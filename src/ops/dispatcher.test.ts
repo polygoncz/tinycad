@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DocumentWriter, FeatureId } from '@/document';
+import { createFeatureSchemaRegistry } from '@/document';
 import { aDocument, aFeature } from '@/document/testing';
 import { createOperationDispatcher } from './dispatcher';
 import { createOpHandlerRegistry } from './handler';
@@ -17,7 +18,7 @@ const rename = (featureId: string, name: string): FeatureRenameOp => ({
 
 function setup(now?: () => number) {
   const doc = aDocument({ features: [aFeature({ id: 'a', name: 'A' })] });
-  const handlers = createOpHandlerRegistry();
+  const handlers = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
   const log = createOperationLog();
   const dispatcher = createOperationDispatcher({ doc, handlers, log, ...(now ? { now } : {}) });
   return { doc, handlers, log, dispatcher };
@@ -201,15 +202,16 @@ describe('dispatch – meta consistency', () => {
 describe('reentrance', () => {
   function setupRe() {
     const doc = aDocument({ features: [aFeature({ id: 'a', params: { size: 0 } })] });
-    const handlers = createOpHandlerRegistry();
+    const handlers = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
     const log = createOperationLog();
     const dispatcher = createOperationDispatcher({ doc, handlers, log });
     return { doc, log, dispatcher };
   }
   const set = (size: number): FeatureSetParamsOp => ({
     type: 'feature.setParams',
-    v: 1,
+    v: 2,
     featureId: 'a' as FeatureId,
+    typeVersion: 1,
     params: { size },
   });
 

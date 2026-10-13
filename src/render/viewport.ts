@@ -15,6 +15,7 @@ import type {
   BodyId,
   HighlightPort,
   OverlayPort,
+  PickFilter,
   PickResult,
   ViewKeyEvent,
   ViewPointerEvent,
@@ -46,8 +47,8 @@ export interface Viewport extends ViewportPort, Disposable {
 
   /** Rendering on demand, not a 60 fps loop. */
   requestRender(): void;
-  /** px relative to the canvas (CSS px); an unmounted viewport → null. */
-  pick(x: number, y: number): PickResult | null;
+  /** px relative to the canvas (CSS px); an unmounted viewport → null. Filter: spec 10. */
+  pick(x: number, y: number, filter?: PickFilter): PickResult | null;
   /** Unmounted → error. */
   screenToRay(x: number, y: number): { origin: Vec3; direction: Vec3 };
 
@@ -357,10 +358,11 @@ export function createViewport(deps: {
       assertAlive();
       scheduleFrame();
     },
-    pick(x: number, y: number): PickResult | null {
+    pick(x: number, y: number, filter?: PickFilter): PickResult | null {
       assertAlive();
       if (mounted === null) return null;
-      return picker.pick(rig.camera, x, y, mounted.canvas.clientWidth, mounted.canvas.clientHeight);
+      const { clientWidth, clientHeight } = mounted.canvas;
+      return picker.pick(rig.camera, x, y, clientWidth, clientHeight, filter);
     },
     screenToRay(x: number, y: number): { origin: Vec3; direction: Vec3 } {
       assertAlive();

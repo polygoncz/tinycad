@@ -2,12 +2,48 @@
 // reference param, ToolManager hands the viewport events to this inner tool instead of
 // the active one. A click fills the param, Escape drops the focus. It is not a
 // registered tool: the manager creates it for the session and drops it again.
+// The focused param decides what can be picked (pickFilterFor), for the click and the hover.
 
-import type { BodyId, BodyRef } from '@/document';
+import type { BodyId, BodyRef, ParamSpec } from '@/document';
 import type { FeatureEditSession } from './feature-editor';
 import { isPlainEscape } from './key-events';
 import { CLICK_TOLERANCE_PX } from './select-tool';
-import type { PickResult, ViewKeyEvent, ViewPointerEvent, ViewportPort } from './viewport-port';
+import type {
+  PickFilter,
+  PickResult,
+  ViewKeyEvent,
+  ViewPointerEvent,
+  ViewportPort,
+} from './viewport-port';
+
+type TopoEntity = Extract<ParamSpec, { readonly kind: 'topo' }>['entity'];
+
+const NOTHING: PickFilter = Object.freeze([]);
+/** A hit on a face or an edge of a body is the body. */
+const FACES_AND_EDGES: PickFilter = Object.freeze(['face', 'edge']);
+const FACES: PickFilter = Object.freeze(['face']);
+const EDGES: PickFilter = Object.freeze(['edge']);
+const TOPO_FILTERS: Readonly<Record<TopoEntity, PickFilter>> = Object.freeze({
+  face: FACES,
+  edge: EDGES,
+  // pick returns no vertices until M14.
+  vertex: NOTHING,
+});
+
+/**
+ * What a click into a param of this spec can pick (spec 10, "Referenční parametr dialogu").
+ * Sketch regions (region) are not pickable yet; value params pick nothing.
+ */
+export function pickFilterFor(spec: ParamSpec): PickFilter {
+  switch (spec.kind) {
+    case 'bodies':
+      return FACES_AND_EDGES;
+    case 'topo':
+      return TOPO_FILTERS[spec.entity];
+    default:
+      return NOTHING;
+  }
+}
 
 export interface RefPick {
   onPointer(e: ViewPointerEvent): void;
@@ -26,8 +62,16 @@ export function createRefPick(session: FeatureEditSession, viewport: ViewportPor
     down = null;
     if (start === null) return;
     if (Math.hypot(e.x - start.x, e.y - start.y) > CLICK_TOLERANCE_PX) return;
-    const hit = viewport.pick(e.x, e.y);
+    const hit = pickAt(e.x, e.y);
     if (hit !== null) pickInto(hit);
+  }
+
+  /** pick with the filter of the focused param; an empty filter does not ask the viewport. */
+  function pickAt(x: number, y: number): PickResult | null {
+    const name = session.state.get().activeRefParam;
+    const spec = name === null ? undefined : session.schema.params[name];
+    const filter = spec === undefined ? NOTHING : pickFilterFor(spec);
+    return filter.length === 0 ? null : viewport.pick(x, y, filter);
   }
 
   /** Converts the hit into a reference of the focused param; M9 knows bodies only. */
@@ -44,7 +88,7 @@ export function createRefPick(session: FeatureEditSession, viewport: ViewportPor
     onPointer(e) {
       switch (e.type) {
         case 'move':
-          viewport.highlight.setHover(viewport.pick(e.x, e.y));
+          viewport.highlight.setHover(pickAt(e.x, e.y));
           return;
         case 'leave':
           viewport.highlight.setHover(null);

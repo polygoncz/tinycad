@@ -12,7 +12,7 @@ milestones:
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-13
+updated: 2026-10-14
 ---
 # 07 – `regen`: regenerace historie
 
@@ -27,21 +27,28 @@ Přehraje featury Part Studia přes geometrické jádro a vytvoří výsledná t
 Každá featura je funkce `výstupní stav = f(vstupní stav, parametry)`. Stav je neměnný snímek toho, co existuje po dané featuře:
 
 ```ts
+export type ArtifactId = BodyId;                     // M12: | SketchId | PlaneId; vždy '<vlastník>/<druh>[:<n>]' (ADR 0015)
+
 export interface Body {
-  readonly id: BodyId;                // stabilní jméno, např. 'f3k9/body'
+  readonly kind: 'body';
+  readonly id: BodyId;                               // bodyId(origin, n) z document – jediné místo, kde id vzniká
+  readonly origin: FeatureId;                        // featura, jejíž builder id razil; v rodokmenu se nemění
+  readonly lastModifiedBy: FeatureId;                // poslední featura, která tělesu dala nový tvar
   readonly shape: ShapeHandle;
-  readonly createdBy: FeatureId;
-  readonly names: NameTable;          // topologická jména ploch/hran tohoto tvaru (spec 08), do M14 prázdné
+  readonly names: NameTable;                         // topologická jména ploch/hran tohoto tvaru (spec 08), do M14 prázdné
 }
 
+export type Artifact = Body;                         // diskriminace podle kind; M12 přidá SketchArtifact
+
 export interface RegenState {
-  readonly bodies: ReadonlyMap<BodyId, Body>;
+  readonly artifacts: ReadonlyMap<ArtifactId, Artifact>;
 }
 
 export const EMPTY_STATE: RegenState;
+export function bodiesOf(state: RegenState): readonly Body[];   // artefakty druhu body v pořadí mapy
 ```
 
-`RegenState` se mrazí `Object.freeze` jen na úrovni objektu. Mapu těles za běhu nic nehlídá, chrání ji typ `ReadonlyMap` ([[Q048 Neměnnost mapy těles za běhu|Q048]]): stav zapisují jen buildery v repu, ne cizí data.
+`RegenState` se mrazí `Object.freeze` jen na úrovni objektu. Mapu artefaktů za běhu nic nehlídá, chrání ji typ `ReadonlyMap` ([[Q048 Neměnnost mapy těles za běhu|Q048]]): stav zapisují jen buildery v repu, ne cizí data.
 
 Builder mrazí objekt nového stavu i každé nové `Body` (`Object.freeze`), mapu ne. Regenerator stejně mrazí každý `FeatureStatus` (i `FeatureError`) a `RegenResult`; mapu `statuses` chrání typ `ReadonlyMap`. Statusy jdou posluchačům a do UI a zároveň zůstávají v cache.
 
@@ -64,7 +71,7 @@ export type ModelingKernel = PrimitiveOps & QueryOps;   // M13 přidá BooleanOp
 export interface BuildContext {
   /** Sledované jádro: každý vrácený handle patří Regeneratoru (Q041). */
   readonly kernel: ModelingKernel;
-  /** Tělesa ze vstupního stavu; první nevyřešená reference → err (Q044). */
+  /** Tělesa ze vstupního stavu (artefakty druhu body; jiný druh pod tím id → err); první nevyřešená reference → err (Q044). */
   resolveBodies(refs: readonly BodyRef[]): Result<Body[], RefError>;
   /** Více volání se spojí znakem '\n' do statusu 'warning' (Q045). */
   warn(message: string): void;
@@ -85,7 +92,8 @@ export function createBuilderRegistry(): BuilderRegistry;
 ```
 
 Pravidla pro builder:
-- nesmí mutovat vstupní stav, vrací nový (`new Map(state.bodies)` + změny),
+- nesmí mutovat vstupní stav, vrací nový (`new Map(state.artifacts)` + změny),
+- dodržuje identitu [[Artefakt|artefaktů]] ([[0015-artefakty-a-identita-telesa|ADR 0015]]): featura, která těleso **vytváří**, razí id `bodyId(feature.id)` (jediné těleso je bez čísla; při více tělesech dostane každé `bodyId(feature.id, n)` s `n` od 1 podle rodokmenu, ne podle pořadí z jádra – `f/body` a `f/body:1` jsou různá id; přesné pravidlo pro Boolean a Transform doplní M11) a nastaví `origin` i `lastModifiedBy` na sebe; featura, která těleso **mění**, zachová `id`, `origin` i `names` a nastaví `lastModifiedBy`; featura, která těleso **spotřebuje**, ho z mapy odebere,
 - nesmí uvolňovat handle (to dělá `Regenerator`),
 - všechny tvary vytváří přes `ctx.kernel`, ten každý vrácený handle zapíše do množiny vlastněné Regeneratorem – i mezivýsledky a tvary z builderu, který pak selže ([[Q041 Úklid mezivýsledků builderu|Q041]]),
 - očekávanou chybu vrací jako `{ ok: false }` (nevyřešenou referenci jako `UNRESOLVED_REFERENCE`, [[Q044 RefError a nevyřešené reference|Q044]]), výjimky jádra může nechat proletět – `Regenerator` je převede na chybu featury `KERNEL`. Výjimka, která z jádra nepochází (`kernelErrorCode(e) === undefined`), je chyba programu: `run` po úklidu handle odmítne s touto výjimkou ([[Q043 Výjimka builderu mimo jádro|Q043]]),
@@ -99,9 +107,9 @@ export const boxBuilder: FeatureBuilder<BoxParams> = {
   async build({ feature, state }, { kernel }) {
     const { origin, width, depth, height } = feature.params;
     const r = await kernel.makeBox({ origin, size: [width, depth, height] });
-    const id = `${feature.id}/body` as BodyId;
-    const bodies = new Map(state.bodies).set(id, { id, shape: r.shape, createdBy: feature.id, names: EMPTY_NAMES });
-    return { ok: true, state: { bodies } };
+    const id = bodyId(feature.id);   // z document: jediné místo, kde BodyId vzniká (ADR 0015)
+    const body: Body = { kind: 'body', id, origin: feature.id, lastModifiedBy: feature.id, shape: r.shape, names: EMPTY_NAMES };
+    return { ok: true, state: { artifacts: new Map(state.artifacts).set(id, body) } };
   },
 };
 ```
@@ -118,7 +126,7 @@ export type FeatureStatus =
   | { kind: 'pending' };            // ještě nepřepočítaná
 
 export interface FeatureError {
-  readonly code: 'INVALID_PARAMS' | 'UNRESOLVED_REFERENCE' | 'KERNEL' | 'UNKNOWN_TYPE';
+  readonly code: 'INVALID_PARAMS' | 'UNRESOLVED_REFERENCE' | 'KERNEL' | 'UNKNOWN_TYPE' | 'STALE_VERSION';
   readonly message: string;                      // technický text (log, chyby jádra)
   readonly issues?: readonly ParamIssue[];       // jen INVALID_PARAMS: problémy z schema.validate (M10, ADR 0014)
 }
@@ -129,9 +137,10 @@ Status featury určí `Regenerator` v tomto pořadí:
 1. pozice `>= rollbackIndex` → `rolledBack` (builder se nevolá, v cache zůstává, co tam bylo),
 2. `suppressed` → `suppressed`, stav se propustí,
 3. chybí schéma nebo builder pro `type` → `error` `UNKNOWN_TYPE`,
-4. `schema.validate(params)` vrátí problémy → `error` `INVALID_PARAMS` s `issues` (zmrazená kopie) a technickou `message` `'param: code; …'`, builder se nevolá. UI chybu překládá z `issues`, ne z `message` (rozhodnutí 2026-10-13),
-5. builder vrátí `{ ok: false }` → `error` s jeho chybou; výjimka s kódem jádra → `error` `KERNEL`,
-6. builder vrátil stav a volal `warn` → `warning`, jinak `ok`.
+4. `feature.typeVersion !== schema.version` → `error` `STALE_VERSION` (pojistka pro data, která obešla migraci, [[04-operace-a-historie#Migrace dat featur]]; `message` nese obě verze), builder se nevolá,
+5. `schema.validate(params)` vrátí problémy → `error` `INVALID_PARAMS` s `issues` (zmrazená kopie) a technickou `message` `'param: code; …'`, builder se nevolá. UI chybu překládá z `issues`, ne z `message` (rozhodnutí 2026-10-13),
+6. builder vrátí `{ ok: false }` → `error` s jeho chybou; výjimka s kódem jádra → `error` `KERNEL`,
+7. builder vrátil stav a volal `warn` → `warning`, jinak `ok`.
 
 `pending` Regenerator nevrací, používá ho UI před první regenerací.
 
@@ -199,7 +208,7 @@ Posun rollback baru dopředu tak přepočítá jen nově zahrnuté featury, posu
 
 Stavy sdílejí handle (těleso, které featura nezměnila, prochází dál se stejným handle). Počítání referencí by bylo křehké, proto:
 
-1. Po každé dokončené regeneraci se projdou všechny stavy v cache a posbírá se množina **živých** handle.
+1. Po každé dokončené regeneraci se projdou všechny stavy v cache a posbírá se množina **živých** handle (handle artefaktů druhu `body`).
 2. Všechny handle, které Regenerator kdy dostal od jádra a nejsou živé, se uvolní (`kernel.release`).
 3. Handle vytvořené v rámci zahozené (superseded) generace se uvolní nejpozději při sweepu prvního dokončeného běhu, který začne po jejich vytvoření (build nahrazeného běhu může doběhnout až po sweepu generace, která ho nahradila).
 
@@ -223,6 +232,7 @@ Handle se z vlastněné množiny odeberou ještě před čekáním na `release` 
 - Chybná featura: status `error`, následující featury `ok`, stav propuštěn.
 - Neplatné parametry → `INVALID_PARAMS`, builder se nezavolá.
 - Neznámý typ featury (chybí schéma nebo builder) → `UNKNOWN_TYPE`, regenerace pokračuje.
+- Featura s `typeVersion` jiným, než má schéma → `STALE_VERSION`, builder se nezavolá, stav propuštěn.
 - Suppressed featura propustí stav, builder se nezavolá.
 - Status z cache se zachová (`warning` i `error` featury před změnou).
 - `warn` dvakrát → jeden `warning` se zprávami spojenými `'\n'`.

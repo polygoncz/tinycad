@@ -568,12 +568,14 @@ interface RefParams {
   readonly width: number;
   readonly targets: readonly unknown[];
   readonly faces: readonly unknown[];
+  readonly profile: readonly unknown[];
 }
 
 const REF_PARAMS: ParamSchema = {
   width: { kind: 'length', label: 'Width', default: 10, min: 0 },
   targets: { kind: 'bodies', label: 'Targets' },
   faces: { kind: 'topo', label: 'Faces', entity: 'face' },
+  profile: { kind: 'region', label: 'Profile' },
 };
 
 const REF_SCHEMA: FeatureSchema<RefParams> = {
@@ -581,7 +583,7 @@ const REF_SCHEMA: FeatureSchema<RefParams> = {
   version: 1,
   label: 'Ref',
   params: REF_PARAMS,
-  defaults: () => ({ width: 10, targets: [], faces: [] }),
+  defaults: () => ({ width: 10, targets: [], faces: [], profile: [] }),
   validate: (params) => validateAgainstSchema(REF_PARAMS, params),
 };
 
@@ -604,6 +606,20 @@ function faceHit(body: string): PickResult {
     point: [0, 0, 0],
     normal: [0, 0, 1],
   };
+}
+
+function edgeHit(body: string): PickResult {
+  return {
+    kind: 'edge',
+    body: body as BodyId, // test ids are trusted
+    edgeIndex: 2,
+    point: [0, 0, 0],
+  };
+}
+
+/** The filter of the last pick, sorted: the order of kinds has no meaning. */
+function lastKinds(viewport: FakeViewport): readonly string[] | undefined {
+  return viewport.lastFilter === undefined ? undefined : [...viewport.lastFilter].sort();
 }
 
 function setupRefPick(options: { unhandledKey?: (e: ViewKeyEvent) => boolean } = {}) {
@@ -698,6 +714,82 @@ describe('createToolManager – refPick', () => {
     });
     click(viewport);
     expect(session.state.get().params['targets']).toEqual([{ kind: 'body', body: 'f1/body' }]);
+  });
+
+  it('a bodies param picks faces and edges, also for the hover', () => {
+    const { viewport, features } = setupRefPick();
+    const session = features.create('ref');
+    session.focusRefParam('targets');
+    viewport.setPick(edgeHit('f1/body'));
+
+    viewport.emitPointer(at('move', 1, 1));
+    expect(lastKinds(viewport)).toEqual(['edge', 'face']);
+    expect(viewport.hover).toEqual(edgeHit('f1/body'));
+    viewport.pick(0, 0);
+    click(viewport);
+    expect(lastKinds(viewport)).toEqual(['edge', 'face']);
+    expect(session.state.get().params['targets']).toEqual([{ kind: 'body', body: 'f1/body' }]);
+  });
+
+  it('a topo face param picks faces only: an edge is neither hovered nor added', () => {
+    const { viewport, features } = setupRefPick();
+    const session = features.create('ref');
+    session.focusRefParam('faces');
+    const before = session.state.get();
+    viewport.setPick(edgeHit('f1/body'));
+    viewport.highlight.setHover(faceHit('f2/body'));
+
+    viewport.emitPointer(at('move', 1, 1));
+    expect(viewport.lastFilter).toEqual(['face']);
+    expect(viewport.hover).toBeNull();
+    viewport.pick(0, 0);
+    click(viewport);
+    expect(viewport.lastFilter).toEqual(['face']);
+    expect(session.state.get()).toBe(before);
+  });
+
+  it('a region param picks nothing: pick is not called and nothing is hovered', () => {
+    const { viewport, features } = setupRefPick();
+    const session = features.create('ref');
+    session.focusRefParam('profile');
+    const before = session.state.get();
+    let picks = 0;
+    viewport.setPick(() => {
+      picks++;
+      return faceHit('f1/body');
+    });
+    viewport.highlight.setHover(faceHit('f2/body'));
+
+    viewport.emitPointer(at('move', 1, 1));
+    expect(viewport.hover).toBeNull();
+    click(viewport);
+    expect(picks).toBe(0);
+    expect(session.state.get()).toBe(before);
+  });
+
+  it('switching the focused param clears the hover of the old one', () => {
+    const { viewport, features } = setupRefPick();
+    const session = features.create('ref');
+    session.focusRefParam('targets');
+    viewport.setPick(edgeHit('f1/body'));
+    viewport.emitPointer(at('move', 1, 1));
+    expect(viewport.hover).toEqual(edgeHit('f1/body'));
+
+    // A face param does not allow the hovered edge: nothing stays highlighted.
+    session.focusRefParam('faces');
+    expect(viewport.hover).toBeNull();
+  });
+
+  it('the filter follows the focused param', () => {
+    const { viewport, features } = setupRefPick();
+    const session = features.create('ref');
+    session.focusRefParam('targets');
+    viewport.emitPointer(at('move', 1, 1));
+    expect(lastKinds(viewport)).toEqual(['edge', 'face']);
+
+    session.focusRefParam('faces');
+    viewport.emitPointer(at('move', 1, 1));
+    expect(lastKinds(viewport)).toEqual(['face']);
   });
 
   it('ignores a drag, an empty click and the right button', () => {

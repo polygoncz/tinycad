@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FeatureId } from '@/document';
-import { toData } from '@/document';
+import { createFeatureSchemaRegistry, toData } from '@/document';
 import { aDocument, aFeature } from '@/document/testing';
 import { createOpHandlerRegistry } from './handler';
 import type { LogEntry } from './log';
@@ -8,7 +8,7 @@ import type { FeatureRemoveOp, FeatureRenameOp, Operation } from './operation';
 import { replayLog } from './replay';
 
 const id = (s: string): FeatureId => s as FeatureId;
-const handlers = createOpHandlerRegistry();
+const handlers = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
 
 function entry(seq: number, kind: LogEntry['kind'], op: Operation, target?: number): LogEntry {
   return {

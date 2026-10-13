@@ -12,7 +12,8 @@ import type { FeatureId, FeatureInstance } from '@/document';
 export const OP_VERSION = {
   'feature.add': 1,
   'feature.remove': 1,
-  'feature.setParams': 1,
+  // 2 since M10.1: carries typeVersion (Q035).
+  'feature.setParams': 2,
   'feature.rename': 1,
   'feature.suppress': 1,
   'feature.move': 1,
@@ -40,6 +41,8 @@ export interface FeatureRemoveOp extends Operation {
 export interface FeatureSetParamsOp extends Operation {
   readonly type: 'feature.setParams';
   readonly featureId: FeatureId;
+  /** Version of the feature schema the params were written with; apply migrates older ones (Q035). */
+  readonly typeVersion: number;
   /** The whole new params, not a patch. */
   readonly params: unknown;
 }

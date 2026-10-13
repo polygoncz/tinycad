@@ -1,4 +1,6 @@
 import { assertNever } from '@/core';
+import { readRef } from './refs';
+import type { EntityRef } from './refs';
 import type { ParamIssue, ParamSchema, ParamSpec } from './schema';
 
 // Generic checks driven by ParamSpec. A FeatureSchema calls this from validate()
@@ -52,22 +54,12 @@ function checkParam(spec: ParamSpec): Check {
       return (v) =>
         Array.isArray(v) && v.length === 3 && v.every(isFiniteNumber) ? undefined : WRONG_TYPE;
     case 'bodies':
-      return checkRefs(spec.min, spec.max, 'body', (r) => typeof r.body === 'string');
+      return checkRefs(spec.min, spec.max, 'body');
     case 'topo':
       // Whether the name really is a face/edge/vertex is only known after regeneration.
-      return checkRefs(
-        spec.min,
-        spec.max,
-        'topo',
-        (r) => typeof r.body === 'string' && typeof r.name === 'string',
-      );
+      return checkRefs(spec.min, spec.max, 'topo');
     case 'region':
-      return checkRefs(
-        spec.min,
-        spec.max,
-        'region',
-        (r) => typeof r.sketch === 'string' && typeof r.region === 'string',
-      );
+      return checkRefs(spec.min, spec.max, 'region');
     default:
       return assertNever(spec);
   }
@@ -93,12 +85,12 @@ function checkNumber(v: unknown, rules: NumberRules): Problem | undefined {
 function checkRefs(
   min: number | undefined,
   max: number | undefined,
-  kind: string,
-  hasFields: (ref: Record<string, unknown>) => boolean,
+  kind: EntityRef['kind'],
 ): Check {
   return (v) => {
     if (!Array.isArray(v)) return WRONG_TYPE;
-    const index = v.findIndex((r) => !isRecord(r) || r.kind !== kind || !hasFields(r));
+    // Same shape check as referencesOf, so both agree on what a reference is.
+    const index = v.findIndex((r) => readRef(kind, r) === undefined);
     if (index !== -1) return { code: 'param.invalidRef', params: { index } };
     if (min !== undefined && v.length < min) return { code: 'param.tooFewRefs', params: { min } };
     if (max !== undefined && v.length > max) return { code: 'param.tooManyRefs', params: { max } };

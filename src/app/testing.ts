@@ -9,6 +9,7 @@ import type {
   HighlightTarget,
   OverlayPort,
   OverlayShape,
+  PickFilter,
   PickResult,
   ViewKeyEvent,
   ViewPointerEvent,
@@ -90,8 +91,8 @@ export class FakeAppViewport implements AppViewport {
     this.port.setScreenToRay(fn);
   }
 
-  pick(x: number, y: number): PickResult | null {
-    return this.port.pick(x, y);
+  pick(x: number, y: number, filter?: PickFilter): PickResult | null {
+    return this.port.pick(x, y, filter);
   }
 
   screenToRay(x: number, y: number): Ray {

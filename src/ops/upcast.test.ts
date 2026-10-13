@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createFeatureSchemaRegistry } from '@/document';
 import { createOpHandlerRegistry } from './handler';
 import type { OpHandler } from './op-handler';
 import type { Operation } from './operation';
@@ -10,7 +11,7 @@ interface PingOp extends Operation {
 }
 
 function registryWith(upcast?: OpHandler['upcast'], version = 2) {
-  const registry = createOpHandlerRegistry();
+  const registry = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
   const handler: OpHandler = {
     type: 'test.ping',
     version,
@@ -29,7 +30,7 @@ const migrate: OpHandler['upcast'] = (from, raw) => {
 };
 
 describe('upcastOperation', () => {
-  const handlers = createOpHandlerRegistry();
+  const handlers = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
 
   it('returns the current version unchanged', () => {
     const raw = { type: 'feature.rename', v: 1, featureId: 'a', name: 'x' };
@@ -40,6 +41,30 @@ describe('upcastOperation', () => {
   it('migrates an older version with upcast', () => {
     const r = upcastOperation(registryWith(migrate), { type: 'test.ping', v: 1, n: 4 });
     expect(r).toEqual({ ok: true, value: { type: 'test.ping', v: 2, n: 40 } });
+  });
+
+  it('upcasts feature.setParams version 1 to 2 with typeVersion 1 (Q035)', () => {
+    const r = upcastOperation(handlers, {
+      type: 'feature.setParams',
+      v: 1,
+      featureId: 'a',
+      params: { size: 2 },
+    });
+    expect(r).toEqual({
+      ok: true,
+      value: {
+        type: 'feature.setParams',
+        v: 2,
+        featureId: 'a',
+        typeVersion: 1,
+        params: { size: 2 },
+      },
+    });
+  });
+
+  it('validates an upcast feature.setParams version 1', () => {
+    const r = upcastOperation(handlers, { type: 'feature.setParams', v: 1, featureId: 'a' });
+    expect(!r.ok && r.error.path).toBe('params');
   });
 
   it('fails when an older version has no upcast', () => {

@@ -59,7 +59,7 @@ async function importError(raw: unknown): Promise<DocumentLoadError> {
 async function loadedData(store: DocumentStore, id: DocumentId, schemas = emptySchemas) {
   const result = await loadDocument(store, id, {
     schemas,
-    handlers: createOpHandlerRegistry(),
+    handlers: createOpHandlerRegistry({ schemas }),
     verify: true,
   });
   if (!result.ok) expect.fail(`Expected the document to load: ${JSON.stringify(result.error)}`);

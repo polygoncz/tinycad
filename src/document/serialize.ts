@@ -1,9 +1,9 @@
 import { assert, err, ok } from '@/core';
-import type { Result } from '@/core';
+import type { RegistryReader, Result } from '@/core';
 import { createDocument } from './cad-document';
 import type { DocumentReader, DocumentWriter } from './document';
 import type { DocumentId, DocumentMeta, FeatureId, FeatureInstance, PartStudioData } from './model';
-import type { FeatureSchemaRegistry } from './schema';
+import type { FeatureSchema, FeatureSchemaRegistry } from './schema';
 
 export interface DocumentData {
   readonly meta: DocumentMeta;
@@ -19,6 +19,13 @@ export interface DocumentLoadIssue {
 
 export interface DocumentLoadError {
   readonly issues: readonly DocumentLoadIssue[];
+}
+
+/** What a migration needs of a feature: its type, the schema version of its params and the params. */
+export interface FeatureData {
+  readonly type: string;
+  readonly typeVersion: number;
+  readonly params: unknown;
 }
 
 /** No copy: the document data is immutable plain JSON, so it already is a consistent snapshot. */
@@ -141,41 +148,61 @@ function readFeature(
   return migrate(feature, path, schemas, at);
 }
 
-/** Unknown type: kept as is, regeneration reports it. Older version: migrated to the current one. */
+/** Paths of the migration issues are made relative to the document. */
 function migrate(
   f: FeatureInstance,
   path: string,
   schemas: FeatureSchemaRegistry,
   at: At,
 ): FeatureInstance | undefined {
-  const schema = schemas.find(f.type);
-  if (schema === undefined || f.typeVersion === schema.version) return f;
-  if (f.typeVersion > schema.version) {
-    // Should not happen: the app always runs the latest version (Q025).
-    at(
-      `${path}.typeVersion`,
-      `Version ${String(f.typeVersion)} is newer than the known ${String(schema.version)}`,
-    );
+  const migrated = migrateFeatureData(schemas, f);
+  if (!migrated.ok) {
+    at(`${path}.${migrated.error.path}`, migrated.error.message);
     return undefined;
+  }
+  if (migrated.value === f) return f;
+  const { typeVersion, params } = migrated.value;
+  // migrateFeatureData returns a migrated value only with params that are a plain JSON object.
+  return { ...f, typeVersion, params: params as FeatureInstance['params'] };
+}
+
+/**
+ * Params on the current version of the schema of their type (spec 03, Q035). Shared by fromData
+ * and the operation handlers, which migrate the feature data of old log entries when applied.
+ * Unknown type or the current version: unchanged, the same object. Old data the migration cannot
+ * handle is broken data, not a programmer error: a newer version is an issue at 'typeVersion',
+ * a throwing migrate or a result that is not a plain JSON object an issue at 'params'.
+ */
+export function migrateFeatureData(
+  schemas: RegistryReader<FeatureSchema>,
+  data: FeatureData,
+): Result<FeatureData, DocumentLoadIssue> {
+  const schema = schemas.find(data.type);
+  // Unknown type: kept as is, regeneration reports it.
+  if (schema === undefined || data.typeVersion === schema.version) return ok(data);
+  const from = String(data.typeVersion);
+  if (data.typeVersion > schema.version) {
+    // Should not happen: the app always runs the latest version (Q025).
+    return err({
+      path: 'typeVersion',
+      message: `Version ${from} is newer than the known ${String(schema.version)}`,
+    });
   }
   // The registry rejects schemas with version > 1 and no migrate.
   assert(schema.migrate !== undefined, `Feature schema '${schema.type}' has no migrate()`);
   let params: unknown;
   try {
-    params = schema.migrate(f.typeVersion, f.params);
+    params = schema.migrate(data.typeVersion, data.params);
   } catch (e) {
-    // Old data the migration cannot handle is broken data, not a programmer error.
-    at(`${path}.params`, `Migration from version ${String(f.typeVersion)} failed: ${String(e)}`);
-    return undefined;
+    return err({ path: 'params', message: `Migration from version ${from} failed: ${String(e)}` });
   }
   if (!isJsonObject(params)) {
-    at(
-      `${path}.params`,
-      `Migration from version ${String(f.typeVersion)} did not return a plain JSON object`,
-    );
-    return undefined;
+    return err({
+      path: 'params',
+      message: `Migration from version ${from} did not return a plain JSON object`,
+    });
   }
-  return { ...f, typeVersion: schema.version, params };
+  return ok({ ...data, typeVersion: schema.version, params });
 }
 
 /**

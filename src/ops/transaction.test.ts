@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FeatureId } from '@/document';
-import { toData } from '@/document';
+import { createFeatureSchemaRegistry, toData } from '@/document';
 import { aDocument, aFeature } from '@/document/testing';
 import { createOperationDispatcher } from './dispatcher';
 import { createOpHandlerRegistry } from './handler';
@@ -18,8 +18,9 @@ import { replayLog } from './replay';
 const id = (s: string): FeatureId => s as FeatureId;
 const setParams = (featureId: string, size: number): FeatureSetParamsOp => ({
   type: 'feature.setParams',
-  v: 1,
+  v: 2,
   featureId: id(featureId),
+  typeVersion: 1,
   params: { size },
 });
 
@@ -30,7 +31,7 @@ function setup() {
       aFeature({ id: 'b', name: 'B', params: { size: 0 } }),
     ],
   });
-  const handlers = createOpHandlerRegistry();
+  const handlers = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
   const log = createOperationLog();
   const dispatcher = createOperationDispatcher({ doc, handlers, log });
   return { doc, handlers, log, dispatcher };

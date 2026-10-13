@@ -45,10 +45,15 @@ function aBox(id: string, name = id): ReturnType<typeof aFeature<BoxParams>> {
 const EN = (key: string): string => (key === 'box.label' ? 'Box' : key);
 
 /** `translate: null` leaves it out of the deps. */
-function setup(init: DocumentOptions = {}, translate: ((key: string) => string) | null = EN) {
-  const session = anOpsSession(init);
+function setup(
+  init: DocumentOptions = {},
+  translate: ((key: string) => string) | null = EN,
+  schema: FeatureSchema = BOX,
+) {
   const schemas = createFeatureSchemaRegistry();
-  schemas.register(BOX);
+  schemas.register(schema);
+  // The handlers migrate with the same schemas, as in the app (Q035).
+  const session = anOpsSession({ ...init, schemas });
   const editor = createFeatureEditor({
     doc: session.doc,
     ops: session.dispatcher,
@@ -301,6 +306,25 @@ describe('FeatureEditSession', () => {
     // Unchanged fields stay the same objects.
     expect(state.fields[0]).toBe(before.fields[0]);
     expect(state.fields[2]).toBe(before.fields[2]);
+  });
+
+  it('setParam sends the version of the schema with the params (Q035)', () => {
+    // Version 3: the op must carry the schema version, not a constant 1.
+    const v3: FeatureSchema<BoxParams> = { ...BOX, version: 3, migrate: () => BOX.defaults() };
+    const { doc, log, editor } = setup({}, EN, v3);
+    const session = editor.create('box');
+    session.setParam('width', 5);
+    session.commit();
+
+    const ops = loggedOps(log.entries().map((e) => e.op));
+    expect(ops.find((op) => op.type === 'feature.setParams')).toEqual({
+      type: 'feature.setParams',
+      v: OP_VERSION['feature.setParams'],
+      featureId: 'new1',
+      typeVersion: 3,
+      params: { width: 5, height: 20, targets: [] },
+    });
+    expect(doc.feature(fid('new1'))).toMatchObject({ typeVersion: 3, params: { width: 5 } });
   });
 
   it('an invalid value is applied and shows in issues and FieldState.issue', () => {

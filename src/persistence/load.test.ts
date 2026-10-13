@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createFeatureSchemaRegistry, toData } from '@/document';
-import type { DocumentId, DocumentMeta, FeatureId } from '@/document';
+import type { DocumentId, DocumentMeta, FeatureId, FeatureSchema } from '@/document';
 import { aFeature } from '@/document/testing';
 import {
   createOpHandlerRegistry,
@@ -9,6 +9,7 @@ import {
   OP_VERSION,
 } from '@/ops';
 import type {
+  BatchOp,
   FeatureAddOp,
   FeatureMoveOp,
   FeatureRemoveOp,
@@ -16,6 +17,7 @@ import type {
   FeatureSetParamsOp,
   FeatureSuppressOp,
   LogEntry,
+  Operation,
   OpHandlerRegistry,
   StudioSetRollbackOp,
 } from '@/ops';
@@ -83,7 +85,7 @@ function broken<T>(value: T, changes: Readonly<Record<string, unknown>>): T {
 async function loaded(
   store: DocumentStore,
   verify = true,
-  handlers: OpHandlerRegistry = createOpHandlerRegistry(),
+  handlers: OpHandlerRegistry = createOpHandlerRegistry({ schemas }),
 ): Promise<LoadedDocument> {
   const result = await loadDocument(store, id, { schemas, handlers, verify });
   if (!result.ok) expect.fail(`Expected the document to load: ${JSON.stringify(result.error)}`);
@@ -93,7 +95,7 @@ async function loaded(
 async function loadError(store: DocumentStore, verify = true): Promise<LoadDocumentError> {
   const result = await loadDocument(store, id, {
     schemas,
-    handlers: createOpHandlerRegistry(),
+    handlers: createOpHandlerRegistry({ schemas }),
     verify,
   });
   if (result.ok) expect.fail('Expected the document not to load');
@@ -102,7 +104,7 @@ async function loadError(store: DocumentStore, verify = true): Promise<LoadDocum
 
 /** Handlers whose apply calls are counted: how many entries a load really replayed. */
 function countingHandlers(): { handlers: OpHandlerRegistry; applied: () => number } {
-  const inner = createOpHandlerRegistry();
+  const inner = createOpHandlerRegistry({ schemas });
   let count = 0;
   const handlers: OpHandlerRegistry = {
     ...inner,
@@ -171,6 +173,7 @@ function runMixedHistory(session: OpsSession, total: number): FeatureId {
           type: 'feature.setParams',
           v: OP_VERSION['feature.setParams'],
           featureId: last.id,
+          typeVersion: 1,
           params: { size: step },
         });
         break;
@@ -271,7 +274,11 @@ describe('loadDocument', () => {
     const snapshot = createSnapshot(session.doc, 3);
     await store.saveSnapshot(id, snapshot);
     await expect(
-      loadDocument(store, id, { schemas, handlers: createOpHandlerRegistry(), verify: true }),
+      loadDocument(store, id, {
+        schemas,
+        handlers: createOpHandlerRegistry({ schemas }),
+        verify: true,
+      }),
     ).rejects.toThrow(/not deterministic/);
     // Without verify the mismatch goes unnoticed.
     expect((await loaded(store, false)).doc.feature(featureA)?.name).toBe('elsewhere');
@@ -290,6 +297,159 @@ describe('loadDocument', () => {
     expect(opened.log.entries()).toEqual(session.log.entries());
   });
 
+  describe('migration of feature data (Q035)', () => {
+    // The box schema before and after a change: version 2 renamed `w` to `width`.
+    const boxV1: FeatureSchema = {
+      type: 'box',
+      version: 1,
+      label: 'box.label',
+      params: { w: { kind: 'length', label: 'box.w', default: 1 } },
+      defaults: () => ({ w: 1 }),
+      validate: () => [],
+    };
+    const boxV2: FeatureSchema = {
+      ...boxV1,
+      version: 2,
+      params: { width: { kind: 'length', label: 'box.width', default: 1 } },
+      defaults: () => ({ width: 1 }),
+      migrate(fromVersion, raw) {
+        if (fromVersion !== 1) throw new Error(`Unsupported version ${String(fromVersion)}`);
+        const { w } = raw as { w: unknown }; // version 1 params, checked right below
+        if (typeof w !== 'number') throw new Error('w must be a number');
+        return { width: w };
+      },
+    };
+    const registryOf = (schema: FeatureSchema) => {
+      const registry = createFeatureSchemaRegistry();
+      registry.register(schema);
+      return registry;
+    };
+    const setW = (w: number, featureId: FeatureId = featureA): FeatureSetParamsOp => ({
+      type: 'feature.setParams',
+      v: OP_VERSION['feature.setParams'],
+      featureId,
+      typeVersion: 1,
+      params: { w },
+    });
+
+    /** An operation as written before M10.1: feature.setParams version 1, without typeVersion. */
+    function writtenBeforeM101(op: Operation): unknown {
+      if (op.type === 'batch') {
+        return { ...op, ops: (op as BatchOp).ops.map(writtenBeforeM101) }; // checked by type
+      }
+      if (op.type !== 'feature.setParams') return op;
+      const old = Object.fromEntries(Object.entries(op).filter(([key]) => key !== 'typeVersion'));
+      return { ...old, v: 1 };
+    }
+
+    /**
+     * Saved before M10.1 while box had version 1: base with 'a', then add 'b', two setParams of
+     * 'a' and an undo of the second, setParams in operation version 1. A snapshot at 3 makes
+     * the latest path start from version 1 data too.
+     */
+    async function aVersion1Store(): Promise<DocumentStore> {
+      const v1 = registryOf(boxV1);
+      const session = anOpsSession({
+        meta,
+        features: [aFeature({ id: 'a', name: 'A', params: { w: 1 } })],
+        schemas: v1,
+      });
+      const store = createMemoryDocumentStore();
+      await store.createDocument(meta, createSnapshot(session.doc, 0));
+      const addB: FeatureAddOp = {
+        type: 'feature.add',
+        v: OP_VERSION['feature.add'],
+        feature: aFeature({ id: 'b', name: 'B', params: { w: 2 } }),
+        index: 1,
+      };
+      session.dispatcher.dispatch(addB);
+      session.dispatcher.dispatch(setW(5));
+      session.dispatcher.dispatch(setW(7));
+      const snapshot = createSnapshot(session.doc, 3);
+      session.undo.undo();
+      const entries = session.log.entries().map((entry) =>
+        broken(entry, {
+          op: writtenBeforeM101(entry.op),
+          inverse: writtenBeforeM101(entry.inverse),
+        }),
+      );
+      await store.appendEntries(id, entries);
+      await store.saveSnapshot(id, snapshot);
+      return store;
+    }
+
+    async function openedWithV2(store: DocumentStore): Promise<LoadedDocument> {
+      const v2 = registryOf(boxV2);
+      const handlers = createOpHandlerRegistry({ schemas: v2 });
+      const result = await loadDocument(store, id, { schemas: v2, handlers, verify: true });
+      if (!result.ok) expect.fail(`Expected the document to load: ${JSON.stringify(result.error)}`);
+      return result.value;
+    }
+
+    it('a document saved with schema version 1 loads with version 2: every feature migrated', async () => {
+      const store = await aVersion1Store();
+      const stored = await store.load(id);
+      // The op exactly, without typeVersion.
+      expect(stored?.entries[1]).toEqual(
+        expect.objectContaining({
+          op: { type: 'feature.setParams', v: 1, featureId: 'a', params: { w: 5 } },
+        }),
+      );
+      const opened = await openedWithV2(store);
+      expect(opened.doc.studio.features.map((f) => [f.id, f.typeVersion, f.params])).toEqual([
+        ['a', 2, { width: 5 }],
+        ['b', 2, { width: 2 }],
+      ]);
+    });
+
+    it('undo and redo after loading apply the old entries in the new shape', async () => {
+      const opened = await openedWithV2(await aVersion1Store());
+      const handlers = createOpHandlerRegistry({ schemas: registryOf(boxV2) });
+      const dispatcher = createOperationDispatcher({ doc: opened.doc, handlers, log: opened.log });
+      const undo = createUndoManager({ dispatcher, log: opened.log });
+
+      // Undo of setW(5): its inverse was recorded with version 1 params { w: 1 }.
+      undo.undo();
+      expect(opened.doc.feature(featureA)).toMatchObject({ typeVersion: 2, params: { width: 1 } });
+      // The new entry is computed from the migrated document: current version already.
+      expect(opened.log.entries().at(-1)?.inverse).toMatchObject({
+        typeVersion: 2,
+        params: { width: 5 },
+      });
+
+      undo.redo();
+      expect(opened.doc.feature(featureA)).toMatchObject({ typeVersion: 2, params: { width: 5 } });
+    });
+
+    it('an entry whose migration fails is an entry error with the message', async () => {
+      const store = await aVersion1Store();
+      // Old data the version 2 migration cannot handle; the entry itself is well formed.
+      const op: FeatureSetParamsOp = { ...setW(1), params: { w: 'x' } };
+      const bad: LogEntry = {
+        seq: 5,
+        kind: 'do',
+        op,
+        inverse: setW(5),
+        label: 'Box',
+        time: 0,
+      };
+      await store.appendEntries(id, [bad]);
+      const v2 = registryOf(boxV2);
+      const result = await loadDocument(store, id, {
+        schemas: v2,
+        handlers: createOpHandlerRegistry({ schemas: v2 }),
+      });
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          kind: 'entry',
+          seq: 5,
+          error: { path: 'op', message: expect.stringContaining('w must be a number') as unknown },
+        },
+      });
+    });
+  });
+
   describe('errors', () => {
     it('a missing document is not-found', async () => {
       expect(await loadError(createMemoryDocumentStore())).toEqual({ kind: 'not-found' });
@@ -302,7 +462,7 @@ describe('loadDocument', () => {
         load: () => Promise.reject(new Error('disk on fire')),
       };
       await expect(
-        loadDocument(failing, id, { schemas, handlers: createOpHandlerRegistry() }),
+        loadDocument(failing, id, { schemas, handlers: createOpHandlerRegistry({ schemas }) }),
       ).rejects.toThrow('disk on fire');
     });
 

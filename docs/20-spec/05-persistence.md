@@ -237,7 +237,7 @@ Tvar chyby rozhodla [[Q033 Tvar chyby při načtení dokumentu|Q033]]. Chyba I/O
 
 Známé omezení: `target` undo/redo záznamů, který neodpovídá zásobníku, `loadDocument` nezachytí. Vyhodí až `rebuildUndoStacks` v `createUndoManager`. `parseLogEntry` kontroluje jen tvar (spec 04).
 
-Featury a parametry uvnitř záznamů se migrují až při `apply` během přehrání ([[04-operace-a-historie#Migrace dat featur]], [[Q035 Migrace featur v záznamech logu|Q035]]); `parseLogEntry` schémata nepotřebuje. Selhání migrace je chyba `entry` jako každá jiná výjimka handleru (bod 4).
+Featury a parametry uvnitř záznamů se migrují až při `apply` během přehrání ([[04-operace-a-historie#Migrace dat featur]], [[Q035 Migrace featur v záznamech logu|Q035]]); `parseLogEntry` schémata nepotřebuje. Selhání migrace je chyba `entry` jako každá jiná výjimka handleru (bod 4). Registr `handlers` musí vzniknout se **stejnými** `schemas`, jaké dostane `loadDocument` (`createOpHandlerRegistry({ schemas })`): dva různé registry schémat by migrovaly snapshot a záznamy jinak; nic to nehlídá, kompoziční kořen má jediný registr.
 
 ### Jeden zapisovatel na dokument
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DocumentWriter, FeatureId } from '@/document';
-import { toData } from '@/document';
+import { createFeatureSchemaRegistry, toData } from '@/document';
 import { aDocument, aFeature } from '@/document/testing';
 import { createOperationDispatcher } from './dispatcher';
 import { createOpHandlerRegistry } from './handler';
@@ -27,7 +27,7 @@ function setup() {
   const doc = aDocument({
     features: [aFeature({ id: 'a', name: 'A' }), aFeature({ id: 'b', name: 'B' })],
   });
-  const handlers = createOpHandlerRegistry();
+  const handlers = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
   const log = createOperationLog();
   const dispatcher = createOperationDispatcher({ doc, handlers, log });
   const undo = createUndoManager({ dispatcher, log });
@@ -228,7 +228,7 @@ describe('reopening', () => {
     const doc = aDocument({
       features: [aFeature({ id: 'a', name: 'A' }), aFeature({ id: 'b', name: 'B' })],
     });
-    const handlers = createOpHandlerRegistry();
+    const handlers = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
     replayLog(doc, handlers, entries);
     expect(toData(doc)).toEqual(toData(live.doc));
     const log = createOperationLog(entries);

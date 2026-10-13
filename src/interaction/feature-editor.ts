@@ -280,6 +280,8 @@ function createSession(deps: {
         type: 'feature.setParams',
         v: OP_VERSION['feature.setParams'],
         featureId,
+        // The params are written in the shape of this schema version (Q035).
+        typeVersion: schema.version,
         params: { ...params, [name]: value },
       };
       // A failing handler throws here, before anything changed: the session stays as it was.

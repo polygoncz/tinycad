@@ -120,7 +120,13 @@ describe('replayLog (property)', () => {
                 case 'remove':
                   return { type: 'feature.remove', v: 1, featureId };
                 case 'setParams':
-                  return { type: 'feature.setParams', v: 1, featureId, params: { size: s.n } };
+                  return {
+                    type: 'feature.setParams',
+                    v: 2,
+                    featureId,
+                    typeVersion: 1,
+                    params: { size: s.n },
+                  };
                 case 'rename':
                   return { type: 'feature.rename', v: 1, featureId, name: `n${String(s.n)}` };
                 case 'suppress':
@@ -147,7 +153,13 @@ describe('replayLog (property)', () => {
               const y = featureAt(s.b);
               const z = featureAt(s.c);
               if (x !== undefined) {
-                ops.push({ type: 'feature.setParams', v: 1, featureId: x, params: { size: s.a } });
+                ops.push({
+                  type: 'feature.setParams',
+                  v: 2,
+                  featureId: x,
+                  typeVersion: 1,
+                  params: { size: s.a },
+                });
               }
               if (y !== undefined) {
                 ops.push({ type: 'feature.rename', v: 1, featureId: y, name: `b${String(s.b)}` });

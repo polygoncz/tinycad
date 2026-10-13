@@ -31,6 +31,8 @@ export type LoadDocumentError =
  * Opens a stored document (spec 05): parses every log entry, loads the latest snapshot and
  * replays only the entries after it. With `verify` it also replays the whole log from the base
  * snapshot and throws when the two states differ – that breaks determinism, a programmer error.
+ * Features in the snapshot are migrated by fromData with `schemas`, feature data in the entries
+ * by the handlers when replayed (Q035); a failed migration is an entry error like any other.
  */
 export async function loadDocument(
   store: DocumentStore,

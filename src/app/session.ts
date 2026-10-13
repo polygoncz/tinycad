@@ -180,7 +180,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   }
   checkComplete(schemas, builders);
   const messages = mergeMessages(deps.plugins);
-  const handlers = createOpHandlerRegistry();
+  const handlers = createOpHandlerRegistry({ schemas });
 
   // 2. The document.
   const { doc, log } = await openDocument(deps, schemas, handlers);

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { createFeatureSchemaRegistry } from '@/document';
 import { createOpHandlerRegistry } from '../handler';
 import { upcastOperation } from '../upcast';
 
-const handlers = createOpHandlerRegistry();
+const handlers = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
 
 const feature = {
   id: 'f1',
@@ -17,7 +18,13 @@ const feature = {
 const valid: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   'feature.add': { type: 'feature.add', v: 1, feature, index: 0 },
   'feature.remove': { type: 'feature.remove', v: 1, featureId: 'f1' },
-  'feature.setParams': { type: 'feature.setParams', v: 1, featureId: 'f1', params: { size: 2 } },
+  'feature.setParams': {
+    type: 'feature.setParams',
+    v: 2,
+    featureId: 'f1',
+    typeVersion: 1,
+    params: { size: 2 },
+  },
   'feature.rename': { type: 'feature.rename', v: 1, featureId: 'f1', name: '' },
   'feature.suppress': { type: 'feature.suppress', v: 1, featureId: 'f1', suppressed: true },
   'feature.move': { type: 'feature.move', v: 1, featureId: 'f1', toIndex: 0 },
@@ -54,6 +61,10 @@ const broken: readonly (readonly [string, Readonly<Record<string, unknown>>, str
   ['feature.remove', { ...valid['feature.remove'], featureId: '' }, 'featureId'],
   ['feature.remove', without(valid['feature.remove'] ?? {}, 'featureId'), 'featureId'],
   ['feature.setParams', { ...valid['feature.setParams'], featureId: 1 }, 'featureId'],
+  ['feature.setParams', without(valid['feature.setParams'] ?? {}, 'typeVersion'), 'typeVersion'],
+  ['feature.setParams', { ...valid['feature.setParams'], typeVersion: 0 }, 'typeVersion'],
+  ['feature.setParams', { ...valid['feature.setParams'], typeVersion: 1.5 }, 'typeVersion'],
+  ['feature.setParams', { ...valid['feature.setParams'], typeVersion: '1' }, 'typeVersion'],
   ['feature.setParams', { ...valid['feature.setParams'], params: null }, 'params'],
   ['feature.setParams', { ...valid['feature.setParams'], params: [1] }, 'params'],
   ['feature.setParams', without(valid['feature.setParams'] ?? {}, 'params'), 'params'],
@@ -101,7 +112,7 @@ describe('validate of built-in handlers', () => {
   });
 
   it('validates the result of upcast, not the raw older version', () => {
-    const registry = createOpHandlerRegistry();
+    const registry = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
     registry.register({
       type: 'test.ping',
       version: 2,

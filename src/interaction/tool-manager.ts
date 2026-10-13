@@ -116,12 +116,20 @@ export function createToolManager(deps: {
   let refPick: RefPick | null = null;
 
   /** Creates or drops refPick by the focused reference param of the current session. */
+  /** The focused param of the current session; the hover is cleared when it changes. */
+  let refParam: string | null = null;
+
   function syncRefPick(): void {
-    if (session === null || session.state.get().activeRefParam === null) {
+    const next = session?.state.get().activeRefParam ?? null;
+    if (session === null || next === null) {
       dropRefPick();
+      refParam = null;
       return;
     }
     refPick ??= createRefPick(session, deps.ctx.viewport);
+    // Another param may allow other targets: the old hover must not stay (spec 10).
+    if (refParam !== null && refParam !== next) deps.ctx.viewport.highlight.setHover(null);
+    refParam = next;
   }
 
   function dropRefPick(): void {

@@ -110,6 +110,21 @@ describe('SELECT_TOOL', () => {
       expect(viewport.hover).toBeNull();
     });
 
+    it('picks without a filter, so faces and edges both count', () => {
+      const { viewport, selection, pointer, click } = setup();
+      viewport.setPick(EDGE_HIT);
+      // A pick with a narrower filter before each event: the tool must not inherit it.
+      viewport.pick(0, 0, ['face']);
+      pointer(ptr('move', 10, 0));
+      expect(viewport.lastFilter).toBeUndefined();
+      expect(viewport.hover).toEqual(EDGE_HIT);
+
+      viewport.pick(0, 0, ['face']);
+      click(10, 10);
+      expect(viewport.lastFilter).toBeUndefined();
+      expect(selection.items.get()).toEqual([EDGE]);
+    });
+
     it('leave clears the hover', () => {
       const { viewport, pointer } = setup();
       viewport.setPick(EDGE_HIT);

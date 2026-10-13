@@ -8,6 +8,8 @@ export type {
   OverlayPort,
   OverlayShape,
   OverlayStyle,
+  PickFilter,
+  PickKind,
   PickResult,
   ViewKeyEvent,
   ViewPointerEvent,

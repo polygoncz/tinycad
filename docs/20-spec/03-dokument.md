@@ -100,7 +100,7 @@ export function createDocument(init: CreateDocumentInit): DocumentWriter;
 
 ## Reference na jiné entity
 
-Parametry featur mohou odkazovat na výsledky jiných featur. Reference jsou vždy **jména**, nikdy indexy nebo handle. Značkovaná id (`FeatureId`, `BodyId`…) vznikají přetypováním jen na dvou důvěryhodných místech: při generování id v `ops` a v `fromData` po kontrole tvaru dat.
+Parametry featur mohou odkazovat na výsledky jiných featur. Reference jsou vždy **jména**, nikdy indexy nebo handle. Značkovaná id (`FeatureId`, `BodyId`…) vznikají přetypováním jen na důvěryhodných místech: při generování id v `interaction` (`FeatureEditor`), v `fromData` po kontrole tvaru dat, v `bodyId` (ražba `BodyId`, [[0015-artefakty-a-identita-telesa|ADR 0015]]) a v interní kontrole tvaru reference `readRef`, kterou sdílí `validateAgainstSchema` a `referencesOf`.
 
 ```ts
 export type BodyId = Brand<string, 'BodyId'>;   // '<featureId>/body' nebo '<featureId>/body:<n>'
@@ -118,7 +118,7 @@ export type EntityRef = BodyRef | TopoRef | SketchRegionRef;   // diskriminován
 Id artefaktu má vždy tvar `<vlastník>/<druh>[:<n>]` ([[0015-artefakty-a-identita-telesa|ADR 0015]]). Razí ho jediné místo v `document`; builder nepřetypovává. Z referencí featury tak plyne, na kterých featurách závisí – čisté funkce, které v [[M11-dalsi-entity|M11]] použijí pravidla přesunu a mazání:
 
 ```ts
-export function bodyId(origin: FeatureId, n?: number): BodyId;   // '<origin>/body', s n >= 1 '<origin>/body:<n>'; n < 1 nebo neceločíselné → výjimka
+export function bodyId(origin: FeatureId, n?: number): BodyId;   // '<origin>/body', s n >= 1 '<origin>/body:<n>'; n < 1 nebo neceločíselné → výjimka; prázdný origin nebo origin s '/' → výjimka
 export function originOfBody(body: BodyId): FeatureId;            // text před prvním '/'; bez '/' → výjimka (chyba programu)
 export function ownerOf(ref: EntityRef): FeatureId;               // body, topo → originOfBody(ref.body); region → ref.sketch
 
@@ -130,7 +130,7 @@ export function orderViolations(studio: PartStudioData, deps: ReadonlyMap<Featur
 ```
 
 - `referencesOf` projde `schema.params` v pořadí schématu; u druhů `bodies`, `topo` a `region` vezme z hodnoty jen položky, které jsou platnou referencí daného druhu (stejná kontrola tvaru jako `validateAgainstSchema`); hodnotu, která není pole, a neplatné položky přeskočí (hlásí je validace); `params`, které nejsou objekt → `[]`. Výsledek i položky jsou zmrazené kopie.
-- `dependenciesOf`: pro každou featuru studia v pořadí vlastníci jejích referencí přes `ownerOf`, bez duplicit, v pořadí prvního výskytu, jen featury, které ve studiu existují (nevyřešenou referenci hlásí regenerace), bez vlastní featury; neznámý typ → `[]`.
+- `dependenciesOf`: pro každou featuru studia v pořadí vlastníci jejích referencí přes `ownerOf`, bez duplicit, v pořadí prvního výskytu, jen featury, které ve studiu existují (nevyřešenou referenci hlásí regenerace), bez vlastní featury; neznámý typ → `[]`. Počítá se pro všechny featury studia včetně potlačených a za rollback barem (pravidla v M11 si stav featury ověří samy).
 - `dependentsOf`: featury, jejichž závislosti obsahují `id`, v pořadí mapy.
 - `orderViolations`: dvojice, kde závislost leží na indexu ≥ index featury. Prázdné = pořadí platné; pořadí výsledku podle featur, pak závislostí.
 
@@ -225,7 +225,7 @@ export interface FeatureData { readonly type: string; readonly typeVersion: numb
 export function migrateFeatureData(schemas: RegistryReader<FeatureSchema>, data: FeatureData): Result<FeatureData, DocumentLoadIssue>;
 ```
 
-`fromData` cesty prefixuje `studio.features[i].`.
+`fromData` cesty prefixuje `studio.features[i].`. Migrovaný výsledek zachová ostatní pole vstupu (`{ ...data, typeVersion, params }`); nezměněná data vrací jako tentýž objekt.
 
 ## Testy
 

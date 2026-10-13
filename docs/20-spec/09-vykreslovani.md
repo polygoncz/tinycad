@@ -167,7 +167,7 @@ Zvýraznění plochy je **malá vlastní kopie** jejích trojúhelníků: čist�
 
 `PickResult` definuje [[10-interakce#Port viewportu]] ([[Q057 Tvar PickResult|Q057]]).
 
-Filtr (`PickFilter`, [[10-interakce#Port viewportu]], M10.1): průchod přes hrany (bod 2) běží jen s `'edge'` ve filtru, raycast ploch (bod 1) jen s `'face'`; prázdný filtr vrátí `null` bez dotazu na scénu. Výchozí je obojí.
+Filtr (`PickFilter`, [[10-interakce#Port viewportu]], M10.1): průchod přes hrany (bod 2) běží jen s `'edge'` ve filtru, raycast ploch (bod 1) jen s `'face'`; prázdný filtr vrátí `null` bez dotazu na scénu. Výchozí je obojí. Plochy zakrývají hrany i s filtrem `['edge']`: raycast viditelnosti hrany (bod 2) s plochami počítá vždy, filtr vypíná jen výběr ploch jako výsledek.
 
 1. Plochy: `THREE.Raycaster` jen proti meshům těles → první zásah → index trojúhelníku → `triangleToFace` → `faceIndex`. `normal` = normála trojúhelníku z jeho vinutí (proti směru hodinových ručiček při pohledu zvenku = ven, kontrakt [[06-geometricke-jadro|jádra]]) ve světových souřadnicích, **ven z tělesa**, neotáčí se podle paprsku. Orientace roviny skici na ploše (M12) tak nezávisí na tom, odkud se uživatel dívá.
 2. Hrany: čistá funkce `closestSegments(screenSegments, x, y, tolerancePx)` nad segmenty promítnutými do pixelů vrátí kandidáty seřazené podle vzdálenosti (tolerance 6 px). Kandidát je viditelný, pokud raycast skrz jeho nejbližší bod nenarazí na plochu blíž než ten bod (tolerance 1e-4 × úhlopříčka scény). První viditelný kandidát vyhrává **před plochou**. `point` = nejbližší bod na segmentu ve 3D.

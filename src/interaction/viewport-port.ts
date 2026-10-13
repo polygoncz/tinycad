@@ -7,8 +7,12 @@ import type { Subscribable, Vec3 } from '@/core';
 import type { BodyId } from '@/document';
 
 export interface ViewportPort {
-  /** Coordinates in px relative to the view area; null = nothing under the cursor. */
-  pick(x: number, y: number): PickResult | null;
+  /**
+   * Coordinates in px relative to the view area; null = nothing under the cursor.
+   * The filter says what can be hit, default ['edge', 'face']; an empty one gives null
+   * without asking the scene. Its order has no meaning: an edge wins over a face.
+   */
+  pick(x: number, y: number, filter?: PickFilter): PickResult | null;
   screenToRay(x: number, y: number): { readonly origin: Vec3; readonly direction: Vec3 };
   /** Hover and selection. */
   readonly highlight: HighlightPort;
@@ -16,6 +20,12 @@ export interface ViewportPort {
   readonly overlay: OverlayPort;
   readonly events: Subscribable<ViewportEvents>;
 }
+
+/** What pick can hit. M12 adds 'sketchEntity', M14 'vertex'. */
+export type PickKind = 'face' | 'edge';
+
+/** Kinds pick may return, in any order; empty = nothing can be picked. */
+export type PickFilter = readonly PickKind[];
 
 export interface ViewportEvents {
   readonly pointer: ViewPointerEvent;

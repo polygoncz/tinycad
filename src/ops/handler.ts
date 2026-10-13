@@ -1,12 +1,19 @@
 import { createRegistry } from '@/core';
-import { featureHandlers } from './handlers/feature';
+import type { RegistryReader } from '@/core';
+import type { FeatureSchema } from '@/document';
+import { createFeatureHandlers } from './handlers/feature';
 import { studioHandlers } from './handlers/studio';
 import type { OpHandler, OpHandlerRegistry } from './op-handler';
 
 export type { OpHandler, OpHandlerRegistry } from './op-handler';
 
-/** Registry with the built-in handlers. register({ type: 'batch' }) throws. */
-export function createOpHandlerRegistry(): OpHandlerRegistry {
+/**
+ * Registry with the built-in handlers. register({ type: 'batch' }) throws. The schemas are for
+ * migrating the feature data of operations when applied (Q035).
+ */
+export function createOpHandlerRegistry(deps: {
+  schemas: RegistryReader<FeatureSchema>;
+}): OpHandlerRegistry {
   const registry = createRegistry<OpHandler>({ what: 'op handler', keyOf: (h) => h.type });
   const guarded: OpHandlerRegistry = {
     ...registry,
@@ -17,6 +24,8 @@ export function createOpHandlerRegistry(): OpHandlerRegistry {
       registry.register(handler);
     },
   };
-  for (const handler of [...featureHandlers, ...studioHandlers]) guarded.register(handler);
+  for (const handler of [...createFeatureHandlers(deps.schemas), ...studioHandlers]) {
+    guarded.register(handler);
+  }
   return guarded;
 }

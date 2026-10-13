@@ -39,9 +39,10 @@ describe('documents', () => {
     expect(await listDocuments(store)).toEqual([
       { meta: { id, name: UNTITLED, createdAt: 1000 }, lastSeq: 0, updatedAt: 1000 },
     ]);
+    const schemas = createFeatureSchemaRegistry();
     const loaded = await loadDocument(store, id, {
-      schemas: createFeatureSchemaRegistry(),
-      handlers: createOpHandlerRegistry(),
+      schemas,
+      handlers: createOpHandlerRegistry({ schemas }),
     });
     expect(loaded.ok).toBe(true);
   });

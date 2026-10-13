@@ -3,8 +3,8 @@ import { createDocument } from './cad-document';
 import type { DocumentId, FeatureId, FeatureInstance } from './model';
 import { createFeatureSchemaRegistry } from './schema';
 import type { FeatureSchema, FeatureSchemaRegistry } from './schema';
-import { fromData, toData } from './serialize';
-import type { DocumentLoadIssue } from './serialize';
+import { fromData, migrateFeatureData, toData } from './serialize';
+import type { DocumentLoadIssue, FeatureData } from './serialize';
 
 // Box v2 renamed `size` to `width` and dropped `legacy`.
 interface BoxV2 {
@@ -141,6 +141,59 @@ describe('fromData – migration', () => {
     expect(loadIssues(rawData([{ ...box('a', 1), typeVersion: 3 }])).map((i) => i.path)).toEqual([
       'studio.features[0].typeVersion',
     ]);
+  });
+});
+
+describe('migrateFeatureData', () => {
+  const v1 = (params: unknown): FeatureData => ({ type: 'box', typeVersion: 1, params });
+
+  function issue(data: FeatureData, registry = schemas(boxV2)): DocumentLoadIssue {
+    const result = migrateFeatureData(registry, data);
+    if (result.ok) throw new Error('Expected the migration to fail');
+    return result.error;
+  }
+
+  it('returns the same object when the data is on the current version', () => {
+    const data: FeatureData = { type: 'box', typeVersion: 2, params: { width: 1 } };
+    const result = migrateFeatureData(schemas(boxV2), data);
+    expect(result.ok && result.value).toBe(data);
+  });
+
+  it('migrates an older version through migrate to the schema version', () => {
+    expect(migrateFeatureData(schemas(boxV2), v1({ size: 5, legacy: true }))).toEqual({
+      ok: true,
+      value: { type: 'box', typeVersion: 2, params: { width: 5 } },
+    });
+  });
+
+  it('keeps an unknown type unchanged, the same object', () => {
+    const data: FeatureData = { type: 'teleport', typeVersion: 7, params: { any: 1 } };
+    const result = migrateFeatureData(schemas(boxV2), data);
+    expect(result.ok && result.value).toBe(data);
+  });
+
+  it('reports a version newer than the schema at typeVersion', () => {
+    expect(issue({ type: 'box', typeVersion: 3, params: {} })).toEqual({
+      path: 'typeVersion',
+      message: expect.stringContaining('newer') as string,
+    });
+  });
+
+  it('reports a migrate that throws at params', () => {
+    expect(issue(v1({ size: 'x' }))).toEqual({
+      path: 'params',
+      message: expect.stringContaining('size must be a number') as string,
+    });
+  });
+
+  it.each([
+    ['a number', 42],
+    ['an array', [1]],
+    ['null', null],
+    ['a Date inside', { at: new Date(0) }],
+  ])('reports a migrate returning %s at params', (_, result) => {
+    const broken: FeatureSchema = { ...boxV2, migrate: () => result };
+    expect(issue(v1({}), schemas(broken)).path).toBe('params');
   });
 });
 

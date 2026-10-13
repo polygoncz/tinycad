@@ -1,5 +1,6 @@
 // Picking (spec 09, "Picking"): what is under the cursor. Edges first, in screen space with a
 // pixel tolerance and an occlusion check; then faces by a raycast against the body meshes.
+// The filter (spec 10, "Port viewportu") turns either pass off; faces still hide edges.
 //
 // Cost: every pick projects all edge segments of all bodies and runs one raycast per edge
 // candidate (plus one for the face). Fine for M8 (a box has 12 edges); large models will need a
@@ -7,7 +8,7 @@
 
 import * as THREE from 'three';
 import { assert, type Vec3 } from '@/core';
-import type { PickResult } from '@/interaction';
+import type { PickFilter, PickResult } from '@/interaction';
 import type { BoundingBox } from '@/kernel';
 import type { BodyView } from './body-view';
 import { closestSegments } from './edge-pick';
@@ -24,6 +25,8 @@ import {
 const EDGE_TOLERANCE_PX = 6;
 /** Below this length (px) a projected segment counts as a point: an edge seen end-on. */
 const POINT_SEGMENT_PX = 1e-3;
+/** The filter of a pick without one (spec 10, "Port viewportu"). */
+const DEFAULT_FILTER: PickFilter = Object.freeze(['edge', 'face']);
 
 export interface PickerOptions {
   /** The shown bodies (BodyLayerInternal.views); the hidden ones are skipped. */
@@ -33,13 +36,17 @@ export interface PickerOptions {
 }
 
 export interface Picker {
-  /** (x, y) in CSS px relative to a canvas of width × height CSS px. */
+  /**
+   * (x, y) in CSS px relative to a canvas of width × height CSS px. The filter says what can
+   * be hit, default edges and faces; an empty one gives null without looking at the scene.
+   */
   pick(
     camera: THREE.Camera,
     x: number,
     y: number,
     width: number,
     height: number,
+    filter?: PickFilter,
   ): PickResult | null;
 }
 
@@ -161,8 +168,8 @@ export function createPicker(options: PickerOptions): Picker {
   }
 
   return {
-    pick(camera, x, y, width, height) {
-      if (width <= 0 || height <= 0) return null;
+    pick(camera, x, y, width, height, filter = DEFAULT_FILTER) {
+      if (filter.length === 0 || width <= 0 || height <= 0) return null;
       // A hidden body (Q071) is neither picked nor hides what is behind it.
       const views = [...options.views()].filter((view) => view.object.visible);
       if (views.length === 0) return null;
@@ -171,8 +178,11 @@ export function createPicker(options: PickerOptions): Picker {
       const meshes = views.map((view) => view.faces);
 
       // An edge within the tolerance wins over the face under the cursor (spec 09).
-      const edge = pickEdge(camera, views, meshes, x, y, { width, height });
-      if (edge !== null) return edge;
+      if (filter.includes('edge')) {
+        const edge = pickEdge(camera, views, meshes, x, y, { width, height });
+        if (edge !== null) return edge;
+      }
+      if (!filter.includes('face')) return null;
       const at = toNdc(x, y, width, height);
       return pickFace(camera, views, meshes, at.x, at.y);
     },

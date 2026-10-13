@@ -1,7 +1,9 @@
 // Test-only entry point of ops: a ready-made session (document + handlers + log +
 // dispatcher + undo). dependency-cruiser allows importing it only from *.test.ts.
 
-import type { DocumentWriter } from '@/document';
+import type { RegistryReader } from '@/core';
+import { createFeatureSchemaRegistry } from '@/document';
+import type { DocumentWriter, FeatureSchema } from '@/document';
 import { aDocument } from '@/document/testing';
 import type { DocumentOptions } from '@/document/testing';
 import { createOperationDispatcher } from './dispatcher';
@@ -21,10 +23,16 @@ export interface OpsSession {
   readonly undo: UndoManager;
 }
 
+export interface OpsSessionOptions extends DocumentOptions {
+  /** Feature schemas the handlers migrate feature data with (Q035). Defaults to none. */
+  readonly schemas?: RegistryReader<FeatureSchema>;
+}
+
 /** A session over aDocument(init); LogEntry.time is deterministic (1, 2, 3, …). */
-export function anOpsSession(init: DocumentOptions = {}): OpsSession {
-  const doc = aDocument(init);
-  const handlers = createOpHandlerRegistry();
+export function anOpsSession(init: OpsSessionOptions = {}): OpsSession {
+  const { schemas = createFeatureSchemaRegistry(), ...documentOptions } = init;
+  const doc = aDocument(documentOptions);
+  const handlers = createOpHandlerRegistry({ schemas });
   const log = createOperationLog();
   let clock = 0;
   const dispatcher = createOperationDispatcher({ doc, handlers, log, now: () => ++clock });

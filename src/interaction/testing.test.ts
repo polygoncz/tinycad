@@ -5,6 +5,7 @@ import type {
   FeatureHealth,
   HighlightTarget,
   OverlayShape,
+  PickKind,
   PickResult,
   ViewKeyEvent,
   ViewPointerEvent,
@@ -51,6 +52,37 @@ describe('FakeViewport', () => {
       expect(view.pick(10, 99)).toBe(FACE);
       expect(view.pick(60, 10)).toBe(EDGE);
       expect(view.pick(60, 60)).toBeNull();
+    });
+
+    it('returns the result only when its kind is in the filter', () => {
+      const view = new FakeViewport();
+      view.setPick(EDGE);
+      expect(view.pick(0, 0, ['face'])).toBeNull();
+      expect(view.pick(0, 0, ['edge'])).toBe(EDGE);
+      expect(view.pick(0, 0, ['face', 'edge'])).toBe(EDGE);
+      expect(view.pick(0, 0, [])).toBeNull();
+      view.setPick(FACE);
+      expect(view.pick(0, 0, ['edge'])).toBeNull();
+      expect(view.pick(0, 0, ['face'])).toBe(FACE);
+    });
+
+    it('lastFilter is the filter of the last call, undefined without one', () => {
+      const view = new FakeViewport();
+      expect(view.lastFilter).toBeUndefined();
+      view.pick(0, 0, ['face']);
+      expect(view.lastFilter).toEqual(['face']);
+      view.pick(0, 0, []);
+      expect(view.lastFilter).toEqual([]);
+      view.pick(0, 0);
+      expect(view.lastFilter).toBeUndefined();
+    });
+
+    it('keeps its own copy of the filter', () => {
+      const view = new FakeViewport();
+      const filter: PickKind[] = ['face'];
+      view.pick(0, 0, filter);
+      filter.push('edge');
+      expect(view.lastFilter).toEqual(['face']);
     });
   });
 

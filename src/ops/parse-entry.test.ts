@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { createFeatureSchemaRegistry } from '@/document';
 import { createOpHandlerRegistry } from './handler';
 import type { Operation } from './operation';
 import { parseLogEntry } from './parse-entry';
 
-const handlers = createOpHandlerRegistry();
+const handlers = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
 
 const op = { type: 'feature.rename', v: 1, featureId: 'f1', name: 'New' };
 const inverse = { type: 'feature.rename', v: 1, featureId: 'f1', name: 'Old' };
@@ -63,7 +64,7 @@ describe('parseLogEntry', () => {
   });
 
   it('upcasts an older operation version inside the entry', () => {
-    const registry = createOpHandlerRegistry();
+    const registry = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
     registry.register({
       type: 'test.ping',
       version: 2,

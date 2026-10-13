@@ -22,7 +22,8 @@ function setup() {
     meta: { id: 'dialog' as DocumentId, name: 'Dialog', createdAt: 0 }, // a test id is trusted
   });
   const log = createOperationLog();
-  const ops = createOperationDispatcher({ doc, handlers: createOpHandlerRegistry(), log });
+  const handlers = createOpHandlerRegistry({ schemas });
+  const ops = createOperationDispatcher({ doc, handlers, log });
   const regenerator = createRegenerator({ kernel, schemas, builders, now: () => 0 });
   const editor = createFeatureEditor({
     doc,

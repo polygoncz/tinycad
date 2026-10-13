@@ -4,6 +4,9 @@
 export type { DocumentEvents, DocumentReader, DocumentWriter } from './document';
 export type { DocumentId, DocumentMeta, FeatureId, FeatureInstance, PartStudioData } from './model';
 export type { BodyId, BodyRef, EntityRef, SketchRegionRef, TopoName, TopoRef } from './refs';
+export { bodyId, originOfBody, ownerOf } from './refs';
+export { dependenciesOf, dependentsOf, orderViolations, referencesOf } from './references';
+export type { OrderViolation } from './references';
 
 export { createDocument } from './cad-document';
 export type { CreateDocumentInit } from './cad-document';
@@ -17,5 +20,5 @@ export type {
   ParamSpec,
 } from './schema';
 export { validateAgainstSchema } from './validate';
-export { fromData, toData } from './serialize';
-export type { DocumentData, DocumentLoadError, DocumentLoadIssue } from './serialize';
+export { fromData, migrateFeatureData, toData } from './serialize';
+export type { DocumentData, DocumentLoadError, DocumentLoadIssue, FeatureData } from './serialize';

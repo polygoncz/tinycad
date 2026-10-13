@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DocumentWriter, FeatureId } from '@/document';
-import { toData } from '@/document';
+import { createFeatureSchemaRegistry, toData } from '@/document';
 import { aDocument, aFeature } from '@/document/testing';
 import { applyOperation } from './apply';
 import { createOpHandlerRegistry } from './handler';
@@ -28,7 +28,7 @@ type Op =
   | BatchOp;
 
 const id = (s: string): FeatureId => s as FeatureId;
-const handlers = createOpHandlerRegistry();
+const handlers = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
 
 function setup(rollbackIndex: number): DocumentWriter {
   return aDocument({
@@ -85,7 +85,13 @@ describe('applyOperation – rollback bar', () => {
       const doc = setup(bar);
       const plain: Op[] = [
         rename('b', 'X'),
-        { type: 'feature.setParams', v: 1, featureId: id('b'), params: { size: 7 } },
+        {
+          type: 'feature.setParams',
+          v: 2,
+          featureId: id('b'),
+          typeVersion: 1,
+          params: { size: 7 },
+        },
         { type: 'feature.suppress', v: 1, featureId: id('b'), suppressed: true },
       ];
       for (const op of plain) {
@@ -156,7 +162,7 @@ describe('applyOperation – batch', () => {
 
   it('rethrows the very same error object when reverting succeeds', () => {
     const failure = new Error('boom');
-    const reg = createOpHandlerRegistry();
+    const reg = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
     reg.register({
       type: 'test.fail',
       version: 1,

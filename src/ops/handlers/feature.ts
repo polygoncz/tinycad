@@ -1,4 +1,13 @@
-import type { DocumentReader, FeatureId, FeatureInstance } from '@/document';
+import { assert } from '@/core';
+import type { RegistryReader } from '@/core';
+import { migrateFeatureData } from '@/document';
+import type {
+  DocumentReader,
+  FeatureData,
+  FeatureId,
+  FeatureInstance,
+  FeatureSchema,
+} from '@/document';
 import type { OpHandler } from '../op-handler';
 import { OP_VERSION } from '../operation';
 import {
@@ -26,29 +35,56 @@ function requireFeature(doc: DocumentReader, id: FeatureId): FeatureInstance {
   return f;
 }
 
-const add: OpHandler<FeatureAddOp> = {
-  type: 'feature.add',
-  version: OP_VERSION['feature.add'],
-  invert: (_doc, op) => ({
-    type: 'feature.remove',
-    v: OP_VERSION['feature.remove'],
-    featureId: op.feature.id,
-  }),
-  apply: (doc, op) => {
-    doc.insertFeature(op.index, op.feature);
-  },
-  validate: validateShape({
-    feature: object({
-      id: nonEmptyString,
-      type: nonEmptyString,
-      typeVersion: wholeNumber(1),
-      name: string,
-      suppressed: boolean,
-      params: plainObject,
+type Schemas = RegistryReader<FeatureSchema>;
+
+/**
+ * Feature data of an operation on the current version of its schema (Q035): the log lives
+ * forever, so old entries carry old params. A failed migration throws before any change, so
+ * apply leaves the document as it was; replaying a log turns it into an entry error.
+ */
+function migrated(schemas: Schemas, featureId: FeatureId, data: FeatureData): FeatureData {
+  const result = migrateFeatureData(schemas, data);
+  if (!result.ok) {
+    const { path, message } = result.error;
+    throw new Error(`Feature '${featureId}' of type '${data.type}': ${path}: ${message}`);
+  }
+  return result.value;
+}
+
+/** The feature with the type version and params of `data`. */
+function withData(f: FeatureInstance, data: FeatureData): FeatureInstance {
+  // FeatureInstance.params is Readonly<P> with P = unknown, which rejects a plain unknown.
+  return { ...f, typeVersion: data.typeVersion, params: data.params as FeatureInstance['params'] };
+}
+
+function addHandler(schemas: Schemas): OpHandler<FeatureAddOp> {
+  return {
+    type: 'feature.add',
+    version: OP_VERSION['feature.add'],
+    invert: (_doc, op) => ({
+      type: 'feature.remove',
+      v: OP_VERSION['feature.remove'],
+      featureId: op.feature.id,
     }),
-    index: wholeNumber(0),
-  }),
-};
+    apply: (doc, op) => {
+      const { feature } = op;
+      const data = migrated(schemas, feature.id, feature);
+      // Current data: the very instance of the operation goes into the document.
+      doc.insertFeature(op.index, data === feature ? feature : withData(feature, data));
+    },
+    validate: validateShape({
+      feature: object({
+        id: nonEmptyString,
+        type: nonEmptyString,
+        typeVersion: wholeNumber(1),
+        name: string,
+        suppressed: boolean,
+        params: plainObject,
+      }),
+      index: wholeNumber(0),
+    }),
+  };
+}
 
 const remove: OpHandler<FeatureRemoveOp> = {
   type: 'feature.remove',
@@ -68,26 +104,44 @@ const remove: OpHandler<FeatureRemoveOp> = {
   validate: validateShape({ featureId: nonEmptyString }),
 };
 
-const setParams: OpHandler<FeatureSetParamsOp> = {
-  type: 'feature.setParams',
-  version: OP_VERSION['feature.setParams'],
-  invert: (doc, op) => ({
+function setParamsHandler(schemas: Schemas): OpHandler<FeatureSetParamsOp> {
+  return {
     type: 'feature.setParams',
-    v: OP_VERSION['feature.setParams'],
-    featureId: op.featureId,
-    params: requireFeature(doc, op.featureId).params,
-  }),
-  apply: (doc, op) => {
-    doc.replaceFeature({
-      ...requireFeature(doc, op.featureId),
-      // FeatureInstance.params is Readonly<P> with P = unknown, which rejects a plain unknown.
-      params: op.params as FeatureInstance['params'],
-    });
-  },
-  // Same feature: the later params win; the inverse of the first op still restores the start.
-  merge: (prev, next) => (prev.featureId === next.featureId ? next : null),
-  validate: validateShape({ featureId: nonEmptyString, params: plainObject }),
-};
+    version: OP_VERSION['feature.setParams'],
+    invert: (doc, op) => {
+      const f = requireFeature(doc, op.featureId);
+      return {
+        type: 'feature.setParams',
+        v: OP_VERSION['feature.setParams'],
+        featureId: op.featureId,
+        typeVersion: f.typeVersion,
+        params: f.params,
+      };
+    },
+    apply: (doc, op) => {
+      const f = requireFeature(doc, op.featureId);
+      // The type comes from the document: the operation only knows the feature by its id.
+      const data = { type: f.type, typeVersion: op.typeVersion, params: op.params };
+      doc.replaceFeature(withData(f, migrated(schemas, f.id, data)));
+    },
+    // Same feature: the later params win; the inverse of the first op still restores the start.
+    merge: (prev, next) => (prev.featureId === next.featureId ? next : null),
+    // Version 1 had no typeVersion. It existed only while every feature schema had version 1,
+    // so 1 is right: the version of an operation carrying feature data goes up before any
+    // schema leaves version 1 (Q035).
+    upcast: (fromVersion, raw) => {
+      assert(fromVersion === 1, `feature.setParams: no upcast from version ${String(fromVersion)}`);
+      // upcastOperation passes an object only and validates the result right after.
+      const old = raw as FeatureSetParamsOp;
+      return { ...old, v: OP_VERSION['feature.setParams'], typeVersion: 1 };
+    },
+    validate: validateShape({
+      featureId: nonEmptyString,
+      typeVersion: wholeNumber(1),
+      params: plainObject,
+    }),
+  };
+}
 
 const rename: OpHandler<FeatureRenameOp> = {
   type: 'feature.rename',
@@ -137,13 +191,12 @@ const move: OpHandler<FeatureMoveOp> = {
   validate: validateShape({ featureId: nonEmptyString, toIndex: wholeNumber(0) }),
 };
 
-// Method-style members make OpHandler<O> assignable to OpHandler<Operation>; the dispatcher
-// looks handlers up by op.type, so each one only ever sees its own operation.
-export const featureHandlers: readonly OpHandler[] = [
-  add,
-  remove,
-  setParams,
-  rename,
-  suppress,
-  move,
-];
+/**
+ * The built-in feature.* handlers. feature.add and feature.setParams migrate the feature data
+ * they carry with `schemas` when applied (Q035).
+ */
+export function createFeatureHandlers(schemas: Schemas): readonly OpHandler[] {
+  // Method-style members make OpHandler<O> assignable to OpHandler<Operation>; the dispatcher
+  // looks handlers up by op.type, so each one only ever sees its own operation.
+  return [addHandler(schemas), remove, setParamsHandler(schemas), rename, suppress, move];
+}

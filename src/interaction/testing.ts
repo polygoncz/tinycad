@@ -11,6 +11,7 @@ import type {
   HighlightTarget,
   OverlayPort,
   OverlayShape,
+  PickFilter,
   PickResult,
   ViewKeyEvent,
   ViewPointerEvent,
@@ -22,12 +23,16 @@ type Ray = ReturnType<ViewportPort['screenToRay']>;
 type PickFn = (x: number, y: number) => PickResult | null;
 type RayFn = (x: number, y: number) => Ray;
 
+/** The filter of a pick called without one (spec 10, "Port viewportu"). */
+const DEFAULT_FILTER: PickFilter = Object.freeze(['edge', 'face']);
+
 /** Default ray: screen px map 1:1 to world XY, looking down -Z (a top view without y flip). */
 const DEFAULT_RAY: RayFn = (x, y) => ({ origin: [x, y, 0] satisfies Vec3, direction: [0, 0, -1] });
 
 /**
  * A ViewportPort for tests: preset pick results, a configurable screenToRay, recorded
  * highlight and overlay state, and manual emitting of pointer and key events.
+ * pick returns the preset result only when its kind is in the filter and records the filter.
  * The recorded state is replaced on every call, so a read snapshot never changes later.
  */
 export class FakeViewport implements ViewportPort {
@@ -38,6 +43,7 @@ export class FakeViewport implements ViewportPort {
 
   private pickFn: PickFn = () => null;
   private rayFn: RayFn = DEFAULT_RAY;
+  private filterState: PickFilter | undefined = undefined;
   private hoverState: HighlightTarget | null = null;
   private selectionState: readonly HighlightTarget[] = [];
   private overlayState: ReadonlyMap<string, readonly OverlayShape[]> = new Map();
@@ -76,12 +82,20 @@ export class FakeViewport implements ViewportPort {
     this.rayFn = fn;
   }
 
-  pick(x: number, y: number): PickResult | null {
-    return this.pickFn(x, y);
+  /** The preset result, or null when its kind is not in the filter. */
+  pick(x: number, y: number, filter?: PickFilter): PickResult | null {
+    this.filterState = filter === undefined ? undefined : Object.freeze([...filter]);
+    const hit = this.pickFn(x, y);
+    return hit !== null && (filter ?? DEFAULT_FILTER).includes(hit.kind) ? hit : null;
   }
 
   screenToRay(x: number, y: number): Ray {
     return this.rayFn(x, y);
+  }
+
+  /** Filter of the last pick call; undefined = called without one, or not called yet. */
+  get lastFilter(): PickFilter | undefined {
+    return this.filterState;
   }
 
   /** Last state passed to highlight.setHover. */

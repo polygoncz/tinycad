@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import { createFeatureSchemaRegistry } from '@/document';
 import { createOpHandlerRegistry } from './handler';
 import type { OpHandler } from './handler';
+
+const deps = { schemas: createFeatureSchemaRegistry() };
 
 describe('createOpHandlerRegistry', () => {
   it('contains the seven built-in handlers', () => {
     expect(
-      createOpHandlerRegistry()
+      createOpHandlerRegistry(deps)
         .all()
         .map((h) => h.type)
         .sort(),
@@ -23,7 +26,7 @@ describe('createOpHandlerRegistry', () => {
   });
 
   it('has no handler for batch and refuses to register one', () => {
-    const registry = createOpHandlerRegistry();
+    const registry = createOpHandlerRegistry(deps);
     expect(registry.has('batch')).toBe(false);
     const fake: OpHandler = {
       type: 'batch',
@@ -37,7 +40,7 @@ describe('createOpHandlerRegistry', () => {
   });
 
   it('accepts new handlers and rejects duplicates', () => {
-    const registry = createOpHandlerRegistry();
+    const registry = createOpHandlerRegistry(deps);
     const custom: OpHandler = {
       type: 'sketch.noop',
       version: 1,
@@ -55,6 +58,6 @@ describe('createOpHandlerRegistry', () => {
   });
 
   it('registries are independent', () => {
-    expect(createOpHandlerRegistry()).not.toBe(createOpHandlerRegistry());
+    expect(createOpHandlerRegistry(deps)).not.toBe(createOpHandlerRegistry(deps));
   });
 });
