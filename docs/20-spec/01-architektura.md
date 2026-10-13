@@ -24,7 +24,7 @@ milestones:
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-13
+updated: 2026-10-14
 ---
 # 01 – Architektura
 
@@ -137,7 +137,7 @@ document emit('changed')
        regen/Regenerator.run(studio)
          ├─ najde první featuru, jejíž instance se změnila (identita objektu)
          ├─ builder.build(...) → kernel.makeBox(...)   ── postMessage ──► worker (OCCT)
-         └─ RegenResult { bodies, statuses }
+         └─ RegenResult { finalState: { artifacts }, statuses }
   └─ render/SceneSync.update(result)
        ├─ kernel.tessellate(handle) pro nové handle   ── worker ──►
        └─ Three.js mesh, requestRender()

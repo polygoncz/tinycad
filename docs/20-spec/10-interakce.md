@@ -388,7 +388,7 @@ export interface BrowserModel {
 
 - `setVisible` tělesa, které poslední regenerace nezná (zastaralý řádek v UI), nic neudělá. Při změně se nejdřív vyšle `hidden`, pak `bodies`.
 - Viditelnost je **stav pohledu** ([[Q071 Viditelnost těles|Q071]]): neukládá se, nejde přes dispečer ani do undo, po reloadu je vše vidět. Těleso, které po regeneraci zmizí, ze `hidden` vypadne.
-- Do M14 nemají tělesa stabilní identitu, takže skrytí se po změně historie může přenést na jiné těleso se stejným `BodyId`. Vědomé omezení.
+- Od [[0015-artefakty-a-identita-telesa|ADR 0015]] je `BodyId` rodokmen (featura původu), takže skrytí přežije změnu historie; uložení viditelnosti do dokumentu (metadata těles, [[Q071 Viditelnost těles|Q071]]) je úkol [[M11-dalsi-entity|M11]].
 
 ## Vestavěné akce
 

@@ -3,7 +3,7 @@ import type { RegistryReader, Result } from '@/core';
 import { createDocument } from './cad-document';
 import type { DocumentReader, DocumentWriter } from './document';
 import type { DocumentId, DocumentMeta, FeatureId, FeatureInstance, PartStudioData } from './model';
-import type { FeatureSchema, FeatureSchemaRegistry } from './schema';
+import type { FeatureSchema } from './schema';
 
 export interface DocumentData {
   readonly meta: DocumentMeta;
@@ -41,7 +41,7 @@ export function toData(doc: DocumentReader): DocumentData {
  */
 export function fromData(
   data: unknown,
-  schemas: FeatureSchemaRegistry,
+  schemas: RegistryReader<FeatureSchema>,
 ): Result<DocumentWriter, DocumentLoadError> {
   const issues: DocumentLoadIssue[] = [];
   const at = (path: string, message: string) => {
@@ -77,7 +77,7 @@ function readMeta(raw: unknown, at: At): DocumentMeta | undefined {
 
 function readStudio(
   raw: unknown,
-  schemas: FeatureSchemaRegistry,
+  schemas: RegistryReader<FeatureSchema>,
   at: At,
 ): PartStudioData | undefined {
   if (!isRecord(raw)) {
@@ -110,7 +110,7 @@ function readStudio(
 function readFeature(
   raw: unknown,
   path: string,
-  schemas: FeatureSchemaRegistry,
+  schemas: RegistryReader<FeatureSchema>,
   at: At,
 ): FeatureInstance | undefined {
   if (!isRecord(raw)) {
@@ -119,7 +119,8 @@ function readFeature(
   }
   const { id, type, typeVersion, name, params, suppressed } = raw;
   // Report every bad field first, then narrow all of them at once.
-  if (!isNonEmptyString(id)) at(`${path}.id`, 'Must be a non-empty string');
+  // The owner of an artifact id is the text before the first '/', so a feature id has none (spec 03).
+  if (!isFeatureIdText(id)) at(`${path}.id`, "Must be a non-empty string without '/'");
   if (!isNonEmptyString(type)) at(`${path}.type`, 'Must be a non-empty string');
   if (!isWholeNumber(typeVersion) || typeVersion < 1)
     at(`${path}.typeVersion`, 'Must be a whole number >= 1');
@@ -127,7 +128,7 @@ function readFeature(
   if (!isJsonObject(params)) at(`${path}.params`, 'Must be a plain JSON object');
   if (typeof suppressed !== 'boolean') at(`${path}.suppressed`, 'Must be true or false');
   if (
-    !isNonEmptyString(id) ||
+    !isFeatureIdText(id) ||
     !isNonEmptyString(type) ||
     !isWholeNumber(typeVersion) ||
     typeVersion < 1 ||
@@ -152,7 +153,7 @@ function readFeature(
 function migrate(
   f: FeatureInstance,
   path: string,
-  schemas: FeatureSchemaRegistry,
+  schemas: RegistryReader<FeatureSchema>,
   at: At,
 ): FeatureInstance | undefined {
   const migrated = migrateFeatureData(schemas, f);
@@ -228,6 +229,10 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === 'string' && v.length > 0;
+}
+
+function isFeatureIdText(v: unknown): v is string {
+  return isNonEmptyString(v) && !v.includes('/');
 }
 
 function isWholeNumber(v: unknown): v is number {

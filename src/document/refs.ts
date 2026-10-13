@@ -81,11 +81,9 @@ export function readRef(kind: EntityRef['kind'], r: unknown): EntityRef | undefi
   // The id casts below follow the shape check, as in fromData (spec 03).
   switch (kind) {
     case 'body':
-      return typeof r.body === 'string'
-        ? Object.freeze({ kind, body: r.body as BodyId })
-        : undefined;
+      return isBodyIdText(r.body) ? Object.freeze({ kind, body: r.body as BodyId }) : undefined;
     case 'topo':
-      return typeof r.body === 'string' && typeof r.name === 'string'
+      return isBodyIdText(r.body) && typeof r.name === 'string'
         ? Object.freeze({ kind, body: r.body as BodyId, name: r.name as TopoName })
         : undefined;
     case 'region':
@@ -99,4 +97,11 @@ export function readRef(kind: EntityRef['kind'], r: unknown): EntityRef | undefi
 
 function isRecord(v: unknown): v is Readonly<Record<string, unknown>> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/** '<owner>/body' or '<owner>/body:<n>' with n >= 1, as bodyId mints it; data from outside is checked here. */
+const BODY_ID = /^[^/]+\/body(?::[1-9][0-9]*)?$/;
+
+function isBodyIdText(v: unknown): v is string {
+  return typeof v === 'string' && BODY_ID.test(v);
 }

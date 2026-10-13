@@ -19,6 +19,11 @@ export const nonEmptyString = check(
   (v) => typeof v === 'string' && v !== '',
   'Must be a non-empty string',
 );
+/** A new feature id: the owner part of artifact ids, so it must not contain '/' (spec 03). */
+export const featureIdText = check(
+  (v) => typeof v === 'string' && v !== '' && !v.includes('/'),
+  "Must be a non-empty string without '/'",
+);
 export const string = check((v) => typeof v === 'string', 'Must be a string');
 export const boolean = check((v) => typeof v === 'boolean', 'Must be a boolean');
 export const plainObject = check(isRecord, 'Must be an object');

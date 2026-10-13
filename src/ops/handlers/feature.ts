@@ -12,6 +12,7 @@ import type { OpHandler } from '../op-handler';
 import { OP_VERSION } from '../operation';
 import {
   boolean,
+  featureIdText,
   nonEmptyString,
   object,
   plainObject,
@@ -74,7 +75,7 @@ function addHandler(schemas: Schemas): OpHandler<FeatureAddOp> {
     },
     validate: validateShape({
       feature: object({
-        id: nonEmptyString,
+        id: featureIdText,
         type: nonEmptyString,
         typeVersion: wholeNumber(1),
         name: string,

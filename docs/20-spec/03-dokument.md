@@ -100,7 +100,7 @@ export function createDocument(init: CreateDocumentInit): DocumentWriter;
 
 ## Reference na jiné entity
 
-Parametry featur mohou odkazovat na výsledky jiných featur. Reference jsou vždy **jména**, nikdy indexy nebo handle. Značkovaná id (`FeatureId`, `BodyId`…) vznikají přetypováním jen na důvěryhodných místech: při generování id v `interaction` (`FeatureEditor`), v `fromData` po kontrole tvaru dat, v `bodyId` (ražba `BodyId`, [[0015-artefakty-a-identita-telesa|ADR 0015]]) a v interní kontrole tvaru reference `readRef`, kterou sdílí `validateAgainstSchema` a `referencesOf`.
+Parametry featur mohou odkazovat na výsledky jiných featur. Reference jsou vždy **jména**, nikdy indexy nebo handle. Tvar id se kontroluje na datové hranici: `FeatureId` nesmí být prázdné ani obsahovat `/` (`fromData`, `validate` u `feature.add`), `BodyId` v referenci musí mít tvar `<vlastník>/body[:<n>]` (`readRef`); asserty v `bodyId` a `originOfBody` jsou pak jen pojistka proti chybě programu. Značkovaná id (`FeatureId`, `BodyId`…) vznikají přetypováním jen na důvěryhodných místech: při generování id v `interaction` (`FeatureEditor`), v `fromData` po kontrole tvaru dat, v `bodyId` (ražba `BodyId`, [[0015-artefakty-a-identita-telesa|ADR 0015]]) a v interní kontrole tvaru reference `readRef`, kterou sdílí `validateAgainstSchema` a `referencesOf`.
 
 ```ts
 export type BodyId = Brand<string, 'BodyId'>;   // '<featureId>/body' nebo '<featureId>/body:<n>'
@@ -129,7 +129,7 @@ export interface OrderViolation { readonly feature: FeatureId; readonly dependsO
 export function orderViolations(studio: PartStudioData, deps: ReadonlyMap<FeatureId, readonly FeatureId[]>): readonly OrderViolation[];
 ```
 
-- `referencesOf` projde `schema.params` v pořadí schématu; u druhů `bodies`, `topo` a `region` vezme z hodnoty jen položky, které jsou platnou referencí daného druhu (stejná kontrola tvaru jako `validateAgainstSchema`); hodnotu, která není pole, a neplatné položky přeskočí (hlásí je validace); `params`, které nejsou objekt → `[]`. Výsledek i položky jsou zmrazené kopie.
+- `referencesOf` projde `schema.params` v pořadí schématu; u druhů `bodies`, `topo` a `region` vezme z hodnoty jen položky, které jsou platnou referencí daného druhu (stejná kontrola tvaru jako `validateAgainstSchema`); u `body` a `topo` je součástí tvaru i id tělesa `<vlastník>/body[:<n>]` (`n` ≥ 1), jiný řetězec je `param.invalidRef`; hodnotu, která není pole, a neplatné položky přeskočí (hlásí je validace); `params`, které nejsou objekt → `[]`. Výsledek i položky jsou zmrazené kopie.
 - `dependenciesOf`: pro každou featuru studia v pořadí vlastníci jejích referencí přes `ownerOf`, bez duplicit, v pořadí prvního výskytu, jen featury, které ve studiu existují (nevyřešenou referenci hlásí regenerace), bez vlastní featury; neznámý typ → `[]`. Počítá se pro všechny featury studia včetně potlačených a za rollback barem (pravidla v M11 si stav featury ověří samy).
 - `dependentsOf`: featury, jejichž závislosti obsahují `id`, v pořadí mapy.
 - `orderViolations`: dvojice, kde závislost leží na indexu ≥ index featury. Prázdné = pořadí platné; pořadí výsledku podle featur, pak závislostí.
@@ -200,7 +200,7 @@ export interface DocumentData {
 }
 
 export function toData(doc: DocumentReader): DocumentData;
-export function fromData(data: unknown, schemas: FeatureSchemaRegistry): Result<DocumentWriter, DocumentLoadError>;
+export function fromData(data: unknown, schemas: RegistryReader<FeatureSchema>): Result<DocumentWriter, DocumentLoadError>;
 
 export interface DocumentLoadIssue { readonly path: string; readonly message: string } // path: 'studio.features[3].id', '' = celá data
 export interface DocumentLoadError { readonly issues: readonly DocumentLoadIssue[] }

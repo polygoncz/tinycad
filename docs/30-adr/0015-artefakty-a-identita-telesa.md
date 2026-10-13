@@ -1,6 +1,6 @@
 ---
 type: adr
-status: proposed
+status: accepted
 number: 15
 aliases:
   - ADR 0015
@@ -20,7 +20,7 @@ updated: 2026-10-14
 ---
 # 0015 – Artefakty ve stavu regenerace a identita tělesa jako rodokmen
 
-- **Stav:** Navrženo (`status: proposed`)
+- **Stav:** Přijato (`status: accepted`, Pavel potvrdil předpoklady plánu M10.1 2026-10-14)
 - **Datum:** 2026-10-14
 - **Souvisí:** [[07-regenerace]], [[03-dokument]], [[0006-nemenna-data|ADR 0006]], [[0007-vlastni-topologicke-pojmenovani|ADR 0007]], [[Revize architektury 2026-10-13]]
 

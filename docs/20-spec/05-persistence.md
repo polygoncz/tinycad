@@ -217,7 +217,7 @@ export type LoadDocumentError =
 export async function loadDocument(
   store: DocumentStore,
   id: DocumentId,
-  deps: { schemas: FeatureSchemaRegistry; handlers: OpHandlerRegistry; verify?: boolean },
+  deps: { schemas: RegistryReader<FeatureSchema>; handlers: OpHandlerRegistry; verify?: boolean },
 ): Promise<Result<LoadedDocument, LoadDocumentError>>;
 ```
 
@@ -261,7 +261,7 @@ export function exportDocument(doc: DocumentReader): TinycadFile;
 export async function importDocument(
   store: DocumentStore,
   raw: unknown,
-  deps: { schemas: FeatureSchemaRegistry; newId: DocumentId; now: number },
+  deps: { schemas: RegistryReader<FeatureSchema>; newId: DocumentId; now: number },
 ): Promise<Result<DocumentMeta, DocumentLoadError>>;
 ```
 

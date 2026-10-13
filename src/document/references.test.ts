@@ -104,6 +104,20 @@ describe('referencesOf', () => {
     expect(referencesOf(schema, params)).toEqual([regionRef('s1', 'r1')]);
   });
 
+  it('skips body and topo references whose id is not <owner>/body[:<n>]', () => {
+    const params = {
+      targets: [
+        { kind: 'body', body: 'nope' },
+        { kind: 'body', body: 'a/body:0' },
+        bodyRef('a', 3),
+      ],
+      faces: [{ kind: 'topo', body: 'b', name: 'Face1' }, topoRef('b', 'Face1')],
+      profile: [],
+      width: 1,
+    };
+    expect(referencesOf(schema, params)).toEqual([bodyRef('a', 3), topoRef('b', 'Face1')]);
+  });
+
   it('returns [] for params that are not an object', () => {
     for (const params of [null, undefined, 3, 'x', [bodyRef('a')]]) {
       expect(referencesOf(schema, params)).toEqual([]);

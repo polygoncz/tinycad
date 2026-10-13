@@ -1,5 +1,5 @@
 import { err, ok } from '@/core';
-import type { Result } from '@/core';
+import type { RegistryReader, Result } from '@/core';
 import { toData } from '@/document';
 import type {
   DocumentId,
@@ -7,7 +7,7 @@ import type {
   DocumentLoadIssue,
   DocumentMeta,
   DocumentReader,
-  FeatureSchemaRegistry,
+  FeatureSchema,
 } from '@/document';
 import { formatVersionIssue, parseSnapshot } from './load';
 import { createSnapshot } from './snapshot';
@@ -38,7 +38,7 @@ export function exportDocument(doc: DocumentReader): TinycadFile {
 export async function importDocument(
   store: DocumentStore,
   raw: unknown,
-  deps: { schemas: FeatureSchemaRegistry; newId: DocumentId; now: number },
+  deps: { schemas: RegistryReader<FeatureSchema>; newId: DocumentId; now: number },
 ): Promise<Result<DocumentMeta, DocumentLoadError>> {
   const checked = checkFile(raw, deps.schemas);
   if (!checked.ok) return checked;
@@ -58,7 +58,7 @@ export async function importDocument(
 
 function checkFile(
   raw: unknown,
-  schemas: FeatureSchemaRegistry,
+  schemas: RegistryReader<FeatureSchema>,
 ): Result<DocumentReader, DocumentLoadError> {
   if (!isRecord(raw)) return err({ issues: [{ path: '', message: 'Must be an object' }] });
   const issues: DocumentLoadIssue[] = [];

@@ -170,7 +170,7 @@ export interface RegenEvents {      // exportovaný typ, app ho pojmenuje
 }
 
 export function createRegenerator(deps: {
-  kernel: GeometryKernel; builders: BuilderRegistry; schemas: FeatureSchemaRegistry;
+  kernel: GeometryKernel; builders: RegistryReader<FeatureBuilder>; schemas: RegistryReader<FeatureSchema>;   // jen čtení (ADR 0011)
   now: () => number;                // hodiny pro durationMs, dodá app (Q046)
 }): Regenerator;
 

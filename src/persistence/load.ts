@@ -1,12 +1,12 @@
 import { assert, err, ok } from '@/core';
-import type { Result } from '@/core';
+import type { RegistryReader, Result } from '@/core';
 import { fromData, toData } from '@/document';
 import type {
   DocumentId,
   DocumentLoadError,
   DocumentLoadIssue,
   DocumentWriter,
-  FeatureSchemaRegistry,
+  FeatureSchema,
 } from '@/document';
 import { createOperationLog, parseLogEntry, replayLog } from '@/ops';
 import type { LogEntry, OperationLoadError, OperationLog, OpHandlerRegistry } from '@/ops';
@@ -37,7 +37,7 @@ export type LoadDocumentError =
 export async function loadDocument(
   store: DocumentStore,
   id: DocumentId,
-  deps: { schemas: FeatureSchemaRegistry; handlers: OpHandlerRegistry; verify?: boolean },
+  deps: { schemas: RegistryReader<FeatureSchema>; handlers: OpHandlerRegistry; verify?: boolean },
 ): Promise<Result<LoadedDocument, LoadDocumentError>> {
   const { schemas, handlers } = deps;
   const stored = await store.load(id);
@@ -101,7 +101,7 @@ function loadSnapshot(
   raw: unknown,
   id: DocumentId,
   lastSeq: number,
-  schemas: FeatureSchemaRegistry,
+  schemas: RegistryReader<FeatureSchema>,
   which: 'latest' | 'base',
 ): Result<{ doc: DocumentWriter; atSeq: number }, LoadDocumentError> {
   const parsed = parseSnapshot(raw, schemas, {
@@ -125,7 +125,7 @@ function loadSnapshot(
  */
 export function parseSnapshot(
   raw: unknown,
-  schemas: FeatureSchemaRegistry,
+  schemas: RegistryReader<FeatureSchema>,
   atSeqRule: { readonly max: number; readonly message: string },
 ): Result<{ doc: DocumentWriter; atSeq: number }, DocumentLoadError> {
   if (!isRecord(raw)) return err({ issues: [{ path: '', message: 'Must be an object' }] });

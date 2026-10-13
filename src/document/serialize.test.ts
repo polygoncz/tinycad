@@ -223,6 +223,12 @@ describe('fromData – broken data (Q026)', () => {
     expect(loadIssues(data).map((i) => i.path)).toEqual(['meta.id', 'meta.name', 'meta.createdAt']);
   });
 
+  it("rejects a feature id with '/': it is the owner part of artifact ids", () => {
+    expect(loadIssues(rawData([box('a/b', 1)])).map((i) => i.path)).toEqual([
+      'studio.features[0].id',
+    ]);
+  });
+
   it('reports every bad feature field with its path', () => {
     const bad = { id: 7, type: '', typeVersion: 0, name: null, params: [], suppressed: 'no' };
     expect(loadIssues(rawData([box('a', 1), bad])).map((i) => i.path)).toEqual([

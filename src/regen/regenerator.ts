@@ -1,16 +1,16 @@
 import { Emitter, RpcError } from '@/core';
-import type { Subscribable } from '@/core';
+import type { RegistryReader, Subscribable } from '@/core';
 import type {
   FeatureId,
   FeatureInstance,
-  FeatureSchemaRegistry,
+  FeatureSchema,
   ParamIssue,
   PartStudioData,
 } from '@/document';
 import { kernelErrorCode } from '@/kernel';
 import type { GeometryKernel, ShapeHandle } from '@/kernel';
 import { createBuildSession } from './build-context';
-import type { BuilderRegistry, BuildOutput } from './builder';
+import type { BuildOutput, FeatureBuilder } from './builder';
 import { EMPTY_STATE, bodiesOf } from './state';
 import type { FeatureError, FeatureStatus, RegenState } from './state';
 
@@ -57,8 +57,8 @@ const ROLLED_BACK: FeatureStatus = Object.freeze({ kind: 'rolledBack' });
 
 export function createRegenerator(deps: {
   kernel: GeometryKernel;
-  builders: BuilderRegistry;
-  schemas: FeatureSchemaRegistry;
+  builders: RegistryReader<FeatureBuilder>;
+  schemas: RegistryReader<FeatureSchema>;
   /** Clock for durationMs (Q046); app supplies it, ring 1 does not touch globals (ADR 0009). */
   now: () => number;
 }): Regenerator {

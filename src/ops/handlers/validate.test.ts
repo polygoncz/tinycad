@@ -46,6 +46,7 @@ const broken: readonly (readonly [string, Readonly<Record<string, unknown>>, str
   ['feature.add', { ...valid['feature.add'], feature: [] }, 'feature'],
   ['feature.add', withFeature({ id: '' }), 'feature.id'],
   ['feature.add', withFeature({ id: 3 }), 'feature.id'],
+  ['feature.add', withFeature({ id: 'a/b' }), 'feature.id'],
   ['feature.add', withFeature({ type: '' }), 'feature.type'],
   ['feature.add', withFeature({ type: undefined }), 'feature.type'],
   ['feature.add', withFeature({ typeVersion: 0 }), 'feature.typeVersion'],
