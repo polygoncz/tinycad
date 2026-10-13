@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import type { Locator, Page } from '@playwright/test';
 
 // Smoke test of M10 (Ú11): the whole path click → operation → log → regeneration in the

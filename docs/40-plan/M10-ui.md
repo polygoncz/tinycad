@@ -224,7 +224,7 @@ Vue 3 Composition API, propojení externího stavu s reaktivitou Vue (`shallowRe
 
 ## Retrospektiva
 
-_Návrh Clauda, Pavel doplní nebo upraví._
+_Doplnil Claude na Pavlovu žádost (2026-10-13)._
 
 **Co bylo jinak, než se čekalo**
 - Milník začal **návrhem vzhledu**, ne kódem. Tři kola mockupů (Onshape → macOS s plovoucími panely → Fusion: pevný toolbar se skupinami, Prohlížeč, Timeline, plovoucí dialog) a z nich nové pojmy [[Timeline]] a [[Prohlížeč]]. Bez toho by spec 11 popisovala UI, které Pavel nechtěl.
@@ -233,11 +233,19 @@ _Návrh Clauda, Pavel doplní nebo upraví._
 - **Chyba v plánu, ne v kódu:** spec 11 přiřadila vestavěné akce do `app`. Implementátor ji splnil přesně a pravidla akcí skončila v prstenci 3. Odhalila to až revize architektury proti ADR 0010; oprava byla celá vlna F (`createBuiltInActions`, `createEditLock` v `interaction`).
 - Požadavek `pagehide` → `flush` byl ve spec 01 od M4, ale žádný úkol ho nevlastnil; našel ho implementátor UI.
 - Ruční průchod v prohlížeči a e2e test našly to, co 1700 unit testů nemohlo: přetékající pole (CSS grid `1fr`), chybějící přístupné názvy, zámek dokumentu držený po HMR.
+- **Safari po uzavření milníku:** v dev režimu se nespustil worker jádra. Vite posílal `using` nepřeložený (WebKit ho nezná), produkční build ho převáděl – proto e2e proti buildu v Chrome prošel. UI navíc ukázalo zavádějící „jádro opakovaně spadlo“, protože stav `failed` slučoval pád a nespuštění. Poučení: testovat i v druhém engine a hláška musí popisovat příčinu, ne domněnku.
+- Kontrola chyb v konzoli v e2e hned při zavedení našla chybějící `favicon.ico` (404 jen v Chrome) – opraveno ikonou, ne výjimkou.
 
 **Co se osvědčilo**
 - **Vlny paralelních implementátorů v git worktree** (A: 4 souběžně, B, C: 3, E, F: 2). Sloučení patchem bez konfliktů díky tomu, že plán předem přidělil sdílené soubory jednomu úkolu.
 - Rozdělení `app` na `createAppSession(deps)` (Node, fake) a `openAppSession` (prohlížeč): kompoziční kořen má 50+ testů bez prohlížeče.
 - Otázky implementátorů jako zdroj rozhodnutí: z technických chyb typecheck (např. tvar `ParamIssue` v `regen`) se staly návrhová rozhodnutí zapsaná ve spec.
-- E2E přes role a přístupné názvy (Playwright s nainstalovaným Chrome, bez stahování) zároveň hlídá přístupnost.
+- E2E přes role a přístupné názvy zároveň hlídá přístupnost; běží v Chrome i WebKitu a padá na jakékoli chybě v konzoli (výjimky jen v seznamu s důvodem v `e2e/fixtures.ts`).
+- Pavel zkoušel aplikaci průběžně sám a v jiném prohlížeči – to našlo chybu Safari, kterou žádný automatický test nepokrýval.
 
-**Výsledek:** 1723 unit testů, 2 integrační, 4 e2e; `npm run check` i `npm run build` zelené; běžící aplikace v prohlížeči.
+**Co příště jinak**
+- Revize architektury už v polovině milníku (po vlně, která zavádí novou vrstvu), ne až na konci – nález o akcích v `app` by stál jen jeden úkol, ne celou vlnu.
+- Každý požadavek spec na „napojení na platformu“ (`pagehide`, zámky, workery) má mít vlastníka v plánu.
+- Ověřovat v obou enginech (Chromium, WebKit) od prvního spuštění aplikace.
+
+**Výsledek:** 1734 unit testů, 2 integrační, 8 e2e (4 scénáře × Chrome a WebKit, bez chyb v konzoli); `npm run check` i `npm run build` zelené; aplikace běží v Chrome i Safari.
