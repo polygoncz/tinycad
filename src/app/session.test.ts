@@ -1,0 +1,386 @@
+import { describe, expect, it, vi } from 'vitest';
+import { createSequentialIdGenerator } from '@/core';
+import type { DocumentId } from '@/document';
+import { boxPlugin } from '@/features/box';
+import type { ViewKeyEvent } from '@/interaction';
+import { createMemoryDocumentStore } from '@/persistence';
+import type { DocumentStore } from '@/persistence';
+import { createManualScheduler } from '@/persistence/testing';
+import type { ManualScheduler } from '@/persistence/testing';
+import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
+import { createAppSession } from './index';
+import { RESTART_WINDOW_MS } from './kernel-supervisor';
+import type { AppSession, AppSessionDeps, KernelUiState } from './index';
+import { aKernelFactory, FakeAppViewport, settle } from './testing';
+import type { KernelFactory } from './testing';
+
+// Branded ids are created by a cast at one place in tests.
+const DOC = 'doc1' as DocumentId;
+const UNTITLED = 'Bez názvu';
+
+/** Czech texts of the box plus the name of a new document. */
+function translate(key: string): string {
+  if (key === 'document.untitled') return UNTITLED;
+  return boxPlugin.messages?.cs[key] ?? key;
+}
+
+interface Harness {
+  readonly session: AppSession;
+  readonly store: DocumentStore;
+  readonly kernels: KernelFactory;
+  readonly viewport: FakeAppViewport;
+  readonly scheduler: ManualScheduler;
+  /** Moves the clock of `now`. */
+  readonly advance: (ms: number) => void;
+}
+
+async function open(
+  overrides: Partial<AppSessionDeps> & { kernels?: KernelFactory } = {},
+): Promise<Harness> {
+  const store = overrides.store ?? createMemoryDocumentStore({ now: () => 0 });
+  const kernels = overrides.kernels ?? aKernelFactory();
+  const viewport = new FakeAppViewport();
+  const scheduler = createManualScheduler();
+  let time = 1_000_000;
+  const session = await createAppSession({
+    plugins: [boxPlugin],
+    store,
+    docId: DOC,
+    createKernel: kernels.create,
+    viewport,
+    scheduler,
+    now: () => time,
+    ids: createSequentialIdGenerator('f'),
+    translate,
+    readOnly: false,
+    ...overrides,
+  });
+  await settle();
+  return {
+    session,
+    store,
+    kernels,
+    viewport,
+    scheduler,
+    advance: (ms) => {
+      time += ms;
+    },
+  };
+}
+
+/** Creates a box through the dialog with the given height and commits it. */
+function addBox(session: AppSession, height = 10): void {
+  const edit = session.features.create('box');
+  edit.setParam('height', height);
+  edit.commit();
+}
+
+/** A stored document with one box, made and saved by a first session. */
+async function aStoredDocumentWithBox(): Promise<DocumentStore> {
+  const { session, store, scheduler } = await open();
+  addBox(session, 20);
+  scheduler.advance(1000);
+  await settle();
+  session.dispose();
+  await settle();
+  return store;
+}
+
+const key = (k: string): ViewKeyEvent => ({
+  key: k,
+  mods: { shift: false, alt: false, mod: false },
+  inTextField: false,
+});
+
+describe('createAppSession – opening', () => {
+  it('creates a missing document in the store, empty and named by translate', async () => {
+    const { session, store } = await open();
+    expect(session.doc.meta.id).toBe(DOC);
+    expect(session.doc.meta.name).toBe(UNTITLED);
+    expect(session.doc.studio.features).toEqual([]);
+    expect(session.readOnly).toBe(false);
+    const infos = await store.listDocuments();
+    expect(infos.map((i) => i.meta.id)).toEqual([DOC]);
+  });
+
+  it('starts the kernel and regenerates the empty document', async () => {
+    const { session, kernels } = await open();
+    expect(kernels.kernels).toHaveLength(1);
+    expect(session.kernel.get()).toBe('ready');
+    expect(session.regen.get()).toMatchObject({ busy: false, bodyCount: 0, errorCount: 0 });
+  });
+
+  it('opens a stored document and shows its bodies', async () => {
+    const store = await aStoredDocumentWithBox();
+    const { session, viewport } = await open({ store });
+    expect(session.doc.studio.features).toHaveLength(1);
+    expect(session.featureTree.rows.get()).toHaveLength(1);
+    expect(viewport.lastSync).toHaveLength(1);
+    expect(session.regen.get().bodyCount).toBe(1);
+  });
+
+  it('rejects a document the store holds broken data for', async () => {
+    const store = createMemoryDocumentStore();
+    const broken: DocumentStore = {
+      listDocuments: () => store.listDocuments(),
+      createDocument: (meta, initial) => store.createDocument(meta, initial),
+      deleteDocument: (id) => store.deleteDocument(id),
+      appendEntries: (id, entries) => store.appendEntries(id, entries),
+      saveSnapshot: (id, snapshot) => store.saveSnapshot(id, snapshot),
+      load: () => Promise.resolve({ snapshot: {}, base: {}, entries: [] }),
+    };
+    await expect(open({ store: broken })).rejects.toThrow(/doc1/);
+  });
+
+  it('exposes every tool, the select tool active, and the merged plugin messages', async () => {
+    const { session } = await open();
+    expect(session.toolList.map((t) => t.id)).toEqual(['select', 'box']);
+    expect(session.tools.active.get()).toBe('select');
+    expect(session.messages.cs['box.label']).toBe(boxPlugin.messages?.cs['box.label']);
+    expect(session.messages.en['box.label']).toBe(boxPlugin.messages?.en['box.label']);
+  });
+
+  it('rejects two plugins of the same type before anything starts', async () => {
+    const kernels = aKernelFactory();
+    await expect(open({ plugins: [boxPlugin, boxPlugin], kernels })).rejects.toThrow(/box/);
+    expect(kernels.kernels).toHaveLength(0);
+  });
+});
+
+describe('createAppSession – changes', () => {
+  it('a committed box is regenerated and synced to the viewport', async () => {
+    const { session, viewport } = await open();
+    addBox(session, 30);
+    await settle();
+    expect(viewport.lastSync).toHaveLength(1);
+    const regen = session.regen.get();
+    expect(regen).toMatchObject({ busy: false, bodyCount: 1, errorCount: 0 });
+    expect(regen.lastMs).not.toBeNull();
+    expect(session.browser.bodies.get()).toHaveLength(1);
+    expect(session.featureTree.rows.get()[0]?.status).toBe('ok');
+  });
+
+  it('ten quick changes regenerate at most twice', async () => {
+    const { session, viewport, kernels } = await open();
+    addBox(session);
+    await settle();
+    const syncsBefore = viewport.syncs.length;
+    const boxesBefore = kernels.last.fake.callCount('makeBox');
+
+    const edit = session.features.edit(session.doc.studio.features[0]?.id ?? fail());
+    for (let h = 11; h <= 20; h++) edit.setParam('height', h);
+    await settle();
+    edit.commit();
+    await settle();
+
+    expect(viewport.syncs.length - syncsBefore).toBeLessThanOrEqual(2);
+    expect(kernels.last.fake.callCount('makeBox') - boxesBefore).toBeLessThanOrEqual(2);
+    expect(session.regen.get().busy).toBe(false);
+  });
+
+  it('busy is true while a regeneration runs', async () => {
+    const { session } = await open();
+    const seen: boolean[] = [];
+    session.regen.subscribe(() => seen.push(session.regen.get().busy));
+    addBox(session);
+    expect(session.regen.get().busy).toBe(true);
+    await settle();
+    expect(seen[seen.length - 1]).toBe(false);
+  });
+
+  it('an invalid param marks only its feature, the other bodies stay', async () => {
+    const { session, viewport } = await open();
+    addBox(session, 10);
+    addBox(session, 0);
+    await settle();
+    expect(session.regen.get()).toMatchObject({ bodyCount: 1, errorCount: 1 });
+    expect(viewport.lastSync).toHaveLength(1);
+    expect(session.featureTree.rows.get().map((r) => r.status)).toEqual(['ok', 'error']);
+  });
+
+  it('saves the log to the store after the flush delay', async () => {
+    const { session, store, scheduler } = await open();
+    addBox(session);
+    expect(session.persistence.get()).toBe('pending');
+    scheduler.advance(1000);
+    await settle();
+    expect(session.persistence.get()).toBe('saved');
+    expect((await store.load(DOC))?.entries).toHaveLength(1);
+  });
+});
+
+describe('createAppSession – kernel restart', () => {
+  it('a crashed kernel is replaced: restarting → ready, bodies shown again', async () => {
+    const { session, kernels, viewport } = await open();
+    addBox(session);
+    await settle();
+    const states: KernelUiState[] = [];
+    session.kernel.subscribe(() => states.push(session.kernel.get()));
+    const crashed = kernels.last;
+
+    crashed.crash();
+    addBox(session);
+    await settle();
+
+    expect(states).toEqual(['restarting', 'ready']);
+    expect(crashed.disposed).toBe(true);
+    expect(kernels.kernels).toHaveLength(2);
+    expect(viewport.resets[viewport.resets.length - 1]).toBe(kernels.last);
+    expect(viewport.lastSync).toHaveLength(2);
+    expect(session.regen.get().bodyCount).toBe(2);
+  });
+
+  it('two crashes within the window → failed', async () => {
+    const { session, kernels, advance } = await open();
+    addBox(session);
+    await settle();
+    kernels.last.crash();
+    addBox(session);
+    await settle();
+    advance(RESTART_WINDOW_MS - 1);
+    kernels.last.crash();
+    addBox(session);
+    await settle();
+    expect(session.kernel.get()).toBe('failed');
+    expect(kernels.kernels).toHaveLength(2);
+  });
+});
+
+describe('createAppSession – read-only', () => {
+  it('writes nothing and refuses changes of the document', async () => {
+    const store = await aStoredDocumentWithBox();
+    const append = vi.spyOn(store, 'appendEntries');
+    const snapshot = vi.spyOn(store, 'saveSnapshot');
+    const { session, scheduler, viewport } = await open({ store, readOnly: true });
+
+    expect(session.readOnly).toBe(true);
+    expect(viewport.lastSync).toHaveLength(1);
+    expect(() => session.features.create('box')).toThrow(/read-only/);
+    expect(() => {
+      session.tools.activate('box');
+    }).toThrow(/read-only/);
+    const id = session.doc.studio.features[0]?.id ?? fail();
+    expect(() => {
+      session.featureTree.rename(id, 'Other');
+    }).toThrow(/read-only/);
+
+    scheduler.advance(10_000);
+    session.dispose();
+    await settle();
+    expect(session.persistence.get()).toBe('saved');
+    expect(append).not.toHaveBeenCalled();
+    expect(snapshot).not.toHaveBeenCalled();
+  });
+
+  it('does not create a missing document', async () => {
+    const store = createMemoryDocumentStore();
+    await expect(open({ store, readOnly: true })).rejects.toThrow(/doc1/);
+    expect(await store.listDocuments()).toEqual([]);
+  });
+});
+
+describe('createAppSession – view', () => {
+  it('setTheme picks the scene palette', async () => {
+    const { session, viewport } = await open();
+    session.setTheme('dark');
+    expect(viewport.palette).toBe(DARK_PALETTE);
+    session.setTheme('light');
+    expect(viewport.palette).toBe(LIGHT_PALETTE);
+  });
+
+  it('hiding a body in the browser hides it in the viewport, showing shows it', async () => {
+    const { session, viewport } = await open();
+    addBox(session);
+    await settle();
+    const body = session.browser.bodies.get()[0]?.body ?? fail();
+    session.browser.setVisible(body, false);
+    expect(viewport.visibilityCalls).toContainEqual({ body, visible: false });
+    session.browser.setVisible(body, true);
+    expect(viewport.visibilityCalls[viewport.visibilityCalls.length - 1]).toEqual({
+      body,
+      visible: true,
+    });
+  });
+
+  it('a hidden body stays hidden after the next sync', async () => {
+    const { session, viewport } = await open();
+    addBox(session);
+    await settle();
+    const body = session.browser.bodies.get()[0]?.body ?? fail();
+    session.browser.setVisible(body, false);
+    viewport.visibilityCalls.length = 0;
+    addBox(session);
+    await settle();
+    expect(viewport.visibilityCalls).toContainEqual({ body, visible: false });
+  });
+
+  it('mountViewport mounts the viewport', async () => {
+    const { session, viewport } = await open();
+    // A stand-in element: the fake only records what it got.
+    const el = {} as HTMLElement;
+    session.mountViewport(el);
+    expect(viewport.mountedOn).toBe(el);
+  });
+
+  it('mirrors the selection into the viewport highlight', async () => {
+    const { session, viewport } = await open();
+    addBox(session);
+    await settle();
+    const body = session.browser.bodies.get()[0]?.body ?? fail();
+    session.selection.set([{ kind: 'face', body, faceIndex: 2 }]);
+    expect(viewport.selection).toEqual([{ kind: 'face', body, faceIndex: 2 }]);
+  });
+
+  it('keys the active tool does not handle go to the actions', async () => {
+    const { session, viewport } = await open();
+    const run = vi.fn();
+    session.actions.register({
+      id: 'test.x',
+      label: 'test.x',
+      shortcut: 'X',
+      enabled: { get: () => true, subscribe: () => () => undefined },
+      run,
+    });
+    viewport.emitKey(key('x'));
+    expect(run).toHaveBeenCalledOnce();
+  });
+});
+
+describe('createAppSession – dispose', () => {
+  it('releases the kernel, saves what is pending and stops the models', async () => {
+    const { session, kernels, store, scheduler, viewport } = await open();
+    addBox(session);
+    await settle();
+    const syncs = viewport.syncs.length;
+    session.dispose();
+    await settle();
+
+    expect(kernels.last.disposed).toBe(true);
+    expect((await store.load(DOC))?.entries).toHaveLength(1);
+    expect(scheduler.pending).toBe(0);
+    // Unbound from the viewport: keys reach neither the tools nor the actions.
+    const run = vi.fn();
+    session.actions.register({
+      id: 'test.y',
+      label: 'test.y',
+      shortcut: 'Y',
+      enabled: { get: () => true, subscribe: () => () => undefined },
+      run,
+    });
+    viewport.emitKey(key('y'));
+    expect(run).not.toHaveBeenCalled();
+    expect(viewport.syncs.length).toBe(syncs);
+  });
+
+  it('a second dispose does nothing', async () => {
+    const { session } = await open();
+    session.dispose();
+    expect(() => {
+      session.dispose();
+    }).not.toThrow();
+  });
+});
+
+function fail(): never {
+  throw new Error('Missing test data');
+}

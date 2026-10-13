@@ -6,6 +6,7 @@
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.test.json" },
     { "path": "./tsconfig.test-idb.json" },
+    { "path": "./tsconfig.test-app.json" },
     { "path": "./tsconfig.node.json" }
   ]
 }

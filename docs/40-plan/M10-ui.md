@@ -37,10 +37,10 @@ Pořadí odspodu nahoru: nejdřív doména a porty, pak `app`, nakonec `ui`. Pod
 - [x] `kernel-occt`: trap WASM je fatální → `'disconnected'` ([[Q055 Pád WASM jádra|Q055]]).
 - [x] `render`: `ScenePalette`, `setPalette`, `setBodyVisible` ([[Q072 Barvy scény podle režimu|Q072]], [[Q071 Viditelnost těles|Q071]]).
 - [x] `interaction`: `BrowserModel`, rozšíření `RegenSnapshot` o tělesa.
-- [ ] `app/createAppSession` – kompoziční kořen testovaný v Node: registrace pluginů a vestavěných handlerů, propojení událostí, `RegenScheduler` (dirty flag, žádná fronta), restart jádra, režim jen pro čtení.
+- [x] `app/createAppSession` – kompoziční kořen testovaný v Node: registrace pluginů a vestavěných handlerů, propojení událostí, `RegenScheduler` (dirty flag, žádná fronta), restart jádra, režim jen pro čtení.
 - [ ] Akce: undo, redo, smazat vybranou featuru, potlačit, fit all, aktivace nástrojů.
 - [ ] `app/openAppSession` – workery, `IdbDocumentStore`, Web Lock ([[Q038 Jeden dokument ve dvou záložkách|Q038]]), seznam dokumentů (nový, otevřít, smazat).
-- [ ] `ui/composables`: `useSession` (provide/inject), `useObservable` ([[0010-prezentacni-model|ADR 0010]]); `vue-i18n` se slovníky pluginů.
+- [x] `ui/composables`: `useSession` (provide/inject), `useObservable` ([[0010-prezentacni-model|ADR 0010]]); `vue-i18n` se slovníky pluginů.
 - [ ] Převod globální klávesnice z DOM na `ViewKeyEvent` pro `ActionRegistry`.
 - [ ] Komponenty podle rozvržení v [[11-ui#Rozvržení]] (Fusion + macOS): `AppShell`, `TitleBar`, `Toolbar` se skupinami, `ViewportHost`, plovoucí `Browser` a `FeatureDialog` + `ParamField` registr, ukotvená `Timeline` (stavy, rollback značka tažením, dvojklik = edit, kontextové menu, stav regenerace), `DocumentList` (hash `#/d/<id>`, [[Q019 Úvodní obrazovka se seznamem dokumentů|Q019]]).
 - [ ] Rozvržení a CSS proměnné: světlý a tmavý režim, průsvitné plovoucí panely, Tabler Icons.
@@ -122,13 +122,13 @@ Doplňky z revize vlny A (rozhodnutí 2026-10-13).
 
 #### Ú7 Vestavěné akce
 - **Soubory:** `src/app/actions.ts` + test, `src/app/session.ts` (jen zapojení).
-- **Kontrakt:** [[10-interakce#Akce a klávesové zkratky]]: `undo` (`Mod+Z`), `redo` (`Mod+Shift+Z`), `feature.delete` (`Delete`/`Backspace`, vybraná featura), `feature.suppress` (`S`, přepne), `view.fitAll` (`F`), aktivace nástrojů podle `ToolDescriptor.shortcut`, `timeline.stepBack`/`stepForward`/`toStart`/`toEnd` (posun baru). `enabled` jako `Observable` (undo/redo podle `UndoManager`, mazání a potlačení podle výběru, vše `false` v `readOnly` nebo při otevřené session). Popisky akcí jsou klíče.
+- **Kontrakt:** [[10-interakce#Akce a klávesové zkratky]]: `undo` (`Mod+Z`), `redo` (`Mod+Shift+Z`), `feature.delete` (`Delete`/`Backspace`, vybraná featura), `feature.suppress` (`S`, přepne), `view.fitAll` (`F`), aktivace nástrojů podle `ToolDescriptor.shortcut`, `timeline.stepBack`/`stepForward`/`toStart`/`toEnd` (posun baru), jednorázové `camera.fitAll()` po první regeneraci s tělesy ([[11-ui#Kompoziční kořen (app)]]). `UndoManager` už `createAppSession` vytváří, jen ho zapoj. `enabled` jako `Observable` (undo/redo podle `UndoManager`, mazání a potlačení podle výběru, vše `false` v `readOnly` nebo při otevřené session). Popisky akcí jsou klíče.
 - **Testy:** každá akce v `createAppSession` s fake závislostmi: undo/redo vrátí dokument, delete smaže vybranou featuru, suppress přepne, kroky timeline posunou bar a na krajích jsou zakázané, `enabled` reaguje na výběr a session.
 - **Hotovo když:** testy a `npm run check` projdou.
 
 #### Ú8 `openAppSession` a dokumenty
 - **Soubory:** `src/app/browser.ts` (nový), `src/app/documents.ts` (nový), `src/app/index.ts` + test toho, co jde v Node.
-- **Kontrakt:** [[11-ui#Kompoziční kořen (app)]], [[05-persistence#Jeden zapisovatel na dokument]]. `openAppSession({ docId, plugins, translate })`: `createOcctKernel`, `createIdbDocumentStore`, `createViewport`, Web Lock (`navigator.locks.request(…, { ifAvailable: true })`, zámek drží promise až do `dispose`), pak `createAppSession`. `listDocuments`, `createNewDocument`, `deleteDocument` nad `DocumentStore` (`documents.ts` bere store jako parametr, takže je testovatelný s `MemoryDocumentStore`).
+- **Kontrakt:** [[11-ui#Kompoziční kořen (app)]], [[05-persistence#Jeden zapisovatel na dokument]]. `openAppSession({ docId, plugins, translate })`: `createOcctKernel`, `createIdbDocumentStore`, `createViewport` (s `palette` podle tématu a zástupnými `MeshOps`), Web Lock (`navigator.locks.request(…, { ifAvailable: true })`, zámek drží promise až do `dispose`), pak `createAppSession` s `verify: import.meta.env.DEV`; `dispose` uvolní session, viewport, store, jádro a zámek. `listDocuments`, `createNewDocument`, `deleteDocument` nad `DocumentStore` (`documents.ts` bere store jako parametr, takže je testovatelný s `MemoryDocumentStore`).
 - **Testy:** `documents.ts` s `MemoryDocumentStore` (nový dokument má jméno a je v seznamu, smazání); funkce zámku s falešným `LockManager` (dostane / nedostane zámek → `readOnly`, `dispose` zámek uvolní).
 - **Hotovo když:** testy a `npm run check` projdou.
 

@@ -42,7 +42,12 @@ const modules = {
       'features/*',
     ],
   },
-  ui: { deps: ['app', 'core'], types: ['document', 'interaction'], npm: ['vue'] },
+  // vue-i18n: ADR 0014; Tabler Icons: the only UI dependency (spec 11 "Styl").
+  ui: {
+    deps: ['app', 'core'],
+    types: ['document', 'interaction'],
+    npm: ['vue', 'vue-i18n', '@tabler/icons-webfont'],
+  },
 };
 
 const SPEC = 'see docs/20-spec/01-architektura.md';

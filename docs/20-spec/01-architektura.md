@@ -181,6 +181,7 @@ tinycad/
 ├─ tsconfig.app.json        kód pro prohlížeč (DOM, vite/client), bez testů
 ├─ tsconfig.test.json       testy (*.test.ts, tests/), typy Node, bez DOM
 ├─ tsconfig.test-idb.json   testy adaptéru IndexedDB (fake-indexeddb v Node), typy Node + lib DOM
+├─ tsconfig.test-app.json   testy app a ui v Node (s fake), lib DOM kvůli typům AppSession a render
 └─ tsconfig.node.json       konfigurace Vite a Vitest
 ```
 
