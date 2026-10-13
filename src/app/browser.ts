@@ -13,6 +13,7 @@ import { createIdbDocumentStore } from '@/persistence/idb';
 import type { FeaturePlugin } from '@/plugin-api';
 import { createViewport, DARK_PALETTE, LIGHT_PALETTE } from '@/render';
 import { acquireDocumentLock } from './doc-lock';
+import { disposeOpenSession } from './dispose-open-session';
 import * as documents from './documents';
 import { flushOnPageHide } from './page-lifecycle';
 import { createAppSession } from './session';
@@ -31,15 +32,19 @@ export interface OpenAppSessionOptions {
  * Opens the document in this tab. Without the document lock (another tab has it) the session
  * is read-only. Rejects like createAppSession; everything made so far is released then.
  * close waits for the final save of the session, then releases the viewport, the store and the
- * lock; dispose releases everything at once without waiting for the save.
+ * lock; dispose returns at once: it releases the viewport, the store and the lock follow when the
+ * safety flush of the session has settled.
  */
 export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSession> {
+  // The lock and the store, plus `screen` with the viewport: disposed last, it goes first.
   const lifetime = new DisposableStore();
   try {
     // Before loading (spec 05): the lock decides whether this tab may write.
     const lock = lifetime.add(await acquireDocumentLock(navigator.locks, opts.docId));
     const store = lifetime.add(createIdbDocumentStore());
-    const viewport = lifetime.add(
+    // dispose releases the viewport before the store and the lock, which wait for the flush.
+    const screen = lifetime.add(new DisposableStore());
+    const viewport = screen.add(
       createViewport({
         meshes: NO_KERNEL_YET,
         palette: opts.theme === 'dark' ? DARK_PALETTE : LIGHT_PALETTE,
@@ -89,8 +94,14 @@ export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSe
       },
       dispose() {
         pageHide.dispose();
-        session.dispose();
-        lifetime.dispose();
+        disposeOpenSession({
+          session,
+          viewport: screen,
+          afterFlush: lifetime,
+          onError: (error) => {
+            console.error(error);
+          },
+        });
       },
     });
   } catch (e) {

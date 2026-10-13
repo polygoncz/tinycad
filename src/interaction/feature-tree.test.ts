@@ -366,3 +366,50 @@ describe('FeatureTreeModel commands', () => {
     expect(s.emits()).toBe(0);
   });
 });
+
+describe('FeatureTreeModel rename mode', () => {
+  it('starts without a feature in the rename mode', () => {
+    const s = setup({ features: [aBox('a')] });
+    expect(s.tree.renaming.get()).toBeNull();
+    expect('set' in s.tree.renaming).toBe(false);
+  });
+
+  it('beginRename puts the feature into the rename mode, cancelRename ends it', () => {
+    const s = setup({ features: [aBox('a'), aBox('b')] });
+    let emits = 0;
+    s.tree.renaming.subscribe(() => {
+      emits++;
+    });
+
+    s.tree.beginRename(fid('b'));
+    expect(s.tree.renaming.get()).toBe('b');
+    s.tree.beginRename(fid('b'));
+    expect(emits).toBe(1);
+
+    s.tree.cancelRename();
+    expect(s.tree.renaming.get()).toBeNull();
+    s.tree.cancelRename();
+    expect(emits).toBe(2);
+    expect(s.log.entries()).toHaveLength(0);
+  });
+
+  it('rename ends the rename mode, also with an unchanged name', () => {
+    const s = setup({ features: [aBox('a')] });
+    s.tree.beginRename(fid('a'));
+    s.tree.rename(fid('a'), 'Base');
+    expect(s.tree.renaming.get()).toBeNull();
+    expect(s.doc.feature(fid('a'))?.name).toBe('Base');
+
+    s.tree.beginRename(fid('a'));
+    s.tree.rename(fid('a'), '  ');
+    expect(s.tree.renaming.get()).toBeNull();
+  });
+
+  it('beginRename of an unknown feature throws and leaves the mode as it was', () => {
+    const s = setup({ features: [aBox('a')] });
+    expect(() => {
+      s.tree.beginRename(fid('x'));
+    }).toThrow();
+    expect(s.tree.renaming.get()).toBeNull();
+  });
+});

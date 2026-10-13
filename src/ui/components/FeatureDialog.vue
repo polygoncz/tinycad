@@ -9,21 +9,16 @@ import { computed, onMounted, ref, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FeatureEditSession, FieldState } from '@/interaction';
 import { useObservable } from '../composables/use-observable';
-import { useSession } from '../composables/use-session';
 import { paramFieldFor } from './params/registry';
 
 const props = defineProps<{ edit: FeatureEditSession }>();
 
-const session = useSession();
 const { t } = useI18n();
 const state = useObservable(props.edit.state);
-const rows = useObservable(session.featureTree.rows);
 
 const icon = computed(() => `ti-${props.edit.schema.icon ?? 'cube'}`);
-// The name from the tree (it follows renames); the type label until the row exists.
-const title = computed(
-  () => rows.value.find((r) => r.id === props.edit.featureId)?.name ?? t(props.edit.schema.label),
-);
+// The name of the feature from the session (generated on create, spec 10 "Dialog featury").
+const title = computed(() => state.value.name);
 
 function update(field: FieldState, value: unknown): void {
   props.edit.setParam(field.name, value);

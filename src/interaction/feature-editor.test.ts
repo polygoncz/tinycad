@@ -146,6 +146,15 @@ describe('FeatureEditor.create', () => {
     expect(doc.studio.features.map((f) => f.name)).toEqual(['Box 1', 'Box 2']);
   });
 
+  it('the state carries the generated name for the title of the dialog', () => {
+    const { editor } = setup({ features: [aBox('b1', 'Box 1')] });
+    const session = editor.create('box');
+    expect(session.state.get().name).toBe('Box 2');
+    session.cancel();
+    // The feature is gone from the document; the last snapshot keeps its name.
+    expect(session.state.get().name).toBe('Box 2');
+  });
+
   it('names the feature in the language of translate', () => {
     const cs = (key: string): string => (key === 'box.label' ? 'Kvádr' : key);
     const { doc, editor } = setup({}, cs);
@@ -205,6 +214,14 @@ describe('FeatureEditor.edit', () => {
     expect(session.schema).toBe(BOX);
     expect(session.state.get().params).toEqual({ width: 1, height: 2, targets: [] });
     expect(editor.current.get()).toBe(session);
+  });
+
+  it('the state carries the name of the edited feature', () => {
+    const { editor } = setup({ features: [aBox('a', 'Box 7')] });
+    const session = editor.edit(fid('a'));
+    expect(session.state.get().name).toBe('Box 7');
+    session.commit();
+    expect(session.state.get().name).toBe('Box 7');
   });
 
   it('labels the entry with the key feature.edit, without the feature name (ADR 0014)', () => {

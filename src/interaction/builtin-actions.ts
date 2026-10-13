@@ -1,18 +1,12 @@
-// Built-in actions (spec 10, "Akce a klávesové zkratky"; M10 plan, Ú7 and Ú7b): undo, redo,
-// edit, suppress and delete of the selected features, the bar after the selected feature, fit
-// all, the rollback bar steps of the timeline and one action per tool with a shortcut. Labels are translation keys (ADR 0014); ui translates them.
+// Built-in actions (spec 10, "Vestavěné akce"): undo, redo, edit, rename, suppress and delete of
+// the selected features, the bar after the selected feature, fit all, the rollback bar steps of
+// the timeline and one action per tool with a shortcut. Their rules are presentation logic
+// (ADR 0010), so they live here and app only calls createBuiltInActions. Labels are translation
+// keys (ADR 0014); ui translates them.
 
 import { DisposableStore, ObservableValue } from '@/core';
 import type { Disposable, Observable, Unsubscribe } from '@/core';
 import type { DocumentReader, FeatureId } from '@/document';
-import type {
-  ActionRegistry,
-  FeatureEditor,
-  FeatureTreeModel,
-  SelectionModel,
-  ToolDescriptor,
-  ToolManager,
-} from '@/interaction';
 import { OP_VERSION } from '@/ops';
 import type {
   FeatureRemoveOp,
@@ -21,29 +15,58 @@ import type {
   OperationDispatcher,
   UndoManager,
 } from '@/ops';
-import type { CameraController } from '@/render';
+import type { ActionRegistry } from './actions';
+import type { FeatureEditor } from './feature-editor';
+import type { FeatureTreeModel } from './feature-tree';
+import type { SelectionModel } from './selection';
+import type { ToolManager } from './tool-manager';
+import type { ToolDescriptor } from './tools';
 
-export interface BuiltInActionDeps {
-  readonly actions: ActionRegistry;
-  readonly doc: DocumentReader;
-  /** The dispatcher of the session (the refusing one when read-only). */
-  readonly ops: OperationDispatcher;
-  readonly undo: UndoManager;
-  readonly selection: SelectionModel;
-  readonly features: FeatureEditor;
-  readonly featureTree: FeatureTreeModel;
-  readonly tools: ToolManager;
-  readonly toolList: readonly ToolDescriptor[];
-  readonly camera: CameraController;
-  readonly readOnly: boolean;
+/** Ids of the built-in actions; ui takes them from AppSession.actionIds, never as literals. */
+export const ACTION_IDS = Object.freeze({
+  undo: 'undo',
+  redo: 'redo',
+  fitAll: 'view.fitAll',
+  featureEdit: 'feature.edit',
+  featureRename: 'feature.rename',
+  featureSuppress: 'feature.suppress',
+  featureDelete: 'feature.delete',
+  rollHere: 'timeline.rollHere',
+  toStart: 'timeline.toStart',
+  stepBack: 'timeline.stepBack',
+  stepForward: 'timeline.stepForward',
+  toEnd: 'timeline.toEnd',
+} as const);
+
+/** The action that activates a tool with a shortcut. */
+export function toolActionId(toolId: string): string {
+  return `tool.${toolId}`;
 }
 
+/** The group of the feature context menu in the Timeline. */
+const FEATURE_GROUP = 'feature';
+
 /**
- * Registers the built-in actions into `deps.actions`. The returned Disposable unsubscribes the
+ * Registers the built-in actions into `deps.registry`. The returned Disposable unsubscribes the
  * `enabled` observables from their sources; the registry itself is disposed by its owner.
  */
-export function registerBuiltInActions(deps: BuiltInActionDeps): Disposable {
-  const { actions, doc, ops, undo, selection, features, featureTree, tools, camera } = deps;
+export function createBuiltInActions(deps: {
+  registry: ActionRegistry;
+  doc: DocumentReader;
+  /** The dispatcher of the session (the refusing one when read-only). */
+  ops: OperationDispatcher;
+  undo: UndoManager;
+  selection: SelectionModel;
+  featureTree: FeatureTreeModel;
+  editor: FeatureEditor;
+  tools: ToolManager;
+  toolList: readonly ToolDescriptor[];
+  /** createEditLock: read-only or an open feature dialog. */
+  locked: Observable<boolean>;
+  /** Narrow on purpose: interaction does not know render. */
+  camera: { fitAll(): void };
+}): Disposable {
+  const { registry, doc, ops, undo, selection, featureTree, editor, tools, locked, camera } = deps;
   const subscriptions = new DisposableStore();
 
   /** An Observable<boolean> recomputed whenever one of the sources fires. */
@@ -60,13 +83,13 @@ export function registerBuiltInActions(deps: BuiltInActionDeps): Disposable {
   }
 
   // Sources of `enabled`.
-  const onSession = (fn: () => void): Unsubscribe => features.current.subscribe(fn);
+  const onLock = (fn: () => void): Unsubscribe => locked.subscribe(fn);
   const onDoc = (fn: () => void): Unsubscribe => doc.events.on('changed', fn);
   const onSelection = (fn: () => void): Unsubscribe => selection.items.subscribe(fn);
   const onUndo = (fn: () => void): Unsubscribe => undo.events.on('changed', fn);
+  const onFeatures = [onSelection, onDoc, onLock];
 
-  /** Read-only, or the feature dialog holds a transaction: nothing may change the document. */
-  const blocked = (): boolean => deps.readOnly || features.current.get() !== null;
+  const isLocked = (): boolean => locked.get();
 
   /** Selected features that still exist, in selection order. */
   function selectedFeatures(): FeatureId[] {
@@ -74,6 +97,12 @@ export function registerBuiltInActions(deps: BuiltInActionDeps): Disposable {
       .get()
       .flatMap((item) => (item.kind === 'feature' ? [item.feature] : []))
       .filter((id) => doc.feature(id) !== undefined);
+  }
+
+  /** The one selected feature; null with none or more than one selected. */
+  function singleSelected(): FeatureId | null {
+    const selected = selectedFeatures();
+    return selected.length === 1 ? (selected[0] ?? null) : null;
   }
 
   /** All ops in one transaction, so the action is one undo step. */
@@ -89,55 +118,59 @@ export function registerBuiltInActions(deps: BuiltInActionDeps): Disposable {
     tx.commit();
   }
 
-  actions.register({
-    id: 'undo',
-    label: 'undo',
+  registry.register({
+    id: ACTION_IDS.undo,
+    label: ACTION_IDS.undo,
     shortcut: 'Mod+Z',
-    enabled: derived(() => !blocked() && undo.canUndo(), [onUndo, onSession]),
+    enabled: derived(() => !isLocked() && undo.canUndo(), [onUndo, onLock]),
     run: () => {
       undo.undo();
     },
   });
 
-  actions.register({
-    id: 'redo',
-    label: 'redo',
+  registry.register({
+    id: ACTION_IDS.redo,
+    label: ACTION_IDS.redo,
     shortcut: 'Mod+Shift+Z',
-    enabled: derived(() => !blocked() && undo.canRedo(), [onUndo, onSession]),
+    enabled: derived(() => !isLocked() && undo.canRedo(), [onUndo, onLock]),
     run: () => {
       undo.redo();
     },
   });
 
-  const hasSelectedFeature = (): boolean => !blocked() && selectedFeatures().length > 0;
-  /** The one selected feature; null with none or more than one selected. */
-  const singleSelected = (): FeatureId | null => {
-    const selected = selectedFeatures();
-    return selected.length === 1 ? (selected[0] ?? null) : null;
-  };
+  const hasSelectedFeature = (): boolean => !isLocked() && selectedFeatures().length > 0;
+  const hasSingleSelected = (): boolean => !isLocked() && singleSelected() !== null;
 
   // The feature context menu of the timeline is the group 'feature' in registration order:
-  // edit, suppress, roll here, delete (rename is a UI-only item between them).
-  actions.register({
-    id: 'feature.edit',
-    label: 'feature.edit',
-    group: 'feature',
-    enabled: derived(
-      () => !blocked() && singleSelected() !== null,
-      [onSelection, onDoc, onSession],
-    ),
+  // edit, rename, suppress, roll here, delete.
+  registry.register({
+    id: ACTION_IDS.featureEdit,
+    label: ACTION_IDS.featureEdit,
+    group: FEATURE_GROUP,
+    enabled: derived(hasSingleSelected, onFeatures),
     run: () => {
       const id = singleSelected();
-      if (id !== null) featureTree.edit(id);
+      if (id !== null) editor.edit(id);
     },
   });
 
-  actions.register({
-    id: 'feature.suppress',
-    label: 'feature.suppress',
+  registry.register({
+    id: ACTION_IDS.featureRename,
+    label: ACTION_IDS.featureRename,
+    group: FEATURE_GROUP,
+    enabled: derived(hasSingleSelected, onFeatures),
+    run: () => {
+      const id = singleSelected();
+      if (id !== null) featureTree.beginRename(id);
+    },
+  });
+
+  registry.register({
+    id: ACTION_IDS.featureSuppress,
+    label: ACTION_IDS.featureSuppress,
     shortcut: 'S',
-    group: 'feature',
-    enabled: derived(hasSelectedFeature, [onSelection, onDoc, onSession]),
+    group: FEATURE_GROUP,
+    enabled: derived(hasSelectedFeature, onFeatures),
     run: () => {
       const selected = selectedFeatures();
       // All suppressed → unsuppress all; otherwise suppress the rest.
@@ -163,26 +196,23 @@ export function registerBuiltInActions(deps: BuiltInActionDeps): Disposable {
     const index = doc.studio.features.findIndex((f) => f.id === id) + 1;
     return index === doc.studio.rollbackIndex ? null : index;
   };
-  actions.register({
-    id: 'timeline.rollHere',
-    label: 'timeline.rollHere',
-    group: 'feature',
-    enabled: derived(
-      () => !blocked() && rollHereTarget() !== null,
-      [onSelection, onDoc, onSession],
-    ),
+  registry.register({
+    id: ACTION_IDS.rollHere,
+    label: ACTION_IDS.rollHere,
+    group: FEATURE_GROUP,
+    enabled: derived(() => !isLocked() && rollHereTarget() !== null, onFeatures),
     run: () => {
       const index = rollHereTarget();
       if (index !== null) featureTree.moveRollbackBar(index);
     },
   });
 
-  actions.register({
-    id: 'feature.delete',
-    label: 'feature.delete',
+  registry.register({
+    id: ACTION_IDS.featureDelete,
+    label: ACTION_IDS.featureDelete,
     shortcut: ['Delete', 'Backspace'],
-    group: 'feature',
-    enabled: derived(hasSelectedFeature, [onSelection, onDoc, onSession]),
+    group: FEATURE_GROUP,
+    enabled: derived(hasSelectedFeature, onFeatures),
     run: () => {
       const removed = new Set(selectedFeatures());
       applyAll(
@@ -200,9 +230,9 @@ export function registerBuiltInActions(deps: BuiltInActionDeps): Disposable {
     },
   });
 
-  actions.register({
-    id: 'view.fitAll',
-    label: 'view.fitAll',
+  registry.register({
+    id: ACTION_IDS.fitAll,
+    label: ACTION_IDS.fitAll,
     shortcut: 'F',
     // Does not change the document: enabled also read-only and with the dialog open.
     enabled: new ObservableValue(true).asObservable(),
@@ -213,10 +243,10 @@ export function registerBuiltInActions(deps: BuiltInActionDeps): Disposable {
 
   // Rollback bar steps; target() of the action is null when the step leads nowhere.
   const barSteps: readonly { id: string; target: () => number }[] = [
-    { id: 'timeline.toStart', target: () => 0 },
-    { id: 'timeline.stepBack', target: () => doc.studio.rollbackIndex - 1 },
-    { id: 'timeline.stepForward', target: () => doc.studio.rollbackIndex + 1 },
-    { id: 'timeline.toEnd', target: () => doc.studio.features.length },
+    { id: ACTION_IDS.toStart, target: () => 0 },
+    { id: ACTION_IDS.stepBack, target: () => doc.studio.rollbackIndex - 1 },
+    { id: ACTION_IDS.stepForward, target: () => doc.studio.rollbackIndex + 1 },
+    { id: ACTION_IDS.toEnd, target: () => doc.studio.features.length },
   ];
   for (const step of barSteps) {
     const target = (): number | null => {
@@ -224,10 +254,10 @@ export function registerBuiltInActions(deps: BuiltInActionDeps): Disposable {
       const { features: list, rollbackIndex } = doc.studio;
       return index >= 0 && index <= list.length && index !== rollbackIndex ? index : null;
     };
-    actions.register({
+    registry.register({
       id: step.id,
       label: step.id,
-      enabled: derived(() => !blocked() && target() !== null, [onDoc, onSession]),
+      enabled: derived(() => !isLocked() && target() !== null, [onDoc, onLock]),
       run: () => {
         const index = target();
         if (index !== null) featureTree.moveRollbackBar(index);
@@ -236,11 +266,11 @@ export function registerBuiltInActions(deps: BuiltInActionDeps): Disposable {
   }
 
   // Tools with a shortcut; a tool without one is reachable only from the toolbar.
-  const toolEnabled = derived(() => !blocked(), [onSession]);
+  const toolEnabled = derived(() => !isLocked(), [onLock]);
   for (const tool of deps.toolList) {
     if (tool.shortcut === undefined) continue;
-    actions.register({
-      id: `tool.${tool.id}`,
+    registry.register({
+      id: toolActionId(tool.id),
       label: tool.label,
       shortcut: tool.shortcut,
       enabled: toolEnabled,

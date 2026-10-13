@@ -47,6 +47,12 @@ export interface FeatureTreeModel {
   rename(id: FeatureId, name: string): void;
   /** → dispatch studio.setRollback */
   moveRollbackBar(index: number): void;
+  /** The feature in the rename mode (the inline field of the Timeline); null = none. */
+  readonly renaming: Observable<FeatureId | null>;
+  /** The action feature.rename: puts the feature into the rename mode. */
+  beginRename(id: FeatureId): void;
+  /** Ends the rename mode without renaming; rename() ends it too. */
+  cancelRename(): void;
   /** → selection.set / toggle */
   select(id: FeatureId, opts?: { additive?: boolean }): void;
   dispose(): void;
@@ -64,6 +70,7 @@ export function createFeatureTreeModel(deps: {
 
   const rows = new ObservableValue<readonly TreeRow[]>(buildRows([]));
   const rollbackIndex = new ObservableValue<number>(doc.studio.rollbackIndex);
+  const renaming = new ObservableValue<FeatureId | null>(null);
 
   /** The rows from all sources, reusing every unchanged row of `prev`. */
   function buildRows(prev: readonly TreeRow[]): readonly TreeRow[] {
@@ -116,6 +123,8 @@ export function createFeatureTreeModel(deps: {
       editor.edit(id);
     },
     rename(id, name) {
+      // The inline field is done whatever happens to the name.
+      renaming.set(null);
       const feature = doc.feature(id);
       assert(feature !== undefined, `rename: unknown feature '${id}'`);
       const trimmed = name.trim();
@@ -141,6 +150,14 @@ export function createFeatureTreeModel(deps: {
         index,
       };
       ops.dispatch(op);
+    },
+    renaming: renaming.asObservable(),
+    beginRename(id) {
+      assert(doc.feature(id) !== undefined, `beginRename: unknown feature '${id}'`);
+      renaming.set(id);
+    },
+    cancelRename() {
+      renaming.set(null);
     },
     select(id, opts) {
       const item = { kind: 'feature', feature: id } as const;

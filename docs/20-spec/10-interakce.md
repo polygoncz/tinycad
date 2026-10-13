@@ -280,7 +280,7 @@ export interface EditState {
   readonly fields: readonly FieldState[];                // pořadí podle schema.params
   readonly activeRefParam: string | null;                // parametr typu bodies/topo/region, který přijímá výběr
   readonly open: boolean;                                // false po commit/cancel
-  readonly name: string;                                 // název featury pro titulek dialogu (u create vygenerovaný)
+  readonly name: string;                                 // jméno featury z dokumentu (po zmizení featury poslední známé)
 }
 
 export interface FieldState {
@@ -341,7 +341,7 @@ export interface FeatureTreeModel {
   moveRollbackBar(index: number): void;                        // → dispatch studio.setRollback
   readonly renaming: Observable<FeatureId | null>;             // featura v režimu přejmenování (inline pole v Timeline)
   beginRename(id: FeatureId): void;                            // akce feature.rename
-  cancelRename(): void;                                        // rename() režim také ukončí
+  cancelRename(): void;                                        // rename() režim také ukončí; beginRename neznámé featury → výjimka; zmizelá featura → id nesedí na žádný řádek
   select(id: FeatureId, opts?: { additive?: boolean }): void;  // → selection.set / toggle
   dispose(): void;
 }
@@ -455,7 +455,7 @@ export function createActionRegistry(): ActionRegistry;
 - Po `dispose` registr dál spouští akce, jen snapshot `actions` už nesleduje `enabled`. `dispose` patří ke konci session aplikace.
 - Formátování zkratky pro zobrazení (⌘ na macOS) je věc `ui`.
 
-Akce registruje `app` (undo, redo, smazat výběr, potlačit featuru, aktivovat nástroj X, fit all). UI z nich staví menu a toolbar; zkratky fungují globálně, pokud fokus není v textovém poli.
+Akce registruje `createBuiltInActions` volané z `app` (undo, redo, smazat výběr, potlačit featuru, aktivovat nástroj X, fit all). UI z nich staví menu a toolbar; zkratky fungují globálně, pokud fokus není v textovém poli.
 
 ## Testy
 

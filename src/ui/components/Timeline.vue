@@ -13,7 +13,7 @@ import ContextMenu from './ContextMenu.vue';
 import TimelineItem from './TimelineItem.vue';
 
 const session = useSession();
-const { featureTree, actions } = session;
+const { featureTree, actions, actionIds } = session;
 const { t } = useI18n();
 
 const rows = useObservable(featureTree.rows);
@@ -21,14 +21,16 @@ const rollbackIndex = useObservable(featureTree.rollbackIndex);
 const actionStates = useObservable(actions.actions);
 const regen = useObservable(session.regen);
 const selection = useObservable(session.selection.items);
-const editSession = useObservable(session.features.current);
+// Read-only or the feature dialog is open (spec 10, "Vestavěné akce"): the bar does not move.
+const locked = useObservable(session.locked);
+const renamingId = useObservable(featureTree.renaming);
 
-/** The step buttons; the actions are registered by app (M10, Ú7). */
+/** The step buttons; the actions are the built-in ones of interaction. */
 const STEPS = Object.freeze([
-  { id: 'timeline.toStart', icon: 'ti-player-skip-back' },
-  { id: 'timeline.stepBack', icon: 'ti-player-track-prev' },
-  { id: 'timeline.stepForward', icon: 'ti-player-track-next' },
-  { id: 'timeline.toEnd', icon: 'ti-player-skip-forward' },
+  { id: actionIds.toStart, icon: 'ti-player-skip-back' },
+  { id: actionIds.stepBack, icon: 'ti-player-track-prev' },
+  { id: actionIds.stepForward, icon: 'ti-player-track-next' },
+  { id: actionIds.toEnd, icon: 'ti-player-skip-forward' },
 ]);
 
 function actionState(id: string): ActionState | undefined {
@@ -39,10 +41,6 @@ function runStep(id: string): void {
   if (actionState(id)?.enabled === true) actions.run(id);
 }
 
-// While the feature dialog is open the dispatcher is in a transaction and refuses the bar
-// and a second edit (spec 10, "Strom featur"); read-only refuses every change.
-const locked = computed(() => session.readOnly || editSession.value !== null);
-
 function select(id: FeatureId, additive: boolean): void {
   featureTree.select(id, { additive });
 }
@@ -51,40 +49,27 @@ function edit(id: FeatureId): void {
   if (!locked.value) featureTree.edit(id);
 }
 
-// Context menu of a feature (spec 10, "Akce a klávesové zkratky"): the right button selects the
-// feature first, so the actions of the group 'feature' work on the selection. Rename is a
-// UI-only item (an inline field), placed after edit.
-const RENAME = 'feature.rename';
-const menu = ref<{ readonly x: number; readonly y: number; readonly id: FeatureId } | null>(null);
-const renamingId = ref<FeatureId | null>(null);
-
-const menuItems = computed((): readonly ActionState[] => {
-  const items = actionStates.value.filter((a) => a.group === 'feature');
-  const rename: ActionState = Object.freeze({
-    id: RENAME,
-    label: RENAME,
-    shortcut: null,
-    group: 'feature',
-    enabled: !locked.value,
-  });
-  const at = items.findIndex((a) => a.id === 'feature.edit') + 1;
-  return [...items.slice(0, at), rename, ...items.slice(at)];
-});
+// Context menu of a feature (spec 10, "Vestavěné akce"): the snapshot of the actions of the group
+// 'feature'. The right button selects the feature first, so the actions work on the selection;
+// rename puts the feature into the rename mode of the tree, which shows the inline field.
+const FEATURE_GROUP = 'feature';
+const menu = ref<{ readonly x: number; readonly y: number } | null>(null);
+const menuItems = computed((): readonly ActionState[] =>
+  actionStates.value.filter((a) => a.group === FEATURE_GROUP),
+);
 
 function openMenu(id: FeatureId, e: MouseEvent): void {
   featureTree.select(id);
-  menu.value = { x: e.clientX, y: e.clientY, id };
+  menu.value = { x: e.clientX, y: e.clientY };
 }
 
 function runMenuItem(actionId: string): void {
-  const target = menu.value?.id ?? null;
-  if (actionId === RENAME) renamingId.value = target;
-  else actions.run(actionId);
+  actions.run(actionId);
 }
 
 function rename(id: FeatureId, name: string): void {
-  renamingId.value = null;
-  if (!locked.value) featureTree.rename(id, name);
+  if (locked.value) featureTree.cancelRename();
+  else featureTree.rename(id, name);
 }
 
 // Dragging the rollback marker: only the position under the pointer is local view state;
@@ -160,7 +145,7 @@ function onBarCancel(): void {
           @edit="edit(row.id)"
           @menu="openMenu(row.id, $event)"
           @rename="rename(row.id, $event)"
-          @cancel-rename="renamingId = null"
+          @cancel-rename="featureTree.cancelRename()"
         />
       </template>
       <div

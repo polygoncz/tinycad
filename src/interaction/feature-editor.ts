@@ -56,6 +56,8 @@ export interface EditState {
   readonly activeRefParam: string | null;
   /** false after commit/cancel. */
   readonly open: boolean;
+  /** Name of the feature for the title of the dialog (generated on create). */
+  readonly name: string;
 }
 
 export interface FieldState {
@@ -187,6 +189,11 @@ function createSession(deps: {
   let open = true;
   const state = new ObservableValue<EditState>(buildState(null));
 
+  /** The name of the feature in the document; the last known one once it is gone. */
+  function readName(prev: EditState | null): string {
+    return doc.feature(featureId)?.name ?? prev?.name ?? '';
+  }
+
   /** The params of the feature in the document; the last known ones once it is gone. */
   function readParams(prev: EditState | null): Readonly<Record<string, unknown>> {
     const params = doc.feature(featureId)?.params;
@@ -223,6 +230,7 @@ function createSession(deps: {
       fields: sameFields ? prev.fields : Object.freeze(fields),
       activeRefParam,
       open,
+      name: readName(prev),
     });
   }
 
@@ -235,7 +243,8 @@ function createSession(deps: {
       next.issues === prev.issues &&
       next.fields === prev.fields &&
       next.activeRefParam === prev.activeRefParam &&
-      next.open === prev.open;
+      next.open === prev.open &&
+      next.name === prev.name;
     if (!unchanged) state.set(next);
   }
 

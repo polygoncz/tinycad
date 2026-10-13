@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
 import type { DocumentId } from '@/document';
 import { createMemoryDocumentStore } from '@/persistence';
+import type { FeaturePlugin } from '@/plugin-api';
 import { createManualScheduler } from '@/persistence/testing';
 import { BUILT_IN_PLUGINS, createAppSession } from './index';
 import { aKernelFactory, FakeAppViewport } from './testing';
@@ -28,4 +29,27 @@ describe('BUILT_IN_PLUGINS', () => {
     expect(session.toolList.map((t) => t.id)).toContain('box');
     session.dispose();
   });
+
+  // ADR 0014: every plugin checks its own dictionary; this checks all of them at once.
+  it.each(BUILT_IN_PLUGINS.map((p) => [p.schema.type, p] as const))(
+    '%s has a cs and an en text for every label',
+    (_type, plugin) => {
+      const keys = labelKeys(plugin);
+      expect(keys.length).toBeGreaterThan(0);
+      const missing = (lang: 'cs' | 'en'): string[] =>
+        keys.filter((key) => plugin.messages?.[lang][key] === undefined);
+      expect(missing('cs')).toEqual([]);
+      expect(missing('en')).toEqual([]);
+    },
+  );
 });
+
+/** Label keys of the schema, its params, their enum options and the tools. */
+function labelKeys(plugin: FeaturePlugin): string[] {
+  const params = Object.values(plugin.schema.params).flatMap((spec) => [
+    spec.label,
+    ...(spec.kind === 'enum' ? spec.options.map((o) => o.label) : []),
+  ]);
+  const tools = (plugin.tools ?? []).map((t) => t.label);
+  return [plugin.schema.label, ...params, ...tools];
+}

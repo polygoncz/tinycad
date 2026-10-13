@@ -6,9 +6,12 @@ describe('interaction public API', () => {
   it('exports exactly these runtime values', () => {
     expect(Object.keys(interaction).sort()).toEqual(
       [
+        'ACTION_IDS',
         'bindSelectionHighlight',
         'createActionRegistry',
         'createBrowserModel',
+        'createBuiltInActions',
+        'createEditLock',
         'createFeatureEditor',
         'createFeatureTreeModel',
         'createSelectionModel',
@@ -16,6 +19,7 @@ describe('interaction public API', () => {
         'createToolRegistry',
         'SELECT_TOOL',
         'sameSelectionItem',
+        'toolActionId',
       ].sort(),
     );
   });

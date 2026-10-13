@@ -51,14 +51,39 @@ function backToList(): void {
   globalThis.location.hash = '';
 }
 
-onMounted(() => {
+// HMR: a hot update of this module remounts App. The old instance closes its session (final
+// save, then the document lock) and the new one opens only after that; opened at once, it would
+// find the lock still held and be read-only.
+const HOT_CLOSED = 'closed';
+const previousClosed = hotPromise(import.meta.hot?.data, HOT_CLOSED);
+import.meta.hot?.dispose((data: Record<string, unknown>) => {
+  // show(null) closes the open session (show never rejects); unmount then has nothing left.
+  data[HOT_CLOSED] = switcher.show(null);
+});
+
+let mounted = false;
+function start(): void {
+  if (!mounted) return;
   globalThis.addEventListener('hashchange', onHashChange);
   onHashChange();
+}
+
+onMounted(() => {
+  mounted = true;
+  if (previousClosed === null) start();
+  else void previousClosed.then(start);
 });
 onUnmounted(() => {
+  mounted = false;
   globalThis.removeEventListener('hashchange', onHashChange);
   switcher.dispose();
 });
+
+/** The promise stored under `key` in the HMR data of the previous module, if any. */
+function hotPromise(data: unknown, key: string): Promise<unknown> | null {
+  const value: unknown = data instanceof Object ? Reflect.get(data, key) : undefined;
+  return value instanceof Promise ? value : null;
+}
 </script>
 
 <template>

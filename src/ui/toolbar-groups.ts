@@ -29,22 +29,29 @@ export interface ToolbarGroup {
 /** Known groups in toolbar order; groups of tools not listed here follow at the end. */
 const GROUP_ORDER: readonly string[] = ['history', 'primitive', 'modify', 'construction', 'view'];
 
-/** The actions shown as buttons, by group, with their icons. */
-const ACTION_BUTTONS: Readonly<Record<string, readonly { id: string; icon: string }[]>> = {
-  history: [
-    { id: 'undo', icon: 'arrow-back-up' },
-    { id: 'redo', icon: 'arrow-forward-up' },
-  ],
-  view: [{ id: 'view.fitAll', icon: 'zoom-scan' }],
-};
+/** The ids of the actions the toolbar shows as buttons; ui passes AppSession.actionIds. */
+export type ToolbarActionIds = Readonly<Record<'undo' | 'redo' | 'fitAll', string>>;
 
-/** Prefix of the actions app registers for tools with a shortcut (`tool.<id>`). */
-const TOOL_ACTION_PREFIX = 'tool.';
+/** The actions shown as buttons, by group, with their icons. */
+function actionButtons(
+  ids: ToolbarActionIds,
+): Readonly<Record<string, readonly { id: string; icon: string }[]>> {
+  return {
+    history: [
+      { id: ids.undo, icon: 'arrow-back-up' },
+      { id: ids.redo, icon: 'arrow-forward-up' },
+    ],
+    view: [{ id: ids.fitAll, icon: 'zoom-scan' }],
+  };
+}
 
 export function toolbarGroups(input: {
   readonly tools: readonly ToolDescriptor[];
   readonly actions: readonly ActionState[];
-  /** Read-only or the feature dialog is open: tools without an action are disabled. */
+  readonly actionIds: ToolbarActionIds;
+  /** AppSession.toolActionId: the action that activates a tool, if app registered one. */
+  readonly toolActionId: (toolId: string) => string;
+  /** AppSession.locked: tools without an action are disabled. */
   readonly locked: boolean;
 }): readonly ToolbarGroup[] {
   const actionById = new Map(input.actions.map((a) => [a.id, a]));
@@ -55,7 +62,7 @@ export function toolbarGroups(input: {
     else list.push(item);
   };
 
-  for (const [group, buttons] of Object.entries(ACTION_BUTTONS)) {
+  for (const [group, buttons] of Object.entries(actionButtons(input.actionIds))) {
     for (const { id, icon } of buttons) {
       const action = actionById.get(id);
       if (action === undefined) continue;
@@ -70,7 +77,7 @@ export function toolbarGroups(input: {
     }
   }
   for (const tool of input.tools) {
-    const action = actionById.get(TOOL_ACTION_PREFIX + tool.id);
+    const action = actionById.get(input.toolActionId(tool.id));
     add(tool.group, {
       id: tool.id,
       label: tool.label,

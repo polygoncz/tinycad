@@ -389,6 +389,80 @@ describe('createAppSession – view', () => {
   });
 });
 
+describe('createAppSession – actions', () => {
+  // The rules of the actions are tested in interaction (builtin-actions.test.ts); here only that
+  // app registers them over the session and hands ui the lock and the ids.
+
+  it('registers the built-in actions and an action per tool with a shortcut', async () => {
+    const { session } = await open();
+    const ids = session.actions.actions.get().map((a) => a.id);
+    expect(ids).toEqual(expect.arrayContaining(Object.values(session.actionIds)));
+    expect(session.actions.actions.get().find((a) => a.id === 'tool.box')).toMatchObject({
+      label: 'box.label',
+      shortcut: 'B',
+    });
+  });
+
+  it('actionIds are the ids of the built-in actions', async () => {
+    const { session } = await open();
+    expect(session.actionIds.undo).toBe('undo');
+    expect(session.actionIds.featureRename).toBe('feature.rename');
+  });
+
+  it('locked follows the feature dialog', async () => {
+    const { session } = await open();
+    expect(session.locked.get()).toBe(false);
+    const edit = session.features.create('box');
+    expect(session.locked.get()).toBe(true);
+    edit.cancel();
+    expect(session.locked.get()).toBe(false);
+  });
+
+  it('read-only is locked and disables the actions that change the document', async () => {
+    const store = await aStoredDocumentWithBox();
+    const { session } = await open({ store, readOnly: true });
+    const enabled = (id: string): boolean | undefined =>
+      session.actions.actions.get().find((a) => a.id === id)?.enabled;
+    expect(session.locked.get()).toBe(true);
+    expect(enabled(session.actionIds.toStart)).toBe(false);
+    expect(enabled('tool.box')).toBe(false);
+    expect(enabled(session.actionIds.fitAll)).toBe(true);
+  });
+
+  it('undo through the keyboard brings the document back', async () => {
+    const { session, viewport } = await open();
+    addBox(session);
+    viewport.emitKey({ ...key('z'), mods: { shift: false, alt: false, mod: true } });
+    expect(session.doc.studio.features).toHaveLength(0);
+  });
+
+  it('fit all fits the camera of the viewport', async () => {
+    const { session, viewport } = await open();
+    const before = viewport.fitAllCount;
+    session.actions.run(session.actionIds.fitAll);
+    expect(viewport.fitAllCount).toBe(before + 1);
+  });
+});
+
+describe('createAppSession – first view', () => {
+  it('the first regeneration with a body fits the camera once', async () => {
+    const { session, viewport } = await open();
+    expect(viewport.fitAllCount).toBe(0);
+    addBox(session);
+    await settle();
+    expect(viewport.fitAllCount).toBe(1);
+    addBox(session);
+    await settle();
+    expect(viewport.fitAllCount).toBe(1);
+  });
+
+  it('a stored document with bodies is fitted once after opening', async () => {
+    const store = await aStoredDocumentWithBox();
+    const { viewport } = await open({ store });
+    expect(viewport.fitAllCount).toBe(1);
+  });
+});
+
 describe('createAppSession – dispose', () => {
   it('releases the kernel, saves what is pending and stops the models', async () => {
     const { session, kernels, store, scheduler, viewport } = await open();

@@ -15,10 +15,14 @@ import type {
   FeatureSchemaRegistry,
 } from '@/document';
 import {
+  ACTION_IDS,
   bindSelectionHighlight,
   createActionRegistry,
   createBrowserModel,
+  createBuiltInActions,
+  createEditLock,
   createFeatureEditor,
+  toolActionId,
   createFeatureTreeModel,
   createSelectionModel,
   createToolManager,
@@ -57,7 +61,6 @@ import { createBuilderRegistry, createRegenerator } from '@/regen';
 import type { BuilderRegistry, RegenResult } from '@/regen';
 import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
 import type { BodyLayer, CameraController, ScenePalette } from '@/render';
-import { registerBuiltInActions } from './actions';
 import { createKernelSupervisor } from './kernel-supervisor';
 import type { KernelUiState } from './kernel-supervisor';
 import { createRegenScheduler } from './regen-scheduler';
@@ -114,6 +117,12 @@ export interface AppSession extends Disposable {
   readonly doc: DocumentReader;
   /** Q038: the document is open in another tab. */
   readonly readOnly: boolean;
+  /** Read-only or an open feature dialog: the one rule, from interaction (createEditLock). */
+  readonly locked: Observable<boolean>;
+  /** The ids of the built-in actions; ui may not import values of interaction. */
+  readonly actionIds: typeof ACTION_IDS;
+  /** Id of the action that activates a tool (ui must not build it itself, spec 10). */
+  toolActionId(toolId: string): string;
   readonly regen: Observable<RegenUiState>;
   /** Q055: restart after a kernel crash. */
   readonly kernel: Observable<KernelUiState>;
@@ -220,19 +229,21 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     }),
   );
   const toolList = Object.freeze(toolRegistry.all());
+  const locked = createEditLock({ readOnly, editor: features });
+  // Built-in actions (spec 11, step 5): their rules live in interaction (ADR 0010).
   lifetime.add(
-    registerBuiltInActions({
-      actions,
+    createBuiltInActions({
+      registry: actions,
       doc,
       ops,
       undo,
       selection,
-      features,
       featureTree,
+      editor: features,
       tools,
       toolList,
+      locked,
       camera: viewport.camera,
-      readOnly,
     }),
   );
 
@@ -355,6 +366,9 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   return {
     doc,
     readOnly,
+    locked,
+    actionIds: ACTION_IDS,
+    toolActionId,
     regen: regenUi.asObservable(),
     kernel: supervisor.state,
     persistence: persistenceStatus.asObservable(),

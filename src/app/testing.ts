@@ -2,8 +2,18 @@
 // records the kernels it made. dependency-cruiser allows importing it only from *.test.ts.
 
 import { RpcError } from '@/core';
-import type { Disposable } from '@/core';
+import type { Disposable, Subscribable } from '@/core';
 import type { BodyId } from '@/document';
+import type {
+  HighlightPort,
+  HighlightTarget,
+  OverlayPort,
+  OverlayShape,
+  PickResult,
+  ViewKeyEvent,
+  ViewPointerEvent,
+  ViewportEvents,
+} from '@/interaction';
 import { FakeViewport } from '@/interaction/testing';
 import type { GeometryKernel, MeshOps, ShapeHandle } from '@/kernel';
 import { createFakeKernel } from '@/kernel/testing';
@@ -13,12 +23,20 @@ import type { DocumentLocks } from './doc-lock';
 import type { AppViewport } from './session';
 
 type SyncedBody = { readonly id: BodyId; readonly shape: ShapeHandle };
+type Ray = ReturnType<FakeViewport['screenToRay']>;
 
 /**
  * An AppViewport for tests: the ViewportPort part of FakeViewport plus recorded mount, body
  * syncs, kernel resets, camera calls, palettes and body visibility. sync resolves at once.
+ * It wraps a FakeViewport instead of extending it: a class of another module is no base
+ * class (ADR 0011), so its members are passed on one by one.
  */
-export class FakeAppViewport extends FakeViewport implements AppViewport {
+export class FakeAppViewport implements AppViewport {
+  private readonly port = new FakeViewport();
+  readonly highlight: HighlightPort = this.port.highlight;
+  readonly overlay: OverlayPort = this.port.overlay;
+  readonly events: Subscribable<ViewportEvents> = this.port.events;
+
   /** Element of the last mount, null before any. */
   mountedOn: HTMLElement | null = null;
   /** Bodies of every sync call, oldest first. */
@@ -61,6 +79,46 @@ export class FakeAppViewport extends FakeViewport implements AppViewport {
 
   setBodyVisible(body: BodyId, visible: boolean): void {
     this.visibilityCalls.push({ body, visible });
+  }
+
+  /** A fixed result, or a function of the view coordinates (FakeViewport.setPick). */
+  setPick(result: Parameters<FakeViewport['setPick']>[0]): void {
+    this.port.setPick(result);
+  }
+
+  setScreenToRay(fn: (x: number, y: number) => Ray): void {
+    this.port.setScreenToRay(fn);
+  }
+
+  pick(x: number, y: number): PickResult | null {
+    return this.port.pick(x, y);
+  }
+
+  screenToRay(x: number, y: number): Ray {
+    return this.port.screenToRay(x, y);
+  }
+
+  /** Last state passed to highlight.setHover. */
+  get hover(): HighlightTarget | null {
+    return this.port.hover;
+  }
+
+  /** Last state passed to highlight.setSelection. */
+  get selection(): readonly HighlightTarget[] {
+    return this.port.selection;
+  }
+
+  /** Last overlay state per id. */
+  get overlayShapes(): ReadonlyMap<string, readonly OverlayShape[]> {
+    return this.port.overlayShapes;
+  }
+
+  emitPointer(e: ViewPointerEvent): void {
+    this.port.emitPointer(e);
+  }
+
+  emitKey(e: ViewKeyEvent): void {
+    this.port.emitKey(e);
   }
 
   /** Bodies of the last sync; empty before any. */

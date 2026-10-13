@@ -21,14 +21,16 @@ const { t } = i18n;
 const isMac = isMacPlatform(globalThis.navigator.userAgent);
 
 const actionStates = useObservable(session.actions.actions);
-const editSession = useObservable(session.features.current);
+const locked = useObservable(session.locked);
 const activeTool = useObservable(session.tools.active);
 
 const groups = computed(() =>
   toolbarGroups({
     tools: session.toolList,
     actions: actionStates.value,
-    locked: session.readOnly || editSession.value !== null,
+    actionIds: session.actionIds,
+    toolActionId: (id) => session.toolActionId(id),
+    locked: locked.value,
   }),
 );
 

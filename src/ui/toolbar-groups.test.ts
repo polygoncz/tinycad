@@ -19,6 +19,10 @@ function anAction(id: string, enabled = true, shortcut: string | null = null): A
   return { id, label: id, shortcut, group: null, enabled };
 }
 
+/** The ids are passed in, never known by the function (AppSession.actionIds). */
+const IDS = { undo: 'undo', redo: 'redo', fitAll: 'view.fitAll' } as const;
+const toolActionId = (id: string): string => `tool.${id}`;
+
 const ACTIONS: readonly ActionState[] = [
   anAction('undo', true, 'Mod+Z'),
   anAction('redo', false, 'Mod+Shift+Z'),
@@ -35,7 +39,13 @@ describe('toolbarGroups', () => {
       aTool('box', 'primitive', 'B'),
       aTool('sketch', 'sketch'),
     ];
-    const groups = toolbarGroups({ tools, actions: ACTIONS, locked: false });
+    const groups = toolbarGroups({
+      tools,
+      actions: ACTIONS,
+      actionIds: IDS,
+      toolActionId,
+      locked: false,
+    });
     expect(groups.map((g) => g.id)).toEqual([
       'history',
       'primitive',
@@ -47,12 +57,24 @@ describe('toolbarGroups', () => {
   });
 
   it('leaves out empty groups', () => {
-    const groups = toolbarGroups({ tools: [], actions: [], locked: false });
+    const groups = toolbarGroups({
+      tools: [],
+      actions: [],
+      actionIds: IDS,
+      toolActionId,
+      locked: false,
+    });
     expect(groups).toEqual([]);
   });
 
   it('history and view are the actions with their state', () => {
-    const groups = toolbarGroups({ tools: [], actions: ACTIONS, locked: false });
+    const groups = toolbarGroups({
+      tools: [],
+      actions: ACTIONS,
+      actionIds: IDS,
+      toolActionId,
+      locked: false,
+    });
     expect(groups[0]?.items).toEqual([
       {
         id: 'undo',
@@ -74,11 +96,29 @@ describe('toolbarGroups', () => {
     expect(groups[1]?.items.map((i) => i.id)).toEqual(['view.fitAll']);
   });
 
+  it('finds the action buttons by the ids it is given', () => {
+    const ids = { undo: 'my.undo', redo: 'my.redo', fitAll: 'my.fit' };
+    const actions = [anAction('my.undo'), anAction('undo'), anAction('my.fit')];
+    const groups = toolbarGroups({
+      tools: [],
+      actions,
+      actionIds: ids,
+      toolActionId,
+      locked: false,
+    });
+    expect(groups.map((g) => g.items.map((i) => i.command))).toEqual([
+      [{ kind: 'action', id: 'my.undo' }],
+      [{ kind: 'action', id: 'my.fit' }],
+    ]);
+  });
+
   it('a tool with an action runs and is enabled through it', () => {
     const disabled = ACTIONS.map((a) => (a.id === 'tool.box' ? { ...a, enabled: false } : a));
     const [, create] = toolbarGroups({
       tools: [aTool('box', 'primitive', 'B')],
       actions: disabled,
+      actionIds: IDS,
+      toolActionId,
       locked: false,
     });
     expect(create?.items).toEqual([
@@ -95,8 +135,14 @@ describe('toolbarGroups', () => {
 
   it('a tool without an action is activated directly and disabled while locked', () => {
     const tools = [aTool('chamfer', 'modify')];
-    const open = toolbarGroups({ tools, actions: [], locked: false });
-    const locked = toolbarGroups({ tools, actions: [], locked: true });
+    const open = toolbarGroups({ tools, actions: [], actionIds: IDS, toolActionId, locked: false });
+    const locked = toolbarGroups({
+      tools,
+      actions: [],
+      actionIds: IDS,
+      toolActionId,
+      locked: true,
+    });
     expect(open[0]?.items[0]?.command).toEqual({ kind: 'tool', id: 'chamfer' });
     expect(open[0]?.items[0]?.enabled).toBe(true);
     expect(open[0]?.items[0]?.shortcut).toBeNull();

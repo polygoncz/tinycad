@@ -266,6 +266,7 @@ function aRecordingEditor(open = false) {
       fields: [],
       activeRefParam: null,
       open: true,
+      name: 'Box 1',
     }),
     setParam: () => expect.fail('setParam is not expected'),
     focusRefParam: () => expect.fail('focusRefParam is not expected'),
