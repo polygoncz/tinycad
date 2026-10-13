@@ -1,14 +1,14 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[06-geometricke-jadro]]"
 decide_by: "[[M10-ui]]"
 proposal: "Zatím jen zahodit výsledek"
-decision: ""
+decision: "Zatím bez rušení operace jádra; RegenScheduler s dirty flagem a zahazování zastaralých výsledků. Ověřit v M10 tažením hodnoty."
 tags:
   - otazka
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 # Q010 Zrušení probíhající operace jádra
 
@@ -24,4 +24,4 @@ Zatím ne – výsledek zastaralé regenerace se jen zahodí (generace). Pozděj
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do [[06-geometricke-jadro]]. Zásadní rozhodnutí → nové ADR.)_
+2026-10-13 (Pavel): **zatím ne.** Stačí `RegenScheduler` (dirty flag, žádná fronta) a zahazování výsledku zastaralé regenerace. V [[M10-ui]] ověřit v prohlížeči rychlou změnou hodnoty; když to nebude problém, cancel token se nezavádí. Propsáno do [[11-ui]].

@@ -106,7 +106,7 @@ Prstence 1 a 2 se typují konfigurací `tsconfig.domain.json` bez knihovny `DOM`
 | `plugin-api` | `core`, `document`, `regen`, `interaction` | – |
 | `features/*` | `core`, `document`, `ops`, `kernel`, `regen`, `interaction`, `plugin-api` | – |
 | `app` | vše kromě `ui` | – |
-| `ui` | `app`, `core`, typy z `document` a `interaction` | `vue` |
+| `ui` | `app`, `core`, typy z `document` a `interaction` | `vue`, `vue-i18n`, `@tabler/icons-webfont` ([[0014-preklady-vue-i18n-a-klice\|ADR 0014]], [[11-ui#Styl]]) |
 
 Důležité zákazy:
 - `features/*` se navzájem neimportují.

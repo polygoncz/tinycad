@@ -1,14 +1,14 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[11-ui]]"
 decide_by: "[[M10-ui]]"
 proposal: "Jednoduchý seznam, bez routeru"
-decision: ""
+decision: "Jednoduchý seznam dokumentů bez routeru; id dokumentu v location.hash, prázdný hash = seznam."
 tags:
   - otazka
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 # Q019 Úvodní obrazovka se seznamem dokumentů
 
@@ -24,4 +24,4 @@ Jednoduchý seznam v M10, router až bude potřeba.
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do [[11-ui]]. Zásadní rozhodnutí → nové ADR.)_
+2026-10-13 (Pavel): **jednoduchý seznam bez routeru.** Id otevřeného dokumentu je v `location.hash` (`#/d/<id>`), prázdný hash ukáže seznam (`DocumentList`, plovoucí list přes viewport). Propsáno do [[11-ui]].

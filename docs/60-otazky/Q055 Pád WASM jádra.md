@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[06-geometricke-jadro]]"
 decide_by: "[[M10-ui]]"
 proposal: "Trap WASM hlásit jako konec jádra (failAll, 'disconnected'); restart jádra řeší app"
-decision: ""
+decision: "Varianta A v M10: trap je fatální, worker ho nahlásí, klient přejde na disconnected, app vytvoří nové jádro a spustí regeneraci."
 tags:
   - otazka
 created: 2026-10-13
@@ -30,4 +30,4 @@ Návrh: **A**, implementovat s napojením jádra v [[M10-ui]] (tam vzniká `app`
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR.)_
+2026-10-13 (Pavel): **varianta A v [[M10-ui]].** Vlastní build ([[M16-vlastni-occt-build]]) trapy jen omezí (nativní výjimky, větší zásobník), neodstraní, takže cesta restartu je potřeba tak jako tak. Propsáno do [[06-geometricke-jadro]] a [[11-ui]].

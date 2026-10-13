@@ -119,9 +119,9 @@ Datová část typu featury: co za parametry má, jak vypadají výchozí hodnot
 
 ```ts
 export type ParamSpec =
-  | { kind: 'length';  label: string; default: number; min?: number; max?: number }
-  | { kind: 'angle';   label: string; default: number; min?: number; max?: number }
-  | { kind: 'number';  label: string; default: number; min?: number; max?: number; integer?: boolean }
+  | { kind: 'length';  label: string; default: number } & Bounds
+  | { kind: 'angle';   label: string; default: number } & Bounds
+  | { kind: 'number';  label: string; default: number; integer?: boolean } & Bounds
   | { kind: 'boolean'; label: string; default: boolean }
   | { kind: 'enum';    label: string; default: string; options: readonly { value: string; label: string }[] }
   | { kind: 'point';   label: string; default: Vec3 }
@@ -129,19 +129,26 @@ export type ParamSpec =
   | { kind: 'topo';    label: string; entity: 'face' | 'edge' | 'vertex'; min?: number; max?: number } // TopoRef[]
   | { kind: 'region';  label: string; min?: number; max?: number };          // SketchRegionRef[]
 
+/** Meze číselného parametru. exclusiveMin/Max = ostrá mez (Q050): { min: 0, exclusiveMin: true } znamená > 0. */
+interface Bounds { min?: number; max?: number; exclusiveMin?: boolean; exclusiveMax?: boolean }
+
 export type ParamSchema = Readonly<Record<string, ParamSpec>>;
 
 export interface FeatureSchema<P = unknown> {
   readonly type: string;
   readonly version: number;
-  readonly label: string;               // 'Box'
+  readonly label: string;               // klíč překladu, 'box.label' (ADR 0014)
   readonly params: ParamSchema;
   defaults(): P;
   validate(params: unknown): readonly ParamIssue[]; // unknown: parametry z dokumentu jsou neověřené
   migrate?(fromVersion: number, raw: unknown): P;   // povinné, jakmile version > 1 – hlídá registr
 }
 
-export interface ParamIssue { readonly param: string; readonly message: string }   // param '' = parametry jako celek
+export interface ParamIssue {
+  readonly param: string;                                   // '' = parametry jako celek
+  readonly code: string;                                    // klíč překladu, 'param.mustBePositive' (ADR 0014)
+  readonly params?: Readonly<Record<string, string | number>>; // hodnoty do textu, např. { min: 0 }
+}
 
 export type FeatureSchemaRegistry = Registry<FeatureSchema>;   // klíč = type, viz core
 export function createFeatureSchemaRegistry(): FeatureSchemaRegistry;
@@ -151,6 +158,9 @@ export function createFeatureSchemaRegistry(): FeatureSchemaRegistry;
 - `migrate` je v typu volitelná, protože pravidlo „povinné od verze 2“ závisí na hodnotě. Hlídá ho `register()` registru schémat: verze musí být celé číslo ≥ 1 a schéma s `version > 1` bez `migrate` se odmítne výjimkou už při startu.
 - Referenční `ParamSpec` (`bodies`, `topo`, `region`) bez `min`/`max` připouští `0..∞` referencí. Povinnost aspoň jedné reference vyjádří schéma přes `min: 1`.
 - Typ entity u `topo` (`face`/`edge`/`vertex`) obecná validace neověřuje – zjistí se až po regeneraci.
+
+- Všechny `label` (u `ParamSpec`, u možností `enum` a u `FeatureSchema`) jsou **klíče překladu**, ne texty. Texty dodává plugin ve slovníku `messages` a překládá je `ui` ([[0014-preklady-vue-i18n-a-klice|ADR 0014]], [[Q070 Překlady textů UI|Q070]]).
+- `exclusiveMin`/`exclusiveMax` bez `min`/`max` nemají účinek. Kódy chyb z `validateAgainstSchema`: `param.missing`, `param.unexpected`, `param.wrongType`, `param.notInteger`, `param.belowMin`, `param.atOrBelowMin` (ostrá mez), `param.aboveMax`, `param.atOrAboveMax`, `param.unknownOption`, `param.tooFewRefs`, `param.tooManyRefs`; `params` nesou příslušnou mez. Přesný seznam upřesní Implementační plán [[M10-ui]].
 
 `ParamSpec` slouží třem účelům najednou: validaci, generování formuláře v UI ([[11-ui|11]]) a rozpoznání, které parametry jsou reference (pro picking v dialogu).
 

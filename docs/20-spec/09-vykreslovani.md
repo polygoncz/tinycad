@@ -41,22 +41,41 @@ export interface Viewport extends ViewportPort, Disposable {
   readonly overlay: OverlayLayer;      // dočasná geometrie nástrojů (implementuje OverlayPort)
   readonly camera: CameraController;   // fit all, standardní pohledy
 
+  setPalette(palette: ScenePalette): void;   // přebarví existující materiály, nic nevytváří znovu (Q072)
+  setBodyVisible(body: BodyId, visible: boolean): void; // stav pohledu z Prohlížeče (Q071)
+
   readonly events: Subscribable<{ pointer: ViewPointerEvent; key: ViewKeyEvent }>;
 }
 
 export function createViewport(deps: {
   meshes: MeshOps;
   quality?: MeshQuality;                              // výchozí MESH_QUALITY
-  background?: number;                                // barva 0xRRGGBB
+  palette?: ScenePalette;                             // výchozí LIGHT_PALETTE (nahrazuje background)
   reportError?: (body: BodyId, error: unknown) => void;  // výchozí console.error
 }): Viewport;
 
 export const MESH_QUALITY: MeshQuality = { linearDeflection: 0.1, angularDeflection: 0.5 };
+
+/** Barvy scény jako 0xRRGGBB. Hodnota, žádné CSS – render nezná DOM (Q072). */
+export interface ScenePalette {
+  readonly background: number;
+  readonly face: number;
+  readonly edge: number;
+  readonly hover: number;
+  readonly selection: number;   // odpovídá --accent v CSS
+  readonly preview: number;     // overlay nástrojů
+  readonly construction: number;
+  readonly axes: readonly [x: number, y: number, z: number];
+}
+export const LIGHT_PALETTE: ScenePalette;
+export const DARK_PALETTE: ScenePalette;
 ```
 
 - Typy portu (`ViewportPort`, `PickResult`, `HighlightTarget`, `HighlightPort`, `OverlayPort`, události, `BodyId`) definuje [[10-interakce#Port viewportu]], `render` je importuje jen jako typy z `@/interaction`.
 - `mount`, `bodies` a `camera` nejsou součástí portu: používá je jen `app` (kompoziční kořen). Nástroje vidí jen `ViewportPort`.
 - `dispose()`: `unmount()`, uvolní všechna tělesa, zvýraznění, overlay, ovládání kamery a odběratele `events`. Další volání čehokoli kromě `dispose` je chyba, i na podobjektech (`bodies`, `camera`, `highlight`, `overlay`, `events.on`).
+- Barvy scény jsou jen v `ScenePalette` ([[Q072 Barvy scény podle režimu|Q072]]): konstanty `FACE_COLOR`, `EDGE_COLOR`, barvy ve `highlight-layer`, `overlay-layer` a `scene-helpers` se nahradí čtením z palety. `setPalette` změní barvy materiálů a pozadí a zavolá `requestRender()`. Paletu vybírá `app` podle režimu, který mu předá `ui` (`AppSession.setTheme`); `ui` typy z `render` nezná.
+- `setBodyVisible` jen skryje nebo ukáže `BodyView` (`visible`) a picking skryté těleso ignoruje. Těleso, které po `sync` zmizí, ztratí i stav viditelnosti. Viditelnost se neukládá ([[Q071 Viditelnost těles|Q071]]).
 - `mount` je odolný proti chybě (např. prohlížeč bez WebGL): uvolní, co už vytvořil, a výjimku pošle dál.
 - Známé omezení: Three.js si na materiálech registruje posluchače `dispose` s odkazem na renderer, takže materiály žijící celý život viewportu mohou po opakovaném `mount`/`unmount` držet staré renderery v paměti CPU až do `dispose`. Opakovaný mount je vzácný, neřešíme.
 - `unmount()` volá `renderer.forceContextLoss()`: prohlížeč dovolí jen několik kontextů WebGL a opakovaný `mount` by je vyčerpal. Po opětovném `mount` zůstane kamera, jak byla, výchozí pohled (`iso` + `fitAll`) se nastaví jen při prvním `mount`.

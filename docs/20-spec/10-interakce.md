@@ -341,12 +341,41 @@ export function createFeatureTreeModel(deps: {
 }): FeatureTreeModel;
 ```
 
+- `typeLabel` a `message` jsou od [[0014-preklady-vue-i18n-a-klice|ADR 0014]] klíče překladu (případně s parametry), překládá je `ui`. Zprávy z jádra (`KernelError.message`) zůstávají technický text a UI je ukáže pod přeloženým nadpisem chyby.
 - Řádky v pořadí featur dokumentu. Stav: `suppressed` (z dokumentu) > `rolledBack` (index `>= rollbackIndex`) > `health` z portu (`ok`/`warning`/`error`) > `pending` (featura v `health` chybí, např. ještě neproběhla regenerace).
 - Model se přepočítá při `doc.events.changed`, změně `regen.state`, `selection.items` a `editor.current`. Nezměněný řádek je týž objekt, nezměněný seznam týž snapshot.
 - `rows` a `rollbackIndex` se přepočítají v jednom kroku, ale vyšlou se postupně (nejdřív `rows`). Odběratel jednoho proto nemá v callbacku číst druhé; Vue překresluje dávkově v mikroúloze, takže v UI nekonzistence nevznikne. Kdyby to vadilo jinde, sloučí se do jednoho `Observable<TreeSnapshot>`.
 - Nezměněný řádek se pozná porovnáním s řádkem na stejné pozici; po přesunu featury proto dostanou nový objekt i řádky, které se jen posunuly.
 - `rename` neznámé featury → výjimka. `rename`: jméno se ořízne, prázdné nebo stejné → nic. `moveRollbackBar`: stejný index → nic, mimo `0..features.length` → výjimka.
 - `rename` a `moveRollbackBar` během otevřené transakce hodí výjimku (z dispečera); UI je má v tu chvíli zakázat podle `editing`.
+
+## Prohlížeč: `BrowserModel` a viditelnost těles
+
+[[Prohlížeč]] v UI ([[11-ui#Rozvržení]]) ukazuje *výsledek* modelování: tělesa z poslední regenerace. [[Timeline]] je jen jiné vykreslení `FeatureTreeModel` výše. Návrh (kontrakt upřesní Implementační plán [[M10-ui]]):
+
+```ts
+// RegenSnapshot (port výše) se rozšíří o seznam těles:
+readonly bodies: readonly { readonly body: BodyId; readonly feature: FeatureId }[];
+
+export interface BrowserBodyRow {
+  readonly body: BodyId;
+  readonly name: string;        // „Těleso n“ podle pořadí (klíč překladu + číslo)
+  readonly feature: FeatureId;  // featura, která těleso vytvořila
+  readonly visible: boolean;
+  readonly selected: boolean;   // výběr obsahuje { kind: 'body', body }
+}
+
+export interface BrowserModel {
+  readonly bodies: Observable<readonly BrowserBodyRow[]>;
+  readonly hidden: Observable<ReadonlySet<BodyId>>;   // app → viewport.setBodyVisible
+  select(body: BodyId, opts?: { additive?: boolean }): void;
+  setVisible(body: BodyId, visible: boolean): void;
+  dispose(): void;
+}
+```
+
+- Viditelnost je **stav pohledu** ([[Q071 Viditelnost těles|Q071]]): neukládá se, nejde přes dispečer ani do undo, po reloadu je vše vidět. Těleso, které po regeneraci zmizí, ze `hidden` vypadne.
+- Do M14 nemají tělesa stabilní identitu, takže skrytí se po změně historie může přenést na jiné těleso se stejným `BodyId`. Vědomé omezení.
 
 ## Akce a klávesové zkratky
 

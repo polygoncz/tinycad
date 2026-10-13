@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[03-dokument]]"
 decide_by: "[[M10-ui]]"
 proposal: "přidat do ParamSpec pro length/angle/number volitelné exclusiveMin: boolean"
-decision: ""
+decision: "exclusiveMin/exclusiveMax u length, angle, number; validateAgainstSchema je respektuje, vlastní pravidlo v boxu zmizí."
 tags:
   - otazka
 created: 2026-10-13
@@ -32,4 +32,4 @@ Návrh: **1**, implementovat v M10 spolu s generovaným formulářem.
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR.)_
+2026-10-13 (Pavel): **možnost 1.** `exclusiveMin?: boolean` a `exclusiveMax?: boolean` u `length`, `angle`, `number`; `validateAgainstSchema` je respektuje a formulář je zná. Box přejde na `min: 0, exclusiveMin: true`. Propsáno do [[03-dokument]].

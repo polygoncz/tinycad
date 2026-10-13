@@ -239,6 +239,10 @@ Známé omezení: `target` undo/redo záznamů, který neodpovídá zásobníku,
 
 Známé omezení: featury a parametry uvnitř operací se nemigrují na novou verzi schématu ([[Q035 Migrace featur v záznamech logu|Q035]]). Dokud mají všechna schémata `version: 1`, nemá to dopad.
 
+### Jeden zapisovatel na dokument
+
+Dvě záložky se stejným dokumentem by zapisovaly `seq` od stejného `lastSeq` a přepsaly si log ([[Q038 Jeden dokument ve dvou záložkách|Q038]]). Hlídá to `app`, ne port: před `loadDocument` požádá o Web Lock (`navigator.locks.request('tinycad-doc-<id>', { ifAvailable: true }, …)`) a drží ho po celou dobu sezení. Zámek se uvolní i při pádu nebo zavření záložky. Záložka, která zámek nedostane, otevře dokument **jen pro čtení**: nevytvoří `PersistenceService`, dispečer odmítá operace a UI ukáže hlášku „otevřeno v jiné záložce“. Pojistka `'conflict'` v kontraktu `DocumentStore` se zatím nedělá.
+
 ## Export a import souboru
 
 Pro zálohu a sdílení mezi počítači (git). Soubor `.tinycad.json`:

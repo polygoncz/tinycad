@@ -1,0 +1,131 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<style>
+:root{--accent:#007AFF;--accent-soft:rgba(0,122,255,.14);--text:#1d1d1f;--text2:#6e6e73;--text3:#a1a1a6;--danger:#FF3B30;--ok:#34C759;
+--glass:rgba(255,255,255,.42);--glass-border:rgba(0,0,0,.08);--glass-hi:rgba(255,255,255,.6);--shadow:0 10px 30px rgba(0,0,0,.12),0 1px 3px rgba(0,0,0,.08);
+--hover:rgba(0,0,0,.06);--field:rgba(255,255,255,.75);--field-border:rgba(0,0,0,.12);--vp1:#f4f5f7;--vp2:#dfe2e7;--grid:rgba(0,0,0,.05);
+--b-top:#e8f1ff;--b-l:#c6dcf9;--b-r:#9fc3f2;--b-edge:#3a6fb0;--g-top:#f2f1ee;--g-l:#d9d7d1;--g-r:#bebcb5;--g-edge:#6b6a66;--tip:rgba(30,30,32,.92);--tipt:#fff}
+.dark{--accent:#0A84FF;--accent-soft:rgba(10,132,255,.25);--text:#f5f5f7;--text2:#a1a1a6;--text3:#6e6e73;--danger:#FF453A;--ok:#30D158;
+--glass:rgba(38,38,42,.45);--glass-border:rgba(255,255,255,.1);--glass-hi:rgba(255,255,255,.06);--shadow:0 10px 30px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.3);
+--hover:rgba(255,255,255,.08);--field:rgba(0,0,0,.25);--field-border:rgba(255,255,255,.12);--vp1:#2b2d32;--vp2:#17181b;--grid:rgba(255,255,255,.04);
+--b-top:#5d8fd0;--b-l:#3b6aa6;--b-r:#2c5285;--b-edge:#9cc3f5;--g-top:#8a8984;--g-l:#6a6964;--g-r:#55544f;--g-edge:#c4c2bb;--tip:rgba(245,245,247,.95);--tipt:#1d1d1f}
+:root{--chrome:rgba(246,246,248,.86);--chrome-b:rgba(0,0,0,.1);--warn:#FF9F0A}
+.dark{--chrome:rgba(36,36,40,.88);--chrome-b:rgba(255,255,255,.08)}
+*{box-sizing:border-box}
+body{margin:0;font:13px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;color:var(--text);-webkit-font-smoothing:antialiased}
+.win{position:relative;width:1000px;height:640px;overflow:hidden;background:linear-gradient(180deg,var(--vp1),var(--vp2));border-radius:12px}
+.glass{position:absolute;background:var(--glass);backdrop-filter:blur(18px) saturate(200%);-webkit-backdrop-filter:blur(18px) saturate(200%);border:0.5px solid var(--glass-border);box-shadow:var(--shadow),inset 0 0.5px 0 var(--glass-hi);border-radius:12px}
+.chrome{position:absolute;left:0;right:0;background:var(--chrome);backdrop-filter:blur(24px) saturate(180%)}
+.ib{width:38px;height:38px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;font-size:24px;color:var(--text);position:relative}
+.ib.hov{background:var(--hover)}.ib.dis{color:var(--text3)}
+.grp{display:flex;flex-direction:column;align-items:center;padding:0 6px}
+.grp .icons{display:flex;gap:1px}
+.grp .lbl{font-size:10.5px;font-weight:600;color:var(--text2);letter-spacing:.03em;margin-top:1px;display:flex;align-items:center;gap:2px}
+.vsep{width:1px;align-self:stretch;margin:6px 4px;background:var(--chrome-b)}
+.tip{position:absolute;top:66px;left:50%;transform:translateX(-50%);background:var(--tip);color:var(--tipt);font-size:12px;padding:4px 8px;border-radius:6px;white-space:nowrap;display:flex;gap:8px;z-index:5}
+.tip kbd{font:inherit;opacity:.6}
+.tab{padding:3px 12px;border-radius:6px;font-size:12px;font-weight:500;color:var(--text2)}.tab.on{background:var(--glass);color:var(--text);box-shadow:0 0.5px 2px rgba(0,0,0,.15)}
+.node{display:flex;align-items:center;gap:6px;height:26px;padding-right:8px;margin:0 6px;border-radius:6px;font-size:13px}
+.node i{font-size:16px}.node .chev{font-size:12px;color:var(--text3);width:12px}.node .eye{margin-left:auto;color:var(--text2)}
+.node.sel{background:var(--accent-soft)}
+.fld{display:grid;grid-template-columns:72px 1fr;align-items:center;gap:10px;margin:0 14px 10px}
+.fld label{color:var(--text2)}
+.inp{height:28px;border-radius:7px;background:var(--field);border:0.5px solid var(--field-border);display:flex;align-items:center;padding:0 8px;justify-content:space-between}
+.inp span{color:var(--text3)}.inp.foc{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}.inp.bad{border-color:var(--danger);box-shadow:0 0 0 3px rgba(255,59,48,.18)}
+.btn{height:28px;padding:0 14px;border-radius:7px;display:inline-flex;align-items:center;background:var(--hover);font-weight:500}.btn.pri{background:var(--accent);color:#fff}
+.menu{padding:5px 0;border-radius:10px}.menu .row{display:flex;align-items:center;gap:8px;height:24px;padding:0 8px;margin:0 5px;border-radius:5px}.menu .row i{font-size:16px}
+.menu .k{margin-left:auto;color:var(--text3);font-size:12px}.menu .row.sel{background:var(--accent);color:#fff}.menu .row.sel .k{color:rgba(255,255,255,.75)}
+.tl{position:relative;width:34px;height:34px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;font-size:20px;margin:0 1px}
+.tl.sel{background:var(--accent-soft);color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.tl.after{color:var(--text3)}.tl.sup{color:var(--text3)}.tl.sup:after{content:"";position:absolute;width:26px;height:1.5px;background:var(--text3);transform:rotate(-45deg)}
+.tl.err{color:var(--danger);background:rgba(255,59,48,.12)}
+.tl .badge{position:absolute;right:-2px;top:-2px;width:12px;height:12px;border-radius:50%;background:var(--danger);color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:700}
+.pb{font-size:17px;color:var(--text2);width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px}
+</style></head><body style="padding:10px">
+<div class="win" id="win">
+<svg width="1000" height="640" style="position:absolute;inset:0">
+<g stroke="var(--grid)" stroke-width="1"><line x1="0" y1="520" x2="1000" y2="500"/><line x1="0" y1="470" x2="1000" y2="460"/><line x1="0" y1="420" x2="1000" y2="425"/>
+<line x1="500" y1="380" x2="180" y2="560"/><line x1="500" y1="380" x2="820" y2="560"/><line x1="500" y1="380" x2="500" y2="580"/></g>
+<g transform="translate(-748,-400) scale(2.4)"><g id="b1"><polygon points="430,360 530,410 530,320 430,270" fill="var(--b-l)" stroke="var(--b-edge)" stroke-width="1.2"/><polygon points="530,410 610,370 610,280 530,320" fill="var(--b-r)" stroke="var(--b-edge)" stroke-width="1.2"/><polygon id="top" points="430,270 530,320 610,280 510,230" fill="var(--b-top)" stroke="var(--b-edge)" stroke-width="1.2"/></g>
+<g><polygon points="530,410 580,435 580,385 530,360" fill="var(--g-l)" stroke="var(--g-edge)"/><polygon points="580,435 630,410 630,360 580,385" fill="var(--g-r)" stroke="var(--g-edge)"/><polygon points="530,360 580,385 630,360 580,335" fill="var(--g-top)" stroke="var(--g-edge)"/></g>
+</g><g transform="translate(36,560)" stroke-width="2.5" stroke-linecap="round"><line x2="28" stroke="#FF3B30"/><line x2="-14" y2="-14" stroke="#34C759"/><line y2="-28" stroke="#0A84FF"/></g>
+</svg>
+
+<!-- docked top chrome: title bar + toolbar -->
+<div class="chrome" style="top:0;border-bottom:0.5px solid var(--chrome-b)">
+<div style="height:38px;display:flex;align-items:center;padding:0 12px;gap:10px;border-bottom:0.5px solid var(--chrome-b)">
+<span style="display:flex;gap:7px"><span style="width:12px;height:12px;border-radius:50%;background:#FF5F57"></span><span style="width:12px;height:12px;border-radius:50%;background:#FEBC2E"></span><span style="width:12px;height:12px;border-radius:50%;background:#28C840"></span></span>
+<i class="ti ti-layout-grid" style="font-size:18px;color:var(--text2);margin-left:10px"></i>
+<span style="flex:1;text-align:center;font-weight:600">Držák motoru <span id="save" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);margin-left:6px;vertical-align:1px"></span></span>
+<i class="ti ti-language" style="font-size:18px;color:var(--text2)"></i><i class="ti ti-moon" id="modei" style="font-size:18px;color:var(--text2)"></i>
+</div>
+<div style="display:flex;align-items:center;gap:8px;padding:6px 12px 4px">
+<div style="display:flex;flex-direction:column;gap:3px;margin-right:6px;background:var(--hover);padding:3px;border-radius:8px"><span class="tab on">Modelování</span><span class="tab">Skica</span></div>
+<div class="grp"><div class="icons"><span class="ib"><i class="ti ti-arrow-back-up"></i></span><span class="ib"><i class="ti ti-arrow-forward-up"></i></span></div><div class="lbl">HISTORIE</div></div>
+<div class="vsep"></div>
+<div class="grp"><div class="icons"><span class="ib hov" id="tbox"><i class="ti ti-box"></i><span class="tip" id="tip">Kvádr <kbd>B</kbd></span></span><span class="ib dis"><i class="ti ti-cylinder"></i></span><span class="ib dis"><i class="ti ti-arrow-big-up-lines"></i></span><span class="ib dis"><i class="ti ti-rotate-360"></i></span></div><div class="lbl">VYTVOŘIT <i class="ti ti-chevron-down" style="font-size:10px"></i></div></div>
+<div class="vsep"></div>
+<div class="grp"><div class="icons"><span class="ib dis"><i class="ti ti-squares-filled"></i></span><span class="ib dis"><i class="ti ti-shape"></i></span><span class="ib dis"><i class="ti ti-arrows-move"></i></span></div><div class="lbl">UPRAVIT <i class="ti ti-chevron-down" style="font-size:10px"></i></div></div>
+<div class="vsep"></div>
+<div class="grp"><div class="icons"><span class="ib dis"><i class="ti ti-square-rotated"></i></span><span class="ib dis"><i class="ti ti-axis-x"></i></span></div><div class="lbl">KONSTRUKCE <i class="ti ti-chevron-down" style="font-size:10px"></i></div></div>
+<div class="vsep"></div>
+<div class="grp"><div class="icons"><span class="ib"><i class="ti ti-zoom-scan"></i></span><span class="ib dis"><i class="ti ti-ruler-measure"></i></span></div><div class="lbl">ZOBRAZIT <i class="ti ti-chevron-down" style="font-size:10px"></i></div></div>
+</div></div>
+
+<!-- browser -->
+<div class="glass" style="left:12px;top:120px;width:230px;padding:0 0 8px">
+<div style="display:flex;align-items:center;gap:6px;padding:9px 12px 6px;font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.03em"><i class="ti ti-chevron-down" style="font-size:12px"></i><span style="flex:1">PROHLÍŽEČ</span><i class="ti ti-pin" style="font-size:14px"></i></div>
+<div class="node" style="padding-left:4px"><i class="ti ti-chevron-down chev"></i><i class="ti ti-cube" style="color:var(--accent)"></i><b style="font-weight:500">Držák motoru</b></div>
+<div class="node" style="padding-left:20px"><i class="ti ti-chevron-right chev"></i><i class="ti ti-settings"></i>Nastavení dokumentu</div>
+<div class="node" style="padding-left:20px"><i class="ti ti-chevron-right chev"></i><i class="ti ti-axis-y"></i>Počátek<i class="ti ti-eye-off eye" style="color:var(--text3)"></i></div>
+<div class="node" style="padding-left:20px"><i class="ti ti-chevron-down chev"></i><i class="ti ti-folder"></i>Tělesa<i class="ti ti-eye eye"></i></div>
+<div class="node sel" id="n1" style="padding-left:36px"><span class="chev"></span><i class="ti ti-box" id="n1i" style="color:var(--b-edge)"></i><span id="n1t">Těleso 1</span><i class="ti ti-eye eye"></i></div>
+<div class="node" style="padding-left:36px"><span class="chev"></span><i class="ti ti-box"></i>Těleso 2<i class="ti ti-eye eye"></i></div>
+<div class="node" style="padding-left:20px;color:var(--text3)"><i class="ti ti-chevron-right chev"></i><i class="ti ti-folder"></i>Skici</div>
+</div>
+
+<!-- feature dialog -->
+<div class="glass" id="dlg" style="right:14px;top:120px;width:280px;display:none;padding-bottom:12px">
+<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:0.5px solid var(--glass-border);margin-bottom:12px"><i class="ti ti-box" style="font-size:18px;color:var(--accent)"></i><span style="font-weight:600;flex:1;font-size:12px;letter-spacing:.03em">KVÁDR 1</span><i class="ti ti-grip-horizontal" style="color:var(--text3)"></i></div>
+<div class="fld"><label>Šířka</label><div class="inp">40<span>mm</span></div></div>
+<div class="fld"><label>Hloubka</label><div class="inp">25<span>mm</span></div></div>
+<div class="fld"><label>Výška</label><div class="inp foc" id="h">30<span>mm</span></div></div>
+<div id="herr" style="display:none;color:var(--danger);font-size:12px;margin:-4px 14px 10px 96px">Musí být větší než 0</div>
+<div style="display:flex;justify-content:flex-end;gap:8px;padding:6px 14px 0"><span class="btn">Zrušit</span><span class="btn pri">OK</span></div>
+</div>
+
+<!-- timeline -->
+<div class="chrome" style="bottom:0;height:52px;border-top:0.5px solid var(--chrome-b);display:flex;align-items:center;padding:0 10px;gap:4px">
+<span class="pb"><i class="ti ti-player-skip-back"></i></span><span class="pb"><i class="ti ti-player-track-prev"></i></span><span class="pb"><i class="ti ti-player-track-next"></i></span><span class="pb"><i class="ti ti-player-skip-forward"></i></span>
+<div style="width:1px;height:26px;background:var(--chrome-b);margin:0 8px"></div>
+<span class="tl sel" id="t1"><i class="ti ti-box"></i></span>
+<span class="tl"><i class="ti ti-box"></i></span>
+<span class="tl sup"><i class="ti ti-box"></i></span>
+<span style="position:relative;width:10px;height:40px;display:inline-flex;justify-content:center"><span style="width:3px;height:40px;background:var(--accent);border-radius:2px"></span><span style="position:absolute;top:-4px;width:12px;height:10px;background:var(--accent);clip-path:polygon(0 0,100% 0,50% 100%)"></span></span>
+<span class="tl after"><i class="ti ti-box"></i></span>
+<span style="flex:1"></span>
+<span id="stat" style="font-size:12px;color:var(--text2);display:flex;gap:10px;align-items:center"></span>
+<i class="ti ti-settings" style="font-size:16px;color:var(--text2);margin-left:10px"></i>
+</div>
+
+<!-- context menu over timeline -->
+<div class="glass menu" id="ctx" style="left:150px;bottom:62px;width:190px">
+<div class="row"><i class="ti ti-edit"></i>Upravit featuru<span class="k">↩</span></div>
+<div class="row sel"><i class="ti ti-eye-off"></i>Potlačit<span class="k">S</span></div>
+<div class="row"><i class="ti ti-arrow-bar-to-right"></i>Vrátit se sem</div>
+<div class="row"><i class="ti ti-pencil"></i>Přejmenovat</div>
+<div style="height:0.5px;background:var(--glass-border);margin:4px 10px"></div>
+<div class="row" style="color:var(--danger)"><i class="ti ti-trash"></i>Smazat<span class="k">⌫</span></div>
+</div>
+</div>
+<script>
+const p=new URLSearchParams(location.search),s=p.get('s')||'tree',dark=p.get('m')==='dark';const $=i=>document.getElementById(i);
+if(dark){document.documentElement.classList.add('dark');document.body.style.background='#000';$('modei').className='ti ti-sun'}
+const dlg=s==='dlg'||s==='err',err=s==='err';
+$('ctx').style.display=s==='tree'?'block':'none';$('dlg').style.display=dlg?'block':'none';
+$('tip').style.display=s==='tree'?'flex':'none';if(s!=='tree')$('tbox').classList.remove('hov');
+if(s==='tree')$('top').setAttribute('fill','var(--accent)');
+if(err){$('h').className='inp bad';$('h').firstChild.textContent='0';$('herr').style.display='block';$('t1').className='tl err';$('t1').insertAdjacentHTML('beforeend','<span class="badge">!</span>');$('b1').style.display='none';$('n1').className='node';$("n1t").style.color="var(--text3)";$("n1i").style.color="var(--text3)";$('n1t').textContent='Těleso 1 (chybí)'}
+$('stat').innerHTML=(err?'<span style="color:var(--danger)"><i class="ti ti-alert-triangle"></i> 1 chyba</span>':'<span><i class="ti ti-check" style="color:var(--ok)"></i> 42 ms</span>')+'<span>'+(err?'1 těleso':'2 tělesa')+'</span><span>Plocha 3 · Těleso 1</span>';
+if(dlg)$('save').style.background='var(--warn)';
+</script></body></html>

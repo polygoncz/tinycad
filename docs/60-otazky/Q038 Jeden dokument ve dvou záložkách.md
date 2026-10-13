@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[05-persistence]]"
 decide_by: "[[M10-ui]]"
 proposal: "Web Locks: dokument smí mít otevřený jen jedna záložka, druhá ho otevře jen pro čtení"
-decision: ""
+decision: "Web Locks na dokument v app; záložka bez zámku otevře dokument jen pro čtení."
 tags:
   - otazka
 created: 2026-10-13
@@ -34,4 +34,4 @@ Návrh: **1** jako hlavní mechanismus (v `app`), a možná **2** jako pojistka 
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR.)_
+2026-10-13 (Pavel): **možnost 1 – Web Locks.** `app` při otevření dokumentu požádá o `navigator.locks` se jménem podle id dokumentu. Záložka, která zámek nedostane, otevře dokument jen pro čtení s hláškou „otevřeno v jiné záložce“. Pojistka `'conflict'` ve store se zatím nedělá. Propsáno do [[11-ui]] a [[05-persistence]].
