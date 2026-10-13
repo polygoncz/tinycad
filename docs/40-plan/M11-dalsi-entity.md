@@ -13,7 +13,7 @@ specs:
   - "[[07-regenerace]]"
   - "[[10-interakce]]"
 depends_on:
-  - "[[M10-ui]]"
+  - "[[M10.1-zpevneni-kostry]]"
 started: 
 finished: 
 tags:
@@ -29,7 +29,7 @@ updated: 2026-10-12
 
 > Hrubý plán – před zahájením upřesnit.
 
-**Navazuje na:** [[M10-ui]]
+**Navazuje na:** [[M10.1-zpevneni-kostry]]
 
 ## Úkoly
 
@@ -48,3 +48,12 @@ updated: 2026-10-12
 ## Retrospektiva
 
 _(vyplnit po dokončení)_
+
+## Úkoly z revize architektury (doplněno 2026-10-13, [[M10.1-zpevneni-kostry]])
+
+Nálezy 2 a 3 z [[Revize architektury 2026-10-13]], jejichž první spotřebitel vzniká až tady. Zapracovat do Implementačního plánu při startu M11.
+
+- [ ] **Pravidlo identity u Transform a Boolean** ([[07-regenerace]]): Transform zachová `id`, `origin`, `names`, nastaví `lastModifiedBy`; Boolean dědí `id` prvního cíle, nástroje z mapy odebere; `keepTools` je zachová beze změny; více výsledných solidů → `bodyId(cíl.origin, n)` podle rodokmenu z historie jádra (`Generated`/`Modified`), ne podle pořadí výstupu. Test: změna parametru válce nepřehodí id dvou výsledných těles.
+- [ ] **Pravidla závislostí v `interaction`** ([[10-interakce]]): `FeatureTreeModel.move(id, toIndex)` (nový příkaz pro budoucí tažení v Timeline) odmítne přesun, po kterém `orderViolations` není prázdné; akce `feature.delete` nejdřív spočítá `dependentsOf` a UI zobrazí potvrzení „N featur ztratí referenci“ (jako Fusion); řádek Timeline nese `dependents: number` pro tooltip. Testy v Node s `dependenciesOf` z `document`.
+- [ ] **Metadata těles v dokumentu** ([[03-dokument]], [[04-operace-a-historie]]): `PartStudioData.bodies?: Readonly<Record<BodyId, { name?: string; hidden?: boolean }>>` a operace `body.rename`, `body.setVisible` s inverzí; Prohlížeč jméno zobrazí a viditelnost ukládá sem místo stavu pohledu (přehodnotit [[Q071 Viditelnost těles|Q071]]: identita je od M10.1 rodokmen, takže už se nepřenese na jiné těleso). Barva až s [[Q017 Průhlednost a skrývání těles|Q017]].
+- [ ] **Měřítko rozšiřitelnosti:** do retrospektivy zapsat seznam souborů mimo `features/*` změněných kvůli novým entitám, odděleně od souborů změněných kvůli úkolům výše.

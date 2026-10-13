@@ -19,3 +19,6 @@ Jedno pevné těleso ve [[Stav regenerace|stavu regenerace]]. Má stabilní `Bod
 
 **V návrhu:** [[07-regenerace]], [[03-dokument]]
 **Souvisí:** [[Handle tvaru]], [[Stav regenerace]]
+
+> [!note] Od M10.1 ([[0015-artefakty-a-identita-telesa|ADR 0015]])
+> Těleso je jeden druh *artefaktu* (`kind: 'body'`) v mapě `RegenState.artifacts`. Identita je rodokmen: `origin` je featura, jejíž builder id razil (`bodyId(origin, n)` z `document`), `lastModifiedBy` poslední featura, která tělesu dala nový tvar. Featura, která těleso mění, zachová `id`, `origin` i `names`.

@@ -30,6 +30,7 @@ Jediná entita až do M10 je **kvádr (Box)**. Druhá entita v M11 je zkouška r
 | [[M08-vykreslovani\|M8]] | Vykreslování | `render` | viewport, synchronizace, picking |
 | [[M09-interakce\|M9]] | Interakce | `interaction` | výběr, nástroje, dialog featury, akce |
 | [[M10-ui\|M10]] | UI a první aplikace | `app`, `ui` | **spustitelná aplikace s kvádrem**, strom, dialog, undo, ukládání |
+| [[M10.1-zpevneni-kostry\|M10.1]] | Zpevnění kostry | `document`, `ops`, `regen`, `interaction`, `render`, `app` | opravy z [[Revize architektury 2026-10-13\|revize architektury]]: artefakty, identita tělesa, reference, migrace v logu, filtr pickingu |
 | [[M11-dalsi-entity\|M11]] | Další entity | `features/*` | Cylinder, Transform, Boolean; reference na tělesa |
 | [[M12-skicar\|M12]] | Skicář | `features/sketch` | skica, vazby (planegcs), profily |
 | [[M13-extrude-revolve\|M13]] | Extrude a Revolve | `features/*` | tělesa ze skici |
@@ -46,10 +47,12 @@ Stav milníků (`todo` / `doing` / `done`) je **jen ve vlastnostech** souborů m
 ```
 M0 → M1 → M2 → M3 ─┬─► M4 ────────────────────────┐
                    │                              │
-          M1 → M5 ─┴─► M6 ─► M7 ─► M8 ─► M9 ─► M10 ─► M11 ─► M12 ─► M13 ─► M14 ─► M15 ─► M16
+          M1 → M5 ─┴─► M6 ─► M7 ─► M8 ─► M9 ─► M10 ─► M10.1 ─► M11 ─► M12 ─► M13 ─► M14 ─► M15 ─► M16
 ```
 
 M4 (persistence) a M5 (port jádra) na sobě nezávisí – pořadí lze prohodit. Persistence je dřív, protože ověří formát logu, dokud je čerstvý.
+
+Milník `MNN.X` je neplánovaná úprava mezi dvěma milníky ([[Konvence vaultu#Principy|konvence]]); M10.1 nese opravy z revize architektury po M10.
 
 M16 (vlastní OCCT build) technicky potřebuje jen M7. Na konci je proto, že předpřipravený build stačí. Přesune se dřív, pokud mu bude chybět API ([[0013-replicad-opencascadejs|ADR 0013]]).
 

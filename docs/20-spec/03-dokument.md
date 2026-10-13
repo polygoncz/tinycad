@@ -12,7 +12,7 @@ milestones:
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-13
+updated: 2026-10-14
 ---
 # 03 – `document`: doménový model
 
@@ -113,6 +113,27 @@ export interface SketchRegionRef { readonly kind: 'region'; readonly sketch: Fea
 export type EntityRef = BodyRef | TopoRef | SketchRegionRef;   // diskriminováno podle kind
 ```
 
+### Id těles a závislosti
+
+Id artefaktu má vždy tvar `<vlastník>/<druh>[:<n>]` ([[0015-artefakty-a-identita-telesa|ADR 0015]]). Razí ho jediné místo v `document`; builder nepřetypovává. Z referencí featury tak plyne, na kterých featurách závisí – čisté funkce, které v [[M11-dalsi-entity|M11]] použijí pravidla přesunu a mazání:
+
+```ts
+export function bodyId(origin: FeatureId, n?: number): BodyId;   // '<origin>/body', s n >= 1 '<origin>/body:<n>'; n < 1 nebo neceločíselné → výjimka
+export function originOfBody(body: BodyId): FeatureId;            // text před prvním '/'; bez '/' → výjimka (chyba programu)
+export function ownerOf(ref: EntityRef): FeatureId;               // body, topo → originOfBody(ref.body); region → ref.sketch
+
+export function referencesOf(schema: FeatureSchema, params: unknown): readonly EntityRef[];
+export function dependenciesOf(studio: PartStudioData, schemas: RegistryReader<FeatureSchema>): ReadonlyMap<FeatureId, readonly FeatureId[]>;
+export function dependentsOf(deps: ReadonlyMap<FeatureId, readonly FeatureId[]>, id: FeatureId): readonly FeatureId[];
+export interface OrderViolation { readonly feature: FeatureId; readonly dependsOn: FeatureId }
+export function orderViolations(studio: PartStudioData, deps: ReadonlyMap<FeatureId, readonly FeatureId[]>): readonly OrderViolation[];
+```
+
+- `referencesOf` projde `schema.params` v pořadí schématu; u druhů `bodies`, `topo` a `region` vezme z hodnoty jen položky, které jsou platnou referencí daného druhu (stejná kontrola tvaru jako `validateAgainstSchema`); hodnotu, která není pole, a neplatné položky přeskočí (hlásí je validace); `params`, které nejsou objekt → `[]`. Výsledek i položky jsou zmrazené kopie.
+- `dependenciesOf`: pro každou featuru studia v pořadí vlastníci jejích referencí přes `ownerOf`, bez duplicit, v pořadí prvního výskytu, jen featury, které ve studiu existují (nevyřešenou referenci hlásí regenerace), bez vlastní featury; neznámý typ → `[]`.
+- `dependentsOf`: featury, jejichž závislosti obsahují `id`, v pořadí mapy.
+- `orderViolations`: dvojice, kde závislost leží na indexu ≥ index featury. Prázdné = pořadí platné; pořadí výsledku podle featur, pak závislostí.
+
 ## Schéma featury
 
 Datová část typu featury: co za parametry má, jak vypadají výchozí hodnoty a jak se migrují stará data. Chování (výpočet geometrie) je v `regen` ([[0004-data-oddelene-od-chovani|ADR 0004]]).
@@ -193,6 +214,18 @@ export interface DocumentLoadError { readonly issues: readonly DocumentLoadIssue
 - Neznámý typ featury při načítání: featura se zachová jako „neznámá“ (data beze změny), regenerace ji označí chybou. Dokument se tím nerozbije.
 - Formát musí být čisté JSON (žádné `Map`, `Date`, `undefined` v polích). Ověří test „`JSON.parse(JSON.stringify(x))` je hluboce rovno `x`“. `fromData` to u `params` (i u výsledku `migrate`) kontroluje: jen čisté objekty (prototyp `Object.prototype` nebo `null`), pole, řetězce, konečná čísla, `boolean` a `null`. IndexedDB ukládá structured clone, takže by se tam jinak `Date` nebo `Map` dostaly.
 - `toData` vrací zmrazený obal.
+
+### Migrace dat featur
+
+Migraci parametrů na aktuální verzi schématu používá `fromData` i `ops` (migrace při `apply`, [[04-operace-a-historie#Handler]], [[Q035 Migrace featur v záznamech logu|Q035]]), proto je exportovaná:
+
+```ts
+export interface FeatureData { readonly type: string; readonly typeVersion: number; readonly params: unknown }
+/** Neznámý typ → beze změny (tentýž objekt). Stejná verze → tentýž objekt. Novější verze → err 'typeVersion'; výjimka migrate nebo výsledek, který není čistý JSON objekt → err 'params'. */
+export function migrateFeatureData(schemas: RegistryReader<FeatureSchema>, data: FeatureData): Result<FeatureData, DocumentLoadIssue>;
+```
+
+`fromData` cesty prefixuje `studio.features[i].`.
 
 ## Testy
 

@@ -12,7 +12,7 @@ milestones:
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-13
+updated: 2026-10-14
 ---
 # 04 – `ops`: operace, log a undo/redo
 
@@ -37,13 +37,13 @@ Payload je **přímo na objektu operace** (žádné vnořené `payload`), např.
 
 ### Sada operací
 
-Typů je záměrně málo a jsou malé: log žije navždy, každá změna tvaru operace znamená migraci. Všechny mají v M3 `v: 1`.
+Typů je záměrně málo a jsou malé: log žije navždy, každá změna tvaru operace znamená migraci. Všechny mají v M3 `v: 1`; `feature.setParams` má od [[M10.1-zpevneni-kostry|M10.1]] `v: 2` (`upcast` z 1 doplní `typeVersion: 1`, [[Q035 Migrace featur v záznamech logu|Q035]]).
 
 | `type` | Pole (kromě `type`, `v`) | Inverze (spočítaná z aktuálního stavu) | Mutátor |
 |---|---|---|---|
 | `feature.add` | `feature: FeatureInstance, index: number` | `feature.remove { featureId: feature.id }` | `insertFeature` |
 | `feature.remove` | `featureId` | `feature.add` s aktuální instancí a jejím indexem | `removeFeature` |
-| `feature.setParams` | `featureId, params: unknown` (celé nové parametry) | `feature.setParams` s aktuálními parametry | `replaceFeature({ ...f, params })` |
+| `feature.setParams` (`v: 2`) | `featureId, typeVersion: number, params: unknown` (celé nové parametry a verze schématu, se kterou vznikly) | `feature.setParams` s aktuálními `typeVersion` a parametry | `replaceFeature({ ...f, typeVersion, params })` po migraci |
 | `feature.rename` | `featureId, name: string` | `feature.rename` s aktuálním jménem | `replaceFeature({ ...f, name })` |
 | `feature.suppress` | `featureId, suppressed: boolean` | `feature.suppress` s aktuální hodnotou | `replaceFeature({ ...f, suppressed })` |
 | `feature.move` | `featureId, toIndex: number` | `feature.move` na aktuální index | `moveFeature` |
@@ -77,8 +77,8 @@ export interface OpHandler<O extends Operation = Operation> {
 }
 
 export type OpHandlerRegistry = Registry<OpHandler>;   // klíč = type, viz core
-/** Registr s vestavěnými handlery (feature.*, studio.setRollback). register({ type: 'batch' }) vyhodí. */
-export function createOpHandlerRegistry(): OpHandlerRegistry;
+/** Registr s vestavěnými handlery (feature.*, studio.setRollback). register({ type: 'batch' }) vyhodí. Schémata potřebuje migrace dat featur při apply. */
+export function createOpHandlerRegistry(deps: { schemas: RegistryReader<FeatureSchema> }): OpHandlerRegistry;
 ```
 
 Kontrakt handleru:
@@ -87,6 +87,14 @@ Kontrakt handleru:
 - Inverze má `v` rovné aktuální verzi **handleru svého typu** (inverze `feature.add` je `feature.remove` ve verzi handleru `feature.remove`). Verze každého typu operace je proto jedna konstanta, kterou sdílí handler i každý, kdo operaci toho typu vytváří. Vestavěné verze jsou v `OP_VERSION` (objekt `typ → verze`), který `ops/index.ts` exportuje pro tvůrce operací mimo `ops` (`interaction`, dev stránky); vlastní operace pluginu (M12) mají verzi u svého handleru.
 - Handler se o [[Rollback bar|rollback bar]] nestará – viz [[#Dávka a rollback bar]].
 - `merge(prev, next)` vrací operaci `m`, pro kterou platí: aplikace `m` na stav před `prev` = aplikace `prev` a pak `next`, a `prev`ova inverze z `m` vrátí stav před `prev`. Jinak vrací `null`. V M3 ho má jen `feature.setParams`: stejné `featureId` → `next`, jinak `null`.
+
+### Migrace dat featur
+
+Operace `feature.add` a `feature.setParams` nesou parametry featury i s verzí schématu (`feature.typeVersion`, resp. `typeVersion`). Log žije navždy, takže po zvednutí verze schématu nesou staré záznamy stará data. Handlery je převedou **při `apply`** přes `migrateFeatureData` z [[03-dokument#Migrace dat featur|document]] ([[Q035 Migrace featur v záznamech logu|Q035]]): `feature.add` vloží migrovanou featuru, `feature.setParams` nastaví `{ ...f, ...migrované({ type: f.type, typeVersion: op.typeVersion, params: op.params }) }`. `err` z migrace je výjimka handleru (dokument beze změny; při přehrání logu z ní `loadDocument` udělá chybu `entry`). `invert` nese aktuální `typeVersion` a parametry featury, takže inverze už je v aktuální verzi.
+
+Determinismus platí: migrace je čistá funkce schématu a dat a schémata jsou pro běžící aplikaci konstantní. Přehrání od základu a snapshot + zbytek dávají totéž, protože `fromData` migruje stejnou funkcí. `parseLogEntry` zůstává bez schémat a bez stavu.
+
+**Invariant:** verze operace nesoucí data featury se zvedá dřív, než první schéma opustí verzi 1 – jen tak smí `upcast` ze starší verze operace doplnit chybějící `typeVersion: 1`.
 
 ### Determinismus
 
@@ -322,13 +330,13 @@ Všech sedm vestavěných handlerů `validate` má:
 |---|---|
 | `feature.add` | `feature` je objekt: `id` a `type` neprázdný řetězec, `typeVersion` celé číslo ≥ 1, `name` řetězec, `suppressed` boolean, `params` objekt (ne pole, ne `null`). `index` celé číslo ≥ 0. |
 | `feature.remove` | `featureId` neprázdný řetězec |
-| `feature.setParams` | `featureId` neprázdný řetězec, `params` objekt (ne pole, ne `null`) |
+| `feature.setParams` | `featureId` neprázdný řetězec, `typeVersion` celé číslo ≥ 1, `params` objekt (ne pole, ne `null`) |
 | `feature.rename` | `featureId` neprázdný řetězec, `name` řetězec |
 | `feature.suppress` | `featureId` neprázdný řetězec, `suppressed` boolean |
 | `feature.move` | `featureId` neprázdný řetězec, `toIndex` celé číslo ≥ 0 |
 | `studio.setRollback` | `index` celé číslo ≥ 0 |
 
-Hodnoty `params` proti schématu featury se tady nekontrolují: `ops` schémata nezná. Migrace featur v operacích je otevřená ([[Q035 Migrace featur v záznamech logu|Q035]]).
+Hodnoty `params` proti schématu featury se při načítání nekontrolují a nemigrují; migrace běží až při `apply` ([[#Migrace dat featur]]).
 
 ### Načtení záznamu logu
 

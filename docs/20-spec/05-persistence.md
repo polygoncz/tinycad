@@ -12,7 +12,7 @@ milestones:
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-13
+updated: 2026-10-14
 ---
 # 05 – `persistence`: ukládání dokumentů
 
@@ -237,7 +237,7 @@ Tvar chyby rozhodla [[Q033 Tvar chyby při načtení dokumentu|Q033]]. Chyba I/O
 
 Známé omezení: `target` undo/redo záznamů, který neodpovídá zásobníku, `loadDocument` nezachytí. Vyhodí až `rebuildUndoStacks` v `createUndoManager`. `parseLogEntry` kontroluje jen tvar (spec 04).
 
-Známé omezení: featury a parametry uvnitř operací se nemigrují na novou verzi schématu ([[Q035 Migrace featur v záznamech logu|Q035]]). Dokud mají všechna schémata `version: 1`, nemá to dopad.
+Featury a parametry uvnitř záznamů se migrují až při `apply` během přehrání ([[04-operace-a-historie#Migrace dat featur]], [[Q035 Migrace featur v záznamech logu|Q035]]); `parseLogEntry` schémata nepotřebuje. Selhání migrace je chyba `entry` jako každá jiná výjimka handleru (bod 4).
 
 ### Jeden zapisovatel na dokument
 

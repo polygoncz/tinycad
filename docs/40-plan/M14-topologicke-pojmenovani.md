@@ -47,3 +47,11 @@ updated: 2026-10-12
 ## Retrospektiva
 
 _(vyplnit po dokončení)_
+
+## Úkoly z revize architektury (doplněno 2026-10-13, [[M10.1-zpevneni-kostry]])
+
+Nález 5 z [[Revize architektury 2026-10-13]], druhá část: jména v portu a přemapování výběru.
+
+- [ ] **Jména v portu** ([[10-interakce#Port stavu regenerace]]): artefakt tělesa v `RegenSnapshot` nese `names: NameTable`; `interaction` převádí pick na `TopoRef` přes `names.nameOfFace(index)` bez znalosti `regen`.
+- [ ] **Výběr přežije regeneraci** ([[10-interakce#Výběr]], nahrazuje pravidlo z [[Q064 Výběr po regeneraci|Q064]]): `SelectionItem` druhu `face`/`edge` nese `name: TopoName` a index platný pro aktuální generaci; při nové generaci se položky přemapují podle jména, vypadnou jen ty, jejichž jméno zaniklo. Test: výběr hrany, změna parametru, výběr zůstává na „stejné“ hraně.
+- [ ] **`PickResult` a `HighlightTarget`** doplnit o `name?: TopoName` (vyplňuje `interaction`, `render` jméno nezná); `PickKind` o `'vertex'`.

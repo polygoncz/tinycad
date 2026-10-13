@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[04-operace-a-historie]]"
 decide_by: "[[M11-dalsi-entity]]"
 proposal: "Operace nesoucí parametry nesou i typeVersion; parseLogEntry je migruje stejně jako fromData"
-decision: ""
+decision: "setParams nese typeVersion (v: 2); migrace při apply přes schémata v registru handlerů"
 tags:
   - otazka
 created: 2026-10-13
@@ -33,4 +33,7 @@ Návrh: **1**. Dokud má každé schéma `version: 1`, problém nenastane. M4 ho
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR.)_
+2026-10-14 (Pavel, plán [[M10.1-zpevneni-kostry|M10.1]]): **spojení možností 1 a 2.** `feature.setParams` nese `typeVersion` a má verzi operace 2; `upcast` z verze 1 doplní `typeVersion: 1` (v době verze 1 měla všechna schémata `version: 1`, od teď platí invariant: verze operace nesoucí data featury se zvedá dřív, než první schéma opustí verzi 1). Migrace parametrů běží při `apply` handlerů `feature.add` a `feature.setParams` přes `migrateFeatureData` z `document`; registr handlerů dostane schémata (`createOpHandlerRegistry({ schemas })`). `apply` zná typ featury i u `setParams`, `parseLogEntry` zůstává bez schémat. Propsáno do [[04-operace-a-historie#Handler]], [[03-dokument#Serializace]] a [[05-persistence#Načtení dokumentu]].
+
+> [!note] Návrh z plánu M10.1 (2026-10-13)
+> [[M10.1-zpevneni-kostry|M10.1]], úkol Ú2, spojuje možnosti 1 a 2: `feature.setParams` nese `typeVersion` (verze operace 2, `upcast` z 1 doplní `typeVersion: 1`, protože v době verze 1 měla všechna schémata `version: 1`) a migrace běží při `apply` přes `migrateFeatureData` z `document` (`createOpHandlerRegistry({ schemas })`). `apply` zná typ featury i u `setParams`, `parseLogEntry` zůstává bez schémat a bez stavu. Rozhodnout při startu M10.1.

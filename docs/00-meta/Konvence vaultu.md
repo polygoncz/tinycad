@@ -22,7 +22,7 @@ Vault je složka `docs/` v repozitáři tinycad. V Obsidianu se otevírá **jen 
 3. **Konzistentní vlastnosti.** Každá poznámka má frontmatter podle schématu níže. Díky tomu fungují Bases a Claude ve vaultu rychle najde, co hledá.
 4. **Ručně kurátorovaná mapa + automatické přehledy.** MOC poznámky ([[Domů]], [[Glosář]], [[Rozhodnutí]], [[Roadmapa]]) mají nahoře ručně psaný kontext a pod ním vložené Bases.
 5. **Stav je na jednom místě.** Stav milníku, otázky nebo specifikace je jen ve vlastnosti `status` dané poznámky, nikde se neopisuje ručně.
-6. **Nudné, předvídatelné názvy** u strukturálních dokumentů (`07-regenerace`, `M06-regenerace`, `0004-...`), přirozené názvy u atomických poznámek (`Rollback bar`, `Q012 Volba WASM buildu OCCT`).
+6. **Nudné, předvídatelné názvy** u strukturálních dokumentů (`07-regenerace`, `M06-regenerace`, `0004-...`), přirozené názvy u atomických poznámek (`Rollback bar`, `Q012 Volba WASM buildu OCCT`). Neplánovaná úprava mezi dvěma milníky (oprava kostry, dluh z revize) dostane číslo `MNN.X` za milníkem, po kterém vznikla (`M10.1-zpevneni-kostry`, `order: 10.1`); plánované milníky se nepřečíslovávají (rozhodnutí 2026-10-13).
 
 ## Struktura
 
