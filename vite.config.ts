@@ -14,6 +14,12 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['replicad-opencascadejs'],
   },
+  // Dev serves TypeScript transformed for 'esnext', so `using` (kernel-occt) reached the browser
+  // as is and Safari, which lacks it, could not load the OCCT worker. Lower newer syntax in dev
+  // too; the production build already does (build.target).
+  oxc: {
+    target: 'es2022',
+  },
   // The OCCT worker is a module worker (top-level imports); the default 'iife' cannot code-split.
   worker: {
     format: 'es',
