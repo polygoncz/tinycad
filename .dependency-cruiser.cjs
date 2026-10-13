@@ -11,7 +11,8 @@
  * @type {Record<string, ModuleSpec>}
  */
 const modules = {
-  core: {},
+  // gl-matrix only behind the vec3/mat4 facade in src/core/math/ (ADR 0012).
+  core: { npm: ['gl-matrix'] },
   document: { deps: ['core'] },
   ops: { deps: ['core', 'document'] },
   persistence: { deps: ['core', 'document', 'ops'] },
@@ -117,6 +118,15 @@ module.exports = {
         'Deep imports bypass the public API.',
       from: { path: '^src/(features/[^/]+|persistence/idb|[^/]+)/' },
       to: { path: '^src/[^/]+/.+', pathNot: ['^src/$1/', '/index\\.ts$'] },
+    },
+    {
+      name: 'gl-matrix-only-in-core-math',
+      severity: 'error',
+      comment:
+        'gl-matrix is hidden behind the vec3/mat4 facade in src/core/math/ (ADR 0012). ' +
+        'Use Vec3, Mat4, vec3 and mat4 from core instead.',
+      from: { pathNot: '^src/core/math/' },
+      to: { path: 'node_modules/gl-matrix/' },
     },
     {
       name: 'no-circular',

@@ -20,7 +20,7 @@ updated: 2026-10-13
 > **Rozhodnutí:** [[0002-occt-wasm-ve-workeru]], [[0010-prezentacni-model]]  
 > **Milník:** [[M01-core]]
 
-Nejspodnější modul. **Nesmí importovat nic** – ani jiné moduly, ani knihovny, ani DOM API (kromě typů jako `MessagePort` v `rpc`). Všechno ostatní na něm stojí, takže musí být malý, stabilní a dokonale otestovaný.
+Nejspodnější modul. **Nesmí importovat nic** – ani jiné moduly, ani knihovny, ani API platformy. Jedinou výjimkou je `gl-matrix` za fasádou v `src/core/math/` ([[0012-gl-matrix-za-fasadou|ADR 0012]]). Typuje se jen proti `ES2023`, bez DOM ([[0009-platformove-nezavisla-domena|ADR 0009]]), takže nemá ani `console`, `crypto` nebo `MessagePort`. Co z platformy potřebuje, dostane parametrem nebo přes vlastní strukturální typ ([[Q022 Platformové typy v core|Q022]]). Všechno ostatní na něm stojí, takže musí být malý, stabilní a dokonale otestovaný.
 
 ## Obsah
 
@@ -40,13 +40,15 @@ export type FeatureId = Brand<string, 'FeatureId'>;
 
 ```ts
 export interface IdGenerator {
-  next(): string;            // krátké, URL-safe, náhodné (např. 10 znaků base62)
+  next(): string;            // 10 znaků base62 (0-9A-Za-z), URL-safe
 }
-export function createRandomIdGenerator(): IdGenerator;                // crypto.getRandomValues
+export type RandomSource = (bytes: Uint8Array<ArrayBuffer>) => void;  // naplní pole náhodnými bajty (typ jako crypto.getRandomValues)
+export function createRandomIdGenerator(random: RandomSource): IdGenerator;
+// app předá crypto.getRandomValues.bind(crypto); testy deterministický zdroj
 export function createSequentialIdGenerator(prefix?: string): IdGenerator; // 'id1', 'id2', … pro testy
 ```
 
-ID se generují **před** vytvořením operace, nikdy uvnitř `apply` (determinismus, viz [[04-operace-a-historie|04]]).
+Formát rozhodnut v [[Q002 Formát ID|Q002]]. ID se generují **před** vytvořením operace, nikdy uvnitř `apply` (determinismus, viz [[04-operace-a-historie|04]]).
 
 ### Události
 
@@ -55,14 +57,20 @@ Typovaný emitter. Vrací funkci pro odhlášení, aby šel snadno použít s `D
 ```ts
 export type Unsubscribe = () => void;
 
-export class Emitter<Events extends Record<string, unknown>> {
+// Samoreferenční omezení: projde interface i type. Record<string, unknown> by interface odmítl (nemá index signaturu).
+export class Emitter<Events extends { [K in keyof Events]: unknown }> {
   on<K extends keyof Events>(type: K, fn: (e: Events[K]) => void): Unsubscribe;
   once<K extends keyof Events>(type: K, fn: (e: Events[K]) => void): Unsubscribe;
   emit<K extends keyof Events>(type: K, e: Events[K]): void;
 }
 ```
 
-Pravidla: handlery se volají synchronně v pořadí registrace; výjimka v jednom handleru se zaloguje a neshodí ostatní.
+Pravidla:
+
+- Ve veřejných rozhraních jiných modulů zatím `readonly events: Emitter<…>`. Jestli vystavovat jen odběr, řeší [[Q023 Události jen pro odběr|Q023]].
+- Handlery se volají synchronně v pořadí registrace.
+- Výjimka v jednom handleru neshodí ostatní. `emit` zavolá všechny handlery a teprve potom chybu vyhodí: jednu chybu tak, jak je, více chyb jako `AggregateError`. `core` nic neloguje (nemá `console`), logování je věc volajícího, který zná platformu ([[Q022 Platformové typy v core|Q022]]).
+- Odhlášení během `emit` se projeví hned: odhlášený handler, který na řadu ještě nepřišel, se už nezavolá. Handler přihlášený během `emit` se zavolá až při dalším `emit`.
 
 ### Observable
 
@@ -97,7 +105,8 @@ export interface Registry<T> {
   all(): readonly T[];                  // v pořadí registrace
 }
 
-export function createRegistry<T>(opts: { what: string; keyOf: (item: T) => string }): Registry<T>;
+export interface RegistryOptions<T> { readonly what: string; readonly keyOf: (item: T) => string }
+export function createRegistry<T>(opts: RegistryOptions<T>): Registry<T>;
 // what = název pro chybové hlášky ('feature schema', 'op handler'…)
 ```
 
@@ -116,6 +125,9 @@ export class DisposableStore implements Disposable {
 }
 ```
 
+- `add` po `dispose` uvolní položku hned, jinak by tiše unikla.
+- Výjimka v jedné položce nezastaví uvolnění ostatních. Chyby se vyhodí až na konci, stejně jako u `Emitter` (jedna chyba tak, jak je, více jako `AggregateError`).
+
 Používají to hlavně `render` (Three.js geometrie a materiály) a `interaction` (posluchače událostí).
 
 ### Result
@@ -124,8 +136,8 @@ Pro očekávané chyby (validace, nevyřešená reference) místo výjimek. Výj
 
 ```ts
 export type Result<T, E = Error> =
-  | { ok: true; value: T }
-  | { ok: false; error: E };
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: E };
 
 export const ok = <T>(value: T): Result<T, never> => ({ ok: true, value });
 export const err = <E>(error: E): Result<never, E> => ({ ok: false, error });
@@ -142,13 +154,21 @@ export function assertNever(x: never): never;   // pro vyčerpávající switch
 
 Jen neměnné hodnotové typy a čisté funkce. Žádná závislost na Three.js – převod na `THREE.Vector3` dělá `render`.
 
+Výpočty dělá knihovna **gl-matrix** schovaná za fasádou `vec3`/`mat4` ve složce `src/core/math/` ([[0012-gl-matrix-za-fasadou|ADR 0012]], porovnání knihoven v [[Q024 Knihovna pro vektorovou matematiku|Q024]]). Fasáda zapisuje výsledky vždy do nového obyčejného pole: výsledek je nový objekt a počítá se ve float64 (`create()` z gl-matrix by vrátil `Float32Array`). Typy gl-matrix se ven nedostanou, dependency-cruiser hlídá import jen z `src/core/math/`.
+
 ```ts
 export type Vec3 = readonly [number, number, number];
-export type Mat4 = readonly number[];          // 16 čísel, column-major (jako Three.js i OCCT gp_Trsf → převod)
+export type Mat4 = readonly [number, /* … 16× */ number];  // n-tice 16 čísel, column-major (jako Three.js; OCCT gp_Trsf → převod)
+export const EPSILON = 1e-9;                   // výchozí tolerance vec3.equals
 
 export const vec3 = { add, sub, scale, dot, cross, length, normalize, equals };
 export const mat4 = { identity, translation, rotationAxisAngle, multiply, transformPoint };
 ```
+
+- `Mat4` je n-tice, ne `number[]`: s `noUncheckedIndexedAccess` má pak každý index typ `number` a pole špatné délky neprojde.
+- `normalize` nulového vektoru je chyba programátora (výjimka), ne tiché `NaN`.
+- `equals(a, b, eps = EPSILON)` porovnává s tolerancí po složkách.
+- `multiply(a, b)` = a·b, výsledek aplikuje nejdřív `b`. `transformPoint` dělí výslednou homogenní souřadnicí `w` (u afinních matic je `w = 1`).
 
 Rozsah roste podle potřeby, nic „do zásoby“.
 
@@ -157,22 +177,38 @@ Rozsah roste podle potřeby, nic „do zásoby“.
 Malá typovaná vrstva nad `postMessage`, sdílená persistencí i jádrem. Vlastní implementace místo knihovny Comlink, protože jde o výukový projekt a je to cca 100 řádků ([[0002-occt-wasm-ve-workeru|ADR 0002]]).
 
 ```ts
-// Protokol = mapa název metody → (argumenty, výsledek)
-export type RpcProtocol = Record<string, { args: unknown[]; result: unknown }>;
+// Protokol = mapa název metody → (argumenty, výsledek). Samoreferenční jako u Emitter, aby prošel i interface.
+export type RpcProtocol<P> = { readonly [K in keyof P]: { readonly args: readonly unknown[]; readonly result: unknown } };
 
+// Vlastní strukturální typ: MessagePort, Worker i DedicatedWorkerGlobalScope ho splní bez adaptéru.
 export interface MessageEndpoint {
-  postMessage(msg: unknown, transfer?: Transferable[]): void;
-  addEventListener(type: 'message', fn: (e: MessageEvent) => void): void;
+  postMessage(msg: unknown, transfer: ArrayBuffer[]): void;   // povinný: v DOM přetíženích je volitelná jen varianta s options
+  addEventListener(type: 'message', fn: (e: { readonly data: unknown }) => void): void;
+  start?(): void;                                              // MessagePort bez start() listenerům nic nedoručí
 }
 
-export function createRpcClient<P extends RpcProtocol>(ep: MessageEndpoint): RpcClient<P>;
-export function serveRpc<P extends RpcProtocol>(ep: MessageEndpoint, impl: RpcImpl<P>): void;
+export interface RpcClient<P extends RpcProtocol<P>> {
+  call<K extends keyof P & string>(method: K, ...args: P[K]['args']): Promise<P[K]['result']>;
+}
+export type RpcImpl<P extends RpcProtocol<P>> = {
+  readonly [K in keyof P]: (...args: P[K]['args']) => R | Transferred<R> | Promise<R | Transferred<R>>;  // R = P[K]['result']
+};
+
+export function createRpcClient<P extends RpcProtocol<P>>(ep: MessageEndpoint): RpcClient<P>;
+export function serveRpc<P extends RpcProtocol<P>>(ep: MessageEndpoint, impl: RpcImpl<P>): void;
+export function transfer<T>(value: T, buffers: readonly ArrayBuffer[]): Transferred<T>;
+export class RpcError extends Error { readonly code: string }
 ```
 
+- Implementace (`impl`) může být objektový literál i instance třídy. Metody se hledají i v prototypu (kromě `Object.prototype`) a volají se s `this = impl`.
+- Klient volá explicitně `client.call('metoda', …)`, ne přes `Proxy` (`client.metoda(…)`). `Proxy` odpovídá na každou vlastnost včetně `then`, takže `await` na samotného klienta by uvízl.
+
 - Každý požadavek má `id`, odpověď je `{ id, ok, value | error }`.
-- Chyby se serializují jako `{ code, message }`, na straně klienta se z nich stane `RpcError`.
-- Implementace může vrátit `transfer(value, [buffers])`, aby se velká pole nepřekopírovávala.
-- Pořadí: požadavky se ve workeru zpracují v pořadí přijetí (worker je jednovláknový).
+- Chyby se serializují jako `{ code, message }`, na straně klienta se z nich stane `RpcError`. Kód: řetězcové `code` vyhozené chyby, jinak `'internal'`; neznámá metoda má `'unknown-method'`; výsledek nebo argumenty, které nejde zkopírovat (`postMessage` vyhodí), mají `'unserializable'` a server ani klient tím nepřestanou fungovat.
+- Přes hranici přežije jen `code` a `message`, ne třída chyby. Adaptér (např. `kernel-occt`) si z `RpcError.code` vytvoří vlastní chybu (`KernelError`). Protokoly přenášejí data chyb, ne instance `Error`.
+- Implementace může vrátit `transfer(value, [buffers])`, aby se velká pole nepřekopírovávala. Přenášejí se jen `ArrayBuffer` (sítě, buffery), jiné `Transferable` nepotřebujeme. Přenos funguje **jen pro výsledky**: velká data tečou z workeru ven (sítě z jádra). Přenos argumentů (např. snapshot do workeru persistence) se doplní, až ho bude potřeba ([[M04-persistence|M4]]).
+- Známé omezení: když worker spadne nebo odpověď nedorazí, volání nikdy neskončí. Klient zatím nemá `dispose()` ani reakci na `messageerror`. Doplní se s workerem jádra v [[M07-kernel-occt|M7]] (souvisí s [[Q010 Zrušení probíhající operace jádra|Q010]]).
+- Pořadí: server zpracuje požadavky **sériově** v pořadí přijetí, další začne až po dokončení předchozího. Jednovláknovost workeru sama nestačí, dvě `async` metody (persistence nad IndexedDB) by se proplétaly.
 
 ## Testy
 

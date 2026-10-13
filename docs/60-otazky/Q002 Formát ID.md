@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[02-core]]"
 decide_by: "[[M01-core]]"
 proposal: "Náhodné krátké (base62)"
-decision: ""
+decision: "Náhodné 10 znaků base62"
 tags:
   - otazka
 created: 2026-10-12
@@ -27,4 +27,4 @@ Návrh: náhodné krátké.
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do [[02-core]]. Zásadní rozhodnutí → nové ADR.)_
+2026-10-13: **náhodné krátké ID, 10 znaků base62** (abeceda `0-9A-Za-z`). 62¹⁰ ≈ 8·10¹⁷ kombinací stačí s rezervou, ID je čitelné v ladění. Řazení podle času nepotřebujeme, pořadí drží [[Operační log|operační log]]. Zdroj náhody se do generátoru předává zvenku, viz [[Q022 Platformové typy v core|Q022]]. Propsáno do [[02-core]].

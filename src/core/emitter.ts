@@ -1,0 +1,57 @@
+import { throwCollected } from './collect-errors';
+import type { Unsubscribe } from './disposable';
+
+interface Entry<T> {
+  readonly fn: (e: T) => void;
+  active: boolean;
+}
+
+// The self-referential constraint accepts both interfaces and type aliases;
+// `Record<string, unknown>` would reject interfaces (they have no index signature).
+export class Emitter<Events extends { [K in keyof Events]: unknown }> {
+  private readonly handlers = new Map<keyof Events, Entry<never>[]>();
+
+  on<K extends keyof Events>(type: K, fn: (e: Events[K]) => void): Unsubscribe {
+    const entry: Entry<Events[K]> = { fn, active: true };
+    this.list(type).push(entry);
+    return () => {
+      if (!entry.active) return;
+      entry.active = false;
+      const list = this.list(type);
+      list.splice(list.indexOf(entry), 1);
+    };
+  }
+
+  once<K extends keyof Events>(type: K, fn: (e: Events[K]) => void): Unsubscribe {
+    const off = this.on(type, (e) => {
+      off();
+      fn(e);
+    });
+    return off;
+  }
+
+  emit<K extends keyof Events>(type: K, e: Events[K]): void {
+    // Iterate a copy: handlers added during emit wait for the next emit.
+    // The active flag skips handlers removed during emit before their turn.
+    const entries = [...this.list(type)];
+    const errors: unknown[] = [];
+    for (const entry of entries) {
+      if (!entry.active) continue;
+      try {
+        entry.fn(e);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    throwCollected(errors, `Several handlers of '${String(type)}' failed`);
+  }
+
+  private list<K extends keyof Events>(type: K): Entry<Events[K]>[] {
+    let list = this.handlers.get(type) as Entry<Events[K]>[] | undefined;
+    if (!list) {
+      list = [];
+      this.handlers.set(type, list);
+    }
+    return list;
+  }
+}

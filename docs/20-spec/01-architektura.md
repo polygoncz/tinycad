@@ -93,7 +93,7 @@ Prstence 1 a 2 se typují konfigurací `tsconfig.domain.json` bez knihovny `DOM`
 
 | Modul | Smí importovat | Externí knihovny |
 |---|---|---|
-| `core` | – | – |
+| `core` | – | `gl-matrix`, jen v `src/core/math/` ([[0012-gl-matrix-za-fasadou\|ADR 0012]]) |
 | `document` | `core` | – |
 | `ops` | `core`, `document` | – |
 | `persistence` | `core`, `document`, `ops` | – |
