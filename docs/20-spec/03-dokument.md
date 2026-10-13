@@ -1,6 +1,6 @@
 ---
 type: spec
-status: draft
+status: implemented
 order: 3
 aliases:
   - document – doménový model
