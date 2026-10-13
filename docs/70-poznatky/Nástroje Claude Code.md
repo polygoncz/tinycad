@@ -43,6 +43,8 @@ Pravidla z [[Konvence vaultu]] jsou rozdělená takto:
 - **Od [[M00-zaklad-projektu|M0]]:** `lint:vault` v `npm run check`, prettier a eslint jako hook (`scripts/code-format.mjs`), subagent `architecture-reviewer` na kontrolu architektury proti [[01-architektura]] a [[0011-programovani-proti-rozhranim|ADR 0011]]. Co jde zkontrolovat strojově (zakázaný `export class` v `index.ts`), hlídá ESLint; úsudek (široká rozhraní, logika ve `.vue`) subagent.
 
 - **Od [[M03-operace|M3]] (pokus):** subagent `implementer` s modelem Sonnet implementuje úkoly z Implementačního plánu milníku. Hlavní sezení (Opus) dělá specifikaci, plán a kontrolu. Rozdělení podle schopností modelu: úsudek a návrh tam, kde se rozhoduje, mechanický převod přesné spec na kód levnějším modelem. Subagent nesmí rozhodovat návrh, jinak by se ztratilo pravidlo „nerozhoduj potichu“.
+  - **Zkušenost z M3:** postup funguje, když je spec dotažená na kontrakt (signatury, krajní případy, seznam testů) a hlavní sezení po každém úkolu čte kód proti spec. Implementer se dvakrát zastavil s přesnou otázkou (díra v pravidle rollback baru, `begin` při výjimce odběratele) místo tichého rozhodnutí; díry, které spec neřešila, se tak dostaly do vaultu. Zbylé chyby (přepsané výjimky ve `finally`, reentrance) našel až `architecture-reviewer` – revize na konci milníku má smysl i při kontrole po úkolech.
+- **Od [[M04-persistence|M4]]:** `implementer` běží na modelu **Opus** místo Sonnetu (Pavel). Důvod: úkoly M3 nebyly „mechanický převod“ – vyžadovaly úsudek u krajních případů a výjimek, a cena chyby, kterou musí najít až revize, je vyšší než úspora za levnější model.
 
 Souvisí s [[Second brain v Obsidianu]]: vault je zdroj pravdy a nástroje hlídají, aby zůstal konzistentní.
 

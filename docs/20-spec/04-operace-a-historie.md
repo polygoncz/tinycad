@@ -1,6 +1,6 @@
 ---
 type: spec
-status: accepted
+status: implemented
 order: 4
 aliases:
   - ops – operace, log, undo/redo

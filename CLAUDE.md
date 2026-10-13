@@ -25,7 +25,7 @@ Výuková webová CAD aplikace (Onshape-like Part Studio). Autor: Pavel. Pavel z
 ### Rozdělení specifikace a implementace (pokus od M3)
 
 - **Hlavní sezení (s Pavlem):** rozhodnout otázky, dotáhnout specifikaci na úroveň kontraktu (signatury, krajní případy, invarianty, seznam testů) a sepsat **Implementační plán** v poznámce milníku (úkoly se soubory, kontraktem, testy a „hotovo když“).
-- **Implementace:** každý úkol plánu zvlášť subagent `implementer` (Sonnet, TDD, `npm run check`). Návrh nerozhoduje, nejasnosti vrací jako otázky.
+- **Implementace:** každý úkol plánu zvlášť subagent `implementer` (Opus, TDD, `npm run check`). Návrh nerozhoduje, nejasnosti vrací jako otázky.
 - **Po každém úkolu:** hlavní sezení zkontroluje kód proti specifikaci, vysvětlí Pavlovi návrhová místa, otázky implementátora převede na otázky ve vaultu nebo upřesnění spec, zaškrtne úkol. Na konci milníku `architecture-reviewer`.
 
 ## Konvence kódu
@@ -43,7 +43,7 @@ Výuková webová CAD aplikace (Onshape-like Part Studio). Autor: Pavel. Pavel z
 
 - Skilly: `/milnik start|konec Mnn`, `/zaznam otazka|adr|pojem|poznatek <název>`, `/denik` (konec sezení). Skill `obsidian-format` (syntaxe vaultu) se načítá automaticky.
 - Subagent `architecture-reviewer` (`.claude/agents/`): revize kódu proti ADR 0008–0011 a spec 01, hlásí jen to, co nechytí `npm run check`. Spouštět na konci milníku před `/milnik konec`.
-- Subagent `implementer` (`.claude/agents/`, model Sonnet): implementuje jeden úkol z Implementačního plánu milníku podle spec, metodou TDD; vault nemění, necommituje, nejasnosti vrací jako otázky.
+- Subagent `implementer` (`.claude/agents/`, model Opus): implementuje jeden úkol z Implementačního plánu milníku podle spec, metodou TDD; vault nemění, necommituje, nejasnosti vrací jako otázky.
 - Hooky: po úpravě poznámky v `docs/` se nastaví `updated` na dnešek a zkontroluje se frontmatter a wikilinky (`scripts/vault-lint.mjs`). Mazání v `docs/` a přepisování `docs/01-inbox/` blokuje `scripts/claude-guard.mjs`. Když hook nahlásí chybu, oprav poznámku a hook neobcházej.
 
 ## Užitečné příkazy

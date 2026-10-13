@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 3
 aliases:
   - M3
@@ -12,7 +12,7 @@ specs:
 depends_on:
   - "[[M02-dokument]]"
 started: 2026-10-13
-finished: 
+finished: 2026-10-13
 tags:
   - milnik
 created: 2026-10-12
@@ -104,4 +104,16 @@ Event sourcing v malém, inverzní operace, determinismus, property-based testov
 
 ## Retrospektiva
 
-_(vyplnit po dokončení)_
+> _Návrh od Clauda – Pavel doplní nebo upraví._
+
+**Co bylo jinak, než se čekalo**
+- Spec 04 vypadala na úrovni signatur hotově, ale dotažení na kontrakt odhalilo šest děr ještě před kódem (kind/target v `dispatch`, zdroj času, `inTransaction`, chybějící `replayLog`, kde se volá `upcast`) a jednu zásadní: inverzi dávky nejde spočítat předem ([[Q031 Inverze dávky operací|Q031]]).
+- Pravidlo z [[Q029 Posun rollback baru při změnách featur|Q029]] („obal inverzi, když se bar pohnul“) neplatilo: bar se při `apply` pohnout nemusí, a přesto ho posune až inverze. Našla to matice testů (před/na/za × add/remove/move), ne úvaha. Opraveno na „pohnul se bar nebo pořadí featur“.
+- Většina složitosti nebyla v operacích, ale ve **výjimkách odběratelů**: [[Q030 Výjimka odběratele po změně dokumentu|Q030]] se protáhla do logu (`appended`), dispečera (`applied`), `begin`, `commit` i `abort`. Každé místo „nejdřív změň, pak notifikuj“ potřebovalo vlastní rozhodnutí (dotáhnout, nebo vrátit zpět).
+- `architecture-reviewer` našel dvě skutečné díry v invariantu „log odpovídá dokumentu“: `finally`, který přepíše sesbírané výjimky, a reentranci (dispatch z odběratele `changed` předběhne vnější záznam).
+
+**Co se osvědčilo**
+- Nový postup od M3: hlavní sezení dotáhne spec a plán, `implementer` dělá úkol po úkolu v TDD. Implementer se dvakrát zastavil s přesnou otázkou místo tichého rozhodnutí – obě díry skončily jako rozhodnutí ve vaultu.
+- Jedna interní funkce (`applyOperation`) pro `dispatch`, transakce i replay, a jedna funkce `step` pro živé zásobníky i `rebuildUndoStacks` – shoda je z konstrukce, testy ji jen potvrzují.
+- Property-based test s abstraktními kroky překládanými podle aktuálního stavu: každá sekvence je platná a shrinking funguje. Ověření záměrně vloženou chybou ukázalo, že test opravdu kouše.
+- Revize kódu po každém úkolu proti spec: díry v `begin` a v pořadí kroků dispečera se chytily dřív, než na ně navázaly další úkoly.
