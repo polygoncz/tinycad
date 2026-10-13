@@ -11,22 +11,23 @@ modules:
 milestones:
   - "[[M05-kernel-port]]"
   - "[[M07-kernel-occt]]"
+  - "[[M11-dalsi-entity]]"
   - "[[M16-vlastni-occt-build]]"
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-13
+updated: 2026-10-14
 ---
 # 06 – `kernel` a `kernel-occt`: geometrické jádro
 
 > **Pojmy:** [[Geometrické jádro]], [[Handle tvaru]], [[Port a adaptér]]  
 > **Rozhodnutí:** [[0002-occt-wasm-ve-workeru]], [[0011-programovani-proti-rozhranim]], [[Q039 Chyby jádra přes hranici workeru|Q039]]  
-> **Milník:** [[M05-kernel-port]], [[M07-kernel-occt]]
+> **Milník:** [[M05-kernel-port]], [[M07-kernel-occt]], [[M11-dalsi-entity]]
 
 Geometrické jádro je za **portem** `GeometryKernel`. Doména (`regen`) zná jen rozhraní. Konkrétní implementace:
 
 - **OCCT** (`kernel-occt`): OpenCascade ve WASM, běží ve Web Workeru ([[0002-occt-wasm-ve-workeru|ADR 0002]]). Tovární funkce `createOcctKernel(): Promise<GeometryKernel & Disposable>` (počká na start workeru) – M7.
-- **Fake** (`kernel`): jednoduchá implementace v paměti pro testy vyšších vrstev, umí jen kvádry jako AABB. `createFakeKernel(): FakeKernel` z `kernel/testing.ts` – M5.
+- **Fake** (`kernel`): jednoduchá implementace v paměti pro testy vyšších vrstev, každý tvar drží jen jako AABB (od M11 i válec, transformace a boolean, [[#`FakeKernel`]]). `createFakeKernel(): FakeKernel` z `kernel/testing.ts` – M5.
 
 Třídy jsou skryté v modulech, ven jdou rozhraní a tovární funkce ([[0011-programovani-proti-rozhranim|ADR 0011]]). Ven nejde ani třída chyby ([[#Chyby]]).
 
@@ -55,7 +56,7 @@ hlavní vlákno (doména)                         worker (adaptér, M7)
 │ regen: Body                │   ShapeHandle  │ kernel-occt: ShapeEntry          │
 │  id: BodyId (stabilní)     │ ─────────────► │  shape: TopoDS_Shape             │
 │  shape: ShapeHandle        │   (jen číslo)  │  faces/edges/vertices:           │
-│  createdBy: FeatureId      │                │    TopTools_IndexedMapOfShape    │
+│  origin: FeatureId         │                │    TopTools_IndexedMapOfShape    │
 │  names: topologická jména  │ ◄───────────── │  mesh?: cache tessellace         │
 └────────────────────────────┘  MeshData,     │  history/roles z algoritmu       │
        „co tvar znamená“         bbox… (data) └──────────────────────────────────┘
@@ -63,7 +64,7 @@ hlavní vlákno (doména)                         worker (adaptér, M7)
 ```
 
 - **`ShapeEntry` (adaptér):** handle je klíč do soukromé `Map<ShapeHandle, ShapeEntry>`. Záznam drží tvar a **mapy podtvarů** spočítané jednou při vzniku tvaru (algoritmem `TopExp::MapShapes`, [[#`kernel-occt`: architektura adaptéru|viz adaptér]]). Díky nim je `SubShapeIndex` pro daný handle stabilní napříč dotazy (síť, topologie, historie). Cache sítě, role a historie přibudou, až je bude potřeba (M11, M14); v M7 záznam drží jen tvar a mapy. Je soukromý v adaptéru. `FakeKernel` má vlastní záznam `{ min, max }` (AABB).
-- **`Body` (doména, [[07-regenerace|spec 07]]):** stabilní `BodyId` napříč regeneracemi (handle se mění při každé), featura, která těleso vytvořila, a od M14 topologická jména. UI, výběr i reference featur odkazují na `Body` a jména, nikdy na handle.
+- **`Body` (doména, [[07-regenerace|spec 07]]):** stabilní `BodyId` napříč regeneracemi (handle se mění při každé), rodokmen (`origin`, `lastModifiedBy`, [[0015-artefakty-a-identita-telesa|ADR 0015]]) a od M14 topologická jména. UI, výběr i reference featur odkazují na `Body` a jména, nikdy na handle.
 - Na hlavním vlákně **nejsou** objekty obalující tvar (proxy s metodami `shape.mesh()`). Neměly by vlastní data a míchaly by „co tvar znamená“ (`Body`) s „co spočítalo jádro“ (`ShapeEntry`).
 
 ## Rozhraní (segregované)
@@ -98,20 +99,43 @@ export interface LifecycleOps {
 export interface GeometryKernel extends PrimitiveOps, MeshOps, QueryOps, LifecycleOps {}
 ```
 
+### Stav po M11
+
+M11 přidal válec, tuhou transformaci a boolean ([[M11-dalsi-entity|M11]], Ú1):
+
+```ts
+export interface PrimitiveOps {
+  makeBox(p: { readonly origin: Vec3; readonly size: Vec3 }): Promise<ShapeResult>;
+  /** Válec: podstava se středem base, osa ve směru axis (nemusí být jednotková), výška height podél osy. */
+  makeCylinder(p: { readonly base: Vec3; readonly axis: Vec3; readonly radius: number; readonly height: number }): Promise<ShapeResult>;
+}
+
+export interface TransformOps {
+  /** Nový tvar = shape přemístěný tuhou transformací m (rotace + posun, bez zrcadlení a měřítka). */
+  transform(shape: ShapeHandle, m: Mat4): Promise<ShapeResult>;
+}
+
+export type BooleanOp = 'union' | 'subtract' | 'intersect';
+export interface BooleanOps {
+  /** Jeden výsledný tvar (případně compound více solidů); vstupy zůstávají platné. */
+  boolean(op: BooleanOp, targets: readonly ShapeHandle[], tools: readonly ShapeHandle[]): Promise<ShapeResult>;
+}
+
+export interface GeometryKernel extends PrimitiveOps, TransformOps, BooleanOps, MeshOps, QueryOps, LifecycleOps {}
+
+/** m je tuhý pohyb: konečná čísla, spodní řádek [0,0,0,1], rotační část ortonormální s det +1 (tolerance po prvcích, výchozí 1e-9). */
+export function isRigidMotion(m: Mat4, tolerance?: number): boolean;
+```
+
+`transform` přijímá jen tuhé pohyby ([[Rozhodnutí noční rychloakce#M11 – Další entity|R7]]): `gp_Trsf` v OCCT zrcadlení a měřítko sice umí, ale zrcadlení otočí navinutí trojúhelníků a měřítko mění geometrii (kopie místo lokace). Featura Transform v M11 nic jiného nepotřebuje. `isRigidMotion` je jedna kontrola pro obě implementace.
+
+Výsledek booleanu je v M11 **vždy jeden handle** (u více cílů nebo nesouvislého výsledku compound více solidů). Rozpad na více těles podle historie jádra přijde s historií v [[M14-topologicke-pojmenovani|M14]] ([[Rozhodnutí noční rychloakce#M11 – Další entity|R8]]).
+
 ### Plánované rozšíření
 
 Přidávají se do `GeometryKernel` v milníku, který je potřebuje, a kontraktová sada se o ně rozšíří:
 
 ```ts
-// PrimitiveOps (M11)
-makeCylinder(p: { base: Vec3; axis: Vec3; radius: number; height: number }): Promise<ShapeResult>;
-
-export interface TransformOps {      // podle potřeby (M11+)
-  transform(shape: ShapeHandle, m: Mat4): Promise<ShapeResult>;
-}
-export interface BooleanOps {        // podle potřeby (M11+)
-  boolean(op: 'union' | 'subtract' | 'intersect', targets: readonly ShapeHandle[], tools: readonly ShapeHandle[]): Promise<ShapeResult>;
-}
 export interface SweepOps {          // M13
   extrude(profile: ProfileInput, direction: Vec3, distance: number): Promise<ShapeResult>;
   revolve(profile: ProfileInput, axis: Axis, angle: number): Promise<ShapeResult>;
@@ -133,6 +157,10 @@ Ověřuje ho kontraktová sada ([[#Testy]]), spuštěná pro `FakeKernel` v M5 a
 
 - **Asynchronní a bez synchronních výjimek:** každá metoda vrací `Promise`. Chyba je vždy odmítnutý `Promise`, nikdy výjimka při volání.
 - **`makeBox`:** každá složka `origin` je konečné číslo, každá složka `size` je konečné číslo > 0, jinak `'invalid-input'`. Vrací nový handle. Bounding box výsledku **obaluje** `[origin, origin + size]`: `min ≤ origin`, `max ≥ origin + size`, nadsazení nejvýš 1e-6 v každé složce. OCCT `BRepBndLib::Add` rozšiřuje box o toleranci tvaru (~1e-7), adaptér proto použije `BRepBndLib::AddOptimal` bez tolerance tvaru (M7).
+- **`makeCylinder`** (M11): každá složka `base` a `axis` konečná, délka `axis` > 1e-9, `radius` a `height` konečné > 0, jinak `'invalid-input'`. Bounding box výsledku odpovídá válci (podstavy `base` a `base + height·â` s poloměrem `radius`) s tolerancí 1e-5 v každé složce.
+- **`transform`** (M11): všech 16 prvků konečných a `isRigidMotion(m)`, jinak `'invalid-input'`; neznámý handle → `'unknown-handle'`. Vstupní tvar se nemění a zůstává platný. Bounding box výsledku = bounding box tvaru přemístěného `m` (tolerance 1e-5).
+- **`boolean`** (M11): `op` je jedna ze tří hodnot, `targets` i `tools` neprázdné a žádný handle se neopakuje (ani napříč seznamy), jinak `'invalid-input'`; neznámý handle → `'unknown-handle'`. Výsledek bez jediného solidu (prázdný průnik, rozdíl, který cíl celý odebere) a selhání algoritmu → `'operation-failed'`. Vstupy zůstávají platné. `union` = sjednocení všech vstupů, `subtract` = cíle bez nástrojů, `intersect` = společná část cílů a nástrojů.
+- Žádná operace zatím nevyplňuje `history` ani `roles` (M14).
 - **`tessellate`:** `linearDeflection` i `angularDeflection` jsou konečná čísla > 0, jinak `'invalid-input'`. Neznámý handle → `'unknown-handle'`. Každé volání vrací **nové** buffery, nesdílené s jiným voláním, s jiným polem téže sítě ani s vnitřním stavem jádra, takže je volající smí přenést jako transferable. Že opakované volání vrátí stejná data, se **nezaručuje** (OCCT může síť zjemnit).
 - **`boundingBox`:** neznámý handle → `'unknown-handle'`. Vrací nový objekt.
 - **`release`:**
@@ -141,7 +169,7 @@ Ověřuje ho kontraktová sada ([[#Testy]]), spuštěná pro `FakeKernel` v M5 a
   - **Atomický:** při chybě se neuvolní nic. Přísnost odhalí chyby v mark & sweep, které by tolerantní `release` skryl.
 - **`liveHandleCount`:** počet vytvořených a neuvolněných handle. Neúspěšná operace žádný handle nevytvoří.
 - **Více chyb najednou** (např. neznámý handle i neplatná kvalita): který kód se vrátí, není určeno a sada to netestuje. `FakeKernel` dává přednost chybě z `failNext`.
-- **Izolace:** jádro si neponechává odkaz na vstupní objekty (`origin`, `size`, pole handle) a **čte je synchronně při volání**, jako by je klonoval `postMessage`. Změna vstupu hned po volání (před `await`) výsledek neovlivní. Vrácená data nesdílí paměť s ničím jiným. Když čtení vstupu selže (vstup mimo typy, např. `null`), je to také odmítnutý `Promise`, ne synchronní výjimka.
+- **Izolace:** jádro si neponechává odkaz na vstupní objekty (`origin`, `size`, `base`, `axis`, matice, pole handle) a **čte je synchronně při volání**, jako by je klonoval `postMessage`. Změna vstupu hned po volání (před `await`) výsledek neovlivní. Vrácená data nesdílí paměť s ničím jiným. Když čtení vstupu selže (vstup mimo typy, např. `null`), je to také odmítnutý `Promise`, ne synchronní výjimka.
 
 ### Výsledek operace a historie
 
@@ -252,10 +280,16 @@ Modulový worker inicializuje OCCT asynchronně. Zpráva, která do workeru dora
 - Plochy v pořadí mapy podtvarů (`SubShapeIndex` = pozice). Každá plocha má **vlastní vrcholy** (žádné sdílení mezi plochami), aby šly normály ostrých hran a `faceRanges`. Uzly triangulace se transformují `TopLoc_Location` plochy.
 - Plocha s orientací `TopAbs_REVERSED`: prohodí se pořadí dvou vrcholů každého trojúhelníku a otočí normály, aby trojúhelníky byly CCW při pohledu zvenku.
 - Normály: z triangulace, pokud je má; jinak průměr jednotkových normál nedegenerovaných trojúhelníků plochy v uzlu (u rovinné plochy vyjde normála plochy), normalizovaný. Navinutí se otáčí **před** výpočtem normál, takže vyjdou ven samy. Uzel bez nedegenerovaného trojúhelníku dostane průměrnou normálu plochy. Plocha, která má jen degenerované trojúhelníky, se vynechá (jako plocha bez trojúhelníků). Pro M7 (jen kvádr) stačí druhá cesta, první se doplní s křivými plochami (M11).
-- Lokace se aplikují přes `gp_Trsf.Transforms(x, y, z)` (bez nového objektu OCCT na uzel). **Zrcadlící lokace** (`gp_Trsf.IsNegative()`) by otočila navinutí; M7 ji neřeší, doplní se s `TransformOps` (M11).
+- Lokace se aplikují přes `gp_Trsf.Transforms(x, y, z)` (bez nového objektu OCCT na uzel). **Zrcadlící lokace** (`gp_Trsf.IsNegative()`) by otočila navinutí; nevznikne, protože `transform` přijímá jen tuhé pohyby (M11).
 - Hrany v pořadí mapy podtvarů. Polyline z `BRep_Tool.PolygonOnTriangulation(edge, loc)`: OCCT vybere první reprezentaci hrany na triangulaci sousední plochy a vrátí polygon, tu triangulaci a složenou lokaci. Uzly polygonu jsou indexy do vrácené triangulace, transformují se vrácenou lokací. Degenerovaná hrana, hrana bez polygonu nebo s méně než 2 body se do `edgeRanges` nezapíše (jako plocha bez trojúhelníků).
 - Chybějící triangulaci nebo polygon vrací binding jako JS `null`, i když `.d.ts` slibuje objekt; adaptér na `null` testuje explicitně.
 - Výsledek se kopíruje do nových typed arrays, každé s vlastním `ArrayBuffer` ([[#Síť pro vykreslení]]).
+
+### Modelovací operace v adaptéru (M11)
+
+- **Válec:** `BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(base), gp_Dir(axis)), radius, height)`. Má 3 plochy (plášť, dvě podstavy) a 3 hrany (dvě kružnice a šev).
+- **Transformace:** `gp_Trsf.SetValues(a11 … a34)` po řádcích (`a_rc = m[c*4 + r]`, `Mat4` je po sloupcích) a `BRepBuilderAPI_Transform(shape, trsf, false)`. Tuhý pohyb jen nastaví lokaci, geometrie (`TShape`) se nekopíruje a sdílí s původním tvarem; tessellace lokaci ploch aplikuje.
+- **Boolean:** prázdný konstruktor `BRepAlgoAPI_Fuse | Cut | Common`, `SetArguments(cíle)`, `SetTools(nástroje)` (seznamy `NCollection_List_TopoDS_Shape`; `Append` vrací nový obal `TopoDS_Shape`, který adaptér smaže), `Build()`. `HasErrors()` → `'operation-failed'`; výsledek bez solidu (`TopExp_Explorer(výsledek, TopAbs_SOLID).More()` je `false`) → `'operation-failed'`.
 
 ### Volba WASM buildu OCCT (spike v M7)
 
@@ -287,8 +321,8 @@ export function describeGeometryKernelContract(name: string, factory: () => Prom
 ```
 
 - Žije v `kernel/testing.ts`, aby ho mohly používat testy modulů, které na `kernel` závisí hodnotově (`regen`, `features/*`). `render` má z `kernel` jen typy, testuje proti vlastnímu stubu `MeshOps`. Do produkčního kódu se fake nedostane.
-- Záznam tvaru je AABB. `makeBox` uloží `[origin, origin + size]`.
-- `tessellate` vrací kvádr jako 6 ploch po 2 trojúhelnících (24 vrcholů, normály ploch), pořadí ploch −X, +X, −Y, +Y, −Z, +Z. Dál 12 hran po 2 bodech. Pro budoucí `transform` posune AABB a pro `boolean('union')` vrátí obalový AABB (až budou v rozhraní).
+- Záznam tvaru (`AabbEntry`) je AABB. `makeBox` uloží `[origin, origin + size]`. Od M11: `makeCylinder` uloží AABB válce pro libovolnou osu (`â` jednotková osa, v ose `k` rozšíření `radius · sqrt(1 − â_k²)` kolem obou podstav); `transform` AABB osmi rohů vstupního AABB po `mat4.transformPoint`; `boolean('union')` obalový AABB všech vstupů, `'subtract'` obalový AABB cílů (jeden cíl beze změny – fake nic neodečítá), `'intersect'` průnik obalu cílů s obalem nástrojů, prázdný nebo nulové tloušťky → `'operation-failed'`. Validace vstupů je stejná jako u OCCT.
+- `tessellate` vrací AABB jako kvádr: 6 ploch po 2 trojúhelnících (24 vrcholů, normály ploch), pořadí ploch −X, +X, −Y, +Y, −Z, +Z. Dál 12 hran po 2 bodech. Platí pro každý tvar, i válec a výsledek booleanu.
 - Volání `failNext` se týká jen dalšího volání dané metody. Injektovaná chyba nevytvoří handle a nic neuvolní.
 - Výsledky se vrací asynchronně (v mikroúloze), nikdy synchronně, aby testy vyšších vrstev nespoléhaly na pořadí, které by s workerem neplatilo.
 
@@ -298,10 +332,13 @@ export function describeGeometryKernelContract(name: string, factory: () => Prom
   - nové handle po každé operaci, nikdy znovu použité,
   - všechny kódy chyb, odmítnutí místo synchronní výjimky, atomicitu `release`, `liveHandleCount`,
   - **kvádr:** bounding box, síť projde `validateMeshData`, právě 6 ploch s indexy 0–5 a 12 hran s indexy 0–11, každá plocha má aspoň 2 trojúhelníky, body leží v AABB a pokrývají ho, normály trojúhelníků jedné plochy jsou shodné, kolmé ke stěně (rovnoběžné se souřadnicovou osou), míří **ven** a šest ploch leží na šesti různých stěnách (navinutí trojúhelníku souhlasí s normálou),
-  - nové buffery při každém `tessellate`.
+  - nové buffery při každém `tessellate`,
+  - **M11** (bbox s tolerancí 1e-5, nic, co platí jen pro jedno jádro): `makeCylinder` pro osy X, Y a nejednotkovou Z a každý neplatný vstup; `transform` posun, rotace o 90° a 45° kolem Z, vstup zůstává platný, nerigidní matice (zrcadlení, měřítko, zkosení, `NaN`) → `'invalid-input'`; `boolean` – `union` překrývajících se i oddělených kvádrů (obalový bbox), `intersect` překrývajících se (přesný průnik) a oddělených (`'operation-failed'`, žádný handle), `subtract` s nástrojem, který odřízne roh (bbox cíle), neplatné seznamy a `op`; síť každého výsledku projde `validateMeshData` a leží v bbox; izolace vstupů.
 - `validateMeshData`: platná síť, každé pravidlo porušené zvlášť.
 - `kernelErrorCode`: vlastní chyba, `RpcError` se stejným kódem, cizí kód a ne-chyba → `undefined`.
 - `FakeKernel` navíc: `failNext` (jednorázové, fronta, bez vedlejších účinků), `callCount`.
+- `isRigidMotion`: identita, rotace s posunem → `true`; zrcadlení, měřítko, zkosení, neafinní spodní řádek, `NaN` → `false`.
+- `kernel-occt` navíc (M11, mimo kontrakt): válec má 3 plochy a objem ze sítě do 1 % od `πr²h`; posunutý a otočený kvádr 6 ploch a stejný objem; kvádr minus válec, který jím prochází, 7 ploch a objem do 1 %; `subtract`, kde nástroj cíl celý pokryje → `'operation-failed'`; `union` oddělených kvádrů 12 ploch.
 - `kernel-occt` navíc (M7):
   - mapy podtvarů: kvádr má 6 / 12 / 8 ploch, hran a vrcholů, pořadí ploch −X, +X, −Y, +Y, −Z, +Z (pořadí `MapShapes` pro `MakeBox`),
   - `boundingBox` kvádru přesně (bez tolerance tvaru),

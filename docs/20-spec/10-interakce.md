@@ -301,6 +301,7 @@ export interface FieldState {
 2. `ops.begin(schema.label)`, pak `tx.apply(feature.add)` s `id = ids.next()`, `typeVersion = schema.version`, `params = schema.defaults()`, `suppressed: false`, `index = rollbackIndex`.
 3. Jméno: `"<schema.label> <n>"`, kde `n` je nejmenší kladné číslo, pro které takové jméno ve studiu ještě není.
 4. Vložení na pozici baru posune bar za novou featuru samo (pravidlo mutátoru v [[03-dokument]]), takže nová featura je aktivní ([[Q068 Kam se vloží nová featura|Q068]]).
+5. `activeRefParam` nové session = první parametr schématu druhu `bodies`, `topo` nebo `region` (v pořadí schématu), jinak `null` – výběr ve viewportu a v Prohlížeči jde rovnou do něj, jako v Onshape (M11, [[Rozhodnutí noční rychloakce#M11 – Další entity|R19]]). `edit` začíná s `null`.
 
 **`edit(featureId)`**
 1. Předpoklady jako u `create`; neznámá featura → výjimka.
@@ -335,6 +336,7 @@ export interface TreeRow {
   readonly message: string | null;     // u warning/error
   readonly selected: boolean;          // výběr obsahuje { kind: 'feature', feature: id }
   readonly editing: boolean;           // featura otevřené session
+  readonly dependents: number;         // počet featur, které na featuře závisí (dependentsOf, M11) – tooltip
 }
 
 export interface FeatureTreeModel {
@@ -347,6 +349,10 @@ export interface FeatureTreeModel {
   beginRename(id: FeatureId): void;                            // akce feature.rename
   cancelRename(): void;                                        // rename() režim také ukončí; beginRename neznámé featury → výjimka; zmizelá featura → id nesedí na žádný řádek
   select(id: FeatureId, opts?: { additive?: boolean }): void;  // → selection.set / toggle
+  /** Featury mimo ids, které závisí na kterékoli z ids; v pořadí studia, bez duplicit (M11). */
+  dependentsOf(ids: readonly FeatureId[]): readonly FeatureId[];
+  /** Přesun featury; prázdné = přesunuto (feature.move), jinak nová porušení pořadí a nic se nestalo (M11). */
+  move(id: FeatureId, toIndex: number): readonly OrderViolation[];
   dispose(): void;
 }
 
@@ -363,32 +369,44 @@ export function createFeatureTreeModel(deps: {
 - Nezměněný řádek se pozná porovnáním s řádkem na stejné pozici; po přesunu featury proto dostanou nový objekt i řádky, které se jen posunuly.
 - `rename` neznámé featury → výjimka. `rename`: jméno se ořízne, prázdné nebo stejné → nic. `moveRollbackBar`: stejný index → nic, mimo `0..features.length` → výjimka.
 - `rename` a `moveRollbackBar` během otevřené transakce hodí výjimku (z dispečera); UI je má v tu chvíli zakázat podle `editing`.
+- **Závislosti** (M11, nález 3 z [[Revize architektury 2026-10-13]]): strom při každém přepočtu po změně dokumentu spočítá `dependenciesOf(doc.studio, schemas)` z [[03-dokument#Id těles a závislosti|document]]; `dependents` je součástí porovnání nezměněného řádku. Pravidla závislostí jsou prezentační logika, proto tady a ne v handleru (`ops` by jinak potřeboval schémata).
+- `move(id, toIndex)`: neznámé id nebo `toIndex` mimo `0..features.length − 1` → výjimka; stejný index → `[]` a nic. Odmítne přesun, po kterém by v `orderViolations` byla dvojice, která tam teď není, a vrátí právě tato nová porušení (dokument ani log se nezmění). Porušení, která už v dokumentu jsou (data zvenku), jiný přesun neblokují. Jinak `dispatch(feature.move)`. Tažení featur v Timeline v M11 nevzniká, příkaz je připravený pro ně ([[Rozhodnutí noční rychloakce#M11 – Další entity|R17]] ⚠).
 
 ## Prohlížeč: `BrowserModel` a viditelnost těles
 
-[[Prohlížeč]] v UI ([[11-ui#Rozvržení]]) ukazuje *výsledek* modelování: tělesa z poslední regenerace. [[Timeline]] je jen jiné vykreslení `FeatureTreeModel` výše. Návrh (kontrakt upřesní Implementační plán [[M10-ui]]):
+[[Prohlížeč]] v UI ([[11-ui#Rozvržení]]) ukazuje *výsledek* modelování: tělesa z poslední regenerace. [[Timeline]] je jen jiné vykreslení `FeatureTreeModel` výše. Jméno a viditelnost tělesa jsou od M11 [[03-dokument#Metadata těles|metadata v dokumentu]] ([[Q071 Viditelnost těles|Q071]]):
 
 ```ts
 export interface BrowserBodyRow {
   readonly body: BodyId;
-  readonly name: { readonly key: 'browser.body'; readonly n: number };  // „Těleso n“, n od 1 podle pořadí; překládá ui
-  readonly feature: FeatureId;  // featura, která těleso vytvořila
-  readonly visible: boolean;
-  readonly selected: boolean;   // výběr obsahuje { kind: 'body', body }
+  readonly name: { readonly key: 'browser.body'; readonly n: number };  // automatické „Těleso n“, n od 1 podle pořadí; překládá ui
+  readonly userName: string | null;   // jméno z metadat (body.rename); ui ho má přednostně
+  readonly feature: FeatureId;        // featura původu (origin)
+  readonly visible: boolean;          // !doc.bodyMeta(body).hidden
+  readonly selected: boolean;         // výběr obsahuje { kind: 'body', body }
 }
 
 export interface BrowserModel {
   readonly bodies: Observable<readonly BrowserBodyRow[]>;
-  readonly hidden: Observable<ReadonlySet<BodyId>>;   // app → viewport.setBodyVisible
+  readonly hidden: Observable<ReadonlySet<BodyId>>;   // tělesa poslední regenerace se skrytím v metadatech; app → viewport.setBodyVisible
   select(body: BodyId, opts?: { additive?: boolean }): void;
-  setVisible(body: BodyId, visible: boolean): void;
+  setVisible(body: BodyId, visible: boolean): void;   // → dispatch body.setVisible
+  rename(body: BodyId, name: string): void;           // → dispatch body.rename
+  /** Jméno pro čip v poli reference, jen z dokumentu: userName, jinak jméno featury původu (u bodyId(f, n) s příponou ' (n)'); featura původu chybí → null. */
+  refLabel(body: BodyId): string | null;
   dispose(): void;
 }
+
+export function createBrowserModel(deps: {
+  doc: DocumentReader; ops: OperationDispatcher; regen: RegenStatusPort;
+  selection: SelectionCommands; editor: FeatureEditor;
+}): BrowserModel;
 ```
 
-- `setVisible` tělesa, které poslední regenerace nezná (zastaralý řádek v UI), nic neudělá. Při změně se nejdřív vyšle `hidden`, pak `bodies`.
-- Viditelnost je **stav pohledu** ([[Q071 Viditelnost těles|Q071]]): neukládá se, nejde přes dispečer ani do undo, po reloadu je vše vidět. Těleso, které po regeneraci zmizí, ze `hidden` vypadne.
-- Od [[0015-artefakty-a-identita-telesa|ADR 0015]] je `BodyId` rodokmen (featura původu), takže skrytí přežije změnu historie; uložení viditelnosti do dokumentu (metadata těles, [[Q071 Viditelnost těles|Q071]]) je úkol [[M11-dalsi-entity|M11]].
+- Model se přepočítá při změně regenerace, výběru i dokumentu. Při změně se nejdřív vyšle `hidden`, pak `bodies`. Těleso, které po regeneraci zmizí, ze `hidden` vypadne (jeho metadata v dokumentu zůstávají).
+- `setVisible` a `rename` tělesa, které poslední regenerace nezná (zastaralý řádek v UI), nic neudělají; během otevřené transakce (dialog) také nic a shodná hodnota také nic. `rename` jméno ořízne, prázdné jméno smaže (vrátí automatické). V režimu jen pro čtení dispečer odmítne; UI oba ovládací prvky zakáže podle `locked` ([[Rozhodnutí noční rychloakce#M11 – Další entity|R14]] ⚠ – v M10 šlo skrývat i během dialogu).
+- `select(body)`: je-li otevřená session s `activeRefParam` druhu `bodies`, přidá nebo odebere těleso v tomto parametru (`setParam`, stejné přepínání jako `refPick`) a výběr nemění; jinak `selection.set`/`toggle` (M11, [[Rozhodnutí noční rychloakce#M11 – Další entity|R19]]).
+- `refLabel` nečte řádky (poslední regeneraci): náhled booleanu nástroj z mapy těles odebere, ale čip v dialogu ho musí pojmenovat dál.
 
 ## Vestavěné akce
 
@@ -415,6 +433,7 @@ export function createBuiltInActions(deps: {
 }): Disposable;
 ```
 
+- `createBuiltInActions` dostane od M11 i `confirm: (request: ConfirmRequest) => boolean` s `ConfirmRequest = { key: string; params: Readonly<Record<string, string | number>> }` (klíč překladu a hodnoty; `interaction` nezná DOM, dialog dodá `ui` přes `app`). `feature.delete` spočítá `featureTree.dependentsOf(odstraňované)`; je-li jich `n > 0`, zeptá se `confirm({ key: 'feature.delete.confirm', params: { n } })` a při `false` nic nesmaže ani nezmění výběr (jako Fusion: „N featur ztratí referenci“, [[Rozhodnutí noční rychloakce#M11 – Další entity|R16]]). Bez závislých se neptá.
 - Skupina `feature` (kontextové menu) v pořadí: `feature.edit`, `feature.rename` (→ `featureTree.beginRename`), `feature.suppress`, `timeline.rollHere`, `feature.delete`. Menu v [[Timeline]] je jen vykreslený snapshot akcí této skupiny.
 - `ui` id akcí nezná natvrdo: bere je z `AppSession.actionIds` (reexport `ACTION_IDS`).
 
@@ -470,7 +489,9 @@ Akce registruje `createBuiltInActions` volané z `app` (undo, redo, smazat výb�
 - `SelectTool` s `FakeViewport`: hover, `leave`, klik → `set`, Shift+klik → `toggle`, klik do prázdna → `clear`, tažení nad toleranci nic nevybere, pravé tlačítko ignoruje, `Escape`.
 - `FeatureEditSession` se skutečným dokumentem a dispečerem (jádro ani regenerace nejsou potřeba; `interaction` na `kernel` nesmí ani v testech). Integrační test v `tests/` s `FakeKernel` a regenerací ověří živý náhled. Případy: create → `setParam` ×20 → commit = **jeden** záznam v logu; cancel = dokument i log beze změny; jméno `Box 2`; vložení na bar; edit featury před i za barem posune bar dočasně a po commit/cancel ho vrátí, v logu není `studio.setRollback`; neplatná hodnota → `issues`; druhá session → výjimka; příkazy po zavření → výjimka; undo zakázané během session.
 - `ActionRegistry`: zkratky včetně `Mod` a `Shift`, přesná shoda modifikátorů, velikost písmen, ignorování v textovém poli, zakázaná akce, neplatná a duplicitní zkratka, nový snapshot jen pro změněnou akci.
-- `FeatureTreeModel`: snapshot řádků po přidání featury, chybě regenerace, potlačení a posunu rollback baru; nový snapshot je nový objekt, nezměněný řádek zůstává identický; `selected`, `editing`; `rename` s mezerami a prázdné.
+- `FeatureTreeModel`: snapshot řádků po přidání featury, chybě regenerace, potlačení a posunu rollback baru; nový snapshot je nový objekt, nezměněný řádek zůstává identický; `selected`, `editing`; `rename` s mezerami a prázdné; `dependents`, `dependentsOf`, `move` (platný, odmítnutý, existující porušení) – M11.
+- `feature.delete` s potvrzením: bez závislých bez dotazu, se závislými dotaz s `n`, zamítnutí nic nesmaže (M11).
+- `BrowserModel`: jméno a viditelnost z metadat, operace přes dispečer a undo, neznámé těleso a otevřená transakce nic, `select` do aktivního parametru `bodies`, `refLabel` (M11).
 - Architektura: `interaction` projde `tsconfig.domain.json` a nezávisí na `regen`, `kernel`, `render`, `ui` (`npm run check`).
 
 ## Otevřené otázky

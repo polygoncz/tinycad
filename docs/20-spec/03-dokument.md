@@ -40,6 +40,7 @@ export interface FeatureInstance<P = unknown> {
 export interface PartStudioData {
   readonly features: readonly FeatureInstance[];
   readonly rollbackIndex: number; // 0..features.length; features[i] se přehraje, když i < rollbackIndex
+  readonly bodies?: Readonly<Record<BodyId, BodyMeta>>;   // metadata těles (M11), viz Metadata těles; chybí, když je prázdné
 }
 
 export interface DocumentMeta {
@@ -61,6 +62,7 @@ export interface DocumentReader {
   readonly studio: PartStudioData;
   feature(id: FeatureId): FeatureInstance | undefined;
   indexOf(id: FeatureId): number;              // -1, když neexistuje
+  bodyMeta(body: BodyId): BodyMeta;            // {} (sdílený zmrazený objekt) pro těleso bez metadat (M11)
   readonly events: Subscribable<DocumentEvents>;
 }
 
@@ -70,6 +72,7 @@ export interface DocumentWriter extends DocumentReader {
   replaceFeature(f: FeatureInstance): void;     // stejné id, nová data
   moveFeature(id: FeatureId, toIndex: number): void;
   setRollbackIndex(index: number): void;
+  setBodyMeta(body: BodyId, meta: BodyMeta): void;   // M11, viz Metadata těles
   rename(name: string): void;
 }
 
@@ -91,7 +94,7 @@ export function createDocument(init: CreateDocumentInit): DocumentWriter;
   - `removeFeature(i)`: `i < r` → `r − 1`.
   - `moveFeature(from → to)`: jako smazání na `from` a vložení na `to` (`to` je výsledný index). Přesunutá featura převezme stav cílové pozice.
   - Pravidla nejsou sama o sobě přesně invertovatelná (index rovný `r` je dvojznačný). Přesné undo zajišťuje dispečer v `ops` ([[04-operace-a-historie|04]]).
-- `changed` se vyšle jen po skutečné změně. Mutace beze změny (`setRollbackIndex` na stejný index, `moveFeature` na stejné místo, `rename` na stejné jméno, `replaceFeature` se stejným objektem) nic nevyšle. `rename` vyšle `changed` s nezměněným `studio` – nové jméno odběratel přečte z `doc.meta`.
+- `changed` se vyšle jen po skutečné změně. Mutace beze změny (`setRollbackIndex` na stejný index, `setBodyMeta` se stejnými metadaty (po hodnotě), `moveFeature` na stejné místo, `rename` na stejné jméno, `replaceFeature` se stejným objektem) nic nevyšle. `rename` vyšle `changed` s nezměněným `studio` – nové jméno odběratel přečte z `doc.meta`.
 - Mutátor, jehož kontrola selže (výjimka), dokument nezmění a nic nevyšle. Výjimka **odběratele** `changed` se ale šíří z mutátoru až **po** provedení změny: dokument je změněný, i když mutátor vyhodil výjimku. Jak s tím naloží dispečer v `ops`, řeší [[Q030 Výjimka odběratele po změně dokumentu|Q030]].
 - `events` vystavuje jen `on` a `once` (vlastní objekt, ne `Emitter`), takže ani přetypování nedá přístup k `emit` ([[Q023 Události jen pro odběr|Q023]]).
 - Data vstupující do dokumentu (`createDocument`, `insertFeature`, `replaceFeature`) se zmrazí do hloubky bez zkratek – i mělce zmrazený objekt zvenku se zmrazí celý. Mutátory pak zmrazí jen nové pole a nové `studio`, jejichž prvky už zmrazené jsou.
@@ -100,7 +103,7 @@ export function createDocument(init: CreateDocumentInit): DocumentWriter;
 
 ## Reference na jiné entity
 
-Parametry featur mohou odkazovat na výsledky jiných featur. Reference jsou vždy **jména**, nikdy indexy nebo handle. Tvar id se kontroluje na datové hranici: `FeatureId` nesmí být prázdné ani obsahovat `/` (`fromData`, `validate` u `feature.add`), `BodyId` v referenci musí mít tvar `<vlastník>/body[:<n>]` (`readRef`); asserty v `bodyId` a `originOfBody` jsou pak jen pojistka proti chybě programu. Značkovaná id (`FeatureId`, `BodyId`…) vznikají přetypováním jen na důvěryhodných místech: při generování id v `interaction` (`FeatureEditor`), v `fromData` po kontrole tvaru dat, v `bodyId` (ražba `BodyId`, [[0015-artefakty-a-identita-telesa|ADR 0015]]) a v interní kontrole tvaru reference `readRef`, kterou sdílí `validateAgainstSchema` a `referencesOf`.
+Parametry featur mohou odkazovat na výsledky jiných featur. Reference jsou vždy **jména**, nikdy indexy nebo handle. Tvar id se kontroluje na datové hranici: `FeatureId` nesmí být prázdné ani obsahovat `/` (`fromData`, `validate` u `feature.add`), `BodyId` v referenci musí mít tvar `<vlastník>/body[:<n>]` (`readRef`); asserty v `bodyId` a `originOfBody` jsou pak jen pojistka proti chybě programu. Značkovaná id (`FeatureId`, `BodyId`…) vznikají přetypováním jen na důvěryhodných místech: při generování id v `interaction` (`FeatureEditor`), v `fromData` po kontrole tvaru dat, v `bodyId` (ražba `BodyId`, [[0015-artefakty-a-identita-telesa|ADR 0015]]), v `parseBodyId` (kontrola tvaru id tělesa z dat zvenku, M11: klíče metadat v `fromData`, `validate` operací `body.*`) a v interní kontrole tvaru reference `readRef`, kterou sdílí `validateAgainstSchema` a `referencesOf`.
 
 ```ts
 export type BodyId = Brand<string, 'BodyId'>;   // '<featureId>/body' nebo '<featureId>/body:<n>'
@@ -121,6 +124,7 @@ Id artefaktu má vždy tvar `<vlastník>/<druh>[:<n>]` ([[0015-artefakty-a-ident
 export function bodyId(origin: FeatureId, n?: number): BodyId;   // '<origin>/body', s n >= 1 '<origin>/body:<n>'; n < 1 nebo neceločíselné → výjimka; prázdný origin nebo origin s '/' → výjimka
 export function originOfBody(body: BodyId): FeatureId;            // text před prvním '/'; bez '/' → výjimka (chyba programu)
 export function ownerOf(ref: EntityRef): FeatureId;               // body, topo → originOfBody(ref.body); region → ref.sketch
+export function parseBodyId(v: unknown): BodyId | undefined;      // text ve tvaru '<vlastník>/body[:<n>]' (n ≥ 1) → BodyId, jinak undefined (M11)
 
 export function referencesOf(schema: FeatureSchema, params: unknown): readonly EntityRef[];
 export function dependenciesOf(studio: PartStudioData, schemas: RegistryReader<FeatureSchema>): ReadonlyMap<FeatureId, readonly FeatureId[]>;
@@ -133,6 +137,19 @@ export function orderViolations(studio: PartStudioData, deps: ReadonlyMap<Featur
 - `dependenciesOf`: pro každou featuru studia v pořadí vlastníci jejích referencí přes `ownerOf`, bez duplicit, v pořadí prvního výskytu, jen featury, které ve studiu existují (nevyřešenou referenci hlásí regenerace), bez vlastní featury; neznámý typ → `[]`. Počítá se pro všechny featury studia včetně potlačených a za rollback barem (pravidla v M11 si stav featury ověří samy).
 - `dependentsOf`: featury, jejichž závislosti obsahují `id`, v pořadí mapy.
 - `orderViolations`: dvojice, kde závislost leží na indexu ≥ index featury. Prázdné = pořadí platné; pořadí výsledku podle featur, pak závislostí.
+
+### Metadata těles
+
+Jméno a skrytí [[Těleso|tělesa]] patří do dokumentu ([[M11-dalsi-entity|M11]], [[Q071 Viditelnost těles|Q071]]): přežijí reload, jdou přes operace a undo ([[04-operace-a-historie#Sada operací]]). Smí tam až od [[0015-artefakty-a-identita-telesa|ADR 0015]]: `BodyId` je rodokmen (featura původu), takže se metadata po změně historie nepřenesou na jiné těleso.
+
+```ts
+export interface BodyMeta { readonly name?: string; readonly hidden?: true }
+```
+
+- **Kanonický tvar** (determinismus, porovnání `toData` při přehrání logu): `setBodyMeta` uloží `name` jen neprázdné a `hidden` jen jako `true`; prázdná metadata záznam odeberou; prázdná mapa → vlastnost `bodies` ve studiu chybí. Barva a průhlednost přibudou jako další pole ([[Q073 Průhlednost a barva těles|Q073]]).
+- Změna metadat vytvoří nové `studio` se **stejným** polem `features` i `rollbackIndex`, takže cache regenerace podle identity featur zůstane platná. Ostatní mutátory `bodies` zachovají.
+- Dokument tělesa nezná (vznikají regenerací), takže `setBodyMeta` existenci tělesa nekontroluje a záznamy smazaných featur zůstávají: undo smazání vrátí těleso i se jménem a skrytím.
+- `fromData`: `studio.bodies` chybí → bez metadat; jinak objekt s klíči přes `parseBodyId` (jinak issue `studio.bodies['<klíč>']`) a hodnotami jen s `name` (neprázdný řetězec) a `hidden` (boolean, `false` se vypustí); jiná vlastnost v hodnotě je issue (přísnost jako u parametrů, [[Q028 Chybějící a přebytečné parametry|Q028]]). Výsledek je v kanonickém tvaru a zmrazený.
 
 ## Schéma featury
 
@@ -182,7 +199,7 @@ export function createFeatureSchemaRegistry(): FeatureSchemaRegistry;
 - Typ entity u `topo` (`face`/`edge`/`vertex`) obecná validace neověřuje – zjistí se až po regeneraci.
 
 - Všechny `label` (u `ParamSpec`, u možností `enum` a u `FeatureSchema`) jsou **klíče překladu**, ne texty. Texty dodává plugin ve slovníku `messages` a překládá je `ui` ([[0014-preklady-vue-i18n-a-klice|ADR 0014]], [[Q070 Překlady textů UI|Q070]]).
-- `exclusiveMin`/`exclusiveMax` bez `min`/`max` nemají účinek. Kódy chyb z `validateAgainstSchema`: `param.missing`, `param.unexpected`, `param.wrongType`, `param.notInteger`, `param.belowMin`, `param.atOrBelowMin` (ostrá mez), `param.aboveMax`, `param.atOrAboveMax`, `param.unknownOption`, `param.tooFewRefs`, `param.tooManyRefs`, `param.invalidRef` (`{ index }`). `belowMin`/`atOrBelowMin` a `tooFewRefs` nesou `{ min }`, `aboveMax`/`atOrAboveMax` a `tooManyRefs` `{ max }`, ostatní kódy jsou bez `params`. `param.wrongType` pokrývá i parametry, které nejsou objekt (`param: ''`), a NaN/nekonečno.
+- `exclusiveMin`/`exclusiveMax` bez `min`/`max` nemají účinek. Kódy chyb z `validateAgainstSchema`: `param.missing`, `param.unexpected`, `param.wrongType`, `param.notInteger`, `param.belowMin`, `param.atOrBelowMin` (ostrá mez), `param.aboveMax`, `param.atOrAboveMax`, `param.unknownOption`, `param.tooFewRefs`, `param.tooManyRefs`, `param.invalidRef` (`{ index }`), `param.duplicateRef` (`{ index }`, M11). `belowMin`/`atOrBelowMin` a `tooFewRefs` nesou `{ min }`, `aboveMax`/`atOrAboveMax` a `tooManyRefs` `{ max }`, ostatní kódy jsou bez `params`. `param.wrongType` pokrývá i parametry, které nejsou objekt (`param: ''`), a NaN/nekonečno.
 
 `ParamSpec` slouží třem účelům najednou: validaci, generování formuláře v UI ([[11-ui|11]]) a rozpoznání, které parametry jsou reference (pro picking v dialogu).
 
@@ -190,6 +207,7 @@ Pomocná funkce `validateAgainstSchema(schema, params)` dělá obecnou kontrolu 
 
 - Chybějící parametr (je ve schématu, ne v `params`) i přebytečný parametr (je v `params`, ne ve schématu) je `ParamIssue` ([[Q028 Chybějící a přebytečné parametry|Q028]]). `migrate` proto musí po sobě uklidit i parametry, které nová verze nemá.
 - Referenční parametry (`bodies`, `topo`, `region`) jsou v `params` vždy, prázdné jako `[]`, i při `min: 0`.
+- Referenční parametr nesmí obsahovat stejnou referenci dvakrát (M11): po kontrole tvaru se hlásí první položka shodná s dřívější (`body` u `body`, `body` + `name` u `topo`, `sketch` + `region` u `region`) jako `param.duplicateRef` s jejím `index`. Pořadí kontrol: `invalidRef`, `duplicateRef`, `tooFewRefs`, `tooManyRefs`. Vztahy mezi parametry (těleso v cílech i nástrojích booleanu) jsou vlastní pravidlo schématu.
 
 ## Serializace
 
@@ -236,6 +254,7 @@ export function migrateFeatureData(schemas: RegistryReader<FeatureSchema>, data:
 - Migrace: featura s `typeVersion: 1` se načte schématem verze 2.
 - `validateAgainstSchema` pro každý `ParamSpec.kind`, chybějící a přebytečný parametr.
 - `fromData` s poškozenými daty vrátí `err` s cestou k problému (duplicitní id, `rollbackIndex` mimo rozsah, chybějící vlastnost).
+- Metadata těles (M11): kanonizace v `setBodyMeta`, žádný `changed` beze změny, `features` zůstává totéž pole, ostatní mutátory metadata zachovají, `fromData` s platnými i poškozenými metadaty; `param.duplicateRef` pro `bodies` a `topo`.
 
 ## Otevřené otázky
 

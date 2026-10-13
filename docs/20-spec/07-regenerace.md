@@ -9,6 +9,7 @@ modules:
   - regen
 milestones:
   - "[[M06-regenerace]]"
+  - "[[M11-dalsi-entity]]"
 tags:
   - spec
 created: 2026-10-12
@@ -66,7 +67,7 @@ export interface BuildInput<P> {
 }
 
 /** Část jádra, kterou smí builder používat: tvoří a ptá se, neuvolňuje (Q041). */
-export type ModelingKernel = PrimitiveOps & QueryOps;   // M13 přidá BooleanOps
+export type ModelingKernel = PrimitiveOps & TransformOps & BooleanOps & QueryOps;   // M11 přidal TransformOps a BooleanOps
 
 export interface BuildContext {
   /** Sledované jádro: každý vrácený handle patří Regeneratoru (Q041). */
@@ -87,17 +88,27 @@ export type BuildOutput =
   | { ok: true; state: RegenState }
   | { ok: false; error: FeatureError };
 
+/** Chyba featury pro nevyřešenou referenci parametru param (Q044); hluboce zmrazená. */
+export function unresolvedReference(param: string, e: RefError): FeatureError;
+// → { code: 'UNRESOLVED_REFERENCE', message: e.message, issues: [{ param, code: 'param.unresolvedRef' }] }
+
 export type BuilderRegistry = Registry<FeatureBuilder>;   // klíč = type, viz core; chybějící builder → find() = undefined
 export function createBuilderRegistry(): BuilderRegistry;
 ```
 
 Pravidla pro builder:
 - nesmí mutovat vstupní stav, vrací nový (`new Map(state.artifacts)` + změny),
-- dodržuje identitu [[Artefakt|artefaktů]] ([[0015-artefakty-a-identita-telesa|ADR 0015]]): featura, která těleso **vytváří**, razí id `bodyId(feature.id)` (jediné těleso je bez čísla; při více tělesech dostane každé `bodyId(feature.id, n)` s `n` od 1 podle rodokmenu, ne podle pořadí z jádra – `f/body` a `f/body:1` jsou různá id; přesné pravidlo pro Boolean a Transform doplní M11) a nastaví `origin` i `lastModifiedBy` na sebe; featura, která těleso **mění**, zachová `id`, `origin` i `names` a nastaví `lastModifiedBy`; featura, která těleso **spotřebuje**, ho z mapy odebere,
+- dodržuje identitu [[Artefakt|artefaktů]] ([[0015-artefakty-a-identita-telesa|ADR 0015]]): featura, která těleso **vytváří**, razí id `bodyId(feature.id)` (jediné těleso je bez čísla; při více tělesech dostane každé `bodyId(feature.id, n)` s `n` od 1 podle rodokmenu, ne podle pořadí z jádra – `f/body` a `f/body:1` jsou různá id; přesné pravidlo pro Boolean a Transform doplní M11) a nastaví `origin` i `lastModifiedBy` na sebe; featura, která těleso **mění**, zachová `id`, `origin` i `names` a nastaví `lastModifiedBy`; featura, která těleso **spotřebuje**, ho z mapy odebere (pravidla Transform a Boolean níže),
 - nesmí uvolňovat handle (to dělá `Regenerator`),
 - všechny tvary vytváří přes `ctx.kernel`, ten každý vrácený handle zapíše do množiny vlastněné Regeneratorem – i mezivýsledky a tvary z builderu, který pak selže ([[Q041 Úklid mezivýsledků builderu|Q041]]),
-- očekávanou chybu vrací jako `{ ok: false }` (nevyřešenou referenci jako `UNRESOLVED_REFERENCE`, [[Q044 RefError a nevyřešené reference|Q044]]), výjimky jádra může nechat proletět – `Regenerator` je převede na chybu featury `KERNEL`. Výjimka, která z jádra nepochází (`kernelErrorCode(e) === undefined`), je chyba programu: `run` po úklidu handle odmítne s touto výjimkou ([[Q043 Výjimka builderu mimo jádro|Q043]]),
+- očekávanou chybu vrací jako `{ ok: false }` (nevyřešenou referenci přes `unresolvedReference(param, e)` jako `UNRESOLVED_REFERENCE` s `issues`, aby ji UI přeložilo u parametru, [[Q044 RefError a nevyřešené reference|Q044]]), výjimky jádra může nechat proletět – `Regenerator` je převede na chybu featury `KERNEL`. Výjimka, která z jádra nepochází (`kernelErrorCode(e) === undefined`), je chyba programu: `run` po úklidu handle odmítne s touto výjimkou ([[Q043 Výjimka builderu mimo jádro|Q043]]),
 - validaci parametrů neřeší – `Regenerator` před voláním builderu zavolá `schema.validate` a při problému builder vůbec nespustí (status `INVALID_PARAMS`). Builder tedy smí předpokládat platné parametry.
+
+**Identita u featur, které tělesa mění** ([[M11-dalsi-entity|M11]], [[0015-artefakty-a-identita-telesa|ADR 0015]]):
+
+- **Transform:** každé vybrané těleso zůstane pod svým `id` a na svém místě v mapě, zachová `origin` a `names`, dostane nový `shape` a `lastModifiedBy` = transform. Ostatní artefakty beze změny.
+- **Boolean:** výsledek je **jedno** těleso `{ ...první cíl, shape, lastModifiedBy: boolean }` – dědí `id`, `origin`, `names` a místo v mapě prvního cíle. Ostatní cíle a nástroje z mapy zmizí; s `keepTools` nástroje zůstanou beze změny (tentýž objekt). Jádro vrátí jeden handle i pro nesouvislý výsledek (compound více solidů). Rozpad výsledku na více těles `bodyId(cíl.origin, n)` podle rodokmenu z historie jádra (`Generated`/`Modified`, ne pořadí výstupu) je úkol [[M14-topologicke-pojmenovani|M14]] ([[Rozhodnutí noční rychloakce#M11 – Další entity|R8]] ⚠).
+- Změna parametru featury, ze které těleso pochází, ani nástroje booleanu id výsledku nemění (id je rodokmen, ne pořadí výstupu jádra).
 
 Příklad:
 
@@ -128,7 +139,7 @@ export type FeatureStatus =
 export interface FeatureError {
   readonly code: 'INVALID_PARAMS' | 'UNRESOLVED_REFERENCE' | 'KERNEL' | 'UNKNOWN_TYPE' | 'STALE_VERSION';
   readonly message: string;                      // technický text (log, chyby jádra)
-  readonly issues?: readonly ParamIssue[];       // jen INVALID_PARAMS: problémy z schema.validate (M10, ADR 0014)
+  readonly issues?: readonly ParamIssue[];       // INVALID_PARAMS: problémy z schema.validate (M10, ADR 0014); UNRESOLVED_REFERENCE: [{ param, code: 'param.unresolvedRef' }] (M11)
 }
 ```
 
@@ -231,6 +242,7 @@ Handle se z vlastněné množiny odeberou ještě před čekáním na `release` 
 - Posun rollback baru dozadu nevolá jádro, posun zpět dopředu také ne.
 - Chybná featura: status `error`, následující featury `ok`, stav propuštěn.
 - Neplatné parametry → `INVALID_PARAMS`, builder se nezavolá.
+- `unresolvedReference` dá kód, zprávu z `RefError` a `issues` s parametrem, zmrazené do hloubky; sledované jádro zapíše handle z `makeCylinder`, `transform` a `boolean` (M11).
 - Neznámý typ featury (chybí schéma nebo builder) → `UNKNOWN_TYPE`, regenerace pokračuje.
 - Featura s `typeVersion` jiným, než má schéma → `STALE_VERSION`, builder se nezavolá, stav propuštěn.
 - Suppressed featura propustí stav, builder se nezavolá.

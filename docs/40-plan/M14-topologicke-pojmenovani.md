@@ -17,7 +17,7 @@ finished:
 tags:
   - milnik
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-14
 ---
 # M14 – Topologické pojmenování, Fillet, Chamfer, skica na ploše
 
@@ -55,3 +55,10 @@ Nález 5 z [[Revize architektury 2026-10-13]], druhá část: jména v portu a p
 - [ ] **Jména v portu** ([[10-interakce#Port stavu regenerace]]): artefakt tělesa v `RegenSnapshot` nese `names: NameTable`; `interaction` převádí pick na `TopoRef` přes `names.nameOfFace(index)` bez znalosti `regen`.
 - [ ] **Výběr přežije regeneraci** ([[10-interakce#Výběr]], nahrazuje pravidlo z [[Q064 Výběr po regeneraci|Q064]]): `SelectionItem` druhu `face`/`edge` nese `name: TopoName` a index platný pro aktuální generaci; při nové generaci se položky přemapují podle jména, vypadnou jen ty, jejichž jméno zaniklo. Test: výběr hrany, změna parametru, výběr zůstává na „stejné“ hraně.
 - [ ] **`PickResult` a `HighlightTarget`** doplnit o `name?: TopoName` (vyplňuje `interaction`, `render` jméno nezná); `PickKind` o `'vertex'`.
+
+## Úkoly z M11
+
+Odloženo z [[M11-dalsi-entity|M11]] ([[Rozhodnutí noční rychloakce#M11 – Další entity|R8]], R19), protože to potřebuje historii jádra nebo jména, která vznikají tady.
+
+- [ ] **Boolean s více výslednými tělesy** ([[07-regenerace#Builder featury]]): výsledek booleanu rozložit na solidy; těleso, které vzniklo z cíle, dostane `bodyId(cíl.origin, n)` podle rodokmenu z historie jádra (`Generated`/`Modified` pro solidy), ne podle pořadí výstupu. Test: změna parametru válce nepřehodí id dvou výsledných těles (např. kvádr rozříznutý válcem na dvě části). Do té doby je výsledek jeden handle (compound).
+- [ ] **Zvýraznění těles vybraných v dialogu** ([[10-interakce#Port viewportu]]): `HighlightTarget` druhu `body`, aby reference v aktivním poli byly vidět ve viewportu.

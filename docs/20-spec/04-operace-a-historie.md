@@ -48,11 +48,15 @@ Typů je záměrně málo a jsou malé: log žije navždy, každá změna tvaru 
 | `feature.suppress` | `featureId, suppressed: boolean` | `feature.suppress` s aktuální hodnotou | `replaceFeature({ ...f, suppressed })` |
 | `feature.move` | `featureId, toIndex: number` | `feature.move` na aktuální index | `moveFeature` |
 | `studio.setRollback` | `index: number` | `studio.setRollback` na aktuální index | `setRollbackIndex` |
+| `body.rename` (M11) | `body: BodyId, name: string` (`''` = smazat jméno) | `body.rename` s aktuálním jménem nebo `''` | `setBodyMeta(body, { ...aktuální, name })` |
+| `body.setVisible` (M11) | `body: BodyId, visible: boolean` | `body.setVisible` s aktuální viditelností (`!hidden`) | `setBodyMeta(body, { ...aktuální, hidden: visible ? undefined : true })` |
 | `batch` | `ops: readonly Operation[]` | viz [[#Dávka]] | – |
 
-Modul exportuje typy `FeatureAddOp`, `FeatureRemoveOp`, `FeatureSetParamsOp`, `FeatureRenameOp`, `FeatureSuppressOp`, `FeatureMoveOp`, `StudioSetRollbackOp`, `BatchOp`. Konstruktory operací nejsou – operace je literál.
+Modul exportuje typy `FeatureAddOp`, `FeatureRemoveOp`, `FeatureSetParamsOp`, `FeatureRenameOp`, `FeatureSuppressOp`, `FeatureMoveOp`, `StudioSetRollbackOp`, `BodyRenameOp`, `BodySetVisibleOp`, `BatchOp`. Konstruktory operací nejsou – operace je literál.
 
 `setParams` nese **celé** parametry, ne patch. Inverze je pak triviální a operace nezávisí na předchozím stavu.
+
+Operace `body.*` (M11) mění [[03-dokument#Metadata těles|metadata těles]]. Mají `v: 1`, nemají `merge` ani `upcast`, existenci tělesa nekontrolují (dokument tělesa nezná) a rollback bar nemění, takže je `applyOperation` neobaluje. Jdou do logu i undo jako každá jiná změna dokumentu ([[Rozhodnutí noční rychloakce#M11 – Další entity|R13]] ⚠).
 
 `feature.rename` přejmenuje **featuru**. Přejmenování dokumentu (`DocumentWriter.rename`) zatím operaci nemá; přibude jako nový typ, až ho bude potřebovat UI.
 
@@ -77,7 +81,7 @@ export interface OpHandler<O extends Operation = Operation> {
 }
 
 export type OpHandlerRegistry = Registry<OpHandler>;   // klíč = type, viz core
-/** Registr s vestavěnými handlery (feature.*, studio.setRollback). register({ type: 'batch' }) vyhodí. Schémata potřebuje migrace dat featur při apply. */
+/** Registr s vestavěnými handlery (feature.*, studio.setRollback, od M11 body.*). register({ type: 'batch' }) vyhodí. Schémata potřebuje migrace dat featur při apply. */
 export function createOpHandlerRegistry(deps: { schemas: RegistryReader<FeatureSchema> }): OpHandlerRegistry;
 ```
 
@@ -324,7 +328,7 @@ export function upcastOperation(handlers: OpHandlerRegistry, raw: unknown): Resu
 
 Po obálce (a případném `upcast`) zavolá `handler.validate`, pokud ho handler má ([[Q032 Kontrola payloadu operací při načítání|Q032]]). První nalezený problém → `err` s cestou relativní k operaci (`'featureId'`, `'feature.typeVersion'`; v dávce s prefixem `ops[i].`). `validate` kontroluje jen **tvar**, ne vztah ke stavu dokumentu (existence featury, rozsah indexu). To ohlásí až `apply` výjimkou při přehrání.
 
-Všech sedm vestavěných handlerů `validate` má:
+Všech devět vestavěných handlerů `validate` má:
 
 | `type` | Kontrola |
 |---|---|
@@ -335,6 +339,8 @@ Všech sedm vestavěných handlerů `validate` má:
 | `feature.suppress` | `featureId` neprázdný řetězec, `suppressed` boolean |
 | `feature.move` | `featureId` neprázdný řetězec, `toIndex` celé číslo ≥ 0 |
 | `studio.setRollback` | `index` celé číslo ≥ 0 |
+| `body.rename` | `body` ve tvaru id tělesa (`parseBodyId`), `name` řetězec |
+| `body.setVisible` | `body` ve tvaru id tělesa, `visible` boolean |
 
 Hodnoty `params` proti schématu featury se při načítání nekontrolují a nemigrují; migrace běží až při `apply` ([[#Migrace dat featur]]).
 
@@ -365,7 +371,8 @@ export function parseLogEntry(handlers: OpHandlerRegistry, raw: unknown): Result
 - `upcastOperation`: aktuální verze, fiktivní v1 → v2, chybějící `upcast`, novější verze, neznámý typ, rozbitá obálka i uvnitř dávky.
 - `validate` každého vestavěného handleru: platná operace projde, každé pole z tabulky rozbité zvlášť → `err` se správnou cestou; v dávce s prefixem.
 - `parseLogEntry`: platný záznam každého `kind`, každé pole rozbité zvlášť, `target` u `do`, chyba v `op` i `inverse` s prefixem cesty, upcast staré verze operace uvnitř záznamu.
-- **Replay test** (fast-check, 1000 sekvencí): náhodné operace, transakce (commit i abort), undo a redo; pak `replayLog` na prázdný dokument → `toData` se shoduje se živým dokumentem a `rebuildUndoStacks` se shoduje se živými zásobníky.
+- `body.rename` a `body.setVisible`: inverze vrátí metadata, `invert` tělesa bez metadat, `validate` s rozbitým `body`.
+- **Replay test** (fast-check, 1000 sekvencí): náhodné operace (od M11 včetně `body.*`), transakce (commit i abort), undo a redo; pak `replayLog` na prázdný dokument → `toData` se shoduje se živým dokumentem a `rebuildUndoStacks` se shoduje se živými zásobníky.
 
 ## Otevřené otázky
 
