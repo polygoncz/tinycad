@@ -208,6 +208,7 @@ V Safari se v dev režimu nespustil worker jádra: `using` z `kernel-occt` šel 
 - **Kontrakt:** [[11-ui#Kompoziční kořen (app)]] – stav `unavailable` a `AppSession.kernelError`; jádro, které naběhne po `dispose`, se uvolní bez `onReady` (dnes `Viewport used after dispose`). `SELECT_TOOL.label` = klíč `tool.select` s překladem. [[13-testovani]] – e2e i ve WebKitu (projekt `webkit` vedle `chrome`).
 - **Testy:** supervisor: selhaný start → `unavailable` a text chyby, ne `failed`; start doběhne po `dispose` → jádro uvolněno, `onReady` se nevolá. Slovníky obsahují `tool.select`. `npm run test:e2e` projde v obou prohlížečích.
 - **Hotovo když:** `npm run check` a `npm run test:e2e` projdou.
+- **Výsledek:** hotovo; e2e 4 scénáře × Chrome a WebKit. Varování `Viewport used after dispose` se v testech nepodařilo vyvolat (supervisor ani session viewport po uvolnění nepoužijí); pravděpodobně artefakt HMR, sledovat.
 
 ## Akceptační kritéria
 
