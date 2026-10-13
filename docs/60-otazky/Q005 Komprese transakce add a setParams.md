@@ -1,14 +1,14 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[04-operace-a-historie]]"
 decide_by: "[[M03-operace]]"
 proposal: "Začít s batch"
-decision: ""
+decision: "Jen batch, kompresi add + setParams zatím ne"
 tags:
   - otazka
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 # Q005 Komprese transakce add a setParams
 
@@ -27,4 +27,4 @@ Návrh: začít s `batch`, kompresi přidat, až bude log v ladění nepřehledn
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do [[04-operace-a-historie]]. Zásadní rozhodnutí → nové ADR.)_
+2026-10-13: **jen `batch`.** Při commitu [[Transakce|transakce]] se slučují jen sousední operace téhož typu přes `merge` (v M3 jen `feature.setParams` téže featury). `feature.add` + `feature.setParams` zůstanou jako `batch`. Obecný kompresor přidáme, až bude log při ladění nepřehledný. Propsáno do [[04-operace-a-historie#Transakce]].

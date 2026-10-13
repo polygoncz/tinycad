@@ -55,3 +55,5 @@ Pavel nechal volbu na doporučení s ohledem na budoucí flexibilitu, velké zm�
 - **Přesnost undo zajistí `ops`, obecně, ne každý handler zvlášť:** když se po `apply` změní `rollbackIndex`, dispečer inverzi obalí do `batch[inverze, studio.setRollback(původní)]`. Každá budoucí operace je tak vůči baru správná automaticky.
 - **Proč ne možnost 3:** dvojznačnost „nová featura vs. bar na stejném místě“ zůstává i u baru jako id, undo by bar stejně muselo obnovovat explicitně. Regenerace i API Onshape pracují s indexem.
 - Propsáno do [[03-dokument|03]] a [[04-operace-a-historie|04]]. Ověří replay test v [[M03-operace|M3]].
+
+**Doplnění 2026-10-13 ([[M03-operace|M3]]):** podmínka „obalit inverzi, když se bar při `apply` posunul“ nestačí – smazání featury na indexu `r` bar nepohne, ale inverzní vložení na `r` ho posune. Dispečer proto obaluje inverzi, když se změnil `rollbackIndex` **nebo pořadí či počet featur**. Propsáno do [[04-operace-a-historie#Rollback bar]].

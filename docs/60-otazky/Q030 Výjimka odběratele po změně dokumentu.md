@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[04-operace-a-historie]]"
 decide_by: "[[M03-operace]]"
 proposal: "Dispečer zapíše operaci do logu i při výjimce odběratele, výjimku pak pošle dál"
-decision: ""
+decision: "Možnost 1: dispečer porovná stav identitou; při změně zapíše záznam a pak výjimku pošle dál"
 tags:
   - otazka
 created: 2026-10-13
@@ -35,4 +35,4 @@ Návrh: **1**. Pravidlo „log vždy odpovídá dokumentu“ je pro undo a persi
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR.)_
+2026-10-13: **možnost 1.** Dispečer si před `apply` zapamatuje `doc.studio` a `doc.meta`. Když `apply` vyhodí výjimku a obojí je identicky stejné, nic nezapíše a výjimku pošle dál. Když se dokument změnil (výjimku vyhodil odběratel `changed`), zapíše záznam do logu, vyšle `applied` a teprve pak výjimku pošle dál. Invariant: log vždy odpovídá dokumentu. Propsáno do [[04-operace-a-historie#Dispečer]].
