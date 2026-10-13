@@ -20,6 +20,7 @@ describe('core public API', () => {
         'err',
         'mat4',
         'ok',
+        'plane',
         'serveRpc',
         'transfer',
         'vec3',

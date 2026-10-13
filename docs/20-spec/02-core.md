@@ -196,7 +196,7 @@ export const plane = {
   toWorld(p: Plane, v: Vec2): Vec3,                            // origin + x·xDir + y·yDir
   toLocal(p: Plane, w: Vec3): Vec2,                            // kolmý průmět: [(w − origin)·xDir, (w − origin)·yDir]
   intersectRay(p: Plane, ray: { readonly origin: Vec3; readonly direction: Vec3 }): Vec3 | null,  // |direction·normal| < 1e-12 → null; průsečík i „za“ počátkem paprsku
-  isOrthonormal(p: Plane, tolerance?: number): boolean,        // konečná čísla, |xDir| = |normal| = 1, xDir·normal = 0 (výchozí 1e-9)
+  isOrthonormal(p: Plane, tolerance?: number): boolean,        // konečná čísla (i origin), |xDir| = |normal| = 1, xDir·normal = 0 (výchozí 1e-9)
 };
 ```
 

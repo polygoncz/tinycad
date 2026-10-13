@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: doing
 order: 12
 aliases:
   - M12
@@ -30,7 +30,7 @@ specs:
   - "[[11-ui]]"
 depends_on:
   - "[[M11-dalsi-entity]]"
-started: 
+started: 2026-10-14
 finished: 
 tags:
   - milnik
@@ -49,7 +49,7 @@ updated: 2026-10-14
 
 ## Úkoly
 
-- [ ] Ú1 `core`: rovina a 2D vektory (`Vec2`, `Plane`, `plane`)
+- [x] Ú1 `core`: rovina a 2D vektory (`Vec2`, `Plane`, `plane`)
 - [ ] Ú2 `document`, `ops`, `interaction`, `ui`: počáteční roviny, `PlaneRef`, `SketchId`, druhy parametrů `planes` a `data`
 - [ ] Ú3 `sketch` (nový modul): model skici, kontrola dat, pomůcky editace, oblasti, port řešiče, `FakeSolver`; hranice modulů
 - [ ] Ú4 `kernel`, `kernel-occt`, `regen`: `SketchOps.makeFace`
