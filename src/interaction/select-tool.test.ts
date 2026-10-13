@@ -92,6 +92,10 @@ describe('SELECT_TOOL', () => {
     expect(CLICK_TOLERANCE_PX).toBe(4);
   });
 
+  it('its label is the translation key tool.select (ADR 0014)', () => {
+    expect(SELECT_TOOL.label).toBe('tool.select');
+  });
+
   it('creates a new tool every time', () => {
     expect(SELECT_TOOL.create()).not.toBe(SELECT_TOOL.create());
   });

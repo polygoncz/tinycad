@@ -199,6 +199,16 @@ Jeden úkol, protože změny navazují přes vrstvy (typy z `interaction` potře
 #### Ú12 Ověření a revize (hlavní sezení)
 Projít akceptační kritéria, ověřit [[Q010 Zrušení probíhající operace jádra|Q010]] rychlou změnou hodnoty v prohlížeči, spustit `architecture-reviewer`, propsat odchylky do specifikací.
 
+### Po uzavření: oprava Safari (2026-10-13)
+
+V Safari se v dev režimu nespustil worker jádra: `using` z `kernel-occt` šel do prohlížeče nepřeložený (Safari ho nezná) a UI ukázalo zavádějící „jádro opakovaně spadlo“. Opraveno `oxc.target` ve `vite.config.ts`. Navazující úkol:
+
+#### Ú13 Nespuštěné jádro, Safari v e2e, drobnosti z konzole
+- **Soubory:** `src/app/kernel-supervisor.ts`, `session.ts` + testy; `src/ui/components/TitleBar.vue`, `src/ui/i18n/cs.ts`, `en.ts`; `src/interaction/select-tool.ts` (+ test); `playwright.config.ts`.
+- **Kontrakt:** [[11-ui#Kompoziční kořen (app)]] – stav `unavailable` a `AppSession.kernelError`; jádro, které naběhne po `dispose`, se uvolní bez `onReady` (dnes `Viewport used after dispose`). `SELECT_TOOL.label` = klíč `tool.select` s překladem. [[13-testovani]] – e2e i ve WebKitu (projekt `webkit` vedle `chrome`).
+- **Testy:** supervisor: selhaný start → `unavailable` a text chyby, ne `failed`; start doběhne po `dispose` → jádro uvolněno, `onReady` se nevolá. Slovníky obsahují `tool.select`. `npm run test:e2e` projde v obou prohlížečích.
+- **Hotovo když:** `npm run check` a `npm run test:e2e` projdou.
+
 ## Akceptační kritéria
 
 - Celá cesta *klik → operace → log → regenerace ve workeru → vykreslení → undo* funguje v prohlížeči.

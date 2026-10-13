@@ -1,21 +1,28 @@
 // Kernel supervisor (spec 11, "Restart jádra"; Q055, Q049): owns the current geometry kernel and
 // its Regenerator. A kernel that ends 'disconnected' (WASM trap, crashed worker) is dropped with
 // its Regenerator, which is dead from then on, and a new pair is started. A second crash within
-// RESTART_WINDOW_MS gives up ('failed'), so crashes do not cycle.
+// RESTART_WINDOW_MS gives up ('failed'), so crashes do not cycle. A kernel that does not start at
+// all (the worker or the WASM fails to load, OCCT fails to initialise) is 'unavailable', with the
+// text of its error; a kernel that starts only after dispose is released and never reported ready.
 
 import { ObservableValue } from '@/core';
 import type { Disposable, Observable } from '@/core';
 import type { GeometryKernel } from '@/kernel';
 import type { Regenerator } from '@/regen';
 
-export type KernelUiState = 'starting' | 'ready' | 'restarting' | 'failed';
+export type KernelUiState = 'starting' | 'ready' | 'restarting' | 'failed' | 'unavailable';
 
 /** A crash this soon after the previous one is not restarted (spec 11). */
 export const RESTART_WINDOW_MS = 10_000;
 
 export interface KernelSupervisor extends Disposable {
   readonly state: Observable<KernelUiState>;
-  /** The Regenerator of the live kernel; null while starting, restarting, failed or disposed. */
+  /** Text of the error of a kernel that failed to start ('unavailable'); null otherwise. */
+  readonly error: Observable<string | null>;
+  /**
+   * The Regenerator of the live kernel; null while starting, restarting, failed, unavailable or
+   * disposed.
+   */
   regenerator(): Regenerator | null;
   /**
    * The Regenerator rejected with RpcError 'disconnected': its kernel is gone. The loss of a
@@ -36,10 +43,11 @@ export function createKernelSupervisor(deps: {
   now: () => number;
   /** A new kernel is ready (start or restart): app resets the viewport and regenerates. */
   onReady: (kernel: GeometryKernel) => void;
-  /** A kernel failed to start. */
+  /** A kernel failed to start (also a restart): the supervisor is 'unavailable' from then on. */
   onError: (error: unknown) => void;
 }): KernelSupervisor {
   const state = new ObservableValue<KernelUiState>('starting');
+  const error = new ObservableValue<string | null>(null);
   let live: Live | null = null;
   let lastCrashAt: number | undefined;
   let disposed = false;
@@ -50,7 +58,8 @@ export function createKernelSupervisor(deps: {
       kernel = await deps.createKernel();
     } catch (e) {
       if (disposed) return;
-      state.set('failed');
+      error.set(errorText(e));
+      state.set('unavailable');
       deps.onError(e);
       return;
     }
@@ -74,6 +83,7 @@ export function createKernelSupervisor(deps: {
 
   return {
     state: state.asObservable(),
+    error: error.asObservable(),
     regenerator: () => live?.regenerator ?? null,
     lost(regenerator) {
       if (disposed || live?.regenerator !== regenerator) return;
@@ -94,4 +104,8 @@ export function createKernelSupervisor(deps: {
       drop();
     },
   };
+}
+
+function errorText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }

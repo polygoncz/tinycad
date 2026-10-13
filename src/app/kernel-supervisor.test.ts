@@ -3,7 +3,8 @@ import type { GeometryKernel } from '@/kernel';
 import type { Regenerator } from '@/regen';
 import { createKernelSupervisor, RESTART_WINDOW_MS } from './kernel-supervisor';
 import type { KernelUiState } from './kernel-supervisor';
-import { aKernelFactory, settle } from './testing';
+import { aKernelFactory, createCrashableKernel, settle } from './testing';
+import type { CrashableKernel } from './testing';
 
 /** A stand-in Regenerator that remembers its kernel; the supervisor never runs it. */
 function aRegenerator(kernel: GeometryKernel): Regenerator & { kernel: GeometryKernel } {
@@ -53,7 +54,7 @@ describe('KernelSupervisor', () => {
     expect(regenerator).not.toBeNull();
   });
 
-  it('a failed start → failed, reported', async () => {
+  it('a failed start → unavailable with the text of the error, not failed; reported', async () => {
     const factory = aKernelFactory();
     factory.failNext(new Error('no wasm'));
     const onError = vi.fn();
@@ -64,8 +65,10 @@ describe('KernelSupervisor', () => {
       onReady: vi.fn(),
       onError,
     });
+    expect(supervisor.error.get()).toBeNull();
     await settle();
-    expect(supervisor.state.get()).toBe('failed');
+    expect(supervisor.state.get()).toBe('unavailable');
+    expect(supervisor.error.get()).toBe('no wasm');
     expect(supervisor.regenerator()).toBeNull();
     expect(onError).toHaveBeenCalledWith(new Error('no wasm'));
   });
@@ -139,7 +142,7 @@ describe('KernelSupervisor', () => {
     expect(factory.kernels).toHaveLength(2);
   });
 
-  it('a failed restart → failed, reported', async () => {
+  it('a failed restart → unavailable with the text of the error, reported', async () => {
     const { factory, supervisor, onError } = aSupervisor();
     await settle();
     const first = supervisor.regenerator();
@@ -147,8 +150,67 @@ describe('KernelSupervisor', () => {
     factory.failNext(new Error('again'));
     supervisor.lost(first);
     await settle();
-    expect(supervisor.state.get()).toBe('failed');
+    expect(supervisor.state.get()).toBe('unavailable');
+    expect(supervisor.error.get()).toBe('again');
     expect(onError).toHaveBeenCalledWith(new Error('again'));
+  });
+
+  it('a crash gives no error text: failed, error stays null', async () => {
+    const { supervisor } = aSupervisor();
+    await settle();
+    const first = supervisor.regenerator();
+    if (first === null) throw new Error('not ready');
+    supervisor.lost(first);
+    await settle();
+    const second = supervisor.regenerator();
+    if (second === null) throw new Error('not ready');
+    supervisor.lost(second);
+    expect(supervisor.state.get()).toBe('failed');
+    expect(supervisor.error.get()).toBeNull();
+  });
+
+  it('a start that finishes after dispose: the kernel is released, onReady is not called', async () => {
+    let finish: (kernel: CrashableKernel) => void = () => undefined;
+    const onReady = vi.fn();
+    const supervisor = createKernelSupervisor({
+      createKernel: () =>
+        new Promise<CrashableKernel>((resolve) => {
+          finish = resolve;
+        }),
+      createRegenerator: aRegenerator,
+      now: () => 0,
+      onReady,
+      onError: vi.fn(),
+    });
+    supervisor.dispose();
+    const kernel = createCrashableKernel();
+    finish(kernel);
+    await settle();
+    expect(kernel.disposed).toBe(true);
+    expect(onReady).not.toHaveBeenCalled();
+    expect(supervisor.regenerator()).toBeNull();
+    expect(supervisor.state.get()).toBe('starting');
+  });
+
+  it('a start that fails after dispose changes nothing and reports nothing', async () => {
+    let fail: (error: Error) => void = () => undefined;
+    const onError = vi.fn();
+    const supervisor = createKernelSupervisor({
+      createKernel: () =>
+        new Promise<CrashableKernel>((_, reject) => {
+          fail = reject;
+        }),
+      createRegenerator: aRegenerator,
+      now: () => 0,
+      onReady: vi.fn(),
+      onError,
+    });
+    supervisor.dispose();
+    fail(new Error('late'));
+    await settle();
+    expect(supervisor.state.get()).toBe('starting');
+    expect(supervisor.error.get()).toBeNull();
+    expect(onError).not.toHaveBeenCalled();
   });
 
   it('dispose releases the kernel; a kernel that arrives after dispose is released at once', async () => {

@@ -20,6 +20,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'document.untitled': 'Bez názvu',
   'feature.edit': 'Upravit featuru',
   'browser.body': 'Těleso {n}',
+  'tool.select': 'Vybrat',
 
   // Labels of the built-in actions (app); feature.edit is above, it is a transaction label too.
   undo: 'Zpět',
@@ -73,6 +74,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'titleBar.persistence.error': 'Uložení selhalo',
   'titleBar.kernel.restarting': 'Geometrické jádro se restartuje…',
   'titleBar.kernel.failed': 'Geometrické jádro opakovaně spadlo.',
+  'titleBar.kernel.unavailable': 'Geometrické jádro se nepodařilo spustit.',
   'titleBar.kernel.reload': 'Obnovit stránku',
   'titleBar.language': 'Jazyk: {language}',
   'titleBar.locale.cs': 'čeština',

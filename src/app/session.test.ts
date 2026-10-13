@@ -12,8 +12,8 @@ import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
 import { createAppSession } from './index';
 import { RESTART_WINDOW_MS } from './kernel-supervisor';
 import type { AppSession, AppSessionDeps, KernelUiState } from './index';
-import { aKernelFactory, FakeAppViewport, settle } from './testing';
-import type { KernelFactory } from './testing';
+import { aKernelFactory, createCrashableKernel, FakeAppViewport, settle } from './testing';
+import type { CrashableKernel, KernelFactory } from './testing';
 
 // Branded ids are created by a cast at one place in tests.
 const DOC = 'doc1' as DocumentId;
@@ -276,6 +276,23 @@ describe('createAppSession – kernel restart', () => {
     await settle();
     expect(session.kernel.get()).toBe('failed');
     expect(kernels.kernels).toHaveLength(2);
+  });
+  it('a kernel that fails to start → unavailable, kernelError carries its text', async () => {
+    const kernels = aKernelFactory();
+    kernels.failNext(new Error('OCCT worker failed: SyntaxError'));
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { session, viewport } = await open({ kernels });
+    expect(session.kernel.get()).toBe('unavailable');
+    expect(session.kernelError.get()).toBe('OCCT worker failed: SyntaxError');
+    expect(viewport.resets).toHaveLength(0);
+    expect(errors).toHaveBeenCalled();
+    errors.mockRestore();
+  });
+
+  it('kernelError is null while the kernel runs', async () => {
+    const { session } = await open();
+    expect(session.kernel.get()).toBe('ready');
+    expect(session.kernelError.get()).toBeNull();
   });
 });
 
@@ -540,6 +557,24 @@ describe('createAppSession – dispose', () => {
     await session.close();
     expect(counting.appends()).toBe(0);
     expect(kernels.last.disposed).toBe(true);
+  });
+
+  it('a kernel that becomes ready after dispose is released, the viewport is not used', async () => {
+    let finish: (kernel: CrashableKernel) => void = () => undefined;
+    const { session, viewport } = await open({
+      createKernel: () =>
+        new Promise<CrashableKernel>((resolve) => {
+          finish = resolve;
+        }),
+    });
+    expect(session.kernel.get()).toBe('starting');
+    session.dispose();
+    const kernel = createCrashableKernel();
+    finish(kernel);
+    await settle();
+    expect(kernel.disposed).toBe(true);
+    expect(viewport.resets).toHaveLength(0);
+    expect(viewport.syncs).toHaveLength(0);
   });
 
   it('a second dispose does nothing', async () => {

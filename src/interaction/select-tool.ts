@@ -12,7 +12,8 @@ export const CLICK_TOLERANCE_PX = 4;
 
 export const SELECT_TOOL: ToolDescriptor = Object.freeze({
   id: 'select',
-  label: 'Select',
+  // A translation key (ADR 0014): ui translates labels of tools.
+  label: 'tool.select',
   icon: 'select',
   group: 'select',
   create: createSelectTool,

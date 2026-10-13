@@ -23,8 +23,9 @@ const ISSUE_CODES = [
   'param.invalidRef',
 ];
 
-// Keys the domain and interaction hand to ui (ADR 0014): transaction label, body row name.
-const DOMAIN_KEYS = ['feature.edit', 'browser.body'];
+// Keys the domain and interaction hand to ui (ADR 0014): transaction label, body row name,
+// label of the select tool (SELECT_TOOL.label).
+const DOMAIN_KEYS = ['feature.edit', 'browser.body', 'tool.select'];
 
 // Labels of the built-in actions of app (M10, Ú7b) and the UI-only rename item of the menu.
 const ACTION_KEYS = [
@@ -42,11 +43,15 @@ const ACTION_KEYS = [
   'timeline.toEnd',
 ];
 
-// Keys the components build at run time: save states, kernel states and toolbar groups.
+// Keys the components build at run time (save states, locales, toolbar groups) and the kernel
+// notices of the title bar.
 const COMPOSED_KEYS = [
   'titleBar.persistence.saved',
   'titleBar.persistence.pending',
   'titleBar.persistence.error',
+  'titleBar.kernel.restarting',
+  'titleBar.kernel.failed',
+  'titleBar.kernel.unavailable',
   'titleBar.locale.cs',
   'titleBar.locale.en',
   'toolbar.group.history',

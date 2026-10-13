@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // The title bar (spec 11, "Komponenty"): the way to the document list, the document name with a
 // dot for the save state (green saved, orange pending, red error), the read-only notice (Q038),
-// the kernel restart notice (Q055) and the switches of language and theme. Only bindings.
+// the kernel notices (restart and crash, Q055; a kernel that did not start, with its error in the
+// tooltip) and the switches of language and theme. Only bindings.
 import { useI18n } from 'vue-i18n';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
@@ -12,6 +13,7 @@ const { t } = useI18n();
 
 const persistence = useObservable(session.persistence);
 const kernel = useObservable(session.kernel);
+const kernelError = useObservable(session.kernelError);
 // No rename of documents in M10, so the name is read once (as in the Browser).
 const documentName = session.doc.meta.name;
 
@@ -55,6 +57,17 @@ function reload(): void {
     </span>
     <span v-else-if="kernel === 'failed'" class="kernel failed" role="alert">
       <i class="ti ti-alert-triangle" aria-hidden="true" /> {{ t('titleBar.kernel.failed') }}
+      <button type="button" class="reload" @click="reload">
+        {{ t('titleBar.kernel.reload') }}
+      </button>
+    </span>
+    <span
+      v-else-if="kernel === 'unavailable'"
+      class="kernel failed"
+      role="alert"
+      :title="kernelError ?? undefined"
+    >
+      <i class="ti ti-alert-triangle" aria-hidden="true" /> {{ t('titleBar.kernel.unavailable') }}
       <button type="button" class="reload" @click="reload">
         {{ t('titleBar.kernel.reload') }}
       </button>

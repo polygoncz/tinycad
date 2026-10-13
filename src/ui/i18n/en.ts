@@ -19,6 +19,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'document.untitled': 'Untitled',
   'feature.edit': 'Edit feature',
   'browser.body': 'Body {n}',
+  'tool.select': 'Select',
 
   // Labels of the built-in actions (app); feature.edit is above, it is a transaction label too.
   undo: 'Undo',
@@ -72,6 +73,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'titleBar.persistence.error': 'Saving failed',
   'titleBar.kernel.restarting': 'The geometry kernel is restarting…',
   'titleBar.kernel.failed': 'The geometry kernel crashed repeatedly.',
+  'titleBar.kernel.unavailable': 'The geometry kernel could not be started.',
   'titleBar.kernel.reload': 'Reload page',
   'titleBar.language': 'Language: {language}',
   'titleBar.locale.cs': 'Czech',

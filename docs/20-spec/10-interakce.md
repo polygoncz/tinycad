@@ -391,6 +391,7 @@ export interface BrowserModel {
 Pravidla vestavěných akcí jsou prezentační logika, proto patří do `interaction` (revize M10, [[0010-prezentacni-model|ADR 0010]]); `app` je jen zaregistruje.
 
 ```ts
+// SELECT_TOOL.label je klíč překladu 'tool.select' (ADR 0014).
 export const ACTION_IDS = {
   undo: 'undo', redo: 'redo', fitAll: 'view.fitAll',
   featureEdit: 'feature.edit', featureRename: 'feature.rename', featureSuppress: 'feature.suppress',

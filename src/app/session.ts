@@ -126,6 +126,8 @@ export interface AppSession extends Disposable {
   readonly regen: Observable<RegenUiState>;
   /** Q055: restart after a kernel crash. */
   readonly kernel: Observable<KernelUiState>;
+  /** Why the kernel did not start ('unavailable'), for the tooltip; null otherwise. */
+  readonly kernelError: Observable<string | null>;
   /** Always 'saved' when read-only. */
   readonly persistence: Observable<PersistenceStatus>;
   readonly selection: SelectionModel;
@@ -371,6 +373,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     toolActionId,
     regen: regenUi.asObservable(),
     kernel: supervisor.state,
+    kernelError: supervisor.error,
     persistence: persistenceStatus.asObservable(),
     selection,
     featureTree,
