@@ -56,8 +56,6 @@ Nastavení TS ve strict módu a co jednotlivé přepínače hlídají; jak vynut
 
 ## Retrospektiva
 
-> [!note] Návrh od Clauda – Pavle, doplň nebo uprav.
-
 **Co bylo jinak, než se čekalo**
 - Milník se rozrostl o architektonické rozhodnutí: požadavek na přenositelnost vedl k [[0009-platformove-nezavisla-domena|ADR 0009]] (tři prstence, `ViewportPort`) a [[0010-prezentacni-model|ADR 0010]]. Při revizi specifikací se našly dvě skryté závislosti na platformě: `interaction → render` a `KeyboardEvent` v `ActionRegistry`. Na papíře je nikdo nehlídal.
 - Nejnovější verze nástrojů do sebe nezapadly: TypeScript 7 (nativní kompilátor) zatím nepodporuje `typescript-eslint`, proto zůstáváme na `~6.0`. ESLint 10 načte konfiguraci v TS jen s knihovnou `jiti`.
