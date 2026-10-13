@@ -42,6 +42,8 @@ Pravidla z [[Konvence vaultu]] jsou rozdělená takto:
 - **Skilly:** `/milnik` (start a konec milníku podle [[Roadmapa|Roadmapy]]), `/zaznam` (otázka, ADR, pojem ze šablony), `/denik` a `obsidian-format` (syntaxe).
 - **Od [[M00-zaklad-projektu|M0]]:** `lint:vault` v `npm run check`, prettier a eslint jako hook (`scripts/code-format.mjs`), subagent `architecture-reviewer` na kontrolu architektury proti [[01-architektura]] a [[0011-programovani-proti-rozhranim|ADR 0011]]. Co jde zkontrolovat strojově (zakázaný `export class` v `index.ts`), hlídá ESLint; úsudek (široká rozhraní, logika ve `.vue`) subagent.
 
+- **Od [[M03-operace|M3]] (pokus):** subagent `implementer` s modelem Sonnet implementuje úkoly z Implementačního plánu milníku. Hlavní sezení (Opus) dělá specifikaci, plán a kontrolu. Rozdělení podle schopností modelu: úsudek a návrh tam, kde se rozhoduje, mechanický převod přesné spec na kód levnějším modelem. Subagent nesmí rozhodovat návrh, jinak by se ztratilo pravidlo „nerozhoduj potichu“.
+
 Souvisí s [[Second brain v Obsidianu]]: vault je zdroj pravdy a nástroje hlídají, aby zůstal konzistentní.
 
 ## Zdroje

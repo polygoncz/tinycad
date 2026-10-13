@@ -25,6 +25,17 @@ updated: {{date:YYYY-MM-DD}}
 
 - [ ] 
 
+## Implementační plán
+
+_(Volitelné, vyplní hlavní sezení před implementací. Jeden úkol = jedno spuštění subagenta `implementer`.)_
+
+### 1. Název úkolu
+
+- **Soubory:** 
+- **Kontrakt:** odkaz na sekci spec, případně upřesnění.
+- **Testy:** 
+- **Hotovo když:** testy výše projdou a `npm run check` je zelený.
+
 ## Akceptační kritéria
 
 - 

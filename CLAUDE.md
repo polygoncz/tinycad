@@ -22,6 +22,12 @@ Výuková webová CAD aplikace (Onshape-like Part Studio). Autor: Pavel. Pavel z
 7. Na konci každého sezení zapiš nebo doplň dnešní záznam v `docs/80-denik/RRRR-MM-DD.md` a aktualizuj `updated` u změněných poznámek.
 8. Nic ve vaultu nemaž – nepotřebné přesuň do `docs/90-archiv/`.
 
+### Rozdělení specifikace a implementace (pokus od M3)
+
+- **Hlavní sezení (s Pavlem):** rozhodnout otázky, dotáhnout specifikaci na úroveň kontraktu (signatury, krajní případy, invarianty, seznam testů) a sepsat **Implementační plán** v poznámce milníku (úkoly se soubory, kontraktem, testy a „hotovo když“).
+- **Implementace:** každý úkol plánu zvlášť subagent `implementer` (Sonnet, TDD, `npm run check`). Návrh nerozhoduje, nejasnosti vrací jako otázky.
+- **Po každém úkolu:** hlavní sezení zkontroluje kód proti specifikaci, vysvětlí Pavlovi návrhová místa, otázky implementátora převede na otázky ve vaultu nebo upřesnění spec, zaškrtne úkol. Na konci milníku `architecture-reviewer`.
+
 ## Konvence kódu
 
 - **Kód, identifikátory, komentáře v kódu, commit zprávy:** anglicky. **Vault:** česky.
@@ -37,6 +43,7 @@ Výuková webová CAD aplikace (Onshape-like Part Studio). Autor: Pavel. Pavel z
 
 - Skilly: `/milnik start|konec Mnn`, `/zaznam otazka|adr|pojem|poznatek <název>`, `/denik` (konec sezení). Skill `obsidian-format` (syntaxe vaultu) se načítá automaticky.
 - Subagent `architecture-reviewer` (`.claude/agents/`): revize kódu proti ADR 0008–0011 a spec 01, hlásí jen to, co nechytí `npm run check`. Spouštět na konci milníku před `/milnik konec`.
+- Subagent `implementer` (`.claude/agents/`, model Sonnet): implementuje jeden úkol z Implementačního plánu milníku podle spec, metodou TDD; vault nemění, necommituje, nejasnosti vrací jako otázky.
 - Hooky: po úpravě poznámky v `docs/` se nastaví `updated` na dnešek a zkontroluje se frontmatter a wikilinky (`scripts/vault-lint.mjs`). Mazání v `docs/` a přepisování `docs/01-inbox/` blokuje `scripts/claude-guard.mjs`. Když hook nahlásí chybu, oprav poznámku a hook neobcházej.
 
 ## Užitečné příkazy
