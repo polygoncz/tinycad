@@ -3,22 +3,36 @@ import type { ParamIssue, ParamSchema, ParamSpec } from './schema';
 
 // Generic checks driven by ParamSpec. A FeatureSchema calls this from validate()
 // and adds its own rules. Missing and unexpected params are both issues (Q028).
+// Issues carry codes, not texts (ADR 0014); the list of codes is in spec 03.
 
-type Check = (value: unknown) => string | undefined;
+/** An issue without the param key; the caller adds it. */
+type Problem = Omit<ParamIssue, 'param'>;
+type Check = (value: unknown) => Problem | undefined;
+
+/** The numeric bounds of a length/angle/number spec. */
+interface NumberRules {
+  readonly min?: number;
+  readonly max?: number;
+  readonly exclusiveMin?: boolean;
+  readonly exclusiveMax?: boolean;
+  readonly integer?: boolean;
+}
+
+const WRONG_TYPE: Problem = { code: 'param.wrongType' };
 
 export function validateAgainstSchema(schema: ParamSchema, params: unknown): readonly ParamIssue[] {
-  if (!isRecord(params)) return [{ param: '', message: 'Params must be an object' }];
+  if (!isRecord(params)) return [{ param: '', ...WRONG_TYPE }];
   const issues: ParamIssue[] = [];
   for (const [key, spec] of Object.entries(schema)) {
     if (!Object.hasOwn(params, key)) {
-      issues.push({ param: key, message: 'Missing' });
+      issues.push({ param: key, code: 'param.missing' });
       continue;
     }
-    const message = checkParam(spec)(params[key]);
-    if (message !== undefined) issues.push({ param: key, message });
+    const problem = checkParam(spec)(params[key]);
+    if (problem !== undefined) issues.push({ param: key, ...problem });
   }
   for (const key of Object.keys(params)) {
-    if (!Object.hasOwn(schema, key)) issues.push({ param: key, message: 'Unexpected param' });
+    if (!Object.hasOwn(schema, key)) issues.push({ param: key, code: 'param.unexpected' });
   }
   return issues;
 }
@@ -27,21 +41,16 @@ function checkParam(spec: ParamSpec): Check {
   switch (spec.kind) {
     case 'length':
     case 'angle':
-      return (v) => checkNumber(v, spec.min, spec.max, false);
     case 'number':
-      return (v) => checkNumber(v, spec.min, spec.max, spec.integer ?? false);
+      return (v) => checkNumber(v, spec);
     case 'boolean':
-      return (v) => (typeof v === 'boolean' ? undefined : 'Must be true or false');
+      return (v) => (typeof v === 'boolean' ? undefined : WRONG_TYPE);
     case 'enum':
       return (v) =>
-        spec.options.some((o) => o.value === v)
-          ? undefined
-          : `Must be one of ${spec.options.map((o) => o.value).join(', ')}`;
+        spec.options.some((o) => o.value === v) ? undefined : { code: 'param.unknownOption' };
     case 'point':
       return (v) =>
-        Array.isArray(v) && v.length === 3 && v.every(isFiniteNumber)
-          ? undefined
-          : 'Must be a point [x, y, z]';
+        Array.isArray(v) && v.length === 3 && v.every(isFiniteNumber) ? undefined : WRONG_TYPE;
     case 'bodies':
       return checkRefs(spec.min, spec.max, 'body', (r) => typeof r.body === 'string');
     case 'topo':
@@ -64,16 +73,20 @@ function checkParam(spec: ParamSpec): Check {
   }
 }
 
-function checkNumber(
-  v: unknown,
-  min: number | undefined,
-  max: number | undefined,
-  integer: boolean,
-) {
-  if (!isFiniteNumber(v)) return 'Must be a finite number';
-  if (integer && !Number.isInteger(v)) return 'Must be a whole number';
-  if (min !== undefined && v < min) return `Must be at least ${String(min)}`;
-  if (max !== undefined && v > max) return `Must be at most ${String(max)}`;
+function checkNumber(v: unknown, rules: NumberRules): Problem | undefined {
+  if (!isFiniteNumber(v)) return WRONG_TYPE;
+  if (rules.integer === true && !Number.isInteger(v)) return { code: 'param.notInteger' };
+  const { min, max } = rules;
+  if (min !== undefined) {
+    if (rules.exclusiveMin === true) {
+      if (v <= min) return { code: 'param.atOrBelowMin', params: { min } };
+    } else if (v < min) return { code: 'param.belowMin', params: { min } };
+  }
+  if (max !== undefined) {
+    if (rules.exclusiveMax === true) {
+      if (v >= max) return { code: 'param.atOrAboveMax', params: { max } };
+    } else if (v > max) return { code: 'param.aboveMax', params: { max } };
+  }
   return undefined;
 }
 
@@ -84,11 +97,11 @@ function checkRefs(
   hasFields: (ref: Record<string, unknown>) => boolean,
 ): Check {
   return (v) => {
-    if (!Array.isArray(v)) return 'Must be a list of references';
+    if (!Array.isArray(v)) return WRONG_TYPE;
     const index = v.findIndex((r) => !isRecord(r) || r.kind !== kind || !hasFields(r));
-    if (index !== -1) return `Reference ${String(index)} is not a valid '${kind}' reference`;
-    if (min !== undefined && v.length < min) return `Select at least ${String(min)}`;
-    if (max !== undefined && v.length > max) return `Select at most ${String(max)}`;
+    if (index !== -1) return { code: 'param.invalidRef', params: { index } };
+    if (min !== undefined && v.length < min) return { code: 'param.tooFewRefs', params: { min } };
+    if (max !== undefined && v.length > max) return { code: 'param.tooManyRefs', params: { max } };
     return undefined;
   };
 }

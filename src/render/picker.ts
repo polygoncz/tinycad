@@ -26,7 +26,7 @@ const EDGE_TOLERANCE_PX = 6;
 const POINT_SEGMENT_PX = 1e-3;
 
 export interface PickerOptions {
-  /** The shown bodies (BodyLayerInternal.views). */
+  /** The shown bodies (BodyLayerInternal.views); the hidden ones are skipped. */
   readonly views: () => Iterable<BodyView>;
   /** Union of their bounds, for the occlusion tolerance. */
   readonly bounds: () => BoundingBox | null;
@@ -163,7 +163,8 @@ export function createPicker(options: PickerOptions): Picker {
   return {
     pick(camera, x, y, width, height) {
       if (width <= 0 || height <= 0) return null;
-      const views = [...options.views()];
+      // A hidden body (Q071) is neither picked nor hides what is behind it.
+      const views = [...options.views()].filter((view) => view.object.visible);
       if (views.length === 0) return null;
       camera.updateMatrixWorld();
       for (const view of views) view.object.updateMatrixWorld();

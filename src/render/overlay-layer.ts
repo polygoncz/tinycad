@@ -6,9 +6,8 @@ import * as THREE from 'three';
 import type { Disposable } from '@/core';
 import type { OverlayPort, OverlayShape, OverlayStyle } from '@/interaction';
 import { flattenPoints, validateOverlayShapes } from './overlay-shapes';
+import type { ScenePalette } from './palette';
 
-const PREVIEW_COLOR = 0x2563eb;
-const CONSTRUCTION_COLOR = 0x6b7280;
 /** Dash and gap of construction lines in mm (world units). */
 const DASH_SIZE = 2;
 const GAP_SIZE = 1.5;
@@ -21,10 +20,13 @@ const RENDER_ORDER = 2;
 export interface OverlayLayerInternal extends OverlayPort, Disposable {
   /** Parent of every overlay object; the viewport puts it into the scene. */
   readonly group: THREE.Group;
+  /** Recolours both styles in place (Q072); the caller requests the render. */
+  setPalette(palette: ScenePalette): void;
 }
 
 export interface OverlayLayerOptions {
   readonly requestRender: () => void;
+  readonly palette: ScenePalette;
 }
 
 /** Objects under one id with their geometries. */
@@ -34,21 +36,21 @@ interface Entry {
 }
 
 export function createOverlayLayer(options: OverlayLayerOptions): OverlayLayerInternal {
-  const { requestRender } = options;
+  const { requestRender, palette } = options;
   const group = new THREE.Group();
   const lineMaterials: Record<OverlayStyle, THREE.LineBasicMaterial> = {
-    preview: new THREE.LineBasicMaterial({ color: PREVIEW_COLOR, depthTest: true }),
+    preview: new THREE.LineBasicMaterial({ color: palette.preview, depthTest: true }),
     // Dashes need line distances on the geometry (computeLineDistances below).
     construction: new THREE.LineDashedMaterial({
-      color: CONSTRUCTION_COLOR,
+      color: palette.construction,
       dashSize: DASH_SIZE,
       gapSize: GAP_SIZE,
       depthTest: true,
     }),
   };
   const pointMaterials: Record<OverlayStyle, THREE.PointsMaterial> = {
-    preview: createPointMaterial(PREVIEW_COLOR),
-    construction: createPointMaterial(CONSTRUCTION_COLOR),
+    preview: createPointMaterial(palette.preview),
+    construction: createPointMaterial(palette.construction),
   };
   const entries = new Map<string, Entry>();
 
@@ -95,6 +97,12 @@ export function createOverlayLayer(options: OverlayLayerOptions): OverlayLayerIn
       if (objects.length > 0) group.add(...objects);
       entries.set(id, { objects, geometries: built.map(({ geometry }) => geometry) });
       requestRender();
+    },
+    setPalette(next: ScenePalette): void {
+      for (const style of ['preview', 'construction'] as const) {
+        lineMaterials[style].color.setHex(next[style]);
+        pointMaterials[style].color.setHex(next[style]);
+      }
     },
     remove(id) {
       if (drop(id)) requestRender();

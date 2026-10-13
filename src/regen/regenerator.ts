@@ -278,7 +278,7 @@ function isDisconnected(e: unknown): e is RpcError {
   return e instanceof RpcError && e.code === 'disconnected';
 }
 
-/** 'param: message', or the message alone for an issue of the params as a whole. */
+/** 'param: code', or the code alone for an issue of the params as a whole (codes since ADR 0014). */
 function formatIssue(issue: ParamIssue): string {
-  return issue.param === '' ? issue.message : `${issue.param}: ${issue.message}`;
+  return issue.param === '' ? issue.code : `${issue.param}: ${issue.code}`;
 }

@@ -94,13 +94,17 @@ export interface KeyMods { readonly shift: boolean; readonly alt: boolean; reado
 export type FeatureHealth =
   | { kind: 'ok' }
   | { kind: 'warning'; message: string }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string; issues?: readonly ParamIssue[] };   // issues = neplatné parametry (INVALID_PARAMS), překládá ui
+
+export interface RegenBody { readonly body: BodyId; readonly feature: FeatureId }
 
 export interface RegenSnapshot {
   /** Roste o 1 s každou dokončenou regenerací; 0 = ještě žádná. */
   readonly generation: number;
   /** Featury, které poslední regenerace vyhodnotila (ne potlačené, ne za barem). */
   readonly health: ReadonlyMap<FeatureId, FeatureHealth>;
+  /** Tělesa poslední regenerace v pořadí, v jakém je ukazuje Prohlížeč (M10). */
+  readonly bodies: readonly RegenBody[];
 }
 
 export interface RegenStatusPort {
@@ -110,7 +114,7 @@ export interface RegenStatusPort {
 
 - `health` je `ReadonlyMap`, ale `Map` zmrazit nejde: adaptér v `app` posílá v každém snapshotu **novou** mapu a už ji nemění. `interaction` ji jen čte.
 - Potlačení a pozice za barem port nenese: `interaction` je čte přímo z dokumentu, takže se projeví hned, ne až po regeneraci.
-- V testech port nahrazuje `FakeRegenStatus` (`testing.ts`) s metodou `publish(health)`, která zvýší `generation`.
+- V testech port nahrazuje `FakeRegenStatus` (`testing.ts`) s metodou `publish(health, bodies?)`, která zvýší `generation` (bez `bodies` prázdný seznam). `RegenBody` se exportuje, potřebuje ho adaptér v `app`.
 
 ## Prezentační modely a `Observable`
 
@@ -256,6 +260,7 @@ export interface FeatureEditor {
 
 export function createFeatureEditor(deps: {
   doc: DocumentReader; ops: OperationDispatcher; schemas: RegistryReader<FeatureSchema>; ids: IdGenerator;
+  translate?: (key: string) => string;   // výchozí identita; název nové featury = nextFeatureName(studio, translate(schema.label))
 }): FeatureEditor;
 
 export interface FeatureEditSession {   // vytváří ji jen FeatureEditor
@@ -281,7 +286,7 @@ export interface FieldState {
   readonly name: string;
   readonly spec: ParamSpec;            // kind, label, min/max… – UI podle něj zvolí ovládací prvek
   readonly value: unknown;
-  readonly issue: string | null;       // první ParamIssue s param === name
+  readonly issue: ParamIssue | null;   // první ParamIssue s param === name (kód, překládá ui – ADR 0014)
   readonly active: boolean;            // name === activeRefParam
 }
 ```
@@ -294,7 +299,7 @@ export interface FieldState {
 
 **`edit(featureId)`**
 1. Předpoklady jako u `create`; neznámá featura → výjimka.
-2. `ops.begin('Edit <name>')`. Je-li `rollbackIndex !== index + 1`, `tx.applyTransient(studio.setRollback(index + 1))`: bar je během editace těsně za editovanou featurou, ať byla před barem, nebo za ním. Pozdější featury se nepřehrávají a náhled ukazuje model ve stavu editované featury ([[Q018 Rollback bar při editaci starší featury|Q018]]). Přechodná operace se při `commit` i `cancel` vrátí sama a do logu se nedostane ([[04-operace-a-historie]]).
+2. `ops.begin('feature.edit')` – popisek transakce je klíč překladu ([[0014-preklady-vue-i18n-a-klice|ADR 0014]]), jméno featury do něj nepatří. Je-li `rollbackIndex !== index + 1`, `tx.applyTransient(studio.setRollback(index + 1))`: bar je během editace těsně za editovanou featurou, ať byla před barem, nebo za ním. Pozdější featury se nepřehrávají a náhled ukazuje model ve stavu editované featury ([[Q018 Rollback bar při editaci starší featury|Q018]]). Přechodná operace se při `commit` i `cancel` vrátí sama a do logu se nedostane ([[04-operace-a-historie]]).
 
 **Session**
 - `setParam(name, value)`: `name` musí být klíč `schema.params`, jinak výjimka. Nové `params = { ...params, [name]: value }` → `tx.apply(feature.setParams)`. Hodnota se **nekontroluje** před aplikací: neplatné parametry dokument unese, regenerace featuru označí chybou a `issues` je ukážou. `setParam` se stejnou hodnotou (`Object.is` u primitiv) nic neaplikuje. Selže-li handler, výjimka letí dál a session zůstává otevřená beze změny.
@@ -354,12 +359,9 @@ export function createFeatureTreeModel(deps: {
 [[Prohlížeč]] v UI ([[11-ui#Rozvržení]]) ukazuje *výsledek* modelování: tělesa z poslední regenerace. [[Timeline]] je jen jiné vykreslení `FeatureTreeModel` výše. Návrh (kontrakt upřesní Implementační plán [[M10-ui]]):
 
 ```ts
-// RegenSnapshot (port výše) se rozšíří o seznam těles:
-readonly bodies: readonly { readonly body: BodyId; readonly feature: FeatureId }[];
-
 export interface BrowserBodyRow {
   readonly body: BodyId;
-  readonly name: string;        // „Těleso n“ podle pořadí (klíč překladu + číslo)
+  readonly name: { readonly key: 'browser.body'; readonly n: number };  // „Těleso n“, n od 1 podle pořadí; překládá ui
   readonly feature: FeatureId;  // featura, která těleso vytvořila
   readonly visible: boolean;
   readonly selected: boolean;   // výběr obsahuje { kind: 'body', body }
@@ -374,6 +376,7 @@ export interface BrowserModel {
 }
 ```
 
+- `setVisible` tělesa, které poslední regenerace nezná (zastaralý řádek v UI), nic neudělá. Při změně se nejdřív vyšle `hidden`, pak `bodies`.
 - Viditelnost je **stav pohledu** ([[Q071 Viditelnost těles|Q071]]): neukládá se, nejde přes dispečer ani do undo, po reloadu je vše vidět. Těleso, které po regeneraci zmizí, ze `hidden` vypadne.
 - Do M14 nemají tělesa stabilní identitu, takže skrytí se po změně historie může přenést na jiné těleso se stejným `BodyId`. Vědomé omezení.
 

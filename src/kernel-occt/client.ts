@@ -1,6 +1,6 @@
-import type { RpcClient } from '@/core';
+import type { MessageEndpoint, RpcClient } from '@/core';
 import type { GeometryKernel } from '@/kernel';
-import type { OcctKernelProtocol } from './protocol';
+import { isOcctFatalNotice, type OcctKernelProtocol } from './protocol';
 
 /**
  * GeometryKernel on the main thread that forwards every call to the OCCT worker (spec 06,
@@ -20,4 +20,21 @@ export function createOcctKernelClient(
     release: (handles) => rpc.call('release', handles),
     liveHandleCount: () => rpc.call('liveHandleCount'),
   };
+}
+
+/**
+ * Ends the connection when the worker reports a WASM trap (spec 06, Chyby; Q055): fails all
+ * pending and later calls with 'disconnected' "OCCT crashed: …", then calls `terminate`.
+ * failAll comes first, so its message wins over a failAll inside `terminate`.
+ */
+export function endOnFatal(
+  ep: Pick<MessageEndpoint, 'addEventListener'>,
+  rpc: Pick<RpcClient<OcctKernelProtocol>, 'failAll'>,
+  terminate: () => void,
+): void {
+  ep.addEventListener('message', (e) => {
+    if (!isOcctFatalNotice(e.data)) return;
+    rpc.failAll(`OCCT crashed: ${e.data.message}`);
+    terminate();
+  });
 }

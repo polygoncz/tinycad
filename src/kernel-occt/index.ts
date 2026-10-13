@@ -2,7 +2,7 @@
 import { createRpcClient } from '@/core';
 import type { Disposable } from '@/core';
 import type { GeometryKernel } from '@/kernel';
-import { createOcctKernelClient } from './client';
+import { createOcctKernelClient, endOnFatal } from './client';
 import type { OcctKernelProtocol } from './protocol';
 
 /**
@@ -12,7 +12,8 @@ import type { OcctKernelProtocol } from './protocol';
  * - the worker never starts (script not found, error in the script) → onerror → failAll →
  *   'disconnected'.
  * Later, a crashed worker or an undecodable message fails all pending and later calls with
- * 'disconnected' (Q037). dispose() does the same and terminates the worker.
+ * 'disconnected' (Q037). So does a WASM trap the worker reports ('OCCT crashed: …', Q055),
+ * and the worker is terminated. dispose() does the same and terminates the worker.
  */
 export async function createOcctKernel(): Promise<GeometryKernel & Disposable> {
   const worker = new Worker(new URL('./occt.worker.ts', import.meta.url), { type: 'module' });
@@ -27,6 +28,8 @@ export async function createOcctKernel(): Promise<GeometryKernel & Disposable> {
     rpc.dispose();
     worker.terminate();
   };
+  // A WASM trap is fatal (spec 06, Chyby; Q055): the worker reports it, the kernel is dead.
+  endOnFatal(worker, rpc, dispose);
 
   const client = createOcctKernelClient(rpc);
   try {

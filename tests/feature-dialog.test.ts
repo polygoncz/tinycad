@@ -29,6 +29,8 @@ function setup() {
     ops,
     schemas,
     ids: createSequentialIdGenerator('f'),
+    // The English texts of the plugin, as ui would translate them (ADR 0014).
+    translate: (key) => boxPlugin.messages?.en[key] ?? key,
   });
 
   /** Regenerates the current document; per body its creator and bounding box. */

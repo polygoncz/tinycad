@@ -8,6 +8,7 @@ import type { BodyId } from '@/interaction';
 import type { BoundingBox, MeshOps, MeshQuality, ShapeHandle } from '@/kernel';
 import { unionBounds } from './bounds';
 import { createBodyMaterials, createBodyView, type BodyView } from './body-view';
+import type { ScenePalette } from './palette';
 import { createSceneSync, type ScenePlan } from './scene-sync';
 
 export interface BodyLayer {
@@ -27,6 +28,13 @@ export interface BodyLayerInternal extends BodyLayer, Disposable {
   readonly views: ReadonlyMap<BodyId, BodyView>;
   /** Union of the bounds of the shown bodies, null when there are none (CameraRig.getBounds). */
   bounds(): BoundingBox | null;
+  /** Recolours the shared materials (Q072); the caller requests the render. */
+  setPalette(palette: ScenePalette): void;
+  /**
+   * Shows or hides a shown body (Q071). An unknown body does nothing; a body that leaves the
+   * scene forgets that it was hidden. Requests a render only when something changed.
+   */
+  setBodyVisible(body: BodyId, visible: boolean): void;
 }
 
 export interface BodyLayerOptions {
@@ -34,6 +42,7 @@ export interface BodyLayerOptions {
   readonly quality: MeshQuality;
   readonly reportError: (body: BodyId, error: unknown) => void;
   readonly requestRender: () => void;
+  readonly palette: ScenePalette;
   /** Called after every scene swap (`apply`): the highlight rebuilds from the new meshes. */
   readonly afterApply?: () => void;
 }
@@ -41,8 +50,10 @@ export interface BodyLayerOptions {
 export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
   const { requestRender } = options;
   const group = new THREE.Group();
-  const materials = createBodyMaterials();
+  const materials = createBodyMaterials(options.palette);
   const views = new Map<BodyId, BodyView>();
+  /** Hidden bodies; always a subset of the keys of `views`. */
+  const hidden = new Set<BodyId>();
   let meshes = options.meshes;
   let disposed = false;
 
@@ -62,9 +73,13 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
       // SceneSync removes a body before it adds it again; a second view would leak.
       assert(!views.has(id), `Body ${id} is already shown`);
       const view = createBodyView(id, mesh, materials);
+      // A body kept under the same id with a new shape stays hidden.
+      view.object.visible = !hidden.has(id);
       views.set(id, view);
       group.add(view.object);
     }
+    // After the adds: a body removed and added again in one plan is still in the scene.
+    for (const id of hidden) if (!views.has(id)) hidden.delete(id);
     options.afterApply?.();
     requestRender();
   }
@@ -84,6 +99,17 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
     },
     sync(bodies) {
       return sceneSync.sync(bodies);
+    },
+    setPalette(palette) {
+      materials.setPalette(palette);
+    },
+    setBodyVisible(body, visible) {
+      const view = views.get(body);
+      if (view === undefined || view.object.visible === visible) return;
+      view.object.visible = visible;
+      if (visible) hidden.delete(body);
+      else hidden.add(body);
+      requestRender();
     },
     reset(next) {
       meshes = next;

@@ -7,19 +7,19 @@ import type { BodyId } from '@/interaction';
 import type { BoundingBox, MeshData } from '@/kernel';
 import { meshBounds } from './bounds';
 import { polylinesToSegments } from './mesh-index';
-
-const FACE_COLOR = 0xb9c3d1;
-const EDGE_COLOR = 0x1f2328;
+import type { ScenePalette } from './palette';
 
 /** Materials shared by every BodyView; created and disposed by BodyLayer. */
 export interface BodyMaterials extends Disposable {
   readonly faces: THREE.MeshStandardMaterial;
   readonly edges: THREE.LineBasicMaterial;
+  /** Recolours both materials in place (Q072); every BodyView follows. */
+  setPalette(palette: ScenePalette): void;
 }
 
-export function createBodyMaterials(): BodyMaterials {
+export function createBodyMaterials(palette: ScenePalette): BodyMaterials {
   const faces = new THREE.MeshStandardMaterial({
-    color: FACE_COLOR,
+    color: palette.face,
     metalness: 0,
     roughness: 0.6,
     // Pushes faces slightly back in depth, so the edges on them win (spec 09).
@@ -27,10 +27,14 @@ export function createBodyMaterials(): BodyMaterials {
     polygonOffsetFactor: 1,
     polygonOffsetUnits: 1,
   });
-  const edges = new THREE.LineBasicMaterial({ color: EDGE_COLOR });
+  const edges = new THREE.LineBasicMaterial({ color: palette.edge });
   return {
     faces,
     edges,
+    setPalette(next: ScenePalette): void {
+      faces.color.setHex(next.face);
+      edges.color.setHex(next.edge);
+    },
     dispose(): void {
       faces.dispose();
       edges.dispose();

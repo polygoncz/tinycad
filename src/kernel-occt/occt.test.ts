@@ -2,6 +2,7 @@ import type { TopoDS_Shape } from 'replicad-opencascadejs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createKernelError, kernelErrorCode } from '@/kernel';
 import { loadOcct, mapSubShapes, toKernelError, type Occt } from './occt';
+import { aWasmTrap } from './testing';
 
 let oc: Occt;
 
@@ -139,6 +140,11 @@ describe('toKernelError', () => {
   it('passes an error with a kernel code through unchanged', () => {
     const original = createKernelError('invalid-input', 'size must be positive');
     expect(toKernelError(oc, original)).toBe(original);
+  });
+
+  it('passes a WASM trap through unchanged: it is fatal, not a kernel error (Q055)', () => {
+    const trap = aWasmTrap();
+    expect(toKernelError(oc, trap)).toBe(trap);
   });
 
   it('converts any other error to internal, keeping its message', () => {

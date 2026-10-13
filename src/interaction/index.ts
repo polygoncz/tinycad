@@ -30,3 +30,5 @@ export { createFeatureEditor } from './feature-editor';
 export type { EditState, FeatureEditor, FeatureEditSession, FieldState } from './feature-editor';
 export { createFeatureTreeModel } from './feature-tree';
 export type { FeatureTreeModel, TreeRow, TreeStatus } from './feature-tree';
+export { createBrowserModel } from './browser-model';
+export type { BrowserBodyRow, BrowserModel } from './browser-model';

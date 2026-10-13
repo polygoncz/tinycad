@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import type { Disposable } from '@/core';
+import type { ScenePalette } from './palette';
 
 /** Grid size and cell in mm. */
 const GRID_SIZE = 200;
@@ -21,13 +22,21 @@ export interface SceneHelpers extends Disposable {
    * main camera. Leaves the renderer's viewport and scissor test as it found them (full canvas).
    */
   drawAxes(renderer: THREE.WebGLRenderer, mainCamera: THREE.Camera): void;
+  /** Recolours the axis triad in place (Q072); the caller requests the render. */
+  setPalette(palette: ScenePalette): void;
+  /** The axis triad; exposed for tests of its colours. */
+  readonly axes: THREE.AxesHelper;
 }
 
 /**
  * Adds the grid and the lights to the scene. The camera must be in the scene: the directional
  * light is its child ("headlight"), so lighting follows the view as in CAD.
  */
-export function createSceneHelpers(scene: THREE.Scene, camera: THREE.Camera): SceneHelpers {
+export function createSceneHelpers(
+  scene: THREE.Scene,
+  camera: THREE.Camera,
+  palette: ScenePalette,
+): SceneHelpers {
   const grid = new THREE.GridHelper(
     GRID_SIZE,
     GRID_SIZE / GRID_CELL,
@@ -56,13 +65,16 @@ export function createSceneHelpers(scene: THREE.Scene, camera: THREE.Camera): Sc
 
   const axesScene = new THREE.Scene();
   const axes = new THREE.AxesHelper(1);
-  // X red, Y green, Z blue.
-  axes.setColors(new THREE.Color(0xe53935), new THREE.Color(0x43a047), new THREE.Color(0x1e88e5));
+  setAxisColors(axes, palette);
   axesScene.add(axes);
   const axesCamera = new THREE.OrthographicCamera(-1.2, 1.2, 1.2, -1.2, 0.1, 10);
   const viewDirection = new THREE.Vector3();
 
   return {
+    axes,
+    setPalette(next: ScenePalette): void {
+      setAxisColors(axes, next);
+    },
     drawAxes(renderer: THREE.WebGLRenderer, mainCamera: THREE.Camera): void {
       // Same rotation as the main camera, looking at the origin of the triad scene.
       mainCamera.getWorldDirection(viewDirection);
@@ -91,4 +103,10 @@ export function createSceneHelpers(scene: THREE.Scene, camera: THREE.Camera): Sc
       axes.dispose();
     },
   };
+}
+
+/** X, Y, Z by the palette; rewrites the colour attribute of the same geometry. */
+function setAxisColors(axes: THREE.AxesHelper, palette: ScenePalette): void {
+  const [x, y, z] = palette.axes;
+  axes.setColors(new THREE.Color(x), new THREE.Color(y), new THREE.Color(z));
 }

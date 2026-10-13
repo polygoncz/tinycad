@@ -4,31 +4,30 @@ import type { Registry, Vec3 } from '@/core';
 // The data half of a feature type (ADR 0004): params, defaults, validation, migration.
 // Geometry is computed by the FeatureBuilder in regen.
 
+/**
+ * Bounds of a numeric param, inclusive unless marked exclusive (Q050):
+ * `{ min: 0, exclusiveMin: true }` means > 0. exclusiveMin/Max without min/max have no effect.
+ */
+interface Bounds {
+  readonly min?: number;
+  readonly max?: number;
+  readonly exclusiveMin?: boolean;
+  readonly exclusiveMax?: boolean;
+}
+
 // One ParamSpec drives three things: validation, the generated UI form (spec 11)
 // and telling reference params apart for picking in the feature dialog.
+// Every label (of a ParamSpec, an enum option and a FeatureSchema) is a translation key,
+// 'box.width', never a text; the plugin brings the texts in its messages (ADR 0014).
 export type ParamSpec =
-  | {
-      readonly kind: 'length';
-      readonly label: string;
-      readonly default: number;
-      readonly min?: number;
-      readonly max?: number;
-    }
-  | {
-      readonly kind: 'angle';
-      readonly label: string;
-      readonly default: number;
-      readonly min?: number;
-      readonly max?: number;
-    }
-  | {
+  | ({ readonly kind: 'length'; readonly label: string; readonly default: number } & Bounds)
+  | ({ readonly kind: 'angle'; readonly label: string; readonly default: number } & Bounds)
+  | ({
       readonly kind: 'number';
       readonly label: string;
       readonly default: number;
-      readonly min?: number;
-      readonly max?: number;
       readonly integer?: boolean;
-    }
+    } & Bounds)
   | { readonly kind: 'boolean'; readonly label: string; readonly default: boolean }
   | {
       readonly kind: 'enum';
@@ -63,14 +62,17 @@ export type ParamSchema = Readonly<Record<string, ParamSpec>>;
 export interface ParamIssue {
   /** Key of the param, '' for the params object as a whole. */
   readonly param: string;
-  readonly message: string;
+  /** Translation key, 'param.atOrBelowMin' (ADR 0014); the codes of validateAgainstSchema are in spec 03. */
+  readonly code: string;
+  /** Values for the text, e.g. { min: 0 }. */
+  readonly params?: Readonly<Record<string, string | number>>;
 }
 
 export interface FeatureSchema<P = unknown> {
   /** Registry key, 'box'. */
   readonly type: string;
   readonly version: number;
-  /** Display name, 'Box'. */
+  /** Translation key of the display name, 'box.label' (ADR 0014). */
   readonly label: string;
   readonly params: ParamSchema;
   defaults(): P;

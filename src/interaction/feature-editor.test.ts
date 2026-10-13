@@ -16,15 +16,15 @@ interface BoxParams {
 }
 
 const BOX_PARAMS: ParamSchema = {
-  width: { kind: 'length', label: 'Width', default: 10, min: 0 },
-  height: { kind: 'length', label: 'Height', default: 20, min: 0 },
-  targets: { kind: 'bodies', label: 'Targets' },
+  width: { kind: 'length', label: 'box.width', default: 10, min: 0, exclusiveMin: true },
+  height: { kind: 'length', label: 'box.height', default: 20, min: 0, exclusiveMin: true },
+  targets: { kind: 'bodies', label: 'box.targets' },
 };
 
 const BOX: FeatureSchema<BoxParams> = {
   type: 'box',
   version: 1,
-  label: 'Box',
+  label: 'box.label',
   params: BOX_PARAMS,
   defaults: () => ({ width: 10, height: 20, targets: [] }),
   validate: (params) => validateAgainstSchema(BOX_PARAMS, params),
@@ -41,7 +41,11 @@ function aBox(id: string, name = id): ReturnType<typeof aFeature<BoxParams>> {
   });
 }
 
-function setup(init: DocumentOptions = {}) {
+/** Translates the box label to English, so the names below read 'Box 1'. */
+const EN = (key: string): string => (key === 'box.label' ? 'Box' : key);
+
+/** `translate: null` leaves it out of the deps. */
+function setup(init: DocumentOptions = {}, translate: ((key: string) => string) | null = EN) {
   const session = anOpsSession(init);
   const schemas = createFeatureSchemaRegistry();
   schemas.register(BOX);
@@ -50,6 +54,7 @@ function setup(init: DocumentOptions = {}) {
     ops: session.dispatcher,
     schemas,
     ids: createSequentialIdGenerator('new'),
+    ...(translate === null ? {} : { translate }),
   });
   return { ...session, editor };
 }
@@ -115,7 +120,8 @@ describe('FeatureEditor.create', () => {
     const entries = log.entries();
     expect(entries).toHaveLength(1);
     const [entry] = entries;
-    expect(entry?.label).toBe('Box');
+    // The label of the transaction stays the key, translated only when shown (ADR 0014).
+    expect(entry?.label).toBe('box.label');
     expect(entry?.op.type).toBe('batch');
     const ops = (entry?.op as BatchOp).ops; // asserted to be a batch just above
     expect(ops.map((op) => op.type)).toEqual(['feature.add', 'feature.setParams']);
@@ -138,6 +144,20 @@ describe('FeatureEditor.create', () => {
     editor.create('box').commit();
     editor.create('box').commit();
     expect(doc.studio.features.map((f) => f.name)).toEqual(['Box 1', 'Box 2']);
+  });
+
+  it('names the feature in the language of translate', () => {
+    const cs = (key: string): string => (key === 'box.label' ? 'Kvádr' : key);
+    const { doc, editor } = setup({}, cs);
+    editor.create('box').commit();
+    expect(doc.feature(fid('new1'))?.name).toBe('Kvádr 1');
+  });
+
+  it('names the feature by the key without translate', () => {
+    const { doc, log, editor } = setup({}, null);
+    editor.create('box').commit();
+    expect(doc.feature(fid('new1'))?.name).toBe('box.label 1');
+    expect(log.entries()[0]?.label).toBe('box.label');
   });
 
   it('fills the gap after a removed name', () => {
@@ -273,9 +293,24 @@ describe('FeatureEditSession', () => {
 
     expect(doc.feature(fid('new1'))?.params).toMatchObject({ width: -1 });
     const state = session.state.get();
-    expect(state.issues.map((i) => i.param)).toEqual(['width']);
-    expect(state.fields[0]?.issue).toEqual(expect.any(String));
+    const issue = { param: 'width', code: 'param.atOrBelowMin', params: { min: 0 } };
+    expect(state.issues).toEqual([issue]);
+    expect(state.fields[0]?.issue).toEqual(issue);
+    expect(state.fields[0]?.issue).toBe(state.issues[0]);
+    expect(Object.isFrozen(state.fields[0]?.issue?.params)).toBe(true);
     expect(state.fields[1]?.issue).toBeNull();
+  });
+
+  it('a field with the same issue after another change stays the same object', () => {
+    const { editor } = setup();
+    const session = editor.create('box');
+    session.setParam('width', -1);
+    const before = session.state.get();
+    session.setParam('height', 7);
+
+    const state = session.state.get();
+    expect(state.issues).toBe(before.issues);
+    expect(state.fields[0]).toBe(before.fields[0]);
   });
 
   it('commit is allowed with issues', () => {

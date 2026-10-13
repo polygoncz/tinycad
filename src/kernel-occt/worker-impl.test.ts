@@ -3,6 +3,7 @@ import { createRpcClient, serveRpc } from '@/core';
 import { kernelErrorCode, validateMeshData, type GeometryKernel, type MeshData } from '@/kernel';
 import { createFakeKernel } from '@/kernel/testing';
 import type { OcctKernelProtocol } from './protocol';
+import { aWasmTrap } from './testing';
 import { createOcctWorkerImpl } from './worker-impl';
 
 // The worker side of the OCCT kernel served over a MessageChannel in Node, without a Worker.
@@ -15,10 +16,13 @@ afterEach(() => {
   for (const p of ports.splice(0)) p.close();
 });
 
-function connect(init: Promise<GeometryKernel>) {
+function connect(
+  init: Promise<GeometryKernel>,
+  onFatal: (message: string) => void = () => undefined,
+) {
   const { port1, port2 } = new MessageChannel();
   ports.push(port1, port2);
-  serveRpc<OcctKernelProtocol>(port2, createOcctWorkerImpl(init));
+  serveRpc<OcctKernelProtocol>(port2, createOcctWorkerImpl(init, onFatal));
   return createRpcClient<OcctKernelProtocol>(port1);
 }
 
@@ -123,4 +127,65 @@ describe('OCCT worker implementation', () => {
       expect(sent[field].buffer.byteLength, `${field} on the worker side`).toBe(0);
     }
   });
+
+  it('a WASM trap answers the call with an error and reports the crash', async () => {
+    const fatal: string[] = [];
+    const rpc = connect(Promise.resolve(throwingKernel(() => aWasmTrap('unreachable'))), (m) => {
+      fatal.push(m);
+    });
+    const e = await rejection(rpc.call('makeBox', BOX));
+    expect(e).toBeInstanceOf(Error);
+    expect(e instanceof Error ? e.message : '').toContain('unreachable');
+    expect(fatal).toEqual(['unreachable']);
+  });
+
+  it('after a trap the kernel computes nothing more', async () => {
+    let makeBoxCalls = 0;
+    const rpc = connect(
+      Promise.resolve(
+        throwingKernel(() => {
+          makeBoxCalls++;
+          return aWasmTrap('unreachable');
+        }),
+      ),
+    );
+    await rejection(rpc.call('makeBox', BOX));
+    const e = await rejection(rpc.call('makeBox', BOX));
+    expect(e instanceof Error ? e.message : '').toContain('OCCT crashed');
+    expect(makeBoxCalls).toBe(1);
+  });
+
+  it('an OCCT exception stays internal, reports no crash and the kernel keeps working', async () => {
+    const fatal: string[] = [];
+    let fail = true;
+    const fake = createFakeKernel();
+    const kernel: GeometryKernel = {
+      ...throwingKernel(() => new Error('Standard_DomainError')),
+      makeBox: (p) => {
+        if (fail) {
+          fail = false;
+          return Promise.reject(new Error('Standard_DomainError'));
+        }
+        return fake.makeBox(p);
+      },
+    };
+    const rpc = connect(Promise.resolve(kernel), (m) => {
+      fatal.push(m);
+    });
+    expect(kernelErrorCode(await rejection(rpc.call('makeBox', BOX)))).toBe('internal');
+    await expect(rpc.call('makeBox', BOX)).resolves.toHaveProperty('shape');
+    expect(fatal).toEqual([]);
+  });
 });
+
+/** A kernel whose every call rejects with `error()` – a trap or an ordinary failure. */
+function throwingKernel(error: () => Error): GeometryKernel {
+  const fail = () => Promise.reject(error());
+  return {
+    makeBox: fail,
+    tessellate: fail,
+    boundingBox: fail,
+    release: fail,
+    liveHandleCount: fail,
+  };
+}

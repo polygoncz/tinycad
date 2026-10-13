@@ -44,7 +44,7 @@ export function validateSize(params: unknown): readonly ParamIssue[] {
     typeof params === 'object' && params !== null ? Reflect.get(params, 'size') : undefined;
   return typeof size === 'number' && size > 0
     ? []
-    : [{ param: 'size', message: 'Must be greater than 0' }];
+    : [{ param: 'size', code: 'param.atOrBelowMin', params: { min: 0 } }];
 }
 
 /** A schema of `type`, by default for the params of aFeature() (DefaultParams). */
@@ -56,7 +56,7 @@ export function aSchema(
     type,
     version: 1,
     label: type,
-    params: { size: { kind: 'length', label: 'Size', default: 1, min: 0 } },
+    params: { size: { kind: 'length', label: 'Size', default: 1, min: 0, exclusiveMin: true } },
     defaults: (): DefaultParams => ({ size: 1 }),
     validate,
   };

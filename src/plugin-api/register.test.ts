@@ -6,7 +6,7 @@ import type { Tool, ToolDescriptor } from '@/interaction';
 import { createBuilderRegistry } from '@/regen';
 import type { FeatureBuilder } from '@/regen';
 import { aSchema, aSpyBuilder, validateSize } from '@/regen/testing';
-import type { FeaturePlugin } from '.';
+import type { FeaturePlugin, PluginMessages } from '.';
 import { registerPlugin } from '.';
 
 function registries() {
@@ -47,16 +47,19 @@ describe('registerPlugin', () => {
     expect(regs.builders.get('box')).toBe(plugin.builder);
   });
 
-  it('accepts a plugin typed with its own params', () => {
-    // Compile-time check: FeaturePlugin<P> must be passable without a cast.
+  it('accepts a plugin typed with its own params and its messages', () => {
+    // Compile-time check: FeaturePlugin<P> must be passable without a cast. The messages
+    // are for ui (ADR 0014); registration leaves them alone.
     interface SizeParams {
       readonly size: number;
     }
     const schema: FeatureSchema<SizeParams> = {
       type: 'cube',
       version: 1,
-      label: 'Cube',
-      params: { size: { kind: 'length', label: 'Size', default: 1, min: 0 } },
+      label: 'cube.label',
+      params: {
+        size: { kind: 'length', label: 'cube.size', default: 1, min: 0, exclusiveMin: true },
+      },
       defaults: () => ({ size: 1 }),
       validate: validateSize,
     };
@@ -64,7 +67,11 @@ describe('registerPlugin', () => {
       type: 'cube',
       build: async ({ state }) => Promise.resolve({ ok: true, state }),
     };
-    const plugin: FeaturePlugin<SizeParams> = { schema, builder };
+    const messages: PluginMessages = {
+      cs: { 'cube.label': 'Krychle', 'cube.size': 'Velikost' },
+      en: { 'cube.label': 'Cube', 'cube.size': 'Size' },
+    };
+    const plugin: FeaturePlugin<SizeParams> = { schema, builder, messages };
     const regs = registries();
     registerPlugin(plugin, regs);
     expect(regs.schemas.has('cube')).toBe(true);

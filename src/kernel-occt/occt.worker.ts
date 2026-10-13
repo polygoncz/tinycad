@@ -4,7 +4,7 @@ import type { MessageEndpoint } from '@/core';
 import wasmUrl from 'replicad-opencascadejs/wasm?url';
 import { loadOcct } from './occt';
 import { OcctKernelImpl } from './occt-kernel-impl';
-import type { OcctKernelProtocol } from './protocol';
+import type { OcctFatalNotice, OcctKernelProtocol } from './protocol';
 import { createOcctWorkerImpl } from './worker-impl';
 
 // tsconfig.app.json types `self` as Window (lib DOM, not WebWorker), whose postMessage wants a
@@ -19,11 +19,18 @@ const endpoint: MessageEndpoint = {
   },
 };
 
+/** A WASM trap killed the kernel (spec 06, Chyby): tell the main thread, it ends the worker. */
+function reportFatal(message: string): void {
+  const notice: OcctFatalNotice = { type: 'fatal', message };
+  endpoint.postMessage(notice, []);
+}
+
 // Synchronously at start (spec 06, "Start workeru a ready"): a message arriving before the
 // listener is registered would be lost. OCCT loads meanwhile; the calls wait for it.
 serveRpc<OcctKernelProtocol>(
   endpoint,
   createOcctWorkerImpl(
     loadOcct({ locateWasm: () => wasmUrl }).then((oc) => new OcctKernelImpl(oc)),
+    reportFatal,
   ),
 );

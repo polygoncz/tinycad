@@ -27,6 +27,7 @@ import { createCameraRig, type CameraController } from './camera-controller';
 import { createFrameScheduler } from './frame-scheduler';
 import { createHighlightLayer } from './highlight-layer';
 import { createOverlayLayer } from './overlay-layer';
+import { LIGHT_PALETTE, type ScenePalette } from './palette';
 import { toNdc } from './pick-math';
 import { createPicker } from './picker';
 import { createSceneHelpers } from './scene-helpers';
@@ -59,12 +60,15 @@ export interface Viewport extends ViewportPort, Disposable {
   /** Fit all, standard views. */
   readonly camera: CameraController;
 
+  /** Recolours the existing materials and the background, creates nothing anew (Q072). */
+  setPalette(palette: ScenePalette): void;
+  /** View state from the browser (Q071): a hidden body is not drawn and not picked. */
+  setBodyVisible(body: BodyId, visible: boolean): void;
+
   readonly events: Subscribable<{ pointer: ViewPointerEvent; key: ViewKeyEvent }>;
 }
 
 export const MESH_QUALITY: MeshQuality = { linearDeflection: 0.1, angularDeflection: 0.5 };
-
-const DEFAULT_BACKGROUND = 0xf3f4f6;
 
 /** Resources that exist only while the viewport is mounted. */
 interface Mounted {
@@ -77,10 +81,11 @@ interface Mounted {
 export function createViewport(deps: {
   meshes: MeshOps;
   quality?: MeshQuality;
-  background?: number;
+  /** Default LIGHT_PALETTE. */
+  palette?: ScenePalette;
   reportError?: (body: BodyId, error: unknown) => void;
 }): Viewport {
-  const background = deps.background ?? DEFAULT_BACKGROUND;
+  let palette = deps.palette ?? LIGHT_PALETTE;
   const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
   const lifetime = new DisposableStore();
   let emitter = new Emitter<ViewportEvents>();
@@ -115,6 +120,7 @@ export function createViewport(deps: {
           console.error(`Tessellation of body ${body} failed`, error);
         }),
       requestRender: scheduleFrame,
+      palette,
       // The highlight is created right below; apply runs only after a sync, reset or dispose.
       afterApply: () => {
         highlightLayer.rebuild();
@@ -124,10 +130,10 @@ export function createViewport(deps: {
   scene.add(layer.group);
   // After the body layer, so they are disposed before it; rebuild after dispose is a no-op.
   const highlightLayer = lifetime.add(
-    createHighlightLayer({ views: layer.views, requestRender: scheduleFrame }),
+    createHighlightLayer({ views: layer.views, requestRender: scheduleFrame, palette }),
   );
   scene.add(highlightLayer.group);
-  const overlayLayer = lifetime.add(createOverlayLayer({ requestRender: scheduleFrame }));
+  const overlayLayer = lifetime.add(createOverlayLayer({ requestRender: scheduleFrame, palette }));
   scene.add(overlayLayer.group);
   const rig = lifetime.add(
     createCameraRig({
@@ -137,7 +143,7 @@ export function createViewport(deps: {
   );
   // In the scene, so the headlight (its child) is part of the scene graph.
   scene.add(rig.camera);
-  const helpers = lifetime.add(createSceneHelpers(scene, rig.camera));
+  const helpers = lifetime.add(createSceneHelpers(scene, rig.camera, palette));
   const picker = createPicker({
     views: () => layer.views.values(),
     bounds: () => layer.bounds(),
@@ -230,7 +236,7 @@ export function createViewport(deps: {
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setClearColor(background);
+    renderer.setClearColor(palette.background);
     renderer.autoClear = false;
     resources.add(() => {
       renderer.dispose();
@@ -375,6 +381,21 @@ export function createViewport(deps: {
     highlight,
     overlay,
     camera,
+    setPalette(next: ScenePalette): void {
+      assertAlive();
+      palette = next;
+      layer.setPalette(next);
+      highlightLayer.setPalette(next);
+      overlayLayer.setPalette(next);
+      helpers.setPalette(next);
+      // While unmounted, mount takes the background from `palette`.
+      mounted?.renderer.setClearColor(next.background);
+      scheduleFrame();
+    },
+    setBodyVisible(body: BodyId, visible: boolean): void {
+      assertAlive();
+      layer.setBodyVisible(body, visible);
+    },
     events,
     dispose(): void {
       if (disposed) return;

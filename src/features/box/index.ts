@@ -3,6 +3,7 @@
 
 import type { FeaturePlugin } from '@/plugin-api';
 import { boxBuilder } from './builder';
+import { boxMessages } from './messages';
 import { boxSchema } from './schema';
 import type { BoxParams } from './schema';
 import { boxTool } from './tool';
@@ -13,4 +14,5 @@ export const boxPlugin: FeaturePlugin<BoxParams> = Object.freeze<FeaturePlugin<B
   schema: boxSchema,
   builder: boxBuilder,
   tools: Object.freeze([boxTool]),
+  messages: boxMessages,
 });

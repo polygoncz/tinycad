@@ -32,11 +32,11 @@ updated: 2026-10-13
 
 Pořadí odspodu nahoru: nejdřív doména a porty, pak `app`, nakonec `ui`. Podrobný Implementační plán bude níže.
 
-- [ ] `document`: ostrá mez `exclusiveMin`/`exclusiveMax` ([[Q050 Ostrá dolní mez parametru|Q050]]), `label` jako klíč a `ParamIssue` s `code`/`params` ([[0014-preklady-vue-i18n-a-klice|ADR 0014]]); úprava `features/box` a `interaction`.
-- [ ] `plugin-api`: `messages` ve `FeaturePlugin`, slovník cs/en pro box.
-- [ ] `kernel-occt`: trap WASM je fatální → `'disconnected'` ([[Q055 Pád WASM jádra|Q055]]).
-- [ ] `render`: `ScenePalette`, `setPalette`, `setBodyVisible` ([[Q072 Barvy scény podle režimu|Q072]], [[Q071 Viditelnost těles|Q071]]).
-- [ ] `interaction`: `BrowserModel`, rozšíření `RegenSnapshot` o tělesa.
+- [x] `document`: ostrá mez `exclusiveMin`/`exclusiveMax` ([[Q050 Ostrá dolní mez parametru|Q050]]), `label` jako klíč a `ParamIssue` s `code`/`params` ([[0014-preklady-vue-i18n-a-klice|ADR 0014]]); úprava `features/box` a `interaction`.
+- [x] `plugin-api`: `messages` ve `FeaturePlugin`, slovník cs/en pro box.
+- [x] `kernel-occt`: trap WASM je fatální → `'disconnected'` ([[Q055 Pád WASM jádra|Q055]]).
+- [x] `render`: `ScenePalette`, `setPalette`, `setBodyVisible` ([[Q072 Barvy scény podle režimu|Q072]], [[Q071 Viditelnost těles|Q071]]).
+- [x] `interaction`: `BrowserModel`, rozšíření `RegenSnapshot` o tělesa.
 - [ ] `app/createAppSession` – kompoziční kořen testovaný v Node: registrace pluginů a vestavěných handlerů, propojení událostí, `RegenScheduler` (dirty flag, žádná fronta), restart jádra, režim jen pro čtení.
 - [ ] Akce: undo, redo, smazat vybranou featuru, potlačit, fit all, aktivace nástrojů.
 - [ ] `app/openAppSession` – workery, `IdbDocumentStore`, Web Lock ([[Q038 Jeden dokument ve dvou záložkách|Q038]]), seznam dokumentů (nový, otevřít, smazat).
@@ -56,7 +56,8 @@ Každý úkol dělá zvlášť subagent `implementer` (TDD: test nejdřív a ov�
 | Vlna | Úkoly (paralelně) | Závisí na |
 |---|---|---|
 | A | Ú1 i18n v doméně · Ú2 trap jádra · Ú3 paleta a viditelnost v `render` · Ú4 `BrowserModel` | – |
-| B | Ú5 `createAppSession` · Ú6 základ `ui` | A |
+| A2 | Ú1b strukturovaná chyba regenerace a klíče popisků · Ú3b dokončení palety | A |
+| B | Ú5 `createAppSession` · Ú6 základ `ui` | A2 |
 | C | Ú7 vestavěné akce · Ú8 `openAppSession` a dokumenty · Ú9 `Timeline` a `Browser` | B |
 | D | Ú10 zbytek komponent a spuštění aplikace | C |
 | E | Ú11 e2e test · Ú12 ověření a revize (hlavní sezení) | D |
@@ -85,6 +86,22 @@ Každý úkol dělá zvlášť subagent `implementer` (TDD: test nejdřív a ov�
 - **Soubory:** `src/interaction/regen-status-port.ts`, `browser-model.ts` (nový), `testing.ts`, `index.ts` + testy.
 - **Kontrakt:** [[10-interakce]], sekce *Prohlížeč* – `RegenSnapshot.bodies`, `BrowserBodyRow`, `BrowserModel`, `createBrowserModel({ regen, selection })`. `name` je `{ key: 'browser.body', n }` místo hotového textu (překládá `ui`) – upřesnit ve spec. Pořadí řádků = pořadí v `bodies`. `FakeRegenStatus.publish(health, bodies?)`.
 - **Testy:** řádky po `publish`; `selected` podle výběru (`{ kind: 'body' }`); `select` s `additive`; `setVisible(false)` → `hidden` obsahuje těleso a řádek `visible: false`, stejná hodnota nic nevyšle; těleso, které v další generaci chybí, vypadne z `hidden`; nezměněný řádek je týž objekt; `dispose` odhlásí.
+- **Hotovo když:** testy a `npm run check` projdou.
+
+### Vlna A2
+
+Doplňky z revize vlny A (rozhodnutí 2026-10-13).
+
+#### Ú1b Strukturovaná chyba regenerace a klíče popisků
+- **Soubory:** `src/regen/state.ts`, `src/regen/regenerator.ts` + test; `src/interaction/regen-status-port.ts` (`FeatureHealth`, export `RegenBody`), `src/interaction/index.ts`, `src/interaction/feature-editor.ts` + test; `src/features/box/tool.ts`, `box.test.ts`.
+- **Kontrakt:** [[07-regenerace]] – `FeatureError.issues` u `INVALID_PARAMS` (zmrazená kopie), `message` zůstává technický text. [[10-interakce#Port stavu regenerace]] – `FeatureHealth` `error` s volitelnými `issues`, export `RegenBody`. [[10-interakce]] – `FeatureEditor.edit` otevře transakci s popiskem `'feature.edit'`. `boxTool.label` = `'box.label'` (klíč, [[0014-preklady-vue-i18n-a-klice|ADR 0014]]).
+- **Testy:** výška 0 → status `error` `INVALID_PARAMS` s `issues: [{ param: 'height', code: 'param.atOrBelowMin', params: { min: 0 } }]`, zmrazené; popisek záznamu v logu po editaci je `'feature.edit'`; `boxTool.label` je klíč, který má slovník boxu.
+- **Hotovo když:** testy a `npm run check` projdou.
+
+#### Ú3b Dokončení palety a skrytých těles
+- **Soubory:** `src/render/palette.ts`, `scene-helpers.ts`, `highlight-layer.ts`, `camera-controller.ts` (nebo kde je `fitAll`), `viewport.ts` + testy.
+- **Kontrakt:** [[09-vykreslovani#Viewport]] – `ScenePalette.grid`, osy v obou paletách `0xff3b30`, `0x34c759`, `0x0a84ff`; tmavá paleta `preview` `0x0a84ff`, `construction` `0x6b7280`, mřížka tmavé palety tlumená na pozadí `0x1f2023` (např. `0x3a3c42`/`0x2c2e33`). Zvýraznění skrytého tělesa se nekreslí, `fitAll` skrytá tělesa vynechá.
+- **Testy:** `setPalette` přebarví mřížku; obě palety mají osy podle spec; hover/výběr na skrytém tělese nic nevykreslí a po zobrazení se zvýraznění vrátí; `fitAll` počítá rámeček bez skrytých těles (čistá funkce, pokud existuje).
 - **Hotovo když:** testy a `npm run check` projdou.
 
 ### Vlna B

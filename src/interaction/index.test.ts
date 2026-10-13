@@ -8,6 +8,7 @@ describe('interaction public API', () => {
       [
         'bindSelectionHighlight',
         'createActionRegistry',
+        'createBrowserModel',
         'createFeatureEditor',
         'createFeatureTreeModel',
         'createSelectionModel',

@@ -20,9 +20,8 @@ import {
   validTargets,
 } from './highlight-targets';
 import { edgeSegments, faceTriangles } from './mesh-index';
+import type { ScenePalette } from './palette';
 
-const HOVER_COLOR = 0xf59e0b;
-const SELECTION_COLOR = 0x2563eb;
 const FACE_OPACITY = 0.45;
 /** After the bodies (renderOrder 0), so an equal-depth highlight edge wins over the body edge. */
 const RENDER_ORDER = 1;
@@ -41,12 +40,15 @@ export interface HighlightLayerInternal extends HighlightPort, Disposable {
   rebuild(): void;
   /** Canvas size in CSS px; fat-line materials need it to size their width in pixels. */
   setResolution(width: number, height: number): void;
+  /** Recolours hover and selection in place (Q072); the caller requests the render. */
+  setPalette(palette: ScenePalette): void;
 }
 
 export interface HighlightLayerOptions {
   /** The shown bodies (BodyLayerInternal.views). */
   readonly views: ReadonlyMap<BodyId, BodyView>;
   readonly requestRender: () => void;
+  readonly palette: ScenePalette;
 }
 
 /** Face and edge material of one highlight kind (hover or selection). */
@@ -58,8 +60,8 @@ interface Look {
 export function createHighlightLayer(options: HighlightLayerOptions): HighlightLayerInternal {
   const { views, requestRender } = options;
   const group = new THREE.Group();
-  const hoverLook = createLook(HOVER_COLOR);
-  const selectionLook = createLook(SELECTION_COLOR);
+  const hoverLook = createLook(options.palette.hover);
+  const selectionLook = createLook(options.palette.selection);
   /** Geometries of the drawn objects; all replaced on every change. */
   let geometries: THREE.BufferGeometry[] = [];
   let hover: HighlightTarget | null = null;
@@ -125,6 +127,10 @@ export function createHighlightLayer(options: HighlightLayerOptions): HighlightL
     setResolution(width: number, height: number): void {
       for (const look of [hoverLook, selectionLook]) look.edge.resolution.set(width, height);
     },
+    setPalette(palette: ScenePalette): void {
+      recolor(hoverLook, palette.hover);
+      recolor(selectionLook, palette.selection);
+    },
     rebuild(): void {
       if (disposed) return;
       hover = hover !== null && validTarget(hover, meshOf) ? hover : null;
@@ -142,6 +148,11 @@ export function createHighlightLayer(options: HighlightLayerOptions): HighlightL
       }
     },
   };
+}
+
+function recolor(look: Look, color: number): void {
+  look.face.color.setHex(color);
+  look.edge.color.setHex(color);
 }
 
 function createLook(color: number): Look {

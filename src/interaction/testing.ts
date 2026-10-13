@@ -5,7 +5,7 @@
 import { Emitter, ObservableValue } from '@/core';
 import type { Observable, Subscribable, Vec3 } from '@/core';
 import type { FeatureId } from '@/document';
-import type { FeatureHealth, RegenSnapshot, RegenStatusPort } from './regen-status-port';
+import type { FeatureHealth, RegenBody, RegenSnapshot, RegenStatusPort } from './regen-status-port';
 import type {
   HighlightPort,
   HighlightTarget,
@@ -108,20 +108,32 @@ export class FakeViewport implements ViewportPort {
   }
 }
 
+const NO_BODIES: readonly RegenBody[] = Object.freeze([]);
+
 /**
- * A RegenStatusPort for tests: starts with no regeneration (generation 0, no health);
- * each publish stands for one finished regeneration.
+ * A RegenStatusPort for tests: starts with no regeneration (generation 0, no health, no
+ * bodies); each publish stands for one finished regeneration.
  */
 export class FakeRegenStatus implements RegenStatusPort {
   private readonly value = new ObservableValue<RegenSnapshot>(
-    Object.freeze({ generation: 0, health: new Map() }),
+    Object.freeze({ generation: 0, health: new Map(), bodies: NO_BODIES }),
   );
   readonly state: Observable<RegenSnapshot> = this.value.asObservable();
 
-  /** A new frozen snapshot with generation + 1 and a copy of health; notifies subscribers. */
-  publish(health: ReadonlyMap<FeatureId, FeatureHealth>): void {
+  /**
+   * A new frozen snapshot with generation + 1 and copies of health and bodies (no bodies
+   * when omitted); notifies subscribers.
+   */
+  publish(
+    health: ReadonlyMap<FeatureId, FeatureHealth>,
+    bodies: readonly RegenBody[] = NO_BODIES,
+  ): void {
     this.value.set(
-      Object.freeze({ generation: this.value.get().generation + 1, health: new Map(health) }),
+      Object.freeze({
+        generation: this.value.get().generation + 1,
+        health: new Map(health),
+        bodies: Object.freeze(bodies.map(({ body, feature }) => Object.freeze({ body, feature }))),
+      }),
     );
   }
 }

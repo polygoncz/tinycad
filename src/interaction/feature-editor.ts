@@ -63,8 +63,8 @@ export interface FieldState {
   /** kind, label, min/max… – the UI picks the control by it. */
   readonly spec: ParamSpec;
   readonly value: unknown;
-  /** The first ParamIssue with param === name. */
-  readonly issue: string | null;
+  /** The first ParamIssue with param === name; ui translates its code (ADR 0014). */
+  readonly issue: ParamIssue | null;
   /** name === activeRefParam */
   readonly active: boolean;
 }
@@ -74,8 +74,11 @@ export function createFeatureEditor(deps: {
   ops: OperationDispatcher;
   schemas: RegistryReader<FeatureSchema>;
   ids: IdGenerator;
+  /** Translates schema.label for the name of a new feature (ADR 0014); identity by default. */
+  translate?: (key: string) => string;
 }): FeatureEditor {
   const { doc, ops, schemas, ids } = deps;
+  const translate = deps.translate ?? ((key: string) => key);
   const current = new ObservableValue<FeatureEditSession | null>(null);
 
   function checkCanOpen(what: string): void {
@@ -126,11 +129,13 @@ export function createFeatureEditor(deps: {
         id: ids.next() as FeatureId,
         type,
         typeVersion: schema.version,
-        name: nextFeatureName(doc.studio, schema.label),
+        // The name is plain text in the current language; a later switch does not rename it.
+        name: nextFeatureName(doc.studio, translate(schema.label)),
         // FeatureInstance.params is Readonly<P> with P = unknown, which rejects a plain unknown.
         params: schema.defaults() as FeatureInstance['params'],
         suppressed: false,
       };
+      // The label of the transaction stays the key, translated only when shown (ADR 0014).
       const tx = begin(schema.label, (t) => {
         // Inserting at the bar moves the bar behind the new feature (Q068).
         const add: FeatureAddOp = {
@@ -195,13 +200,13 @@ function createSession(deps: {
     const issues =
       prev !== null && sameIssues(prev.issues, freshIssues)
         ? prev.issues
-        : Object.freeze(freshIssues.map((i) => Object.freeze({ ...i })));
+        : Object.freeze(freshIssues.map(freezeIssue));
     const fields = Object.entries(schema.params).map(([name, spec], i): FieldState => {
       const field: FieldState = {
         name,
         spec,
         value: params[name],
-        issue: issues.find((issue) => issue.param === name)?.message ?? null,
+        issue: issues.find((issue) => issue.param === name) ?? null,
         active: name === activeRefParam,
       };
       const old = prev?.fields[i];
@@ -302,13 +307,31 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** A frozen copy, its params included: issues come from the plugin's validate. */
+function freezeIssue(issue: ParamIssue): ParamIssue {
+  const { params, ...rest } = issue;
+  return Object.freeze(
+    params === undefined ? { ...rest } : { ...rest, params: Object.freeze({ ...params }) },
+  );
+}
+
 function sameIssues(a: readonly ParamIssue[], b: readonly ParamIssue[]): boolean {
+  return a.length === b.length && a.every((issue, i) => sameIssue(issue, b[i] ?? null));
+}
+
+function sameIssue(a: ParamIssue | null, b: ParamIssue | null): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  return a.param === b.param && a.code === b.code && sameIssueParams(a.params, b.params);
+}
+
+function sameIssueParams(a: ParamIssue['params'], b: ParamIssue['params']): boolean {
+  if (a === b) return true;
+  if (a === undefined || b === undefined) return false;
+  const keys = Object.keys(a);
   return (
-    a.length === b.length &&
-    a.every((issue, i) => {
-      const other = b[i];
-      return other !== undefined && issue.param === other.param && issue.message === other.message;
-    })
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => Object.hasOwn(b, key) && Object.is(a[key], b[key]))
   );
 }
 
@@ -317,7 +340,7 @@ function sameField(a: FieldState, b: FieldState): boolean {
     a.name === b.name &&
     a.spec === b.spec &&
     Object.is(a.value, b.value) &&
-    a.issue === b.issue &&
+    sameIssue(a.issue, b.issue) &&
     a.active === b.active
   );
 }

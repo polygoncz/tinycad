@@ -4,6 +4,7 @@
 import init from 'replicad-opencascadejs';
 import type { OpenCascadeInstance, TopAbs_ShapeEnum, TopoDS_Shape } from 'replicad-opencascadejs';
 import { createKernelError, kernelErrorCode } from '@/kernel';
+import { isWasmTrap } from './wasm-trap';
 
 /** Initialised OCCT module: every bound class plus Emscripten helpers. */
 export type Occt = OpenCascadeInstance;
@@ -76,9 +77,12 @@ export function mapSubShapes(
  * Converts anything thrown inside the adapter to a kernel error (spec 06, Errors). An OCCT
  * exception (WebAssembly.Exception) becomes 'internal' with the OCCT type in the message;
  * an error that already has a kernel code passes unchanged; anything else is 'internal'.
+ * A WASM trap (WebAssembly.RuntimeError) passes unchanged too: it is fatal, not a kernel
+ * error, and the worker must still recognise it (Q055).
  */
 export function toKernelError(oc: Occt, e: unknown): Error {
   if (e instanceof Error && kernelErrorCode(e) !== undefined) return e;
+  if (isWasmTrap(e)) return e;
   if (isWasmException(e)) {
     const [type, message] = oc.getExceptionMessage(e);
     return createKernelError('internal', message ? `${type}: ${message}` : type);

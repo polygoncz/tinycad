@@ -254,14 +254,14 @@ describe('Regenerator.run', () => {
       expect(result.finalState).toBe(first.finalState);
     });
 
-    it('invalid params give INVALID_PARAMS with the issues joined by "; " and skip the builder', async () => {
+    it('invalid params give INVALID_PARAMS with the issue codes joined by "; " and skip the builder', async () => {
       const { run, schemas, builders } = setup();
       const strict = aSpyBuilder('strict');
       builders.register(strict);
       schemas.register(
         aSchema('strict', () => [
-          { param: 'size', message: 'Must be greater than 0' },
-          { param: '', message: 'Params are inconsistent' },
+          { param: 'size', code: 'param.atOrBelowMin', params: { min: 0 } },
+          { param: '', code: 'strict.inconsistent' },
         ]),
       );
       const result = await run(
@@ -272,7 +272,7 @@ describe('Regenerator.run', () => {
         kind: 'error',
         error: {
           code: 'INVALID_PARAMS',
-          message: 'size: Must be greater than 0; Params are inconsistent',
+          message: 'size: param.atOrBelowMin; strict.inconsistent',
         },
       });
       expect(result.statuses.get(aFeature({ id: 'b' }).id)).toEqual(OK);

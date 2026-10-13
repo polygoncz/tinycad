@@ -9,6 +9,7 @@ import type {
   ViewKeyEvent,
   ViewPointerEvent,
 } from '.';
+import type { RegenBody } from './regen-status-port';
 import { FakeRegenStatus, FakeViewport } from './testing';
 
 // Branded ids are created by a cast in tests only.
@@ -199,11 +200,26 @@ describe('FakeRegenStatus', () => {
   const F2 = 'f2' as FeatureId;
   const ERROR: FeatureHealth = { kind: 'error', message: 'boom' };
 
-  it('starts at generation 0 with no health, frozen', () => {
+  it('starts at generation 0 with no health and no bodies, frozen', () => {
     const snapshot = new FakeRegenStatus().state.get();
     expect(snapshot.generation).toBe(0);
     expect(snapshot.health.size).toBe(0);
+    expect(snapshot.bodies).toEqual([]);
     expect(Object.isFrozen(snapshot)).toBe(true);
+  });
+
+  it('publish sets frozen copies of the bodies; without them there are none', () => {
+    const regen = new FakeRegenStatus();
+    const bodies: RegenBody[] = [{ body: BODY, feature: F1 }];
+    regen.publish(new Map(), bodies);
+    const snapshot = regen.state.get();
+    bodies.push({ body: BODY, feature: F2 });
+    expect(snapshot.bodies).toEqual([{ body: BODY, feature: F1 }]);
+    expect(Object.isFrozen(snapshot.bodies)).toBe(true);
+    expect(snapshot.bodies.every((b) => Object.isFrozen(b))).toBe(true);
+
+    regen.publish(new Map());
+    expect(regen.state.get().bodies).toEqual([]);
   });
 
   it('publish increments the generation, sets the health and notifies subscribers', () => {

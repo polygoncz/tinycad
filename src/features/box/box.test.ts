@@ -20,6 +20,7 @@ import { aBuildContext, stoppedClock } from '@/regen/testing';
 import { boxBuilder } from './builder';
 import { boxSchema } from './schema';
 import type { BoxParams } from './schema';
+import { boxMessages } from './messages';
 import { boxTool } from './tool';
 import * as box from '.';
 
@@ -49,6 +50,10 @@ describe('box public API', () => {
     expect(boxBuilder.type).toBe('box');
   });
 
+  it('boxPlugin brings the messages of the box', () => {
+    expect(box.boxPlugin.messages).toBe(boxMessages);
+  });
+
   it('boxPlugin brings the box tool', () => {
     expect(box.boxPlugin.tools).toEqual([boxTool]);
   });
@@ -66,7 +71,22 @@ describe('box public API', () => {
 
 describe('boxSchema', () => {
   it('is version 1 of type box', () => {
-    expect(boxSchema).toMatchObject({ type: 'box', version: 1, label: 'Box' });
+    expect(boxSchema).toMatchObject({ type: 'box', version: 1, label: 'box.label' });
+  });
+
+  it('labels are translation keys (ADR 0014)', () => {
+    expect(Object.entries(boxSchema.params).map(([key, spec]) => [key, spec.label])).toEqual([
+      ['origin', 'box.origin'],
+      ['width', 'box.width'],
+      ['depth', 'box.depth'],
+      ['height', 'box.height'],
+    ]);
+  });
+
+  it('sizes have the exclusive lower bound 0 (Q050)', () => {
+    for (const key of ['width', 'depth', 'height']) {
+      expect(boxSchema.params[key], key).toMatchObject({ min: 0, exclusiveMin: true });
+    }
   });
 
   it('is frozen deeply, param specs and the origin default included', () => {
@@ -92,11 +112,21 @@ describe('boxSchema', () => {
     expect(a).toEqual(b);
   });
 
-  it.each(['width', 'depth', 'height'] as const)('rejects a zero, negative or NaN %s', (key) => {
-    for (const value of [0, -0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+  it.each(['width', 'depth', 'height'] as const)('rejects a zero or negative %s', (key) => {
+    for (const value of [0, -0, -1]) {
       const issues = boxSchema.validate({ ...boxSchema.defaults(), [key]: value });
-      expect(issues, `${key} = ${String(value)}`).toHaveLength(1);
-      expect(issues[0]?.param).toBe(key);
+      expect(issues, `${key} = ${String(value)}`).toEqual([
+        { param: key, code: 'param.atOrBelowMin', params: { min: 0 } },
+      ]);
+    }
+  });
+
+  it.each(['width', 'depth', 'height'] as const)('rejects a NaN or infinite %s', (key) => {
+    for (const value of [Number.NaN, Number.POSITIVE_INFINITY]) {
+      const issues = boxSchema.validate({ ...boxSchema.defaults(), [key]: value });
+      expect(issues, `${key} = ${String(value)}`).toEqual([
+        { param: key, code: 'param.wrongType' },
+      ]);
     }
   });
 
@@ -121,6 +151,41 @@ describe('boxSchema', () => {
     expect(boxSchema.validate({ ...boxSchema.defaults(), size: 1 }).map((i) => i.param)).toEqual([
       'size',
     ]);
+  });
+});
+
+describe('boxMessages', () => {
+  /** Every translation key of the schema: its label, the param labels and enum option labels. */
+  function schemaKeys(): readonly string[] {
+    return [
+      boxSchema.label,
+      ...Object.values(boxSchema.params).flatMap((spec) => [
+        spec.label,
+        ...(spec.kind === 'enum' ? spec.options.map((o) => o.label) : []),
+      ]),
+    ];
+  }
+
+  it.each(['cs', 'en'] as const)('%s has a text for every key of the schema', (lang) => {
+    for (const key of schemaKeys()) {
+      expect(boxMessages[lang][key], `${lang}: ${key}`).toEqual(expect.any(String));
+      expect(boxMessages[lang][key], `${lang}: ${key}`).not.toBe('');
+    }
+  });
+
+  it('cs and en have the same keys', () => {
+    expect(Object.keys(boxMessages.cs).sort()).toEqual(Object.keys(boxMessages.en).sort());
+  });
+
+  it('names the box Kvádr and Box', () => {
+    expect(boxMessages.cs['box.label']).toBe('Kvádr');
+    expect(boxMessages.en['box.label']).toBe('Box');
+  });
+
+  it('is frozen', () => {
+    expect(Object.isFrozen(boxMessages)).toBe(true);
+    expect(Object.isFrozen(boxMessages.cs)).toBe(true);
+    expect(Object.isFrozen(boxMessages.en)).toBe(true);
   });
 });
 

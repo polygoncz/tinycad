@@ -117,7 +117,11 @@ export type FeatureStatus =
   | { kind: 'rolledBack' }          // za rollback barem
   | { kind: 'pending' };            // ještě nepřepočítaná
 
-export interface FeatureError { readonly code: 'INVALID_PARAMS' | 'UNRESOLVED_REFERENCE' | 'KERNEL' | 'UNKNOWN_TYPE'; readonly message: string }
+export interface FeatureError {
+  readonly code: 'INVALID_PARAMS' | 'UNRESOLVED_REFERENCE' | 'KERNEL' | 'UNKNOWN_TYPE';
+  readonly message: string;                      // technický text (log, chyby jádra)
+  readonly issues?: readonly ParamIssue[];       // jen INVALID_PARAMS: problémy z schema.validate (M10, ADR 0014)
+}
 ```
 
 Status featury určí `Regenerator` v tomto pořadí:
@@ -125,7 +129,7 @@ Status featury určí `Regenerator` v tomto pořadí:
 1. pozice `>= rollbackIndex` → `rolledBack` (builder se nevolá, v cache zůstává, co tam bylo),
 2. `suppressed` → `suppressed`, stav se propustí,
 3. chybí schéma nebo builder pro `type` → `error` `UNKNOWN_TYPE`,
-4. `schema.validate(params)` vrátí problémy → `error` `INVALID_PARAMS` (zprávy spojené `'; '`), builder se nevolá,
+4. `schema.validate(params)` vrátí problémy → `error` `INVALID_PARAMS` s `issues` (zmrazená kopie) a technickou `message` `'param: code; …'`, builder se nevolá. UI chybu překládá z `issues`, ne z `message` (rozhodnutí 2026-10-13),
 5. builder vrátí `{ ok: false }` → `error` s jeho chybou; výjimka s kódem jádra → `error` `KERNEL`,
 6. builder vrátil stav a volal `warn` → `warning`, jinak `ok`.
 
