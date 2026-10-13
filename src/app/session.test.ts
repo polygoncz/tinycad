@@ -230,6 +230,16 @@ describe('createAppSession – changes', () => {
     expect(session.persistence.get()).toBe('saved');
     expect((await store.load(DOC))?.entries).toHaveLength(1);
   });
+
+  it('flush writes the pending queue to the store at once, without the delay', async () => {
+    const { session, store, scheduler } = await open();
+    addBox(session);
+    await session.flush();
+    expect(session.persistence.get()).toBe('saved');
+    expect((await store.load(DOC))?.entries).toHaveLength(1);
+    // The delayed flush is cancelled: nothing is written twice.
+    expect(scheduler.pending).toBe(0);
+  });
 });
 
 describe('createAppSession – kernel restart', () => {
@@ -292,6 +302,16 @@ describe('createAppSession – read-only', () => {
     await settle();
     expect(session.persistence.get()).toBe('saved');
     expect(append).not.toHaveBeenCalled();
+    expect(snapshot).not.toHaveBeenCalled();
+  });
+
+  it('flush writes nothing', async () => {
+    const store = await aStoredDocumentWithBox();
+    const counting = aCountingStore(store);
+    const snapshot = vi.spyOn(store, 'saveSnapshot');
+    const { session } = await open({ store: counting.store, readOnly: true });
+    await expect(session.flush()).resolves.toBeUndefined();
+    expect(counting.appends()).toBe(0);
     expect(snapshot).not.toHaveBeenCalled();
   });
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // ParamSpec kind 'point': three coordinates in millimetres; a change reports the whole point.
-import { computed } from 'vue';
+import { computed, useId } from 'vue';
 import type { Vec3 } from '@/core';
 import type { FieldState } from '@/interaction';
 import { asPoint, withCoordinate } from './field-values';
@@ -16,19 +16,24 @@ const AXES = [
   { name: 'Z', index: 2 },
 ] as const;
 
+// Each coordinate is named by the field label and its axis: "Poloha X" (spec 11, "Přístupnost").
+const axisIdPrefix = useId();
+
 // A value that is not a point (invalid document data) edits as the origin.
 const point = computed((): Vec3 => asPoint(props.field.value) ?? [0, 0, 0]);
 </script>
 
 <template>
-  <FieldShell :label="field.spec.label" :issue="field.issue">
+  <FieldShell v-slot="{ labelId, issueId }" :label="field.spec.label" :issue="field.issue">
     <div class="point">
       <div v-for="axis in AXES" :key="axis.name" class="axis">
-        <span class="axis-name">{{ axis.name }}</span>
+        <span :id="`${axisIdPrefix}-${axis.name}`" class="axis-name">{{ axis.name }}</span>
         <NumericInput
           :value="point[axis.index]"
           unit="mm"
           :invalid="field.issue !== null"
+          :labelledby="`${labelId} ${axisIdPrefix}-${axis.name}`"
+          :describedby="issueId"
           @commit="emit('update', withCoordinate(point, axis.index, $event))"
         />
       </div>

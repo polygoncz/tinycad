@@ -1,5 +1,9 @@
 <script setup lang="ts">
 // Common frame of a param field: translated label, the control (slot) and the issue text.
+// Accessibility (spec 11, "Komponenty"): the slot gets the ids of the label and of the issue,
+// the control names itself by them (aria-labelledby, aria-describedby), so a screen reader and
+// the e2e test find the field as "Výška".
+import { useId } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ParamIssue } from '@/document';
 import { issueText } from '../../i18n/i18n';
@@ -7,13 +11,17 @@ import { issueText } from '../../i18n/i18n';
 defineProps<{ label: string; issue: ParamIssue | null }>();
 
 const { t } = useI18n();
+const labelId = useId();
+const issueId = useId();
 </script>
 
 <template>
   <div class="param-field">
-    <span class="label">{{ t(label) }}</span>
-    <div class="control"><slot /></div>
-    <div v-if="issue" class="issue">{{ issueText(t, issue) }}</div>
+    <span :id="labelId" class="label">{{ t(label) }}</span>
+    <div class="control">
+      <slot :label-id="labelId" :issue-id="issue ? issueId : undefined" />
+    </div>
+    <div v-if="issue" :id="issueId" class="issue">{{ issueText(t, issue) }}</div>
   </div>
 </template>
 

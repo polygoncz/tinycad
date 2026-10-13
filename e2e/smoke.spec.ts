@@ -3,29 +3,21 @@ import type { Locator, Page } from '@playwright/test';
 
 // Smoke test of M10 (Ú11): the whole path click → operation → log → regeneration in the
 // worker → rendering → undo, persistence across a reload, an invalid param and the read-only
-// second tab. Runs against the production build (playwright.config.ts) in Czech.
+// second tab. Runs against the production build (playwright.config.ts) in Czech. Elements are
+// found only by their roles and accessible names (spec 11, "Přístupnost").
 
 /** From the document list to an open, empty document. */
 async function createDocument(page: Page): Promise<void> {
   await page.goto('/');
-  // Not exact: the name starts with the glyph of the icon font (the <i> is not aria-hidden).
-  await page.getByRole('button', { name: 'Nový' }).click();
+  await page.getByRole('button', { name: 'Nový', exact: true }).click();
   await expect(page).toHaveURL(/#\/d\//);
   // The toolbar is there once the session is open.
   await expect(page.getByRole('button', { name: 'Kvádr', exact: true })).toBeEnabled();
 }
 
-/**
- * The input of a param field of the open dialog by its label. The input has no accessible
- * name of its own (FieldShell renders the label as a plain span), so the field is found
- * through its frame.
- */
+/** The input of a param field of the open dialog, named by its label. */
 function paramInput(page: Page, label: string): Locator {
-  return page
-    .getByRole('dialog')
-    .locator('.param-field')
-    .filter({ has: page.getByText(label, { exact: true }) })
-    .getByRole('textbox');
+  return page.getByRole('dialog').getByRole('textbox', { name: label, exact: true });
 }
 
 /** Toolbar Kvádr → height → OK. */
@@ -79,12 +71,27 @@ test('height 0 marks the feature as an error and the other body stays', async ({
   await addBox(page, '0');
   const broken = timelineFeature(page, 'Kvádr 2');
   await expect(broken).toBeVisible();
-  // The tooltip of the item names its state and the issue.
-  await expect(broken).toContainText('Chyba');
-  await expect(broken).toContainText('Musí být větší než 0');
-  await expect(timelineFeature(page, 'Kvádr 1')).not.toContainText('Chyba');
+  // The description of the item names its state and the issue.
+  await expect(broken).toHaveAccessibleDescription(/Chyba/);
+  await expect(broken).toHaveAccessibleDescription(/Musí být větší než 0/);
+  await expect(timelineFeature(page, 'Kvádr 1')).not.toHaveAccessibleDescription(/Chyba/);
 
   await expect(page.getByText('Chyby: 1')).toBeVisible();
+  await expect(page.getByText('Tělesa: 1')).toBeVisible();
+});
+
+test('Enter in the dialog confirms it, the first field has the focus', async ({ page }) => {
+  await createDocument(page);
+
+  await page.getByRole('button', { name: 'Kvádr', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  // The first field of the box is the X of its origin.
+  await expect(paramInput(page, 'Počátek X')).toBeFocused();
+
+  await page.keyboard.press('Enter');
+  await expect(dialog).toBeHidden();
+  await expect(timelineFeature(page, 'Kvádr 1')).toBeVisible();
   await expect(page.getByText('Tělesa: 1')).toBeVisible();
 });
 

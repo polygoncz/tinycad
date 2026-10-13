@@ -21,8 +21,15 @@ const selected = computed({
 </script>
 
 <template>
-  <FieldShell :label="field.spec.label" :issue="field.issue">
-    <select v-model="selected" class="select" :class="{ invalid: field.issue !== null }">
+  <FieldShell v-slot="{ labelId, issueId }" :label="field.spec.label" :issue="field.issue">
+    <select
+      v-model="selected"
+      class="select"
+      :class="{ invalid: field.issue !== null }"
+      :aria-labelledby="labelId"
+      :aria-describedby="issueId"
+      :aria-invalid="field.issue !== null"
+    >
       <option v-for="option in options" :key="option.value" :value="option.value">
         {{ t(option.label) }}
       </option>

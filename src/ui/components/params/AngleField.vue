@@ -17,11 +17,13 @@ const degrees = computed(() =>
 </script>
 
 <template>
-  <FieldShell :label="field.spec.label" :issue="field.issue">
+  <FieldShell v-slot="{ labelId, issueId }" :label="field.spec.label" :issue="field.issue">
     <NumericInput
       :value="degrees"
       unit="°"
       :invalid="field.issue !== null"
+      :labelledby="labelId"
+      :describedby="issueId"
       @commit="emit('update', degToRad($event))"
     />
   </FieldShell>

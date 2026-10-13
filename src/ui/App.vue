@@ -67,20 +67,20 @@ onUnmounted(() => {
     <DocumentList v-if="view.docId === null" />
     <div v-else class="notice" role="status">
       <template v-if="view.openError !== null">
-        <i class="ti ti-alert-triangle error-icon" />
+        <i class="ti ti-alert-triangle error-icon" aria-hidden="true" />
         <p>{{ t('app.openError') }}</p>
         <p class="detail">{{ view.openError }}</p>
         <button type="button" class="button" @click="backToList">{{ t('app.backToList') }}</button>
       </template>
       <template v-else>
-        <i class="ti ti-loader-2 spinner" />
+        <i class="ti ti-loader-2 spinner" aria-hidden="true" />
         <p>{{ t('app.opening') }}</p>
       </template>
     </div>
   </div>
 
   <div v-if="view.closeError !== null" class="toast" role="alert">
-    <i class="ti ti-alert-triangle error-icon" />
+    <i class="ti ti-alert-triangle error-icon" aria-hidden="true" />
     <span>{{ t('app.closeError', { error: view.closeError }) }}</span>
     <button
       type="button"
@@ -88,7 +88,7 @@ onUnmounted(() => {
       :title="t('app.dismiss')"
       @click="switcher.dismissCloseError()"
     >
-      <i class="ti ti-x" />
+      <i class="ti ti-x" aria-hidden="true" />
     </button>
   </div>
 </template>

@@ -91,7 +91,7 @@ function runMenuItem(id: string): void {
             :aria-label="t(item.label)"
             @click="run(item)"
           >
-            <i class="ti" :class="`ti-${item.icon}`" />
+            <i class="ti" :class="`ti-${item.icon}`" aria-hidden="true" />
             <span class="tip" role="tooltip">
               {{ t(item.label) }}
               <kbd v-if="item.shortcut !== null">{{ shortcutText(item.shortcut, isMac) }}</kbd>
@@ -99,7 +99,7 @@ function runMenuItem(id: string): void {
           </button>
         </div>
         <button type="button" class="group-label" @click="openMenu(group, $event)">
-          {{ groupLabel(group) }} <i class="ti ti-chevron-down" />
+          {{ groupLabel(group) }} <i class="ti ti-chevron-down" aria-hidden="true" />
         </button>
       </div>
     </template>

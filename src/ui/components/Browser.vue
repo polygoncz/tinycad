@@ -33,14 +33,18 @@ function toggleVisible(row: BrowserBodyRow): void {
 <template>
   <aside class="browser">
     <button type="button" class="header" @click="panelOpen = !panelOpen">
-      <i class="ti chevron" :class="panelOpen ? 'ti-chevron-down' : 'ti-chevron-right'" />
+      <i
+        class="ti chevron"
+        :class="panelOpen ? 'ti-chevron-down' : 'ti-chevron-right'"
+        aria-hidden="true"
+      />
       <span>{{ t('browser.title') }}</span>
     </button>
 
     <div v-if="panelOpen" class="tree" role="tree">
       <div class="node level-0" role="treeitem">
-        <i class="ti ti-chevron-down chevron" />
-        <i class="ti ti-cube document-icon" />
+        <i class="ti ti-chevron-down chevron" aria-hidden="true" />
+        <i class="ti ti-cube document-icon" aria-hidden="true" />
         <span class="name document-name">{{ documentName }}</span>
       </div>
 
@@ -50,8 +54,12 @@ function toggleVisible(row: BrowserBodyRow): void {
         :aria-expanded="bodiesOpen"
         @click="bodiesOpen = !bodiesOpen"
       >
-        <i class="ti chevron" :class="bodiesOpen ? 'ti-chevron-down' : 'ti-chevron-right'" />
-        <i class="ti ti-folder" />
+        <i
+          class="ti chevron"
+          :class="bodiesOpen ? 'ti-chevron-down' : 'ti-chevron-right'"
+          aria-hidden="true"
+        />
+        <i class="ti ti-folder" aria-hidden="true" />
         <span class="name">{{ t('browser.bodies') }}</span>
       </div>
 
@@ -66,7 +74,7 @@ function toggleVisible(row: BrowserBodyRow): void {
           @click="select(row, $event)"
         >
           <span class="chevron" />
-          <i class="ti ti-box" />
+          <i class="ti ti-box" aria-hidden="true" />
           <span class="name">{{ t(row.name.key, { n: row.name.n }) }}</span>
           <button
             type="button"
@@ -74,7 +82,7 @@ function toggleVisible(row: BrowserBodyRow): void {
             :title="row.visible ? t('browser.hide') : t('browser.show')"
             @click.stop="toggleVisible(row)"
           >
-            <i class="ti" :class="row.visible ? 'ti-eye' : 'ti-eye-off'" />
+            <i class="ti" :class="row.visible ? 'ti-eye' : 'ti-eye-off'" aria-hidden="true" />
           </button>
         </div>
       </template>

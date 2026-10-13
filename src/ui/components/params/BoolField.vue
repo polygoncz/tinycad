@@ -17,8 +17,14 @@ const checked = computed({
 </script>
 
 <template>
-  <FieldShell :label="field.spec.label" :issue="field.issue">
-    <input v-model="checked" type="checkbox" class="checkbox" />
+  <FieldShell v-slot="{ labelId, issueId }" :label="field.spec.label" :issue="field.issue">
+    <input
+      v-model="checked"
+      type="checkbox"
+      class="checkbox"
+      :aria-labelledby="labelId"
+      :aria-describedby="issueId"
+    />
   </FieldShell>
 </template>
 

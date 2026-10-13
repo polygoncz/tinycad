@@ -4,7 +4,8 @@
 // The form is generated from the schema through the ParamField registry; every change goes to
 // the session (setParam, focusRefParam, commit, cancel). Movable by its header; the offset is
 // view state of this panel only. Enter is OK and Esc is Cancel while the focus is in the dialog.
-import { computed, ref } from 'vue';
+// On opening the first field gets the focus (spec 11, "Přístupnost"), so the keys work at once.
+import { computed, onMounted, ref, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FeatureEditSession, FieldState } from '@/interaction';
 import { useObservable } from '../composables/use-observable';
@@ -49,6 +50,12 @@ function onKeyDown(e: KeyboardEvent): void {
   }
 }
 
+// The first control of the form; a dialog without fields keeps the focus where it was.
+const fields = useTemplateRef<HTMLElement>('fields');
+onMounted(() => {
+  fields.value?.querySelector<HTMLElement>('input, select, button')?.focus();
+});
+
 // Moving by the header: pointer capture, the offset from the docked position.
 const offset = ref({ x: 0, y: 0 });
 let drag: { readonly x: number; readonly y: number; readonly pointerId: number } | null = null;
@@ -85,12 +92,12 @@ function onGripUp(): void {
       @pointerup="onGripUp"
       @pointercancel="onGripUp"
     >
-      <i class="ti feature-icon" :class="icon" />
+      <i class="ti feature-icon" :class="icon" aria-hidden="true" />
       <span class="title">{{ title }}</span>
-      <i class="ti ti-grip-horizontal grip" />
+      <i class="ti ti-grip-horizontal grip" aria-hidden="true" />
     </header>
 
-    <div class="fields">
+    <div ref="fields" class="fields">
       <template v-for="field in state.fields" :key="field.name">
         <component
           :is="paramFieldFor(field.spec.kind)"

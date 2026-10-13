@@ -80,7 +80,7 @@ onMounted(() => {
       <h1 class="title">{{ t('documents.title') }}</h1>
       <ThemeLocaleToggles />
       <button type="button" class="new" :disabled="busy" @click="create">
-        <i class="ti ti-plus" /> {{ t('documents.new') }}
+        <i class="ti ti-plus" aria-hidden="true" /> {{ t('documents.new') }}
       </button>
     </header>
 
@@ -91,7 +91,7 @@ onMounted(() => {
     <div v-else class="cards">
       <article v-for="info in documents" :key="info.meta.id" class="card">
         <button type="button" class="open" @click="open(info.meta.id)">
-          <span class="preview"><i class="ti ti-box" /></span>
+          <span class="preview"><i class="ti ti-box" aria-hidden="true" /></span>
           <span class="meta">
             <span class="name">{{ info.meta.name }}</span>
             <span class="date">{{ updatedText(info) }}</span>
@@ -105,7 +105,7 @@ onMounted(() => {
           :disabled="busy"
           @click="remove(info)"
         >
-          <i class="ti ti-trash" />
+          <i class="ti ti-trash" aria-hidden="true" />
         </button>
       </article>
     </div>

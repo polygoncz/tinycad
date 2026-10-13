@@ -2,11 +2,20 @@
 // Text input for one number. Reports a value on change (Enter or leaving the field), not on
 // every keystroke. Text that is not a number is not reported; the field shows the last value.
 // The typed text is a local string (pure UI state); no DOM types in the script, so the
-// component typechecks in the DOM-free test project too.
+// component typechecks in the DOM-free test project too. The name comes from the field label
+// (labelledby, spec 11 "Přístupnost"); the unit is not part of it.
 import { ref, watch } from 'vue';
 import { formatNumber, parseNumber } from './field-values';
 
-const props = defineProps<{ value: unknown; unit?: string; invalid: boolean }>();
+const props = defineProps<{
+  value: unknown;
+  unit?: string;
+  invalid: boolean;
+  /** Ids of the elements naming the input (aria-labelledby). */
+  labelledby: string;
+  /** Id of the issue text, when there is one (aria-describedby). */
+  describedby?: string | undefined;
+}>();
 const emit = defineEmits<{ commit: [value: number] }>();
 
 const text = ref(formatNumber(props.value));
@@ -26,7 +35,15 @@ function onChange(): void {
 
 <template>
   <label class="numeric-input" :class="{ invalid }">
-    <input v-model="text" type="text" inputmode="decimal" @change="onChange" />
+    <input
+      v-model="text"
+      type="text"
+      inputmode="decimal"
+      :aria-labelledby="labelledby"
+      :aria-describedby="describedby"
+      :aria-invalid="invalid"
+      @change="onChange"
+    />
     <span v-if="unit" class="unit">{{ unit }}</span>
   </label>
 </template>

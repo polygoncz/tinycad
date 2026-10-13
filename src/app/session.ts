@@ -136,6 +136,11 @@ export interface AppSession extends Disposable {
   /** Q072: app picks the ScenePalette, ui does not know render. */
   setTheme(theme: 'light' | 'dark'): void;
   /**
+   * Writes the pending queue of the persistence now, without the delay; read-only: nothing.
+   * openAppSession calls it on pagehide and visibilitychange to hidden (Q034).
+   */
+  flush(): Promise<void>;
+  /**
    * Writes the pending queue of the persistence (flush), then releases like dispose. Rejects
    * with the error of the flush, after releasing anyway. A second call returns the same promise.
    */
@@ -366,6 +371,9 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     },
     setTheme(theme) {
       viewport.setPalette(theme === 'dark' ? DARK_PALETTE : LIGHT_PALETTE);
+    },
+    async flush() {
+      await persistence?.flush();
     },
     close() {
       closing ??= close();

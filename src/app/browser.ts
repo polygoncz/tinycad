@@ -14,6 +14,7 @@ import type { FeaturePlugin } from '@/plugin-api';
 import { createViewport, DARK_PALETTE, LIGHT_PALETTE } from '@/render';
 import { acquireDocumentLock } from './doc-lock';
 import * as documents from './documents';
+import { flushOnPageHide } from './page-lifecycle';
 import { createAppSession } from './session';
 import type { AppSession } from './session';
 
@@ -59,9 +60,21 @@ export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSe
       verify: import.meta.env.DEV,
     });
 
+    // Q034: a reload right after a change must not lose the queue waiting for the delayed flush.
+    const pageHide = flushOnPageHide({
+      page: window,
+      document,
+      flush: () => session.flush(),
+      onError: (error) => {
+        console.error(error);
+      },
+    });
+
     // Reverse order of creation: the viewport, then the store, then the lock.
     let closing: Promise<void> | null = null;
     async function close(): Promise<void> {
+      // The session saves for the last time itself; the page must not flush it any more.
+      pageHide.dispose();
       try {
         await session.close();
       } finally {
@@ -75,6 +88,7 @@ export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSe
         return closing;
       },
       dispose() {
+        pageHide.dispose();
         session.dispose();
         lifetime.dispose();
       },

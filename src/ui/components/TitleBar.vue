@@ -32,13 +32,13 @@ function reload(): void {
       :title="t('titleBar.documents')"
       @click="showDocuments"
     >
-      <i class="ti ti-layout-grid" />
+      <i class="ti ti-layout-grid" aria-hidden="true" />
     </button>
 
     <div class="title">
       <span class="name">{{ documentName }}</span>
       <span v-if="session.readOnly" class="read-only" :title="t('titleBar.readOnlyHint')">
-        <i class="ti ti-lock" /> {{ t('titleBar.readOnly') }}
+        <i class="ti ti-lock" aria-hidden="true" /> {{ t('titleBar.readOnly') }}
       </span>
       <span
         v-else
@@ -51,10 +51,10 @@ function reload(): void {
     </div>
 
     <span v-if="kernel === 'restarting'" class="kernel" role="status">
-      <i class="ti ti-loader-2" /> {{ t('titleBar.kernel.restarting') }}
+      <i class="ti ti-loader-2" aria-hidden="true" /> {{ t('titleBar.kernel.restarting') }}
     </span>
     <span v-else-if="kernel === 'failed'" class="kernel failed" role="alert">
-      <i class="ti ti-alert-triangle" /> {{ t('titleBar.kernel.failed') }}
+      <i class="ti ti-alert-triangle" aria-hidden="true" /> {{ t('titleBar.kernel.failed') }}
       <button type="button" class="reload" @click="reload">
         {{ t('titleBar.kernel.reload') }}
       </button>

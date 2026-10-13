@@ -31,7 +31,7 @@ function toggleTheme(): void {
       :title="t('titleBar.language', { language: t(`titleBar.locale.${nextLocale}`) })"
       @click="toggleLocale"
     >
-      <i class="ti ti-language" />
+      <i class="ti ti-language" aria-hidden="true" />
     </button>
     <button
       type="button"
@@ -39,7 +39,7 @@ function toggleTheme(): void {
       :title="theme === 'dark' ? t('titleBar.themeLight') : t('titleBar.themeDark')"
       @click="toggleTheme"
     >
-      <i class="ti" :class="theme === 'dark' ? 'ti-sun' : 'ti-moon'" />
+      <i class="ti" :class="theme === 'dark' ? 'ti-sun' : 'ti-moon'" aria-hidden="true" />
     </button>
   </span>
 </template>

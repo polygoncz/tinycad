@@ -2,7 +2,10 @@
 // One feature of the Timeline: the icon, the state of the row and a tooltip with the name and
 // the translated issues. The row is a frozen TreeRow snapshot, passed as a prop (never put into
 // ref()/reactive()). While `renaming`, the name is an inline field; the Timeline does the rest.
-import { nextTick, useTemplateRef, watch } from 'vue';
+// Accessibility (spec 11, "Přístupnost"): the name of the item is the feature name, the details
+// of the tooltip (type, state, message, issues) are its description; the tooltip is hidden until
+// hover, which aria-describedby does not mind.
+import { nextTick, useId, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { TreeRow } from '@/interaction';
 import { issueText } from '../i18n/i18n';
@@ -17,6 +20,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const detailsId = useId();
 
 const input = useTemplateRef<HTMLInputElement>('input');
 // Enter and blur both commit; the flag keeps the blur after Enter or Escape from repeating it.
@@ -48,12 +52,13 @@ function cancel(): void {
     :class="[row.status, { selected: row.selected, editing: row.editing }]"
     role="button"
     :aria-label="row.name"
+    :aria-describedby="renaming ? undefined : detailsId"
     @click="emit('select', $event.shiftKey || $event.metaKey || $event.ctrlKey)"
     @dblclick="emit('edit')"
     @contextmenu.prevent="emit('menu', $event)"
   >
-    <i class="ti" :class="`ti-${row.icon ?? 'cube'}`" />
-    <span v-if="row.status === 'error'" class="badge">!</span>
+    <i class="ti" :class="`ti-${row.icon ?? 'cube'}`" aria-hidden="true" />
+    <span v-if="row.status === 'error'" class="badge" aria-hidden="true">!</span>
     <input
       v-if="renaming"
       ref="input"
@@ -68,11 +73,15 @@ function cancel(): void {
     />
     <span v-else class="tooltip">
       <span class="name">{{ row.name }}</span>
-      <span class="type">{{ t(row.typeLabel) }}</span>
-      <span v-if="row.status !== 'ok'" class="state">{{ t(`timeline.status.${row.status}`) }}</span>
-      <span v-if="row.message !== null" class="message">{{ row.message }}</span>
-      <span v-for="(issue, i) in row.issues ?? []" :key="i" class="issue">
-        {{ issueText(t, issue) }}
+      <span :id="detailsId" class="details">
+        <span class="type">{{ t(row.typeLabel) }}</span>
+        <span v-if="row.status !== 'ok'" class="state">{{
+          t(`timeline.status.${row.status}`)
+        }}</span>
+        <span v-if="row.message !== null" class="message">{{ row.message }}</span>
+        <span v-for="(issue, i) in row.issues ?? []" :key="i" class="issue">
+          {{ issueText(t, issue) }}
+        </span>
       </span>
     </span>
   </div>
@@ -161,6 +170,10 @@ function cancel(): void {
 }
 .name {
   font-weight: 600;
+}
+/* Only groups the description for aria-describedby; the tooltip lays out its children. */
+.details {
+  display: contents;
 }
 .type,
 .state {

@@ -137,7 +137,7 @@ function onBarCancel(): void {
       :disabled="actionState(step.id)?.enabled !== true"
       @click="runStep(step.id)"
     >
-      <i class="ti" :class="step.icon" />
+      <i class="ti" :class="step.icon" aria-hidden="true" />
     </button>
     <div class="separator" />
 
@@ -186,13 +186,15 @@ function onBarCancel(): void {
 
     <div class="status">
       <span v-if="regen.busy" class="busy">
-        <i class="ti ti-loader-2" /> {{ t('timeline.regen.busy') }}
+        <i class="ti ti-loader-2" aria-hidden="true" /> {{ t('timeline.regen.busy') }}
       </span>
       <span v-else-if="regen.errorCount > 0" class="errors">
-        <i class="ti ti-alert-triangle" /> {{ t('timeline.regen.errors', { n: regen.errorCount }) }}
+        <i class="ti ti-alert-triangle" aria-hidden="true" />
+        {{ t('timeline.regen.errors', { n: regen.errorCount }) }}
       </span>
       <span v-else-if="regen.lastMs !== null">
-        <i class="ti ti-check ok" /> {{ t('timeline.regen.ms', { ms: Math.round(regen.lastMs) }) }}
+        <i class="ti ti-check ok" aria-hidden="true" />
+        {{ t('timeline.regen.ms', { ms: Math.round(regen.lastMs) }) }}
       </span>
       <span>{{ t('timeline.bodies', { n: regen.bodyCount }) }}</span>
       <span v-if="selection.length > 0">{{ t('timeline.selected', { n: selection.length }) }}</span>

@@ -10,10 +10,12 @@ const emit = defineEmits<{ update: [value: unknown] }>();
 </script>
 
 <template>
-  <FieldShell :label="field.spec.label" :issue="field.issue">
+  <FieldShell v-slot="{ labelId, issueId }" :label="field.spec.label" :issue="field.issue">
     <NumericInput
       :value="field.value"
       :invalid="field.issue !== null"
+      :labelledby="labelId"
+      :describedby="issueId"
       @commit="emit('update', $event)"
     />
   </FieldShell>
