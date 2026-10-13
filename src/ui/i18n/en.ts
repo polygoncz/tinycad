@@ -20,6 +20,25 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'feature.edit': 'Edit feature',
   'browser.body': 'Body {n}',
 
+  // Browser.
+  'browser.title': 'Browser',
+  'browser.bodies': 'Bodies',
+  'browser.show': 'Show',
+  'browser.hide': 'Hide',
+
+  // Timeline.
+  'timeline.rollbackBar': 'Rollback bar – drag',
+  'timeline.status.warning': 'Warning',
+  'timeline.status.error': 'Error',
+  'timeline.status.suppressed': 'Suppressed',
+  'timeline.status.rolledBack': 'After the rollback bar',
+  'timeline.status.pending': 'Waiting for regeneration',
+  'timeline.regen.busy': 'Regenerating…',
+  'timeline.regen.errors': 'Errors: {n}',
+  'timeline.regen.ms': '{ms} ms',
+  'timeline.bodies': 'Bodies: {n}',
+  'timeline.selected': 'Selected: {n}',
+
   // Param fields.
   'field.refs.count': 'Selected: {n}',
   'field.refs.pick': 'Select in the view',

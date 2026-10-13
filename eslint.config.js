@@ -41,7 +41,7 @@ const platformGlobals = [
 }));
 
 export default defineConfig(
-  { ignores: ['dist/', 'coverage/', 'docs/', 'scripts/', 'spikes/', 'node_modules/'] },
+  { ignores: ['dist/', 'coverage/', 'docs/', 'scripts/', 'spikes/', 'node_modules/', '.claude/worktrees/'] },
 
   eslint.configs.recommended,
   tseslint.configs.strictTypeChecked,
@@ -72,6 +72,13 @@ export default defineConfig(
     files: ['**/*.vue'],
     languageOptions: {
       parserOptions: { parser: tseslint.parser },
+    },
+    rules: {
+      // TypeScript checks undefined names; no-undef does not know browser globals in SFCs
+      // (typescript-eslint recommends turning it off for TS code).
+      'no-undef': 'off',
+      // Timeline and Browser (Prohlížeč) are names from the vault glossary, kept on purpose.
+      'vue/multi-word-component-names': ['error', { ignores: ['Timeline', 'Browser'] }],
     },
   },
   {

@@ -21,6 +21,25 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'feature.edit': 'Úprava featury',
   'browser.body': 'Těleso {n}',
 
+  // Browser.
+  'browser.title': 'Prohlížeč',
+  'browser.bodies': 'Tělesa',
+  'browser.show': 'Zobrazit',
+  'browser.hide': 'Skrýt',
+
+  // Timeline.
+  'timeline.rollbackBar': 'Rollback bar – táhněte',
+  'timeline.status.warning': 'Varování',
+  'timeline.status.error': 'Chyba',
+  'timeline.status.suppressed': 'Potlačeno',
+  'timeline.status.rolledBack': 'Za rollback barem',
+  'timeline.status.pending': 'Čeká na přepočet',
+  'timeline.regen.busy': 'Přepočítávám…',
+  'timeline.regen.errors': 'Chyby: {n}',
+  'timeline.regen.ms': '{ms} ms',
+  'timeline.bodies': 'Tělesa: {n}',
+  'timeline.selected': 'Vybráno: {n}',
+
   // Param fields.
   'field.refs.count': 'Vybráno: {n}',
   'field.refs.pick': 'Vyberte v pohledu',

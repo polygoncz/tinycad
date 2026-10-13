@@ -38,8 +38,8 @@ Pořadí odspodu nahoru: nejdřív doména a porty, pak `app`, nakonec `ui`. Pod
 - [x] `render`: `ScenePalette`, `setPalette`, `setBodyVisible` ([[Q072 Barvy scény podle režimu|Q072]], [[Q071 Viditelnost těles|Q071]]).
 - [x] `interaction`: `BrowserModel`, rozšíření `RegenSnapshot` o tělesa.
 - [x] `app/createAppSession` – kompoziční kořen testovaný v Node: registrace pluginů a vestavěných handlerů, propojení událostí, `RegenScheduler` (dirty flag, žádná fronta), restart jádra, režim jen pro čtení.
-- [ ] Akce: undo, redo, smazat vybranou featuru, potlačit, fit all, aktivace nástrojů.
-- [ ] `app/openAppSession` – workery, `IdbDocumentStore`, Web Lock ([[Q038 Jeden dokument ve dvou záložkách|Q038]]), seznam dokumentů (nový, otevřít, smazat).
+- [x] Akce: undo, redo, smazat vybranou featuru, potlačit, fit all, aktivace nástrojů.
+- [x] `app/openAppSession` – workery, `IdbDocumentStore`, Web Lock ([[Q038 Jeden dokument ve dvou záložkách|Q038]]), seznam dokumentů (nový, otevřít, smazat).
 - [x] `ui/composables`: `useSession` (provide/inject), `useObservable` ([[0010-prezentacni-model|ADR 0010]]); `vue-i18n` se slovníky pluginů.
 - [ ] Převod globální klávesnice z DOM na `ViewKeyEvent` pro `ActionRegistry`.
 - [ ] Komponenty podle rozvržení v [[11-ui#Rozvržení]] (Fusion + macOS): `AppShell`, `TitleBar`, `Toolbar` se skupinami, `ViewportHost`, plovoucí `Browser` a `FeatureDialog` + `ParamField` registr, ukotvená `Timeline` (stavy, rollback značka tažením, dvojklik = edit, kontextové menu, stav regenerace), `DocumentList` (hash `#/d/<id>`, [[Q019 Úvodní obrazovka se seznamem dokumentů|Q019]]).

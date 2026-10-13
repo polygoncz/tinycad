@@ -57,6 +57,7 @@ import { createBuilderRegistry, createRegenerator } from '@/regen';
 import type { BuilderRegistry, RegenResult } from '@/regen';
 import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
 import type { BodyLayer, CameraController, ScenePalette } from '@/render';
+import { registerBuiltInActions } from './actions';
 import { createKernelSupervisor } from './kernel-supervisor';
 import type { KernelUiState } from './kernel-supervisor';
 import { createRegenScheduler } from './regen-scheduler';
@@ -168,8 +169,8 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   // Q038: everything that changes the document goes through `ops`, so this one guard covers
   // the feature dialog, the tree, the tools and the actions.
   const ops = readOnly ? refuseChanges(dispatcher) : dispatcher;
-  // Not on AppSession yet; the built-in actions (undo, redo) wire it in.
-  lifetime.add(createUndoManager({ dispatcher: ops, log }));
+  // Not on AppSession: the built-in actions undo and redo are its UI.
+  const undo = lifetime.add(createUndoManager({ dispatcher: ops, log }));
 
   const persistenceStatus = new ObservableValue<PersistenceStatus>('saved');
   const persistence: PersistenceService | null = readOnly
@@ -197,7 +198,6 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     createFeatureTreeModel({ doc, ops, schemas, regen: regenStatus, editor: features, selection }),
   );
   const browser = lifetime.add(createBrowserModel({ regen: regenStatus, selection }));
-  // Empty until the built-in actions are registered (M10, Ú7).
   const actions = lifetime.add(createActionRegistry());
   const tools = lifetime.add(
     createToolManager({
@@ -205,6 +205,22 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       ctx: { viewport, selection, doc, ops, ids: deps.ids, features },
       defaultToolId: SELECT_TOOL.id,
       unhandledKey: (e) => actions.handleKey(e),
+    }),
+  );
+  const toolList = Object.freeze(toolRegistry.all());
+  lifetime.add(
+    registerBuiltInActions({
+      actions,
+      doc,
+      ops,
+      undo,
+      selection,
+      features,
+      featureTree,
+      tools,
+      toolList,
+      camera: viewport.camera,
+      readOnly,
     }),
   );
 
@@ -259,7 +275,19 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     });
     const bodies = [...result.finalState.bodies.values()].map(({ id, shape }) => ({ id, shape }));
     // sync never rejects and drops a stale result itself (spec 09).
-    void viewport.bodies.sync(bodies).then(applyHidden);
+    void viewport.bodies.sync(bodies).then(() => {
+      applyHidden();
+      fitFirstView(bodies.length);
+    });
+  }
+
+  // First view (spec 11): fit the camera once, after the first regeneration with a body; later
+  // changes leave the camera where the user put it.
+  let fitted = false;
+  function fitFirstView(bodyCount: number): void {
+    if (disposed || fitted || bodyCount === 0) return;
+    fitted = true;
+    viewport.camera.fitAll();
   }
 
   // 5. Visibility of bodies (Q071): the browser holds it, the viewport mirrors it.
@@ -297,7 +325,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     featureTree,
     browser,
     tools,
-    toolList: Object.freeze(toolRegistry.all()),
+    toolList,
     features,
     actions,
     messages,
