@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   asPoint,
+  bodyRefItems,
   degToRad,
   formatNumber,
   parseNumber,
   radToDeg,
   withCoordinate,
+  withoutIndex,
 } from './field-values';
 
 describe('parseNumber', () => {
@@ -66,5 +68,35 @@ describe('angles', () => {
     expect(radToDeg(Math.PI)).toBeCloseTo(180);
     expect(degToRad(90)).toBeCloseTo(Math.PI / 2);
     expect(formatNumber(radToDeg(degToRad(30)))).toBe('30');
+  });
+});
+
+describe('bodyRefItems', () => {
+  it('lists the body references with their index in the value', () => {
+    const value = [
+      { kind: 'body', body: 'a/body' },
+      { kind: 'topo', body: 'b/body', name: 'x' },
+      { kind: 'body', body: 'c/body:2' },
+    ];
+    expect(bodyRefItems(value)).toEqual([
+      { index: 0, body: 'a/body' },
+      { index: 2, body: 'c/body:2' },
+    ]);
+  });
+
+  it('skips anything that is not a body reference; a non-array is empty', () => {
+    expect(bodyRefItems([null, 1, { kind: 'body' }, { kind: 'body', body: 3 }])).toEqual([]);
+    expect(bodyRefItems(undefined)).toEqual([]);
+    expect(bodyRefItems({ kind: 'body', body: 'a/body' })).toEqual([]);
+  });
+});
+
+describe('withoutIndex', () => {
+  it('drops the item at the index and keeps the rest in order', () => {
+    expect(withoutIndex(['a', 'b', 'c'], 1)).toEqual(['a', 'c']);
+  });
+
+  it('a non-array value becomes empty', () => {
+    expect(withoutIndex('junk', 0)).toEqual([]);
   });
 });

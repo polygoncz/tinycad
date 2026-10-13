@@ -42,6 +42,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'browser.bodies': 'Bodies',
   'browser.show': 'Show',
   'browser.hide': 'Hide',
+  'browser.rename': 'Rename body',
 
   // Timeline.
   'timeline.rollbackBar': 'Rollback bar – drag',
@@ -60,6 +61,8 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   // Param fields.
   'field.refs.count': 'Selected: {n}',
   'field.refs.pick': 'Select in the view',
+  'field.refs.missing': 'Missing body',
+  'field.refs.remove': 'Remove {name}',
 
   // App: switching documents.
   'app.opening': 'Opening the document…',

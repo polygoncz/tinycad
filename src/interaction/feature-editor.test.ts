@@ -101,7 +101,8 @@ describe('FeatureEditor.create', () => {
     expect(state.open).toBe(true);
     expect(state.params).toEqual({ width: 10, height: 20, targets: [] });
     expect(state.issues).toEqual([]);
-    expect(state.activeRefParam).toBeNull();
+    // The first reference param takes the selection right away (R19).
+    expect(state.activeRefParam).toBe('targets');
     expect(state.fields.map((f) => f.name)).toEqual(['width', 'height', 'targets']);
     expect(state.fields[0]).toEqual({
       name: 'width',
@@ -207,6 +208,50 @@ describe('FeatureEditor.create', () => {
     expect(() => editor.create('box')).toThrow();
     expect(() => editor.edit(fid('a'))).toThrow();
     expect(editor.current.get()).toBe(first);
+  });
+});
+
+describe('FeatureEditor initial reference param (R19)', () => {
+  const REFS: ParamSchema = {
+    width: { kind: 'length', label: 'w', default: 1 },
+    faces: { kind: 'topo', label: 'faces', entity: 'face' },
+    targets: { kind: 'bodies', label: 'targets' },
+    profile: { kind: 'region', label: 'profile' },
+  };
+  const REF_SCHEMA: FeatureSchema = {
+    type: 'refs',
+    version: 1,
+    label: 'refs.label',
+    params: REFS,
+    defaults: () => ({ width: 1, faces: [], targets: [], profile: [] }),
+    validate: () => [],
+  };
+  const PLAIN: FeatureSchema = {
+    type: 'plain',
+    version: 1,
+    label: 'plain.label',
+    params: { width: { kind: 'length', label: 'w', default: 1 } },
+    defaults: () => ({ width: 1 }),
+    validate: () => [],
+  };
+
+  it('create activates the first bodies, topo or region param in schema order', () => {
+    const { editor } = setup({}, EN, REF_SCHEMA);
+    const state = editor.create('refs').state.get();
+    expect(state.activeRefParam).toBe('faces');
+    expect(state.fields.map((f) => f.active)).toEqual([false, true, false, false]);
+  });
+
+  it('create of a schema without reference params starts with null', () => {
+    const { editor } = setup({}, EN, PLAIN);
+    expect(editor.create('plain').state.get().activeRefParam).toBeNull();
+  });
+
+  it('edit starts with null', () => {
+    const { editor } = setup({ features: [aBox('a')] });
+    const state = editor.edit(fid('a')).state.get();
+    expect(state.activeRefParam).toBeNull();
+    expect(state.fields.every((f) => !f.active)).toBe(true);
   });
 });
 
@@ -405,8 +450,8 @@ describe('FeatureEditSession', () => {
   });
 
   it('focusRefParam marks the active field; null clears it', () => {
-    const { editor } = setup();
-    const session = editor.create('box');
+    const { editor } = setup({ features: [aBox('a')] });
+    const session = editor.edit(fid('a'));
     const before = session.state.get();
     session.focusRefParam('targets');
 

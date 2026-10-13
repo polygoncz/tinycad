@@ -426,6 +426,20 @@ describe('createAppSession – view', () => {
     expect(viewport.visibilityCalls).toContainEqual({ body, visible: false });
   });
 
+  it('the browser stores hiding in the document, so it survives a reopen', async () => {
+    const { session, store } = await open();
+    addBox(session);
+    await settle();
+    const body = session.browser.bodies.get()[0]?.body ?? fail();
+    session.browser.setVisible(body, false);
+    expect(session.doc.bodyMeta(body)).toEqual({ hidden: true });
+    await session.close();
+
+    const reopened = await open({ store });
+    expect(reopened.session.browser.bodies.get()[0]).toMatchObject({ body, visible: false });
+    expect(reopened.viewport.visibilityCalls).toContainEqual({ body, visible: false });
+  });
+
   it('mountViewport mounts the viewport', async () => {
     const { session, viewport } = await open();
     // A stand-in element: the fake only records what it got.

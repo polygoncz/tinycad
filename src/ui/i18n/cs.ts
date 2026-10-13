@@ -43,6 +43,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'browser.bodies': 'Tělesa',
   'browser.show': 'Zobrazit',
   'browser.hide': 'Skrýt',
+  'browser.rename': 'Přejmenovat těleso',
 
   // Timeline.
   'timeline.rollbackBar': 'Rollback bar – táhněte',
@@ -61,6 +62,8 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   // Param fields.
   'field.refs.count': 'Vybráno: {n}',
   'field.refs.pick': 'Vyberte v pohledu',
+  'field.refs.missing': 'Chybí těleso',
+  'field.refs.remove': 'Odebrat {name}',
 
   // App: switching documents.
   'app.opening': 'Otevírám dokument…',

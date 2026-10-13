@@ -4,9 +4,10 @@
 // registered tool: the manager creates it for the session and drops it again.
 // The focused param decides what can be picked (pickFilterFor), for the click and the hover.
 
-import type { BodyId, BodyRef, ParamSpec } from '@/document';
+import type { ParamSpec } from '@/document';
 import type { FeatureEditSession } from './feature-editor';
 import { isPlainEscape } from './key-events';
+import { toggleBodyRef } from './ref-values';
 import { CLICK_TOLERANCE_PX } from './select-tool';
 import type {
   PickFilter,
@@ -81,7 +82,7 @@ export function createRefPick(session: FeatureEditSession, viewport: ViewportPor
     if (name === null) return;
     // topo and region need topological naming and sketches (M13/M14).
     if (session.schema.params[name]?.kind !== 'bodies') return;
-    session.setParam(name, toggleBody(state.params[name], hit.body));
+    session.setParam(name, toggleBodyRef(state.params[name], hit.body));
   }
 
   return {
@@ -111,26 +112,4 @@ export function createRefPick(session: FeatureEditSession, viewport: ViewportPor
       down = null;
     },
   };
-}
-
-/**
- * Adds the body at the end, or removes it when it is there already. Keeps the order and
- * any other items; a value that is not an array counts as empty.
- */
-function toggleBody(value: unknown, body: BodyId): readonly unknown[] {
-  const items: readonly unknown[] = Array.isArray(value) ? value : [];
-  const isTheBody = (item: unknown): boolean => isBodyRef(item) && item.body === body;
-  if (items.some(isTheBody)) return Object.freeze(items.filter((item) => !isTheBody(item)));
-  const ref: BodyRef = Object.freeze({ kind: 'body', body });
-  return Object.freeze([...items, ref]);
-}
-
-function isBodyRef(value: unknown): value is BodyRef {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'kind' in value &&
-    value.kind === 'body' &&
-    'body' in value
-  );
 }

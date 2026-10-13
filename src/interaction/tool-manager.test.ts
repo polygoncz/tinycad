@@ -876,6 +876,8 @@ describe('createToolManager – refPick', () => {
     const { rec, viewport, features } = setupRefPick();
     features.create('ref').commit();
     const second = features.create('ref');
+    // create focuses the first reference param (R19); without a focus the active tool gets the events.
+    second.focusRefParam(null);
 
     viewport.emitPointer(at('move', 1, 1));
     expect(rec.calls).toEqual(['select.pointer:move']);

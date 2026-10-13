@@ -223,7 +223,9 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   const featureTree = lifetime.add(
     createFeatureTreeModel({ doc, ops, schemas, regen: regenStatus, editor: features, selection }),
   );
-  const browser = lifetime.add(createBrowserModel({ regen: regenStatus, selection }));
+  const browser = lifetime.add(
+    createBrowserModel({ doc, ops, regen: regenStatus, selection, editor: features }),
+  );
   const actions = lifetime.add(createActionRegistry());
   const tools = lifetime.add(
     createToolManager({
@@ -321,7 +323,8 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     viewport.camera.fitAll();
   }
 
-  // 5. Visibility of bodies (Q071): the browser holds it, the viewport mirrors it.
+  // 5. Visibility of bodies (Q071): the document holds it, the browser reads it, the viewport
+  // mirrors it.
   let shownHidden: ReadonlySet<BodyId> = browser.hidden.get();
   lifetime.add(
     browser.hidden.subscribe(() => {

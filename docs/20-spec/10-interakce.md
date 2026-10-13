@@ -407,6 +407,7 @@ export function createBrowserModel(deps: {
 - `setVisible` a `rename` tělesa, které poslední regenerace nezná (zastaralý řádek v UI), nic neudělají; během otevřené transakce (dialog) také nic a shodná hodnota také nic. `rename` jméno ořízne, prázdné jméno smaže (vrátí automatické). V režimu jen pro čtení dispečer odmítne; UI oba ovládací prvky zakáže podle `locked` ([[Rozhodnutí noční rychloakce#M11 – Další entity|R14]] ⚠ – v M10 šlo skrývat i během dialogu).
 - `select(body)`: je-li otevřená session s `activeRefParam` druhu `bodies`, přidá nebo odebere těleso v tomto parametru (`setParam`, stejné přepínání jako `refPick`) a výběr nemění; jinak `selection.set`/`toggle` (M11, [[Rozhodnutí noční rychloakce#M11 – Další entity|R19]]).
 - `refLabel` nečte řádky (poslední regeneraci): náhled booleanu nástroj z mapy těles odebere, ale čip v dialogu ho musí pojmenovat dál.
+- `refLabel` nejdřív ověří tvar id (`parseBodyId`, hodnota parametru smí být neplatná) a existenci featury původu – chybí-li, vrací `null` i u tělesa se jménem v metadatech (metadata smazané featury v dokumentu zůstávají, čip má ukázat „Chybí těleso“); teprve pak `userName`, jinak jméno featury původu ([[Rozhodnutí noční rychloakce#M11 – Další entity|R25]]).
 
 ## Vestavěné akce
 

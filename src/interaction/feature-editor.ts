@@ -185,7 +185,9 @@ function createSession(deps: {
   onClose: () => void;
 }): FeatureEditSession {
   const { doc, ops, tx, mode, featureId, schema, onClose } = deps;
-  let activeRefParam: string | null = null;
+  // A new feature takes the selection into its first reference param right away; editing an
+  // existing one starts without (spec 10, R19).
+  let activeRefParam: string | null = mode === 'create' ? firstRefParam(schema) : null;
   let open = true;
   const state = new ObservableValue<EditState>(buildState(null));
 
@@ -313,6 +315,12 @@ function createSession(deps: {
       });
     },
   };
+}
+
+/** The first bodies, topo or region param in the order of the schema, or null. */
+function firstRefParam(schema: FeatureSchema): string | null {
+  const found = Object.entries(schema.params).find(([, spec]) => REF_KINDS.has(spec.kind));
+  return found === undefined ? null : found[0];
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
