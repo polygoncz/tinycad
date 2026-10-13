@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inTextField, isMacPlatform, toViewKeyEvent } from './keyboard';
+import { inTextField, isMacPlatform, shortcutText, toViewKeyEvent } from './keyboard';
 
 const noMods = { shiftKey: false, altKey: false, ctrlKey: false, metaKey: false };
 const body = { tagName: 'BODY', isContentEditable: false };
@@ -66,5 +66,18 @@ describe('isMacPlatform', () => {
     expect(isMacPlatform('Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)')).toBe(true);
     expect(isMacPlatform('Mozilla/5.0 (Windows NT 10.0; Win64; x64)')).toBe(false);
     expect(isMacPlatform('Mozilla/5.0 (X11; Linux x86_64)')).toBe(false);
+  });
+});
+
+describe('shortcutText', () => {
+  it('shows macOS symbols on Mac', () => {
+    expect(shortcutText('Mod+Shift+Z', true)).toBe('⌘⇧Z');
+    expect(shortcutText('Delete', true)).toBe('⌫');
+    expect(shortcutText('b', true)).toBe('B');
+  });
+
+  it('shows Ctrl and plus signs elsewhere', () => {
+    expect(shortcutText('Mod+Shift+Z', false)).toBe('Ctrl+Shift+Z');
+    expect(shortcutText('F', false)).toBe('F');
   });
 });

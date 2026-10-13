@@ -87,8 +87,9 @@ export default defineConfig(
       // TypeScript checks undefined names; no-undef does not know browser globals in SFCs
       // (typescript-eslint recommends turning it off for TS code).
       'no-undef': 'off',
-      // Timeline and Browser (Prohlížeč) are names from the vault glossary, kept on purpose.
-      'vue/multi-word-component-names': ['error', { ignores: ['Timeline', 'Browser'] }],
+      // Timeline, Browser (Prohlížeč) and Toolbar are names from the vault (glossary, spec 11),
+      // kept on purpose.
+      'vue/multi-word-component-names': ['error', { ignores: ['Timeline', 'Browser', 'Toolbar'] }],
     },
   },
   {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ParamIssue } from '@/document';
 import { cs } from './cs';
 import { en } from './en';
-import { createUiI18n, issueText, pickLocale, setUiLocale } from './i18n';
+import { addPluginMessages, createUiI18n, issueText, pickLocale, setUiLocale } from './i18n';
 import type { KeyValueStorage } from '../storage';
 import type { LocaleEnv } from './i18n';
 
@@ -42,6 +42,20 @@ const ACTION_KEYS = [
   'timeline.toEnd',
 ];
 
+// Keys the components build at run time: save states, kernel states and toolbar groups.
+const COMPOSED_KEYS = [
+  'titleBar.persistence.saved',
+  'titleBar.persistence.pending',
+  'titleBar.persistence.error',
+  'titleBar.locale.cs',
+  'titleBar.locale.en',
+  'toolbar.group.history',
+  'toolbar.group.primitive',
+  'toolbar.group.modify',
+  'toolbar.group.construction',
+  'toolbar.group.view',
+];
+
 const PLUGIN = {
   cs: { 'box.label': 'Kvádr', 'box.width': 'Šířka' },
   en: { 'box.label': 'Box', 'box.width': 'Width' },
@@ -72,10 +86,13 @@ describe('built-in dictionaries', () => {
     expect(Object.keys(en).sort()).toEqual(Object.keys(cs).sort());
   });
 
-  it.each([...ISSUE_CODES, ...DOMAIN_KEYS, ...ACTION_KEYS])('%s has a text in cs and en', (key) => {
-    expect(cs[key]).toBeTruthy();
-    expect(en[key]).toBeTruthy();
-  });
+  it.each([...ISSUE_CODES, ...DOMAIN_KEYS, ...ACTION_KEYS, ...COMPOSED_KEYS])(
+    '%s has a text in cs and en',
+    (key) => {
+      expect(cs[key]).toBeTruthy();
+      expect(en[key]).toBeTruthy();
+    },
+  );
 
   it('are frozen', () => {
     expect(Object.isFrozen(cs)).toBe(true);
@@ -124,6 +141,34 @@ describe('createUiI18n', () => {
     expect(i18n.global.locale.value).toBe('en');
     expect(i18n.global.t('box.width')).toBe('Width');
     expect(storage.data.get('tinycad.locale')).toBe('en');
+  });
+});
+
+describe('addPluginMessages', () => {
+  const NONE = { cs: {}, en: {} };
+
+  it('adds the dictionaries of the plugins to a running instance', () => {
+    const i18n = createUiI18n(NONE, env('cs', 'cs'));
+    addPluginMessages(i18n, PLUGIN);
+    expect(i18n.global.t('box.width')).toBe('Šířka');
+    setUiLocale(i18n, 'en', null);
+    expect(i18n.global.t('box.width')).toBe('Width');
+  });
+
+  it('adding the same dictionaries again (next session) is fine', () => {
+    const i18n = createUiI18n(NONE, env('cs', 'cs'));
+    addPluginMessages(i18n, PLUGIN);
+    addPluginMessages(i18n, PLUGIN);
+    expect(i18n.global.t('box.label')).toBe('Kvádr');
+  });
+
+  it('rejects a plugin key that clashes with a built-in key', () => {
+    const i18n = createUiI18n(NONE, env('cs', 'cs'));
+    const clash = { cs: { undo: 'x' }, en: { undo: 'x' } };
+    expect(() => {
+      addPluginMessages(i18n, clash);
+    }).toThrow(/undo/);
+    expect(i18n.global.t('undo')).toBe(cs.undo);
   });
 });
 

@@ -1,0 +1,168 @@
+<script setup lang="ts">
+// The feature dialog (spec 11, "Komponenty"; spec 10, "Dialog featury"): a floating panel on the
+// right, shown while features.current is a session (AppShell mounts one dialog per session).
+// The form is generated from the schema through the ParamField registry; every change goes to
+// the session (setParam, focusRefParam, commit, cancel). Movable by its header; the offset is
+// view state of this panel only.
+import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+import type { FeatureEditSession, FieldState } from '@/interaction';
+import { useObservable } from '../composables/use-observable';
+import { useSession } from '../composables/use-session';
+import { paramFieldFor } from './params/registry';
+
+const props = defineProps<{ edit: FeatureEditSession }>();
+
+const session = useSession();
+const { t } = useI18n();
+const state = useObservable(props.edit.state);
+const rows = useObservable(session.featureTree.rows);
+
+const icon = computed(() => `ti-${props.edit.schema.icon ?? 'cube'}`);
+// The name from the tree (it follows renames); the type label until the row exists.
+const title = computed(
+  () => rows.value.find((r) => r.id === props.edit.featureId)?.name ?? t(props.edit.schema.label),
+);
+
+function update(field: FieldState, value: unknown): void {
+  props.edit.setParam(field.name, value);
+}
+
+function activate(field: FieldState): void {
+  props.edit.focusRefParam(field.name);
+}
+
+// Moving by the header: pointer capture, the offset from the docked position.
+const offset = ref({ x: 0, y: 0 });
+let drag: { readonly x: number; readonly y: number; readonly pointerId: number } | null = null;
+
+function onGripDown(e: PointerEvent): void {
+  if (e.button !== 0 || !(e.currentTarget instanceof Element)) return;
+  e.currentTarget.setPointerCapture(e.pointerId);
+  drag = { x: e.clientX - offset.value.x, y: e.clientY - offset.value.y, pointerId: e.pointerId };
+}
+
+function onGripMove(e: PointerEvent): void {
+  if (drag?.pointerId !== e.pointerId) return;
+  offset.value = { x: e.clientX - drag.x, y: e.clientY - drag.y };
+}
+
+function onGripUp(): void {
+  drag = null;
+}
+</script>
+
+<template>
+  <section
+    class="feature-dialog"
+    role="dialog"
+    :aria-label="title"
+    :style="{ transform: `translate(${String(offset.x)}px, ${String(offset.y)}px)` }"
+  >
+    <header
+      class="header"
+      :title="t('dialog.move')"
+      @pointerdown="onGripDown"
+      @pointermove="onGripMove"
+      @pointerup="onGripUp"
+      @pointercancel="onGripUp"
+    >
+      <i class="ti feature-icon" :class="icon" />
+      <span class="title">{{ title }}</span>
+      <i class="ti ti-grip-horizontal grip" />
+    </header>
+
+    <div class="fields">
+      <template v-for="field in state.fields" :key="field.name">
+        <component
+          :is="paramFieldFor(field.spec.kind)"
+          v-if="paramFieldFor(field.spec.kind) !== undefined"
+          :field="field"
+          @update="update(field, $event)"
+          @activate="activate(field)"
+        />
+      </template>
+    </div>
+
+    <footer class="buttons">
+      <button type="button" class="button" @click="edit.cancel()">{{ t('dialog.cancel') }}</button>
+      <button type="button" class="button primary" @click="edit.commit()">
+        {{ t('dialog.ok') }}
+      </button>
+    </footer>
+  </section>
+</template>
+
+<style scoped>
+.feature-dialog {
+  position: absolute;
+  right: 14px;
+  top: 12px;
+  z-index: 20;
+  width: 280px;
+  padding-bottom: 12px;
+  border-radius: var(--radius-panel);
+  background: var(--panel-bg);
+  backdrop-filter: var(--panel-blur);
+  -webkit-backdrop-filter: var(--panel-blur);
+  border: 0.5px solid var(--panel-border);
+  box-shadow:
+    var(--panel-shadow),
+    inset 0 0.5px 0 var(--panel-highlight);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size);
+}
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border-bottom: 0.5px solid var(--panel-border);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.header:active {
+  cursor: grabbing;
+}
+.feature-icon {
+  font-size: 18px;
+  color: var(--accent);
+}
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.grip {
+  color: var(--text-tertiary);
+}
+.buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 6px 14px 0;
+}
+.button {
+  height: var(--field-height);
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--control-hover);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 500;
+}
+.button.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+</style>

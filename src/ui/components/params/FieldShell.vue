@@ -20,7 +20,7 @@ const { t } = useI18n();
 <style scoped>
 .param-field {
   display: grid;
-  grid-template-columns: 72px 1fr;
+  grid-template-columns: 72px minmax(0, 1fr);
   align-items: center;
   gap: 4px 10px;
   margin: 0 14px 10px;

@@ -5,7 +5,7 @@
 import { onMounted, onUnmounted, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ActionState } from '@/interaction';
-import { isMacPlatform } from '../keyboard';
+import { isMacPlatform, shortcutText } from '../keyboard';
 
 defineProps<{
   items: readonly ActionState[];
@@ -20,25 +20,6 @@ const menu = useTemplateRef<HTMLElement>('menu');
 // globalThis, not window/navigator: the ESLint config has no browser globals for .vue files
 // (no-undef); the types are the same.
 const isMac = isMacPlatform(globalThis.navigator.userAgent);
-
-/** Symbols of named keys and modifiers as macOS menus show them. */
-const MAC_KEYS: Readonly<Record<string, string>> = Object.freeze({
-  Mod: '⌘',
-  Shift: '⇧',
-  Alt: '⌥',
-  Delete: '⌫',
-  Backspace: '⌫',
-  Enter: '↩',
-  Escape: '⎋',
-});
-const OTHER_KEYS: Readonly<Record<string, string>> = Object.freeze({ Mod: 'Ctrl' });
-
-/** 'Mod+Shift+Z' → '⌘⇧Z' on macOS, 'Ctrl+Shift+Z' elsewhere (spec 10: formatting is ui's). */
-function shortcutText(shortcut: string): string {
-  const names = isMac ? MAC_KEYS : OTHER_KEYS;
-  const tokens = shortcut.split('+').map((token) => names[token] ?? token.toUpperCase());
-  return tokens.join(isMac ? '' : '+');
-}
 
 function choose(item: ActionState): void {
   if (!item.enabled) return;
@@ -83,7 +64,9 @@ onUnmounted(() => {
       @click="choose(item)"
     >
       <span class="label">{{ t(item.label) }}</span>
-      <span v-if="item.shortcut !== null" class="shortcut">{{ shortcutText(item.shortcut) }}</span>
+      <span v-if="item.shortcut !== null" class="shortcut">{{
+        shortcutText(item.shortcut, isMac)
+      }}</span>
     </button>
   </div>
 </template>

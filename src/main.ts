@@ -1,4 +1,4 @@
-import { createApp } from 'vue';
-import { App } from '@/ui';
+import { BUILT_IN_PLUGINS } from '@/app';
+import { startUi } from '@/ui';
 
-createApp(App).mount('#app');
+startUi('#app', { plugins: BUILT_IN_PLUGINS });

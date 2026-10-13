@@ -1,2 +1,3 @@
 // Ring 3 – Vue components and composables.
-export { default as App } from './App.vue';
+export { startUi } from './start';
+export type { StartUiOptions } from './start';

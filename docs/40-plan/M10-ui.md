@@ -41,9 +41,9 @@ Pořadí odspodu nahoru: nejdřív doména a porty, pak `app`, nakonec `ui`. Pod
 - [x] Akce: undo, redo, smazat vybranou featuru, potlačit, fit all, aktivace nástrojů.
 - [x] `app/openAppSession` – workery, `IdbDocumentStore`, Web Lock ([[Q038 Jeden dokument ve dvou záložkách|Q038]]), seznam dokumentů (nový, otevřít, smazat).
 - [x] `ui/composables`: `useSession` (provide/inject), `useObservable` ([[0010-prezentacni-model|ADR 0010]]); `vue-i18n` se slovníky pluginů.
-- [ ] Převod globální klávesnice z DOM na `ViewKeyEvent` pro `ActionRegistry`.
-- [ ] Komponenty podle rozvržení v [[11-ui#Rozvržení]] (Fusion + macOS): `AppShell`, `TitleBar`, `Toolbar` se skupinami, `ViewportHost`, plovoucí `Browser` a `FeatureDialog` + `ParamField` registr, ukotvená `Timeline` (stavy, rollback značka tažením, dvojklik = edit, kontextové menu, stav regenerace), `DocumentList` (hash `#/d/<id>`, [[Q019 Úvodní obrazovka se seznamem dokumentů|Q019]]).
-- [ ] Rozvržení a CSS proměnné: světlý a tmavý režim, průsvitné plovoucí panely, Tabler Icons.
+- [x] Převod globální klávesnice z DOM na `ViewKeyEvent` pro `ActionRegistry`.
+- [x] Komponenty podle rozvržení v [[11-ui#Rozvržení]] (Fusion + macOS): `AppShell`, `TitleBar`, `Toolbar` se skupinami, `ViewportHost`, plovoucí `Browser` a `FeatureDialog` + `ParamField` registr, ukotvená `Timeline` (stavy, rollback značka tažením, dvojklik = edit, kontextové menu, stav regenerace), `DocumentList` (hash `#/d/<id>`, [[Q019 Úvodní obrazovka se seznamem dokumentů|Q019]]).
+- [x] Rozvržení a CSS proměnné: světlý a tmavý režim, průsvitné plovoucí panely, Tabler Icons.
 - [ ] E2E smoke test v Playwright: nový dokument → Box → výška 30 → OK → undo → redo → reload → featura existuje.
 - [ ] Ověřit tažením hodnoty, že regenerace bez rušení stačí ([[Q010 Zrušení probíhající operace jádra|Q010]]).
 

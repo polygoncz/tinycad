@@ -55,6 +55,17 @@ export function setUiLocale(
   storage?.setItem(LOCALE_KEY, locale);
 }
 
+/**
+ * Adds the dictionaries of the plugins of a session (AppSession.messages) to the running
+ * instance: the instance lives with the page, the plugin texts arrive with the first session.
+ * Adding the same dictionaries again is fine; a key of a built-in text throws, nothing is added.
+ */
+export function addPluginMessages(i18n: UiI18n, plugins: MessageDictionaries): void {
+  const merged = { cs: merge(cs, plugins.cs), en: merge(en, plugins.en) };
+  i18n.global.mergeLocaleMessage('cs', merged.cs);
+  i18n.global.mergeLocaleMessage('en', merged.en);
+}
+
 /** Text of a validation issue: its code is the key, its params fill the placeholders. */
 export function issueText(t: Translate, issue: ParamIssue): string {
   return t(issue.code, issue.params ?? {});

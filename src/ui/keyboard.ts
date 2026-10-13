@@ -51,3 +51,26 @@ export function inTextField(target: unknown): boolean {
 export function isMacPlatform(userAgent: string): boolean {
   return /Mac|iPhone|iPad|iPod/.test(userAgent);
 }
+
+/** Symbols of named keys and modifiers as macOS menus show them. */
+const MAC_KEYS: Readonly<Record<string, string>> = Object.freeze({
+  Mod: '⌘',
+  Shift: '⇧',
+  Alt: '⌥',
+  Delete: '⌫',
+  Backspace: '⌫',
+  Enter: '↩',
+  Escape: '⎋',
+});
+const OTHER_KEYS: Readonly<Record<string, string>> = Object.freeze({
+  Mod: 'Ctrl',
+  Shift: 'Shift',
+  Alt: 'Alt',
+});
+
+/** 'Mod+Shift+Z' → '⌘⇧Z' on macOS, 'Ctrl+Shift+Z' elsewhere (spec 10: formatting is ui's). */
+export function shortcutText(shortcut: string, isMac: boolean): string {
+  const names = isMac ? MAC_KEYS : OTHER_KEYS;
+  const tokens = shortcut.split('+').map((token) => names[token] ?? token.toUpperCase());
+  return tokens.join(isMac ? '' : '+');
+}

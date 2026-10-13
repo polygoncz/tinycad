@@ -55,4 +55,53 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   // Param fields.
   'field.refs.count': 'Selected: {n}',
   'field.refs.pick': 'Select in the view',
+
+  // App: switching documents.
+  'app.opening': 'Opening the document…',
+  'app.openError': 'The document could not be opened.',
+  'app.backToList': 'Back to documents',
+  'app.closeError': 'The last changes of the previous document could not be saved: {error}',
+  'app.dismiss': 'Dismiss',
+
+  // Title bar.
+  'titleBar.documents': 'Documents',
+  'titleBar.readOnly': 'Read-only',
+  'titleBar.readOnlyHint': 'The document is open in another tab. Changes are not possible here.',
+  'titleBar.persistence.saved': 'Saved',
+  'titleBar.persistence.pending': 'Saving…',
+  'titleBar.persistence.error': 'Saving failed',
+  'titleBar.kernel.restarting': 'The geometry kernel is restarting…',
+  'titleBar.kernel.failed': 'The geometry kernel crashed repeatedly.',
+  'titleBar.kernel.reload': 'Reload page',
+  'titleBar.language': 'Language: {language}',
+  'titleBar.locale.cs': 'Czech',
+  'titleBar.locale.en': 'English',
+  'titleBar.themeDark': 'Dark mode',
+  'titleBar.themeLight': 'Light mode',
+
+  // Toolbar groups (toolbar.group.<id>; ToolDescriptor.group or history/view).
+  'toolbar.group.history': 'History',
+  'toolbar.group.primitive': 'Create',
+  'toolbar.group.modify': 'Modify',
+  'toolbar.group.construction': 'Construct',
+  'toolbar.group.view': 'View',
+  'toolbar.group.select': 'Select',
+  'toolbar.group.sketch': 'Sketch',
+  'toolbar.group.feature': 'Features',
+
+  // Feature dialog.
+  'dialog.ok': 'OK',
+  'dialog.cancel': 'Cancel',
+  'dialog.move': 'Move',
+
+  // Document list.
+  'documents.title': 'Documents',
+  'documents.new': 'New',
+  'documents.delete': 'Delete document',
+  'documents.confirmDelete': 'Delete the document “{name}” with its history?',
+  'documents.loading': 'Loading…',
+  'documents.empty': 'There are no documents yet.',
+  'documents.error.list': 'The document list could not be loaded: {error}',
+  'documents.error.create': 'The document could not be created: {error}',
+  'documents.error.delete': 'The document could not be deleted: {error}',
 });

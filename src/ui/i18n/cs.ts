@@ -56,4 +56,53 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   // Param fields.
   'field.refs.count': 'Vybráno: {n}',
   'field.refs.pick': 'Vyberte v pohledu',
+
+  // App: switching documents.
+  'app.opening': 'Otevírám dokument…',
+  'app.openError': 'Dokument se nepodařilo otevřít.',
+  'app.backToList': 'Zpět na dokumenty',
+  'app.closeError': 'Poslední změny předchozího dokumentu se nepodařilo uložit: {error}',
+  'app.dismiss': 'Zavřít',
+
+  // Title bar.
+  'titleBar.documents': 'Dokumenty',
+  'titleBar.readOnly': 'Jen pro čtení',
+  'titleBar.readOnlyHint': 'Dokument je otevřený v jiné záložce. Změny zde nejsou možné.',
+  'titleBar.persistence.saved': 'Uloženo',
+  'titleBar.persistence.pending': 'Ukládám…',
+  'titleBar.persistence.error': 'Uložení selhalo',
+  'titleBar.kernel.restarting': 'Geometrické jádro se restartuje…',
+  'titleBar.kernel.failed': 'Geometrické jádro opakovaně spadlo.',
+  'titleBar.kernel.reload': 'Obnovit stránku',
+  'titleBar.language': 'Jazyk: {language}',
+  'titleBar.locale.cs': 'čeština',
+  'titleBar.locale.en': 'angličtina',
+  'titleBar.themeDark': 'Tmavý režim',
+  'titleBar.themeLight': 'Světlý režim',
+
+  // Toolbar groups (toolbar.group.<id>; ToolDescriptor.group or history/view).
+  'toolbar.group.history': 'Historie',
+  'toolbar.group.primitive': 'Vytvořit',
+  'toolbar.group.modify': 'Upravit',
+  'toolbar.group.construction': 'Konstrukce',
+  'toolbar.group.view': 'Zobrazit',
+  'toolbar.group.select': 'Výběr',
+  'toolbar.group.sketch': 'Skica',
+  'toolbar.group.feature': 'Featury',
+
+  // Feature dialog.
+  'dialog.ok': 'OK',
+  'dialog.cancel': 'Zrušit',
+  'dialog.move': 'Přesunout',
+
+  // Document list.
+  'documents.title': 'Dokumenty',
+  'documents.new': 'Nový',
+  'documents.delete': 'Smazat dokument',
+  'documents.confirmDelete': 'Smazat dokument „{name}“ i s historií?',
+  'documents.loading': 'Načítám…',
+  'documents.empty': 'Zatím tu nejsou žádné dokumenty.',
+  'documents.error.list': 'Seznam dokumentů se nepodařilo načíst: {error}',
+  'documents.error.create': 'Dokument se nepodařilo vytvořit: {error}',
+  'documents.error.delete': 'Dokument se nepodařilo smazat: {error}',
 });

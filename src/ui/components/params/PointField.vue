@@ -44,7 +44,7 @@ const point = computed((): Vec3 => asPoint(props.field.value) ?? [0, 0, 0]);
 }
 .axis {
   display: grid;
-  grid-template-columns: 12px 1fr;
+  grid-template-columns: 12px minmax(0, 1fr);
   align-items: center;
   gap: 6px;
 }

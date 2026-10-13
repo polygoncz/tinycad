@@ -31,6 +31,9 @@
   --panel-highlight: rgba(255, 255, 255, 0.6);
   --panel-shadow: 0 10px 30px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
 
+  /* Page behind the viewport (document list, opening): the gradient of the mockup's view */
+  --page-bg: linear-gradient(180deg, #f4f5f7, #dfe2e7);
+
   /* Docked bars (title bar, toolbar, timeline): almost opaque, the window frame */
   --chrome-bg: rgba(246, 246, 248, 0.86);
   --chrome-border: rgba(0, 0, 0, 0.1);
@@ -85,6 +88,8 @@
   --panel-border: rgba(255, 255, 255, 0.1);
   --panel-highlight: rgba(255, 255, 255, 0.06);
   --panel-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.3);
+
+  --page-bg: linear-gradient(180deg, #2b2d32, #17181b);
 
   --chrome-bg: rgba(36, 36, 40, 0.88);
   --chrome-border: rgba(255, 255, 255, 0.08);
