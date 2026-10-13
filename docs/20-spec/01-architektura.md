@@ -179,7 +179,8 @@ tinycad/
 ├─ tsconfig.base.json       společné přísné volby
 ├─ tsconfig.domain.json     prstence 1 a 2, bez lib DOM a bez @types
 ├─ tsconfig.app.json        kód pro prohlížeč (DOM, vite/client), bez testů
-├─ tsconfig.test.json       testy (*.test.ts, tests/), typy Node
+├─ tsconfig.test.json       testy (*.test.ts, tests/), typy Node, bez DOM
+├─ tsconfig.test-idb.json   testy adaptéru IndexedDB (fake-indexeddb v Node), typy Node + lib DOM
 └─ tsconfig.node.json       konfigurace Vite a Vitest
 ```
 
@@ -191,6 +192,7 @@ Testy jednotek leží vedle kódu (`foo.ts` + `foo.test.ts`).
 - vytváří konkrétní implementace voláním továrních funkcí (`createOcctKernel`, `createIdbDocumentStore`, `createViewport`…) – jediné místo, kde se rozhoduje, *která* implementace rozhraní se použije,
 - registruje pluginy (`registerPlugin(boxPlugin)` → schéma do `FeatureSchemaRegistry`, builder do `BuilderRegistry`, nástroje do `ToolRegistry`),
 - propojuje události (změna dokumentu → regenerace → vykreslení; operace → persistence),
+- napojuje události prohlížeče na doménové služby: `pagehide` a `visibilitychange` → `PersistenceService.flush()` ([[Q034 Uložení při zavírání stránky|Q034]]), `setTimeout` jako `Scheduler`. Prstenec 1 DOM ani časovače nezná ([[0009-platformove-nezavisla-domena|ADR 0009]]),
 - vystavuje fasádu pro UI.
 
 Ostatní moduly dostávají závislosti jako rozhraní v parametru `deps` tovární funkce (dependency injection bez frameworku, ručně; [[0011-programovani-proti-rozhranim|ADR 0011]]).

@@ -1,6 +1,15 @@
 import type { DocumentReader, FeatureId, FeatureInstance } from '@/document';
 import type { OpHandler } from '../op-handler';
 import { OP_VERSION } from '../operation';
+import {
+  boolean,
+  nonEmptyString,
+  object,
+  plainObject,
+  string,
+  validateShape,
+  wholeNumber,
+} from './shape';
 import type {
   FeatureAddOp,
   FeatureMoveOp,
@@ -28,6 +37,17 @@ const add: OpHandler<FeatureAddOp> = {
   apply: (doc, op) => {
     doc.insertFeature(op.index, op.feature);
   },
+  validate: validateShape({
+    feature: object({
+      id: nonEmptyString,
+      type: nonEmptyString,
+      typeVersion: wholeNumber(1),
+      name: string,
+      suppressed: boolean,
+      params: plainObject,
+    }),
+    index: wholeNumber(0),
+  }),
 };
 
 const remove: OpHandler<FeatureRemoveOp> = {
@@ -45,6 +65,7 @@ const remove: OpHandler<FeatureRemoveOp> = {
   apply: (doc, op) => {
     doc.removeFeature(op.featureId);
   },
+  validate: validateShape({ featureId: nonEmptyString }),
 };
 
 const setParams: OpHandler<FeatureSetParamsOp> = {
@@ -65,6 +86,7 @@ const setParams: OpHandler<FeatureSetParamsOp> = {
   },
   // Same feature: the later params win; the inverse of the first op still restores the start.
   merge: (prev, next) => (prev.featureId === next.featureId ? next : null),
+  validate: validateShape({ featureId: nonEmptyString, params: plainObject }),
 };
 
 const rename: OpHandler<FeatureRenameOp> = {
@@ -79,6 +101,7 @@ const rename: OpHandler<FeatureRenameOp> = {
   apply: (doc, op) => {
     doc.replaceFeature({ ...requireFeature(doc, op.featureId), name: op.name });
   },
+  validate: validateShape({ featureId: nonEmptyString, name: string }),
 };
 
 const suppress: OpHandler<FeatureSuppressOp> = {
@@ -93,6 +116,7 @@ const suppress: OpHandler<FeatureSuppressOp> = {
   apply: (doc, op) => {
     doc.replaceFeature({ ...requireFeature(doc, op.featureId), suppressed: op.suppressed });
   },
+  validate: validateShape({ featureId: nonEmptyString, suppressed: boolean }),
 };
 
 const move: OpHandler<FeatureMoveOp> = {
@@ -110,6 +134,7 @@ const move: OpHandler<FeatureMoveOp> = {
   apply: (doc, op) => {
     doc.moveFeature(op.featureId, op.toIndex);
   },
+  validate: validateShape({ featureId: nonEmptyString, toIndex: wholeNumber(0) }),
 };
 
 // Method-style members make OpHandler<O> assignable to OpHandler<Operation>; the dispatcher

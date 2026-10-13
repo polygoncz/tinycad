@@ -1,5 +1,6 @@
 import type { Registry } from '@/core';
 import type { DocumentReader, DocumentWriter } from '@/document';
+import type { OperationLoadError } from './load-error';
 import type { Operation } from './operation';
 
 // Kept apart from handler.ts so that the built-in handlers can import the interface
@@ -16,6 +17,11 @@ export interface OpHandler<O extends Operation = Operation> {
   merge?(prev: O, next: O): O | null;
   /** Converts an older version of the operation to the current one when loading a log. */
   upcast?(fromVersion: number, raw: unknown): O;
+  /**
+   * Checks the payload shape of an operation of the current version when loading (the envelope
+   * is already checked). Empty array = fine. Shape only, not the relation to the document.
+   */
+  validate?(raw: Readonly<Record<string, unknown>>): readonly OperationLoadError[];
 }
 
 export type OpHandlerRegistry = Registry<OpHandler>;

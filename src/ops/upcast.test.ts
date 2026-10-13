@@ -103,8 +103,8 @@ describe('upcastOperation', () => {
       type: 'batch',
       v: 1,
       ops: [
-        { type: 'feature.rename', v: 1 },
-        { type: 'feature.rename', v: 1 },
+        { type: 'feature.rename', v: 1, featureId: 'a', name: 'x' },
+        { type: 'feature.rename', v: 1, featureId: 'a', name: 'y' },
         { type: 'feature.rename', v: 0 },
       ],
     });

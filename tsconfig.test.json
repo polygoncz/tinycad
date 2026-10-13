@@ -6,5 +6,7 @@
     "lib": ["ES2023"],
     "types": ["node"]
   },
-  "include": ["src/**/*.test.ts", "tests/**/*.ts"]
+  "include": ["src/**/*.test.ts", "tests/**/*.ts"],
+  // Need lib DOM for IndexedDB types: checked by tsconfig.test-idb.json.
+  "exclude": ["src/persistence/idb/**/*.test.ts"]
 }

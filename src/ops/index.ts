@@ -23,4 +23,5 @@ export type { Transaction } from './transaction';
 export { createUndoManager, rebuildUndoStacks } from './undo';
 export type { UndoManager } from './undo';
 export { upcastOperation } from './upcast';
-export type { OperationLoadError } from './upcast';
+export { parseLogEntry } from './parse-entry';
+export type { OperationLoadError } from './load-error';

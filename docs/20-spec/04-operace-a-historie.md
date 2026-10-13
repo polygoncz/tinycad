@@ -72,6 +72,8 @@ export interface OpHandler<O extends Operation = Operation> {
   merge?(prev: O, next: O): O | null;
   /** Převod starší verze operace na aktuální při načítání logu. */
   upcast?(fromVersion: number, raw: unknown): O;
+  /** Kontrola tvaru payloadu operace aktuální verze při načítání (obálka už je ověřená). Prázdné pole = v pořádku. */
+  validate?(raw: Readonly<Record<string, unknown>>): readonly OperationLoadError[];
 }
 
 export type OpHandlerRegistry = Registry<OpHandler>;   // klíč = type, viz core
@@ -304,7 +306,33 @@ export function upcastOperation(handlers: OpHandlerRegistry, raw: unknown): Resu
 - `v` menší: handler bez `upcast` → `err`, jinak `handler.upcast(v, raw)`. Výsledek musí mít `v === handler.version` (jinak výjimka – chyba v migraci, ne v datech),
 - `v` rovné → `ok(raw)`.
 
-Tvar payloadu operace aktuální verze se zatím nekontroluje ([[Q032 Kontrola payloadu operací při načítání|Q032]]).
+Po obálce (a případném `upcast`) zavolá `handler.validate`, pokud ho handler má ([[Q032 Kontrola payloadu operací při načítání|Q032]]). První nalezený problém → `err` s cestou relativní k operaci (`'featureId'`, `'feature.typeVersion'`; v dávce s prefixem `ops[i].`). `validate` kontroluje jen **tvar**, ne vztah ke stavu dokumentu (existence featury, rozsah indexu). To ohlásí až `apply` výjimkou při přehrání.
+
+Všech sedm vestavěných handlerů `validate` má:
+
+| `type` | Kontrola |
+|---|---|
+| `feature.add` | `feature` je objekt: `id` a `type` neprázdný řetězec, `typeVersion` celé číslo ≥ 1, `name` řetězec, `suppressed` boolean, `params` objekt (ne pole, ne `null`). `index` celé číslo ≥ 0. |
+| `feature.remove` | `featureId` neprázdný řetězec |
+| `feature.setParams` | `featureId` neprázdný řetězec, `params` objekt (ne pole, ne `null`) |
+| `feature.rename` | `featureId` neprázdný řetězec, `name` řetězec |
+| `feature.suppress` | `featureId` neprázdný řetězec, `suppressed` boolean |
+| `feature.move` | `featureId` neprázdný řetězec, `toIndex` celé číslo ≥ 0 |
+| `studio.setRollback` | `index` celé číslo ≥ 0 |
+
+Hodnoty `params` proti schématu featury se tady nekontrolují: `ops` schémata nezná. Migrace featur v operacích je otevřená ([[Q035 Migrace featur v záznamech logu|Q035]]).
+
+### Načtení záznamu logu
+
+```ts
+/** Data zvenku → LogEntry. Pro persistence (spec 05). */
+export function parseLogEntry(handlers: OpHandlerRegistry, raw: unknown): Result<LogEntry, OperationLoadError>;
+```
+
+- `raw` je objekt, `seq` celé číslo ≥ 1, `kind` je `'do' | 'undo' | 'redo'`, `label` řetězec, `time` konečné číslo.
+- `target`: u `undo`/`redo` celé číslo ≥ 1 a menší než `seq`, u `do` chybí (`target: undefined` se bere jako chybějící, ve shodě s `exactOptionalPropertyTypes`). Že `target` ukazuje na `do` záznam, nekontroluje: to pozná `rebuildUndoStacks` (vyhodí).
+- `op` a `inverse` projdou `upcastOperation`. Cesta chyby dostane prefix `op.` / `inverse.` (`'op.featureId'`, `'inverse'` pro chybu celé operace).
+- Výsledek je nový objekt jen se známými poli (přebytečná pole z úložiště se zahodí).
 
 ## Testy
 
@@ -317,6 +345,8 @@ Tvar payloadu operace aktuální verze se zatím nekontroluje ([[Q032 Kontrola p
 - Undo/redo sekvence včetně „undo, nová změna, redo není možné“; undo během transakce vyhodí; `changed` jen při změně dvojice; undo s posunem rollback baru.
 - `rebuildUndoStacks` = živé zásobníky; poškozený log vyhodí; **undo po „znovuotevření“** (nový log z `entries()`, nový dokument přes `replayLog`, nový `UndoManager`) se chová stejně jako v živé session.
 - `upcastOperation`: aktuální verze, fiktivní v1 → v2, chybějící `upcast`, novější verze, neznámý typ, rozbitá obálka i uvnitř dávky.
+- `validate` každého vestavěného handleru: platná operace projde, každé pole z tabulky rozbité zvlášť → `err` se správnou cestou; v dávce s prefixem.
+- `parseLogEntry`: platný záznam každého `kind`, každé pole rozbité zvlášť, `target` u `do`, chyba v `op` i `inverse` s prefixem cesty, upcast staré verze operace uvnitř záznamu.
 - **Replay test** (fast-check, 1000 sekvencí): náhodné operace, transakce (commit i abort), undo a redo; pak `replayLog` na prázdný dokument → `toData` se shoduje se živým dokumentem a `rebuildUndoStacks` se shoduje se živými zásobníky.
 
 ## Otevřené otázky

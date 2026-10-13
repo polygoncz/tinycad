@@ -1,0 +1,11 @@
+{
+  // Tests of the IndexedDB adapter (persistence/idb): Node under Vitest with fake-indexeddb,
+  // so they need the DOM types of IndexedDB. Kept apart so other tests stay without DOM.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test-idb.tsbuildinfo",
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"]
+  },
+  "include": ["src/persistence/idb/**/*.test.ts"]
+}

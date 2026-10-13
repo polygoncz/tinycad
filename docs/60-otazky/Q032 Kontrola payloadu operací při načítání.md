@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[04-operace-a-historie]]"
 decide_by: "[[M04-persistence]]"
 proposal: "Volitelná metoda handleru validate(raw) volaná z upcastOperation"
-decision: ""
+decision: "Volitelná metoda handleru validate, volaná z upcastOperation; vestavěné handlery ji mají"
 tags:
   - otazka
 created: 2026-10-13
@@ -33,4 +33,4 @@ Návrh: **1**, až to bude potřebovat persistence.
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR.)_
+2026-10-13: **Varianta 1.** `OpHandler` dostane volitelnou metodu `validate(raw)`, kterou `upcastOperation` zavolá na operaci aktuální verze (po případném upcastu). Všech sedm vestavěných handlerů ji implementuje. Persistence ji potřebuje hned, protože data z IndexedDB jsou cizí vstup. Kontroluje se `op` i `inverse` záznamu logu přes novou funkci `parseLogEntry` v `ops`. Propsáno do [[04-operace-a-historie#Přehrání a upcast]] a [[05-persistence#Načtení dokumentu]].

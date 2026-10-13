@@ -9,6 +9,7 @@ describe('ops public API', () => {
       'createOperationDispatcher',
       'createOperationLog',
       'createUndoManager',
+      'parseLogEntry',
       'rebuildUndoStacks',
       'replayLog',
       'upcastOperation',

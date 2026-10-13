@@ -51,7 +51,7 @@ Výuková webová CAD aplikace (Onshape-like Part Studio). Autor: Pavel. Pavel z
 - `node scripts/vault-lint.mjs` – kontrola celého vaultu (od M0 i jako `npm run lint:vault` v `npm run check`).
 - `npm run check` – vše, co musí projít před dokončením úkolu: `typecheck` + `lint` + `lint:deps` + `lint:vault` + `test`.
 - `npm run dev` – vývojový server Vite (http://localhost:5173), `npm run build` – produkční build.
-- `npm run typecheck` – `vue-tsc -b` nad všemi projekty: `tsconfig.domain.json` (prstence 1 a 2 bez DOM, ADR 0009), `tsconfig.app.json` (prohlížeč), `tsconfig.test.json` (testy v Node), `tsconfig.node.json` (konfigurace nástrojů).
+- `npm run typecheck` – `vue-tsc -b` nad všemi projekty: `tsconfig.domain.json` (prstence 1 a 2 bez DOM, ADR 0009), `tsconfig.app.json` (prohlížeč), `tsconfig.test.json` (testy v Node), `tsconfig.test-idb.json` (testy adaptéru IndexedDB, s typy DOM), `tsconfig.node.json` (konfigurace nástrojů).
 - `npm run lint:deps` – hranice modulů (dependency-cruiser, `.dependency-cruiser.cjs`). Tabulka modulů v něm musí odpovídat tabulce v `docs/20-spec/01-architektura.md`.
 - `npm test` – unit testy (Vitest, projekt `unit`), `npm run test:integration` – integrační testy v `tests/`.
 - `npm run format` – Prettier + `eslint --fix` nad celým projektem (vault v `docs/` se neformátuje).
