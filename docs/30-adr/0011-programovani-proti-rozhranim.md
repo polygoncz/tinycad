@@ -48,6 +48,8 @@ Specifikace psané před tímto ADR vystavují konkrétní třídy (`OperationDi
    - neměnná data a hodnotové typy (`Vec3`, featury, operace, `Result`) – jsou to data, ne chování,
    - malé utility v `core` (`Emitter`, `ObservableValue`, `DisposableStore`) – stavební kameny bez variability,
    - třídy chyb (`KernelError`) – potřebují `instanceof`.
+
+   > **Upřesnění (2026-10-13):** chyby portů, které mohou běžet za hranicí workeru, se rozpoznávají podle `code`, ne `instanceof`: třída přes `postMessage` nepřežije. `DocumentStore` (`storeErrorCode`) i `GeometryKernel` (`kernelErrorCode`, [[Q039 Chyby jádra přes hranici workeru|Q039]]) proto třídu chyby ven neexportují. Konkrétní zůstává jen `RpcError` v `core`.
 6. **Modularita** (doplnění [[0008-hranice-modulu|ADR 0008]]): malé veřejné API (exportuje se jen to, co cizí modul potřebuje), rozšíření bez úpravy jádra (nový druh featury, parametru, nástroje = nový soubor a registrace).
 
 Proč tovární funkce, a ne abstraktní třídy (jako v C++): TypeScript má strukturální typování, takže rozhraní nemá runtime cenu a jakýkoli objekt se správným tvarem ho splňuje. Testovací dvojník je pak obyčejný objektový literál. Abstraktní třída by přidala runtime vazbu a svádí k dědičnosti.

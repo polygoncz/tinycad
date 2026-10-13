@@ -213,9 +213,9 @@ export class RpcError extends Error { readonly code: string }
 
 - Každý požadavek má `id`, odpověď je `{ id, ok, value | error }`.
 - Chyby se serializují jako `{ code, message }`, na straně klienta se z nich stane `RpcError`. Kód: řetězcové `code` vyhozené chyby, jinak `'internal'`; neznámá metoda má `'unknown-method'`; výsledek nebo argumenty, které nejde zkopírovat (`postMessage` vyhodí), mají `'unserializable'` a server ani klient tím nepřestanou fungovat.
-- Přes hranici přežije jen `code` a `message`, ne třída chyby. Adaptér (např. `kernel-occt`) si z `RpcError.code` vytvoří vlastní chybu (`KernelError`). Protokoly přenášejí data chyb, ne instance `Error`.
+- Přes hranici přežije jen `code` a `message`, ne třída chyby. Porty proto rozpoznávají chyby podle `code` (`storeErrorCode`, `kernelErrorCode`, [[Q039 Chyby jádra přes hranici workeru|Q039]]), ne podle třídy. Protokoly přenášejí data chyb, ne instance `Error`.
 - Implementace může vrátit `transfer(value, [buffers])`, aby se velká pole nepřekopírovávala. Přenášejí se jen `ArrayBuffer` (sítě, buffery), jiné `Transferable` nepotřebujeme. Přenos funguje **jen pro výsledky**: velká data tečou z workeru ven (sítě z jádra). Přenos argumentů (např. snapshot do workeru persistence) se doplní, až ho bude potřeba ([[M04-persistence|M4]]).
-- Známé omezení: když worker spadne nebo odpověď nedorazí, volání nikdy neskončí. Klient zatím nemá `dispose()` ani reakci na `messageerror`. Doplní se s workerem jádra v [[M07-kernel-occt|M7]] (souvisí s [[Q010 Zrušení probíhající operace jádra|Q010]]).
+- Známé omezení: když worker spadne nebo odpověď nedorazí, volání nikdy neskončí. Rozhodnuto ([[Q037 Pád workeru a čekající RPC volání|Q037]]), implementace v [[M07-kernel-occt|M7]]: `RpcClient` dostane `dispose()` a `failAll(error)`, čekající i pozdější volání se odmítnou `RpcError` s kódem `'disconnected'`. Adaptéry napojí `worker.onerror`/`messageerror` na `failAll`. Zrušení dlouhé operace řeší zvlášť [[Q010 Zrušení probíhající operace jádra|Q010]].
 - Pořadí: server zpracuje požadavky **sériově** v pořadí přijetí, další začne až po dokončení předchozího. Jednovláknovost workeru sama nestačí, dvě `async` metody (persistence nad IndexedDB) by se proplétaly.
 
 ## Testy

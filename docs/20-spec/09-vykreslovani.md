@@ -61,7 +61,8 @@ export interface BodyLayer {
 
 Implementace `SceneSync`:
 1. Porovná nové `(BodyId, ShapeHandle)` se zobrazenými.
-2. Stejné `BodyId` i handle → nic. Nový handle → `kernel.tessellate(handle)` (přes `MeshCache` klíčovanou handle).
+2. Stejné `BodyId` i handle → nic. Nový handle → `kernel.tessellate(handle, quality)` (přes `MeshCache` klíčovanou dvojicí handle + kvalita). `quality` (`MeshQuality`) je konstanta `render`, později nastavení. Změna kvality cache vyprázdní.
+   - **Výměna instance jádra** (restart workeru po pádu, [[Q037 Pád workeru a čekající RPC volání|Q037]]) cache zahodí a vynutí plnou regeneraci: handle jsou jedinečné jen v rámci instance a nové jádro čísluje znovu.
 3. Jakmile jsou **všechny** nové sítě hotové, vymění scénu najednou (žádné problikávání napůl starého a napůl nového modelu).
 4. Zmizelá tělesa → `dispose()` geometrie a materiálů.
 5. Pokud mezitím přišel novější `sync`, výsledek starého se zahodí (stejný vzor generací jako v regeneraci).
@@ -72,7 +73,7 @@ Implementace `SceneSync`:
 
 `BodyView` (jedna instance na těleso):
 - `THREE.Mesh` s `BufferGeometry` ze `MeshData` – plochy,
-- `THREE.LineSegments` – hrany (z `edgePositions`), tmavé, mírně posunuté proti z-fightingu (`polygonOffset` na plochách),
+- `THREE.LineSegments` – hrany. `edgePositions` jsou polyline (hrana má N bodů, u kvádru 2, od M11 víc), čistá funkce `polylinesToSegments(edgePositions, edgeRanges)` je převede na páry úseček a k nim mapu segment → hrana (s testem), tmavé, mírně posunuté proti z-fightingu (`polygonOffset` na plochách),
 - pomocná pole pro mapování trojúhelník → plocha (`faceRanges`) a segment → hrana.
 
 Zvýraznění plochy nevyžaduje novou geometrii: `HighlightLayer` vytvoří malou sub-geometrii ze stejných bufferů (rozsah trojúhelníků dané plochy) s jiným materiálem.

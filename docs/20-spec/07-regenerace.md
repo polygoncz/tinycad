@@ -160,7 +160,7 @@ Stavy sdílejí handle (těleso, které featura nezměnila, prochází dál se s
 
 Regenerator proto vede množinu „vlastněných“ handle. Test ověří, že po sekvenci změn platí `kernel.liveHandleCount() === počet živých`.
 
-`render` drží handle jen pro dobu tessellace a nikdy ho neuvolňuje. Pokud by tessellace doběhla po uvolnění, jádro vrátí `UNKNOWN_HANDLE` a `render` výsledek zahodí (je stejně zastaralý).
+`render` drží handle jen pro dobu tessellace a nikdy ho neuvolňuje. Pokud by tessellace doběhla po uvolnění, jádro odmítne s kódem `'unknown-handle'` (`kernelErrorCode`) a `render` výsledek zahodí (je stejně zastaralý).
 
 ## Testy (s `FakeKernel`)
 

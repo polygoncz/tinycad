@@ -16,7 +16,7 @@ finished:
 tags:
   - milnik
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 # M7 – OCCT adaptér
 
@@ -28,10 +28,11 @@ updated: 2026-10-12
 
 ## Úkoly
 
-- [ ] **Spike (časově omezený, ~1 večer na variantu):** vyzkoušet `opencascade.js`, `replicad-opencascadejs` a nastínit vlastní build přes Emscripten. Kritéria: velikost, dostupnost `BRepPrimAPI_MakeBox`, `BRepMesh_IncrementalMesh`, `BRepAlgoAPI_*` s historií, `STEPControl_Writer`, funkčnost v Node pro testy, ve Vite workeru. Výsledek zapsat jako ADR 0009.
-- [ ] `OcctKernelImpl` (běží uvnitř workeru, testovatelný i přímo v Node): tabulka handle, `makeBox` (+ `roles` pro plochy), `boundingBox`, `release`, `liveHandleCount`.
+- [ ] **Spike (časově omezený, ~1 večer na variantu):** vyzkoušet `opencascade.js`, `replicad-opencascadejs` a nastínit vlastní build přes Emscripten. Kritéria: velikost, dostupnost `BRepPrimAPI_MakeBox`, `BRepMesh_IncrementalMesh`, `BRepAlgoAPI_*` s historií, `STEPControl_Writer`, funkčnost v Node pro testy, ve Vite workeru. Výsledek zapsat jako nové ADR (rozhodnutí [[Q012 Volba WASM buildu OCCT|Q012]]).
+- [ ] `OcctKernelImpl` (běží uvnitř workeru, testovatelný i přímo v Node): tabulka handle, `makeBox` (+ `roles` pro plochy), `boundingBox` (`BRepBndLib::AddOptimal` bez tolerance tvaru, kontrakt dovoluje nadsazení nejvýš 1e-6), `release`, `liveHandleCount`.
 - [ ] Tessellace: `BRepMesh_IncrementalMesh`, průchod ploch přes `TopExp::MapShapes`, triangulace s respektováním orientace plochy, normály, `faceRanges`; polyline hran z `BRep_Tool::PolygonOnTriangulation`, `edgeRanges`.
 - [ ] Disciplína uvolňování OCCT objektů (`try/finally` + `.delete()`), pomocník `using`-like scope.
+- [ ] `core/rpc`: `RpcClient.dispose()` a `failAll(error)` s kódem `'disconnected'` ([[Q037 Pád workeru a čekající RPC volání|Q037]]); napojit v `createIdbDocumentStore` i v klientovi jádra na `worker.onerror`/`messageerror`.
 - [ ] `occt.worker.ts` + `OcctKernelClient` přes `core/rpc`, `ready` promise, transfer bufferů.
 - [ ] Integrační testy: kontraktové testy z M5 proti `OcctKernelImpl`; `validateMeshData`; žádné úniky handle.
 - [ ] Vite: konfigurace workeru a WASM (cesta k `.wasm`, případně `optimizeDeps.exclude`).

@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[02-core]]"
 decide_by: "[[M05-kernel-port]]"
 proposal: "RpcClient.dispose a failAll: čekající volání se odmítnou kódem 'disconnected'; adaptér napojí worker.onerror"
-decision: ""
+decision: "RpcClient.dispose a failAll s kódem disconnected; implementace v M7"
 tags:
   - otazka
 created: 2026-10-13
@@ -33,4 +33,4 @@ Návrh: **1**, případně později doplnit 2 pro jádro. Rozhodnout do [[M05-ke
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR.)_
+2026-10-13: **Varianta 1**, implementace v [[M07-kernel-occt|M7]] spolu s workerem jádra (M5 je port bez workeru). `RpcClient` dostane `dispose()` a `failAll(error)`: čekající i pozdější volání se odmítnou `RpcError` s kódem `'disconnected'`. Adaptéry (`createIdbDocumentStore`, `createOcctKernel`) napojí `worker.onerror`/`messageerror` na `failAll` a `dispose` na `dispose`. Úkol je v [[M07-kernel-occt]], kontrakt doplní [[02-core#RPC pro workery]].
