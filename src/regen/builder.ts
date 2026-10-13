@@ -1,0 +1,56 @@
+import { createRegistry } from '@/core';
+import type { Registry, Result } from '@/core';
+import type { BodyRef, FeatureInstance } from '@/document';
+import type { PrimitiveOps, QueryOps } from '@/kernel';
+import type { Body, FeatureError, RegenState } from './state';
+
+// The behaviour half of a feature type (ADR 0004): turns params into geometry.
+// The data half (params, validation) is FeatureSchema in document.
+
+export interface BuildInput<P> {
+  readonly feature: FeatureInstance<P>;
+  /** State before this feature. */
+  readonly state: RegenState;
+}
+
+/** First body reference resolveBodies could not find (Q044). M14 widens ref to TopoRef. */
+export interface RefError {
+  readonly ref: BodyRef;
+  readonly message: string;
+}
+
+/**
+ * The part of the kernel a builder may use: it creates shapes and asks about them, it never
+ * releases (Q041). Defined here by its consumer (ADR 0011); M13 adds BooleanOps.
+ */
+export type ModelingKernel = PrimitiveOps & QueryOps;
+
+export interface BuildContext {
+  /** Tracked kernel: every returned handle belongs to the Regenerator (Q041). */
+  readonly kernel: ModelingKernel;
+  /** Bodies of the input state; the first unresolved reference gives err (Q044). */
+  resolveBodies(refs: readonly BodyRef[]): Result<Body[], RefError>;
+  /** Several calls are joined with '\n' into one 'warning' status (Q045). */
+  warn(message: string): void;
+}
+
+export type BuildOutput =
+  | { readonly ok: true; readonly state: RegenState }
+  | { readonly ok: false; readonly error: FeatureError };
+
+/**
+ * Rules (spec 07): never mutate the input state, return a new one; never release handles;
+ * create every shape through ctx.kernel; return expected failures as { ok: false }
+ * (an unresolved reference as UNRESOLVED_REFERENCE). Params are already validated.
+ */
+export interface FeatureBuilder<P = unknown> {
+  /** Registry key, same as FeatureSchema.type. */
+  readonly type: string;
+  build(input: BuildInput<P>, ctx: BuildContext): Promise<BuildOutput>;
+}
+
+export type BuilderRegistry = Registry<FeatureBuilder>;
+
+export function createBuilderRegistry(): BuilderRegistry {
+  return createRegistry<FeatureBuilder>({ what: 'feature builder', keyOf: (b) => b.type });
+}

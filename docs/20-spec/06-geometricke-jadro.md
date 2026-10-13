@@ -208,7 +208,7 @@ export function kernelErrorCode(e: unknown): KernelErrorCode | undefined;
 ```
 
 - Neočekávaná výjimka uvnitř implementace (chyba v adaptéru, výjimka OCCT) se převede na `'internal'`.
-- `regen` chybu zachytí a označí featuru jako chybnou (`KERNEL`). Nikdy nespadne celá regenerace. Chyba bez kódu jádra (např. `RpcError` `'disconnected'`, [[Q037 Pád workeru a čekající RPC volání|Q037]]) je pro `regen` také chyba jádra.
+- `regen` chybu s kódem jádra zachytí a označí featuru jako chybnou (`KERNEL`), regenerace pokračuje. Chyba bez kódu jádra chybou featury není: `RpcError` `'disconnected'` ([[Q037 Pád workeru a čekající RPC volání|Q037]]) znamená, že jádro zaniklo – `run` odmítne a `regen` zahodí cache i vlastněné handle ([[Q049 Pád jádra během regenerace|Q049]]); jiná výjimka je chyba programu ([[Q043 Výjimka builderu mimo jádro|Q043]]).
 
 ## `kernel-occt`: architektura adaptéru
 

@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[07-regenerace]]"
 decide_by: "[[M06-regenerace]]"
 proposal: "unknown-handle je chyba programu (assert), jiná chyba nechá množinu na příští sweep, disconnected ji vyprázdní"
-decision: ""
+decision: "podle kódu: unknown-handle = výjimka, jiná chyba jádra = zkusit při příštím sweepu, disconnected = vyprázdnit vlastněnou množinu"
 tags:
   - otazka
 created: 2026-10-13
@@ -36,4 +36,4 @@ Návrh: **1**.
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR.)_
+2026-10-13: **varianta 1** (podle kódu chyby). Propsáno do [[07-regenerace#Životnost handle: mark & sweep|spec 07]].
