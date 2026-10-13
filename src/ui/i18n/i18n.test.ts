@@ -192,4 +192,21 @@ describe('issueText', () => {
       en['param.missing'],
     );
   });
+
+  // R27: the user counts items from 1, the data from 0.
+  it('shows a numeric index from 1', () => {
+    const i18n = createUiI18n(PLUGIN, env('cs', 'cs'));
+    const issue: ParamIssue = { param: 'tools', code: 'param.duplicateRef', params: { index: 0 } };
+    expect(issueText(i18n.global.t, issue)).toBe(cs['param.duplicateRef']?.replace('{index}', '1'));
+  });
+
+  it('leaves a non-numeric index as it is', () => {
+    const calls: Record<string, unknown>[] = [];
+    const t = (_key: string, named: Record<string, unknown>): string => {
+      calls.push(named);
+      return '';
+    };
+    issueText(t, { param: 'tools', code: 'param.duplicateRef', params: { index: 'a', n: 2 } });
+    expect(calls).toEqual([{ index: 'a', n: 2 }]);
+  });
 });

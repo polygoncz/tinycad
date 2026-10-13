@@ -56,7 +56,7 @@ updated: 2026-10-14
 - [x] Ú5 `features/transform`: plugin Transform
 - [x] Ú6 `features/boolean`: plugin Boolean
 - [x] Ú7 `interaction`, `app`, `ui`: Prohlížeč nad metadaty (jméno, viditelnost), `RefListField` se seznamem těles, výběr těles z Prohlížeče do dialogu
-- [ ] Ú8 `app`, `tests`, `e2e`: registrace pluginů, scénář kvádr/válec/boolean
+- [x] Ú8 `app`, `tests`, `e2e`: registrace pluginů, scénář kvádr/válec/boolean
 - [ ] Ú9 hlavní sezení: kontrola, vault, `architecture-reviewer`, retrospektiva s měřítkem rozšiřitelnosti
 
 ## Akceptační kritéria

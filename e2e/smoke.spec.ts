@@ -1,24 +1,11 @@
 import { expect, test } from './fixtures';
-import type { Locator, Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { createDocument, paramInput, timelineFeature } from './helpers';
 
 // Smoke test of M10 (Ú11): the whole path click → operation → log → regeneration in the
 // worker → rendering → undo, persistence across a reload, an invalid param and the read-only
 // second tab. Runs against the production build (playwright.config.ts) in Czech. Elements are
 // found only by their roles and accessible names (spec 11, "Přístupnost").
-
-/** From the document list to an open, empty document. */
-async function createDocument(page: Page): Promise<void> {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Nový', exact: true }).click();
-  await expect(page).toHaveURL(/#\/d\//);
-  // The toolbar is there once the session is open.
-  await expect(page.getByRole('button', { name: 'Kvádr', exact: true })).toBeEnabled();
-}
-
-/** The input of a param field of the open dialog, named by its label. */
-function paramInput(page: Page, label: string): Locator {
-  return page.getByRole('dialog').getByRole('textbox', { name: label, exact: true });
-}
 
 /** Toolbar Kvádr → height → OK. */
 async function addBox(page: Page, height: string): Promise<void> {
@@ -31,10 +18,6 @@ async function addBox(page: Page, height: string): Promise<void> {
   await input.press('Tab');
   await dialog.getByRole('button', { name: 'OK', exact: true }).click();
   await expect(dialog).toBeHidden();
-}
-
-function timelineFeature(page: Page, name: string): Locator {
-  return page.getByRole('button', { name, exact: true });
 }
 
 test('box, undo, redo and reload keep the document and its body', async ({ page }) => {

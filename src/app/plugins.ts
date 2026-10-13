@@ -2,7 +2,16 @@
 // list lives here; main.ts hands it to ui, which passes it to openAppSession. A new feature
 // type = one line here and nothing in ui (spec 11, "Komponenty").
 
+import { booleanPlugin } from '@/features/boolean';
 import { boxPlugin } from '@/features/box';
+import { cylinderPlugin } from '@/features/cylinder';
+import { transformPlugin } from '@/features/transform';
 import type { FeaturePlugin } from '@/plugin-api';
 
-export const BUILT_IN_PLUGINS: readonly FeaturePlugin[] = Object.freeze([boxPlugin]);
+/** The order is the order of the tools within a toolbar group. */
+export const BUILT_IN_PLUGINS: readonly FeaturePlugin[] = Object.freeze([
+  boxPlugin,
+  cylinderPlugin,
+  transformPlugin,
+  booleanPlugin,
+]);

@@ -66,9 +66,14 @@ export function addPluginMessages(i18n: UiI18n, plugins: MessageDictionaries): v
   i18n.global.mergeLocaleMessage('en', merged.en);
 }
 
-/** Text of a validation issue: its code is the key, its params fill the placeholders. */
+/**
+ * Text of a validation issue: its code is the key, its params fill the placeholders. A numeric
+ * `index` is shown from 1 (R27): the data count items from 0, the user from 1.
+ */
 export function issueText(t: Translate, issue: ParamIssue): string {
-  return t(issue.code, issue.params ?? {});
+  const params = issue.params ?? {};
+  const index = params['index'];
+  return t(issue.code, typeof index === 'number' ? { ...params, index: index + 1 } : params);
 }
 
 function merge(

@@ -8,9 +8,14 @@ import { BUILT_IN_PLUGINS, createAppSession } from './index';
 import { aKernelFactory, FakeAppViewport } from './testing';
 
 describe('BUILT_IN_PLUGINS', () => {
-  it('is frozen and has the box', () => {
+  it('is frozen and has the four plugins in toolbar order', () => {
     expect(Object.isFrozen(BUILT_IN_PLUGINS)).toBe(true);
-    expect(BUILT_IN_PLUGINS.map((p) => p.schema.type)).toContain('box');
+    expect(BUILT_IN_PLUGINS.map((p) => p.schema.type)).toEqual([
+      'box',
+      'cylinder',
+      'transform',
+      'boolean',
+    ]);
   });
 
   it('opens a session together (complete registries, no clashing keys)', async () => {
@@ -27,7 +32,14 @@ describe('BUILT_IN_PLUGINS', () => {
       confirm: () => true,
       readOnly: false,
     });
-    expect(session.toolList.map((t) => t.id)).toContain('box');
+    expect(session.toolList.map((t) => t.id)).toEqual(
+      expect.arrayContaining(['box', 'cylinder', 'transform', 'boolean']),
+    );
+    // No two tools share a shortcut.
+    const shortcuts = session.toolList.flatMap((t) =>
+      t.shortcut === undefined ? [] : [t.shortcut],
+    );
+    expect(new Set(shortcuts).size).toBe(shortcuts.length);
     session.dispose();
   });
 
