@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 0
 aliases:
   - M0
@@ -11,7 +11,7 @@ specs:
   - "[[13-testovani]]"
 depends_on: []
 started: 2026-10-13
-finished: 
+finished: 2026-10-13
 tags:
   - milnik
 created: 2026-10-12
@@ -41,7 +41,7 @@ updated: 2026-10-13
 - [x] `src/main.ts` + `App.vue` s nápisem „tinycad“ – ověří, že Vite a Vue běží.
 - [x] `.editorconfig`, `.nvmrc`; doplnit `.gitignore` (základ s výjimkami pro Obsidian už existuje).
 - [x] Doplnit sekci „Užitečné příkazy“ v `CLAUDE.md`.
-- [ ] (Pavel) `git init` a první commit na Macu.
+- [x] (Pavel) `git init` a první commit na Macu.
 
 ## Akceptační kritéria
 
@@ -56,4 +56,16 @@ Nastavení TS ve strict módu a co jednotlivé přepínače hlídají; jak vynut
 
 ## Retrospektiva
 
-_(vyplnit po dokončení)_
+> [!note] Návrh od Clauda – Pavle, doplň nebo uprav.
+
+**Co bylo jinak, než se čekalo**
+- Milník se rozrostl o architektonické rozhodnutí: požadavek na přenositelnost vedl k [[0009-platformove-nezavisla-domena|ADR 0009]] (tři prstence, `ViewportPort`) a [[0010-prezentacni-model|ADR 0010]]. Při revizi specifikací se našly dvě skryté závislosti na platformě: `interaction → render` a `KeyboardEvent` v `ActionRegistry`. Na papíře je nikdo nehlídal.
+- Nejnovější verze nástrojů do sebe nezapadly: TypeScript 7 (nativní kompilátor) zatím nepodporuje `typescript-eslint`, proto zůstáváme na `~6.0`. ESLint 10 načte konfiguraci v TS jen s knihovnou `jiti`.
+- Místo dvou konfigurací TS jsou čtyři (`domain`, `app`, `test`, `node`). Testy potřebují typy Node, kód pro prohlížeč je mít nemá. Přepínač `composite` se na překrývající se projekty nehodí.
+- Plán počítal s Node 22, používáme Node 26 ([[Q021 Verze Node]]).
+
+**Co se osvědčilo**
+- Každou kontrolu ověřit úmyslně chybným kódem. Kromě importu `document → kernel` jsme vyzkoušeli dalších 7 druhů porušení a všechny se chytily.
+- Pravidla dependency-cruiseru generovaná z tabulky modulů (whitelist): chybová hláška rovnou říká, co modul smí, a nový modul je jeden řádek.
+- Dvě nezávislé pojistky proti platformě v doméně: `lib` bez `DOM` v typecheck a `no-restricted-globals` v ESLintu.
+

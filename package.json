@@ -37,5 +37,8 @@
     "vitest": "^5.0.4",
     "vue-eslint-parser": "^10.4.1",
     "vue-tsc": "^3.3.13"
+  },
+  "allowScripts": {
+    "fsevents@2.3.3": true
   }
 }
