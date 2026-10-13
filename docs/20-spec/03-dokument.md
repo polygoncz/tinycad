@@ -138,6 +138,7 @@ export interface FeatureSchema<P = unknown> {
   readonly type: string;
   readonly version: number;
   readonly label: string;               // klíč překladu, 'box.label' (ADR 0014)
+  readonly icon?: string;               // název ikony Tabler, 'box' (Timeline, M10)
   readonly params: ParamSchema;
   defaults(): P;
   validate(params: unknown): readonly ParamIssue[]; // unknown: parametry z dokumentu jsou neověřené

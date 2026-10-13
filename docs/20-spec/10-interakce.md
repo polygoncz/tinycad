@@ -323,7 +323,9 @@ export interface TreeRow {
   readonly id: FeatureId;
   readonly name: string;
   readonly type: string;
-  readonly typeLabel: string;          // schema.label; neznámý typ → type
+  readonly typeLabel: string;          // schema.label (klíč); neznámý typ → type
+  readonly icon: string | null;        // schema.icon (název ikony Tabler); neznámý typ → null
+  readonly issues: readonly ParamIssue[] | null;  // z FeatureHealth error (neplatné parametry), jinak null
   readonly status: TreeStatus;
   readonly message: string | null;     // u warning/error
   readonly selected: boolean;          // výběr obsahuje { kind: 'feature', feature: id }
@@ -384,9 +386,10 @@ export interface BrowserModel {
 
 ```ts
 export interface Action {
-  readonly id: string;              // 'edit.undo'
-  readonly label: string;
-  readonly shortcut?: string;       // 'Mod+Z' (Mod = Cmd na macOS, Ctrl jinde)
+  readonly id: string;              // 'undo', 'feature.delete'
+  readonly label: string;           // klíč překladu (ADR 0014)
+  readonly shortcut?: string | readonly string[];  // 'Mod+Z'; víc zkratek = alternativy ('Delete', 'Backspace')
+  readonly group?: string;          // 'feature' = kontextové menu featury (M10)
   readonly enabled: Observable<boolean>;
   run(): void;
 }
@@ -394,7 +397,8 @@ export interface Action {
 export interface ActionState {
   readonly id: string;
   readonly label: string;
-  readonly shortcut: string | null;
+  readonly shortcut: string | null;   // první zkratka (pro zobrazení)
+  readonly group: string | null;
   readonly enabled: boolean;
 }
 
@@ -409,6 +413,7 @@ export interface ActionRegistry {
 export function createActionRegistry(): ActionRegistry;
 ```
 
+- Víc zkratek: `handleKey` spustí akci na kteroukoli z nich; duplicita se hlídá mezi všemi zkratkami všech akcí. Kontextové menu featury v [[Timeline]] tvoří akce s `group: 'feature'` v pořadí registrace; pravé tlačítko featuru nejdřív vybere (jako Fusion), takže akce pracují s výběrem (rozhodnutí 2026-10-13).
 - `enabled` je `Observable` ([[Q067 Změna enabled u akcí|Q067]]): registr se k němu přihlásí při `register` a při změně vytvoří nový snapshot, ve kterém je nový jen `ActionState` změněné akce.
 - Zkratka: tokeny oddělené `+`, nejdřív modifikátory `Mod`, `Shift`, `Alt` (libovolné pořadí, každý nejvýš jednou), poslední je klávesa podle `KeyboardEvent.key` (`Z`, `Delete`, `Escape`, `F2`…). Písmena se porovnávají bez ohledu na velikost (Shift mění `key` na velké písmeno). Modifikátory musí sedět přesně: `Mod+Z` se nespustí na `Mod+Shift+Z`. Neplatná zkratka (neznámý modifikátor, chybí klávesa, opakovaný modifikátor) → výjimka v `register`.
 - `register`: duplicitní `id` nebo duplicitní zkratka (po normalizaci) → výjimka.

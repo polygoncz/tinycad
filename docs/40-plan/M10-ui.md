@@ -59,7 +59,8 @@ Každý úkol dělá zvlášť subagent `implementer` (TDD: test nejdřív a ov�
 | A2 | Ú1b strukturovaná chyba regenerace a klíče popisků · Ú3b dokončení palety | A |
 | B | Ú5 `createAppSession` · Ú6 základ `ui` | A2 |
 | C | Ú7 vestavěné akce · Ú8 `openAppSession` a dokumenty · Ú9 `Timeline` a `Browser` | B |
-| D | Ú10 zbytek komponent a spuštění aplikace | C |
+| C2 | Ú7b doplňky z revize vlny C | C |
+| D | Ú10 zbytek komponent a spuštění aplikace | C2 |
 | E | Ú11 e2e test · Ú12 ověření a revize (hlavní sezení) | D |
 
 ### Vlna A
@@ -137,6 +138,20 @@ Doplňky z revize vlny A (rozhodnutí 2026-10-13).
 - **Kontrakt:** [[11-ui#Komponenty]], vzhled podle mockupu `ui-m10-mockup.html`. Komponenty dostanou modely přes `useSession()` a čtou je jen přes `useObservable`; žádná logika kromě vazeb (pravidlo 4). Tažení rollback značky volá `featureTree.moveRollbackBar` až při puštění.
 - **Testy:** žádné jednotkové (pokryje e2e Ú11), jen `npm run check` (typecheck šablon přes `vue-tsc`).
 - **Hotovo když:** `npm run check` projde a komponenty jsou v `npm run dev` vidět na dočasné stránce nebo v `AppShell`, pokud už existuje.
+
+### Vlna C2
+
+#### Ú7b Doplňky z revize vlny C (rozhodnutí 2026-10-13)
+Jeden úkol, protože změny navazují přes vrstvy (typy z `interaction` potřebuje `app`).
+- **Soubory:** `src/document/schema.ts`; `src/features/box/schema.ts`, `tool.ts`, `box.test.ts`; `src/interaction/actions.ts`, `shortcut.ts`, `feature-tree.ts` + testy; `src/app/actions.ts`, `session.ts`, `browser.ts`, `documents.ts`, `doc-lock.ts`, `store-drain.ts` (zrušit nebo nahradit), `index.ts` + testy; `src/ui/components/Timeline.vue`, `TimelineItem.vue` (jen zapojení menu a ikony), `src/ui/i18n/cs.ts`, `en.ts` (klíče akcí).
+- **Kontrakt:**
+  - [[10-interakce]] – `Action.shortcut` může být pole alternativ, `Action.group`, `ActionState.group`; `TreeRow.icon` a `TreeRow.issues`. [[03-dokument]] – `FeatureSchema.icon`; box `icon: 'box'`, `boxTool.shortcut: 'B'`.
+  - `app` akce: `feature.delete` se zkratkami `Delete` i `Backspace`; `group: 'feature'` u `feature.edit` (nová – otevře dialog vybrané featury, povolená při právě jedné vybrané featuře), `feature.suppress`, `timeline.rollHere` (nová – bar těsně za vybranou featuru), `feature.delete`.
+  - [[11-ui#Kompoziční kořen (app)]] – `AppSession.close(): Promise<void>` (flush, pak uvolnění; v `openAppSession` potom store, viewport, zámek), `store-drain` nahradit. `AppSessionDeps.verify` → `loadDocument`; `openAppSession` předá `import.meta.env.DEV`. `deleteDocument` si vezme zámek (`ifAvailable`) a dokument otevřený jinde odmítne.
+  - Timeline: pravé tlačítko na featuře → `featureTree.select(id)` a `ContextMenu` z akcí `group === 'feature'`; položka „Přejmenovat“ je čistě v UI (inline pole → `featureTree.rename`). Ikona z `TreeRow.icon` (`ti ti-<icon>`, výchozí `ti-cube`), v tooltipu přeložené `issues` (`issueText`).
+  - Klíče akcí (`undo`, `redo`, `feature.delete`, `feature.suppress`, `feature.edit`, `feature.rename`, `timeline.rollHere`, `view.fitAll`, `timeline.toStart|stepBack|stepForward|toEnd`) ve slovnících cs/en.
+- **Testy:** `handleKey` spustí akci na obě zkratky, duplicita zkratky v poli vyhodí; `ActionState.group`; `TreeRow.icon` ze schématu a `null` u neznámého typu; `TreeRow.issues` z `FeatureHealth`; akce `feature.edit` a `timeline.rollHere` (povolení podle výběru, výsledek); `close()` dopíše frontu do store a teprve pak resolve, dvojí `close` nic; `deleteDocument` s obsazeným zámkem odmítne; `verify` se předá `loadDocument` (např. vadný log s `verify: true` selže při otevření).
+- **Hotovo když:** testy a `npm run check` projdou.
 
 ### Vlna D
 
