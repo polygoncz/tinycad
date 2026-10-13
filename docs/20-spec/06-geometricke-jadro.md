@@ -14,7 +14,7 @@ milestones:
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 # 06 – `kernel` a `kernel-occt`: geometrické jádro
 
@@ -26,6 +26,8 @@ Geometrické jádro je za **portem** `GeometryKernel`. Doména (`regen`) zná je
 
 - `OcctKernelClient` (`kernel-occt`) – OpenCascade ve WASM, běží ve Web Workeru ([[0002-occt-wasm-ve-workeru|ADR 0002]]),
 - `FakeKernel` (`kernel`) – jednoduchá implementace v paměti pro testy vyšších vrstev, umí jen kvádry jako AABB.
+
+Třídy jsou skryté v modulech, ven jdou tovární funkce ([[0011-programovani-proti-rozhranim|ADR 0011]]): `createOcctKernel(): Promise<GeometryKernel>` z `kernel-occt` (počká na start workeru) a `createFakeKernel(): FakeKernel` z `kernel`. `FakeKernel` je rozhraní rozšiřující `GeometryKernel` o testovací metody (`failNext`, `liveHandles`). `KernelError` zůstává třída, protože se rozpoznává přes `instanceof`.
 
 ## Handle místo tvarů
 
@@ -178,7 +180,7 @@ Doporučení: začít předpřipraveným buildem (rychle k výsledku), ale drže
 - Žije v `kernel` (ne v testech), aby ho mohly používat testy všech vyšších modulů.
 - `makeBox` vrací handle s AABB, `transform` posouvá AABB, `boolean('union')` vrací obalový AABB, `tessellate` vrací 12 trojúhelníků s 6 plochami.
 - Umí simulovat chybu (`fake.failNext('makeBox', 'OPERATION_FAILED')`).
-- Počítá živé handle → testy regenerace ověřují, že nic neuniká.
+- Počítá živé handle (`liveHandles()`) → testy regenerace ověřují, že nic neuniká.
 
 ## Testy
 

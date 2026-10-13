@@ -42,8 +42,8 @@ export type FeatureId = Brand<string, 'FeatureId'>;
 export interface IdGenerator {
   next(): string;            // krátké, URL-safe, náhodné (např. 10 znaků base62)
 }
-export class RandomIdGenerator implements IdGenerator { … }   // crypto.getRandomValues
-export class SequentialIdGenerator implements IdGenerator { … } // 'id1', 'id2', … pro testy
+export function createRandomIdGenerator(): IdGenerator;                // crypto.getRandomValues
+export function createSequentialIdGenerator(prefix?: string): IdGenerator; // 'id1', 'id2', … pro testy
 ```
 
 ID se generují **před** vytvořením operace, nikdy uvnitř `apply` (determinismus, viz [[04-operace-a-historie|04]]).
@@ -83,6 +83,27 @@ export class ObservableValue<T> implements Observable<T> {
 ```
 
 Snapshot musí být neměnný. Změna = nový objekt, takže odběratel pozná změnu porovnáním identity.
+
+### Registry
+
+Společný tvar pro všechny registry podle typu (schémata featur, handlery operací, buildery, nástroje). Díky tomu se registry chovají všude stejně ([[0011-programovani-proti-rozhranim|ADR 0011]]).
+
+```ts
+export interface Registry<T> {
+  register(item: T): void;              // duplicitní klíč = chyba programátora (výjimka)
+  get(key: string): T;                  // neznámý klíč = výjimka
+  find(key: string): T | undefined;     // neznámý klíč = undefined
+  has(key: string): boolean;
+  all(): readonly T[];                  // v pořadí registrace
+}
+
+export function createRegistry<T>(opts: { what: string; keyOf: (item: T) => string }): Registry<T>;
+// what = název pro chybové hlášky ('feature schema', 'op handler'…)
+```
+
+### Výjimky z programování proti rozhraním
+
+`core` vystavuje tři malé třídy přímo: `Emitter`, `ObservableValue`, `DisposableStore`. Jsou to stavební kameny bez variability, výjimka podle [[0011-programovani-proti-rozhranim|ADR 0011]]. Vše ostatní (generátory ID, registry) je rozhraní + tovární funkce.
 
 ### Správa životnosti
 
@@ -157,6 +178,7 @@ export function serveRpc<P extends RpcProtocol>(ep: MessageEndpoint, impl: RpcIm
 
 - `Emitter`: pořadí, odhlášení během emitu, výjimka v handleru.
 - `ObservableValue`: oznámení jen při změně identity, odhlášení.
+- `createRegistry`: duplicita a neznámý klíč (`get` vyhodí, `find` vrátí `undefined`), pořadí `all()`.
 - `DisposableStore`: pořadí uvolnění, idempotence.
 - `vec3`/`mat4`: základní identity.
 - RPC: klient + server propojené přes `MessageChannel` v Node (Vitest), chyby, transfer.

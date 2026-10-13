@@ -29,7 +29,7 @@ updated: 2026-10-13
 # 01 – Architektura
 
 > **Pojmy:** [[Port a adaptér]], [[Kompoziční kořen]], [[Dokument]], [[Neměnná data]], [[Operace]], [[Prezentační model]]  
-> **Rozhodnutí:** [[0001-jadro-v-cistem-ts]], [[0003-dokument-je-recept]], [[0004-data-oddelene-od-chovani]], [[0005-operacni-log]], [[0008-hranice-modulu]], [[0009-platformove-nezavisla-domena]], [[0010-prezentacni-model]]  
+> **Rozhodnutí:** [[0001-jadro-v-cistem-ts]], [[0003-dokument-je-recept]], [[0004-data-oddelene-od-chovani]], [[0005-operacni-log]], [[0008-hranice-modulu]], [[0009-platformove-nezavisla-domena]], [[0010-prezentacni-model]], [[0011-programovani-proti-rozhranim]]  
 > **Milník:** [[M00-zaklad-projektu]]
 
 ## Principy
@@ -41,6 +41,8 @@ updated: 2026-10-13
 5. **Rozšiřitelnost přes registry a pluginy.** Nová featura = nový plugin, žádné `switch (type)` v jádru. (Open/closed princip.)
 6. **Asynchronní hranice tam, kde je worker.** Rozhraní jádra a persistence jsou od začátku asynchronní.
 7. **Doména a prezentační logika nevědí, na jaké platformě běží.** Žádné DOM, Worker, Vue, Three.js ani OCCT. Přenos na jinou platformu = přepsat jen adaptéry. ([[0009-platformove-nezavisla-domena|ADR 0009]])
+8. **Programování proti rozhraním.** Veřejné API modulu tvoří rozhraní, datové typy a tovární funkce `createXxx(deps)`. Třídy zůstávají uvnitř modulu, konkrétní implementace propojuje jen `app`. Platí i tam, kde druhá implementace není v plánu. Výjimky: data a hodnotové typy, malé utility v `core`, třídy chyb. ([[0011-programovani-proti-rozhranim|ADR 0011]])
+9. **Modularita.** Malé veřejné API, úzká rozhraní pojmenovaná podle role, kompozice místo dědičnosti, rozšíření bez úpravy jádra. ([[0011-programovani-proti-rozhranim|ADR 0011]])
 
 ## Vrstvy a moduly
 
@@ -185,12 +187,12 @@ Testy jednotek leží vedle kódu (`foo.ts` + `foo.test.ts`).
 ## Kompoziční kořen
 
 `app/AppSession` je jediné místo, které:
-- vytváří konkrétní implementace (`OcctKernelClient`, `IdbDocumentStore`, `Viewport`),
+- vytváří konkrétní implementace voláním továrních funkcí (`createOcctKernel`, `createIdbDocumentStore`, `createViewport`…) – jediné místo, kde se rozhoduje, *která* implementace rozhraní se použije,
 - registruje pluginy (`registerPlugin(boxPlugin)` → schéma do `FeatureSchemaRegistry`, builder do `BuilderRegistry`, nástroje do `ToolRegistry`),
 - propojuje události (změna dokumentu → regenerace → vykreslení; operace → persistence),
 - vystavuje fasádu pro UI.
 
-Ostatní moduly dostávají závislosti v konstruktoru (dependency injection bez frameworku, ručně).
+Ostatní moduly dostávají závislosti jako rozhraní v parametru `deps` tovární funkce (dependency injection bez frameworku, ručně; [[0011-programovani-proti-rozhranim|ADR 0011]]).
 
 ## Komunikace mezi vrstvami
 

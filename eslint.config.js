@@ -82,6 +82,26 @@ export default defineConfig(
     },
   },
 
+  {
+    // ADR 0011: a module's public API is interfaces, data types and factory
+    // functions. core keeps its small utility classes (Emitter, …) as an exception.
+    // Re-exports (`export { Foo } from './foo'`) are not detected here; the
+    // architecture-reviewer subagent covers them.
+    files: ['src/*/index.ts', 'src/features/*/index.ts', 'src/persistence/idb/index.ts'],
+    ignores: ['src/core/index.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'ExportNamedDeclaration > ClassDeclaration, ExportDefaultDeclaration > ClassDeclaration',
+          message:
+            'Do not export classes from a module API. Export an interface and a createXxx() factory (ADR 0011).',
+        },
+      ],
+    },
+  },
+
   // Must be last: turns off stylistic rules that Prettier owns.
   prettier,
 );

@@ -12,7 +12,7 @@ milestones:
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 # 05 – `persistence`: ukládání dokumentů
 
@@ -39,7 +39,7 @@ export interface DocumentSnapshot {
 }
 ```
 
-Undo/redo zásobníky se do snapshotu neukládají – `UndoManager.rebuild` je spočítá z logu. (Log se tedy načítá celý kvůli undo historii, ale **nepřehrává** se celý – aplikují se jen záznamy po `atSeq`.)
+Undo/redo zásobníky se do snapshotu neukládají – `rebuildUndoStacks` je spočítá z logu. (Log se tedy načítá celý kvůli undo historii, ale **nepřehrává** se celý – aplikují se jen záznamy po `atSeq`.)
 
 ## Port
 
@@ -55,8 +55,10 @@ export interface DocumentStore {
 ```
 
 Implementace:
-- `IdbDocumentStore` – klient na hlavním vlákně, přes `core/rpc` volá worker `persistence.worker.ts`, který drží IndexedDB.
-- `MemoryDocumentStore` – pro testy.
+- `IdbDocumentStore` – klient na hlavním vlákně, přes `core/rpc` volá worker `persistence.worker.ts`, který drží IndexedDB. Vytváří ho `createIdbDocumentStore()` z `persistence/idb`.
+- `MemoryDocumentStore` – pro testy, vytváří ho `createMemoryDocumentStore()` z `persistence`.
+
+Obě třídy jsou skryté uvnitř svých modulů, ven jde jen rozhraní `DocumentStore` a tovární funkce ([[0011-programovani-proti-rozhranim|ADR 0011]]).
 
 ### Schéma IndexedDB
 
@@ -73,12 +75,16 @@ Zápis záznamů jedné dávky probíhá v jedné IDB transakci (atomicky).
 ## Služba na hlavním vlákně
 
 ```ts
-export class PersistenceService implements Disposable {
-  constructor(store: DocumentStore, log: OperationLog, doc: DocumentReader, opts?: { flushMs?: number; snapshotEvery?: number });
+export interface PersistenceService extends Disposable {
   flush(): Promise<void>;
   readonly status: 'saved' | 'pending' | 'error';
   readonly events: Emitter<{ status: { status: 'saved' | 'pending' | 'error' } }>;
 }
+
+export function createPersistenceService(deps: {
+  store: DocumentStore; log: OperationLog; doc: DocumentReader;
+  flushMs?: number; snapshotEvery?: number;
+}): PersistenceService;
 ```
 
 - Poslouchá `log.appended`, záznamy sbírá do fronty a odesílá dávkově (debounce `flushMs`, výchozí 300 ms).
@@ -90,13 +96,13 @@ export class PersistenceService implements Disposable {
 
 ```ts
 export async function loadDocument(store, id, schemas: FeatureSchemaRegistry, handlers: OpHandlerRegistry):
-  Promise<{ doc: CadDocument; log: OperationLog }>;
+  Promise<{ doc: DocumentWriter; log: OperationLog }>;
 ```
 
 1. `store.load(id)` → snapshot + všechny záznamy.
 2. `fromData(snapshot.document, schemas)` – včetně migrace featur.
 3. Záznamy s `seq > atSeq`: `upcast` operace na aktuální verzi a `handler.apply`.
-4. `OperationLog.fromEntries(entries)` (všechny, kvůli undo).
+4. `createOperationLog(entries)` (všechny, kvůli undo).
 5. Kontrola konzistence v dev režimu: přehrání celého logu od nuly dá stejný dokument jako snapshot + zbytek.
 
 ## Export a import souboru

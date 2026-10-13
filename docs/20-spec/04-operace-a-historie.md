@@ -12,7 +12,7 @@ milestones:
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 # 04 – `ops`: operace, log a undo/redo
 
@@ -66,7 +66,8 @@ export interface OpHandler<O extends Operation = Operation> {
   upcast?(fromVersion: number, raw: unknown): O;
 }
 
-export class OpHandlerRegistry { register(h: OpHandler): void; get(type: string): OpHandler }
+export type OpHandlerRegistry = Registry<OpHandler>;   // klíč = type, viz core
+export function createOpHandlerRegistry(): OpHandlerRegistry;
 ```
 
 ### Determinismus
@@ -81,8 +82,7 @@ Ověřuje to property-based test (viz [[13-testovani|13]]).
 ## Dispečer
 
 ```ts
-export class OperationDispatcher {
-  constructor(doc: DocumentWriter, handlers: OpHandlerRegistry, log: OperationLog);
+export interface OperationDispatcher {
 
   /** Aplikuje operaci a zapíše ji do logu jako samostatný záznam. */
   dispatch(op: Operation, meta?: { label?: string }): LogEntry;
@@ -92,6 +92,10 @@ export class OperationDispatcher {
 
   readonly events: Emitter<{ applied: { entry: LogEntry | null; op: Operation } }>;
 }
+
+export function createOperationDispatcher(deps: {
+  doc: DocumentWriter; handlers: OpHandlerRegistry; log: OperationLog;
+}): OperationDispatcher;
 ```
 
 Průběh `dispatch(op)`:
@@ -133,13 +137,15 @@ export interface LogEntry {
   readonly time: number;             // ms epoch, jen metadata
 }
 
-export class OperationLog {
+export interface OperationLog {
   append(e: Omit<LogEntry, 'seq'>): LogEntry;
   entries(fromSeq?: number): readonly LogEntry[];
   readonly lastSeq: number;
   readonly events: Emitter<{ appended: LogEntry }>;
-  static fromEntries(entries: readonly LogEntry[]): OperationLog;
 }
+
+/** Prázdný log, nebo log obnovený z uložených záznamů (po načtení dokumentu). */
+export function createOperationLog(entries?: readonly LogEntry[]): OperationLog;
 ```
 
 V paměti je celý log (pro naše velikosti dokumentů to stačí). Na disk ho zapisuje `persistence` ([[05-persistence|05]]), která poslouchá `appended`.
@@ -149,16 +155,19 @@ V paměti je celý log (pro naše velikosti dokumentů to stačí). Na disk ho z
 Undo nemaže historii – připíše **inverzní operaci** jako nový záznam. Historie úprav tak zůstává kompletní (podobně jako mikroverze v Onshape).
 
 ```ts
-export class UndoManager {
-  constructor(dispatcher: OperationDispatcher, log: OperationLog);
+export interface UndoManager {
   canUndo(): boolean;
   canRedo(): boolean;
   undo(): void;   // vezme seq z undo zásobníku, aplikuje jeho inverse jako záznam kind 'undo'
   redo(): void;   // vezme seq z redo zásobníku, aplikuje znovu jeho op jako záznam kind 'redo'
-  /** Obnoví zásobníky přehráním metadat logu (po načtení dokumentu). */
-  static rebuild(log: OperationLog): { undo: number[]; redo: number[] };
   readonly events: Emitter<{ changed: { canUndo: boolean; canRedo: boolean } }>;
 }
+
+/** Zásobníky se při vytvoření spočítají z logu přes rebuildUndoStacks. */
+export function createUndoManager(deps: { dispatcher: OperationDispatcher; log: OperationLog }): UndoManager;
+
+/** Obnoví zásobníky přehráním metadat logu (po načtení dokumentu). Čistá funkce. */
+export function rebuildUndoStacks(log: OperationLog): { undo: number[]; redo: number[] };
 ```
 
 Pravidla:
@@ -166,7 +175,7 @@ Pravidla:
 - `undo` přesune seq z undo do redo, `redo` naopak,
 - zásobníky obsahují seq **původních** `do` záznamů,
 - během otevřené transakce jsou undo/redo zakázané,
-- `rebuild` je čistá funkce nad logem → undo funguje i po zavření a znovuotevření dokumentu.
+- `rebuildUndoStacks` je čistá funkce nad logem → undo funguje i po zavření a znovuotevření dokumentu.
 
 Redo aplikuje původní `op` znovu a inverzi spočítá znovu z aktuálního stavu. Díky tomu je redo správné, i kdyby se stav mezi tím nějak lišil.
 
@@ -176,7 +185,7 @@ Redo aplikuje původní `op` znovu a inverzi spočítá znovu z aktuálního sta
 - Dispečer: výjimka v `apply` nezapíše záznam.
 - Transakce: commit = jeden záznam; abort = dokument beze změny a log beze změny; prázdná transakce nezapíše nic.
 - Undo/redo sekvence včetně „undo, nová změna, redo není možné“.
-- `UndoManager.rebuild` dá stejné zásobníky jako živá session.
+- `rebuildUndoStacks` dá stejné zásobníky jako živá session.
 - **Replay test**: náhodná sekvence operací + undo/redo, pak přehrání logu na prázdný dokument → `toData` se shoduje (fast-check).
 
 ## Otevřené otázky

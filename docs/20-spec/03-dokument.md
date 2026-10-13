@@ -12,7 +12,7 @@ milestones:
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 # 03 – `document`: doménový model
 
@@ -75,10 +75,10 @@ export type DocumentEvents = {
   changed: { studio: PartStudioData };         // po každé dokončené mutaci
 };
 
-export class CadDocument implements DocumentWriter { … }
+export function createDocument(init?: { meta?: DocumentMeta; studio?: PartStudioData }): DocumentWriter;
 ```
 
-- `DocumentWriter` dostávají **jen handlery operací** v `ops`. Všichni ostatní pracují s `DocumentReader`. TypeScript to nevynutí (třída implementuje obojí), drží se to konvencí a code review.
+- `DocumentWriter` dostávají **jen handlery operací** v `ops`. Všichni ostatní pracují s `DocumentReader`. `createDocument` vrací `DocumentWriter` a `app` ho ostatním předává typovaný jako `DocumentReader`. Implementující třída (`CadDocument`) zůstává uvnitř modulu ([[0011-programovani-proti-rozhranim|ADR 0011]]). Přetypování zpět TypeScript nezakáže, hlídá to review.
 - Mutátory hlídají invarianty a při porušení vyhodí výjimku (chyba programátora): unikátní `id`, `rollbackIndex` v rozsahu, vložení featury posune rollback bar, pokud se vkládá před něj.
 - Mutátory **nevalidují parametry** featur. Neplatné parametry jsou legitimní stav dokumentu – featura pak při regeneraci skončí chybou (zčervená jako v Onshape).
 
@@ -125,12 +125,8 @@ export interface FeatureSchema<P = unknown> {
 
 export interface ParamIssue { readonly param: string; readonly message: string }
 
-export class FeatureSchemaRegistry {
-  register(schema: FeatureSchema): void;          // duplicitní type = chyba
-  get(type: string): FeatureSchema;               // neznámý type = chyba
-  has(type: string): boolean;
-  all(): readonly FeatureSchema[];
-}
+export type FeatureSchemaRegistry = Registry<FeatureSchema>;   // klíč = type, viz core
+export function createFeatureSchemaRegistry(): FeatureSchemaRegistry;
 ```
 
 `ParamSpec` slouží třem účelům najednou: validaci, generování formuláře v UI ([[11-ui|11]]) a rozpoznání, které parametry jsou reference (pro picking v dialogu).
@@ -146,7 +142,7 @@ export interface DocumentData {
 }
 
 export function toData(doc: DocumentReader): DocumentData;
-export function fromData(data: DocumentData, schemas: FeatureSchemaRegistry): CadDocument;
+export function fromData(data: DocumentData, schemas: FeatureSchemaRegistry): DocumentWriter;
 ```
 
 - `fromData` u každé featury porovná `typeVersion` s `schema.version` a případně zavolá `migrate`.

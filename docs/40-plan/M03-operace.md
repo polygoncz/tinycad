@@ -16,7 +16,7 @@ finished:
 tags:
   - milnik
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 # M3 – Operace a historie
 
@@ -31,13 +31,13 @@ updated: 2026-10-12
 - [ ] `Operation`, `OpHandler`, `OpHandlerRegistry`.
 - [ ] Handlery: `feature.add`, `feature.remove`, `feature.setParams`, `feature.rename`, `feature.suppress`, `feature.move`, `studio.setRollback`, `batch`.
 - [ ] Test pro každý handler: `apply(op)` + `apply(invert)` = původní stav.
-- [ ] `OperationLog` (`append`, `entries`, `lastSeq`, `fromEntries`, událost `appended`).
+- [ ] `OperationLog` a `createOperationLog(entries?)` (`append`, `entries`, `lastSeq`, událost `appended`).
 - [ ] `OperationDispatcher.dispatch` – pořadí invert → apply → append → emit; výjimka v apply nic nezapíše.
 - [ ] `Transaction` – `apply`, `commit` (sloučení přes `merge`, jinak `batch`), `abort`.
 - [ ] `merge` pro `feature.setParams` téže featury.
-- [ ] `UndoManager` – `undo`, `redo`, zákaz během transakce, `rebuild` z logu.
+- [ ] `UndoManager` – `undo`, `redo`, zákaz během transakce, `rebuildUndoStacks` z logu.
 - [ ] `upcast` mechanismus v registru (zatím bez reálné migrace – test s fiktivní v1 → v2).
-- [ ] Property-based test (fast-check): náhodné operace + undo/redo → replay logu = živý dokument; `rebuild` = živé zásobníky.
+- [ ] Property-based test (fast-check): náhodné operace + undo/redo → replay logu = živý dokument; `rebuildUndoStacks` = živé zásobníky.
 
 ## Akceptační kritéria
 

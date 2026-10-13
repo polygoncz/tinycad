@@ -16,7 +16,7 @@ finished:
 tags:
   - milnik
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 # M4 – Persistence
 
@@ -33,7 +33,7 @@ updated: 2026-10-12
 - [ ] Kontraktové testy `DocumentStore` (sdílená sada spouštěná pro každou implementaci).
 - [ ] `IdbDocumentStore` – worker `persistence.worker.ts` s IndexedDB (stores `documents`, `entries`, `snapshots`), klient přes `core/rpc`. V testech `fake-indexeddb` a worker nahrazený přímým voláním implementace.
 - [ ] `PersistenceService` – dávkování (`flushMs`), snapshot každých N záznamů, stav `saved/pending/error`, retry.
-- [ ] `loadDocument` – snapshot + upcast + přehrání zbytku + `OperationLog.fromEntries` + kontrola konzistence v dev režimu.
+- [ ] `loadDocument` – snapshot + upcast + přehrání zbytku + `createOperationLog(entries)` + kontrola konzistence v dev režimu.
 - [ ] Export/import `.tinycad.json` (čisté funkce, UI až v M10/M15).
 
 ## Akceptační kritéria

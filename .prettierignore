@@ -1,5 +1,6 @@
 # Obsidian vault has its own conventions (docs/00-meta/Konvence vaultu.md).
 docs/
+.obsidian/
 dist/
 coverage/
 package-lock.json

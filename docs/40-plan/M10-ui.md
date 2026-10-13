@@ -30,7 +30,7 @@ updated: 2026-10-13
 
 ## Úkoly
 
-- [ ] `app/AppSession.open` – kompoziční kořen, registrace pluginů a vestavěných handlerů, propojení událostí.
+- [ ] `app/openAppSession` – kompoziční kořen, registrace pluginů a vestavěných handlerů, propojení událostí.
 - [ ] `RegenScheduler` (dirty flag, žádná fronta).
 - [ ] Akce: undo, redo, smazat vybranou featuru, potlačit, fit all, aktivace nástrojů.
 - [ ] `ui/composables`: `useSession` (provide/inject), `useObservable` ([[0010-prezentacni-model|ADR 0010]]).

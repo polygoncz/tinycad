@@ -17,7 +17,7 @@ updated: 2026-10-13
 # 10 – `interaction`: výběr, nástroje, akce
 
 > **Pojmy:** [[Výběr]], [[Nástroj]], [[Akce]], [[Transakce]], [[Rollback bar]], [[Prezentační model]]  
-> **Rozhodnutí:** [[0009-platformove-nezavisla-domena]], [[0010-prezentacni-model]]  
+> **Rozhodnutí:** [[0009-platformove-nezavisla-domena]], [[0010-prezentacni-model]], [[0011-programovani-proti-rozhranim]]  
 > **Milník:** [[M09-interakce]]
 
 Převádí vstupy uživatele (myš, klávesnice, UI) na operace. **Nikdy nemění dokument přímo** – jen vytváří operace a posílá je dispečerovi nebo transakci. Závisí jen na `core`, `document` a `ops`.
@@ -82,13 +82,15 @@ export type SelectionItem =
   | { kind: 'face'; body: BodyId; faceIndex: number }
   | { kind: 'edge'; body: BodyId; edgeIndex: number };
 
-export class SelectionModel {
+export interface SelectionModel {
   readonly items: readonly SelectionItem[];
   set(items: readonly SelectionItem[]): void;
   toggle(item: SelectionItem): void;
   clear(): void;
   readonly events: Emitter<{ changed: { items: readonly SelectionItem[] } }>;
 }
+
+export function createSelectionModel(): SelectionModel;
 ```
 
 - Výběr je **dočasný stav session**, neukládá se do dokumentu ani do logu.
@@ -125,14 +127,18 @@ export interface ToolDescriptor {
   create(): Tool;
 }
 
-export class ToolRegistry { register(d: ToolDescriptor): void; all(): readonly ToolDescriptor[]; get(id: string): ToolDescriptor }
+export type ToolRegistry = Registry<ToolDescriptor>;   // klíč = id, viz core
+export function createToolRegistry(): ToolRegistry;
 
-export class ToolManager {
-  constructor(registry: ToolRegistry, ctx: Omit<ToolContext, 'finish'>, defaultToolId: string);
+export interface ToolManager {
   activate(id: string): void;            // deaktivuje předchozí
   readonly active: ToolDescriptor;
   readonly events: Emitter<{ changed: { active: string } }>;
 }
+
+export function createToolManager(deps: {
+  registry: ToolRegistry; ctx: Omit<ToolContext, 'finish'>; defaultToolId: string;
+}): ToolManager;
 ```
 
 - Vždy je aktivní právě jeden nástroj. Výchozí je `SelectTool` (hover zvýraznění, klik = výběr, Shift = přidat).
@@ -153,7 +159,7 @@ export interface FeatureEditor {
   readonly events: Emitter<{ changed: { session: FeatureEditSession | null } }>;
 }
 
-export class FeatureEditSession {
+export interface FeatureEditSession {   // vytváří ji jen FeatureEditor
   readonly featureId: FeatureId;
   readonly schema: FeatureSchema;
   readonly params: unknown;                              // aktuální hodnoty
@@ -185,12 +191,14 @@ export interface Action {
   run(): void;
 }
 
-export class ActionRegistry {
+export interface ActionRegistry {
   register(a: Action): void;
   run(id: string): void;
   handleKey(e: ViewKeyEvent): boolean;      // najde akci podle zkratky
   readonly events: Emitter<{ changed: void }>; // změna enabled stavů (pro UI)
 }
+
+export function createActionRegistry(): ActionRegistry;
 ```
 
 Akce registruje `app` (undo, redo, smazat výběr, potlačit featuru, aktivovat nástroj X, fit all). UI z nich staví menu a toolbar; zkratky fungují globálně, pokud fokus není v textovém poli.

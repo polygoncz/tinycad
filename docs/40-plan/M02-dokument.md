@@ -16,7 +16,7 @@ finished:
 tags:
   - milnik
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 # M2 – Doménový model
 
@@ -30,7 +30,7 @@ updated: 2026-10-12
 
 - [ ] Typy: `DocumentId`, `FeatureId`, `BodyId`, `TopoName`, `FeatureInstance`, `PartStudioData`, `DocumentMeta`, reference (`BodyRef`, `TopoRef`, `SketchRegionRef`).
 - [ ] `DocumentReader`, `DocumentWriter`, `DocumentEvents`.
-- [ ] `CadDocument` – mutátory s invarianty, strukturální sdílení, `Object.freeze` v dev režimu.
+- [ ] `createDocument` (interně třída `CadDocument`) – mutátory s invarianty, strukturální sdílení, `Object.freeze` v dev režimu.
 - [ ] `ParamSpec`, `ParamSchema`, `FeatureSchema`, `ParamIssue`.
 - [ ] `validateAgainstSchema` pro všechny `ParamSpec.kind`.
 - [ ] `FeatureSchemaRegistry`.

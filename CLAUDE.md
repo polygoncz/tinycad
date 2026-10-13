@@ -36,6 +36,7 @@ Výuková webová CAD aplikace (Onshape-like Part Studio). Autor: Pavel. Pavel z
 ## Nástroje Claude Code (`.claude/`)
 
 - Skilly: `/milnik start|konec Mnn`, `/zaznam otazka|adr|pojem|poznatek <název>`, `/denik` (konec sezení). Skill `obsidian-format` (syntaxe vaultu) se načítá automaticky.
+- Subagent `architecture-reviewer` (`.claude/agents/`): revize kódu proti ADR 0008–0011 a spec 01, hlásí jen to, co nechytí `npm run check`. Spouštět na konci milníku před `/milnik konec`.
 - Hooky: po úpravě poznámky v `docs/` se nastaví `updated` na dnešek a zkontroluje se frontmatter a wikilinky (`scripts/vault-lint.mjs`). Mazání v `docs/` a přepisování `docs/01-inbox/` blokuje `scripts/claude-guard.mjs`. Když hook nahlásí chybu, oprav poznámku a hook neobcházej.
 
 ## Užitečné příkazy

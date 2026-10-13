@@ -24,8 +24,7 @@ Zobrazuje výsledek regenerace pomocí Three.js a odpovídá na otázku „co je
 ## Viewport
 
 ```ts
-export class Viewport implements ViewportPort, Disposable {
-  constructor(opts: { background?: number });
+export interface Viewport extends ViewportPort, Disposable {
 
   mount(el: HTMLElement): void;        // vytvoří canvas, ResizeObserver, ovládání kamery
   unmount(): void;
@@ -41,6 +40,8 @@ export class Viewport implements ViewportPort, Disposable {
 
   readonly events: Emitter<{ pointer: ViewPointerEvent; key: ViewKeyEvent }>;
 }
+
+export function createViewport(deps: { meshes: MeshOps; background?: number }): Viewport;
 ```
 
 - **Vykreslování na požádání:** změna scény nebo kamery zavolá `requestRender()`, který naplánuje jeden snímek přes `requestAnimationFrame`. Statická scéna nežere CPU ani baterii.

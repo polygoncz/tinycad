@@ -29,9 +29,10 @@ updated: 2026-10-13
 ## Úkoly
 
 - [ ] `Brand<T, B>` a vzor pro definici ID typů.
-- [ ] `IdGenerator`, `RandomIdGenerator` (crypto), `SequentialIdGenerator` (testy).
+- [ ] `IdGenerator`, `createRandomIdGenerator` (crypto), `createSequentialIdGenerator` (testy).
 - [ ] `Emitter<Events>` – `on`, `once`, `emit`, odhlášení během emitu, izolace výjimek.
 - [ ] `Observable<T>` a `ObservableValue<T>` ([[0010-prezentacni-model|ADR 0010]]).
+- [ ] `Registry<T>` a `createRegistry` ([[0011-programovani-proti-rozhranim|ADR 0011]]).
 - [ ] `Disposable`, `DisposableStore`.
 - [ ] `Result`, `ok`, `err`.
 - [ ] `assert`, `assertNever`.

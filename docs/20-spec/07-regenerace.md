@@ -12,7 +12,7 @@ milestones:
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 # 07 – `regen`: regenerace historie
 
@@ -65,7 +65,8 @@ export type BuildOutput =
   | { ok: true; state: RegenState }
   | { ok: false; error: FeatureError };
 
-export class BuilderRegistry { register(b: FeatureBuilder): void; get(type: string): FeatureBuilder | undefined }
+export type BuilderRegistry = Registry<FeatureBuilder>;   // klíč = type, viz core; chybějící builder → find() = undefined
+export function createBuilderRegistry(): BuilderRegistry;
 ```
 
 Pravidla pro builder:
@@ -108,8 +109,7 @@ export interface FeatureError { readonly code: 'INVALID_PARAMS' | 'UNRESOLVED_RE
 ## Regenerator
 
 ```ts
-export class Regenerator {
-  constructor(kernel: GeometryKernel, builders: BuilderRegistry, schemas: FeatureSchemaRegistry);
+export interface Regenerator {
 
   /** Přepočítá studio. Volání během běžící regenerace ji nahradí (starý výsledek se zahodí). */
   run(studio: PartStudioData): Promise<RegenResult | 'superseded'>;
@@ -120,6 +120,10 @@ export class Regenerator {
     finished: { generation: number; result: RegenResult };
   }>;
 }
+
+export function createRegenerator(deps: {
+  kernel: GeometryKernel; builders: BuilderRegistry; schemas: FeatureSchemaRegistry;
+}): Regenerator;
 
 export interface RegenResult {
   readonly generation: number;

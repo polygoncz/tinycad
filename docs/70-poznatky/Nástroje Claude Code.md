@@ -40,7 +40,7 @@ Pravidla z [[Konvence vaultu]] jsou rozdělená takto:
 
 - **Hooky:** `scripts/vault-lint.mjs` po každé úpravě poznámky nastaví `updated` a zkontroluje frontmatter a wikilinky. `scripts/claude-guard.mjs` blokuje mazání v `docs/` a přepisování inboxu.
 - **Skilly:** `/milnik` (start a konec milníku podle [[Roadmapa|Roadmapy]]), `/zaznam` (otázka, ADR, pojem ze šablony), `/denik` a `obsidian-format` (syntaxe).
-- **Od [[M00-zaklad-projektu|M0]]:** `lint:vault` v `npm run check`, prettier a eslint jako hook, subagent na kontrolu architektury proti [[01-architektura]].
+- **Od [[M00-zaklad-projektu|M0]]:** `lint:vault` v `npm run check`, prettier a eslint jako hook (`scripts/code-format.mjs`), subagent `architecture-reviewer` na kontrolu architektury proti [[01-architektura]] a [[0011-programovani-proti-rozhranim|ADR 0011]]. Co jde zkontrolovat strojově (zakázaný `export class` v `index.ts`), hlídá ESLint; úsudek (široká rozhraní, logika ve `.vue`) subagent.
 
 Souvisí s [[Second brain v Obsidianu]]: vault je zdroj pravdy a nástroje hlídají, aby zůstal konzistentní.
 
