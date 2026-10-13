@@ -95,10 +95,13 @@ export class ObservableValue<T> implements Observable<T> {
   get(): T;
   set(value: T): void;                       // notifies only if !Object.is(old, value)
   subscribe(fn: () => void): Unsubscribe;
+  asObservable(): Observable<T>;             // pohled jen s get/subscribe, vždy tentýž objekt
 }
 ```
 
 Snapshot musí být neměnný. Změna = nový objekt, takže odběratel pozná změnu porovnáním identity.
+
+Veřejná rozhraní vystavují `value.asObservable()`, nikdy instanci `ObservableValue`: přetypování zpět by jinak dalo `set` (stejný vzor jako `Subscribable` vs. `Emitter`, revize M9).
 
 ### Registry
 
@@ -112,6 +115,9 @@ export interface Registry<T> {
   has(key: string): boolean;
   all(): readonly T[];                  // v pořadí registrace
 }
+
+/** Pohled jen pro čtení: dostávají ho spotřebitelé, kteří nic neregistrují (ADR 0011, revize M9). */
+export type RegistryReader<T> = Pick<Registry<T>, 'get' | 'find' | 'has' | 'all'>;
 
 export interface RegistryOptions<T> { readonly what: string; readonly keyOf: (item: T) => string }
 export function createRegistry<T>(opts: RegistryOptions<T>): Registry<T>;
@@ -225,7 +231,7 @@ export class RpcError extends Error { readonly code: string }
 ## Testy
 
 - `Emitter`: pořadí, odhlášení během emitu, výjimka v handleru.
-- `ObservableValue`: oznámení jen při změně identity, odhlášení.
+- `ObservableValue`: oznámení jen při změně identity, odhlášení; `asObservable()` nemá `set` a je vždy tentýž objekt.
 - `createRegistry`: duplicita a neznámý klíč (`get` vyhodí, `find` vrátí `undefined`), pořadí `all()`.
 - `DisposableStore`: pořadí uvolnění, idempotence.
 - `vec3`/`mat4`: základní identity.

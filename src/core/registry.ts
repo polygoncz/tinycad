@@ -12,6 +12,9 @@ export interface Registry<T> {
   all(): readonly T[];
 }
 
+/** Read-only view for consumers that never register anything (ADR 0011). */
+export type RegistryReader<T> = Pick<Registry<T>, 'get' | 'find' | 'has' | 'all'>;
+
 export interface RegistryOptions<T> {
   /** Name used in error messages, e.g. 'feature schema'. */
   readonly what: string;

@@ -1,4 +1,5 @@
 import type { FeatureSchema } from '@/document';
+import type { ToolDescriptor } from '@/interaction';
 import type { FeatureBuilder } from '@/regen';
 
 /**
@@ -10,4 +11,6 @@ export interface FeaturePlugin<P = unknown> {
   readonly schema: FeatureSchema<P>;
   /** Goes to BuilderRegistry (regen). */
   readonly builder: FeatureBuilder<P>;
+  /** Goes to ToolRegistry (interaction). */
+  readonly tools?: readonly ToolDescriptor[];
 }

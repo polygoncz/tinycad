@@ -12,7 +12,7 @@ export type { Observable } from './observable';
 export { DisposableStore } from './disposable';
 export type { Disposable, Unsubscribe } from './disposable';
 export { createRegistry } from './registry';
-export type { Registry, RegistryOptions } from './registry';
+export type { Registry, RegistryOptions, RegistryReader } from './registry';
 
 export { err, ok } from './result';
 export type { Result } from './result';

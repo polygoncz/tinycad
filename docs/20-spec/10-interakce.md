@@ -1,6 +1,6 @@
 ---
 type: spec
-status: draft
+status: implemented
 order: 10
 aliases:
   - interaction – výběr, nástroje, akce
@@ -35,13 +35,19 @@ export interface ViewportPort {
   readonly events: Subscribable<{ pointer: ViewPointerEvent; key: ViewKeyEvent }>;
 }
 
+/** Co jde zvýraznit: plocha nebo hrana tělesa, bez bodu a normály (Q065). */
+export type HighlightTarget =
+  | { kind: 'face'; body: BodyId; faceIndex: number }
+  | { kind: 'edge'; body: BodyId; edgeIndex: number };
+
+/** Výsledek pickingu je HighlightTarget doplněný o místo zásahu, lze ho předat přímo do setHover. */
 export type PickResult =
   | { kind: 'face'; body: BodyId; faceIndex: number; point: Vec3; normal: Vec3 }  // normal = jednotková normála ve světě, směrem ven z tělesa
   | { kind: 'edge'; body: BodyId; edgeIndex: number; point: Vec3 };
 
 export interface HighlightPort {
-  setHover(target: PickResult | null): void;              // vždy celý stav, ne přírůstek
-  setSelection(targets: readonly PickResult[]): void;     // prázdné pole = nic vybráno
+  setHover(target: HighlightTarget | null): void;              // vždy celý stav, ne přírůstek
+  setSelection(targets: readonly HighlightTarget[]): void;     // prázdné pole = nic vybráno
 }
 
 export type OverlayStyle = 'preview' | 'construction';
@@ -75,24 +81,54 @@ export interface KeyMods { readonly shift: boolean; readonly alt: boolean; reado
 - `interaction/index.ts` re-exportuje typ `BodyId` z `document` jako součást slovníku portu. `render` ho bere odtud a na `document` nesahá ([[Q056 Odkud render bere BodyId|Q056]]).
 - V kódu mají všechna pole typů portu `readonly` ([[Neměnná data]]), ve výpisu výše jsou kvůli čitelnosti vynechaná. Mapa událostí `{ pointer, key }` má v kódu jméno `ViewportEvents`.
 - `PickResult` je definovaný jen tady, [[09-vykreslovani]] na něj odkazuje. Varianta `vertex` přibude, až bude výběr vrcholů potřeba ([[Q057 Tvar PickResult|Q057]]).
-- `HighlightPort` je zrcadlo: stav hoveru a výběru drží `interaction` a vždy ho předá celý. `OverlayPort` nese jen platformově nezávislé tvary ve světových souřadnicích, žádné typy Three.js. Další druhy (síť pro náhled tělesa) přibudou s potřebou ([[Q058 Kontrakt HighlightPort a OverlayPort|Q058]]).
+- `HighlightPort` je zrcadlo: stav hoveru a výběru drží `interaction` a vždy ho předá celý. Bere `HighlightTarget`, protože výběr bod zásahu nezná ([[Q065 Cíl zvýraznění bez bodu a normály|Q065]]); `PickResult` je jeho podtyp, takže výsledek `pick` jde předat beze změny. `OverlayPort` nese jen platformově nezávislé tvary ve světových souřadnicích, žádné typy Three.js. Další druhy (síť pro náhled tělesa) přibudou s potřebou ([[Q058 Kontrakt HighlightPort a OverlayPort|Q058]]).
 - `ViewPointerEvent` chodí pro všechna tlačítka. Pravé a prostřední tlačítko zároveň ovládá kameru, nástroje je mají ignorovat. Kolečko se do `interaction` neposílá, patří jen kameře.
-- Převod DOM událostí na `ViewPointerEvent`/`ViewKeyEvent` dělají adaptéry (`render` pro canvas, `ui` pro globální klávesnici). Do `interaction` se DOM typ nikdy nedostane.
-- V testech nahrazuje viewport `FakeViewport` (předpřipravené výsledky `pick`, ruční emit událostí).
+- Převod DOM událostí na `ViewPointerEvent`/`ViewKeyEvent` dělají adaptéry (`render` pro canvas, `ui` pro globální klávesnici). Adaptér také převádí Cmd (macOS) / Ctrl (jinde) na `mods.mod`, takže `interaction` platformu nezná. Do `interaction` se DOM typ nikdy nedostane.
+- V testech nahrazuje viewport `FakeViewport` (předpřipravené výsledky `pick`, ruční emit událostí, zaznamenaný stav `highlight` a `overlay`).
+
+## Port stavu regenerace
+
+`interaction` nesmí znát `regen`, ale strom featur ukazuje chyby regenerace a výběr podtvarů se po regeneraci čistí. Proto si `interaction` definuje vlastní port a `app` ho plní z [[Stav regenerace|RegenState]] ([[Q063 Stav regenerace v interaction|Q063]], [[Q064 Výběr po regeneraci|Q064]]).
+
+```ts
+export type FeatureHealth =
+  | { kind: 'ok' }
+  | { kind: 'warning'; message: string }
+  | { kind: 'error'; message: string };
+
+export interface RegenSnapshot {
+  /** Roste o 1 s každou dokončenou regenerací; 0 = ještě žádná. */
+  readonly generation: number;
+  /** Featury, které poslední regenerace vyhodnotila (ne potlačené, ne za barem). */
+  readonly health: ReadonlyMap<FeatureId, FeatureHealth>;
+}
+
+export interface RegenStatusPort {
+  readonly state: Observable<RegenSnapshot>;
+}
+```
+
+- `health` je `ReadonlyMap`, ale `Map` zmrazit nejde: adaptér v `app` posílá v každém snapshotu **novou** mapu a už ji nemění. `interaction` ji jen čte.
+- Potlačení a pozice za barem port nenese: `interaction` je čte přímo z dokumentu, takže se projeví hned, ne až po regeneraci.
+- V testech port nahrazuje `FakeRegenStatus` (`testing.ts`) s metodou `publish(health)`, která zvýší `generation`.
 
 ## Prezentační modely a `Observable`
 
-Stav, který UI zobrazuje, vystavují prezentační modely jako `Observable<T>` z `core` (neměnný snapshot + `subscribe`). Pohled volá jen příkazy. Prezentační modely v `interaction`:
+Stav, který UI zobrazuje, vystavují prezentační modely jako `Observable<T>` z `core` (neměnný snapshot + `subscribe`). Pohled volá jen příkazy. **Prezentační modely nemají vlastní `events`, jediný kanál změn je `Observable`** ([[0010-prezentacni-model|ADR 0010]]).
 
 | Model | Stav pro UI | Příkazy |
 |---|---|---|
-| `FeatureTreeModel` | `rows: Observable<readonly TreeRow[]>` (název, typ, stav ok/chyba/potlačeno, za rollback barem) | `edit`, `rename`, `moveRollbackBar`, `select` |
-| `FeatureEditSession` | `fields: Observable<readonly FieldState[]>` (hodnota, chyba, aktivní referenční parametr) | `setParam`, `focusRefParam`, `commit`, `cancel` |
+| `FeatureTreeModel` | `rows: Observable<readonly TreeRow[]>`, `rollbackIndex: Observable<number>` | `edit`, `rename`, `moveRollbackBar`, `select` |
+| `FeatureEditor` | `current: Observable<FeatureEditSession \| null>` | `create`, `edit` |
+| `FeatureEditSession` | `state: Observable<EditState>` (parametry, chyby, pole formuláře, aktivní referenční parametr) | `setParam`, `focusRefParam`, `commit`, `cancel` |
 | `ToolManager` | `active: Observable<string>` | `activate` |
-| `ActionRegistry` | `actions: Observable<readonly ActionState[]>` (id, label, shortcut, enabled) | `run` |
+| `ActionRegistry` | `actions: Observable<readonly ActionState[]>` | `run` |
 | `SelectionModel` | `items: Observable<readonly SelectionItem[]>` | `set`, `toggle`, `clear` |
 
-Přesné tvary `TreeRow`, `FieldState` a `ActionState` se upřesní v [[M09-interakce]].
+Společná pravidla snapshotů:
+- Model vystavuje `ObservableValue.asObservable()`, nikdy samotnou `ObservableValue` (přetypováním by šlo zapisovat, revize M9). Závislosti dostává v nejužší potřebné podobě: `RegistryReader` místo registru, `SelectionCommands` místo `SelectionModel` ([[0011-programovani-proti-rozhranim|ADR 0011]]).
+- Snapshot je zmrazený ([[Neměnná data]]). Nový snapshot vzniká jen při skutečné změně obsahu; beze změny `subscribe` nic nedostane.
+- Položky pole, které se nezměnily, jsou v novém snapshotu **tytéž objekty** (`===`). UI tak překreslí jen změněné řádky.
 
 ## Výběr
 
@@ -104,25 +140,37 @@ export type SelectionItem =
   | { kind: 'edge'; body: BodyId; edgeIndex: number };
 
 export interface SelectionModel {
-  readonly items: readonly SelectionItem[];
+  readonly items: Observable<readonly SelectionItem[]>;
   set(items: readonly SelectionItem[]): void;
   toggle(item: SelectionItem): void;
   clear(): void;
-  readonly events: Subscribable<{ changed: { items: readonly SelectionItem[] } }>;
+  dispose(): void;              // odhlásí se od RegenStatusPort; výběr dál funguje, jen se po regeneraci nečistí
 }
 
-export function createSelectionModel(): SelectionModel;
+/** Co dostávají spotřebitelé výběru (nástroje, strom): bez dispose, ten patří app (revize M9). */
+export type SelectionCommands = Omit<SelectionModel, 'dispose'>;
+
+export function createSelectionModel(deps: { regen: RegenStatusPort }): SelectionModel;
+export function sameSelectionItem(a: SelectionItem, b: SelectionItem): boolean;
+
+/** Zrcadlí položky face/edge výběru do HighlightPort.setSelection; vrací odhlášení. */
+export function bindSelectionHighlight(selection: SelectionModel, highlight: HighlightPort): Unsubscribe;
 ```
 
 - Výběr je **dočasný stav session**, neukládá se do dokumentu ani do logu.
-- Indexy ploch/hran platí jen pro aktuální regeneraci. Po regeneraci se výběr přemapuje přes topologická jména (od M14), do té doby se výběr podtvarů po regeneraci vyčistí.
+- Položky se porovnávají hodnotou (`sameSelectionItem`: druh + id + index). Výběr neobsahuje duplicity a drží pořadí, v jakém položky přibyly.
+- `set` odstraní duplicity (první výskyt vyhrává). `set` se stejným obsahem nic nevyšle.
+- `toggle`: položka ve výběru → odebere ji; jinak ji přidá na konec.
+- Model ukládá zmrazené kopie položek jen s poli jejich druhu, nikdy objekt volajícího (předaný `PickResult` tak do výběru nezanese `point` a `normal`). Položka, která už ve výběru je, zůstává v novém snapshotu týmž objektem.
+- `clear` na prázdném výběru nic nevyšle.
+- Indexy ploch/hran platí jen pro aktuální regeneraci. Když `RegenStatusPort` ohlásí novou `generation`, výběr odebere položky `face` a `edge` (od M14 je přemapuje přes topologická jména). Položky `feature` a `body` zůstávají.
+- `bindSelectionHighlight` při každé změně předá `HighlightPort.setSelection` položky `face`/`edge` v pořadí výběru (ihned při navázání i jednou). Zvýraznění `feature`/`body` přibude s potřebou.
 - Filtr výběru (jen plochy, jen hrany…) nastavuje aktivní nástroj nebo parametr dialogu.
 
 ## Nástroje
 
 ```ts
 export interface Tool {
-  readonly id: string;
   activate(ctx: ToolContext): void;
   deactivate(): void;
   onPointer?(e: ViewPointerEvent): void;
@@ -131,7 +179,7 @@ export interface Tool {
 
 export interface ToolContext {
   readonly viewport: ViewportPort;       // pick, overlay, screenToRay
-  readonly selection: SelectionModel;
+  readonly selection: SelectionCommands;
   readonly doc: DocumentReader;
   readonly ops: OperationDispatcher;
   readonly ids: IdGenerator;
@@ -144,7 +192,7 @@ export interface ToolDescriptor {
   readonly label: string;
   readonly icon: string;                 // název ikony, UI si ji přeloží
   readonly group: 'select' | 'primitive' | 'sketch' | 'feature' | 'modify';
-  readonly shortcut?: string;
+  readonly shortcut?: string;            // jen informace pro UI; zkratku registruje app jako akci
   create(): Tool;
 }
 
@@ -152,19 +200,46 @@ export type ToolRegistry = Registry<ToolDescriptor>;   // klíč = id, viz core
 export function createToolRegistry(): ToolRegistry;
 
 export interface ToolManager {
+  readonly active: Observable<string>;   // id aktivního nástroje
   activate(id: string): void;            // deaktivuje předchozí
-  readonly active: ToolDescriptor;
-  readonly events: Subscribable<{ changed: { active: string } }>;
+  dispose(): void;                       // odhlásí se od událostí, deaktivuje aktivní nástroj
 }
 
 export function createToolManager(deps: {
-  registry: ToolRegistry; ctx: Omit<ToolContext, 'finish'>; defaultToolId: string;
+  registry: RegistryReader<ToolDescriptor>;
+  ctx: Omit<ToolContext, 'finish'>;
+  defaultToolId: string;
+  /** Klávesy z viewportu, které nástroj nezpracoval (app sem napojí ActionRegistry.handleKey). */
+  unhandledKey?: (e: ViewKeyEvent) => boolean;
 }): ToolManager;
+
+export const SELECT_TOOL: ToolDescriptor;   // id 'select', group 'select'
 ```
 
-- Vždy je aktivní právě jeden nástroj. Výchozí je `SelectTool` (hover zvýraznění, klik = výběr, Shift = přidat).
-- `Esc` ukončí aktivní nástroj → návrat k výchozímu.
-- `ToolManager` přeposílá události z `ViewportPort.events` aktivnímu nástroji.
+- `Tool` nemá `id`: identitu nese `ToolDescriptor`, instanci vytváří `create()` při každé aktivaci (nástroj začíná vždy s čistým stavem).
+- Vždy je aktivní právě jeden nástroj. `createToolManager` hned aktivuje výchozí (`defaultToolId` musí být v registru, jinak výjimka).
+- `activate(id)`: neznámé id → výjimka a aktivní nástroj zůstává. Stejné id jako aktivní → nic. Jinak `deactivate()` předchozího, `create()` + `activate(ctx)` nového, `active` vyšle nové id.
+- Každá aktivace dostane vlastní `ctx` s `finish` svázaným s touto instancí. `finish()` neaktivního (starého) nástroje nedělá nic, `finish()` výchozího nástroje také ne.
+- `finish()` volaný **uvnitř** `activate` (nástroj typu „otevři dialog a skonči“) se provede až po návratu z `activate`: `active` vyšle id nástroje a hned potom výchozí.
+- Výjimka z `descriptor.create()` nebo `tool.activate()`: manager nástroj zahodí (bez `deactivate`), aktivuje výchozí nástroj a výjimku pošle dál; `active` pak ukazuje výchozí. Selže-li sám výchozí nástroj, manager zůstane bez aktivního nástroje (události zahazuje) a výjimka letí dál – chyba programátora; selhal-li předtím jiný nástroj, letí `AggregateError` s oběma chybami. `createToolManager` spouští výchozí nástroj před přihlášením k událostem, takže při jeho selhání nic nezůstane přihlášené.
+- Po `dispose` hodí `activate` výjimku, druhé `dispose` nic nedělá.
+- `ToolManager` přeposílá `pointer` a `key` z `ViewportPort.events` aktivnímu nástroji. Klávesa: nejdřív `tool.onKey`; když vrátí `false` nebo ho nemá, `Escape` bez modifikátorů mimo textové pole ukončí nevýchozí nástroj (návrat k výchozímu). Ostatní nezpracované klávesy jdou do `unhandledKey`.
+- **Referenční parametr dialogu** ([[Q066 Klik do referenčního parametru|Q066]]): `ToolManager` sleduje `ctx.features.current` a `state` aktuální session. Dokud má session `activeRefParam !== null`, posílá události vnitřnímu nástroji `refPick` místo aktivního nástroje (ten zůstává aktivní, `active` se nemění, jen je dočasně „zakrytý“). `refPick`: `move` → hover z `pick`; levý klik na cíl povoleného druhu → přidá/odebere referenci v parametru přes `setParam`; `Escape` → `focusRefParam(null)`. Když `activeRefParam` zmizí, `refPick` zruší hover a události jdou znovu aktivnímu nástroji. `FeatureEditor` o nástrojích neví, takže nevznikne cyklus. Převod pick → reference (`BodyRef`, `TopoRef`) je v M9 jen pro `bodies`: zásah plochy i hrany dá `{ kind: 'body', body }`, nové pole je zmrazené, pořadí se drží, hodnota, která není pole, se bere jako prázdné pole. `topo` se doplní s topologickým pojmenováním (M14). `refPick` není `Tool` z registru (nepotřebuje `ToolContext` ani `finish`); zakrytý nástroj nedostane `deactivate` ani jiný signál a jeho hover obnoví až další `move`.
+
+### `SelectTool`
+
+Výchozí nástroj (`SELECT_TOOL`).
+
+| Událost | Chování |
+|---|---|
+| `move` | `highlight.setHover(viewport.pick(x, y))` |
+| `leave` | `highlight.setHover(null)` |
+| levé `down` | zapamatuje si pozici |
+| levé `up` do `CLICK_TOLERANCE_PX = 4` px od `down` (jinak tažení, nic) | zásah → položka `face`/`edge`; bez Shift `set([položka])`, se Shift `toggle(položka)`. Prázdno: bez Shift `clear()`, se Shift nic |
+| `Escape` bez modifikátorů mimo textové pole | neprázdný výběr → `clear()` a vrátí `true`; prázdný → `false` |
+| `deactivate` | `setHover(null)` |
+
+Pravé a prostřední tlačítko ignoruje. `mods.mod` a `alt` při kliku zatím nemají význam. Hover se mění i během tažení (orbit kamery), `leave` rozpracovaný klik nezahazuje.
 
 ## Dialog featury: `FeatureEditor`
 
@@ -176,30 +251,102 @@ export interface FeatureEditor {
   create(type: string): FeatureEditSession;
   /** Otevře existující featuru k úpravě (dvojklik ve stromu). */
   edit(featureId: FeatureId): FeatureEditSession;
-  readonly current: FeatureEditSession | null;
-  readonly events: Subscribable<{ changed: { session: FeatureEditSession | null } }>;
+  readonly current: Observable<FeatureEditSession | null>;
 }
 
+export function createFeatureEditor(deps: {
+  doc: DocumentReader; ops: OperationDispatcher; schemas: RegistryReader<FeatureSchema>; ids: IdGenerator;
+}): FeatureEditor;
+
 export interface FeatureEditSession {   // vytváří ji jen FeatureEditor
+  readonly mode: 'create' | 'edit';
   readonly featureId: FeatureId;
   readonly schema: FeatureSchema;
-  readonly params: unknown;                              // aktuální hodnoty
-  readonly issues: readonly ParamIssue[];
+  readonly state: Observable<EditState>;
   setParam(name: string, value: unknown): void;          // → tx.apply(feature.setParams)
-  readonly activeRefParam: string | null;                // parametr typu bodies/topo, který právě přijímá výběr
-  focusRefParam(name: string): void;
+  focusRefParam(name: string | null): void;
   commit(): void;                                        // → tx.commit()
   cancel(): void;                                        // → tx.abort()
-  readonly events: Subscribable<{ changed: void }>;
+}
+
+export interface EditState {
+  readonly params: Readonly<Record<string, unknown>>;    // aktuální hodnoty (z dokumentu)
+  readonly issues: readonly ParamIssue[];                // schema.validate(params)
+  readonly fields: readonly FieldState[];                // pořadí podle schema.params
+  readonly activeRefParam: string | null;                // parametr typu bodies/topo/region, který přijímá výběr
+  readonly open: boolean;                                // false po commit/cancel
+}
+
+export interface FieldState {
+  readonly name: string;
+  readonly spec: ParamSpec;            // kind, label, min/max… – UI podle něj zvolí ovládací prvek
+  readonly value: unknown;
+  readonly issue: string | null;       // první ParamIssue s param === name
+  readonly active: boolean;            // name === activeRefParam
 }
 ```
 
-- `create` otevře transakci, aplikuje `feature.add` s `schema.defaults()` a novým ID z `IdGenerator`.
-- Každá změna parametru je `feature.setParams` v transakci → dokument se změní → regenerace → živý náhled. Celý dialog je v logu jeden záznam.
-- Je-li aktivní referenční parametr (`bodies`, `topo`), kliknutí ve viewportu plní tento parametr místo běžného výběru.
-- Během otevřené session jsou undo/redo zakázané (pravidlo transakcí).
+**`create(type)`**
+1. Předpoklady (jinak výjimka, nic se nezmění): žádná otevřená session, dispečer není v transakci, typ je v `schemas`.
+2. `ops.begin(schema.label)`, pak `tx.apply(feature.add)` s `id = ids.next()`, `typeVersion = schema.version`, `params = schema.defaults()`, `suppressed: false`, `index = rollbackIndex`.
+3. Jméno: `"<schema.label> <n>"`, kde `n` je nejmenší kladné číslo, pro které takové jméno ve studiu ještě není.
+4. Vložení na pozici baru posune bar za novou featuru samo (pravidlo mutátoru v [[03-dokument]]), takže nová featura je aktivní ([[Q068 Kam se vloží nová featura|Q068]]).
 
-Díky tomu je nástroj pro většinu featur triviální – `ToolDescriptor`, jehož `create()` vrací nástroj, který při aktivaci zavolá `ctx.features.create('box')` a skončí. Interaktivní tvorbu tažením myší (nakreslit kvádr ve viewportu) si plugin může dopsat jako vlastní `Tool`, který mezivýsledky posílá přes `FeatureEditSession.setParam`.
+**`edit(featureId)`**
+1. Předpoklady jako u `create`; neznámá featura → výjimka.
+2. `ops.begin('Edit <name>')`. Je-li `rollbackIndex !== index + 1`, `tx.applyTransient(studio.setRollback(index + 1))`: bar je během editace těsně za editovanou featurou, ať byla před barem, nebo za ním. Pozdější featury se nepřehrávají a náhled ukazuje model ve stavu editované featury ([[Q018 Rollback bar při editaci starší featury|Q018]]). Přechodná operace se při `commit` i `cancel` vrátí sama a do logu se nedostane ([[04-operace-a-historie]]).
+
+**Session**
+- `setParam(name, value)`: `name` musí být klíč `schema.params`, jinak výjimka. Nové `params = { ...params, [name]: value }` → `tx.apply(feature.setParams)`. Hodnota se **nekontroluje** před aplikací: neplatné parametry dokument unese, regenerace featuru označí chybou a `issues` je ukážou. `setParam` se stejnou hodnotou (`Object.is` u primitiv) nic neaplikuje. Selže-li handler, výjimka letí dál a session zůstává otevřená beze změny.
+- `params` čte session vždy z dokumentu (jediný zdroj pravdy), `issues = schema.validate(params)` se přepočítá po každé změně.
+- `focusRefParam(name)`: `name` musí být parametr druhu `bodies`, `topo` nebo `region`, jinak výjimka (i pro neznámé jméno). `null` zruší fokus. Stejné jméno znovu nevytvoří nový snapshot.
+- `commit()`: `tx.commit()` → session zavřená (`open: false`), `editor.current` → `null`. Celý dialog je v logu **jeden** záznam. `commit` je povolený i s `issues` (featura s chybou je v Onshape také platný stav).
+- `cancel()`: `tx.abort()` → dokument i log beze změny, session zavřená, `current` → `null`.
+- Po zavření hodí každý příkaz výjimku. Poslední snapshot má `open: false` a `activeRefParam: null`; `params` drží poslední známé hodnoty (po zrušeném `create` featura v dokumentu už není).
+- Session se zavře, až transakce opravdu skončí (`!ops.inTransaction`), i když odběratel při `commit`/`abort` vyhodí.
+- Selže-li hned po `begin` `feature.add` nebo přechodný posun baru, `FeatureEditor` transakci zruší a výjimku pošle dál; session nevznikne.
+- Během otevřené session jsou undo/redo zakázané (pravidlo transakcí, `UndoManager.canUndo()` vrací `false`).
+
+Díky tomu je nástroj pro většinu featur triviální – `ToolDescriptor`, jehož `create()` vrací nástroj, který při aktivaci zavolá `ctx.features.create('box')` a skončí (je-li už otevřená jiná session, jen skončí). Interaktivní tvorbu tažením myší si plugin může dopsat jako vlastní `Tool`, který mezivýsledky posílá přes `FeatureEditSession.setParam` (odloženo do [[M13-extrude-revolve]]).
+
+## Strom featur: `FeatureTreeModel`
+
+```ts
+export type TreeStatus = 'ok' | 'warning' | 'error' | 'suppressed' | 'rolledBack' | 'pending';
+
+export interface TreeRow {
+  readonly id: FeatureId;
+  readonly name: string;
+  readonly type: string;
+  readonly typeLabel: string;          // schema.label; neznámý typ → type
+  readonly status: TreeStatus;
+  readonly message: string | null;     // u warning/error
+  readonly selected: boolean;          // výběr obsahuje { kind: 'feature', feature: id }
+  readonly editing: boolean;           // featura otevřené session
+}
+
+export interface FeatureTreeModel {
+  readonly rows: Observable<readonly TreeRow[]>;
+  readonly rollbackIndex: Observable<number>;
+  edit(id: FeatureId): void;                                   // → FeatureEditor.edit
+  rename(id: FeatureId, name: string): void;                   // → dispatch feature.rename
+  moveRollbackBar(index: number): void;                        // → dispatch studio.setRollback
+  select(id: FeatureId, opts?: { additive?: boolean }): void;  // → selection.set / toggle
+  dispose(): void;
+}
+
+export function createFeatureTreeModel(deps: {
+  doc: DocumentReader; ops: OperationDispatcher; schemas: RegistryReader<FeatureSchema>;
+  regen: RegenStatusPort; editor: FeatureEditor; selection: SelectionCommands;
+}): FeatureTreeModel;
+```
+
+- Řádky v pořadí featur dokumentu. Stav: `suppressed` (z dokumentu) > `rolledBack` (index `>= rollbackIndex`) > `health` z portu (`ok`/`warning`/`error`) > `pending` (featura v `health` chybí, např. ještě neproběhla regenerace).
+- Model se přepočítá při `doc.events.changed`, změně `regen.state`, `selection.items` a `editor.current`. Nezměněný řádek je týž objekt, nezměněný seznam týž snapshot.
+- `rows` a `rollbackIndex` se přepočítají v jednom kroku, ale vyšlou se postupně (nejdřív `rows`). Odběratel jednoho proto nemá v callbacku číst druhé; Vue překresluje dávkově v mikroúloze, takže v UI nekonzistence nevznikne. Kdyby to vadilo jinde, sloučí se do jednoho `Observable<TreeSnapshot>`.
+- Nezměněný řádek se pozná porovnáním s řádkem na stejné pozici; po přesunu featury proto dostanou nový objekt i řádky, které se jen posunuly.
+- `rename` neznámé featury → výjimka. `rename`: jméno se ořízne, prázdné nebo stejné → nic. `moveRollbackBar`: stejný index → nic, mimo `0..features.length` → výjimka.
+- `rename` a `moveRollbackBar` během otevřené transakce hodí výjimku (z dispečera); UI je má v tu chvíli zakázat podle `editing`.
 
 ## Akce a klávesové zkratky
 
@@ -208,30 +355,50 @@ export interface Action {
   readonly id: string;              // 'edit.undo'
   readonly label: string;
   readonly shortcut?: string;       // 'Mod+Z' (Mod = Cmd na macOS, Ctrl jinde)
-  enabled(): boolean;
+  readonly enabled: Observable<boolean>;
   run(): void;
 }
 
+export interface ActionState {
+  readonly id: string;
+  readonly label: string;
+  readonly shortcut: string | null;
+  readonly enabled: boolean;
+}
+
 export interface ActionRegistry {
+  readonly actions: Observable<readonly ActionState[]>;   // v pořadí registrace
   register(a: Action): void;
-  run(id: string): void;
-  handleKey(e: ViewKeyEvent): boolean;      // najde akci podle zkratky
-  readonly events: Subscribable<{ changed: void }>; // změna enabled stavů (pro UI)
+  run(id: string): boolean;                  // false = akce zakázaná
+  handleKey(e: ViewKeyEvent): boolean;       // najde akci podle zkratky
+  dispose(): void;                           // odhlásí se od enabled všech akcí
 }
 
 export function createActionRegistry(): ActionRegistry;
 ```
 
+- `enabled` je `Observable` ([[Q067 Změna enabled u akcí|Q067]]): registr se k němu přihlásí při `register` a při změně vytvoří nový snapshot, ve kterém je nový jen `ActionState` změněné akce.
+- Zkratka: tokeny oddělené `+`, nejdřív modifikátory `Mod`, `Shift`, `Alt` (libovolné pořadí, každý nejvýš jednou), poslední je klávesa podle `KeyboardEvent.key` (`Z`, `Delete`, `Escape`, `F2`…). Písmena se porovnávají bez ohledu na velikost (Shift mění `key` na velké písmeno). Modifikátory musí sedět přesně: `Mod+Z` se nespustí na `Mod+Shift+Z`. Neplatná zkratka (neznámý modifikátor, chybí klávesa, opakovaný modifikátor) → výjimka v `register`.
+- `register`: duplicitní `id` nebo duplicitní zkratka (po normalizaci) → výjimka.
+- `run(id)`: neznámé id → výjimka. Zakázaná akce se nespustí a vrátí `false`.
+- `handleKey(e)`: `e.inTextField` → `false`. Akce se zkratkou nalezena → spustí ji, je-li povolená, a vrátí `true` i u zakázané (zkratka je „naše“, prohlížeč s ní nemá dělat výchozí akci). Nenalezena → `false`.
+- Názvy modifikátorů a pojmenované klávesy (`Delete`, `F2`) se porovnávají přesně, bez ohledu na velikost se porovnávají jen jednoznakové klávesy. Klávesa `+` zapsat nejde (prázdný token je chyba); až bude potřeba, přibude alias `Plus`.
+- Interně se zkratka i `ViewKeyEvent` převedou na kanonický řetězec (`Mod+Shift+z`), hledání je pak vyhledání v mapě.
+- Po `dispose` registr dál spouští akce, jen snapshot `actions` už nesleduje `enabled`. `dispose` patří ke konci session aplikace.
+- Formátování zkratky pro zobrazení (⌘ na macOS) je věc `ui`.
+
 Akce registruje `app` (undo, redo, smazat výběr, potlačit featuru, aktivovat nástroj X, fit all). UI z nich staví menu a toolbar; zkratky fungují globálně, pokud fokus není v textovém poli.
 
 ## Testy
 
-- `SelectionModel`: toggle, události.
-- `ToolManager`: přepínání, Esc, deaktivace předchozího.
-- `FeatureEditSession` s `FakeKernel`: create → setParam ×N → commit = jeden záznam v logu; cancel = dokument i log beze změny.
-- `ActionRegistry`: zkratky včetně `Mod`, ignorování v textovém poli.
-- Nástroje a výběr s `FakeViewport`: klik → `pick` → změna výběru.
-- `FeatureTreeModel`: snapshot řádků po přidání featury, chybě regenerace a posunu rollback baru; nový snapshot je nový objekt, nezměněný zůstává identický.
+- `FakeViewport`, `FakeRegenStatus`: zaznamenaný stav a ruční emit.
+- `SelectionModel`: `set` s duplicitami, `toggle` přidá/odebere, `clear`, žádná emise beze změny, vyčištění `face`/`edge` při nové generaci (`feature`/`body` zůstávají); `bindSelectionHighlight`.
+- `ToolManager`: výchozí nástroj po vytvoření, přepínání a deaktivace předchozího, neznámé id, `finish` (i uvnitř `activate`, i starý `ctx`), `Escape`, `unhandledKey`, přeposílání událostí jen aktivnímu nástroji, zakrytí nástrojem `refPick` podle `activeRefParam`.
+- `SelectTool` s `FakeViewport`: hover, `leave`, klik → `set`, Shift+klik → `toggle`, klik do prázdna → `clear`, tažení nad toleranci nic nevybere, pravé tlačítko ignoruje, `Escape`.
+- `FeatureEditSession` se skutečným dokumentem a dispečerem (jádro ani regenerace nejsou potřeba; `interaction` na `kernel` nesmí ani v testech). Integrační test v `tests/` s `FakeKernel` a regenerací ověří živý náhled. Případy: create → `setParam` ×20 → commit = **jeden** záznam v logu; cancel = dokument i log beze změny; jméno `Box 2`; vložení na bar; edit featury před i za barem posune bar dočasně a po commit/cancel ho vrátí, v logu není `studio.setRollback`; neplatná hodnota → `issues`; druhá session → výjimka; příkazy po zavření → výjimka; undo zakázané během session.
+- `ActionRegistry`: zkratky včetně `Mod` a `Shift`, přesná shoda modifikátorů, velikost písmen, ignorování v textovém poli, zakázaná akce, neplatná a duplicitní zkratka, nový snapshot jen pro změněnou akci.
+- `FeatureTreeModel`: snapshot řádků po přidání featury, chybě regenerace, potlačení a posunu rollback baru; nový snapshot je nový objekt, nezměněný řádek zůstává identický; `selected`, `editing`; `rename` s mezerami a prázdné.
+- Architektura: `interaction` projde `tsconfig.domain.json` a nezávisí na `regen`, `kernel`, `render`, `ui` (`npm run check`).
 
 ## Otevřené otázky
 

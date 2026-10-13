@@ -5,6 +5,7 @@ import * as ops from '.';
 describe('ops public API', () => {
   it('exports exactly the runtime values of spec 04', () => {
     expect(Object.keys(ops).sort()).toEqual([
+      'OP_VERSION',
       'createOpHandlerRegistry',
       'createOperationDispatcher',
       'createOperationLog',

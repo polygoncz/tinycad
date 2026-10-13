@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { createFeatureSchemaRegistry, toData } from '@/document';
 import type { DocumentId, DocumentMeta, FeatureId } from '@/document';
 import { aFeature } from '@/document/testing';
-import { createOpHandlerRegistry, createOperationDispatcher, createUndoManager } from '@/ops';
+import {
+  createOpHandlerRegistry,
+  createOperationDispatcher,
+  createUndoManager,
+  OP_VERSION,
+} from '@/ops';
 import type {
   FeatureAddOp,
   FeatureMoveOp,
@@ -37,7 +42,7 @@ function aSession(): OpsSession {
 }
 
 function rename(name: string, featureId: FeatureId = featureA): FeatureRenameOp {
-  return { type: 'feature.rename', v: 1, featureId, name };
+  return { type: 'feature.rename', v: OP_VERSION['feature.rename'], featureId, name };
 }
 
 /** A stored document: base snapshot, `count` renames of 'a', optional snapshots at `snapshotsAt`. */
@@ -145,7 +150,7 @@ function runMixedHistory(session: OpsSession, total: number): FeatureId {
         added++;
         dispatch({
           type: 'feature.add',
-          v: 1,
+          v: OP_VERSION['feature.add'],
           feature: aFeature({ id: `n${String(added)}`, name: `N${String(added)}` }),
           index: Math.min(1, features.length),
         });
@@ -162,28 +167,39 @@ function runMixedHistory(session: OpsSession, total: number): FeatureId {
         else dispatch(rename(`R${String(step)}`, first.id));
         break;
       case 5:
-        dispatch({ type: 'feature.setParams', v: 1, featureId: last.id, params: { size: step } });
+        dispatch({
+          type: 'feature.setParams',
+          v: OP_VERSION['feature.setParams'],
+          featureId: last.id,
+          params: { size: step },
+        });
         break;
       case 6:
         dispatch({
           type: 'feature.suppress',
-          v: 1,
+          v: OP_VERSION['feature.suppress'],
           featureId: last.id,
           suppressed: !last.suppressed,
         });
         break;
       case 7:
-        dispatch({ type: 'feature.move', v: 1, featureId: first.id, toIndex: features.length - 1 });
+        dispatch({
+          type: 'feature.move',
+          v: OP_VERSION['feature.move'],
+          featureId: first.id,
+          toIndex: features.length - 1,
+        });
         break;
       case 8:
         dispatch({
           type: 'studio.setRollback',
-          v: 1,
+          v: OP_VERSION['studio.setRollback'],
           index: step % 20 === 8 ? features.length - 1 : features.length,
         });
         break;
       default:
-        if (features.length > 2) dispatch({ type: 'feature.remove', v: 1, featureId: last.id });
+        if (features.length > 2)
+          dispatch({ type: 'feature.remove', v: OP_VERSION['feature.remove'], featureId: last.id });
         else dispatch(rename(`X${String(step)}`, first.id));
     }
   }

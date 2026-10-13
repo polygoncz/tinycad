@@ -6,7 +6,14 @@ import { createOperationDispatcher } from './dispatcher';
 import { createOpHandlerRegistry } from './handler';
 import { createOperationLog } from './log';
 import type { LogEntry } from './log';
-import type { FeatureAddOp, FeatureRemoveOp, FeatureSetParamsOp, Operation } from './operation';
+import type {
+  FeatureAddOp,
+  FeatureRemoveOp,
+  FeatureSetParamsOp,
+  Operation,
+  StudioSetRollbackOp,
+} from './operation';
+import { replayLog } from './replay';
 
 const id = (s: string): FeatureId => s as FeatureId;
 const setParams = (featureId: string, size: number): FeatureSetParamsOp => ({
@@ -28,6 +35,12 @@ function setup() {
   const dispatcher = createOperationDispatcher({ doc, handlers, log });
   return { doc, handlers, log, dispatcher };
 }
+
+const setRollback = (index: number): StudioSetRollbackOp => ({
+  type: 'studio.setRollback',
+  v: 1,
+  index,
+});
 
 describe('commit', () => {
   it('compresses 50 setParams of one feature into one entry', () => {
@@ -361,5 +374,92 @@ describe('reentrance', () => {
     expect(inner.every((e) => e instanceof Error)).toBe(true);
     expect(inner).toHaveLength(3);
     expect(tx.commit()?.op).toEqual(setParams('a', 1));
+  });
+});
+
+describe('applyTransient', () => {
+  it('commit reverts the transient step and writes only the logged ones', () => {
+    const { doc, log, dispatcher } = setup();
+    const applied: { entry: LogEntry | null; op: Operation }[] = [];
+    dispatcher.events.on('applied', (e) => applied.push(e));
+    const tx = dispatcher.begin('Edit');
+    tx.applyTransient(setRollback(1));
+    expect(doc.studio.rollbackIndex).toBe(1);
+    for (let i = 1; i <= 3; i++) tx.apply(setParams('a', i));
+    const entry = tx.commit();
+    expect(log.lastSeq).toBe(1);
+    expect(entry).toMatchObject({
+      kind: 'do',
+      label: 'Edit',
+      op: setParams('a', 3),
+      inverse: setParams('a', 0),
+    });
+    expect(doc.studio.rollbackIndex).toBe(2);
+    expect(doc.studio.features[0]?.params).toEqual({ size: 3 });
+    // transient, 3x apply, revert of the transient (entry null), then the entry
+    expect(applied.map((e) => e.entry)).toEqual([null, null, null, null, null, entry]);
+    expect(applied[4]?.op).toEqual(setRollback(2));
+  });
+
+  it('abort reverts logged and transient steps, document and log unchanged', () => {
+    const { doc, log, dispatcher } = setup();
+    const before = toData(doc);
+    const tx = dispatcher.begin('Edit');
+    tx.applyTransient(setRollback(1));
+    for (let i = 1; i <= 3; i++) tx.apply(setParams('a', i));
+    tx.abort();
+    expect(toData(doc)).toEqual(before);
+    expect(log.lastSeq).toBe(0);
+  });
+
+  it('a transaction with only transient steps writes nothing and returns null', () => {
+    const { doc, log, dispatcher } = setup();
+    const before = toData(doc);
+    const tx = dispatcher.begin('Edit');
+    tx.applyTransient(setRollback(1));
+    tx.applyTransient(setRollback(0));
+    expect(tx.commit()).toBeNull();
+    expect(log.lastSeq).toBe(0);
+    expect(toData(doc)).toEqual(before);
+    expect(dispatcher.inTransaction).toBe(false);
+  });
+
+  it('a failing handler leaves the transaction open and unchanged', () => {
+    const { doc, dispatcher } = setup();
+    const before = toData(doc);
+    const tx = dispatcher.begin('Edit');
+    expect(() => {
+      tx.applyTransient(setRollback(99));
+    }).toThrow();
+    expect(dispatcher.inTransaction).toBe(true);
+    expect(toData(doc)).toEqual(before);
+    tx.apply(setParams('a', 1));
+    expect(tx.commit()?.op).toEqual(setParams('a', 1));
+    expect(doc.studio.rollbackIndex).toBe(2);
+  });
+
+  it('replaying the log after commit gives the live document', () => {
+    const { doc, handlers, log, dispatcher } = setup();
+    const tx = dispatcher.begin('Edit');
+    tx.applyTransient(setRollback(0));
+    for (let i = 1; i <= 3; i++) tx.apply(setParams('b', i));
+    tx.commit();
+    const { doc: replayed } = setup();
+    replayLog(replayed, handlers, log.entries());
+    expect(toData(replayed)).toEqual(toData(doc));
+  });
+
+  it('throws after the transaction has ended', () => {
+    const { dispatcher } = setup();
+    const tx = dispatcher.begin('x');
+    tx.commit();
+    expect(() => {
+      tx.applyTransient(setRollback(1));
+    }).toThrow();
+    const tx2 = dispatcher.begin('y');
+    tx2.abort();
+    expect(() => {
+      tx2.applyTransient(setRollback(1));
+    }).toThrow();
   });
 });

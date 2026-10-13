@@ -8,6 +8,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { DocumentId, DocumentMeta, FeatureId } from '@/document';
 import { aDocument, aFeature } from '@/document/testing';
+import { OP_VERSION } from '@/ops';
 import type { FeatureRenameOp, LogEntry } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import { createSnapshot } from './snapshot';
@@ -48,7 +49,7 @@ function aHistory(
   for (let n = 1; n <= count; n++) {
     const rename: FeatureRenameOp = {
       type: 'feature.rename',
-      v: 1,
+      v: OP_VERSION['feature.rename'],
       featureId: featureA,
       name: `A${String(n)}`,
     };

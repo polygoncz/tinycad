@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRpcClient, serveRpc } from '@/core';
 import type { DocumentId, DocumentMeta, FeatureId } from '@/document';
 import { aFeature } from '@/document/testing';
+import { OP_VERSION } from '@/ops';
 import type { FeatureRenameOp, LogEntry } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import { createSnapshot, storeErrorCode } from '@/persistence';
@@ -56,7 +57,7 @@ function aHistory(
   for (let n = 1; n <= count; n++) {
     const rename: FeatureRenameOp = {
       type: 'feature.rename',
-      v: 1,
+      v: OP_VERSION['feature.rename'],
       featureId: featureA,
       name: `A${String(n)}`,
     };

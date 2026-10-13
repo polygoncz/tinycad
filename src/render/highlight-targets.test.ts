@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { BodyId, PickResult } from '@/interaction';
+import type { BodyId, HighlightTarget, PickResult } from '@/interaction';
 import type { MeshData } from '@/kernel';
 import {
   drawnTargets,
@@ -15,10 +15,30 @@ const body = (id: string): BodyId => id as BodyId;
 const A = body('f1/body');
 const B = body('f2/body');
 
-const face = (b: BodyId, faceIndex: number, point: [number, number, number] = [0, 0, 0]) =>
-  ({ kind: 'face', body: b, faceIndex, point, normal: [0, 0, 1] }) satisfies PickResult;
-const edge = (b: BodyId, edgeIndex: number, point: [number, number, number] = [0, 0, 0]) =>
-  ({ kind: 'edge', body: b, edgeIndex, point }) satisfies PickResult;
+const face = (b: BodyId, faceIndex: number): HighlightTarget => ({
+  kind: 'face',
+  body: b,
+  faceIndex,
+});
+const edge = (b: BodyId, edgeIndex: number): HighlightTarget => ({
+  kind: 'edge',
+  body: b,
+  edgeIndex,
+});
+/** A pick result is a HighlightTarget too; its point and normal must not count. */
+const facePick = (b: BodyId, faceIndex: number, point: [number, number, number]): PickResult => ({
+  kind: 'face',
+  body: b,
+  faceIndex,
+  point,
+  normal: [0, 0, 1],
+});
+const edgePick = (b: BodyId, edgeIndex: number, point: [number, number, number]): PickResult => ({
+  kind: 'edge',
+  body: b,
+  edgeIndex,
+  point,
+});
 
 /** Face keys 5 and 2 (out of order), edge keys 4 and 1. */
 const MESH: MeshData = {
@@ -33,8 +53,8 @@ const meshOf = (b: BodyId): MeshData | undefined => (b === A ? MESH : undefined)
 
 describe('sameTarget', () => {
   it('ignores point and normal', () => {
-    expect(sameTarget(face(A, 5, [1, 2, 3]), face(A, 5, [4, 5, 6]))).toBe(true);
-    expect(sameTarget(edge(A, 4, [1, 2, 3]), edge(A, 4))).toBe(true);
+    expect(sameTarget(facePick(A, 5, [1, 2, 3]), facePick(A, 5, [4, 5, 6]))).toBe(true);
+    expect(sameTarget(edgePick(A, 4, [1, 2, 3]), edge(A, 4))).toBe(true);
   });
 
   it('distinguishes kind, body and index', () => {
@@ -50,14 +70,14 @@ describe('sameHover', () => {
     expect(sameHover(null, null)).toBe(true);
     expect(sameHover(null, face(A, 5))).toBe(false);
     expect(sameHover(face(A, 5), null)).toBe(false);
-    expect(sameHover(face(A, 5, [1, 1, 1]), face(A, 5))).toBe(true);
+    expect(sameHover(facePick(A, 5, [1, 1, 1]), face(A, 5))).toBe(true);
   });
 });
 
 describe('sameSelection', () => {
   it('compares element by element, in order', () => {
     expect(sameSelection([], [])).toBe(true);
-    expect(sameSelection([face(A, 5)], [face(A, 5, [9, 9, 9])])).toBe(true);
+    expect(sameSelection([face(A, 5)], [facePick(A, 5, [9, 9, 9])])).toBe(true);
     expect(sameSelection([face(A, 5)], [])).toBe(false);
     expect(sameSelection([face(A, 5), edge(A, 4)], [edge(A, 4), face(A, 5)])).toBe(false);
   });
@@ -92,7 +112,7 @@ describe('validTarget / validTargets', () => {
 
 describe('drawnTargets', () => {
   it('drops the hover when the selection shows the same target (selection wins)', () => {
-    const drawn = drawnTargets(face(A, 5, [1, 1, 1]), [edge(A, 4), face(A, 5)]);
+    const drawn = drawnTargets(facePick(A, 5, [1, 1, 1]), [edge(A, 4), face(A, 5)]);
     expect(drawn.hover).toBeNull();
     expect(drawn.selection).toEqual([edge(A, 4), face(A, 5)]);
   });
@@ -104,6 +124,8 @@ describe('drawnTargets', () => {
   });
 
   it('draws a target selected twice only once', () => {
-    expect(drawnTargets(null, [face(A, 5), face(A, 5, [1, 1, 1])]).selection).toEqual([face(A, 5)]);
+    expect(drawnTargets(null, [face(A, 5), facePick(A, 5, [1, 1, 1])]).selection).toEqual([
+      face(A, 5),
+    ]);
   });
 });

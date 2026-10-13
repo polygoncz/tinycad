@@ -9,7 +9,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import type { Disposable } from '@/core';
-import type { BodyId, HighlightPort, PickResult } from '@/interaction';
+import type { BodyId, HighlightPort, HighlightTarget } from '@/interaction';
 import type { MeshData } from '@/kernel';
 import type { BodyView } from './body-view';
 import {
@@ -62,8 +62,8 @@ export function createHighlightLayer(options: HighlightLayerOptions): HighlightL
   const selectionLook = createLook(SELECTION_COLOR);
   /** Geometries of the drawn objects; all replaced on every change. */
   let geometries: THREE.BufferGeometry[] = [];
-  let hover: PickResult | null = null;
-  let selection: readonly PickResult[] = [];
+  let hover: HighlightTarget | null = null;
+  let selection: readonly HighlightTarget[] = [];
   let disposed = false;
 
   const meshOf = (body: BodyId): MeshData | undefined => views.get(body)?.mesh;
@@ -77,7 +77,7 @@ export function createHighlightLayer(options: HighlightLayerOptions): HighlightL
     requestRender();
   }
 
-  function draw(target: PickResult, look: Look): void {
+  function draw(target: HighlightTarget, look: Look): void {
     const view = views.get(target.body);
     if (view === undefined) return;
     let object: THREE.Object3D;

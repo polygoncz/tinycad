@@ -22,7 +22,15 @@ export interface ViewportEvents {
   readonly key: ViewKeyEvent;
 }
 
-/** Defined only here; spec 09 refers to it (Q057). A vertex variant comes when needed. */
+/** What can be highlighted: a face or an edge of a body, without point and normal (Q065). */
+export type HighlightTarget =
+  | { readonly kind: 'face'; readonly body: BodyId; readonly faceIndex: number }
+  | { readonly kind: 'edge'; readonly body: BodyId; readonly edgeIndex: number };
+
+/**
+ * A HighlightTarget plus where it was hit, so it can be passed to setHover as it is.
+ * Defined only here; spec 09 refers to it (Q057). A vertex variant comes when needed.
+ */
 export type PickResult =
   | {
       readonly kind: 'face';
@@ -39,11 +47,14 @@ export type PickResult =
       readonly point: Vec3;
     };
 
-/** A mirror of the state interaction holds: every call passes the whole state (Q058). */
+/**
+ * A mirror of the state interaction holds: every call passes the whole state (Q058).
+ * Takes HighlightTarget because the selection does not know the hit point (Q065).
+ */
 export interface HighlightPort {
-  setHover(target: PickResult | null): void;
+  setHover(target: HighlightTarget | null): void;
   /** Empty array = nothing selected. */
-  setSelection(targets: readonly PickResult[]): void;
+  setSelection(targets: readonly HighlightTarget[]): void;
 }
 
 export type OverlayStyle = 'preview' | 'construction';

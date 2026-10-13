@@ -76,4 +76,32 @@ describe('ObservableValue', () => {
     // Consumers that get only Observable<T> cannot write.
     expectTypeOf<Observable<string>>().not.toHaveProperty('set');
   });
+
+  describe('asObservable', () => {
+    it('returns a frozen view without set', () => {
+      const view = new ObservableValue(1).asObservable();
+      expect('set' in view).toBe(false);
+      expect(Object.isFrozen(view)).toBe(true);
+    });
+
+    it('returns the same object every time', () => {
+      const o = new ObservableValue(1);
+      expect(o.asObservable()).toBe(o.asObservable());
+    });
+
+    it('delegates get and subscribe to the value', () => {
+      const o = new ObservableValue(1);
+      const view = o.asObservable();
+      let calls = 0;
+      const off = view.subscribe(() => calls++);
+
+      o.set(2);
+      expect(view.get()).toBe(2);
+      expect(calls).toBe(1);
+
+      off();
+      o.set(3);
+      expect(calls).toBe(1);
+    });
+  });
 });

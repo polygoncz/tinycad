@@ -10,6 +10,8 @@ export interface Transaction {
   readonly label: string;
   /** Applies at once and remembers the op with its inverse. */
   apply(op: Operation): void;
+  /** Applies at once; reverted on both commit and abort, never logged (spec 04, Q018). */
+  applyTransient(op: Operation): void;
   /** Writes one entry; an empty transaction writes nothing and returns null. */
   commit(): LogEntry | null;
   /** Applies the inverses in reverse order, writes nothing. */
@@ -19,6 +21,8 @@ export interface Transaction {
 interface Step {
   readonly op: Operation;
   readonly inverse: Operation;
+  /** Reverted on commit too and never logged. */
+  readonly transient: boolean;
 }
 
 export interface TransactionDeps {
@@ -84,6 +88,7 @@ export function createTransaction(deps: TransactionDeps): Transaction {
   function compress(): Step[] {
     const out: Step[] = [];
     for (const step of steps) {
+      if (step.transient) continue;
       const last = out[out.length - 1];
       const handler =
         last !== undefined && last.op.type === step.op.type
@@ -92,7 +97,7 @@ export function createTransaction(deps: TransactionDeps): Transaction {
       const merged = last !== undefined && handler?.merge ? handler.merge(last.op, step.op) : null;
       if (last !== undefined && merged !== null) {
         // The merged op keeps the inverse of the first one.
-        out[out.length - 1] = { op: merged, inverse: last.inverse };
+        out[out.length - 1] = { op: merged, inverse: last.inverse, transient: false };
       } else {
         out.push(step);
       }
@@ -100,24 +105,56 @@ export function createTransaction(deps: TransactionDeps): Transaction {
     return out;
   }
 
+  function applyStep(op: Operation, transient: boolean): void {
+    // A failing handler throws here: the transaction stays open and unchanged.
+    const { inverse, deferred } = deps.apply(op);
+    steps.push({ op, inverse, transient });
+    const errors = [...deferred];
+    collect(errors, () => {
+      deps.emitApplied(null, op);
+    });
+    throwCollected(errors, 'Subscribers failed after apply');
+  }
+
+  /**
+   * Applies the inverses of `toRevert` in reverse order (each emits `applied` with entry null).
+   * A failing inverse handler is a programmer error: the rest is skipped and the error collected.
+   */
+  function revert(toRevert: readonly Step[], errors: unknown[]): void {
+    for (const step of [...toRevert].reverse()) {
+      try {
+        errors.push(...deps.apply(step.inverse).deferred);
+      } catch (e) {
+        // Should not happen (an inverse of an applied op is valid): give up and report.
+        errors.push(e);
+        break;
+      }
+      collect(errors, () => {
+        deps.emitApplied(null, step.inverse);
+      });
+    }
+  }
+
   return {
     label,
     apply(op) {
       checkOpen('apply');
-      // A failing handler throws here: the transaction stays open and unchanged.
-      const { inverse, deferred } = deps.apply(op);
-      steps.push({ op, inverse });
-      const errors = [...deferred];
-      collect(errors, () => {
-        deps.emitApplied(null, op);
-      });
-      throwCollected(errors, 'Subscribers failed after apply');
+      applyStep(op, false);
+    },
+    applyTransient(op) {
+      checkOpen('applyTransient');
+      applyStep(op, true);
     },
     commit() {
       checkOpen('commit');
       // Order (spec 04): append -> end of transaction -> `applied`. Every exception is collected
       // and thrown at the end, so none overwrites another and the entry is never lost.
       const errors: unknown[] = [];
+      // Transient steps go back first; the logged ones commute with them (caller's contract).
+      revert(
+        steps.filter((s) => s.transient),
+        errors,
+      );
       let written: { entry: LogEntry; op: Operation } | null = null;
       try {
         const planned = plan();
@@ -140,18 +177,7 @@ export function createTransaction(deps: TransactionDeps): Transaction {
     abort() {
       checkOpen('abort');
       const errors: unknown[] = [];
-      for (const step of [...steps].reverse()) {
-        try {
-          errors.push(...deps.apply(step.inverse).deferred);
-        } catch (e) {
-          // Should not happen (an inverse of an applied op is valid): give up and report.
-          errors.push(e);
-          break;
-        }
-        collect(errors, () => {
-          deps.emitApplied(null, step.inverse);
-        });
-      }
+      revert(steps, errors);
       collect(errors, finish);
       throwCollected(errors, 'Subscribers failed during abort');
     },

@@ -36,6 +36,7 @@ updated: 2026-10-12
 - [ ] Parametr `region` a jeho pole v UI (výběr oblasti skici ve viewportu).
 - [ ] Plugin Extrude: vzdálenost, směr, symetricky, režim (nové těleso / přidat / odebrat přes boolean).
 - [ ] Plugin Revolve: osa (čára skici), úhel.
+- [ ] (Volitelné, přesunuto z [[M09-interakce]]) Interaktivní tvorba kvádru tažením ve viewportu: vlastní `Tool`, mezivýsledky přes `FeatureEditSession.setParam`.
 - [ ] Jádro vrací `roles` pro start/end/boční plochy (příprava na M14).
 
 ## Akceptační kritéria (orientačně)

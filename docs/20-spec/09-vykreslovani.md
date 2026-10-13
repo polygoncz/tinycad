@@ -54,7 +54,7 @@ export function createViewport(deps: {
 export const MESH_QUALITY: MeshQuality = { linearDeflection: 0.1, angularDeflection: 0.5 };
 ```
 
-- Typy portu (`ViewportPort`, `PickResult`, `HighlightPort`, `OverlayPort`, události, `BodyId`) definuje [[10-interakce#Port viewportu]], `render` je importuje jen jako typy z `@/interaction`.
+- Typy portu (`ViewportPort`, `PickResult`, `HighlightTarget`, `HighlightPort`, `OverlayPort`, události, `BodyId`) definuje [[10-interakce#Port viewportu]], `render` je importuje jen jako typy z `@/interaction`.
 - `mount`, `bodies` a `camera` nejsou součástí portu: používá je jen `app` (kompoziční kořen). Nástroje vidí jen `ViewportPort`.
 - `dispose()`: `unmount()`, uvolní všechna tělesa, zvýraznění, overlay, ovládání kamery a odběratele `events`. Další volání čehokoli kromě `dispose` je chyba, i na podobjektech (`bodies`, `camera`, `highlight`, `overlay`, `events.on`).
 - `mount` je odolný proti chybě (např. prohlížeč bez WebGL): uvolní, co už vytvořil, a výjimku pošle dál.
@@ -135,7 +135,7 @@ Zvýraznění plochy je **malá vlastní kopie** jejích trojúhelníků: čist�
 
 ## Vrstvy pro interakci
 
-- `HighlightLayer implements HighlightPort`: hover a výběr mají různé barvy, výběr vyhrává nad hoverem, pokud ukazují na totéž. `setHover`/`setSelection` vždy nahradí celý stav ([[Q058 Kontrakt HighlightPort a OverlayPort|Q058]]) a zavolají `requestRender()`. Volání se stejnou hodnotou jako minule nic nepřekresluje (porovnání podle `kind`, `body`, indexu).
+- `HighlightLayer implements HighlightPort`: hover a výběr mají různé barvy, výběr vyhrává nad hoverem, pokud ukazují na totéž. `setHover`/`setSelection` vždy nahradí celý stav ([[Q058 Kontrakt HighlightPort a OverlayPort|Q058]]) a zavolají `requestRender()`. Volání se stejnou hodnotou jako minule nic nepřekresluje (porovnání podle `kind`, `body`, indexu). Od M9 bere `HighlightTarget` (bez `point` a `normal`, [[Q065 Cíl zvýraznění bez bodu a normály|Q065]]); čisté funkce v `highlight-targets.ts` pracují s ním.
   - Neplatné cíle (těleso není zobrazené, index není klíčem ve `faceRanges`/`edgeRanges`) se vypouští už v `setHover`/`setSelection`, nejen po výměně scény. Porovnání „stejná hodnota“ se dělá až po filtraci. Port to nehlásí: `interaction` může mít ve výběru cíl, který viewport právě nezobrazuje.
   - Plocha: neosvětlený průhledný `MeshBasicMaterial` (opacity 0,45, `depthWrite: false`, `polygonOffset` −1/−1, tedy ke kameře). Stínování tělesa zůstane vidět.
   - Hrana: **tlusté čáry** `LineSegments2` + `LineMaterial` z `three/addons` (3 px). WebGL kreslí `LineSegments` vždy 1 px široké bez ohledu na `linewidth`, takže by zvýraznění na hraně tělesa zaniklo. `LineMaterial` potřebuje rozlišení plátna, viewport ho předává při každé změně velikosti.

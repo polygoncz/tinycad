@@ -84,7 +84,7 @@ export function createOpHandlerRegistry(): OpHandlerRegistry;
 Kontrakt handleru:
 - `invert` na neexistující featuru (`featureId` není v dokumentu) **vyhodí** – je to chyba volajícího. Protože `invert` běží před `apply`, dokument zůstane beze změny.
 - `apply` kontroly invariantů nedělá sám, nechává je na mutátorech dokumentu ([[03-dokument|spec 03]]), které při porušení vyhodí a nic nezmění.
-- Inverze má `v` rovné aktuální verzi **handleru svého typu** (inverze `feature.add` je `feature.remove` ve verzi handleru `feature.remove`). Verze každého typu operace je proto jedna konstanta, kterou sdílí handler i každý, kdo operaci toho typu vytváří.
+- Inverze má `v` rovné aktuální verzi **handleru svého typu** (inverze `feature.add` je `feature.remove` ve verzi handleru `feature.remove`). Verze každého typu operace je proto jedna konstanta, kterou sdílí handler i každý, kdo operaci toho typu vytváří. Vestavěné verze jsou v `OP_VERSION` (objekt `typ → verze`), který `ops/index.ts` exportuje pro tvůrce operací mimo `ops` (`interaction`, dev stránky); vlastní operace pluginu (M12) mají verzi u svého handleru.
 - Handler se o [[Rollback bar|rollback bar]] nestará – viz [[#Dávka a rollback bar]].
 - `merge(prev, next)` vrací operaci `m`, pro kterou platí: aplikace `m` na stav před `prev` = aplikace `prev` a pak `next`, a `prev`ova inverze z `m` vrátí stav před `prev`. Jinak vrací `null`. V M3 ho má jen `feature.setParams`: stejné `featureId` → `next`, jinak `null`.
 
@@ -153,7 +153,7 @@ export interface OperationDispatcher {
   readonly inTransaction: boolean;
 
   readonly events: Subscribable<{
-    /** Po každé aplikaci: dispatch (entry), Transaction.apply a abort (entry null). */
+    /** Po každé aplikaci: dispatch a commit (entry); Transaction.apply, applyTransient, vracení přechodných kroků při commitu a abort (entry null). */
     applied: { entry: LogEntry | null; op: Operation };
     /** Transakce začala (true) nebo skončila commitem či abortem (false). */
     transaction: { active: boolean };
@@ -188,17 +188,25 @@ Dialog featury, tažení posuvníku nebo celé skicování nesmí v logu vytvoř
 export interface Transaction {
   readonly label: string;
   apply(op: Operation): void;   // aplikuje okamžitě, zapamatuje si op + inverzi
+  applyTransient(op: Operation): void; // aplikuje okamžitě, při commit i abort se vrátí, do logu nejde
   commit(): LogEntry | null;    // zapíše jeden záznam; prázdná transakce nezapíše nic
   abort(): void;                // aplikuje inverze v opačném pořadí, nezapíše nic
 }
 ```
 
 - `apply` jde přes `applyOperation`. Selže-li handler, transakce zůstane otevřená a beze změny, výjimka letí dál. Odložená výjimka odběratele letí až po zapamatování operace.
+- **Přechodná operace** (`applyTransient`, [[Q018 Rollback bar při editaci starší featury|Q018]]): mění dokument jen po dobu transakce, typicky dočasný posun [[Rollback bar|rollback baru]] při editaci featury. Aplikuje se přes `applyOperation` jako `apply` (stejné chyby a události) a zapamatuje se s inverzí jako přechodný krok.
+  - `commit` nejdřív vrátí přechodné kroky jejich inverzemi v opačném pořadí (každá vyšle `applied` s `entry: null`) a teprve pak komprimuje a zapíše ostatní kroky. Přechodné kroky do záznamu nejdou.
+  - `abort` vrací všechny kroky (logované i přechodné) v opačném pořadí, jako dosud.
+  - Kontrakt volajícího: přechodná operace musí **komutovat** s logovanými operacemi transakce, tj. přehrání záznamu bez ní dá stejný dokument. `studio.setRollback` vůči `feature.setParams` podmínku splňuje (parametry na pozici baru nezávisí). Transakce to neověřuje.
+  - Transakce jen s přechodnými kroky je při commitu prázdná: nic nezapíše a vrátí `null`.
+  - Selže-li při `commit` handler inverze přechodného kroku (chyba programátora, jako u `abort`), zbylé inverze se přeskočí, záznam se přesto zapíše, transakce se ukončí a výjimka letí na konci se sesbíranými. Dokument pak nesedí s logem.
+  - Uvnitř transakce jsou přechodné kroky pro kompresi neviditelné: logované kroky kolem nich se můžou sloučit, jako by sousedily.
 - `commit` operace zkomprimuje: **sousední** operace téhož typu, jejichž handler má `merge`, se zleva doprava zkusí sloučit (výsledek sloučení se zkouší slučovat s další). Sloučená operace si nechá inverzi té **první**. Pak:
   - 0 operací → nic nezapíše, vrátí `null`,
   - 1 operace → záznam s touto operací a její inverzí,
   - víc operací → záznam `batch[ops]` s inverzí `batch[inverze v opačném pořadí]`.
-- Záznam má `kind: 'do'` a `label` transakce. Dokument se při commitu už nemění. Pořadí: `log.append` → konec transakce (`transaction { active: false }`) → `applied` se záznamem. Odběratelé `applied` tak vidí stav po transakci, stejně jako u `dispatch`.
+- Záznam má `kind: 'do'` a `label` transakce. Dokument se při commitu mění jen vrácením přechodných kroků. Pořadí: `log.append` → konec transakce (`transaction { active: false }`) → `applied` se záznamem. Odběratelé `applied` tak vidí stav po transakci, stejně jako u `dispatch`.
 - Výjimky odběratelů `appended`, `transaction` i `applied` se při `commit` i `abort` sbírají do jednoho seznamu a letí až na konci (žádná nepřepíše jinou).
 - `abort` aplikuje inverze v opačném pořadí přes `applyOperation` (každá vyšle `applied` s `entry: null`). Dokument i log jsou pak beze změny. Výjimky odběratelů během abortu se sesbírají a vyhodí až na konci, transakce se ukončí i tak.
 - Po `commit` nebo `abort` je transakce ukončená. Další volání čehokoli na ní vyhodí. Konec transakce vyšle `transaction { active: false }`.
@@ -340,6 +348,7 @@ export function parseLogEntry(handlers: OpHandlerRegistry, raw: unknown): Result
 - `applyOperation`: obalení inverze obnovou baru u add/remove/move před barem, na baru a za barem; bez obalení u `studio.setRollback`; dávka včetně vnořené a prázdné; atomičnost dávky při selhání podoperace; výjimka odběratele (beze změny vs. se změnou).
 - Dispečer: pořadí invert → apply → append → emit; selhání handleru nezapíše záznam; výjimka odběratele po změně zapíše záznam a pak letí; `dispatch` během transakce vyhodí; nekonzistentní `meta` vyhodí; výchozí `label` je `op.type`; `time` z `now`.
 - Log: `seq` od 1, `entries(fromSeq)`, `appended`, obnova ze záznamů, mezera v `seq` vyhodí.
+- Přechodná operace: commit ji vrátí a záznam ji neobsahuje; abort vrátí vše v opačném pořadí; transakce jen s přechodnými kroky nezapíše nic; replay logu dá stejný dokument jako po commitu.
 - Transakce: commit = jeden záznam; **50 změn parametru = 1 záznam**; add + setParams = `batch` se 2 operacemi; abort = dokument i log beze změny; prázdná transakce nezapíše nic; druhý `begin` vyhodí; volání po ukončení vyhodí; `transaction` události.
 - `merge` u `setParams`: stejná featura → `next`, jiná → `null`.
 - Undo/redo sekvence včetně „undo, nová změna, redo není možné“; undo během transakce vyhodí; `changed` jen při změně dvojice; undo s posunem rollback baru.

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { DocumentId, DocumentMeta, FeatureId } from '@/document';
 import { aFeature } from '@/document/testing';
+import { OP_VERSION } from '@/ops';
 import type { FeatureRenameOp, LogEntry } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import type { OpsSession } from '@/ops/testing';
@@ -146,7 +147,7 @@ describe('PersistenceService', () => {
       renames++;
       const op: FeatureRenameOp = {
         type: 'feature.rename',
-        v: 1,
+        v: OP_VERSION['feature.rename'],
         featureId: featureA,
         name: `A${String(renames)}`,
       };

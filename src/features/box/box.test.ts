@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
+import { ObservableValue, createSequentialIdGenerator } from '@/core';
 import { createFeatureSchemaRegistry } from '@/document';
 import type { BodyId, FeatureId, FeatureInstance } from '@/document';
 import { aFeature } from '@/document/testing';
+import {
+  SELECT_TOOL,
+  createSelectionModel,
+  createToolManager,
+  createToolRegistry,
+} from '@/interaction';
+import type { FeatureEditor, FeatureEditSession } from '@/interaction';
+import { FakeRegenStatus, FakeViewport } from '@/interaction/testing';
 import { createFakeKernel } from '@/kernel/testing';
+import { anOpsSession } from '@/ops/testing';
 import { registerPlugin } from '@/plugin-api';
 import { EMPTY_NAMES, EMPTY_STATE, createBuilderRegistry, createRegenerator } from '@/regen';
 import type { Body, RegenState } from '@/regen';
@@ -10,6 +20,7 @@ import { aBuildContext, stoppedClock } from '@/regen/testing';
 import { boxBuilder } from './builder';
 import { boxSchema } from './schema';
 import type { BoxParams } from './schema';
+import { boxTool } from './tool';
 import * as box from '.';
 
 function aBox(id: string, params: Partial<BoxParams> = {}): FeatureInstance<BoxParams> {
@@ -36,6 +47,20 @@ describe('box public API', () => {
     expect(box.boxPlugin.builder).toBe(boxBuilder);
     expect(boxSchema.type).toBe('box');
     expect(boxBuilder.type).toBe('box');
+  });
+
+  it('boxPlugin brings the box tool', () => {
+    expect(box.boxPlugin.tools).toEqual([boxTool]);
+  });
+
+  it('registers schema, builder and tool through registerPlugin', () => {
+    const regs = {
+      schemas: createFeatureSchemaRegistry(),
+      builders: createBuilderRegistry(),
+      tools: createToolRegistry(),
+    };
+    registerPlugin(box.boxPlugin, regs);
+    expect(regs.tools.get('box')).toBe(boxTool);
   });
 });
 
@@ -139,7 +164,7 @@ describe('box plugin in the Regenerator', () => {
     const kernel = createFakeKernel();
     const schemas = createFeatureSchemaRegistry();
     const builders = createBuilderRegistry();
-    registerPlugin(box.boxPlugin, { schemas, builders });
+    registerPlugin(box.boxPlugin, { schemas, builders, tools: createToolRegistry() });
     const regenerator = createRegenerator({ kernel, schemas, builders, now: stoppedClock });
     const features = [aBox('b1'), aBox('b2', { origin: [20, 0, 0] })];
 
@@ -156,5 +181,90 @@ describe('box plugin in the Regenerator', () => {
       ['b2' as FeatureId, { kind: 'ok' }],
     ]);
     expect(await kernel.liveHandleCount()).toBe(2);
+  });
+});
+
+/** A FeatureEditor that records create calls; `open` pretends a session is already open. */
+function aRecordingEditor(open = false) {
+  const created: string[] = [];
+  const session: FeatureEditSession = {
+    mode: 'create',
+    featureId: aFeature().id,
+    schema: boxSchema,
+    state: new ObservableValue({
+      params: {},
+      issues: [],
+      fields: [],
+      activeRefParam: null,
+      open: true,
+    }),
+    setParam: () => expect.fail('setParam is not expected'),
+    focusRefParam: () => expect.fail('focusRefParam is not expected'),
+    commit: () => expect.fail('commit is not expected'),
+    cancel: () => expect.fail('cancel is not expected'),
+  };
+  const current = new ObservableValue<FeatureEditSession | null>(open ? session : null);
+  const editor: FeatureEditor = {
+    current,
+    create(type) {
+      created.push(type);
+      current.set(session);
+      return session;
+    },
+    edit: () => expect.fail('edit is not expected'),
+  };
+  return { editor, created };
+}
+
+function aToolManager(editor: FeatureEditor) {
+  const registry = createToolRegistry();
+  registry.register(SELECT_TOOL);
+  registry.register(boxTool);
+  const ops = anOpsSession();
+  const manager = createToolManager({
+    registry,
+    ctx: {
+      viewport: new FakeViewport(),
+      selection: createSelectionModel({ regen: new FakeRegenStatus() }),
+      doc: ops.doc,
+      ops: ops.dispatcher,
+      ids: createSequentialIdGenerator('t'),
+      features: editor,
+    },
+    defaultToolId: SELECT_TOOL.id,
+  });
+  const emitted: string[] = [];
+  manager.active.subscribe(() => emitted.push(manager.active.get()));
+  return { manager, emitted };
+}
+
+describe('boxTool', () => {
+  it('is the primitive tool box', () => {
+    expect(boxTool).toMatchObject({ id: 'box', label: 'Box', icon: 'box', group: 'primitive' });
+  });
+
+  it('opens the dialog for a new box and returns to the default tool', () => {
+    const { editor, created } = aRecordingEditor();
+    const { manager, emitted } = aToolManager(editor);
+
+    manager.activate('box');
+
+    expect(created).toEqual(['box']);
+    expect(emitted).toEqual(['box', 'select']);
+    expect(manager.active.get()).toBe('select');
+  });
+
+  it('only finishes while another session is open', () => {
+    const { editor, created } = aRecordingEditor(true);
+    const { manager, emitted } = aToolManager(editor);
+
+    manager.activate('box');
+
+    expect(created).toEqual([]);
+    expect(emitted).toEqual(['box', 'select']);
+  });
+
+  it('creates a new tool on every activation', () => {
+    expect(boxTool.create()).not.toBe(boxTool.create());
   });
 });

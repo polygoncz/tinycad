@@ -12,12 +12,19 @@
 import type { DocumentId, FeatureId, FeatureInstance } from '@/document';
 import { createDocument, createFeatureSchemaRegistry } from '@/document';
 import { boxPlugin, type BoxParams } from '@/features/box';
-import type { OverlayShape, PickResult, ViewKeyEvent, ViewPointerEvent } from '@/interaction';
+import {
+  createToolRegistry,
+  type OverlayShape,
+  type PickResult,
+  type ViewKeyEvent,
+  type ViewPointerEvent,
+} from '@/interaction';
 import { createOcctKernel } from '@/kernel-occt';
 import {
   createOperationDispatcher,
   createOperationLog,
   createOpHandlerRegistry,
+  OP_VERSION,
   type FeatureAddOp,
   type FeatureSetParamsOp,
 } from '@/ops';
@@ -109,7 +116,8 @@ async function run(): Promise<void> {
 
   const schemas = createFeatureSchemaRegistry();
   const builders = createBuilderRegistry();
-  registerPlugin(boxPlugin, { schemas, builders });
+  // The tools are not used on this page yet; the registry only satisfies registerPlugin.
+  registerPlugin(boxPlugin, { schemas, builders, tools: createToolRegistry() });
 
   const doc = createDocument({
     meta: { id: 'dev-viewport' as DocumentId, name: 'Viewport dev', createdAt: Date.now() },
@@ -164,7 +172,7 @@ async function run(): Promise<void> {
     aBox(BOX_A, 'Box A', BOX_A_PARAMS),
     aBox(BOX_B, 'Box B', BOX_B_PARAMS),
   ].entries()) {
-    const op: FeatureAddOp = { type: 'feature.add', v: 1, feature, index };
+    const op: FeatureAddOp = { type: 'feature.add', v: OP_VERSION['feature.add'], feature, index };
     dispatcher.dispatch(op);
   }
 
@@ -176,7 +184,7 @@ async function run(): Promise<void> {
     if (!Number.isFinite(height) || height <= 0) return;
     const op: FeatureSetParamsOp = {
       type: 'feature.setParams',
-      v: 1,
+      v: OP_VERSION['feature.setParams'],
       featureId: BOX_A,
       params: { ...BOX_A_PARAMS, height },
     };

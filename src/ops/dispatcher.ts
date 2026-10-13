@@ -26,7 +26,10 @@ export interface OperationDispatcher {
   begin(label: string): Transaction;
   readonly inTransaction: boolean;
   readonly events: Subscribable<{
-    /** After every application: dispatch (entry), Transaction.apply and abort (entry null). */
+    /**
+     * After every application: dispatch and commit (entry); Transaction.apply, applyTransient,
+     * reverting transient steps on commit and abort (entry null).
+     */
     applied: { entry: LogEntry | null; op: Operation };
     /** A transaction started (true) or ended by commit or abort (false). */
     transaction: { active: boolean };

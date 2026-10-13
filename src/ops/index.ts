@@ -12,6 +12,7 @@ export type {
   Operation,
   StudioSetRollbackOp,
 } from './operation';
+export { OP_VERSION } from './operation';
 export { createOpHandlerRegistry } from './handler';
 export type { OpHandler, OpHandlerRegistry } from './handler';
 export { createOperationLog } from './log';

@@ -1,10 +1,14 @@
-// Test-only entry point of interaction: FakeViewport stands in for the render viewport.
+// Test-only entry point of interaction: FakeViewport stands in for the render viewport,
+// FakeRegenStatus for the regeneration state that app feeds in.
 // dependency-cruiser allows importing it only from *.test.ts.
 
-import { Emitter } from '@/core';
-import type { Subscribable, Vec3 } from '@/core';
+import { Emitter, ObservableValue } from '@/core';
+import type { Observable, Subscribable, Vec3 } from '@/core';
+import type { FeatureId } from '@/document';
+import type { FeatureHealth, RegenSnapshot, RegenStatusPort } from './regen-status-port';
 import type {
   HighlightPort,
+  HighlightTarget,
   OverlayPort,
   OverlayShape,
   PickResult,
@@ -34,8 +38,8 @@ export class FakeViewport implements ViewportPort {
 
   private pickFn: PickFn = () => null;
   private rayFn: RayFn = DEFAULT_RAY;
-  private hoverState: PickResult | null = null;
-  private selectionState: readonly PickResult[] = [];
+  private hoverState: HighlightTarget | null = null;
+  private selectionState: readonly HighlightTarget[] = [];
   private overlayState: ReadonlyMap<string, readonly OverlayShape[]> = new Map();
 
   constructor() {
@@ -81,12 +85,12 @@ export class FakeViewport implements ViewportPort {
   }
 
   /** Last state passed to highlight.setHover. */
-  get hover(): PickResult | null {
+  get hover(): HighlightTarget | null {
     return this.hoverState;
   }
 
   /** Last state passed to highlight.setSelection. */
-  get selection(): readonly PickResult[] {
+  get selection(): readonly HighlightTarget[] {
     return this.selectionState;
   }
 
@@ -101,5 +105,23 @@ export class FakeViewport implements ViewportPort {
 
   emitKey(e: ViewKeyEvent): void {
     this.emitter.emit('key', e);
+  }
+}
+
+/**
+ * A RegenStatusPort for tests: starts with no regeneration (generation 0, no health);
+ * each publish stands for one finished regeneration.
+ */
+export class FakeRegenStatus implements RegenStatusPort {
+  private readonly value = new ObservableValue<RegenSnapshot>(
+    Object.freeze({ generation: 0, health: new Map() }),
+  );
+  readonly state: Observable<RegenSnapshot> = this.value.asObservable();
+
+  /** A new frozen snapshot with generation + 1 and a copy of health; notifies subscribers. */
+  publish(health: ReadonlyMap<FeatureId, FeatureHealth>): void {
+    this.value.set(
+      Object.freeze({ generation: this.value.get().generation + 1, health: new Map(health) }),
+    );
   }
 }

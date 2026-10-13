@@ -7,7 +7,7 @@ import type { FeatureId, FeatureInstance } from '@/document';
  * Current schema version of every operation type, in one place: handlers (their `version` and
  * the `v` of the inverses they create), applyOperation and upcast all use it (spec 04).
  * One object keyed by type rather than loose constants, so a lookup by type stays typo-safe.
- * Internal: not exported from index.ts.
+ * Exported from index.ts for creators of operations outside ops (spec 04).
  */
 export const OP_VERSION = {
   'feature.add': 1,

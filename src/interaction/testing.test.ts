@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import type { BodyId, OverlayShape, PickResult, ViewKeyEvent, ViewPointerEvent } from '.';
-import { FakeViewport } from './testing';
+import type { FeatureId } from '@/document';
+import type {
+  BodyId,
+  FeatureHealth,
+  HighlightTarget,
+  OverlayShape,
+  PickResult,
+  ViewKeyEvent,
+  ViewPointerEvent,
+} from '.';
+import { FakeRegenStatus, FakeViewport } from './testing';
 
 // Branded ids are created by a cast in tests only.
 const BODY = 'f1/body' as BodyId;
@@ -84,9 +93,18 @@ describe('FakeViewport', () => {
       expect(view.selection).toEqual([]);
     });
 
+    it('records highlight targets without point and normal', () => {
+      const view = new FakeViewport();
+      const target: HighlightTarget = { kind: 'face', body: BODY, faceIndex: 2 };
+      view.highlight.setHover(target);
+      view.highlight.setSelection([target, FACE]);
+      expect(view.hover).toBe(target);
+      expect(view.selection).toEqual([target, FACE]);
+    });
+
     it('keeps its own copy of the selection', () => {
       const view = new FakeViewport();
-      const targets: PickResult[] = [FACE];
+      const targets: HighlightTarget[] = [FACE];
       view.highlight.setSelection(targets);
       targets.push(EDGE);
       expect(view.selection).toEqual([FACE]);
@@ -172,5 +190,51 @@ describe('FakeViewport', () => {
       view.emitKey({ key: 'a', mods: NO_MODS, inTextField: false });
       expect(seen).toEqual([]);
     });
+  });
+});
+
+describe('FakeRegenStatus', () => {
+  // Branded ids are created by a cast in tests only.
+  const F1 = 'f1' as FeatureId;
+  const F2 = 'f2' as FeatureId;
+  const ERROR: FeatureHealth = { kind: 'error', message: 'boom' };
+
+  it('starts at generation 0 with no health, frozen', () => {
+    const snapshot = new FakeRegenStatus().state.get();
+    expect(snapshot.generation).toBe(0);
+    expect(snapshot.health.size).toBe(0);
+    expect(Object.isFrozen(snapshot)).toBe(true);
+  });
+
+  it('publish increments the generation, sets the health and notifies subscribers', () => {
+    const regen = new FakeRegenStatus();
+    let calls = 0;
+    regen.state.subscribe(() => calls++);
+    regen.publish(new Map([[F1, { kind: 'ok' }]]));
+    regen.publish(new Map([[F2, ERROR]]));
+    const snapshot = regen.state.get();
+    expect(calls).toBe(2);
+    expect(snapshot.generation).toBe(2);
+    expect(snapshot.health).toEqual(new Map([[F2, ERROR]]));
+  });
+
+  it('publish with the same health still makes a new generation', () => {
+    const regen = new FakeRegenStatus();
+    const health = new Map([[F1, ERROR]]);
+    regen.publish(health);
+    const first = regen.state.get();
+    regen.publish(health);
+    expect(regen.state.get()).not.toBe(first);
+    expect(regen.state.get().generation).toBe(2);
+  });
+
+  it('the published snapshot is frozen and does not follow the passed map', () => {
+    const regen = new FakeRegenStatus();
+    const health = new Map<FeatureId, FeatureHealth>([[F1, ERROR]]);
+    regen.publish(health);
+    const snapshot = regen.state.get();
+    health.set(F2, { kind: 'ok' });
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(snapshot.health).toEqual(new Map([[F1, ERROR]]));
   });
 });

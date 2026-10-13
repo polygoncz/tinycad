@@ -1,12 +1,12 @@
-import type { BodyId, PickResult } from '@/interaction';
+import type { BodyId, HighlightTarget } from '@/interaction';
 import type { MeshData } from '@/kernel';
 
 // Pure logic of HighlightLayer (spec 09, "Vrstvy pro interakci" and point 9 of "Synchronizace s
 // regenerací"): comparing targets, which targets still exist, what is drawn. No three import, so
 // it is tested in Node.
 
-/** Same face or edge: kind, body and index. point and normal do not count. */
-export function sameTarget(a: PickResult, b: PickResult): boolean {
+/** Same face or edge: kind, body and index. A PickResult's point and normal do not count. */
+export function sameTarget(a: HighlightTarget, b: HighlightTarget): boolean {
   if (a.kind === 'face' && b.kind === 'face') {
     return a.body === b.body && a.faceIndex === b.faceIndex;
   }
@@ -16,13 +16,16 @@ export function sameTarget(a: PickResult, b: PickResult): boolean {
   return false;
 }
 
-export function sameHover(a: PickResult | null, b: PickResult | null): boolean {
+export function sameHover(a: HighlightTarget | null, b: HighlightTarget | null): boolean {
   if (a === null || b === null) return a === b;
   return sameTarget(a, b);
 }
 
 /** Element by element, in order: a reordered selection counts as a change. */
-export function sameSelection(a: readonly PickResult[], b: readonly PickResult[]): boolean {
+export function sameSelection(
+  a: readonly HighlightTarget[],
+  b: readonly HighlightTarget[],
+): boolean {
   if (a.length !== b.length) return false;
   return a.every((target, i) => {
     const other = b[i];
@@ -36,7 +39,7 @@ export function sameSelection(a: readonly PickResult[], b: readonly PickResult[]
  * regeneration is left to topological naming (M14).
  */
 export function validTarget(
-  target: PickResult,
+  target: HighlightTarget,
   meshOf: (body: BodyId) => MeshData | undefined,
 ): boolean {
   const mesh = meshOf(target.body);
@@ -48,9 +51,9 @@ export function validTarget(
 
 /** The valid targets, in their order; the others are dropped silently. */
 export function validTargets(
-  targets: readonly PickResult[],
+  targets: readonly HighlightTarget[],
   meshOf: (body: BodyId) => MeshData | undefined,
-): readonly PickResult[] {
+): readonly HighlightTarget[] {
   return targets.filter((target) => validTarget(target, meshOf));
 }
 
@@ -59,9 +62,9 @@ export function validTargets(
  * (the selection wins over the hover).
  */
 export function drawnTargets(
-  hover: PickResult | null,
-  selection: readonly PickResult[],
-): { readonly hover: PickResult | null; readonly selection: readonly PickResult[] } {
+  hover: HighlightTarget | null,
+  selection: readonly HighlightTarget[],
+): { readonly hover: HighlightTarget | null; readonly selection: readonly HighlightTarget[] } {
   const unique = selection.filter(
     (target, i) => selection.findIndex((other) => sameTarget(other, target)) === i,
   );
