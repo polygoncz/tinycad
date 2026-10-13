@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 10
 aliases:
   - M10
@@ -14,7 +14,7 @@ depends_on:
   - "[[M04-persistence]]"
   - "[[M09-interakce]]"
 started: 2026-10-13
-finished: 
+finished: 2026-10-13
 tags:
   - milnik
 created: 2026-10-12
@@ -213,4 +213,20 @@ Vue 3 Composition API, propojení externího stavu s reaktivitou Vue (`shallowRe
 
 ## Retrospektiva
 
-_(vyplnit po dokončení)_
+_Návrh Clauda, Pavel doplní nebo upraví._
+
+**Co bylo jinak, než se čekalo**
+- Milník začal **návrhem vzhledu**, ne kódem. Tři kola mockupů (Onshape → macOS s plovoucími panely → Fusion: pevný toolbar se skupinami, Prohlížeč, Timeline, plovoucí dialog) a z nich nové pojmy [[Timeline]] a [[Prohlížeč]]. Bez toho by spec 11 popisovala UI, které Pavel nechtěl.
+- Požadavek „čeština i angličtina“ vypadal jako věc `ui`, ale sáhl až do prstence 1: popisky schémat, chyby validace, název nové featury i popisek transakce. Vzniklo [[0014-preklady-vue-i18n-a-klice|ADR 0014]] (klíče v doméně, `vue-i18n` v `ui`) a první vlna plánu byla celá doménová.
+- Implementátoři našli lepší řešení, než navrhl plán: restart jádra přes existující `viewport.bodies.reset` místo delegujícího `MeshOps`; pořadí `dispose` → `flush` v prohlížeči.
+- **Chyba v plánu, ne v kódu:** spec 11 přiřadila vestavěné akce do `app`. Implementátor ji splnil přesně a pravidla akcí skončila v prstenci 3. Odhalila to až revize architektury proti ADR 0010; oprava byla celá vlna F (`createBuiltInActions`, `createEditLock` v `interaction`).
+- Požadavek `pagehide` → `flush` byl ve spec 01 od M4, ale žádný úkol ho nevlastnil; našel ho implementátor UI.
+- Ruční průchod v prohlížeči a e2e test našly to, co 1700 unit testů nemohlo: přetékající pole (CSS grid `1fr`), chybějící přístupné názvy, zámek dokumentu držený po HMR.
+
+**Co se osvědčilo**
+- **Vlny paralelních implementátorů v git worktree** (A: 4 souběžně, B, C: 3, E, F: 2). Sloučení patchem bez konfliktů díky tomu, že plán předem přidělil sdílené soubory jednomu úkolu.
+- Rozdělení `app` na `createAppSession(deps)` (Node, fake) a `openAppSession` (prohlížeč): kompoziční kořen má 50+ testů bez prohlížeče.
+- Otázky implementátorů jako zdroj rozhodnutí: z technických chyb typecheck (např. tvar `ParamIssue` v `regen`) se staly návrhová rozhodnutí zapsaná ve spec.
+- E2E přes role a přístupné názvy (Playwright s nainstalovaným Chrome, bez stahování) zároveň hlídá přístupnost.
+
+**Výsledek:** 1723 unit testů, 2 integrační, 4 e2e; `npm run check` i `npm run build` zelené; běžící aplikace v prohlížeči.
