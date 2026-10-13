@@ -8,7 +8,7 @@ decision: "Náhodné 10 znaků base62"
 tags:
   - otazka
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 # Q002 Formát ID
 

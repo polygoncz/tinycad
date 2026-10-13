@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 1
 aliases:
   - M1
@@ -12,7 +12,7 @@ specs:
 depends_on:
   - "[[M00-zaklad-projektu]]"
 started: 2026-10-13
-finished: 
+finished: 2026-10-13
 tags:
   - milnik
 created: 2026-10-12
@@ -52,4 +52,14 @@ Branded types a pokročilé generické typy v TS (mapované typy pro `Emitter` a
 
 ## Retrospektiva
 
-_(vyplnit po dokončení)_
+**Co bylo jinak, než se čekalo**
+- Spec 02 a [[0009-platformove-nezavisla-domena|ADR 0009]] si odporovaly: `core` počítal s `console`, `crypto` a typy `MessagePort`, které v doméně bez DOM neexistují. Řešením je injekce a vlastní strukturální typy ([[Q022 Platformové typy v core|Q022]]). `Emitter` proto chyby nelogujeme, ale vyhazuje je, až doběhnou všechny handlery.
+- Pravidlo „`core` neimportuje nic“ vydrželo jeden den. Výhled na inverze, roviny a paprsky vedl k porovnání knihoven a ke gl-matrix za fasádou ([[0012-gl-matrix-za-fasadou|ADR 0012]], [[Q024 Knihovna pro vektorovou matematiku|Q024]]). Vlastní `vec3`/`mat4` z prvního průchodu nebyly zbytečné: jejich testy ověřily, že fasáda drží naše konvence.
+- Detaily TypeScriptu, které na papíře nebyly vidět: `Record<string, unknown>` neprojde s `interface` (potřeba samoreferenční omezení), `erasableSyntaxOnly` zakazuje parameter properties, `Uint8Array` je od TS 5.7 generický podle bufferu a `MessagePort.postMessage` má v přetížení povinný `transfer`.
+- `architecture-reviewer` našel dvě skutečné chyby, které testy nepokryly: zablokovanou frontu RPC serveru po nezkopírovatelném výsledku a nekonečnou smyčku generátoru ID s rozbitým zdrojem náhody. Upozornil také, že `events: Emitter` ve veřejných rozhraních prozrazuje `emit` ([[Q023 Události jen pro odběr|Q023]]).
+
+**Co se osvědčilo**
+- Test nejdřív a ověřit, že selže: odhalil i to, že na macOS neexistuje příkaz `timeout`, když „prázdný výstup“ vypadal jako úspěch.
+- Ověřovat předpoklady překladem a během, ne čtením: chybějící globály v ES2023, `readonly` n-tice proti typům knihoven, float32 vs. float64 v gl-matrix, `null`/`NaN` při singulární inverzi.
+- RPC testované přes skutečný `MessageChannel` v Node: typecheck tím zároveň dokázal, že vlastní `MessageEndpoint` sedí na skutečný port.
+- Revize architektury až na konci milníku, nad hotovým celkem.

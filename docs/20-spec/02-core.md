@@ -1,6 +1,6 @@
 ---
 type: spec
-status: draft
+status: implemented
 order: 2
 aliases:
   - core – sdílené základy
