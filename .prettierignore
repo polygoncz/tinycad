@@ -1,0 +1,9 @@
+# Obsidian vault has its own conventions (docs/00-meta/Konvence vaultu.md).
+docs/
+dist/
+coverage/
+package-lock.json
+# Hand-written notes and tooling outside the app code.
+*.md
+.claude/
+scripts/

@@ -1,0 +1,57 @@
+filters:
+  and:
+    - file.inFolder("40-plan")
+    - note.type == "milestone"
+properties:
+  note.order:
+    displayName: "#"
+  file.name:
+    displayName: Milník
+  note.status:
+    displayName: Stav
+  note.modules:
+    displayName: Moduly
+  note.depends_on:
+    displayName: Navazuje na
+  note.specs:
+    displayName: Specifikace
+  note.started:
+    displayName: Začátek
+  note.finished:
+    displayName: Konec
+views:
+  - type: table
+    name: Přehled
+    order:
+      - note.order
+      - file.name
+      - note.status
+      - note.modules
+      - note.depends_on
+      - note.started
+      - note.finished
+    sort:
+      - property: note.order
+        direction: ASC
+  - type: table
+    name: Podle stavu
+    groupBy:
+      property: note.status
+      direction: ASC
+    order:
+      - note.order
+      - file.name
+      - note.modules
+    sort:
+      - property: note.order
+        direction: ASC
+  - type: table
+    name: Rozpracované
+    filters:
+      and:
+        - note.status == "doing"
+    order:
+      - note.order
+      - file.name
+      - note.started
+      - note.specs

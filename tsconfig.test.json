@@ -1,0 +1,10 @@
+{
+  // Tests run in Node under Vitest: Node types allowed, DOM not (yet).
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    "lib": ["ES2023"],
+    "types": ["node"]
+  },
+  "include": ["src/**/*.test.ts", "tests/**/*.ts"]
+}

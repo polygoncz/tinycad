@@ -1,0 +1,32 @@
+filters:
+  and:
+    - file.inFolder("20-spec")
+    - note.type == "spec"
+properties:
+  note.order:
+    displayName: "#"
+  file.name:
+    displayName: Soubor
+  note.aliases:
+    displayName: Název
+  note.status:
+    displayName: Stav
+  note.modules:
+    displayName: Moduly
+  note.milestones:
+    displayName: Milník
+  note.updated:
+    displayName: Upraveno
+views:
+  - type: table
+    name: Specifikace
+    order:
+      - note.order
+      - file.name
+      - note.status
+      - note.modules
+      - note.milestones
+      - note.updated
+    sort:
+      - property: note.order
+        direction: ASC

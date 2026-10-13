@@ -1,0 +1,61 @@
+filters:
+  and:
+    - file.inFolder("60-otazky")
+    - note.type == "question"
+properties:
+  file.name:
+    displayName: Otázka
+  note.status:
+    displayName: Stav
+  note.area:
+    displayName: Oblast
+  note.decide_by:
+    displayName: Rozhodnout do
+  note.proposal:
+    displayName: Návrh
+views:
+  - type: table
+    name: Otevřené
+    filters:
+      and:
+        - note.status == "open"
+    order:
+      - file.name
+      - note.area
+      - note.decide_by
+      - note.proposal
+    sort:
+      - property: file.name
+        direction: ASC
+  - type: table
+    name: Podle milníku
+    filters:
+      and:
+        - note.status == "open"
+    groupBy:
+      property: note.decide_by
+      direction: ASC
+    order:
+      - file.name
+      - note.area
+      - note.proposal
+  - type: table
+    name: Všechny
+    groupBy:
+      property: note.status
+      direction: DESC
+    order:
+      - file.name
+      - note.area
+      - note.decide_by
+      - note.proposal
+  - type: table
+    name: Otázky k této poznámce
+    filters:
+      and:
+        - file.hasLink(this.file)
+    order:
+      - file.name
+      - note.status
+      - note.decide_by
+      - note.proposal

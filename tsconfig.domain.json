@@ -1,0 +1,28 @@
+{
+  // Rings 1 and 2 (ADR 0009): domain and presentation logic.
+  // No DOM lib and no ambient @types, so browser or Node globals
+  // (window, document, KeyboardEvent, process, Buffer…) fail to typecheck.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.domain.tsbuildinfo",
+    "lib": ["ES2023"],
+    "types": []
+  },
+  "include": [
+    "src/core/**/*.ts",
+    "src/document/**/*.ts",
+    "src/ops/**/*.ts",
+    "src/persistence/**/*.ts",
+    "src/kernel/**/*.ts",
+    "src/regen/**/*.ts",
+    "src/plugin-api/**/*.ts",
+    "src/features/**/*.ts",
+    "src/interaction/**/*.ts"
+  ],
+  "exclude": [
+    // Platform adapter living inside a ring-1 module.
+    "src/persistence/idb/**",
+    // Tests run in Node under Vitest; they are checked by tsconfig.test.json.
+    "src/**/*.test.ts"
+  ]
+}

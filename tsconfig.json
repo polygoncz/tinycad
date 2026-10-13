@@ -1,0 +1,10 @@
+{
+  // Solution file: `vue-tsc -b` builds all referenced projects.
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.domain.json" },
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.test.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}

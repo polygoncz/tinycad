@@ -1,0 +1,12 @@
+{
+  // Tooling configs executed by Node (Vite, Vitest).
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    // Node runs .ts configs natively and needs explicit extensions.
+    "allowImportingTsExtensions": true
+  },
+  "include": ["vite.config.ts", "vitest.config.ts"]
+}

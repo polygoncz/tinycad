@@ -1,0 +1,29 @@
+filters:
+  and:
+    - file.inFolder("70-poznatky")
+    - note.type == "insight"
+properties:
+  file.name:
+    displayName: Poznatek
+  note.status:
+    displayName: Zralost
+  note.topics:
+    displayName: Témata
+  note.created:
+    displayName: Vytvořeno
+views:
+  - type: table
+    name: Poznatky
+    order:
+      - file.name
+      - note.status
+      - note.topics
+      - note.created
+    sort:
+      - property: note.created
+        direction: DESC
+  - type: cards
+    name: Karty
+    order:
+      - file.name
+      - note.topics

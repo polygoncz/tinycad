@@ -1,0 +1,10 @@
+{
+  "useMarkdownLinks": false,
+  "newLinkFormat": "shortest",
+  "alwaysUpdateLinks": true,
+  "newFileLocation": "folder",
+  "newFileFolderPath": "01-inbox",
+  "attachmentFolderPath": "00-meta/prilohy",
+  "propertiesInDocument": "visible",
+  "showUnsupportedFiles": false
+}

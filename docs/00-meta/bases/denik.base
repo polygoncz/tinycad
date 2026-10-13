@@ -1,0 +1,42 @@
+filters:
+  and:
+    - file.inFolder("80-denik")
+    - note.type == "log"
+properties:
+  file.name:
+    displayName: Den
+  note.summary:
+    displayName: Shrnutí
+  note.milestones:
+    displayName: Milníky
+views:
+  - type: table
+    name: Poslední
+    limit: 7
+    order:
+      - file.name
+      - note.summary
+      - note.milestones
+    sort:
+      - property: file.name
+        direction: DESC
+  - type: table
+    name: Celý deník
+    order:
+      - file.name
+      - note.summary
+      - note.milestones
+    sort:
+      - property: file.name
+        direction: DESC
+  - type: table
+    name: Deník k této poznámce
+    filters:
+      and:
+        - file.hasLink(this.file)
+    order:
+      - file.name
+      - note.summary
+    sort:
+      - property: file.name
+        direction: DESC

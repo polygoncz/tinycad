@@ -1,0 +1,49 @@
+---
+type: insight
+status: seed
+aliases:
+  - Claude Code v projektu
+  - Skilly a hooky
+topics:
+  - claude code
+  - automatizace
+  - second brain
+sources:
+  - https://docs.claude.com/en/docs/claude-code/hooks
+  - https://docs.claude.com/en/docs/claude-code/skills
+tags:
+  - poznatek
+created: 2026-10-13
+updated: 2026-10-13
+---
+# Nástroje Claude Code
+
+**Shrnutí:** pravidla, která se dají zkontrolovat strojově, má hlídat hook. Postupy, které vyžadují úsudek, patří do skillu. Paměť a CLAUDE.md jsou až poslední záchrana.
+
+## Podrobnosti
+
+Claude Code nabízí několik úrovní rozšíření. Liší se tím, **kdo** je spouští a **jak spolehlivě**:
+
+| Nástroj | Kdo spouští | Spolehlivost | Na co |
+|---|---|---|---|
+| CLAUDE.md | Claude ho čte na začátku | závisí na tom, jestli si vzpomene | kontext, principy |
+| Skill (`.claude/skills/<název>/SKILL.md`) | Claude podle popisu, nebo uživatel přes `/název` | návod se načte, až je potřeba | opakované postupy s úsudkem |
+| Hook (`.claude/settings.json`) | harness při každém volání nástroje | deterministicky, vždy | kontroly a zákazy |
+| Subagent (`.claude/agents/`) | Claude, v odděleném kontextu | podle zadání | revize, rešerše |
+| Plugin / MCP server | instalace | – | balíček skillů a hooků, přístup k externím datům |
+
+Hook s návratovým kódem 2 zablokuje akci (PreToolUse), nebo vrátí chybu Claudovi k opravě (PostToolUse). Tak se z pravidla „nic nemaž“ stane zákaz místo prosby.
+
+## Jak to využívá tinycad
+
+Pravidla z [[Konvence vaultu]] jsou rozdělená takto:
+
+- **Hooky:** `scripts/vault-lint.mjs` po každé úpravě poznámky nastaví `updated` a zkontroluje frontmatter a wikilinky. `scripts/claude-guard.mjs` blokuje mazání v `docs/` a přepisování inboxu.
+- **Skilly:** `/milnik` (start a konec milníku podle [[Roadmapa|Roadmapy]]), `/zaznam` (otázka, ADR, pojem ze šablony), `/denik` a `obsidian-format` (syntaxe).
+- **Od [[M00-zaklad-projektu|M0]]:** `lint:vault` v `npm run check`, prettier a eslint jako hook, subagent na kontrolu architektury proti [[01-architektura]].
+
+Souvisí s [[Second brain v Obsidianu]]: vault je zdroj pravdy a nástroje hlídají, aby zůstal konzistentní.
+
+## Zdroje
+
+- Dokumentace Claude Code: hooks, skills (viz `sources`).

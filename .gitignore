@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+*.log
+
+# Obsidian – osobní stav okna se neverzuje
+docs/.obsidian/workspace.json
+docs/.obsidian/workspace-mobile.json
+docs/.obsidian/cache
+
+# TypeScript incremental build info, Vite cache
+*.tsbuildinfo
+.vite/
+
+# Claude Code – osobní nastavení se neverzuje
+.claude/settings.local.json

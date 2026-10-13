@@ -1,0 +1,42 @@
+filters:
+  and:
+    - file.inFolder("50-pojmy")
+    - note.type == "concept"
+properties:
+  file.name:
+    displayName: Pojem
+  note.code:
+    displayName: V kódu
+  note.module:
+    displayName: Modul
+  note.summary:
+    displayName: Shrnutí
+views:
+  - type: table
+    name: Glosář
+    order:
+      - file.name
+      - note.code
+      - note.module
+      - note.summary
+    sort:
+      - property: file.name
+        direction: ASC
+  - type: table
+    name: Podle modulu
+    groupBy:
+      property: note.module
+      direction: ASC
+    order:
+      - file.name
+      - note.code
+      - note.summary
+  - type: table
+    name: Pojmy v této poznámce
+    filters:
+      and:
+        - this.file.hasLink(file)
+    order:
+      - file.name
+      - note.code
+      - note.summary

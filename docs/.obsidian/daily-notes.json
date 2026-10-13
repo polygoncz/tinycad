@@ -1,0 +1,6 @@
+{
+  "folder": "80-denik",
+  "format": "YYYY-MM-DD",
+  "template": "00-meta/sablony/Deník",
+  "autorun": false
+}

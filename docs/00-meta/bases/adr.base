@@ -1,0 +1,39 @@
+filters:
+  and:
+    - file.inFolder("30-adr")
+    - note.type == "adr"
+properties:
+  note.number:
+    displayName: "#"
+  file.name:
+    displayName: Rozhodnutí
+  note.status:
+    displayName: Stav
+  note.date:
+    displayName: Datum
+  note.related:
+    displayName: Souvisí
+  note.supersedes:
+    displayName: Nahrazuje
+views:
+  - type: table
+    name: Všechna rozhodnutí
+    order:
+      - note.number
+      - file.name
+      - note.status
+      - note.date
+      - note.related
+      - note.supersedes
+    sort:
+      - property: note.number
+        direction: ASC
+  - type: table
+    name: Rozhodnutí k této poznámce
+    filters:
+      and:
+        - file.hasLink(this.file)
+    order:
+      - note.number
+      - file.name
+      - note.status

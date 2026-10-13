@@ -1,0 +1,30 @@
+{
+  "types": {
+    "aliases": "aliases",
+    "tags": "tags",
+    "type": "text",
+    "status": "text",
+    "created": "date",
+    "updated": "date",
+    "date": "date",
+    "started": "date",
+    "finished": "date",
+    "order": "number",
+    "number": "number",
+    "modules": "multitext",
+    "milestones": "multitext",
+    "specs": "multitext",
+    "depends_on": "multitext",
+    "related": "multitext",
+    "topics": "multitext",
+    "sources": "multitext",
+    "supersedes": "text",
+    "area": "text",
+    "decide_by": "text",
+    "proposal": "text",
+    "decision": "text",
+    "code": "text",
+    "module": "text",
+    "summary": "text"
+  }
+}

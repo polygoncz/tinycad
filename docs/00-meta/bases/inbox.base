@@ -1,0 +1,17 @@
+filters:
+  and:
+    - file.inFolder("01-inbox")
+properties:
+  file.name:
+    displayName: Poznámka
+  file.ctime:
+    displayName: Vytvořeno
+views:
+  - type: table
+    name: Ke zpracování
+    order:
+      - file.name
+      - file.ctime
+    sort:
+      - property: file.ctime
+        direction: ASC
