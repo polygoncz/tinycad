@@ -11,7 +11,7 @@ import { createFeatureEditor, createToolRegistry } from '@/interaction';
 import { createFakeKernel } from '@/kernel/testing';
 import { createOpHandlerRegistry, createOperationDispatcher, createOperationLog } from '@/ops';
 import { registerPlugin } from '@/plugin-api';
-import { createBuilderRegistry, createRegenerator } from '@/regen';
+import { bodiesOf, createBuilderRegistry, createRegenerator } from '@/regen';
 
 function setup() {
   const kernel = createFakeKernel();
@@ -34,13 +34,13 @@ function setup() {
     translate: (key) => boxPlugin.messages?.en[key] ?? key,
   });
 
-  /** Regenerates the current document; per body its creator and bounding box. */
+  /** Regenerates the current document; per body its origin and bounding box. */
   async function regenerate() {
     const result = await regenerator.run(doc.studio);
     if (result === 'superseded') expect.fail('Unexpected superseded run');
     return Promise.all(
-      [...result.finalState.bodies.values()].map(async (body) => ({
-        createdBy: body.createdBy,
+      bodiesOf(result.finalState).map(async (body) => ({
+        origin: body.origin,
         box: await kernel.boundingBox(body.shape),
       })),
     );
@@ -55,12 +55,12 @@ describe('feature dialog with the box plugin', () => {
 
     const session = editor.create('box');
     expect(await regenerate()).toEqual([
-      { createdBy: session.featureId, box: { min: [0, 0, 0], max: [10, 10, 10] } },
+      { origin: session.featureId, box: { min: [0, 0, 0], max: [10, 10, 10] } },
     ]);
 
     session.setParam('height', 25);
     expect(await regenerate()).toEqual([
-      { createdBy: session.featureId, box: { min: [0, 0, 0], max: [10, 10, 25] } },
+      { origin: session.featureId, box: { min: [0, 0, 0], max: [10, 10, 25] } },
     ]);
     expect(log.entries()).toEqual([]);
 
@@ -68,7 +68,7 @@ describe('feature dialog with the box plugin', () => {
     expect(log.entries()).toHaveLength(1);
     expect(doc.studio.features.map((f) => f.name)).toEqual(['Box 1']);
     expect(await regenerate()).toEqual([
-      { createdBy: session.featureId, box: { min: [0, 0, 0], max: [10, 10, 25] } },
+      { origin: session.featureId, box: { min: [0, 0, 0], max: [10, 10, 25] } },
     ]);
   });
 

@@ -11,7 +11,7 @@ import { kernelErrorCode } from '@/kernel';
 import type { GeometryKernel, ShapeHandle } from '@/kernel';
 import { createBuildSession } from './build-context';
 import type { BuilderRegistry, BuildOutput } from './builder';
-import { EMPTY_STATE } from './state';
+import { EMPTY_STATE, bodiesOf } from './state';
 import type { FeatureError, FeatureStatus, RegenState } from './state';
 
 // Replays the features of a part studio through the kernel (spec 07, Regenerator) with a cache
@@ -79,7 +79,7 @@ export function createRegenerator(deps: {
     if (lostKernel !== undefined) throw lostKernel;
   }
 
-  /** Output state and status of one feature in front of the rollback bar (steps 2–6). */
+  /** Output state and status of one feature in front of the rollback bar (steps 2–7). */
   async function build(feature: FeatureInstance, input: RegenState): Promise<CacheEntry> {
     const passThrough = (status: FeatureStatus): CacheEntry => ({ feature, state: input, status });
     // A copy, so freezing it does not touch the object the builder returned.
@@ -95,6 +95,17 @@ export function createRegenerator(deps: {
       return failed({
         code: 'UNKNOWN_TYPE',
         message: `No feature ${missing} for type '${feature.type}'`,
+      });
+    }
+
+    // A guard for data that missed migration (fromData, apply of ops): the builder and validate
+    // expect the params of the current schema version.
+    if (feature.typeVersion !== schema.version) {
+      return failed({
+        code: 'STALE_VERSION',
+        message:
+          `Feature of type '${feature.type}' has data version ${String(feature.typeVersion)}, ` +
+          `the schema is version ${String(schema.version)}`,
       });
     }
 
@@ -136,14 +147,15 @@ export function createRegenerator(deps: {
   }
 
   /**
-   * Mark & sweep (spec 07, Životnost handle): live = handles of all states in the cache, every
-   * other owned handle is released in one release call. Failures of release by code (Q040).
+   * Mark & sweep (spec 07, Životnost handle): live = handles of the body artifacts of all states
+   * in the cache, every other owned handle is released in one release call. Failures of release
+   * by code (Q040).
    */
   async function sweep(): Promise<void> {
     // A dead kernel has nothing to release to (Q049).
     assertKernelAlive();
     const live = new Set<ShapeHandle>();
-    for (const entry of cache) for (const body of entry.state.bodies.values()) live.add(body.shape);
+    for (const entry of cache) for (const body of bodiesOf(entry.state)) live.add(body.shape);
     const dead = [...owned].filter((h) => !live.has(h));
     if (dead.length === 0) return;
     // Out of the owned set before the await: when a newer run sweeps while this release is

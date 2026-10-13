@@ -7,6 +7,7 @@ describe('regen public API', () => {
     expect(Object.keys(regen).sort()).toEqual([
       'EMPTY_NAMES',
       'EMPTY_STATE',
+      'bodiesOf',
       'createBuilderRegistry',
       'createRegenerator',
     ]);

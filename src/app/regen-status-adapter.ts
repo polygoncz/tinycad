@@ -1,10 +1,11 @@
 // Adapter of RegenStatusPort (spec 10, "Port stavu regenerace"): interaction must not know regen,
 // so app turns every RegenResult into a RegenSnapshot – health of the evaluated features, the
-// bodies of the final state and its own generation counter.
+// bodies of the final state (only artifacts of kind body until M12) and its own generation counter.
 
 import { ObservableValue } from '@/core';
 import type { FeatureId } from '@/document';
 import type { FeatureHealth, RegenBody, RegenSnapshot, RegenStatusPort } from '@/interaction';
+import { bodiesOf } from '@/regen';
 import type { FeatureStatus, RegenResult } from '@/regen';
 
 export interface RegenStatusAdapter extends RegenStatusPort {
@@ -29,10 +30,9 @@ export function createRegenStatusAdapter(): RegenStatusAdapter {
         const h = toHealth(status);
         if (h !== undefined) health.set(id, h);
       }
+      // The feature of a body is its origin, the one that minted the id (ADR 0015).
       const bodies: readonly RegenBody[] = Object.freeze(
-        [...result.finalState.bodies.values()].map((b) =>
-          Object.freeze({ body: b.id, feature: b.createdBy }),
-        ),
+        bodiesOf(result.finalState).map((b) => Object.freeze({ body: b.id, feature: b.origin })),
       );
       // Generation of the port, not of the Regenerator: a restarted kernel brings a new
       // Regenerator that counts from 1 again, the port must keep growing (spec 10).

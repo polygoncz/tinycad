@@ -1,8 +1,8 @@
 // The browser (spec 10, "Prohlížeč"): a presentation model over the bodies of the last
 // regeneration and the selection. Visibility is view state (Q071): it is not stored, does not
 // go through the dispatcher or undo, and a body that disappears after a regeneration drops
-// out of the hidden set. Until M14 bodies have no stable identity, so a hidden BodyId may
-// carry over to another body after a history change; a known limitation.
+// out of the hidden set. Since ADR 0015 a BodyId is a lineage (origin feature), so it survives a
+// history change; storing visibility in the document is for M11 (body metadata, Q071).
 
 import { ObservableValue } from '@/core';
 import type { Observable, Unsubscribe } from '@/core';

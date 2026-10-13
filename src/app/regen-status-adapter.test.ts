@@ -1,26 +1,36 @@
 import { describe, expect, it } from 'vitest';
+import { bodyId } from '@/document';
 import type { BodyId, FeatureId } from '@/document';
 import type { ShapeHandle } from '@/kernel';
 import { EMPTY_NAMES } from '@/regen';
-import type { Body, FeatureStatus, RegenResult } from '@/regen';
+import type { Artifact, Body, FeatureStatus, RegenResult } from '@/regen';
+import { aForeignArtifact } from '@/regen/testing';
 import { createRegenStatusAdapter } from './regen-status-adapter';
 
-// Branded ids are created by a cast at one place in tests.
+// Branded ids are created by a cast at one place in tests; body ids by bodyId (ADR 0015).
 const fid = (s: string): FeatureId => s as FeatureId;
-const bid = (s: string): BodyId => s as BodyId;
+const bid = (origin: string): BodyId => bodyId(fid(origin));
 const handle = (n: number): ShapeHandle => n as ShapeHandle;
 
-function aBody(id: string, feature: string, shape: number): Body {
-  return { id: bid(id), shape: handle(shape), createdBy: fid(feature), names: EMPTY_NAMES };
+/** The body minted by `origin`, last modified by `lastModifiedBy` (by default its origin). */
+function aBody(origin: string, shape: number, lastModifiedBy = origin): Body {
+  return {
+    kind: 'body',
+    id: bid(origin),
+    origin: fid(origin),
+    lastModifiedBy: fid(lastModifiedBy),
+    shape: handle(shape),
+    names: EMPTY_NAMES,
+  };
 }
 
 function aResult(
   statuses: readonly (readonly [string, FeatureStatus])[],
-  bodies: readonly Body[] = [],
+  artifacts: readonly Artifact[] = [],
 ): RegenResult {
   return {
     generation: 7,
-    finalState: { bodies: new Map(bodies.map((b) => [b.id, b])) },
+    finalState: { artifacts: new Map(artifacts.map((a) => [a.id, a])) },
     statuses: new Map(statuses.map(([id, s]) => [fid(id), s])),
     durationMs: 3,
   };
@@ -78,13 +88,25 @@ describe('RegenStatusAdapter', () => {
           ['a', { kind: 'ok' }],
           ['b', { kind: 'ok' }],
         ],
-        [aBody('b/body', 'b', 2), aBody('a/body', 'a', 1)],
+        [aBody('b', 2), aBody('a', 1)],
       ),
     );
     expect(adapter.state.get().bodies).toEqual([
-      { body: bid('b/body'), feature: fid('b') },
-      { body: bid('a/body'), feature: fid('a') },
+      { body: bid('b'), feature: fid('b') },
+      { body: bid('a'), feature: fid('a') },
     ]);
+  });
+
+  it('the feature of a body is its origin, not the feature that modified it last', () => {
+    const adapter = createRegenStatusAdapter();
+    adapter.publish(aResult([['a', { kind: 'ok' }]], [aBody('a', 1, 'm')]));
+    expect(adapter.state.get().bodies).toEqual([{ body: bid('a'), feature: fid('a') }]);
+  });
+
+  it('leaves out artifacts that are not bodies', () => {
+    const adapter = createRegenStatusAdapter();
+    adapter.publish(aResult([], [aBody('a', 1), aForeignArtifact('s/sketch'), aBody('b', 2)]));
+    expect(adapter.state.get().bodies.map((b) => b.body)).toEqual([bid('a'), bid('b')]);
   });
 
   it('grows the generation by one with every published result, whatever the Regenerator counts', () => {
@@ -96,9 +118,9 @@ describe('RegenStatusAdapter', () => {
 
   it('publishes a frozen snapshot with a new health map each time', () => {
     const adapter = createRegenStatusAdapter();
-    adapter.publish(aResult([['a', { kind: 'ok' }]], [aBody('a/body', 'a', 1)]));
+    adapter.publish(aResult([['a', { kind: 'ok' }]], [aBody('a', 1)]));
     const first = adapter.state.get();
-    adapter.publish(aResult([['a', { kind: 'ok' }]], [aBody('a/body', 'a', 1)]));
+    adapter.publish(aResult([['a', { kind: 'ok' }]], [aBody('a', 1)]));
     const second = adapter.state.get();
     expect(Object.isFrozen(second)).toBe(true);
     expect(Object.isFrozen(second.bodies)).toBe(true);

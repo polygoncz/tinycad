@@ -28,7 +28,10 @@ export type ModelingKernel = PrimitiveOps & QueryOps;
 export interface BuildContext {
   /** Tracked kernel: every returned handle belongs to the Regenerator (Q041). */
   readonly kernel: ModelingKernel;
-  /** Bodies of the input state; the first unresolved reference gives err (Q044). */
+  /**
+   * Bodies of the input state (artifacts of kind body; another kind under the id gives err);
+   * the first unresolved reference gives err (Q044).
+   */
   resolveBodies(refs: readonly BodyRef[]): Result<Body[], RefError>;
   /** Several calls are joined with '\n' into one 'warning' status (Q045). */
   warn(message: string): void;
@@ -39,9 +42,12 @@ export type BuildOutput =
   | { readonly ok: false; readonly error: FeatureError };
 
 /**
- * Rules (spec 07): never mutate the input state, return a new one; never release handles;
- * create every shape through ctx.kernel; return expected failures as { ok: false }
- * (an unresolved reference as UNRESOLVED_REFERENCE). Params are already validated.
+ * Rules (spec 07): never mutate the input state, return a new one; keep the identity of
+ * artifacts (ADR 0015: a created body gets bodyId(feature.id) with origin and lastModifiedBy
+ * the feature, a changed body keeps id, origin and names and gets lastModifiedBy, a consumed
+ * body leaves the map); never release handles; create every shape through ctx.kernel; return
+ * expected failures as { ok: false } (an unresolved reference as UNRESOLVED_REFERENCE).
+ * Params are already validated.
  */
 export interface FeatureBuilder<P = unknown> {
   /** Registry key, same as FeatureSchema.type. */

@@ -5,6 +5,7 @@ import { aFeature } from '@/document/testing';
 import type { DefaultParams } from '@/document/testing';
 import type { FeatureBuilder } from './builder';
 import type { RegenResult } from './regenerator';
+import { bodiesOf } from './state';
 import { aRegenSetup, aSchema, aSpyBuilder, validateSize } from './testing';
 import type { RegenSetup } from './testing';
 
@@ -113,11 +114,12 @@ async function runOk(setup: RegenSetup, studio: PartStudioData): Promise<RegenRe
 }
 
 /** Body ids with their bounding boxes, read through the kernel that owns the handles. */
-async function bodiesOf(setup: RegenSetup, r: RegenResult) {
+async function bodySummary(setup: RegenSetup, r: RegenResult) {
   return Promise.all(
-    [...r.finalState.bodies.values()].map(async (b) => ({
+    bodiesOf(r.finalState).map(async (b) => ({
       id: b.id,
-      createdBy: b.createdBy,
+      origin: b.origin,
+      lastModifiedBy: b.lastModifiedBy,
       box: await setup.kernel.boundingBox(b.shape),
     })),
   );
@@ -140,8 +142,8 @@ describe('Regenerator (property)', () => {
           const fromScratch = await runOk(scratchSetup, studio);
 
           expect([...withCache.statuses]).toEqual([...fromScratch.statuses]);
-          expect(await bodiesOf(cachedSetup, withCache)).toEqual(
-            await bodiesOf(scratchSetup, fromScratch),
+          expect(await bodySummary(cachedSetup, withCache)).toEqual(
+            await bodySummary(scratchSetup, fromScratch),
           );
 
           cached = cachedAfter(cached, studio);

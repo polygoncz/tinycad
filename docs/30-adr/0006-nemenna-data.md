@@ -13,7 +13,7 @@ supersedes:
 tags:
   - adr
 created: 2026-10-12
-updated: 2026-10-13
+updated: 2026-10-14
 ---
 # 0006 – Neměnná doménová data, cache regenerace podle identity
 
@@ -49,3 +49,5 @@ Zároveň snapshot pro ukládání musí být konzistentní, i když se zapisuje
 - + Vue nemůže nic omylem změnit (ale pozor na proxy – viz [[0001-jadro-v-cistem-ts|ADR 0001]]).
 - − Víc alokací (zanedbatelné u desítek až stovek featur).
 - − Je potřeba disciplína: nikdy nemutovat, vždy kopírovat.
+
+> **Dodatek (2026-10-14, [[M10.1-zpevneni-kostry|M10.1]]):** cache podle identity předpokládá, že **všechny vstupy featury jsou v její `FeatureInstance`** (parametry a reference) a ve výstupu featur před ní. Vstup mimo seznam featur, například proměnné dokumentu ([[Q003 Proměnné a výrazy v parametrech|Q003]]) nebo jednotky, identitu žádné featury nezmění a cache by vrátila zastaralý výsledek. Takový vstup musí regenerace dostat výslovně a invalidovat podle něj: buď zahodit cache při změně identity vstupu, nebo přes graf závislostí ([[03-dokument#Id těles a závislosti|`dependenciesOf`]]) najít první featuru, která vstup používá.

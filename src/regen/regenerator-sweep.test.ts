@@ -12,8 +12,10 @@ import { createBuilderRegistry } from './builder';
 import type { FeatureBuilder } from './builder';
 import { createRegenerator } from './regenerator';
 import type { RegenResult, Regenerator } from './regenerator';
+import { bodiesOf } from './state';
 import type { RegenState } from './state';
 import {
+  aForeignArtifact,
   aGatedBuild,
   aRegenSetup,
   aSchema,
@@ -32,7 +34,7 @@ import type { Deferred, RegenSetup } from './testing';
 
 /** Handles of the bodies of a state. */
 function handlesOf(state: RegenState): ShapeHandle[] {
-  return [...state.bodies.values()].map((b) => b.shape);
+  return bodiesOf(state).map((b) => b.shape);
 }
 
 /** A build that creates an intermediate box and then fails as an expected feature error. */
@@ -132,6 +134,25 @@ describe('Regenerator mark & sweep', () => {
     await runOk(regenerator, aStudio(list, 1));
     expect(kernel.callCount('release')).toBe(0);
     expect(await kernel.liveHandleCount()).toBe(3);
+  });
+
+  it('marks only the shapes of body artifacts; an artifact of another kind is skipped', async () => {
+    const setup = aRegenSetup();
+    const { regenerator, kernel } = setup;
+    const other = aForeignArtifact('m/sketch');
+    registerType(setup, 'mark', ({ state }) =>
+      Promise.resolve({
+        ok: true,
+        state: { artifacts: new Map(state.artifacts).set(other.id, other) },
+      }),
+    );
+    const list = [aFeature({ id: 'a' }), aFeature({ id: 'm', type: 'mark' })];
+    await runOk(regenerator, aStudio(list));
+    const r = await runOk(regenerator, aStudio([aFeature({ id: 'b' }), ...list]));
+    expect([...r.finalState.artifacts.keys()]).toEqual(['b/body', 'a/body', 'm/sketch']);
+    // The old body of a died with the insertion in front of it; the new bodies stay.
+    expect(kernel.callCount('release')).toBe(1);
+    expect(await kernel.liveHandleCount()).toBe(2);
   });
 
   it('a builder that creates an intermediate shape and fails leaks nothing', async () => {

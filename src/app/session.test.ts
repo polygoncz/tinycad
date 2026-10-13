@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
-import { createDocument } from '@/document';
+import { bodyId, createDocument } from '@/document';
 import type { DocumentId } from '@/document';
 import { boxPlugin } from '@/features/box';
 import type { ViewKeyEvent } from '@/interaction';
@@ -8,6 +8,8 @@ import { createMemoryDocumentStore, createSnapshot } from '@/persistence';
 import type { DocumentStore } from '@/persistence';
 import { createManualScheduler } from '@/persistence/testing';
 import type { ManualScheduler } from '@/persistence/testing';
+import type { FeaturePlugin } from '@/plugin-api';
+import { aForeignArtifact, aSchema, aSpyBuilder } from '@/regen/testing';
 import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
 import { createAppSession } from './index';
 import { RESTART_WINDOW_MS } from './kernel-supervisor';
@@ -68,6 +70,21 @@ async function open(
     },
   };
 }
+
+/**
+ * A plugin whose feature leaves an artifact that is not a body. M12 brings the first such kind
+ * (the sketch); until then the artifact is faked.
+ */
+const markPlugin: FeaturePlugin = {
+  schema: aSchema('mark'),
+  builder: aSpyBuilder('mark', ({ feature, state }) => {
+    const mark = aForeignArtifact(`${feature.id}/sketch`);
+    return Promise.resolve({
+      ok: true,
+      state: { artifacts: new Map(state.artifacts).set(mark.id, mark) },
+    });
+  }),
+};
 
 /** Creates a box through the dialog with the given height and commits it. */
 function addBox(session: AppSession, height = 10): void {
@@ -181,6 +198,27 @@ describe('createAppSession – changes', () => {
     expect(regen.lastMs).not.toBeNull();
     expect(session.browser.bodies.get()).toHaveLength(1);
     expect(session.featureTree.rows.get()[0]?.status).toBe('ok');
+  });
+
+  it('the browser lists a body with its origin as the feature that made it', async () => {
+    const { session } = await open();
+    addBox(session);
+    await settle();
+    const id = session.doc.studio.features[0]?.id ?? fail();
+    expect(session.browser.bodies.get().map(({ body, feature }) => ({ body, feature }))).toEqual([
+      { body: bodyId(id), feature: id },
+    ]);
+  });
+
+  it('only bodies reach bodyCount, the viewport and the browser; other artifacts do not', async () => {
+    const { session, viewport } = await open({ plugins: [boxPlugin, markPlugin] });
+    addBox(session);
+    session.features.create('mark').commit();
+    await settle();
+    const box = session.doc.studio.features[0]?.id ?? fail();
+    expect(session.regen.get()).toMatchObject({ bodyCount: 1, errorCount: 0 });
+    expect(viewport.lastSync.map((b) => b.id)).toEqual([bodyId(box)]);
+    expect(session.browser.bodies.get().map((r) => r.body)).toEqual([bodyId(box)]);
   });
 
   it('ten quick changes regenerate at most twice', async () => {

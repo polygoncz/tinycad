@@ -1,24 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import type { FeatureInstance, PartStudioData } from '@/document';
+import { bodyId, createFeatureSchemaRegistry } from '@/document';
+import type { FeatureId, FeatureInstance, ParamIssue, PartStudioData } from '@/document';
 import { aFeature } from '@/document/testing';
 import { createFakeKernel } from '@/kernel/testing';
 import { createBuilderRegistry } from './builder';
 import type { FeatureBuilder } from './builder';
 import { createRegenerator } from './regenerator';
 import type { RegenResult } from './regenerator';
-import { EMPTY_STATE } from './state';
+import { EMPTY_STATE, bodiesOf } from './state';
 import type { FeatureError, FeatureStatus } from './state';
 import {
   aRegenSetup,
   aSchema,
   aSpyBuilder,
   aStudio,
-  bodyIdOf,
   buildCube,
   features,
   stoppedClock,
 } from './testing';
-import { createFeatureSchemaRegistry } from '@/document';
 
 const OK: FeatureStatus = { kind: 'ok' };
 
@@ -37,8 +36,17 @@ function setup(opts: { now?: () => number } = {}) {
   return { ...s, run: (studio: PartStudioData) => regen((x) => s.regenerator.run(x), studio) };
 }
 
+/** Ids of the bodies of the final state, in map order. */
 function bodyIds(result: RegenResult): string[] {
-  return [...result.finalState.bodies.keys()];
+  return bodiesOf(result.finalState).map((b) => b.id);
+}
+
+// Feature ids are created by a cast in tests only.
+const fid = (s: string): FeatureId => s as FeatureId;
+
+/** aSchema of `type` in version 2; its migrate is never reached by the Regenerator. */
+function aSchemaV2(type: string, validate?: (params: unknown) => readonly ParamIssue[]) {
+  return { ...aSchema(type, validate), version: 2, migrate: (_from: number, raw: unknown) => raw };
 }
 
 /** Replaces the feature at index i by a copy with the given overrides (new identity). */
@@ -69,7 +77,7 @@ describe('Regenerator.run', () => {
       const { run, box } = setup();
       await run(aStudio(features(2)));
       expect(box.calls[0]?.state).toBe(EMPTY_STATE);
-      expect([...(box.calls[1]?.state.bodies.keys() ?? [])]).toEqual(['f1/body']);
+      expect([...(box.calls[1]?.state.artifacts.keys() ?? [])]).toEqual(['f1/body']);
     });
 
     it('an empty studio gives EMPTY_STATE and no statuses', async () => {
@@ -149,8 +157,8 @@ describe('Regenerator.run', () => {
       const first = await run(aStudio(list));
       await run(aStudio(withChanged(list, 1, { params: { size: 2 } })));
       const input = box.calls[3]?.state;
-      expect(input?.bodies.get(bodyIdOf(list[0]?.id ?? never()))).toBe(
-        first.finalState.bodies.get(bodyIdOf(list[0]?.id ?? never())),
+      expect(input?.artifacts.get(bodyId(list[0]?.id ?? never()))).toBe(
+        first.finalState.artifacts.get(bodyId(list[0]?.id ?? never())),
       );
     });
   });
@@ -355,6 +363,76 @@ describe('Regenerator.run', () => {
       expect(bodyIds(result)).toEqual(['b/body']);
     });
 
+    it('data of another version than the schema give STALE_VERSION, skip the builder and pass the state through', async () => {
+      const { run, box } = setup();
+      const list = [
+        aFeature({ id: 'a' }),
+        aFeature({ id: 'b', typeVersion: 3 }),
+        aFeature({ id: 'c' }),
+      ];
+      const result = await run(aStudio(list));
+      expect(box.builtIds()).toEqual(['a', 'c']);
+      expect(result.statuses.get(fid('b'))).toEqual({
+        kind: 'error',
+        error: { code: 'STALE_VERSION', message: expect.any(String) as unknown },
+      });
+      expect(result.statuses.get(fid('c'))).toEqual(OK);
+      expect(bodyIds(result)).toEqual(['a/body', 'c/body']);
+    });
+
+    it('STALE_VERSION carries both versions in the message, older data included', async () => {
+      const { run, schemas, builders } = setup();
+      const v2 = aSpyBuilder('v2');
+      builders.register(v2);
+      schemas.register(aSchemaV2('v2'));
+      const result = await run(aStudio([aFeature({ id: 'a', type: 'v2', typeVersion: 1 })]));
+      expect(v2.calls).toHaveLength(0);
+      const status = result.statuses.get(fid('a'));
+      if (status?.kind !== 'error') expect.fail('Expected an error status');
+      expect(status.error.code).toBe('STALE_VERSION');
+      expect(status.error.message).toMatch(/\b1\b/);
+      expect(status.error.message).toMatch(/\b2\b/);
+      expect(result.finalState).toBe(EMPTY_STATE);
+    });
+
+    it('STALE_VERSION comes before validation: the schema does not validate stale params', async () => {
+      const { run, schemas, builders } = setup();
+      let validated = 0;
+      builders.register(aSpyBuilder('v2'));
+      schemas.register(
+        aSchemaV2('v2', () => {
+          validated++;
+          return [];
+        }),
+      );
+      const result = await run(
+        aStudio([aFeature({ id: 'a', type: 'v2', typeVersion: 1, params: { size: 0 } })]),
+      );
+      expect(validated).toBe(0);
+      expect(result.statuses.get(fid('a'))).toMatchObject({
+        kind: 'error',
+        error: { code: 'STALE_VERSION' },
+      });
+    });
+
+    it('UNKNOWN_TYPE comes before STALE_VERSION', async () => {
+      const { run } = setup();
+      const result = await run(aStudio([aFeature({ id: 'a', type: 'unknown', typeVersion: 7 })]));
+      expect(result.statuses.get(fid('a'))).toMatchObject({
+        kind: 'error',
+        error: { code: 'UNKNOWN_TYPE' },
+      });
+    });
+
+    it('a suppressed feature of a stale version stays suppressed', async () => {
+      const { run, box } = setup();
+      const result = await run(
+        aStudio([aFeature({ id: 'a', typeVersion: 2, suppressed: true }), aFeature({ id: 'b' })]),
+      );
+      expect(box.builtIds()).toEqual(['b']);
+      expect([...result.statuses.values()]).toEqual([{ kind: 'suppressed' }, OK]);
+    });
+
     it('a suppressed feature passes the state through without building or validating', async () => {
       const { run, box } = setup();
       const list = [
@@ -371,7 +449,7 @@ describe('Regenerator.run', () => {
         { kind: 'suppressed' },
         OK,
       ]);
-      expect([...(box.calls[1]?.state.bodies.keys() ?? [])]).toEqual(['a/body']);
+      expect([...(box.calls[1]?.state.artifacts.keys() ?? [])]).toEqual(['a/body']);
       expect(bodyIds(result)).toEqual(['a/body', 'd/body']);
     });
 
@@ -531,10 +609,11 @@ describe('Regenerator.run', () => {
           aFeature({ id: 'kernel', type: 'kernelFails' }),
           aFeature({ id: 'invalid', params: { size: 0 } }),
           aFeature({ id: 'unknown', type: 'unknown' }),
+          aFeature({ id: 'stale', typeVersion: 2 }),
           aFeature({ id: 'suppressed', suppressed: true }),
           aFeature({ id: 'rolledBack' }),
         ],
-        7,
+        8,
       );
       return { ...s, studio, builderError };
     }

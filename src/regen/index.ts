@@ -1,8 +1,16 @@
 // Ring 1 – Regenerator, FeatureBuilder, regeneration state and cache.
 // Public API of regen (spec 07). Everything else in this folder is internal.
 
-export { EMPTY_NAMES, EMPTY_STATE } from './state';
-export type { Body, FeatureError, FeatureStatus, NameTable, RegenState } from './state';
+export { EMPTY_NAMES, EMPTY_STATE, bodiesOf } from './state';
+export type {
+  Artifact,
+  ArtifactId,
+  Body,
+  FeatureError,
+  FeatureStatus,
+  NameTable,
+  RegenState,
+} from './state';
 export { createBuilderRegistry } from './builder';
 export type {
   BuildContext,

@@ -144,7 +144,7 @@ Status featury určí `Regenerator` v tomto pořadí:
 
 `pending` Regenerator nevrací, používá ho UI před první regenerací.
 
-Regenerator předpokládá, že parametry jsou ve verzi aktuálního schématu – migraci (`typeVersion` → `schema.version`) dělá `fromData` při načtení ([[03-dokument]]).
+Regenerator předpokládá, že parametry jsou ve verzi aktuálního schématu – migraci (`typeVersion` → `schema.version`) dělá `fromData` při načtení ([[03-dokument]]) a handlery operací při `apply` ([[04-operace-a-historie#Migrace dat featur]]); co migraci obešlo, chytí krok 4 (`STALE_VERSION`).
 
 Když builder (nebo jiné volání jádra) odmítne s `RpcError` `'disconnected'`, jádro zaniklo i se všemi handle ([[Q049 Pád jádra během regenerace|Q049]]): featura nedostane status, `run` odmítne s touto chybou a regen hned – bez volání `release` – vyprázdní cache i vlastněnou množinu a přejde do stavu **mrtvý**: běžící i každý další `run` odmítne původní chybou `'disconnected'` (i běh, který jádro vůbec nevolá a vše bere z cache). Ochranou je tento příznak, ne pořadí zápisů: mrtvý Regenerator cache už nikdy nečte. Mrtvý `run` odmítne hned, bez zvýšení generace a bez `started`. Zotavení řeší `app`: nové jádro a nový Regenerator.
 
@@ -208,7 +208,7 @@ Posun rollback baru dopředu tak přepočítá jen nově zahrnuté featury, posu
 
 Stavy sdílejí handle (těleso, které featura nezměnila, prochází dál se stejným handle). Počítání referencí by bylo křehké, proto:
 
-1. Po každé dokončené regeneraci se projdou všechny stavy v cache a posbírá se množina **živých** handle (handle artefaktů druhu `body`).
+1. Po každé dokončené regeneraci se projdou všechny stavy v cache a posbírá se množina **živých** handle (handle artefaktů druhu `body`). Artefakt jiného druhu s vlastním tvarem (skica v M12) pravidlo rozšíří; hlídá ho test sweepu.
 2. Všechny handle, které Regenerator kdy dostal od jádra a nejsou živé, se uvolní (`kernel.release`).
 3. Handle vytvořené v rámci zahozené (superseded) generace se uvolní nejpozději při sweepu prvního dokončeného běhu, který začne po jejich vytvoření (build nahrazeného běhu může doběhnout až po sweepu generace, která ho nahradila).
 

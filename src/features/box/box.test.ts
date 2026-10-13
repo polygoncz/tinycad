@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ObservableValue, createSequentialIdGenerator } from '@/core';
-import { createFeatureSchemaRegistry } from '@/document';
-import type { BodyId, FeatureId, FeatureInstance } from '@/document';
+import { bodyId, createFeatureSchemaRegistry } from '@/document';
+import type { FeatureId, FeatureInstance } from '@/document';
 import { aFeature } from '@/document/testing';
 import {
   SELECT_TOOL,
@@ -14,7 +14,13 @@ import { FakeRegenStatus, FakeViewport } from '@/interaction/testing';
 import { createFakeKernel } from '@/kernel/testing';
 import { anOpsSession } from '@/ops/testing';
 import { registerPlugin } from '@/plugin-api';
-import { EMPTY_NAMES, EMPTY_STATE, createBuilderRegistry, createRegenerator } from '@/regen';
+import {
+  EMPTY_NAMES,
+  EMPTY_STATE,
+  bodiesOf,
+  createBuilderRegistry,
+  createRegenerator,
+} from '@/regen';
 import type { Body, RegenState } from '@/regen';
 import { aBuildContext, stoppedClock } from '@/regen/testing';
 import { boxBuilder } from './builder';
@@ -194,37 +200,46 @@ describe('boxMessages', () => {
 });
 
 describe('boxBuilder', () => {
-  it('adds one body named <featureId>/body, created by the feature', async () => {
-    const state = await build(aBox('b1'));
-    expect([...state.bodies.keys()]).toEqual(['b1/body']);
-    const body = state.bodies.get('b1/body' as BodyId);
-    expect(body).toMatchObject({ id: 'b1/body', createdBy: 'b1', names: EMPTY_NAMES });
+  it('adds one body bodyId(feature), created and last modified by the feature (ADR 0015)', async () => {
+    const feature = aBox('b1');
+    const state = await build(feature);
+    const id = bodyId(feature.id);
+    expect([...state.artifacts.keys()]).toEqual([id]);
+    expect(state.artifacts.get(id)).toMatchObject({
+      kind: 'body',
+      id: 'b1/body',
+      origin: 'b1',
+      lastModifiedBy: 'b1',
+      names: EMPTY_NAMES,
+    });
   });
 
   it('makes a box spanning origin + size', async () => {
     const kernel = createFakeKernel();
     const feature = aBox('b1', { origin: [1, 2, 3], width: 4, depth: 5, height: 6 });
     const state = await build(feature, EMPTY_STATE, kernel);
-    const body = state.bodies.get('b1/body' as BodyId);
+    const body = state.artifacts.get(bodyId(feature.id));
     if (body === undefined) expect.fail('No body');
     expect(await kernel.boundingBox(body.shape)).toEqual({ min: [1, 2, 3], max: [5, 7, 9] });
   });
 
-  it('keeps the bodies of the input state and does not change it', async () => {
+  it('keeps the artifacts of the input state and does not change it', async () => {
     const kernel = createFakeKernel();
-    const first = await build(aBox('b1'), EMPTY_STATE, kernel);
-    const firstBody = first.bodies.get('b1/body' as BodyId);
+    const b1 = aBox('b1');
+    const first = await build(b1, EMPTY_STATE, kernel);
+    const firstBody = first.artifacts.get(bodyId(b1.id));
     const second = await build(aBox('b2'), first, kernel);
-    expect([...first.bodies.keys()]).toEqual(['b1/body']);
-    expect([...second.bodies.keys()]).toEqual(['b1/body', 'b2/body']);
-    expect(second.bodies.get('b1/body' as BodyId)).toBe(firstBody);
-    expect(EMPTY_STATE.bodies.size).toBe(0);
+    expect([...first.artifacts.keys()]).toEqual(['b1/body']);
+    expect([...second.artifacts.keys()]).toEqual(['b1/body', 'b2/body']);
+    expect(second.artifacts.get(bodyId(b1.id))).toBe(firstBody);
+    expect(EMPTY_STATE.artifacts.size).toBe(0);
   });
 
   it('freezes the output state and the new body', async () => {
-    const state = await build(aBox('b1'));
+    const feature = aBox('b1');
+    const state = await build(feature);
     expect(Object.isFrozen(state)).toBe(true);
-    expect(Object.isFrozen(state.bodies.get('b1/body' as BodyId))).toBe(true);
+    expect(Object.isFrozen(state.artifacts.get(bodyId(feature.id)))).toBe(true);
   });
 });
 
@@ -240,10 +255,10 @@ describe('box plugin in the Regenerator', () => {
     const result = await regenerator.run({ features, rollbackIndex: features.length });
 
     if (result === 'superseded') expect.fail('Unexpected superseded run');
-    const bodies: Body[] = [...result.finalState.bodies.values()];
-    expect(bodies.map((b) => [b.id, b.createdBy])).toEqual([
-      ['b1/body', 'b1'],
-      ['b2/body', 'b2'],
+    const bodies: readonly Body[] = bodiesOf(result.finalState);
+    expect(bodies.map((b) => [b.id, b.origin, b.lastModifiedBy])).toEqual([
+      ['b1/body', 'b1', 'b1'],
+      ['b2/body', 'b2', 'b2'],
     ]);
     expect([...result.statuses]).toEqual([
       ['b1' as FeatureId, { kind: 'ok' }],

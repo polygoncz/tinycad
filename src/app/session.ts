@@ -57,7 +57,7 @@ import type {
 } from '@/persistence';
 import { registerPlugin } from '@/plugin-api';
 import type { FeaturePlugin, PluginMessages } from '@/plugin-api';
-import { createBuilderRegistry, createRegenerator } from '@/regen';
+import { bodiesOf, createBuilderRegistry, createRegenerator } from '@/regen';
 import type { BuilderRegistry, RegenResult } from '@/regen';
 import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
 import type { BodyLayer, CameraController, ScenePalette } from '@/render';
@@ -293,12 +293,14 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     }
     if (result === 'superseded' || disposed) return;
     regenStatus.publish(result);
+    // Only bodies go to the counter and the view; other kinds of artifacts get their own channel
+    // with M12 (ADR 0015).
+    const bodies = bodiesOf(result.finalState).map(({ id, shape }) => ({ id, shape }));
     updateRegenUi({
-      bodyCount: result.finalState.bodies.size,
+      bodyCount: bodies.length,
       errorCount: [...result.statuses.values()].filter((s) => s.kind === 'error').length,
       lastMs: result.durationMs,
     });
-    const bodies = [...result.finalState.bodies.values()].map(({ id, shape }) => ({ id, shape }));
     // sync never rejects and drops a stale result itself (spec 09).
     void viewport.bodies.sync(bodies).then(() => {
       applyHidden();

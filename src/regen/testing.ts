@@ -3,9 +3,8 @@
 // feature lists and results. dependency-cruiser allows importing it only from *.test.ts.
 
 import { expect } from 'vitest';
-import { createFeatureSchemaRegistry } from '@/document';
+import { bodyId, createFeatureSchemaRegistry } from '@/document';
 import type {
-  BodyId,
   FeatureId,
   FeatureInstance,
   FeatureSchema,
@@ -30,13 +29,7 @@ import type {
 import { createRegenerator } from './regenerator';
 import type { RegenResult, Regenerator } from './regenerator';
 import { EMPTY_NAMES, EMPTY_STATE } from './state';
-import type { Body, RegenState } from './state';
-
-/** Body id the default test builder gives the body of a feature. */
-export function bodyIdOf(feature: FeatureId): BodyId {
-  // Same naming as real builders (spec 07); test-only, so the cast is the trusted place.
-  return `${feature}/body` as BodyId;
-}
+import type { Artifact, Body, RegenState } from './state';
 
 /** Validation of the default test schema: params of aFeature() with `size` > 0. */
 export function validateSize(params: unknown): readonly ParamIssue[] {
@@ -63,19 +56,35 @@ export function aSchema(
 }
 
 /**
- * Default build of the test feature type: one cube of edge `size` named bodyIdOf(feature.id),
- * added to the input state through ctx.kernel.
+ * Default build of the test feature type: one cube of edge `size` named bodyId(feature.id) and
+ * created by the feature (ADR 0015), added to the input state through ctx.kernel.
  */
 export const buildCube: FeatureBuilder['build'] = async ({ feature, state }, { kernel }) => {
   // The Regenerator validated the params with aSchema() before calling the builder.
   const { size } = feature.params as DefaultParams;
   const { shape } = await kernel.makeBox({ origin: [0, 0, 0], size: [size, size, size] });
-  const id = bodyIdOf(feature.id);
+  const id = bodyId(feature.id);
   // Frozen like the output of a real builder (boxBuilder); the map is guarded by its type (Q048).
-  const body: Body = Object.freeze({ id, shape, createdBy: feature.id, names: EMPTY_NAMES });
-  const bodies = new Map(state.bodies).set(id, body);
-  return { ok: true, state: Object.freeze({ bodies }) };
+  const body: Body = Object.freeze({
+    kind: 'body',
+    id,
+    origin: feature.id,
+    lastModifiedBy: feature.id,
+    shape,
+    names: EMPTY_NAMES,
+  });
+  const artifacts = new Map(state.artifacts).set(id, body);
+  return { ok: true, state: Object.freeze({ artifacts }) };
 };
+
+/**
+ * An artifact of a kind regen does not have yet (M12 adds 'sketch'), with the given id and no
+ * shape. Code that reads bodies must skip it.
+ */
+export function aForeignArtifact(id: string): Artifact {
+  // Artifact is only Body until M12, so no other kind type-checks; the test fakes one.
+  return Object.freeze({ kind: 'sketch', id }) as unknown as Artifact;
+}
 
 /** Features 'f1'..'fn' of the default test type, each a new object. */
 export function features(n: number): FeatureInstance<DefaultParams>[] {
