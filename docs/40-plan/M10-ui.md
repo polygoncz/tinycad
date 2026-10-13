@@ -44,7 +44,7 @@ Pořadí odspodu nahoru: nejdřív doména a porty, pak `app`, nakonec `ui`. Pod
 - [x] Převod globální klávesnice z DOM na `ViewKeyEvent` pro `ActionRegistry`.
 - [x] Komponenty podle rozvržení v [[11-ui#Rozvržení]] (Fusion + macOS): `AppShell`, `TitleBar`, `Toolbar` se skupinami, `ViewportHost`, plovoucí `Browser` a `FeatureDialog` + `ParamField` registr, ukotvená `Timeline` (stavy, rollback značka tažením, dvojklik = edit, kontextové menu, stav regenerace), `DocumentList` (hash `#/d/<id>`, [[Q019 Úvodní obrazovka se seznamem dokumentů|Q019]]).
 - [x] Rozvržení a CSS proměnné: světlý a tmavý režim, průsvitné plovoucí panely, Tabler Icons.
-- [ ] E2E smoke test v Playwright: nový dokument → Box → výška 30 → OK → undo → redo → reload → featura existuje.
+- [x] E2E smoke test v Playwright: nový dokument → Box → výška 30 → OK → undo → redo → reload → featura existuje.
 - [ ] Ověřit tažením hodnoty, že regenerace bez rušení stačí ([[Q010 Zrušení probíhající operace jádra|Q010]]).
 
 ## Implementační plán
@@ -168,6 +168,12 @@ Jeden úkol, protože změny navazují přes vrstvy (typy z `interaction` potře
 - **Kontrakt:** [[11-ui#Komponenty]] – Enter = OK, Esc = Zrušit v dialogu; přepínače jazyka a režimu i nad seznamem dokumentů; tooltip tlačítka v liště nesmí zakrývat popisek skupiny (pod lištu). [[01-architektura]] – `openAppSession` napojí `pagehide` a `visibilitychange` (`hidden`) na `flush()` persistence a při `close` je odpojí ([[Q034 Uložení při zavírání stránky|Q034]]); bez toho reload těsně po změně může ztratit poslední záznam.
 - **Testy:** logika napojení `pagehide`/`visibilitychange` nad falešným cílem událostí (odpojení při `close`); zbytek pokryje e2e.
 - **Hotovo když:** `npm run check` projde.
+
+#### Ú10c `flush` při zavření stránky a přístupnost
+- **Soubory:** `src/app/session.ts`, `browser.ts`, `page-lifecycle.ts` + testy; `src/ui/components/params/FieldShell.vue`, `NumericInput.vue`, `PointField.vue` (a ostatní pole podle potřeby), `TimelineItem.vue`, `FeatureDialog.vue`, komponenty s ikonami `ti`; `e2e/smoke.spec.ts`.
+- **Kontrakt:** [[11-ui#Kompoziční kořen (app)]] – `AppSession.flush()`; `openAppSession` napojí `flushOnPageHide` na `session.flush` a při `close`/`dispose` odpojí. [[11-ui#Komponenty]] – odstavec Přístupnost.
+- **Testy:** `flush()` zapíše frontu do store, v režimu jen pro čtení nic; e2e přepsat na `getByRole('textbox', { name: 'Výška' })`, chybový stav featury přes přístupný popis, tlačítka přes přesný název; Enter v dialogu (fokus v prvním poli po otevření) potvrdí dialog.
+- **Hotovo když:** `npm run check` a `npm run test:e2e` projdou.
 
 #### Ú11 E2E smoke test
 - **Soubory:** `package.json` (`@playwright/test`, skript `test:e2e`), `playwright.config.ts`, `e2e/smoke.spec.ts`.
