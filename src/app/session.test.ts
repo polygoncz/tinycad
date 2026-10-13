@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
+import { createDocument } from '@/document';
 import type { DocumentId } from '@/document';
 import { boxPlugin } from '@/features/box';
 import type { ViewKeyEvent } from '@/interaction';
-import { createMemoryDocumentStore } from '@/persistence';
+import { createMemoryDocumentStore, createSnapshot } from '@/persistence';
 import type { DocumentStore } from '@/persistence';
 import { createManualScheduler } from '@/persistence/testing';
 import type { ManualScheduler } from '@/persistence/testing';
@@ -144,6 +145,28 @@ describe('createAppSession – opening', () => {
     const kernels = aKernelFactory();
     await expect(open({ plugins: [boxPlugin, boxPlugin], kernels })).rejects.toThrow(/box/);
     expect(kernels.kernels).toHaveLength(0);
+  });
+});
+
+describe('createAppSession – verify', () => {
+  /** The stored box document with a snapshot at seq 1 that does not match its log. */
+  async function aDocumentWithForeignSnapshot(): Promise<DocumentStore> {
+    const store = await aStoredDocumentWithBox();
+    // A snapshot of an empty document at seq 1: the log says there is a box.
+    const meta = { id: DOC, name: UNTITLED, createdAt: 0 };
+    await store.saveSnapshot(DOC, createSnapshot(createDocument({ meta }), 1));
+    return store;
+  }
+
+  it('hands verify to loadDocument: a snapshot that disagrees with the log fails to open', async () => {
+    const store = await aDocumentWithForeignSnapshot();
+    await expect(open({ store, verify: true })).rejects.toThrow(/not deterministic/);
+  });
+
+  it('without verify the same document opens from the snapshot', async () => {
+    const store = await aDocumentWithForeignSnapshot();
+    const { session } = await open({ store });
+    expect(session.doc.studio.features).toHaveLength(0);
   });
 });
 
@@ -372,6 +395,59 @@ describe('createAppSession – dispose', () => {
     expect(viewport.syncs.length).toBe(syncs);
   });
 
+  it('close writes the pending queue to the store before it resolves, then releases', async () => {
+    const memory = createMemoryDocumentStore({ now: () => 0 });
+    const gated = aGatedAppendStore(memory);
+    const { session, kernels, scheduler } = await open({ store: gated.store });
+    addBox(session);
+    await settle();
+
+    let closed = false;
+    const closing = session.close().then(() => {
+      closed = true;
+    });
+    await settle();
+    // The write is in flight: close waits for it, the session is still alive.
+    expect(closed).toBe(false);
+    expect(kernels.last.disposed).toBe(false);
+
+    gated.release();
+    await closing;
+    expect((await memory.load(DOC))?.entries).toHaveLength(1);
+    expect(kernels.last.disposed).toBe(true);
+    expect(scheduler.pending).toBe(0);
+  });
+
+  it('a second close or a dispose after close does nothing', async () => {
+    const memory = createMemoryDocumentStore({ now: () => 0 });
+    const counting = aCountingStore(memory);
+    const { session } = await open({ store: counting.store });
+    addBox(session);
+    await session.close();
+    const appends = counting.appends();
+    expect(appends).toBe(1);
+    await session.close();
+    session.dispose();
+    await settle();
+    expect(counting.appends()).toBe(appends);
+  });
+
+  it('close after dispose does nothing', async () => {
+    const { session, kernels } = await open();
+    session.dispose();
+    await expect(session.close()).resolves.toBeUndefined();
+    expect(kernels.last.disposed).toBe(true);
+  });
+
+  it('close of a read-only session releases without writing', async () => {
+    const store = await aStoredDocumentWithBox();
+    const counting = aCountingStore(store);
+    const { session, kernels } = await open({ store: counting.store, readOnly: true });
+    await session.close();
+    expect(counting.appends()).toBe(0);
+    expect(kernels.last.disposed).toBe(true);
+  });
+
   it('a second dispose does nothing', async () => {
     const { session } = await open();
     session.dispose();
@@ -380,6 +456,46 @@ describe('createAppSession – dispose', () => {
     }).not.toThrow();
   });
 });
+
+/** A store whose appendEntries waits until `release` is called. */
+function aGatedAppendStore(inner: DocumentStore): { store: DocumentStore; release: () => void } {
+  let release = (): void => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    store: {
+      listDocuments: () => inner.listDocuments(),
+      createDocument: (meta, initial) => inner.createDocument(meta, initial),
+      deleteDocument: (id) => inner.deleteDocument(id),
+      appendEntries: (id, entries) => gate.then(() => inner.appendEntries(id, entries)),
+      saveSnapshot: (id, snapshot) => inner.saveSnapshot(id, snapshot),
+      load: (id) => inner.load(id),
+    },
+    release: () => {
+      release();
+    },
+  };
+}
+
+/** A store counting the calls of appendEntries. */
+function aCountingStore(inner: DocumentStore): { store: DocumentStore; appends: () => number } {
+  let appends = 0;
+  return {
+    store: {
+      listDocuments: () => inner.listDocuments(),
+      createDocument: (meta, initial) => inner.createDocument(meta, initial),
+      deleteDocument: (id) => inner.deleteDocument(id),
+      appendEntries: (id, entries) => {
+        appends++;
+        return inner.appendEntries(id, entries);
+      },
+      saveSnapshot: (id, snapshot) => inner.saveSnapshot(id, snapshot),
+      load: (id) => inner.load(id),
+    },
+    appends: () => appends,
+  };
+}
 
 function fail(): never {
   throw new Error('Missing test data');

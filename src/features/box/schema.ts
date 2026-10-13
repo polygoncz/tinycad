@@ -34,6 +34,7 @@ export const boxSchema: FeatureSchema<BoxParams> = Object.freeze<FeatureSchema<B
   type: 'box',
   version: 1,
   label: 'box.label',
+  icon: 'box',
   params,
   defaults(): BoxParams {
     return { origin: [0, 0, 0], width: 10, depth: 10, height: 10 };

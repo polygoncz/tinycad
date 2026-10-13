@@ -4,7 +4,13 @@
 
 import { ObservableValue, assert } from '@/core';
 import type { Observable, RegistryReader, Unsubscribe } from '@/core';
-import type { DocumentReader, FeatureId, FeatureInstance, FeatureSchema } from '@/document';
+import type {
+  DocumentReader,
+  FeatureId,
+  FeatureInstance,
+  FeatureSchema,
+  ParamIssue,
+} from '@/document';
 import type { FeatureRenameOp, OperationDispatcher, StudioSetRollbackOp } from '@/ops';
 import { OP_VERSION } from '@/ops';
 import type { FeatureEditor } from './feature-editor';
@@ -19,6 +25,10 @@ export interface TreeRow {
   readonly type: string;
   /** schema.label; an unknown type → type. */
   readonly typeLabel: string;
+  /** schema.icon (a Tabler icon name); an unknown type or a schema without one → null. */
+  readonly icon: string | null;
+  /** Invalid params of a FeatureHealth error (INVALID_PARAMS), otherwise null; ui translates them. */
+  readonly issues: readonly ParamIssue[] | null;
   readonly status: TreeStatus;
   /** For warning/error. */
   readonly message: string | null;
@@ -65,12 +75,15 @@ export function createFeatureTreeModel(deps: {
     const editing = editor.current.get()?.featureId ?? null;
 
     const next = features.map((feature, i): TreeRow => {
-      const { status, message } = statusOf(feature, i >= bar, health.get(feature.id));
+      const { status, message, issues } = statusOf(feature, i >= bar, health.get(feature.id));
+      const schema = schemas.find(feature.type);
       const row: TreeRow = {
         id: feature.id,
         name: feature.name,
         type: feature.type,
-        typeLabel: schemas.find(feature.type)?.label ?? feature.type,
+        typeLabel: schema?.label ?? feature.type,
+        icon: schema?.icon ?? null,
+        issues,
         status,
         message,
         selected: selected.has(feature.id),
@@ -140,17 +153,29 @@ export function createFeatureTreeModel(deps: {
   };
 }
 
-/** suppressed > rolledBack > health from the port > pending (not evaluated yet). */
+interface RowStatus {
+  readonly status: TreeStatus;
+  readonly message: string | null;
+  readonly issues: readonly ParamIssue[] | null;
+}
+
+/**
+ * suppressed > rolledBack > health from the port > pending (not evaluated yet). Message and
+ * issues only come with the status that shows them, never from a stale health.
+ */
 function statusOf(
   feature: FeatureInstance,
   rolledBack: boolean,
   health: FeatureHealth | undefined,
-): { status: TreeStatus; message: string | null } {
-  if (feature.suppressed) return { status: 'suppressed', message: null };
-  if (rolledBack) return { status: 'rolledBack', message: null };
-  if (health === undefined) return { status: 'pending', message: null };
-  if (health.kind === 'ok') return { status: 'ok', message: null };
-  return { status: health.kind, message: health.message };
+): RowStatus {
+  if (feature.suppressed) return { status: 'suppressed', message: null, issues: null };
+  if (rolledBack) return { status: 'rolledBack', message: null, issues: null };
+  if (health === undefined) return { status: 'pending', message: null, issues: null };
+  if (health.kind === 'ok') return { status: 'ok', message: null, issues: null };
+  if (health.kind === 'warning') {
+    return { status: 'warning', message: health.message, issues: null };
+  }
+  return { status: 'error', message: health.message, issues: health.issues ?? null };
 }
 
 function sameRow(a: TreeRow, b: TreeRow): boolean {
@@ -159,9 +184,33 @@ function sameRow(a: TreeRow, b: TreeRow): boolean {
     a.name === b.name &&
     a.type === b.type &&
     a.typeLabel === b.typeLabel &&
+    a.icon === b.icon &&
+    sameIssues(a.issues, b.issues) &&
     a.status === b.status &&
     a.message === b.message &&
     a.selected === b.selected &&
     a.editing === b.editing
   );
+}
+
+/** Every regeneration brings new issue objects, so equal issues compare by value. */
+function sameIssues(a: readonly ParamIssue[] | null, b: readonly ParamIssue[] | null): boolean {
+  if (a === b) return true;
+  if (a === null || b === null || a.length !== b.length) return false;
+  return a.every((issue, i) => {
+    const other = b[i];
+    return (
+      other !== undefined &&
+      issue.param === other.param &&
+      issue.code === other.code &&
+      sameParams(issue.params, other.params)
+    );
+  });
+}
+
+function sameParams(a: ParamIssue['params'], b: ParamIssue['params']): boolean {
+  if (a === b) return true;
+  if (a === undefined || b === undefined) return false;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k]);
 }

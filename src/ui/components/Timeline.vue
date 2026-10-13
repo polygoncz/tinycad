@@ -9,6 +9,7 @@ import type { FeatureId } from '@/document';
 import type { ActionState } from '@/interaction';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
+import ContextMenu from './ContextMenu.vue';
 import TimelineItem from './TimelineItem.vue';
 
 const session = useSession();
@@ -48,6 +49,42 @@ function select(id: FeatureId, additive: boolean): void {
 
 function edit(id: FeatureId): void {
   if (!locked.value) featureTree.edit(id);
+}
+
+// Context menu of a feature (spec 10, "Akce a klávesové zkratky"): the right button selects the
+// feature first, so the actions of the group 'feature' work on the selection. Rename is a
+// UI-only item (an inline field), placed after edit.
+const RENAME = 'feature.rename';
+const menu = ref<{ readonly x: number; readonly y: number; readonly id: FeatureId } | null>(null);
+const renamingId = ref<FeatureId | null>(null);
+
+const menuItems = computed((): readonly ActionState[] => {
+  const items = actionStates.value.filter((a) => a.group === 'feature');
+  const rename: ActionState = Object.freeze({
+    id: RENAME,
+    label: RENAME,
+    shortcut: null,
+    group: 'feature',
+    enabled: !locked.value,
+  });
+  const at = items.findIndex((a) => a.id === 'feature.edit') + 1;
+  return [...items.slice(0, at), rename, ...items.slice(at)];
+});
+
+function openMenu(id: FeatureId, e: MouseEvent): void {
+  featureTree.select(id);
+  menu.value = { x: e.clientX, y: e.clientY, id };
+}
+
+function runMenuItem(actionId: string): void {
+  const target = menu.value?.id ?? null;
+  if (actionId === RENAME) renamingId.value = target;
+  else actions.run(actionId);
+}
+
+function rename(id: FeatureId, name: string): void {
+  renamingId.value = null;
+  if (!locked.value) featureTree.rename(id, name);
 }
 
 // Dragging the rollback marker: only the position under the pointer is local view state;
@@ -116,7 +153,15 @@ function onBarCancel(): void {
           @pointerup="onBarUp"
           @pointercancel="onBarCancel"
         />
-        <TimelineItem :row="row" @select="select(row.id, $event)" @edit="edit(row.id)" />
+        <TimelineItem
+          :row="row"
+          :renaming="renamingId === row.id"
+          @select="select(row.id, $event)"
+          @edit="edit(row.id)"
+          @menu="openMenu(row.id, $event)"
+          @rename="rename(row.id, $event)"
+          @cancel-rename="renamingId = null"
+        />
       </template>
       <div
         v-if="barIndex >= rows.length"
@@ -129,6 +174,15 @@ function onBarCancel(): void {
         @pointercancel="onBarCancel"
       />
     </div>
+
+    <ContextMenu
+      v-if="menu !== null"
+      :items="menuItems"
+      :x="menu.x"
+      :y="menu.y"
+      @run="runMenuItem"
+      @close="menu = null"
+    />
 
     <div class="status">
       <span v-if="regen.busy" class="busy">

@@ -106,6 +106,8 @@ export interface AppSessionDeps {
   readonly translate: (key: string) => string;
   /** Without the document lock (Q038): nothing is written, changes of the document throw. */
   readonly readOnly: boolean;
+  /** Handed to loadDocument: replay the whole log from the base and compare (spec 05). */
+  readonly verify?: boolean;
 }
 
 export interface AppSession extends Disposable {
@@ -133,7 +135,12 @@ export interface AppSession extends Disposable {
   mountViewport(el: HTMLElement): void;
   /** Q072: app picks the ScenePalette, ui does not know render. */
   setTheme(theme: 'light' | 'dark'): void;
-  /** Saves what is pending, releases the kernel, the services and the models. */
+  /**
+   * Writes the pending queue of the persistence (flush), then releases like dispose. Rejects
+   * with the error of the flush, after releasing anyway. A second call returns the same promise.
+   */
+  close(): Promise<void>;
+  /** Synchronous safety net: releases at once, the final save runs without being awaited. */
   dispose(): void;
 }
 
@@ -315,6 +322,31 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   lifetime.add(supervisor);
   lifetime.add(scheduler);
 
+  function dispose(): void {
+    if (disposed) return;
+    disposed = true;
+    lifetime.dispose();
+    if (persistence !== null) {
+      // dispose does not save (spec 05); a flush after it still writes the queue.
+      persistence.dispose();
+      persistence.flush().catch(reportError);
+    }
+  }
+
+  async function close(): Promise<void> {
+    if (disposed) return;
+    let failure: { readonly error: unknown } | null = null;
+    try {
+      await persistence?.flush();
+    } catch (error) {
+      failure = { error };
+    }
+    // Entries appended while the flush ran go with the last flush of dispose.
+    dispose();
+    if (failure !== null) throw failure.error;
+  }
+  let closing: Promise<void> | null = null;
+
   return {
     doc,
     readOnly,
@@ -335,16 +367,11 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     setTheme(theme) {
       viewport.setPalette(theme === 'dark' ? DARK_PALETTE : LIGHT_PALETTE);
     },
-    dispose() {
-      if (disposed) return;
-      disposed = true;
-      lifetime.dispose();
-      if (persistence !== null) {
-        // dispose does not save (spec 05); a flush after it still writes the queue.
-        persistence.dispose();
-        persistence.flush().catch(reportError);
-      }
+    close() {
+      closing ??= close();
+      return closing;
     },
+    dispose,
   };
 }
 
@@ -355,7 +382,11 @@ async function openDocument(
   handlers: OpHandlerRegistry,
 ): Promise<{ doc: DocumentWriter; log: OperationLog }> {
   const { store, docId } = deps;
-  const loaded = await loadDocument(store, docId, { schemas, handlers });
+  const loaded = await loadDocument(store, docId, {
+    schemas,
+    handlers,
+    verify: deps.verify ?? false,
+  });
   if (loaded.ok) return loaded.value;
   if (loaded.error.kind !== 'not-found' || deps.readOnly) {
     throw new Error(`Cannot open document '${docId}': ${describeLoadError(loaded.error)}`);

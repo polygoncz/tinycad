@@ -1,6 +1,6 @@
-// Built-in actions (spec 10, "Akce a klávesové zkratky"; M10 plan, Ú7): undo, redo, delete and
-// suppress of the selected features, fit all, the rollback bar steps of the timeline and one
-// action per tool with a shortcut. Labels are translation keys (ADR 0014); ui translates them.
+// Built-in actions (spec 10, "Akce a klávesové zkratky"; M10 plan, Ú7 and Ú7b): undo, redo,
+// edit, suppress and delete of the selected features, the bar after the selected feature, fit
+// all, the rollback bar steps of the timeline and one action per tool with a shortcut. Labels are translation keys (ADR 0014); ui translates them.
 
 import { DisposableStore, ObservableValue } from '@/core';
 import type { Disposable, Observable, Unsubscribe } from '@/core';
@@ -110,26 +110,25 @@ export function registerBuiltInActions(deps: BuiltInActionDeps): Disposable {
   });
 
   const hasSelectedFeature = (): boolean => !blocked() && selectedFeatures().length > 0;
+  /** The one selected feature; null with none or more than one selected. */
+  const singleSelected = (): FeatureId | null => {
+    const selected = selectedFeatures();
+    return selected.length === 1 ? (selected[0] ?? null) : null;
+  };
 
+  // The feature context menu of the timeline is the group 'feature' in registration order:
+  // edit, suppress, roll here, delete (rename is a UI-only item between them).
   actions.register({
-    id: 'feature.delete',
-    label: 'feature.delete',
-    shortcut: 'Delete',
-    enabled: derived(hasSelectedFeature, [onSelection, onDoc, onSession]),
+    id: 'feature.edit',
+    label: 'feature.edit',
+    group: 'feature',
+    enabled: derived(
+      () => !blocked() && singleSelected() !== null,
+      [onSelection, onDoc, onSession],
+    ),
     run: () => {
-      const removed = new Set(selectedFeatures());
-      applyAll(
-        'feature.delete',
-        [...removed].map((featureId): FeatureRemoveOp => ({
-          type: 'feature.remove',
-          v: OP_VERSION['feature.remove'],
-          featureId,
-        })),
-      );
-      // A deleted feature does not stay selected (undo brings it back unselected).
-      selection.set(
-        selection.items.get().filter((i) => i.kind !== 'feature' || !removed.has(i.feature)),
-      );
+      const id = singleSelected();
+      if (id !== null) featureTree.edit(id);
     },
   });
 
@@ -137,6 +136,7 @@ export function registerBuiltInActions(deps: BuiltInActionDeps): Disposable {
     id: 'feature.suppress',
     label: 'feature.suppress',
     shortcut: 'S',
+    group: 'feature',
     enabled: derived(hasSelectedFeature, [onSelection, onDoc, onSession]),
     run: () => {
       const selected = selectedFeatures();
@@ -152,6 +152,50 @@ export function registerBuiltInActions(deps: BuiltInActionDeps): Disposable {
             featureId,
             suppressed,
           })),
+      );
+    },
+  });
+
+  /** The bar right after the one selected feature; null when there is none or the bar is there. */
+  const rollHereTarget = (): number | null => {
+    const id = singleSelected();
+    if (id === null) return null;
+    const index = doc.studio.features.findIndex((f) => f.id === id) + 1;
+    return index === doc.studio.rollbackIndex ? null : index;
+  };
+  actions.register({
+    id: 'timeline.rollHere',
+    label: 'timeline.rollHere',
+    group: 'feature',
+    enabled: derived(
+      () => !blocked() && rollHereTarget() !== null,
+      [onSelection, onDoc, onSession],
+    ),
+    run: () => {
+      const index = rollHereTarget();
+      if (index !== null) featureTree.moveRollbackBar(index);
+    },
+  });
+
+  actions.register({
+    id: 'feature.delete',
+    label: 'feature.delete',
+    shortcut: ['Delete', 'Backspace'],
+    group: 'feature',
+    enabled: derived(hasSelectedFeature, [onSelection, onDoc, onSession]),
+    run: () => {
+      const removed = new Set(selectedFeatures());
+      applyAll(
+        'feature.delete',
+        [...removed].map((featureId): FeatureRemoveOp => ({
+          type: 'feature.remove',
+          v: OP_VERSION['feature.remove'],
+          featureId,
+        })),
+      );
+      // A deleted feature does not stay selected (undo brings it back unselected).
+      selection.set(
+        selection.items.get().filter((i) => i.kind !== 'feature' || !removed.has(i.feature)),
       );
     },
   });

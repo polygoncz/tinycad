@@ -74,6 +74,10 @@ describe('boxSchema', () => {
     expect(boxSchema).toMatchObject({ type: 'box', version: 1, label: 'box.label' });
   });
 
+  it('has the Tabler icon box for the timeline', () => {
+    expect(boxSchema.icon).toBe('box');
+  });
+
   it('labels are translation keys (ADR 0014)', () => {
     expect(Object.entries(boxSchema.params).map(([key, spec]) => [key, spec.label])).toEqual([
       ['origin', 'box.origin'],
@@ -310,6 +314,7 @@ describe('boxTool', () => {
       label: 'box.label',
       icon: 'box',
       group: 'primitive',
+      shortcut: 'B',
     });
   });
 

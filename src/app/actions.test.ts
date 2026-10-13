@@ -96,15 +96,34 @@ describe('built-in actions – registration', () => {
     expect(shortcuts).toMatchObject({
       undo: 'Mod+Z',
       redo: 'Mod+Shift+Z',
+      'feature.edit': null,
       'feature.delete': 'Delete',
       'feature.suppress': 'S',
+      'timeline.rollHere': null,
       'view.fitAll': 'F',
       'timeline.toStart': null,
       'timeline.stepBack': null,
       'timeline.stepForward': null,
       'timeline.toEnd': null,
     });
-    for (const a of session.actions.actions.get()) expect(a.label).toBe(a.id);
+    for (const a of session.actions.actions.get()) {
+      if (!a.id.startsWith('tool.')) expect(a.label).toBe(a.id);
+    }
+  });
+
+  it('the feature context menu is edit, suppress, roll here and delete, in this order', async () => {
+    const { session } = await open();
+    expect(
+      session.actions.actions
+        .get()
+        .filter((a) => a.group === 'feature')
+        .map((a) => a.id),
+    ).toEqual(['feature.edit', 'feature.suppress', 'timeline.rollHere', 'feature.delete']);
+  });
+
+  it('the box tool is activated by its shortcut B', async () => {
+    const { session } = await open();
+    expect(state(session, 'tool.box')).toMatchObject({ label: 'box.label', shortcut: 'B' });
   });
 
   it('registers an action for every tool with a shortcut, labelled by the tool', async () => {
@@ -112,7 +131,7 @@ describe('built-in actions – registration', () => {
 
     expect(state(session, 'tool.line')).toMatchObject({ label: 'line.label', shortcut: 'L' });
     // Tools without a shortcut get no action.
-    expect(session.actions.actions.get().map((a) => a.id)).not.toContain('tool.box');
+    expect(session.actions.actions.get().map((a) => a.id)).not.toContain('tool.select');
     viewport.emitKey(key('l'));
     // The line tool finishes at once: activation went through and the default tool is back.
     expect(session.tools.active.get()).toBe('select');
@@ -173,6 +192,15 @@ describe('built-in actions – delete and suppress', () => {
     expect(enabled(session, 'feature.delete')).toBe(false);
     session.actions.run('undo');
     expect(featureIds(session)).toEqual([a, b]);
+  });
+
+  it('delete also runs on Backspace', async () => {
+    const { session, viewport } = await open();
+    const a = addBox(session);
+    const b = addBox(session);
+    selectFeature(session, a);
+    viewport.emitKey(key('Backspace'));
+    expect(featureIds(session)).toEqual([b]);
   });
 
   it('delete removes every selected feature in one undoable step', async () => {
@@ -237,7 +265,67 @@ describe('built-in actions – delete and suppress', () => {
   });
 });
 
+describe('built-in actions – edit', () => {
+  it('edit opens the dialog of the one selected feature', async () => {
+    const { session } = await open();
+    const a = addBox(session);
+    addBox(session);
+    expect(enabled(session, 'feature.edit')).toBe(false);
+    selectFeature(session, a);
+    expect(enabled(session, 'feature.edit')).toBe(true);
+
+    expect(session.actions.run('feature.edit')).toBe(true);
+    expect(session.features.current.get()?.featureId).toBe(a);
+    // The dialog holds a transaction: no second edit.
+    expect(enabled(session, 'feature.edit')).toBe(false);
+  });
+
+  it('edit is disabled with more than one or no selected feature', async () => {
+    const { session } = await open();
+    const a = addBox(session);
+    const b = addBox(session);
+    selectFeature(session, a, b);
+    expect(enabled(session, 'feature.edit')).toBe(false);
+    selectFeature(session);
+    expect(enabled(session, 'feature.edit')).toBe(false);
+  });
+});
+
 describe('built-in actions – timeline', () => {
+  it('roll here moves the bar right after the selected feature', async () => {
+    const { session } = await open();
+    const a = addBox(session);
+    const b = addBox(session);
+    addBox(session);
+    const bar = (): number => session.doc.studio.rollbackIndex;
+    expect(enabled(session, 'timeline.rollHere')).toBe(false);
+
+    selectFeature(session, a);
+    expect(enabled(session, 'timeline.rollHere')).toBe(true);
+    session.actions.run('timeline.rollHere');
+    expect(bar()).toBe(1);
+    // The bar is already there.
+    expect(enabled(session, 'timeline.rollHere')).toBe(false);
+
+    // A feature after the bar rolls the bar forward.
+    selectFeature(session, b);
+    session.actions.run('timeline.rollHere');
+    expect(bar()).toBe(2);
+  });
+
+  it('roll here is disabled with more than one selected feature or an open dialog', async () => {
+    const { session } = await open();
+    const a = addBox(session);
+    const b = addBox(session);
+    selectFeature(session, a, b);
+    expect(enabled(session, 'timeline.rollHere')).toBe(false);
+    selectFeature(session, a);
+    const edit = session.features.create('box');
+    expect(enabled(session, 'timeline.rollHere')).toBe(false);
+    edit.cancel();
+    expect(enabled(session, 'timeline.rollHere')).toBe(true);
+  });
+
   it('the steps move the rollback bar and are disabled at the ends', async () => {
     const { session } = await open();
     addBox(session);
@@ -330,8 +418,10 @@ describe('built-in actions – read-only', () => {
     for (const id of [
       'undo',
       'redo',
+      'feature.edit',
       'feature.delete',
       'feature.suppress',
+      'timeline.rollHere',
       'timeline.toStart',
       'timeline.stepBack',
       'timeline.stepForward',

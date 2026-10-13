@@ -41,7 +41,17 @@ const platformGlobals = [
 }));
 
 export default defineConfig(
-  { ignores: ['dist/', 'coverage/', 'docs/', 'scripts/', 'spikes/', 'node_modules/', '.claude/worktrees/'] },
+  {
+    ignores: [
+      'dist/',
+      'coverage/',
+      'docs/',
+      'scripts/',
+      'spikes/',
+      'node_modules/',
+      '.claude/worktrees/',
+    ],
+  },
 
   eslint.configs.recommended,
   tseslint.configs.strictTypeChecked,

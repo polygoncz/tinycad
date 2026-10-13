@@ -1,16 +1,45 @@
 <script setup lang="ts">
-// One feature of the Timeline: the icon, the state of the row and a tooltip with the name.
-// The row is a frozen TreeRow snapshot, passed as a prop (never put into ref()/reactive()).
+// One feature of the Timeline: the icon, the state of the row and a tooltip with the name and
+// the translated issues. The row is a frozen TreeRow snapshot, passed as a prop (never put into
+// ref()/reactive()). While `renaming`, the name is an inline field; the Timeline does the rest.
+import { nextTick, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { TreeRow } from '@/interaction';
+import { issueText } from '../i18n/i18n';
 
-defineProps<{ row: TreeRow }>();
+const props = defineProps<{ row: TreeRow; renaming: boolean }>();
 const emit = defineEmits<{
   select: [additive: boolean];
   edit: [];
+  menu: [e: MouseEvent];
+  rename: [name: string];
+  cancelRename: [];
 }>();
 
 const { t } = useI18n();
+
+const input = useTemplateRef<HTMLInputElement>('input');
+// Enter and blur both commit; the flag keeps the blur after Enter or Escape from repeating it.
+let done = false;
+watch(
+  () => props.renaming,
+  async (renaming) => {
+    done = false;
+    if (!renaming) return;
+    await nextTick();
+    input.value?.select();
+  },
+);
+function commit(): void {
+  if (done) return;
+  done = true;
+  emit('rename', input.value?.value ?? props.row.name);
+}
+function cancel(): void {
+  if (done) return;
+  done = true;
+  emit('cancelRename');
+}
 </script>
 
 <template>
@@ -21,15 +50,30 @@ const { t } = useI18n();
     :aria-label="row.name"
     @click="emit('select', $event.shiftKey || $event.metaKey || $event.ctrlKey)"
     @dblclick="emit('edit')"
+    @contextmenu.prevent="emit('menu', $event)"
   >
-    <!-- One generic icon for every feature type until TreeRow carries an icon. -->
-    <i class="ti ti-cube" />
+    <i class="ti" :class="`ti-${row.icon ?? 'cube'}`" />
     <span v-if="row.status === 'error'" class="badge">!</span>
-    <span class="tooltip">
+    <input
+      v-if="renaming"
+      ref="input"
+      class="rename"
+      :value="row.name"
+      :aria-label="t('feature.rename')"
+      @click.stop
+      @dblclick.stop
+      @keydown.enter.prevent="commit"
+      @keydown.escape.prevent="cancel"
+      @blur="commit"
+    />
+    <span v-else class="tooltip">
       <span class="name">{{ row.name }}</span>
       <span class="type">{{ t(row.typeLabel) }}</span>
       <span v-if="row.status !== 'ok'" class="state">{{ t(`timeline.status.${row.status}`) }}</span>
       <span v-if="row.message !== null" class="message">{{ row.message }}</span>
+      <span v-for="(issue, i) in row.issues ?? []" :key="i" class="issue">
+        {{ issueText(t, issue) }}
+      </span>
     </span>
   </div>
 </template>
@@ -122,7 +166,23 @@ const { t } = useI18n();
 .state {
   opacity: 0.7;
 }
-.message {
+.message,
+.issue {
   white-space: normal;
+}
+.rename {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  width: 160px;
+  padding: 3px 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-row);
+  background: var(--panel-bg);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size);
 }
 </style>

@@ -9,6 +9,7 @@ export const boxTool: ToolDescriptor = Object.freeze<ToolDescriptor>({
   label: 'box.label',
   icon: 'box',
   group: 'primitive',
+  shortcut: 'B',
   create: createBoxTool,
 });
 

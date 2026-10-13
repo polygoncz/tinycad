@@ -10,8 +10,10 @@ export interface Action {
   /** E.g. 'edit.undo'. */
   readonly id: string;
   readonly label: string;
-  /** E.g. 'Mod+Z' (Mod = Cmd on macOS, Ctrl elsewhere). */
-  readonly shortcut?: string;
+  /** E.g. 'Mod+Z' (Mod = Cmd on macOS, Ctrl elsewhere); several = alternatives ('Delete', 'Backspace'). */
+  readonly shortcut?: string | readonly string[];
+  /** 'feature' = the context menu of a feature in the timeline (M10). */
+  readonly group?: string;
   /** The registry subscribes to it, so the snapshot follows without manual refresh (Q067). */
   readonly enabled: Observable<boolean>;
   run(): void;
@@ -20,7 +22,9 @@ export interface Action {
 export interface ActionState {
   readonly id: string;
   readonly label: string;
+  /** The first shortcut, for display. */
   readonly shortcut: string | null;
+  readonly group: string | null;
   readonly enabled: boolean;
 }
 
@@ -37,11 +41,18 @@ export interface ActionRegistry {
   dispose(): void;
 }
 
+/** The shortcuts of the action as a list; none → empty. */
+function shortcutsOf(a: Action): readonly string[] {
+  if (a.shortcut === undefined) return [];
+  return typeof a.shortcut === 'string' ? [a.shortcut] : a.shortcut;
+}
+
 function toState(a: Action): ActionState {
   return Object.freeze({
     id: a.id,
     label: a.label,
-    shortcut: a.shortcut ?? null,
+    shortcut: shortcutsOf(a)[0] ?? null,
+    group: a.group ?? null,
     enabled: a.enabled.get(),
   });
 }
@@ -85,16 +96,21 @@ export function createActionRegistry(): ActionRegistry {
     register(a) {
       // Validate everything before changing anything.
       if (byId.has(a.id)) throw new Error(`Duplicate action '${a.id}'`);
-      const shortcut = a.shortcut === undefined ? null : parseShortcut(a.shortcut);
-      if (shortcut !== null) {
-        const owner = byShortcut.get(shortcut);
-        if (owner !== undefined) {
-          throw new Error(
-            `Shortcut '${a.shortcut ?? ''}' of action '${a.id}' is used by '${owner}'`,
-          );
-        }
-        byShortcut.set(shortcut, a.id);
+      const written = shortcutsOf(a);
+      if (Array.isArray(a.shortcut) && written.length === 0) {
+        throw new Error(`Action '${a.id}' has an empty list of shortcuts`);
       }
+      // Canonical form → the shortcut as written, for the error messages.
+      const own = new Map<string, string>();
+      for (const shortcut of written) {
+        const canonical = parseShortcut(shortcut);
+        const owner = byShortcut.get(canonical) ?? (own.has(canonical) ? a.id : undefined);
+        if (owner !== undefined) {
+          throw new Error(`Shortcut '${shortcut}' of action '${a.id}' is used by '${owner}'`);
+        }
+        own.set(canonical, shortcut);
+      }
+      for (const canonical of own.keys()) byShortcut.set(canonical, a.id);
       byId.set(a.id, a);
       actions.set(Object.freeze([...actions.get(), toState(a)]));
       subscriptions.add(

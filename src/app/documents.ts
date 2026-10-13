@@ -1,12 +1,14 @@
 // The document list (Q019) over a DocumentStore: listing, creating and deleting documents.
-// The store comes in as a parameter, so this runs in Node with MemoryDocumentStore; browser.ts
-// hands it the IndexedDB store.
+// The store and the lock manager come in as parameters, so this runs in Node with
+// MemoryDocumentStore and a fake; browser.ts hands it the IndexedDB store and navigator.locks.
 
 import type { IdGenerator } from '@/core';
 import { createDocument } from '@/document';
 import type { DocumentId, DocumentMeta } from '@/document';
 import { createSnapshot } from '@/persistence';
 import type { DocumentInfo, DocumentStore } from '@/persistence';
+import { acquireDocumentLock } from './doc-lock';
+import type { DocumentLocks } from './doc-lock';
 
 /** The key of the name of a new document (spec 11, "Nový dokument"; ADR 0014). */
 const NAME_OF_NEW_DOCUMENT = 'document.untitled';
@@ -38,7 +40,19 @@ export async function createNewDocument(
   return meta.id;
 }
 
-/** Deletes the document with its log and snapshots; a missing id does nothing. */
-export function deleteDocument(store: DocumentStore, id: DocumentId): Promise<void> {
-  return store.deleteDocument(id);
+/**
+ * Deletes the document with its log and snapshots; a missing id does nothing. Takes the lock of
+ * the document first (spec 11, "Smazání dokumentu"): a document open in another tab is refused.
+ */
+export async function deleteDocument(
+  deps: { readonly store: DocumentStore; readonly locks: DocumentLocks },
+  id: DocumentId,
+): Promise<void> {
+  const lock = await acquireDocumentLock(deps.locks, id);
+  try {
+    if (!lock.held) throw new Error(`Document '${id}' is open in another tab`);
+    await deps.store.deleteDocument(id);
+  } finally {
+    lock.dispose();
+  }
 }

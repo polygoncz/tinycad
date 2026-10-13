@@ -3,7 +3,9 @@ import { createSequentialIdGenerator } from '@/core';
 import { createFeatureSchemaRegistry } from '@/document';
 import { createOpHandlerRegistry } from '@/ops';
 import { createMemoryDocumentStore, loadDocument } from '@/persistence';
+import { acquireDocumentLock } from './doc-lock';
 import { createNewDocument, deleteDocument, listDocuments } from './documents';
+import { aFakeLocks, settle } from './testing';
 
 const UNTITLED = 'Bez názvu';
 
@@ -57,8 +59,34 @@ describe('documents', () => {
     const { store, deps } = setup();
     const kept = await createNewDocument(store, deps);
     const removed = await createNewDocument(store, deps);
-    await deleteDocument(store, removed);
-    await deleteDocument(store, removed);
+    const { locks } = aFakeLocks();
+    await deleteDocument({ store, locks }, removed);
+    await deleteDocument({ store, locks }, removed);
     expect((await listDocuments(store)).map((d) => d.meta.id)).toEqual([kept]);
+  });
+
+  it('deletes under the lock of the document and releases it after', async () => {
+    const { store, deps } = setup();
+    const id = await createNewDocument(store, deps);
+    const { locks, held, requests } = aFakeLocks();
+    await deleteDocument({ store, locks }, id);
+    await settle();
+    expect(requests).toEqual([{ name: `tinycad-doc-${id}`, ifAvailable: true }]);
+    expect(held.size).toBe(0);
+  });
+
+  it('refuses to delete a document open in another tab', async () => {
+    const { store, deps } = setup();
+    const id = await createNewDocument(store, deps);
+    const { locks } = aFakeLocks();
+    const otherTab = await acquireDocumentLock(locks, id);
+
+    await expect(deleteDocument({ store, locks }, id)).rejects.toThrow(/another tab/);
+    expect((await listDocuments(store)).map((d) => d.meta.id)).toEqual([id]);
+
+    otherTab.dispose();
+    await settle();
+    await deleteDocument({ store, locks }, id);
+    expect(await listDocuments(store)).toEqual([]);
   });
 });

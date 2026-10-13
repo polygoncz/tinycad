@@ -9,6 +9,7 @@ import { OP_VERSION } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import { createFeatureEditor } from './feature-editor';
 import { createFeatureTreeModel } from './feature-tree';
+import type { FeatureHealth } from './regen-status-port';
 import { createSelectionModel } from './selection';
 import { FakeRegenStatus } from './testing';
 
@@ -24,6 +25,7 @@ const BOX: FeatureSchema<BoxParams> = {
   type: 'box',
   version: 1,
   label: 'Box',
+  icon: 'box',
   params: BOX_PARAMS,
   defaults: () => ({ width: 10 }),
   validate: (params) => validateAgainstSchema(BOX_PARAMS, params),
@@ -61,7 +63,7 @@ function setup(init: DocumentOptions = {}) {
   tree.rows.subscribe(() => {
     emits++;
   });
-  return { ...session, regen, selection, editor, tree, emits: () => emits };
+  return { ...session, schemas, regen, selection, editor, tree, emits: () => emits };
 }
 
 function addFeature(s: ReturnType<typeof setup>, id: string, index: number): void {
@@ -98,6 +100,8 @@ describe('FeatureTreeModel rows', () => {
         name: 'Name f1',
         type: 'box',
         typeLabel: 'Box',
+        icon: 'box',
+        issues: null,
         status: 'pending',
         message: null,
         selected: false,
@@ -159,6 +163,62 @@ describe('FeatureTreeModel rows', () => {
   it('uses the type as the label for an unknown type', () => {
     const s = setup({ features: [aBox('a', 'mystery')] });
     expect(s.tree.rows.get()[0]).toMatchObject({ type: 'mystery', typeLabel: 'mystery' });
+  });
+
+  it('takes the icon from the schema, null for an unknown type', () => {
+    const s = setup({ features: [aBox('a'), aBox('b', 'mystery')] });
+    expect(s.tree.rows.get().map((r) => r.icon)).toEqual(['box', null]);
+  });
+
+  it('has a null icon when the schema has none', () => {
+    const s = setup({ features: [aBox('a', 'plain')] });
+    s.schemas.register({
+      type: 'plain',
+      version: 1,
+      label: 'Plain',
+      params: BOX_PARAMS,
+      defaults: () => ({ width: 10 }),
+      validate: (params) => validateAgainstSchema(BOX_PARAMS, params),
+    });
+    s.regen.publish(new Map());
+    expect(s.tree.rows.get()[0]?.icon).toBeNull();
+  });
+
+  it('carries the issues of an error from the regeneration', () => {
+    const s = setup({ features: [aBox('a'), aBox('b'), aBox('c')] });
+    const issues = [{ param: 'width', code: 'param.atOrBelowMin', params: { min: 0 } }];
+    s.regen.publish(
+      new Map<FeatureId, FeatureHealth>([
+        [fid('a'), { kind: 'error', message: 'invalid params', issues }],
+        [fid('b'), { kind: 'error', message: 'boom' }],
+        [fid('c'), { kind: 'warning', message: 'thin wall' }],
+      ]),
+    );
+    expect(s.tree.rows.get().map((r) => r.issues)).toEqual([issues, null, null]);
+  });
+
+  it('drops the issues of a suppressed feature', () => {
+    const s = setup({ features: [aBox('a')] });
+    const issues = [{ param: 'width', code: 'param.atOrBelowMin', params: { min: 0 } }];
+    s.regen.publish(new Map([[fid('a'), { kind: 'error', message: 'x', issues }]]));
+    suppress(s, 'a');
+    expect(s.tree.rows.get()[0]?.issues).toBeNull();
+  });
+
+  it('keeps the row identical when a new regeneration reports equal issues', () => {
+    const s = setup({ features: [aBox('a')] });
+    const issues = () => [{ param: 'width', code: 'param.atOrBelowMin', params: { min: 0 } }];
+    s.regen.publish(new Map([[fid('a'), { kind: 'error', message: 'x', issues: issues() }]]));
+    const row = s.tree.rows.get()[0];
+    s.regen.publish(new Map([[fid('a'), { kind: 'error', message: 'x', issues: issues() }]]));
+    expect(s.tree.rows.get()[0]).toBe(row);
+
+    s.regen.publish(
+      new Map([
+        [fid('a'), { kind: 'error', message: 'x', issues: [{ param: 'width', code: 'other' }] }],
+      ]),
+    );
+    expect(s.tree.rows.get()[0]).not.toBe(row);
   });
 
   it('makes a new snapshot object on change and keeps unchanged rows identical', () => {

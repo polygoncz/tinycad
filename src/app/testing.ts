@@ -9,6 +9,7 @@ import type { GeometryKernel, MeshOps, ShapeHandle } from '@/kernel';
 import { createFakeKernel } from '@/kernel/testing';
 import type { FakeKernel } from '@/kernel/testing';
 import type { ScenePalette, StandardView } from '@/render';
+import type { DocumentLocks } from './doc-lock';
 import type { AppViewport } from './session';
 
 type SyncedBody = { readonly id: BodyId; readonly shape: ShapeHandle };
@@ -136,4 +137,26 @@ export function aKernelFactory(): KernelFactory {
 /** Lets every pending promise chain of resolved fakes run to its end (one macrotask). */
 export function settle(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/** A LockManager with ifAvailable semantics: one holder per name, a busy name gets null. */
+export function aFakeLocks(): {
+  readonly locks: DocumentLocks;
+  /** Names held now. */
+  readonly held: Set<string>;
+  readonly requests: { name: string; ifAvailable: boolean }[];
+} {
+  const held = new Set<string>();
+  const requests: { name: string; ifAvailable: boolean }[] = [];
+  const locks: DocumentLocks = {
+    request(name, options, callback) {
+      requests.push({ name, ifAvailable: options.ifAvailable });
+      if (held.has(name)) return callback(null);
+      held.add(name);
+      return callback({ name }).finally(() => {
+        held.delete(name);
+      });
+    },
+  };
+  return { locks, held, requests };
 }

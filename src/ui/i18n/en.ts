@@ -20,6 +20,19 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'feature.edit': 'Edit feature',
   'browser.body': 'Body {n}',
 
+  // Labels of the built-in actions (app); feature.edit is above, it is a transaction label too.
+  undo: 'Undo',
+  redo: 'Redo',
+  'feature.delete': 'Delete',
+  'feature.suppress': 'Suppress',
+  'feature.rename': 'Rename',
+  'timeline.rollHere': 'Roll here',
+  'view.fitAll': 'Fit all',
+  'timeline.toStart': 'To start',
+  'timeline.stepBack': 'Step back',
+  'timeline.stepForward': 'Step forward',
+  'timeline.toEnd': 'To end',
+
   // Browser.
   'browser.title': 'Browser',
   'browser.bodies': 'Bodies',

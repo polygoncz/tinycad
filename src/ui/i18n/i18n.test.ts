@@ -26,6 +26,22 @@ const ISSUE_CODES = [
 // Keys the domain and interaction hand to ui (ADR 0014): transaction label, body row name.
 const DOMAIN_KEYS = ['feature.edit', 'browser.body'];
 
+// Labels of the built-in actions of app (M10, Ú7b) and the UI-only rename item of the menu.
+const ACTION_KEYS = [
+  'undo',
+  'redo',
+  'feature.delete',
+  'feature.suppress',
+  'feature.edit',
+  'feature.rename',
+  'timeline.rollHere',
+  'view.fitAll',
+  'timeline.toStart',
+  'timeline.stepBack',
+  'timeline.stepForward',
+  'timeline.toEnd',
+];
+
 const PLUGIN = {
   cs: { 'box.label': 'Kvádr', 'box.width': 'Šířka' },
   en: { 'box.label': 'Box', 'box.width': 'Width' },
@@ -56,7 +72,7 @@ describe('built-in dictionaries', () => {
     expect(Object.keys(en).sort()).toEqual(Object.keys(cs).sort());
   });
 
-  it.each([...ISSUE_CODES, ...DOMAIN_KEYS])('%s has a text in cs and en', (key) => {
+  it.each([...ISSUE_CODES, ...DOMAIN_KEYS, ...ACTION_KEYS])('%s has a text in cs and en', (key) => {
     expect(cs[key]).toBeTruthy();
     expect(en[key]).toBeTruthy();
   });

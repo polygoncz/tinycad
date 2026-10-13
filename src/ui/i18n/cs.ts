@@ -18,8 +18,21 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
 
   // Keys handed over by the domain and interaction.
   'document.untitled': 'Bez názvu',
-  'feature.edit': 'Úprava featury',
+  'feature.edit': 'Upravit featuru',
   'browser.body': 'Těleso {n}',
+
+  // Labels of the built-in actions (app); feature.edit is above, it is a transaction label too.
+  undo: 'Zpět',
+  redo: 'Znovu',
+  'feature.delete': 'Smazat',
+  'feature.suppress': 'Potlačit',
+  'feature.rename': 'Přejmenovat',
+  'timeline.rollHere': 'Posunout bar sem',
+  'view.fitAll': 'Zobrazit vše',
+  'timeline.toStart': 'Na začátek',
+  'timeline.stepBack': 'O krok zpět',
+  'timeline.stepForward': 'O krok vpřed',
+  'timeline.toEnd': 'Na konec',
 
   // Browser.
   'browser.title': 'Prohlížeč',

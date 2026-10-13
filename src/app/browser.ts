@@ -1,7 +1,7 @@
 // openAppSession (spec 11, "Kompoziční kořen (app)"): the thin browser layer. It builds what
 // createAppSession takes as deps – the OCCT kernel worker, the IndexedDB store, the Web Lock
 // (Q038) and the three.js viewport – and releases them again. Only the e2e test covers it; the
-// parts with logic (documents.ts, doc-lock.ts, store-drain.ts) are tested in Node.
+// parts with logic (documents.ts, doc-lock.ts) are tested in Node.
 
 import { createRandomIdGenerator, DisposableStore } from '@/core';
 import type { Disposable, IdGenerator } from '@/core';
@@ -16,7 +16,6 @@ import { acquireDocumentLock } from './doc-lock';
 import * as documents from './documents';
 import { createAppSession } from './session';
 import type { AppSession } from './session';
-import { createDrainableStore } from './store-drain';
 
 export interface OpenAppSessionOptions {
   readonly docId: DocumentId;
@@ -30,16 +29,15 @@ export interface OpenAppSessionOptions {
 /**
  * Opens the document in this tab. Without the document lock (another tab has it) the session
  * is read-only. Rejects like createAppSession; everything made so far is released then.
- * dispose releases the session, the viewport, and – after the final save – the store and the
- * lock.
+ * close waits for the final save of the session, then releases the viewport, the store and the
+ * lock; dispose releases everything at once without waiting for the save.
  */
 export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSession> {
   const lifetime = new DisposableStore();
   try {
     // Before loading (spec 05): the lock decides whether this tab may write.
     const lock = lifetime.add(await acquireDocumentLock(navigator.locks, opts.docId));
-    const idb = lifetime.add(createIdbDocumentStore());
-    const drainable = createDrainableStore(idb);
+    const store = lifetime.add(createIdbDocumentStore());
     const viewport = lifetime.add(
       createViewport({
         meshes: NO_KERNEL_YET,
@@ -48,7 +46,7 @@ export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSe
     );
     const session = await createAppSession({
       plugins: opts.plugins,
-      store: drainable.store,
+      store,
       docId: opts.docId,
       createKernel: createOcctKernel,
       viewport,
@@ -57,27 +55,28 @@ export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSe
       ids: randomIds(),
       translate: opts.translate,
       readOnly: !lock.held,
+      // Replay the whole log on every open while developing (spec 05, "verify").
+      verify: import.meta.env.DEV,
     });
 
-    let disposed = false;
+    // Reverse order of creation: the viewport, then the store, then the lock.
+    let closing: Promise<void> | null = null;
+    async function close(): Promise<void> {
+      try {
+        await session.close();
+      } finally {
+        lifetime.dispose();
+      }
+    }
     return Object.freeze({
       ...session,
+      close() {
+        closing ??= close();
+        return closing;
+      },
       dispose() {
-        if (disposed) return;
-        disposed = true;
         session.dispose();
-        viewport.dispose();
-        // The store and the lock (added before the viewport, released after it) go once the
-        // final flush of the session has written.
-        drainable.drained().then(
-          () => {
-            lifetime.dispose();
-          },
-          (e: unknown) => {
-            lifetime.dispose();
-            console.error(e);
-          },
-        );
+        lifetime.dispose();
       },
     });
   } catch (e) {
@@ -104,9 +103,12 @@ export function createNewDocument(opts: {
   );
 }
 
-/** Deletes the document with its history; a missing id does nothing. */
+/**
+ * Deletes the document with its history; a missing id does nothing. Rejects when the document
+ * is open in another tab (its lock is held).
+ */
 export function deleteDocument(id: DocumentId): Promise<void> {
-  return withStore((store) => documents.deleteDocument(store, id));
+  return withStore((store) => documents.deleteDocument({ store, locks: navigator.locks }, id));
 }
 
 /** A store worker for one call of the document list, terminated after it. */

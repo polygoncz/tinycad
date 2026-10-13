@@ -9,13 +9,17 @@ interface TestAction extends Action {
   readonly runs: () => number;
 }
 
-function anAction(id: string, opts: { shortcut?: string; enabled?: boolean } = {}): TestAction {
+function anAction(
+  id: string,
+  opts: { shortcut?: string | readonly string[]; enabled?: boolean; group?: string } = {},
+): TestAction {
   const enabledValue = new ObservableValue(opts.enabled ?? true);
   let runs = 0;
   return {
     id,
     label: `Label ${id}`,
     ...(opts.shortcut === undefined ? {} : { shortcut: opts.shortcut }),
+    ...(opts.group === undefined ? {} : { group: opts.group }),
     enabled: enabledValue,
     enabledValue,
     run: () => {
@@ -37,9 +41,33 @@ describe('ActionRegistry', () => {
       registry.register(anAction('edit.undo', { shortcut: 'Mod+Z' }));
       registry.register(anAction('edit.redo', { enabled: false }));
       expect(registry.actions.get()).toEqual([
-        { id: 'edit.undo', label: 'Label edit.undo', shortcut: 'Mod+Z', enabled: true },
-        { id: 'edit.redo', label: 'Label edit.redo', shortcut: null, enabled: false },
+        {
+          id: 'edit.undo',
+          label: 'Label edit.undo',
+          shortcut: 'Mod+Z',
+          group: null,
+          enabled: true,
+        },
+        {
+          id: 'edit.redo',
+          label: 'Label edit.redo',
+          shortcut: null,
+          group: null,
+          enabled: false,
+        },
       ]);
+    });
+
+    it('carries the group of the action', () => {
+      const registry = createActionRegistry();
+      registry.register(anAction('feature.edit', { group: 'feature' }));
+      expect(registry.actions.get()[0]?.group).toBe('feature');
+    });
+
+    it('shows the first of several shortcuts', () => {
+      const registry = createActionRegistry();
+      registry.register(anAction('feature.delete', { shortcut: ['Delete', 'Backspace'] }));
+      expect(registry.actions.get()[0]?.shortcut).toBe('Delete');
     });
 
     it('is frozen', () => {
@@ -126,6 +154,39 @@ describe('ActionRegistry', () => {
       }).toThrow();
     });
 
+    it('throws on a duplicate among the alternatives of two actions', () => {
+      const registry = createActionRegistry();
+      registry.register(anAction('a', { shortcut: ['Delete', 'Backspace'] }));
+      expect(() => {
+        registry.register(anAction('b', { shortcut: ['X', 'Backspace'] }));
+      }).toThrow(/Backspace/);
+      // Nothing of the rejected action stays: its first shortcut is still free.
+      registry.register(anAction('c', { shortcut: 'X' }));
+    });
+
+    it('throws on a duplicate within the alternatives of one action', () => {
+      const registry = createActionRegistry();
+      expect(() => {
+        registry.register(anAction('a', { shortcut: ['Mod+Z', 'Mod+z'] }));
+      }).toThrow();
+      expect(registry.actions.get()).toEqual([]);
+    });
+
+    it('throws on an invalid alternative', () => {
+      const registry = createActionRegistry();
+      expect(() => {
+        registry.register(anAction('a', { shortcut: ['Delete', 'Foo+Z'] }));
+      }).toThrow();
+      registry.register(anAction('b', { shortcut: 'Delete' }));
+    });
+
+    it('throws on an empty list of shortcuts', () => {
+      const registry = createActionRegistry();
+      expect(() => {
+        registry.register(anAction('a', { shortcut: [] }));
+      }).toThrow();
+    });
+
     it('throws on an invalid shortcut', () => {
       const registry = createActionRegistry();
       expect(() => {
@@ -207,6 +268,15 @@ describe('ActionRegistry', () => {
       registry.register(del);
       expect(registry.handleKey(key('Delete'))).toBe(true);
       expect(del.runs()).toBe(1);
+    });
+
+    it('runs the action on any of its shortcuts', () => {
+      const registry = createActionRegistry();
+      const del = anAction('feature.delete', { shortcut: ['Delete', 'Backspace'] });
+      registry.register(del);
+      expect(registry.handleKey(key('Delete'))).toBe(true);
+      expect(registry.handleKey(key('Backspace'))).toBe(true);
+      expect(del.runs()).toBe(2);
     });
 
     it('ignores keys in a text field', () => {

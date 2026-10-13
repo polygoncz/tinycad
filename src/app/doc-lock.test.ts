@@ -2,27 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { DocumentId } from '@/document';
 import { acquireDocumentLock, documentLockName } from './doc-lock';
 import type { DocumentLocks } from './doc-lock';
-import { settle } from './testing';
+import { aFakeLocks, settle } from './testing';
 
 // Branded ids are created by a cast at one place in tests.
 const DOC = 'doc1' as DocumentId;
-
-/** A LockManager with ifAvailable semantics: one holder per name, a busy name gets null. */
-function aFakeLocks() {
-  const held = new Set<string>();
-  const requests: { name: string; ifAvailable: boolean }[] = [];
-  const locks: DocumentLocks = {
-    request(name, options, callback) {
-      requests.push({ name, ifAvailable: options.ifAvailable });
-      if (held.has(name)) return callback(null);
-      held.add(name);
-      return callback({ name }).finally(() => {
-        held.delete(name);
-      });
-    },
-  };
-  return { locks, held, requests };
-}
 
 describe('acquireDocumentLock', () => {
   it('names the lock after the document', () => {

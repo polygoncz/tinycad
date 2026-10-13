@@ -74,6 +74,8 @@ export interface FeatureSchema<P = unknown> {
   readonly version: number;
   /** Translation key of the display name, 'box.label' (ADR 0014). */
   readonly label: string;
+  /** Tabler icon name, 'box' (Timeline, M10); the UI falls back to a generic icon. */
+  readonly icon?: string;
   readonly params: ParamSchema;
   defaults(): P;
   /** Takes unknown: params come from the document unchecked. Usually validateAgainstSchema + own rules. */
