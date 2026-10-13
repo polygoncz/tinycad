@@ -12,11 +12,14 @@ export interface ScenePalette {
   /** Overlay of tools. */
   readonly preview: number;
   readonly construction: number;
+  /** Both palettes: the mockup's red, green and blue. */
   readonly axes: readonly [x: number, y: number, z: number];
+  readonly grid: readonly [center: number, line: number];
 }
 
 function freezePalette(palette: ScenePalette): ScenePalette {
   Object.freeze(palette.axes);
+  Object.freeze(palette.grid);
   return Object.freeze(palette);
 }
 
@@ -28,7 +31,8 @@ export const LIGHT_PALETTE: ScenePalette = freezePalette({
   selection: 0x2563eb,
   preview: 0x2563eb,
   construction: 0x6b7280,
-  axes: [0xe53935, 0x43a047, 0x1e88e5],
+  axes: [0xff3b30, 0x34c759, 0x0a84ff],
+  grid: [0xb4b9c1, 0xd5d8dd],
 });
 
 /** By the M10 mockup (spec 11, "Rozvržení"). */
@@ -38,10 +42,9 @@ export const DARK_PALETTE: ScenePalette = freezePalette({
   edge: 0x9cc3f5,
   hover: 0x5e9ff5,
   selection: 0x0a84ff,
-  // Not given by the plan: the light palette also previews in the selection colour.
   preview: 0x0a84ff,
-  // Not given by the plan: the light grey kept; it reads on both backgrounds.
   construction: 0x6b7280,
-  // Not given by the plan: the light axes kept.
-  axes: [0xe53935, 0x43a047, 0x1e88e5],
+  axes: [0xff3b30, 0x34c759, 0x0a84ff],
+  // Muted on the dark background.
+  grid: [0x3a3c42, 0x2c2e33],
 });

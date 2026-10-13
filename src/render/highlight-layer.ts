@@ -34,7 +34,7 @@ export interface HighlightLayerInternal extends HighlightPort, Disposable {
   readonly group: THREE.Group;
   /**
    * Rebuilds the highlight from the current meshes after BodyLayer swapped the scene (spec 09
-   * point 9). Targets whose body disappeared or whose index is out of range are dropped, and the
+   * point 9) or changed the visibility of a body. Targets whose body disappeared or whose index is out of range are dropped, and the
    * state shrinks by them. No-op after dispose.
    */
   rebuild(): void;
@@ -81,7 +81,9 @@ export function createHighlightLayer(options: HighlightLayerOptions): HighlightL
 
   function draw(target: HighlightTarget, look: Look): void {
     const view = views.get(target.body);
-    if (view === undefined) return;
+    // A hidden body keeps its targets in the state but draws none (spec 09, setBodyVisible);
+    // rebuild after showing it draws them again.
+    if (view === undefined || !view.object.visible) return;
     let object: THREE.Object3D;
     if (target.kind === 'face') {
       const geometry = new THREE.BufferGeometry();

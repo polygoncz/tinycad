@@ -8,8 +8,7 @@ import type { ScenePalette } from './palette';
 /** Grid size and cell in mm. */
 const GRID_SIZE = 200;
 const GRID_CELL = 10;
-const GRID_CENTER_COLOR = 0xb4b9c1;
-const GRID_COLOR = 0xd5d8dd;
+const GRID_DIVISIONS = GRID_SIZE / GRID_CELL;
 
 /** Side of the axis triad viewport in CSS px. */
 const AXES_SIZE = 120;
@@ -22,10 +21,12 @@ export interface SceneHelpers extends Disposable {
    * main camera. Leaves the renderer's viewport and scissor test as it found them (full canvas).
    */
   drawAxes(renderer: THREE.WebGLRenderer, mainCamera: THREE.Camera): void;
-  /** Recolours the axis triad in place (Q072); the caller requests the render. */
+  /** Recolours the grid and the axis triad in place (Q072); the caller requests the render. */
   setPalette(palette: ScenePalette): void;
   /** The axis triad; exposed for tests of its colours. */
   readonly axes: THREE.AxesHelper;
+  /** The grid; exposed for tests of its colours. */
+  readonly grid: THREE.GridHelper;
 }
 
 /**
@@ -37,12 +38,8 @@ export function createSceneHelpers(
   camera: THREE.Camera,
   palette: ScenePalette,
 ): SceneHelpers {
-  const grid = new THREE.GridHelper(
-    GRID_SIZE,
-    GRID_SIZE / GRID_CELL,
-    GRID_CENTER_COLOR,
-    GRID_COLOR,
-  );
+  const [gridCenter, gridLine] = palette.grid;
+  const grid = new THREE.GridHelper(GRID_SIZE, GRID_DIVISIONS, gridCenter, gridLine);
   // GridHelper lies in XZ; turned about X into XY (Z up).
   grid.rotation.x = Math.PI / 2;
   // The grid lies in z = 0 like the bottom faces of bodies standing on it, which would z-fight.
@@ -72,7 +69,9 @@ export function createSceneHelpers(
 
   return {
     axes,
+    grid,
     setPalette(next: ScenePalette): void {
+      setGridColors(grid, next);
       setAxisColors(axes, next);
     },
     drawAxes(renderer: THREE.WebGLRenderer, mainCamera: THREE.Camera): void {
@@ -109,4 +108,21 @@ export function createSceneHelpers(
 function setAxisColors(axes: THREE.AxesHelper, palette: ScenePalette): void {
   const [x, y, z] = palette.axes;
   axes.setColors(new THREE.Color(x), new THREE.Color(y), new THREE.Color(z));
+}
+
+/**
+ * Centre line and the other lines by the palette; rewrites the colour attribute of the same
+ * geometry. Mirrors the layout of GridHelper: divisions + 1 line pairs, four vertices each, the
+ * pair at index divisions / 2 is the centre.
+ */
+function setGridColors(grid: THREE.GridHelper, palette: ScenePalette): void {
+  const [center, line] = palette.grid;
+  const centerColor = new THREE.Color(center);
+  const lineColor = new THREE.Color(line);
+  const attribute = grid.geometry.getAttribute('color');
+  for (let i = 0; i <= GRID_DIVISIONS; i++) {
+    const color = i === GRID_DIVISIONS / 2 ? centerColor : lineColor;
+    for (let v = 0; v < 4; v++) attribute.setXYZ(i * 4 + v, color.r, color.g, color.b);
+  }
+  attribute.needsUpdate = true;
 }

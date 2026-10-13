@@ -20,10 +20,12 @@
     "check": "npm run typecheck && npm run lint && npm run lint:deps && npm run lint:vault && npm run test"
   },
   "dependencies": {
+    "@tabler/icons-webfont": "^3.49.0",
     "gl-matrix": "^3.4.4",
     "replicad-opencascadejs": "1.1.0",
     "three": "~0.186.1",
-    "vue": "^3.5.43"
+    "vue": "^3.5.43",
+    "vue-i18n": "^11.4.14"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

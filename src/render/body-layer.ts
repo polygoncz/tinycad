@@ -26,7 +26,10 @@ export interface BodyLayerInternal extends BodyLayer, Disposable {
   /** Parent of every BodyView object; the viewport puts it into the scene. */
   readonly group: THREE.Group;
   readonly views: ReadonlyMap<BodyId, BodyView>;
-  /** Union of the bounds of the shown bodies, null when there are none (CameraRig.getBounds). */
+  /**
+   * Union of the bounds of the shown and visible bodies, null when there are none
+   * (CameraRig.getBounds): fitAll leaves hidden bodies out.
+   */
   bounds(): BoundingBox | null;
   /** Recolours the shared materials (Q072); the caller requests the render. */
   setPalette(palette: ScenePalette): void;
@@ -45,6 +48,8 @@ export interface BodyLayerOptions {
   readonly palette: ScenePalette;
   /** Called after every scene swap (`apply`): the highlight rebuilds from the new meshes. */
   readonly afterApply?: () => void;
+  /** Called after setBodyVisible changed a body: the highlight of a hidden body is not drawn. */
+  readonly afterVisibilityChange?: () => void;
 }
 
 export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
@@ -95,7 +100,8 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
     group,
     views,
     bounds(): BoundingBox | null {
-      return unionBounds([...views.values()].map((view) => view.bounds));
+      const visible = [...views.values()].filter((view) => view.object.visible);
+      return unionBounds(visible.map((view) => view.bounds));
     },
     sync(bodies) {
       return sceneSync.sync(bodies);
@@ -109,6 +115,7 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
       view.object.visible = visible;
       if (visible) hidden.delete(body);
       else hidden.add(body);
+      options.afterVisibilityChange?.();
       requestRender();
     },
     reset(next) {

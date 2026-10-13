@@ -10,6 +10,7 @@ const KEYS = [
   'preview',
   'construction',
   'axes',
+  'grid',
 ] as const satisfies readonly (keyof ScenePalette)[];
 
 const isColor = (value: unknown): boolean =>
@@ -22,21 +23,28 @@ describe.each([
   it('is frozen, axes included', () => {
     expect(Object.isFrozen(palette)).toBe(true);
     expect(Object.isFrozen(palette.axes)).toBe(true);
+    expect(Object.isFrozen(palette.grid)).toBe(true);
   });
 
   it('has a colour for every key and nothing else', () => {
     expect(Object.keys(palette).sort()).toEqual([...KEYS].sort());
     for (const key of KEYS) {
-      if (key === 'axes') continue;
+      if (key === 'axes' || key === 'grid') continue;
       expect(isColor(palette[key]), key).toBe(true);
     }
     expect(palette.axes).toHaveLength(3);
     expect(palette.axes.every(isColor)).toBe(true);
+    expect(palette.grid).toHaveLength(2);
+    expect(palette.grid.every(isColor)).toBe(true);
+  });
+
+  it('has the axes of the mockup', () => {
+    expect(palette.axes).toEqual([0xff3b30, 0x34c759, 0x0a84ff]);
   });
 });
 
 describe('palettes', () => {
-  it('light keeps the colours of M8 and M9', () => {
+  it('light keeps the colours of M8 and M9, axes by the mockup', () => {
     expect(LIGHT_PALETTE).toEqual({
       background: 0xf3f4f6,
       face: 0xb9c3d1,
@@ -45,7 +53,8 @@ describe('palettes', () => {
       selection: 0x2563eb,
       preview: 0x2563eb,
       construction: 0x6b7280,
-      axes: [0xe53935, 0x43a047, 0x1e88e5],
+      axes: [0xff3b30, 0x34c759, 0x0a84ff],
+      grid: [0xb4b9c1, 0xd5d8dd],
     });
   });
 
@@ -56,6 +65,8 @@ describe('palettes', () => {
       edge: 0x9cc3f5,
       selection: 0x0a84ff,
       hover: 0x5e9ff5,
+      preview: 0x0a84ff,
+      construction: 0x6b7280,
     });
   });
 });

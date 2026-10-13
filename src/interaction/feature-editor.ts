@@ -153,7 +153,8 @@ export function createFeatureEditor(deps: {
       const feature = doc.feature(featureId);
       assert(feature !== undefined, `edit: unknown feature '${featureId}'`);
       const schema = schemas.get(feature.type);
-      const tx = begin(`Edit ${feature.name}`, (t) => {
+      // A translation key; the feature name does not belong in it (ADR 0014).
+      const tx = begin('feature.edit', (t) => {
         // The bar sits right behind the edited feature for the session only (Q018).
         const index = doc.indexOf(featureId) + 1;
         if (doc.studio.rollbackIndex === index) return;

@@ -273,10 +273,39 @@ describe('Regenerator.run', () => {
         error: {
           code: 'INVALID_PARAMS',
           message: 'size: param.atOrBelowMin; strict.inconsistent',
+          issues: [
+            { param: 'size', code: 'param.atOrBelowMin', params: { min: 0 } },
+            { param: '', code: 'strict.inconsistent' },
+          ],
         },
       });
       expect(result.statuses.get(aFeature({ id: 'b' }).id)).toEqual(OK);
       expect(bodyIds(result)).toEqual(['b/body']);
+    });
+
+    it('a zero height gives INVALID_PARAMS with a frozen copy of the issues', async () => {
+      const { run, schemas, builders } = setup();
+      builders.register(aSpyBuilder('tall'));
+      const returned = [{ param: 'height', code: 'param.atOrBelowMin', params: { min: 0 } }];
+      schemas.register(aSchema('tall', () => returned));
+      const result = await run(aStudio([aFeature({ id: 'a', type: 'tall' })]));
+      const status = result.statuses.get(aFeature({ id: 'a' }).id);
+      expect(status).toEqual({
+        kind: 'error',
+        error: {
+          code: 'INVALID_PARAMS',
+          message: 'height: param.atOrBelowMin',
+          issues: [{ param: 'height', code: 'param.atOrBelowMin', params: { min: 0 } }],
+        },
+      });
+      const issues = status?.kind === 'error' ? status.error.issues : undefined;
+      expect(issues).not.toBe(returned);
+      expect(Object.isFrozen(issues)).toBe(true);
+      expect(issues?.every((issue) => Object.isFrozen(issue))).toBe(true);
+      expect(issues?.every((issue) => Object.isFrozen(issue.params))).toBe(true);
+      // The schema's own array stays as it was.
+      expect(Object.isFrozen(returned)).toBe(false);
+      expect(Object.isFrozen(returned[0])).toBe(false);
     });
 
     it('invalid params of the default schema skip the builder', async () => {

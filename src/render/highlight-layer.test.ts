@@ -11,10 +11,14 @@ import { aBoxMesh } from './testing';
 const A = 'f1/body' as BodyId;
 
 function setup() {
-  const mesh = aBoxMesh([0, 0, 0], [10, 10, 10]);
-  const views = new Map<BodyId, BodyView>([
-    [A, createBodyView(A, mesh, createBodyMaterials(LIGHT_PALETTE))],
-  ]);
+  return setupWith(new Map<BodyId, BodyView>([[A, viewOf(A)]]));
+}
+
+function viewOf(id: BodyId): BodyView {
+  return createBodyView(id, aBoxMesh([0, 0, 0], [10, 10, 10]), createBodyMaterials(LIGHT_PALETTE));
+}
+
+function setupWith(views: ReadonlyMap<BodyId, BodyView>) {
   const layer = createHighlightLayer({
     views,
     requestRender: () => undefined,
@@ -67,5 +71,55 @@ describe('HighlightLayer palette', () => {
       DARK_PALETTE.selection,
       DARK_PALETTE.hover,
     ]);
+  });
+});
+
+describe('HighlightLayer on a hidden body', () => {
+  const B = 'f2/body' as BodyId;
+
+  function hiddenSetup() {
+    const views = new Map<BodyId, BodyView>([
+      [A, viewOf(A)],
+      [B, viewOf(B)],
+    ]);
+    const layer = createHighlightLayer({
+      views,
+      requestRender: () => undefined,
+      palette: LIGHT_PALETTE,
+    });
+    const viewA = views.get(A);
+    if (viewA === undefined) throw new Error('view A');
+    return { layer, viewA };
+  }
+
+  it('draws neither hover nor selection of a hidden body', () => {
+    const { layer, viewA } = hiddenSetup();
+    viewA.object.visible = false;
+    layer.setSelection([{ kind: 'edge', body: A, edgeIndex: 0 }]);
+    layer.setHover({ kind: 'face', body: A, faceIndex: 0 });
+    expect(layer.group.children).toHaveLength(0);
+  });
+
+  it('still draws the visible bodies', () => {
+    const { layer, viewA } = hiddenSetup();
+    viewA.object.visible = false;
+    layer.setSelection([
+      { kind: 'face', body: A, faceIndex: 0 },
+      { kind: 'face', body: B, faceIndex: 0 },
+    ]);
+    expect(layer.group.children).toHaveLength(1);
+  });
+
+  it('rebuild after hiding drops the drawing, after showing brings it back', () => {
+    const { layer, viewA } = hiddenSetup();
+    layer.setSelection([{ kind: 'face', body: A, faceIndex: 0 }]);
+    layer.setHover({ kind: 'edge', body: A, edgeIndex: 0 });
+    expect(layer.group.children).toHaveLength(2);
+    viewA.object.visible = false;
+    layer.rebuild();
+    expect(layer.group.children).toHaveLength(0);
+    viewA.object.visible = true;
+    layer.rebuild();
+    expect(layer.group.children).toHaveLength(2);
   });
 });

@@ -125,6 +125,9 @@ export function createViewport(deps: {
       afterApply: () => {
         highlightLayer.rebuild();
       },
+      afterVisibilityChange: () => {
+        highlightLayer.rebuild();
+      },
     }),
   );
   scene.add(layer.group);

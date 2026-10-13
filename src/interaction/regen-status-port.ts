@@ -5,12 +5,17 @@
 // them from the document directly, so they show at once, not after a regeneration.
 
 import type { Observable } from '@/core';
-import type { BodyId, FeatureId } from '@/document';
+import type { BodyId, FeatureId, ParamIssue } from '@/document';
 
 export type FeatureHealth =
   | { readonly kind: 'ok' }
   | { readonly kind: 'warning'; readonly message: string }
-  | { readonly kind: 'error'; readonly message: string };
+  | {
+      readonly kind: 'error';
+      readonly message: string;
+      /** Invalid params (INVALID_PARAMS); ui translates these, not the message (ADR 0014). */
+      readonly issues?: readonly ParamIssue[];
+    };
 
 /** A body of the last regeneration and the feature that made it. */
 export interface RegenBody {

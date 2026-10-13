@@ -1,4 +1,4 @@
-import type { BodyId, FeatureId } from '@/document';
+import type { BodyId, FeatureId, ParamIssue } from '@/document';
 import type { ShapeHandle } from '@/kernel';
 
 // Regeneration state (spec 07): an immutable snapshot of what exists after a feature.
@@ -29,7 +29,10 @@ export const EMPTY_STATE: RegenState = Object.freeze({ bodies: new Map<BodyId, B
 
 export interface FeatureError {
   readonly code: 'INVALID_PARAMS' | 'UNRESOLVED_REFERENCE' | 'KERNEL' | 'UNKNOWN_TYPE';
+  /** Technical text for logs and kernel errors; the UI does not show it for INVALID_PARAMS. */
   readonly message: string;
+  /** Only INVALID_PARAMS: the problems from schema.validate, translated by the UI (ADR 0014). */
+  readonly issues?: readonly ParamIssue[];
 }
 
 export type FeatureStatus =

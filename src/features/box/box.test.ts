@@ -305,7 +305,17 @@ function aToolManager(editor: FeatureEditor) {
 
 describe('boxTool', () => {
   it('is the primitive tool box', () => {
-    expect(boxTool).toMatchObject({ id: 'box', label: 'Box', icon: 'box', group: 'primitive' });
+    expect(boxTool).toMatchObject({
+      id: 'box',
+      label: 'box.label',
+      icon: 'box',
+      group: 'primitive',
+    });
+  });
+
+  it('labels the tool with a key the box messages translate (ADR 0014)', () => {
+    expect(boxMessages.cs[boxTool.label]).toBe('Kvádr');
+    expect(boxMessages.en[boxTool.label]).toBe('Box');
   });
 
   it('opens the dialog for a new box and returns to the default tool', () => {

@@ -15,7 +15,9 @@ const shape = (n: number): ShapeHandle => n as ShapeHandle;
 
 async function setup() {
   const requestRender = vi.fn();
+  const afterVisibilityChange = vi.fn();
   const layer = createBodyLayer({
+    afterVisibilityChange,
     meshes: boxMeshes(),
     quality: { linearDeflection: 0.1, angularDeflection: 0.5 },
     reportError: () => undefined,
@@ -31,7 +33,7 @@ async function setup() {
     { id: B, shape: b },
   ]);
   requestRender.mockClear();
-  return { layer, requestRender, box, a, b };
+  return { layer, requestRender, afterVisibilityChange, box, a, b };
 }
 
 function materialsOf(layer: Awaited<ReturnType<typeof setup>>['layer'], id: BodyId) {
@@ -100,6 +102,18 @@ describe('BodyLayer visibility', () => {
     expect(requestRender).toHaveBeenCalledTimes(1);
   });
 
+  it('reports a change only (the highlight redraws on it)', async () => {
+    const { layer, afterVisibilityChange } = await setup();
+    layer.setBodyVisible(A, true);
+    layer.setBodyVisible(body('nope'), false);
+    expect(afterVisibilityChange).not.toHaveBeenCalled();
+    layer.setBodyVisible(A, false);
+    layer.setBodyVisible(A, false);
+    expect(afterVisibilityChange).toHaveBeenCalledTimes(1);
+    layer.setBodyVisible(A, true);
+    expect(afterVisibilityChange).toHaveBeenCalledTimes(2);
+  });
+
   it('an unknown body does nothing', async () => {
     const { layer, requestRender, a, b } = await setup();
     const unknown = body('nope');
@@ -141,5 +155,26 @@ describe('BodyLayer visibility', () => {
     layer.reset(boxMeshes());
     await layer.sync([{ id: A, shape: shape(5) }]);
     expect(layer.views.get(A)?.object.visible).toBe(true);
+  });
+});
+
+describe('BodyLayer bounds', () => {
+  it('leave hidden bodies out (fitAll)', async () => {
+    const { layer } = await setup();
+    // Boxes from the origin, B the bigger one: hiding B shrinks the union to A.
+    const both = layer.bounds();
+    const onlyA = layer.views.get(A)?.bounds;
+    layer.setBodyVisible(B, false);
+    expect(layer.bounds()).toEqual(onlyA);
+    expect(layer.bounds()).not.toEqual(both);
+    layer.setBodyVisible(B, true);
+    expect(layer.bounds()).toEqual(both);
+  });
+
+  it('are null when every body is hidden', async () => {
+    const { layer } = await setup();
+    layer.setBodyVisible(A, false);
+    layer.setBodyVisible(B, false);
+    expect(layer.bounds()).toBeNull();
   });
 });

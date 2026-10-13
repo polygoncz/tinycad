@@ -207,12 +207,12 @@ describe('FeatureEditor.edit', () => {
     expect(editor.current.get()).toBe(session);
   });
 
-  it('labels the entry Edit <name>', () => {
+  it('labels the entry with the key feature.edit, without the feature name (ADR 0014)', () => {
     const { log, editor } = setup({ features: [aBox('a', 'Box 7')] });
     const session = editor.edit(fid('a'));
     session.setParam('width', 3);
     session.commit();
-    expect(log.entries().map((e) => e.label)).toEqual(['Edit Box 7']);
+    expect(log.entries().map((e) => e.label)).toEqual(['feature.edit']);
   });
 
   it('throws for an unknown feature and changes nothing', () => {

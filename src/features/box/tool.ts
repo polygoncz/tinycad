@@ -5,7 +5,8 @@ import type { Tool, ToolDescriptor } from '@/interaction';
 
 export const boxTool: ToolDescriptor = Object.freeze<ToolDescriptor>({
   id: 'box',
-  label: 'Box',
+  // A translation key from the box messages (ADR 0014).
+  label: 'box.label',
   icon: 'box',
   group: 'primitive',
   create: createBoxTool,

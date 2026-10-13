@@ -100,7 +100,11 @@ export function createRegenerator(deps: {
 
     const issues = schema.validate(feature.params);
     if (issues.length > 0) {
-      return failed({ code: 'INVALID_PARAMS', message: issues.map(formatIssue).join('; ') });
+      return failed({
+        code: 'INVALID_PARAMS',
+        message: issues.map(formatIssue).join('; '),
+        issues: freezeIssues(issues),
+      });
     }
 
     const session = createBuildSession({ kernel, owned, state: input });
@@ -279,6 +283,19 @@ function isDisconnected(e: unknown): e is RpcError {
 }
 
 /** 'param: code', or the code alone for an issue of the params as a whole (codes since ADR 0014). */
+/** A frozen copy: the status lives in the cache and goes to the UI, the schema's array may not be frozen. */
+function freezeIssues(issues: readonly ParamIssue[]): readonly ParamIssue[] {
+  return Object.freeze(
+    issues.map((issue) =>
+      Object.freeze(
+        issue.params === undefined
+          ? { ...issue }
+          : { ...issue, params: Object.freeze({ ...issue.params }) },
+      ),
+    ),
+  );
+}
+
 function formatIssue(issue: ParamIssue): string {
   return issue.param === '' ? issue.code : `${issue.param}: ${issue.code}`;
 }
