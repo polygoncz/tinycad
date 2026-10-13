@@ -61,7 +61,7 @@ Každý úkol dělá zvlášť subagent `implementer` (TDD: test nejdřív a ov�
 | C | Ú7 vestavěné akce · Ú8 `openAppSession` a dokumenty · Ú9 `Timeline` a `Browser` | B |
 | C2 | Ú7b doplňky z revize vlny C | C |
 | D | Ú10 zbytek komponent a spuštění aplikace | C2 |
-| E | Ú11 e2e test · Ú12 ověření a revize (hlavní sezení) | D |
+| E | Ú10b doladění UI · Ú11 e2e test · pak Ú12 ověření a revize (hlavní sezení) | D |
 
 ### Vlna A
 
@@ -162,6 +162,12 @@ Jeden úkol, protože změny navazují přes vrstvy (typy z `interaction` potře
 - **Hotovo když:** `npm run check` a `npm run build` projdou a aplikace v `npm run dev` projde ručně cestu nový dokument → kvádr → OK → undo.
 
 ### Vlna E
+
+#### Ú10b Doladění UI z prvního spuštění
+- **Soubory:** `src/ui/components/FeatureDialog.vue`, `DocumentList.vue`, `TitleBar.vue` (případně vytažení přepínačů do `ThemeLocaleToggles.vue`), `Toolbar.vue`; `src/app/browser.ts` (+ test, co jde v Node).
+- **Kontrakt:** [[11-ui#Komponenty]] – Enter = OK, Esc = Zrušit v dialogu; přepínače jazyka a režimu i nad seznamem dokumentů; tooltip tlačítka v liště nesmí zakrývat popisek skupiny (pod lištu). [[01-architektura]] – `openAppSession` napojí `pagehide` a `visibilitychange` (`hidden`) na `flush()` persistence a při `close` je odpojí ([[Q034 Uložení při zavírání stránky|Q034]]); bez toho reload těsně po změně může ztratit poslední záznam.
+- **Testy:** logika napojení `pagehide`/`visibilitychange` nad falešným cílem událostí (odpojení při `close`); zbytek pokryje e2e.
+- **Hotovo když:** `npm run check` projde.
 
 #### Ú11 E2E smoke test
 - **Soubory:** `package.json` (`@playwright/test`, skript `test:e2e`), `playwright.config.ts`, `e2e/smoke.spec.ts`.

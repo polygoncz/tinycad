@@ -171,7 +171,7 @@ tinycad/
 │  ├─ ui/
 │  │  ├─ components/
 │  │  └─ composables/
-│  └─ main.ts               vytvoří AppSession a připojí Vue
+│  └─ main.ts               startUi('#app', { plugins: BUILT_IN_PLUGINS }) – seznam pluginů z app, Vue z ui
 ├─ tests/                   integrační testy (e2e); testy OCCT jsou vedle kódu v kernel-occt (Q051)
 ├─ .dependency-cruiser.cjs
 ├─ vite.config.ts
