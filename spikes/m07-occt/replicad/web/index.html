@@ -1,0 +1,9 @@
+<!doctype html><html><body><pre id="out">starting…</pre><div id="tick">0</div>
+<script type="module">
+const out = document.getElementById('out');
+let ticks = 0; const iv = setInterval(() => (document.getElementById('tick').textContent = String(++ticks)), 16);
+const t0 = performance.now();
+const w = new Worker(new URL('./occt.worker.js', import.meta.url), { type: 'module' });
+w.onmessage = (e) => { out.textContent = JSON.stringify({ ...e.data, mainMs: Math.round(performance.now() - t0), uiTicksDuringInit: ticks }, null, 2); clearInterval(iv); };
+w.onerror = (e) => (out.textContent = 'worker error: ' + e.message);
+</script></body></html>

@@ -1,0 +1,23 @@
+import type { RpcClient } from '@/core';
+import type { GeometryKernel } from '@/kernel';
+import type { OcctKernelProtocol } from './protocol';
+
+/**
+ * GeometryKernel on the main thread that forwards every call to the OCCT worker (spec 06,
+ * "kernel-occt: architektura adaptéru"). Thin: kernel errors arrive as RpcError with the same
+ * code (read with kernelErrorCode) and meshes arrive transferred, so nothing is converted.
+ * Takes only `call` of the RPC client (ADR 0011, narrow interfaces): failAll and dispose belong
+ * to the owner of the worker (Q037). `ready` waits for the OCCT initialisation in the worker.
+ */
+export function createOcctKernelClient(
+  rpc: Pick<RpcClient<OcctKernelProtocol>, 'call'>,
+): GeometryKernel & { ready(): Promise<void> } {
+  return {
+    ready: () => rpc.call('ready'),
+    makeBox: (p) => rpc.call('makeBox', p),
+    tessellate: (shape, q) => rpc.call('tessellate', shape, q),
+    boundingBox: (shape) => rpc.call('boundingBox', shape),
+    release: (handles) => rpc.call('release', handles),
+    liveHandleCount: () => rpc.call('liveHandleCount'),
+  };
+}

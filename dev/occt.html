@@ -1,0 +1,30 @@
+<!doctype html>
+<!--
+  Temporary dev page (M7, manual check of the OCCT worker): open /dev/occt.html on the dev server.
+  Not part of the app. Remove or archive after M10.
+-->
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>tinycad – OCCT dev</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 2rem;
+      }
+      pre {
+        font-size: 1rem;
+      }
+      .error {
+        color: #b00020;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>OCCT worker</h1>
+    <p>Frames during init: <strong id="frames">0</strong></p>
+    <pre id="out">Loading OCCT…</pre>
+    <script type="module" src="./occt.ts"></script>
+  </body>
+</html>

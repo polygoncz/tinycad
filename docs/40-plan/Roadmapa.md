@@ -7,7 +7,7 @@ aliases:
 tags:
   - plan
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 # Roadmapa
 
@@ -35,6 +35,7 @@ Jediná entita až do M10 je **kvádr (Box)**. Druhá entita v M11 je zkouška r
 | [[M13-extrude-revolve\|M13]] | Extrude a Revolve | `features/*` | tělesa ze skici |
 | [[M14-topologicke-pojmenovani\|M14]] | Topologické pojmenování | `regen`, `kernel-occt` | fillet, chamfer, skica na ploše, stabilní reference |
 | [[M15-export-a-dokonceni\|M15]] | Export a dokončení | `kernel-occt`, `ui` | STEP export, import/export dokumentu |
+| [[M16-vlastni-occt-build\|M16]] | Vlastní OCCT build | `kernel-occt` | vlastní C++ modul přes Emscripten místo předpřipraveného buildu |
 
 Stav milníků (`todo` / `doing` / `done`) je **jen ve vlastnostech** souborů milníků – tabulka níže se z nich generuje sama:
 
@@ -45,10 +46,12 @@ Stav milníků (`todo` / `doing` / `done`) je **jen ve vlastnostech** souborů m
 ```
 M0 → M1 → M2 → M3 ─┬─► M4 ────────────────────────┐
                    │                              │
-          M1 → M5 ─┴─► M6 ─► M7 ─► M8 ─► M9 ─► M10 ─► M11 ─► M12 ─► M13 ─► M14 ─► M15
+          M1 → M5 ─┴─► M6 ─► M7 ─► M8 ─► M9 ─► M10 ─► M11 ─► M12 ─► M13 ─► M14 ─► M15 ─► M16
 ```
 
 M4 (persistence) a M5 (port jádra) na sobě nezávisí – pořadí lze prohodit. Persistence je dřív, protože ověří formát logu, dokud je čerstvý.
+
+M16 (vlastní OCCT build) technicky potřebuje jen M7. Na konci je proto, že předpřipravený build stačí. Přesune se dřív, pokud mu bude chybět API ([[0013-replicad-opencascadejs|ADR 0013]]).
 
 ## Jak pracovat s milníkem
 

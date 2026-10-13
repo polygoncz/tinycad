@@ -1,0 +1,6 @@
+{
+  "name": "spike-m07-replicad",
+  "private": true,
+  "type": "module",
+  "dependencies": { "replicad-opencascadejs": "1.1.0" }
+}

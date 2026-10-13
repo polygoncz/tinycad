@@ -1,3 +1,4 @@
+import type { Disposable } from '../disposable';
 import { RpcError } from './error';
 import {
   isRpcResponse,
@@ -7,10 +8,14 @@ import {
   type RpcRequest,
 } from './messages';
 
-export interface RpcClient<P extends RpcProtocol<P>> {
+export interface RpcClient<P extends RpcProtocol<P>> extends Disposable {
   // An explicit call() instead of a Proxy (client.method()): a Proxy answers every
   // property, including `then`, so `await`ing the client itself would hang.
   call<K extends keyof P & string>(method: K, ...args: P[K]['args']): Promise<P[K]['result']>;
+  /** The connection is dead: rejects pending and all later calls with RpcError('disconnected', message). */
+  failAll(message: string): void;
+  /** Same as failAll('RPC client disposed'). */
+  dispose(): void;
 }
 
 interface Pending {
@@ -21,9 +26,12 @@ interface Pending {
 export function createRpcClient<P extends RpcProtocol<P>>(ep: MessageEndpoint): RpcClient<P> {
   let nextId = 1;
   const pending = new Map<number, Pending>();
+  // Set once by failAll; the first message wins (Q037).
+  let disconnected: RpcError | undefined;
 
   listen(ep, (data) => {
     if (!isRpcResponse(data)) return;
+    // After failAll the map is empty, so late responses fall through here.
     const p = pending.get(data.id);
     if (!p) return;
     pending.delete(data.id);
@@ -31,8 +39,18 @@ export function createRpcClient<P extends RpcProtocol<P>>(ep: MessageEndpoint): 
     else p.reject(new RpcError(data.error.code, data.error.message));
   });
 
+  function failAll(message: string): void {
+    if (disconnected) return;
+    const error = new RpcError('disconnected', message);
+    disconnected = error;
+    const waiting = [...pending.values()];
+    pending.clear();
+    for (const p of waiting) p.reject(error);
+  }
+
   return {
     call(method, ...args) {
+      if (disconnected) return Promise.reject(disconnected);
       const id = nextId++;
       const request: RpcRequest = { id, method, args };
       return new Promise((resolve, reject) => {
@@ -46,6 +64,10 @@ export function createRpcClient<P extends RpcProtocol<P>>(ep: MessageEndpoint): 
           reject(new RpcError('unserializable', e instanceof Error ? e.message : String(e)));
         }
       });
+    },
+    failAll,
+    dispose: () => {
+      failAll('RPC client disposed');
     },
   };
 }

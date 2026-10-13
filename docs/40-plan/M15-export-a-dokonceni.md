@@ -16,7 +16,7 @@ finished:
 tags:
   - milnik
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 # M15 – Export a dokončení
 
@@ -36,7 +36,7 @@ updated: 2026-10-12
 
 ## Další nápady (mimo rozsah)
 
-- Vlastní C++ modul OCCT přes Emscripten místo předpřipraveného buildu (výměna adaptéru za portem).
+- Vlastní C++ modul OCCT přes Emscripten místo předpřipraveného buildu (výměna adaptéru za portem). → samostatný milník [[M16-vlastni-occt-build]].
 - Jádro na serveru jako alternativní adaptér `GeometryKernel`.
 - Proměnné a výrazy v parametrech.
 - Větvení verzí nad operačním logem.

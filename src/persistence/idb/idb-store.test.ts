@@ -1,6 +1,6 @@
 import { forceCloseDatabase, IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { serveRpc } from '@/core';
+import { createRpcClient, serveRpc } from '@/core';
 import type { DocumentId, DocumentMeta, FeatureId } from '@/document';
 import { aFeature } from '@/document/testing';
 import type { FeatureRenameOp, LogEntry } from '@/ops';
@@ -31,7 +31,7 @@ function connect(indexedDB: IDBFactory, now: () => number): DocumentStore {
   const { port1, port2 } = new MessageChannel();
   ports.push(port1, port2);
   serveRpc<DocumentStoreProtocol>(port1, createIdbStoreImpl({ indexedDB, now }));
-  return createDocumentStoreClient(port2);
+  return createDocumentStoreClient(createRpcClient<DocumentStoreProtocol>(port2));
 }
 
 describeDocumentStoreContract('IdbDocumentStore', ({ now }) =>

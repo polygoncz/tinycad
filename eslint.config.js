@@ -41,7 +41,7 @@ const platformGlobals = [
 }));
 
 export default defineConfig(
-  { ignores: ['dist/', 'coverage/', 'docs/', 'scripts/', 'node_modules/'] },
+  { ignores: ['dist/', 'coverage/', 'docs/', 'scripts/', 'spikes/', 'node_modules/'] },
 
   eslint.configs.recommended,
   tseslint.configs.strictTypeChecked,

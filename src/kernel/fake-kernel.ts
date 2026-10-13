@@ -16,6 +16,9 @@ export interface FakeKernel extends GeometryKernel {
   callCount(op?: KernelOp): number;
 }
 
+/** `read` of a method whose inputs are primitives: nothing to copy. */
+const noInput = (): undefined => undefined;
+
 export function createFakeKernel(): FakeKernel {
   return new FakeKernelImpl();
 }
@@ -49,9 +52,11 @@ class FakeKernelImpl implements FakeKernel {
 
   makeBox(p: { readonly origin: Vec3; readonly size: Vec3 }): Promise<ShapeResult> {
     // Spec 06, isolation: inputs are read synchronously at the call, as postMessage would clone them.
-    const origin: Vec3 = [p.origin[0], p.origin[1], p.origin[2]];
-    const size: Vec3 = [p.size[0], p.size[1], p.size[2]];
-    return this.call('makeBox', () => {
+    const read = (): { origin: Vec3; size: Vec3 } => ({
+      origin: [p.origin[0], p.origin[1], p.origin[2]],
+      size: [p.size[0], p.size[1], p.size[2]],
+    });
+    return this.call('makeBox', read, ({ origin, size }) => {
       if (!origin.every(Number.isFinite)) {
         throw createKernelError('invalid-input', 'makeBox: origin must be finite');
       }
@@ -68,8 +73,11 @@ class FakeKernelImpl implements FakeKernel {
   }
 
   tessellate(shape: ShapeHandle, q: MeshQuality): Promise<MeshData> {
-    const { linearDeflection, angularDeflection } = q;
-    return this.call('tessellate', () => {
+    const read = (): MeshQuality => ({
+      linearDeflection: q.linearDeflection,
+      angularDeflection: q.angularDeflection,
+    });
+    return this.call('tessellate', read, ({ linearDeflection, angularDeflection }) => {
       const valid = (d: number): boolean => Number.isFinite(d) && d > 0;
       if (!valid(linearDeflection) || !valid(angularDeflection)) {
         throw createKernelError('invalid-input', 'tessellate: deflections must be finite and > 0');
@@ -79,41 +87,53 @@ class FakeKernelImpl implements FakeKernel {
   }
 
   boundingBox(shape: ShapeHandle): Promise<BoundingBox> {
-    return this.call('boundingBox', () => {
+    return this.call('boundingBox', noInput, () => {
       const { min, max } = this.entry(shape);
       return { min: [...min], max: [...max] };
     });
   }
 
   release(handles: readonly ShapeHandle[]): Promise<void> {
-    const snapshot = [...handles];
-    return this.call('release', () => {
-      // Check everything first: release is atomic.
-      if (new Set(snapshot).size !== snapshot.length) {
-        throw createKernelError('invalid-input', 'release: the same handle more than once');
-      }
-      for (const h of snapshot) this.entry(h);
-      for (const h of snapshot) this.shapes.delete(h);
-    });
+    return this.call(
+      'release',
+      () => [...handles],
+      (snapshot) => {
+        // Check everything first: release is atomic.
+        if (new Set(snapshot).size !== snapshot.length) {
+          throw createKernelError('invalid-input', 'release: the same handle more than once');
+        }
+        for (const h of snapshot) this.entry(h);
+        for (const h of snapshot) this.shapes.delete(h);
+      },
+    );
   }
 
   liveHandleCount(): Promise<number> {
-    return this.call('liveHandleCount', () => this.shapes.size);
+    return this.call('liveHandleCount', noInput, () => this.shapes.size);
   }
 
   /**
-   * Counts the call, then runs `body` in a microtask: results never come synchronously and a
-   * failure – injected or thrown by `body` – is always a rejection. An injected failure skips
-   * `body`, so it has no side effects.
+   * Counts the call, calls `read` synchronously – the copy of the inputs (isolation, spec 06) –
+   * then runs `body` on the copy in a microtask: results never come synchronously and a
+   * failure – injected, thrown by `read` on input outside the types ('internal') or thrown by
+   * `body` – is always a rejection. An injected failure skips `read` and `body`, so it has no
+   * side effects and wins over any other error of the call.
    */
-  private call<T>(op: KernelOp, body: () => T): Promise<T> {
+  private call<I, T>(op: KernelOp, read: () => I, body: (input: I) => T): Promise<T> {
     this.calls.set(op, (this.calls.get(op) ?? 0) + 1);
     const [failure, ...rest] = this.failures.get(op) ?? [];
-    if (failure !== undefined) this.failures.set(op, rest);
-    return Promise.resolve().then(() => {
-      if (failure !== undefined) throw createKernelError(failure.code, failure.message);
-      return body();
-    });
+    if (failure !== undefined) {
+      this.failures.set(op, rest);
+      return Promise.reject(createKernelError(failure.code, failure.message));
+    }
+    let input: I;
+    try {
+      input = read();
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : String(e);
+      return Promise.reject(createKernelError('internal', `${op}: cannot read input: ${reason}`));
+    }
+    return Promise.resolve().then(() => body(input));
   }
 
   private nextHandle(): ShapeHandle {

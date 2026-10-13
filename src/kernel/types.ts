@@ -48,18 +48,21 @@ export interface HistoryLink {
   readonly to: readonly SubShapeIndex[];
 }
 
-/** Flat typed arrays, so they can cross postMessage as transferables without copying. */
+/**
+ * Flat typed arrays, so they can cross postMessage as transferables without copying. Each over
+ * its own plain ArrayBuffer (not a SharedArrayBuffer, which cannot be transferred).
+ */
 export interface MeshData {
   /** xyz */
-  readonly positions: Float32Array;
+  readonly positions: Float32Array<ArrayBuffer>;
   /** xyz, unit length, one per vertex */
-  readonly normals: Float32Array;
+  readonly normals: Float32Array<ArrayBuffer>;
   /** Triangles, counter-clockwise when viewed from outside. */
-  readonly indices: Uint32Array;
+  readonly indices: Uint32Array<ArrayBuffer>;
   /** Triangle ranges per B-rep face, for picking and face highlight: triples [faceIndex, firstTriangle, triangleCount]. */
-  readonly faceRanges: Uint32Array;
+  readonly faceRanges: Uint32Array<ArrayBuffer>;
   /** Edge polylines: points one after another. */
-  readonly edgePositions: Float32Array;
+  readonly edgePositions: Float32Array<ArrayBuffer>;
   /** Triples [edgeIndex, firstPoint, pointCount]. */
-  readonly edgeRanges: Uint32Array;
+  readonly edgeRanges: Uint32Array<ArrayBuffer>;
 }

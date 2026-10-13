@@ -1,0 +1,6 @@
+{
+  "name": "spike-m07-opencascadejs",
+  "private": true,
+  "type": "module",
+  "dependencies": { "opencascade.js": "2.0.0-beta.b5ff984" }
+}

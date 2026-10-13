@@ -46,6 +46,7 @@ updated: 2026-10-13
 - Po reloadu stránky je dokument i undo historie zpět.
 - Chybný parametr (výška 0) → featura červená ve stromu, zbytek modelu v pořádku.
 - `ui` neimportuje nic kromě `app`, `core` a typů z `document`/`interaction`.
+- `npm run build` vydá worker jádra a WASM OCCT jako samostatné assety; dočasná `dev/occt.html` z [[M07-kernel-occt|M7]] je odstraněná nebo archivovaná.
 
 ## Co se naučíš
 

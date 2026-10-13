@@ -195,8 +195,12 @@ export interface MessageEndpoint {
   start?(): void;                                              // MessagePort bez start() listenerům nic nedoručí
 }
 
-export interface RpcClient<P extends RpcProtocol<P>> {
+export interface RpcClient<P extends RpcProtocol<P>> extends Disposable {
   call<K extends keyof P & string>(method: K, ...args: P[K]['args']): Promise<P[K]['result']>;
+  /** Spojení je mrtvé: čekající i všechna další volání odmítne RpcError('disconnected', message). */
+  failAll(message: string): void;
+  /** Totéž jako failAll('RPC client disposed'). */
+  dispose(): void;
 }
 export type RpcImpl<P extends RpcProtocol<P>> = {
   readonly [K in keyof P]: (...args: P[K]['args']) => R | Transferred<R> | Promise<R | Transferred<R>>;  // R = P[K]['result']
@@ -215,7 +219,7 @@ export class RpcError extends Error { readonly code: string }
 - Chyby se serializují jako `{ code, message }`, na straně klienta se z nich stane `RpcError`. Kód: řetězcové `code` vyhozené chyby, jinak `'internal'`; neznámá metoda má `'unknown-method'`; výsledek nebo argumenty, které nejde zkopírovat (`postMessage` vyhodí), mají `'unserializable'` a server ani klient tím nepřestanou fungovat.
 - Přes hranici přežije jen `code` a `message`, ne třída chyby. Porty proto rozpoznávají chyby podle `code` (`storeErrorCode`, `kernelErrorCode`, [[Q039 Chyby jádra přes hranici workeru|Q039]]), ne podle třídy. Protokoly přenášejí data chyb, ne instance `Error`.
 - Implementace může vrátit `transfer(value, [buffers])`, aby se velká pole nepřekopírovávala. Přenášejí se jen `ArrayBuffer` (sítě, buffery), jiné `Transferable` nepotřebujeme. Přenos funguje **jen pro výsledky**: velká data tečou z workeru ven (sítě z jádra). Přenos argumentů (např. snapshot do workeru persistence) se doplní, až ho bude potřeba ([[M04-persistence|M4]]).
-- Známé omezení: když worker spadne nebo odpověď nedorazí, volání nikdy neskončí. Rozhodnuto ([[Q037 Pád workeru a čekající RPC volání|Q037]]), implementace v [[M07-kernel-occt|M7]]: `RpcClient` dostane `dispose()` a `failAll(error)`, čekající i pozdější volání se odmítnou `RpcError` s kódem `'disconnected'`. Adaptéry napojí `worker.onerror`/`messageerror` na `failAll`. Zrušení dlouhé operace řeší zvlášť [[Q010 Zrušení probíhající operace jádra|Q010]].
+- **Pád spojení** ([[Q037 Pád workeru a čekající RPC volání|Q037]], implementace v [[M07-kernel-occt|M7]]): `failAll(message)` přepne klienta natrvalo do stavu „odpojeno“. Všechna čekající volání se odmítnou `RpcError('disconnected', message)`, každé další `call` vrátí odmítnutý `Promise` se stejnou chybou a nic neposílá. Odpověď, která dorazí později, se ignoruje. `dispose()` je `failAll('RPC client disposed')`. Obojí je idempotentní: první volání vyhrává, další nic nezmění (zpráva chyby zůstane z prvního). Adaptéry napojí `worker.onerror`/`messageerror` na `failAll` (u `onerror` se zprávou z `ErrorEvent.message`, `messageerror` text nemá, takže pevná zpráva) a vlastní `dispose` na `rpc.dispose()` + `worker.terminate()`. Klienta RPC vytváří ten, kdo vlastní worker, aby mohl volat `failAll`; klientovi portu (`createDocumentStoreClient`, `createOcctKernelClient`) předá jen `Pick<RpcClient<P>, 'call'>` (úzké rozhraní, [[0011-programovani-proti-rozhranim|ADR 0011]]). Zrušení dlouhé operace řeší zvlášť [[Q010 Zrušení probíhající operace jádra|Q010]].
 - Pořadí: server zpracuje požadavky **sériově** v pořadí přijetí, další začne až po dokončení předchozího. Jednovláknovost workeru sama nestačí, dvě `async` metody (persistence nad IndexedDB) by se proplétaly.
 
 ## Testy
@@ -226,6 +230,7 @@ export class RpcError extends Error { readonly code: string }
 - `DisposableStore`: pořadí uvolnění, idempotence.
 - `vec3`/`mat4`: základní identity.
 - RPC: klient + server propojené přes `MessageChannel` v Node (Vitest), chyby, transfer.
+- RPC odpojení: `failAll` odmítne čekající volání (`'disconnected'`, zpráva z `failAll`), další `call` odmítne bez odeslání, pozdní odpověď serveru se ignoruje, druhé `failAll` zprávu nezmění, `dispose` se chová jako `failAll`.
 
 ## Otevřené otázky
 

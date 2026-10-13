@@ -78,6 +78,15 @@ describe('FakeKernel', () => {
       kernel.failNext('boundingBox', 'internal');
       expect(kernelErrorCode(await rejection(kernel.boundingBox(UNKNOWN)))).toBe('internal');
     });
+
+    it('wins over a failed read of input outside the types, and is used up', async () => {
+      const kernel = createFakeKernel();
+      kernel.failNext('release', 'operation-failed');
+      // 42 is not an array of handles: a value outside the types on purpose.
+      const notAList = 42 as unknown as readonly ShapeHandle[];
+      expect(kernelErrorCode(await rejection(kernel.release(notAList)))).toBe('operation-failed');
+      expect(kernelErrorCode(await rejection(kernel.release(notAList)))).toBe('internal');
+    });
   });
 
   describe('callCount', () => {
@@ -95,6 +104,13 @@ describe('FakeKernel', () => {
       expect(kernel.callCount('boundingBox')).toBe(0);
       expect(kernel.callCount('liveHandleCount')).toBe(1);
       expect(kernel.callCount()).toBe(5);
+    });
+
+    it('counts a call whose input cannot be read', async () => {
+      const kernel = createFakeKernel();
+      // null is not a box: a value outside the types on purpose.
+      await rejection(kernel.makeBox(null as unknown as typeof BOX));
+      expect(kernel.callCount('makeBox')).toBe(1);
     });
 
     it('counts a call as soon as it is made', () => {

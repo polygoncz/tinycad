@@ -1,6 +1,6 @@
 ---
 type: spec
-status: accepted
+status: implemented
 order: 6
 aliases:
   - kernel – geometrické jádro
@@ -11,6 +11,7 @@ modules:
 milestones:
   - "[[M05-kernel-port]]"
   - "[[M07-kernel-occt]]"
+  - "[[M16-vlastni-occt-build]]"
 tags:
   - spec
 created: 2026-10-12
@@ -61,7 +62,7 @@ hlavní vlákno (doména)                         worker (adaptér, M7)
                                                 „co OCCT má a jak to najít“
 ```
 
-- **`ShapeEntry` (adaptér):** handle je klíč do tabulky `HandleTable<ShapeHandle, ShapeEntry>`. Záznam drží tvar a **mapy podtvarů** spočítané jednou při vzniku tvaru (`TopExp::MapShapes`). Díky nim je `SubShapeIndex` pro daný handle stabilní napříč dotazy (síť, topologie, historie). Dál drží cache sítě, role a historii. Je soukromý v adaptéru. `FakeKernel` má vlastní záznam `{ min, max }` (AABB).
+- **`ShapeEntry` (adaptér):** handle je klíč do soukromé `Map<ShapeHandle, ShapeEntry>`. Záznam drží tvar a **mapy podtvarů** spočítané jednou při vzniku tvaru (algoritmem `TopExp::MapShapes`, [[#`kernel-occt`: architektura adaptéru|viz adaptér]]). Díky nim je `SubShapeIndex` pro daný handle stabilní napříč dotazy (síť, topologie, historie). Cache sítě, role a historie přibudou, až je bude potřeba (M11, M14); v M7 záznam drží jen tvar a mapy. Je soukromý v adaptéru. `FakeKernel` má vlastní záznam `{ min, max }` (AABB).
 - **`Body` (doména, [[07-regenerace|spec 07]]):** stabilní `BodyId` napříč regeneracemi (handle se mění při každé), featura, která těleso vytvořila, a od M14 topologická jména. UI, výběr i reference featur odkazují na `Body` a jména, nikdy na handle.
 - Na hlavním vlákně **nejsou** objekty obalující tvar (proxy s metodami `shape.mesh()`). Neměly by vlastní data a míchaly by „co tvar znamená“ (`Body`) s „co spočítalo jádro“ (`ShapeEntry`).
 
@@ -140,7 +141,7 @@ Ověřuje ho kontraktová sada ([[#Testy]]), spuštěná pro `FakeKernel` v M5 a
   - **Atomický:** při chybě se neuvolní nic. Přísnost odhalí chyby v mark & sweep, které by tolerantní `release` skryl.
 - **`liveHandleCount`:** počet vytvořených a neuvolněných handle. Neúspěšná operace žádný handle nevytvoří.
 - **Více chyb najednou** (např. neznámý handle i neplatná kvalita): který kód se vrátí, není určeno a sada to netestuje. `FakeKernel` dává přednost chybě z `failNext`.
-- **Izolace:** jádro si neponechává odkaz na vstupní objekty (`origin`, `size`, pole handle) a **čte je synchronně při volání**, jako by je klonoval `postMessage`. Změna vstupu hned po volání (před `await`) výsledek neovlivní. Vrácená data nesdílí paměť s ničím jiným.
+- **Izolace:** jádro si neponechává odkaz na vstupní objekty (`origin`, `size`, pole handle) a **čte je synchronně při volání**, jako by je klonoval `postMessage`. Změna vstupu hned po volání (před `await`) výsledek neovlivní. Vrácená data nesdílí paměť s ničím jiným. Když čtení vstupu selže (vstup mimo typy, např. `null`), je to také odmítnutý `Promise`, ne synchronní výjimka.
 
 ### Výsledek operace a historie
 
@@ -173,14 +174,15 @@ Indexy podtvarů platí jen pro konkrétní handle, napříč regeneracemi stabi
 
 ```ts
 export interface MeshData {
-  readonly positions: Float32Array;   // xyz
-  readonly normals: Float32Array;     // xyz, jednotkové, jedna na vrchol
-  readonly indices: Uint32Array;      // trojúhelníky, proti směru hodinových ručiček při pohledu zvenku
+  // <ArrayBuffer>: pole stojí na obyčejném (přenositelném) ArrayBuffer, ne SharedArrayBuffer.
+  readonly positions: Float32Array<ArrayBuffer>;   // xyz
+  readonly normals: Float32Array<ArrayBuffer>;     // xyz, jednotkové, jedna na vrchol
+  readonly indices: Uint32Array<ArrayBuffer>;      // trojúhelníky, proti směru hodinových ručiček při pohledu zvenku
   /** Rozsahy trojúhelníků podle B-rep plochy, pro picking a zvýraznění plochy. */
-  readonly faceRanges: Uint32Array;   // trojice [faceIndex, firstTriangle, triangleCount] za sebou
+  readonly faceRanges: Uint32Array<ArrayBuffer>;   // trojice [faceIndex, firstTriangle, triangleCount] za sebou
   /** Polyline hran: body za sebou, rozsahy podle hrany. */
-  readonly edgePositions: Float32Array;
-  readonly edgeRanges: Uint32Array;   // trojice [edgeIndex, firstPoint, pointCount]
+  readonly edgePositions: Float32Array<ArrayBuffer>;
+  readonly edgeRanges: Uint32Array<ArrayBuffer>;   // trojice [edgeIndex, firstPoint, pointCount]
 }
 
 /** Strukturální kontrola sítě. Prázdné pole = v pořádku. Pro testy obou jader a vývojovou kontrolu v app (render smí z kernel jen typy). */
@@ -213,32 +215,59 @@ export function kernelErrorCode(e: unknown): KernelErrorCode | undefined;
 ## `kernel-occt`: architektura adaptéru
 
 ```
-hlavní vlákno                          Web Worker
-┌──────────────────────┐   rpc    ┌────────────────────────────────┐
-│ OcctKernelClient     │ ───────► │ occt.worker.ts                 │
-│ implements           │          │   serveRpc(OcctKernelImpl)     │
-│ GeometryKernel       │ ◄─────── │ OcctKernelImpl                 │
-└──────────────────────┘ transfer │   HandleTable<number, Shape>   │
-                                  │   naming roles, history        │
-                                  │   tessellation (BRepMesh)      │
-                                  │ OCCT WASM modul                │
-                                  └────────────────────────────────┘
+hlavní vlákno                               Web Worker
+┌───────────────────────────┐   rpc    ┌──────────────────────────────────────┐
+│ createOcctKernel()        │ ───────► │ occt.worker.ts                       │
+│  Worker + RpcClient       │          │   serveRpc(createOcctWorkerImpl(     │
+│  createOcctKernelClient   │ ◄─────── │     loadOcct() → OcctKernelImpl))    │
+│  → GeometryKernel         │ transfer │ OcctKernelImpl                       │
+│    & Disposable           │          │   Map<ShapeHandle, ShapeEntry>       │
+└───────────────────────────┘          │   tessellateEntry (BRepMesh)         │
+                                       │ OCCT WASM modul                      │
+                                       └──────────────────────────────────────┘
 ```
 
-- `OcctKernelClient` je tenký, jen převádí volání na RPC. Chyby nepřevádí, kód přežije v `RpcError`.
-- `OcctKernelImpl` drží tabulku handle → `ShapeEntry` ([[#Datové struktury na obou stranách]]) a veškerou práci s OCCT. Všechny OCCT objekty vytvořené v metodě uvolňuje (`.delete()` u embind objektů) v `try/finally`.
-- Inicializace WASM (desítky MB) proběhne jednou při startu workeru, klient vystaví `ready: Promise<void>`.
+- `createOcctKernel()` (jediný veřejný export) vlastní worker a klienta RPC. `createOcctKernelClient` je tenký, jen převádí volání na RPC a dostane z klienta RPC jen `call` (`failAll`/`dispose` patří vlastníkovi workeru). Chyby nepřevádí, kód přežije v `RpcError`.
+- `createOcctWorkerImpl(init: Promise<GeometryKernel>)` je strana workeru: implementace protokolu, která na každé volání počká na inicializaci ([[#Start workeru a `ready`]]).
+- `OcctKernelImpl` drží soukromou `Map` handle → `ShapeEntry` ([[#Datové struktury na obou stranách]]) a veškerou práci s OCCT. Modul OCCT dostane v konstruktoru (nenačítá ho sám), takže jde testovat přímo v Node bez workeru. Všechny OCCT objekty vytvořené v metodě uvolňuje deklarací `using` (embind objekty mají `[Symbol.dispose]`, který volá `.delete()`), `try/finally` jen tam, kde objekt opouští rozsah ([[0013-replicad-opencascadejs|ADR 0013]]).
+- Inicializace WASM proběhne jednou při startu workeru (v prohlížeči ~300 ms, v Node ~100 ms), klient vystaví `ready: Promise<void>`.
 - Worker zpracovává požadavky sériově. Dlouhé operace (fillet) blokují další, pro začátek je to přijatelné.
+- **Mapy podtvarů:** zvolený build nemá svázané `TopExp::MapShapes` ani `TopTools_IndexedMapOfShape`. Jediný pomocník adaptéru je počítá stejným algoritmem: `TopExp_Explorer(shape, typ)` a přidání podtvaru, jen pokud v seznamu ještě není podtvar `IsSame`. Pořadí, a tedy i `SubShapeIndex`, je proto stejné jako u `MapShapes`. Cena je O(n²) volání `IsSame`.
+- **Výjimky OCCT** přicházejí jako `WebAssembly.Exception`. Adaptér je přes `getExceptionMessage` převede na chybu `'internal'` se zprávou `<typ OCCT>: <zpráva>`, při prázdné zprávě jen `<typ OCCT>`. `'operation-failed'` z převodu výjimky nevzniká: operace, které běžně selhávají (boolean, fillet – M11+), kontrolují `IsDone()` a tuto chybu vyhodí samy. Pád samotného WASM (`WebAssembly.RuntimeError`: trap, „function signature mismatch“) je dnes také `'internal'`, ale stav jádra po něm není zaručený ([[Q055 Pád WASM jádra|Q055]]).
+- **Vite:** WASM se načítá přes `import wasmUrl from 'replicad-opencascadejs/wasm?url'` a `locateFile: () => wasmUrl`, balík je v `optimizeDeps.exclude`, worker má `format: 'es'`. Import s dotazem `?url` dependency-cruiser nevyřeší (bere `?url` jako část podcesty `exports`), proto ho pravidlo `not-to-unresolvable` vynechává a hlídá ho zvláštní pravidlo `<modul>-allowed-npm-assets` se stejným seznamem npm balíků ([[01-architektura]]). Překlep v takové cestě odhalí až `vite build`. `vite build` hlásí neškodné varování: `node:module` z kódu Emscriptenu pro Node se v prohlížeči nahradí prázdným modulem.
+- **`using` v prohlížeči:** Vite 8 deklaraci `using` převádí na pomocnou funkci, která hledá `Symbol.dispose ?? Symbol.for('Symbol.dispose')`. Embind ale metodu `[Symbol.dispose]` přidá jen tehdy, když `Symbol.dispose` existuje. Worker proto **před** inicializací OCCT doplní `Symbol.dispose = Symbol.for('Symbol.dispose')`, **jen pokud chybí** (v TS přes `Object.defineProperty`, vlastnost je deklarovaná jako readonly), aby obě strany použily stejný symbol i v prohlížeči bez nativní podpory.
+
+### Start workeru a `ready`
+
+Modulový worker inicializuje OCCT asynchronně. Zpráva, která do workeru dorazí dřív, než si zaregistruje posluchače, se ztratí. Proto:
+
+1. `occt.worker.ts` zavolá `serveRpc` **hned synchronně** při startu. Implementace drží `Promise<OcctKernelImpl>` a každá metoda nejdřív počká na něj.
+2. Protokol `OcctKernelProtocol` = metody `GeometryKernel` + `ready(): void`. `ready` počká na inicializaci. Selhání inicializace (nenalezený WASM…) se tak dostane ke klientovi jako odmítnutí (`'internal'` se zprávou), ne jako neodchycená výjimka ve workeru, kterou `worker.onerror` nezachytí. Implementace selhání inicializace hned označí jako ošetřené (`catch`), aby z něj ve workeru nebylo neošetřené odmítnutí, dokud se nikdo nezeptá; každé další `await` přesto odmítne.
+3. `createOcctKernel()` vytvoří worker, napojí `onerror`/`messageerror` na `rpc.failAll`, počká na `ready` a vrátí `GeometryKernel & Disposable`. Když `ready` selže, worker ukončí a odmítne: chyba inicializace OCCT → `'internal'`; worker, který vůbec nenaběhne (404, chyba skriptu) → `onerror` → `'disconnected'`. `dispose()` = `rpc.dispose()` + `worker.terminate()`.
+4. Klient výsledek `tessellate` jen předá: buffery přišly přes `transfer`, worker o ně přišel (kontrakt nových bufferů tím platí automaticky).
+
+### Tessellace v adaptéru
+
+- `BRepMesh_IncrementalMesh(shape, linearDeflection, false, angularDeflection, false)`: absolutní průhyb, bez paralelismu (worker je jednovláknový).
+- Plochy v pořadí mapy podtvarů (`SubShapeIndex` = pozice). Každá plocha má **vlastní vrcholy** (žádné sdílení mezi plochami), aby šly normály ostrých hran a `faceRanges`. Uzly triangulace se transformují `TopLoc_Location` plochy.
+- Plocha s orientací `TopAbs_REVERSED`: prohodí se pořadí dvou vrcholů každého trojúhelníku a otočí normály, aby trojúhelníky byly CCW při pohledu zvenku.
+- Normály: z triangulace, pokud je má; jinak průměr jednotkových normál nedegenerovaných trojúhelníků plochy v uzlu (u rovinné plochy vyjde normála plochy), normalizovaný. Navinutí se otáčí **před** výpočtem normál, takže vyjdou ven samy. Uzel bez nedegenerovaného trojúhelníku dostane průměrnou normálu plochy. Plocha, která má jen degenerované trojúhelníky, se vynechá (jako plocha bez trojúhelníků). Pro M7 (jen kvádr) stačí druhá cesta, první se doplní s křivými plochami (M11).
+- Lokace se aplikují přes `gp_Trsf.Transforms(x, y, z)` (bez nového objektu OCCT na uzel). **Zrcadlící lokace** (`gp_Trsf.IsNegative()`) by otočila navinutí; M7 ji neřeší, doplní se s `TransformOps` (M11).
+- Hrany v pořadí mapy podtvarů. Polyline z `BRep_Tool.PolygonOnTriangulation(edge, loc)`: OCCT vybere první reprezentaci hrany na triangulaci sousední plochy a vrátí polygon, tu triangulaci a složenou lokaci. Uzly polygonu jsou indexy do vrácené triangulace, transformují se vrácenou lokací. Degenerovaná hrana, hrana bez polygonu nebo s méně než 2 body se do `edgeRanges` nezapíše (jako plocha bez trojúhelníků).
+- Chybějící triangulaci nebo polygon vrací binding jako JS `null`, i když `.d.ts` slibuje objekt; adaptér na `null` testuje explicitně.
+- Výsledek se kopíruje do nových typed arrays, každé s vlastním `ArrayBuffer` ([[#Síť pro vykreslení]]).
 
 ### Volba WASM buildu OCCT (spike v M7)
 
+Rozhodnuto ([[Q012 Volba WASM buildu OCCT|Q012]], [[0013-replicad-opencascadejs|ADR 0013]]): **`replicad-opencascadejs` 1.1.0**. Měření ze spiku (`spikes/m07-occt/`) jsou v ADR.
+
 | Varianta | Pro | Proti |
 |---|---|---|
-| `opencascade.js` (předpřipravený build) | rychlý start, celé API z JS | velký soubor, projekt se vyvíjí pomalu, volání tisíců vazeb z TS je upovídané |
-| `replicad-opencascadejs` (zúžený build z projektu replicad) | menší, udržovaný | jen podmnožina API |
-| **Vlastní C++ modul přes Emscripten + embind** | úzké API přesně podle `GeometryKernel`, logika v C++, které Pavel zná; malý soubor | nutnost sestavit OCCT pro Emscripten, složitější build |
+| `opencascade.js` (předpřipravený build) | celé API z JS včetně map | od 2023 stojí, 50 MB WASM, start ~2,4 s, výjimky jako holé ukazatele, přípony přetížení `_1`, `_2` |
+| **`replicad-opencascadejs`** (zúžený build z projektu replicad) – zvoleno | 23 MB WASM, start ~100 ms, udržovaný, `Symbol.dispose`, čitelné výjimky | jen podmnožina API, chybí mapy podtvarů |
+| Vlastní C++ modul přes Emscripten + embind | úzké API přesně podle `GeometryKernel`, logika v C++, které Pavel zná; malý soubor | nutnost sestavit OCCT pro Emscripten, složitější build |
 
-Doporučení: začít předpřipraveným buildem (rychle k výsledku), ale držet port úzký, aby šlo později přejít na vlastní C++ modul beze změny zbytku aplikace. Přechod může být samostatný pozdější milník, výborná ukázka síly portu.
+Port drží API úzké, aby šlo později přejít na vlastní C++ modul beze změny zbytku aplikace. Přechod je samostatný milník [[M16-vlastni-occt-build]].
 
 ## `FakeKernel`
 
@@ -265,7 +294,7 @@ export function describeGeometryKernelContract(name: string, factory: () => Prom
 
 ## Testy
 
-- **Kontraktová sada** `describeGeometryKernelContract` v `kernel/testing.ts`, spuštěná pro `FakeKernel` (M5) a pro `OcctKernelImpl` přímo v Node (M7, `tests/kernel-occt/`). Pokrývá každou odrážku [[#Kontrakt (platí pro každou implementaci)|kontraktu]]:
+- **Kontraktová sada** `describeGeometryKernelContract` v `kernel/testing.ts`, spuštěná pro `FakeKernel` (M5) a pro `OcctKernelImpl` přímo v Node (M7, `src/kernel-occt/*.test.ts` v projektu `unit`, tedy v `npm run check`; modul OCCT se načte jednou na soubor, [[Q051 Kde běží kontraktové testy OCCT|Q051]]). Pokrývá každou odrážku [[#Kontrakt (platí pro každou implementaci)|kontraktu]]:
   - nové handle po každé operaci, nikdy znovu použité,
   - všechny kódy chyb, odmítnutí místo synchronní výjimky, atomicitu `release`, `liveHandleCount`,
   - **kvádr:** bounding box, síť projde `validateMeshData`, právě 6 ploch s indexy 0–5 a 12 hran s indexy 0–11, každá plocha má aspoň 2 trojúhelníky, body leží v AABB a pokrývají ho, normály trojúhelníků jedné plochy jsou shodné, kolmé ke stěně (rovnoběžné se souřadnicovou osou), míří **ven** a šest ploch leží na šesti různých stěnách (navinutí trojúhelníku souhlasí s normálou),
@@ -273,6 +302,12 @@ export function describeGeometryKernelContract(name: string, factory: () => Prom
 - `validateMeshData`: platná síť, každé pravidlo porušené zvlášť.
 - `kernelErrorCode`: vlastní chyba, `RpcError` se stejným kódem, cizí kód a ne-chyba → `undefined`.
 - `FakeKernel` navíc: `failNext` (jednorázové, fronta, bez vedlejších účinků), `callCount`.
+- `kernel-occt` navíc (M7):
+  - mapy podtvarů: kvádr má 6 / 12 / 8 ploch, hran a vrcholů, pořadí ploch −X, +X, −Y, +Y, −Z, +Z (pořadí `MapShapes` pro `MakeBox`),
+  - `boundingBox` kvádru přesně (bez tolerance tvaru),
+  - výjimka OCCT uvnitř metody → odmítnutí s kódem `'internal'` a typem výjimky ve zprávě,
+  - paměť se automaticky netestuje: samo OCCT po `delete()` nechá ~11 kB na kvádr, takže únik v adaptéru nejde od úniku buildu odlišit ([[Q054 Únik paměti v OCCT buildu|Q054]]). Že adaptér uvolní všechny objekty OCCT, které vlastní (`using`, `ShapeEntry` při `release`), ověřuje revize. Paměťový test patří do [[M16-vlastni-occt-build]],
+  - klient přes `MessageChannel` v Node: `ready`, předání sítě přes `transfer`, chyba jádra dorazí s kódem, `failAll` odmítne čekající volání.
 
 ## Otevřené otázky
 

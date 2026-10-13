@@ -18,7 +18,7 @@ const modules = {
   persistence: { deps: ['core', 'document', 'ops'] },
   'persistence/idb': { deps: ['core', 'document', 'ops', 'persistence'] },
   kernel: { deps: ['core'] },
-  'kernel-occt': { deps: ['core', 'kernel'] },
+  'kernel-occt': { deps: ['core', 'kernel'], npm: ['replicad-opencascadejs'] },
   regen: { deps: ['core', 'document', 'kernel'] },
   render: { deps: ['core'], types: ['kernel', 'interaction'], npm: ['three'] },
   interaction: { deps: ['core', 'document', 'ops'] },
@@ -77,6 +77,13 @@ function testCodeOf(/** @type {string} */ from) {
   return `${from}(.*\\.test\\.ts|testing\\.ts)$`;
 }
 
+/**
+ * Vite asset import with a query (`replicad-opencascadejs/wasm?url`, spec 06 "Vite").
+ * enhanced-resolve takes the query as part of the package exports subpath and cannot resolve
+ * it; Vite resolves it at build time (a wrong path fails `vite build`).
+ */
+const VITE_ASSET_QUERY = '\\?(url|raw|inline)$';
+
 /** Regex for npm packages, including scoped helpers (vue → @vue/*). */
 function npmPath(/** @type {string[]} */ names) {
   return `node_modules/(${names.map((n) => `${n}|@${n}`).join('|')})/`;
@@ -120,6 +127,19 @@ const moduleRules = Object.entries(modules).flatMap(([name, spec]) => {
       to: {
         dependencyTypes: ['npm', 'npm-dev', 'npm-optional', 'npm-peer', 'npm-no-pkg', 'core'],
         ...(npm.length > 0 ? { pathNot: npmPath(npm) } : {}),
+      },
+    },
+    {
+      // Vite asset imports (`pkg/file?url`) stay unresolved (see VITE_ASSET_QUERY), so the
+      // rule above does not see them; the same npm whitelist applies to them here.
+      name: `${name}-allowed-npm-assets`,
+      severity: 'error',
+      comment: `${name} may use npm packages: ${npm.join(', ') || 'none'} (${SPEC})`,
+      from: { path: from, pathNot: testCodeOf(from) },
+      to: {
+        couldNotResolve: true,
+        path: VITE_ASSET_QUERY,
+        ...(npm.length > 0 ? { pathNot: `^(${npm.join('|')})/` } : {}),
       },
     },
   ];
@@ -177,7 +197,7 @@ module.exports = {
       severity: 'error',
       comment: 'Import cannot be resolved – missing package or wrong path.',
       from: {},
-      to: { couldNotResolve: true },
+      to: { couldNotResolve: true, pathNot: VITE_ASSET_QUERY },
     },
     {
       name: 'main-allowed-deps',

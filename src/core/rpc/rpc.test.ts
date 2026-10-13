@@ -160,3 +160,77 @@ describe('rpc', () => {
     await expect(loose.call('constructor')).rejects.toMatchObject({ code: 'unknown-method' });
   });
 });
+
+describe('rpc disconnect', () => {
+  function connectCounting() {
+    const { port1, port2 } = new MessageChannel();
+    ports.push(port1, port2);
+    serveRpc<TestProtocol>(port2, impl);
+    let sent = 0;
+    const counting = {
+      postMessage(msg: unknown, transferList: ArrayBuffer[]) {
+        sent++;
+        port1.postMessage(msg, transferList);
+      },
+      addEventListener: port1.addEventListener.bind(port1),
+      start: port1.start.bind(port1),
+    };
+    const client = createRpcClient<TestProtocol>(counting);
+    return { client, sentCount: () => sent };
+  }
+
+  it('failAll rejects pending calls with "disconnected" and the given message', async () => {
+    const client = connect(impl);
+    const pending = client.call('echoLater', 'x', 20).catch((e: unknown) => e);
+    client.failAll('worker crashed');
+    const error = await pending;
+    expect(error).toBeInstanceOf(RpcError);
+    expect(error).toMatchObject({ code: 'disconnected', message: 'worker crashed' });
+  });
+
+  it('rejects later calls without sending anything', async () => {
+    const { client, sentCount } = connectCounting();
+    client.failAll('gone');
+    await expect(client.call('add', 1, 2)).rejects.toMatchObject({
+      code: 'disconnected',
+      message: 'gone',
+    });
+    expect(sentCount()).toBe(0);
+  });
+
+  it('ignores a response that arrives after failAll', async () => {
+    const client = connect(impl);
+    const pending = client.call('echoLater', 'late', 5);
+    client.failAll('gone');
+    await expect(pending).rejects.toMatchObject({ code: 'disconnected' });
+    // Give the server time to answer; the late response must not throw or resolve anything.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await expect(client.call('add', 1, 1)).rejects.toMatchObject({ code: 'disconnected' });
+  });
+
+  it('keeps the message of the first failAll', async () => {
+    const client = connect(impl);
+    client.failAll('first');
+    client.failAll('second');
+    client.dispose();
+    await expect(client.call('add', 1, 1)).rejects.toMatchObject({
+      code: 'disconnected',
+      message: 'first',
+    });
+  });
+
+  it('dispose behaves like failAll("RPC client disposed")', async () => {
+    const { client, sentCount } = connectCounting();
+    const pending = client.call('echoLater', 'x', 20).catch((e: unknown) => e);
+    client.dispose();
+    await expect(pending).resolves.toMatchObject({
+      code: 'disconnected',
+      message: 'RPC client disposed',
+    });
+    await expect(client.call('add', 1, 1)).rejects.toMatchObject({
+      code: 'disconnected',
+      message: 'RPC client disposed',
+    });
+    expect(sentCount()).toBe(1);
+  });
+});

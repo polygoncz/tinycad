@@ -99,7 +99,7 @@ Prstence 1 a 2 se typují konfigurací `tsconfig.domain.json` bez knihovny `DOM`
 | `persistence` | `core`, `document`, `ops` | – |
 | `persistence/idb` | `core`, `document`, `ops`, `persistence` | (IndexedDB API) |
 | `kernel` | `core` | – |
-| `kernel-occt` | `core`, `kernel` | OCCT WASM |
+| `kernel-occt` | `core`, `kernel` | `replicad-opencascadejs` ([[0013-replicad-opencascadejs\|ADR 0013]]) |
 | `regen` | `core`, `document`, `kernel` | – |
 | `render` | `core`, `kernel` (jen typy `MeshData`), `interaction` (jen typy: `ViewportPort`, události) | `three` |
 | `interaction` | `core`, `document`, `ops` | – |
@@ -115,7 +115,7 @@ Důležité zákazy:
 - `regen` nezná `ops` (regenerace neví, jak změna vznikla).
 - `persistence/idb` je samostatný vstupní bod (vlastní `index.ts`), který importuje jen `app`. `persistence/index.ts` ho nereexportuje, jinak by se adaptér přes import dostal do prstence 1.
 - `testing.ts` smí importovat **jen testovací kód** (`*.test.ts` a jiné `testing.ts`), a to jen z modulů, na které jeho modul smí záviset **hodnotově** (sloupec `deps`; typová závislost `types` k `testing.ts` nepouští). Produkční kód ho neimportuje nikdy, ani ve vlastním modulu – buildery se tak nedostanou do produkčního bundlu. Testovací kód smí používat `vitest` (fake s `vi.fn`) a skládat buildery jiných modulů. Pravidla `testing-only-in-tests` a `<modul>-allowed-deps-in-tests` v `.dependency-cruiser.cjs`.
-- Pravidla jsou whitelist: tabulka výše je zkopírovaná v `.dependency-cruiser.cjs` a z ní se generuje jedno pravidlo na modul (vlastní soubory + `index.ts` povolených modulů + povolené npm balíčky).
+- Pravidla jsou whitelist: tabulka výše je zkopírovaná v `.dependency-cruiser.cjs` a z ní se generuje jedno pravidlo na modul (vlastní soubory + `index.ts` povolených modulů + povolené npm balíčky). Importy assetů Vite s dotazem (`balík/soubor?url`) dependency-cruiser nevyřeší; místo `not-to-unresolvable` je hlídá pravidlo `<modul>-allowed-npm-assets` proti stejnému seznamu npm balíků ([[06-geometricke-jadro]], M7).
 - `interaction` nezná `render`: viewport zná jen přes port `ViewportPort`, který sám definuje. `render` ho implementuje ([[0009-platformove-nezavisla-domena|ADR 0009]]).
 - Prstence 1 a 2 nepoužívají globální objekty prohlížeče (`window`, `document`, `requestAnimationFrame`, `indexedDB`, DOM typy událostí).
 
@@ -172,7 +172,7 @@ tinycad/
 │  │  ├─ components/
 │  │  └─ composables/
 │  └─ main.ts               vytvoří AppSession a připojí Vue
-├─ tests/                   integrační testy (kernel-occt, e2e)
+├─ tests/                   integrační testy (e2e); testy OCCT jsou vedle kódu v kernel-occt (Q051)
 ├─ .dependency-cruiser.cjs
 ├─ vite.config.ts
 ├─ tsconfig.json            řešení: odkazy na projekty níže, `vue-tsc -b`

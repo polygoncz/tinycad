@@ -572,6 +572,25 @@ export function describeGeometryKernelContract(
         expectEnclosesBox(await kernel.boundingBox(b), ORIGIN, BOX_MAX);
       });
 
+      it.each([
+        // Inputs outside the types – a JS caller or a bug can pass them. The casts through
+        // unknown break the types on purpose.
+        ['makeBox(null)', (k: GeometryKernel) => k.makeBox(null as unknown as typeof BOX)],
+        [
+          'tessellate(handle, null)',
+          (k: GeometryKernel) => k.tessellate(UNKNOWN, null as unknown as MeshQuality),
+        ],
+        ['release(42)', (k: GeometryKernel) => k.release(42 as unknown as readonly ShapeHandle[])],
+      ])(
+        '%s: a failed read of the input rejects with internal, not synchronously',
+        async (_, call) => {
+          const a = await aBox();
+          expect(await rejectionCode(() => call(kernel))).toBe('internal');
+          expect(await kernel.liveHandleCount()).toBe(1);
+          expectEnclosesBox(await kernel.boundingBox(a), ORIGIN, BOX_MAX);
+        },
+      );
+
       it('the bounding box shares no array with the makeBox input', async () => {
         const a = (await kernel.makeBox(BOX)).shape;
         const box = await kernel.boundingBox(a);

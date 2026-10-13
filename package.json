@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "gl-matrix": "^3.4.4",
+    "replicad-opencascadejs": "1.1.0",
     "vue": "^3.5.43"
   },
   "devDependencies": {
