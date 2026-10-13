@@ -6,6 +6,7 @@ describe('kernel public API', () => {
   it('exports exactly the runtime values of spec 06', () => {
     expect(Object.keys(kernel).sort()).toEqual([
       'createKernelError',
+      'isRigidMotion',
       'kernelErrorCode',
       'validateMeshData',
     ]);

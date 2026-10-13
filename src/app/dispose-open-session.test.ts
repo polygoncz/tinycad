@@ -88,6 +88,7 @@ describe('disposeOpenSession', () => {
       now: () => 0,
       ids: createSequentialIdGenerator('f'),
       translate: (key) => key,
+      confirm: () => true,
       readOnly: false,
     });
     await settle();

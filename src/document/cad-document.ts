@@ -2,7 +2,14 @@ import { assert, Emitter } from '@/core';
 import type { Subscribable } from '@/core';
 import type { DocumentEvents, DocumentWriter } from './document';
 import { deepFreeze } from './freeze';
-import type { DocumentMeta, FeatureId, FeatureInstance, PartStudioData } from './model';
+import type {
+  BodyId,
+  BodyMeta,
+  DocumentMeta,
+  FeatureId,
+  FeatureInstance,
+  PartStudioData,
+} from './model';
 
 export interface CreateDocumentInit {
   /** Required: the document never invents ids or timestamps itself (determinism). */
@@ -36,6 +43,29 @@ function assertIndex(index: number, max: number): void {
     Number.isInteger(index) && index >= 0 && index <= max,
     `Feature index ${String(index)} out of range 0..${String(max)}`,
   );
+}
+
+type Bodies = NonNullable<PartStudioData['bodies']>;
+
+/** What bodyMeta gives for a body without metadata: one shared frozen object. */
+const NO_META: BodyMeta = Object.freeze({});
+
+/**
+ * The canonical form of body metadata (spec 03): name only when non-empty, hidden only as true;
+ * undefined when nothing is left. A new frozen object, nothing of `meta` is kept.
+ */
+function canonicalMeta(meta: BodyMeta): BodyMeta | undefined {
+  const name = typeof meta.name === 'string' && meta.name !== '' ? meta.name : undefined;
+  const hidden = meta.hidden === true;
+  if (name === undefined && !hidden) return undefined;
+  return Object.freeze({
+    ...(name === undefined ? {} : { name }),
+    ...(hidden ? { hidden } : {}),
+  });
+}
+
+function sameMeta(a: BodyMeta | undefined, b: BodyMeta | undefined): boolean {
+  return a?.name === b?.name && a?.hidden === b?.hidden;
 }
 
 // Every mutator validates first and then commits a whole new studio in one step,
@@ -72,6 +102,14 @@ class CadDocument implements DocumentWriter {
   // Linear scan: tens to hundreds of features, an id map would only add state to keep in sync.
   indexOf(id: FeatureId): number {
     return this._studio.features.findIndex((f) => f.id === id);
+  }
+
+  bodyMeta(body: BodyId): BodyMeta {
+    const bodies = this._studio.bodies;
+    // hasOwn: a key is data, never something inherited from Object.prototype.
+    return bodies !== undefined && Object.hasOwn(bodies, body)
+      ? (bodies[body] ?? NO_META)
+      : NO_META;
   }
 
   insertFeature(index: number, f: FeatureInstance): void {
@@ -122,6 +160,23 @@ class CadDocument implements DocumentWriter {
     this.commit(this._studio.features, index);
   }
 
+  setBodyMeta(body: BodyId, meta: BodyMeta): void {
+    const next = canonicalMeta(meta);
+    if (sameMeta(canonicalMeta(this.bodyMeta(body)), next)) return;
+    const current = this._studio.bodies ?? {};
+    // A spread keeps the position of an updated entry; removal filters it out.
+    const bodies: Bodies =
+      next === undefined
+        ? Object.fromEntries(Object.entries(current).filter(([key]) => key !== body))
+        : { ...current, [body]: next };
+    // Same features and rollback index: the regeneration cache keyed by features stays valid.
+    this.commitStudio(
+      this._studio.features,
+      this._studio.rollbackIndex,
+      Object.keys(bodies).length === 0 ? undefined : Object.freeze(bodies),
+    );
+  }
+
   rename(name: string): void {
     if (name === this._meta.name) return;
     this._meta = Object.freeze({ ...this._meta, name });
@@ -134,9 +189,24 @@ class CadDocument implements DocumentWriter {
     return index;
   }
 
-  /** Freezes only the new array and studio; their features are already deeply frozen. */
+  /**
+   * Freezes only the new array and studio; their features are already deeply frozen. The body
+   * metadata stay as they are (only setBodyMeta changes them); absent when empty (canonical form).
+   */
   private commit(features: readonly FeatureInstance[], rollbackIndex: number): void {
-    this._studio = Object.freeze({ features: Object.freeze(features), rollbackIndex });
+    this.commitStudio(features, rollbackIndex, this._studio.bodies);
+  }
+
+  private commitStudio(
+    features: readonly FeatureInstance[],
+    rollbackIndex: number,
+    bodies: Bodies | undefined,
+  ): void {
+    this._studio = Object.freeze({
+      features: Object.freeze(features),
+      rollbackIndex,
+      ...(bodies === undefined ? {} : { bodies }),
+    });
     this.emitter.emit('changed', { studio: this._studio });
   }
 }

@@ -70,7 +70,10 @@ export interface FeatureError {
     | 'STALE_VERSION';
   /** Technical text for logs and kernel errors; the UI does not show it for INVALID_PARAMS. */
   readonly message: string;
-  /** Only INVALID_PARAMS: the problems from schema.validate, translated by the UI (ADR 0014). */
+  /**
+   * INVALID_PARAMS: the problems from schema.validate; UNRESOLVED_REFERENCE: one issue
+   * 'param.unresolvedRef' at the param (unresolvedReference). Translated by the UI (ADR 0014).
+   */
   readonly issues?: readonly ParamIssue[];
 }
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { mat4 } from '@/core';
 import { kernelErrorCode } from './errors';
 import { createFakeKernel, describeGeometryKernelContract } from './testing';
 import type { ShapeHandle } from './types';
@@ -137,6 +138,84 @@ describe('FakeKernel', () => {
       order.push('after call');
       await call;
       expect(order).toEqual(['after call', 'error']);
+    });
+  });
+
+  describe('M11 operations', () => {
+    it('the bounding box of an oblique cylinder is the AABB of the cylinder', async () => {
+      const kernel = createFakeKernel();
+      // Unit axis a = (1, 1, 0)/√2: extent r·sqrt(1 − a_k²) = √½ in x and y, r = 1 in z.
+      const { shape } = await kernel.makeCylinder({
+        base: [0, 0, 0],
+        axis: [1, 1, 0],
+        radius: 1,
+        height: 2,
+      });
+      const box = await kernel.boundingBox(shape);
+      const s = Math.SQRT1_2;
+      const top = 2 * s;
+      const min = [-s, -s, -1];
+      const max = [top + s, top + s, 1];
+      for (let k = 0; k < 3; k++) {
+        expect(box.min[k]).toBeCloseTo(min[k] ?? Number.NaN, 12);
+        expect(box.max[k]).toBeCloseTo(max[k] ?? Number.NaN, 12);
+      }
+    });
+
+    it('subtract with a tool covering the whole target keeps the target box (nothing is cut)', async () => {
+      const kernel = createFakeKernel();
+      const target = await kernel.makeBox(BOX);
+      const tool = await kernel.makeBox({ origin: [0, -3, 2], size: [4, 5, 6] });
+      const { shape } = await kernel.boolean('subtract', [target.shape], [tool.shape]);
+      expect(await kernel.boundingBox(shape)).toEqual({ min: [1, -2, 3], max: [3, 1, 7] });
+    });
+
+    it('subtract of several targets gives their enclosing box', async () => {
+      const kernel = createFakeKernel();
+      const a = await kernel.makeBox(BOX);
+      const b = await kernel.makeBox({ origin: [10, 0, 0], size: [1, 1, 1] });
+      const tool = await kernel.makeBox({ origin: [0, 0, 0], size: [1, 1, 1] });
+      const { shape } = await kernel.boolean('subtract', [a.shape, b.shape], [tool.shape]);
+      expect(await kernel.boundingBox(shape)).toEqual({ min: [1, -2, 0], max: [11, 1, 7] });
+    });
+
+    it('intersect of boxes that only touch fails with operation-failed (zero thickness)', async () => {
+      const kernel = createFakeKernel();
+      const a = await kernel.makeBox(BOX);
+      const b = await kernel.makeBox({ origin: [3, -2, 3], size: [1, 1, 1] });
+      const e = await rejection(kernel.boolean('intersect', [a.shape], [b.shape]));
+      expect(kernelErrorCode(e)).toBe('operation-failed');
+    });
+
+    it.each(['makeCylinder', 'transform', 'boolean'] as const)(
+      'failNext works for %s and creates no handle',
+      async (op) => {
+        const kernel = createFakeKernel();
+        const a = await kernel.makeBox(BOX);
+        const b = await kernel.makeBox({ origin: [0, 0, 0], size: [1, 1, 1] });
+        const calls = {
+          makeCylinder: () =>
+            kernel.makeCylinder({ base: [0, 0, 0], axis: [0, 0, 1], radius: 1, height: 1 }),
+          transform: () => kernel.transform(a.shape, mat4.identity()),
+          boolean: () => kernel.boolean('union', [a.shape], [b.shape]),
+        };
+        kernel.failNext(op, 'operation-failed', 'boom');
+        const e = await rejection(calls[op]());
+        expect(kernelErrorCode(e)).toBe('operation-failed');
+        expect(e).toHaveProperty('message', 'boom');
+        expect(await kernel.liveHandleCount()).toBe(2);
+        await expect(calls[op]()).resolves.toHaveProperty('shape');
+      },
+    );
+
+    it('callCount counts the new methods', async () => {
+      const kernel = createFakeKernel();
+      const cylinder = { base: [0, 0, 0], axis: [0, 0, 1], radius: 1, height: 1 } as const;
+      await kernel.makeCylinder(cylinder);
+      await rejection(kernel.makeCylinder({ ...cylinder, radius: 0 }));
+      expect(kernel.callCount('makeCylinder')).toBe(2);
+      expect(kernel.callCount('transform')).toBe(0);
+      expect(kernel.callCount('boolean')).toBe(0);
     });
   });
 

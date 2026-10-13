@@ -29,6 +29,8 @@ const switcher = createDocumentSwitcher<AppSession>({
       plugins: props.plugins,
       // Called later (name of a new feature), when the plugin texts are already added.
       translate: (key) => i18n.global.t(key),
+      // Like deleting a document in DocumentList: the browser's own dialog (R16).
+      confirm: ({ key, params }) => globalThis.confirm(i18n.global.t(key, params)),
       theme: theme.theme.value,
     });
     try {

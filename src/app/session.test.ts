@@ -3,7 +3,7 @@ import { createSequentialIdGenerator } from '@/core';
 import { bodyId, createDocument } from '@/document';
 import type { DocumentId } from '@/document';
 import { boxPlugin } from '@/features/box';
-import type { ViewKeyEvent } from '@/interaction';
+import type { ConfirmRequest, ViewKeyEvent } from '@/interaction';
 import { createMemoryDocumentStore, createSnapshot } from '@/persistence';
 import type { DocumentStore } from '@/persistence';
 import { createManualScheduler } from '@/persistence/testing';
@@ -55,6 +55,7 @@ async function open(
     now: () => time,
     ids: createSequentialIdGenerator('f'),
     translate,
+    confirm: () => true,
     readOnly: false,
     ...overrides,
   });
@@ -84,6 +85,19 @@ const markPlugin: FeaturePlugin = {
       state: { artifacts: new Map(state.artifacts).set(mark.id, mark) },
     });
   }),
+};
+
+/** A feature that refers to bodies and builds nothing (not the real Boolean). */
+const usePlugin: FeaturePlugin = {
+  schema: {
+    type: 'use',
+    version: 1,
+    label: 'use',
+    params: { bodies: { kind: 'bodies', label: 'Bodies' } },
+    defaults: () => ({ bodies: [] }),
+    validate: () => [],
+  },
+  builder: aSpyBuilder('use', ({ state }) => Promise.resolve({ ok: true, state })),
 };
 
 /** Creates a box through the dialog with the given height and commits it. */
@@ -489,6 +503,28 @@ describe('createAppSession – actions', () => {
     addBox(session);
     viewport.emitKey({ ...key('z'), mods: { shift: false, alt: false, mod: true } });
     expect(session.doc.studio.features).toHaveLength(0);
+  });
+
+  it('feature.delete asks the confirm of the deps before features lose a reference', async () => {
+    const asked: ConfirmRequest[] = [];
+    const { session } = await open({
+      plugins: [boxPlugin, usePlugin],
+      confirm: (request) => {
+        asked.push(request);
+        return false;
+      },
+    });
+    addBox(session);
+    const box = session.doc.studio.features[0]?.id;
+    if (box === undefined) expect.fail('No box');
+    const use = session.features.create('use');
+    use.setParam('bodies', [{ kind: 'body', body: bodyId(box) }]);
+    use.commit();
+
+    session.selection.set([{ kind: 'feature', feature: box }]);
+    session.actions.run(session.actionIds.featureDelete);
+    expect(asked).toEqual([{ key: 'feature.delete.confirm', params: { n: 1 } }]);
+    expect(session.doc.studio.features).toHaveLength(2);
   });
 
   it('fit all fits the camera of the viewport', async () => {

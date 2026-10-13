@@ -145,6 +145,9 @@ export function createCrashableKernel(): CrashableKernel {
   return {
     fake,
     makeBox: (p) => guard(() => fake.makeBox(p)),
+    makeCylinder: (p) => guard(() => fake.makeCylinder(p)),
+    transform: (shape, m) => guard(() => fake.transform(shape, m)),
+    boolean: (op, targets, tools) => guard(() => fake.boolean(op, targets, tools)),
     tessellate: (shape, q) => guard(() => fake.tessellate(shape, q)),
     boundingBox: (shape) => guard(() => fake.boundingBox(shape)),
     release: (handles) => guard(() => fake.release(handles)),

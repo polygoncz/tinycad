@@ -4,14 +4,22 @@
 
 import { ObservableValue, assert } from '@/core';
 import type { Observable, RegistryReader, Unsubscribe } from '@/core';
+import { dependenciesOf, orderViolations } from '@/document';
 import type {
   DocumentReader,
   FeatureId,
   FeatureInstance,
   FeatureSchema,
+  OrderViolation,
   ParamIssue,
+  PartStudioData,
 } from '@/document';
-import type { FeatureRenameOp, OperationDispatcher, StudioSetRollbackOp } from '@/ops';
+import type {
+  FeatureMoveOp,
+  FeatureRenameOp,
+  OperationDispatcher,
+  StudioSetRollbackOp,
+} from '@/ops';
 import { OP_VERSION } from '@/ops';
 import type { FeatureEditor } from './feature-editor';
 import type { FeatureHealth, RegenStatusPort } from './regen-status-port';
@@ -36,6 +44,8 @@ export interface TreeRow {
   readonly selected: boolean;
   /** The feature of the open edit session. */
   readonly editing: boolean;
+  /** How many features depend on this one (dependentsOf), for the tooltip (M11). */
+  readonly dependents: number;
 }
 
 export interface FeatureTreeModel {
@@ -55,6 +65,13 @@ export interface FeatureTreeModel {
   cancelRename(): void;
   /** → selection.set / toggle */
   select(id: FeatureId, opts?: { additive?: boolean }): void;
+  /** The features outside ids that depend on any of ids; in studio order, without duplicates (M11). */
+  dependentsOf(ids: readonly FeatureId[]): readonly FeatureId[];
+  /**
+   * Moves the feature to the final index toIndex (feature.move). Empty = moved; otherwise the
+   * new order violations the move would bring, and nothing happened (M11).
+   */
+  move(id: FeatureId, toIndex: number): readonly OrderViolation[];
   dispose(): void;
 }
 
@@ -68,6 +85,18 @@ export function createFeatureTreeModel(deps: {
 }): FeatureTreeModel {
   const { doc, ops, schemas, regen, editor, selection } = deps;
 
+  /** The dependency graph of `graphOf`; recomputed only when the studio changes. */
+  let graphOf: PartStudioData | null = null;
+  let graph: ReadonlyMap<FeatureId, readonly FeatureId[]> = new Map();
+  function dependencies(): ReadonlyMap<FeatureId, readonly FeatureId[]> {
+    // The studio is immutable: the same object means the same references.
+    if (graphOf !== doc.studio) {
+      graphOf = doc.studio;
+      graph = dependenciesOf(graphOf, schemas);
+    }
+    return graph;
+  }
+
   const rows = new ObservableValue<readonly TreeRow[]>(buildRows([]));
   const rollbackIndex = new ObservableValue<number>(doc.studio.rollbackIndex);
   const renaming = new ObservableValue<FeatureId | null>(null);
@@ -80,6 +109,7 @@ export function createFeatureTreeModel(deps: {
       selection.items.get().flatMap((item) => (item.kind === 'feature' ? [item.feature] : [])),
     );
     const editing = editor.current.get()?.featureId ?? null;
+    const dependents = countDependents(dependencies());
 
     const next = features.map((feature, i): TreeRow => {
       const { status, message, issues } = statusOf(feature, i >= bar, health.get(feature.id));
@@ -95,6 +125,7 @@ export function createFeatureTreeModel(deps: {
         message,
         selected: selected.has(feature.id),
         editing: feature.id === editing,
+        dependents: dependents.get(feature.id) ?? 0,
       };
       // Rows are matched by position: a row only moves when features move, which is rare.
       const old = prev[i];
@@ -164,10 +195,64 @@ export function createFeatureTreeModel(deps: {
       if (opts?.additive === true) selection.toggle(item);
       else selection.set([item]);
     },
+    dependentsOf(ids) {
+      const of = new Set(ids);
+      const found: FeatureId[] = [];
+      // The map is in studio order and has each feature once.
+      for (const [feature, dependsOn] of dependencies()) {
+        if (!of.has(feature) && dependsOn.some((d) => of.has(d))) found.push(feature);
+      }
+      return Object.freeze(found);
+    },
+    move(id, toIndex) {
+      const studio = doc.studio;
+      const { features } = studio;
+      const from = features.findIndex((f) => f.id === id);
+      const feature = features[from];
+      assert(feature !== undefined, `move: unknown feature '${id}'`);
+      assert(
+        Number.isInteger(toIndex) && toIndex >= 0 && toIndex < features.length,
+        `move: index ${String(toIndex)} is out of 0..${String(features.length - 1)}`,
+      );
+      if (toIndex === from) return Object.freeze([]);
+      // The references do not depend on the order, so the graph stays valid for the new order.
+      const deps = dependencies();
+      const moved = features.toSpliced(from, 1).toSpliced(toIndex, 0, feature);
+      const existing = new Set(orderViolations(studio, deps).map(violationKey));
+      const added = orderViolations({ ...studio, features: moved }, deps).filter(
+        (v) => !existing.has(violationKey(v)),
+      );
+      if (added.length > 0) return Object.freeze(added);
+      const op: FeatureMoveOp = {
+        type: 'feature.move',
+        v: OP_VERSION['feature.move'],
+        featureId: id,
+        toIndex,
+      };
+      ops.dispatch(op);
+      return Object.freeze([]);
+    },
     dispose() {
       for (const unsubscribe of unsubscribes) unsubscribe();
     },
   };
+}
+
+/** Per feature, how many features depend on it. */
+function countDependents(
+  deps: ReadonlyMap<FeatureId, readonly FeatureId[]>,
+): ReadonlyMap<FeatureId, number> {
+  const counts = new Map<FeatureId, number>();
+  // dependenciesOf lists each dependency of a feature once, so each dependent counts once.
+  for (const dependsOn of deps.values()) {
+    for (const d of dependsOn) counts.set(d, (counts.get(d) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** Identity of an order violation for comparing two lists. */
+function violationKey(v: OrderViolation): string {
+  return JSON.stringify([v.feature, v.dependsOn]);
 }
 
 interface RowStatus {
@@ -206,7 +291,8 @@ function sameRow(a: TreeRow, b: TreeRow): boolean {
     a.status === b.status &&
     a.message === b.message &&
     a.selected === b.selected &&
-    a.editing === b.editing
+    a.editing === b.editing &&
+    a.dependents === b.dependents
   );
 }
 

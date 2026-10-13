@@ -1,7 +1,7 @@
 import { createRegistry } from '@/core';
 import type { Registry, Result } from '@/core';
 import type { BodyRef, FeatureInstance } from '@/document';
-import type { PrimitiveOps, QueryOps } from '@/kernel';
+import type { BooleanOps, PrimitiveOps, QueryOps, TransformOps } from '@/kernel';
 import type { Body, FeatureError, RegenState } from './state';
 
 // The behaviour half of a feature type (ADR 0004): turns params into geometry.
@@ -21,9 +21,22 @@ export interface RefError {
 
 /**
  * The part of the kernel a builder may use: it creates shapes and asks about them, it never
- * releases (Q041). Defined here by its consumer (ADR 0011); M13 adds BooleanOps.
+ * releases (Q041). Defined here by its consumer (ADR 0011); M11 added TransformOps and
+ * BooleanOps.
  */
-export type ModelingKernel = PrimitiveOps & QueryOps;
+export type ModelingKernel = PrimitiveOps & TransformOps & BooleanOps & QueryOps;
+
+/**
+ * The feature error for an unresolved reference of the param `param` (Q044): the UI translates
+ * the issue at the param, the message of the RefError stays for logs. Deeply frozen.
+ */
+export function unresolvedReference(param: string, e: RefError): FeatureError {
+  return Object.freeze({
+    code: 'UNRESOLVED_REFERENCE',
+    message: e.message,
+    issues: Object.freeze([Object.freeze({ param, code: 'param.unresolvedRef' })]),
+  });
+}
 
 export interface BuildContext {
   /** Tracked kernel: every returned handle belongs to the Regenerator (Q041). */
@@ -46,7 +59,7 @@ export type BuildOutput =
  * artifacts (ADR 0015: a created body gets bodyId(feature.id) with origin and lastModifiedBy
  * the feature, a changed body keeps id, origin and names and gets lastModifiedBy, a consumed
  * body leaves the map); never release handles; create every shape through ctx.kernel; return
- * expected failures as { ok: false } (an unresolved reference as UNRESOLVED_REFERENCE).
+ * expected failures as { ok: false } (an unresolved reference through unresolvedReference).
  * Params are already validated.
  */
 export interface FeatureBuilder<P = unknown> {

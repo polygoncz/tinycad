@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { FeatureBuilder } from './builder';
-import { createBuilderRegistry } from './builder';
+import { bodyId } from '@/document';
+import type { FeatureId } from '@/document';
+import type { FeatureBuilder, RefError } from './builder';
+import { createBuilderRegistry, unresolvedReference } from './builder';
 
 function aBuilder(type: string): FeatureBuilder {
   return {
@@ -33,5 +35,29 @@ describe('createBuilderRegistry', () => {
     const a = createBuilderRegistry();
     a.register(aBuilder('box'));
     expect(createBuilderRegistry().has('box')).toBe(false);
+  });
+});
+
+describe('unresolvedReference', () => {
+  // Branded ids are created by a cast in tests.
+  const box1 = 'box1' as FeatureId;
+  const e: RefError = {
+    ref: { kind: 'body', body: bodyId(box1) },
+    message: 'Body box1/body not found',
+  };
+
+  it('is an UNRESOLVED_REFERENCE with the message of the RefError and an issue at the param', () => {
+    expect(unresolvedReference('tools', e)).toEqual({
+      code: 'UNRESOLVED_REFERENCE',
+      message: 'Body box1/body not found',
+      issues: [{ param: 'tools', code: 'param.unresolvedRef' }],
+    });
+  });
+
+  it('is deeply frozen', () => {
+    const error = unresolvedReference('tools', e);
+    expect(Object.isFrozen(error)).toBe(true);
+    expect(Object.isFrozen(error.issues)).toBe(true);
+    for (const issue of error.issues ?? []) expect(Object.isFrozen(issue)).toBe(true);
   });
 });

@@ -8,10 +8,10 @@
 // as an RpcError carrying the same code.
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { Vec3 } from '@/core';
+import { mat4, type Mat4, type Vec3 } from '@/core';
 import { kernelErrorCode } from './errors';
 import type { KernelErrorCode } from './errors';
-import type { GeometryKernel } from './kernel';
+import type { BooleanOp, GeometryKernel } from './kernel';
 import { validateMeshData } from './mesh';
 import type { BoundingBox, MeshData, MeshQuality, ShapeHandle } from './types';
 
@@ -30,6 +30,18 @@ const MESH_TOLERANCE = 1e-5 * Math.max(1, ...ORIGIN.map(Math.abs), ...BOX_MAX.ma
 /** The same tolerance validateMeshData uses for unit normals. */
 const NORMAL_TOLERANCE = 1e-4;
 const QUALITY: MeshQuality = { linearDeflection: 0.1, angularDeflection: 0.5 };
+
+// M11 fixtures. The cylinder stands on the box corner ORIGIN; its axis is not unit length.
+const CYLINDER = { base: ORIGIN, axis: [0, 0, 2] as Vec3, radius: 2, height: 4 };
+const CYLINDER_MIN: Vec3 = [-1, -4, 3];
+const CYLINDER_MAX: Vec3 = [3, 0, 7];
+// Boxes for boolean, relative to BOX = [1, -2, 3]..[3, 1, 7]:
+/** [2, 0, 5]..[4, 2, 9]: overlaps BOX in [2, 0, 5]..[3, 1, 7]. */
+const OVERLAPPING = { origin: [2, 0, 5] as Vec3, size: [2, 2, 4] as Vec3 };
+/** [10, 0, 0]..[11, 1, 1]: no common point with BOX. */
+const SEPARATE = { origin: [10, 0, 0] as Vec3, size: [1, 1, 1] as Vec3 };
+/** [2.5, 0.5, 6.5]..[3.5, 1.5, 7.5]: cuts the corner BOX_MAX off BOX, no whole side. */
+const CORNER = { origin: [2.5, 0.5, 6.5] as Vec3, size: [1, 1, 1] as Vec3 };
 
 // Handles are created by a cast in tests only: numbers the kernel has never issued.
 const handle = (n: number): ShapeHandle => n as ShapeHandle;
@@ -172,6 +184,61 @@ const MESH_FIELDS = [
   'edgeRanges',
 ] as const;
 
+/** Spec 06 (M11): bounding boxes of modelling results are compared within this, per component. */
+const BBOX_TOLERANCE = 1e-5;
+
+/** The bounding box equals [min, max] within BBOX_TOLERANCE in every component. */
+function expectBoxClose(actual: BoundingBox, min: Vec3, max: Vec3, what = 'bounding box'): void {
+  expectVecClose(actual.min, min, BBOX_TOLERANCE, `min of ${what}`);
+  expectVecClose(actual.max, max, BBOX_TOLERANCE, `max of ${what}`);
+}
+
+/**
+ * The mesh passes validateMeshData and every vertex and edge point lies in [min, max], within
+ * the float32 precision of the mesh relative to the extent of the box.
+ */
+function expectValidMeshIn(mesh: MeshData, min: Vec3, max: Vec3, what: string): void {
+  expect(validateMeshData(mesh), `${what}: validateMeshData`).toEqual([]);
+  const tolerance = 1e-5 * Math.max(1, ...min.map(Math.abs), ...max.map(Math.abs));
+  for (const [kind, list] of [
+    ['vertex', points(mesh.positions)],
+    ['edge point', points(mesh.edgePositions)],
+  ] as const) {
+    list.forEach((p, i) => {
+      for (let k = 0; k < 3; k++) {
+        const c = p[k] ?? Number.NaN;
+        const lo = (min[k] ?? Number.NaN) - tolerance;
+        const hi = (max[k] ?? Number.NaN) + tolerance;
+        if (!(c >= lo && c <= hi)) {
+          expect.fail(`${what}: ${kind} ${String(i)} [${p.join(', ')}] outside the bounding box`);
+        }
+      }
+    });
+  }
+}
+
+/** A matrix written by rows; Mat4 is column-major (element r, c at index c * 4 + r). */
+// prettier-ignore
+function fromRows(
+  a11: number, a12: number, a13: number, a14: number,
+  a21: number, a22: number, a23: number, a24: number,
+  a31: number, a32: number, a33: number, a34: number,
+  a41: number, a42: number, a43: number, a44: number,
+): Mat4 {
+  return [a11, a21, a31, a41, a12, a22, a32, a42, a13, a23, a33, a43, a14, a24, a34, a44];
+}
+
+const INF = Number.POSITIVE_INFINITY;
+// prettier-ignore
+const NOT_RIGID: readonly (readonly [string, Mat4])[] = [
+  ['a non-orthonormal matrix (shear)', fromRows(1, 0.5, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)],
+  ['a mirror (det -1)', fromRows(-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)],
+  ['a scale 2', fromRows(2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1)],
+  ['a matrix with NaN', fromRows(1, 0, 0, Number.NaN, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)],
+  ['a matrix with Infinity', fromRows(1, 0, 0, 0, 0, 1, 0, INF, 0, 0, 1, 0, 0, 0, 0, 1)],
+  ['a non-affine bottom row', fromRows(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.1, 0, 0, 1)],
+];
+
 /** Kontraktová sada; factory vytvoří pro každý test čerstvé jádro. */
 export function describeGeometryKernelContract(
   name: string,
@@ -204,6 +271,9 @@ export function describeGeometryKernelContract(
 
       it.each([
         ['makeBox', (k: GeometryKernel) => k.makeBox({ origin: ORIGIN, size: [0, 1, 1] })],
+        ['makeCylinder', (k: GeometryKernel) => k.makeCylinder({ ...CYLINDER, radius: 0 })],
+        ['transform', (k: GeometryKernel) => k.transform(UNKNOWN, mat4.identity())],
+        ['boolean', (k: GeometryKernel) => k.boolean('union', [], [])],
         ['tessellate', (k: GeometryKernel) => k.tessellate(UNKNOWN, QUALITY)],
         ['boundingBox', (k: GeometryKernel) => k.boundingBox(UNKNOWN)],
         ['release', (k: GeometryKernel) => k.release([UNKNOWN])],
@@ -219,7 +289,11 @@ export function describeGeometryKernelContract(
         const created = kernel.makeBox(BOX);
         expect(created).toBeInstanceOf(Promise);
         const { shape } = await created;
+        const other = (await kernel.makeBox(OVERLAPPING)).shape;
         const calls = [
+          kernel.makeCylinder(CYLINDER),
+          kernel.transform(shape, mat4.identity()),
+          kernel.boolean('union', [shape], [other]),
           kernel.tessellate(shape, QUALITY),
           kernel.boundingBox(shape),
           kernel.liveHandleCount(),
@@ -265,6 +339,206 @@ export function describeGeometryKernelContract(
         async (_, origin, size) => {
           expect(await rejectionCode(() => kernel.makeBox({ origin, size }))).toBe('invalid-input');
           expect(await kernel.liveHandleCount()).toBe(0);
+        },
+      );
+    });
+
+    describe('makeCylinder', () => {
+      it.each([
+        ['x', [1, 0, 0], [1, -4, 1], [5, 0, 5]],
+        ['y', [0, 1, 0], [-1, -2, 1], [3, 2, 5]],
+        ['z, not unit length', [0, 0, 2], CYLINDER_MIN, CYLINDER_MAX],
+      ] satisfies [string, Vec3, Vec3, Vec3][])(
+        'axis %s: a new handle with the bounding box of the cylinder',
+        async (_, axis, min, max) => {
+          const { shape } = await kernel.makeCylinder({ ...CYLINDER, axis });
+          expect(Number.isInteger(shape)).toBe(true);
+          expect(shape).toBeGreaterThan(0);
+          expect(await kernel.liveHandleCount()).toBe(1);
+          expectBoxClose(await kernel.boundingBox(shape), min, max);
+        },
+      );
+
+      it('the mesh passes validateMeshData and lies in the bounding box', async () => {
+        const { shape } = await kernel.makeCylinder(CYLINDER);
+        const mesh = await kernel.tessellate(shape, QUALITY);
+        expectValidMeshIn(mesh, CYLINDER_MIN, CYLINDER_MAX, 'cylinder');
+      });
+
+      it.each([
+        ['base NaN', { base: [Number.NaN, 0, 0] }],
+        ['base Infinity', { base: [0, Number.POSITIVE_INFINITY, 0] }],
+        ['axis NaN', { axis: [0, 0, Number.NaN] }],
+        ['axis Infinity', { axis: [Number.NEGATIVE_INFINITY, 0, 1] }],
+        ['axis zero', { axis: [0, 0, 0] }],
+        ['axis of length 1e-10', { axis: [1e-10, 0, 0] }],
+        ['radius 0', { radius: 0 }],
+        ['radius negative', { radius: -1 }],
+        ['radius NaN', { radius: Number.NaN }],
+        ['radius Infinity', { radius: Number.POSITIVE_INFINITY }],
+        ['height 0', { height: 0 }],
+        ['height negative', { height: -1 }],
+        ['height NaN', { height: Number.NaN }],
+        ['height Infinity', { height: Number.POSITIVE_INFINITY }],
+      ] satisfies [string, Partial<typeof CYLINDER>][])(
+        '%s rejects with invalid-input and creates no handle',
+        async (_, change) => {
+          const p = { ...CYLINDER, ...change };
+          expect(await rejectionCode(() => kernel.makeCylinder(p))).toBe('invalid-input');
+          expect(await kernel.liveHandleCount()).toBe(0);
+        },
+      );
+    });
+
+    describe('transform', () => {
+      it('a translation moves the bounding box; a new handle', async () => {
+        const a = await aBox();
+        const { shape } = await kernel.transform(a, mat4.translation([10, 0, -5]));
+        expect(shape).not.toBe(a);
+        expect(await kernel.liveHandleCount()).toBe(2);
+        expectBoxClose(await kernel.boundingBox(shape), [11, -2, -2], [13, 1, 2]);
+      });
+
+      it('a rotation by 90° about Z about the origin turns the bounding box', async () => {
+        const m = mat4.rotationAxisAngle([0, 0, 1], Math.PI / 2);
+        const { shape } = await kernel.transform(await aBox(), m);
+        // (x, y) → (−y, x): x in [1, 3], y in [−2, 1] gives x' in [−1, 2], y' in [1, 3].
+        expectBoxClose(await kernel.boundingBox(shape), [-1, 1, 3], [2, 3, 7]);
+      });
+
+      it('a rotation by 45° about Z gives the bounding box of the turned corners', async () => {
+        const m = mat4.rotationAxisAngle([0, 0, 1], Math.PI / 4);
+        const { shape } = await kernel.transform(await aBox(), m);
+        // x' = (x − y)/√2 with x − y in [0, 5]; y' = (x + y)/√2 with x + y in [−1, 4].
+        const s = Math.SQRT1_2;
+        expectBoxClose(await kernel.boundingBox(shape), [0, -s, 3], [5 * s, 4 * s, 7]);
+      });
+
+      it('the input stays valid with the same bounding box', async () => {
+        const a = await aBox();
+        await kernel.transform(a, mat4.translation([10, 0, 0]));
+        expectEnclosesBox(await kernel.boundingBox(a), ORIGIN, BOX_MAX);
+        expect(await kernel.liveHandleCount()).toBe(2);
+      });
+
+      it('the mesh of the result passes validateMeshData and lies in its bounding box', async () => {
+        const m = mat4.multiply(
+          mat4.translation([0, 0, 1]),
+          mat4.rotationAxisAngle([0, 0, 1], Math.PI / 4),
+        );
+        const { shape } = await kernel.transform(await aBox(), m);
+        const s = Math.SQRT1_2;
+        const mesh = await kernel.tessellate(shape, QUALITY);
+        expectValidMeshIn(mesh, [0, -s, 4], [5 * s, 4 * s, 8], 'moved box');
+      });
+
+      it.each(NOT_RIGID)('%s rejects with invalid-input and creates no handle', async (_, m) => {
+        const a = await aBox();
+        expect(await rejectionCode(() => kernel.transform(a, m))).toBe('invalid-input');
+        expect(await kernel.liveHandleCount()).toBe(1);
+      });
+
+      it.each(NEVER_ISSUED)('handle %s, never issued, rejects with unknown-handle', async (h) => {
+        await aBox();
+        const code = await rejectionCode(() => kernel.transform(h, mat4.identity()));
+        expect(code).toBe('unknown-handle');
+        expect(await kernel.liveHandleCount()).toBe(1);
+      });
+    });
+
+    describe('boolean', () => {
+      async function aShape(box: { readonly origin: Vec3; readonly size: Vec3 }) {
+        return (await kernel.makeBox(box)).shape;
+      }
+
+      /** One new handle with bounding box [min, max] and a valid mesh inside it. */
+      async function expectResult(
+        op: BooleanOp,
+        targets: readonly ShapeHandle[],
+        tools: readonly ShapeHandle[],
+        min: Vec3,
+        max: Vec3,
+      ): Promise<void> {
+        const before = await kernel.liveHandleCount();
+        const { shape } = await kernel.boolean(op, targets, tools);
+        expect([...targets, ...tools]).not.toContain(shape);
+        expect(await kernel.liveHandleCount()).toBe(before + 1);
+        expectBoxClose(await kernel.boundingBox(shape), min, max, `${op} result`);
+        const mesh = await kernel.tessellate(shape, QUALITY);
+        expectValidMeshIn(mesh, min, max, `${op} result`);
+      }
+
+      it('union of two overlapping boxes has their enclosing bounding box', async () => {
+        const tool = await aShape(OVERLAPPING);
+        await expectResult('union', [await aBox()], [tool], ORIGIN, [4, 2, 9]);
+      });
+
+      it('union of two separate boxes has their enclosing bounding box', async () => {
+        const tool = await aShape(SEPARATE);
+        await expectResult('union', [await aBox()], [tool], [1, -2, 0], [11, 1, 7]);
+      });
+
+      it('intersect of two overlapping boxes is exactly their common part', async () => {
+        const tool = await aShape(OVERLAPPING);
+        await expectResult('intersect', [await aBox()], [tool], [2, 0, 5], [3, 1, 7]);
+      });
+
+      it('intersect of two separate boxes rejects with operation-failed, no handle', async () => {
+        const a = await aBox();
+        const b = await aShape(SEPARATE);
+        const code = await rejectionCode(() => kernel.boolean('intersect', [a], [b]));
+        expect(code).toBe('operation-failed');
+        expect(await kernel.liveHandleCount()).toBe(2);
+      });
+
+      it('subtract of a box cutting a corner keeps the bounding box of the target', async () => {
+        const tool = await aShape(CORNER);
+        await expectResult('subtract', [await aBox()], [tool], ORIGIN, BOX_MAX);
+      });
+
+      it('the inputs stay valid with the same bounding boxes', async () => {
+        const a = await aBox();
+        const b = await aShape(OVERLAPPING);
+        for (const op of ['union', 'subtract', 'intersect'] as const) {
+          await kernel.boolean(op, [a], [b]);
+        }
+        expect(await kernel.liveHandleCount()).toBe(5);
+        expectEnclosesBox(await kernel.boundingBox(a), ORIGIN, BOX_MAX, 'target');
+        expectEnclosesBox(await kernel.boundingBox(b), [2, 0, 5], [4, 2, 9], 'tool');
+      });
+
+      type BooleanArgs = readonly [BooleanOp, readonly ShapeHandle[], readonly ShapeHandle[]];
+      it.each([
+        ['empty targets', (a, b) => ['union', [], [a, b]]],
+        ['empty tools', (a, b) => ['union', [a, b], []]],
+        ['a repeated target', (a, b) => ['union', [a, a], [b]]],
+        ['a repeated tool', (a, b) => ['subtract', [a], [b, b]]],
+        ['a handle in both lists', (a) => ['intersect', [a], [a]]],
+        // An op outside the type – a JS caller or a bug can pass it.
+        ['an unknown op', (a, b) => ['xor' as BooleanOp, [a], [b]]],
+      ] satisfies [string, (a: ShapeHandle, b: ShapeHandle) => BooleanArgs][])(
+        '%s rejects with invalid-input and creates no handle',
+        async (_, args) => {
+          const a = await aBox();
+          const b = await aShape(OVERLAPPING);
+          const [op, targets, tools] = args(a, b);
+          const code = await rejectionCode(() => kernel.boolean(op, targets, tools));
+          expect(code).toBe('invalid-input');
+          expect(await kernel.liveHandleCount()).toBe(2);
+        },
+      );
+
+      it.each([
+        ['in targets', (a) => [[UNKNOWN], [a]]],
+        ['in tools', (a) => [[a], [UNKNOWN]]],
+      ] satisfies [string, (a: ShapeHandle) => readonly [ShapeHandle[], ShapeHandle[]]][])(
+        'an unknown handle %s rejects with unknown-handle',
+        async (_, args) => {
+          const a = await aBox();
+          const [targets, tools] = args(a);
+          const code = await rejectionCode(() => kernel.boolean('union', targets, tools));
+          expect(code).toBe('unknown-handle');
+          expect(await kernel.liveHandleCount()).toBe(1);
         },
       );
     });
@@ -559,6 +833,41 @@ export function describeGeometryKernelContract(
         expectEnclosesBox(await kernel.boundingBox(a), ORIGIN, BOX_MAX);
       });
 
+      it('changing makeCylinder inputs right after the call, before await, does not change the shape', async () => {
+        const base: Vec3 = [...ORIGIN];
+        const axis: Vec3 = [0, 0, 2];
+        const created = callWithoutThrow(() =>
+          kernel.makeCylinder({ base, axis, radius: 2, height: 4 }),
+        );
+        // The inputs are readonly tuples; the test writes into them on purpose.
+        Reflect.set(base, 0, 100);
+        Reflect.set(axis, 0, 5);
+        const { shape } = await created;
+        expectBoxClose(await kernel.boundingBox(shape), CYLINDER_MIN, CYLINDER_MAX);
+      });
+
+      it('changing the transform matrix right after the call, before await, does not change the result', async () => {
+        const a = await aBox();
+        const m: [...Mat4] = [...mat4.translation([10, 0, 0])];
+        const moved = callWithoutThrow(() => kernel.transform(a, m));
+        m[12] = 100;
+        const { shape } = await moved;
+        expectBoxClose(await kernel.boundingBox(shape), [11, -2, 3], [13, 1, 7]);
+      });
+
+      it('changing the boolean lists right after the call, before await, does not change the result', async () => {
+        const a = await aBox();
+        const b = (await kernel.makeBox(OVERLAPPING)).shape;
+        const c = (await kernel.makeBox(SEPARATE)).shape;
+        const targets = [a];
+        const tools = [b];
+        const united = callWithoutThrow(() => kernel.boolean('union', targets, tools));
+        targets[0] = c;
+        tools.push(c);
+        const { shape } = await united;
+        expectBoxClose(await kernel.boundingBox(shape), ORIGIN, [4, 2, 9]);
+      });
+
       it('changing the release list right after the call, before await, does not change what is released', async () => {
         const a = await aBox();
         const b = await aBox();
@@ -581,6 +890,19 @@ export function describeGeometryKernelContract(
           (k: GeometryKernel) => k.tessellate(UNKNOWN, null as unknown as MeshQuality),
         ],
         ['release(42)', (k: GeometryKernel) => k.release(42 as unknown as readonly ShapeHandle[])],
+        [
+          'makeCylinder(null)',
+          (k: GeometryKernel) => k.makeCylinder(null as unknown as typeof CYLINDER),
+        ],
+        [
+          'transform(handle, null)',
+          (k: GeometryKernel) => k.transform(UNKNOWN, null as unknown as Mat4),
+        ],
+        [
+          'boolean(union, null, [handle])',
+          (k: GeometryKernel) =>
+            k.boolean('union', null as unknown as readonly ShapeHandle[], [UNKNOWN]),
+        ],
       ])(
         '%s: a failed read of the input rejects with internal, not synchronously',
         async (_, call) => {

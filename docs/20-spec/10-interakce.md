@@ -433,7 +433,7 @@ export function createBuiltInActions(deps: {
 }): Disposable;
 ```
 
-- `createBuiltInActions` dostane od M11 i `confirm: (request: ConfirmRequest) => boolean` s `ConfirmRequest = { key: string; params: Readonly<Record<string, string | number>> }` (klíč překladu a hodnoty; `interaction` nezná DOM, dialog dodá `ui` přes `app`). `feature.delete` spočítá `featureTree.dependentsOf(odstraňované)`; je-li jich `n > 0`, zeptá se `confirm({ key: 'feature.delete.confirm', params: { n } })` a při `false` nic nesmaže ani nezmění výběr (jako Fusion: „N featur ztratí referenci“, [[Rozhodnutí noční rychloakce#M11 – Další entity|R16]]). Bez závislých se neptá.
+- `createBuiltInActions` dostane od M11 i `confirm: (request: ConfirmRequest) => boolean` s `ConfirmRequest = { key: string; params: Readonly<Record<string, string | number>> }` (klíč překladu a hodnoty; `interaction` nezná DOM, dialog dodá `ui` přes `app`). `feature.delete` spočítá `featureTree.dependentsOf(odstraňované)`; je-li jich `n > 0`, zeptá se `confirm({ key: 'feature.delete.confirm', params: { n } })` a při `false` nic nesmaže ani nezmění výběr (jako Fusion: „N featur ztratí referenci“, [[Rozhodnutí noční rychloakce#M11 – Další entity|R16]]). Bez závislých se neptá; maže-li se featura spolu se všemi svými závislými, je `n = 0` (`dependentsOf` počítá jen featury mimo odstraňované) a také se neptá.
 - Skupina `feature` (kontextové menu) v pořadí: `feature.edit`, `feature.rename` (→ `featureTree.beginRename`), `feature.suppress`, `timeline.rollHere`, `feature.delete`. Menu v [[Timeline]] je jen vykreslený snapshot akcí této skupiny.
 - `ui` id akcí nezná natvrdo: bere je z `AppSession.actionIds` (reexport `ACTION_IDS`).
 

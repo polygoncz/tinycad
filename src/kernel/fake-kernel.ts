@@ -1,11 +1,14 @@
-import type { Vec3 } from '@/core';
+import { mat4, type Mat4, type Vec3 } from '@/core';
 import { createKernelError } from './errors';
 import type { KernelErrorCode } from './errors';
-import type { GeometryKernel } from './kernel';
+import type { BooleanOp, GeometryKernel } from './kernel';
+import { isRigidMotion } from './transform';
 import type { BoundingBox, MeshData, MeshQuality, ShapeHandle, ShapeResult } from './types';
 
-// In-memory GeometryKernel for tests of higher layers (spec 06, "FakeKernel"). A shape is an
-// axis-aligned box. Reached only through kernel/testing.ts, so it never gets into production.
+// In-memory GeometryKernel for tests of higher layers (spec 06, "FakeKernel"). A shape is its
+// axis-aligned bounding box (AABB): a cylinder, a moved shape and a boolean result are stored
+// as their AABB and tessellated as a box. Reached only through kernel/testing.ts, so it never
+// gets into production.
 
 export type KernelOp = keyof GeometryKernel;
 
@@ -19,12 +22,17 @@ export interface FakeKernel extends GeometryKernel {
 /** `read` of a method whose inputs are primitives: nothing to copy. */
 const noInput = (): undefined => undefined;
 
+/** Spec 06: a cylinder axis must be longer than this. */
+const MIN_AXIS_LENGTH = 1e-9;
+
+const BOOLEAN_OPS: readonly BooleanOp[] = ['union', 'subtract', 'intersect'];
+
 export function createFakeKernel(): FakeKernel {
   return new FakeKernelImpl();
 }
 
-/** The fake's ShapeEntry: the box as its AABB. */
-interface BoxEntry {
+/** The fake's ShapeEntry: the shape as its axis-aligned bounding box (AABB). */
+interface AabbEntry {
   readonly min: Vec3;
   readonly max: Vec3;
 }
@@ -35,7 +43,7 @@ interface InjectedFailure {
 }
 
 class FakeKernelImpl implements FakeKernel {
-  private readonly shapes = new Map<ShapeHandle, BoxEntry>();
+  private readonly shapes = new Map<ShapeHandle, AabbEntry>();
   /** Increasing counter: a handle is never reused within one instance. */
   private lastHandle = 0;
   private readonly failures = new Map<KernelOp, InjectedFailure[]>();
@@ -63,12 +71,114 @@ class FakeKernelImpl implements FakeKernel {
       if (!size.every((s) => Number.isFinite(s) && s > 0)) {
         throw createKernelError('invalid-input', 'makeBox: size must be finite and > 0');
       }
-      const shape = this.nextHandle();
-      this.shapes.set(shape, {
+      return this.add({
         min: [origin[0], origin[1], origin[2]],
         max: [origin[0] + size[0], origin[1] + size[1], origin[2] + size[2]],
       });
-      return { shape };
+    });
+  }
+
+  makeCylinder(p: {
+    readonly base: Vec3;
+    readonly axis: Vec3;
+    readonly radius: number;
+    readonly height: number;
+  }): Promise<ShapeResult> {
+    const read = (): { base: Vec3; axis: Vec3; radius: number; height: number } => ({
+      base: [p.base[0], p.base[1], p.base[2]],
+      axis: [p.axis[0], p.axis[1], p.axis[2]],
+      radius: p.radius,
+      height: p.height,
+    });
+    return this.call('makeCylinder', read, ({ base, axis, radius, height }) => {
+      if (!base.every(Number.isFinite) || !axis.every(Number.isFinite)) {
+        throw createKernelError('invalid-input', 'makeCylinder: base and axis must be finite');
+      }
+      const length = Math.hypot(axis[0], axis[1], axis[2]);
+      if (!(length > MIN_AXIS_LENGTH)) {
+        throw createKernelError('invalid-input', 'makeCylinder: axis must not be zero');
+      }
+      if (!positive(radius) || !positive(height)) {
+        throw createKernelError(
+          'invalid-input',
+          'makeCylinder: radius and height must be finite and > 0',
+        );
+      }
+      // The AABB of the two base discs: in axis k a disc of radius r with unit normal a reaches
+      // r·sqrt(1 − a_k²) from its centre.
+      const unit = axis.map((c) => c / length);
+      const min: number[] = [];
+      const max: number[] = [];
+      for (let k = 0; k < 3; k++) {
+        const a = unit[k] ?? Number.NaN;
+        const reach = radius * Math.sqrt(Math.max(0, 1 - a * a));
+        const bottom = base[k] ?? Number.NaN;
+        const top = bottom + height * a;
+        min.push(Math.min(bottom, top) - reach);
+        max.push(Math.max(bottom, top) + reach);
+      }
+      return this.add({ min: toVec3(min), max: toVec3(max) });
+    });
+  }
+
+  transform(shape: ShapeHandle, m: Mat4): Promise<ShapeResult> {
+    // A spread of the tuple keeps its type: a copy of all 16 elements.
+    return this.call(
+      'transform',
+      (): Mat4 => [...m],
+      (matrix) => {
+        if (!isRigidMotion(matrix)) {
+          throw createKernelError('invalid-input', 'transform: m must be a rigid motion');
+        }
+        const { min, max } = this.entry(shape);
+        const corners = [0, 1, 2, 3, 4, 5, 6, 7].map((i) =>
+          mat4.transformPoint(matrix, [
+            i & 1 ? max[0] : min[0],
+            i & 2 ? max[1] : min[1],
+            i & 4 ? max[2] : min[2],
+          ]),
+        );
+        return this.add(enclosing(corners));
+      },
+    );
+  }
+
+  boolean(
+    op: BooleanOp,
+    targets: readonly ShapeHandle[],
+    tools: readonly ShapeHandle[],
+  ): Promise<ShapeResult> {
+    const read = (): { targets: ShapeHandle[]; tools: ShapeHandle[] } => ({
+      targets: [...targets],
+      tools: [...tools],
+    });
+    return this.call('boolean', read, (lists) => {
+      if (!BOOLEAN_OPS.includes(op)) {
+        throw createKernelError('invalid-input', `boolean: unknown op ${op}`);
+      }
+      if (lists.targets.length === 0 || lists.tools.length === 0) {
+        throw createKernelError('invalid-input', 'boolean: targets and tools must not be empty');
+      }
+      const all = [...lists.targets, ...lists.tools];
+      if (new Set(all).size !== all.length) {
+        throw createKernelError('invalid-input', 'boolean: the same handle more than once');
+      }
+      const targetBox = enclosing(lists.targets.flatMap((h) => extremes(this.entry(h))));
+      const toolBox = enclosing(lists.tools.flatMap((h) => extremes(this.entry(h))));
+      switch (op) {
+        case 'union':
+          return this.add(enclosing([...extremes(targetBox), ...extremes(toolBox)]));
+        case 'subtract':
+          // The fake cuts nothing away: the result is the box of the targets.
+          return this.add(targetBox);
+        case 'intersect': {
+          const common = overlap(targetBox, toolBox);
+          if (common === undefined) {
+            throw createKernelError('operation-failed', 'boolean: the intersection is empty');
+          }
+          return this.add(common);
+        }
+      }
     });
   }
 
@@ -136,13 +246,20 @@ class FakeKernelImpl implements FakeKernel {
     return Promise.resolve().then(() => body(input));
   }
 
+  /** Stores the entry under a new handle. */
+  private add(entry: AabbEntry): ShapeResult {
+    const shape = this.nextHandle();
+    this.shapes.set(shape, entry);
+    return { shape };
+  }
+
   private nextHandle(): ShapeHandle {
     this.lastHandle++;
     // The only place a number becomes a ShapeHandle.
     return this.lastHandle as ShapeHandle;
   }
 
-  private entry(shape: ShapeHandle): BoxEntry {
+  private entry(shape: ShapeHandle): AabbEntry {
     const entry = this.shapes.get(shape);
     if (entry === undefined) {
       throw createKernelError('unknown-handle', `Unknown shape handle ${String(shape)}`);
@@ -151,11 +268,43 @@ class FakeKernelImpl implements FakeKernel {
   }
 }
 
+function positive(x: number): boolean {
+  return Number.isFinite(x) && x > 0;
+}
+
+function toVec3(v: readonly number[]): Vec3 {
+  return [v[0] ?? Number.NaN, v[1] ?? Number.NaN, v[2] ?? Number.NaN];
+}
+
+/** The two extreme corners of the box: enough for `enclosing`. */
+function extremes({ min, max }: AabbEntry): Vec3[] {
+  return [min, max];
+}
+
+/** The AABB of the points. */
+function enclosing(points: readonly Vec3[]): AabbEntry {
+  const axes = [0, 1, 2];
+  return {
+    min: toVec3(axes.map((k) => Math.min(...points.map((p) => p[k] ?? Number.NaN)))),
+    max: toVec3(axes.map((k) => Math.max(...points.map((p) => p[k] ?? Number.NaN)))),
+  };
+}
+
+/** The common part of two boxes; undefined when it is empty or of zero thickness in any axis. */
+function overlap(a: AabbEntry, b: AabbEntry): AabbEntry | undefined {
+  const axes = [0, 1, 2];
+  const min = toVec3(axes.map((k) => Math.max(a.min[k] ?? Number.NaN, b.min[k] ?? Number.NaN)));
+  const max = toVec3(axes.map((k) => Math.min(a.max[k] ?? Number.NaN, b.max[k] ?? Number.NaN)));
+  return axes.every((k) => (max[k] ?? Number.NaN) > (min[k] ?? Number.NaN))
+    ? { min, max }
+    : undefined;
+}
+
 /**
  * The box as 6 faces of 2 triangles (24 vertices, flat normals) in order −X, +X, −Y, +Y, −Z, +Z,
  * and 12 edges of 2 points. Fresh buffers on every call.
  */
-function boxMesh({ min, max }: BoxEntry): MeshData {
+function boxMesh({ min, max }: AabbEntry): MeshData {
   const positions: number[] = [];
   const normals: number[] = [];
   const indices: number[] = [];

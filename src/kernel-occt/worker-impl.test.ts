@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { createRpcClient, serveRpc } from '@/core';
+import { createRpcClient, mat4, serveRpc } from '@/core';
 import { kernelErrorCode, validateMeshData, type GeometryKernel, type MeshData } from '@/kernel';
 import { createFakeKernel } from '@/kernel/testing';
 import type { OcctKernelProtocol } from './protocol';
@@ -95,11 +95,39 @@ describe('OCCT worker implementation', () => {
     );
   });
 
+  it('forwards makeCylinder, transform and boolean to the kernel', async () => {
+    const rpc = connect(Promise.resolve(createFakeKernel()));
+    const cylinder = await rpc.call('makeCylinder', {
+      base: [0, 0, 0],
+      axis: [0, 0, 1],
+      radius: 1,
+      height: 2,
+    });
+    await expect(rpc.call('boundingBox', cylinder.shape)).resolves.toEqual({
+      min: [-1, -1, 0],
+      max: [1, 1, 2],
+    });
+    const moved = await rpc.call('transform', cylinder.shape, mat4.translation([10, 0, 0]));
+    await expect(rpc.call('boundingBox', moved.shape)).resolves.toEqual({
+      min: [9, -1, 0],
+      max: [11, 1, 2],
+    });
+    const united = await rpc.call('boolean', 'union', [cylinder.shape], [moved.shape]);
+    await expect(rpc.call('boundingBox', united.shape)).resolves.toEqual({
+      min: [-1, -1, 0],
+      max: [11, 1, 2],
+    });
+    await expect(rpc.call('liveHandleCount')).resolves.toBe(3);
+  });
+
   it('tessellate transfers the mesh buffers: the worker side loses them', async () => {
     const fake = createFakeKernel();
     let sent: MeshData | undefined;
     const spying: GeometryKernel = {
       makeBox: (p) => fake.makeBox(p),
+      makeCylinder: (p) => fake.makeCylinder(p),
+      transform: (s, m) => fake.transform(s, m),
+      boolean: (op, targets, tools) => fake.boolean(op, targets, tools),
       boundingBox: (s) => fake.boundingBox(s),
       release: (h) => fake.release(h),
       liveHandleCount: () => fake.liveHandleCount(),
@@ -183,6 +211,9 @@ function throwingKernel(error: () => Error): GeometryKernel {
   const fail = () => Promise.reject(error());
   return {
     makeBox: fail,
+    makeCylinder: fail,
+    transform: fail,
+    boolean: fail,
     tessellate: fail,
     boundingBox: fail,
     release: fail,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createFeatureSchemaRegistry, toData } from '@/document';
+import { bodyId, createFeatureSchemaRegistry, toData } from '@/document';
 import type { DocumentId, DocumentMeta, FeatureId, FeatureSchema } from '@/document';
 import { aFeature } from '@/document/testing';
 import {
@@ -10,6 +10,8 @@ import {
 } from '@/ops';
 import type {
   BatchOp,
+  BodyRenameOp,
+  BodySetVisibleOp,
   FeatureAddOp,
   FeatureMoveOp,
   FeatureRemoveOp,
@@ -295,6 +297,40 @@ describe('loadDocument', () => {
     const { session, store } = await aStoredSession(4, [4]);
     const opened = await loaded(store);
     expect(opened.log.entries()).toEqual(session.log.entries());
+  });
+
+  it('keeps body names and hiding: from the snapshot and from replaying the log (M11)', async () => {
+    const session = aSession();
+    const store = createMemoryDocumentStore();
+    await store.createDocument(meta, createSnapshot(session.doc, 0));
+    const body = bodyId(featureA);
+    const other = bodyId(featureA, 1);
+    const ops: readonly (BodyRenameOp | BodySetVisibleOp)[] = [
+      { type: 'body.rename', v: OP_VERSION['body.rename'], body, name: 'Base' },
+      { type: 'body.setVisible', v: OP_VERSION['body.setVisible'], body, visible: false },
+      { type: 'body.setVisible', v: OP_VERSION['body.setVisible'], body: other, visible: false },
+      { type: 'body.rename', v: OP_VERSION['body.rename'], body: other, name: 'Other' },
+    ];
+    for (const op of ops) session.dispatcher.dispatch(op);
+    // `store` has all metadata in its snapshot at 4; `fromSnapshot` has a snapshot at 2 with
+    // half of it and replays entries 3 and 4 on top. With verify both also replay from the base.
+    await store.appendEntries(id, session.log.entries());
+    await store.saveSnapshot(id, createSnapshot(session.doc, 4));
+    const fromSnapshot = createMemoryDocumentStore();
+    await fromSnapshot.createDocument(meta, createSnapshot(aSession().doc, 0));
+    await fromSnapshot.appendEntries(id, session.log.entries());
+    const partial = aSession();
+    for (const op of ops.slice(0, 2)) partial.dispatcher.dispatch(op);
+    await fromSnapshot.saveSnapshot(id, createSnapshot(partial.doc, 2));
+
+    for (const s of [store, fromSnapshot]) {
+      for (const verify of [true, false]) {
+        const opened = await loaded(s, verify);
+        expect(opened.doc.bodyMeta(body)).toEqual({ name: 'Base', hidden: true });
+        expect(opened.doc.bodyMeta(other)).toEqual({ name: 'Other', hidden: true });
+        expect(toData(opened.doc)).toEqual(toData(session.doc));
+      }
+    }
   });
 
   describe('migration of feature data (Q035)', () => {

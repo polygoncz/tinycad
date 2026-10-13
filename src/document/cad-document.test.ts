@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createDocument } from './cad-document';
 import type { DocumentWriter } from './document';
 import type { DocumentId, DocumentMeta, FeatureId, FeatureInstance, PartStudioData } from './model';
+import type { BodyId } from './refs';
 
 const meta: DocumentMeta = { id: 'd1' as DocumentId, name: 'Doc', createdAt: 0 };
 
@@ -264,5 +265,114 @@ describe('events', () => {
       doc.removeFeature(fid('x'));
     }).toThrow();
     expect(count).toBe(0);
+  });
+});
+
+describe('body metadata (M11)', () => {
+  const body = (s: string) => s as BodyId;
+  const a = body('a/body');
+  const b = body('b/body:1');
+
+  it('has no metadata at first: bodyMeta gives the shared frozen {}', () => {
+    const doc = docWith(['a']);
+    expect(doc.bodyMeta(a)).toEqual({});
+    expect(doc.bodyMeta(a)).toBe(doc.bodyMeta(b));
+    expect(Object.isFrozen(doc.bodyMeta(a))).toBe(true);
+    expect('bodies' in doc.studio).toBe(false);
+  });
+
+  it('stores a name and hidden, frozen', () => {
+    const doc = docWith(['a', 'b']);
+    doc.setBodyMeta(a, { name: 'Base' });
+    doc.setBodyMeta(b, { hidden: true });
+    expect(doc.bodyMeta(a)).toEqual({ name: 'Base' });
+    expect(doc.bodyMeta(b)).toEqual({ hidden: true });
+    expect(doc.studio.bodies).toEqual({ [a]: { name: 'Base' }, [b]: { hidden: true } });
+    expect(Object.isFrozen(doc.studio)).toBe(true);
+    expect(Object.isFrozen(doc.studio.bodies)).toBe(true);
+    expect(Object.isFrozen(doc.bodyMeta(a))).toBe(true);
+  });
+
+  it('does not keep a meta object from outside', () => {
+    const doc = docWith(['a']);
+    const meta = { name: 'Base' };
+    doc.setBodyMeta(a, meta);
+    meta.name = 'Changed';
+    expect(doc.bodyMeta(a)).toEqual({ name: 'Base' });
+  });
+
+  it('keeps the canonical form: an empty name and hidden other than true are dropped', () => {
+    const doc = docWith(['a']);
+    doc.setBodyMeta(a, { name: 'Base', hidden: true });
+    doc.setBodyMeta(a, { name: '', hidden: true });
+    expect(doc.studio.bodies).toEqual({ [a]: { hidden: true } });
+    // hidden is typed `true`; a cast must still not store `false`.
+    doc.setBodyMeta(a, { name: 'X', hidden: false as unknown as true });
+    expect(doc.studio.bodies).toEqual({ [a]: { name: 'X' } });
+    expect(Object.keys(doc.bodyMeta(a))).toEqual(['name']);
+  });
+
+  it('removes the entry for empty metadata and the whole map when it is empty', () => {
+    const doc = docWith(['a']);
+    doc.setBodyMeta(a, { name: 'A' });
+    doc.setBodyMeta(b, { name: 'B' });
+    doc.setBodyMeta(a, {});
+    expect(doc.studio.bodies).toEqual({ [b]: { name: 'B' } });
+    doc.setBodyMeta(b, { name: '' });
+    expect('bodies' in doc.studio).toBe(false);
+  });
+
+  it('does not emit changed for the same metadata by value', () => {
+    const doc = docWith(['a']);
+    doc.setBodyMeta(a, { name: 'A', hidden: true });
+    const studio = doc.studio;
+    let count = 0;
+    doc.events.on('changed', () => count++);
+    doc.setBodyMeta(a, { hidden: true, name: 'A' });
+    doc.setBodyMeta(b, {});
+    doc.setBodyMeta(b, { name: '' });
+    expect(count).toBe(0);
+    expect(doc.studio).toBe(studio);
+    doc.setBodyMeta(a, { name: 'A' });
+    expect(count).toBe(1);
+  });
+
+  it('keeps the very same features array and rollback index', () => {
+    const doc = docWith(['a', 'b'], 1);
+    const features = doc.studio.features;
+    const seen: PartStudioData[] = [];
+    doc.events.on('changed', ({ studio }) => seen.push(studio));
+    doc.setBodyMeta(a, { hidden: true });
+    expect(doc.studio.features).toBe(features);
+    expect(doc.studio.rollbackIndex).toBe(1);
+    expect(seen).toEqual([doc.studio]);
+  });
+
+  it('every other mutator keeps the metadata', () => {
+    const doc = docWith(['a', 'b']);
+    doc.setBodyMeta(a, { name: 'A' });
+    const bodies = doc.studio.bodies;
+    doc.insertFeature(2, feature('c'));
+    expect(doc.studio.bodies).toBe(bodies);
+    doc.replaceFeature(feature('c', { size: 5 }));
+    expect(doc.studio.bodies).toBe(bodies);
+    doc.moveFeature(fid('c'), 0);
+    expect(doc.studio.bodies).toBe(bodies);
+    doc.setRollbackIndex(1);
+    expect(doc.studio.bodies).toBe(bodies);
+    // The document does not know bodies: the entry of a removed feature stays.
+    doc.removeFeature(fid('a'));
+    expect(doc.studio.bodies).toBe(bodies);
+    doc.rename('Other');
+    expect(doc.studio.bodies).toBe(bodies);
+  });
+
+  it('starts from the metadata of an initial studio, deeply frozen', () => {
+    const doc = createDocument({
+      meta,
+      studio: { features: [], rollbackIndex: 0, bodies: { [a]: { name: 'A' } } },
+    });
+    expect(doc.bodyMeta(a)).toEqual({ name: 'A' });
+    expect(Object.isFrozen(doc.studio.bodies?.[a])).toBe(true);
   });
 });

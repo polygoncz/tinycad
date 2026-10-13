@@ -113,6 +113,9 @@ describe('endOnFatal', () => {
     const fake = createFakeKernel();
     return {
       makeBox: () => Promise.reject(aWasmTrap('unreachable')),
+      makeCylinder: (p) => fake.makeCylinder(p),
+      transform: (s, m) => fake.transform(s, m),
+      boolean: (op, targets, tools) => fake.boolean(op, targets, tools),
       tessellate: (s, q) => fake.tessellate(s, q),
       boundingBox: (s) => fake.boundingBox(s),
       release: (h) => fake.release(h),

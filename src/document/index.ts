@@ -2,9 +2,16 @@
 // Public API of document (spec 03). Everything else in this folder is internal.
 
 export type { DocumentEvents, DocumentReader, DocumentWriter } from './document';
-export type { DocumentId, DocumentMeta, FeatureId, FeatureInstance, PartStudioData } from './model';
+export type {
+  BodyMeta,
+  DocumentId,
+  DocumentMeta,
+  FeatureId,
+  FeatureInstance,
+  PartStudioData,
+} from './model';
 export type { BodyId, BodyRef, EntityRef, SketchRegionRef, TopoName, TopoRef } from './refs';
-export { bodyId, originOfBody, ownerOf } from './refs';
+export { bodyId, originOfBody, ownerOf, parseBodyId } from './refs';
 export { dependenciesOf, dependentsOf, orderViolations, referencesOf } from './references';
 export type { OrderViolation } from './references';
 

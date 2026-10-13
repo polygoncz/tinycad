@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDocument } from './cad-document';
 import type { DocumentId, FeatureId, FeatureInstance } from './model';
+import type { BodyId } from './refs';
 import { createFeatureSchemaRegistry } from './schema';
 import type { FeatureSchema, FeatureSchemaRegistry } from './schema';
 import { fromData, migrateFeatureData, toData } from './serialize';
@@ -83,6 +84,70 @@ describe('toData / fromData round trip', () => {
     const loaded = load(JSON.parse(JSON.stringify(data)));
     expect(toData(loaded)).toEqual(data);
     expect(Object.isFrozen(loaded.studio.features[0]?.params)).toBe(true);
+  });
+
+  it('keeps body metadata through JSON', () => {
+    const doc = sampleDoc();
+    doc.setBodyMeta('a/body' as BodyId, { name: 'Base', hidden: true });
+    const data = toData(doc);
+    expect(toData(load(JSON.parse(JSON.stringify(data))))).toEqual(data);
+  });
+});
+
+describe('fromData – body metadata (M11)', () => {
+  const withBodies = (bodies: unknown): unknown => ({
+    meta: { id: 'd1', name: 'Doc', createdAt: 0 },
+    studio: { features: [], rollbackIndex: 0, bodies },
+  });
+
+  it('loads a studio without bodies without metadata', () => {
+    expect('bodies' in load(rawData([])).studio).toBe(false);
+  });
+
+  it('loads valid metadata, frozen', () => {
+    const doc = load(
+      withBodies({ 'a/body': { name: 'Base' }, 'b/body:2': { hidden: true, name: 'B' } }),
+    );
+    expect(doc.studio.bodies).toEqual({
+      'a/body': { name: 'Base' },
+      'b/body:2': { name: 'B', hidden: true },
+    });
+    expect(doc.bodyMeta('b/body:2' as BodyId)).toEqual({ name: 'B', hidden: true });
+    expect(Object.isFrozen(doc.studio.bodies)).toBe(true);
+    expect(Object.isFrozen(doc.studio.bodies?.['a/body' as BodyId])).toBe(true);
+  });
+
+  it('drops hidden: false, empty entries and an empty map (canonical form)', () => {
+    expect(load(withBodies({ 'a/body': { name: 'A', hidden: false } })).studio.bodies).toEqual({
+      'a/body': { name: 'A' },
+    });
+    const empty = load(withBodies({ 'a/body': { hidden: false }, 'b/body': {} }));
+    expect('bodies' in empty.studio).toBe(false);
+    expect('bodies' in load(withBodies({})).studio).toBe(false);
+  });
+
+  it.each([[null], [[]], ['x'], [3]])('reports bodies %j that is not an object', (bodies) => {
+    expect(loadIssues(withBodies(bodies)).map((i) => i.path)).toEqual(['studio.bodies']);
+  });
+
+  it.each(['a', 'a/', '/body', 'a/body:0', 'a/body:x', 'a/sketch', 'a/b/body'])(
+    'reports the key %j that is not a body id',
+    (key) => {
+      expect(loadIssues(withBodies({ [key]: { name: 'A' } })).map((i) => i.path)).toEqual([
+        `studio.bodies['${key}']`,
+      ]);
+    },
+  );
+
+  it.each([
+    ['not an object', null, "studio.bodies['a/body']"],
+    ['an array', [], "studio.bodies['a/body']"],
+    ['an empty name', { name: '' }, "studio.bodies['a/body'].name"],
+    ['a name that is not a string', { name: 3 }, "studio.bodies['a/body'].name"],
+    ['hidden that is not a boolean', { hidden: 'yes' }, "studio.bodies['a/body'].hidden"],
+    ['a foreign key (Q028)', { name: 'A', color: 'red' }, "studio.bodies['a/body'].color"],
+  ])('reports a value that is %s', (_, value, path) => {
+    expect(loadIssues(withBodies({ 'a/body': value })).map((i) => i.path)).toEqual([path]);
   });
 });
 

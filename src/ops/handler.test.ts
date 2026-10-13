@@ -6,7 +6,7 @@ import type { OpHandler } from './handler';
 const deps = { schemas: createFeatureSchemaRegistry() };
 
 describe('createOpHandlerRegistry', () => {
-  it('contains the seven built-in handlers', () => {
+  it('contains the nine built-in handlers', () => {
     expect(
       createOpHandlerRegistry(deps)
         .all()
@@ -21,6 +21,8 @@ describe('createOpHandlerRegistry', () => {
         'feature.suppress',
         'feature.move',
         'studio.setRollback',
+        'body.rename',
+        'body.setVisible',
       ].sort(),
     );
   });

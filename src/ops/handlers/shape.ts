@@ -1,3 +1,4 @@
+import { parseBodyId } from '@/document';
 import type { OperationLoadError } from '../load-error';
 
 // Small shape checks for validate of the built-in handlers (Q032). Only the shape of the
@@ -23,6 +24,11 @@ export const nonEmptyString = check(
 export const featureIdText = check(
   (v) => typeof v === 'string' && v !== '' && !v.includes('/'),
   "Must be a non-empty string without '/'",
+);
+/** A body id '<owner>/body[:<n>]', the shape bodyId mints (spec 03). */
+export const bodyIdText = check(
+  (v) => parseBodyId(v) !== undefined,
+  "Must be a body id '<feature>/body' or '<feature>/body:<n>'",
 );
 export const string = check((v) => typeof v === 'string', 'Must be a string');
 export const boolean = check((v) => typeof v === 'boolean', 'Must be a boolean');

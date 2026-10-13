@@ -51,6 +51,9 @@ export function createOcctWorkerImpl(
       await kernel;
     },
     makeBox: (p) => onKernel((k) => k.makeBox(p)),
+    makeCylinder: (p) => onKernel((k) => k.makeCylinder(p)),
+    transform: (shape, m) => onKernel((k) => k.transform(shape, m)),
+    boolean: (op, targets, tools) => onKernel((k) => k.boolean(op, targets, tools)),
     tessellate: async (shape, q) => {
       const mesh = await onKernel((k) => k.tessellate(shape, q));
       // The kernel returns new buffers every call (spec 06), so the worker can give them away.

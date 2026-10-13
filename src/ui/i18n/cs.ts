@@ -15,12 +15,15 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'param.tooFewRefs': 'Vyberte aspoň {min}',
   'param.tooManyRefs': 'Vyberte nejvýš {max}',
   'param.invalidRef': 'Neplatná položka výběru',
+  'param.duplicateRef': 'Položka {index} je ve výběru dvakrát',
+  'param.unresolvedRef': 'Odkazované těleso neexistuje',
 
   // Keys handed over by the domain and interaction.
   'document.untitled': 'Bez názvu',
   'feature.edit': 'Upravit featuru',
   'browser.body': 'Těleso {n}',
   'tool.select': 'Vybrat',
+  'feature.delete.confirm': 'Počet featur, které ztratí referenci: {n}. Přesto smazat?',
 
   // Labels of the built-in actions (app); feature.edit is above, it is a transaction label too.
   undo: 'Zpět',
@@ -53,6 +56,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'timeline.regen.ms': '{ms} ms',
   'timeline.bodies': 'Tělesa: {n}',
   'timeline.selected': 'Vybráno: {n}',
+  'timeline.dependents': 'Závisí na ní: {n}',
 
   // Param fields.
   'field.refs.count': 'Vybráno: {n}',

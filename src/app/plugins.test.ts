@@ -24,6 +24,7 @@ describe('BUILT_IN_PLUGINS', () => {
       now: () => 0,
       ids: createSequentialIdGenerator('f'),
       translate: (key) => key,
+      confirm: () => true,
       readOnly: false,
     });
     expect(session.toolList.map((t) => t.id)).toContain('box');

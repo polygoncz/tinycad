@@ -38,6 +38,15 @@ export const ACTION_IDS = Object.freeze({
   toEnd: 'timeline.toEnd',
 } as const);
 
+/**
+ * A yes/no question for the user: a translation key and its params. interaction knows no DOM,
+ * so the dialog comes from ui through app.
+ */
+export interface ConfirmRequest {
+  readonly key: string;
+  readonly params: Readonly<Record<string, string | number>>;
+}
+
 /** The action that activates a tool with a shortcut. */
 export function toolActionId(toolId: string): string {
   return `tool.${toolId}`;
@@ -65,8 +74,11 @@ export function createBuiltInActions(deps: {
   locked: Observable<boolean>;
   /** Narrow on purpose: interaction does not know render. */
   camera: { fitAll(): void };
+  /** Asks the user; true = go on. feature.delete asks before features lose a reference. */
+  confirm: (request: ConfirmRequest) => boolean;
 }): Disposable {
   const { registry, doc, ops, undo, selection, featureTree, editor, tools, locked, camera } = deps;
+  const { confirm } = deps;
   const subscriptions = new DisposableStore();
 
   /** An Observable<boolean> recomputed whenever one of the sources fires. */
@@ -215,6 +227,9 @@ export function createBuiltInActions(deps: {
     enabled: derived(hasSelectedFeature, onFeatures),
     run: () => {
       const removed = new Set(selectedFeatures());
+      // Features that would lose a reference (like Fusion): ask first, false changes nothing.
+      const n = featureTree.dependentsOf([...removed]).length;
+      if (n > 0 && !confirm({ key: 'feature.delete.confirm', params: { n } })) return;
       applyAll(
         'feature.delete',
         [...removed].map((featureId): FeatureRemoveOp => ({

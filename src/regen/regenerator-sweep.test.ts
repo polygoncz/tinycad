@@ -62,6 +62,9 @@ function withRelease(
   let calls = 0;
   return {
     makeBox: (p) => fake.makeBox(p),
+    makeCylinder: (p) => fake.makeCylinder(p),
+    transform: (shape, m) => fake.transform(shape, m),
+    boolean: (op, targets, tools) => fake.boolean(op, targets, tools),
     tessellate: (shape, q) => fake.tessellate(shape, q),
     boundingBox: (shape) => fake.boundingBox(shape),
     release: (handles) => release(handles, calls++),

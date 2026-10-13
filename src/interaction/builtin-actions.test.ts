@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
-import { createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
-import type { BodyId, FeatureId, FeatureSchema, ParamSchema } from '@/document';
+import { bodyId, createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
+import type { BodyId, FeatureId, FeatureInstance, FeatureSchema, ParamSchema } from '@/document';
 import { aFeature } from '@/document/testing';
 import type { DocumentOptions } from '@/document/testing';
 import { anOpsSession } from '@/ops/testing';
 import { createActionRegistry } from './actions';
 import type { ActionState } from './actions';
 import { ACTION_IDS, createBuiltInActions, toolActionId } from './builtin-actions';
+import type { ConfirmRequest } from './builtin-actions';
 import { createEditLock } from './edit-lock';
 import { createFeatureEditor } from './feature-editor';
 import { createFeatureTreeModel } from './feature-tree';
@@ -36,8 +37,32 @@ const BOX: FeatureSchema<BoxParams> = {
   validate: (params) => validateAgainstSchema(BOX_PARAMS, params),
 };
 
+const USE_PARAMS: ParamSchema = {
+  bodies: { kind: 'bodies', label: 'use.bodies' },
+};
+
+/** A test feature that refers to bodies of other features (not the real Boolean). */
+const USE: FeatureSchema = {
+  type: 'use',
+  version: 1,
+  label: 'use.label',
+  params: USE_PARAMS,
+  defaults: () => ({ bodies: [] }),
+  validate: (params) => validateAgainstSchema(USE_PARAMS, params),
+};
+
 const fid = (id: string): FeatureId => id as FeatureId; // test ids are trusted
 const bid = (id: string): BodyId => id as BodyId; // test ids are trusted
+
+const aBox = (id: string): FeatureInstance => aFeature({ id, type: 'box', params: { width: 1 } });
+
+/** A feature that uses the bodies of the given features. */
+const aUse = (id: string, ...owners: string[]): FeatureInstance =>
+  aFeature({
+    id,
+    type: 'use',
+    params: { bodies: owners.map((owner) => ({ kind: 'body', body: bodyId(fid(owner)) })) },
+  });
 
 /** A tool that finishes at once (like the box tool after opening its dialog). */
 function aTool(id: string, shortcut?: string): ToolDescriptor {
@@ -59,11 +84,18 @@ function aTool(id: string, shortcut?: string): ToolDescriptor {
 const LINE_TOOL = aTool('line', 'L');
 const PLANE_TOOL = aTool('plane');
 
-function setup(opts: { readOnly?: boolean; init?: DocumentOptions } = {}) {
+function setup(
+  opts: {
+    readOnly?: boolean;
+    init?: DocumentOptions;
+    confirm?: (r: ConfirmRequest) => boolean;
+  } = {},
+) {
   const ops = anOpsSession(opts.init);
   const { doc, dispatcher, undo } = ops;
   const schemas = createFeatureSchemaRegistry();
   schemas.register(BOX);
+  schemas.register(USE);
   const ids = createSequentialIdGenerator('f');
   const regen = new FakeRegenStatus();
   const selection = createSelectionModel({ regen });
@@ -88,6 +120,8 @@ function setup(opts: { readOnly?: boolean; init?: DocumentOptions } = {}) {
   });
   const locked = createEditLock({ readOnly: opts.readOnly ?? false, editor });
   let fitAllCount = 0;
+  const confirms: ConfirmRequest[] = [];
+  const answer = opts.confirm ?? (() => true);
   const builtIn = createBuiltInActions({
     registry,
     doc,
@@ -103,6 +137,10 @@ function setup(opts: { readOnly?: boolean; init?: DocumentOptions } = {}) {
       fitAll: () => {
         fitAllCount++;
       },
+    },
+    confirm: (request) => {
+      confirms.push(request);
+      return answer(request);
     },
   });
 
@@ -126,6 +164,7 @@ function setup(opts: { readOnly?: boolean; init?: DocumentOptions } = {}) {
     viewport,
     builtIn,
     fitAllCount: () => fitAllCount,
+    confirms,
     addBox,
     state,
     enabled: (id: string): boolean => state(id).enabled,
@@ -294,6 +333,52 @@ describe('built-in actions – delete and suppress', () => {
     expect(s.featureIds()).toEqual([b]);
     s.registry.run('undo');
     expect(s.featureIds()).toEqual([a, b, c]);
+  });
+
+  it('delete without dependent features does not ask', () => {
+    const s = setup();
+    const a = s.addBox();
+    s.select(a);
+    s.registry.run('feature.delete');
+    expect(s.confirms).toEqual([]);
+    expect(s.featureIds()).toEqual([]);
+  });
+
+  it('delete with dependent features asks with their count; false deletes nothing', () => {
+    const s = setup({
+      init: { features: [aBox('a'), aUse('u', 'a'), aUse('v', 'a', 'b'), aBox('b')] },
+      confirm: () => false,
+    });
+    s.select(fid('a'), fid('b'));
+    s.registry.run('feature.delete');
+
+    expect(s.confirms).toEqual([{ key: 'feature.delete.confirm', params: { n: 2 } }]);
+    expect(s.featureIds()).toEqual(['a', 'u', 'v', 'b']);
+    expect(s.log.entries()).toHaveLength(0);
+    expect(s.selection.items.get()).toEqual([
+      { kind: 'feature', feature: 'a' },
+      { kind: 'feature', feature: 'b' },
+    ]);
+  });
+
+  it('delete with dependent features confirmed deletes as before', () => {
+    const s = setup({ init: { features: [aBox('a'), aUse('u', 'a')] } });
+    s.select(fid('a'));
+    s.registry.run('feature.delete');
+
+    expect(s.confirms).toEqual([{ key: 'feature.delete.confirm', params: { n: 1 } }]);
+    expect(s.featureIds()).toEqual(['u']);
+    expect(s.selection.items.get()).toEqual([]);
+    s.registry.run('undo');
+    expect(s.featureIds()).toEqual(['a', 'u']);
+  });
+
+  it('delete of a feature together with its dependents does not ask', () => {
+    const s = setup({ init: { features: [aBox('a'), aUse('u', 'a')] } });
+    s.select(fid('a'), fid('u'));
+    s.registry.run('feature.delete');
+    expect(s.confirms).toEqual([]);
+    expect(s.featureIds()).toEqual([]);
   });
 
   it('suppress toggles the selected feature', () => {

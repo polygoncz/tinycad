@@ -11,7 +11,17 @@ export type {
   ShapeResult,
   SubShapeIndex,
 } from './types';
-export type { GeometryKernel, LifecycleOps, MeshOps, PrimitiveOps, QueryOps } from './kernel';
+export type {
+  BooleanOp,
+  BooleanOps,
+  GeometryKernel,
+  LifecycleOps,
+  MeshOps,
+  PrimitiveOps,
+  QueryOps,
+  TransformOps,
+} from './kernel';
+export { isRigidMotion } from './transform';
 export { createKernelError, kernelErrorCode } from './errors';
 export type { KernelErrorCode } from './errors';
 export { validateMeshData } from './mesh';

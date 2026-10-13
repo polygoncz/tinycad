@@ -1,4 +1,4 @@
-import type { FeatureId, FeatureInstance } from '@/document';
+import type { BodyId, FeatureId, FeatureInstance } from '@/document';
 
 // Operations are plain JSON data (spec 04): payload sits directly on the object,
 // there is no constructor function. The log lives forever, so shapes stay small.
@@ -18,6 +18,8 @@ export const OP_VERSION = {
   'feature.suppress': 1,
   'feature.move': 1,
   'studio.setRollback': 1,
+  'body.rename': 1,
+  'body.setVisible': 1,
   batch: 1,
 } as const;
 
@@ -68,6 +70,21 @@ export interface FeatureMoveOp extends Operation {
 export interface StudioSetRollbackOp extends Operation {
   readonly type: 'studio.setRollback';
   readonly index: number;
+}
+
+/** Name of a body in the document's body metadata (M11, spec 03). */
+export interface BodyRenameOp extends Operation {
+  readonly type: 'body.rename';
+  readonly body: BodyId;
+  /** '' removes the name. */
+  readonly name: string;
+}
+
+/** Visibility of a body in the document's body metadata (M11, spec 03). */
+export interface BodySetVisibleOp extends Operation {
+  readonly type: 'body.setVisible';
+  readonly body: BodyId;
+  readonly visible: boolean;
 }
 
 /** Structural operation without a handler in the registry (Q031). */

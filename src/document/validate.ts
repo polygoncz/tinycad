@@ -90,12 +90,47 @@ function checkRefs(
   return (v) => {
     if (!Array.isArray(v)) return WRONG_TYPE;
     // Same shape check as referencesOf, so both agree on what a reference is.
-    const index = v.findIndex((r) => readRef(kind, r) === undefined);
-    if (index !== -1) return { code: 'param.invalidRef', params: { index } };
+    const keys: string[] = [];
+    // Array.isArray narrows to any[]; the items are unchecked data.
+    for (const [index, r] of (v as readonly unknown[]).entries()) {
+      const ref = readRef(kind, r);
+      if (ref === undefined) return { code: 'param.invalidRef', params: { index } };
+      keys.push(refKey(ref));
+    }
+    const duplicate = firstDuplicate(keys);
+    if (duplicate !== -1) return { code: 'param.duplicateRef', params: { index: duplicate } };
     if (min !== undefined && v.length < min) return { code: 'param.tooFewRefs', params: { min } };
     if (max !== undefined && v.length > max) return { code: 'param.tooManyRefs', params: { max } };
     return undefined;
   };
+}
+
+/**
+ * What makes two references the same (spec 03): body for body, body + name for topo, sketch +
+ * region for region. Extra fields of the raw data are ignored, readRef keeps only these.
+ * JSON of a tuple, so no separator character inside a name can make two keys collide.
+ */
+function refKey(ref: EntityRef): string {
+  switch (ref.kind) {
+    case 'body':
+      return JSON.stringify([ref.body]);
+    case 'topo':
+      return JSON.stringify([ref.body, ref.name]);
+    case 'region':
+      return JSON.stringify([ref.sketch, ref.region]);
+    default:
+      return assertNever(ref);
+  }
+}
+
+/** Index of the first key equal to an earlier one, -1 when all differ. */
+function firstDuplicate(keys: readonly string[]): number {
+  const seen = new Set<string>();
+  return keys.findIndex((key) => {
+    if (seen.has(key)) return true;
+    seen.add(key);
+    return false;
+  });
 }
 
 function isFiniteNumber(v: unknown): v is number {

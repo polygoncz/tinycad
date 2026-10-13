@@ -41,6 +41,9 @@ export async function createOcctKernel(): Promise<GeometryKernel & Disposable> {
   // Only the port and dispose go out: `ready` belongs to the start-up.
   return {
     makeBox: (p) => client.makeBox(p),
+    makeCylinder: (p) => client.makeCylinder(p),
+    transform: (shape, m) => client.transform(shape, m),
+    boolean: (op, targets, tools) => client.boolean(op, targets, tools),
     tessellate: (shape, q) => client.tessellate(shape, q),
     boundingBox: (shape) => client.boundingBox(shape),
     release: (handles) => client.release(handles),

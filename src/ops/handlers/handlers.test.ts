@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import type { DocumentWriter, FeatureId, FeatureSchema } from '@/document';
+import type { BodyId, DocumentWriter, FeatureId, FeatureSchema } from '@/document';
 import { createFeatureSchemaRegistry, toData } from '@/document';
 import { aDocument, aFeature } from '@/document/testing';
 import { createOpHandlerRegistry } from '../handler';
+import { anOpsSession } from '../testing';
 import { OP_VERSION } from '../operation';
 import type {
+  BodyRenameOp,
+  BodySetVisibleOp,
   FeatureAddOp,
   FeatureMoveOp,
   FeatureRemoveOp,
@@ -22,11 +25,14 @@ type Op =
   | FeatureRenameOp
   | FeatureSuppressOp
   | FeatureMoveOp
-  | StudioSetRollbackOp;
+  | StudioSetRollbackOp
+  | BodyRenameOp
+  | BodySetVisibleOp;
 
 // No schemas: the 'box' features of aFeature() have an unknown type, nothing is migrated.
 const handlers = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
 const id = (s: string): FeatureId => s as FeatureId;
+const body = (s: string): BodyId => s as BodyId;
 
 function setup(rollbackIndex?: number): DocumentWriter {
   return aDocument({
@@ -85,6 +91,16 @@ const cases: readonly Case[] = [
   {
     name: 'studio.setRollback',
     op: { type: 'studio.setRollback', v: 1, index: 1 },
+    compare: 'toData',
+  },
+  {
+    name: 'body.rename',
+    op: { type: 'body.rename', v: 1, body: body('a/body'), name: 'Base' },
+    compare: 'toData',
+  },
+  {
+    name: 'body.setVisible',
+    op: { type: 'body.setVisible', v: 1, body: body('b/body:1'), visible: false },
     compare: 'toData',
   },
 ];
@@ -175,6 +191,79 @@ describe('built-in op handlers', () => {
       const withMerge = handlers.all().filter((h) => h.merge !== undefined);
       expect(withMerge.map((h) => h.type)).toEqual(['feature.setParams']);
     });
+  });
+});
+
+describe('body metadata handlers (M11)', () => {
+  const a = body('a/body');
+  const rename = (name: string): BodyRenameOp => ({ type: 'body.rename', v: 1, body: a, name });
+  const setVisible = (visible: boolean): BodySetVisibleOp => ({
+    type: 'body.setVisible',
+    v: 1,
+    body: a,
+    visible,
+  });
+
+  it('invert of a body without metadata: empty name, visible', () => {
+    const doc = setup();
+    expect(handlers.get('body.rename').invert(doc, rename('X'))).toEqual(rename(''));
+    expect(handlers.get('body.setVisible').invert(doc, setVisible(false))).toEqual(
+      setVisible(true),
+    );
+  });
+
+  it('invert carries the current name and visibility', () => {
+    const doc = setup();
+    doc.setBodyMeta(a, { name: 'Base', hidden: true });
+    expect(handlers.get('body.rename').invert(doc, rename('X'))).toEqual(rename('Base'));
+    expect(handlers.get('body.setVisible').invert(doc, setVisible(true))).toEqual(
+      setVisible(false),
+    );
+  });
+
+  it('rename keeps hidden and setVisible keeps the name', () => {
+    const doc = setup();
+    handlers.get('body.setVisible').apply(doc, setVisible(false));
+    handlers.get('body.rename').apply(doc, rename('Base'));
+    expect(doc.bodyMeta(a)).toEqual({ name: 'Base', hidden: true });
+    handlers.get('body.setVisible').apply(doc, setVisible(true));
+    expect(doc.bodyMeta(a)).toEqual({ name: 'Base' });
+    handlers.get('body.rename').apply(doc, rename(''));
+    expect(doc.studio).toEqual(setup().studio);
+  });
+
+  it('a body of a feature that does not exist is no error (the document does not know bodies)', () => {
+    const doc = setup();
+    const ghost: BodyRenameOp = { type: 'body.rename', v: 1, body: body('zzz/body'), name: 'G' };
+    const inverse = handlers.get('body.rename').invert(doc, ghost);
+    handlers.get('body.rename').apply(doc, ghost);
+    expect(doc.bodyMeta(body('zzz/body'))).toEqual({ name: 'G' });
+    handlers.get('body.rename').apply(doc, inverse);
+    expect(doc.bodyMeta(body('zzz/body'))).toEqual({});
+  });
+
+  it('does not touch the features or the rollback bar', () => {
+    const doc = setup(1);
+    const features = doc.studio.features;
+    handlers.get('body.rename').apply(doc, rename('Base'));
+    handlers.get('body.setVisible').apply(doc, setVisible(false));
+    expect(doc.studio.features).toBe(features);
+    expect(doc.studio.rollbackIndex).toBe(1);
+  });
+
+  it('undo and redo through the dispatcher bring the metadata back', () => {
+    const { doc, dispatcher, undo } = anOpsSession({ features: [aFeature({ id: 'a' })] });
+    dispatcher.dispatch(rename('Base'));
+    dispatcher.dispatch(setVisible(false));
+    expect(doc.bodyMeta(a)).toEqual({ name: 'Base', hidden: true });
+    undo.undo();
+    expect(doc.bodyMeta(a)).toEqual({ name: 'Base' });
+    undo.undo();
+    expect(doc.bodyMeta(a)).toEqual({});
+    expect('bodies' in doc.studio).toBe(false);
+    undo.redo();
+    undo.redo();
+    expect(doc.bodyMeta(a)).toEqual({ name: 'Base', hidden: true });
   });
 });
 

@@ -1,13 +1,15 @@
 import fc from 'fast-check';
 import { describe, it, expect } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
-import { toData } from '@/document';
-import type { FeatureId } from '@/document';
+import { bodyId, toData } from '@/document';
+import type { BodyId, FeatureId } from '@/document';
 import { aDocument, aFeature } from '@/document/testing';
 import { replayLog } from './replay';
 import { anOpsSession } from './testing';
 import type {
   BatchOp,
+  BodyRenameOp,
+  BodySetVisibleOp,
   FeatureAddOp,
   FeatureMoveOp,
   FeatureRemoveOp,
@@ -26,6 +28,8 @@ type Operation =
   | FeatureSuppressOp
   | FeatureMoveOp
   | StudioSetRollbackOp
+  | BodyRenameOp
+  | BodySetVisibleOp
   | BatchOp;
 
 // Abstract steps: a kind plus plain integers/booleans. They are translated to concrete
@@ -37,7 +41,9 @@ type OpStep =
   | { readonly k: 'rename'; readonly i: number; readonly n: number }
   | { readonly k: 'suppress'; readonly i: number; readonly on: boolean }
   | { readonly k: 'move'; readonly i: number; readonly to: number }
-  | { readonly k: 'rollback'; readonly at: number };
+  | { readonly k: 'rollback'; readonly at: number }
+  | { readonly k: 'bodyRename'; readonly b: number; readonly n: number }
+  | { readonly k: 'bodyVisible'; readonly b: number; readonly on: boolean };
 
 type Step =
   | OpStep
@@ -61,7 +67,20 @@ const opStep: fc.Arbitrary<OpStep> = fc.oneof(
   fc.record({ k: fc.constant('suppress' as const), i: int, on: fc.boolean() }),
   fc.record({ k: fc.constant('move' as const), i: int, to: int }),
   fc.record({ k: fc.constant('rollback' as const), at: int }),
+  fc.record({ k: fc.constant('bodyRename' as const), b: int, n: fc.nat(3) }),
+  fc.record({ k: fc.constant('bodyVisible' as const), b: int, on: fc.boolean() }),
 );
+
+// Body metadata does not depend on features existing (spec 03), so a small fixed set of bodies,
+// some of them of features that never exist, makes renames and hiding collide often.
+const fid = (s: string): FeatureId => s as FeatureId;
+const BODIES: readonly BodyId[] = [
+  bodyId(fid('p1')),
+  bodyId(fid('p2')),
+  bodyId(fid('p2'), 1),
+  bodyId(fid('zz')),
+];
+const bodyAt = (b: number): BodyId => BODIES[b % BODIES.length] ?? bodyId(fid('p1'));
 const step: fc.Arbitrary<Step> = fc.oneof(
   { arbitrary: opStep, weight: 6 },
   {
@@ -113,6 +132,16 @@ describe('replayLog (property)', () => {
               };
             case 'rollback':
               return { type: 'studio.setRollback', v: 1, index: s.at % (len + 1) };
+            // n = 0 clears the name, so the canonical form (no entry, no bodies) is exercised too.
+            case 'bodyRename':
+              return {
+                type: 'body.rename',
+                v: 1,
+                body: bodyAt(s.b),
+                name: s.n === 0 ? '' : `n${String(s.n)}`,
+              };
+            case 'bodyVisible':
+              return { type: 'body.setVisible', v: 1, body: bodyAt(s.b), visible: s.on };
             default: {
               const featureId = featureAt(s.i);
               if (featureId === undefined) return null;

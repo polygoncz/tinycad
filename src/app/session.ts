@@ -32,6 +32,7 @@ import {
 import type {
   ActionRegistry,
   BrowserModel,
+  ConfirmRequest,
   FeatureEditor,
   FeatureTreeModel,
   SelectionModel,
@@ -107,6 +108,8 @@ export interface AppSessionDeps {
   readonly ids: IdGenerator;
   /** Translation of keys: the name of a new feature and of a new document (ADR 0014). */
   readonly translate: (key: string) => string;
+  /** Asks the user a yes/no question (feature.delete with dependents); ui shows the dialog. */
+  readonly confirm: (request: ConfirmRequest) => boolean;
   /** Without the document lock (Q038): nothing is written, changes of the document throw. */
   readonly readOnly: boolean;
   /** Handed to loadDocument: replay the whole log from the base and compare (spec 05). */
@@ -246,6 +249,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       toolList,
       locked,
       camera: viewport.camera,
+      confirm: deps.confirm,
     }),
   );
 

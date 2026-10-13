@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
-import { createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
+import { bodyId, createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
 import type { BodyId, FeatureId, FeatureSchema, ParamSchema } from '@/document';
 import { aFeature } from '@/document/testing';
 import type { DocumentOptions } from '@/document/testing';
-import type { FeatureAddOp, FeatureSuppressOp } from '@/ops';
+import type { FeatureAddOp, FeatureSetParamsOp, FeatureSuppressOp } from '@/ops';
 import { OP_VERSION } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import { createFeatureEditor } from './feature-editor';
@@ -34,6 +34,34 @@ const BOX: FeatureSchema<BoxParams> = {
 const fid = (id: string): FeatureId => id as FeatureId; // test ids are trusted
 const bid = (id: string): BodyId => id as BodyId; // test ids are trusted
 
+interface UseParams {
+  readonly bodies: readonly { readonly kind: 'body'; readonly body: BodyId }[];
+}
+
+const USE_PARAMS: ParamSchema = {
+  bodies: { kind: 'bodies', label: 'Bodies' },
+};
+
+/** A test feature that refers to bodies of other features (not the real Boolean). */
+const USE: FeatureSchema<UseParams> = {
+  type: 'use',
+  version: 1,
+  label: 'Use',
+  params: USE_PARAMS,
+  defaults: () => ({ bodies: [] }),
+  validate: (params) => validateAgainstSchema(USE_PARAMS, params),
+};
+
+/** The params of a feature that uses the bodies of the given features. */
+function using(...owners: string[]): UseParams {
+  return { bodies: owners.map((owner) => ({ kind: 'body', body: bodyId(fid(owner)) })) };
+}
+
+/** A feature that uses the bodies of the given features. */
+function aUse(id: string, ...owners: string[]): ReturnType<typeof aFeature<UseParams>> {
+  return aFeature<UseParams>({ id, name: `Name ${id}`, type: 'use', params: using(...owners) });
+}
+
 function aBox(id: string, type = 'box'): ReturnType<typeof aFeature<BoxParams>> {
   return aFeature<BoxParams>({ id, name: `Name ${id}`, type, params: { width: 1 } });
 }
@@ -42,6 +70,7 @@ function setup(init: DocumentOptions = {}) {
   const session = anOpsSession(init);
   const schemas = createFeatureSchemaRegistry();
   schemas.register(BOX);
+  schemas.register(USE);
   const regen = new FakeRegenStatus();
   const selection = createSelectionModel({ regen });
   const editor = createFeatureEditor({
@@ -106,6 +135,7 @@ describe('FeatureTreeModel rows', () => {
         message: null,
         selected: false,
         editing: false,
+        dependents: 0,
       },
     ]);
 
@@ -411,5 +441,97 @@ describe('FeatureTreeModel rename mode', () => {
       s.tree.beginRename(fid('x'));
     }).toThrow();
     expect(s.tree.renaming.get()).toBeNull();
+  });
+});
+
+describe('FeatureTreeModel dependencies', () => {
+  it('counts the features that depend on a row, 0 without dependents', () => {
+    const s = setup({ features: [aBox('a'), aBox('b'), aUse('u', 'a')] });
+    expect(s.tree.rows.get().map((r) => r.dependents)).toEqual([1, 0, 0]);
+  });
+
+  it('a changed reference changes dependents and only the affected rows', () => {
+    const s = setup({ features: [aBox('a'), aBox('b'), aBox('c'), aUse('u', 'a')] });
+    const before = s.tree.rows.get();
+    const op: FeatureSetParamsOp = {
+      type: 'feature.setParams',
+      v: OP_VERSION['feature.setParams'],
+      featureId: fid('u'),
+      typeVersion: 1,
+      params: using('b'),
+    };
+    s.dispatcher.dispatch(op);
+    const after = s.tree.rows.get();
+    expect(after.map((r) => r.dependents)).toEqual([0, 1, 0, 0]);
+    expect(after[0]).not.toBe(before[0]);
+    expect(after[1]).not.toBe(before[1]);
+    expect(after[2]).toBe(before[2]);
+    expect(after[3]).toBe(before[3]);
+  });
+
+  it('dependentsOf several ids leaves the ids out, in studio order, without duplicates', () => {
+    const s = setup({
+      features: [aBox('a'), aBox('b'), aUse('u', 'b', 'a'), aUse('v', 'u'), aUse('w', 'a')],
+    });
+    const dependents = s.tree.dependentsOf([fid('b'), fid('a'), fid('u')]);
+    expect(dependents).toEqual(['v', 'w']);
+    expect(Object.isFrozen(dependents)).toBe(true);
+    expect(s.tree.dependentsOf([fid('b')])).toEqual(['u']);
+    expect(s.tree.dependentsOf([])).toEqual([]);
+  });
+});
+
+describe('FeatureTreeModel move', () => {
+  it('a valid move dispatches feature.move', () => {
+    const s = setup({ features: [aBox('a'), aBox('b'), aUse('u', 'a')] });
+    expect(s.tree.move(fid('a'), 1)).toEqual([]);
+    expect(s.doc.studio.features.map((f) => f.id)).toEqual(['b', 'a', 'u']);
+    expect(s.log.entries()).toHaveLength(1);
+    expect(s.log.entries()[0]?.op).toEqual({
+      type: 'feature.move',
+      v: OP_VERSION['feature.move'],
+      featureId: 'a',
+      toIndex: 1,
+    });
+  });
+
+  it('moving a dependent feature before its dependency returns the violations and changes nothing', () => {
+    const s = setup({ features: [aBox('a'), aBox('b'), aUse('u', 'b')] });
+    const violations = s.tree.move(fid('u'), 0);
+    expect(violations).toEqual([{ feature: 'u', dependsOn: 'b' }]);
+    expect(s.doc.studio.features.map((f) => f.id)).toEqual(['a', 'b', 'u']);
+    expect(s.log.entries()).toHaveLength(0);
+
+    // Moving the dependency after the dependent is refused as well.
+    expect(s.tree.move(fid('b'), 2)).toEqual([{ feature: 'u', dependsOn: 'b' }]);
+    expect(s.log.entries()).toHaveLength(0);
+  });
+
+  it('a move to the same index does nothing', () => {
+    const s = setup({ features: [aBox('a'), aBox('b')] });
+    expect(s.tree.move(fid('b'), 1)).toEqual([]);
+    expect(s.log.entries()).toHaveLength(0);
+  });
+
+  it('an unknown id or an index out of 0..features.length - 1 throws', () => {
+    const s = setup({ features: [aBox('a'), aBox('b')] });
+    for (const index of [-1, 2, 0.5, Number.NaN]) {
+      expect(() => s.tree.move(fid('a'), index)).toThrow();
+    }
+    expect(() => s.tree.move(fid('x'), 0)).toThrow();
+    expect(s.log.entries()).toHaveLength(0);
+  });
+
+  it('a violation already in the document does not block another move', () => {
+    // u refers to b, which comes after it: data from outside.
+    const s = setup({ features: [aUse('u', 'b'), aBox('a'), aBox('b')] });
+    expect(s.tree.move(fid('a'), 2)).toEqual([]);
+    expect(s.doc.studio.features.map((f) => f.id)).toEqual(['u', 'b', 'a']);
+  });
+
+  it('throws during an open transaction, like rename', () => {
+    const s = setup({ features: [aBox('a'), aBox('b')] });
+    s.tree.edit(fid('b'));
+    expect(() => s.tree.move(fid('a'), 1)).toThrow();
   });
 });

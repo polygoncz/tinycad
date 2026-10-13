@@ -16,4 +16,8 @@ describe('ops public API', () => {
       'upcastOperation',
     ]);
   });
+
+  it('OP_VERSION has the body metadata operations of M11', () => {
+    expect(ops.OP_VERSION).toMatchObject({ 'body.rename': 1, 'body.setVisible': 1 });
+  });
 });

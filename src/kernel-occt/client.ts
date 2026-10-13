@@ -15,6 +15,9 @@ export function createOcctKernelClient(
   return {
     ready: () => rpc.call('ready'),
     makeBox: (p) => rpc.call('makeBox', p),
+    makeCylinder: (p) => rpc.call('makeCylinder', p),
+    transform: (shape, m) => rpc.call('transform', shape, m),
+    boolean: (op, targets, tools) => rpc.call('boolean', op, targets, tools),
     tessellate: (shape, q) => rpc.call('tessellate', shape, q),
     boundingBox: (shape) => rpc.call('boundingBox', shape),
     release: (handles) => rpc.call('release', handles),

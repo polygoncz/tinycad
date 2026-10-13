@@ -14,12 +14,15 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'param.tooFewRefs': 'Select at least {min}',
   'param.tooManyRefs': 'Select at most {max}',
   'param.invalidRef': 'Invalid selection item',
+  'param.duplicateRef': 'Item {index} is selected twice',
+  'param.unresolvedRef': 'The referenced body does not exist',
 
   // Keys handed over by the domain and interaction.
   'document.untitled': 'Untitled',
   'feature.edit': 'Edit feature',
   'browser.body': 'Body {n}',
   'tool.select': 'Select',
+  'feature.delete.confirm': 'Features that will lose a reference: {n}. Delete anyway?',
 
   // Labels of the built-in actions (app); feature.edit is above, it is a transaction label too.
   undo: 'Undo',
@@ -52,6 +55,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'timeline.regen.ms': '{ms} ms',
   'timeline.bodies': 'Bodies: {n}',
   'timeline.selected': 'Selected: {n}',
+  'timeline.dependents': 'Used by: {n}',
 
   // Param fields.
   'field.refs.count': 'Selected: {n}',

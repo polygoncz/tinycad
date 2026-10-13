@@ -49,9 +49,9 @@ updated: 2026-10-14
 
 ## Úkoly
 
-- [ ] Ú1 `kernel`, `kernel-occt`, `regen`: `makeCylinder`, `TransformOps`, `BooleanOps` (Fake + OCCT), `ModelingKernel`, převod `RefError` → `UNRESOLVED_REFERENCE`
-- [ ] Ú2 `document`, `ops`: metadata těles v dokumentu, operace `body.rename` a `body.setVisible`, duplicitní reference
-- [ ] Ú3 `interaction`, `app`, `ui`: závislosti ve stromu featur (`dependents`, `move`), potvrzení mazání, překlady vlny A
+- [x] Ú1 `kernel`, `kernel-occt`, `regen`: `makeCylinder`, `TransformOps`, `BooleanOps` (Fake + OCCT), `ModelingKernel`, převod `RefError` → `UNRESOLVED_REFERENCE`
+- [x] Ú2 `document`, `ops`: metadata těles v dokumentu, operace `body.rename` a `body.setVisible`, duplicitní reference
+- [x] Ú3 `interaction`, `app`, `ui`: závislosti ve stromu featur (`dependents`, `move`), potvrzení mazání, překlady vlny A
 - [ ] Ú4 `features/cylinder`: plugin Cylinder
 - [ ] Ú5 `features/transform`: plugin Transform
 - [ ] Ú6 `features/boolean`: plugin Boolean

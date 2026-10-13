@@ -29,6 +29,8 @@ const valid: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   'feature.suppress': { type: 'feature.suppress', v: 1, featureId: 'f1', suppressed: true },
   'feature.move': { type: 'feature.move', v: 1, featureId: 'f1', toIndex: 0 },
   'studio.setRollback': { type: 'studio.setRollback', v: 1, index: 0 },
+  'body.rename': { type: 'body.rename', v: 1, body: 'f1/body', name: '' },
+  'body.setVisible': { type: 'body.setVisible', v: 1, body: 'f1/body:2', visible: false },
 };
 
 const withFeature = (patch: Readonly<Record<string, unknown>>) => ({
@@ -79,6 +81,18 @@ const broken: readonly (readonly [string, Readonly<Record<string, unknown>>, str
   ['studio.setRollback', { ...valid['studio.setRollback'], index: -1 }, 'index'],
   ['studio.setRollback', { ...valid['studio.setRollback'], index: 1.5 }, 'index'],
   ['studio.setRollback', without(valid['studio.setRollback'] ?? {}, 'index'), 'index'],
+  ['body.rename', without(valid['body.rename'] ?? {}, 'body'), 'body'],
+  ['body.rename', { ...valid['body.rename'], body: '' }, 'body'],
+  ['body.rename', { ...valid['body.rename'], body: 'f1' }, 'body'],
+  ['body.rename', { ...valid['body.rename'], body: 'f1/body:0' }, 'body'],
+  ['body.rename', { ...valid['body.rename'], body: 'f1/sketch' }, 'body'],
+  ['body.rename', { ...valid['body.rename'], body: 7 }, 'body'],
+  ['body.rename', { ...valid['body.rename'], name: null }, 'name'],
+  ['body.rename', without(valid['body.rename'] ?? {}, 'name'), 'name'],
+  ['body.setVisible', { ...valid['body.setVisible'], body: 'a/b/body' }, 'body'],
+  ['body.setVisible', without(valid['body.setVisible'] ?? {}, 'body'), 'body'],
+  ['body.setVisible', { ...valid['body.setVisible'], visible: 'no' }, 'visible'],
+  ['body.setVisible', without(valid['body.setVisible'] ?? {}, 'visible'), 'visible'],
 ];
 
 describe('validate of built-in handlers', () => {

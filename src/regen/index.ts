@@ -11,7 +11,7 @@ export type {
   NameTable,
   RegenState,
 } from './state';
-export { createBuilderRegistry } from './builder';
+export { createBuilderRegistry, unresolvedReference } from './builder';
 export type {
   BuildContext,
   BuildInput,

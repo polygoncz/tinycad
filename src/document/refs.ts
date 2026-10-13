@@ -1,12 +1,12 @@
 import { assert, assertNever } from '@/core';
 import type { Brand } from '@/core';
-import type { FeatureId } from './model';
+import type { BodyId, FeatureId } from './model';
+
+export type { BodyId } from './model';
 
 // References from feature params to results of other features. Always names,
 // never indices or kernel handles, so they survive regeneration (ADR 0007).
 
-/** '<featureId>/body' or '<featureId>/body:<n>'; minted only by bodyId() (ADR 0015). */
-export type BodyId = Brand<string, 'BodyId'>;
 /** Persistent topological name, see spec 08. */
 export type TopoName = Brand<string, 'TopoName'>;
 
@@ -80,12 +80,16 @@ export function readRef(kind: EntityRef['kind'], r: unknown): EntityRef | undefi
   if (!isRecord(r) || r.kind !== kind) return undefined;
   // The id casts below follow the shape check, as in fromData (spec 03).
   switch (kind) {
-    case 'body':
-      return isBodyIdText(r.body) ? Object.freeze({ kind, body: r.body as BodyId }) : undefined;
-    case 'topo':
-      return isBodyIdText(r.body) && typeof r.name === 'string'
-        ? Object.freeze({ kind, body: r.body as BodyId, name: r.name as TopoName })
+    case 'body': {
+      const body = parseBodyId(r.body);
+      return body === undefined ? undefined : Object.freeze({ kind, body });
+    }
+    case 'topo': {
+      const body = parseBodyId(r.body);
+      return body !== undefined && typeof r.name === 'string'
+        ? Object.freeze({ kind, body, name: r.name as TopoName })
         : undefined;
+    }
     case 'region':
       return typeof r.sketch === 'string' && typeof r.region === 'string'
         ? Object.freeze({ kind, sketch: r.sketch as FeatureId, region: r.region })
@@ -102,6 +106,12 @@ function isRecord(v: unknown): v is Readonly<Record<string, unknown>> {
 /** '<owner>/body' or '<owner>/body:<n>' with n >= 1, as bodyId mints it; data from outside is checked here. */
 const BODY_ID = /^[^/]+\/body(?::[1-9][0-9]*)?$/;
 
-function isBodyIdText(v: unknown): v is string {
-  return typeof v === 'string' && BODY_ID.test(v);
+/**
+ * Text in the shape of a body id '<owner>/body[:<n>]' -> BodyId, otherwise undefined. The trusted
+ * place where a body id from outside becomes branded: references (readRef), keys of body
+ * metadata in fromData, validate of the body.* operations (spec 03).
+ */
+export function parseBodyId(v: unknown): BodyId | undefined {
+  // The cast follows the shape check, as in fromData.
+  return typeof v === 'string' && BODY_ID.test(v) ? (v as BodyId) : undefined;
 }

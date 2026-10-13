@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { mat4 } from '@/core';
 import { kernelErrorCode } from '@/kernel';
 import type { ShapeHandle } from '@/kernel';
 import { createFakeKernel } from '@/kernel/testing';
 import { createTrackingKernel } from './tracking-kernel';
 
 const BOX = { origin: [0, 0, 0], size: [1, 2, 3] } as const;
+const CYLINDER = { base: [0, 0, 0], axis: [0, 0, 1], radius: 1, height: 2 } as const;
 
 function setup() {
   const real = createFakeKernel();
@@ -26,6 +28,36 @@ describe('createTrackingKernel', () => {
     expect([...owned]).toEqual([a.shape, b.shape]);
   });
 
+  it('adds the handles of makeCylinder, transform and boolean to the owned set', async () => {
+    const { owned, kernel } = setup();
+    const cylinder = await kernel.makeCylinder(CYLINDER);
+    const moved = await kernel.transform(cylinder.shape, mat4.translation([10, 0, 0]));
+    const united = await kernel.boolean('union', [cylinder.shape], [moved.shape]);
+    expect([...owned]).toEqual([cylinder.shape, moved.shape, united.shape]);
+  });
+
+  it.each(['makeCylinder', 'transform', 'boolean'] as const)(
+    'passes a %s error through unchanged and records nothing new',
+    async (op) => {
+      const { real, owned, kernel } = setup();
+      const a = await kernel.makeBox(BOX);
+      const b = await kernel.makeBox(BOX);
+      const calls = {
+        makeCylinder: () => kernel.makeCylinder(CYLINDER),
+        transform: () => kernel.transform(a.shape, mat4.identity()),
+        boolean: () => kernel.boolean('union', [a.shape], [b.shape]),
+      };
+      real.failNext(op, 'operation-failed', 'boom');
+      const error: unknown = await calls[op]().then(
+        () => undefined,
+        (e: unknown) => e,
+      );
+      expect(kernelErrorCode(error)).toBe('operation-failed');
+      expect(error).toHaveProperty('message', 'boom');
+      expect([...owned]).toEqual([a.shape, b.shape]);
+    },
+  );
+
   it('passes kernel errors through unchanged and records nothing', async () => {
     const { real, owned, kernel } = setup();
     real.failNext('makeBox', 'operation-failed');
@@ -43,7 +75,13 @@ describe('createTrackingKernel', () => {
     expect(kernel.release).toBeUndefined();
     // @ts-expect-error -- neither has it liveHandleCount.
     expect(kernel.liveHandleCount).toBeUndefined();
-    expect(Object.keys(kernel).sort()).toEqual(['boundingBox', 'makeBox']);
+    expect(Object.keys(kernel).sort()).toEqual([
+      'boolean',
+      'boundingBox',
+      'makeBox',
+      'makeCylinder',
+      'transform',
+    ]);
   });
 
   it('delegates boundingBox', async () => {

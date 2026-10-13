@@ -24,6 +24,7 @@ export type { SelectionCommands, SelectionItem, SelectionModel } from './selecti
 export { createActionRegistry } from './actions';
 export type { Action, ActionRegistry, ActionState } from './actions';
 export { ACTION_IDS, createBuiltInActions, toolActionId } from './builtin-actions';
+export type { ConfirmRequest } from './builtin-actions';
 export { createEditLock } from './edit-lock';
 export { createToolRegistry } from './tools';
 export type { Tool, ToolContext, ToolDescriptor, ToolRegistry } from './tools';

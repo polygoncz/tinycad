@@ -3,6 +3,8 @@
 
 export type {
   BatchOp,
+  BodyRenameOp,
+  BodySetVisibleOp,
   FeatureAddOp,
   FeatureMoveOp,
   FeatureRemoveOp,

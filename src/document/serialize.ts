@@ -2,7 +2,16 @@ import { assert, err, ok } from '@/core';
 import type { RegistryReader, Result } from '@/core';
 import { createDocument } from './cad-document';
 import type { DocumentReader, DocumentWriter } from './document';
-import type { DocumentId, DocumentMeta, FeatureId, FeatureInstance, PartStudioData } from './model';
+import type {
+  BodyId,
+  BodyMeta,
+  DocumentId,
+  DocumentMeta,
+  FeatureId,
+  FeatureInstance,
+  PartStudioData,
+} from './model';
+import { parseBodyId } from './refs';
 import type { FeatureSchema } from './schema';
 
 export interface DocumentData {
@@ -104,7 +113,63 @@ function readStudio(
     at('studio.rollbackIndex', `Must be a whole number in 0..${String(length)}`);
     return undefined;
   }
-  return { features, rollbackIndex };
+  const bodies = readBodies(raw.bodies, at);
+  return bodies === undefined ? { features, rollbackIndex } : { features, rollbackIndex, bodies };
+}
+
+/**
+ * Body metadata (spec 03, M11) in canonical form: absent or empty -> undefined, `hidden: false`
+ * and entries left empty are dropped. Keys must be body ids; values have only `name` (non-empty
+ * string) and `hidden` (boolean), any other field is an issue (strict as params, Q028).
+ */
+function readBodies(raw: unknown, at: At): PartStudioData['bodies'] {
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) {
+    at('studio.bodies', 'Must be an object');
+    return undefined;
+  }
+  const bodies: Record<BodyId, BodyMeta> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const path = `studio.bodies['${key}']`;
+    const body = parseBodyId(key);
+    if (body === undefined) {
+      at(path, "Must be a body id '<feature>/body' or '<feature>/body:<n>'");
+      continue;
+    }
+    const meta = readBodyMeta(value, path, at);
+    if (meta !== undefined) bodies[body] = meta;
+  }
+  return Object.keys(bodies).length === 0 ? undefined : bodies;
+}
+
+/** The canonical metadata of one body, undefined when broken (reported) or empty. */
+function readBodyMeta(raw: unknown, path: string, at: At): BodyMeta | undefined {
+  if (!isRecord(raw)) {
+    at(path, 'Must be an object');
+    return undefined;
+  }
+  let valid = true;
+  for (const key of Object.keys(raw)) {
+    if (key !== 'name' && key !== 'hidden') {
+      at(`${path}.${key}`, 'Unexpected property');
+      valid = false;
+    }
+  }
+  const { name, hidden } = raw;
+  if (name !== undefined && !isNonEmptyString(name)) {
+    at(`${path}.name`, 'Must be a non-empty string');
+    valid = false;
+  }
+  if (hidden !== undefined && typeof hidden !== 'boolean') {
+    at(`${path}.hidden`, 'Must be true or false');
+    valid = false;
+  }
+  if (!valid) return undefined;
+  const meta: BodyMeta = {
+    ...(isNonEmptyString(name) ? { name } : {}),
+    ...(hidden === true ? { hidden } : {}),
+  };
+  return Object.keys(meta).length === 0 ? undefined : meta;
 }
 
 function readFeature(

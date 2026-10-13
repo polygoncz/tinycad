@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FeatureId } from './model';
-import { bodyId, originOfBody, ownerOf } from './refs';
+import { bodyId, originOfBody, ownerOf, parseBodyId } from './refs';
 import type { BodyId, TopoName } from './refs';
 
 const fid = (s: string): FeatureId => s as FeatureId;
@@ -48,5 +48,35 @@ describe('ownerOf', () => {
 
   it('a region reference belongs to its sketch', () => {
     expect(ownerOf({ kind: 'region', sketch: fid('s1'), region: 'r1' })).toBe('s1');
+  });
+});
+
+describe('parseBodyId', () => {
+  it.each(['f1/body', 'f1/body:1', 'f1/body:12', 'a.b-c/body:3'])('accepts %j', (text) => {
+    expect(parseBodyId(text)).toBe(text);
+  });
+
+  it.each([
+    '',
+    'f1',
+    'f1/',
+    '/body',
+    'f1/body:0',
+    'f1/body:01',
+    'f1/body:',
+    'f1/body:x',
+    'f1/sketch',
+    'f1/b/body',
+    'f1/body/x',
+  ])('rejects %j', (text) => {
+    expect(parseBodyId(text)).toBeUndefined();
+  });
+
+  it.each([[undefined], [null], [3], [{}], [['f1/body']]])('rejects the non-string %j', (value) => {
+    expect(parseBodyId(value)).toBeUndefined();
+  });
+
+  it('gives back what bodyId mints', () => {
+    expect(parseBodyId(bodyId(fid('f1'), 2))).toBe(bodyId(fid('f1'), 2));
   });
 });

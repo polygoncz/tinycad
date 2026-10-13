@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // One feature of the Timeline: the icon, the state of the row and a tooltip with the name and
-// the translated issues. The row is a frozen TreeRow snapshot, passed as a prop (never put into
+// the translated issues and how many features depend on it. The row is a frozen TreeRow snapshot, passed as a prop (never put into
 // ref()/reactive()). While `renaming`, the name is an inline field; the Timeline does the rest.
 // Accessibility (spec 11, "Přístupnost"): the name of the item is the feature name, the details
 // of the tooltip (type, state, message, issues) are its description; the tooltip is hidden until
@@ -82,6 +82,9 @@ function cancel(): void {
         <span v-for="(issue, i) in row.issues ?? []" :key="i" class="issue">
           {{ issueText(t, issue) }}
         </span>
+        <span v-if="row.dependents > 0" class="dependents">{{
+          t('timeline.dependents', { n: row.dependents })
+        }}</span>
       </span>
     </span>
   </div>
@@ -176,7 +179,8 @@ function cancel(): void {
   display: contents;
 }
 .type,
-.state {
+.state,
+.dependents {
   opacity: 0.7;
 }
 .message,

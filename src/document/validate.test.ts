@@ -107,10 +107,12 @@ describe('validateAgainstSchema – each ParamSpec kind', () => {
   it('bodies: BodyRef[] with count limits', () => {
     const spec: ParamSpec = { kind: 'bodies', label: 'B', min: 1, max: 2 };
     const ref = { kind: 'body', body: 'f1/body' };
+    const ref2 = { kind: 'body', body: 'f2/body' };
+    const ref3 = { kind: 'body', body: 'f1/body:1' };
     ok(spec, [ref]);
-    ok(spec, [ref, ref]);
+    ok(spec, [ref, ref2]);
     bad(spec, [], 'param.tooFewRefs', { min: 1 });
-    bad(spec, [ref, ref, ref], 'param.tooManyRefs', { max: 2 });
+    bad(spec, [ref, ref2, ref3], 'param.tooManyRefs', { max: 2 });
     bad(spec, [ref, { kind: 'topo', body: 'f1/body', name: 'x' }], 'param.invalidRef', {
       index: 1,
     });
@@ -133,6 +135,54 @@ describe('validateAgainstSchema – each ParamSpec kind', () => {
     const spec: ParamSpec = { kind: 'region', label: 'R', min: 1 };
     ok(spec, [{ kind: 'region', sketch: 's1', region: 'r1' }]);
     bad(spec, [{ kind: 'region', sketch: 's1', region: 7 }], 'param.invalidRef', { index: 0 });
+  });
+});
+
+describe('validateAgainstSchema – duplicate references (M11)', () => {
+  const body = (b: string) => ({ kind: 'body', body: b });
+  const topo = (b: string, name: string) => ({ kind: 'topo', body: b, name });
+  const region = (sketch: string, r: string) => ({ kind: 'region', sketch, region: r });
+
+  it('bodies: reports the index of the first item equal to an earlier one', () => {
+    const spec: ParamSpec = { kind: 'bodies', label: 'B' };
+    bad(spec, [body('a/body'), body('b/body'), body('a/body')], 'param.duplicateRef', {
+      index: 2,
+    });
+    bad(
+      spec,
+      [body('a/body'), body('b/body'), body('b/body'), body('a/body')],
+      'param.duplicateRef',
+      { index: 2 },
+    );
+    ok(spec, [body('a/body'), body('a/body:1')]);
+  });
+
+  it('bodies: extra fields of an item do not make it different', () => {
+    const spec: ParamSpec = { kind: 'bodies', label: 'B' };
+    bad(spec, [body('a/body'), { ...body('a/body'), note: 'x' }], 'param.duplicateRef', {
+      index: 1,
+    });
+  });
+
+  it('topo: the same body and name is a duplicate, other names on one body are not', () => {
+    const spec: ParamSpec = { kind: 'topo', label: 'T', entity: 'face' };
+    bad(spec, [topo('a/body', 'f1'), topo('a/body', 'f1')], 'param.duplicateRef', { index: 1 });
+    ok(spec, [topo('a/body', 'f1'), topo('a/body', 'f2'), topo('b/body', 'f1')]);
+  });
+
+  it('region: the same sketch and region is a duplicate', () => {
+    const spec: ParamSpec = { kind: 'region', label: 'R' };
+    bad(spec, [region('s1', 'r1'), region('s1', 'r1')], 'param.duplicateRef', { index: 1 });
+    ok(spec, [region('s1', 'r1'), region('s1', 'r2'), region('s2', 'r1')]);
+  });
+
+  it('checks invalidRef first, then duplicateRef, then the counts', () => {
+    const spec: ParamSpec = { kind: 'bodies', label: 'B', min: 3, max: 1 };
+    bad(spec, [body('a/body'), body('a/body'), { kind: 'body' }], 'param.invalidRef', {
+      index: 2,
+    });
+    bad(spec, [body('a/body'), body('a/body')], 'param.duplicateRef', { index: 1 });
+    bad(spec, [body('a/body'), body('b/body')], 'param.tooFewRefs', { min: 3 });
   });
 });
 

@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import * as document from '.';
+import type { BodyMeta } from '.';
 
 // Guards the public API: a value export removed or added by accident shows up here.
 describe('document public API', () => {
@@ -16,10 +17,15 @@ describe('document public API', () => {
         'orderViolations',
         'originOfBody',
         'ownerOf',
+        'parseBodyId',
         'referencesOf',
         'toData',
         'validateAgainstSchema',
       ].sort(),
     );
+  });
+
+  it('exports the type BodyMeta of spec 03', () => {
+    expectTypeOf<BodyMeta>().toEqualTypeOf<{ readonly name?: string; readonly hidden?: true }>();
   });
 });

@@ -10,6 +10,7 @@ describe('regen public API', () => {
       'bodiesOf',
       'createBuilderRegistry',
       'createRegenerator',
+      'unresolvedReference',
     ]);
   });
 });

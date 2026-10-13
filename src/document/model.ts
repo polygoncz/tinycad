@@ -7,6 +7,11 @@ import type { Brand } from '@/core';
 
 export type DocumentId = Brand<string, 'DocumentId'>;
 export type FeatureId = Brand<string, 'FeatureId'>;
+/**
+ * '<featureId>/body' or '<featureId>/body:<n>'; minted only by bodyId() (ADR 0015). Declared
+ * here, not in refs.ts, so that PartStudioData can key body metadata by it without a cycle.
+ */
+export type BodyId = Brand<string, 'BodyId'>;
 
 export interface FeatureInstance<P = unknown> {
   readonly id: FeatureId;
@@ -25,6 +30,17 @@ export interface PartStudioData {
   readonly features: readonly FeatureInstance[];
   /** 0..features.length; features[i] is replayed when i < rollbackIndex. */
   readonly rollbackIndex: number;
+  /** Metadata of bodies by lineage (ADR 0015); canonical form: absent when empty. */
+  readonly bodies?: Readonly<Record<BodyId, BodyMeta>>;
+}
+
+/**
+ * Name and visibility of a body (spec 03, M11). Canonical form: name only when non-empty,
+ * hidden only as true; the document keeps it so, which makes replayed data compare equal.
+ */
+export interface BodyMeta {
+  readonly name?: string;
+  readonly hidden?: true;
 }
 
 export interface DocumentMeta {

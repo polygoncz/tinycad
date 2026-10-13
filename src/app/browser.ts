@@ -6,6 +6,7 @@
 import { createRandomIdGenerator, DisposableStore } from '@/core';
 import type { Disposable, IdGenerator } from '@/core';
 import type { DocumentId } from '@/document';
+import type { ConfirmRequest } from '@/interaction';
 import type { MeshOps } from '@/kernel';
 import { createOcctKernel } from '@/kernel-occt';
 import type { DocumentInfo, DocumentStore, Scheduler } from '@/persistence';
@@ -24,6 +25,8 @@ export interface OpenAppSessionOptions {
   readonly plugins: readonly FeaturePlugin[];
   /** Translation of keys: names of new features and documents (ADR 0014). */
   readonly translate: (key: string) => string;
+  /** Asks the user a yes/no question (feature.delete with dependents). */
+  readonly confirm: (request: ConfirmRequest) => boolean;
   /** The theme at the start, for the palette of the viewport; later AppSession.setTheme. */
   readonly theme: 'light' | 'dark';
 }
@@ -60,6 +63,7 @@ export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSe
       now: Date.now,
       ids: randomIds(),
       translate: opts.translate,
+      confirm: opts.confirm,
       readOnly: !lock.held,
       // Replay the whole log on every open while developing (spec 05, "verify").
       verify: import.meta.env.DEV,
