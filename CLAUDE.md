@@ -48,6 +48,7 @@ Výuková webová CAD aplikace (Onshape-like Part Studio). Autor: Pavel. Pavel z
 
 ## Užitečné příkazy
 
+- `node scripts/claude-guard.selftest.mjs` – test hooku `claude-guard` (co blokuje a co ne); spustit po každé úpravě hooku.
 - `node scripts/vault-lint.mjs` – kontrola celého vaultu (od M0 i jako `npm run lint:vault` v `npm run check`).
 - `npm run check` – vše, co musí projít před dokončením úkolu: `typecheck` + `lint` + `lint:deps` + `lint:vault` + `test`.
 - `npm run dev` – vývojový server Vite (http://localhost:5173), `npm run build` – produkční build.
