@@ -18,7 +18,7 @@ finished:
 tags:
   - milnik
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-14
 ---
 # M13 – Extrude a Revolve
 
@@ -43,6 +43,14 @@ updated: 2026-10-12
 
 - Obdélník → extrude → změna kóty ve skice → extrude se přepočítá.
 - Kružnice → extrude odebrat z kvádru → díra.
+
+## Úkoly z M12 (doplněno 2026-10-14)
+
+Odloženo z [[M12-skicar]] (rozhodnutí v [[Rozhodnutí noční rychloakce#M12 – Skicář]]):
+
+- [ ] `BuildContext.resolveRegions(refs: readonly SketchRegionRef[])` nad `SketchArtifact.regions` (plochy oblastí už jsou v jádře jako handle, `SketchOps.makeFace`); Extrude bere `ShapeHandle` plochy, ne data (`ProfileInput` ze spec 06 odpadá).
+- [ ] Pole parametru `region` v UI a picking oblasti skici ve viewportu (`render` zatím pickuje jen entity skici).
+- [ ] Osy počátku jako artefakty (`origin/axis:x|y|z`, R37) a osa Revolve jako reference na osu nebo úsečku skici.
 
 ## Retrospektiva
 

@@ -284,6 +284,7 @@ function aRecordingEditor(open = false) {
       name: 'Box 1',
     }),
     setParam: () => expect.fail('setParam is not expected'),
+    removeRef: () => expect.fail('removeRef is not expected'),
     focusRefParam: () => expect.fail('focusRefParam is not expected'),
     commit: () => expect.fail('commit is not expected'),
     cancel: () => expect.fail('cancel is not expected'),

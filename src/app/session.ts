@@ -223,8 +223,9 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   const featureTree = lifetime.add(
     createFeatureTreeModel({ doc, ops, schemas, regen: regenStatus, editor: features, selection }),
   );
+  const locked = createEditLock({ readOnly, editor: features });
   const browser = lifetime.add(
-    createBrowserModel({ doc, ops, regen: regenStatus, selection, editor: features }),
+    createBrowserModel({ doc, ops, regen: regenStatus, selection, editor: features, locked }),
   );
   const actions = lifetime.add(createActionRegistry());
   const tools = lifetime.add(
@@ -236,7 +237,6 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     }),
   );
   const toolList = Object.freeze(toolRegistry.all());
-  const locked = createEditLock({ readOnly, editor: features });
   // Built-in actions (spec 11, step 5): their rules live in interaction (ADR 0010).
   lifetime.add(
     createBuiltInActions({

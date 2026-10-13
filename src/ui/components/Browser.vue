@@ -2,12 +2,12 @@
 // The Browser (spec 11, "Komponenty"; Prohlížeč): a floating panel on the left with the result
 // of modelling – document › Bodies › Body n. Click selects a body (or puts it into the active
 // bodies field of the dialog), the eye toggles its visibility, a double click on the name renames
-// it; both are stored in the document (Q071) and disabled while the session is locked (R14).
-// Only bindings and layout (rule 4): rows come from BrowserModel, changes go back through it.
-// Origin and Sketches come with M12.
+// it; both are stored in the document (Q071) and disabled without BrowserModel.canEdit (R14).
+// Only bindings and layout (rule 4): rows, the rename mode and canEdit come from BrowserModel,
+// changes go back through it. Origin and Sketches come with M12.
 import { nextTick, ref, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { BodyId, BrowserBodyRow } from '@/interaction';
+import type { BrowserBodyRow } from '@/interaction';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
 
@@ -16,7 +16,8 @@ const { browser } = session;
 const { t } = useI18n();
 
 const bodies = useObservable(browser.bodies);
-const locked = useObservable(session.locked);
+const canEdit = useObservable(browser.canEdit);
+const renaming = useObservable(browser.renaming);
 // No rename of documents in M10, so the name is read once.
 const documentName = session.doc.meta.name;
 
@@ -28,44 +29,33 @@ function select(row: BrowserBodyRow, e: MouseEvent): void {
   browser.select(row.body, { additive: e.shiftKey || e.metaKey || e.ctrlKey });
 }
 
-function toggleVisible(row: BrowserBodyRow): void {
-  if (!locked.value) browser.setVisible(row.body, !row.visible);
-}
-
 function displayName(row: BrowserBodyRow): string {
   return row.userName ?? t(row.name.key, { n: row.name.n });
 }
 
-// Inline rename, like TimelineItem: which body is being renamed is state of this panel only.
-const renaming = ref<BodyId | null>(null);
+// The inline field, like TimelineItem. Enter and blur both commit; the flag keeps the blur after
+// Enter or Escape from repeating it.
 const input = useTemplateRef<HTMLInputElement[]>('input');
-// Enter and blur both commit; the flag keeps the blur after Enter or Escape from repeating it.
 let done = false;
-
-async function beginRename(row: BrowserBodyRow): Promise<void> {
-  if (locked.value) return;
+watch(renaming, async (body) => {
+  if (body === null) return;
   done = false;
-  renaming.value = row.body;
   await nextTick();
   input.value?.[0]?.select();
-}
+});
+
 function commitRename(row: BrowserBodyRow): void {
   if (done) return;
   done = true;
-  const name = input.value?.[0]?.value ?? displayName(row);
-  renaming.value = null;
-  // An untouched field keeps an unnamed body on its automatic, translated name.
-  if (!locked.value && name.trim() !== displayName(row)) browser.rename(row.body, name);
+  // An untouched field (still the filled-in name) keeps an unnamed body on its automatic name.
+  const text = input.value?.[0]?.value;
+  browser.rename(row.body, text === undefined || text === displayName(row) ? null : text);
 }
 function cancelRename(): void {
   if (done) return;
   done = true;
-  renaming.value = null;
+  browser.cancelRename();
 }
-// The dialog opening (or the tab losing the lock) ends the rename without a change.
-watch(locked, (now) => {
-  if (now) cancelRename();
-});
 </script>
 
 <template>
@@ -129,15 +119,15 @@ watch(locked, (now) => {
             v-else
             class="name"
             :title="t('browser.rename')"
-            @dblclick.stop="beginRename(row)"
+            @dblclick.stop="browser.beginRename(row.body)"
             >{{ displayName(row) }}</span
           >
           <button
             type="button"
             class="eye"
             :title="row.visible ? t('browser.hide') : t('browser.show')"
-            :disabled="locked"
-            @click.stop="toggleVisible(row)"
+            :disabled="!canEdit"
+            @click.stop="browser.setVisible(row.body, !row.visible)"
           >
             <i class="ti" :class="row.visible ? 'ti-eye' : 'ti-eye-off'" aria-hidden="true" />
           </button>

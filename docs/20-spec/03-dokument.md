@@ -9,6 +9,7 @@ modules:
   - document
 milestones:
   - "[[M02-dokument]]"
+  - "[[M12-skicar]]"
 tags:
   - spec
 created: 2026-10-12
@@ -103,7 +104,7 @@ export function createDocument(init: CreateDocumentInit): DocumentWriter;
 
 ## Reference na jiné entity
 
-Parametry featur mohou odkazovat na výsledky jiných featur. Reference jsou vždy **jména**, nikdy indexy nebo handle. Tvar id se kontroluje na datové hranici: `FeatureId` nesmí být prázdné ani obsahovat `/` (`fromData`, `validate` u `feature.add`), `BodyId` v referenci musí mít tvar `<vlastník>/body[:<n>]` (`readRef`); asserty v `bodyId` a `originOfBody` jsou pak jen pojistka proti chybě programu. Značkovaná id (`FeatureId`, `BodyId`…) vznikají přetypováním jen na důvěryhodných místech: při generování id v `interaction` (`FeatureEditor`), v `fromData` po kontrole tvaru dat, v `bodyId` (ražba `BodyId`, [[0015-artefakty-a-identita-telesa|ADR 0015]]), v `parseBodyId` (kontrola tvaru id tělesa z dat zvenku, M11: klíče metadat v `fromData`, `validate` operací `body.*`) a v interní kontrole tvaru reference `readRef`, kterou sdílí `validateAgainstSchema` a `referencesOf`.
+Parametry featur mohou odkazovat na výsledky jiných featur. Reference jsou vždy **jména**, nikdy indexy nebo handle. Tvar id se kontroluje na datové hranici: `FeatureId` nesmí být prázdné, obsahovat `/` ani být vyhrazené `'origin'` (M12, vlastník počáteční geometrie; `fromData`, `validate` u `feature.add`), `BodyId` v referenci musí mít tvar `<vlastník>/body[:<n>]` (`readRef`); asserty v `bodyId` a `originOfBody` jsou pak jen pojistka proti chybě programu. Značkovaná id (`FeatureId`, `BodyId`…) vznikají přetypováním jen na důvěryhodných místech: při generování id v `interaction` (`FeatureEditor`), v `fromData` po kontrole tvaru dat, v `bodyId` (ražba `BodyId`, [[0015-artefakty-a-identita-telesa|ADR 0015]]), v `parseBodyId` (kontrola tvaru id tělesa z dat zvenku, M11: klíče metadat v `fromData`, `validate` operací `body.*`) a v interní kontrole tvaru reference `readRef`, kterou sdílí `validateAgainstSchema` a `referencesOf`.
 
 ```ts
 export type BodyId = Brand<string, 'BodyId'>;   // '<featureId>/body' nebo '<featureId>/body:<n>'
@@ -113,8 +114,27 @@ export type TopoName = Brand<string, 'TopoName'>;                             //
 export interface TopoRef { readonly kind: 'topo'; readonly body: BodyId; readonly name: TopoName }
 export interface SketchRegionRef { readonly kind: 'region'; readonly sketch: FeatureId; readonly region: string } // spec 12
 
-export type EntityRef = BodyRef | TopoRef | SketchRegionRef;   // diskriminováno podle kind
+export type PlaneId = Brand<string, 'PlaneId'>;   // '<vlastník>/plane:<jméno>', jméno [a-z0-9]+ (M12)
+export interface PlaneRef { readonly kind: 'plane'; readonly plane: PlaneId }  // M12, spec 12
+
+export type EntityRef = BodyRef | TopoRef | SketchRegionRef | PlaneRef;   // diskriminováno podle kind
 ```
+
+### Počáteční geometrie (M12)
+
+Počáteční roviny jsou artefakty vyhrazeného vlastníka `origin` ([[12-skicar#Roviny a počátek]], [[0015-artefakty-a-identita-telesa|ADR 0015]]). Jejich id a rámce jsou konstanty v `document`, protože na ně odkazují reference v datech; `regen` z nich seeduje `EMPTY_STATE` a `interaction` z nich staví řádky Prohlížeče.
+
+```ts
+export type SketchId = Brand<string, 'SketchId'>;            // '<featureId>/sketch'
+export function sketchId(owner: FeatureId): SketchId;         // jediné místo ražby; prázdný owner nebo s '/' → výjimka
+export const ORIGIN: FeatureId;                               // 'origin' – vyhrazený vlastník, žádná featura toto id mít nesmí
+export const ORIGIN_PLANE_IDS: { readonly xy: PlaneId; readonly xz: PlaneId; readonly yz: PlaneId };   // 'origin/plane:xy'…
+export interface OriginPlane { readonly id: PlaneId; readonly label: string; readonly plane: Plane }  // label = klíč překladu 'origin.plane.xy'
+export const ORIGIN_PLANES: readonly OriginPlane[];           // [xy, xz, yz], rámce podle tabulky ve spec 12, hluboce zmrazené
+export function parsePlaneId(v: unknown): PlaneId | undefined;   // text '<vlastník>/plane:<jméno>' (vlastník neprázdný bez '/', jméno [a-z0-9]+), jinak undefined
+```
+
+`ownerOf(PlaneRef)` vrátí text před `/` (u počátku `ORIGIN`). `dependenciesOf` bere jen vlastníky, kteří jsou featurami studia, takže reference na počáteční rovinu závislost nevytváří.
 
 ### Id těles a závislosti
 
@@ -165,7 +185,9 @@ export type ParamSpec =
   | { kind: 'point';   label: string; default: Vec3 }
   | { kind: 'bodies';  label: string; min?: number; max?: number }            // BodyRef[]
   | { kind: 'topo';    label: string; entity: 'face' | 'edge' | 'vertex'; min?: number; max?: number } // TopoRef[]
-  | { kind: 'region';  label: string; min?: number; max?: number };          // SketchRegionRef[]
+  | { kind: 'region';  label: string; min?: number; max?: number }           // SketchRegionRef[]
+  | { kind: 'planes';  label: string; min?: number; max?: number }           // PlaneRef[] (M12)
+  | { kind: 'data';    label: string };                                      // libovolná JSON data bez pole formuláře; obsah ověří schéma (M12, skica)
 
 /** Meze číselného parametru. exclusiveMin/Max = ostrá mez (Q050): { min: 0, exclusiveMin: true } znamená > 0. */
 interface Bounds { min?: number; max?: number; exclusiveMin?: boolean; exclusiveMax?: boolean }
@@ -195,8 +217,9 @@ export function createFeatureSchemaRegistry(): FeatureSchemaRegistry;
 
 - `validate` bere `unknown`, ne `P`: validace teprve zjišťuje, jestli data odpovídají `P` (stejně jako `fromData`).
 - `migrate` je v typu volitelná, protože pravidlo „povinné od verze 2“ závisí na hodnotě. Hlídá ho `register()` registru schémat: verze musí být celé číslo ≥ 1 a schéma s `version > 1` bez `migrate` se odmítne výjimkou už při startu.
-- Referenční `ParamSpec` (`bodies`, `topo`, `region`) bez `min`/`max` připouští `0..∞` referencí. Povinnost aspoň jedné reference vyjádří schéma přes `min: 1`.
+- Referenční `ParamSpec` (`bodies`, `topo`, `region`, od M12 `planes`) bez `min`/`max` připouští `0..∞` referencí. Povinnost aspoň jedné reference vyjádří schéma přes `min: 1`.
 - Typ entity u `topo` (`face`/`edge`/`vertex`) obecná validace neověřuje – zjistí se až po regeneraci.
+- `planes` (M12) se validuje jako ostatní referenční druhy: položka `{ kind: 'plane', plane }` s `parsePlaneId`, jinak `param.invalidRef`; duplicita podle `plane`. `data` (M12) obecná validace jen vyžaduje (`param.missing`); obsah (tvar, invarianty) kontroluje vlastní `validate` schématu (skica: `parseSketchData`, [[12-skicar#Kontrola dat]]). Formulář dialogu pole `data` nekreslí.
 
 - Všechny `label` (u `ParamSpec`, u možností `enum` a u `FeatureSchema`) jsou **klíče překladu**, ne texty. Texty dodává plugin ve slovníku `messages` a překládá je `ui` ([[0014-preklady-vue-i18n-a-klice|ADR 0014]], [[Q070 Překlady textů UI|Q070]]).
 - `exclusiveMin`/`exclusiveMax` bez `min`/`max` nemají účinek. Kódy chyb z `validateAgainstSchema`: `param.missing`, `param.unexpected`, `param.wrongType`, `param.notInteger`, `param.belowMin`, `param.atOrBelowMin` (ostrá mez), `param.aboveMax`, `param.atOrAboveMax`, `param.unknownOption`, `param.tooFewRefs`, `param.tooManyRefs`, `param.invalidRef` (`{ index }`), `param.duplicateRef` (`{ index }`, M11). `belowMin`/`atOrBelowMin` a `tooFewRefs` nesou `{ min }`, `aboveMax`/`atOrAboveMax` a `tooManyRefs` `{ max }`, ostatní kódy jsou bez `params`. `param.wrongType` pokrývá i parametry, které nejsou objekt (`param: ''`), a NaN/nekonečno.
@@ -206,8 +229,8 @@ export function createFeatureSchemaRegistry(): FeatureSchemaRegistry;
 Pomocná funkce `validateAgainstSchema(schema, params)` dělá obecnou kontrolu (typ, min/max, počet referencí). Schéma featury ji v `validate` zavolá a přidá vlastní pravidla.
 
 - Chybějící parametr (je ve schématu, ne v `params`) i přebytečný parametr (je v `params`, ne ve schématu) je `ParamIssue` ([[Q028 Chybějící a přebytečné parametry|Q028]]). `migrate` proto musí po sobě uklidit i parametry, které nová verze nemá.
-- Referenční parametry (`bodies`, `topo`, `region`) jsou v `params` vždy, prázdné jako `[]`, i při `min: 0`.
-- Referenční parametr nesmí obsahovat stejnou referenci dvakrát (M11): po kontrole tvaru se hlásí první položka shodná s dřívější (`body` u `body`, `body` + `name` u `topo`, `sketch` + `region` u `region`) jako `param.duplicateRef` s jejím `index`. Pořadí kontrol: `invalidRef`, `duplicateRef`, `tooFewRefs`, `tooManyRefs`. Vztahy mezi parametry (těleso v cílech i nástrojích booleanu) jsou vlastní pravidlo schématu.
+- Referenční parametry (`bodies`, `topo`, `region`, `planes`) jsou v `params` vždy, prázdné jako `[]`, i při `min: 0`.
+- Referenční parametr nesmí obsahovat stejnou referenci dvakrát (M11): po kontrole tvaru se hlásí první položka shodná s dřívější (`body` u `body`, `body` + `name` u `topo`, `sketch` + `region` u `region`, `plane` u `planes`) jako `param.duplicateRef` s jejím `index`. Pořadí kontrol: `invalidRef`, `duplicateRef`, `tooFewRefs`, `tooManyRefs`. Vztahy mezi parametry (těleso v cílech i nástrojích booleanu) jsou vlastní pravidlo schématu.
 
 ## Serializace
 
@@ -254,6 +277,7 @@ export function migrateFeatureData(schemas: RegistryReader<FeatureSchema>, data:
 - Migrace: featura s `typeVersion: 1` se načte schématem verze 2.
 - `validateAgainstSchema` pro každý `ParamSpec.kind`, chybějící a přebytečný parametr.
 - `fromData` s poškozenými daty vrátí `err` s cestou k problému (duplicitní id, `rollbackIndex` mimo rozsah, chybějící vlastnost).
+- Počáteční geometrie a nové druhy parametrů (M12): `parsePlaneId`, `sketchId`, `ORIGIN_PLANES` (rámce ortonormální, id podle tabulky), `planes` v `readRef`/`referencesOf`/`validateAgainstSchema` (tvar, duplicita, min/max), `data` jen `param.missing`, `dependenciesOf` ignoruje `ORIGIN`, `fromData` a `feature.add` odmítnou `FeatureId` `'origin'`.
 - Metadata těles (M11): kanonizace v `setBodyMeta`, žádný `changed` beze změny, `features` zůstává totéž pole, ostatní mutátory metadata zachovají, `fromData` s platnými i poškozenými metadaty; `param.duplicateRef` pro `bodies` a `topo`.
 
 ## Otevřené otázky

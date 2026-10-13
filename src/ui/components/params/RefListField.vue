@@ -3,36 +3,21 @@
 // active one that takes the selection from the view or the Browser (FieldState.active). The
 // references are set by the selection, not typed here, so the button reports only that the field
 // wants to become active (the dialog calls focusRefParam). A 'bodies' field lists the chosen
-// bodies as chips; the name comes from the document (browser.refLabel), not from the Browser
-// rows, because a preview may drop a tool body from the result that the chip still has to name.
-// Each chip removes its item with ×. A 'topo' field shows the count only.
+// bodies as chips from FieldState.refs (names from the document, interaction); each chip reports
+// the removal of its item with × (the dialog calls removeRef). A 'topo' field shows the count only.
 import { computed, useId } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FieldState } from '@/interaction';
-import { useSession } from '../../composables/use-session';
-import { bodyRefItems, withoutIndex } from './field-values';
 import FieldShell from './FieldShell.vue';
 
 const props = defineProps<{ field: FieldState }>();
-const emit = defineEmits<{ update: [value: unknown]; activate: [] }>();
+const emit = defineEmits<{ update: [value: unknown]; activate: []; remove: [index: number] }>();
 
 const { t } = useI18n();
-const { browser } = useSession();
 // The name is the label followed by the own text: "Tělesa 2 vybráno".
 const buttonId = useId();
 const count = computed(() => (Array.isArray(props.field.value) ? props.field.value.length : 0));
-const chips = computed(() =>
-  props.field.spec.kind === 'bodies'
-    ? bodyRefItems(props.field.value).map(({ index, body }) => {
-        const label = browser.refLabel(body);
-        return { index, key: `${String(index)}:${body}`, label, missing: label === null };
-      })
-    : [],
-);
-
-function remove(index: number): void {
-  emit('update', withoutIndex(props.field.value, index));
-}
+const chips = computed(() => props.field.refs ?? []);
 </script>
 
 <template>
@@ -51,13 +36,18 @@ function remove(index: number): void {
         {{ field.active ? t('field.refs.pick') : t('field.refs.count', { n: count }) }}
       </button>
       <ul v-if="chips.length > 0" class="chips">
-        <li v-for="chip in chips" :key="chip.key" class="chip" :class="{ missing: chip.missing }">
+        <li
+          v-for="chip in chips"
+          :key="`${String(chip.index)}:${chip.body ?? ''}`"
+          class="chip"
+          :class="{ missing: chip.label === null }"
+        >
           <span class="chip-name">{{ chip.label ?? t('field.refs.missing') }}</span>
           <button
             type="button"
             class="chip-remove"
             :aria-label="t('field.refs.remove', { name: chip.label ?? t('field.refs.missing') })"
-            @click="remove(chip.index)"
+            @click="emit('remove', chip.index)"
           >
             <i class="ti ti-x" aria-hidden="true" />
           </button>

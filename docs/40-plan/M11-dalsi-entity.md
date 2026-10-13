@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 11
 aliases:
   - M11
@@ -25,7 +25,7 @@ specs:
 depends_on:
   - "[[M10.1-zpevneni-kostry]]"
 started: 2026-10-14
-finished: 
+finished: 2026-10-14
 tags:
   - milnik
 created: 2026-10-12
@@ -57,7 +57,7 @@ updated: 2026-10-14
 - [x] Ú6 `features/boolean`: plugin Boolean
 - [x] Ú7 `interaction`, `app`, `ui`: Prohlížeč nad metadaty (jméno, viditelnost), `RefListField` se seznamem těles, výběr těles z Prohlížeče do dialogu
 - [x] Ú8 `app`, `tests`, `e2e`: registrace pluginů, scénář kvádr/válec/boolean
-- [ ] Ú9 hlavní sezení: kontrola, vault, `architecture-reviewer`, retrospektiva s měřítkem rozšiřitelnosti
+- [x] Ú9 hlavní sezení: kontrola, vault, `architecture-reviewer`, retrospektiva s měřítkem rozšiřitelnosti
 
 ## Akceptační kritéria
 
@@ -72,10 +72,10 @@ updated: 2026-10-14
 
 Nálezy 2 a 3 z [[Revize architektury 2026-10-13]], jejichž první spotřebitel vzniká až tady. Zapracováno do Implementačního plánu (2026-10-14), u každého bodu je, kde se řeší.
 
-- [ ] **Pravidlo identity u Transform a Boolean** ([[07-regenerace]]): Transform zachová `id`, `origin`, `names`, nastaví `lastModifiedBy`; Boolean dědí `id` prvního cíle, nástroje z mapy odebere; `keepTools` je zachová beze změny; více výsledných solidů → `bodyId(cíl.origin, n)` podle rodokmenu z historie jádra (`Generated`/`Modified`), ne podle pořadí výstupu. Test: změna parametru válce nepřehodí id dvou výsledných těles. → Ú5, Ú6. **Zúženo (R8 ⚠):** výsledek booleanu je v M11 vždy jedno těleso (jeden handle, případně compound více solidů); rozpad na více těles podle historie jádra je úkol [[M14-topologicke-pojmenovani|M14]], kde historie jádra vzniká. Test se mění na „změna parametru válce nezmění id výsledku“.
-- [ ] **Pravidla závislostí v `interaction`** ([[10-interakce]]): `FeatureTreeModel.move(id, toIndex)` (nový příkaz pro budoucí tažení v Timeline) odmítne přesun, po kterém `orderViolations` není prázdné; akce `feature.delete` nejdřív spočítá `dependentsOf` a UI zobrazí potvrzení „N featur ztratí referenci“ (jako Fusion); řádek Timeline nese `dependents: number` pro tooltip. Testy v Node s `dependenciesOf` z `document`. → Ú3 (`move` bez UI tažení, R17 ⚠).
-- [ ] **Metadata těles v dokumentu** ([[03-dokument]], [[04-operace-a-historie]]): `PartStudioData.bodies?: Readonly<Record<BodyId, { name?: string; hidden?: boolean }>>` a operace `body.rename`, `body.setVisible` s inverzí; Prohlížeč jméno zobrazí a viditelnost ukládá sem místo stavu pohledu (přehodnotit [[Q071 Viditelnost těles|Q071]]: identita je od M10.1 rodokmen, takže už se nepřenese na jiné těleso). Barva až s [[Q017 Průhlednost a skrývání těles|Q017]]. → Ú2, Ú7; barva a průhlednost [[Q073 Průhlednost a barva těles|Q073]].
-- [ ] **Měřítko rozšiřitelnosti:** do retrospektivy zapsat seznam souborů mimo `features/*` změněných kvůli novým entitám, odděleně od souborů změněných kvůli úkolům výše. → Ú9.
+- [x] **Pravidlo identity u Transform a Boolean** ([[07-regenerace]]): Transform zachová `id`, `origin`, `names`, nastaví `lastModifiedBy`; Boolean dědí `id` prvního cíle, nástroje z mapy odebere; `keepTools` je zachová beze změny; více výsledných solidů → `bodyId(cíl.origin, n)` podle rodokmenu z historie jádra (`Generated`/`Modified`), ne podle pořadí výstupu. Test: změna parametru válce nepřehodí id dvou výsledných těles. → Ú5, Ú6. **Zúženo (R8 ⚠):** výsledek booleanu je v M11 vždy jedno těleso (jeden handle, případně compound více solidů); rozpad na více těles podle historie jádra je úkol [[M14-topologicke-pojmenovani|M14]], kde historie jádra vzniká. Test se mění na „změna parametru válce nezmění id výsledku“.
+- [x] **Pravidla závislostí v `interaction`** ([[10-interakce]]): `FeatureTreeModel.move(id, toIndex)` (nový příkaz pro budoucí tažení v Timeline) odmítne přesun, po kterém `orderViolations` není prázdné; akce `feature.delete` nejdřív spočítá `dependentsOf` a UI zobrazí potvrzení „N featur ztratí referenci“ (jako Fusion); řádek Timeline nese `dependents: number` pro tooltip. Testy v Node s `dependenciesOf` z `document`. → Ú3 (`move` bez UI tažení, R17 ⚠).
+- [x] **Metadata těles v dokumentu** ([[03-dokument]], [[04-operace-a-historie]]): `PartStudioData.bodies?: Readonly<Record<BodyId, { name?: string; hidden?: boolean }>>` a operace `body.rename`, `body.setVisible` s inverzí; Prohlížeč jméno zobrazí a viditelnost ukládá sem místo stavu pohledu (přehodnotit [[Q071 Viditelnost těles|Q071]]: identita je od M10.1 rodokmen, takže už se nepřenese na jiné těleso). Barva až s [[Q017 Průhlednost a skrývání těles|Q017]]. → Ú2, Ú7; barva a průhlednost [[Q073 Průhlednost a barva těles|Q073]].
+- [x] **Měřítko rozšiřitelnosti:** do retrospektivy zapsat seznam souborů mimo `features/*` změněných kvůli novým entitám, odděleně od souborů změněných kvůli úkolům výše. → Ú9.
 
 ## Implementační plán
 
@@ -326,6 +326,8 @@ Pluginy Ú4–Ú6 mají strukturu jako `features/box` (`index.ts`, `schema.ts`, 
 - Měřítko rozšiřitelnosti do retrospektivy: `git diff --stat` mimo `src/features/*`, rozdělené na (a) kvůli novým entitám – očekáváno jen jádro (Ú1), registrace (Ú8) a obecná kontrola duplicit (Ú2, `param.duplicateRef`); (b) kvůli úkolům z revize – Ú2 metadata, Ú3, Ú7. Každý soubor zdůvodnit.
 - `architecture-reviewer`, oprava nálezů, retrospektiva, poznatky, `/milnik konec M11`, commit.
 
+- [x] Ú9a Oprava nálezů revize v prezentační vrstvě (přejmenování a `canEdit` v `BrowserModel`, `FieldState.refs` a `removeRef`, úzké závislosti editoru)
+
 ## Co se naučíš
 
 - Jak se mění port jádra, aby obě implementace (AABB fake a OCCT) splnily jeden kontrakt, a co do kontraktu nepatří (počet ploch, objem).
@@ -339,4 +341,29 @@ Pluginy Ú4–Ú6 mají strukturu jako `features/box` (`index.ts`, `schema.ts`, 
 
 ## Retrospektiva
 
-_(vyplnit po dokončení)_
+_Návrh (noční rychloakce, Pavel doplní nebo upraví)._
+
+**Měřítko rozšiřitelnosti** (`git diff 31874e7..HEAD` mimo `src/features/*`):
+
+(a) **Kvůli novým entitám**
+- Port jádra a jeho dvě implementace: `kernel/kernel.ts`, `fake-kernel.ts`, `testing.ts` (kontraktová sada), nový `transform.ts` (`isRigidMotion`), `index.ts`; `kernel-occt/occt-kernel-impl.ts` a přeposílání v `client.ts`, `worker-impl.ts`, `index.ts`. Očekávané: nová geometrie = nové operace jádra. Protokol workeru se odvozuje z portu, takže přeposílání je po jednom řádku na metodu.
+- `regen/builder.ts` (`ModelingKernel` o `TransformOps` a `BooleanOps`, pomocník `unresolvedReference`) a `tracking-kernel.ts` (sledování nových handle). Očekávané: builder smí jen to, co mu `regen` dá.
+- `document/validate.ts` (`param.duplicateRef`, R12) a klíče `param.*` v `ui/i18n`: obecné pravidlo pro všechny referenční parametry, první spotřebitel je Boolean.
+- Registrace: `app/plugins.ts`; testovací jádro v `app/testing.ts` (doplnění nových metod portu).
+- **Žádná** změna v `ops`, `persistence`, `render` ani v `ui` komponentách kvůli Cylinder/Transform/Boolean samotným: dialog, Timeline, ikony i překlady přišly z pluginů.
+
+(b) **Kvůli úkolům z revize architektury**
+- Metadata těles: `document` (`model`, `refs`, `serialize`, `cad-document`, `document`), `ops` (`handlers/body.ts`, `operation.ts`, `handler.ts`), Prohlížeč (`interaction/browser-model.ts`, `ref-values.ts`, `ui/components/Browser.vue`).
+- Závislosti featur: `interaction/feature-tree.ts`, `builtin-actions.ts` (potvrzení), `app/session.ts`, `browser.ts`, `ui/App.vue`, `TimelineItem.vue`.
+- Výběr referencí v dialogu: `interaction/feature-editor.ts` (`FieldState.refs`, `removeRef`, první referenční parametr aktivní), `ui/components/params/RefListField.vue`, `FeatureDialog.vue`.
+
+**Co bylo jinak, než se čekalo**
+- Nová entita opravdu nepotřebovala nic mimo jádro a registraci – kostra z M10.1 (reference, id těles jako rodokmen, `refPick` s filtrem) se vyplatila. Drahé bylo rozšíření portu jádra: jedna operace = Fake + OCCT + kontraktová sada + přeposílání + sledování v `regen`.
+- Revize našla jen věci v prezentační vrstvě: plán sám povolil stav přejmenování v komponentě a čtení surové hodnoty parametru v `ui`. Pravidlo „logika v presenteru“ ([[0010-prezentacni-model|ADR 0010]]) je potřeba hlídat už při psaní plánu, ne až při revizi.
+- Výchozí hodnoty pluginů s povinnými referencemi validací neprojdou (R24) – společný test pluginů se musel upravit.
+- Zúžení (⚠ v [[Rozhodnutí noční rychloakce]]): boolean dává vždy jedno těleso (R8, rozpad v M14), rotace jen kolem os přes počátek (R6), žádné zvýraznění vybraných těles během dialogu (R19).
+
+**Co se osvědčilo**
+- Vlny s vlastníky sdílených souborů: 9 úkolů, 4 souběžně, slučování patchem bez konfliktu.
+- E2E výběrem těles přes Prohlížeč místo kliků do canvasu: test nezávisí na kameře.
+

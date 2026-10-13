@@ -9,6 +9,7 @@ modules:
   - render
 milestones:
   - "[[M08-vykreslovani]]"
+  - "[[M12-skicar]]"
 tags:
   - spec
 created: 2026-10-12
@@ -39,7 +40,8 @@ export interface Viewport extends ViewportPort, Disposable {
   readonly bodies: BodyLayer;          // tělesa z regenerace
   readonly highlight: HighlightLayer;  // hover a výběr (implementuje HighlightPort)
   readonly overlay: OverlayLayer;      // dočasná geometrie nástrojů (implementuje OverlayPort)
-  readonly camera: CameraController;   // fit all, standardní pohledy
+  readonly sketches: SketchLayer;      // kresby skic a rovin (implementuje SketchPort, M12)
+  readonly camera: CameraController;   // fit all, standardní pohledy, kolmo na rovinu (M12)
 
   setPalette(palette: ScenePalette): void;   // přebarví existující materiály, nic nevytváří znovu (Q072)
   setBodyVisible(body: BodyId, visible: boolean): void; // stav pohledu z Prohlížeče (Q071)
@@ -65,6 +67,8 @@ export interface ScenePalette {
   readonly selection: number;   // odpovídá --accent v CSS
   readonly preview: number;     // overlay nástrojů
   readonly construction: number;
+  readonly sketch: number;          // nedourčená skica (M12): světlá 0x0a84ff, tmavá 0x409cff
+  readonly sketchDefined: number;   // plně určená skica (M12): světlá 0x1c1c1e, tmavá 0xf2f2f7
   readonly axes: readonly [x: number, y: number, z: number];   // obě palety 0xff3b30, 0x34c759, 0x0a84ff (mockup)
   readonly grid: readonly [center: number, line: number];
 }
@@ -98,8 +102,12 @@ export type StandardView = 'iso' | 'top' | 'bottom' | 'front' | 'back' | 'left' 
 export interface CameraController {
   fitAll(): void;                    // obálka všech těles; prázdná scéna → výchozí výřez 200 × 200 mm kolem počátku
   setView(view: StandardView): void; // nastaví směr pohledu a pak fitAll()
+  /** M12: kamera ve směru direction od cíle (jako u standardních pohledů), pak fitAll(); kolmo na rovinu skici = setViewDirection(plane.normal). */
+  setViewDirection(direction: Vec3): void;
 }
 ```
+
+`setViewDirection(d)` (M12): `d` se normalizuje (nulový vektor = chyba programu); směr skoro rovnoběžný se Z (`|d̂·Z| > 1 − 1e-9`) použije nakloněný směr `top`/`bottom` (viz níže), jinak `d̂`. Nahoře je jako vždy +Z promítnuté do roviny pohledu, takže u počátečních rovin je nahoře osa y skici. Čistá funkce `viewDirectionFor(d)` vedle `orbitDirection`.
 
 Směry (odkud se kamera dívá, a co je na obrazovce nahoře): `front` z −Y (+Z), `back` z +Y, `right` z +X, `left` z −X, `top` z +Z (+Y), `bottom` z −Z (+Y), `iso` z (1, −1, 1) (+Z promítnuté do roviny pohledu).
 
@@ -163,6 +171,15 @@ Zvýraznění plochy je **malá vlastní kopie** jejích trojúhelníků: čist�
 - `OverlayLayer implements OverlayPort`: `OverlayShape` → `LineSegments`/`Points` ve vlastní skupině scény, styly `preview` a `construction` jako dva sdílené materiály. `set(id, …)` uvolní předchozí geometrii pod stejným `id`. `lines` s lichým počtem bodů je chyba (assert), pod `id` pak zůstane předchozí stav. `construction` je čárkovaná (`LineDashedMaterial`).
 - Zvýraznění a overlay do pickingu nevstupují. Zvýraznění plochy se kreslí nad plochou tělesa díky `polygonOffset` (u čar a bodů nemá účinek). Hrany zvýraznění a overlay mají `depthTest` zapnutý a vyšší `renderOrder` (zvýraznění 1, overlay 2): na stejné hloubce vyhrají, ale tělesa před nimi je zakryjí.
 
+## Skici
+
+Kresby skic a rovin ([[12-skicar#Kresba a picking]], [[0017-modul-sketch-a-skicar|ADR 0017]]) přicházejí jako `SketchDrawing` přes `SketchPort` ([[10-interakce#Port viewportu]]); `render` je tesseluje a pickuje sám. Data skici ani jádro nezná.
+
+- **Čisté funkce** (bez `three`, test v Node): `tessellateSketch(drawing, maxStep = π/36)` v `sketch-drawing.ts` → světové `segments` (dvojice bodů xyz), `segmentCurves` (id křivky na segment), `segmentStyles`, `points` (xyz), `pointIds`, `pointStyles`; oblouk dostane `max(2, ⌈(endAngle − startAngle) / maxStep⌉)` segmentů, body přes `plane.toWorld`. `pickSketch(screenSegments, screenPoints, x, y, tolerancePx = 6)` v `sketch-pick.ts` → nejbližší bod do tolerance, jinak nejbližší segment (přes `closestSegments`), nebo `null`.
+- **`SketchLayer`** (`sketch-layer.ts`): pod každým id jedna skupina s `LineSegments2` (`LineMaterial` s barvami po vrcholech, šířka 2 px) a `Points` (7 px, bez zmenšování se vzdáleností); barva podle stylu z palety: `normal` → `sketch`, `defined` → `sketchDefined`, `construction` a `plane` → `construction`, `hover` → `hover`, `selected` → `selection`. `depthTest: false`, `renderOrder` 3: skica se kreslí přes tělesa (rovina skici často leží na ploše tělesa a čáry by s ní bojovaly o hloubku, [[Rozhodnutí noční rychloakce#M12 – Skicář|R47]] ⚠). `set` nahradí vše pod id a uvolní starou geometrii, `remove` neznámého id nic. `setPalette` přebarví, rozlišení `LineMaterial` dostává jako zvýraznění.
+- **Picking:** s `'sketchEntity'` ve filtru se nejdřív zkouší skici (všechny kresby, body před křivkami, bez testu zakrytí tělesy); zásah → `{ kind: 'sketchEntity', sketch: id kresby, entity: id bodu nebo křivky, point }` (`point` = bod na segmentu nebo bod ve 3D). Bez zásahu pokračují hrany a plochy podle filtru. `camera.fitAll` kresby skic nezahrnuje.
+- `HighlightLayer` cíle `sketchEntity` vypouští (zvýraznění skici nese styl kresby).
+
 ## Picking
 
 `PickResult` definuje [[10-interakce#Port viewportu]] ([[Q057 Tvar PickResult|Q057]]).
@@ -181,7 +198,7 @@ Filtr (`PickFilter`, [[10-interakce#Port viewportu]], M10.1): průchod přes hra
 ## Testy
 
 `render` se testuje nejhůř, proto v něm má být co nejméně logiky ([[Q061 Testy render v Node|Q061]]):
-- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache` a generace `SceneSync` (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
+- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor` (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
 - Testy `render` nesmí importovat `@/kernel/testing` (`FakeKernel`): `render` závisí na `kernel` jen typově a `testing.ts` otevírá jen hodnotovým závislostem ([[01-architektura]]). Sítě v testech jsou ruční, malé a záměrně s klíči ploch mimo pořadí.
 - Kód s Three.js (`Viewport`, `BodyView`, vrstvy, picking) se ověřuje ručně na dev stránce `dev/viewport.html`. Smoke test v prohlížeči (Playwright) později.
 

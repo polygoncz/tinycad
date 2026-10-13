@@ -80,7 +80,7 @@ export function createFeatureTreeModel(deps: {
   ops: OperationDispatcher;
   schemas: RegistryReader<FeatureSchema>;
   regen: RegenStatusPort;
-  editor: FeatureEditor;
+  editor: Pick<FeatureEditor, 'current' | 'edit'>;
   selection: SelectionCommands;
 }): FeatureTreeModel {
   const { doc, ops, schemas, regen, editor, selection } = deps;

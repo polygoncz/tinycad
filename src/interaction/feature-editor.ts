@@ -5,6 +5,7 @@
 import { ObservableValue, assert } from '@/core';
 import type { IdGenerator, Observable, RegistryReader } from '@/core';
 import type {
+  BodyId,
   DocumentReader,
   FeatureId,
   FeatureInstance,
@@ -21,6 +22,7 @@ import type {
 } from '@/ops';
 import { OP_VERSION } from '@/ops';
 import { nextFeatureName } from './feature-name';
+import { bodyOfRef, bodyRefLabel } from './ref-values';
 
 export interface FeatureEditor {
   /** Creates a new feature of the type at the rollback bar and opens an edit session for it. */
@@ -38,6 +40,11 @@ export interface FeatureEditSession {
   readonly state: Observable<EditState>;
   /** → tx.apply(feature.setParams) */
   setParam(name: string, value: unknown): void;
+  /**
+   * Removes the item at the index from the value of the param (the × of a chip) → setParam.
+   * An index out of range, a non-array value or a closed session do nothing (M11).
+   */
+  removeRef(name: string, index: number): void;
   focusRefParam(name: string | null): void;
   /** → tx.commit() */
   commit(): void;
@@ -69,6 +76,18 @@ export interface FieldState {
   readonly issue: ParamIssue | null;
   /** name === activeRefParam */
   readonly active: boolean;
+  /** The chips of a 'bodies' param, one per item of the value; null for the other kinds (M11). */
+  readonly refs: readonly FieldRef[] | null;
+}
+
+/** One item of the value of a 'bodies' param, as its chip shows it. */
+export interface FieldRef {
+  /** Position of the item in the value. */
+  readonly index: number;
+  /** null for an item that is not a body reference of the right shape. */
+  readonly body: BodyId | null;
+  /** Name from the document only (bodyRefLabel); null = a missing body. */
+  readonly label: string | null;
 }
 
 export function createFeatureEditor(deps: {
@@ -189,7 +208,21 @@ function createSession(deps: {
   // existing one starts without (spec 10, R19).
   let activeRefParam: string | null = mode === 'create' ? firstRefParam(schema) : null;
   let open = true;
+
+  /** The chips of a 'bodies' value; `prev` is reused when nothing in them changed. */
+  function refsOf(value: unknown, prev: readonly FieldRef[] | null): readonly FieldRef[] {
+    const items: readonly unknown[] = Array.isArray(value) ? value : [];
+    const refs = items.map((item, index): FieldRef => {
+      const body = bodyOfRef(item);
+      return Object.freeze({ index, body, label: body === null ? null : bodyRefLabel(doc, body) });
+    });
+    return prev !== null && sameRefs(prev, refs) ? prev : Object.freeze(refs);
+  }
+
   const state = new ObservableValue<EditState>(buildState(null));
+  // Labels of the chips come from the document (names of features, body metadata), so the
+  // snapshot follows every change of it while the session is open.
+  const unsubscribeDoc = doc.events.on('changed', refresh);
 
   /** The name of the feature in the document; the last known one once it is gone. */
   function readName(prev: EditState | null): string {
@@ -212,14 +245,15 @@ function createSession(deps: {
         ? prev.issues
         : Object.freeze(freshIssues.map(freezeIssue));
     const fields = Object.entries(schema.params).map(([name, spec], i): FieldState => {
+      const old = prev?.fields[i];
       const field: FieldState = {
         name,
         spec,
         value: params[name],
         issue: issues.find((issue) => issue.param === name) ?? null,
         active: name === activeRefParam,
+        refs: spec.kind === 'bodies' ? refsOf(params[name], old?.refs ?? null) : null,
       };
-      const old = prev?.fields[i];
       return old !== undefined && sameField(old, field) ? old : Object.freeze(field);
     });
     const sameFields =
@@ -260,6 +294,7 @@ function createSession(deps: {
       end();
     } finally {
       if (!ops.inTransaction) {
+        unsubscribeDoc();
         open = false;
         activeRefParam = null;
         refresh();
@@ -268,27 +303,39 @@ function createSession(deps: {
     }
   }
 
+  /** → tx.apply(feature.setParams) */
+  function setParam(name: string, value: unknown): void {
+    checkOpen('setParam');
+    assert(Object.hasOwn(schema.params, name), `setParam: unknown param '${name}'`);
+    const params = readParams(state.get());
+    if (Object.hasOwn(params, name) && Object.is(params[name], value)) return;
+    const op: FeatureSetParamsOp = {
+      type: 'feature.setParams',
+      v: OP_VERSION['feature.setParams'],
+      featureId,
+      // The params are written in the shape of this schema version (Q035).
+      typeVersion: schema.version,
+      params: { ...params, [name]: value },
+    };
+    // A failing handler throws here, before anything changed: the session stays as it was.
+    tx.apply(op);
+    refresh();
+  }
+
   return {
     mode,
     featureId,
     schema,
     state: state.asObservable(),
-    setParam(name, value) {
-      checkOpen('setParam');
-      assert(Object.hasOwn(schema.params, name), `setParam: unknown param '${name}'`);
-      const params = readParams(state.get());
-      if (Object.hasOwn(params, name) && Object.is(params[name], value)) return;
-      const op: FeatureSetParamsOp = {
-        type: 'feature.setParams',
-        v: OP_VERSION['feature.setParams'],
-        featureId,
-        // The params are written in the shape of this schema version (Q035).
-        typeVersion: schema.version,
-        params: { ...params, [name]: value },
-      };
-      // A failing handler throws here, before anything changed: the session stays as it was.
-      tx.apply(op);
-      refresh();
+    setParam,
+    removeRef(name, index) {
+      if (!open) return;
+      assert(Object.hasOwn(schema.params, name), `removeRef: unknown param '${name}'`);
+      const value = readParams(state.get())[name];
+      if (!Array.isArray(value) || !Number.isInteger(index)) return;
+      const items: readonly unknown[] = value;
+      if (index < 0 || index >= items.length) return;
+      setParam(name, Object.freeze(items.toSpliced(index, 1)));
     },
     focusRefParam(name) {
       checkOpen('focusRefParam');
@@ -361,6 +408,17 @@ function sameField(a: FieldState, b: FieldState): boolean {
     a.spec === b.spec &&
     Object.is(a.value, b.value) &&
     sameIssue(a.issue, b.issue) &&
-    a.active === b.active
+    a.active === b.active &&
+    a.refs === b.refs
+  );
+}
+
+function sameRefs(a: readonly FieldRef[], b: readonly FieldRef[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((ref, i) => {
+      const other = b[i];
+      return other !== undefined && ref.body === other.body && ref.label === other.label;
+    })
   );
 }

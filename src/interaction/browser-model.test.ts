@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
 import { bodyId, createFeatureSchemaRegistry, toData, validateAgainstSchema } from '@/document';
-import type { BodyId, FeatureId, FeatureSchema, ParamSchema } from '@/document';
+import type { FeatureId, FeatureSchema, ParamSchema } from '@/document';
 import { aFeature } from '@/document/testing';
 import type { BodyRenameOp, BodySetVisibleOp, Operation } from '@/ops';
 import { OP_VERSION } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import { createBrowserModel } from './browser-model';
+import { createEditLock } from './edit-lock';
 import { createFeatureEditor } from './feature-editor';
 import type { RegenBody } from './regen-status-port';
 import { createSelectionModel } from './selection';
@@ -46,7 +47,7 @@ const TOPO: FeatureSchema = {
   validate: () => [],
 };
 
-function setup() {
+function setup(opts: { readOnly?: boolean } = {}) {
   const schemas = createFeatureSchemaRegistry();
   schemas.register(BOOL);
   schemas.register(TOPO);
@@ -66,12 +67,14 @@ function setup() {
     schemas,
     ids: createSequentialIdGenerator('new'),
   });
+  const locked = createEditLock({ readOnly: opts.readOnly ?? false, editor });
   const browser = createBrowserModel({
     doc: ops.doc,
     ops: ops.dispatcher,
     regen,
     selection,
     editor,
+    locked,
   });
   const order: string[] = [];
   browser.bodies.subscribe(() => order.push('bodies'));
@@ -420,43 +423,96 @@ describe('BrowserModel.select', () => {
   });
 });
 
-describe('BrowserModel.refLabel', () => {
-  it('is the name from the metadata', () => {
+describe('BrowserModel.canEdit', () => {
+  it('is true without a dialog and false while a feature edit session is open', () => {
     const s = setup();
+    const seen: boolean[] = [];
+    s.browser.canEdit.subscribe(() => seen.push(s.browser.canEdit.get()));
+    expect(s.browser.canEdit.get()).toBe(true);
+    const session = s.editor.create('bool');
+    expect(s.browser.canEdit.get()).toBe(false);
+    session.cancel();
+    expect(s.browser.canEdit.get()).toBe(true);
+    expect(seen).toEqual([false, true]);
+    expect('set' in s.browser.canEdit).toBe(false);
+  });
+
+  it('is always false read-only; setVisible, beginRename and rename do nothing', () => {
+    const s = setup({ readOnly: true });
+    s.regen.publish(new Map(), BODIES);
+    expect(s.browser.canEdit.get()).toBe(false);
+    s.browser.setVisible(B1, false);
+    s.browser.beginRename(B1);
+    s.browser.rename(B1, 'Base');
+    expect(s.browser.renaming.get()).toBeNull();
+    expect(s.log.entries()).toHaveLength(0);
+    expect(s.doc.bodyMeta(B1)).toEqual({});
+  });
+});
+
+describe('BrowserModel rename mode', () => {
+  it('beginRename puts a body of the last regeneration into the rename mode', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    expect(s.browser.renaming.get()).toBeNull();
+    s.browser.beginRename(B2);
+    expect(s.browser.renaming.get()).toBe(B2);
+    expect('set' in s.browser.renaming).toBe(false);
+  });
+
+  it('beginRename of a body unknown to the last regeneration does nothing', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    s.browser.beginRename(B3);
+    expect(s.browser.renaming.get()).toBeNull();
+  });
+
+  it('beginRename during a dialog does nothing', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    const session = s.editor.create('bool');
+    s.browser.beginRename(B1);
+    expect(s.browser.renaming.get()).toBeNull();
+    session.cancel();
+  });
+
+  it('cancelRename ends the mode without an operation', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    s.browser.beginRename(B1);
+    s.browser.cancelRename();
+    expect(s.browser.renaming.get()).toBeNull();
+    expect(s.log.entries()).toHaveLength(0);
+  });
+
+  it('rename ends the mode and renames', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    s.browser.beginRename(B1);
+    s.browser.rename(B1, 'Base');
+    expect(s.browser.renaming.get()).toBeNull();
+    expect(s.doc.bodyMeta(B1)).toEqual({ name: 'Base' });
+  });
+
+  it('rename with null (the text did not change) ends the mode without an operation', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
     s.doc.setBodyMeta(B1, { name: 'Base' });
-    expect(s.browser.refLabel(B1)).toBe('Base');
+    s.browser.beginRename(B1);
+    s.browser.rename(B1, null);
+    expect(s.browser.renaming.get()).toBeNull();
+    expect(s.log.entries()).toHaveLength(0);
+    expect(s.doc.bodyMeta(B1)).toEqual({ name: 'Base' });
   });
 
-  it('is the name of the origin feature without a name in the metadata', () => {
+  it('opening the dialog ends the mode without a change', () => {
     const s = setup();
-    expect(s.browser.refLabel(B2)).toBe('Cylinder 1');
-  });
-
-  it('adds the number of the body id as a suffix', () => {
-    const s = setup();
-    expect(s.browser.refLabel(bodyId(fid('f2'), 2))).toBe('Cylinder 1 (2)');
-  });
-
-  it('does not need the body in the last regeneration', () => {
-    const s = setup();
-    s.regen.publish(new Map(), [{ body: B1, feature: fid('f1') }]);
-    expect(s.browser.refLabel(B3)).toBe('Box 2');
-  });
-
-  it('is null when the origin feature is not in the document, even with a name', () => {
-    const s = setup();
-    s.doc.setBodyMeta(B3, { name: 'Gone' });
-    s.doc.removeFeature(fid('f3'));
-    expect(s.browser.refLabel(B3)).toBeNull();
-    expect(s.browser.refLabel(bodyId(fid('nope')))).toBeNull();
-  });
-
-  it('is null for a value not shaped like a body id (params may hold anything)', () => {
-    const s = setup();
-    for (const junk of ['f1', '', 'f1/face', 'f1/body:0']) {
-      // Simulates an invalid param value that reached the field.
-      expect(s.browser.refLabel(junk as BodyId)).toBeNull();
-    }
+    s.regen.publish(new Map(), BODIES);
+    s.browser.beginRename(B1);
+    const session = s.editor.create('bool');
+    expect(s.browser.renaming.get()).toBeNull();
+    session.cancel();
+    expect(s.browser.renaming.get()).toBeNull();
   });
 });
 
@@ -470,6 +526,15 @@ describe('BrowserModel.dispose', () => {
     s.selection.set([{ kind: 'body', body: B1 }]);
     s.doc.setBodyMeta(B1, { name: 'X' });
     expect(s.browser.bodies.get()).toBe(rows);
+  });
+
+  it('unsubscribes from the edit lock', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    s.browser.beginRename(B1);
+    s.browser.dispose();
+    s.editor.create('bool').cancel();
+    expect(s.browser.renaming.get()).toBe(B1);
   });
 });
 

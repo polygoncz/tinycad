@@ -10,6 +10,7 @@ modules:
 milestones:
   - "[[M06-regenerace]]"
   - "[[M11-dalsi-entity]]"
+  - "[[M12-skicar]]"
 tags:
   - spec
 created: 2026-10-12
@@ -28,7 +29,7 @@ Přehraje featury Part Studia přes geometrické jádro a vytvoří výsledná t
 Každá featura je funkce `výstupní stav = f(vstupní stav, parametry)`. Stav je neměnný snímek toho, co existuje po dané featuře:
 
 ```ts
-export type ArtifactId = BodyId;                     // M12: | SketchId | PlaneId; vždy '<vlastník>/<druh>[:<n>]' (ADR 0015)
+export type ArtifactId = BodyId | SketchId | PlaneId; // vždy '<vlastník>/<druh>[:<n>]' (ADR 0015); SketchId a PlaneId od M12
 
 export interface Body {
   readonly kind: 'body';
@@ -39,15 +40,37 @@ export interface Body {
   readonly names: NameTable;                         // topologická jména ploch/hran tohoto tvaru (spec 08), do M14 prázdné
 }
 
-export type Artifact = Body;                         // diskriminace podle kind; M12 přidá SketchArtifact
+/** Rovina (M12): počáteční roviny vlastníka ORIGIN; později konstrukční roviny. */
+export interface PlaneArtifact {
+  readonly kind: 'plane';
+  readonly id: PlaneId;
+  readonly owner: FeatureId;                         // ORIGIN u počátečních rovin
+  readonly plane: Plane;                             // z core
+}
+
+/** Výsledek skici (M12, spec 12): rovina, vyřešená geometrie pro kresbu a plochy oblastí v jádře. */
+export interface SketchArtifact {
+  readonly kind: 'sketch';
+  readonly id: SketchId;                             // sketchId(owner)
+  readonly owner: FeatureId;
+  readonly plane: Plane;
+  readonly entities: readonly SketchEntity[];        // ze sketch; kresba v render
+  readonly regions: ReadonlyMap<string, ShapeHandle>; // jméno oblasti → rovinná plocha (SketchOps.makeFace), v pořadí oblastí
+}
+
+export type Artifact = Body | SketchArtifact | PlaneArtifact;   // diskriminace podle kind
 
 export interface RegenState {
   readonly artifacts: ReadonlyMap<ArtifactId, Artifact>;
 }
 
-export const EMPTY_STATE: RegenState;
+export const EMPTY_STATE: RegenState;                // od M12 tři PlaneArtifact z ORIGIN_PLANES (document) v pořadí xy, xz, yz
 export function bodiesOf(state: RegenState): readonly Body[];   // artefakty druhu body v pořadí mapy
+export function sketchesOf(state: RegenState): readonly SketchArtifact[];   // M12
+export function planesOf(state: RegenState): readonly PlaneArtifact[];      // M12
 ```
+
+Počáteční roviny jsou ve stavu od začátku, takže na ně odkazuje skica stejně jako na kterýkoli jiný artefakt ([[12-skicar#Roviny a počátek]]). `EMPTY_STATE` a jeho artefakty jsou zmrazené.
 
 `RegenState` se mrazí `Object.freeze` jen na úrovni objektu. Mapu artefaktů za běhu nic nehlídá, chrání ji typ `ReadonlyMap` ([[Q048 Neměnnost mapy těles za běhu|Q048]]): stav zapisují jen buildery v repu, ne cizí data.
 
@@ -67,20 +90,22 @@ export interface BuildInput<P> {
 }
 
 /** Část jádra, kterou smí builder používat: tvoří a ptá se, neuvolňuje (Q041). */
-export type ModelingKernel = PrimitiveOps & TransformOps & BooleanOps & QueryOps;   // M11 přidal TransformOps a BooleanOps
+export type ModelingKernel = PrimitiveOps & TransformOps & BooleanOps & SketchOps & QueryOps;   // M11 přidal TransformOps a BooleanOps, M12 SketchOps
 
 export interface BuildContext {
   /** Sledované jádro: každý vrácený handle patří Regeneratoru (Q041). */
   readonly kernel: ModelingKernel;
   /** Tělesa ze vstupního stavu (artefakty druhu body; jiný druh pod tím id → err); první nevyřešená reference → err (Q044). */
   resolveBodies(refs: readonly BodyRef[]): Result<Body[], RefError>;
+  /** Roviny ze vstupního stavu (artefakty druhu plane; chybějící nebo jiný druh → err, první nevyřešená reference), M12. */
+  resolvePlanes(refs: readonly PlaneRef[]): Result<PlaneArtifact[], RefError>;
   /** Více volání se spojí znakem '\n' do statusu 'warning' (Q045). */
   warn(message: string): void;
   // resolveTopo(refs: readonly TopoRef[]): Result<ResolvedTopo[], RefError> – přidá M14
 }
 
 export interface RefError {
-  readonly ref: BodyRef;        // v M14 i TopoRef
+  readonly ref: BodyRef | PlaneRef;   // PlaneRef od M12, v M14 i TopoRef
   readonly message: string;
 }
 
@@ -219,7 +244,7 @@ Posun rollback baru dopředu tak přepočítá jen nově zahrnuté featury, posu
 
 Stavy sdílejí handle (těleso, které featura nezměnila, prochází dál se stejným handle). Počítání referencí by bylo křehké, proto:
 
-1. Po každé dokončené regeneraci se projdou všechny stavy v cache a posbírá se množina **živých** handle (handle artefaktů druhu `body`). Artefakt jiného druhu s vlastním tvarem (skica v M12) pravidlo rozšíří; hlídá ho test sweepu.
+1. Po každé dokončené regeneraci se projdou všechny stavy v cache a posbírá se množina **živých** handle: `shape` artefaktů druhu `body` a od M12 všechny hodnoty `regions` artefaktů druhu `sketch` (roviny handle nemají). Hlídá to test sweepu.
 2. Všechny handle, které Regenerator kdy dostal od jádra a nejsou živé, se uvolní (`kernel.release`).
 3. Handle vytvořené v rámci zahozené (superseded) generace se uvolní nejpozději při sweepu prvního dokončeného běhu, který začne po jejich vytvoření (build nahrazeného běhu může doběhnout až po sweepu generace, která ho nahradila).
 
@@ -244,6 +269,7 @@ Handle se z vlastněné množiny odeberou ještě před čekáním na `release` 
 - Neplatné parametry → `INVALID_PARAMS`, builder se nezavolá.
 - `unresolvedReference` dá kód, zprávu z `RefError` a `issues` s parametrem, zmrazené do hloubky; sledované jádro zapíše handle z `makeCylinder`, `transform` a `boolean` (M11).
 - Neznámý typ featury (chybí schéma nebo builder) → `UNKNOWN_TYPE`, regenerace pokračuje.
+- M12: `EMPTY_STATE` má tři roviny; `resolvePlanes` (existující rovina, chybějící id, id tělesa → err); sledované jádro zapíše handle z `makeFace`; sweep: plochy oblastí skici jsou živé, po smazání skici se uvolní (`liveHandleCount`).
 - Featura s `typeVersion` jiným, než má schéma → `STALE_VERSION`, builder se nezavolá, stav propuštěn.
 - Suppressed featura propustí stav, builder se nezavolá.
 - Status z cache se zachová (`warning` i `error` featury před změnou).

@@ -12,6 +12,8 @@ modules:
   - persistence
   - kernel
   - kernel-occt
+  - sketch
+  - solver-planegcs
   - regen
   - render
   - interaction
@@ -29,7 +31,7 @@ updated: 2026-10-14
 # 01 – Architektura
 
 > **Pojmy:** [[Port a adaptér]], [[Kompoziční kořen]], [[Dokument]], [[Neměnná data]], [[Operace]], [[Prezentační model]]  
-> **Rozhodnutí:** [[0001-jadro-v-cistem-ts]], [[0003-dokument-je-recept]], [[0004-data-oddelene-od-chovani]], [[0005-operacni-log]], [[0008-hranice-modulu]], [[0009-platformove-nezavisla-domena]], [[0010-prezentacni-model]], [[0011-programovani-proti-rozhranim]]  
+> **Rozhodnutí:** [[0001-jadro-v-cistem-ts]], [[0003-dokument-je-recept]], [[0004-data-oddelene-od-chovani]], [[0005-operacni-log]], [[0008-hranice-modulu]], [[0009-platformove-nezavisla-domena]], [[0010-prezentacni-model]], [[0011-programovani-proti-rozhranim]], [[0017-modul-sketch-a-skicar]]  
 > **Milník:** [[M00-zaklad-projektu]]
 
 ## Principy
@@ -54,9 +56,9 @@ Nad vrstvami platí hrubší dělení podle toho, jestli modul smí znát platfo
 
 | Prstenec | Moduly | Platforma (DOM, Worker, Vue, Three.js, OCCT) |
 |---|---|---|
-| 1. Doména | `core`, `document`, `ops`, `regen`, `kernel`, `persistence` (bez `idb/`), `plugin-api`, `features/*` | ne |
+| 1. Doména | `core`, `document`, `ops`, `regen`, `kernel`, `sketch` (M12), `persistence` (bez `idb/`), `plugin-api`, `features/*` | ne |
 | 2. Prezentační logika | `interaction` ([[Prezentační model\|prezentační modely]], nástroje, port `ViewportPort`) | ne |
-| 3. Adaptéry a platforma | `render`, `ui`, `kernel-occt`, `persistence/idb`, `app` | ano |
+| 3. Adaptéry a platforma | `render`, `ui`, `kernel-occt`, `solver-planegcs` (M12), `persistence/idb`, `app` | ano |
 
 Prstence 1 a 2 se typují konfigurací `tsconfig.domain.json` bez knihovny `DOM`, takže použití `window` nebo `KeyboardEvent` shodí `typecheck`. `app` je kompoziční kořen *pro danou platformu*.
 
@@ -100,17 +102,19 @@ Prstence 1 a 2 se typují konfigurací `tsconfig.domain.json` bez knihovny `DOM`
 | `persistence/idb` | `core`, `document`, `ops`, `persistence` | (IndexedDB API) |
 | `kernel` | `core` | – |
 | `kernel-occt` | `core`, `kernel` | `replicad-opencascadejs` ([[0013-replicad-opencascadejs\|ADR 0013]]) |
-| `regen` | `core`, `document`, `kernel` | – |
+| `sketch` (M12) | `core` | – |
+| `solver-planegcs` (M12) | `core`, `sketch` | `@salusoft89/planegcs` ([[0016-planegcs-resic-vazeb\|ADR 0016]]) |
+| `regen` | `core`, `document`, `kernel`, `sketch` | – |
 | `render` | `core`, `kernel` (jen typy: `MeshData`, `MeshOps`, `MeshQuality`, `ShapeHandle`, `BoundingBox`), `interaction` (jen typy: `ViewportPort`, události, `BodyId`, [[Q056 Odkud render bere BodyId\|Q056]]) | `three` (včetně `three/addons`) |
-| `interaction` | `core`, `document`, `ops` | – |
+| `interaction` | `core`, `document`, `ops`, `sketch` | – |
 | `plugin-api` | `core`, `document`, `regen`, `interaction` | – |
-| `features/*` | `core`, `document`, `ops`, `kernel`, `regen`, `interaction`, `plugin-api` | – |
+| `features/*` | `core`, `document`, `ops`, `kernel`, `sketch`, `regen`, `interaction`, `plugin-api` | – |
 | `app` | vše kromě `ui` | – |
 | `ui` | `app`, `core`, typy z `document` a `interaction` | `vue`, `vue-i18n`, `@tabler/icons-webfont` ([[0014-preklady-vue-i18n-a-klice\|ADR 0014]], [[11-ui#Styl]]) |
 
 Důležité zákazy:
 - `features/*` se navzájem neimportují.
-- Nic kromě `app` neimportuje `kernel-occt` (konkrétní implementace).
+- Nic kromě `app` neimportuje `kernel-occt` ani `solver-planegcs` (konkrétní implementace). `sketch` je doménový model skici a port řešiče, ne plugin; skicář (režim, nástroje) je v `interaction` ([[0017-modul-sketch-a-skicar|ADR 0017]], M12).
 - `ui` nesahá na `ops`, `regen`, `kernel`, `render` přímo – jen přes `AppSession`.
 - `regen` nezná `ops` (regenerace neví, jak změna vznikla).
 - `persistence/idb` je samostatný vstupní bod (vlastní `index.ts`), který importuje jen `app`. `persistence/index.ts` ho nereexportuje, jinak by se adaptér přes import dostal do prstence 1.
@@ -159,6 +163,8 @@ tinycad/
 │  │  └─ idb/               adaptér IndexedDB + worker
 │  ├─ kernel/               port + FakeKernel (pro testy)
 │  ├─ kernel-occt/          adaptér OCCT, worker
+│  ├─ sketch/               model skici, oblasti, port ConstraintSolver (M12)
+│  ├─ solver-planegcs/      adaptér řešiče vazeb, worker (M12)
 │  ├─ regen/
 │  ├─ render/
 │  ├─ interaction/

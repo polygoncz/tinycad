@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
-import { createFeatureSchemaRegistry, toData, validateAgainstSchema } from '@/document';
+import { bodyId, createFeatureSchemaRegistry, toData, validateAgainstSchema } from '@/document';
 import type { FeatureId, FeatureSchema, ParamSchema } from '@/document';
 import { aFeature } from '@/document/testing';
 import type { DocumentOptions } from '@/document/testing';
@@ -110,7 +110,9 @@ describe('FeatureEditor.create', () => {
       value: 10,
       issue: null,
       active: false,
+      refs: null,
     });
+    expect(state.fields[2]?.refs).toEqual([]);
     expect(Object.isFrozen(state)).toBe(true);
     expect(Object.isFrozen(state.fields)).toBe(true);
     expect(Object.isFrozen(state.fields[0])).toBe(true);
@@ -539,5 +541,141 @@ describe('FeatureEditSession', () => {
     expect(undo.canUndo()).toBe(false);
     session.cancel();
     expect(undo.canUndo()).toBe(true);
+  });
+});
+
+describe('FeatureEditSession reference chips (FieldState.refs)', () => {
+  const A = bodyId(fid('a'));
+  const B2 = bodyId(fid('b'), 2);
+
+  function withTargets(targets: readonly unknown[]) {
+    const s = setup({ features: [aBox('a', 'Box 1'), aBox('b', 'Box 2')] });
+    const session = s.editor.create('box');
+    session.setParam('targets', targets);
+    return { ...s, session };
+  }
+
+  const targetsOf = (session: { state: { get(): { fields: readonly { refs: unknown }[] } } }) =>
+    session.state.get().fields[2]?.refs;
+
+  it('lists each item with its index, body and label', () => {
+    const { session } = withTargets([
+      { kind: 'body', body: A },
+      { kind: 'body', body: B2 },
+    ]);
+    const refs = targetsOf(session);
+    expect(refs).toEqual([
+      { index: 0, body: A, label: 'Box 1' },
+      { index: 1, body: B2, label: 'Box 2 (2)' },
+    ]);
+    expect(Object.isFrozen(refs)).toBe(true);
+    expect(Array.isArray(refs) && refs.every((r) => Object.isFrozen(r))).toBe(true);
+  });
+
+  it('an item of an invalid shape has body and label null; a non-array is empty', () => {
+    const { session } = withTargets([
+      'junk',
+      { kind: 'body', body: 'a' },
+      { kind: 'body', body: A },
+    ]);
+    expect(targetsOf(session)).toEqual([
+      { index: 0, body: null, label: null },
+      { index: 1, body: null, label: null },
+      { index: 2, body: A, label: 'Box 1' },
+    ]);
+    session.setParam('targets', 'junk');
+    expect(targetsOf(session)).toEqual([]);
+  });
+
+  it('the label is null when the origin feature is not in the document', () => {
+    const { session } = withTargets([{ kind: 'body', body: bodyId(fid('gone')) }]);
+    expect(targetsOf(session)).toEqual([{ index: 0, body: 'gone/body', label: null }]);
+  });
+
+  it('follows a change of the body metadata in the document', () => {
+    const { doc, session } = withTargets([{ kind: 'body', body: A }]);
+    const before = session.state.get();
+    doc.setBodyMeta(A, { name: 'Base' });
+    const state = session.state.get();
+    expect(state.fields[2]?.refs).toEqual([{ index: 0, body: A, label: 'Base' }]);
+    expect(state.fields[0]).toBe(before.fields[0]);
+  });
+
+  it('a document change that keeps the labels keeps the field and the snapshot', () => {
+    const { doc, session } = withTargets([{ kind: 'body', body: A }]);
+    const before = session.state.get();
+    let emits = 0;
+    session.state.subscribe(() => emits++);
+    doc.setBodyMeta(bodyId(fid('b')), { hidden: true });
+    expect(session.state.get()).toBe(before);
+    expect(emits).toBe(0);
+  });
+
+  it('stops following the document once the session is closed', () => {
+    const { doc, session } = withTargets([{ kind: 'body', body: A }]);
+    session.commit();
+    const closed = session.state.get();
+    doc.setBodyMeta(A, { name: 'Base' });
+    expect(session.state.get()).toBe(closed);
+  });
+});
+
+describe('FeatureEditSession.removeRef', () => {
+  const A = bodyId(fid('a'));
+  const B = bodyId(fid('b'));
+
+  function withTargets(targets: readonly unknown[]) {
+    const s = setup({ features: [aBox('a'), aBox('b')] });
+    const session = s.editor.create('box');
+    session.setParam('targets', targets);
+    return { ...s, session };
+  }
+
+  it('removes the item at the index through setParam', () => {
+    const { doc, session } = withTargets([
+      { kind: 'body', body: A },
+      'junk',
+      { kind: 'body', body: B },
+    ]);
+    session.removeRef('targets', 1);
+    expect(doc.feature(fid('new1'))?.params).toMatchObject({
+      targets: [
+        { kind: 'body', body: A },
+        { kind: 'body', body: B },
+      ],
+    });
+    session.removeRef('targets', 0);
+    expect(session.state.get().params['targets']).toEqual([{ kind: 'body', body: B }]);
+  });
+
+  it('an index out of range or a non-array value does nothing', () => {
+    const { dispatcher, session } = withTargets([{ kind: 'body', body: A }]);
+    const applied: Operation[] = [];
+    dispatcher.events.on('applied', ({ op }) => applied.push(op));
+    session.removeRef('targets', 1);
+    session.removeRef('targets', -1);
+    session.removeRef('targets', 0.5);
+    session.setParam('targets', 'junk');
+    applied.length = 0;
+    session.removeRef('targets', 0);
+    expect(applied).toEqual([]);
+  });
+
+  it('does nothing once the session is closed', () => {
+    const { doc, session } = withTargets([{ kind: 'body', body: A }]);
+    session.commit();
+    expect(() => {
+      session.removeRef('targets', 0);
+    }).not.toThrow();
+    expect(doc.feature(fid('new1'))?.params).toMatchObject({
+      targets: [{ kind: 'body', body: A }],
+    });
+  });
+
+  it('an unknown param throws', () => {
+    const { session } = withTargets([]);
+    expect(() => {
+      session.removeRef('depth', 0);
+    }).toThrow();
   });
 });

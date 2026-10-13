@@ -12,6 +12,7 @@ milestones:
   - "[[M05-kernel-port]]"
   - "[[M07-kernel-occt]]"
   - "[[M11-dalsi-entity]]"
+  - "[[M12-skicar]]"
   - "[[M16-vlastni-occt-build]]"
 tags:
   - spec
@@ -131,6 +132,28 @@ export function isRigidMotion(m: Mat4, tolerance?: number): boolean;
 
 Výsledek booleanu je v M11 **vždy jeden handle** (u více cílů nebo nesouvislého výsledku compound více solidů). Rozpad na více těles podle historie jádra přijde s historií v [[M14-topologicke-pojmenovani|M14]] ([[Rozhodnutí noční rychloakce#M11 – Další entity|R8]]).
 
+### Stav po M12
+
+M12 přidal rovinnou plochu z uzavřených smyček – profil skici jako handle v jádře ([[12-skicar#Oblasti (profily)]], [[0017-modul-sketch-a-skicar|ADR 0017]], nález 9 z [[Revize architektury 2026-10-13]]):
+
+```ts
+/** 2D křivka v rovině; stejný tvar jako Curve2 ze sketch (kernel na sketch nezávisí, shodu hlídá strukturální typování v builderu skici). */
+export type ProfileCurve =
+  | { readonly kind: 'line'; readonly from: Vec2; readonly to: Vec2 }
+  | { readonly kind: 'arc'; readonly center: Vec2; readonly from: Vec2; readonly to: Vec2; readonly ccw: boolean }
+  | { readonly kind: 'circle'; readonly center: Vec2; readonly radius: number };
+export type ProfileLoop = readonly ProfileCurve[];
+
+export interface SketchOps {
+  /** Rovinná plocha v rovině plane ohraničená smyčkou outer, s dírami holes. Souřadnice smyček jsou v rovině (x = xDir, y = normal × xDir). */
+  makeFace(p: { readonly plane: Plane; readonly outer: ProfileLoop; readonly holes: readonly ProfileLoop[] }): Promise<ShapeResult>;
+}
+
+export interface GeometryKernel extends PrimitiveOps, TransformOps, BooleanOps, SketchOps, MeshOps, QueryOps, LifecycleOps {}
+```
+
+`Plane` a `Vec2` jsou z `core` ([[02-core]]). Builder skici volá `makeFace` jednou na oblast; křivky skici jako drát (`makeSketchCurves`) a `tessellateCurves` nevznikají – skicu kreslí `render` z dat ([[Rozhodnutí noční rychloakce#M12 – Skicář|R34]]).
+
 ### Plánované rozšíření
 
 Přidávají se do `GeometryKernel` v milníku, který je potřebuje, a kontraktová sada se o ně rozšíří:
@@ -160,6 +183,7 @@ Ověřuje ho kontraktová sada ([[#Testy]]), spuštěná pro `FakeKernel` v M5 a
 - **`makeCylinder`** (M11): každá složka `base` a `axis` konečná, délka `axis` > 1e-9, `radius` a `height` konečné > 0, jinak `'invalid-input'`. Bounding box výsledku odpovídá válci (podstavy `base` a `base + height·â` s poloměrem `radius`) s tolerancí 1e-5 v každé složce.
 - **`transform`** (M11): všech 16 prvků konečných a `isRigidMotion(m)`, jinak `'invalid-input'`; neznámý handle → `'unknown-handle'`. Vstupní tvar se nemění a zůstává platný. Bounding box výsledku = bounding box tvaru přemístěného `m` (tolerance 1e-5).
 - **`boolean`** (M11): `op` je jedna ze tří hodnot, `targets` i `tools` neprázdné a žádný handle se neopakuje (ani napříč seznamy), jinak `'invalid-input'`; neznámý handle → `'unknown-handle'`. Výsledek bez jediného solidu (prázdný průnik, rozdíl, který cíl celý odebere) a selhání algoritmu → `'operation-failed'`. Vstupy zůstávají platné. `union` = sjednocení všech vstupů, `subtract` = cíle bez nástrojů, `intersect` = společná část cílů a nástrojů.
+- **`makeFace`** (M12): `plane` má konečné složky, `xDir` i `normal` jednotkové a navzájem kolmé (`plane.isOrthonormal`, tolerance 1e-9); `outer` neprázdná; každá smyčka je buď jediná `circle` (poloměr konečný > 0), nebo ≥ 1 křivek `line`/`arc` (bez `circle`), kde konec každé křivky leží na začátku další a konec poslední na začátku první (tolerance `1e-7 · max(1, |souřadnice|)`); úsečka a oblouk nenulové délky (`from ≠ to`), oblouk s `|to − center| = |from − center|` (relativně 1e-7) a poloměrem > 1e-9. Jinak `'invalid-input'`. Orientace smyček je libovolná (jádro si ji srovná). Bounding box výsledku = obálka smyčky `outer` v prostoru (tolerance 1e-5; kontraktová sada jen pro roviny s osami rovnoběžnými se souřadnicovými). Plochu, kterou nejde postavit (samoprotínající se smyčka), OCCT hlásí `'operation-failed'`.
 - Žádná operace zatím nevyplňuje `history` ani `roles` (M14).
 - **`tessellate`:** `linearDeflection` i `angularDeflection` jsou konečná čísla > 0, jinak `'invalid-input'`. Neznámý handle → `'unknown-handle'`. Každé volání vrací **nové** buffery, nesdílené s jiným voláním, s jiným polem téže sítě ani s vnitřním stavem jádra, takže je volající smí přenést jako transferable. Že opakované volání vrátí stejná data, se **nezaručuje** (OCCT může síť zjemnit).
 - **`boundingBox`:** neznámý handle → `'unknown-handle'`. Vrací nový objekt.
@@ -291,6 +315,12 @@ Modulový worker inicializuje OCCT asynchronně. Zpráva, která do workeru dora
 - **Transformace:** `gp_Trsf.SetValues(a11 … a34)` po řádcích (`a_rc = m[c*4 + r]`, `Mat4` je po sloupcích) a `BRepBuilderAPI_Transform(shape, trsf, false)`. Tuhý pohyb jen nastaví lokaci, geometrie (`TShape`) se nekopíruje a sdílí s původním tvarem; tessellace lokaci ploch aplikuje.
 - **Boolean:** prázdný konstruktor `BRepAlgoAPI_Fuse | Cut | Common`, `SetArguments(cíle)`, `SetTools(nástroje)` (seznamy `NCollection_List_TopoDS_Shape`; `Append` vrací nový obal `TopoDS_Shape`, který adaptér smaže), `Build()`. `HasErrors()` → `'operation-failed'`; výsledek bez solidu (`TopExp_Explorer(výsledek, TopAbs_SOLID).More()` je `false`) → `'operation-failed'`.
 
+### Rovinná plocha v adaptéru (M12)
+
+- Rovina `gp_Ax3(gp_Pnt(origin), gp_Dir(normal), gp_Dir(xDir))`, `gp_Pln(ax3)`; bod roviny `(x, y)` → `origin + x·xDir + y·yDir` (`plane.toWorld` z `core`).
+- Hrany: úsečka `BRepBuilderAPI_MakeEdge(gp_Pnt, gp_Pnt)`; oblouk `BRepBuilderAPI_MakeEdge(gp_Circ, P1, P2)` s `gp_Circ(gp_Ax2(střed, normal, xDir), r)` – kružnice v OCCT běží proti směru hodinových ručiček kolem `normal`, takže pro `ccw: false` se body prohodí; kružnice `BRepBuilderAPI_MakeEdge(gp_Circ)`.
+- Smyčka `BRepBuilderAPI_MakeWire` (`Add` po hranách, `IsDone()` jinak `'operation-failed'`); plocha `BRepBuilderAPI_MakeFace(gp_Pln, outerWire, true)`, díry `Add(holeWire)`, pak `ShapeFix_Face` (srovná orientaci děr) a `BRepCheck_Analyzer(face).IsValid()` jinak `'operation-failed'`. Všechny objekty OCCT přes `using`.
+
 ### Volba WASM buildu OCCT (spike v M7)
 
 Rozhodnuto ([[Q012 Volba WASM buildu OCCT|Q012]], [[0013-replicad-opencascadejs|ADR 0013]]): **`replicad-opencascadejs` 1.1.0**. Měření ze spiku (`spikes/m07-occt/`) jsou v ADR.
@@ -321,7 +351,7 @@ export function describeGeometryKernelContract(name: string, factory: () => Prom
 ```
 
 - Žije v `kernel/testing.ts`, aby ho mohly používat testy modulů, které na `kernel` závisí hodnotově (`regen`, `features/*`). `render` má z `kernel` jen typy, testuje proti vlastnímu stubu `MeshOps`. Do produkčního kódu se fake nedostane.
-- Záznam tvaru (`AabbEntry`) je AABB. `makeBox` uloží `[origin, origin + size]`. Od M11: `makeCylinder` uloží AABB válce pro libovolnou osu (`â` jednotková osa, v ose `k` rozšíření `radius · sqrt(1 − â_k²)` kolem obou podstav); `transform` AABB osmi rohů vstupního AABB po `mat4.transformPoint`; `boolean('union')` obalový AABB všech vstupů, `'subtract'` obalový AABB cílů (jeden cíl beze změny – fake nic neodečítá), `'intersect'` průnik obalu cílů s obalem nástrojů, prázdný nebo nulové tloušťky → `'operation-failed'`. Validace vstupů je stejná jako u OCCT.
+- Záznam tvaru (`AabbEntry`) je AABB. `makeBox` uloží `[origin, origin + size]`. Od M11: `makeCylinder` uloží AABB válce pro libovolnou osu (`â` jednotková osa, v ose `k` rozšíření `radius · sqrt(1 − â_k²)` kolem obou podstav); `transform` AABB osmi rohů vstupního AABB po `mat4.transformPoint`; `boolean('union')` obalový AABB všech vstupů, `'subtract'` obalový AABB cílů (jeden cíl beze změny – fake nic neodečítá), `'intersect'` průnik obalu cílů s obalem nástrojů, prázdný nebo nulové tloušťky → `'operation-failed'`. Od M12 `makeFace` uloží AABB smyčky `outer` v prostoru: koncové body křivek a u oblouků a kružnic body v lokálních úhlech 0, π/2, π, 3π/2, které na křivce leží, převedené `plane.toWorld` (přesné pro roviny s osami rovnoběžnými se souřadnicovými, jinde podhodnocené – fake to nevadí); `tessellate` plochy je kvádr s nulovou tloušťkou. Validace vstupů je stejná jako u OCCT.
 - `tessellate` vrací AABB jako kvádr: 6 ploch po 2 trojúhelnících (24 vrcholů, normály ploch), pořadí ploch −X, +X, −Y, +Y, −Z, +Z. Dál 12 hran po 2 bodech. Platí pro každý tvar, i válec a výsledek booleanu.
 - Volání `failNext` se týká jen dalšího volání dané metody. Injektovaná chyba nevytvoří handle a nic neuvolní.
 - Výsledky se vrací asynchronně (v mikroúloze), nikdy synchronně, aby testy vyšších vrstev nespoléhaly na pořadí, které by s workerem neplatilo.
@@ -334,6 +364,8 @@ export function describeGeometryKernelContract(name: string, factory: () => Prom
   - **kvádr:** bounding box, síť projde `validateMeshData`, právě 6 ploch s indexy 0–5 a 12 hran s indexy 0–11, každá plocha má aspoň 2 trojúhelníky, body leží v AABB a pokrývají ho, normály trojúhelníků jedné plochy jsou shodné, kolmé ke stěně (rovnoběžné se souřadnicovou osou), míří **ven** a šest ploch leží na šesti různých stěnách (navinutí trojúhelníku souhlasí s normálou),
   - nové buffery při každém `tessellate`,
   - **M11** (bbox s tolerancí 1e-5, nic, co platí jen pro jedno jádro): `makeCylinder` pro osy X, Y a nejednotkovou Z a každý neplatný vstup; `transform` posun, rotace o 90° a 45° kolem Z, vstup zůstává platný, nerigidní matice (zrcadlení, měřítko, zkosení, `NaN`) → `'invalid-input'`; `boolean` – `union` překrývajících se i oddělených kvádrů (obalový bbox), `intersect` překrývajících se (přesný průnik) a oddělených (`'operation-failed'`, žádný handle), `subtract` s nástrojem, který odřízne roh (bbox cíle), neplatné seznamy a `op`; síť každého výsledku projde `validateMeshData` a leží v bbox; izolace vstupů.
+- **M12** (kontraktová sada): `makeFace` – čtverec v rovině XY, obdélník v rovině XZ posunuté do `origin [0, 5, 0]`, kružnice v rovině YZ, smyčka z úsečky a půlkruhového oblouku („D“, `ccw` true i false), čtverec s kruhovou dírou: bbox s tolerancí 1e-5, síť projde `validateMeshData`; neortonormální rovina, neuzavřená smyčka, kružnice uprostřed víceprvkové smyčky, nulová úsečka, oblouk s nestejným poloměrem, prázdná `outer` → `'invalid-input'` bez handle; izolace vstupu.
+- `kernel-occt` navíc (M12): plocha má v síti 1 plochu; obsah (`BRepGProp.SurfaceProperties`) čtverce s dírou = `a² − πr²` (relativně 1e-6), „D“ = obdélník + půlkruh; samoprotínající se smyčka (motýlek) → `'operation-failed'`.
 - `validateMeshData`: platná síť, každé pravidlo porušené zvlášť.
 - `kernelErrorCode`: vlastní chyba, `RpcError` se stejným kódem, cizí kód a ne-chyba → `undefined`.
 - `FakeKernel` navíc: `failNext` (jednorázové, fronta, bez vedlejších účinků), `callCount`.

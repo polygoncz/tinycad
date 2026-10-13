@@ -3,7 +3,6 @@
 // millimetres and degrees.
 
 import type { Vec3 } from '@/core';
-import type { BodyId } from '@/interaction';
 
 /** Number typed by the user, '.' or ',' as the decimal mark; null for anything else. */
 export function parseNumber(text: string): number | null {
@@ -49,36 +48,4 @@ export function radToDeg(rad: number): number {
 
 export function degToRad(deg: number): number {
   return (deg * Math.PI) / 180;
-}
-
-/** A body reference in the value of a 'bodies' param and its position in the value. */
-export interface BodyRefItem {
-  readonly index: number;
-  readonly body: BodyId;
-}
-
-/**
- * The body references of a 'bodies' param value, each with its index; anything else in the
- * value (invalid params are legitimate state, spec 03) is skipped, a non-array is empty.
- */
-export function bodyRefItems(value: unknown): readonly BodyRefItem[] {
-  if (!Array.isArray(value)) return [];
-  const items: readonly unknown[] = value;
-  return items.flatMap((item, index) =>
-    isRecord(item) && item.kind === 'body' && typeof item.body === 'string'
-      ? // Only a string here; refLabel checks the shape of the id and names nothing otherwise.
-        [{ index, body: item.body as BodyId }]
-      : [],
-  );
-}
-
-/** The value without the item at the index; a non-array becomes empty. */
-export function withoutIndex(value: unknown, index: number): readonly unknown[] {
-  if (!Array.isArray(value)) return [];
-  const items: readonly unknown[] = value;
-  return items.filter((_, i) => i !== index);
-}
-
-function isRecord(v: unknown): v is Readonly<Record<string, unknown>> {
-  return typeof v === 'object' && v !== null;
 }

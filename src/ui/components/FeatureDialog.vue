@@ -2,9 +2,10 @@
 // The feature dialog (spec 11, "Komponenty"; spec 10, "Dialog featury"): a floating panel on the
 // right, shown while features.current is a session (AppShell mounts one dialog per session).
 // The form is generated from the schema through the ParamField registry; every change goes to
-// the session (setParam, focusRefParam, commit, cancel). Movable by its header; the offset is
-// view state of this panel only. Enter is OK and Esc is Cancel while the focus is in the dialog.
-// On opening the first field gets the focus (spec 11, "Přístupnost"), so the keys work at once.
+// the session (setParam, removeRef, focusRefParam, commit, cancel). Movable by its header; the
+// offset is view state of this panel only. Enter is OK and Esc is Cancel while the focus is in
+// the dialog. On opening the first field gets the focus (spec 11, "Přístupnost"), so the keys
+// work at once.
 import { computed, onMounted, ref, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FeatureEditSession, FieldState } from '@/interaction';
@@ -22,6 +23,10 @@ const title = computed(() => state.value.name);
 
 function update(field: FieldState, value: unknown): void {
   props.edit.setParam(field.name, value);
+}
+
+function remove(field: FieldState, index: number): void {
+  props.edit.removeRef(field.name, index);
 }
 
 function activate(field: FieldState): void {
@@ -100,6 +105,7 @@ function onGripUp(): void {
           :field="field"
           @update="update(field, $event)"
           @activate="activate(field)"
+          @remove="remove(field, $event)"
         />
       </template>
     </div>

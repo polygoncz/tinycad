@@ -9,6 +9,7 @@ modules:
   - ops
 milestones:
   - "[[M03-operace]]"
+  - "[[M12-skicar]]"
 tags:
   - spec
 created: 2026-10-12
@@ -60,7 +61,7 @@ Operace `body.*` (M11) mění [[03-dokument#Metadata těles|metadata těles]]. M
 
 `feature.rename` přejmenuje **featuru**. Přejmenování dokumentu (`DocumentWriter.rename`) zatím operaci nemá; přibude jako nový typ, až ho bude potřebovat UI.
 
-Skicář přidá vlastní operace (`sketch.*`), viz [[12-skicar|12]]. Nové typy operací se registrují stejně jako featury.
+Skicář vlastní operace v M12 **nemá**: editace skici je `feature.setParams` s celými vyřešenými daty skici v jedné transakci, takže je v logu jeden záznam ([[Q074 Operace skicáře v logu|Q074]], [[12-skicar#Operace a transakce]]). Kdyby operace pluginu někdy přibyly, registrují se jako featury (`FeaturePlugin.ops`). `validate` operace `feature.add` od M12 odmítne i `FeatureId` `'origin'` (vyhrazený vlastník počáteční geometrie, [[03-dokument#Počáteční geometrie (M12)]]).
 
 ## Handler
 

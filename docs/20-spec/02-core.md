@@ -9,6 +9,7 @@ modules:
   - core
 milestones:
   - "[[M01-core]]"
+  - "[[M12-skicar]]"
 tags:
   - spec
 created: 2026-10-12
@@ -184,6 +185,21 @@ export const mat4 = { identity, translation, rotationAxisAngle, multiply, transf
 - `equals(a, b, eps = EPSILON)` porovnává s tolerancí po složkách.
 - `multiply(a, b)` = a·b, výsledek aplikuje nejdřív `b`. `transformPoint` dělí výslednou homogenní souřadnicí `w` (u afinních matic je `w = 1`).
 
+**Rovina a 2D (M12, skicář):** `src/core/math/plane.ts`, bez gl-matrix (stačí fasáda `vec3`).
+
+```ts
+export type Vec2 = readonly [number, number];
+/** Rámec roviny: počátek, jednotková osa x a jednotková normála, navzájem kolmé. Osa y = normal × xDir. */
+export interface Plane { readonly origin: Vec3; readonly xDir: Vec3; readonly normal: Vec3 }
+export const plane = {
+  yDir(p: Plane): Vec3,                                        // normal × xDir
+  toWorld(p: Plane, v: Vec2): Vec3,                            // origin + x·xDir + y·yDir
+  toLocal(p: Plane, w: Vec3): Vec2,                            // kolmý průmět: [(w − origin)·xDir, (w − origin)·yDir]
+  intersectRay(p: Plane, ray: { readonly origin: Vec3; readonly direction: Vec3 }): Vec3 | null,  // |direction·normal| < 1e-12 → null; průsečík i „za“ počátkem paprsku
+  isOrthonormal(p: Plane, tolerance?: number): boolean,        // konečná čísla, |xDir| = |normal| = 1, xDir·normal = 0 (výchozí 1e-9)
+};
+```
+
 Rozsah roste podle potřeby, nic „do zásoby“.
 
 ### RPC pro workery
@@ -235,6 +251,7 @@ export class RpcError extends Error { readonly code: string }
 - `createRegistry`: duplicita a neznámý klíč (`get` vyhodí, `find` vrátí `undefined`), pořadí `all()`.
 - `DisposableStore`: pořadí uvolnění, idempotence.
 - `vec3`/`mat4`: základní identity.
+- `plane` (M12): `toLocal(toWorld(v)) = v` pro tři počáteční roviny i obecnou ortonormální, `yDir` počátečních rovin, `intersectRay` (kolmý, šikmý, rovnoběžný → `null`), `isOrthonormal` (nejednotková, nekolmá, `NaN` → `false`).
 - RPC: klient + server propojené přes `MessageChannel` v Node (Vitest), chyby, transfer.
 - RPC odpojení: `failAll` odmítne čekající volání (`'disconnected'`, zpráva z `failAll`), další `call` odmítne bez odeslání, pozdní odpověď serveru se ignoruje, druhé `failAll` zprávu nezmění, `dispose` se chová jako `failAll`.
 

@@ -7,7 +7,6 @@
 import { ObservableValue } from '@/core';
 import type { Observable, Unsubscribe } from '@/core';
 import type { BodyId, DocumentReader, FeatureId } from '@/document';
-import { originOfBody, parseBodyId } from '@/document';
 import type { BodyRenameOp, BodySetVisibleOp, OperationDispatcher } from '@/ops';
 import { OP_VERSION } from '@/ops';
 import type { FeatureEditor } from './feature-editor';
@@ -35,16 +34,24 @@ export interface BrowserModel {
   readonly hidden: Observable<ReadonlySet<BodyId>>;
   /** Into the active bodies param of the dialog, otherwise → selection.set / toggle */
   select(body: BodyId, opts?: { additive?: boolean }): void;
+  /**
+   * Visibility and name may change: no transaction (dialog) is open and the document is not
+   * read-only (the edit lock, R14). Without it setVisible, beginRename and rename do nothing.
+   */
+  readonly canEdit: Observable<boolean>;
   /** → dispatch body.setVisible */
   setVisible(body: BodyId, visible: boolean): void;
-  /** → dispatch body.rename (trimmed; '' removes the name) */
-  rename(body: BodyId, name: string): void;
+  /** The body in the rename mode (the inline field of the Browser); null = none. */
+  readonly renaming: Observable<BodyId | null>;
+  /** Puts a body of the last regeneration into the rename mode. */
+  beginRename(body: BodyId): void;
+  /** Ends the rename mode without renaming; rename() and the loss of canEdit end it too. */
+  cancelRename(): void;
   /**
-   * Name of the body for a chip in a reference field, from the document only: the name from
-   * the metadata, otherwise the name of the origin feature with ' (n)' for an id with number n;
-   * null when the origin feature is not in the document.
+   * Ends the rename mode and → dispatch body.rename (trimmed; '' removes the name). null = the
+   * text did not change (ui compares it with what it filled in): no operation.
    */
-  refLabel(body: BodyId): string | null;
+  rename(body: BodyId, name: string | null): void;
   dispose(): void;
 }
 
@@ -55,13 +62,21 @@ export function createBrowserModel(deps: {
   ops: OperationDispatcher;
   regen: RegenStatusPort;
   selection: SelectionCommands;
-  editor: FeatureEditor;
+  editor: Pick<FeatureEditor, 'current'>;
+  /** The edit lock (createEditLock): read-only or an open feature dialog. */
+  locked: Observable<boolean>;
 }): BrowserModel {
-  const { doc, ops, regen, selection, editor } = deps;
+  const { doc, ops, regen, selection, editor, locked } = deps;
 
   // A Set cannot be frozen; each change publishes a new set that is never mutated again.
   const hidden = new ObservableValue<ReadonlySet<BodyId>>(new Set());
   const rows = new ObservableValue<readonly BrowserBodyRow[]>(EMPTY_ROWS);
+  const renaming = new ObservableValue<BodyId | null>(null);
+  // Derived from the lock without an own state: it changes exactly when the lock does.
+  const canEdit: Observable<boolean> = Object.freeze({
+    get: () => !locked.get(),
+    subscribe: (fn: () => void): Unsubscribe => locked.subscribe(fn),
+  });
 
   /** The rows from all sources, reusing every unchanged row of `prev`. */
   function buildRows(prev: readonly BrowserBodyRow[]): readonly BrowserBodyRow[] {
@@ -113,21 +128,29 @@ export function createBrowserModel(deps: {
     rows.set(buildRows(rows.get()));
   }
 
-  /** The last regeneration knows the body and no transaction (dialog) is running. */
+  /** Editing is allowed, the last regeneration knows the body and no transaction is running. */
   function canChange(body: BodyId): boolean {
-    return !ops.inTransaction && regen.state.get().bodies.some((b) => b.body === body);
+    return (
+      canEdit.get() && !ops.inTransaction && regen.state.get().bodies.some((b) => b.body === body)
+    );
   }
 
   const unsubscribes: readonly Unsubscribe[] = [
     regen.state.subscribe(refresh),
     selection.items.subscribe(refresh),
     doc.events.on('changed', refresh),
+    // The dialog opening (or the document being read-only) ends the rename without a change.
+    locked.subscribe(() => {
+      if (!canEdit.get()) renaming.set(null);
+    }),
   ];
   refresh();
 
   return {
     bodies: rows.asObservable(),
     hidden: hidden.asObservable(),
+    canEdit,
+    renaming: renaming.asObservable(),
     select(body, opts) {
       // An open dialog with a focused bodies param takes the body instead of the selection (R19).
       const session = editor.current.get();
@@ -154,8 +177,16 @@ export function createBrowserModel(deps: {
       };
       ops.dispatch(op);
     },
+    beginRename(body) {
+      if (canChange(body)) renaming.set(body);
+    },
+    cancelRename() {
+      renaming.set(null);
+    },
     rename(body, name) {
-      if (!canChange(body)) return;
+      // The inline field is done whatever happens to the name.
+      renaming.set(null);
+      if (name === null || !canChange(body)) return;
       const trimmed = name.trim();
       if (trimmed === (doc.bodyMeta(body).name ?? '')) return;
       const op: BodyRenameOp = {
@@ -166,28 +197,10 @@ export function createBrowserModel(deps: {
       };
       ops.dispatch(op);
     },
-    refLabel(body) {
-      // The id comes from param values, which may be anything (invalid params are legitimate
-      // state, spec 03): a value not shaped like a body id names nothing.
-      if (parseBodyId(body) === undefined) return null;
-      // Without its origin feature the body cannot exist, whatever the metadata still say.
-      const origin = doc.feature(originOfBody(body));
-      if (origin === undefined) return null;
-      const userName = doc.bodyMeta(body).name;
-      if (userName !== undefined) return userName;
-      const n = bodyNumber(body);
-      return n === null ? origin.name : `${origin.name} (${n})`;
-    },
     dispose() {
       for (const unsubscribe of unsubscribes) unsubscribe();
     },
   };
-}
-
-/** The n of '<origin>/body:<n>' as text, null for '<origin>/body'. */
-function bodyNumber(body: BodyId): string | null {
-  const colon = body.lastIndexOf(':');
-  return colon > body.indexOf('/') ? body.slice(colon + 1) : null;
 }
 
 function sameRow(
