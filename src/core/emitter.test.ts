@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { Emitter } from './emitter';
+import type { Subscribable } from './emitter';
 
 // An interface on purpose: the Events constraint must accept interfaces, not only type aliases.
 interface TestEvents {
@@ -134,5 +135,17 @@ describe('Emitter', () => {
     expect(() => {
       e.emit('reset', undefined);
     }).toThrow(AggregateError);
+  });
+});
+
+describe('Subscribable', () => {
+  it('is implemented by Emitter but hides emit', () => {
+    const e = new Emitter<TestEvents>();
+    const events: Subscribable<TestEvents> = e;
+    const seen: number[] = [];
+    events.on('change', ({ value }) => seen.push(value));
+    e.emit('change', { value: 1 });
+    expect(seen).toEqual([1]);
+    expectTypeOf<Subscribable<TestEvents>>().not.toHaveProperty('emit');
   });
 });

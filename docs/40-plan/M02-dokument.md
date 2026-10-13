@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: doing
 order: 2
 aliases:
   - M2
@@ -11,7 +11,7 @@ specs:
   - "[[03-dokument]]"
 depends_on:
   - "[[M01-core]]"
-started: 
+started: 2026-10-13
 finished: 
 tags:
   - milnik
@@ -28,14 +28,14 @@ updated: 2026-10-13
 
 ## Úkoly
 
-- [ ] Typy: `DocumentId`, `FeatureId`, `BodyId`, `TopoName`, `FeatureInstance`, `PartStudioData`, `DocumentMeta`, reference (`BodyRef`, `TopoRef`, `SketchRegionRef`).
-- [ ] `DocumentReader`, `DocumentWriter`, `DocumentEvents`.
-- [ ] `createDocument` (interně třída `CadDocument`) – mutátory s invarianty, strukturální sdílení, `Object.freeze` v dev režimu.
-- [ ] `ParamSpec`, `ParamSchema`, `FeatureSchema`, `ParamIssue`.
-- [ ] `validateAgainstSchema` pro všechny `ParamSpec.kind`.
-- [ ] `FeatureSchemaRegistry`.
-- [ ] `toData` / `fromData` včetně migrace podle `typeVersion` a zachování neznámých typů.
-- [ ] Testovací buildery: `aFeature()`, `aDocument()` (v `document/testing.ts`, exportované zvlášť, aby se nedostaly do produkčního bundlu).
+- [x] Typy: `DocumentId`, `FeatureId`, `BodyId`, `TopoName`, `FeatureInstance`, `PartStudioData`, `DocumentMeta`, reference (`BodyRef`, `TopoRef`, `SketchRegionRef`).
+- [x] `DocumentReader`, `DocumentWriter`, `DocumentEvents`.
+- [x] `createDocument` (interně třída `CadDocument`) – mutátory s invarianty, strukturální sdílení, `Object.freeze` vždy ([[Q027 Kdy mrazit doménová data|Q027]]).
+- [x] `ParamSpec`, `ParamSchema`, `FeatureSchema`, `ParamIssue`.
+- [x] `validateAgainstSchema` pro všechny `ParamSpec.kind`.
+- [x] `FeatureSchemaRegistry`.
+- [x] `toData` / `fromData` včetně migrace podle `typeVersion` a zachování neznámých typů.
+- [x] Testovací buildery: `aFeature()`, `aDocument()` (v `document/testing.ts`, exportované zvlášť, aby se nedostaly do produkčního bundlu).
 
 ## Akceptační kritéria
 

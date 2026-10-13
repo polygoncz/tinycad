@@ -46,6 +46,8 @@ Typů je záměrně málo a jsou malé: log žije navždy, každá změna tvaru 
 | `studio.setRollback` | `{ index }` | `studio.setRollback` na původní index |
 | `batch` | `{ ops: Operation[] }` | `batch` s inverzemi v opačném pořadí |
 
+Rollback bar: mutátory dokumentu ho při vložení, smazání a přesunu posouvají podle pravidel ze [[03-dokument|spec 03]], která nejsou přesně invertovatelná. Proto **dispečer** po `apply` porovná `rollbackIndex` a pokud se změnil, uloží jako inverzi `batch[inverze handleru, studio.setRollback(původní)]`. Handlery se o bar starat nemusí ([[Q029 Posun rollback baru při změnách featur|Q029]]).
+
 `setParams` nese **celé** parametry, ne patch. Inverze je pak triviální a operace nezávisí na předchozím stavu.
 
 Skicář přidá vlastní operace (`sketch.*`), viz [[12-skicar|12]]. Nové typy operací se registrují stejně jako featury.
@@ -90,7 +92,7 @@ export interface OperationDispatcher {
   /** Zahájí transakci – viz níže. Současně může běžet jen jedna. */
   begin(label: string): Transaction;
 
-  readonly events: Emitter<{ applied: { entry: LogEntry | null; op: Operation } }>;
+  readonly events: Subscribable<{ applied: { entry: LogEntry | null; op: Operation } }>;
 }
 
 export function createOperationDispatcher(deps: {
@@ -141,7 +143,7 @@ export interface OperationLog {
   append(e: Omit<LogEntry, 'seq'>): LogEntry;
   entries(fromSeq?: number): readonly LogEntry[];
   readonly lastSeq: number;
-  readonly events: Emitter<{ appended: LogEntry }>;
+  readonly events: Subscribable<{ appended: LogEntry }>;
 }
 
 /** Prázdný log, nebo log obnovený z uložených záznamů (po načtení dokumentu). */
@@ -160,7 +162,7 @@ export interface UndoManager {
   canRedo(): boolean;
   undo(): void;   // vezme seq z undo zásobníku, aplikuje jeho inverse jako záznam kind 'undo'
   redo(): void;   // vezme seq z redo zásobníku, aplikuje znovu jeho op jako záznam kind 'redo'
-  readonly events: Emitter<{ changed: { canUndo: boolean; canRedo: boolean } }>;
+  readonly events: Subscribable<{ changed: { canUndo: boolean; canRedo: boolean } }>;
 }
 
 /** Zásobníky se při vytvoření spočítají z logu přes rebuildUndoStacks. */

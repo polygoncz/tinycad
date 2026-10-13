@@ -46,7 +46,7 @@ updated: 2026-10-13
 
 ## Vrstvy a moduly
 
-Každý modul je složka v `src/` s veřejným API v `index.ts`.
+Každý modul je složka v `src/` s veřejným API v `index.ts`. Volitelně má druhý vstupní bod `testing.ts` s pomůckami pro testy (buildery, fake implementace), viz pravidla níže.
 
 ### Tři prstence
 
@@ -114,6 +114,7 @@ Důležité zákazy:
 - `ui` nesahá na `ops`, `regen`, `kernel`, `render` přímo – jen přes `AppSession`.
 - `regen` nezná `ops` (regenerace neví, jak změna vznikla).
 - `persistence/idb` je samostatný vstupní bod (vlastní `index.ts`), který importuje jen `app`. `persistence/index.ts` ho nereexportuje, jinak by se adaptér přes import dostal do prstence 1.
+- `testing.ts` smí importovat **jen testovací kód** (`*.test.ts` a jiné `testing.ts`), a to jen z modulů, na které jeho modul smí záviset **hodnotově** (sloupec `deps`; typová závislost `types` k `testing.ts` nepouští). Produkční kód ho neimportuje nikdy, ani ve vlastním modulu – buildery se tak nedostanou do produkčního bundlu. Testovací kód smí používat `vitest` (fake s `vi.fn`) a skládat buildery jiných modulů. Pravidla `testing-only-in-tests` a `<modul>-allowed-deps-in-tests` v `.dependency-cruiser.cjs`.
 - Pravidla jsou whitelist: tabulka výše je zkopírovaná v `.dependency-cruiser.cjs` a z ní se generuje jedno pravidlo na modul (vlastní soubory + `index.ts` povolených modulů + povolené npm balíčky).
 - `interaction` nezná `render`: viewport zná jen přes port `ViewportPort`, který sám definuje. `render` ho implementuje ([[0009-platformove-nezavisla-domena|ADR 0009]]).
 - Prstence 1 a 2 nepoužívají globální objekty prohlížeče (`window`, `document`, `requestAnimationFrame`, `indexedDB`, DOM typy událostí).
@@ -197,7 +198,7 @@ Ostatní moduly dostávají závislosti jako rozhraní v parametru `deps` továr
 ## Komunikace mezi vrstvami
 
 - **Dolů:** přímé volání metod přes rozhraní.
-- **Nahoru:** typované události (`Emitter` z `core`). Nižší vrstva nikdy nevolá vyšší.
+- **Nahoru:** typované události (`Emitter` z `core`, ve veřejném rozhraní vystavený jako `Subscribable`). Nižší vrstva nikdy nevolá vyšší.
 - **Do UI:** [[Prezentační model|prezentační modely]] vystavují stav jako `Observable<T>` (neměnný snapshot + `subscribe`). Pohled stav čte a volá příkazy, presenter do pohledu nezapisuje ([[0010-prezentacni-model|ADR 0010]]).
 - **Do workerů:** typované RPC nad `postMessage` (`core/rpc`), velká data jako transferable `ArrayBuffer`.
 

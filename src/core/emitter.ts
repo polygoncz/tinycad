@@ -8,7 +8,15 @@ interface Entry<T> {
 
 // The self-referential constraint accepts both interfaces and type aliases;
 // `Record<string, unknown>` would reject interfaces (they have no index signature).
-export class Emitter<Events extends { [K in keyof Events]: unknown }> {
+export type EventMap<Events> = { [K in keyof Events]: unknown };
+
+/** Subscribe-only view of an Emitter; what public interfaces expose (Q023). */
+export interface Subscribable<Events extends EventMap<Events>> {
+  on<K extends keyof Events>(type: K, fn: (e: Events[K]) => void): Unsubscribe;
+  once<K extends keyof Events>(type: K, fn: (e: Events[K]) => void): Unsubscribe;
+}
+
+export class Emitter<Events extends EventMap<Events>> implements Subscribable<Events> {
   private readonly handlers = new Map<keyof Events, Entry<never>[]>();
 
   on<K extends keyof Events>(type: K, fn: (e: Events[K]) => void): Unsubscribe {

@@ -38,7 +38,7 @@ export interface Viewport extends ViewportPort, Disposable {
   readonly overlay: OverlayLayer;      // dočasná geometrie nástrojů (implementuje OverlayPort)
   readonly camera: CameraController;   // fit all, standardní pohledy
 
-  readonly events: Emitter<{ pointer: ViewPointerEvent; key: ViewKeyEvent }>;
+  readonly events: Subscribable<{ pointer: ViewPointerEvent; key: ViewKeyEvent }>;
 }
 
 export function createViewport(deps: { meshes: MeshOps; background?: number }): Viewport;

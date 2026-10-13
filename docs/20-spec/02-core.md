@@ -58,7 +58,15 @@ Typovaný emitter. Vrací funkci pro odhlášení, aby šel snadno použít s `D
 export type Unsubscribe = () => void;
 
 // Samoreferenční omezení: projde interface i type. Record<string, unknown> by interface odmítl (nemá index signaturu).
-export class Emitter<Events extends { [K in keyof Events]: unknown }> {
+export type EventMap<Events> = { [K in keyof Events]: unknown };
+
+// Jen odběr – to, co vystavují veřejná rozhraní.
+export interface Subscribable<Events extends EventMap<Events>> {
+  on<K extends keyof Events>(type: K, fn: (e: Events[K]) => void): Unsubscribe;
+  once<K extends keyof Events>(type: K, fn: (e: Events[K]) => void): Unsubscribe;
+}
+
+export class Emitter<Events extends EventMap<Events>> implements Subscribable<Events> {
   on<K extends keyof Events>(type: K, fn: (e: Events[K]) => void): Unsubscribe;
   once<K extends keyof Events>(type: K, fn: (e: Events[K]) => void): Unsubscribe;
   emit<K extends keyof Events>(type: K, e: Events[K]): void;
@@ -67,7 +75,7 @@ export class Emitter<Events extends { [K in keyof Events]: unknown }> {
 
 Pravidla:
 
-- Ve veřejných rozhraních jiných modulů zatím `readonly events: Emitter<…>`. Jestli vystavovat jen odběr, řeší [[Q023 Události jen pro odběr|Q023]].
+- Veřejná rozhraní jiných modulů vystavují jen odběr: `readonly events: Subscribable<…>`. `Emitter` si drží implementace soukromě a jen ony volají `emit` ([[Q023 Události jen pro odběr|Q023]]). Stejný vzor jako `Observable` vs. `ObservableValue`.
 - Handlery se volají synchronně v pořadí registrace.
 - Výjimka v jednom handleru neshodí ostatní. `emit` zavolá všechny handlery a teprve potom chybu vyhodí: jednu chybu tak, jak je, více chyb jako `AggregateError`. `core` nic neloguje (nemá `console`), logování je věc volajícího, který zná platformu ([[Q022 Platformové typy v core|Q022]]).
 - Odhlášení během `emit` se projeví hned: odhlášený handler, který na řadu ještě nepřišel, se už nezavolá. Handler přihlášený během `emit` se zavolá až při dalším `emit`.

@@ -6,6 +6,7 @@ export { createRandomIdGenerator, createSequentialIdGenerator } from './id';
 export type { IdGenerator, RandomSource } from './id';
 
 export { Emitter } from './emitter';
+export type { EventMap, Subscribable } from './emitter';
 export { ObservableValue } from './observable';
 export type { Observable } from './observable';
 export { DisposableStore } from './disposable';

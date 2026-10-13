@@ -32,7 +32,7 @@ export interface ViewportPort {
   screenToRay(x: number, y: number): { origin: Vec3; direction: Vec3 };
   readonly highlight: HighlightPort;                // hover a výběr
   readonly overlay: OverlayPort;                    // dočasná geometrie nástrojů
-  readonly events: Emitter<{ pointer: ViewPointerEvent; key: ViewKeyEvent }>;
+  readonly events: Subscribable<{ pointer: ViewPointerEvent; key: ViewKeyEvent }>;
 }
 
 export type PickResult =
@@ -87,7 +87,7 @@ export interface SelectionModel {
   set(items: readonly SelectionItem[]): void;
   toggle(item: SelectionItem): void;
   clear(): void;
-  readonly events: Emitter<{ changed: { items: readonly SelectionItem[] } }>;
+  readonly events: Subscribable<{ changed: { items: readonly SelectionItem[] } }>;
 }
 
 export function createSelectionModel(): SelectionModel;
@@ -133,7 +133,7 @@ export function createToolRegistry(): ToolRegistry;
 export interface ToolManager {
   activate(id: string): void;            // deaktivuje předchozí
   readonly active: ToolDescriptor;
-  readonly events: Emitter<{ changed: { active: string } }>;
+  readonly events: Subscribable<{ changed: { active: string } }>;
 }
 
 export function createToolManager(deps: {
@@ -156,7 +156,7 @@ export interface FeatureEditor {
   /** Otevře existující featuru k úpravě (dvojklik ve stromu). */
   edit(featureId: FeatureId): FeatureEditSession;
   readonly current: FeatureEditSession | null;
-  readonly events: Emitter<{ changed: { session: FeatureEditSession | null } }>;
+  readonly events: Subscribable<{ changed: { session: FeatureEditSession | null } }>;
 }
 
 export interface FeatureEditSession {   // vytváří ji jen FeatureEditor
@@ -169,7 +169,7 @@ export interface FeatureEditSession {   // vytváří ji jen FeatureEditor
   focusRefParam(name: string): void;
   commit(): void;                                        // → tx.commit()
   cancel(): void;                                        // → tx.abort()
-  readonly events: Emitter<{ changed: void }>;
+  readonly events: Subscribable<{ changed: void }>;
 }
 ```
 
@@ -195,7 +195,7 @@ export interface ActionRegistry {
   register(a: Action): void;
   run(id: string): void;
   handleKey(e: ViewKeyEvent): boolean;      // najde akci podle zkratky
-  readonly events: Emitter<{ changed: void }>; // změna enabled stavů (pro UI)
+  readonly events: Subscribable<{ changed: void }>; // změna enabled stavů (pro UI)
 }
 
 export function createActionRegistry(): ActionRegistry;

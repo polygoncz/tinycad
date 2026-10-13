@@ -114,7 +114,7 @@ export interface Regenerator {
   /** Přepočítá studio. Volání během běžící regenerace ji nahradí (starý výsledek se zahodí). */
   run(studio: PartStudioData): Promise<RegenResult | 'superseded'>;
 
-  readonly events: Emitter<{
+  readonly events: Subscribable<{
     started: { generation: number };
     featureDone: { generation: number; featureId: FeatureId; status: FeatureStatus };
     finished: { generation: number; result: RegenResult };

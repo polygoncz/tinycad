@@ -26,7 +26,7 @@ Výuková webová CAD aplikace (Onshape-like Part Studio). Autor: Pavel. Pavel z
 
 - **Kód, identifikátory, komentáře v kódu, commit zprávy:** anglicky. **Vault:** česky.
 - TypeScript `strict`, žádné `any` (výjimka jen v adaptéru OCCT, izolovaná a okomentovaná).
-- Každý modul v `src/` má veřejné API jen přes svůj `index.ts`. Hluboké importy do cizího modulu jsou zakázané.
+- Každý modul v `src/` má veřejné API jen přes svůj `index.ts`. Hluboké importy do cizího modulu jsou zakázané. Pomůcky pro testy (buildery `aFeature()`, `aDocument()`…) jsou v `testing.ts` modulu a smí je importovat jen `*.test.ts`.
 - Pravidla závislostí mezi moduly jsou v `docs/20-spec/01-architektura.md` a vynucuje je dependency-cruiser (`npm run lint:deps`).
 - Doménová data jsou **neměnná** (immutable). Změna = nový objekt.
 - Dokument mění **jen** handlery operací (`src/ops`). Nikdo jiný nedostane `DocumentWriter`.

@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[02-core]]"
 decide_by: "[[M02-dokument]]"
 proposal: "Rozhraní Subscribable<E> s on/once v core, events ho vystavují místo Emitter"
-decision: ""
+decision: "Subscribable<E> v core (on/once), veřejná rozhraní vystavují events: Subscribable, Emitter zůstává soukromý"
 tags:
   - otazka
 created: 2026-10-13
@@ -37,4 +37,9 @@ Návrh: **1**. Je to stejný vzor jako u `Observable` a hlídá ho kompilátor.
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR.)_
+Pavel schválil **možnost 1** (2026-10-13).
+
+- `core` exportuje `Subscribable<Events>` (`on`, `once`) a typ `EventMap<Events>`; `Emitter` ho implementuje.
+- Veřejná rozhraní mají `readonly events: Subscribable<…>`, implementace drží `Emitter` v soukromém poli.
+- Propsáno do [[02-core|02]] a do všech 13 míst ve specifikacích [[03-dokument|03]], [[04-operace-a-historie|04]], [[05-persistence|05]], [[07-regenerace|07]], [[09-vykreslovani|09]], [[10-interakce|10]]; zmínka v [[01-architektura|01]].
+- Nové ADR není potřeba: jde o upřesnění bodu 3 [[0011-programovani-proti-rozhranim|ADR 0011]], ne o nové rozhodnutí.

@@ -78,7 +78,7 @@ Zápis záznamů jedné dávky probíhá v jedné IDB transakci (atomicky).
 export interface PersistenceService extends Disposable {
   flush(): Promise<void>;
   readonly status: 'saved' | 'pending' | 'error';
-  readonly events: Emitter<{ status: { status: 'saved' | 'pending' | 'error' } }>;
+  readonly events: Subscribable<{ status: { status: 'saved' | 'pending' | 'error' } }>;
 }
 
 export function createPersistenceService(deps: {
@@ -100,7 +100,7 @@ export async function loadDocument(store, id, schemas: FeatureSchemaRegistry, ha
 ```
 
 1. `store.load(id)` → snapshot + všechny záznamy.
-2. `fromData(snapshot.document, schemas)` – včetně migrace featur.
+2. `fromData(snapshot.document, schemas)` – včetně migrace featur. Vrací `Result`; poškozený snapshot (`DocumentLoadError`, [[Q026 Chyby při načítání dokumentu|Q026]]) načtení ukončí chybou. Přesný tvar chybového výsledku `loadDocument` se upřesní v [[M04-persistence|M4]].
 3. Záznamy s `seq > atSeq`: `upcast` operace na aktuální verzi a `handler.apply`.
 4. `createOperationLog(entries)` (všechny, kvůli undo).
 5. Kontrola konzistence v dev režimu: přehrání celého logu od nuly dá stejný dokument jako snapshot + zbytek.

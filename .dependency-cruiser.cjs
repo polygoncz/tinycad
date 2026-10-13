@@ -60,6 +60,23 @@ function entryPoint(/** @type {string} */ name) {
   return `^src/${name}/index\\.ts$`;
 }
 
+/** Regex matching the test-only entry point of a module (builders, fakes): testing.ts. */
+function testingEntryPoint(/** @type {string} */ name) {
+  if (name === 'features/*') return '^src/features/[^/]+/testing\\.ts$';
+  return `^src/${name}/testing\\.ts$`;
+}
+
+/**
+ * Test code: *.test.ts and the testing.ts helpers themselves. It may also use the
+ * testing.ts entry points of allowed modules (builders compose) and vitest (fakes with vi.fn).
+ */
+const TEST_FILES = '(\\.test\\.ts|/testing\\.ts)$';
+
+/** Test code of a module whose files match `from` (testing.ts only at the module root). */
+function testCodeOf(/** @type {string} */ from) {
+  return `${from}(.*\\.test\\.ts|testing\\.ts)$`;
+}
+
 /** Regex for npm packages, including scoped helpers (vue → @vue/*). */
 function npmPath(/** @type {string[]} */ names) {
   return `node_modules/(${names.map((n) => `${n}|@${n}`).join('|')})/`;
@@ -81,14 +98,25 @@ const moduleRules = Object.entries(modules).flatMap(([name, spec]) => {
       name: `${name}-allowed-deps`,
       severity: 'error',
       comment: `${name} may import only: ${allowed.join(', ') || 'nothing'} (${SPEC})`,
-      from: { path: from },
+      from: { path: from, pathNot: testCodeOf(from) },
       to: { path: '^src/', pathNot: [own, ...[...deps, ...types].map(entryPoint)] },
+    },
+    {
+      name: `${name}-allowed-deps-in-tests`,
+      severity: 'error',
+      comment: `tests of ${name} may import only: ${allowed.join(', ') || 'nothing'}, via index.ts or testing.ts (${SPEC})`,
+      from: { path: testCodeOf(from) },
+      to: {
+        path: '^src/',
+        // testing.ts holds values, so only `deps` open it, not type-only `types`.
+        pathNot: [own, ...[...deps, ...types].map(entryPoint), ...deps.map(testingEntryPoint)],
+      },
     },
     {
       name: `${name}-allowed-npm`,
       severity: 'error',
       comment: `${name} may use npm packages: ${npm.join(', ') || 'none'} (${SPEC})`,
-      from: { path: from, pathNot: '\\.test\\.ts$' },
+      from: { path: from, pathNot: testCodeOf(from) },
       to: {
         dependencyTypes: ['npm', 'npm-dev', 'npm-optional', 'npm-peer', 'npm-no-pkg', 'core'],
         ...(npm.length > 0 ? { pathNot: npmPath(npm) } : {}),
@@ -117,7 +145,16 @@ module.exports = {
         'Import another module only through its index.ts (ADR 0008). ' +
         'Deep imports bypass the public API.',
       from: { path: '^src/(features/[^/]+|persistence/idb|[^/]+)/' },
-      to: { path: '^src/[^/]+/.+', pathNot: ['^src/$1/', '/index\\.ts$'] },
+      to: { path: '^src/[^/]+/.+', pathNot: ['^src/$1/', '/index\\.ts$', '/testing\\.ts$'] },
+    },
+    {
+      name: 'testing-only-in-tests',
+      severity: 'error',
+      comment:
+        'testing.ts (builders, fakes) is for tests only, so it never reaches the production bundle ' +
+        '(see docs/20-spec/01-architektura.md).',
+      from: { path: '^src/', pathNot: TEST_FILES },
+      to: { path: '^src/.+/testing\\.ts$' },
     },
     {
       name: 'gl-matrix-only-in-core-math',

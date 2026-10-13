@@ -13,7 +13,7 @@ supersedes:
 tags:
   - adr
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 # 0006 – Neměnná doménová data, cache regenerace podle identity
 
@@ -33,6 +33,8 @@ Zároveň snapshot pro ukládání musí být konzistentní, i když se zapisuje
 - Změna = nový objekt pro změněnou featuru a nové pole featur; nezměněné featury zůstávají **tytéž objekty** (strukturální sdílení).
 - Regenerator najde první změněnou pozici porovnáním **identity** (`!==`) s instancí uloženou v cache.
 - Stejný princip platí pro `RegenState` (neměnná mapa těles).
+
+> **Upřesnění (2026-10-13):** `Object.freeze` se používá vždy, nejen v dev režimu – doménový prstenec dev režim nezná ([[Q027 Kdy mrazit doménová data|Q027]]).
 
 ## Zvažované alternativy
 
