@@ -1,6 +1,9 @@
 node_modules/
 dist/
 coverage/
+# Playwright (e2e) output
+test-results/
+playwright-report/
 .DS_Store
 *.log
 

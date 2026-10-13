@@ -17,6 +17,7 @@
     "lint:vault": "node scripts/vault-lint.mjs",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration --passWithNoTests",
+    "test:e2e": "playwright test",
     "check": "npm run typecheck && npm run lint && npm run lint:deps && npm run lint:vault && npm run test"
   },
   "dependencies": {

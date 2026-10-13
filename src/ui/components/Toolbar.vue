@@ -3,7 +3,8 @@
 // Vytvořit, Upravit, Konstrukce, Zobrazit). Which button sits in which group and whether it is
 // enabled is the pure function toolbarGroups; this component only draws it and runs commands.
 // Icon without a label, a tooltip "name  shortcut", under each group its label opening a menu
-// of the group. Tabs Modelling/Sketch come with the sketcher (M12).
+// of the group. Tabs Modelling/Sketch come with the sketcher (M12). The tooltip opens under the
+// whole bar, so it never covers the group label under the button.
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ActionState } from '@/interaction';
@@ -116,10 +117,14 @@ function runMenuItem(id: string): void {
 
 <style scoped>
 .toolbar {
+  /* Rows under a button down to the bottom edge of the bar: the tooltip goes below them. */
+  --label-gap: 1px;
+  --label-height: 16px;
+  --bar-padding-bottom: 4px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px 4px;
+  padding: 6px 12px var(--bar-padding-bottom);
   background: var(--chrome-bg);
   backdrop-filter: var(--chrome-blur);
   -webkit-backdrop-filter: var(--chrome-blur);
@@ -161,7 +166,7 @@ function runMenuItem(id: string): void {
 }
 .tip {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + var(--label-gap) + var(--label-height) + var(--bar-padding-bottom) + 6px);
   left: 50%;
   z-index: 50;
   transform: translateX(-50%);
@@ -187,7 +192,8 @@ function runMenuItem(id: string): void {
   display: flex;
   align-items: center;
   gap: 2px;
-  margin-top: 1px;
+  height: var(--label-height);
+  margin-top: var(--label-gap);
   padding: 0 4px;
   border: none;
   border-radius: var(--radius-row);

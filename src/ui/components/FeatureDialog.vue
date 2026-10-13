@@ -3,7 +3,7 @@
 // right, shown while features.current is a session (AppShell mounts one dialog per session).
 // The form is generated from the schema through the ParamField registry; every change goes to
 // the session (setParam, focusRefParam, commit, cancel). Movable by its header; the offset is
-// view state of this panel only.
+// view state of this panel only. Enter is OK and Esc is Cancel while the focus is in the dialog.
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FeatureEditSession, FieldState } from '@/interaction';
@@ -32,6 +32,23 @@ function activate(field: FieldState): void {
   props.edit.focusRefParam(field.name);
 }
 
+// Keys of the dialog (spec 11, "Komponenty"). Enter in a field must first confirm the typed value:
+// fields report it on change, which the browser fires only after keydown. Leaving the field fires
+// change synchronously, so blur() stores the value (setParam) before commit. Enter on a button
+// keeps its own meaning (Cancel stays Cancel). preventDefault also keeps the keys from the global
+// shortcuts in AppShell and from the active tool.
+function onKeyDown(e: KeyboardEvent): void {
+  if (e.defaultPrevented || e.isComposing) return;
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    props.edit.cancel();
+  } else if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) {
+    e.preventDefault();
+    if (e.target instanceof HTMLElement) e.target.blur();
+    props.edit.commit();
+  }
+}
+
 // Moving by the header: pointer capture, the offset from the docked position.
 const offset = ref({ x: 0, y: 0 });
 let drag: { readonly x: number; readonly y: number; readonly pointerId: number } | null = null;
@@ -58,6 +75,7 @@ function onGripUp(): void {
     role="dialog"
     :aria-label="title"
     :style="{ transform: `translate(${String(offset.x)}px, ${String(offset.y)}px)` }"
+    @keydown="onKeyDown"
   >
     <header
       class="header"

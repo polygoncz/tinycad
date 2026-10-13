@@ -2,13 +2,15 @@
 // The document list (spec 11, "Komponenty"; Q019): a floating sheet with the cards of the stored
 // documents, newest first. New, open and delete go through app; opening is only a change of the
 // hash (#/d/<id>), App.vue does the rest. Deleting a document open in another tab is refused by
-// app (its lock) and the error is shown here.
+// app (its lock) and the error is shown here. The header has the same switches of language and
+// theme as the TitleBar.
 import { onMounted, ref, shallowRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { createNewDocument, deleteDocument, listDocuments } from '@/app';
 import type { DocumentInfo } from '@/app';
 import type { DocumentId } from '@/document';
 import { docHash } from '../route';
+import ThemeLocaleToggles from './ThemeLocaleToggles.vue';
 
 const { t, locale } = useI18n();
 
@@ -76,6 +78,7 @@ onMounted(() => {
   <section class="document-list" :aria-label="t('documents.title')">
     <header class="header">
       <h1 class="title">{{ t('documents.title') }}</h1>
+      <ThemeLocaleToggles />
       <button type="button" class="new" :disabled="busy" @click="create">
         <i class="ti ti-plus" /> {{ t('documents.new') }}
       </button>
