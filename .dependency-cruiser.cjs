@@ -186,6 +186,19 @@ module.exports = {
       to: { path: 'node_modules/gl-matrix/' },
     },
     {
+      name: 'render-pure-files-without-three',
+      severity: 'error',
+      comment:
+        'The pure files of render (diffs, math, caches) are tested in Node without WebGL, so they ' +
+        'must not import three (docs/20-spec/09-vykreslovani.md "Testy", Q061).',
+      from: {
+        path:
+          '^src/render/(body-diff|bounds|camera-math|edge-pick|frame-scheduler|highlight-targets|' +
+          'mesh-cache|mesh-index|orbit-direction|overlay-shapes|pick-math|scene-sync|view-events)\\.ts$',
+      },
+      to: { path: 'node_modules/three/' },
+    },
+    {
       name: 'no-circular',
       severity: 'error',
       comment: 'Circular dependencies are forbidden (ADR 0008).',

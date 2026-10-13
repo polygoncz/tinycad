@@ -101,7 +101,7 @@ Prstence 1 a 2 se typují konfigurací `tsconfig.domain.json` bez knihovny `DOM`
 | `kernel` | `core` | – |
 | `kernel-occt` | `core`, `kernel` | `replicad-opencascadejs` ([[0013-replicad-opencascadejs\|ADR 0013]]) |
 | `regen` | `core`, `document`, `kernel` | – |
-| `render` | `core`, `kernel` (jen typy `MeshData`), `interaction` (jen typy: `ViewportPort`, události) | `three` |
+| `render` | `core`, `kernel` (jen typy: `MeshData`, `MeshOps`, `MeshQuality`, `ShapeHandle`, `BoundingBox`), `interaction` (jen typy: `ViewportPort`, události, `BodyId`, [[Q056 Odkud render bere BodyId\|Q056]]) | `three` (včetně `three/addons`) |
 | `interaction` | `core`, `document`, `ops` | – |
 | `plugin-api` | `core`, `document`, `regen`, `interaction` | – |
 | `features/*` | `core`, `document`, `ops`, `kernel`, `regen`, `interaction`, `plugin-api` | – |

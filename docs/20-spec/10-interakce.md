@@ -36,11 +36,27 @@ export interface ViewportPort {
 }
 
 export type PickResult =
-  | { kind: 'face'; body: BodyId; faceIndex: number; point: Vec3 }
+  | { kind: 'face'; body: BodyId; faceIndex: number; point: Vec3; normal: Vec3 }  // normal = jednotková normála ve světě, směrem ven z tělesa
   | { kind: 'edge'; body: BodyId; edgeIndex: number; point: Vec3 };
 
+export interface HighlightPort {
+  setHover(target: PickResult | null): void;              // vždy celý stav, ne přírůstek
+  setSelection(targets: readonly PickResult[]): void;     // prázdné pole = nic vybráno
+}
+
+export type OverlayStyle = 'preview' | 'construction';
+export type OverlayShape =
+  | { kind: 'lines'; points: readonly Vec3[]; style: OverlayStyle }   // páry bodů = úsečky (lichá délka = chyba)
+  | { kind: 'points'; points: readonly Vec3[]; style: OverlayStyle };
+
+export interface OverlayPort {
+  set(id: string, shapes: readonly OverlayShape[]): void;  // nahradí vše pod daným id
+  remove(id: string): void;                                // neznámé id = nic
+  clear(): void;
+}
+
 export interface ViewPointerEvent {
-  readonly type: 'down' | 'move' | 'up';
+  readonly type: 'down' | 'move' | 'up' | 'leave';   // leave = kurzor opustil plochu pohledu (zruší hover)
   readonly x: number; readonly y: number;
   readonly button: 'left' | 'middle' | 'right' | null;
   readonly mods: KeyMods;
@@ -56,6 +72,11 @@ export interface KeyMods { readonly shift: boolean; readonly alt: boolean; reado
 ```
 
 - Port definuje `interaction`, protože ho potřebuje. `render` ho implementuje (`Viewport`) a z `interaction` importuje jen tyto typy.
+- `interaction/index.ts` re-exportuje typ `BodyId` z `document` jako součást slovníku portu. `render` ho bere odtud a na `document` nesahá ([[Q056 Odkud render bere BodyId|Q056]]).
+- V kódu mají všechna pole typů portu `readonly` ([[Neměnná data]]), ve výpisu výše jsou kvůli čitelnosti vynechaná. Mapa událostí `{ pointer, key }` má v kódu jméno `ViewportEvents`.
+- `PickResult` je definovaný jen tady, [[09-vykreslovani]] na něj odkazuje. Varianta `vertex` přibude, až bude výběr vrcholů potřeba ([[Q057 Tvar PickResult|Q057]]).
+- `HighlightPort` je zrcadlo: stav hoveru a výběru drží `interaction` a vždy ho předá celý. `OverlayPort` nese jen platformově nezávislé tvary ve světových souřadnicích, žádné typy Three.js. Další druhy (síť pro náhled tělesa) přibudou s potřebou ([[Q058 Kontrakt HighlightPort a OverlayPort|Q058]]).
+- `ViewPointerEvent` chodí pro všechna tlačítka. Pravé a prostřední tlačítko zároveň ovládá kameru, nástroje je mají ignorovat. Kolečko se do `interaction` neposílá, patří jen kameře.
 - Převod DOM událostí na `ViewPointerEvent`/`ViewKeyEvent` dělají adaptéry (`render` pro canvas, `ui` pro globální klávesnici). Do `interaction` se DOM typ nikdy nedostane.
 - V testech nahrazuje viewport `FakeViewport` (předpřipravené výsledky `pick`, ruční emit událostí).
 
