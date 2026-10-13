@@ -37,7 +37,7 @@ UI má být česky i anglicky s přepínačem. Texty pro uživatele ale vznikaj�
 - `FeaturePlugin` dostane volitelné pole `messages: { cs: …; en: … }` se slovníkem svých klíčů. `ui` slovníky pluginů při startu přidá do instance `vue-i18n`.
 - Název nové featury (`Kvádr 1`) se vygeneruje v aktuálním jazyce a uloží jako běžný text. Přepnutí jazyka existující featury nepřejmenuje (stejně jako Fusion).
 - Akce a transakce, které dělají totéž, sdílejí klíč (`feature.edit`, `feature.delete`, `feature.suppress`): stejný text je v menu i v historii undo, proto je ve tvaru příkazu („Upravit featuru“).
-- Test v `ui`: každý klíč ze schémat a kódů chyb všech pluginů má překlad v obou jazycích.
+- Testy: každý plugin ověřuje svůj slovník; souhrnný test v `app` (`plugins.test.ts`) ověří, že každý `label` všech `BUILT_IN_PLUGINS` má text v `cs` i `en` (`ui` pluginy importovat nesmí). Vestavěné klíče a kódy chyb ověřuje `ui`.
 
 ## Zvažované alternativy
 

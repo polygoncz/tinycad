@@ -45,7 +45,7 @@ Pořadí odspodu nahoru: nejdřív doména a porty, pak `app`, nakonec `ui`. Pod
 - [x] Komponenty podle rozvržení v [[11-ui#Rozvržení]] (Fusion + macOS): `AppShell`, `TitleBar`, `Toolbar` se skupinami, `ViewportHost`, plovoucí `Browser` a `FeatureDialog` + `ParamField` registr, ukotvená `Timeline` (stavy, rollback značka tažením, dvojklik = edit, kontextové menu, stav regenerace), `DocumentList` (hash `#/d/<id>`, [[Q019 Úvodní obrazovka se seznamem dokumentů|Q019]]).
 - [x] Rozvržení a CSS proměnné: světlý a tmavý režim, průsvitné plovoucí panely, Tabler Icons.
 - [x] E2E smoke test v Playwright: nový dokument → Box → výška 30 → OK → undo → redo → reload → featura existuje.
-- [ ] Ověřit tažením hodnoty, že regenerace bez rušení stačí ([[Q010 Zrušení probíhající operace jádra|Q010]]).
+- [x] Ověřit tažením hodnoty, že regenerace bez rušení stačí ([[Q010 Zrušení probíhající operace jádra|Q010]]).
 
 ## Implementační plán
 
@@ -61,7 +61,8 @@ Každý úkol dělá zvlášť subagent `implementer` (TDD: test nejdřív a ov�
 | C | Ú7 vestavěné akce · Ú8 `openAppSession` a dokumenty · Ú9 `Timeline` a `Browser` | B |
 | C2 | Ú7b doplňky z revize vlny C | C |
 | D | Ú10 zbytek komponent a spuštění aplikace | C2 |
-| E | Ú10b doladění UI · Ú11 e2e test · pak Ú12 ověření a revize (hlavní sezení) | D |
+| E | Ú10b doladění UI · Ú11 e2e test · Ú10c flush a přístupnost · Ú12 ověření a revize (hlavní sezení) | D |
+| F | Ú12a akce a zámek do `interaction` · Ú12b drobnosti z revize a HMR | E |
 
 ### Vlna A
 
@@ -180,6 +181,20 @@ Jeden úkol, protože změny navazují přes vrstvy (typy z `interaction` potře
 - **Kontrakt:** akceptační kritéria níže. Test proti `vite preview` (produkční build).
 - **Testy:** nový dokument → Kvádr → výška 30 → OK → undo → redo → reload → featura existuje a těleso je vykreslené (počet těles ve stavu); výška 0 → featura v Timeline s chybou, ostatní těleso zůstane; druhá záložka se stejným dokumentem → jen pro čtení.
 - **Hotovo když:** `npm run test:e2e` projde.
+
+### Vlna F – nálezy revize architektury (rozhodnutí 2026-10-13: opravit vše v M10)
+
+#### Ú12a Prezentační logika akcí a zámku do `interaction`
+- **Soubory:** `src/interaction/builtin-actions.ts`, `edit-lock.ts` (nové), `feature-tree.ts`, `feature-editor.ts`, `index.ts` + testy; `src/app/actions.ts` (odstranit, testy přesunout do `interaction`), `src/app/session.ts`, `index.ts`; `src/ui/components/Timeline.vue`, `TimelineItem.vue`, `Toolbar.vue`, `FeatureDialog.vue`, `src/ui/toolbar-groups.ts` + test.
+- **Kontrakt:** [[10-interakce#Vestavěné akce]] (`ACTION_IDS`, `toolActionId`, `createEditLock`, `createBuiltInActions`, úzké `camera`), `FeatureTreeModel.renaming`/`beginRename`/`cancelRename`, `EditState.name`; [[11-ui#Kompoziční kořen (app)]] – `AppSession.locked`, `AppSession.actionIds`, bod 5. Komponenty: žádné vlastní pravidlo `locked`, menu = snapshot akcí skupiny `feature`, id akcí z `session.actionIds`, titulek dialogu z `EditState.name`.
+- **Testy:** dosavadní testy akcí přenesené do `interaction` (s `FakeViewport`/fake kamerou místo `app`); `createEditLock`; `beginRename`/`cancelRename`/`rename` ukončí režim; `feature.rename` ve skupině `feature` na správném místě; `EditState.name` u create i edit; e2e projde.
+- **Hotovo když:** `npm run check` a `npm run test:e2e` projdou.
+
+#### Ú12b Drobnosti z revize a HMR
+- **Soubory:** `src/app/testing.ts` a testy, které ho používají (jen pokud se změní API pomůcky); `src/app/browser.ts`; `src/app/plugins.test.ts`; `src/ui/start.ts` nebo `src/ui/App.vue` (HMR).
+- **Kontrakt:** `FakeAppViewport` kompozicí místo `extends` ([[0011-programovani-proti-rozhranim|ADR 0011]]); `openAppSession.dispose` uvolní store a zámek až po pojistném `flush` ([[11-ui#Kompoziční kořen (app)]]); souhrnný test překladů `BUILT_IN_PLUGINS` ([[0014-preklady-vue-i18n-a-klice|ADR 0014]]); při HMR (`import.meta.hot.dispose`) se otevřená session zavře, aby neblokovala zámek dokumentu.
+- **Testy:** existující testy `app` beze změny chování; `plugins.test.ts` – každý `label` (schéma, parametry, možnosti enum, nástroje) má `cs` i `en`; logika pořadí uvolnění v `dispose`, pokud jde oddělit do testovatelné funkce.
+- **Hotovo když:** `npm run check` projde.
 
 #### Ú12 Ověření a revize (hlavní sezení)
 Projít akceptační kritéria, ověřit [[Q010 Zrušení probíhající operace jádra|Q010]] rychlou změnou hodnoty v prohlížeči, spustit `architecture-reviewer`, propsat odchylky do specifikací.

@@ -280,6 +280,7 @@ export interface EditState {
   readonly fields: readonly FieldState[];                // pořadí podle schema.params
   readonly activeRefParam: string | null;                // parametr typu bodies/topo/region, který přijímá výběr
   readonly open: boolean;                                // false po commit/cancel
+  readonly name: string;                                 // název featury pro titulek dialogu (u create vygenerovaný)
 }
 
 export interface FieldState {
@@ -338,6 +339,9 @@ export interface FeatureTreeModel {
   edit(id: FeatureId): void;                                   // → FeatureEditor.edit
   rename(id: FeatureId, name: string): void;                   // → dispatch feature.rename
   moveRollbackBar(index: number): void;                        // → dispatch studio.setRollback
+  readonly renaming: Observable<FeatureId | null>;             // featura v režimu přejmenování (inline pole v Timeline)
+  beginRename(id: FeatureId): void;                            // akce feature.rename
+  cancelRename(): void;                                        // rename() režim také ukončí
   select(id: FeatureId, opts?: { additive?: boolean }): void;  // → selection.set / toggle
   dispose(): void;
 }
@@ -381,6 +385,33 @@ export interface BrowserModel {
 - `setVisible` tělesa, které poslední regenerace nezná (zastaralý řádek v UI), nic neudělá. Při změně se nejdřív vyšle `hidden`, pak `bodies`.
 - Viditelnost je **stav pohledu** ([[Q071 Viditelnost těles|Q071]]): neukládá se, nejde přes dispečer ani do undo, po reloadu je vše vidět. Těleso, které po regeneraci zmizí, ze `hidden` vypadne.
 - Do M14 nemají tělesa stabilní identitu, takže skrytí se po změně historie může přenést na jiné těleso se stejným `BodyId`. Vědomé omezení.
+
+## Vestavěné akce
+
+Pravidla vestavěných akcí jsou prezentační logika, proto patří do `interaction` (revize M10, [[0010-prezentacni-model|ADR 0010]]); `app` je jen zaregistruje.
+
+```ts
+export const ACTION_IDS = {
+  undo: 'undo', redo: 'redo', fitAll: 'view.fitAll',
+  featureEdit: 'feature.edit', featureRename: 'feature.rename', featureSuppress: 'feature.suppress',
+  featureDelete: 'feature.delete', rollHere: 'timeline.rollHere',
+  toStart: 'timeline.toStart', stepBack: 'timeline.stepBack', stepForward: 'timeline.stepForward', toEnd: 'timeline.toEnd',
+} as const;
+export function toolActionId(toolId: string): string;   // 'tool.<id>'
+
+/** Stav „zamčeno“: dokument jen pro čtení nebo otevřený dialog. Jediné místo pravidla. */
+export function createEditLock(deps: { readOnly: boolean; editor: FeatureEditor }): Observable<boolean>;
+
+export function createBuiltInActions(deps: {
+  registry: ActionRegistry; doc: DocumentReader; ops: OperationDispatcher; undo: UndoManager;
+  selection: SelectionModel; featureTree: FeatureTreeModel; editor: FeatureEditor; tools: ToolManager;
+  toolList: readonly ToolDescriptor[]; locked: Observable<boolean>;
+  camera: { fitAll(): void };                         // úzké rozhraní, render interaction nezná
+}): Disposable;
+```
+
+- Skupina `feature` (kontextové menu) v pořadí: `feature.edit`, `feature.rename` (→ `featureTree.beginRename`), `feature.suppress`, `timeline.rollHere`, `feature.delete`. Menu v [[Timeline]] je jen vykreslený snapshot akcí této skupiny.
+- `ui` id akcí nezná natvrdo: bere je z `AppSession.actionIds` (reexport `ACTION_IDS`).
 
 ## Akce a klávesové zkratky
 

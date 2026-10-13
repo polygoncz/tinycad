@@ -25,3 +25,5 @@ Zatím ne – výsledek zastaralé regenerace se jen zahodí (generace). Pozděj
 ## Rozhodnutí
 
 2026-10-13 (Pavel): **zatím ne.** Stačí `RegenScheduler` (dirty flag, žádná fronta) a zahazování výsledku zastaralé regenerace. V [[M10-ui]] ověřit v prohlížeči rychlou změnou hodnoty; když to nebude problém, cancel token se nezavádí. Propsáno do [[11-ui]].
+
+**Ověřeno 2026-10-13 ([[M10-ui]], Ú12):** 50 změn výšky kvádru za 2 ms → dialog i UI plynulé, poslední regenerace 3 ms a výsledek odpovídá poslední hodnotě. Cancel token se nezavádí; přehodnotit, až budou operace jádra trvat stovky ms (booleany, zaoblení).
