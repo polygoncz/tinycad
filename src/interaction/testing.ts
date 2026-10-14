@@ -1,10 +1,12 @@
 // Test-only entry point of interaction: FakeViewport stands in for the render viewport,
-// FakeRegenStatus for the regeneration state that app feeds in.
+// FakeRegenStatus for the regeneration state that app feeds in, FakeFileExporter for the
+// export of app (M15).
 // dependency-cruiser allows importing it only from *.test.ts.
 
 import { Emitter, ObservableValue } from '@/core';
 import type { Observable, Subscribable, Vec3 } from '@/core';
-import type { FeatureId, TopoName } from '@/document';
+import type { BodyId, FeatureId, TopoName } from '@/document';
+import type { FileExporter } from './file-actions';
 import { NO_TOPO_NAMES } from './regen-status-port';
 import type {
   FeatureHealth,
@@ -239,4 +241,64 @@ function nameOf(
 ): TopoName | undefined {
   for (const [name, indices] of byName) if (indices.includes(index)) return name;
   return undefined;
+}
+
+/** One call of the FakeFileExporter: STEP with its bodies, or the document. */
+export type FileExportCall =
+  { readonly task: 'step'; readonly bodies: readonly BodyId[] } | { readonly task: 'document' };
+
+interface PendingExport {
+  readonly resolve: () => void;
+  readonly reject: (e: unknown) => void;
+}
+
+/**
+ * A FileExporter for tests: records the calls and leaves each one pending until the test
+ * settles it with resolve() or reject(e), oldest first (manual settling, like FakeSolver.hold).
+ */
+export class FakeFileExporter implements FileExporter {
+  private callList: readonly FileExportCall[] = [];
+  private pending: readonly PendingExport[] = [];
+
+  /** All calls so far, in order; frozen and replaced on every call, so a read list never changes. */
+  get calls(): readonly FileExportCall[] {
+    return this.callList;
+  }
+
+  /** Calls not settled yet. */
+  get pendingCount(): number {
+    return this.pending.length;
+  }
+
+  exportStep(bodies: readonly BodyId[]): Promise<void> {
+    return this.record(Object.freeze({ task: 'step', bodies: Object.freeze([...bodies]) }));
+  }
+
+  exportDocument(): Promise<void> {
+    return this.record(Object.freeze({ task: 'document' }));
+  }
+
+  /** Fulfils the oldest pending call; none pending throws. */
+  resolve(): void {
+    this.take().resolve();
+  }
+
+  /** Rejects the oldest pending call with `e`; none pending throws. */
+  reject(e: unknown): void {
+    this.take().reject(e);
+  }
+
+  private record(call: FileExportCall): Promise<void> {
+    this.callList = Object.freeze([...this.callList, call]);
+    return new Promise<void>((resolve, reject) => {
+      this.pending = [...this.pending, { resolve, reject }];
+    });
+  }
+
+  private take(): PendingExport {
+    const [first, ...rest] = this.pending;
+    if (first === undefined) throw new Error('FakeFileExporter: no pending export');
+    this.pending = rest;
+    return first;
+  }
 }

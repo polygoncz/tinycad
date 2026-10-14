@@ -88,3 +88,7 @@ export { SKETCH_ACTION_IDS, createSketchActions, sketchConstraintActionId } from
 export { createSketchTools } from './sketch-tools';
 export { createTopoInspector } from './topo-inspector';
 export type { TopoHover, TopoInspector } from './topo-inspector';
+export { HISTORY_LIMIT, createHistoryModel } from './history-model';
+export type { HistoryModel, HistoryRow, HistoryState } from './history-model';
+export { FILE_ACTION_IDS, createFileActions } from './file-actions';
+export type { FileActions, FileExporter, FileStatus, FileTask } from './file-actions';
