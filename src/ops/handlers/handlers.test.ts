@@ -7,6 +7,7 @@ import { anOpsSession } from '../testing';
 import { OP_VERSION } from '../operation';
 import type {
   BodyRenameOp,
+  BodySetColorOp,
   BodySetVisibleOp,
   FeatureAddOp,
   FeatureMoveOp,
@@ -27,7 +28,8 @@ type Op =
   | FeatureMoveOp
   | StudioSetRollbackOp
   | BodyRenameOp
-  | BodySetVisibleOp;
+  | BodySetVisibleOp
+  | BodySetColorOp;
 
 // No schemas: the 'box' features of aFeature() have an unknown type, nothing is migrated.
 const handlers = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
@@ -101,6 +103,11 @@ const cases: readonly Case[] = [
   {
     name: 'body.setVisible',
     op: { type: 'body.setVisible', v: 1, body: body('b/body:1'), visible: false },
+    compare: 'toData',
+  },
+  {
+    name: 'body.setColor',
+    op: { type: 'body.setColor', v: 1, body: body('a/body'), color: '#ff8800' },
     compare: 'toData',
   },
 ];
@@ -230,6 +237,51 @@ describe('body metadata handlers (M11)', () => {
     expect(doc.bodyMeta(a)).toEqual({ name: 'Base' });
     handlers.get('body.rename').apply(doc, rename(''));
     expect(doc.studio).toEqual(setup().studio);
+  });
+
+  const setColor = (color: string | null): BodySetColorOp => ({
+    type: 'body.setColor',
+    v: 1,
+    body: a,
+    color,
+  });
+
+  it('setColor: invert of a body without a color gives null (M15)', () => {
+    expect(handlers.get('body.setColor').invert(setup(), setColor('#ff8800'))).toEqual(
+      setColor(null),
+    );
+  });
+
+  it('setColor: invert carries the current color (M15)', () => {
+    const doc = setup();
+    doc.setBodyMeta(a, { color: '#112233' });
+    expect(handlers.get('body.setColor').invert(doc, setColor(null))).toEqual(setColor('#112233'));
+  });
+
+  it('setColor keeps name and hidden; rename and setVisible keep the color (M15)', () => {
+    const doc = setup();
+    doc.setBodyMeta(a, { name: 'Base', hidden: true });
+    handlers.get('body.setColor').apply(doc, setColor('#ff8800'));
+    expect(doc.bodyMeta(a)).toEqual({ name: 'Base', hidden: true, color: '#ff8800' });
+    handlers.get('body.setVisible').apply(doc, setVisible(true));
+    handlers.get('body.rename').apply(doc, rename(''));
+    expect(doc.bodyMeta(a)).toEqual({ color: '#ff8800' });
+    handlers.get('body.setVisible').apply(doc, setVisible(false));
+    expect(doc.bodyMeta(a)).toEqual({ hidden: true, color: '#ff8800' });
+    handlers.get('body.setVisible').apply(doc, setVisible(true));
+    handlers.get('body.setColor').apply(doc, setColor(null));
+    expect(doc.studio).toEqual(setup().studio);
+  });
+
+  it('setColor with the current color changes nothing and emits nothing (M15)', () => {
+    const doc = setup();
+    doc.setBodyMeta(a, { color: '#ff8800' });
+    const studio = doc.studio;
+    let count = 0;
+    doc.events.on('changed', () => count++);
+    handlers.get('body.setColor').apply(doc, setColor('#ff8800'));
+    expect(doc.studio).toBe(studio);
+    expect(count).toBe(0);
   });
 
   it('a body of a feature that does not exist is no error (the document does not know bodies)', () => {

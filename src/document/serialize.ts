@@ -2,6 +2,7 @@ import { assert, err, ok } from '@/core';
 import type { RegistryReader, Result } from '@/core';
 import { createDocument } from './cad-document';
 import type { DocumentReader, DocumentWriter } from './document';
+import { isBodyColor } from './model';
 import type {
   BodyId,
   BodyMeta,
@@ -121,7 +122,8 @@ function readStudio(
 /**
  * Body metadata (spec 03, M11) in canonical form: absent or empty -> undefined, `hidden: false`
  * and entries left empty are dropped. Keys must be body ids; values have only `name` (non-empty
- * string) and `hidden` (boolean), any other field is an issue (strict as params, Q028).
+ * string), `hidden` (boolean) and `color` (isBodyColor, M15), any other field is an issue
+ * (strict as params, Q028).
  */
 function readBodies(raw: unknown, at: At): PartStudioData['bodies'] {
   if (raw === undefined) return undefined;
@@ -151,12 +153,12 @@ function readBodyMeta(raw: unknown, path: string, at: At): BodyMeta | undefined 
   }
   let valid = true;
   for (const key of Object.keys(raw)) {
-    if (key !== 'name' && key !== 'hidden') {
+    if (key !== 'name' && key !== 'hidden' && key !== 'color') {
       at(`${path}.${key}`, 'Unexpected property');
       valid = false;
     }
   }
-  const { name, hidden } = raw;
+  const { name, hidden, color } = raw;
   if (name !== undefined && !isNonEmptyString(name)) {
     at(`${path}.name`, 'Must be a non-empty string');
     valid = false;
@@ -165,10 +167,15 @@ function readBodyMeta(raw: unknown, path: string, at: At): BodyMeta | undefined 
     at(`${path}.hidden`, 'Must be true or false');
     valid = false;
   }
+  if (color !== undefined && !isBodyColor(color)) {
+    at(`${path}.color`, "Must be a color '#rrggbb' in lower case");
+    valid = false;
+  }
   if (!valid) return undefined;
   const meta: BodyMeta = {
     ...(isNonEmptyString(name) ? { name } : {}),
     ...(hidden === true ? { hidden } : {}),
+    ...(isBodyColor(color) ? { color } : {}),
   };
   return Object.keys(meta).length === 0 ? undefined : meta;
 }

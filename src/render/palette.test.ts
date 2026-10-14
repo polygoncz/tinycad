@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DARK_PALETTE, LIGHT_PALETTE, type ScenePalette } from './palette';
+import { DARK_PALETTE, LIGHT_PALETTE, parseHexColor, type ScenePalette } from './palette';
 
 const KEYS = [
   'background',
@@ -43,6 +43,21 @@ describe.each([
   it('has the axes of the mockup', () => {
     expect(palette.axes).toEqual([0xff3b30, 0x34c759, 0x0a84ff]);
   });
+});
+
+describe('parseHexColor', () => {
+  it('turns #rrggbb into 0xRRGGBB', () => {
+    expect(parseHexColor('#000000')).toBe(0x000000);
+    expect(parseHexColor('#ffffff')).toBe(0xffffff);
+    expect(parseHexColor('#3b6aa6')).toBe(0x3b6aa6);
+  });
+
+  it.each(['', '#fff', '#ABCDEF', '3b6aa6', '#3b6aa6ff', 'red', '#gggggg', ' #3b6aa6'])(
+    'throws on %j (only the canonical form of the document)',
+    (text) => {
+      expect(() => parseHexColor(text)).toThrow();
+    },
+  );
 });
 
 describe('palettes', () => {

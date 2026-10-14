@@ -31,6 +31,7 @@ describe('document public API', () => {
         'dependenciesOf',
         'dependentsOf',
         'fromData',
+        'isBodyColor',
         'isParamVisible',
         'migrateFeatureData',
         'orderViolations',
@@ -50,7 +51,11 @@ describe('document public API', () => {
   });
 
   it('exports the type BodyMeta of spec 03', () => {
-    expectTypeOf<BodyMeta>().toEqualTypeOf<{ readonly name?: string; readonly hidden?: true }>();
+    expectTypeOf<BodyMeta>().toEqualTypeOf<{
+      readonly name?: string;
+      readonly hidden?: true;
+      readonly color?: string;
+    }>();
   });
 
   it('exports the plane and sketch types of spec 03 (M12)', () => {

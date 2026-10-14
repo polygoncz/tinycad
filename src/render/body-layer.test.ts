@@ -178,3 +178,151 @@ describe('BodyLayer bounds', () => {
     expect(layer.bounds()).toBeNull();
   });
 });
+
+describe('BodyLayer colour', () => {
+  const RED = '#ff0000';
+  const GREEN = '#00ff00';
+
+  it('gives a coloured body its own face material, the edges keep the palette', async () => {
+    const { layer, requestRender } = await setup();
+    const shared = materialsOf(layer, B);
+    layer.setBodyColor(A, RED);
+    const { faces, edges } = materialsOf(layer, A);
+    expect(faces).not.toBe(shared.faces);
+    expect(faces.color.getHex()).toBe(0xff0000);
+    expect(edges).toBe(shared.edges);
+    expect(materialsOf(layer, B).faces.color.getHex()).toBe(LIGHT_PALETTE.face);
+    expect(requestRender).toHaveBeenCalledTimes(1);
+  });
+
+  it('the copy keeps the other properties of the shared material', async () => {
+    const { layer } = await setup();
+    const shared = materialsOf(layer, B).faces;
+    layer.setBodyColor(A, RED);
+    const { faces } = materialsOf(layer, A);
+    expect(faces.polygonOffset).toBe(shared.polygonOffset);
+    expect(faces.roughness).toBe(shared.roughness);
+  });
+
+  it('null returns the shared material of the palette', async () => {
+    const { layer, requestRender } = await setup();
+    const shared = materialsOf(layer, B).faces;
+    layer.setBodyColor(A, RED);
+    const own = materialsOf(layer, A).faces;
+    const dispose = vi.spyOn(own, 'dispose');
+    layer.setBodyColor(A, null);
+    expect(materialsOf(layer, A).faces).toBe(shared);
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(requestRender).toHaveBeenCalledTimes(2);
+  });
+
+  it('the same value again does not render', async () => {
+    const { layer, requestRender } = await setup();
+    layer.setBodyColor(A, null);
+    expect(requestRender).not.toHaveBeenCalled();
+    layer.setBodyColor(A, RED);
+    layer.setBodyColor(A, RED);
+    expect(requestRender).toHaveBeenCalledTimes(1);
+  });
+
+  it('switching colours swaps the material and releases the old one', async () => {
+    const { layer } = await setup();
+    layer.setBodyColor(A, RED);
+    const red = materialsOf(layer, A).faces;
+    const dispose = vi.spyOn(red, 'dispose');
+    layer.setBodyColor(A, GREEN);
+    expect(materialsOf(layer, A).faces.color.getHex()).toBe(0x00ff00);
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('an invalid colour throws and changes nothing', async () => {
+    const { layer, requestRender } = await setup();
+    const shared = materialsOf(layer, A).faces;
+    expect(() => {
+      layer.setBodyColor(A, 'red');
+    }).toThrow();
+    expect(materialsOf(layer, A).faces).toBe(shared);
+    expect(requestRender).not.toHaveBeenCalled();
+  });
+
+  it('an unknown body does nothing and is not remembered', async () => {
+    const { layer, requestRender, a, b } = await setup();
+    const unknown = body('nope');
+    layer.setBodyColor(unknown, RED);
+    expect(requestRender).not.toHaveBeenCalled();
+    await layer.sync([
+      { id: A, shape: a },
+      { id: B, shape: b },
+      { id: unknown, shape: a },
+    ]);
+    expect(materialsOf(layer, unknown).faces.color.getHex()).toBe(LIGHT_PALETTE.face);
+  });
+
+  it('a kept body keeps its colour, also with a new shape', async () => {
+    const { layer, box, b } = await setup();
+    layer.setBodyColor(A, RED);
+    const red = materialsOf(layer, A).faces;
+    await layer.sync([
+      { id: A, shape: box() },
+      { id: B, shape: b },
+    ]);
+    expect(materialsOf(layer, A).faces).toBe(red);
+    expect(red.color.getHex()).toBe(0xff0000);
+  });
+
+  it('a body missing from a sync forgets its colour and releases the material', async () => {
+    const { layer, a, b } = await setup();
+    layer.setBodyColor(A, RED);
+    const dispose = vi.spyOn(materialsOf(layer, A).faces, 'dispose');
+    await layer.sync([{ id: B, shape: b }]);
+    expect(dispose).toHaveBeenCalledTimes(1);
+    await layer.sync([
+      { id: A, shape: a },
+      { id: B, shape: b },
+    ]);
+    expect(materialsOf(layer, A).faces).toBe(materialsOf(layer, B).faces);
+  });
+
+  it('bodies with the same colour share the material, the last one releases it', async () => {
+    const { layer } = await setup();
+    layer.setBodyColor(A, RED);
+    layer.setBodyColor(B, RED);
+    const red = materialsOf(layer, A).faces;
+    expect(materialsOf(layer, B).faces).toBe(red);
+    const dispose = vi.spyOn(red, 'dispose');
+    layer.setBodyColor(A, null);
+    expect(dispose).not.toHaveBeenCalled();
+    expect(materialsOf(layer, B).faces).toBe(red);
+    layer.setBodyColor(B, GREEN);
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('setPalette changes the default only, coloured bodies keep their colour', async () => {
+    const { layer } = await setup();
+    layer.setBodyColor(A, RED);
+    layer.setPalette(DARK_PALETTE);
+    expect(materialsOf(layer, A).faces.color.getHex()).toBe(0xff0000);
+    expect(materialsOf(layer, A).edges.color.getHex()).toBe(DARK_PALETTE.edge);
+    expect(materialsOf(layer, B).faces.color.getHex()).toBe(DARK_PALETTE.face);
+    layer.setBodyColor(A, null);
+    expect(materialsOf(layer, A).faces.color.getHex()).toBe(DARK_PALETTE.face);
+  });
+
+  it('reset forgets every colour and releases the materials', async () => {
+    const { layer } = await setup();
+    layer.setBodyColor(A, RED);
+    const dispose = vi.spyOn(materialsOf(layer, A).faces, 'dispose');
+    layer.reset(boxMeshes());
+    expect(dispose).toHaveBeenCalledTimes(1);
+    await layer.sync([{ id: A, shape: shape(5) }]);
+    expect(materialsOf(layer, A).faces.color.getHex()).toBe(LIGHT_PALETTE.face);
+  });
+
+  it('dispose releases the colour materials', async () => {
+    const { layer } = await setup();
+    layer.setBodyColor(A, RED);
+    const dispose = vi.spyOn(materialsOf(layer, A).faces, 'dispose');
+    layer.dispose();
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+});

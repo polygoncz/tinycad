@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
+import { isBodyColor } from './model';
 import type { FeatureId, FeatureInstance, PartStudioData } from './model';
 import type {
   AxisId,
@@ -70,5 +71,28 @@ describe('document model types', () => {
     };
     const studio: PartStudioData = { features: [feature], rollbackIndex: 1 };
     expect(JSON.parse(JSON.stringify(studio))).toEqual(studio);
+  });
+});
+
+describe('isBodyColor (M15)', () => {
+  it.each(['#000000', '#ffffff', '#a0b1c2'])('accepts %j', (v) => {
+    expect(isBodyColor(v)).toBe(true);
+  });
+
+  it.each([
+    '#FFF',
+    '#fff',
+    '#ABCDEF',
+    '#abcdeg',
+    'abcdef',
+    '#abcdef0',
+    ' #abcdef',
+    'red',
+    '',
+    0xabcdef,
+    null,
+    undefined,
+  ])('rejects %j', (v) => {
+    expect(isBodyColor(v)).toBe(false);
   });
 });

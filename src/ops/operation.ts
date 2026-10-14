@@ -20,6 +20,7 @@ export const OP_VERSION = {
   'studio.setRollback': 1,
   'body.rename': 1,
   'body.setVisible': 1,
+  'body.setColor': 1,
   batch: 1,
 } as const;
 
@@ -85,6 +86,14 @@ export interface BodySetVisibleOp extends Operation {
   readonly type: 'body.setVisible';
   readonly body: BodyId;
   readonly visible: boolean;
+}
+
+/** Color of a body in the document's body metadata (M15, spec 03). */
+export interface BodySetColorOp extends Operation {
+  readonly type: 'body.setColor';
+  readonly body: BodyId;
+  /** '#rrggbb' in lower case (isBodyColor); null = the default color. */
+  readonly color: string | null;
 }
 
 /** Structural operation without a handler in the registry (Q031). */

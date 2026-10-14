@@ -1,4 +1,4 @@
-import { ORIGIN, parseBodyId } from '@/document';
+import { isBodyColor, ORIGIN, parseBodyId } from '@/document';
 import type { OperationLoadError } from '../load-error';
 
 // Small shape checks for validate of the built-in handlers (Q032). Only the shape of the
@@ -32,6 +32,11 @@ export const featureIdText = check(
 export const bodyIdText = check(
   (v) => parseBodyId(v) !== undefined,
   "Must be a body id '<feature>/body' or '<feature>/body:<n>'",
+);
+/** A body color '#rrggbb' in lower case or null for the default (M15); no canonicalization. */
+export const bodyColorOrNull = check(
+  (v) => v === null || isBodyColor(v),
+  "Must be null or a color '#rrggbb' in lower case",
 );
 export const string = check((v) => typeof v === 'string', 'Must be a string');
 export const boolean = check((v) => typeof v === 'boolean', 'Must be a boolean');

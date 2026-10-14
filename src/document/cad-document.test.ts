@@ -312,6 +312,44 @@ describe('body metadata (M11)', () => {
     expect(Object.keys(doc.bodyMeta(a))).toEqual(['name']);
   });
 
+  it('stores a color with the other metadata (M15)', () => {
+    const doc = docWith(['a']);
+    doc.setBodyMeta(a, { name: 'Base', color: '#ff8800' });
+    expect(doc.bodyMeta(a)).toEqual({ name: 'Base', color: '#ff8800' });
+    expect(doc.studio.bodies).toEqual({ [a]: { name: 'Base', color: '#ff8800' } });
+    expect(Object.isFrozen(doc.bodyMeta(a))).toBe(true);
+  });
+
+  it('removes a color and drops metadata left with the default color only (M15)', () => {
+    const doc = docWith(['a']);
+    doc.setBodyMeta(a, { hidden: true, color: '#00ff00' });
+    doc.setBodyMeta(a, { hidden: true });
+    expect(doc.studio.bodies).toEqual({ [a]: { hidden: true } });
+    doc.setBodyMeta(a, { color: '#00ff00' });
+    expect(doc.studio.bodies).toEqual({ [a]: { color: '#00ff00' } });
+    doc.setBodyMeta(a, {});
+    expect('bodies' in doc.studio).toBe(false);
+  });
+
+  it('keeps the color only as a valid color (canonical form, M15)', () => {
+    const doc = docWith(['a']);
+    doc.setBodyMeta(a, { name: 'A', color: '#FF8800' });
+    expect(doc.bodyMeta(a)).toEqual({ name: 'A' });
+    doc.setBodyMeta(a, { color: 'red' });
+    expect('bodies' in doc.studio).toBe(false);
+  });
+
+  it('compares the color too: the same color emits nothing, another one emits (M15)', () => {
+    const doc = docWith(['a']);
+    doc.setBodyMeta(a, { color: '#112233' });
+    let count = 0;
+    doc.events.on('changed', () => count++);
+    doc.setBodyMeta(a, { color: '#112233' });
+    expect(count).toBe(0);
+    doc.setBodyMeta(a, { color: '#112234' });
+    expect(count).toBe(1);
+  });
+
   it('removes the entry for empty metadata and the whole map when it is empty', () => {
     const doc = docWith(['a']);
     doc.setBodyMeta(a, { name: 'A' });

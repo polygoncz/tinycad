@@ -56,3 +56,12 @@ export const DARK_PALETTE: ScenePalette = freezePalette({
   // Muted on the dark background.
   grid: [0x3a3c42, 0x2c2e33],
 });
+
+/**
+ * '#rrggbb' (lower case, the canonical form of a body colour in the document) → 0xRRGGBB.
+ * Anything else is a bug of the caller and throws: the document validates colours already.
+ */
+export function parseHexColor(text: string): number {
+  if (!/^#[0-9a-f]{6}$/.test(text)) throw new Error(`Invalid colour ${JSON.stringify(text)}`);
+  return Number.parseInt(text.slice(1), 16);
+}

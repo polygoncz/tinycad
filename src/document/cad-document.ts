@@ -2,6 +2,7 @@ import { assert, Emitter } from '@/core';
 import type { Subscribable } from '@/core';
 import type { DocumentEvents, DocumentWriter } from './document';
 import { deepFreeze } from './freeze';
+import { isBodyColor } from './model';
 import type {
   BodyId,
   BodyMeta,
@@ -57,15 +58,17 @@ const NO_META: BodyMeta = Object.freeze({});
 function canonicalMeta(meta: BodyMeta): BodyMeta | undefined {
   const name = typeof meta.name === 'string' && meta.name !== '' ? meta.name : undefined;
   const hidden = meta.hidden === true;
-  if (name === undefined && !hidden) return undefined;
+  const color = isBodyColor(meta.color) ? meta.color : undefined;
+  if (name === undefined && !hidden && color === undefined) return undefined;
   return Object.freeze({
     ...(name === undefined ? {} : { name }),
     ...(hidden ? { hidden } : {}),
+    ...(color === undefined ? {} : { color }),
   });
 }
 
 function sameMeta(a: BodyMeta | undefined, b: BodyMeta | undefined): boolean {
-  return a?.name === b?.name && a?.hidden === b?.hidden;
+  return a?.name === b?.name && a?.hidden === b?.hidden && a?.color === b?.color;
 }
 
 // Every mutator validates first and then commits a whole new studio in one step,

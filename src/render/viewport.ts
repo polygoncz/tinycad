@@ -68,6 +68,11 @@ export interface Viewport extends ViewportPort, Disposable {
   setPalette(palette: ScenePalette): void;
   /** View state from the browser (Q071): a hidden body is not drawn and not picked. */
   setBodyVisible(body: BodyId, visible: boolean): void;
+  /**
+   * Body colour from its metadata (M15, Q073): '#rrggbb' colours the faces, null returns the
+   * palette's. Survives a sync while the body stays; setPalette leaves it alone.
+   */
+  setBodyColor(body: BodyId, color: string | null): void;
 
   readonly events: Subscribable<{ pointer: ViewPointerEvent; key: ViewKeyEvent }>;
 }
@@ -453,6 +458,10 @@ export function createViewport(deps: {
     setBodyVisible(body: BodyId, visible: boolean): void {
       assertAlive();
       layer.setBodyVisible(body, visible);
+    },
+    setBodyColor(body: BodyId, color: string | null): void {
+      assertAlive();
+      layer.setBodyColor(body, color);
     },
     events,
     dispose(): void {

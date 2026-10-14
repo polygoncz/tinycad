@@ -126,6 +126,16 @@ describe('fromData – body metadata (M11)', () => {
     expect('bodies' in load(withBodies({})).studio).toBe(false);
   });
 
+  it('loads a valid color (M15)', () => {
+    const doc = load(
+      withBodies({ 'a/body': { color: '#a0b1c2' }, 'b/body': { name: 'B', color: '#000000' } }),
+    );
+    expect(doc.studio.bodies).toEqual({
+      'a/body': { color: '#a0b1c2' },
+      'b/body': { name: 'B', color: '#000000' },
+    });
+  });
+
   it.each([[null], [[]], ['x'], [3]])('reports bodies %j that is not an object', (bodies) => {
     expect(loadIssues(withBodies(bodies)).map((i) => i.path)).toEqual(['studio.bodies']);
   });
@@ -145,7 +155,11 @@ describe('fromData – body metadata (M11)', () => {
     ['an empty name', { name: '' }, "studio.bodies['a/body'].name"],
     ['a name that is not a string', { name: 3 }, "studio.bodies['a/body'].name"],
     ['hidden that is not a boolean', { hidden: 'yes' }, "studio.bodies['a/body'].hidden"],
-    ['a foreign key (Q028)', { name: 'A', color: 'red' }, "studio.bodies['a/body'].color"],
+    ['a foreign key (Q028)', { name: 'A', opacity: 1 }, "studio.bodies['a/body'].opacity"],
+    ['a short color (M15)', { color: '#FFF' }, "studio.bodies['a/body'].color"],
+    ['an upper-case color (M15)', { color: '#ABCDEF' }, "studio.bodies['a/body'].color"],
+    ['a named color (M15)', { name: 'A', color: 'red' }, "studio.bodies['a/body'].color"],
+    ['a color that is a number (M15)', { color: 0xff8800 }, "studio.bodies['a/body'].color"],
   ])('reports a value that is %s', (_, value, path) => {
     expect(loadIssues(withBodies({ 'a/body': value })).map((i) => i.path)).toEqual([path]);
   });

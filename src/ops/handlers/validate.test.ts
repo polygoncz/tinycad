@@ -31,6 +31,7 @@ const valid: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   'studio.setRollback': { type: 'studio.setRollback', v: 1, index: 0 },
   'body.rename': { type: 'body.rename', v: 1, body: 'f1/body', name: '' },
   'body.setVisible': { type: 'body.setVisible', v: 1, body: 'f1/body:2', visible: false },
+  'body.setColor': { type: 'body.setColor', v: 1, body: 'f1/body', color: '#ff8800' },
 };
 
 const withFeature = (patch: Readonly<Record<string, unknown>>) => ({
@@ -95,6 +96,15 @@ const broken: readonly (readonly [string, Readonly<Record<string, unknown>>, str
   ['body.setVisible', without(valid['body.setVisible'] ?? {}, 'body'), 'body'],
   ['body.setVisible', { ...valid['body.setVisible'], visible: 'no' }, 'visible'],
   ['body.setVisible', without(valid['body.setVisible'] ?? {}, 'visible'), 'visible'],
+  ['body.setColor', { ...valid['body.setColor'], body: 'f1' }, 'body'],
+  ['body.setColor', without(valid['body.setColor'] ?? {}, 'body'), 'body'],
+  ['body.setColor', without(valid['body.setColor'] ?? {}, 'color'), 'color'],
+  // Upper case is refused: the handler does not canonicalize, so replay stays deterministic.
+  ['body.setColor', { ...valid['body.setColor'], color: '#FF8800' }, 'color'],
+  ['body.setColor', { ...valid['body.setColor'], color: '#fff' }, 'color'],
+  ['body.setColor', { ...valid['body.setColor'], color: 'red' }, 'color'],
+  ['body.setColor', { ...valid['body.setColor'], color: 0xff8800 }, 'color'],
+  ['body.setColor', { ...valid['body.setColor'], color: '' }, 'color'],
 ];
 
 describe('validate of built-in handlers', () => {
@@ -105,6 +115,11 @@ describe('validate of built-in handlers', () => {
   it.each(Object.entries(valid))('%s: a valid operation passes', (type, raw) => {
     expect(handlers.get(type).validate?.(raw)).toEqual([]);
     expect(upcastOperation(handlers, raw)).toEqual({ ok: true, value: raw });
+  });
+
+  it('body.setColor: null (the default color) passes', () => {
+    const raw = { type: 'body.setColor', v: 1, body: 'f1/body:2', color: null };
+    expect(handlers.get('body.setColor').validate?.(raw)).toEqual([]);
   });
 
   it.each(broken)('%s: %j fails at %j', (type, raw, path) => {

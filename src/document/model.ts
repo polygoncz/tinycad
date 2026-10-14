@@ -35,12 +35,25 @@ export interface PartStudioData {
 }
 
 /**
- * Name and visibility of a body (spec 03, M11). Canonical form: name only when non-empty,
- * hidden only as true; the document keeps it so, which makes replayed data compare equal.
+ * Name, visibility and color of a body (spec 03, M11, color M15). Canonical form: name only when
+ * non-empty, hidden only as true, color only when isBodyColor; the document keeps it so, which
+ * makes replayed data compare equal.
  */
 export interface BodyMeta {
   readonly name?: string;
   readonly hidden?: true;
+  /** '#rrggbb' in lower case (isBodyColor); absent = the default color of the palette. */
+  readonly color?: string;
+}
+
+const BODY_COLOR = /^#[0-9a-f]{6}$/;
+
+/**
+ * A valid body color '#rrggbb' in lower case (spec 03, M15). Shared by fromData and validate of
+ * body.setColor; upper case is refused, so replay needs no conversion.
+ */
+export function isBodyColor(v: unknown): v is string {
+  return typeof v === 'string' && BODY_COLOR.test(v);
 }
 
 export interface DocumentMeta {

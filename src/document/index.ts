@@ -10,6 +10,7 @@ export type {
   FeatureInstance,
   PartStudioData,
 } from './model';
+export { isBodyColor } from './model';
 export type {
   AxisId,
   AxisRef,
