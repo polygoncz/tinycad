@@ -35,7 +35,6 @@ import {
   aKernelFactory,
   createCrashableKernel,
   FakeAppViewport,
-  formatTestValue,
   settle,
 } from './testing';
 import type { CrashableKernel, KernelFactory } from './testing';
@@ -86,7 +85,6 @@ async function open(
     solver: createFakeSolver(),
     download: downloads.download,
     theme: 'light',
-    formatValue: formatTestValue,
     ...overrides,
   });
   await settle();
@@ -1216,19 +1214,23 @@ describe('createAppSession – manipulators (M18)', () => {
     return { ...harness, transform: edit.featureId };
   }
 
-  it('shows the six handles of the Transform in the open dialog', async () => {
+  it('shows the handles of the Transform in its default mode Free in the open dialog', async () => {
     const { viewport } = await openTransform();
     expect(viewport.manipulatorViews.map((v) => v.id)).toEqual([
       'tx',
       'ty',
       'tz',
+      'txy',
+      'tyz',
+      'tzx',
+      'tc',
       'rx',
       'ry',
       'rz',
     ]);
   });
 
-  it('dragging tz changes translate, OK writes one entry, the label uses formatValue', async () => {
+  it('dragging tz changes translate, OK writes one entry', async () => {
     const { session, viewport, store, scheduler, transform } = await openTransform();
     scheduler.advance(1000);
     await settle();
@@ -1239,7 +1241,6 @@ describe('createAppSession – manipulators (M18)', () => {
 
     viewport.emitPointer(pointer('down', 0, 0));
     viewport.emitPointer(pointer('move', 0, 7));
-    expect(viewport.manipulatorLabel?.text).toBe('7 length');
     viewport.emitPointer(pointer('up', 0, 7));
     expect(session.doc.feature(transform)?.params).toMatchObject({ translate: [0, 0, 7] });
 
@@ -1252,9 +1253,53 @@ describe('createAppSession – manipulators (M18)', () => {
 
   it('dispose clears the handles in the view', async () => {
     const { session, viewport } = await openTransform();
-    expect(viewport.manipulatorViews).toHaveLength(6);
+    expect(viewport.manipulatorViews).toHaveLength(10);
     session.dispose();
     expect(viewport.manipulatorViews).toEqual([]);
+  });
+
+  it('the HUD of an open Transform has its 4 modes, the first active (M19)', async () => {
+    const { session } = await openTransform();
+    const hud = session.manipulator.hud.get() ?? fail();
+    expect(hud.modes.map((m) => [m.id, m.active])).toEqual([
+      ['free', true],
+      ['move', false],
+      ['rotate', false],
+      ['pivot', false],
+    ]);
+  });
+
+  it('setMode rotate shows the three full circles (M19)', async () => {
+    const { session, viewport } = await openTransform();
+    session.manipulator.setMode('rotate');
+    expect(viewport.manipulatorViews.map((v) => [v.id, v.kind])).toEqual([
+      ['rx', 'angular'],
+      ['ry', 'angular'],
+      ['rz', 'angular'],
+    ]);
+    expect(session.manipulator.hud.get()?.modes.find((m) => m.active)?.id).toBe('rotate');
+  });
+
+  it('setValue writes translate of the Transform (M19)', async () => {
+    const { session, transform } = await openTransform();
+    session.manipulator.setValue('tz', 12);
+    expect(session.doc.feature(transform)?.params).toMatchObject({ translate: [0, 0, 12] });
+  });
+
+  it('project and onViewChanged are forwarded from the viewport (M19)', async () => {
+    const { session, viewport } = await open();
+    expect(session.manipulator.project([1, 2, 3])).toBeNull();
+    viewport.prepareProject(([x, y]) => [x * 10, y * 10]);
+    expect(session.manipulator.project([1, 2, 3])).toEqual([10, 20]);
+
+    let calls = 0;
+    const off = session.manipulator.onViewChanged(() => {
+      calls++;
+    });
+    viewport.emitViewChanged({ generation: 1 });
+    off();
+    viewport.emitViewChanged({ generation: 2 });
+    expect(calls).toBe(1);
   });
 });
 

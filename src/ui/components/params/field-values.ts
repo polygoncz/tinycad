@@ -53,13 +53,12 @@ export function degToRad(deg: number): number {
 }
 
 /**
- * Text of the label of a manipulator (spec 11, rule 7): millimetres or degrees rounded to two
- * decimals, the same numbers as in the fields and independent of the language.
+ * The text of the value field of the manipulator HUD (spec 11, rules 7 and 8): millimetres or
+ * degrees rounded to two decimals, the same numbers as in the fields and independent of the
+ * language. The unit stands beside the input.
  */
-export function formatHandleValue(value: number, unit: HandleUnit): string {
-  return unit === 'length'
-    ? `${formatNumber(round2(value))} mm`
-    : `${formatNumber(round2(radToDeg(value)))}°`;
+export function handleValueNumber(value: number, unit: HandleUnit): string {
+  return formatNumber(round2(unit === 'length' ? value : radToDeg(value)));
 }
 
 function round2(value: number): number {

@@ -207,6 +207,9 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'viewCube.switchToFree': 'Switch to free rotation',
   'viewCube.switchToTurntable': 'Switch to rotation with Z up',
 
+  // The value field of the manipulator HUD (M19), its aria-label.
+  'manipulator.field.label': 'Handle value',
+
   // Labels of the built-in operations in the history panel: the dispatcher writes the op type
   // as the label of an entry without one. feature.rename and feature.suppress are above (actions).
   'feature.add': 'Add feature',

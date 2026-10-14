@@ -1065,6 +1065,13 @@ describe('extrudeManipulators', () => {
   // The anchor carries the sketch normal; flip comes from the live params (spec 07).
   const ANCHORS = { base: { point: [1, 2, 3] as Vec3, direction: [0, 0, 1] as Vec3 } };
 
+  /** The handles of the frame (M19); the extrude has no modes, so the mode is ''. */
+  function handlesOf(params: ExtrudeParams): readonly Handle[] {
+    const frame = extrudeManipulators.frame(params, ANCHORS, '');
+    if (frame === null) expect.fail('no frame');
+    return frame.handles;
+  }
+
   function only(handles: readonly Handle[]): LinearHandle {
     expect(handles.map((h) => h.id)).toEqual(['distance']);
     const [h] = handles;
@@ -1072,52 +1079,64 @@ describe('extrudeManipulators', () => {
     return h;
   }
 
-  it('gives no handles without the anchor base', () => {
-    expect(extrudeManipulators.handles(anExtrude('e').params, {})).toEqual([]);
+  it('has no modes', () => {
+    expect(extrudeManipulators.modes).toBeUndefined();
+  });
+
+  it('gives no frame without the anchor base', () => {
+    expect(extrudeManipulators.frame(anExtrude('e').params, {}, '')).toBeNull();
+  });
+
+  it('the center of the frame is the base point', () => {
+    expect(extrudeManipulators.frame(anExtrude('e').params, ANCHORS, '')?.center).toEqual([
+      1, 2, 3,
+    ]);
   });
 
   it('blind: one neutral length arrow at base + d·distance with min 0.01', () => {
-    const h = only(extrudeManipulators.handles(anExtrude('e', { distance: 10 }).params, ANCHORS));
+    const h = only(handlesOf(anExtrude('e', { distance: 10 }).params));
     expect(h).toMatchObject({ unit: 'length', tint: 'neutral', min: 0.01, value: 10 });
     expectVec(h.position, [1, 2, 13]);
     expect(h.direction).toEqual([0, 0, 1]);
     expect(h.toParams(12)).toEqual({ distance: 12 });
-    expect(h.display?.(12) ?? 12).toBe(12);
+    expect(h.displayScale ?? 1).toBe(1);
   });
 
   it('blind with flip: the arrow points against the normal of the anchor', () => {
     const params = anExtrude('e', { distance: 10, flip: true }).params;
-    const h = only(extrudeManipulators.handles(params, ANCHORS));
+    const h = only(handlesOf(params));
     expectVec(h.position, [1, 2, -7]);
     expectVec(h.direction, [0, 0, -1]);
     expect(h.value).toBe(10);
     expect(h.toParams(12)).toEqual({ distance: 12 });
   });
 
-  it('symmetric: the arrow at base + d·distance/2, the label shows the whole distance', () => {
+  it('symmetric: the arrow at base + d·distance/2, the field shows the whole distance', () => {
     const params = anExtrude('e', { endType: 'symmetric', distance: 10 }).params;
-    const h = only(extrudeManipulators.handles(params, ANCHORS));
+    const h = only(handlesOf(params));
     expect(h).toMatchObject({ unit: 'length', tint: 'neutral', min: 0.01, value: 5 });
     expectVec(h.position, [1, 2, 8]);
     expect(h.direction).toEqual([0, 0, 1]);
     expect(h.toParams(6)).toEqual({ distance: 12 });
-    expect(h.display?.(6)).toBe(12);
+    expect(h.displayScale).toBe(2);
   });
 
   it('symmetric ignores a set flip: the arrow goes along the normal', () => {
     const params = anExtrude('e', { endType: 'symmetric', distance: 10, flip: true }).params;
-    const h = only(extrudeManipulators.handles(params, ANCHORS));
+    const h = only(handlesOf(params));
     expectVec(h.position, [1, 2, 8]);
     expectVec(h.direction, [0, 0, 1]);
   });
 
-  it('up to face gives no handles even with an old anchor base', () => {
+  it('up to face gives no frame even with an old anchor base', () => {
     const params = anExtrude('e', { endType: 'upToFace' }).params;
-    expect(extrudeManipulators.handles(params, ANCHORS)).toEqual([]);
+    expect(extrudeManipulators.frame(params, ANCHORS, '')).toBeNull();
   });
 
-  it('the handles are frozen', () => {
-    const handles = extrudeManipulators.handles(anExtrude('e').params, ANCHORS);
+  it('the frame and the handles are frozen', () => {
+    const frame = extrudeManipulators.frame(anExtrude('e').params, ANCHORS, '');
+    expect(Object.isFrozen(frame)).toBe(true);
+    const handles = handlesOf(anExtrude('e').params);
     expect(Object.isFrozen(handles)).toBe(true);
     const h = only(handles);
     expect(Object.isFrozen(h)).toBe(true);

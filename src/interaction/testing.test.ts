@@ -300,27 +300,22 @@ describe('FakeViewport', () => {
       direction: [1, 0, 0],
       tint: 'x',
       state: 'idle',
+      dashed: false,
     };
 
-    it('starts with no views, no label and a pick of null', () => {
+    it('starts with no views and a pick of null', () => {
       const viewport = new FakeViewport();
       expect(viewport.manipulatorViews).toEqual([]);
-      expect(viewport.manipulatorLabel).toBeNull();
       expect(viewport.manipulators.pick(1, 2)).toBeNull();
     });
 
-    it('records the last views as a frozen copy and the last label', () => {
+    it('records the last views as a frozen copy', () => {
       const viewport = new FakeViewport();
       const views = [VIEW];
       viewport.manipulators.set(views);
       views.push({ ...VIEW, id: 'b' });
       expect(viewport.manipulatorViews).toEqual([VIEW]);
       expect(Object.isFrozen(viewport.manipulatorViews)).toBe(true);
-
-      viewport.manipulators.setLabel({ x: 1, y: 2, text: '3 mm' });
-      expect(viewport.manipulatorLabel).toEqual({ x: 1, y: 2, text: '3 mm' });
-      viewport.manipulators.setLabel(null);
-      expect(viewport.manipulatorLabel).toBeNull();
     });
 
     it('pick calls the prepared function with the coordinates', () => {
@@ -331,7 +326,24 @@ describe('FakeViewport', () => {
     });
   });
 
+  describe('project (M19)', () => {
+    it('is null by default and calls the prepared function with the world point', () => {
+      const viewport = new FakeViewport();
+      expect(viewport.project([1, 2, 3])).toBeNull();
+      viewport.prepareProject(([x, y]) => [x * 10, y * 10]);
+      expect(viewport.project([1, 2, 3])).toEqual([10, 20]);
+    });
+  });
+
   describe('events', () => {
+    it('delivers emitted viewChanged events to subscribers (M19)', () => {
+      const view = new FakeViewport();
+      const seen: number[] = [];
+      view.events.on('viewChanged', (e) => seen.push(e.generation));
+      view.emitViewChanged({ generation: 3 });
+      expect(seen).toEqual([3]);
+    });
+
     it('delivers emitted pointer events to subscribers', () => {
       const view = new FakeViewport();
       const seen: ViewPointerEvent[] = [];

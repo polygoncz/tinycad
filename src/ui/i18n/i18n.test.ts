@@ -157,6 +157,9 @@ const VIEW_CUBE_KEYS = [
   'viewCube.switchToTurntable',
 ];
 
+// The aria-label of the value field of the manipulator HUD (M19, spec 11 rule 8).
+const MANIPULATOR_KEYS = ['manipulator.field.label'];
+
 const PLUGIN = {
   cs: { 'box.label': 'Kvádr', 'box.width': 'Šířka' },
   en: { 'box.label': 'Box', 'box.width': 'Width' },
@@ -197,6 +200,7 @@ describe('built-in dictionaries', () => {
     ...DEBUG_KEYS,
     ...FILE_KEYS,
     ...VIEW_CUBE_KEYS,
+    ...MANIPULATOR_KEYS,
     // The types of the built-in operations (OP_VERSION of ops, through app): the dispatcher
     // writes the type as the label of an entry without one, so the history panel translates it
     // (spec 11, M15); a new type fails this test until it has a text.

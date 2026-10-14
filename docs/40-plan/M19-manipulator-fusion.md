@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 19
 aliases:
   - M19
@@ -20,7 +20,7 @@ specs:
 depends_on:
   - "[[M18-manipulatory]]"
 started: 2026-10-14
-finished:
+finished: 2026-10-14
 tags:
   - milnik
 created: 2026-10-14
@@ -44,18 +44,19 @@ updated: 2026-10-14
 
 ## Úkoly
 
-- [ ] 1. `interaction`: nové druhy úchytů a matematika (bez změny API)
-- [ ] 2. `interaction` + přizpůsobení: `frame`, režimy, `pickPoint`, HUD, port, Extrude a Transformace na nové API
-- [ ] 3. `render`: glyfy ve stylu Fusion, picking nových druhů, `project`, `viewChanged`
-- [ ] 4. `features/transform`: schéma v3, migrace, režimy, kardanové oblouky, čočka pivotu
-- [ ] 5. `app` + `ui`: `AppSession.manipulator`, `ManipulatorHud.vue`
-- [ ] 6. Ruční ověření, revize, uzavření
+- [x] 1. `interaction`: nové druhy úchytů a matematika (bez změny API)
+- [x] 2. `interaction` + přizpůsobení: `frame`, režimy, `pickPoint`, HUD, port, Extrude a Transformace na nové API
+- [x] 3. `render`: glyfy ve stylu Fusion, picking nových druhů, `project`, `viewChanged`
+- [x] 4. `features/transform`: schéma v3, migrace, režimy, kardanové oblouky, čočka pivotu
+- [x] 5. `app` + `ui`: `AppSession.manipulator`, `ManipulatorHud.vue`
+- [x] 6. Ruční ověření, revize, uzavření
+- [x] 7. Opravy z revize architektury
 
 ## Implementační plán
 
 ### Společná pravidla (platí pro každý úkol)
 
-- Kontrakt ve spec doslova, čísla ze spec. Mezi ně patří velikosti glyfů v tabulce [[09-vykreslovani#Vzhled od M19 (styl Fusion)]], posun pole (96 a 88 px) a lišty (24 px).
+- Kontrakt ve spec doslova, čísla ze spec. Mezi ně patří velikosti glyfů v tabulce [[09-vykreslovani#Vzhled od M19 (styl Fusion)]], posun pole (96 a 88 px) a lišty (110 px).
 - Vektory přes `vec3`, `mat4` a `quat` z `@/core` ([[0012-gl-matrix-za-fasadou|ADR 0012]]). Čisté soubory `render` patří do pravidla `render-pure-files-without-three`.
 - Neměnná data, žádné `any`, angličtina v kódu, TDD, `npm run check` zelený.
 
@@ -109,7 +110,7 @@ updated: 2026-10-14
 - **Soubory:** `src/features/transform/{schema,builder,manipulators,messages,index}.ts`, `transform.test.ts`.
 - **Kontrakt:**
   - **Params** v pořadí `bodies`, `pivot`, `pivotPoint`, `translate`, `rx`, `ry`, `rz`. Tři pole `angle` s výchozí hodnotou 0 a popisky `transform.rx`, `transform.ry`, `transform.rz` (cs „Rotace X/Y/Z“, en „Rotation X/Y/Z“). `axis` a `angle` zanikají i s texty.
-  - **`migrate(1, raw)`** projde v1 → v2 → v3. **`migrate(2, raw)`** nastaví `r<axis> = angle`, ostatní úhly 0, a odebere `axis` a `angle`. Data, která nejsou objekt, odmítne výjimkou.
+  - **`migrate(1, raw)`** projde v1 → v2 → v3. **`migrate(2, raw)`** nastaví `r<axis> = angle`, ostatní úhly 0, a odebere `axis` a `angle`. Data, která nejsou objekt, odmítne výjimkou. Data v2 s neznámou nebo chybějící `axis` propustí beze změny a chybu ohlásí `validate` na featuře (rozhodnutí 2026-10-14: jedna chybná featura nerozbije načtení dokumentu).
   - **Builder:** `R = Rz · Ry · Rx` (`mat4.rotationAxisAngle`), `m = T(translate) · T(p) · R · T(−p)`. Kotva jen pro `bodiesCenter` (beze změny).
   - **Režimy** v pořadí:
 
@@ -118,7 +119,7 @@ updated: 2026-10-14
     | `free` | `transform.mode.free` (cs „Volný“, en „Free“) | `arrows-move` |
     | `move` | `transform.mode.move` (cs „Posun“, en „Move“) | `arrows-up-down` |
     | `rotate` | `transform.mode.rotate` (cs „Rotace“, en „Rotate“) | `rotate-clockwise` |
-    | `pivot` | `transform.mode.pivot` (cs „Nastavit pivot“, en „Set pivot“) | `focus-2` |
+    | `pivot` | `transform.mode.pivot` (cs „Nastavit pivot“, en „Set pivot“) | `focus-2`, `picksPoint: true` |
 
   - **`frame`:** `p` stejně jako v M18 (`origin`, `pivotPoint`, kotva), `c = p + translate`, `center = c`.
     - **Posun** (`free`, `move`):
@@ -161,6 +162,13 @@ updated: 2026-10-14
   - tmavý režim.
 - `architecture-reviewer`, opravy, uzavření, deník.
 
+### 7. Opravy z revize architektury
+
+- **Soubory:** `src/ui/manipulator-hud.ts` (+ test), `src/ui/components/ManipulatorHud.vue`, `src/ui/components/params/field-values.ts` (+ test), `src/interaction/manipulator-controller.ts` (+ test), `src/interaction/regen-status-port.ts` nebo kde je `HudField`.
+- **Kontrakt:** [[11-ui]] pravidlo 8 (`hudLayout`, `fieldCommit`), `HudField.kind` v [[10-interakce#Režimy a HUD (M19)]], pravidlo 7 (bez `formatHandleValue`).
+- **Testy:** `hudLayout` (skrytí lišty a pole mimo plochu, odsazení podle `kind`), `fieldCommit` (nezměněný text, neplatný text, stupně → radiány), controller plní `kind`.
+- **Hotovo když:** `npm run check` a e2e jsou zelené a `ManipulatorHud.vue` neobsahuje výpočty polohy ani rozhodování o zápisu.
+
 ## Akceptační kritéria
 
 - Ve výchozím režimu Volný jsou vidět šipky, čtverce, středový bod a čtvrtkruhy. V režimu Rotace celé kružnice, v Posunu jen posun. Lišta režimů jezdí s manipulátorem.
@@ -183,4 +191,23 @@ updated: 2026-10-14
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+**Co šlo dobře**
+- Abstrakce z M18 unesla velké rozšíření: dva nové druhy úchytů, režimy, klik na model a HUD. Controller přitom neví nic o Transformaci. Pivot je čistá čočka (`t' = t + (I − R)(p − p')`) a v prohlížeči těleso při přichycení pivotu opravdu stojí.
+- Pořadí „přidat vedle, pak přepnout API najednou“ (úkoly 1 a 2) udrželo zelený `npm run check` po každém úkolu.
+- Kardanové oblouky fungují tak, jak má: po rotaci Z se oblouky X a Y otočí s tělesem.
+
+**Co bylo jinak, než se čekalo**
+- Při psaní spec M19 vyplavala chyba v M18. Transformace s pivotem `origin` nebo `point` nevracela kotvy a manipulátor zmizel. Pravidlo „builder s manipulátorem vrací kotvy vždy“ je teď ve spec 07.
+- Lišta 24 px od středu ležela přes úchyty. Ve spec jsem nepočítal s dosahem glyfů (98 px), oprava na 110 px přišla až z ručního ověření v prohlížeči.
+- Revize našla logiku rozvržení a zápisu ve `.vue` (ADR 0010). Přesunula se do čistých funkcí `hudLayout` a `fieldCommit`.
+- Čtyři rozhodnutí z implementace jsem propsal do spec:
+  - příznak režimu `picksPoint` místo sondy;
+  - migrace v2 s neplatnou `axis` propustí data, chybu ohlásí `validate`;
+  - `HudField.kind` místo odvozování druhu úchytu z jednotky;
+  - skrytí kružnice viděné z hrany.
+
+**Co dál**
+- Lišta u pravého okraje plochy zajíždí pod plovoucí dialog featury. Ořez počítá s plochou viewportu, ne s panely nad ní.
+- Pole u úhlového úchytu částečně překrývá kružnice. Pomohlo by odsazení podle `extent`, nebo pole za obvodem kružnice.
+- Velikost glyfů (šipka 98 px) může působit malá. Rozměry jsou konstanty v tabulce spec 09, doladí se podle Pavlova dojmu.
+- Revolve: kotva osy a úhlový úchyt (třetí ověření abstrakce).

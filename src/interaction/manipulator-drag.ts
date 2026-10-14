@@ -1,5 +1,5 @@
 // The math of dragging a handle (spec 10, "Matematika tažení"): pure functions from a pointer ray
-// to the parameter of a linear or angular handle, unwrapping across ±π and snapping.
+// to the parameter of a linear, angular, planar or point handle, unwrapping across ±π and snapping.
 
 import { vec3 } from '@/core';
 import type { Vec3 } from '@/core';
@@ -54,6 +54,36 @@ export function angularParam(center: Vec3, axis: Vec3, zero: Vec3, ray: Ray): nu
   const angle = Math.atan2(vec3.dot(vec3.cross(zero, v), n), vec3.dot(zero, v));
   // atan2 gives −π for a -0 sine; the range is half-open at −π.
   return angle === -Math.PI ? Math.PI : angle;
+}
+
+/**
+ * The coordinates (a, b) of the intersection of the ray with the plane (origin, u × v) in the basis
+ * u, v; null when the plane is seen edge-on (|n · ray| < EDGE_ON_LIMIT). u and v are unit and
+ * perpendicular by the handle contract, so the coordinates are plain projections.
+ */
+export function planarParam(
+  origin: Vec3,
+  u: Vec3,
+  v: Vec3,
+  ray: Ray,
+): readonly [number, number] | null {
+  const n = vec3.normalize(vec3.cross(u, v));
+  const r = vec3.normalize(ray.direction);
+  const cos = vec3.dot(n, r);
+  if (Math.abs(cos) < EDGE_ON_LIMIT) return null;
+  const s = vec3.dot(n, vec3.sub(origin, ray.origin)) / cos;
+  const w = vec3.sub(vec3.add(ray.origin, vec3.scale(r, s)), origin);
+  return [vec3.dot(w, u), vec3.dot(w, v)];
+}
+
+/**
+ * The intersection of the ray with the plane perpendicular to it through position, i.e. the point
+ * of the ray nearest to position.
+ */
+export function pointParam(position: Vec3, ray: Ray): Vec3 {
+  const r = vec3.normalize(ray.direction);
+  const s = vec3.dot(r, vec3.sub(position, ray.origin));
+  return vec3.add(ray.origin, vec3.scale(r, s));
 }
 
 /** next − prev mapped into (−π, π] (unwrapping across ±π). */

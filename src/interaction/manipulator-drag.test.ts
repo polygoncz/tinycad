@@ -7,6 +7,8 @@ import {
   SNAP_STEP,
   angularParam,
   linearParam,
+  planarParam,
+  pointParam,
   snapValue,
   unwrapDelta,
 } from './manipulator-drag';
@@ -158,5 +160,82 @@ describe('snapValue', () => {
     expect(Object.is(snapValue(-0.3, length, false), 0)).toBe(true);
     expect(Object.is(snapValue(-0, length, true), 0)).toBe(true);
     expect(Object.is(snapValue(-0.4, { unit: 'length', max: 0 }, false), 0)).toBe(true);
+  });
+});
+
+describe('planarParam', () => {
+  it('gives the coordinates in the XY plane seen from above', () => {
+    const [a, b] = planarParam([1, 2, 0], X, Y, downAt(4, -1)) ?? [NaN, NaN];
+    expect(a).toBeCloseTo(3, 12);
+    expect(b).toBeCloseTo(-3, 12);
+  });
+
+  it('gives the coordinates for an oblique ray', () => {
+    const target: Vec3 = [3, 5, 2];
+    const direction = vec3.normalize([1, -2, -3]);
+    const ray = { origin: vec3.sub(target, vec3.scale(direction, 7)), direction };
+    const [a, b] = planarParam([0, 0, 2], X, Y, ray) ?? [NaN, NaN];
+    expect(a).toBeCloseTo(3, 9);
+    expect(b).toBeCloseTo(5, 9);
+  });
+
+  it('measures in a basis u, v rotated by 30° about Z', () => {
+    const c = Math.cos(Math.PI / 6);
+    const s = Math.sin(Math.PI / 6);
+    const u: Vec3 = [c, s, 0];
+    const v: Vec3 = [-s, c, 0];
+    // The point 2·u + 3·v off the origin (1, 1, 0).
+    const p = vec3.add([1, 1, 0], vec3.add(vec3.scale(u, 2), vec3.scale(v, 3)));
+    const [a, b] = planarParam([1, 1, 0], u, v, downAt(p[0], p[1])) ?? [NaN, NaN];
+    expect(a).toBeCloseTo(2, 12);
+    expect(b).toBeCloseTo(3, 12);
+  });
+
+  it('works in a plane that is not XY (normal is u × v)', () => {
+    // The YZ plane at x = 4, looked at along −X.
+    const ray = { origin: [10, 2, -1] as Vec3, direction: [-1, 0, 0] as Vec3 };
+    const [a, b] = planarParam([4, 0, 0], Y, Z, ray) ?? [NaN, NaN];
+    expect(a).toBeCloseTo(2, 12);
+    expect(b).toBeCloseTo(-1, 12);
+  });
+
+  it('gives null when the plane is seen edge-on', () => {
+    expect(planarParam(ORIGIN, X, Y, { origin: [5, 5, 0], direction: [-1, 0, 0] })).toBeNull();
+    expect(
+      planarParam(ORIGIN, X, Y, { origin: [5, 5, 0.1], direction: [-1, 0, -0.01] }),
+    ).toBeNull();
+  });
+});
+
+describe('pointParam', () => {
+  it('gives the point of the ray nearest to position', () => {
+    const q = pointParam([1, 2, 3], downAt(4, -1));
+    expect(q[0]).toBeCloseTo(4, 12);
+    expect(q[1]).toBeCloseTo(-1, 12);
+    expect(q[2]).toBeCloseTo(3, 12);
+  });
+
+  it('gives the nearest point for an oblique ray that is not unit', () => {
+    const position: Vec3 = [2, -1, 5];
+    const direction: Vec3 = [3, 1, -2];
+    const ray = { origin: [-4, 0, 7] as Vec3, direction };
+    const q = pointParam(position, ray);
+    // q lies on the ray …
+    const along = vec3.sub(q, ray.origin);
+    expect(vec3.length(vec3.cross(along, direction))).toBeCloseTo(0, 9);
+    // … and q − position is perpendicular to it.
+    expect(vec3.dot(vec3.sub(q, position), direction)).toBeCloseTo(0, 9);
+  });
+
+  it('gives position itself when the ray passes through it', () => {
+    const direction = vec3.normalize([1, 1, -1]);
+    const position: Vec3 = [3, 4, 5];
+    const q = pointParam(position, {
+      origin: vec3.sub(position, vec3.scale(direction, 9)),
+      direction,
+    });
+    expect(q[0]).toBeCloseTo(3, 12);
+    expect(q[1]).toBeCloseTo(4, 12);
+    expect(q[2]).toBeCloseTo(5, 12);
   });
 });

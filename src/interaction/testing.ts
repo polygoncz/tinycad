@@ -21,7 +21,6 @@ import type {
   HandleView,
   HighlightPort,
   HighlightTarget,
-  ManipulatorLabel,
   ManipulatorPort,
   OverlayPort,
   OverlayShape,
@@ -29,6 +28,7 @@ import type {
   PickResult,
   SketchDrawing,
   SketchPort,
+  ViewChangedEvent,
   ViewKeyEvent,
   ViewPointerEvent,
   ViewportEvents,
@@ -39,6 +39,7 @@ type Ray = ReturnType<ViewportPort['screenToRay']>;
 type PickFn = (x: number, y: number) => PickResult | null;
 type RayFn = (x: number, y: number) => Ray;
 type HandlePickFn = (x: number, y: number) => string | null;
+type ProjectFn = (world: Vec3) => readonly [x: number, y: number] | null;
 
 /** The filter of a pick called without one (spec 10, "Port viewportu"). */
 const DEFAULT_FILTER: PickFilter = Object.freeze(['edge', 'face']);
@@ -48,8 +49,8 @@ const DEFAULT_RAY: RayFn = (x, y) => ({ origin: [x, y, 0] satisfies Vec3, direct
 
 /**
  * A ViewportPort for tests: preset pick results, a configurable screenToRay, recorded
- * highlight, overlay, sketch drawing and manipulator state (M18), a preset handle pick, and
- * manual emitting of pointer and key events. pick returns the preset result only when its kind is in the filter and records the filter.
+ * highlight, overlay, sketch drawing and manipulator state (M18), a preset handle pick and
+ * projection (M19), and manual emitting of pointer, key and viewChanged events. pick returns the preset result only when its kind is in the filter and records the filter.
  * The recorded state is replaced on every call, so a read snapshot never changes later.
  */
 export class FakeViewport implements ViewportPort {
@@ -69,7 +70,7 @@ export class FakeViewport implements ViewportPort {
   private sketchState: ReadonlyMap<string, SketchDrawing> = new Map();
   private handlePickFn: HandlePickFn = () => null;
   private manipulatorViewState: readonly HandleView[] = Object.freeze([]);
-  private manipulatorLabelState: ManipulatorLabel | null = null;
+  private projectFn: ProjectFn = () => null;
 
   constructor() {
     this.highlight = {
@@ -110,9 +111,6 @@ export class FakeViewport implements ViewportPort {
         this.manipulatorViewState = Object.freeze([...handles]);
       },
       pick: (x, y) => this.handlePickFn(x, y),
-      setLabel: (label) => {
-        this.manipulatorLabelState = label;
-      },
     };
   }
 
@@ -124,6 +122,11 @@ export class FakeViewport implements ViewportPort {
   /** The result of manipulators.pick as a function of the view coordinates; default null (M18). */
   prepareHandlePick(fn: HandlePickFn): void {
     this.handlePickFn = fn;
+  }
+
+  /** The result of project as a function of the world point; default null (M19). */
+  prepareProject(fn: ProjectFn): void {
+    this.projectFn = fn;
   }
 
   setScreenToRay(fn: RayFn): void {
@@ -139,6 +142,10 @@ export class FakeViewport implements ViewportPort {
 
   screenToRay(x: number, y: number): Ray {
     return this.rayFn(x, y);
+  }
+
+  project(world: Vec3): readonly [x: number, y: number] | null {
+    return this.projectFn(world);
   }
 
   /** Filter of the last pick call; undefined = called without one, or not called yet. */
@@ -171,17 +178,16 @@ export class FakeViewport implements ViewportPort {
     return this.manipulatorViewState;
   }
 
-  /** Last label passed to manipulators.setLabel (M18); null before any. */
-  get manipulatorLabel(): ManipulatorLabel | null {
-    return this.manipulatorLabelState;
-  }
-
   emitPointer(e: ViewPointerEvent): void {
     this.emitter.emit('pointer', e);
   }
 
   emitKey(e: ViewKeyEvent): void {
     this.emitter.emit('key', e);
+  }
+
+  emitViewChanged(e: ViewChangedEvent): void {
+    this.emitter.emit('viewChanged', e);
   }
 }
 

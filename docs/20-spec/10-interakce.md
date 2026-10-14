@@ -169,7 +169,7 @@ export interface RegenStatusPort {
 
 - `health` je `ReadonlyMap`, ale `Map` zmrazit nejde: adaptér v `app` posílá v každém snapshotu **novou** mapu a už ji nemění. `interaction` ji jen čte.
 - Potlačení a pozice za barem port nenese: `interaction` je čte přímo z dokumentu, takže se projeví hned, ne až po regeneraci.
-- `anchors` (M18): stejně jako `health` nová mapa v každém snapshotu. Typy `Anchor` a `FeatureAnchors` jsou veřejné API `interaction`, pluginy je potřebují pro podpis `ManipulatorDescriptor.handles`. `FakeRegenStatus.publish` dostane volitelný čtvrtý argument `anchors` (chybějící = prázdná mapa).
+- `anchors` (M18): stejně jako `health` nová mapa v každém snapshotu. Typy `Anchor` a `FeatureAnchors` jsou veřejné API `interaction`, pluginy je potřebují pro podpis `ManipulatorDescriptor.frame`. `FakeRegenStatus.publish` dostane volitelný čtvrtý argument `anchors` (chybějící = prázdná mapa).
 - V testech port nahrazuje `FakeRegenStatus` (`testing.ts`) s metodou `publish(health, bodies?, sketches?)`, která zvýší `generation` (chybějící seznamy prázdné; těleso bez `names` dostane `NO_TOPO_NAMES`, M14). `aTopoNames({ faces?: Record<string, number[]>, edges?: … })` v `testing.ts` sestaví `TopoNames` z ručně zadaných jmen. Port nese `sketches` vedle `bodies` místo sjednocení `artifacts` z revize – stejná informace s menší změnou ([[Rozhodnutí noční rychloakce#M12 – Skicář|R38]] ⚠). `RegenBody` se exportuje, potřebuje ho adaptér v `app`.
 
 ## Prezentační modely a `Observable`
@@ -462,13 +462,16 @@ export interface PointHandle extends HandleBase {
 export type Handle = LinearHandle | AngularHandle | PlanarHandle | PointHandle;
 
 /** M19: režim manipulátoru; label je klíč překladu (ADR 0014), icon jméno ikony (Tabler) pro ui. */
-export interface ManipulatorMode { readonly id: string; readonly label: string; readonly icon: string }
+export interface ManipulatorMode {
+  readonly id: string; readonly label: string; readonly icon: string;
+  readonly picksPoint?: boolean;                   // v režimu bere controller klik na model a volá pickPoint (výchozí false)
+}
 /** M19: výsledek deskriptoru – bod, u kterého stojí lišta, a úchyty. */
 export interface ManipulatorFrame { readonly center: Vec3; readonly handles: readonly Handle[] }
 
 export interface ManipulatorDescriptor<P = unknown> {
   readonly type: string;                           // typ featury
-  /** M19: režimy; první je výchozí. Bez režimů (nebo s jedním) není lišta a mode je ''. */
+  /** M19: režimy; první je výchozí. Bez režimů je mode ''. Lišta jen při dvou a více režimech. */
   readonly modes?: readonly ManipulatorMode[];
   /** Čistá funkce; volá se jen s platnými params (issues = []) a s kotvami featury; null = žádné úchyty. */
   frame(params: P, anchors: FeatureAnchors, mode: string): ManipulatorFrame | null;
@@ -533,7 +536,7 @@ export function snapValue(value: number, h: { unit: HandleUnit; min?: number; ma
 - **Úhlový tah:** při stisku `a₀`, při každém pohybu `acc += unwrapDelta(aPrev, a)`, `aPrev = a`, `raw = value₀ + acc`. Tah tak umí víc než jednu otáčku. `a = null` → pohyb se ignoruje.
 - **Rovinný tah** (M19): při stisku `(a₀, b₀)`, při pohybu `raw = value₀ + (a − a₀, b − b₀)`; `null` → pohyb se ignoruje. Přichycení po složkách (`snapValue` s `unit: 'length'`).
 - **Bodový tah** (M19): při stisku `q₀ = pointParam(position, ray)`; rovina tahu je kolmá na paprsek **při stisku** a během tahu se nemění (orbit kamery během tahu nejde, pravé tlačítko se ignoruje). Při pohybu průsečík s touto rovinou `q`, `raw = value₀ + (q − q₀)`, přichycení po složkách.
-- Paprsek se ve všech funkcích bere jako celá přímka (záporné `s` u průsečíku se nezahazuje). V ortografické kameře leží úchyt vždy před počátkem paprsku na blízké rovině, takže to nevadí. Směry se normalizují uvnitř, `linearParam` vrací `t` v jednotkách zadaného `direction`.
+- Paprsek se ve všech funkcích bere jako celá přímka (záporné `s` u průsečíku se nezahazuje). V ortografické kameře leží úchyt vždy před počátkem paprsku na blízké rovině, takže to nevadí. Směry se normalizují uvnitř, `linearParam` vrací `t` v jednotkách zadaného `direction`. `u` a `v` rovinného úchytu se nenormalizují: kontrakt úchytu je chce jednotkové a kolmé, souřadnice jsou pak prosté průměty.
 - Přichycení je na **absolutní** hodnotu (`Math.round(raw / step) * step`), ne na přírůstek. Ořez až po přichycení. `snapValue` vrací `−0` jako `0`.
 
 ### `ManipulatorController` (`manipulator-controller.ts`)
@@ -569,9 +572,9 @@ export function createManipulatorController(deps: {
 
 | Událost | Bez tažení | Při tažení |
 |---|---|---|
-| `move` | `id = manipulators.pick(x, y)` → hover úchytu; vrátí `id !== null`; v režimu s `pickPoint` vrátí `true` i nad modelem (spodní vrstva nedostane hover) | spočítá hodnotu (výše), přichycení (`fine = mods.shift`); liší-li se od poslední → `session.setParams(handle.toParams(v))`; skalární úchyt aktualizuje pole HUD; `true` |
-| levé `down` | `manipulators.pick(x, y)` vrátí id úchytu: začne tažení (paprsek z `screenToRay`, počáteční parametr, zmrazí úchyt, kotvy a režim, uloží původní hodnoty klíčů `toParams(value)` z params, stav `active`; skalární úchyt se stane úchytem pole HUD), `true`; je-li počáteční parametr `null` → `false`. Mimo úchyt v režimu s `pickPoint`: zapamatuje si pozici, `true` | `true` (ignoruje) |
-| levé `up` | po `down` mimo úchyt v režimu s `pickPoint` a do `CLICK_TOLERANCE_PX` od něj: `hit = viewport.pick(x, y, ['face', 'edge'])`, `patch = pickPoint(…, hit.point)`, není-li `null` → `session.setParams(patch)`; `true`. Jinak `false` | konec tažení, hover znovu z `pick`; `true` |
+| `move` | `id = manipulators.pick(x, y)` → hover úchytu; vrátí `id !== null`; v režimu s `picksPoint` vrátí `true` i nad modelem (spodní vrstva nedostane hover) | spočítá hodnotu (výše), přichycení (`fine = mods.shift`); liší-li se od poslední → `session.setParams(handle.toParams(v))`; skalární úchyt aktualizuje pole HUD; `true` |
+| levé `down` | `manipulators.pick(x, y)` vrátí id úchytu: začne tažení (paprsek z `screenToRay`, počáteční parametr, zmrazí úchyt, kotvy a režim, uloží původní hodnoty klíčů `toParams(value)` z params, stav `active`; skalární úchyt se stane úchytem pole HUD), `true`; je-li počáteční parametr `null` → `false`. Mimo úchyt v režimu s `picksPoint`: zapamatuje si pozici, `true` | `true` (ignoruje) |
+| levé `up` | po `down` mimo úchyt v režimu s `picksPoint` a do `CLICK_TOLERANCE_PX` od něj: `hit = viewport.pick(x, y, ['face', 'edge'])`, `patch = pickPoint(…, hit.point)`, není-li `null` → `session.setParams(patch)`; `true`. Jinak `false` | konec tažení, hover znovu z `pick`; `true` |
 | pravé, prostřední | `false` (kamera) | `true` (ignoruje) |
 | `leave` | zruší hover; `false` | `true` (ukazatel je zachycený, tah pokračuje) |
 | `Escape` | `false` | `session.setParams(původní hodnoty)`, konec tažení; `true` |
@@ -583,7 +586,7 @@ export function createManipulatorController(deps: {
 - Session zavřená během tažení (Zrušit nebo OK z dialogu) → tažení skončí bez zápisu, pohledy `[]`, `hud` `null`.
 - `dispose`: odhlásí se, pošle `set([])` a `hud` `null`. Druhé `dispose` nic.
 - Tažení otevírá transakci jen dialog. Controller nikdy nevolá `ops`, jen session (Q069).
-- V režimu s `pickPoint` bere controller levé klikání nad modelem sám, takže referenční parametr dialogu (`refPick`) a nástroj v tu chvíli klik nedostanou. Přepnutím do jiného režimu se chování vrátí.
+- V režimu s `picksPoint` bere controller levé klikání nad modelem sám, takže referenční parametr dialogu (`refPick`) a nástroj v tu chvíli klik nedostanou. Přepnutím do jiného režimu se chování vrátí.
 
 ### Režimy a HUD (M19)
 
@@ -591,12 +594,13 @@ export function createManipulatorController(deps: {
 
 ```ts
 export interface ManipulatorHud {
-  readonly modes: readonly { readonly id: string; readonly label: string; readonly icon: string; readonly active: boolean }[];   // [] = bez lišty
+  readonly modes: readonly { readonly id: string; readonly label: string; readonly icon: string; readonly active: boolean }[];   // [] = bez lišty (žádný nebo jeden režim)
   readonly center: Vec3;                   // frame.center: lišta stojí vpravo nahoře od jeho průmětu
   readonly field: HudField | null;
 }
 export interface HudField {
   readonly handleId: string;
+  readonly kind: 'linear' | 'angular';   // ui podle něj volí odsazení pole (revize M19)
   readonly at: Vec3;                       // linear: position, angular: center
   readonly direction: Vec3;                // jednotkový směr ve světě, podél kterého ui pole odsune: linear = direction, angular = zero otočené o 45° kolem axis (střed čtvrtkruhu)
   readonly value: number;                  // zobrazená hodnota (value · displayScale)
@@ -609,7 +613,7 @@ export interface HudField {
 - **Režim** je stav UI, ne dokumentu. Při otevření session (nové `features.current`) je výchozí první režim deskriptoru. `setMode(id)` přepne, přepočítá rámec, zruší hover a pole HUD (`field: null`). Stejné id nic.
 - **Umístění pole:** `ui` promítne `at` a `at + direction`, ze dvou bodů vezme směr na obrazovce a pole postaví `FIELD_OFFSET_PX` od průmětu `at` (lineární 96 px = šipka 80 + 16, úhlový 88 px = poloměr 72 + 16). Délky glyfů tak `interaction` znát nemusí.
 - **Pole HUD** patří poslednímu použitému skalárnímu úchytu: úchyt, za který se táhlo, nebo na který se jen kliklo (levé `down` + `up` bez pohybu, hodnota se nezmění). Pole drží hodnotu z aktuálního rámce (po změně params z dialogu se aktualizuje). Zmizí, když úchyt v rámci není (jiný režim, jiný typ konce u Extrude). Rovinný a bodový úchyt pole nemají.
-- `setValue(handleId, shown)`: úchyt musí být v aktuálním rámci a skalární, jinak nic. `v = shown / (displayScale ?? 1)`, ořez na `[min, max]` bez přichycení; liší-li se od `value` → `session.setParams(toParams(v))`.
+- `setValue(handleId, shown)`: během tahu nic; úchyt musí být v aktuálním rámci a skalární, jinak nic. `v = shown / (displayScale ?? 1)`, ořez na `[min, max]` bez přichycení; liší-li se od `value` → `session.setParams(toParams(v))`.
 - `hud` je nový objekt jen při změně obsahu (porovnání po polích, vektory po složkách), aby se Vue nepřekreslovalo při každém snapshotu.
 
 ### Směrování v `ToolManager`
@@ -623,7 +627,7 @@ export interface HudField {
 ### Testy
 
 - `manipulator-drag`: `linearParam` (kolmý paprsek, šikmý paprsek, rovnoběžný → `null`), `angularParam` (čtyři kvadranty, znaménko podle `axis`, z hrany → `null`), `unwrapDelta` přes ±π, `snapValue` (krok, `fine`, ořez, `−0`), tah přes 400° dá 400° (součet `unwrapDelta`). M19: `planarParam` (rovina XY shora i šikmo, báze u, v jiná než osy, z hrany → `null`), `pointParam` (bod na paprsku nejbližší k position).
-- `manipulator-controller` s `FakeViewport`, `FakeRegenStatus`, `anOpsSession` a testovacím deskriptorem: bez session, bez kotev, s `issues` → `[]`; hover; tah lineárního úchytu zapíše params (se Shift bez přichycení); `setParams` jen při změně hodnoty; Esc vrátí původní params včetně klíče, který úchyt přepíná; po commitu je v logu jedna položka; zmrazené kotvy (snapshot bez kotev během tahu tah nepřeruší); zavření session během tahu. M19: rovinný a bodový tah (bodový s rovinou ze stisku i po `viewChanged`); režimy (výchozí první, `setMode` přepne rámec a zruší pole, během tahu nic, nová session vrátí výchozí); `pickPoint` (klik na model zapíše patch, tah po modelu ne, klik mimo model nic, v režimu bez `pickPoint` jde klik dál); pole HUD (po tahu, po kliku bez pohybu, zmizí s úchytem, `dragging`, `displayScale`); `setValue` (ořez, bez přichycení, neznámý nebo neskalární úchyt nic).
+- `manipulator-controller` s `FakeViewport`, `FakeRegenStatus`, `anOpsSession` a testovacím deskriptorem: bez session, bez kotev, s `issues` → `[]`; hover; tah lineárního úchytu zapíše params (se Shift bez přichycení); `setParams` jen při změně hodnoty; Esc vrátí původní params včetně klíče, který úchyt přepíná; po commitu je v logu jedna položka; zmrazené kotvy (snapshot bez kotev během tahu tah nepřeruší); zavření session během tahu. M19: rovinný a bodový tah (bodový s rovinou ze stisku i po `viewChanged`); režimy (výchozí první, `setMode` přepne rámec a zruší pole, během tahu nic, nová session vrátí výchozí); `pickPoint` (klik na model zapíše patch, tah po modelu ne, klik mimo model nic, v režimu bez `picksPoint` jde klik dál); pole HUD (po tahu, po kliku bez pohybu, zmizí s úchytem, `dragging`, `displayScale`); `setValue` (ořez, bez přichycení, neznámý nebo neskalární úchyt nic).
 - `tool-manager`: s úchytem pod kurzorem nástroj nedostane `move`, dostane jednou `leave`; levé `down` na úchytu nedojde k nástroji ani k `refPick`; Escape při tažení nedojde k nástroji; bez `manipulators` beze změny.
 
 ## Strom featur: `FeatureTreeModel`

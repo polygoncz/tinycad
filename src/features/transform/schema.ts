@@ -3,7 +3,8 @@ import { validateAgainstSchema } from '@/document';
 import type { BodyRef, FeatureSchema, ParamIssue, ParamSchema, ParamSpec } from '@/document';
 
 // The data half of the transform feature (ADR 0004): params, defaults, validation and the
-// migration from version 1 (M18: version 2 added the pivot of the rotation).
+// migrations (M18: version 2 added the pivot of the rotation; M19: version 3 replaced the axis
+// and the angle with three angles rx, ry, rz).
 
 export interface TransformParams {
   /** Bodies to move, at least one. */
@@ -17,10 +18,13 @@ export interface TransformParams {
   readonly pivotPoint: Vec3;
   /** Translation, applied after the rotation. */
   readonly translate: Vec3;
-  /** Axis of the rotation, through the pivot. */
-  readonly axis: 'x' | 'y' | 'z';
-  /** Rotation angle in radians (the UI shows degrees), unbounded. */
-  readonly angle: number;
+  /**
+   * Rotation angles about the world axes through the pivot, in radians (the UI shows degrees),
+   * unbounded. The rotation is R = Rz · Ry · Rx: x first, z last (Euler angles, M19).
+   */
+  readonly rx: number;
+  readonly ry: number;
+  readonly rz: number;
 }
 
 // Frozen deeply like the box schema: shared by the registry, the UI form and the validation.
@@ -50,24 +54,16 @@ const params: ParamSchema = Object.freeze<ParamSchema>({
     label: 'transform.translate',
     default: Object.freeze<Vec3>([0, 0, 0]),
   }),
-  axis: Object.freeze<ParamSpec>({
-    kind: 'enum',
-    label: 'transform.axis',
-    default: 'z',
-    options: Object.freeze([
-      Object.freeze({ value: 'x', label: 'transform.axis.x' }),
-      Object.freeze({ value: 'y', label: 'transform.axis.y' }),
-      Object.freeze({ value: 'z', label: 'transform.axis.z' }),
-    ]),
-  }),
-  angle: Object.freeze<ParamSpec>({ kind: 'angle', label: 'transform.angle', default: 0 }),
+  rx: Object.freeze<ParamSpec>({ kind: 'angle', label: 'transform.rx', default: 0 }),
+  ry: Object.freeze<ParamSpec>({ kind: 'angle', label: 'transform.ry', default: 0 }),
+  rz: Object.freeze<ParamSpec>({ kind: 'angle', label: 'transform.rz', default: 0 }),
 });
 
 export const transformSchema: FeatureSchema<TransformParams> = Object.freeze<
   FeatureSchema<TransformParams>
 >({
   type: 'transform',
-  version: 2,
+  version: 3,
   label: 'transform.label',
   icon: 'arrows-move',
   params,
@@ -78,8 +74,9 @@ export const transformSchema: FeatureSchema<TransformParams> = Object.freeze<
       pivot: 'bodiesCenter',
       pivotPoint: [0, 0, 0],
       translate: [0, 0, 0],
-      axis: 'z',
-      angle: 0,
+      rx: 0,
+      ry: 0,
+      rz: 0,
     };
   },
   validate(raw: unknown): readonly ParamIssue[] {
@@ -88,21 +85,57 @@ export const transformSchema: FeatureSchema<TransformParams> = Object.freeze<
   migrate,
 });
 
+/** The angle param of version 3 that takes the angle of version 2, by its axis. */
+const ANGLE_OF_AXIS: Readonly<Record<string, 'rx' | 'ry' | 'rz'>> = Object.freeze({
+  x: 'rx',
+  y: 'ry',
+  z: 'rz',
+});
+
 /**
- * Version 1 rotated about an axis through the world origin: the pivot 'origin' keeps old
- * documents and log entries where they were. Data the migration does not know throw, which
- * fromData and the operation handlers report as a load problem (spec 03).
+ * Migrates step by step to the current version: 1 → 2 → 3. Data the migration does not know
+ * throw, which fromData and the operation handlers report as a load problem (spec 03).
  */
 function migrate(fromVersion: number, raw: unknown): TransformParams {
-  if (fromVersion !== 1) {
-    throw new Error(`Cannot migrate transform params from version ${String(fromVersion)}`);
+  switch (fromVersion) {
+    case 1:
+      return fromVersion2(fromVersion1(raw));
+    case 2:
+      return fromVersion2(raw);
+    default:
+      throw new Error(`Cannot migrate transform params from version ${String(fromVersion)}`);
   }
+}
+
+/**
+ * Version 1 rotated about an axis through the world origin: the pivot 'origin' keeps old
+ * documents and log entries where they were.
+ */
+function fromVersion1(raw: unknown): Readonly<Record<string, unknown>> {
+  return { ...objectOf(raw, 1), pivot: 'origin', pivotPoint: [0, 0, 0] };
+}
+
+/**
+ * Version 2 rotated by one angle about one world axis: that angle goes to r<axis>, the others
+ * are 0. Params with an unknown or missing axis pass unchanged: validate then reports them on the
+ * feature (axis and angle unexpected, rx, ry, rz missing) and the document still loads.
+ */
+function fromVersion2(raw: unknown): TransformParams {
+  const params = objectOf(raw, 2);
+  const { axis, angle, ...rest } = params;
+  const key = typeof axis === 'string' ? ANGLE_OF_AXIS[axis] : undefined;
+  // Unchecked params (an object, see objectOf): migrate only moves and adds params; whether the
+  // result is valid is up to validate, which the Regenerator runs before the builder (spec 07),
+  // like for any params from outside.
+  if (key === undefined) return params as unknown as TransformParams;
+  return { ...rest, rx: 0, ry: 0, rz: 0, [key]: angle } as unknown as TransformParams;
+}
+
+/** The raw params as a record; anything but a plain object throws. */
+function objectOf(raw: unknown, version: number): Readonly<Record<string, unknown>> {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    throw new Error('Transform params of version 1 must be an object');
+    throw new Error(`Transform params of version ${String(version)} must be an object`);
   }
-  // Unchecked params of version 1 (narrowed to an object above): migrate only adds the new
-  // params; whether the rest is valid is up to validate, which the Regenerator runs before the
-  // builder (spec 07), like for any params from outside.
-  const old = raw as Partial<TransformParams>;
-  return { ...old, pivot: 'origin', pivotPoint: [0, 0, 0] } as TransformParams;
+  // Narrowed to a non-null, non-array object above; its keys are read as unknown values.
+  return raw as Readonly<Record<string, unknown>>;
 }

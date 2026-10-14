@@ -1140,6 +1140,13 @@ function aManipulatorStub(handles: {
       calls.push(`key:${e.key}`);
       return handles.key?.(e) ?? false;
     },
+    hud: new ObservableValue(null).asObservable(),
+    setMode() {
+      calls.push('setMode');
+    },
+    setValue() {
+      calls.push('setValue');
+    },
     dispose() {
       calls.push('dispose');
     },
@@ -1305,18 +1312,21 @@ describe('createToolManager – manipulators', () => {
     const handles = createManipulatorRegistry();
     handles.register({
       type: 'ref',
-      handles: (p: RefParams) => [
-        {
-          kind: 'linear',
-          id: 'w',
-          position: [p.width, 0, 0],
-          direction: [1, 0, 0],
-          value: p.width,
-          unit: 'length',
-          tint: 'x',
-          toParams: (v) => ({ width: v }),
-        },
-      ],
+      frame: (p: RefParams) => ({
+        center: [0, 0, 0],
+        handles: [
+          {
+            kind: 'linear',
+            id: 'w',
+            position: [p.width, 0, 0],
+            direction: [1, 0, 0],
+            value: p.width,
+            unit: 'length',
+            tint: 'x',
+            toParams: (v) => ({ width: v }),
+          },
+        ],
+      }),
     });
     const regen = new FakeRegenStatus();
     const controller = createManipulatorController({
@@ -1324,7 +1334,6 @@ describe('createToolManager – manipulators', () => {
       regen,
       registry: handles,
       viewport,
-      formatValue: (v) => String(v),
     });
     createToolManager({
       registry,

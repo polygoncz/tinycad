@@ -23,6 +23,8 @@ export interface ViewportPort {
   readonly sketches: SketchPort;
   /** Handles of manipulators (M18). */
   readonly manipulators: ManipulatorPort;
+  /** M19: the projection into px relative to the view area; not mounted → null. */
+  project(world: Vec3): readonly [x: number, y: number] | null;
   readonly events: Subscribable<ViewportEvents>;
 }
 
@@ -38,6 +40,8 @@ export type PickFilter = readonly PickKind[];
 export interface ViewportEvents {
   readonly pointer: ViewPointerEvent;
   readonly key: ViewKeyEvent;
+  /** M19: after a drawn frame in which the camera or the size of the view area changed. */
+  readonly viewChanged: ViewChangedEvent;
 }
 
 /**
@@ -203,6 +207,11 @@ export interface ViewKeyEvent {
   readonly inTextField: boolean;
 }
 
+/** M19: the HUD of a manipulator moves (spec 10, "Port viewportu"). */
+export interface ViewChangedEvent {
+  readonly generation: number;
+}
+
 export interface KeyMods {
   readonly shift: boolean;
   readonly alt: boolean;
@@ -213,37 +222,43 @@ export interface KeyMods {
 /** State of a handle view: the dragged handle is active, the one under the cursor hover (M18). */
 export type HandleState = 'idle' | 'hover' | 'active';
 
-/** What render draws for a handle (M18): no functions and no value. */
-export type HandleView =
-  | {
-      readonly kind: 'linear';
-      readonly id: string;
-      readonly position: Vec3;
-      readonly direction: Vec3;
-      readonly tint: HandleTint;
-      readonly state: HandleState;
-    }
-  | {
-      readonly kind: 'angular';
-      readonly id: string;
-      readonly center: Vec3;
-      readonly axis: Vec3;
-      readonly tint: HandleTint;
-      readonly state: HandleState;
-    };
-
-/** The value label next to the cursor while dragging (M18); x, y in px relative to the view area. */
-export interface ManipulatorLabel {
-  readonly x: number;
-  readonly y: number;
-  readonly text: string;
+/** Fields every handle view has; dashed since M19 (the pivot mode). */
+interface ViewBase {
+  readonly id: string;
+  readonly tint: HandleTint;
+  readonly state: HandleState;
+  readonly dashed: boolean;
 }
 
-/** A mirror like HighlightPort (M18): the controller holds the state and passes it whole. */
+/** What render draws for a handle (M18; planar, point, zero and extent since M19): no functions and no value. */
+export type HandleView =
+  | (ViewBase & {
+      readonly kind: 'linear';
+      readonly position: Vec3;
+      readonly direction: Vec3;
+    })
+  | (ViewBase & {
+      readonly kind: 'angular';
+      readonly center: Vec3;
+      readonly axis: Vec3;
+      readonly zero: Vec3;
+      readonly extent: 'quarter' | 'full';
+    })
+  | (ViewBase & {
+      readonly kind: 'planar';
+      readonly origin: Vec3;
+      readonly u: Vec3;
+      readonly v: Vec3;
+    })
+  | (ViewBase & { readonly kind: 'point'; readonly position: Vec3 });
+
+/**
+ * A mirror like HighlightPort (M18): the controller holds the state and passes it whole. The
+ * value label is gone since M19: ui draws the field of the HUD.
+ */
 export interface ManipulatorPort {
   /** Always the whole state; [] = nothing. */
   set(handles: readonly HandleView[]): void;
   /** Id of the handle under the cursor (by the last set); null = none. */
   pick(x: number, y: number): string | null;
-  setLabel(label: ManipulatorLabel | null): void;
 }

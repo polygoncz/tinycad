@@ -1,20 +1,29 @@
-// Handles of manipulators (spec 09, "Manipulátory (M18)"): arrows and rings of a constant size on
-// the screen, drawn over everything, plus the value label next to the cursor. A mirror like the
-// highlight: interaction passes the whole state. The glyphs are built in CSS px around their
-// origin; the viewport scales each one by the world units per px of the camera before every
-// render. The shape on the screen comes from manipulator-pick.ts, so drawing and picking agree.
+// Handles of manipulators (spec 09, "Manipulátory (M18)" and "Vzhled od M19 (styl Fusion)"):
+// arrows, quarters and rings, squares and centre points of a constant size on the screen, drawn
+// over everything. A mirror like the highlight: interaction passes the whole state. The glyphs are
+// built in CSS px around their origin; the viewport scales each one by the world units per px of
+// the camera before every render. The shape on the screen comes from manipulator-pick.ts, so
+// drawing and picking agree.
 
 import * as THREE from 'three';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
-import { assert, assertNever, vec3, type Disposable, type Vec3 } from '@/core';
-import type { HandleView, ManipulatorLabel, ManipulatorPort } from '@/interaction';
+import { assert, assertNever, vec3, type Disposable, type Quat, type Vec3 } from '@/core';
+import type { HandleView, ManipulatorPort } from '@/interaction';
 import type { BoundingBox } from '@/kernel';
 import {
-  HANDLE_ARROW_PX,
+  arcPoints,
+  HANDLE_ARROW_CONE_PX,
+  HANDLE_ARROW_CONE_RADIUS_PX,
+  HANDLE_ARROW_SHAFT_PX,
+  HANDLE_ARROW_START_PX,
+  HANDLE_POINT_PX,
+  HANDLE_QUARTER_SEGMENTS,
   HANDLE_RING_PX,
   HANDLE_RING_SEGMENTS,
+  HANDLE_SQUARE_FAR_PX,
+  HANDLE_SQUARE_NEAR_PX,
   handleBounds,
   handleHidden,
   pickHandle,
@@ -23,18 +32,41 @@ import {
 } from './manipulator-pick';
 import type { ScenePalette } from './palette';
 
-/** Width of shafts and rings in CSS px. */
-const LINE_WIDTH_PX = 3;
-/** Cone at the tip of an arrow, in CSS px; the shaft takes the rest of HANDLE_ARROW_PX. */
-const CONE_LENGTH_PX = 16;
-const CONE_RADIUS_PX = 5;
+/** Width of shafts, quarters and rings in CSS px. */
+const LINE_WIDTH_PX = 4;
+/** Width of the outline of a square in CSS px. */
+const SQUARE_OUTLINE_PX = 1.5;
+/** Width of the outline of a point in CSS px. */
+const POINT_OUTLINE_PX = 2;
+/** Opacity of the fill of a square. */
+const SQUARE_FILL_OPACITY = 0.35;
+/** Dashes of a dashed glyph (the pivot mode) in CSS px. */
+const DASH_PX = 6;
+const GAP_PX = 5;
+/** Radius of the dot in the middle of a dashed point, in CSS px (spec 09 gives no size). */
+const POINT_DOT_PX = 3;
 const CONE_SEGMENTS = 16;
-/** After the bodies (0), the highlight (1), the overlay (2) and the sketches (3). */
-const RENDER_ORDER = 4;
-/** Class of the label element; ui may style it further. */
-const LABEL_CLASS = 'tc-manipulator-label';
+const CIRCLE_SEGMENTS = 32;
+/**
+ * After the bodies (0), the highlight (1), the overlay (2) and the sketches (3). Fills a bit
+ * before lines, so the outline and the dot of a point stay above its fill.
+ */
+const FILL_RENDER_ORDER = 4;
+const LINE_RENDER_ORDER = 4.5;
 /** Local axis the glyphs are built along: the arrow points along it, the ring lies across it. */
 const LOCAL_AXIS = new THREE.Vector3(0, 0, 1);
+
+/**
+ * Seen through the bodies they move (depthTest off). Transparent (lines and cones at full opacity)
+ * to land in the transparent queue, which three draws after the opaque one: so the handles stay
+ * above the transparent region fills and face highlights as well, sorted by renderOrder.
+ */
+const MATERIAL_FLAGS = {
+  depthTest: false,
+  depthWrite: false,
+  transparent: true,
+  side: THREE.DoubleSide,
+} as const;
 
 /** Handles of manipulators (spec 09, "Manipulátory (M18)"): implements ManipulatorPort. */
 export type ManipulatorLayer = ManipulatorPort;
@@ -54,9 +86,10 @@ export interface ManipulatorLayerInternal extends Omit<ManipulatorPort, 'pick'>,
   pick(x: number, y: number, projection: HandleProjection): string | null;
   /**
    * Before every render: the glyphs take the size of the camera (world units per CSS px), an
-   * arrow seen end-on and a ring seen edge-on hide. Requests nothing, the caller is drawing.
+   * arrow seen end-on and a ring or square seen edge-on hide, a point turns to the camera
+   * (`orientation` of the camera rig). Requests nothing, the caller is drawing.
    */
-  beforeRender(worldPerPx: number, viewDirection: Vec3): void;
+  beforeRender(worldPerPx: number, viewDirection: Vec3, orientation: Quat): void;
   /**
    * Box around every glyph of the last set for the camera size worldPerPx (spec 09, "Near a
    * far"); null = no handles.
@@ -66,10 +99,6 @@ export interface ManipulatorLayerInternal extends Omit<ManipulatorPort, 'pick'>,
   setPalette(palette: ScenePalette): void;
   /** Canvas size in CSS px; fat-line materials need it to size their width in pixels. */
   setResolution(width: number, height: number): void;
-  /** Creates the label element as the last child of the canvas's parent; shows the last label. */
-  mountLabel(canvas: HTMLCanvasElement): void;
-  /** Removes the label element; the label itself is kept for the next mountLabel. Idempotent. */
-  unmountLabel(): void;
 }
 
 export interface ManipulatorLayerOptions {
@@ -83,19 +112,29 @@ type ColorKey = (typeof COLOR_KEYS)[number];
 
 /** Materials shared by every glyph of one colour. */
 interface Look {
+  /** Shafts, quarters and rings. */
   readonly line: LineMaterial;
-  readonly cone: THREE.MeshBasicMaterial;
+  readonly dashedLine: LineMaterial;
+  readonly squareOutline: LineMaterial;
+  readonly dashedSquareOutline: LineMaterial;
+  readonly pointOutline: LineMaterial;
+  /** Cones and the dot of a dashed point. */
+  readonly solid: THREE.MeshBasicMaterial;
+  readonly squareFill: THREE.MeshBasicMaterial;
 }
 
 /** One drawn handle; reused by the next set while its id and kind stay. */
-interface Glyph {
-  readonly kind: HandleView['kind'];
-  readonly root: THREE.Group;
-  readonly line: LineSegments2;
-  /** Only arrows have one. */
-  readonly cone: THREE.Mesh | null;
-  view: HandleView;
-}
+type Glyph = { readonly root: THREE.Group; view: HandleView } & (
+  | { readonly kind: 'linear'; readonly shaft: LineSegments2; readonly cone: THREE.Mesh }
+  | { readonly kind: 'angular'; readonly arc: LineSegments2 }
+  | { readonly kind: 'planar'; readonly fill: THREE.Mesh; readonly outline: LineSegments2 }
+  | {
+      readonly kind: 'point';
+      readonly fill: THREE.Mesh;
+      readonly outline: LineSegments2;
+      readonly dot: THREE.Mesh;
+    }
+);
 
 export function createManipulatorLayer(options: ManipulatorLayerOptions): ManipulatorLayerInternal {
   const { requestRender } = options;
@@ -107,66 +146,167 @@ export function createManipulatorLayer(options: ManipulatorLayerOptions): Manipu
     neutral: createLook(options.palette.selection),
     hover: createLook(options.palette.hover),
   };
+  // The fill of a point has the colour of the background, whatever its tint.
+  const pointFillMaterial = new THREE.MeshBasicMaterial({
+    ...MATERIAL_FLAGS,
+    color: options.palette.background,
+  });
   // Every glyph shares these; they are in CSS px and the glyph root scales them.
   const shaftGeometry = new LineSegmentsGeometry().setPositions([
     0,
     0,
+    HANDLE_ARROW_START_PX,
     0,
     0,
-    0,
-    HANDLE_ARROW_PX - CONE_LENGTH_PX,
+    HANDLE_ARROW_SHAFT_PX,
   ]);
-  const coneGeometry = new THREE.ConeGeometry(CONE_RADIUS_PX, CONE_LENGTH_PX, CONE_SEGMENTS)
-    // The cone points along +Y; turn it to +Z and put its tip at HANDLE_ARROW_PX.
+  const coneGeometry = new THREE.ConeGeometry(
+    HANDLE_ARROW_CONE_RADIUS_PX,
+    HANDLE_ARROW_CONE_PX,
+    CONE_SEGMENTS,
+  )
+    // The cone points along +Y; turn it to +Z and put its base at the end of the shaft.
     .rotateX(Math.PI / 2)
-    .translate(0, 0, HANDLE_ARROW_PX - CONE_LENGTH_PX / 2);
-  const ringGeometry = new LineSegmentsGeometry().setPositions(ringPositions());
+    .translate(0, 0, HANDLE_ARROW_SHAFT_PX + HANDLE_ARROW_CONE_PX / 2);
+  const ringGeometry = new LineSegmentsGeometry().setPositions(
+    segmentPositions(localArc(HANDLE_RING_PX, 2 * Math.PI, HANDLE_RING_SEGMENTS), true),
+  );
+  const quarterGeometry = new LineSegmentsGeometry().setPositions(
+    segmentPositions(localArc(HANDLE_RING_PX, Math.PI / 2, HANDLE_QUARTER_SEGMENTS), false),
+  );
+  const near = HANDLE_SQUARE_NEAR_PX;
+  const far = HANDLE_SQUARE_FAR_PX;
+  const squareCorners: readonly Vec3[] = [
+    [near, near, 0],
+    [far, near, 0],
+    [far, far, 0],
+    [near, far, 0],
+  ];
+  const squareFillGeometry = new THREE.BufferGeometry()
+    .setAttribute('position', new THREE.Float32BufferAttribute(squareCorners.flat(), 3))
+    .setIndex([0, 1, 2, 0, 2, 3]);
+  const squareOutlineGeometry = new LineSegmentsGeometry().setPositions(
+    segmentPositions(squareCorners, true),
+  );
+  const pointFillGeometry = new THREE.CircleGeometry(HANDLE_POINT_PX, CIRCLE_SEGMENTS);
+  const pointOutlineGeometry = new LineSegmentsGeometry().setPositions(
+    segmentPositions(localArc(HANDLE_POINT_PX, 2 * Math.PI, CIRCLE_SEGMENTS), true),
+  );
+  const pointDotGeometry = new THREE.CircleGeometry(POINT_DOT_PX, CIRCLE_SEGMENTS);
 
+  /** Every view of the last set, in its order. */
   let views: readonly HandleView[] = [];
   let glyphs = new Map<string, Glyph>();
   let worldPerPx = 1;
   let viewDirection: Vec3 = [0, 0, -1];
-  let label: ManipulatorLabel | null = null;
-  let labelElement: HTMLDivElement | null = null;
+  let orientation: Quat = [0, 0, 0, 1];
 
-  function createGlyph(view: HandleView): Glyph {
-    const root = new THREE.Group();
-    const line = new LineSegments2(
-      view.kind === 'linear' ? shaftGeometry : ringGeometry,
-      looks[colorKey(view)].line,
-    );
-    line.renderOrder = RENDER_ORDER;
-    root.add(line);
-    let cone: THREE.Mesh | null = null;
-    if (view.kind === 'linear') {
-      cone = new THREE.Mesh(coneGeometry, looks[colorKey(view)].cone);
-      cone.renderOrder = RENDER_ORDER;
-      root.add(cone);
-    }
-    group.add(root);
-    return { kind: view.kind, root, line, cone, view };
+  function line(geometry: LineSegmentsGeometry, material: LineMaterial): LineSegments2 {
+    const object = new LineSegments2(geometry, material);
+    object.renderOrder = LINE_RENDER_ORDER;
+    return object;
   }
 
-  /** Position, orientation, colour, size and visibility of the glyph from its view. */
+  function mesh(
+    geometry: THREE.BufferGeometry,
+    material: THREE.Material,
+    renderOrder: number,
+  ): THREE.Mesh {
+    const object = new THREE.Mesh(geometry, material);
+    object.renderOrder = renderOrder;
+    return object;
+  }
+
+  /** The objects of a glyph; place gives them their materials, geometry and pose. */
+  function createGlyph(view: HandleView): Glyph {
+    const root = new THREE.Group();
+    const look = looks[colorKey(view)];
+    let glyph: Glyph;
+    switch (view.kind) {
+      case 'linear': {
+        const shaft = line(shaftGeometry, look.line);
+        // Dashes need the distances along the line; they land on the shared geometry, the same
+        // every time.
+        shaft.computeLineDistances();
+        const cone = mesh(coneGeometry, look.solid, LINE_RENDER_ORDER);
+        root.add(shaft, cone);
+        glyph = { kind: 'linear', root, view, shaft, cone };
+        break;
+      }
+      case 'angular': {
+        const arc = line(ringGeometry, look.line);
+        root.add(arc);
+        glyph = { kind: 'angular', root, view, arc };
+        break;
+      }
+      case 'planar': {
+        const fill = mesh(squareFillGeometry, look.squareFill, FILL_RENDER_ORDER);
+        const outline = line(squareOutlineGeometry, look.squareOutline);
+        outline.computeLineDistances();
+        root.add(fill, outline);
+        glyph = { kind: 'planar', root, view, fill, outline };
+        break;
+      }
+      case 'point': {
+        const fill = mesh(pointFillGeometry, pointFillMaterial, FILL_RENDER_ORDER);
+        const outline = line(pointOutlineGeometry, look.pointOutline);
+        const dot = mesh(pointDotGeometry, look.solid, LINE_RENDER_ORDER);
+        root.add(fill, outline, dot);
+        glyph = { kind: 'point', root, view, fill, outline, dot };
+        break;
+      }
+      default:
+        return assertNever(view);
+    }
+    group.add(root);
+    return glyph;
+  }
+
+  /** Materials, geometry, position, orientation, size and visibility of the glyph from its view. */
   function place(glyph: Glyph, view: HandleView): void {
     glyph.view = view;
     const look = looks[colorKey(view)];
-    glyph.line.material = look.line;
-    if (glyph.cone !== null) glyph.cone.material = look.cone;
-    const origin = view.kind === 'linear' ? view.position : view.center;
-    const along = view.kind === 'linear' ? view.direction : view.axis;
-    glyph.root.position.set(...origin);
-    glyph.root.quaternion.setFromUnitVectors(
-      LOCAL_AXIS,
-      new THREE.Vector3(...vec3.normalize(along)),
-    );
+    if (glyph.kind === 'linear' && view.kind === 'linear') {
+      glyph.shaft.material = view.dashed ? look.dashedLine : look.line;
+      glyph.cone.material = look.solid;
+      glyph.root.position.set(...view.position);
+      glyph.root.quaternion.setFromUnitVectors(
+        LOCAL_AXIS,
+        new THREE.Vector3(...vec3.normalize(view.direction)),
+      );
+    } else if (glyph.kind === 'angular' && view.kind === 'angular') {
+      glyph.arc.geometry = view.extent === 'full' ? ringGeometry : quarterGeometry;
+      glyph.arc.material = look.line;
+      glyph.root.position.set(...view.center);
+      // Local X → zero, local Y → axis × zero, local Z → axis: the quarter runs from zero.
+      const axis = vec3.normalize(view.axis);
+      orient(glyph.root, perpendicularUnit(view.zero, axis), axis);
+    } else if (glyph.kind === 'planar' && view.kind === 'planar') {
+      glyph.fill.material = look.squareFill;
+      glyph.outline.material = view.dashed ? look.dashedSquareOutline : look.squareOutline;
+      glyph.root.position.set(...view.origin);
+      // Local X → u, local Y → v (unit and perpendicular, spec 10).
+      orient(glyph.root, vec3.normalize(view.u), vec3.normalize(vec3.cross(view.u, view.v)));
+    } else if (glyph.kind === 'point' && view.kind === 'point') {
+      // Dashed (the pivot mode): the outline without the fill, and a dot in the middle.
+      glyph.fill.visible = !view.dashed;
+      glyph.dot.visible = view.dashed;
+      glyph.outline.material = look.pointOutline;
+      glyph.dot.material = look.solid;
+      glyph.root.position.set(...view.position);
+    } else {
+      // set creates a new glyph whenever the kind changes.
+      assert(false, 'Glyph and view of different kinds');
+    }
     fit(glyph);
   }
 
-  /** Size of the camera and the hiding of an arrow seen end-on or a ring seen edge-on. */
+  /** Size of the camera, the hiding of glyphs seen end-on or edge-on, a point facing the camera. */
   function fit(glyph: Glyph): void {
     glyph.root.scale.setScalar(worldPerPx);
     glyph.root.visible = !handleHidden(glyph.view, viewDirection);
+    // The camera looks along its local −Z: with its orientation the disc lies in the screen.
+    if (glyph.kind === 'point') glyph.root.quaternion.set(...orientation);
   }
 
   function dropGlyph(glyph: Glyph): void {
@@ -174,28 +314,15 @@ export function createManipulatorLayer(options: ManipulatorLayerOptions): Manipu
     group.remove(glyph.root);
   }
 
-  function showLabel(): void {
-    if (labelElement === null) return;
-    if (label === null) {
-      labelElement.style.display = 'none';
-      labelElement.textContent = '';
-      return;
-    }
-    labelElement.textContent = label.text;
-    labelElement.style.left = `${String(label.x)}px`;
-    labelElement.style.top = `${String(label.y)}px`;
-    labelElement.style.display = 'block';
-  }
-
   return {
     group,
-    set(next: readonly HandleView[]): void {
-      if (sameViews(views, next)) return;
+    set(all: readonly HandleView[]): void {
       // Before any change: duplicate ids would share one glyph.
-      const ids = new Set(next.map((view) => view.id));
-      assert(ids.size === next.length, 'Handle ids must be unique');
+      const ids = new Set(all.map((view) => view.id));
+      assert(ids.size === all.length, 'Handle ids must be unique');
+      if (sameViews(views, all)) return;
       const kept = new Map<string, Glyph>();
-      for (const view of next) {
+      for (const view of all) {
         const old = glyphs.get(view.id);
         const glyph = old?.kind === view.kind ? old : createGlyph(view);
         place(glyph, view);
@@ -205,7 +332,7 @@ export function createManipulatorLayer(options: ManipulatorLayerOptions): Manipu
         if (kept.get(id) !== glyph) dropGlyph(glyph);
       }
       glyphs = kept;
-      views = next;
+      views = all;
       requestRender();
     },
     pick(x: number, y: number, projection: HandleProjection): string | null {
@@ -218,14 +345,10 @@ export function createManipulatorLayer(options: ManipulatorLayerOptions): Manipu
       );
       return pickHandle(screen, x, y);
     },
-    setLabel(next: ManipulatorLabel | null): void {
-      label = next;
-      // A DOM element, not the canvas: no render needed.
-      showLabel();
-    },
-    beforeRender(nextWorldPerPx: number, nextViewDirection: Vec3): void {
+    beforeRender(nextWorldPerPx: number, nextViewDirection: Vec3, nextOrientation: Quat): void {
       worldPerPx = nextWorldPerPx;
       viewDirection = nextViewDirection;
+      orientation = nextOrientation;
       for (const glyph of glyphs.values()) fit(glyph);
     },
     bounds(cameraWorldPerPx: number): BoundingBox | null {
@@ -240,37 +363,38 @@ export function createManipulatorLayer(options: ManipulatorLayerOptions): Manipu
         hover: next.hover,
       };
       for (const key of COLOR_KEYS) {
-        looks[key].line.color.setHex(colors[key]);
-        looks[key].cone.color.setHex(colors[key]);
+        for (const material of lookMaterials(looks[key])) material.color.setHex(colors[key]);
       }
+      pointFillMaterial.color.setHex(next.background);
     },
     setResolution(width: number, height: number): void {
-      for (const look of Object.values(looks)) look.line.resolution.set(width, height);
-    },
-    mountLabel(canvas: HTMLCanvasElement): void {
-      const parent = canvas.parentElement;
-      assert(parent !== null, 'The canvas needs a parent for the label');
-      assert(labelElement === null, 'The label is already mounted');
-      labelElement = createLabelElement();
-      // Last, so it stacks above the canvas and the view cube.
-      parent.appendChild(labelElement);
-      showLabel();
-    },
-    unmountLabel(): void {
-      labelElement?.remove();
-      labelElement = null;
+      for (const look of Object.values(looks)) {
+        for (const material of lookMaterials(look)) {
+          if (material instanceof LineMaterial) material.resolution.set(width, height);
+        }
+      }
     },
     dispose(): void {
       for (const glyph of glyphs.values()) dropGlyph(glyph);
       glyphs = new Map();
       views = [];
-      shaftGeometry.dispose();
-      coneGeometry.dispose();
-      ringGeometry.dispose();
-      for (const look of Object.values(looks)) {
-        look.line.dispose();
-        look.cone.dispose();
+      for (const geometry of [
+        shaftGeometry,
+        coneGeometry,
+        ringGeometry,
+        quarterGeometry,
+        squareFillGeometry,
+        squareOutlineGeometry,
+        pointFillGeometry,
+        pointOutlineGeometry,
+        pointDotGeometry,
+      ]) {
+        geometry.dispose();
       }
+      for (const look of Object.values(looks)) {
+        for (const material of lookMaterials(look)) material.dispose();
+      }
+      pointFillMaterial.dispose();
     },
   };
 }
@@ -288,24 +412,75 @@ function colorKey(view: HandleView): ColorKey {
 }
 
 function createLook(color: number): Look {
-  // Seen through the bodies they move (depthTest off). Transparent at full opacity only to land
-  // in the transparent queue, which three draws after the opaque one: so the handles stay above
-  // the transparent region fills and face highlights as well, sorted by renderOrder.
-  const flags = { color, depthTest: false, depthWrite: false, transparent: true } as const;
+  const lineMaterial = (linewidth: number, dashed: boolean): LineMaterial =>
+    new LineMaterial({
+      color,
+      depthTest: false,
+      depthWrite: false,
+      transparent: true,
+      linewidth,
+      ...(dashed ? { dashed: true, dashSize: DASH_PX, gapSize: GAP_PX } : {}),
+    });
   return {
-    line: new LineMaterial({ ...flags, linewidth: LINE_WIDTH_PX }),
-    cone: new THREE.MeshBasicMaterial(flags),
+    line: lineMaterial(LINE_WIDTH_PX, false),
+    dashedLine: lineMaterial(LINE_WIDTH_PX, true),
+    squareOutline: lineMaterial(SQUARE_OUTLINE_PX, false),
+    dashedSquareOutline: lineMaterial(SQUARE_OUTLINE_PX, true),
+    pointOutline: lineMaterial(POINT_OUTLINE_PX, false),
+    solid: new THREE.MeshBasicMaterial({ ...MATERIAL_FLAGS, color }),
+    squareFill: new THREE.MeshBasicMaterial({
+      ...MATERIAL_FLAGS,
+      color,
+      opacity: SQUARE_FILL_OPACITY,
+    }),
   };
 }
 
-/** Segments of a ring of HANDLE_RING_PX around the origin in the local XY plane. */
-function ringPositions(): number[] {
+function lookMaterials(look: Look): readonly (LineMaterial | THREE.MeshBasicMaterial)[] {
+  return [
+    look.line,
+    look.dashedLine,
+    look.squareOutline,
+    look.dashedSquareOutline,
+    look.pointOutline,
+    look.solid,
+    look.squareFill,
+  ];
+}
+
+/** Turns `root` so its local X is `x` and its local Z is `z` (both unit and perpendicular). */
+function orient(root: THREE.Object3D, x: Vec3, z: Vec3): void {
+  const y = vec3.cross(z, x);
+  const basis = new THREE.Matrix4().makeBasis(
+    new THREE.Vector3(...x),
+    new THREE.Vector3(...y),
+    new THREE.Vector3(...z),
+  );
+  root.quaternion.setFromRotationMatrix(basis);
+}
+
+/** `v` without its part along the unit `axis`, made unit (as arcPoints does with zero). */
+function perpendicularUnit(v: Vec3, axis: Vec3): Vec3 {
+  return vec3.normalize(vec3.sub(v, vec3.scale(axis, vec3.dot(v, axis))));
+}
+
+/** Points of an arc of `radius` px in the local XY plane from +X towards +Y, `segments` + 1 of them. */
+function localArc(radius: number, sweep: number, segments: number): readonly Vec3[] {
+  return arcPoints([0, 0, 0], [0, 0, 1], [1, 0, 0], radius, sweep, segments, segments + 1);
+}
+
+/**
+ * Pairs of points for LineSegmentsGeometry along the polyline; closed joins the last point to the
+ * first (a full circle whose last point repeats the first needs no closing).
+ */
+function segmentPositions(points: readonly Vec3[], closed: boolean): number[] {
   const positions: number[] = [];
-  const at = (i: number): [number, number, number] => {
-    const angle = (2 * Math.PI * i) / HANDLE_RING_SEGMENTS;
-    return [HANDLE_RING_PX * Math.cos(angle), HANDLE_RING_PX * Math.sin(angle), 0];
-  };
-  for (let i = 0; i < HANDLE_RING_SEGMENTS; i++) positions.push(...at(i), ...at(i + 1));
+  const count = closed ? points.length : points.length - 1;
+  for (let i = 0; i < count; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    if (a !== undefined && b !== undefined) positions.push(...a, ...b);
+  }
   return positions;
 }
 
@@ -315,37 +490,37 @@ function sameViews(a: readonly HandleView[], b: readonly HandleView[]): boolean 
 }
 
 function sameView(a: HandleView, b: HandleView | undefined): boolean {
-  if (b === undefined || a.id !== b.id || a.tint !== b.tint || a.state !== b.state) return false;
-  if (a.kind === 'linear') {
-    return (
-      b.kind === 'linear' && sameVec(a.position, b.position) && sameVec(a.direction, b.direction)
-    );
+  if (
+    b === undefined ||
+    a.id !== b.id ||
+    a.tint !== b.tint ||
+    a.state !== b.state ||
+    a.dashed !== b.dashed
+  ) {
+    return false;
   }
-  return b.kind === 'angular' && sameVec(a.center, b.center) && sameVec(a.axis, b.axis);
+  switch (a.kind) {
+    case 'linear':
+      return (
+        b.kind === 'linear' && sameVec(a.position, b.position) && sameVec(a.direction, b.direction)
+      );
+    case 'angular':
+      return (
+        b.kind === 'angular' &&
+        a.extent === b.extent &&
+        sameVec(a.center, b.center) &&
+        sameVec(a.axis, b.axis) &&
+        sameVec(a.zero, b.zero)
+      );
+    case 'planar':
+      return (
+        b.kind === 'planar' && sameVec(a.origin, b.origin) && sameVec(a.u, b.u) && sameVec(a.v, b.v)
+      );
+    case 'point':
+      return b.kind === 'point' && sameVec(a.position, b.position);
+  }
 }
 
 function sameVec(a: Vec3, b: Vec3): boolean {
   return a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
-}
-
-/** The label over the canvas; colours from the ui theme by name (render does not import ui). */
-function createLabelElement(): HTMLDivElement {
-  const element = document.createElement('div');
-  element.className = LABEL_CLASS;
-  Object.assign(element.style, {
-    position: 'absolute',
-    display: 'none',
-    pointerEvents: 'none',
-    background: 'var(--chrome-bg)',
-    color: 'var(--text-primary)',
-    padding: '2px 6px',
-    borderRadius: '4px',
-    fontSize: '12px',
-    lineHeight: '1.4',
-    whiteSpace: 'nowrap',
-    fontVariantNumeric: 'tabular-nums',
-    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.25)',
-    userSelect: 'none',
-  });
-  return element;
 }

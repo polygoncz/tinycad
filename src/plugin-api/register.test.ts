@@ -35,12 +35,12 @@ function aTool(id: string): ToolDescriptor {
   };
 }
 
-/** A descriptor that is never asked for handles here: registration only stores it. */
+/** A descriptor that is never asked for a frame here: registration only stores it. */
 function aManipulator(type: string): ManipulatorDescriptor {
   return {
     type,
-    handles() {
-      throw new Error('ManipulatorDescriptor.handles is not expected in registration tests');
+    frame() {
+      throw new Error('ManipulatorDescriptor.frame is not expected in registration tests');
     },
   };
 }
@@ -242,18 +242,21 @@ describe('registerPlugin', () => {
       builder: { type: 'cube', build: async ({ state }) => Promise.resolve({ ok: true, state }) },
       manipulators: {
         type: 'cube',
-        handles: (params) => [
-          {
-            kind: 'linear',
-            id: 'size',
-            value: params.size,
-            unit: 'length',
-            tint: 'neutral',
-            position: [0, 0, 0],
-            direction: [0, 0, 1],
-            toParams: (size) => ({ size }),
-          },
-        ],
+        frame: (params) => ({
+          center: [0, 0, 0],
+          handles: [
+            {
+              kind: 'linear',
+              id: 'size',
+              value: params.size,
+              unit: 'length',
+              tint: 'neutral',
+              position: [0, 0, 0],
+              direction: [0, 0, 1],
+              toParams: (size) => ({ size }),
+            },
+          ],
+        }),
       },
     };
     const regs = registries();

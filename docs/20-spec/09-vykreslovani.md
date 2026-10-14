@@ -277,9 +277,9 @@ Zvýraznění plochy je **malá vlastní kopie** jejích trojúhelníků: čist�
 
 ## Manipulátory (M18)
 
-`ManipulatorLayer` (typ splňuje `ManipulatorPort`; vnitřní vrstva má `pick` s projekcí a port za ni doplní viewport, stejně jako u skic; [[10-interakce#Manipulátory (M18)]], [[0021-manipulatory-kotvy-z-regenerace|ADR 0021]]) kreslí úchyty [[Manipulátor|manipulátorů]], pickuje je a ukazuje štítek s hodnotou.
+`ManipulatorLayer` (typ splňuje `ManipulatorPort`; vnitřní vrstva má `pick` s projekcí a port za ni doplní viewport, stejně jako u skic; [[10-interakce#Manipulátory (M18)]], [[0021-manipulatory-kotvy-z-regenerace|ADR 0021]]) kreslí úchyty [[Manipulátor|manipulátorů]] a pickuje je (v M18 ukazovala i štítek s hodnotou, od M19 ho nahrazuje HUD v `ui`).
 
-- **Glyfy s konstantní velikostí na obrazovce.** Lineární úchyt je šipka: dřík `LineSegments2` (3 px) a kužel (`ConeGeometry`) na konci, celková délka `HANDLE_ARROW_PX = 80` px od `position` ve směru `direction`. Úhlový úchyt je kružnice: `LineSegments2` (3 px), 64 segmentů, poloměr `HANDLE_RING_PX = 60` px kolem `center` v rovině kolmé na `axis`. Měřítko skupiny glyfu = světové jednotky na pixel ortografické kamery (`(top − bottom) / zoom / výška plátna`), přepočítané ve `draw` viewportu před `renderer.render` (kamera se mohla změnit gestem nebo animací).
+- **Glyfy s konstantní velikostí na obrazovce.** (Rozměry a tvary v této odrážce platily v M18, od M19 je nahrazuje tabulka v [[#Vzhled od M19 (styl Fusion)]]; princip škálování platí dál.) Lineární úchyt je šipka: dřík `LineSegments2` (3 px) a kužel (`ConeGeometry`) na konci, celková délka `HANDLE_ARROW_PX = 80` px od `position` ve směru `direction`. Úhlový úchyt je kružnice: `LineSegments2` (3 px), 64 segmentů, poloměr `HANDLE_RING_PX = 60` px kolem `center` v rovině kolmé na `axis`. Měřítko skupiny glyfu = světové jednotky na pixel ortografické kamery (`(top − bottom) / zoom / výška plátna`), přepočítané ve `draw` viewportu před `renderer.render` (kamera se mohla změnit gestem nebo animací).
 - **Barvy:** `tint` `x`/`y`/`z` → `palette.axes[0..2]`, `neutral` → `palette.selection`. Stav `hover` a `active` → `palette.hover`. `setPalette` přebarví. Paleta se nemění.
 - `depthTest: false`, `renderOrder` 4: úchyt je vidět i uvnitř nebo za tělesem, které posouvá (nad skicami, které mají 3).
 - **Skrytí šipky:** lineární úchyt s `|direction · směr pohledu| > HANDLE_HIDE_COS = 0,98` se nekreslí a `pick` ho nevrátí. Táhnout ho stejně nejde (`PARALLEL_LIMIT` ve spec 10).
@@ -296,7 +296,7 @@ Zvýraznění plochy je **malá vlastní kopie** jejích trojúhelníků: čist�
   // skryté úchyty vynechá (arrowHidden, ringHidden), pořadí zachová; tolerance HANDLE_PICK_PX = 8, HANDLE_RING_PICK_PX = 6
   ```
 - **Near a far:** obálka zobrazených úchytů (`handleBounds(handles, worldPerPx)`: krychle o poloviční straně délky šipky nebo poloměru kružnice × `worldPerPx` kolem `position`/`center`, i u skrytých úchytů, aby obálka při otáčení neskákala; bez úchytů `null`) patří do obálky všeho viditelného ([[#Near a far]]), aby glyf daleko od těles neořízl hloubkový řez.
-- **Štítek:** `setLabel` ukáže nebo skryje jeden absolutně pozicovaný `<div>` nad canvasem (rodič canvasu, `pointer-events: none`, třída `tc-manipulator-label`). Barvy jsou z CSS proměnných `ui` (`--chrome-bg`, `--text-primary`), `render` je jen odkazuje jménem. `unmount` prvek odebere, další `mount` ho vytvoří znovu.
+- **Štítek (jen M18, od M19 zrušen):** `setLabel` ukáže nebo skryje jeden absolutně pozicovaný `<div>` nad canvasem (rodič canvasu, `pointer-events: none`, třída `tc-manipulator-label`). Barvy jsou z CSS proměnných `ui` (`--chrome-bg`, `--text-primary`), `render` je jen odkazuje jménem. `unmount` prvek odebere, další `mount` ho vytvoří znovu.
 - `dispose` uvolní geometrie a materiály.
 
 ### Vzhled od M19 (styl Fusion)
@@ -318,7 +318,12 @@ M19 nahrazuje glyfy výše ([[0022-rezimy-a-hud-manipulatoru|ADR 0022]]). Veliko
 - **Štítek zaniká:** `setLabel`, `tc-manipulator-label` a jeho DOM prvek se ruší, text kreslí `ui` (HUD).
 - **`project(world)`** promítne bod kamerou do CSS px vůči ploše pohledu (stejně jako picking), nepřipojený viewport → `null`.
 - **`viewChanged`:** ve `draw` po vykreslení, když se od minulého snímku změnila kamera (`target`, `orientation`, `halfHeight`) nebo velikost plochy; `generation` roste o 1. Animace kamery ho tak posílá každý snímek, klidová scéna nikdy.
-- Čisté funkce v `manipulator-pick.ts` (`projectHandles`, `pickHandle`, `handleBounds`) se rozšíří o nové druhy; `projectHandles` vrací pro `planar` čtyři rohy a pro `point` střed a poloměr.
+- Čisté funkce v `manipulator-pick.ts` (`projectHandles`, `pickHandle`, `handleBounds`, `handleHidden`, `squareHidden`, `arcPoints`) pokrývají všechny druhy. `ScreenHandle`: `linear` `{ from, to }` (14–98 px), `angular` `{ points, closed }` (`closed` = celá kružnice), `planar` `{ corners }`, `point` `{ center, radius }`.
+- **Upřesnění z implementace (M19):**
+  - `dashed` platí pro dřík šipky a obrys čtverce. Oblouky ho ignorují, bod s `dashed` má plný obrys 2 px bez výplně a tečku o poloměru 3 px.
+  - Výplně (čtverec, bod) mají `renderOrder` 4, čáry, kužel a tečka 4,5, aby obrys neskončil pod výplní.
+  - Obálka (`handleBounds`) čtverce jsou jeho čtyři rohy, bodu krychle o poloviční straně 9 px × `worldPerPx`.
+  - `viewChanged`: změnu pozná čistá funkce `viewChangedSince(previous, next)` v `view-change.ts` (porovnání `target`, `orientation`, `halfHeight`, šířky a výšky po číslech). První snímek po `mount` se hlásí jako změna, aby si HUD spočítal polohy.
 
 
 ## Skici
@@ -350,7 +355,7 @@ Filtr (`PickFilter`, [[10-interakce#Port viewportu]], M10.1): průchod přes hra
 ## Testy
 
 `render` se testuje nejhůř, proto v něm má být co nejméně logiky ([[Q061 Testy render v Node|Q061]]):
-- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, od M17 operace kamery (`orbit`, `pan`, `zoomAt`, `turn`, `ease`, `interpolate`, `clipRange`, `orientationFor`), `cameraGesture`, `wheelFactor`, `buildViewCube` a `cubeRegionAt`, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor` (od M17 zaniká), od M13 `pickSketchRegion` a `pointInRegion`, od M15 `parseHexColor`, od M18 `pickHandle`, `projectHandles`, `handleBounds`, `arrowHidden` a `ringHidden` (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
+- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, od M17 operace kamery (`orbit`, `pan`, `zoomAt`, `turn`, `ease`, `interpolate`, `clipRange`, `orientationFor`), `cameraGesture`, `wheelFactor`, `buildViewCube` a `cubeRegionAt`, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor` (od M17 zaniká), od M13 `pickSketchRegion` a `pointInRegion`, od M15 `parseHexColor`, od M18 `pickHandle`, `projectHandles`, `handleBounds`, `arrowHidden` a `ringHidden`, od M19 `squareHidden`, `arcPoints` a `viewChangedSince` (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
 - Testy `render` nesmí importovat `@/kernel/testing` (`FakeKernel`): `render` závisí na `kernel` jen typově a `testing.ts` otevírá jen hodnotovým závislostem ([[01-architektura]]). Sítě v testech jsou ruční, malé a záměrně s klíči ploch mimo pořadí.
 - Kód s Three.js (`Viewport`, `BodyView`, vrstvy, picking) se ověřuje ručně na dev stránce `dev/viewport.html`. Smoke test v prohlížeči (Playwright) později.
 

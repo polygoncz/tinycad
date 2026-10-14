@@ -4,7 +4,7 @@
 // viewport. openAppSession (browser) builds the real ones and calls this.
 
 import { DisposableStore, ObservableValue, RpcError } from '@/core';
-import type { Disposable, IdGenerator, Observable, Unsubscribe } from '@/core';
+import type { Disposable, IdGenerator, Observable, Unsubscribe, Vec3 } from '@/core';
 import { createDocument, ORIGIN_AXES, ORIGIN_PLANES } from '@/document';
 import type {
   AxisId,
@@ -52,8 +52,8 @@ import type {
   FeatureEditor,
   FeatureTreeModel,
   FileActions,
-  HandleUnit,
   HistoryModel,
+  ManipulatorHud,
   Mode,
   SelectionModel,
   SketchEditor,
@@ -155,8 +155,6 @@ export interface AppSessionDeps {
   readonly download: (file: DownloadFile) => void;
   /** M15: the theme at the start: the first value of defaultBodyColor; later setTheme. */
   readonly theme: 'light' | 'dark';
-  /** M18: the text of the manipulator label; ui brings the units and the format (mm, °). */
-  readonly formatValue: (value: number, unit: HandleUnit) => string;
 }
 
 export interface AppSession extends Disposable {
@@ -214,6 +212,20 @@ export interface AppSession extends Disposable {
   readonly fileActionIds: typeof FILE_ACTION_IDS;
   /** M15: '#rrggbb' face colour of the current palette (setTheme), for the colour field in ui. */
   readonly defaultBodyColor: Observable<string>;
+  /**
+   * M19: the HUD of the manipulator (mode bar and value field, spec 11 rule 8). hud, setMode and
+   * setValue are the controller's; project and onViewChanged are forwarded from the viewport, so
+   * ui can place the HUD over the view without knowing render.
+   */
+  readonly manipulator: {
+    readonly hud: Observable<ManipulatorHud | null>;
+    setMode(id: string): void;
+    setValue(handleId: string, shown: number): void;
+    /** Px relative to the view area; null when the view is not mounted. */
+    project(world: Vec3): readonly [x: number, y: number] | null;
+    /** The view moved (camera, resize): positions of the HUD are stale; every frame of an animation. */
+    onViewChanged(listener: () => void): Unsubscribe;
+  };
 
   mountViewport(el: HTMLElement): void;
   /** Q072: app picks the ScenePalette, ui does not know render. */
@@ -347,7 +359,6 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       regen: regenStatus,
       registry: manipulatorRegistry,
       viewport,
-      formatValue: deps.formatValue,
     }),
   );
   const tools = lifetime.add(
@@ -648,6 +659,23 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     files,
     fileActionIds: FILE_ACTION_IDS,
     defaultBodyColor: defaultBodyColor.asObservable(),
+    manipulator: {
+      hud: manipulators.hud,
+      setMode(id) {
+        manipulators.setMode(id);
+      },
+      setValue(handleId, shown) {
+        manipulators.setValue(handleId, shown);
+      },
+      project(world) {
+        return viewport.project(world);
+      },
+      onViewChanged(listener) {
+        return viewport.events.on('viewChanged', () => {
+          listener();
+        });
+      },
+    },
     mountViewport(el) {
       viewport.mount(el);
     },

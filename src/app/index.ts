@@ -18,4 +18,4 @@ export type { DownloadFile } from './file-exporter';
 export type { PluginMessages } from '@/plugin-api';
 export type { DocumentInfo } from '@/persistence';
 export type { OrbitMode, ViewCubeLabels } from '@/render';
-export type { HandleUnit } from '@/interaction';
+export type { HandleUnit, HudField, ManipulatorHud } from '@/interaction';

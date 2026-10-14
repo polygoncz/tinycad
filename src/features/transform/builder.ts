@@ -1,5 +1,5 @@
 import { mat4, vec3 } from '@/core';
-import type { Vec3 } from '@/core';
+import type { Mat4, Vec3 } from '@/core';
 import type { BodyId } from '@/document';
 import { modifyBody, replaceBodies, unresolvedReference } from '@/regen';
 import type { Body, FeatureBuilder, ModelingKernel } from '@/regen';
@@ -13,11 +13,29 @@ import type { TransformParams } from './schema';
 // the manipulator computes them itself (spec 07, the anchor is minimal).
 
 /** Unit vectors of the world axes; shared with the manipulator. */
-export const AXIS: Readonly<Record<TransformParams['axis'], Vec3>> = Object.freeze({
+export const AXIS: Readonly<Record<'x' | 'y' | 'z', Vec3>> = Object.freeze({
   x: Object.freeze<Vec3>([1, 0, 0]),
   y: Object.freeze<Vec3>([0, 1, 0]),
   z: Object.freeze<Vec3>([0, 0, 1]),
 });
+
+type Angles = Pick<TransformParams, 'rx' | 'ry' | 'rz'>;
+
+/** R = Rz · Ry · Rx: x first, z last (M19, Euler angles); shared with the manipulator. */
+export function rotationOf({ rx, ry, rz }: Angles): Mat4 {
+  return mat4.multiply(
+    mat4.rotationAxisAngle(AXIS.z, rz),
+    mat4.multiply(mat4.rotationAxisAngle(AXIS.y, ry), mat4.rotationAxisAngle(AXIS.x, rx)),
+  );
+}
+
+/** R⁻¹ = Rx⁻¹ · Ry⁻¹ · Rz⁻¹, each by the opposite angle; shared with the manipulator. */
+export function inverseRotationOf({ rx, ry, rz }: Angles): Mat4 {
+  return mat4.multiply(
+    mat4.rotationAxisAngle(AXIS.x, -rx),
+    mat4.multiply(mat4.rotationAxisAngle(AXIS.y, -ry), mat4.rotationAxisAngle(AXIS.z, -rz)),
+  );
+}
 
 export const transformBuilder: FeatureBuilder<TransformParams> = Object.freeze<
   FeatureBuilder<TransformParams>
@@ -25,20 +43,20 @@ export const transformBuilder: FeatureBuilder<TransformParams> = Object.freeze<
   type: 'transform',
   async build({ feature, state }, ctx) {
     // Params are valid here: the Regenerator ran transformSchema.validate first.
-    const { bodies: refs, pivot, pivotPoint, translate, axis, angle } = feature.params;
+    const { bodies: refs, pivot, pivotPoint, translate } = feature.params;
     const resolved = ctx.resolveBodies(refs);
     if (!resolved.ok) return { ok: false, error: unresolvedReference('bodies', resolved.error) };
-    // From the input shapes, so it depends neither on translate nor on angle (anchor invariant).
+    // From the input shapes, so it depends neither on translate nor on the angles (anchor invariant).
     const p =
       pivot === 'bodiesCenter'
         ? await centerOf(ctx.kernel, resolved.value)
         : pivot === 'point'
           ? pivotPoint
           : ORIGIN;
-    // Rotate about the axis through the pivot first, then translate: T(translate) · T(p) · R · T(−p).
+    // Rotate through the pivot first, then translate: T(translate) · T(p) · R · T(−p).
     const rotation = mat4.multiply(
       mat4.translation(p),
-      mat4.multiply(mat4.rotationAxisAngle(AXIS[axis], angle), mat4.translation(vec3.scale(p, -1))),
+      mat4.multiply(rotationOf(feature.params), mat4.translation(vec3.scale(p, -1))),
     );
     const m = mat4.multiply(mat4.translation(translate), rotation);
     const changed = new Map<BodyId, Body>();

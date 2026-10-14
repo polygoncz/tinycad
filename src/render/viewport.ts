@@ -17,7 +17,6 @@ import type {
   OverlayPort,
   PickFilter,
   PickResult,
-  ViewKeyEvent,
   ViewPointerEvent,
   ViewportEvents,
   ViewportPort,
@@ -43,6 +42,7 @@ import { createSceneHelpers, GRID_BOUNDS } from './scene-helpers';
 import { createSketchLayer, type SketchLayer } from './sketch-layer';
 import { createViewCube } from './view-cube';
 import { DEFAULT_VIEW_CUBE_LABELS, type ViewCubeLabels } from './view-cube-labels';
+import { viewChangedSince, type ViewSnapshot } from './view-change';
 import { toViewKeyEvent, toViewPointerEvent } from './view-events';
 
 /** Hover and selection (spec 09, "Vrstvy pro interakci"). */
@@ -95,7 +95,11 @@ export interface Viewport extends ViewportPort, Disposable {
   /** M17.1: click on the rotation mode button of the view cube; dispose drops the listeners. */
   onOrbitModeToggle(listener: () => void): Unsubscribe;
 
-  readonly events: Subscribable<{ pointer: ViewPointerEvent; key: ViewKeyEvent }>;
+  /**
+   * viewChanged (M19) after a drawn frame whose camera (target, orientation, halfHeight) or view
+   * area size differs from the previous frame; the first frame after mount counts as changed.
+   */
+  readonly events: Subscribable<ViewportEvents>;
 }
 
 export const MESH_QUALITY: MeshQuality = { linearDeflection: 0.1, angularDeflection: 0.5 };
@@ -133,6 +137,10 @@ export function createViewport(deps: {
   let mounted: Mounted | null = null;
   let everMounted = false;
   let disposed = false;
+  /** What the last frame drew with (viewChanged); null = no frame since mount. */
+  let lastView: ViewSnapshot | null = null;
+  /** Grows by one with every viewChanged; never reset, so a remount keeps it growing. */
+  let viewGeneration = 0;
 
   const scheduler = lifetime.add(
     createFrameScheduler({
@@ -258,13 +266,37 @@ export function createViewport(deps: {
     const fading = viewCube.tick(time);
     updateClip();
     // Constant size on the screen for the camera of this frame (a gesture or animation moved it).
-    manipulatorLayer.beforeRender(worldPerPx(mounted.canvas.clientHeight), viewDirection());
+    manipulatorLayer.beforeRender(
+      worldPerPx(mounted.canvas.clientHeight),
+      viewDirection(),
+      rig.orientation,
+    );
     // autoClear is off because of the view cube drawn over the main scene.
     renderer.clear();
     renderer.render(scene, rig.camera);
     viewCube.draw(renderer, rig.orientation);
+    emitViewChanged(mounted.canvas);
     // The scheduler clears its pending frame before draw, so this asks for the next one.
     if (animating || fading) scheduleFrame();
+  }
+
+  /**
+   * viewChanged after the frame when its camera or view area differs from the last frame (spec 09,
+   * "Vzhled od M19"): an animation sends it every frame, a still scene never.
+   */
+  function emitViewChanged(canvas: HTMLCanvasElement): void {
+    const next: ViewSnapshot = {
+      target: rig.target,
+      orientation: rig.orientation,
+      halfHeight: rig.halfHeight,
+      width: canvas.clientWidth,
+      height: canvas.clientHeight,
+    };
+    const changed = viewChangedSince(lastView, next);
+    lastView = next;
+    if (!changed) return;
+    viewGeneration += 1;
+    emitter.emit('viewChanged', { generation: viewGeneration });
   }
 
   /** Ray through (x, y) CSS px of a canvas of width × height CSS px (both > 0). */
@@ -425,12 +457,6 @@ export function createViewport(deps: {
     resources.add(() => {
       viewCube.unmount();
     });
-    // After the view cube, so the label stacks above it.
-    manipulatorLayer.mountLabel(canvas);
-    resources.add(() => {
-      manipulatorLayer.unmountLabel();
-    });
-
     listen(resources, canvas, 'pointerdown', (e) => {
       // A manipulator drag goes on outside the canvas (spec 09, "Události"); the browser
       // releases the capture on pointerup. Right and middle are captured by the camera input.
@@ -475,6 +501,8 @@ export function createViewport(deps: {
     if (mounted === null) return;
     const { resources } = mounted;
     mounted = null;
+    // The next mount draws a first frame again, and it announces the view.
+    lastView = null;
     resources.dispose();
   }
 
@@ -550,10 +578,6 @@ export function createViewport(deps: {
       updateClip();
       return manipulatorLayer.pick(x, y, handleProjection(clientWidth, clientHeight));
     },
-    setLabel(label) {
-      assertAlive();
-      manipulatorLayer.setLabel(label);
-    },
   };
 
   const camera: CameraController = {
@@ -594,6 +618,15 @@ export function createViewport(deps: {
         if (hit !== null) return hit;
       }
       return picker.pick(rig.camera, x, y, clientWidth, clientHeight, filter);
+    },
+    project(world: Vec3): readonly [x: number, y: number] | null {
+      assertAlive();
+      if (mounted === null) return null;
+      const { clientWidth, clientHeight } = mounted.canvas;
+      if (clientWidth <= 0 || clientHeight <= 0) return null;
+      // No updateClip: near/far and the distance along the view do not move x and y of an
+      // orthographic projection.
+      return handleProjection(clientWidth, clientHeight).project(world);
     },
     screenToRay(x: number, y: number): { origin: Vec3; direction: Vec3 } {
       assertAlive();

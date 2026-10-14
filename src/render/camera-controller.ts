@@ -41,6 +41,8 @@ export interface CameraRig extends CameraController, Disposable {
   readonly orientation: Quat;
   /** Point the camera orbits around; part of the clip bounds (spec 09, "Near a far"). */
   readonly target: Vec3;
+  /** M19: half of the visible height in mm; with target and orientation it drives viewChanged. */
+  readonly halfHeight: number;
   /** Pointer and wheel listeners (CameraInput) on the element. Only one at a time. */
   attach(element: HTMLElement): void;
   /** Removes the listeners; the camera keeps its view. Idempotent. */
@@ -161,6 +163,9 @@ export function createCameraRig(options: CameraRigOptions): CameraRig {
     },
     get target(): Vec3 {
       return model.state.target;
+    },
+    get halfHeight(): number {
+      return model.state.halfHeight;
     },
     fitAll(): void {
       assertAlive();

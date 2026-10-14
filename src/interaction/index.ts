@@ -7,7 +7,6 @@ export type {
   HighlightPort,
   HighlightTarget,
   KeyMods,
-  ManipulatorLabel,
   ManipulatorPort,
   OverlayPort,
   OverlayShape,
@@ -21,6 +20,7 @@ export type {
   SketchDrawingRegion,
   SketchPort,
   SketchStyle,
+  ViewChangedEvent,
   ViewKeyEvent,
   ViewPointerEvent,
   ViewportEvents,
@@ -48,11 +48,16 @@ export type {
   HandleUnit,
   LinearHandle,
   ManipulatorDescriptor,
+  ManipulatorFrame,
+  ManipulatorMode,
   ManipulatorRegistry,
+  Patch,
+  PlanarHandle,
+  PointHandle,
 } from './manipulators';
 export { createManipulatorRegistry } from './manipulators';
 export { createManipulatorController } from './manipulator-controller';
-export type { ManipulatorController } from './manipulator-controller';
+export type { HudField, ManipulatorController, ManipulatorHud } from './manipulator-controller';
 export { bindSelectionHighlight, createSelectionModel, sameSelectionItem } from './selection';
 export type { SelectionCommands, SelectionItem, SelectionModel } from './selection';
 export { ALL_MODES } from './mode';

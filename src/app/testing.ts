@@ -5,11 +5,9 @@ import { Emitter, RpcError } from '@/core';
 import type { Disposable, Subscribable, Unsubscribe, Vec3 } from '@/core';
 import type { BodyId } from '@/document';
 import type {
-  HandleUnit,
   HandleView,
   HighlightPort,
   HighlightTarget,
-  ManipulatorLabel,
   ManipulatorPort,
   OverlayPort,
   OverlayShape,
@@ -17,6 +15,7 @@ import type {
   PickResult,
   SketchDrawing,
   SketchPort,
+  ViewChangedEvent,
   ViewKeyEvent,
   ViewPointerEvent,
   ViewportEvents,
@@ -36,9 +35,9 @@ type Ray = ReturnType<FakeViewport['screenToRay']>;
 /**
  * An AppViewport for tests: the ViewportPort part of FakeViewport plus recorded mount, body
  * syncs, kernel resets, camera calls (views and view directions), palettes, body visibility,
- * body colours (M15), view cube labels (M17), rotation modes (M17.1) and manipulator views and
- * label (M18); emitOrbitModeToggle
- * plays a click on the rotation mode button. sync resolves at once.
+ * body colours (M15), view cube labels (M17), rotation modes (M17.1) and manipulator views
+ * (M18), a prepared projection (M19); emitOrbitModeToggle
+ * plays a click on the rotation mode button, emitViewChanged a move of the view (M19). sync resolves at once.
  * It wraps a FakeViewport instead of extending it: a class of another module is no base
  * class (ADR 0011), so its members are passed on one by one.
  */
@@ -149,6 +148,16 @@ export class FakeAppViewport implements AppViewport {
     return this.port.screenToRay(x, y);
   }
 
+  /** The result of project as a function of the world point (FakeViewport.prepareProject, M19). */
+  prepareProject(fn: (world: Vec3) => readonly [x: number, y: number] | null): void {
+    this.port.prepareProject(fn);
+  }
+
+  /** FakeViewport.project: null until a test prepares it (M19). */
+  project(world: Vec3): readonly [x: number, y: number] | null {
+    return this.port.project(world);
+  }
+
   /** Last state passed to highlight.setHover. */
   get hover(): HighlightTarget | null {
     return this.port.hover;
@@ -174,17 +183,17 @@ export class FakeAppViewport implements AppViewport {
     return this.port.manipulatorViews;
   }
 
-  /** Last label passed to manipulators.setLabel (M18). */
-  get manipulatorLabel(): ManipulatorLabel | null {
-    return this.port.manipulatorLabel;
-  }
-
   emitPointer(e: ViewPointerEvent): void {
     this.port.emitPointer(e);
   }
 
   emitKey(e: ViewKeyEvent): void {
     this.port.emitKey(e);
+  }
+
+  /** Plays a move of the view: the HUD positions are stale (M19). */
+  emitViewChanged(e: ViewChangedEvent): void {
+    this.port.emitViewChanged(e);
   }
 
   /** Bodies of the last sync; empty before any. */
@@ -294,11 +303,6 @@ export function aFakeLocks(): {
     },
   };
   return { locks, held, requests };
-}
-
-/** AppSessionDeps.formatValue for tests (M18): the raw value and the unit, '7 length'. */
-export function formatTestValue(value: number, unit: HandleUnit): string {
-  return `${String(value)} ${unit}`;
 }
 
 /** AppSessionDeps.download that keeps every file (M15). */
