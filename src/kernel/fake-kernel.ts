@@ -4,12 +4,25 @@ import type { KernelErrorCode } from './errors';
 import type { Axis, BooleanOp, GeometryKernel } from './kernel';
 import { parseFaceInput, type ProfileCurve, type ProfileLoop } from './profile';
 import { isRigidMotion } from './transform';
-import type { BoundingBox, MeshData, MeshQuality, ShapeHandle, ShapeResult } from './types';
+import type {
+  BoundingBox,
+  EdgeInfo,
+  FaceInfo,
+  HistoryLink,
+  MeshData,
+  MeshQuality,
+  ShapeHandle,
+  ShapeHistory,
+  ShapeResult,
+  SubShapeIndex,
+  TopologySummary,
+} from './types';
 
 // In-memory GeometryKernel for tests of higher layers (spec 06, "FakeKernel"). A shape is its
 // axis-aligned bounding box (AABB): a cylinder, a moved shape, a boolean result, a face and a
 // swept solid are stored as their AABB and tessellated as a box (a face as a box of zero
-// thickness). Reached only through kernel/testing.ts, so it never gets into production.
+// thickness). Its topology is that box too (M14): 6 faces, 12 edges, 8 vertices in the order
+// of the mesh. Reached only through kernel/testing.ts, so it never gets into production.
 
 export type KernelOp = keyof GeometryKernel;
 
@@ -28,6 +41,10 @@ const MIN_AXIS_LENGTH = 1e-9;
 
 /** Spec 06: revolve takes 0 < angle ≤ 2π + this. */
 const ANGLE_TOLERANCE = 1e-9;
+
+/** The topology of every stored shape is its AABB as a box (spec 06, M14). */
+const BOX_EDGES = 12;
+const BOX_VERTICES = 8;
 
 const BOOLEAN_OPS: readonly BooleanOp[] = ['union', 'subtract', 'intersect'];
 
@@ -83,10 +100,14 @@ class FakeKernelImpl implements FakeKernel {
       if (!size.every((s) => Number.isFinite(s) && s > 0)) {
         throw createKernelError('invalid-input', 'makeBox: size must be finite and > 0');
       }
-      return this.add({
-        min: [origin[0], origin[1], origin[2]],
-        max: [origin[0] + size[0], origin[1] + size[1], origin[2] + size[2]],
-      });
+      return this.add(
+        {
+          min: [origin[0], origin[1], origin[2]],
+          max: [origin[0] + size[0], origin[1] + size[1], origin[2] + size[2]],
+        },
+        false,
+        { roles: BOX_ROLES },
+      );
     });
   }
 
@@ -129,7 +150,9 @@ class FakeKernelImpl implements FakeKernel {
         min.push(Math.min(bottom, top) - reach);
         max.push(Math.max(bottom, top) + reach);
       }
-      return this.add({ min: toVec3(min), max: toVec3(max) });
+      return this.add({ min: toVec3(min), max: toVec3(max) }, false, {
+        roles: cylinderRoles(unit),
+      });
     });
   }
 
@@ -145,7 +168,7 @@ class FakeKernelImpl implements FakeKernel {
         const entry = this.entry(shape);
         const corners = cornersOf(entry).map((c) => mat4.transformPoint(matrix, c));
         // A moved face is still a face (spec 06, M13).
-        return this.add(enclosing(corners), entry.face);
+        return this.add(enclosing(corners), entry.face, { history: identityHistory() });
       },
     );
   }
@@ -172,18 +195,22 @@ class FakeKernelImpl implements FakeKernel {
       }
       const targetBox = enclosing(lists.targets.flatMap((h) => extremes(this.entry(h))));
       const toolBox = enclosing(lists.tools.flatMap((h) => extremes(this.entry(h))));
+      // Spec 06, FakeKernel (M14): the first input is the identity, every other one is deleted.
+      const history = booleanHistory(all.length);
       switch (op) {
         case 'union':
-          return this.add(enclosing([...extremes(targetBox), ...extremes(toolBox)]));
+          return this.add(enclosing([...extremes(targetBox), ...extremes(toolBox)]), false, {
+            history,
+          });
         case 'subtract':
           // The fake cuts nothing away: the result is the box of the targets.
-          return this.add(targetBox);
+          return this.add(targetBox, false, { history });
         case 'intersect': {
           const common = overlap(targetBox, toolBox);
           if (common === undefined) {
             throw createKernelError('operation-failed', 'boolean: the intersection is empty');
           }
-          return this.add(common);
+          return this.add(common, false, { history });
         }
       }
     });
@@ -228,7 +255,10 @@ class FakeKernelImpl implements FakeKernel {
       const entry = this.face(profile, 'extrude');
       const shift = input.direction.map((c) => (c / length) * input.distance);
       const moved = (p: Vec3): Vec3 => toVec3(p.map((c, k) => c + (shift[k] ?? Number.NaN)));
-      return this.add(enclosing([...extremes(entry), ...extremes(entry).map(moved)]));
+      return this.add(enclosing([...extremes(entry), ...extremes(entry).map(moved)]), false, {
+        roles: sweepRoles(input.direction, 'face:start', 'face:end'),
+        history: profileHistory(),
+      });
     });
   }
 
@@ -257,8 +287,16 @@ class FakeKernelImpl implements FakeKernel {
         const m = rotationAbout(input.origin, input.direction, a);
         return cornersOf(entry).map((c) => mat4.transformPoint(m, c));
       });
-      return this.add(enclosing(turned));
+      return this.add(enclosing(turned), false, { history: profileHistory() });
     });
+  }
+
+  fillet(shape: ShapeHandle, edges: readonly number[], radius: number): Promise<ShapeResult> {
+    return this.dressup('fillet', shape, edges, radius);
+  }
+
+  chamfer(shape: ShapeHandle, edges: readonly number[], distance: number): Promise<ShapeResult> {
+    return this.dressup('chamfer', shape, edges, distance);
   }
 
   tessellate(shape: ShapeHandle, q: MeshQuality): Promise<MeshData> {
@@ -280,6 +318,10 @@ class FakeKernelImpl implements FakeKernel {
       const { min, max } = this.entry(shape);
       return { min: [...min], max: [...max] };
     });
+  }
+
+  topology(shape: ShapeHandle): Promise<TopologySummary> {
+    return this.call('topology', noInput, () => boxTopology(this.entry(shape)));
   }
 
   release(handles: readonly ShapeHandle[]): Promise<void> {
@@ -325,11 +367,37 @@ class FakeKernelImpl implements FakeKernel {
     return Promise.resolve().then(() => body(input));
   }
 
+  /**
+   * Fillet or chamfer (spec 06, M14): the input checked as by OCCT (12 edges of the box), the
+   * AABB unchanged under a new handle, the history the identity of the 6 faces.
+   */
+  private dressup(
+    op: 'fillet' | 'chamfer',
+    shape: ShapeHandle,
+    edges: readonly number[],
+    size: number,
+  ): Promise<ShapeResult> {
+    const read = (): { edges: number[]; size: number } => ({ edges: [...edges], size });
+    return this.call(op, read, (input) => {
+      if (!positive(input.size)) {
+        throw createKernelError('invalid-input', `${op}: the size must be finite and > 0`);
+      }
+      const entry = this.entry(shape);
+      const problem = edgeListProblem(input.edges, BOX_EDGES);
+      if (problem !== undefined) throw createKernelError('invalid-input', `${op}: ${problem}`);
+      return this.add({ min: entry.min, max: entry.max }, false, { history: identityHistory() });
+    });
+  }
+
   /** Stores the AABB under a new handle; `face` marks a face (spec 06, M13). */
-  private add({ min, max }: AabbEntry, face = false): ShapeResult {
+  private add(
+    { min, max }: AabbEntry,
+    face = false,
+    described: Omit<ShapeResult, 'shape'> = {},
+  ): ShapeResult {
     const shape = this.nextHandle();
     this.shapes.set(shape, { min, max, face });
-    return { shape };
+    return { shape, ...described };
   }
 
   private nextHandle(): ShapeHandle {
@@ -358,6 +426,137 @@ class FakeKernelImpl implements FakeKernel {
 
 function positive(x: number): boolean {
   return Number.isFinite(x) && x > 0;
+}
+
+/**
+ * Spec 06 (M14): what is wrong with the edge list of fillet/chamfer – empty, an index that is
+ * not an integer in [0, count), a duplicate – or undefined when it is valid.
+ */
+function edgeListProblem(edges: readonly number[], count: number): string | undefined {
+  if (edges.length === 0) return 'edges must not be empty';
+  const bad = edges.find((e) => !(Number.isInteger(e) && e >= 0 && e < count));
+  if (bad !== undefined) {
+    return `edge ${String(bad)} is not an integer in [0, ${String(count)})`;
+  }
+  if (new Set(edges).size !== edges.length) return 'the same edge more than once';
+  return undefined;
+}
+
+// Topology, roles and history of the fake (spec 06, FakeKernel, M14). A face of the box has the
+// index 2·axis + (1 on the max side), as in the mesh; a corner has the bits x = 1, y = 2, z = 4.
+
+const faceIndex = (axis: number, high: boolean): number => 2 * axis + (high ? 1 : 0);
+const face = (index: number): SubShapeIndex => ({ type: 'face', index });
+
+/** Spec 06: left 0, right 1, front 2, back 3, bottom 4, top 5. */
+const BOX_ROLES: Readonly<Record<string, readonly SubShapeIndex[]>> = {
+  'face:left': [face(0)],
+  'face:right': [face(1)],
+  'face:front': [face(2)],
+  'face:back': [face(3)],
+  'face:bottom': [face(4)],
+  'face:top': [face(5)],
+};
+
+/** The axis of the largest |component| of v and whether that component is positive. */
+function dominantAxis(v: readonly number[]): { axis: number; positive: boolean } {
+  let axis = 0;
+  for (let k = 1; k < 3; k++) {
+    if (Math.abs(v[k] ?? 0) > Math.abs(v[axis] ?? 0)) axis = k;
+  }
+  return { axis, positive: (v[axis] ?? 0) > 0 };
+}
+
+/** The faces against and along the dominant component of `direction`: [back, front]. */
+function sweepEnds(direction: readonly number[]): readonly [number, number] {
+  const { axis, positive: along } = dominantAxis(direction);
+  return [faceIndex(axis, !along), faceIndex(axis, along)];
+}
+
+/** Spec 06: start/end = the wall against/along the dominant component of d̂. */
+function sweepRoles(
+  direction: readonly number[],
+  start: string,
+  end: string,
+): Readonly<Record<string, readonly SubShapeIndex[]>> {
+  const [back, front] = sweepEnds(direction);
+  return { [start]: [face(back)], [end]: [face(front)] };
+}
+
+/** Spec 06: bottom/top = the wall against/along the dominant axis component, side = the rest. */
+function cylinderRoles(
+  axis: readonly number[],
+): Readonly<Record<string, readonly SubShapeIndex[]>> {
+  const [bottom, top] = sweepEnds(axis);
+  const side = [0, 1, 2, 3, 4, 5].filter((f) => f !== bottom && f !== top);
+  return { 'face:bottom': [face(bottom)], 'face:top': [face(top)], 'face:side': side.map(face) };
+}
+
+const ALL_FACES = [0, 1, 2, 3, 4, 5];
+
+/** Face i of input 0 → face i of the output, for all 6 faces. */
+function identityLinks(input: number): HistoryLink[] {
+  return ALL_FACES.map((i) => ({ input, from: face(i), to: [face(i)] }));
+}
+
+function deletedFaces(input: number): ShapeHistory['deleted'] {
+  return ALL_FACES.map((i) => ({ input, sub: face(i) }));
+}
+
+/** transform, fillet, chamfer: the identity of the 6 faces. */
+function identityHistory(): ShapeHistory {
+  return { modified: identityLinks(0), generated: [], deleted: [] };
+}
+
+/** boolean: the first input is the identity, the others are deleted. */
+function booleanHistory(inputs: number): ShapeHistory {
+  const others = Array.from({ length: inputs - 1 }, (_, k) => k + 1);
+  return { modified: identityLinks(0), generated: [], deleted: others.flatMap(deletedFaces) };
+}
+
+/** extrude, revolve: the profile is deleted. */
+function profileHistory(): ShapeHistory {
+  return { modified: [], generated: [], deleted: deletedFaces(0) };
+}
+
+/**
+ * The AABB as a box: faces −X, +X, −Y, +Y, −Z, +Z (plane through the centre of the wall,
+ * normal outwards), edges in the order of the mesh with their faces and corner vertices.
+ */
+function boxTopology({ min, max }: AabbEntry): TopologySummary {
+  const at = (k: number, high: boolean): number => (high ? max[k] : min[k]) ?? Number.NaN;
+  const centre = (k: number): number => (at(k, false) + at(k, true)) / 2;
+  const faces: FaceInfo[] = [];
+  for (let axis = 0; axis < 3; axis++) {
+    for (const high of [false, true]) {
+      const origin = toVec3([0, 1, 2].map((k) => (k === axis ? at(k, high) : centre(k))));
+      const normal = toVec3([0, 1, 2].map((k) => (k === axis ? (high ? 1 : -1) : 0)));
+      faces.push({ surface: 'plane', plane: { origin, normal } });
+    }
+  }
+  const edges: EdgeInfo[] = [];
+  for (let axis = 0; axis < 3; axis++) {
+    const u = (axis + 1) % 3;
+    const v = (axis + 2) % 3;
+    for (const [uHigh, vHigh] of [
+      [false, false],
+      [true, false],
+      [true, true],
+      [false, true],
+    ] as const) {
+      const corner = (axisHigh: boolean): number =>
+        (axisHigh ? 1 << axis : 0) + (uHigh ? 1 << u : 0) + (vHigh ? 1 << v : 0);
+      const midpoint = toVec3(
+        [0, 1, 2].map((k) => (k === axis ? centre(k) : at(k, k === u ? uHigh : vHigh))),
+      );
+      edges.push({
+        faces: [faceIndex(u, uHigh), faceIndex(v, vHigh)].sort((a, b) => a - b),
+        vertices: [corner(false), corner(true)].sort((a, b) => a - b),
+        midpoint,
+      });
+    }
+  }
+  return { faces, edges, vertexCount: BOX_VERTICES };
 }
 
 function toVec3(v: readonly number[]): Vec3 {

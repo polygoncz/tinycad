@@ -162,6 +162,8 @@ function readCurve(x: unknown, path: string, errors: string[]): ProfileCurve | u
     return undefined;
   }
   const kind: unknown = Reflect.get(x, 'kind');
+  const id = readId(Reflect.get(x, 'id'), path, errors);
+  if (id === undefined) return undefined;
   switch (kind) {
     case 'line': {
       const from = readVec2(Reflect.get(x, 'from'));
@@ -174,7 +176,7 @@ function readCurve(x: unknown, path: string, errors: string[]): ProfileCurve | u
         errors.push(`${path}: a line must not have zero length`);
         return undefined;
       }
-      return { kind, from, to };
+      return { kind, from, to, ...id };
     }
     case 'arc': {
       const center = readVec2(Reflect.get(x, 'center'));
@@ -203,7 +205,7 @@ function readCurve(x: unknown, path: string, errors: string[]): ProfileCurve | u
         errors.push(`${path}: the arc radius must be > ${String(MIN_ARC_RADIUS)}`);
         return undefined;
       }
-      return { kind, center, from, to, ccw };
+      return { kind, center, from, to, ccw, ...id };
     }
     case 'circle': {
       const center = readVec2(Reflect.get(x, 'center'));
@@ -216,12 +218,23 @@ function readCurve(x: unknown, path: string, errors: string[]): ProfileCurve | u
         errors.push(`${path}: radius must be finite and > 0`);
         return undefined;
       }
-      return { kind, center, radius };
+      return { kind, center, radius, ...id };
     }
     default:
       errors.push(`${path}: unknown curve kind ${String(kind)}`);
       return undefined;
   }
+}
+
+/**
+ * The optional entity id of a curve (M14) as a property bag to spread into the copy: `{}` when
+ * absent, `{ id }` for a non-empty string; undefined (and an error) for anything else.
+ */
+function readId(x: unknown, path: string, errors: string[]): { readonly id?: string } | undefined {
+  if (x === undefined) return {};
+  if (typeof x === 'string' && x.length > 0) return { id: x };
+  errors.push(`${path}: id must be a non-empty string`);
+  return undefined;
 }
 
 function startOf(c: ProfileCurve | undefined): Vec2 | undefined {

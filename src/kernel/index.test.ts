@@ -28,7 +28,7 @@ describe('kernel public API', () => {
     }>();
   });
 
-  it('exports the topology types and DressupOps, not yet part of the port (M14 wave 0)', () => {
+  it('exports the topology types; the port includes DressupOps and topology (M14)', () => {
     expectTypeOf<kernel.FaceInfo['surface']>().toEqualTypeOf<kernel.SurfaceType>();
     expectTypeOf<kernel.FaceInfo['plane']>().toEqualTypeOf<kernel.FacePlane | undefined>();
     expectTypeOf<kernel.TopologySummary['faces']>().toEqualTypeOf<readonly kernel.FaceInfo[]>();
@@ -42,6 +42,9 @@ describe('kernel public API', () => {
     expectTypeOf<Parameters<kernel.DressupOps['chamfer']>>().toEqualTypeOf<
       [kernel.ShapeHandle, readonly number[], number]
     >();
-    expectTypeOf<kernel.GeometryKernel>().not.toHaveProperty('fillet');
+    expectTypeOf<kernel.GeometryKernel>().toExtend<kernel.DressupOps>();
+    expectTypeOf<ReturnType<kernel.QueryOps['topology']>>().toEqualTypeOf<
+      Promise<kernel.TopologySummary>
+    >();
   });
 });

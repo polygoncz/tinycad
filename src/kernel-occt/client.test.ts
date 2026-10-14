@@ -70,6 +70,19 @@ describe('OcctKernelClient', () => {
     expect(kernelErrorCode(e)).toBe('invalid-input');
   });
 
+  it('forwards topology, fillet and chamfer with roles and history intact (M14)', async () => {
+    const { kernel } = connect(Promise.resolve(new OcctKernelImpl(oc)));
+    const box = await kernel.makeBox(BOX);
+    expect(box.roles?.['face:top']).toHaveLength(1);
+    const topology = await kernel.topology(box.shape);
+    expect(topology.faces).toHaveLength(6);
+    const filleted = await kernel.fillet(box.shape, [0], 0.2);
+    expect((await kernel.topology(filleted.shape)).faces).toHaveLength(7);
+    expect(filleted.history?.generated.some((l) => l.from.type === 'edge')).toBe(true);
+    const chamfered = await kernel.chamfer(box.shape, [0], 0.2);
+    expect((await kernel.topology(chamfered.shape)).faces).toHaveLength(7);
+  });
+
   it('failAll rejects pending calls with disconnected', async () => {
     // An initialisation that never finishes keeps the calls pending in the worker.
     const { rpc, kernel } = connect(new Promise<GeometryKernel>(() => undefined));
@@ -121,6 +134,9 @@ describe('endOnFatal', () => {
       revolve: (s, a, angle) => fake.revolve(s, a, angle),
       tessellate: (s, q) => fake.tessellate(s, q),
       boundingBox: (s) => fake.boundingBox(s),
+      topology: (s) => fake.topology(s),
+      fillet: (s, e, r) => fake.fillet(s, e, r),
+      chamfer: (s, e, d) => fake.chamfer(s, e, d),
       release: (h) => fake.release(h),
       liveHandleCount: () =>
         new Promise((resolve) =>

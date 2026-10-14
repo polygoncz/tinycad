@@ -20,9 +20,9 @@ export interface MeshQuality {
 
 export interface ShapeResult {
   readonly shape: ShapeHandle;
-  /** Not filled until M14. */
+  /** From M14, for operations with input shapes (spec 06, "Stav po M14"). */
   readonly history?: ShapeHistory;
-  /** Named parts, e.g. { 'face:top': [5] }. Not filled until M14. */
+  /** Named parts, e.g. { 'face:top': [5] }; keys without a feature id (ADR 0018). From M14. */
   readonly roles?: Readonly<Record<string, readonly SubShapeIndex[]>>;
 }
 

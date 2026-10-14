@@ -118,6 +118,7 @@ describe('createTrackingKernel', () => {
       'makeCylinder',
       'makeFace',
       'revolve',
+      'topology',
       'transform',
     ]);
   });

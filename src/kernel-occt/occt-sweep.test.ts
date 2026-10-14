@@ -154,19 +154,6 @@ describe('OcctKernelImpl.revolve (M13)', () => {
     expect(kernelErrorCode(e)).toBe('operation-failed');
     expect(await kernel.liveHandleCount()).toBe(1);
   });
-
-  it('returns no roles and no history (M14)', async () => {
-    const kernel = new OcctKernelImpl(oc);
-    const profile = await aRectangle(kernel, 5, 10);
-    const results = [
-      await kernel.revolve(profile, Z_AXIS, Math.PI),
-      await kernel.extrude(profile, [0, -1, 0], 1),
-    ];
-    for (const result of results) {
-      expect(result.roles).toBeUndefined();
-      expect(result.history).toBeUndefined();
-    }
-  });
 });
 
 describe('createInThreadOcctKernel', () => {

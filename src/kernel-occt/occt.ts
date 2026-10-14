@@ -90,11 +90,19 @@ export function hasSolid(oc: Occt, shape: TopoDS_Shape): boolean {
 export function toKernelError(oc: Occt, e: unknown): Error {
   if (e instanceof Error && kernelErrorCode(e) !== undefined) return e;
   if (isWasmTrap(e)) return e;
-  if (isWasmException(e)) {
-    const [type, message] = oc.getExceptionMessage(e);
-    return createKernelError('internal', message ? `${type}: ${message}` : type);
-  }
+  const text = occtExceptionText(oc, e);
+  if (text !== undefined) return createKernelError('internal', text);
   return createKernelError('internal', e instanceof Error ? e.message : String(e));
+}
+
+/**
+ * The text of an OCCT exception (WebAssembly.Exception): `<OCCT type>: <message>`, just the
+ * type when the message is empty; undefined for anything else (a trap included).
+ */
+export function occtExceptionText(oc: Occt, e: unknown): string | undefined {
+  if (!isWasmException(e)) return undefined;
+  const [type, message] = oc.getExceptionMessage(e);
+  return message ? `${type}: ${message}` : type;
 }
 
 /**

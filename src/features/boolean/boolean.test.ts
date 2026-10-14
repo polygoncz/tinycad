@@ -77,6 +77,7 @@ function aRecordingKernel() {
     extrude: (profile, direction, distance) => fake.extrude(profile, direction, distance),
     revolve: (profile, axis, angle) => fake.revolve(profile, axis, angle),
     boundingBox: (shape) => fake.boundingBox(shape),
+    topology: (shape) => fake.topology(shape),
   };
   return { fake, kernel, calls };
 }

@@ -36,9 +36,16 @@ describe('OcctKernelImpl.makeBox', () => {
     expect(b.shape).toBe(2);
   });
 
-  it('returns no roles and no history (Q052)', async () => {
+  it('returns the six roles of the box faces and no history (M14)', async () => {
     const result = await aKernel().makeBox(unitBox);
-    expect(result.roles).toBeUndefined();
+    expect(Object.keys(result.roles ?? {}).sort()).toEqual([
+      'face:back',
+      'face:bottom',
+      'face:front',
+      'face:left',
+      'face:right',
+      'face:top',
+    ]);
     expect(result.history).toBeUndefined();
   });
 

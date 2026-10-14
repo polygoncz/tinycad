@@ -120,6 +120,22 @@ describe('OCCT worker implementation', () => {
     await expect(rpc.call('liveHandleCount')).resolves.toBe(3);
   });
 
+  it('forwards topology, fillet and chamfer to the kernel (M14)', async () => {
+    const fake = createFakeKernel();
+    const rpc = connect(Promise.resolve(fake));
+    const box = await rpc.call('makeBox', BOX);
+    const topology = await rpc.call('topology', box.shape);
+    expect(topology.faces).toHaveLength(6);
+    expect(topology.vertexCount).toBe(8);
+    const filleted = await rpc.call('fillet', box.shape, [0, 1], 0.2);
+    const chamfered = await rpc.call('chamfer', box.shape, [2], 0.3);
+    expect(filleted.history?.modified).toHaveLength(6);
+    expect(chamfered.shape).not.toBe(filleted.shape);
+    expect(fake.callCount('topology')).toBe(1);
+    expect(fake.callCount('fillet')).toBe(1);
+    expect(fake.callCount('chamfer')).toBe(1);
+  });
+
   it('tessellate transfers the mesh buffers: the worker side loses them', async () => {
     const fake = createFakeKernel();
     let sent: MeshData | undefined;
@@ -132,6 +148,9 @@ describe('OCCT worker implementation', () => {
       extrude: (s, d, l) => fake.extrude(s, d, l),
       revolve: (s, a, angle) => fake.revolve(s, a, angle),
       boundingBox: (s) => fake.boundingBox(s),
+      topology: (s) => fake.topology(s),
+      fillet: (s, e, r) => fake.fillet(s, e, r),
+      chamfer: (s, e, d) => fake.chamfer(s, e, d),
       release: (h) => fake.release(h),
       liveHandleCount: () => fake.liveHandleCount(),
       tessellate: async (s, q) => {
@@ -222,6 +241,9 @@ function throwingKernel(error: () => Error): GeometryKernel {
     revolve: fail,
     tessellate: fail,
     boundingBox: fail,
+    topology: fail,
+    fillet: fail,
+    chamfer: fail,
     release: fail,
     liveHandleCount: fail,
   };

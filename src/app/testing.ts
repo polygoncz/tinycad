@@ -166,8 +166,11 @@ export function createCrashableKernel(): CrashableKernel {
     extrude: (profile, direction, distance) =>
       guard(() => fake.extrude(profile, direction, distance)),
     revolve: (profile, axis, angle) => guard(() => fake.revolve(profile, axis, angle)),
+    fillet: (shape, edges, radius) => guard(() => fake.fillet(shape, edges, radius)),
+    chamfer: (shape, edges, distance) => guard(() => fake.chamfer(shape, edges, distance)),
     tessellate: (shape, q) => guard(() => fake.tessellate(shape, q)),
     boundingBox: (shape) => guard(() => fake.boundingBox(shape)),
+    topology: (shape) => guard(() => fake.topology(shape)),
     release: (handles) => guard(() => fake.release(handles)),
     liveHandleCount: () => guard(() => fake.liveHandleCount()),
     crash: () => {

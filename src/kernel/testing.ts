@@ -14,7 +14,16 @@ import type { KernelErrorCode } from './errors';
 import type { Axis, BooleanOp, GeometryKernel } from './kernel';
 import type { ProfileCurve, ProfileLoop } from './profile';
 import { validateMeshData } from './mesh';
-import type { BoundingBox, MeshData, MeshQuality, ShapeHandle } from './types';
+import type {
+  BoundingBox,
+  MeshData,
+  MeshQuality,
+  ShapeHandle,
+  ShapeHistory,
+  ShapeResult,
+  SubShapeIndex,
+  TopologySummary,
+} from './types';
 
 export { createFakeKernel } from './fake-kernel';
 export type { FakeKernel, KernelOp } from './fake-kernel';
@@ -291,6 +300,123 @@ const RING_PROFILE: FaceParams = {
 const Z_AXIS = { origin: [0, 0, 0], direction: [0, 0, 1] } as const satisfies Axis;
 const TURN = 2 * Math.PI;
 
+// M14 fixtures and checks: roles, topology and history.
+/** Spec 06 (R93): the box roles by world axes and the outward normal of each. */
+const BOX_ROLE_NORMALS: Readonly<Record<string, Vec3>> = {
+  'face:top': [0, 0, 1],
+  'face:bottom': [0, 0, -1],
+  'face:front': [0, -1, 0],
+  'face:back': [0, 1, 0],
+  'face:left': [-1, 0, 0],
+  'face:right': [1, 0, 0],
+};
+const HISTORY_BOOLEAN_OPS: readonly BooleanOp[] = ['union', 'subtract', 'intersect'];
+const KIND_ORDER = ['face', 'edge', 'vertex'] as const;
+type SubShapeKind = (typeof KIND_ORDER)[number];
+
+/** Integers in [0, count), strictly ascending (so without duplicates). */
+function expectAscendingIn(indices: readonly number[], count: number, what: string): void {
+  indices.forEach((i, k) => {
+    if (!(Number.isInteger(i) && i >= 0 && i < count)) {
+      expect.fail(`${what}: index ${String(i)} not in [0, ${String(count)})`);
+    }
+    if (k > 0 && !(i > (indices[k - 1] ?? Number.NaN))) {
+      expect.fail(`${what}: [${indices.join(', ')}] not strictly ascending`);
+    }
+  });
+}
+
+/** Number of sub-shapes of the kind in the topology. */
+function countOf(t: TopologySummary, kind: SubShapeKind): number {
+  switch (kind) {
+    case 'face':
+      return t.faces.length;
+    case 'edge':
+      return t.edges.length;
+    case 'vertex':
+      return t.vertexCount;
+  }
+}
+
+/**
+ * Spec 06, contract "roles a history": every face of every input exactly once in modified or
+ * deleted; modified and deleted only for faces, generated only to faces; indices valid and
+ * ascending; entries ordered by input, kind (face, edge, vertex), index.
+ */
+function expectCompleteHistory(
+  history: ShapeHistory,
+  inputs: readonly TopologySummary[],
+  output: TopologySummary,
+  what: string,
+): void {
+  const seen = inputs.map((t) => new Array<number>(t.faces.length).fill(0));
+  const count = (input: number, index: number): void => {
+    const row = seen[input];
+    if (row === undefined || !(index >= 0 && index < row.length)) {
+      expect.fail(`${what}: face ${String(index)} of input ${String(input)} out of range`);
+    }
+    row[index] = (row[index] ?? 0) + 1;
+  };
+  for (const link of history.modified) {
+    expect(link.from.type, `${what}: modified from`).toBe('face');
+    count(link.input, link.from.index);
+    expect(
+      link.to.every((s) => s.type === 'face'),
+      `${what}: modified to faces`,
+    ).toBe(true);
+    expectAscendingIn(
+      link.to.map((s) => s.index),
+      output.faces.length,
+      `${what}: modified to`,
+    );
+  }
+  for (const d of history.deleted) {
+    expect(d.sub.type, `${what}: deleted`).toBe('face');
+    count(d.input, d.sub.index);
+  }
+  seen.forEach((row, input) => {
+    row.forEach((n, face) => {
+      if (n !== 1) {
+        expect.fail(
+          `${what}: face ${String(face)} of input ${String(input)} is there ${String(n)}×`,
+        );
+      }
+    });
+  });
+  for (const link of history.generated) {
+    const input = inputs[link.input];
+    if (input === undefined) expect.fail(`${what}: generated from a missing input`);
+    expectAscendingIn([link.from.index], countOf(input, link.from.type), `${what}: generated from`);
+    expect(link.to.length, `${what}: generated to`).toBeGreaterThan(0);
+    expect(
+      link.to.every((s) => s.type === 'face'),
+      `${what}: generated to faces`,
+    ).toBe(true);
+    expectAscendingIn(
+      link.to.map((s) => s.index),
+      output.faces.length,
+      `${what}: generated to`,
+    );
+  }
+  const key = (input: number, sub: SubShapeIndex): readonly [number, number, number] => [
+    input,
+    KIND_ORDER.indexOf(sub.type),
+    sub.index,
+  ];
+  for (const list of [
+    history.modified.map((l) => key(l.input, l.from)),
+    history.deleted.map((d) => key(d.input, d.sub)),
+    history.generated.map((l) => key(l.input, l.from)),
+  ]) {
+    list.forEach((k, i) => {
+      const prev = list[i - 1];
+      if (prev === undefined) return;
+      const order = prev[0] - k[0] || prev[1] - k[1] || prev[2] - k[2];
+      if (!(order < 0)) expect.fail(`${what}: history entries out of order at ${String(i)}`);
+    });
+  }
+}
+
 /** Kontraktová sada; factory vytvoří pro každý test čerstvé jádro. */
 export function describeGeometryKernelContract(
   name: string,
@@ -329,6 +455,9 @@ export function describeGeometryKernelContract(
         ['makeFace', (k: GeometryKernel) => k.makeFace({ ...FACE, outer: [] })],
         ['extrude', (k: GeometryKernel) => k.extrude(UNKNOWN, [0, 0, 1], 5)],
         ['revolve', (k: GeometryKernel) => k.revolve(UNKNOWN, Z_AXIS, TURN)],
+        ['fillet', (k: GeometryKernel) => k.fillet(UNKNOWN, [0], 1)],
+        ['chamfer', (k: GeometryKernel) => k.chamfer(UNKNOWN, [0], 1)],
+        ['topology', (k: GeometryKernel) => k.topology(UNKNOWN)],
         ['tessellate', (k: GeometryKernel) => k.tessellate(UNKNOWN, QUALITY)],
         ['boundingBox', (k: GeometryKernel) => k.boundingBox(UNKNOWN)],
         ['release', (k: GeometryKernel) => k.release([UNKNOWN])],
@@ -353,6 +482,9 @@ export function describeGeometryKernelContract(
           kernel.makeFace(FACE),
           kernel.extrude(profile, [0, 0, 1], 5),
           kernel.revolve(profile, Z_AXIS, TURN),
+          kernel.fillet(shape, [0], 0.5),
+          kernel.chamfer(shape, [0], 0.5),
+          kernel.topology(shape),
           kernel.tessellate(shape, QUALITY),
           kernel.boundingBox(shape),
           kernel.liveHandleCount(),
@@ -837,6 +969,254 @@ export function describeGeometryKernelContract(
       it.each(NEVER_ISSUED)('handle %s, never issued, rejects with unknown-handle', async (h) => {
         await aRing();
         expect(await rejectionCode(() => kernel.revolve(h, Z_AXIS, TURN))).toBe('unknown-handle');
+        expect(await kernel.liveHandleCount()).toBe(1);
+      });
+    });
+
+    describe('topology (M14)', () => {
+      it('a box: 6 planar faces with outward normals on their walls, 12 edges, 8 vertices', async () => {
+        const shape = await aBox();
+        const topology = await kernel.topology(shape);
+        expect(topology.faces).toHaveLength(6);
+        expect(topology.edges).toHaveLength(12);
+        expect(topology.vertexCount).toBe(8);
+        const walls = new Set<string>();
+        topology.faces.forEach((face, i) => {
+          expect(face.surface, `face ${String(i)}`).toBe('plane');
+          const plane = face.plane;
+          if (plane === undefined) return expect.fail(`face ${String(i)} has no plane`);
+          expect(Math.hypot(...plane.normal)).toBeCloseTo(1, 6);
+          const wall = axisOf(plane.normal);
+          if (wall === undefined) return expect.fail(`face ${String(i)}: normal not axis-aligned`);
+          // Outward: the plane point lies on the wall the normal points away from the box.
+          const level = (wall.sign > 0 ? BOX_MAX : ORIGIN)[wall.axis] ?? Number.NaN;
+          expect(Math.abs((plane.origin[wall.axis] ?? Number.NaN) - level)).toBeLessThan(1e-6);
+          walls.add(`${String(wall.sign)}${String(wall.axis)}`);
+        });
+        expect(walls.size).toBe(6);
+        topology.edges.forEach((edge, i) => {
+          expect(edge.faces, `faces of edge ${String(i)}`).toHaveLength(2);
+          expect(edge.vertices, `vertices of edge ${String(i)}`).toHaveLength(2);
+          expectAscendingIn(edge.faces, 6, `faces of edge ${String(i)}`);
+          expectAscendingIn(edge.vertices, 8, `vertices of edge ${String(i)}`);
+          // The midpoint lies on the planes of both adjacent faces.
+          for (const f of edge.faces) {
+            const plane = topology.faces[f]?.plane;
+            if (plane === undefined) return expect.fail(`face ${String(f)} has no plane`);
+            const off = dot(sub(edge.midpoint, plane.origin), plane.normal);
+            expect(
+              Math.abs(off),
+              `midpoint of edge ${String(i)} off face ${String(f)}`,
+            ).toBeLessThan(1e-6);
+          }
+        });
+      });
+
+      it('has as many faces and edges as the mesh and creates no handle', async () => {
+        const shape = await aBox();
+        const topology = await kernel.topology(shape);
+        const mesh = await kernel.tessellate(shape, QUALITY);
+        expect(topology.faces).toHaveLength(mesh.faceRanges.length / 3);
+        expect(topology.edges).toHaveLength(mesh.edgeRanges.length / 3);
+        expect(await kernel.liveHandleCount()).toBe(1);
+      });
+
+      it.each(NEVER_ISSUED)('handle %s, never issued, rejects with unknown-handle', async (h) => {
+        await aBox();
+        expect(await rejectionCode(() => kernel.topology(h))).toBe('unknown-handle');
+      });
+
+      it('a released handle rejects with unknown-handle', async () => {
+        const a = await aBox();
+        await kernel.release([a]);
+        expect(await rejectionCode(() => kernel.topology(a))).toBe('unknown-handle');
+      });
+    });
+
+    describe('roles (M14)', () => {
+      it('a box: the six world-axis roles, one face each, with the normal of the table (R93)', async () => {
+        const { shape, roles } = await kernel.makeBox(BOX);
+        const topology = await kernel.topology(shape);
+        expect(Object.keys(roles ?? {}).sort()).toEqual(Object.keys(BOX_ROLE_NORMALS).sort());
+        const faces = new Set<number>();
+        for (const [role, normal] of Object.entries(BOX_ROLE_NORMALS)) {
+          const subs = roles?.[role] ?? [];
+          expect(subs, role).toHaveLength(1);
+          const [only] = subs;
+          if (only === undefined) return expect.fail(`${role} has no face`);
+          expect(only.type, role).toBe('face');
+          faces.add(only.index);
+          const plane = topology.faces[only.index]?.plane;
+          if (plane === undefined) return expect.fail(`${role}: the face has no plane`);
+          expectVecClose(plane.normal, normal, NORMAL_TOLERANCE, `normal of ${role}`);
+        }
+        expect(faces.size).toBe(6);
+      });
+
+      it('a cylinder: top and bottom planar along ±axis, a non-empty side, disjoint', async () => {
+        const { shape, roles } = await kernel.makeCylinder(CYLINDER);
+        const topology = await kernel.topology(shape);
+        expect(Object.keys(roles ?? {}).sort()).toEqual(['face:bottom', 'face:side', 'face:top']);
+        const indices = (role: string): number[] => (roles?.[role] ?? []).map((s) => s.index);
+        for (const [role, normal] of [
+          ['face:bottom', [0, 0, -1]],
+          ['face:top', [0, 0, 1]],
+        ] satisfies [string, Vec3][]) {
+          expect(indices(role), role).toHaveLength(1);
+          const face = topology.faces[indices(role)[0] ?? -1];
+          expect(face?.surface, role).toBe('plane');
+          expectVecClose(face?.plane?.normal ?? [0, 0, 0], normal, NORMAL_TOLERANCE, role);
+        }
+        expect(indices('face:side').length).toBeGreaterThan(0);
+        const all = [...indices('face:bottom'), ...indices('face:top'), ...indices('face:side')];
+        expect(new Set(all).size).toBe(all.length);
+        for (const subs of Object.values(roles ?? {})) {
+          expect(subs.every((s) => s.type === 'face')).toBe(true);
+          expectAscendingIn(
+            subs.map((s) => s.index),
+            topology.faces.length,
+            'role',
+          );
+        }
+      });
+
+      it('an extrude: face:start against the direction and face:end along it', async () => {
+        const profile = (await kernel.makeFace(SQUARE_10)).shape;
+        const { shape, roles } = await kernel.extrude(profile, [0, 0, 1], 5);
+        const topology = await kernel.topology(shape);
+        for (const [role, normal] of [
+          ['face:start', [0, 0, -1]],
+          ['face:end', [0, 0, 1]],
+        ] satisfies [string, Vec3][]) {
+          const subs = roles?.[role] ?? [];
+          expect(subs, role).toHaveLength(1);
+          const plane = topology.faces[subs[0]?.index ?? -1]?.plane;
+          expectVecClose(plane?.normal ?? [0, 0, 0], normal, NORMAL_TOLERANCE, role);
+        }
+      });
+
+      it('transform, boolean, fillet and chamfer return no roles', async () => {
+        const a = await aBox();
+        const b = (await kernel.makeBox(OVERLAPPING)).shape;
+        const results = [
+          await kernel.transform(a, mat4.translation([1, 0, 0])),
+          await kernel.boolean('union', [a], [b]),
+          await kernel.fillet(a, [0], 0.5),
+          await kernel.chamfer(a, [0], 0.5),
+        ];
+        for (const r of results) expect(r.roles).toBeUndefined();
+      });
+    });
+
+    describe('history (M14)', () => {
+      /** Topologies of the inputs and the output, then the completeness check of spec 06. */
+      async function expectComplete(
+        result: ShapeResult,
+        inputs: readonly ShapeHandle[],
+        what: string,
+      ): Promise<void> {
+        const history = result.history;
+        if (history === undefined) return expect.fail(`${what}: no history`);
+        const inputTopologies = await Promise.all(inputs.map((h) => kernel.topology(h)));
+        const output = await kernel.topology(result.shape);
+        expectCompleteHistory(history, inputTopologies, output, what);
+      }
+
+      it('primitives and makeFace return no history', async () => {
+        expect((await kernel.makeBox(BOX)).history).toBeUndefined();
+        expect((await kernel.makeCylinder(CYLINDER)).history).toBeUndefined();
+        expect((await kernel.makeFace(FACE)).history).toBeUndefined();
+      });
+
+      it('transform: every face of the input exactly once, in range, ordered', async () => {
+        const a = await aBox();
+        const moved = await kernel.transform(a, mat4.rotationAxisAngle([0, 0, 1], TURN / 8));
+        await expectComplete(moved, [a], 'transform');
+      });
+
+      it.each(HISTORY_BOOLEAN_OPS)(
+        'boolean %s: every face of every input exactly once',
+        async (op) => {
+          const a = await aBox();
+          const b = (await kernel.makeBox(OVERLAPPING)).shape;
+          await expectComplete(await kernel.boolean(op, [a], [b]), [a, b], `boolean ${op}`);
+        },
+      );
+
+      it('extrude: every face of the profile exactly once', async () => {
+        const profile = (await kernel.makeFace(SQUARE_10)).shape;
+        await expectComplete(await kernel.extrude(profile, [0, 0, 1], 5), [profile], 'extrude');
+      });
+
+      it.each([
+        ['2π', TURN],
+        ['π/2', TURN / 4],
+      ])('revolve by %s: every face of the profile exactly once', async (_, angle) => {
+        const profile = (await kernel.makeFace(RING_PROFILE)).shape;
+        await expectComplete(await kernel.revolve(profile, Z_AXIS, angle), [profile], 'revolve');
+      });
+
+      it.each(['fillet', 'chamfer'] as const)(
+        '%s: every face of the input exactly once',
+        async (op) => {
+          const a = await aBox();
+          await expectComplete(await kernel[op](a, [0], 0.5), [a], op);
+        },
+      );
+    });
+
+    describe.each(['fillet', 'chamfer'] as const)('%s (M14)', (op) => {
+      it('of one box edge: a new handle, the bounding box of the box, the input stays valid', async () => {
+        const a = await aBox();
+        const { shape } = await kernel[op](a, [0], 0.5);
+        expect(shape).not.toBe(a);
+        expect(await kernel.liveHandleCount()).toBe(2);
+        expectBoxClose(await kernel.boundingBox(shape), ORIGIN, BOX_MAX, op);
+        expectEnclosesBox(await kernel.boundingBox(a), ORIGIN, BOX_MAX, 'input');
+        expect(validateMeshData(await kernel.tessellate(shape, QUALITY))).toEqual([]);
+      });
+
+      it.each([
+        ['no edges', [], 0.5],
+        ['a duplicate edge', [0, 0], 0.5],
+        ['an edge index out of range', [12], 0.5],
+        ['a negative edge index', [-1], 0.5],
+        ['a non-integer edge index', [0.5], 0.5],
+        ['a NaN edge index', [Number.NaN], 0.5],
+        ['a size of 0', [0], 0],
+        ['a negative size', [0], -1],
+        ['a NaN size', [0], Number.NaN],
+        ['an infinite size', [0], INF],
+      ] satisfies [string, number[], number][])(
+        '%s rejects with invalid-input and creates no handle',
+        async (_, edges, size) => {
+          const a = await aBox();
+          expect(await rejectionCode(() => kernel[op](a, edges, size))).toBe('invalid-input');
+          expect(await kernel.liveHandleCount()).toBe(1);
+        },
+      );
+
+      it.each(NEVER_ISSUED)('handle %s, never issued, rejects with unknown-handle', async (h) => {
+        await aBox();
+        expect(await rejectionCode(() => kernel[op](h, [0], 0.5))).toBe('unknown-handle');
+        expect(await kernel.liveHandleCount()).toBe(1);
+      });
+
+      it('changing the edge list right after the call, before await, does not change the call', async () => {
+        const a = await aBox();
+        const edges = [0];
+        const created = callWithoutThrow(() => kernel[op](a, edges, 0.5));
+        edges[0] = 99;
+        edges.push(0);
+        const { shape } = await created;
+        expectBoxClose(await kernel.boundingBox(shape), ORIGIN, BOX_MAX, op);
+      });
+
+      it('a failed read of the edge list rejects with internal, not synchronously', async () => {
+        const a = await aBox();
+        // Input outside the types; the cast through unknown breaks the types on purpose.
+        const edges = null as unknown as readonly number[];
+        expect(await rejectionCode(() => kernel[op](a, edges, 0.5))).toBe('internal');
         expect(await kernel.liveHandleCount()).toBe(1);
       });
     });

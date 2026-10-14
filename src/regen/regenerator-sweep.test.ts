@@ -115,6 +115,9 @@ function withRelease(
     revolve: (profile, axis, angle) => fake.revolve(profile, axis, angle),
     tessellate: (shape, q) => fake.tessellate(shape, q),
     boundingBox: (shape) => fake.boundingBox(shape),
+    topology: (shape) => fake.topology(shape),
+    fillet: (shape, edges, radius) => fake.fillet(shape, edges, radius),
+    chamfer: (shape, edges, distance) => fake.chamfer(shape, edges, distance),
     release: (handles) => release(handles, calls++),
     liveHandleCount: () => fake.liveHandleCount(),
   };

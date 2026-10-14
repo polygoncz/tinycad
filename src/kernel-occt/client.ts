@@ -21,8 +21,11 @@ export function createOcctKernelClient(
     makeFace: (p) => rpc.call('makeFace', p),
     extrude: (profile, direction, distance) => rpc.call('extrude', profile, direction, distance),
     revolve: (profile, axis, angle) => rpc.call('revolve', profile, axis, angle),
+    fillet: (shape, edges, radius) => rpc.call('fillet', shape, edges, radius),
+    chamfer: (shape, edges, distance) => rpc.call('chamfer', shape, edges, distance),
     tessellate: (shape, q) => rpc.call('tessellate', shape, q),
     boundingBox: (shape) => rpc.call('boundingBox', shape),
+    topology: (shape) => rpc.call('topology', shape),
     release: (handles) => rpc.call('release', handles),
     liveHandleCount: () => rpc.call('liveHandleCount'),
   };

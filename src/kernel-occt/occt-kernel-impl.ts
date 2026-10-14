@@ -1,4 +1,8 @@
-import type { NCollection_List_TopoDS_Shape, TopoDS_Shape } from 'replicad-opencascadejs';
+import type {
+  BRepBuilderAPI_Transform,
+  NCollection_List_TopoDS_Shape,
+  TopoDS_Shape,
+} from 'replicad-opencascadejs';
 import type { Mat4, Plane, Vec3 } from '@/core';
 import {
   createKernelError,
@@ -12,13 +16,24 @@ import {
   type ProfileLoop,
   type ShapeHandle,
   type ShapeResult,
+  type SubShapeIndex,
+  type TopologySummary,
   validateFaceInput,
 } from '@/kernel';
-import { copyFaceInput, faceShape } from './face';
+import { dressupResult, type DressupKind } from './dressup';
+import { copyFaceInput, faceResult } from './face';
+import { collectHistory } from './history';
 import { hasSolid, toKernelError, type Occt } from './occt';
-import { createShapeEntry, deleteShapeEntry, type ShapeEntry } from './shape-entry';
-import { prismShape, requireFace, revolShape } from './sweep';
+import {
+  createShapeEntry,
+  deleteShapeEntry,
+  indexOfSame,
+  type EntryDescription,
+  type ShapeEntry,
+} from './shape-entry';
+import { prismResult, requireFace, revolResult } from './sweep';
 import { tessellateEntry } from './tessellate';
+import { topologyOf } from './topology';
 
 // GeometryKernel over the OCCT module (spec 06, "kernel-occt: adapter architecture"). Runs in
 // the worker; takes the module in the constructor, so it is testable in Node without a worker.
@@ -36,6 +51,19 @@ const ANGLE_TOLERANCE = 1e-9;
 const TURN = 2 * Math.PI;
 
 const BOOLEAN_OPS: readonly BooleanOp[] = ['union', 'subtract', 'intersect'];
+
+/**
+ * Roles of the box faces by world axes (spec 06, R93). BRepPrimAPI_MakeBox names its faces
+ * after its own view: Left/Right are YMin/YMax, Back/Front are XMin/XMax.
+ */
+const BOX_ROLES = [
+  ['face:top', 'TopFace'],
+  ['face:bottom', 'BottomFace'],
+  ['face:front', 'LeftFace'],
+  ['face:back', 'RightFace'],
+  ['face:left', 'BackFace'],
+  ['face:right', 'FrontFace'],
+] as const;
 
 export class OcctKernelImpl implements GeometryKernel {
   private readonly oc: Occt;
@@ -60,7 +88,7 @@ export class OcctKernelImpl implements GeometryKernel {
       if (!size.every((s) => Number.isFinite(s) && s > 0)) {
         throw createKernelError('invalid-input', 'makeBox: size must be finite and > 0');
       }
-      return this.add(this.boxShape(origin, size));
+      return this.boxResult(origin, size);
     });
   }
 
@@ -90,7 +118,7 @@ export class OcctKernelImpl implements GeometryKernel {
           'makeCylinder: radius and height must be finite and > 0',
         );
       }
-      return this.add(this.cylinderShape(base, axis, radius, height));
+      return this.cylinderResult(base, axis, radius, height);
     });
   }
 
@@ -101,7 +129,7 @@ export class OcctKernelImpl implements GeometryKernel {
         if (!isRigidMotion(matrix)) {
           throw createKernelError('invalid-input', 'transform: m must be a rigid motion');
         }
-        return this.add(this.movedShape(this.entry(shape).shape, matrix));
+        return this.movedResult(this.entry(shape), matrix);
       },
     );
   }
@@ -126,9 +154,9 @@ export class OcctKernelImpl implements GeometryKernel {
       if (new Set(all).size !== all.length) {
         throw createKernelError('invalid-input', 'boolean: the same handle more than once');
       }
-      const targetShapes = lists.targets.map((h) => this.entry(h).shape);
-      const toolShapes = lists.tools.map((h) => this.entry(h).shape);
-      return this.add(this.booleanShape(op, targetShapes, toolShapes));
+      const targetEntries = lists.targets.map((h) => this.entry(h));
+      const toolEntries = lists.tools.map((h) => this.entry(h));
+      return this.booleanResult(op, targetEntries, toolEntries);
     });
   }
 
@@ -147,7 +175,7 @@ export class OcctKernelImpl implements GeometryKernel {
       if (input === undefined) {
         throw createKernelError('invalid-input', `makeFace: ${errors.join('; ')}`);
       }
-      return this.add(faceShape(this.oc, input));
+      return faceResult(this.oc, input, this.adder);
     });
   }
 
@@ -167,11 +195,11 @@ export class OcctKernelImpl implements GeometryKernel {
       if (!(Number.isFinite(input.distance) && input.distance > 0)) {
         throw createKernelError('invalid-input', 'extrude: distance must be finite and > 0');
       }
-      const face = this.entry(profile).shape;
-      requireFace(this.oc, face, 'extrude');
+      const face = this.entry(profile);
+      requireFace(this.oc, face.shape, 'extrude');
       const k = input.distance / length;
       const shift: Vec3 = [input.direction[0] * k, input.direction[1] * k, input.direction[2] * k];
-      return this.add(prismShape(this.oc, face, shift));
+      return prismResult(this.oc, face, shift, this.adder);
     });
   }
 
@@ -195,11 +223,20 @@ export class OcctKernelImpl implements GeometryKernel {
       if (!(valid && input.angle <= TURN + ANGLE_TOLERANCE)) {
         throw createKernelError('invalid-input', 'revolve: angle must be in (0, 2π]');
       }
-      const face = this.entry(profile).shape;
-      requireFace(this.oc, face, 'revolve');
+      const face = this.entry(profile);
+      requireFace(this.oc, face.shape, 'revolve');
       // An angle within the tolerance above 2π is a full turn.
-      return this.add(revolShape(this.oc, face, input.axis, Math.min(input.angle, TURN)));
+      const angle = Math.min(input.angle, TURN);
+      return revolResult(this.oc, face, input.axis, angle, this.adder);
     });
+  }
+
+  fillet(shape: ShapeHandle, edges: readonly number[], radius: number): Promise<ShapeResult> {
+    return this.dressup('fillet', shape, edges, radius);
+  }
+
+  chamfer(shape: ShapeHandle, edges: readonly number[], distance: number): Promise<ShapeResult> {
+    return this.dressup('chamfer', shape, edges, distance);
   }
 
   tessellate(shape: ShapeHandle, q: MeshQuality): Promise<MeshData> {
@@ -236,6 +273,10 @@ export class OcctKernelImpl implements GeometryKernel {
         max: [box.GetXMax(), box.GetYMax(), box.GetZMax()],
       };
     });
+  }
+
+  topology(shape: ShapeHandle): Promise<TopologySummary> {
+    return this.run(noInput, () => topologyOf(this.oc, this.entry(shape)));
   }
 
   release(handles: readonly ShapeHandle[]): Promise<void> {
@@ -279,36 +320,130 @@ export class OcctKernelImpl implements GeometryKernel {
     });
   }
 
-  /** Takes ownership of `shape` and stores it under a new handle. */
-  private add(shape: TopoDS_Shape): ShapeResult {
-    const entry = createShapeEntry(this.oc, shape);
+  /**
+   * Takes ownership of `shape` and stores it under a new handle, with the edge roles and the
+   * roles and history of `description` (M14). If describing fails, the entry is deleted and
+   * no handle is created.
+   */
+  private add(shape: TopoDS_Shape, description: EntryDescription = {}): ShapeResult {
+    const entry = createShapeEntry(this.oc, shape, description.edgeRoles);
+    let described: Omit<ShapeResult, 'shape'>;
+    try {
+      described = description.describe?.(entry) ?? {};
+    } catch (e) {
+      deleteShapeEntry(entry);
+      throw e;
+    }
     const handle = this.nextHandle();
     this.shapes.set(handle, entry);
-    return { shape: handle };
+    return { shape: handle, ...described };
   }
 
-  /** New TopoDS_Shape of the box; the caller owns it. */
-  private boxShape(origin: Vec3, size: Vec3): TopoDS_Shape {
+  /** `add` for the helpers in other files (sweep, face, dressup). */
+  private readonly adder = (shape: TopoDS_Shape, description?: EntryDescription): ShapeResult =>
+    this.add(shape, description);
+
+  /**
+   * Fillet or chamfer (spec 06, M14): the size finite and > 0, the edges a non-empty list of
+   * distinct integer indices of edges of the shape, else 'invalid-input'.
+   */
+  private dressup(
+    kind: DressupKind,
+    shape: ShapeHandle,
+    edges: readonly number[],
+    size: number,
+  ): Promise<ShapeResult> {
+    const read = (): { edges: number[]; size: number } => ({ edges: [...edges], size });
+    return this.run(read, (input) => {
+      if (!(Number.isFinite(input.size) && input.size > 0)) {
+        throw createKernelError('invalid-input', `${kind}: the size must be finite and > 0`);
+      }
+      const entry = this.entry(shape);
+      const count = entry.edges.length;
+      if (input.edges.length === 0) {
+        throw createKernelError('invalid-input', `${kind}: edges must not be empty`);
+      }
+      const bad = input.edges.find((e) => !(Number.isInteger(e) && e >= 0 && e < count));
+      if (bad !== undefined) {
+        throw createKernelError(
+          'invalid-input',
+          `${kind}: edge ${String(bad)} is not an integer in [0, ${String(count)})`,
+        );
+      }
+      if (new Set(input.edges).size !== input.edges.length) {
+        throw createKernelError('invalid-input', `${kind}: the same edge more than once`);
+      }
+      return dressupResult(this.oc, kind, entry, input.edges, input.size, this.adder);
+    });
+  }
+
+  /** The box, with the roles of its faces by world axes (spec 06, R93). */
+  private boxResult(origin: Vec3, size: Vec3): ShapeResult {
     using corner = new this.oc.gp_Pnt(origin[0], origin[1], origin[2]);
     using maker = new this.oc.BRepPrimAPI_MakeBox(corner, size[0], size[1], size[2]);
-    return maker.Shape();
+    return this.add(maker.Shape(), {
+      describe: (entry) => {
+        const roles: Record<string, readonly SubShapeIndex[]> = {};
+        for (const [role, method] of BOX_ROLES) {
+          using face = maker[method]();
+          roles[role] = this.faceRole(entry, face, role);
+        }
+        return { roles };
+      },
+    });
   }
 
-  /** New TopoDS_Shape of the cylinder about the axis (base, axis); the caller owns it. */
-  private cylinderShape(base: Vec3, axis: Vec3, radius: number, height: number): TopoDS_Shape {
+  /**
+   * The cylinder about the axis (base, axis), with the roles face:side (the lateral face of
+   * BRepPrimAPI_MakeOneAxis) and face:bottom/face:top: of the two other faces, the bottom is
+   * the one whose plane point projects lower onto the axis (spec 06, M14).
+   */
+  private cylinderResult(base: Vec3, axis: Vec3, radius: number, height: number): ShapeResult {
     using origin = new this.oc.gp_Pnt(base[0], base[1], base[2]);
     using direction = new this.oc.gp_Dir(axis[0], axis[1], axis[2]);
     using frame = new this.oc.gp_Ax2(origin, direction);
     using maker = new this.oc.BRepPrimAPI_MakeCylinder(frame, radius, height);
-    return maker.Shape();
+    return this.add(maker.Shape(), {
+      describe: (entry) => {
+        using lateral = maker.Face();
+        const side = this.faceRole(entry, lateral, 'face:side');
+        const caps = topologyOf(this.oc, entry)
+          .faces.map((f, index) => ({ index, plane: f.plane }))
+          .filter((f) => f.plane !== undefined && !side.some((s) => s.index === f.index))
+          .map((f) => ({
+            index: f.index,
+            level: f.plane === undefined ? 0 : dot(f.plane.origin, axis),
+          }))
+          .sort((a, b) => a.level - b.level);
+        const [bottom, top] = caps;
+        if (caps.length !== 2 || bottom === undefined || top === undefined) {
+          throw createKernelError('internal', 'makeCylinder: expected two planar caps');
+        }
+        return {
+          roles: {
+            'face:bottom': [{ type: 'face', index: bottom.index }],
+            'face:top': [{ type: 'face', index: top.index }],
+            'face:side': side,
+          },
+        };
+      },
+    });
+  }
+
+  /** The face of the entry IsSame as `face`, as a role; 'internal' if it is not there. */
+  private faceRole(entry: ShapeEntry, face: TopoDS_Shape, role: string): SubShapeIndex[] {
+    const index = indexOfSame(entry.faces, face);
+    if (index < 0) throw createKernelError('internal', `${role}: the face is not in the shape`);
+    return [{ type: 'face', index }];
   }
 
   /**
-   * New TopoDS_Shape: `shape` moved by the rigid motion m (spec 06, "Modelovací operace v
-   * adaptéru"). gp_Trsf takes the rows a11 … a34; Mat4 is column-major, so a_rc = m[c * 4 + r].
-   * A rigid motion only sets a location: the geometry (TShape) is shared, not copied.
+   * `entry` moved by the rigid motion m (spec 06, "Modelovací operace v adaptéru"). gp_Trsf
+   * takes the rows a11 … a34; Mat4 is column-major, so a_rc = m[c * 4 + r]. A rigid motion
+   * only sets a location: the geometry (TShape) is shared, not copied. The edge roles move
+   * along through Modified of the edges (M14); the history is that of BRepBuilderAPI_Transform.
    */
-  private movedShape(shape: TopoDS_Shape, m: Mat4): TopoDS_Shape {
+  private movedResult(entry: ShapeEntry, m: Mat4): ShapeResult {
     using trsf = new this.oc.gp_Trsf();
     // prettier-ignore
     trsf.SetValues(
@@ -316,22 +451,47 @@ export class OcctKernelImpl implements GeometryKernel {
       m[1], m[5], m[9], m[13],
       m[2], m[6], m[10], m[14],
     );
-    using maker = new this.oc.BRepBuilderAPI_Transform(shape, trsf, false, false);
-    return maker.Shape();
+    using maker = new this.oc.BRepBuilderAPI_Transform(entry.shape, trsf, false, false);
+    return this.add(maker.Shape(), {
+      edgeRoles: (edges) => this.movedEdgeRoles(maker, entry, edges),
+      describe: (moved) => ({ history: collectHistory(this.oc, maker, [entry], moved) }),
+    });
+  }
+
+  /** Edge roles of the moved shape: each edge with a role → the edges IsSame as its Modified. */
+  private movedEdgeRoles(
+    maker: BRepBuilderAPI_Transform,
+    entry: ShapeEntry,
+    edges: readonly TopoDS_Shape[],
+  ): ReadonlyMap<number, string> {
+    const roles = new Map<number, string>();
+    for (const [index, id] of entry.edgeRoles) {
+      const edge = entry.edges[index];
+      if (edge === undefined) continue;
+      using list = maker.Modified(edge);
+      while (!list.IsEmpty()) {
+        using item = list.First();
+        list.RemoveFirst();
+        const moved = indexOfSame(edges, item);
+        if (moved >= 0) roles.set(moved, id);
+      }
+    }
+    return roles;
   }
 
   /**
-   * New TopoDS_Shape of the boolean; the caller owns it. A failed algorithm or a result without
-   * a solid (an empty intersection, a cut that removes the whole target) is 'operation-failed'.
+   * The boolean with its history (inputs = [...targets, ...tools]). A failed algorithm or a
+   * result without a solid (an empty intersection, a cut that removes the whole target) is
+   * 'operation-failed'.
    */
-  private booleanShape(
+  private booleanResult(
     op: BooleanOp,
-    targets: readonly TopoDS_Shape[],
-    tools: readonly TopoDS_Shape[],
-  ): TopoDS_Shape {
+    targets: readonly ShapeEntry[],
+    tools: readonly ShapeEntry[],
+  ): ShapeResult {
     using algo = this.booleanAlgo(op);
-    using targetList = this.shapeList(targets);
-    using toolList = this.shapeList(tools);
+    using targetList = this.shapeList(targets.map((e) => e.shape));
+    using toolList = this.shapeList(tools.map((e) => e.shape));
     algo.SetArguments(targetList);
     algo.SetTools(toolList);
     algo.Build();
@@ -347,7 +507,10 @@ export class OcctKernelImpl implements GeometryKernel {
       result.delete();
       throw e;
     }
-    return result;
+    const inputs = [...targets, ...tools];
+    return this.add(result, {
+      describe: (entry) => ({ history: collectHistory(this.oc, algo, inputs, entry) }),
+    });
   }
 
   private booleanAlgo(
@@ -389,4 +552,8 @@ export class OcctKernelImpl implements GeometryKernel {
     }
     return entry;
   }
+}
+
+function dot(a: Vec3, b: Vec3): number {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }

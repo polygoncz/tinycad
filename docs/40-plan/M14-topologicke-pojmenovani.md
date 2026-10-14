@@ -47,7 +47,7 @@ updated: 2026-10-14
 ## Úkoly
 
 - [x] Ú0 hlavní sezení: typy portu jádra a `Curve2.id` (vlna 0)
-- [ ] Ú1 `kernel`, `kernel-occt`: `topology`, role, historie u všech operací, `DressupOps.fillet`/`chamfer`
+- [x] Ú1 `kernel`, `kernel-occt`: `topology`, role, historie u všech operací, `DressupOps.fillet`/`chamfer`
 - [x] Ú2 `regen`: `NameTable`, `propagateNames` (čistá funkce)
 - [x] Ú3 `interaction` (+ zástupné místo v `render`, `app`): `TopoNames` v portu, výběr přežije regeneraci, `HighlightTarget` druhu `body`
 - [x] Ú4 `sketch`: id křivek v oblastech

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Plane, Vec2 } from '@/core';
-import { validateFaceInput, type ProfileCurve, type ProfileLoop } from './profile';
+import { parseFaceInput, validateFaceInput, type ProfileCurve, type ProfileLoop } from './profile';
 
 const XY: Plane = { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, 0, 1] };
 
@@ -176,5 +176,34 @@ describe('validateFaceInput', () => {
       expect(() => validateFaceInput(p)).not.toThrow();
       expect(validateFaceInput(p)).not.toEqual([]);
     }
+  });
+});
+
+describe('parseFaceInput: entity ids of the curves (M14)', () => {
+  it('keeps the id of every kind of curve in the copy', () => {
+    const outer: ProfileLoop = [
+      { kind: 'line', from: [0, -1], to: [0, 1], id: 'l1' },
+      { kind: 'arc', center: [0, 0], from: [0, 1], to: [0, -1], ccw: true, id: 'a1' },
+    ];
+    const hole: ProfileLoop = [{ kind: 'circle', center: [0.5, 0], radius: 0.1, id: 'c1' }];
+    const parsed = parseFaceInput(face({ outer, holes: [hole] }));
+    expect(parsed.ok && parsed.value.outer.map((c) => c.id)).toEqual(['l1', 'a1']);
+    expect(parsed.ok && parsed.value.holes[0]?.[0]?.id).toBe('c1');
+  });
+
+  it('a curve without an id has no id property in the copy', () => {
+    const parsed = parseFaceInput(face());
+    expect(parsed.ok && parsed.value.outer.every((c) => !('id' in c))).toBe(true);
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['a number', 7],
+    ['null', null],
+  ])('an id that is %s is invalid', (_, id) => {
+    const outer = [{ kind: 'circle', center: [0, 0], radius: 1, id }];
+    const parsed = parseFaceInput(face({ outer }));
+    expect(parsed.ok).toBe(false);
+    expect(validateFaceInput(face({ outer })).join('\n')).toContain('outer[0]: id');
   });
 });

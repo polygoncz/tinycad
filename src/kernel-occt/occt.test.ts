@@ -1,7 +1,7 @@
 import type { TopoDS_Shape } from 'replicad-opencascadejs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createKernelError, kernelErrorCode } from '@/kernel';
-import { loadOcct, mapSubShapes, toKernelError, type Occt } from './occt';
+import { loadOcct, mapSubShapes, occtExceptionText, toKernelError, type Occt } from './occt';
 import { aWasmTrap } from './testing';
 
 let oc: Occt;
@@ -157,5 +157,25 @@ describe('toKernelError', () => {
     const error = toKernelError(oc, 'boom');
     expect(kernelErrorCode(error)).toBe('internal');
     expect(error.message).toContain('boom');
+  });
+});
+
+describe('occtExceptionText (M14)', () => {
+  it('is the OCCT type of an OCCT exception', () => {
+    let caught: unknown;
+    try {
+      using origin = new oc.gp_Pnt(0, 0, 0);
+      using maker = new oc.BRepPrimAPI_MakeBox(origin, -1, 0, 0);
+      maker.Shape().delete();
+    } catch (e) {
+      caught = e;
+    }
+    expect(occtExceptionText(oc, caught)).toBe('Standard_DomainError');
+  });
+
+  it('is undefined for a WASM trap and for anything else: fillet turns only OCCT exceptions into operation-failed', () => {
+    expect(occtExceptionText(oc, aWasmTrap())).toBeUndefined();
+    expect(occtExceptionText(oc, new Error('boom'))).toBeUndefined();
+    expect(occtExceptionText(oc, createKernelError('internal', 'x'))).toBeUndefined();
   });
 });

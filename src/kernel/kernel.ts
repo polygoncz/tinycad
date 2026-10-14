@@ -1,6 +1,13 @@
 import type { Mat4, Plane, Vec3 } from '@/core';
 import type { ProfileLoop } from './profile';
-import type { BoundingBox, MeshData, MeshQuality, ShapeHandle, ShapeResult } from './types';
+import type {
+  BoundingBox,
+  MeshData,
+  MeshQuality,
+  ShapeHandle,
+  ShapeResult,
+  TopologySummary,
+} from './types';
 
 // The GeometryKernel port (spec 06, ADR 0011), segregated by capability. It grows with the
 // milestones that need it; nothing is added in advance.
@@ -66,10 +73,7 @@ export interface SweepOps {
   revolve(profile: ShapeHandle, axis: Axis, angle: number): Promise<ShapeResult>;
 }
 
-/**
- * Dress-up of edges (M14). Not yet part of GeometryKernel: no implementation has it until the
- * kernel task of M14 adds it to the port.
- */
+/** Dress-up of edges (M14). */
 export interface DressupOps {
   /** Fillet of the edges `edges` (edge indices of `shape`) with the radius `radius`. */
   fillet(shape: ShapeHandle, edges: readonly number[], radius: number): Promise<ShapeResult>;
@@ -83,6 +87,8 @@ export interface MeshOps {
 
 export interface QueryOps {
   boundingBox(shape: ShapeHandle): Promise<BoundingBox>;
+  /** Faces, edges and vertex count of the shape (M14); the same indices as its mesh. */
+  topology(shape: ShapeHandle): Promise<TopologySummary>;
 }
 
 export interface LifecycleOps {
@@ -98,6 +104,7 @@ export interface GeometryKernel
     BooleanOps,
     SketchOps,
     SweepOps,
+    DressupOps,
     MeshOps,
     QueryOps,
     LifecycleOps {}

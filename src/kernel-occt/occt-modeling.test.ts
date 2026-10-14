@@ -107,21 +107,6 @@ describe('OcctKernelImpl modelling (M11)', () => {
     expect(faceCount(mesh)).toBe(12);
   });
 
-  it('returns no roles and no history (M14)', async () => {
-    const kernel = new OcctKernelImpl(oc);
-    const a = await kernel.makeBox({ origin: [0, 0, 0], size: [1, 1, 1] });
-    const b = await kernel.makeBox({ origin: [0.5, 0, 0], size: [1, 1, 1] });
-    const results = [
-      await kernel.makeCylinder({ base: [0, 0, 0], axis: [0, 0, 1], radius: 1, height: 1 }),
-      await kernel.transform(a.shape, mat4.translation([1, 0, 0])),
-      await kernel.boolean('union', [a.shape], [b.shape]),
-    ];
-    for (const result of results) {
-      expect(result.roles).toBeUndefined();
-      expect(result.history).toBeUndefined();
-    }
-  });
-
   it('releasing the input of a transform leaves the result valid', async () => {
     const kernel = new OcctKernelImpl(oc);
     const box = await kernel.makeBox({ origin: [0, 0, 0], size: [1, 2, 3] });

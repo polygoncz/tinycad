@@ -58,12 +58,15 @@ export function createOcctWorkerImpl(
     extrude: (profile, direction, distance) =>
       onKernel((k) => k.extrude(profile, direction, distance)),
     revolve: (profile, axis, angle) => onKernel((k) => k.revolve(profile, axis, angle)),
+    fillet: (shape, edges, radius) => onKernel((k) => k.fillet(shape, edges, radius)),
+    chamfer: (shape, edges, distance) => onKernel((k) => k.chamfer(shape, edges, distance)),
     tessellate: async (shape, q) => {
       const mesh = await onKernel((k) => k.tessellate(shape, q));
       // The kernel returns new buffers every call (spec 06), so the worker can give them away.
       return transfer(mesh, meshBuffers(mesh));
     },
     boundingBox: (shape) => onKernel((k) => k.boundingBox(shape)),
+    topology: (shape) => onKernel((k) => k.topology(shape)),
     release: (handles) => onKernel((k) => k.release(handles)),
     liveHandleCount: () => onKernel((k) => k.liveHandleCount()),
   };

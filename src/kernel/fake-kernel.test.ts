@@ -349,13 +349,22 @@ describe('FakeKernel', () => {
       expect(mesh.faceRanges).toHaveLength(6 * 3);
     });
 
-    it('returns no roles and no history', async () => {
+    it('the profile is deleted in the history (M14); revolve returns no roles', async () => {
       const { kernel, profile } = await aFace();
-      const results = [
-        await kernel.extrude(profile, [0, 0, 1], 1),
-        await kernel.revolve(profile, { origin: [0, 0, 0], direction: [0, 1, 0] }, 1),
-      ];
-      for (const result of results) expect(result).toEqual({ shape: result.shape });
+      const deleted = [0, 1, 2, 3, 4, 5].map((index) => ({
+        input: 0,
+        sub: { type: 'face', index },
+      }));
+      const extruded = await kernel.extrude(profile, [0, 0, 1], 1);
+      const revolved = await kernel.revolve(
+        profile,
+        { origin: [0, 0, 0], direction: [0, 1, 0] },
+        1,
+      );
+      for (const result of [extruded, revolved]) {
+        expect(result.history).toEqual({ modified: [], generated: [], deleted });
+      }
+      expect(revolved.roles).toBeUndefined();
     });
 
     it.each(['extrude', 'revolve'] as const)(
@@ -419,6 +428,146 @@ describe('FakeKernel', () => {
       expect(mesh.edgePositions).toHaveLength(12 * 2 * 3);
       expect(mesh.edgeRanges).toHaveLength(12 * 3);
       for (let e = 0; e < 12; e++) expect(mesh.edgeRanges[3 * e + 2]).toBe(2);
+    });
+  });
+
+  describe('topology, roles and history (M14)', () => {
+    const face = (index: number) => ({ type: 'face', index }) as const;
+    const identity = [0, 1, 2, 3, 4, 5].map((i) => ({ input: 0, from: face(i), to: [face(i)] }));
+
+    async function aFace(kernel = createFakeKernel()) {
+      const outer = [
+        { kind: 'line', from: [0, 0], to: [2, 0] },
+        { kind: 'line', from: [2, 0], to: [2, 2] },
+        { kind: 'line', from: [2, 2], to: [0, 0] },
+      ] as const;
+      const plane = { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, 0, 1] } as const;
+      return { kernel, profile: (await kernel.makeFace({ plane, outer, holes: [] })).shape };
+    }
+
+    it('the topology is the AABB box: faces in mesh order, edges with faces and corners', async () => {
+      const kernel = createFakeKernel();
+      const { shape } = await kernel.makeBox(BOX);
+      const topology = await kernel.topology(shape);
+      expect(topology.faces.map((f) => f.plane)).toEqual([
+        { origin: [1, -0.5, 5], normal: [-1, 0, 0] },
+        { origin: [3, -0.5, 5], normal: [1, 0, 0] },
+        { origin: [2, -2, 5], normal: [0, -1, 0] },
+        { origin: [2, 1, 5], normal: [0, 1, 0] },
+        { origin: [2, -0.5, 3], normal: [0, 0, -1] },
+        { origin: [2, -0.5, 7], normal: [0, 0, 1] },
+      ]);
+      // Edge 0 runs along X at y, z low: between −Y (2) and −Z (4), corners 0 and 1.
+      expect(topology.edges[0]).toEqual({ faces: [2, 4], vertices: [0, 1], midpoint: [2, -2, 3] });
+      // Edge 4 runs along Y at z, x low: between −X (0) and −Z (4), corners 0 and 2.
+      expect(topology.edges[4]).toEqual({
+        faces: [0, 4],
+        vertices: [0, 2],
+        midpoint: [1, -0.5, 3],
+      });
+      expect(topology.vertexCount).toBe(8);
+    });
+
+    it('the edges of the topology are the edges of the mesh, in the same order', async () => {
+      const kernel = createFakeKernel();
+      const { shape } = await kernel.makeBox(BOX);
+      const topology = await kernel.topology(shape);
+      const mesh = await kernel.tessellate(shape, QUALITY);
+      topology.edges.forEach((edge, e) => {
+        const ends = [...mesh.edgePositions.slice(6 * e, 6 * e + 6)];
+        const middle = [0, 1, 2].map((k) => ((ends[k] ?? 0) + (ends[k + 3] ?? 0)) / 2);
+        expect(edge.midpoint).toEqual(middle);
+      });
+    });
+
+    it('box roles: left 0, right 1, front 2, back 3, bottom 4, top 5', async () => {
+      const { roles } = await createFakeKernel().makeBox(BOX);
+      expect(roles).toEqual({
+        'face:left': [face(0)],
+        'face:right': [face(1)],
+        'face:front': [face(2)],
+        'face:back': [face(3)],
+        'face:bottom': [face(4)],
+        'face:top': [face(5)],
+      });
+    });
+
+    it.each([
+      ['+Z', [0, 0, 2], 4, 5, [0, 1, 2, 3]],
+      ['−Z', [0, 0, -1], 5, 4, [0, 1, 2, 3]],
+      ['mostly +X', [3, 1, 1], 0, 1, [2, 3, 4, 5]],
+    ] as const)(
+      'cylinder roles about %s: bottom and top by the dominant axis component, side the rest',
+      async (_, axis, bottom, top, side) => {
+        const { roles } = await createFakeKernel().makeCylinder({
+          base: [0, 0, 0],
+          axis,
+          radius: 1,
+          height: 2,
+        });
+        expect(roles).toEqual({
+          'face:bottom': [face(bottom)],
+          'face:top': [face(top)],
+          'face:side': side.map(face),
+        });
+      },
+    );
+
+    it('extrude roles: start and end by the dominant component of the direction, no side', async () => {
+      const { kernel, profile } = await aFace();
+      const { roles } = await kernel.extrude(profile, [0, -2, 1], 1);
+      expect(roles).toEqual({ 'face:start': [face(3)], 'face:end': [face(2)] });
+    });
+
+    it('transform, fillet and chamfer: the identity of the 6 faces', async () => {
+      const kernel = createFakeKernel();
+      const { shape } = await kernel.makeBox(BOX);
+      for (const result of [
+        await kernel.transform(shape, mat4.translation([1, 2, 3])),
+        await kernel.fillet(shape, [3], 0.2),
+        await kernel.chamfer(shape, [3, 5], 0.2),
+      ]) {
+        expect(result.history).toEqual({ modified: identity, generated: [], deleted: [] });
+      }
+    });
+
+    it('boolean: the first input is the identity, the other inputs are deleted', async () => {
+      const kernel = createFakeKernel();
+      const a = (await kernel.makeBox(BOX)).shape;
+      const b = (await kernel.makeBox(BOX)).shape;
+      const c = (await kernel.makeBox(BOX)).shape;
+      const { history } = await kernel.boolean('union', [a, b], [c]);
+      expect(history?.modified).toEqual(identity);
+      expect(history?.deleted).toEqual(
+        [1, 2].flatMap((input) => [0, 1, 2, 3, 4, 5].map((i) => ({ input, sub: face(i) }))),
+      );
+    });
+
+    it('fillet and chamfer keep the AABB under a new handle', async () => {
+      const kernel = createFakeKernel();
+      const { shape } = await kernel.makeBox(BOX);
+      const filleted = (await kernel.fillet(shape, [0], 0.5)).shape;
+      const chamfered = (await kernel.chamfer(shape, [0], 0.5)).shape;
+      expect(new Set([shape, filleted, chamfered]).size).toBe(3);
+      for (const h of [filleted, chamfered]) {
+        expect(await kernel.boundingBox(h)).toEqual({ min: [1, -2, 3], max: [3, 1, 7] });
+      }
+    });
+
+    it('failNext and callCount work for topology, fillet and chamfer', async () => {
+      const kernel = createFakeKernel();
+      const { shape } = await kernel.makeBox(BOX);
+      kernel.failNext('fillet', 'operation-failed', 'too big');
+      kernel.failNext('topology', 'internal');
+      expect(kernelErrorCode(await rejection(kernel.fillet(shape, [0], 1)))).toBe(
+        'operation-failed',
+      );
+      expect(kernelErrorCode(await rejection(kernel.topology(shape)))).toBe('internal');
+      await kernel.chamfer(shape, [0], 1);
+      expect(await kernel.liveHandleCount()).toBe(2);
+      expect(kernel.callCount('fillet')).toBe(1);
+      expect(kernel.callCount('chamfer')).toBe(1);
+      expect(kernel.callCount('topology')).toBe(1);
     });
   });
 });
