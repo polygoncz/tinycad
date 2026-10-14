@@ -14,7 +14,7 @@ milestones:
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-14
 ---
 # 08 – Topologické pojmenování
 
@@ -53,6 +53,8 @@ Plochu pojmenuje featura, která ji **vytvořila**, podle své sémantiky:
 | Fillet | `<fid>/face:fillet:<jméno zaoblené hrany>` |
 
 Jména skicových entit jsou stabilní ID ze skicáře ([[12-skicar|12]]), proto jsou stabilní i boční plochy extrude.
+
+Stav po [[M13-extrude-revolve|M13]]: Vysunutí a Rotace existují, ale jádro `roles` nevrací ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R64]] ⚠). Pro `face:side:<entita>` musí M14 nejdřív u `makeFace` vrátit vazbu hran plochy na id křivek skici (role hran `edge:<entita>`), protože profil je v jádře hotová plocha; start a konec dá `BRepPrimAPI_MakeSweep::FirstShape()`/`LastShape()`, boční plochy `Generated(hrana)`. Role samy nestačí: po „přidat/odebrat“ (boolean v `applyBodyOperation`) je potřeba i historie booleanu.
 
 ### Hrany a vrcholy
 

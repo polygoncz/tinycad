@@ -16,7 +16,7 @@ finished:
 tags:
   - milnik
 created: 2026-10-12
-updated: 2026-10-13
+updated: 2026-10-14
 ---
 # M15 – Export a dokončení
 
@@ -41,6 +41,7 @@ updated: 2026-10-13
 - Proměnné a výrazy v parametrech.
 - Větvení verzí nad operačním logem.
 - Více Part Studií v dokumentu.
+- Interaktivní tvorba kvádru tažením ve viewportu (vlastní `Tool`, mezivýsledky přes `FeatureEditSession.setParam`) – přesunuto z [[M09-interakce]] přes [[M13-extrude-revolve|M13]] ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R79]]).
 
 ## Retrospektiva
 

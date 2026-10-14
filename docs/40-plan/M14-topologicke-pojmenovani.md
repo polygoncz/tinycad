@@ -62,3 +62,11 @@ Odloženo z [[M11-dalsi-entity|M11]] ([[Rozhodnutí noční rychloakce#M11 – D
 
 - [ ] **Boolean s více výslednými tělesy** ([[07-regenerace#Builder featury]]): výsledek booleanu rozložit na solidy; těleso, které vzniklo z cíle, dostane `bodyId(cíl.origin, n)` podle rodokmenu z historie jádra (`Generated`/`Modified` pro solidy), ne podle pořadí výstupu. Test: změna parametru válce nepřehodí id dvou výsledných těles (např. kvádr rozříznutý válcem na dvě části). Do té doby je výsledek jeden handle (compound).
 - [ ] **Zvýraznění těles vybraných v dialogu** ([[10-interakce#Port viewportu]]): `HighlightTarget` druhu `body`, aby reference v aktivním poli byly vidět ve viewportu.
+
+## Úkoly z M13
+
+Odloženo z [[M13-extrude-revolve|M13]] ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R64, R66, R68]]), protože to potřebuje historii jádra nebo reference na plochy.
+
+- [ ] **Role ploch Vysunutí a Rotace** ([[06-geometricke-jadro#Stav po M13]], [[08-topologicke-pojmenovani#Plochy]]): `makeFace` vrací vazbu hran plochy na id křivek skici (`roles` `edge:<entita>`), `extrude`/`revolve` vrací `face:start`, `face:end` (`FirstShape`/`LastShape`) a `face:side:<entita>` (`Generated(hrana)`); po „přidat/odebrat“ se jména přenesou historií booleanu v `applyBodyOperation`.
+- [ ] **Konec „Po plochu“** u Vysunutí (`endType: 'upToFace'`, parametr `upTo` druhu `topo` s `visibleWhen`) – nová možnost enumu, data verze 1 zůstávají platná.
+- [ ] (Volitelné) **Automatické cíle** „sloučit se vším, čeho se dotkne“ – potřebuje dotaz jádra na průnik (`BRepExtrema_DistShapeShape` nebo boolean `Common`).

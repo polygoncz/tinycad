@@ -11,6 +11,7 @@ milestones:
   - "[[M06-regenerace]]"
   - "[[M11-dalsi-entity]]"
   - "[[M12-skicar]]"
+  - "[[M13-extrude-revolve]]"
 tags:
   - spec
 created: 2026-10-12
@@ -29,7 +30,7 @@ Přehraje featury Part Studia přes geometrické jádro a vytvoří výsledná t
 Každá featura je funkce `výstupní stav = f(vstupní stav, parametry)`. Stav je neměnný snímek toho, co existuje po dané featuře:
 
 ```ts
-export type ArtifactId = BodyId | SketchId | PlaneId; // vždy '<vlastník>/<druh>[:<n>]' (ADR 0015); SketchId a PlaneId od M12
+export type ArtifactId = BodyId | SketchId | PlaneId | AxisId; // vždy '<vlastník>/<druh>[:<n>]' (ADR 0015); SketchId a PlaneId od M12, AxisId od M13
 
 export interface Body {
   readonly kind: 'body';
@@ -58,16 +59,26 @@ export interface SketchArtifact {
   readonly regions: ReadonlyMap<string, ShapeHandle>; // jméno oblasti → rovinná plocha (SketchOps.makeFace), v pořadí oblastí
 }
 
-export type Artifact = Body | SketchArtifact | PlaneArtifact;   // diskriminace podle kind
+/** Osa (M13): osy počátku vlastníka ORIGIN; později konstrukční osy. */
+export interface AxisArtifact {
+  readonly kind: 'axis';
+  readonly id: AxisId;
+  readonly owner: FeatureId;                         // ORIGIN u os počátku
+  readonly origin: Vec3;
+  readonly direction: Vec3;                          // jednotkový
+}
+
+export type Artifact = Body | SketchArtifact | PlaneArtifact | AxisArtifact;   // diskriminace podle kind
 
 export interface RegenState {
   readonly artifacts: ReadonlyMap<ArtifactId, Artifact>;
 }
 
-export const EMPTY_STATE: RegenState;                // od M12 tři PlaneArtifact z ORIGIN_PLANES (document) v pořadí xy, xz, yz
+export const EMPTY_STATE: RegenState;                // od M12 tři PlaneArtifact z ORIGIN_PLANES (document) v pořadí xy, xz, yz, od M13 za nimi tři AxisArtifact z ORIGIN_AXES (x, y, z)
 export function bodiesOf(state: RegenState): readonly Body[];   // artefakty druhu body v pořadí mapy
 export function sketchesOf(state: RegenState): readonly SketchArtifact[];   // M12
 export function planesOf(state: RegenState): readonly PlaneArtifact[];      // M12
+export function axesOf(state: RegenState): readonly AxisArtifact[];         // M13
 ```
 
 Počáteční roviny jsou ve stavu od začátku, takže na ně odkazuje skica stejně jako na kterýkoli jiný artefakt ([[12-skicar#Roviny a počátek]]). `EMPTY_STATE` a jeho artefakty jsou zmrazené.
@@ -90,7 +101,7 @@ export interface BuildInput<P> {
 }
 
 /** Část jádra, kterou smí builder používat: tvoří a ptá se, neuvolňuje (Q041). */
-export type ModelingKernel = PrimitiveOps & TransformOps & BooleanOps & SketchOps & QueryOps;   // M11 přidal TransformOps a BooleanOps, M12 SketchOps
+export type ModelingKernel = PrimitiveOps & TransformOps & BooleanOps & SketchOps & SweepOps & QueryOps;   // M11 přidal TransformOps a BooleanOps, M12 SketchOps, M13 SweepOps
 
 export interface BuildContext {
   /** Sledované jádro: každý vrácený handle patří Regeneratoru (Q041). */
@@ -99,15 +110,22 @@ export interface BuildContext {
   resolveBodies(refs: readonly BodyRef[]): Result<Body[], RefError>;
   /** Roviny ze vstupního stavu (artefakty druhu plane; chybějící nebo jiný druh → err, první nevyřešená reference), M12. */
   resolvePlanes(refs: readonly PlaneRef[]): Result<PlaneArtifact[], RefError>;
+  /** Oblasti skic (M13): artefakt sketchId(ref.sketch) druhu sketch a jméno v jeho regions; první nevyřešená reference → err. */
+  resolveRegions(refs: readonly SketchRegionRef[]): Result<ResolvedRegion[], RefError>;
+  /** Osa (M13): artefakt druhu axis, nebo úsečka skici (i konstrukční) převedená do světa přes rovinu skici. */
+  resolveAxis(ref: AxisRef | SketchEntityRef): Result<ResolvedAxis, RefError>;
   /** Více volání se spojí znakem '\n' do statusu 'warning' (Q045). */
   warn(message: string): void;
   // resolveTopo(refs: readonly TopoRef[]): Result<ResolvedTopo[], RefError> – přidá M14
 }
 
 export interface RefError {
-  readonly ref: BodyRef | PlaneRef;   // PlaneRef od M12, v M14 i TopoRef
+  readonly ref: BodyRef | PlaneRef | SketchRegionRef | AxisRef | SketchEntityRef;   // PlaneRef od M12, oblast, osa a entita skici od M13, v M14 i TopoRef
   readonly message: string;
 }
+
+export interface ResolvedRegion { readonly ref: SketchRegionRef; readonly sketch: SketchArtifact; readonly face: ShapeHandle }   // M13
+export interface ResolvedAxis { readonly origin: Vec3; readonly direction: Vec3 }   // M13, direction jednotkový
 
 export type BuildOutput =
   | { ok: true; state: RegenState }
@@ -134,6 +152,31 @@ Pravidla pro builder:
 - **Transform:** každé vybrané těleso zůstane pod svým `id` a na svém místě v mapě, zachová `origin` a `names`, dostane nový `shape` a `lastModifiedBy` = transform. Ostatní artefakty beze změny.
 - **Boolean:** výsledek je **jedno** těleso `{ ...první cíl, shape, lastModifiedBy: boolean }` – dědí `id`, `origin`, `names` a místo v mapě prvního cíle. Ostatní cíle a nástroje z mapy zmizí; s `keepTools` nástroje zůstanou beze změny (tentýž objekt). Jádro vrátí jeden handle i pro nesouvislý výsledek (compound více solidů). Rozpad výsledku na více těles `bodyId(cíl.origin, n)` podle rodokmenu z historie jádra (`Generated`/`Modified`, ne pořadí výstupu) je úkol [[M14-topologicke-pojmenovani|M14]] ([[Rozhodnutí noční rychloakce#M11 – Další entity|R8]] ⚠).
 - Změna parametru featury, ze které těleso pochází, ani nástroje booleanu id výsledku nemění (id je rodokmen, ne pořadí výstupu jádra).
+- **Vysunutí a Rotace** (M13): podle operace featury, viz [[#Operace tělesa (M13)]].
+
+### Operace tělesa (M13)
+
+Featury, které ze skici staví nový tvar (Vysunutí, Rotace, později Sweep a Loft), ho podle parametru `operation` buď přidají jako nové těleso, nebo jím upraví cílová tělesa. Pravidlo identity je pro všechny stejné, proto je to jedna funkce v `regen`, ne kód v každém pluginu ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R65–R67]]):
+
+```ts
+export type BodyOperation = 'new' | 'add' | 'remove' | 'intersect';
+export function applyBodyOperation(p: {
+  readonly kernel: ModelingKernel;              // ctx.kernel – mezivýsledky sleduje Regenerator
+  readonly state: RegenState;
+  readonly feature: FeatureId;
+  readonly op: BodyOperation;
+  readonly shapes: readonly ShapeHandle[];      // nové tvary featury (hranol na oblast), ≥ 1
+  readonly targets: readonly Body[];            // vyřešená cílová tělesa; ≥ 1 pro jiné operace než 'new', u 'new' ignorovaná
+}): Promise<RegenState>;
+```
+
+- **`new`:** jeden tvar = tvar tělesa, víc tvarů → `boolean('union', [první], ostatní)` (oddělené tvary dají compound jednoho tělesa jako R8 ⚠). Nové těleso `bodyId(feature)`, `origin` i `lastModifiedBy` = featura, na konec mapy.
+- **`add`:** `boolean('union', [cíl₁], [ostatní cíle…, tvary…])`; výsledek dědí `id`, `origin`, `names` a místo v mapě prvního cíle, `lastModifiedBy` = featura; ostatní cíle z mapy zmizí (jako Boolean union).
+- **`remove`** a **`intersect`:** pro **každý** cíl zvlášť `boolean('subtract' | 'intersect', [cíl], tvary)`; každý cíl zachová `id`, `origin`, `names` i místo v mapě, `lastModifiedBy` = featura. Cíle se tak neslijí do jednoho tělesa.
+- Prázdný výsledek (odebrání celého cíle, prázdný průnik) je chyba jádra `'operation-failed'` → featura `KERNEL` (Onshape by těleso smazal; R67 ⚠).
+- Mezivýsledky (hranoly) ve stavu nezůstanou, takže je sweep uvolní. Výsledná tělesa i stav jsou zmrazené. `shapes` prázdné nebo chybějící cíle u `add`/`remove`/`intersect` → výjimka (chyba programu; schéma má `min: 1`).
+
+`resolveRegions` hlásí `Sketch '<f>' not found` (artefakt chybí nebo je jiného druhu) a `Region '<jméno>' of sketch '<f>' not found`. `resolveAxis` hlásí chybějící osu, chybějící skicu nebo entitu, entitu jiného druhu než `line` (`Sketch entity '<id>' is not a line`) a úsečku nulové délky. Builder je převede přes `unresolvedReference(param, e)`.
 
 Příklad:
 
@@ -244,7 +287,7 @@ Posun rollback baru dopředu tak přepočítá jen nově zahrnuté featury, posu
 
 Stavy sdílejí handle (těleso, které featura nezměnila, prochází dál se stejným handle). Počítání referencí by bylo křehké, proto:
 
-1. Po každé dokončené regeneraci se projdou všechny stavy v cache a posbírá se množina **živých** handle: `shape` artefaktů druhu `body` a od M12 všechny hodnoty `regions` artefaktů druhu `sketch` (roviny handle nemají). Hlídá to test sweepu.
+1. Po každé dokončené regeneraci se projdou všechny stavy v cache a posbírá se množina **živých** handle: `shape` artefaktů druhu `body` a od M12 všechny hodnoty `regions` artefaktů druhu `sketch` (roviny a osy handle nemají). Hlídá to test sweepu.
 2. Všechny handle, které Regenerator kdy dostal od jádra a nejsou živé, se uvolní (`kernel.release`).
 3. Handle vytvořené v rámci zahozené (superseded) generace se uvolní nejpozději při sweepu prvního dokončeného běhu, který začne po jejich vytvoření (build nahrazeného běhu může doběhnout až po sweepu generace, která ho nahradila).
 
@@ -270,6 +313,7 @@ Handle se z vlastněné množiny odeberou ještě před čekáním na `release` 
 - `unresolvedReference` dá kód, zprávu z `RefError` a `issues` s parametrem, zmrazené do hloubky; sledované jádro zapíše handle z `makeCylinder`, `transform` a `boolean` (M11).
 - Neznámý typ featury (chybí schéma nebo builder) → `UNKNOWN_TYPE`, regenerace pokračuje.
 - M12: `EMPTY_STATE` má tři roviny; `resolvePlanes` (existující rovina, chybějící id, id tělesa → err); sledované jádro zapíše handle z `makeFace`; sweep: plochy oblastí skici jsou živé, po smazání skici se uvolní (`liveHandleCount`).
+- M13: `EMPTY_STATE` má za rovinami tři osy; `axesOf`; `resolveRegions` (oblast, chybějící skica, chybějící jméno, id tělesa); `resolveAxis` (osa počátku, úsečka skici na XZ ve světových souřadnicích, konstrukční úsečka, kružnice → err, nulová délka); `applyBodyOperation` pro všechny čtyři operace (identita, pořadí mapy, jedno `union` u více tvarů, cíle zvlášť u `remove`/`intersect`); sledované jádro zapíše handle z `extrude` a `revolve`.
 - Featura s `typeVersion` jiným, než má schéma → `STALE_VERSION`, builder se nezavolá, stav propuštěn.
 - Suppressed featura propustí stav, builder se nezavolá.
 - Status z cache se zachová (`warning` i `error` featury před změnou).

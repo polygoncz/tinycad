@@ -10,6 +10,7 @@ modules:
 milestones:
   - "[[M08-vykreslovani]]"
   - "[[M12-skicar]]"
+  - "[[M13-extrude-revolve]]"
 tags:
   - spec
 created: 2026-10-12
@@ -179,6 +180,8 @@ Kresby skic a rovin ([[12-skicar#Kresba a picking]], [[0017-modul-sketch-a-skica
 - **`SketchLayer`** (`sketch-layer.ts`): pod každým id jedna skupina s `LineSegments2` (`LineMaterial` s barvami po vrcholech, šířka 2 px) a `Points` (7 px, bez zmenšování se vzdáleností); barva podle stylu z palety: `normal` → `sketch`, `defined` → `sketchDefined`, `construction` a `plane` → `construction`, `hover` → `hover`, `selected` → `selection`. `depthTest: false`, `renderOrder` 3: skica se kreslí přes tělesa (rovina skici často leží na ploše tělesa a čáry by s ní bojovaly o hloubku, [[Rozhodnutí noční rychloakce#M12 – Skicář|R47]] ⚠). `set` nahradí vše pod id a uvolní starou geometrii, `remove` neznámého id nic. `setPalette` přebarví, rozlišení `LineMaterial` dostává jako zvýraznění.
 - **Picking:** s `'sketchEntity'` ve filtru se nejdřív zkouší skici (všechny kresby, body před křivkami, bez testu zakrytí tělesy); zásah → `{ kind: 'sketchEntity', sketch: id kresby, entity: id bodu nebo křivky, point }` (`point` = bod na segmentu nebo bod ve 3D). Bez zásahu pokračují hrany a plochy podle filtru. `camera.fitAll` kresby skic nezahrnuje.
 - `HighlightLayer` cíle `sketchEntity` vypouští (zvýraznění skici nese styl kresby).
+- **Oblasti** (M13, [[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R75]]): kresba může nést `regions` (uzavřené polygony v rovině kresby, spočítá je `interaction`). `SketchLayer` z každé oblasti postaví výplň (`ShapeGeometry` z `THREE.Shape` s dírami v souřadnicích roviny, umístěnou rámcem roviny), bez zvýraznění neviditelnou; cíle `sketchRegion` z `HighlightLayer` ji obarví (`hover`, `selection`, průhlednost 0,35, `depthTest: false`, `renderOrder` 2 – pod čarami skici). Picking oblasti je čistá funkce `pickSketchRegion(drawings, ray)` v `sketch-pick.ts`: průsečík paprsku s rovinou kresby (`plane.intersectRay`), `toLocal`, bod v polygonu (`pointInRegion`, sudo-liché pravidlo přes `outer` i `holes`), z více kreseb nejbližší podél paprsku; zakrytí tělesy se nekontroluje (jako R47 ⚠). Zásah → `{ kind: 'sketchRegion', sketch: id kresby, region: id oblasti, point }`.
+- **Pořadí v `pick`** podle filtru: `sketchEntity` > `sketchRegion` > hrany > plochy.
 
 ## Picking
 
@@ -198,7 +201,7 @@ Filtr (`PickFilter`, [[10-interakce#Port viewportu]], M10.1): průchod přes hra
 ## Testy
 
 `render` se testuje nejhůř, proto v něm má být co nejméně logiky ([[Q061 Testy render v Node|Q061]]):
-- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor` (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
+- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor`, od M13 `pickSketchRegion` a `pointInRegion` (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
 - Testy `render` nesmí importovat `@/kernel/testing` (`FakeKernel`): `render` závisí na `kernel` jen typově a `testing.ts` otevírá jen hodnotovým závislostem ([[01-architektura]]). Sítě v testech jsou ruční, malé a záměrně s klíči ploch mimo pořadí.
 - Kód s Three.js (`Viewport`, `BodyView`, vrstvy, picking) se ověřuje ručně na dev stránce `dev/viewport.html`. Smoke test v prohlížeči (Playwright) později.
 

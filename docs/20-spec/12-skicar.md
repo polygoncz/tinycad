@@ -13,6 +13,7 @@ modules:
   - render
 milestones:
   - "[[M12-skicar]]"
+  - "[[M13-extrude-revolve]]"
 tags:
   - spec
 created: 2026-10-12
@@ -157,7 +158,7 @@ Počáteční roviny jsou [[Artefakt|artefakty]] vyhrazeného vlastníka `origin
 | `origin/plane:xz` | `origin.plane.xz` („Přední“) | 0 | +X | −Y | `front` |
 | `origin/plane:yz` | `origin.plane.yz` („Pravá“) | 0 | +Y | +X | `right` |
 
-Osa y roviny = `normal × xDir` vyjde u všech tří +Y, +Z, +Z – skica na přední a pravé rovině má „nahoru“ osu Z jako v Onshape. Osy počátku (`origin/axis:z`) přibudou s Revolve v M13.
+Osa y roviny = `normal × xDir` vyjde u všech tří +Y, +Z, +Z – skica na přední a pravé rovině má „nahoru“ osu Z jako v Onshape. Osy počátku `origin/axis:x|y|z` přibyly s Revolve v M13 jako artefakty téhož vlastníka ([[03-dokument#Počáteční geometrie (M12)]], [[07-regenerace#Princip]]).
 
 ## Oblasti (profily)
 
@@ -183,6 +184,8 @@ export function computeRegions(data: SketchData): RegionsResult;   // oblasti se
 5. **Stěny:** polohrany (half-edge); v každém uzlu se odchozí polohrany seřadí proti směru hodinových ručiček podle úhlu tečny v uzlu; při shodě úhlu (do 1e-9 rad, tečný oblouk a úsečka) je dál ta, která se víc stáčí doleva (větší znaménková křivost: oblouk otáčející se proti směru `+1/r`, po směru `−1/r`, úsečka 0). `next(e)` = odchozí polohrana v cílovém uzlu bezprostředně **po směru** hodinových ručiček od `twin(e)`. Cykly se znaménkovou plochou (shoelace + kruhová úseč u oblouků) > 0 jsou omezené stěny, < 0 vnější hranice komponenty.
 6. **Díry:** vnější hranici komponenty (a kružnici jako samostatnou komponentu) přiřadí jako díru té omezené stěně **jiné** komponenty s nejmenší plochou, která obsahuje její libovolný bod (např. první bod první křivky). Bez takové stěny se nepřiřadí nikam.
 7. **Jméno** z id hraničních křivek, takže je stabilní při změně kót i pořadí kreslení; jiná oblast stejné jméno mít nemůže (dvě omezené stěny s týmž souborem hran planární graf bez křížení nedovolí). Extrude ukládá `SketchRegionRef { sketch: FeatureId, region: name }` ([[03-dokument#Reference na jiné entity]]).
+
+**Spotřebitelé oblastí (M13):** Vysunutí a Rotace dostanou plochu oblasti přes `BuildContext.resolveRegions` ([[07-regenerace#Builder featury]]); `interaction` spočítá stejné oblasti z entit artefaktu znovu (`artifactDrawing`), aby je `render` uměl vyplnit a pickovat ([[10-interakce#Kresba skici]]) – jména se shodují, protože jde o stejnou čistou funkci nad stejnými daty. Osou Rotace může být úsečka skici, i konstrukční (`SketchEntityRef`).
 
 ## Řešič vazeb
 
@@ -240,7 +243,7 @@ Skicu kreslí `render` z dat, ne z jádra ([[0017-modul-sketch-a-skicar|ADR 0017
 
 - „Most“ – úsečka spojující vnitřní smyčku s vnější: stěna ji obsahuje tam i zpět, díra nevznikne a `makeFace` nejspíš selže (`'operation-failed'`); uživatel most smaže.
 
-Každá položka je v [[Rozhodnutí noční rychloakce#M12 – Skicář|rozhodnutích R31–R50]]: splines, odsazení (offset), úhlová kóta a vzdálenost bod–přímka, vazba bod na křivce (snap na vnitřek úsečky), dělení křivek v průsečících (trim), popisky kót a značky vazeb ve viewportu (kóty a vazby jsou jen v panelu), tažení úseček a kružnic (jen body), undo uvnitř skicáře, skica na ploše tělesa (M14), osy počátku (M13), výplň rovin.
+Každá položka je v [[Rozhodnutí noční rychloakce#M12 – Skicář|rozhodnutích R31–R50]]: splines, odsazení (offset), úhlová kóta a vzdálenost bod–přímka, vazba bod na křivce (snap na vnitřek úsečky), dělení křivek v průsečících (trim), popisky kót a značky vazeb ve viewportu (kóty a vazby jsou jen v panelu), tažení úseček a kružnic (jen body), undo uvnitř skicáře, skica na ploše tělesa (M14), výplň rovin. Osy počátku a výběr oblasti přidal M13.
 
 ## Testy
 
