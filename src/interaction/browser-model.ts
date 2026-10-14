@@ -8,12 +8,13 @@
 // Since M13 it lists the origin axes (a view state like the planes) and, while the dialog has an
 // active region param, the regions of each sketch. A click on an axis or a region goes only into
 // the active reference param of the dialog: neither is an item of the selection (R72, R75).
+// Since M15 the color of a body is metadata too (body.setColor, Q073), saved and undoable.
 
 import { ObservableValue } from '@/core';
 import type { Observable, Unsubscribe } from '@/core';
-import { ORIGIN_AXES, ORIGIN_PLANES } from '@/document';
+import { ORIGIN_AXES, ORIGIN_PLANES, isBodyColor } from '@/document';
 import type { AxisId, BodyId, DocumentReader, FeatureId, PlaneId, SketchId } from '@/document';
-import type { BodyRenameOp, BodySetVisibleOp, OperationDispatcher } from '@/ops';
+import type { BodyRenameOp, BodySetColorOp, BodySetVisibleOp, OperationDispatcher } from '@/ops';
 import { OP_VERSION } from '@/ops';
 import type { FeatureEditor, FeatureEditSession } from './feature-editor';
 import {
@@ -36,6 +37,8 @@ export interface BrowserBodyRow {
   readonly feature: FeatureId;
   /** !doc.bodyMeta(body).hidden */
   readonly visible: boolean;
+  /** M15: doc.bodyMeta(body).color ?? null */
+  readonly color: string | null;
   /** The selection contains { kind: 'body', body }. */
   readonly selected: boolean;
 }
@@ -91,11 +94,19 @@ export interface BrowserModel {
   select(body: BodyId, opts?: { additive?: boolean }): void;
   /**
    * Visibility and name may change: no transaction (dialog) is open and the document is not
-   * read-only (the edit lock, R14). Without it setVisible, beginRename and rename do nothing.
+   * read-only (the edit lock, R14). Without it setVisible, setColor, beginRename and rename do
+   * nothing.
    */
   readonly canEdit: Observable<boolean>;
   /** → dispatch body.setVisible */
   setVisible(body: BodyId, visible: boolean): void;
+  /** M15: bodies of the last regeneration with a color in the metadata; app → viewport.setBodyColor */
+  readonly colors: Observable<ReadonlyMap<BodyId, string>>;
+  /**
+   * M15: → dispatch body.setColor (null = the default color), with the guards of setVisible.
+   * An invalid color (not isBodyColor) is an error of the caller: it throws.
+   */
+  setColor(body: BodyId, color: string | null): void;
   /** The body in the rename mode (the inline field of the Browser); null = none. */
   readonly renaming: Observable<BodyId | null>;
   /** Puts a body of the last regeneration into the rename mode. */
@@ -161,6 +172,8 @@ export function createBrowserModel(deps: {
 
   // A Set cannot be frozen; each change publishes a new set that is never mutated again.
   const hidden = new ObservableValue<ReadonlySet<BodyId>>(new Set());
+  // Like hidden: a Map cannot be frozen either, so a new map is published on each change.
+  const colors = new ObservableValue<ReadonlyMap<BodyId, string>>(new Map());
   const rows = new ObservableValue<readonly BrowserBodyRow[]>(EMPTY_ROWS);
   const renaming = new ObservableValue<BodyId | null>(null);
   const visiblePlanes = new ObservableValue<ReadonlySet<PlaneId>>(new Set());
@@ -188,6 +201,7 @@ export function createBrowserModel(deps: {
         n: i + 1,
         userName: meta.name ?? null,
         visible: meta.hidden !== true,
+        color: meta.color ?? null,
         selected: selected.has(body),
       };
       // Rows are matched by position, like the feature tree.
@@ -198,6 +212,7 @@ export function createBrowserModel(deps: {
         userName: row.userName,
         feature,
         visible: row.visible,
+        color: row.color,
         selected: row.selected,
       });
     });
@@ -210,6 +225,16 @@ export function createBrowserModel(deps: {
       regen.state
         .get()
         .bodies.flatMap(({ body }) => (doc.bodyMeta(body).hidden === true ? [body] : [])),
+    );
+  }
+
+  /** Bodies of the last regeneration with a color in the metadata of the document. */
+  function buildColors(): ReadonlyMap<BodyId, string> {
+    return new Map(
+      regen.state.get().bodies.flatMap(({ body }): [BodyId, string][] => {
+        const color = doc.bodyMeta(body).color;
+        return color === undefined ? [] : [[body, color]];
+      }),
     );
   }
 
@@ -346,7 +371,8 @@ export function createBrowserModel(deps: {
   }
 
   /**
-   * hidden, visiblePlanes, visibleAxes, bodies, planes, axes, sketches in this order (spec 10);
+   * hidden, colors, visiblePlanes, visibleAxes, bodies, planes, axes, sketches in this order
+   * (spec 10);
    * each only when it changed. `view` holds a new set of visible planes or axes
    * (setPlaneVisible, setAxisVisible); the missing one stays.
    */
@@ -361,6 +387,8 @@ export function createBrowserModel(deps: {
     if (next.size !== current.size || [...next].some((body) => !current.has(body))) {
       hidden.set(next);
     }
+    const nextColors = buildColors();
+    if (!sameColors(colors.get(), nextColors)) colors.set(nextColors);
     if (view.planes !== undefined) visiblePlanes.set(view.planes);
     if (view.axes !== undefined) visibleAxes.set(view.axes);
     rows.set(buildRows(rows.get()));
@@ -413,6 +441,7 @@ export function createBrowserModel(deps: {
   return {
     bodies: rows.asObservable(),
     hidden: hidden.asObservable(),
+    colors: colors.asObservable(),
     planes: planeRows.asObservable(),
     visiblePlanes: visiblePlanes.asObservable(),
     sketches: sketchRows.asObservable(),
@@ -443,6 +472,21 @@ export function createBrowserModel(deps: {
         v: OP_VERSION['body.setVisible'],
         body,
         visible,
+      };
+      ops.dispatch(op);
+    },
+    setColor(body, color) {
+      // A caller error whatever the state, so it is checked before the guards.
+      if (color !== null && !isBodyColor(color)) {
+        throw new Error(`BrowserModel.setColor: invalid color ${JSON.stringify(color)}`);
+      }
+      if (!canChange(body)) return;
+      if ((doc.bodyMeta(body).color ?? null) === color) return;
+      const op: BodySetColorOp = {
+        type: 'body.setColor',
+        v: OP_VERSION['body.setColor'],
+        body,
+        color,
       };
       ops.dispatch(op);
     },
@@ -535,6 +579,11 @@ function isAxisValue(value: unknown, axis: AxisId): boolean {
   return ref?.kind === 'axis' && ref.axis === axis;
 }
 
+/** The same bodies with the same colors. */
+function sameColors(a: ReadonlyMap<BodyId, string>, b: ReadonlyMap<BodyId, string>): boolean {
+  return a.size === b.size && [...b].every(([body, color]) => a.get(body) === color);
+}
+
 /** Same length and the same objects at every position. */
 function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
   return a.length === b.length && b.every((item, i) => item === a[i]);
@@ -548,6 +597,7 @@ function sameRow(
     readonly n: number;
     readonly userName: string | null;
     readonly visible: boolean;
+    readonly color: string | null;
     readonly selected: boolean;
   },
 ): boolean {
@@ -557,6 +607,7 @@ function sameRow(
     a.name.n === b.n &&
     a.userName === b.userName &&
     a.visible === b.visible &&
+    a.color === b.color &&
     a.selected === b.selected
   );
 }

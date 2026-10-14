@@ -11,7 +11,13 @@ import {
 } from '@/document';
 import type { AxisId, FeatureId, FeatureSchema, ParamSchema, PlaneId } from '@/document';
 import { aFeature } from '@/document/testing';
-import type { BodyRenameOp, BodySetVisibleOp, FeatureRenameOp, Operation } from '@/ops';
+import type {
+  BodyRenameOp,
+  BodySetColorOp,
+  BodySetVisibleOp,
+  FeatureRenameOp,
+  Operation,
+} from '@/ops';
 import { OP_VERSION } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import { createBrowserModel } from './browser-model';
@@ -111,6 +117,7 @@ function setup(opts: { readOnly?: boolean; sketchEdit?: (feature: FeatureId) => 
   const order: string[] = [];
   browser.bodies.subscribe(() => order.push('bodies'));
   browser.hidden.subscribe(() => order.push('hidden'));
+  browser.colors.subscribe(() => order.push('colors'));
   browser.visiblePlanes.subscribe(() => order.push('visiblePlanes'));
   browser.planes.subscribe(() => order.push('planes'));
   browser.sketches.subscribe(() => order.push('sketches'));
@@ -126,6 +133,7 @@ function setup(opts: { readOnly?: boolean; sketchEdit?: (feature: FeatureId) => 
     order,
     bodyEmits: () => count('bodies'),
     hiddenEmits: () => count('hidden'),
+    colorEmits: () => count('colors'),
     planeEmits: () => count('planes'),
     sketchEmits: () => count('sketches'),
     axisEmits: () => count('axes'),
@@ -154,6 +162,7 @@ describe('BrowserModel rows', () => {
         userName: null,
         feature: 'f1',
         visible: true,
+        color: null,
         selected: false,
       },
       {
@@ -162,6 +171,7 @@ describe('BrowserModel rows', () => {
         userName: null,
         feature: 'f2',
         visible: true,
+        color: null,
         selected: false,
       },
     ]);
@@ -344,6 +354,139 @@ describe('BrowserModel.setVisible', () => {
     s.browser.setVisible(B1, false);
     expect(s.doc.bodyMeta(B1)).toEqual({});
     session.cancel();
+    expect(s.log.entries()).toHaveLength(0);
+  });
+});
+
+describe('BrowserModel colors (M15)', () => {
+  it('a row carries the color from the body metadata', () => {
+    const s = setup();
+    s.doc.setBodyMeta(B2, { color: '#ff8800' });
+    s.regen.publish(new Map(), BODIES);
+    expect(s.browser.bodies.get().map((r) => r.color)).toEqual([null, '#ff8800']);
+  });
+
+  it('colors holds only the bodies of the last regeneration with a color', () => {
+    const s = setup();
+    s.doc.setBodyMeta(B1, { color: '#112233' });
+    s.doc.setBodyMeta(B3, { color: '#445566' });
+    s.regen.publish(new Map(), BODIES);
+    expect([...s.browser.colors.get()]).toEqual([[B1, '#112233']]);
+
+    s.regen.publish(new Map(), [{ body: B2, feature: fid('f2'), names: NO_TOPO_NAMES }]);
+    expect(s.browser.colors.get().size).toBe(0);
+    // The metadata stay in the document.
+    expect(s.doc.bodyMeta(B1)).toEqual({ color: '#112233' });
+  });
+
+  it('without a change of the content no new map and no new rows are published', () => {
+    const s = setup();
+    s.doc.setBodyMeta(B1, { color: '#112233' });
+    s.regen.publish(new Map(), BODIES);
+    const colors = s.browser.colors.get();
+    const rows = s.browser.bodies.get();
+    const emits = s.colorEmits();
+    s.regen.publish(new Map(), BODIES);
+    s.browser.setVisible(B2, false);
+    expect(s.browser.colors.get()).toBe(colors);
+    expect(s.colorEmits()).toBe(emits);
+    expect(s.browser.bodies.get()[0]).toBe(rows[0]);
+  });
+
+  it('setColor dispatches body.setColor; the row and colors follow the document', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    const before = s.browser.bodies.get();
+    const first = s.browser.colors.get();
+    s.browser.setColor(B2, '#00ff00');
+    const op: BodySetColorOp = {
+      type: 'body.setColor',
+      v: OP_VERSION['body.setColor'],
+      body: B2,
+      color: '#00ff00',
+    };
+    expect(loggedOps(s)).toEqual([op]);
+    expect(s.doc.bodyMeta(B2)).toEqual({ color: '#00ff00' });
+    expect([...s.browser.colors.get()]).toEqual([[B2, '#00ff00']]);
+    // The old map is never mutated.
+    expect(first.size).toBe(0);
+    const rows = s.browser.bodies.get();
+    expect(rows.map((r) => r.color)).toEqual([null, '#00ff00']);
+    expect(rows[0]).toBe(before[0]);
+
+    s.browser.setColor(B2, null);
+    expect(s.doc.bodyMeta(B2)).toEqual({});
+    expect(s.browser.colors.get().size).toBe(0);
+  });
+
+  it('undo brings the color back', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    s.browser.setColor(B1, '#abcdef');
+    s.browser.setColor(B1, '#123456');
+    s.undo.undo();
+    expect(s.doc.bodyMeta(B1)).toEqual({ color: '#abcdef' });
+    expect(s.browser.bodies.get()[0]?.color).toBe('#abcdef');
+    s.undo.undo();
+    expect(s.browser.colors.get().size).toBe(0);
+    expect(s.browser.bodies.get()[0]?.color).toBeNull();
+  });
+
+  it('emits in the order hidden, colors, bodies', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    s.order.length = 0;
+    s.browser.setColor(B1, '#abcdef');
+    expect(s.order).toEqual(['colors', 'bodies']);
+    s.order.length = 0;
+    s.doc.setBodyMeta(B2, { hidden: true, color: '#000000' });
+    expect(s.order).toEqual(['hidden', 'colors', 'bodies']);
+  });
+
+  it('the same value does nothing', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    s.browser.setColor(B1, null);
+    expect(s.log.entries()).toHaveLength(0);
+    s.browser.setColor(B1, '#abcdef');
+    s.browser.setColor(B1, '#abcdef');
+    expect(s.log.entries()).toHaveLength(1);
+  });
+
+  it('a body unknown to the last regeneration does nothing', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    s.browser.setColor(B3, '#abcdef');
+    expect(s.log.entries()).toHaveLength(0);
+    expect(s.doc.bodyMeta(B3)).toEqual({});
+  });
+
+  it('does nothing during a transaction', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    const session = s.editor.create('bool');
+    s.browser.setColor(B1, '#abcdef');
+    expect(s.doc.bodyMeta(B1)).toEqual({});
+    session.cancel();
+    expect(s.log.entries()).toHaveLength(0);
+  });
+
+  it('does nothing read-only', () => {
+    const s = setup({ readOnly: true });
+    s.regen.publish(new Map(), BODIES);
+    s.browser.setColor(B1, '#abcdef');
+    expect(s.log.entries()).toHaveLength(0);
+    expect(s.doc.bodyMeta(B1)).toEqual({});
+  });
+
+  it('an invalid color throws and dispatches nothing', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    for (const color of ['#ABCDEF', 'red', '#abc', '']) {
+      expect(() => {
+        s.browser.setColor(B1, color);
+      }).toThrow();
+    }
     expect(s.log.entries()).toHaveLength(0);
   });
 });
@@ -589,6 +732,13 @@ describe('BrowserModel and the document data', () => {
       [B1]: { hidden: true },
       [B2]: { name: 'Shaft' },
     });
+  });
+
+  it('a color ends up in toData', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    s.browser.setColor(B1, '#abcdef');
+    expect(toData(s.doc).studio.bodies).toEqual({ [B1]: { color: '#abcdef' } });
   });
 });
 
