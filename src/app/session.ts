@@ -4,7 +4,7 @@
 // viewport. openAppSession (browser) builds the real ones and calls this.
 
 import { DisposableStore, ObservableValue, RpcError } from '@/core';
-import type { Disposable, IdGenerator, Observable } from '@/core';
+import type { Disposable, IdGenerator, Observable, Unsubscribe } from '@/core';
 import { createDocument, ORIGIN_AXES, ORIGIN_PLANES } from '@/document';
 import type {
   AxisId,
@@ -74,7 +74,13 @@ import type { FeaturePlugin, PluginMessages } from '@/plugin-api';
 import { bodiesOf, createRegenerator, EMPTY_STATE, planeOfRef, sketchesOf } from '@/regen';
 import type { RegenResult, RegenState, SketchArtifact } from '@/regen';
 import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
-import type { BodyLayer, CameraController, ScenePalette } from '@/render';
+import type {
+  BodyLayer,
+  CameraController,
+  OrbitMode,
+  ScenePalette,
+  ViewCubeLabels,
+} from '@/render';
 import type { ConstraintSolver, GeometricConstraintKind } from '@/sketch';
 import { createFileExporter } from './file-exporter';
 import type { DownloadFile } from './file-exporter';
@@ -112,6 +118,12 @@ export interface AppViewport extends ViewportPort {
   setBodyVisible(body: BodyId, visible: boolean): void;
   /** '#rrggbb', null = the face colour of the palette (spec 09, M15). */
   setBodyColor(body: BodyId, color: string | null): void;
+  /** M17: translated labels of the view cube; the same texts again are ignored (spec 09). */
+  setViewCubeLabels(labels: ViewCubeLabels): void;
+  /** M17.1: the rotation mode of the camera; ui owns it, the viewport only applies it. */
+  setOrbitMode(mode: OrbitMode): void;
+  /** M17.1: click on the rotation mode button of the view cube. */
+  onOrbitModeToggle(listener: () => void): Unsubscribe;
 }
 
 export interface AppSessionDeps {
@@ -202,6 +214,12 @@ export interface AppSession extends Disposable {
   mountViewport(el: HTMLElement): void;
   /** Q072: app picks the ScenePalette, ui does not know render. */
   setTheme(theme: 'light' | 'dark'): void;
+  /** M17: translated labels of the view cube from ui; render knows no i18n. */
+  setViewCubeLabels(labels: ViewCubeLabels): void;
+  /** M17.1: the rotation mode from ui (a page preference like the theme) → viewport. */
+  setOrbitMode(mode: OrbitMode): void;
+  /** M17.1: request of the rotation mode button of the view cube, forwarded from the viewport. */
+  onOrbitModeToggle(listener: () => void): Unsubscribe;
   /**
    * Writes the pending queue of the persistence now, without the delay; read-only: nothing.
    * openAppSession calls it on pagehide and visibilitychange to hidden (Q034).
@@ -620,6 +638,15 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       const palette = paletteOf(theme);
       viewport.setPalette(palette);
       defaultBodyColor.set(hexColor(palette.face));
+    },
+    setViewCubeLabels(labels) {
+      viewport.setViewCubeLabels(labels);
+    },
+    setOrbitMode(mode) {
+      viewport.setOrbitMode(mode);
+    },
+    onOrbitModeToggle(listener) {
+      return viewport.onOrbitModeToggle(listener);
     },
     async flush() {
       await persistence?.flush();

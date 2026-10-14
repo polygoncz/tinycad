@@ -214,7 +214,7 @@ Ostatní moduly dostávají závislosti jako rozhraní v parametru `deps` továr
 ## Souřadnice a jednotky
 
 - Interně **milimetry** a **radiány**. Převod jednotek je věc UI.
-- Pravotočivý systém, **Z nahoru** (jako Onshape). Three.js je standardně Y nahoru → kamera má `up = (0, 0, 1)`.
+- Pravotočivý systém, **Z nahoru** (jako Onshape). Three.js je standardně Y nahoru. „Z nahoru“ platí pro standardní pohledy a `setViewDirection` (`viewBasis`), kamera sama má volnou orientaci (quaternion, [[0019-vlastni-ovladani-kamery|ADR 0019]]).
 
 ## Otevřené otázky
 

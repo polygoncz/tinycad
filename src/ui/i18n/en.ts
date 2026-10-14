@@ -191,6 +191,22 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'browser.color': 'Color of {name}',
   'browser.defaultColor': 'Default color',
 
+  // View cube (M17): face labels and the names of the arrows.
+  'viewCube.front': 'Front',
+  'viewCube.back': 'Back',
+  'viewCube.left': 'Left',
+  'viewCube.right': 'Right',
+  'viewCube.top': 'Top',
+  'viewCube.bottom': 'Bottom',
+  'viewCube.turnLeft': 'Turn left',
+  'viewCube.turnRight': 'Turn right',
+  'viewCube.turnUp': 'Turn up',
+  'viewCube.turnDown': 'Turn down',
+  'viewCube.rollClockwise': 'Roll clockwise',
+  'viewCube.rollCounterClockwise': 'Roll counterclockwise',
+  'viewCube.switchToFree': 'Switch to free rotation',
+  'viewCube.switchToTurntable': 'Switch to rotation with Z up',
+
   // Labels of the built-in operations in the history panel: the dispatcher writes the op type
   // as the label of an entry without one. feature.rename and feature.suppress are above (actions).
   'feature.add': 'Add feature',

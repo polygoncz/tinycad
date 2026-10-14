@@ -138,3 +138,35 @@ describe('SketchLayer region fills', () => {
     expect(disposed).toBe(true);
   });
 });
+
+describe('SketchLayer bounds', () => {
+  it('is null without drawings', () => {
+    expect(setup().layer.bounds()).toBeNull();
+  });
+
+  it('encloses the curves and points of every drawing in world coordinates', () => {
+    const { layer } = setup();
+    layer.set('a', drawing);
+    layer.set('b', {
+      plane: { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, 1, 0] },
+      curves: [],
+      points: [{ id: 'p', at: [-4, 7], style: 'normal' }],
+    });
+    // 'a': the line (0, 0, 5)–(10, 0, 5); 'b': yDir = normal × xDir = −Z, so (−4, 0, −7).
+    const box = layer.bounds();
+    expect(box).not.toBeNull();
+    expect(box?.min[0]).toBeCloseTo(-4);
+    expect(box?.max[0]).toBeCloseTo(10);
+    expect(box?.min[1]).toBeCloseTo(0);
+    expect(box?.max[1]).toBeCloseTo(0);
+    expect(box?.min[2]).toBeCloseTo(-7);
+    expect(box?.max[2]).toBeCloseTo(5);
+  });
+
+  it('is null again after the last drawing is removed', () => {
+    const { layer } = setup();
+    layer.set('a', drawing);
+    layer.remove('a');
+    expect(layer.bounds()).toBeNull();
+  });
+});

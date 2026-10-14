@@ -5,6 +5,8 @@
 import * as THREE from 'three';
 import type { Disposable } from '@/core';
 import type { OverlayPort, OverlayShape, OverlayStyle } from '@/interaction';
+import type { BoundingBox } from '@/kernel';
+import { meshBounds, unionBounds } from './bounds';
 import { flattenPoints, validateOverlayShapes } from './overlay-shapes';
 import type { ScenePalette } from './palette';
 
@@ -22,6 +24,8 @@ export interface OverlayLayerInternal extends OverlayPort, Disposable {
   readonly group: THREE.Group;
   /** Recolours both styles in place (Q072); the caller requests the render. */
   setPalette(palette: ScenePalette): void;
+  /** Box around the points of every shape (spec 09, "Near a far"); null = no points. */
+  bounds(): BoundingBox | null;
 }
 
 export interface OverlayLayerOptions {
@@ -33,6 +37,8 @@ export interface OverlayLayerOptions {
 interface Entry {
   readonly objects: readonly THREE.Object3D[];
   readonly geometries: readonly THREE.BufferGeometry[];
+  /** Box around the points of the shapes; null without points. */
+  readonly bounds: BoundingBox | null;
 }
 
 export function createOverlayLayer(options: OverlayLayerOptions): OverlayLayerInternal {
@@ -95,7 +101,11 @@ export function createOverlayLayer(options: OverlayLayerOptions): OverlayLayerIn
       const built = shapes.map(build);
       const objects = built.map(({ object }) => object);
       if (objects.length > 0) group.add(...objects);
-      entries.set(id, { objects, geometries: built.map(({ geometry }) => geometry) });
+      entries.set(id, {
+        objects,
+        geometries: built.map(({ geometry }) => geometry),
+        bounds: unionBounds(shapes.map((shape) => meshBounds(flattenPoints(shape.points)))),
+      });
       requestRender();
     },
     setPalette(next: ScenePalette): void {
@@ -103,6 +113,9 @@ export function createOverlayLayer(options: OverlayLayerOptions): OverlayLayerIn
         lineMaterials[style].color.setHex(next[style]);
         pointMaterials[style].color.setHex(next[style]);
       }
+    },
+    bounds(): BoundingBox | null {
+      return unionBounds([...entries.values()].map((entry) => entry.bounds));
     },
     remove(id) {
       if (drop(id)) requestRender();

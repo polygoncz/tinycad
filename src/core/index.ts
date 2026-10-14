@@ -22,6 +22,8 @@ export { EPSILON, vec3 } from './math/vec3';
 export type { Vec3 } from './math/vec3';
 export { mat4 } from './math/mat4';
 export type { Mat4 } from './math/mat4';
+export { quat } from './math/quat';
+export type { Quat } from './math/quat';
 export { plane } from './math/plane';
 export type { Plane, Vec2 } from './math/plane';
 

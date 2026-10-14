@@ -21,6 +21,7 @@ describe('core public API', () => {
         'mat4',
         'ok',
         'plane',
+        'quat',
         'serveRpc',
         'transfer',
         'vec3',

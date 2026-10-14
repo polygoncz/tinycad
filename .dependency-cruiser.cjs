@@ -204,9 +204,10 @@ module.exports = {
         'must not import three (docs/20-spec/09-vykreslovani.md "Testy", Q061).',
       from: {
         path:
-          '^src/render/(body-diff|bounds|camera-math|edge-pick|frame-scheduler|highlight-targets|' +
-          'mesh-cache|mesh-index|orbit-direction|overlay-shapes|pick-math|scene-sync|sketch-drawing|' +
-          'sketch-pick|view-events)\\.ts$',
+          '^src/render/(body-diff|bounds|camera-input|camera-math|camera-model|camera-ops|' +
+          'edge-pick|frame-scheduler|highlight-targets|mesh-cache|mesh-index|overlay-shapes|' +
+          'pick-math|scene-sync|sketch-drawing|sketch-pick|view-cube-fade|view-cube-geometry|' +
+          'view-cube-labels|view-cube-layout|view-events)\\.ts$',
       },
       to: { path: 'node_modules/three/' },
     },

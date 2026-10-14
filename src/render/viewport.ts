@@ -22,17 +22,21 @@ import type {
   ViewportEvents,
   ViewportPort,
 } from '@/interaction';
-import type { MeshOps, MeshQuality } from '@/kernel';
+import type { BoundingBox, MeshOps, MeshQuality } from '@/kernel';
 import { createBodyLayer, type BodyLayer } from './body-layer';
+import { unionBounds } from './bounds';
 import { createCameraRig, type CameraController } from './camera-controller';
+import type { OrbitMode } from './camera-ops';
 import { createFrameScheduler } from './frame-scheduler';
 import { createHighlightLayer } from './highlight-layer';
 import { createOverlayLayer } from './overlay-layer';
 import { LIGHT_PALETTE, type ScenePalette } from './palette';
 import { toNdc } from './pick-math';
 import { createPicker } from './picker';
-import { createSceneHelpers } from './scene-helpers';
+import { createSceneHelpers, GRID_BOUNDS } from './scene-helpers';
 import { createSketchLayer, type SketchLayer } from './sketch-layer';
+import { createViewCube } from './view-cube';
+import { DEFAULT_VIEW_CUBE_LABELS, type ViewCubeLabels } from './view-cube-labels';
 import { toViewKeyEvent, toViewPointerEvent } from './view-events';
 
 /** Hover and selection (spec 09, "Vrstvy pro interakci"). */
@@ -41,7 +45,7 @@ export type HighlightLayer = HighlightPort;
 export type OverlayLayer = OverlayPort;
 
 export interface Viewport extends ViewportPort, Disposable {
-  /** Creates canvas, renderer, ResizeObserver and camera controls; twice without unmount = error. */
+  /** Creates canvas, renderer, ResizeObserver and camera input; twice without unmount = error. */
   mount(el: HTMLElement): void;
   /** Releases renderer and canvas; the scene (bodies, camera) stays. Idempotent. */
   unmount(): void;
@@ -73,11 +77,25 @@ export interface Viewport extends ViewportPort, Disposable {
    * palette's. Survives a sync while the body stays; setPalette leaves it alone.
    */
   setBodyColor(body: BodyId, color: string | null): void;
+  /** M17: face labels and arrow aria-labels of the view cube; the same values = nothing. */
+  setViewCubeLabels(labels: ViewCubeLabels): void;
+  /**
+   * M17.1: rotation mode of the camera and the view cube (spec 09, "Režim otáčení"); the same
+   * mode = nothing. ui owns the mode, the viewport only applies it.
+   */
+  setOrbitMode(mode: OrbitMode): void;
+  /** M17.1: click on the rotation mode button of the view cube; dispose drops the listeners. */
+  onOrbitModeToggle(listener: () => void): Unsubscribe;
 
   readonly events: Subscribable<{ pointer: ViewPointerEvent; key: ViewKeyEvent }>;
 }
 
 export const MESH_QUALITY: MeshQuality = { linearDeflection: 0.1, angularDeflection: 0.5 };
+
+/** Requests of the view cube to the owner of the rotation mode. */
+interface OrbitModeEvents {
+  toggle: undefined;
+}
 
 /** Resources that exist only while the viewport is mounted. */
 interface Mounted {
@@ -93,11 +111,17 @@ export function createViewport(deps: {
   /** Default LIGHT_PALETTE. */
   palette?: ScenePalette;
   reportError?: (body: BodyId, error: unknown) => void;
+  /** M17, default English (DEFAULT_VIEW_CUBE_LABELS). */
+  viewCubeLabels?: ViewCubeLabels;
+  /** Clock of the camera and view cube animations in ms; default performance.now. */
+  now?: () => number;
 }): Viewport {
   let palette = deps.palette ?? LIGHT_PALETTE;
+  const now = deps.now ?? (() => performance.now());
   const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
   const lifetime = new DisposableStore();
   let emitter = new Emitter<ViewportEvents>();
+  let orbitModeToggles = new Emitter<OrbitModeEvents>();
   let mounted: Mounted | null = null;
   let everMounted = false;
   let disposed = false;
@@ -163,23 +187,67 @@ export function createViewport(deps: {
     createCameraRig({
       getBounds: () => layer.bounds(),
       requestRender: scheduleFrame,
+      now,
+      isMac,
     }),
   );
   // In the scene, so the headlight (its child) is part of the scene graph.
   scene.add(rig.camera);
   const helpers = lifetime.add(createSceneHelpers(scene, rig.camera, palette));
+  // After the rig, so it is disposed before it.
+  const viewCube = lifetime.add(
+    createViewCube({
+      rig,
+      palette,
+      labels: deps.viewCubeLabels ?? DEFAULT_VIEW_CUBE_LABELS,
+      requestRender: scheduleFrame,
+      now,
+      onOrbitModeToggle: () => {
+        orbitModeToggles.emit('toggle', undefined);
+      },
+    }),
+  );
   const picker = createPicker({
     views: () => layer.views.values(),
     bounds: () => layer.bounds(),
   });
 
+  /**
+   * Box of everything visible (spec 09, "Near a far"): bodies, sketch drawings, tool overlay,
+   * the grid and the camera target. Never null thanks to the grid.
+   */
+  function sceneBounds(): BoundingBox {
+    const target = rig.target;
+    return (
+      unionBounds([
+        layer.bounds(),
+        sketchLayer.bounds(),
+        overlayLayer.bounds(),
+        GRID_BOUNDS,
+        { min: target, max: target },
+      ]) ?? GRID_BOUNDS
+    );
+  }
+
+  /** near/far and the camera position enclose the whole scene; before drawing and picking. */
+  function updateClip(): void {
+    rig.updateClip(sceneBounds());
+  }
+
   function draw(): void {
     if (mounted === null) return;
     const { renderer } = mounted;
-    // autoClear is off because of the axis triad drawn over the main scene.
+    // Running animations move on first; the clip range follows the new orientation.
+    const time = now();
+    const animating = rig.tick(time);
+    const fading = viewCube.tick(time);
+    updateClip();
+    // autoClear is off because of the view cube drawn over the main scene.
     renderer.clear();
     renderer.render(scene, rig.camera);
-    helpers.drawAxes(renderer, rig.camera);
+    viewCube.draw(renderer, rig.orientation);
+    // The scheduler clears its pending frame before draw, so this asks for the next one.
+    if (animating || fading) scheduleFrame();
   }
 
   /** Ray through (x, y) CSS px of a canvas of width × height CSS px (both > 0). */
@@ -295,6 +363,11 @@ export function createViewport(deps: {
     rig.attach(canvas);
     resources.add(() => {
       rig.detach();
+    });
+
+    viewCube.mount(el, canvas);
+    resources.add(() => {
+      viewCube.unmount();
     });
 
     listen(resources, canvas, 'pointerdown', (e) => {
@@ -417,6 +490,7 @@ export function createViewport(deps: {
     pick(x: number, y: number, filter?: PickFilter): PickResult | null {
       assertAlive();
       if (mounted === null) return null;
+      updateClip();
       const { clientWidth, clientHeight } = mounted.canvas;
       // Sketches first, over the bodies and without occlusion (spec 09, "Skici").
       if (filter?.includes('sketchEntity') === true) {
@@ -436,6 +510,7 @@ export function createViewport(deps: {
       const width = mounted.canvas.clientWidth;
       const height = mounted.canvas.clientHeight;
       assert(width > 0 && height > 0, 'screenToRay needs a canvas with a size');
+      updateClip();
       return rayAt(x, y, width, height);
     },
     bodies,
@@ -451,6 +526,7 @@ export function createViewport(deps: {
       overlayLayer.setPalette(next);
       sketchLayer.setPalette(next);
       helpers.setPalette(next);
+      viewCube.setPalette(next);
       // While unmounted, mount takes the background from `palette`.
       mounted?.renderer.setClearColor(next.background);
       scheduleFrame();
@@ -463,6 +539,19 @@ export function createViewport(deps: {
       assertAlive();
       layer.setBodyColor(body, color);
     },
+    setViewCubeLabels(labels: ViewCubeLabels): void {
+      assertAlive();
+      viewCube.setLabels(labels);
+    },
+    setOrbitMode(mode: OrbitMode): void {
+      assertAlive();
+      rig.setOrbitMode(mode);
+      viewCube.setOrbitMode(mode);
+    },
+    onOrbitModeToggle(listener: () => void): Unsubscribe {
+      assertAlive();
+      return orbitModeToggles.on('toggle', listener);
+    },
     events,
     dispose(): void {
       if (disposed) return;
@@ -470,6 +559,7 @@ export function createViewport(deps: {
       disposed = true;
       // Dropping the emitter drops every subscriber.
       emitter = new Emitter<ViewportEvents>();
+      orbitModeToggles = new Emitter<OrbitModeEvents>();
       scene.remove(
         rig.camera,
         layer.group,
@@ -477,7 +567,7 @@ export function createViewport(deps: {
         overlayLayer.group,
         sketchLayer.group,
       );
-      // In reverse order: helpers, camera rig, sketches, overlay, highlight, then the body
+      // In reverse order: view cube, helpers, camera rig, sketches, overlay, highlight, then the body
       // layer, which disposes every BodyView and its shared materials and makes a running sync
       // stale.
       lifetime.dispose();

@@ -139,6 +139,24 @@ const FILE_KEYS = [
   'browser.defaultColor',
 ];
 
+// Keys of the view cube labels (M17), sent to the viewport by AppShell (viewCubeLabels).
+const VIEW_CUBE_KEYS = [
+  'viewCube.front',
+  'viewCube.back',
+  'viewCube.left',
+  'viewCube.right',
+  'viewCube.top',
+  'viewCube.bottom',
+  'viewCube.turnLeft',
+  'viewCube.turnRight',
+  'viewCube.turnUp',
+  'viewCube.turnDown',
+  'viewCube.rollClockwise',
+  'viewCube.rollCounterClockwise',
+  'viewCube.switchToFree',
+  'viewCube.switchToTurntable',
+];
+
 const PLUGIN = {
   cs: { 'box.label': 'Kvádr', 'box.width': 'Šířka' },
   en: { 'box.label': 'Box', 'box.width': 'Width' },
@@ -178,6 +196,7 @@ describe('built-in dictionaries', () => {
     ...SWEEP_KEYS,
     ...DEBUG_KEYS,
     ...FILE_KEYS,
+    ...VIEW_CUBE_KEYS,
     // The types of the built-in operations (OP_VERSION of ops, through app): the dispatcher
     // writes the type as the label of an entry without one, so the history panel translates it
     // (spec 11, M15); a new type fails this test until it has a text.

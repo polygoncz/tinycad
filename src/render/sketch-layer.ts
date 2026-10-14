@@ -17,6 +17,8 @@ import type {
   SketchPort,
   SketchStyle,
 } from '@/interaction';
+import type { BoundingBox } from '@/kernel';
+import { meshBounds, unionBounds } from './bounds';
 import type { ScenePalette } from './palette';
 import { projectSegments, segmentPoint } from './pick-math';
 import { tessellateSketch, type SketchTessellation } from './sketch-drawing';
@@ -68,6 +70,8 @@ export interface SketchLayerInternal extends SketchPort, Disposable {
   setPalette(palette: ScenePalette): void;
   /** Canvas size in CSS px; fat-line materials need it to size their width in pixels. */
   setResolution(width: number, height: number): void;
+  /** Box around the curves and points of every drawing (spec 09, "Near a far"); null = none. */
+  bounds(): BoundingBox | null;
 }
 
 export interface SketchLayerOptions {
@@ -83,6 +87,8 @@ interface Entry {
   readonly geometries: readonly THREE.BufferGeometry[];
   /** Fill of every region by its id; hidden unless highlighted. */
   readonly fills: ReadonlyMap<string, THREE.Mesh>;
+  /** Box around the tessellated curves and points; the region fills lie inside the curves. */
+  readonly bounds: BoundingBox | null;
 }
 
 export function createSketchLayer(options: SketchLayerOptions): SketchLayerInternal {
@@ -181,7 +187,11 @@ export function createSketchLayer(options: SketchLayerOptions): SketchLayerInter
       points.renderOrder = RENDER_ORDER;
       object.add(points);
     }
-    return { drawing, tessellation, object, geometries, fills };
+    const bounds = unionBounds([
+      meshBounds(tessellation.segments),
+      meshBounds(tessellation.points),
+    ]);
+    return { drawing, tessellation, object, geometries, fills, bounds };
   }
 
   /** Shows the fill of every highlighted region of the entry in its colour, hides the others. */
@@ -297,6 +307,9 @@ export function createSketchLayer(options: SketchLayerOptions): SketchLayerInter
     },
     setResolution(width: number, height: number): void {
       lineMaterial.resolution.set(width, height);
+    },
+    bounds(): BoundingBox | null {
+      return unionBounds([...entries.values()].map((entry) => entry.bounds));
     },
     dispose(): void {
       for (const id of [...entries.keys()]) drop(id);

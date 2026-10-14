@@ -1,8 +1,8 @@
 // Test-only entry point of app: a fake AppViewport, a kernel that can crash, a factory that
 // records the kernels it made and a download port that captures the files (M15). dependency-cruiser allows importing it only from *.test.ts.
 
-import { RpcError } from '@/core';
-import type { Disposable, Subscribable, Vec3 } from '@/core';
+import { Emitter, RpcError } from '@/core';
+import type { Disposable, Subscribable, Unsubscribe, Vec3 } from '@/core';
 import type { BodyId } from '@/document';
 import type {
   HighlightPort,
@@ -21,7 +21,7 @@ import { FakeViewport } from '@/interaction/testing';
 import type { GeometryKernel, MeshOps, ShapeHandle } from '@/kernel';
 import { createFakeKernel } from '@/kernel/testing';
 import type { FakeKernel } from '@/kernel/testing';
-import type { ScenePalette, StandardView } from '@/render';
+import type { OrbitMode, ScenePalette, StandardView, ViewCubeLabels } from '@/render';
 import type { DocumentLocks } from './doc-lock';
 import type { DownloadFile } from './file-exporter';
 import type { AppViewport } from './session';
@@ -31,8 +31,9 @@ type Ray = ReturnType<FakeViewport['screenToRay']>;
 
 /**
  * An AppViewport for tests: the ViewportPort part of FakeViewport plus recorded mount, body
- * syncs, kernel resets, camera calls (views and view directions), palettes, body visibility
- * and body colours (M15). sync resolves at once.
+ * syncs, kernel resets, camera calls (views and view directions), palettes, body visibility,
+ * body colours (M15), view cube labels (M17) and rotation modes (M17.1); emitOrbitModeToggle
+ * plays a click on the rotation mode button. sync resolves at once.
  * It wraps a FakeViewport instead of extending it: a class of another module is no base
  * class (ADR 0011), so its members are passed on one by one.
  */
@@ -59,6 +60,11 @@ export class FakeAppViewport implements AppViewport {
   readonly visibilityCalls: { readonly body: BodyId; readonly visible: boolean }[] = [];
   /** Every setBodyColor call, oldest first (M15). */
   readonly colorCalls: { readonly body: BodyId; readonly color: string | null }[] = [];
+  /** Labels of every setViewCubeLabels call, oldest first (M17). */
+  readonly viewCubeLabels: ViewCubeLabels[] = [];
+  /** Mode of every setOrbitMode call, oldest first (M17.1). */
+  readonly orbitModes: OrbitMode[] = [];
+  private readonly orbitModeToggles = new Emitter<{ toggle: undefined }>();
 
   readonly bodies = {
     sync: (bodies: readonly SyncedBody[]): Promise<void> => {
@@ -96,6 +102,23 @@ export class FakeAppViewport implements AppViewport {
 
   setBodyColor(body: BodyId, color: string | null): void {
     this.colorCalls.push({ body, color });
+  }
+
+  setViewCubeLabels(labels: ViewCubeLabels): void {
+    this.viewCubeLabels.push(labels);
+  }
+
+  setOrbitMode(mode: OrbitMode): void {
+    this.orbitModes.push(mode);
+  }
+
+  onOrbitModeToggle(listener: () => void): Unsubscribe {
+    return this.orbitModeToggles.on('toggle', listener);
+  }
+
+  /** Plays a click on the rotation mode button of the view cube (M17.1). */
+  emitOrbitModeToggle(): void {
+    this.orbitModeToggles.emit('toggle', undefined);
   }
 
   /** A fixed result, or a function of the view coordinates (FakeViewport.setPick). */

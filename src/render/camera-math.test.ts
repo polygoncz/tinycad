@@ -13,11 +13,10 @@ function corners(b: BoundingBox): Vec3[] {
   return result;
 }
 
-/** Checks that every corner lies inside the view volume of the fitted camera. */
+/** Checks that every corner lies inside the frame of the fitted camera. */
 function expectInsideView(b: BoundingBox, direction: Vec3, aspect: number, margin = 0.1) {
-  const fit = fitOrtho(b, direction, aspect, margin);
+  const fit = fitOrtho(b, viewBasis(direction), aspect, margin);
   const basis = viewBasis(direction);
-  const eye = vec3.add(fit.target, vec3.scale(basis.direction, fit.distance));
   for (const c of corners(b)) {
     const rel = vec3.sub(c, fit.target);
     const u = vec3.dot(rel, basis.right);
@@ -25,12 +24,7 @@ function expectInsideView(b: BoundingBox, direction: Vec3, aspect: number, margi
     // Inside the frame including the margin.
     expect(Math.abs(u) * (1 + margin)).toBeLessThanOrEqual(fit.halfHeight * aspect + 1e-9);
     expect(Math.abs(v) * (1 + margin)).toBeLessThanOrEqual(fit.halfHeight + 1e-9);
-    // Depth along the view (from the eye towards the target) within near/far.
-    const depth = vec3.dot(vec3.sub(eye, c), basis.direction);
-    expect(depth).toBeGreaterThanOrEqual(fit.near);
-    expect(depth).toBeLessThanOrEqual(fit.far);
   }
-  expect(fit.near).toBeGreaterThan(0);
   return fit;
 }
 
@@ -95,37 +89,59 @@ describe('fitOrtho', () => {
   it('is tight: the limiting extent touches the frame with the margin', () => {
     // Front view of a wide flat box: width 100 (X), height 10 (Z).
     const flat: BoundingBox = { min: [0, 0, 0], max: [100, 5, 10] };
-    expect(fitOrtho(flat, STANDARD_VIEWS.front.direction, 2).halfHeight).toBeCloseTo(27.5);
-    expect(fitOrtho(flat, STANDARD_VIEWS.front.direction, 20).halfHeight).toBeCloseTo(5.5);
+    expect(fitOrtho(flat, viewBasis(STANDARD_VIEWS.front.direction), 2).halfHeight).toBeCloseTo(
+      27.5,
+    );
+    expect(fitOrtho(flat, viewBasis(STANDARD_VIEWS.front.direction), 20).halfHeight).toBeCloseTo(
+      5.5,
+    );
+  });
+
+  it('fits in the given basis: a basis rolled by 90° swaps the limiting extent', () => {
+    // Front view of a wide flat box, rolled so that screen up is +X: width 10 (Z), height 100 (X).
+    const flat: BoundingBox = { min: [0, 0, 0], max: [100, 5, 10] };
+    const rolled = { right: [0, 0, -1], up: [1, 0, 0], direction: [0, -1, 0] } as const;
+    expect(fitOrtho(flat, rolled, 2).halfHeight).toBeCloseTo(55);
   });
 
   it('centres on the bounding box', () => {
-    expect(fitOrtho(cube, STANDARD_VIEWS.iso.direction, 1).target).toEqual([5, 5, 5]);
+    expect(fitOrtho(cube, viewBasis(STANDARD_VIEWS.iso.direction), 1).target).toEqual([5, 5, 5]);
   });
 
   it('uses the margin argument', () => {
-    const fit = fitOrtho(cube, STANDARD_VIEWS.front.direction, 1, 0);
+    const fit = fitOrtho(cube, viewBasis(STANDARD_VIEWS.front.direction), 1, 0);
     expect(fit.halfHeight).toBeCloseTo(5);
   });
 
   it('null bounds give a 200 × 200 frame around the origin', () => {
-    const square = fitOrtho(null, STANDARD_VIEWS.iso.direction, 1);
+    const square = fitOrtho(null, viewBasis(STANDARD_VIEWS.iso.direction), 1);
     expect(square.target).toEqual([0, 0, 0]);
     expect(square.halfHeight).toBeCloseTo(100);
-    expect(square.near).toBeGreaterThan(0);
-    expect(square.far).toBeGreaterThan(square.near);
 
-    const wide = fitOrtho(null, STANDARD_VIEWS.front.direction, 2);
+    const wide = fitOrtho(null, viewBasis(STANDARD_VIEWS.front.direction), 2);
     expect(wide.halfHeight).toBeCloseTo(100);
 
-    const tall = fitOrtho(null, STANDARD_VIEWS.front.direction, 0.5);
+    const tall = fitOrtho(null, viewBasis(STANDARD_VIEWS.front.direction), 0.5);
     expect(tall.halfHeight * 0.5).toBeCloseTo(100);
   });
 
   it('a single point still gives a usable frame', () => {
-    const fit = fitOrtho({ min: [1, 2, 3], max: [1, 2, 3] }, STANDARD_VIEWS.top.direction, 1);
+    const fit = fitOrtho(
+      { min: [1, 2, 3], max: [1, 2, 3] },
+      viewBasis(STANDARD_VIEWS.top.direction),
+      1,
+    );
     expect(fit.halfHeight).toBeGreaterThan(0);
-    expect(fit.near).toBeGreaterThan(0);
-    expect(fit.far).toBeGreaterThan(fit.near);
+  });
+
+  it('computes no depth: only target and halfHeight', () => {
+    expect(Object.keys(fitOrtho(cube, viewBasis(STANDARD_VIEWS.iso.direction), 1)).sort()).toEqual([
+      'halfHeight',
+      'target',
+    ]);
+    expect(Object.keys(fitOrtho(null, viewBasis(STANDARD_VIEWS.iso.direction), 1)).sort()).toEqual([
+      'halfHeight',
+      'target',
+    ]);
   });
 });

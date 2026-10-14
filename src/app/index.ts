@@ -17,3 +17,4 @@ export type { KernelUiState } from './kernel-supervisor';
 export type { DownloadFile } from './file-exporter';
 export type { PluginMessages } from '@/plugin-api';
 export type { DocumentInfo } from '@/persistence';
+export type { OrbitMode, ViewCubeLabels } from '@/render';

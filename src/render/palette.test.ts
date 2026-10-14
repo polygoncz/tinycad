@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { DARK_PALETTE, LIGHT_PALETTE, parseHexColor, type ScenePalette } from './palette';
+import {
+  DARK_PALETTE,
+  LIGHT_PALETTE,
+  parseHexColor,
+  toCssColor,
+  type ScenePalette,
+} from './palette';
 
 const KEYS = [
   'background',
@@ -13,6 +19,7 @@ const KEYS = [
   'sketchDefined',
   'axes',
   'grid',
+  'viewCube',
 ] as const satisfies readonly (keyof ScenePalette)[];
 
 const isColor = (value: unknown): boolean =>
@@ -26,18 +33,21 @@ describe.each([
     expect(Object.isFrozen(palette)).toBe(true);
     expect(Object.isFrozen(palette.axes)).toBe(true);
     expect(Object.isFrozen(palette.grid)).toBe(true);
+    expect(Object.isFrozen(palette.viewCube)).toBe(true);
   });
 
   it('has a colour for every key and nothing else', () => {
     expect(Object.keys(palette).sort()).toEqual([...KEYS].sort());
     for (const key of KEYS) {
-      if (key === 'axes' || key === 'grid') continue;
+      if (key === 'axes' || key === 'grid' || key === 'viewCube') continue;
       expect(isColor(palette[key]), key).toBe(true);
     }
     expect(palette.axes).toHaveLength(3);
     expect(palette.axes.every(isColor)).toBe(true);
     expect(palette.grid).toHaveLength(2);
     expect(palette.grid.every(isColor)).toBe(true);
+    expect(palette.viewCube).toHaveLength(2);
+    expect(palette.viewCube.every(isColor)).toBe(true);
   });
 
   it('has the axes of the mockup', () => {
@@ -60,6 +70,15 @@ describe('parseHexColor', () => {
   );
 });
 
+describe('toCssColor', () => {
+  it('turns 0xRRGGBB into #rrggbb, the inverse of parseHexColor', () => {
+    expect(toCssColor(0x000000)).toBe('#000000');
+    expect(toCssColor(0x0a84ff)).toBe('#0a84ff');
+    expect(toCssColor(0xffffff)).toBe('#ffffff');
+    expect(parseHexColor(toCssColor(0x374151))).toBe(0x374151);
+  });
+});
+
 describe('palettes', () => {
   it('light keeps the colours of M8 and M9, axes by the mockup', () => {
     expect(LIGHT_PALETTE).toEqual({
@@ -74,6 +93,7 @@ describe('palettes', () => {
       sketchDefined: 0x1c1c1e,
       axes: [0xff3b30, 0x34c759, 0x0a84ff],
       grid: [0xb4b9c1, 0xd5d8dd],
+      viewCube: [0xffffff, 0x374151],
     });
   });
 
@@ -89,5 +109,10 @@ describe('palettes', () => {
       sketch: 0x409cff,
       sketchDefined: 0xf2f2f7,
     });
+  });
+
+  it('view cube: face and text colour by theme (M17)', () => {
+    expect(LIGHT_PALETTE.viewCube).toEqual([0xffffff, 0x374151]);
+    expect(DARK_PALETTE.viewCube).toEqual([0x4b4f57, 0xe5e7eb]);
   });
 });

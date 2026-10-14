@@ -1,8 +1,9 @@
-// Static parts of the scene (spec 09, "Scéna"): grid in the XY plane, lights following the
-// camera and the axis triad in the bottom-left corner. Owns their GPU resources.
+// Static parts of the scene (spec 09, "Scéna"): grid in the XY plane and lights following the
+// camera. Owns their GPU resources. The axes are drawn by the view cube since M17.
 
 import * as THREE from 'three';
 import type { Disposable } from '@/core';
+import type { BoundingBox } from '@/kernel';
 import type { ScenePalette } from './palette';
 
 /** Grid size and cell in mm. */
@@ -10,21 +11,15 @@ const GRID_SIZE = 200;
 const GRID_CELL = 10;
 const GRID_DIVISIONS = GRID_SIZE / GRID_CELL;
 
-/** Side of the axis triad viewport in CSS px. */
-const AXES_SIZE = 120;
-/** Distance of the triad camera from the origin; anything beyond the axis length works. */
-const AXES_CAMERA_DISTANCE = 2;
+/** Box of the grid (±100 mm in z = 0); part of what near/far enclose (spec 09, "Near a far"). */
+export const GRID_BOUNDS: BoundingBox = {
+  min: [-GRID_SIZE / 2, -GRID_SIZE / 2, 0],
+  max: [GRID_SIZE / 2, GRID_SIZE / 2, 0],
+};
 
 export interface SceneHelpers extends Disposable {
-  /**
-   * Draws the axis triad over what is already drawn, in the bottom-left corner. Turned like the
-   * main camera. Leaves the renderer's viewport and scissor test as it found them (full canvas).
-   */
-  drawAxes(renderer: THREE.WebGLRenderer, mainCamera: THREE.Camera): void;
-  /** Recolours the grid and the axis triad in place (Q072); the caller requests the render. */
+  /** Recolours the grid in place (Q072); the caller requests the render. */
   setPalette(palette: ScenePalette): void;
-  /** The axis triad; exposed for tests of its colours. */
-  readonly axes: THREE.AxesHelper;
   /** The grid; exposed for tests of its colours. */
   readonly grid: THREE.GridHelper;
 }
@@ -60,37 +55,10 @@ export function createSceneHelpers(
   headlight.target.position.set(0, 0, -1);
   camera.add(headlight, headlight.target);
 
-  const axesScene = new THREE.Scene();
-  const axes = new THREE.AxesHelper(1);
-  setAxisColors(axes, palette);
-  axesScene.add(axes);
-  const axesCamera = new THREE.OrthographicCamera(-1.2, 1.2, 1.2, -1.2, 0.1, 10);
-  const viewDirection = new THREE.Vector3();
-
   return {
-    axes,
     grid,
     setPalette(next: ScenePalette): void {
       setGridColors(grid, next);
-      setAxisColors(axes, next);
-    },
-    drawAxes(renderer: THREE.WebGLRenderer, mainCamera: THREE.Camera): void {
-      // Same rotation as the main camera, looking at the origin of the triad scene.
-      mainCamera.getWorldDirection(viewDirection);
-      mainCamera.getWorldQuaternion(axesCamera.quaternion);
-      axesCamera.position.copy(viewDirection).multiplyScalar(-AXES_CAMERA_DISTANCE);
-      axesCamera.updateMatrixWorld();
-
-      const size = renderer.getSize(new THREE.Vector2());
-      const side = Math.min(AXES_SIZE, size.x, size.y);
-      // The colour of the main scene stays; only depth is cleared so the triad is never hidden.
-      renderer.clearDepth();
-      renderer.setScissorTest(true);
-      renderer.setScissor(0, 0, side, side);
-      renderer.setViewport(0, 0, side, side);
-      renderer.render(axesScene, axesCamera);
-      renderer.setScissorTest(false);
-      renderer.setViewport(0, 0, size.x, size.y);
     },
     dispose(): void {
       scene.remove(grid, hemisphere);
@@ -99,15 +67,8 @@ export function createSceneHelpers(
       grid.material.dispose();
       hemisphere.dispose();
       headlight.dispose();
-      axes.dispose();
     },
   };
-}
-
-/** X, Y, Z by the palette; rewrites the colour attribute of the same geometry. */
-function setAxisColors(axes: THREE.AxesHelper, palette: ScenePalette): void {
-  const [x, y, z] = palette.axes;
-  axes.setColors(new THREE.Color(x), new THREE.Color(y), new THREE.Color(z));
 }
 
 /**

@@ -9,12 +9,15 @@
 // M15: the history panel floats on the right where the dialog and the sketch panel are, so it is
 // drawn only without them; whether it is open is layout state of this window (the TitleBar
 // switch), nothing of the session.
-// Also the page-level bindings of a session: the theme (Q072) and the global keyboard.
+// Also the page-level bindings of a session: the theme (Q072), the view cube labels of the
+// language (M17), the rotation mode of the camera (M17.1) and the global keyboard.
 import { onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { AppSession } from '@/app';
 import { provideSession } from '../composables/use-session';
 import { useObservable } from '../composables/use-observable';
 import { isMacPlatform, toViewKeyEvent } from '../keyboard';
+import { useOrbitMode } from '../orbit-mode/use-orbit-mode';
 import { useTheme } from '../theme/use-theme';
 import Browser from './Browser.vue';
 import { dialogFor } from './feature-dialogs';
@@ -24,6 +27,7 @@ import Timeline from './Timeline.vue';
 import TitleBar from './TitleBar.vue';
 import Toolbar from './Toolbar.vue';
 import TopoDebugPanel from './TopoDebugPanel.vue';
+import { viewCubeLabels } from '../view-cube-labels';
 import ViewportHost from './ViewportHost.vue';
 
 const props = defineProps<{ session: AppSession }>();
@@ -45,6 +49,30 @@ watch(
   { immediate: true },
 );
 
+// The labels of the view cube follow the language of the page (M17); render knows no i18n.
+const { t, locale } = useI18n();
+watch(
+  locale,
+  () => {
+    session.setViewCubeLabels(viewCubeLabels((key) => t(key)));
+  },
+  { immediate: true },
+);
+
+// The rotation mode belongs to the page like the theme (M17.1, ADR 0020); the button at the
+// view cube only asks for a toggle, the controller decides and remembers.
+const orbitMode = useOrbitMode();
+watch(
+  orbitMode.mode,
+  (value) => {
+    session.setOrbitMode(value);
+  },
+  { immediate: true },
+);
+const offOrbitModeToggle = session.onOrbitModeToggle(() => {
+  orbitMode.toggle();
+});
+
 // Global keyboard (spec 10, "Akce a klávesové zkratky"): window keys → ViewKeyEvent →
 // ActionRegistry.handleKey, which ignores text fields. Keys on the focused canvas are not
 // handled here: render forwards them to the active tool, whose unhandled keys reach
@@ -63,6 +91,7 @@ onMounted(() => {
 });
 onUnmounted(() => {
   globalThis.removeEventListener('keydown', onKeyDown);
+  offOrbitModeToggle();
 });
 </script>
 

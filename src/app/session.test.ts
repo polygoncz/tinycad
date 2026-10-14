@@ -26,7 +26,7 @@ import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
 import { createFakeSolver, rectangleData } from '@/sketch/testing';
 import { createAppSession } from './index';
 import { RESTART_WINDOW_MS } from './kernel-supervisor';
-import type { AppSession, AppSessionDeps, KernelUiState } from './index';
+import type { AppSession, AppSessionDeps, KernelUiState, ViewCubeLabels } from './index';
 import { importDocumentFile } from './documents';
 import type { DownloadFile } from './file-exporter';
 import {
@@ -440,6 +440,49 @@ describe('createAppSession – view', () => {
     expect(viewport.palette).toBe(DARK_PALETTE);
     session.setTheme('light');
     expect(viewport.palette).toBe(LIGHT_PALETTE);
+  });
+
+  it('setViewCubeLabels hands the labels to the viewport unchanged (M17)', async () => {
+    const { session, viewport } = await open();
+    const labels: ViewCubeLabels = {
+      front: 'Přední',
+      back: 'Zadní',
+      left: 'Levá',
+      right: 'Pravá',
+      top: 'Horní',
+      bottom: 'Dolní',
+      turnLeft: 'Otočit doleva',
+      turnRight: 'Otočit doprava',
+      turnUp: 'Otočit nahoru',
+      turnDown: 'Otočit dolů',
+      rollClockwise: 'Natočit po směru hodinových ručiček',
+      rollCounterClockwise: 'Natočit proti směru hodinových ručiček',
+      switchToFree: 'Přepnout na volné otáčení',
+      switchToTurntable: 'Přepnout na otáčení se svislou osou Z',
+    };
+    session.setViewCubeLabels(labels);
+    expect(viewport.viewCubeLabels).toEqual([labels]);
+    expect(viewport.viewCubeLabels[0]).toBe(labels);
+  });
+
+  it('setOrbitMode hands the mode to the viewport (M17.1)', async () => {
+    const { session, viewport } = await open();
+    session.setOrbitMode('free');
+    session.setOrbitMode('turntable');
+    expect(viewport.orbitModes).toEqual(['free', 'turntable']);
+  });
+
+  it('a toggle request of the viewport reaches the session listener until unsubscribed (M17.1)', async () => {
+    const { session, viewport } = await open();
+    let toggles = 0;
+    const off = session.onOrbitModeToggle(() => {
+      toggles++;
+    });
+    viewport.emitOrbitModeToggle();
+    expect(toggles).toBe(1);
+    off();
+    viewport.emitOrbitModeToggle();
+    expect(toggles).toBe(1);
   });
 
   it('hiding a body in the browser hides it in the viewport, showing shows it', async () => {

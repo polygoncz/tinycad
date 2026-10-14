@@ -192,6 +192,22 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'browser.color': 'Barva {name}',
   'browser.defaultColor': 'Výchozí barva',
 
+  // View cube (M17): face labels and the names of the arrows.
+  'viewCube.front': 'Přední',
+  'viewCube.back': 'Zadní',
+  'viewCube.left': 'Levá',
+  'viewCube.right': 'Pravá',
+  'viewCube.top': 'Horní',
+  'viewCube.bottom': 'Dolní',
+  'viewCube.turnLeft': 'Otočit doleva',
+  'viewCube.turnRight': 'Otočit doprava',
+  'viewCube.turnUp': 'Otočit nahoru',
+  'viewCube.turnDown': 'Otočit dolů',
+  'viewCube.rollClockwise': 'Natočit po směru hodinových ručiček',
+  'viewCube.rollCounterClockwise': 'Natočit proti směru hodinových ručiček',
+  'viewCube.switchToFree': 'Přepnout na volné otáčení',
+  'viewCube.switchToTurntable': 'Přepnout na otáčení se svislou osou Z',
+
   // Labels of the built-in operations in the history panel: the dispatcher writes the op type
   // as the label of an entry without one. feature.rename and feature.suppress are above (actions).
   'feature.add': 'Přidat featuru',

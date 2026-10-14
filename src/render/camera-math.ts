@@ -1,7 +1,7 @@
 // Camera math of the orthographic viewport (spec 09, "Kamera"): standard views and fitting a
 // bounding box into the view. Pure, no three import; vectors via the vec3 facade (ADR 0012).
 
-import { assert, vec3, type Vec3 } from '@/core';
+import { assert, quat, vec3, type Quat, type Vec3 } from '@/core';
 import type { BoundingBox } from '@/kernel';
 
 export type StandardView = 'iso' | 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right';
@@ -9,7 +9,11 @@ export type StandardView = 'iso' | 'top' | 'bottom' | 'front' | 'back' | 'left' 
 export interface ViewDirection {
   /** Unit vector from the target towards the camera ("where the camera looks from"). */
   readonly direction: Vec3;
-  /** Camera up (camera.up in Three.js); not necessarily perpendicular to direction (iso). */
+  /**
+   * World direction shown on top: +Z, or +Y when looking along Z. Describes viewBasis for the
+   * standard views; the camera itself has a free orientation (ADR 0019). Not necessarily
+   * perpendicular to direction (iso).
+   */
   readonly up: Vec3;
 }
 
@@ -49,15 +53,17 @@ export function viewBasis(direction: Vec3): ViewBasis {
   return { right, up, direction: d };
 }
 
+/** Camera orientation for a view direction: the quaternion turning the camera axes into viewBasis. */
+export function orientationFor(direction: Vec3): Quat {
+  const { right, up, direction: d } = viewBasis(direction);
+  return quat.fromBasis(right, up, d);
+}
+
 export interface OrthoFit {
   /** Point the camera looks at (centre of the bounds). */
   readonly target: Vec3;
   /** Half of the visible height in mm; the visible width is 2 · halfHeight · aspect. */
   readonly halfHeight: number;
-  /** Camera position = target + direction · distance. */
-  readonly distance: number;
-  readonly near: number;
-  readonly far: number;
 }
 
 /** Empty scene: a 200 × 200 mm frame around the origin (spec 09, CameraController.fitAll). */
@@ -66,14 +72,13 @@ const DEFAULT_HALF_SIZE = 100;
 const MIN_HALF_HEIGHT = 1;
 
 /**
- * Fits the bounds into an orthographic view along direction (see viewBasis for the frame).
- * The projected bounds fit with margin (0.1 = 10 %) on the limiting side. The camera stands
- * two bounding radii from the target and near/far enclose the whole bounding sphere, so the
- * bounds stay unclipped also when orbiting around the target.
+ * Fits the bounds into an orthographic view with the camera axes `basis` (any roll; only right
+ * and up are used). The projected bounds fit with margin (0.1 = 10 %) on the limiting side. No depth: the camera
+ * distance and near/far come from clipRange before every frame (spec 09, "Near a far").
  */
 export function fitOrtho(
   bounds: BoundingBox | null,
-  direction: Vec3,
+  basis: ViewBasis,
   aspect: number,
   margin = 0.1,
 ): OrthoFit {
@@ -81,10 +86,10 @@ export function fitOrtho(
   assert(margin >= 0, 'margin must not be negative');
   if (bounds === null) {
     // The frame itself is 200 × 200, no margin around it.
-    return withDepth([0, 0, 0], DEFAULT_HALF_SIZE / Math.min(1, aspect), DEFAULT_HALF_SIZE);
+    return { target: [0, 0, 0], halfHeight: DEFAULT_HALF_SIZE / Math.min(1, aspect) };
   }
 
-  const { right, up } = viewBasis(direction);
+  const { right, up } = basis;
   const target = vec3.scale(vec3.add(bounds.min, bounds.max), 0.5);
   let halfWidth = 0;
   let halfHeight = 0;
@@ -94,17 +99,11 @@ export function fitOrtho(
     halfHeight = Math.max(halfHeight, Math.abs(vec3.dot(rel, up)));
   }
   const fitted = (1 + margin) * Math.max(halfHeight, halfWidth / aspect);
-  const radius = vec3.length(vec3.sub(bounds.max, bounds.min)) / 2;
-  return withDepth(target, Math.max(fitted, MIN_HALF_HEIGHT), Math.max(radius, MIN_HALF_HEIGHT));
+  return { target, halfHeight: Math.max(fitted, MIN_HALF_HEIGHT) };
 }
 
-/** Camera distance and clip planes enclosing a sphere of radius around the target. */
-function withDepth(target: Vec3, halfHeight: number, radius: number): OrthoFit {
-  const distance = 2 * radius;
-  return { target, halfHeight, distance, near: radius / 2, far: distance + radius * 1.5 };
-}
-
-function boxCorners(b: BoundingBox): readonly Vec3[] {
+/** The eight corners of the bounds. */
+export function boxCorners(b: BoundingBox): readonly Vec3[] {
   const corners: Vec3[] = [];
   for (const x of [b.min[0], b.max[0]])
     for (const y of [b.min[1], b.max[1]])

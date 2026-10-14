@@ -9,3 +9,6 @@ export type { BodyLayer } from './body-layer';
 export type { SketchLayer } from './sketch-layer';
 export type { CameraController } from './camera-controller';
 export type { StandardView } from './camera-math';
+export type { OrbitMode } from './camera-ops';
+export { DEFAULT_VIEW_CUBE_LABELS } from './view-cube-labels';
+export type { ViewCubeLabelKey, ViewCubeLabels } from './view-cube-labels';

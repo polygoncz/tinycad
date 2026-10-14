@@ -10,6 +10,7 @@ modules:
 milestones:
   - "[[M01-core]]"
   - "[[M12-skicar]]"
+  - "[[M17-kamera-a-view-cube]]"
 tags:
   - spec
 created: 2026-10-12
@@ -178,6 +179,19 @@ export const EPSILON = 1e-9;                   // výchozí tolerance vec3.equal
 
 export const vec3 = { add, sub, scale, dot, cross, length, normalize, equals };
 export const mat4 = { identity, translation, rotationAxisAngle, multiply, transformPoint };
+
+// M17 (kamera, ADR 0019): jednotkový quaternion [x, y, z, w]
+export type Quat = readonly [number, number, number, number];
+export const quat = {
+  identity,                       // [0, 0, 0, 1]
+  fromAxisAngle(axis: Vec3, angle: number): Quat,   // pravotočivě, osa se normalizuje (nulová = výjimka)
+  fromBasis(right: Vec3, up: Vec3, direction: Vec3): Quat,  // rotace os x, y, z na zadanou ortonormální pravotočivou bázi
+  multiply(a: Quat, b: Quat): Quat,                 // a·b, aplikuje nejdřív b (jako mat4)
+  rotate(q: Quat, v: Vec3): Vec3,
+  slerp(a: Quat, b: Quat, t: number): Quat,         // nejkratší cesta
+  angle(a: Quat, b: Quat): number,                  // úhel rotace mezi a a b v radiánech, ⟨0, π⟩; 2·atan2(|v|, |w|) z conj(a)·b, ne getAngle z gl-matrix (acos ztrácí přesnost u malých úhlů)
+  normalize(q: Quat): Quat,                         // nulový quaternion = výjimka (jako vec3.normalize)
+};
 ```
 
 - `Mat4` je n-tice, ne `number[]`: s `noUncheckedIndexedAccess` má pak každý index typ `number` a pole špatné délky neprojde.

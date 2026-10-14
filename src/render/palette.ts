@@ -19,11 +19,14 @@ export interface ScenePalette {
   /** Both palettes: the mockup's red, green and blue. */
   readonly axes: readonly [x: number, y: number, z: number];
   readonly grid: readonly [center: number, line: number];
+  /** View cube (M17): colour of its faces and of the face labels and arrows. */
+  readonly viewCube: readonly [face: number, text: number];
 }
 
 function freezePalette(palette: ScenePalette): ScenePalette {
   Object.freeze(palette.axes);
   Object.freeze(palette.grid);
+  Object.freeze(palette.viewCube);
   return Object.freeze(palette);
 }
 
@@ -39,6 +42,7 @@ export const LIGHT_PALETTE: ScenePalette = freezePalette({
   sketchDefined: 0x1c1c1e,
   axes: [0xff3b30, 0x34c759, 0x0a84ff],
   grid: [0xb4b9c1, 0xd5d8dd],
+  viewCube: [0xffffff, 0x374151],
 });
 
 /** By the M10 mockup (spec 11, "Rozvržení"). */
@@ -55,6 +59,7 @@ export const DARK_PALETTE: ScenePalette = freezePalette({
   axes: [0xff3b30, 0x34c759, 0x0a84ff],
   // Muted on the dark background.
   grid: [0x3a3c42, 0x2c2e33],
+  viewCube: [0x4b4f57, 0xe5e7eb],
 });
 
 /**
@@ -66,4 +71,9 @@ export const DARK_PALETTE: ScenePalette = freezePalette({
 export function parseHexColor(text: string): number {
   if (!/^#[0-9a-f]{6}$/.test(text)) throw new Error(`Invalid colour ${JSON.stringify(text)}`);
   return Number.parseInt(text.slice(1), 16);
+}
+
+/** 0xRRGGBB → '#rrggbb' for the DOM parts of render (arrows of the view cube). */
+export function toCssColor(color: number): string {
+  return `#${color.toString(16).padStart(6, '0')}`;
 }

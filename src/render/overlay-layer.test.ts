@@ -59,3 +59,37 @@ describe('OverlayLayer palette', () => {
     ]);
   });
 });
+
+describe('OverlayLayer bounds', () => {
+  it('is null without shapes', () => {
+    const layer = createOverlayLayer({ requestRender: () => undefined, palette: LIGHT_PALETTE });
+    expect(layer.bounds()).toBeNull();
+    layer.set('empty', []);
+    expect(layer.bounds()).toBeNull();
+  });
+
+  it('encloses the points of every shape under every id', () => {
+    const layer = createOverlayLayer({ requestRender: () => undefined, palette: LIGHT_PALETTE });
+    layer.set('a', [
+      {
+        kind: 'lines',
+        style: 'preview',
+        points: [
+          [0, 0, 0],
+          [10, 2, 0],
+        ],
+      },
+    ]);
+    layer.set('b', [{ kind: 'points', style: 'construction', points: [[-3, 5, 8]] }]);
+    expect(layer.bounds()).toEqual({ min: [-3, 0, 0], max: [10, 5, 8] });
+  });
+
+  it('forgets removed and cleared shapes', () => {
+    const layer = setup();
+    layer.set('far', [{ kind: 'points', style: 'preview', points: [[100, 100, 100]] }]);
+    layer.remove('far');
+    expect(layer.bounds()).toEqual({ min: [0, 0, 0], max: [1, 0, 0] });
+    layer.clear();
+    expect(layer.bounds()).toBeNull();
+  });
+});

@@ -13,6 +13,8 @@ milestones:
   - "[[M13-extrude-revolve]]"
   - "[[M14-topologicke-pojmenovani]]"
   - "[[M15-export-a-dokonceni]]"
+  - "[[M17-kamera-a-view-cube]]"
+  - "[[M17.1-rezim-otaceni]]"
 tags:
   - spec
 created: 2026-10-12
@@ -21,13 +23,14 @@ updated: 2026-10-14
 # 09 – `render`: vykreslování
 
 > **Pojmy:** [[Viewport]], [[Handle tvaru]], [[Těleso]]  
-> **Milník:** [[M08-vykreslovani]]
+> **Milník:** [[M08-vykreslovani]], kamera a view cube [[M17-kamera-a-view-cube]]  
+> **Rozhodnutí:** [[0019-vlastni-ovladani-kamery|ADR 0019]], [[0020-rezim-otaceni-kamery|ADR 0020]]
 
 Zobrazuje výsledek regenerace pomocí Three.js a odpovídá na otázku „co je pod kurzorem“. O dokumentu ani featurách neví nic – pracuje s tělesy (`BodyId`), handle a sítěmi. Závisí na `core`, typech z `kernel`, typech z `interaction` (port `ViewportPort`, události a `BodyId`, [[0009-platformove-nezavisla-domena|ADR 0009]]) a knihovně `three`.
 
 ## Závislost
 
-`three` ~0.186 a `@types/three` ~0.186 (dev). Z `kernel` bere `render` jen typy `MeshData`, `MeshOps`, `MeshQuality`, `ShapeHandle` a `BoundingBox`. Three.js má verze `0.x`, minor vydání může rozbít API, proto `~`. `OrbitControls` z `three/addons/controls/OrbitControls.js` (podcesta stejného balíku). Nové ADR není potřeba, Three.js zvolil [[0001-jadro-v-cistem-ts|ADR 0001]] ([[Q062 Závislost three a OrbitControls|Q062]]).
+`three` ~0.186 a `@types/three` ~0.186 (dev). Z `kernel` bere `render` jen typy `MeshData`, `MeshOps`, `MeshQuality`, `ShapeHandle` a `BoundingBox`. Three.js má verze `0.x`, minor vydání může rozbít API, proto `~`. Z `three/addons` (podcesta stejného balíku) jen `LineSegments2`/`LineMaterial`. `OrbitControls` se do [[M17-kamera-a-view-cube|M17]] používaly pro kameru, od M17 je nahradilo vlastní ovládání ([[0019-vlastni-ovladani-kamery|ADR 0019]]). Nové ADR není potřeba, Three.js zvolil [[0001-jadro-v-cistem-ts|ADR 0001]] ([[Q062 Závislost three a OrbitControls|Q062]]).
 
 ## Viewport
 
@@ -49,6 +52,9 @@ export interface Viewport extends ViewportPort, Disposable {
   setPalette(palette: ScenePalette): void;   // přebarví existující materiály, nic nevytváří znovu (Q072)
   setBodyVisible(body: BodyId, visible: boolean): void; // stav pohledu z Prohlížeče (Q071)
   setBodyColor(body: BodyId, color: string | null): void; // M15: '#rrggbb' z metadat tělesa, null = barva palety
+  setViewCubeLabels(labels: ViewCubeLabels): void;       // M17: popisky stěn a šipek view cube (viz View cube)
+  setOrbitMode(mode: OrbitMode): void;                    // M17.1: režim otáčení (viz Kamera → Režim otáčení); stejná hodnota = nic
+  onOrbitModeToggle(listener: () => void): Unsubscribe;   // M17.1: klik na tlačítko režimu u view cube; dispose odběratele uvolní
 
   readonly events: Subscribable<{ pointer: ViewPointerEvent; key: ViewKeyEvent }>;
 }
@@ -58,6 +64,8 @@ export function createViewport(deps: {
   quality?: MeshQuality;                              // výchozí MESH_QUALITY
   palette?: ScenePalette;                             // výchozí LIGHT_PALETTE (nahrazuje background)
   reportError?: (body: BodyId, error: unknown) => void;  // výchozí console.error
+  viewCubeLabels?: ViewCubeLabels;                    // M17, výchozí anglické
+  now?: () => number;                                 // M17, hodiny animací, výchozí performance.now
 }): Viewport;
 
 export const MESH_QUALITY: MeshQuality = { linearDeflection: 0.1, angularDeflection: 0.5 };
@@ -75,6 +83,7 @@ export interface ScenePalette {
   readonly sketchDefined: number;   // plně určená skica (M12): světlá 0x1c1c1e, tmavá 0xf2f2f7
   readonly axes: readonly [x: number, y: number, z: number];   // obě palety 0xff3b30, 0x34c759, 0x0a84ff (mockup)
   readonly grid: readonly [center: number, line: number];
+  readonly viewCube: readonly [face: number, text: number];   // M17: světlá 0xffffff, 0x374151; tmavá 0x4b4f57, 0xe5e7eb
 }
 export const LIGHT_PALETTE: ScenePalette;
 export const DARK_PALETTE: ScenePalette;
@@ -92,38 +101,125 @@ export const DARK_PALETTE: ScenePalette;
 
 ### Vykreslování na požádání
 
-Jediný plánovač snímků (`FrameScheduler`, čistý modul s injektovaným `requestAnimationFrame`/`cancelAnimationFrame`): `request()` nastaví příznak a naplánuje **nejvýš jeden** snímek, další volání do vykreslení nic nedělají. `dispose()` zruší naplánovaný snímek. `requestRender()` volají vrstvy (`bodies`, `highlight`, `overlay`) po každé změně, kamera na událost `change` z `OrbitControls` a `ResizeObserver`. Mimo tyto podněty se nevykresluje vůbec, statická scéna nežere CPU ani baterii.
+Jediný plánovač snímků (`FrameScheduler`, čistý modul s injektovaným `requestAnimationFrame`/`cancelAnimationFrame`): `request()` nastaví příznak a naplánuje **nejvýš jeden** snímek, další volání do vykreslení nic nedělají. `dispose()` zruší naplánovaný snímek. `requestRender()` volají vrstvy (`bodies`, `highlight`, `overlay`) po každé změně, kamera po každé operaci (`CameraInput`, view cube) a `ResizeObserver`. Běžící animace kamery nebo průhlednosti view cube (`tick` vrátí `true`) si po snímku vyžádá další (M17). Mimo tyto podněty se nevykresluje vůbec, statická scéna nežere CPU ani baterii.
 
 ### Kamera
 
-- **Ortografická** (`THREE.OrthographicCamera`, [[Q016 Ortografická nebo perspektivní kamera|Q016]]), Z nahoru: `camera.up = (0, 0, 1)`.
-- Ovládání jako v Onshape přes `OrbitControls` s přemapovanými tlačítky: pravé otáčí, prostřední posouvá, kolečko zoomuje ke kurzoru (`zoomToCursor = true`, mění `camera.zoom`). Levé tlačítko kameru neovládá, patří výběru. Kontextové menu na canvasu je potlačené.
-- Dotykové ovládání zatím zůstává výchozí z `OrbitControls` (jeden prst otáčí), spec ho neřeší. `OrbitControls` s klávesou Shift nebo Ctrl/Cmd prohazuje posun a otáčení (vestavěné chování).
-- Při změně velikosti plátna se přepočítá `left/right/top/bottom` podle poměru stran, výška pohledu zůstane.
+> Od [[M17-kamera-a-view-cube|M17]] vlastní ovládání místo `OrbitControls` ([[0019-vlastni-ovladani-kamery|ADR 0019]]). Do M16 platil invariant `camera.up = (0, 0, 1)` a náklon `top`/`bottom` o 1e-4 rad; obojí zmizelo.
+
+- **Ortografická** (`THREE.OrthographicCamera`, [[Q016 Ortografická nebo perspektivní kamera|Q016]]), `camera.zoom` je vždy 1.
+- **Stav rigu** (jediný zdroj pravdy): `target: Vec3`, `orientation: Quat` (rotace, která převede osy kamery x, y, z na `right`, `up`, `direction`; `direction` = jednotkový vektor od cíle ke kameře) a `halfHeight` (polovina viditelné výšky v mm, viditelná šířka = 2 · `halfHeight` · `aspect`). Three.js kamera se ze stavu jen odvozuje (`quaternion`, `position`, `left/right/top/bottom`, `near/far`).
+- Při změně velikosti plátna se přepočítá `left/right/top/bottom` podle poměru stran, `halfHeight` zůstane.
 
 ```ts
 export type StandardView = 'iso' | 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right';
 
-export interface CameraController {
-  fitAll(): void;                    // obálka všech těles; prázdná scéna → výchozí výřez 200 × 200 mm kolem počátku
-  setView(view: StandardView): void; // nastaví směr pohledu a pak fitAll()
-  /** M12: kamera ve směru direction od cíle (jako u standardních pohledů), pak fitAll(); kolmo na rovinu skici = setViewDirection(plane.normal). */
-  setViewDirection(direction: Vec3): void;
+export interface CameraController {        // veřejné API, beze změny proti M12
+  fitAll(): void;                          // obálka viditelných těles v aktuální orientaci; prázdná scéna → výchozí výřez 200 × 200 mm kolem počátku
+  setView(view: StandardView): void;       // orientace standardního pohledu (okamžitě), pak fitAll()
+  setViewDirection(direction: Vec3): void; // M12: orientationFor(direction) (okamžitě), pak fitAll(); nulový vektor = chyba
 }
 ```
 
-`setViewDirection(d)` (M12): `d` se normalizuje (nulový vektor = chyba programu); směr skoro rovnoběžný se Z (`|d̂·Z| > 1 − 1e-9`) použije nakloněný směr `top`/`bottom` (viz níže), jinak `d̂`. Nahoře je jako vždy +Z promítnuté do roviny pohledu, takže u počátečních rovin je nahoře osa y skici. Čistá funkce `viewDirectionFor(d)` vedle `orbitDirection`.
+- `fitAll`, `setView` a `setViewDirection` zruší běžící animaci. `fitAll` drží aktuální orientaci včetně natočení kolem osy pohledu.
+- **Orientace ze směru** `orientationFor(direction)`: báze `viewBasis(direction)` (nahoře je +Z promítnuté do roviny pohledu, při pohledu podél Z je to +Y) převedená na quaternion. Standardní pohledy (odkud se kamera dívá, co je nahoře): `front` z −Y (+Z), `back` z +Y, `right` z +X, `left` z −X, `top` z +Z (+Y), `bottom` z −Z (+Y), `iso` z (1, −1, 1) (+Z promítnuté). Pohled přesně podél Z už není degenerovaný, `orbit-direction.ts` (`VIEW_TILT`, `orbitDirection`, `viewDirectionFor`) zaniká.
+- **`fitOrtho(bounds, basis, aspect, margin = 0.1)`** (čistá): cíl = střed obálky, `halfHeight` tak, aby se obálka promítnutá do `basis.right`/`basis.up` vešla s okrajem 10 % na omezující straně, nejméně 1 mm. Prázdná scéna → cíl (0, 0, 0), výřez 200 × 200 bez okraje. Hloubku (`near`/`far`) už nepočítá.
 
-Směry (odkud se kamera dívá, a co je na obrazovce nahoře): `front` z −Y (+Z), `back` z +Y, `right` z +X, `left` z −X, `top` z +Z (+Y), `bottom` z −Z (+Y), `iso` z (1, −1, 1) (+Z promítnuté do roviny pohledu).
+#### Operace (čisté funkce, `camera-ops.ts`, bez `three`)
 
-- `camera.up` je **vždy** (0, 0, 1). `OrbitControls` si osu `up` čte jen při vytvoření a s jinou neumí otáčet. Orientaci obrazovky proto neurčuje `camera.up`, ale pravidlo `viewBasis(direction)`: nahoře je +Z promítnuté do roviny pohledu, při pohledu podél Z je to +Y.
-- Pohled přesně podél Z je pro `OrbitControls` degenerovaný (polární úhel 0). `top` a `bottom` proto stojí na směru nakloněném o 1e-4 rad: `top` k −Y, `bottom` k +Y. Promítnuté +Z pak na obrazovce míří k +Y, jak `viewBasis` slibuje.
-- Čistá funkce `fitOrtho(bounds, direction, aspect, margin = 0.1)` spočítá cíl (střed obálky), poloviční výšku výřezu (obálka promítnutá do báze `viewBasis` se vejde s okrajem 10 %) a vzdálenost kamery. Kamera stojí 2R od cíle (R = polovina úhlopříčky obálky), `near` = R/2, `far` = 3,5R. Uvnitř tak zůstane celá opsaná koule, tedy i při otáčení kolem cíle. Zoom mění jen `camera.zoom`, posun posouvá kameru i cíl, `near`/`far` platí dál.
+Vstupní posuny jsou v CSS px plátna, `width`/`height` je velikost plátna, osa y obrazovky míří dolů. `right`, `up`, `direction` jsou osy aktuální orientace ve světě.
+
+| Operace | Kontrakt |
+|---|---|
+| `orbit(state, dx, dy, height, mode)` | Rotace kolem cíle, **model sleduje kurzor**: tah doprava otočí přední stranu modelu doprava, tah dolů dolů. Úhly θx = π · dx / `height`, θy = π · dy / `height` (tah přes celou výšku = 180°). **`'free'`** (trackball): θ = π · √(dx² + dy²) / `height`, osa modelu `a = normalize(up · dx + right · dy)`, kamera se otočí opačně: `orientation' = quat.multiply(quat.fromAxisAngle(a, −θ), orientation)`. **`'turntable'`** (M17.1): nejdřív model kolem světové osy **Z** o θx, pak kolem `right` (po otočení) o θy, přitom elevace `e = asin(direction · Z)` se ořízne: skutečný úhel kolem `right` je `clamp(e + θy, −π/2, π/2) − e`. Model kolem `right` o +θ zvedá kameru (elevace roste). `target` a `halfHeight` beze změny. Nulový posun = beze změny. |
+| `pan(state, dx, dy, height)` | Bod pod kurzorem jde s kurzorem: `target' = target − (right · dx − up · dy) · 2 · halfHeight / height`. |
+| `zoomAt(state, x, y, factor, width, height)` | `factor > 1` přibližuje, `factor` musí být konečné kladné číslo (jinak chyba programátora). `halfHeight' = clamp(halfHeight / factor, 0.01, 1e6)`. Bod pod kurzorem zůstane na místě: offset kurzoru od středu ve světě `o = (right · (x − width/2) − up · (y − height/2)) · 2 · halfHeight / height`, `target' = target + o · (1 − halfHeight'/halfHeight)` (se skutečným poměrem po clampu). |
+| `turn(orientation, axis, quarterTurns, mode)` | Otočení o `quarterTurns` · 90° (±1) pro šipky view cube. `axis`: `'up'` (šipky vlevo/vpravo), `'right'` (nahoru/dolů), `'view'` (roll, jen `'free'`; v `'turntable'` chyba programátora). Stejná konvence jako `orbit`: model se točí ve směru šipky. Šipka vpravo = model kolem `up` o +90°, vlevo −90°; dolů = kolem `right` o +90°, nahoru −90°; roll po směru hodinových ručiček = model kolem `direction` o −90°, proti směru +90°. V `'turntable'` je osa `'up'` světová Z a `'right'` má ořez elevace jako `orbit` (z pohledu shora šipka dolů nic nezmění). Vrací cílovou orientaci (kamera opačně, jako u `orbit`). |
+| `levelOrientation(orientation)` | M17.1: srovnání pro turntable. Mimo pól (`|direction · Z| < 1 − 1e-9`) = `orientationFor(direction)`. Na pólu se zachová azimut: `right_h = normalize(right − (right · Z) · Z)`, `direction = sign · Z`, `up = direction × right_h`. Orientace s nulovým rollem a Z nahoru (`up · Z ≥ 0`) se nezmění (do 1e-9). Orientace vzhůru nohama z volného režimu se otočí o 180° kolem osy pohledu, takže Z je zase nahoře. |
+| `ease(t)` | `easeInOutCubic` na ⟨0, 1⟩. |
+| `interpolate(from, to, t)` | `quat.slerp(from, to, ease(t))` (nejkratší cesta). |
+| `clipRange(bounds, target, direction)` | Hloubka všeho viditelného: rohy obálky promítnuté na `direction` relativně k cíli, `sMax`, `sMin`. `pad = max(0,05 · (sMax − sMin), 1)`. Vrací `distance = sMax + pad` (kamera = `target + direction · distance`), `near = pad / 2`, `far = distance − sMin + pad`. Obálka v kameře tedy leží celá mezi `near` a `far` s rezervou, ať je cíl kdekoli. |
+
+#### Režim otáčení (M17.1)
+
+[[0020-rezim-otaceni-kamery|ADR 0020]]. `export type OrbitMode = 'turntable' | 'free'`, výchozí `'turntable'`.
+
+- Invariant `'turntable'`: `basisOf(orientation).right · Z = 0` (nulový roll) po každé operaci. `orientationFor` (standardní pohledy, klik na cube, `setViewDirection`) ho splňuje.
+- Rig drží režim (`setOrbitMode(mode)`, stejná hodnota = nic) a předává ho do `orbit` a `turn`. Přepnutí na `'turntable'` → `animateTo(levelOrientation(goal))`. Přepnutí na `'free'` orientaci nemění.
+- Zdroj pravdy je `ui` ([[11-ui]]): `Viewport.setOrbitMode` jen nastaví režim rigu a view cube. Tlačítko u cube režim sám nemění, jen vyšle požadavek `onOrbitModeToggle`.
+
+#### Animace
+
+- `animateTo(orientation)` (jen interní, pro view cube): přechod z aktuální orientace slerpem, trvání 300 ms, `ease`. Úhel mezi aktuální a novou orientací pod 1e-6 rad → žádná animace a běžící animace se zastaví na místě. Uživatel klikl tam, kde právě je. Stav drží čistý `createCameraModel` (`camera-model.ts`), rig ho jen promítá do Three.js kamery. Cíl a `halfHeight` se nemění.
+- Šipka nebo klik na cube během běžící animace počítá z **cílové** orientace té animace (dvojí rychlý klik na šipku = 180°).
+- Orbit, posun, zoom, `fitAll`, `setView`, `setViewDirection` animaci zruší. Zůstane mezilehlá orientace.
+- Čas dává injektovaná funkce `now()` (výchozí `performance.now`). Rig má `tick(now): boolean`. Viewport ho volá na začátku `draw()` a při `true` (animace běží) si vyžádá další snímek. Mimo animace se dál kreslí jen na požádání.
+
+#### Near a far
+
+Před každým snímkem (`draw`) a před každým `pick`/`screenToRay` rig nastaví `position`, `near`, `far` podle `clipRange` nad **obálkou všeho viditelného**: viditelná tělesa (`BodyLayer.bounds()`), kresby skic (`SketchLayer.bounds()`, nové), overlay nástrojů (`OverlayLayer.bounds()`, nové), mřížka (±100 mm v z = 0) a cíl kamery. Žádná situace (posun a otočení, zoom ke kurzoru, nové těleso bez `fitAll`, skica mimo tělesa) tak model neořízne. U ortografické kamery mění `near`/`far` jen hloubkový řez, ne velikost obrazu.
+
+#### Vstup (`CameraInput`: čisté funkce v `camera-input.ts`, DOM posluchače v `camera-rig-input.ts`)
+
+Poslouchá na canvasu vedle převodu událostí pro `interaction` (ten zůstává beze změny, viz Události).
+
+- Gesta jako v Onshape: **pravé** tlačítko otáčí, **prostřední** posouvá, **kolečko** zoomuje ke kurzoru. S klávesou Shift nebo Ctrl/Cmd se otáčení a posun prohodí (jako dřív u `OrbitControls`). Levé tlačítko kameru neovládá, patří výběru. Kontextové menu na canvasu je potlačené.
+- Čisté funkce: `cameraGesture(button, shiftKey, modKey) → 'orbit' | 'pan' | null` a `wheelFactor(deltaY, deltaMode, height) = exp(−0,002 · deltaY_px)`, kde `deltaY_px = deltaY` (`deltaMode` 0), · 16 (1, řádky), · `height` (2, stránky).
+- `pointerdown` s gestem → `setPointerCapture`, zruší animaci. `pointermove` posílá rozdíly od minulé polohy. `pointerup`, `pointercancel` a `lostpointercapture` gesto ukončí. `wheel` s `passive: false` a `preventDefault()` (i Ctrl + kolečko, tedy pinch na trackpadu).
+- Prostřední `pointerdown` volá `preventDefault()`, aby se ve Windows nespustil autoscroll. Ten vzniká z kompatibilního `mousedown`. Canvas má po dobu připojení `touch-action: none`, jako dřív u `OrbitControls`.
+- Dotykové ovládání se zatím neřeší.
 
 ### Scéna
 
-- Mřížka v rovině XY (`GridHelper` otočený o 90° kolem X; `depthWrite = false`, `renderOrder = -1`, takže se kreslí první a tělesa ji vždy zakryjí. Bez toho by mřížka v z = 0 bojovala se spodními plochami těles o hloubku. Důsledek: mřížku tělesa zakryjí i tam, kde by měla být před nimi, třeba při pohledu zespodu), osový kříž v levém dolním rohu (druhá malá scéna s vlastní kamerou, která kopíruje natočení hlavní, vykreslená přes `setViewport`/`setScissor`).
+- Mřížka 200 × 200 mm v rovině XY (`GridHelper` otočený o 90° kolem X; `depthWrite = false`, `renderOrder = -1`, takže se kreslí první a tělesa ji vždy zakryjí. Bez toho by mřížka v z = 0 bojovala se spodními plochami těles o hloubku. Důsledek: mřížku tělesa zakryjí i tam, kde by měla být před nimi, třeba při pohledu zespodu).
 - Světla: slabé `HemisphereLight` + `DirectionalLight` připnuté ke kameře („čelovka“), takže osvětlení sleduje pohled jako v CAD.
+- Osový kříž vlevo dole (do M16) nahradily osy ve view cube.
+
+### View cube
+
+> [[M17-kamera-a-view-cube|M17]]. Orientační a ovládací kostka vpravo nahoře, jako v Onshape.
+
+**Rozvržení.** Viewport v `mount` vloží do `el` (rodič s `position` jinou než `static`; `ViewportHost` má `absolute`) překryvný `div` 132 × 132 CSS px, 8 px od pravého a horního okraje. Uprostřed je čtverec 96 × 96 px, do kterého se kreslí kostka. Kolem něj jsou šipky. Překryv chytá všechny pointer události nad sebou, takže se nedostanou k canvasu ani k výběru v `interaction`.
+
+**Kreslení.** Druhá malá scéna ve stejném rendereru (jeden WebGL kontext): po hlavní scéně `clearDepth`, `setViewport`/`setScissor` na čtverec kostky v **CSS px**, osa y zdola. Renderer je sám násobí svým `pixelRatio`, takže HiDPI tu nic dalšího nepotřebuje, stejně jako dřív u osového kříže. Ortografická kamera kostky (výřez ±1,8) má orientaci hlavní kamery a stojí na `orientation · (0, 0, 5)`. Vlastní světla (`HemisphereLight` a čelovka), aby kostka byla stínovaná nezávisle na hlavní scéně.
+
+**Geometrie** (čistá funkce `buildViewCube(bevel = 0,25)`, `bevel` ∈ (0, 1), jinak chyba programátora; každá oblast má vlastní vrcholy kvůli ostrému stínování → `positions`, `normals`, `uvs`, `index`, `groups`, bez `three`): kostka s poloviční hranou 1 a zkosenými hranami a rohy. **26 oblastí**:
+- 6 stěn: čtverec |u|, |v| ≤ 1 − `bevel` na souřadnici ±1, s UV pro popisek,
+- 12 hran: zkosení mezi dvěma stěnami (body s oběma souřadnicemi v ⟨1 − `bevel`, 1⟩), bez popisku (UV (0, 0), materiál bez textury),
+- 8 rohů: trojúhelník (všechny tři souřadnice v ⟨1 − `bevel`, 1⟩).
+
+Každá oblast je jedna skupina (`group`) v jedné `BufferGeometry`, klíčem je její **směr** `(sx, sy, sz) ∈ {−1, 0, 1}³ ∖ {0}`, který je zároveň směrem pohledu po kliknutí: `(0, −1, 0)` = front, `(1, −1, 1)` = iso.
+
+**Picking.** `Raycaster` z kamery kostky proti její síti → bod zásahu (kostka je v počátku a neotočená, takže lokální = světové) → čistá funkce `cubeRegionAt(point, bevel) → Vec3`: každá souřadnice s |p| ≥ 1 − `bevel` − 1e-6 dá své znaménko, jinak 0. Bez zásahu → `null`.
+
+**Vzhled.**
+- Každá z 26 oblastí má vlastní materiál (`materialIndex` = skupina), hover přebarví jen ten svůj. Stěny s popiskem mají bílý materiál a celou barvu (pozadí stěny nebo hoveru a text) nese jejich `CanvasTexture`, protože `map` se násobí barvou materiálu a v tmavém tématu by text zanikl.
+- `MeshStandardMaterial` (jemné stínování), barva stěn z palety `viewCube[0]`. Stěny mají popisek (`CanvasTexture`, text barvou `viewCube[1]`, bezpatkové písmo), hrany a rohy jsou bez textu. Popisek je vzpřímený při pohledu ze standardního pohledu dané stěny (`viewBasis` jejího směru).
+- Hovered oblast má barvu `palette.hover`.
+- **Průhlednost:** v klidu `opacity` 0,55, když je ukazatel nad překryvem, 1,0. Přechod 150 ms lineárně přes `tick` jako animace kamery. `transparent: true`, `depthWrite: true`, `side: FrontSide` (kostka je konvexní, zadní stěny prosvítat nemají).
+- **Osy** X/Y/Z barvami `palette.axes` vychází z rohu (−1, −1, −1) mírně vně kostky (posun 0,12 ven podél úhlopříčky), délka 1,1, na konci písmena X, Y, Z. Přesné rozměry doladí ověření v prohlížeči.
+- `setPalette` přebarví i kostku a osy.
+
+**Šipky** (DOM, `<button>` s inline SVG, `aria-label` z popisků): 4 trojúhelníkové šipky uprostřed stran čtverce kostky (`turn` kolem `up` ±1 a `right` ±1) a 2 obloukové šipky v pravém horním rohu překryvu (roll ±1, **jen v režimu `'free'`**, v `'turntable'` skryté a mimo pořadí tabulátoru). Volání `turn` dostává aktuální režim. Viditelné jen při ukazateli nad překryvem nebo při fokusu klávesnicí uvnitř překryvu (`focusin`/`focusout`); CSS `opacity` s přechodem 150 ms. Kostka je pak také neprůhledná. Klik → `animateTo(turn(...))`.
+
+**Tlačítko režimu otáčení** (M17.1): `<button>` 16 px v pravém dolním rohu překryvu, viditelné spolu se šipkami. Ikona (inline SVG) ukazuje **aktuální** režim (turntable: oblouk kolem svislé osy; volný: koule s oblouky), `aria-label` a `title` říká, na co se přepne (`switchToFree` / `switchToTurntable`). Klik → `onOrbitModeToggle` (nic dalšího, režim nastaví až `setOrbitMode` zvenku)
+
+**Události v překryvu.**
+- `pointermove` bez tlačítka → hover oblasti (`cubeRegionAt`), změna → `requestRender()`. `pointerleave` → bez hoveru, kostka zprůhlední.
+- Levé `pointerdown` na kostce → `setPointerCapture`, zapamatuje start. Posun nad **3 px** od startu = tažení: dál volá `orbit(dx, dy, height)` s výškou **hlavního** plátna (stejná citlivost jako pravé tlačítko ve scéně) a zruší animaci. `pointerup` bez tažení nad oblastí = klik → `animateTo(orientationFor(směr oblasti))`.
+- Kolečko a kontextové menu nad překryvem: `preventDefault()`, nic dalšího. Ostatní tlačítka se ignorují.
+
+**Popisky.** `render` nezná i18n. Popisky stěn a `aria-label` šipek přichází hodnotou:
+
+```ts
+export type ViewCubeLabelKey =
+  | 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom'
+  | 'turnLeft' | 'turnRight' | 'turnUp' | 'turnDown' | 'rollClockwise' | 'rollCounterClockwise'
+  | 'switchToFree' | 'switchToTurntable';   // M17.1
+export type ViewCubeLabels = Readonly<Record<ViewCubeLabelKey, string>>;
+```
+
+`createViewport({ …, viewCubeLabels? })` (výchozí anglické, veřejná konstanta `DEFAULT_VIEW_CUBE_LABELS` z `render/index.ts`) a `Viewport.setViewCubeLabels(labels)`. Ten překreslí textury stěn a změní `aria-label`. Stejné hodnoty nic nedělají. `app` je předává z `ui` ([[11-ui#Kompoziční kořen (app)]]).
 
 ### Události
 
@@ -197,7 +293,7 @@ Filtr (`PickFilter`, [[10-interakce#Port viewportu]], M10.1): průchod přes hra
 1. Plochy: `THREE.Raycaster` jen proti meshům těles → první zásah → index trojúhelníku → `triangleToFace` → `faceIndex`. `normal` = normála trojúhelníku z jeho vinutí (proti směru hodinových ručiček při pohledu zvenku = ven, kontrakt [[06-geometricke-jadro|jádra]]) ve světových souřadnicích, **ven z tělesa**, neotáčí se podle paprsku. Orientace roviny skici na ploše (M12) tak nezávisí na tom, odkud se uživatel dívá.
 2. Hrany: čistá funkce `closestSegments(screenSegments, x, y, tolerancePx)` nad segmenty promítnutými do pixelů vrátí kandidáty seřazené podle vzdálenosti (tolerance 6 px). Kandidát je viditelný, pokud raycast skrz jeho nejbližší bod nenarazí na plochu blíž než ten bod (tolerance 1e-4 × úhlopříčka scény). První viditelný kandidát vyhrává **před plochou**. `point` = nejbližší bod na segmentu ve 3D.
    - Viditelnost se testuje raycastem s `far` = hloubka bodu − tolerance (tolerance 1e-4 × úhlopříčka sjednocené obálky, nejméně 1e-6 mm). Plochy, které na hraně leží, ji tak nezakryjí.
-   - Segment, jehož některý konec leží mimo `near`/`far`, se nepromítne (celý NaN) a nedá se vybrat. Segment jen zčásti mimo pohled zůstává.
+   - Segment, jehož některý konec leží mimo `near`/`far`, se nepromítne (celý NaN) a nedá se vybrat. Segment jen zčásti mimo pohled zůstává. Od M17 `near`/`far` obalují všechno viditelné a nastavují se i před `pick` (viz [[#Near a far]]), takže viditelné hrany tím nikdy nevypadnou.
    - Hrana viděná z čela (průmět kratší než 1e-3 px, např. svislé hrany kvádru shora) bere bližší konec ke kameře, ne `t = 0`, aby ji nezakryl vlastní vzdálenější konec.
    - Výpočet bodu přes `t` z obrazovky platí jen pro ortografickou kameru. Projekce a raycasty běží při každém `pick`, pro velké modely bude potřeba cache nebo GPU picking (bod 4).
 3. Ortografická kamera: paprsek z `screenToRay` má pro celé plátno stejný směr (směr pohledu), počátek leží na blízké rovině.
@@ -206,7 +302,7 @@ Filtr (`PickFilter`, [[10-interakce#Port viewportu]], M10.1): průchod přes hra
 ## Testy
 
 `render` se testuje nejhůř, proto v něm má být co nejméně logiky ([[Q061 Testy render v Node|Q061]]):
-- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor`, od M13 `pickSketchRegion` a `pointInRegion`, od M15 `parseHexColor` (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
+- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, od M17 operace kamery (`orbit`, `pan`, `zoomAt`, `turn`, `ease`, `interpolate`, `clipRange`, `orientationFor`), `cameraGesture`, `wheelFactor`, `buildViewCube` a `cubeRegionAt`, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor` (od M17 zaniká), od M13 `pickSketchRegion` a `pointInRegion`, od M15 `parseHexColor` (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
 - Testy `render` nesmí importovat `@/kernel/testing` (`FakeKernel`): `render` závisí na `kernel` jen typově a `testing.ts` otevírá jen hodnotovým závislostem ([[01-architektura]]). Sítě v testech jsou ruční, malé a záměrně s klíči ploch mimo pořadí.
 - Kód s Three.js (`Viewport`, `BodyView`, vrstvy, picking) se ověřuje ručně na dev stránce `dev/viewport.html`. Smoke test v prohlížeči (Playwright) později.
 
