@@ -121,6 +121,8 @@ Plán a kontrakty: [[M13-extrude-revolve#Implementační plán]]. Rozsah (profil
 - **R85 – Obecnější text `param.unresolvedRef` („Odkazovaná položka neexistuje“, R82) mění očekávaný text v e2e M11.** Proč: jeden kód chyby pro tělesa, oblasti, skici i osy; e2e test se upravuje, ne překlad.
 - **R86 – Řádky Prohlížeče označují aktivní/vybraný stav přes `aria-selected`, ne `aria-pressed`.** Proč: ARIA definuje u role `treeitem` jen `aria-selected`; `aria-pressed` patří tlačítkům ([[11-ui#Komponenty]]).
 - **R87 – `RefListField` ukazuje počet vybraných položek i v aktivním stavu** („Vybráno: N · vyberte v pohledu“). Proč: uživatel při klikání potřebuje vidět, že výběr přibývá ([[11-ui#Komponenty]]).
+- **Oprava revize M13 (Ú13a):** jedno čtení referencí oblastí a os (`regionRefsOf`, `axisRefOf`), nadpisy skupin dialogu jako `FieldState.heading`, × v poli osy podle `refText`, sdílené `flipApplies`. Proč: [[0010-prezentacni-model|ADR 0010]], [[0011-programovani-proti-rozhranim|0011]], [[0015-artefakty-a-identita-telesa|0015]]. `readRef` v `document` zůstává mírnější (přijme `sketch` s `/`) ⚠.
+
 ## M14 – Topologické pojmenování
 
 Plán a kontrakty: [[M14-topologicke-pojmenovani#Implementační plán]], spec [[08-topologicke-pojmenovani]], formát jmen [[0018-format-topologickych-jmen|ADR 0018]]. Rozsah (historie u všech operací, role, `topology`, `propagateNames`, pojmenování v builderech, `resolveTopo`, výběr podle jmen, Fillet/Chamfer, skica na ploše, ladicí panel, akceptační scénáře) zadalo hlavní sezení, podrobnosti rozhodl plánovač milníku. Čísla R84–R90 jsou rezervovaná.

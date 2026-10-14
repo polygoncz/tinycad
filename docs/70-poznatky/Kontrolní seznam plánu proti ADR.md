@@ -36,6 +36,10 @@ Plánovač milníku před odevzdáním Implementačního plánu projde každý k
 
 Nálezy z revize, které do seznamu nepatří, se do něj přidají, až se zopakují. Revize `architecture-reviewer` na konci milníku zůstává ([[M12-skicar#Retrospektiva]]).
 
+## Ověřeno v M13
+
+Revize M13 našla stejné typy nálezů (opsané čtení referencí oblastí a os na víc místech, nadpisy skupin počítané ve `.vue`), přestože tento poznatek už existoval: plán M13 vznikl dřív než poznatek a plánovač seznam neměl v zadání. Kontrolní seznam proto musí být **v zadání plánovače**, ne jen v poznatku – poznatek sám nic nevynutí ([[M13-extrude-revolve#Retrospektiva]]).
+
 ## Zdroje
 
 - Architecture Decision Records (adr.github.io).

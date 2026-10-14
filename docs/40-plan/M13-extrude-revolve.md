@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 13
 aliases:
   - M13
@@ -26,7 +26,7 @@ specs:
 depends_on:
   - "[[M12-skicar]]"
 started: 2026-10-14
-finished: 
+finished: 2026-10-14
 tags:
   - milnik
 created: 2026-10-12
@@ -56,7 +56,7 @@ updated: 2026-10-14
 - [x] Ú10 `app`, `ui`: registrace pluginů, pole osy, skupiny a skrytá pole v dialogu, úniková cesta pro vlastní dialog, Prohlížeč, lišta, překlady
 - [x] Ú11 `tests`: integrační scénáře (změna kóty, díra v OCCT, rotace v OCCT)
 - [x] Ú12 `e2e`: akceptační scénář s OCCT a planegcs v prohlížeči
-- [ ] Ú13 hlavní sezení: kontrola, vault, `architecture-reviewer`, retrospektiva
+- [x] Ú13 hlavní sezení: kontrola, vault, `architecture-reviewer`, retrospektiva
 
 ## Akceptační kritéria
 
@@ -71,16 +71,16 @@ updated: 2026-10-14
 
 Odloženo z [[M12-skicar]] (rozhodnutí v [[Rozhodnutí noční rychloakce#M12 – Skicář]]). Zapracováno do Implementačního plánu:
 
-- [ ] `BuildContext.resolveRegions(refs: readonly SketchRegionRef[])` nad `SketchArtifact.regions`; Extrude bere `ShapeHandle` plochy, ne data (`ProfileInput` ze spec 06 odpadá). → Ú2 (port bere handle, R61), Ú4.
-- [ ] Pole parametru `region` v UI a picking oblasti skici ve viewportu. → Ú3, Ú5, Ú6, Ú7, Ú10. **Upraveno:** pole ukazuje jen počet, čipy oblastí nejsou (R77 ⚠); vybrané oblasti zvýrazní viewport (R76); oblasti jdou vybrat i v Prohlížeči (R75).
-- [ ] Osy počátku jako artefakty (`origin/axis:x|y|z`, R37) a osa Revolve jako reference na osu nebo úsečku skici. → Ú1, Ú4, Ú6, Ú7, Ú9 (R71, R72, R73).
+- [x] `BuildContext.resolveRegions(refs: readonly SketchRegionRef[])` nad `SketchArtifact.regions`; Extrude bere `ShapeHandle` plochy, ne data (`ProfileInput` ze spec 06 odpadá). → Ú2 (port bere handle, R61), Ú4.
+- [x] Pole parametru `region` v UI a picking oblasti skici ve viewportu. → Ú3, Ú5, Ú6, Ú7, Ú10. **Upraveno:** pole ukazuje jen počet, čipy oblastí nejsou (R77 ⚠); vybrané oblasti zvýrazní viewport (R76); oblasti jdou vybrat i v Prohlížeči (R75).
+- [x] Osy počátku jako artefakty (`origin/axis:x|y|z`, R37) a osa Revolve jako reference na osu nebo úsečku skici. → Ú1, Ú4, Ú6, Ú7, Ú9 (R71, R72, R73).
 
 ## Úkoly z revize architektury (doplněno 2026-10-13, [[M10.1-zpevneni-kostry]])
 
 Nález 7 z [[Revize architektury 2026-10-13]]: schéma parametrů bez podmínek nestačí na Extrude. Zapracováno do Implementačního plánu (2026-10-14):
 
-- [ ] **Podmíněné a seskupené parametry** ([[03-dokument#Schéma featury]]): `ParamSpec` společně `group?` a `visibleWhen?`; validace skrytý parametr nevyžaduje a nekontroluje; `FieldState.hidden` a dialog pole nekreslí; `referencesOf` skryté parametry přeskočí. → Ú1, Ú6, Ú10 (R70). Test se schématem ve stylu Extrude (`operation`, `endType`, `distance` jen pro `blind`, `upTo` jen pro `upToFace`) je v Ú1. **Upraveno:** obecné `single: true` u referenčních druhů nevzniká, druh `axis` je jednotlivá reference sám o sobě (R71 ⚠); druh `direction` nevzniká – směr vysunutí je normála skici a `flip` (R69 ⚠).
-- [ ] **Úniková cesta pro vlastní formulář** ([[11-ui]]): registr v `ui` `featureType → komponenta dialogu`, výchozí generovaný formulář, dokumentace. → Ú10 (R80).
+- [x] **Podmíněné a seskupené parametry** ([[03-dokument#Schéma featury]]): `ParamSpec` společně `group?` a `visibleWhen?`; validace skrytý parametr nevyžaduje a nekontroluje; `FieldState.hidden` a dialog pole nekreslí; `referencesOf` skryté parametry přeskočí. → Ú1, Ú6, Ú10 (R70). Test se schématem ve stylu Extrude (`operation`, `endType`, `distance` jen pro `blind`, `upTo` jen pro `upToFace`) je v Ú1. **Upraveno:** obecné `single: true` u referenčních druhů nevzniká, druh `axis` je jednotlivá reference sám o sobě (R71 ⚠); druh `direction` nevzniká – směr vysunutí je normála skici a `flip` (R69 ⚠).
+- [x] **Úniková cesta pro vlastní formulář** ([[11-ui]]): registr v `ui` `featureType → komponenta dialogu`, výchozí generovaný formulář, dokumentace. → Ú10 (R80).
 
 ## Mimo rozsah M13
 
@@ -350,10 +350,11 @@ Proč `applyBodyOperation` v `regen` a ne v pluginu: pravidla identity „nové 
   1. Nový dokument → skica obdélníku s dvěma kótami jako v `e2e/m12.spec.ts` → „Hotovo“.
   2. „Vysunutí“ → dialog „Vysunutí 1“, pole „Sloučit s“ není vidět; v Prohlížeči u „Skica 1“ řádek „Oblast 1“ → klik → pole „Oblasti“ ukazuje 1; „OK“ → Timeline „Vysunutí 1“ bez chyby, Prohlížeč „Těleso 1“.
   3. Dvojklik na „Skica 1“ → pole „Vzdálenost 1“ na dvojnásobek, Enter → „Hotovo“ → Timeline bez chyby („Chyby:“ není), stále jedno těleso.
-  4. „Kvádr“ → „OK“; nová skica s kružnicí (nástroj „Kružnice“, dva kliky) → „Hotovo“; „Vysunutí“ → oblast kružnice v Prohlížeči; „Operace“ = „Odebrat“ → pole „Sloučit s“ se objeví; aktivovat ho a klik na těleso kvádru v Prohlížeči → „OK“ → bez chyby, počet těles se nezměnil.
+  4. „Kvádr“ 2000 × 2000 × 10 s počátkem (−1000, −1000, 0) místo výchozího → „OK“; nová skica s kružnicí (nástroj „Kružnice“, dva kliky) → „Hotovo“; „Vysunutí“ → oblast kružnice v Prohlížeči; „Operace“ = „Odebrat“ → pole „Sloučit s“ se objeví; aktivovat ho a klik na těleso kvádru v Prohlížeči → „OK“ → bez chyby, počet těles se nezměnil.
   5. „Zpět“ → „Vysunutí 2“ zmizí; „Znovu“ → zpět; reload po uložení → featury v Timeline, bez chyby.
   6. „Rotace“ → oblast obdélníku z kroku 1 v Prohlížeči, pole „Osa“ aktivovat a v Prohlížeči (skupina Počátek) klik na „Osa X“ (spodní hrana obdélníku na ní leží, profil ji neprotíná, výsledek je platný) → pole ukazuje „Osa X“ → „OK“ → Timeline „Rotace 1“ bez chyby, o jedno těleso víc.
   7. Konzole bez chyb.
+- **Odchylka (implementace):** v kroku 4 velký plochý kvádr místo výchozího – kamera se napasuje na tělesa, takže kvádr přes celý pohled dá předvídatelnou polohu kružnice v pixelech a kliky nástroje „Kružnice“ padnou na jeho horní plochu.
 - **Hotovo když:** `npm run test:e2e` projde v Chrome i WebKit; `npm run check`, `npm run build` zelené.
 
 ### Vlna F
@@ -362,6 +363,8 @@ Proč `applyBodyOperation` v `regen` a ne v pluginu: pravidla identity „nové 
 - Zkontrolovat kód Ú1–Ú12 proti specifikacím, propsat odchylky (03, 06, 07, 09, 10, 11, 12), převést otázky implementátorů na otázky ve vaultu.
 - Ověřit, že `features/extrude` a `features/revolve` neimportují `sketch` ani jiný plugin a že `interaction` nezná `regen`.
 - `architecture-reviewer`, oprava nálezů, retrospektiva, poznatky (kandidáti: podmíněné parametry jako data vs. logika, operace tělesa jako sdílené pravidlo identity, picking oblasti bez jádra), `/milnik konec M13`, commit.
+
+- [x] Ú13a Oprava nálezů revize (jedno čtení referencí oblastí a os, nadpisy skupin v presenteru, × v AxisField podle refText, sdílené flipApplies)
 
 ## Co se naučíš
 
@@ -376,4 +379,17 @@ Proč `applyBodyOperation` v `regen` a ne v pluginu: pravidla identity „nové 
 
 ## Retrospektiva
 
-_(vyplnit po dokončení)_
+_Návrh (noční rychloakce), Pavel doplní._
+
+**Co bylo jinak, než se čekalo**
+- Plán M13 vznikl před implementací M12, takže kontrakty počítaly s tvarem M12 z plánu, ne se skutečným. Odchylky M12 dostávali implementátoři v zadání úkolu; fungovalo to, žádný úkol se kvůli tomu nevracel.
+- `FakeKernel` s bboxem (AABB) stačil na testy identity těles (`applyBodyOperation`, Extrude, Revolve); geometrii – díru, počet ploch, objem – ověřily až integrační testy s OCCT v Node ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R83]]).
+- Mark & sweep handle drží tvary ze všech stavů v cache regenerace, ne jen z posledního. Plán to odhadl špatně (počet živých handle v Ú11) a test se upravoval podle skutečného chování.
+- E2E potřeboval v kroku 4 velký plochý kvádr: kamera se napasuje na tělesa, takže jen s kvádrem přes celý pohled je poloha kružnice v pixelech předvídatelná.
+- Revize opět našla opsané kontroly (čtení referencí oblastí a os na víc místech) a logiku ve `.vue` (nadpisy skupin, × v poli osy), přestože poznatek [[Kontrolní seznam plánu proti ADR]] už existoval – plán M13 vznikl dřív než on. Opraveno v Ú13a.
+
+**Co se osvědčilo**
+- Sdílená funkce `applyBodyOperation` v `regen`: jedno pravidlo identity („nové / přidat / odebrat / průnik“) pro Vysunutí i Rotaci bez importu mezi pluginy ([[0015-artefakty-a-identita-telesa|ADR 0015]]).
+- `createInThreadOcctKernel` v `kernel-occt/testing.ts`: skutečné OCCT v Node bez workeru, deterministické a rychlé testy geometrie.
+
+**Zúžení** (⚠ v [[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve]]): R63–R79 – bez kontroly směru a osy protínající profil, role ploch z jádra až v M14, cílová tělesa jen výslovně, konce jen „Do vzdálenosti“ a „Symetricky“, směr jen normála skici, osa jako samostatný druh bez obecného `single`, konstrukční čáry v modelu, oblasti bez kontroly zakrytí, pole oblastí bez čipů, kvádr tažením vypuštěn; R84 – extrude směrem v rovině profilu se nekontroluje.
