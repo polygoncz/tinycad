@@ -5,7 +5,7 @@ import type { MeshData } from '@/kernel';
 // regenerací"): comparing targets, which targets still exist, what is drawn. No three import, so
 // it is tested in Node. Sketch entities (M12) are never valid here: HighlightPort ignores them,
 // the style of the sketch drawing carries their highlight (spec 10, "Port viewportu"). Sketch
-// regions (M13) are not valid here either for now: their fill comes with Ú5 of M13.
+// regions (M13) are not valid here either: the highlight layer hands them to the sketch layer.
 
 /** A face or an edge of a body: what this layer draws. */
 export type BodyTarget = Extract<HighlightTarget, { readonly kind: 'face' | 'edge' }>;
@@ -56,7 +56,7 @@ export function validTarget(
   target: HighlightTarget,
   meshOf: (body: BodyId) => MeshData | undefined,
 ): target is BodyTarget {
-  // Sketch entities and regions are not drawn by this layer (regions: Ú5 of M13).
+  // Sketch entities and regions are not drawn by the body highlight (regions: the sketch layer).
   if (target.kind !== 'face' && target.kind !== 'edge') return false;
   const mesh = meshOf(target.body);
   if (mesh === undefined) return false;

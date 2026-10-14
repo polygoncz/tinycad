@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { ORIGIN_PLANES, ORIGIN_PLANE_IDS } from '@/document';
+import { plane, vec3 } from '@/core';
+import type { Vec2, Vec3 } from '@/core';
+import { ORIGIN_AXES, ORIGIN_PLANES, ORIGIN_PLANE_IDS } from '@/document';
 import type { PlaneId } from '@/document';
 import { parseSketchData } from '@/sketch';
 import type { SketchData, SketchItemId } from '@/sketch';
 import { rectangleData } from '@/sketch/testing';
-import { ORIGIN_POINT_ID, artifactDrawing, planeDrawing, toSketchDrawing } from './sketch-drawing';
+import {
+  ORIGIN_POINT_ID,
+  artifactDrawing,
+  axisDrawing,
+  planeDrawing,
+  toSketchDrawing,
+} from './sketch-drawing';
 
 /** The frame of an origin plane. */
 function originPlane(id: PlaneId) {
@@ -117,17 +125,147 @@ describe('toSketchDrawing', () => {
   });
 });
 
+/** Signed area of a closed polygon (shoelace): > 0 counter-clockwise. */
+function polygonArea(points: readonly Vec2[]): number {
+  return (
+    points.reduce((sum, [x, y], i) => {
+      const [nx, ny] = points[(i + 1) % points.length] ?? [x, y];
+      return sum + x * ny - nx * y;
+    }, 0) / 2
+  );
+}
+
 describe('artifactDrawing', () => {
-  it('draws the non-construction curves in the style normal, without points', () => {
+  it('draws the curves without points: construction ones in the style construction (M13)', () => {
     const drawing = artifactDrawing(XY, ROUND.entities);
 
     expect(drawing.plane).toBe(XY);
     expect(drawing.curves.map((c) => [c.id, c.style])).toEqual([
       ['k', 'normal'],
       ['a', 'normal'],
+      ['l', 'construction'],
     ]);
     expect(drawing.points).toEqual([]);
     expect(Object.isFrozen(drawing)).toBe(true);
+  });
+
+  it('adds the region of a rectangle, named like computeRegions, counter-clockwise', () => {
+    const rect = rectangleData({ width: 10, height: 5 });
+
+    const drawing = artifactDrawing(XY, rect.entities);
+
+    expect(drawing.regions).toHaveLength(1);
+    const [region] = drawing.regions ?? [];
+    expect(region?.id).toBe('ab,bc,cd,da');
+    expect(region?.holes).toEqual([]);
+    expect(region?.outer).toHaveLength(4);
+    expect(new Set(region?.outer.map(([x, y]) => `${String(x)},${String(y)}`))).toEqual(
+      new Set(['0,0', '10,0', '10,5', '0,5']),
+    );
+    expect(polygonArea(region?.outer ?? [])).toBeCloseTo(50);
+    expect(Object.isFrozen(drawing.regions)).toBe(true);
+    expect(Object.isFrozen(region)).toBe(true);
+  });
+
+  it('a circle in a rectangle: the rectangle region has a hole, the circle is a region of its own', () => {
+    const rect = rectangleData({ width: 10, height: 5 });
+    const withCircle = data(
+      [
+        ...rect.entities,
+        { kind: 'point', id: 'o', x: 5, y: 2.5 },
+        { kind: 'circle', id: 'k', center: 'o', radius: 1 },
+      ],
+      rect.constraints,
+    );
+
+    const drawing = artifactDrawing(XY, withCircle.entities);
+
+    expect(drawing.regions?.map((r) => r.id)).toEqual(['ab,bc,cd,da,k', 'k']);
+    const [outer, circle] = drawing.regions ?? [];
+    expect(outer?.outer).toHaveLength(4);
+    expect(outer?.holes).toHaveLength(1);
+    // A full circle in steps of π/36.
+    expect(outer?.holes[0]).toHaveLength(72);
+    expect(circle?.outer).toHaveLength(72);
+    expect(circle?.holes).toEqual([]);
+    expect(polygonArea(circle?.outer ?? [])).toBeGreaterThan(0);
+    for (const [x, y] of circle?.outer ?? []) expect(Math.hypot(x - 5, y - 2.5)).toBeCloseTo(1);
+  });
+
+  it('an arc becomes a polyline with steps of at most π/36', () => {
+    // A half disc: the arc from [1, 0] to [-1, 0] around [0, 0] and the line back.
+    const halfDisc = data([
+      { kind: 'point', id: 'c', x: 0, y: 0 },
+      { kind: 'point', id: 's', x: 1, y: 0 },
+      { kind: 'point', id: 'e', x: -1, y: 0 },
+      { kind: 'arc', id: 'a', center: 'c', start: 's', end: 'e' },
+      { kind: 'line', id: 'l', p1: 'e', p2: 's' },
+    ]);
+
+    const [region] = artifactDrawing(XY, halfDisc.entities).regions ?? [];
+
+    // 36 arc segments (π / (π/36)) give 36 points from the start of the arc, plus the end of it.
+    expect(region?.outer).toHaveLength(37);
+    expect(polygonArea(region?.outer ?? [])).toBeGreaterThan(0);
+  });
+
+  it('crossing curves give no regions', () => {
+    const crossing = data([
+      { kind: 'point', id: 'a', x: 0, y: 0 },
+      { kind: 'point', id: 'b', x: 2, y: 2 },
+      { kind: 'point', id: 'c', x: 0, y: 2 },
+      { kind: 'point', id: 'd', x: 2, y: 0 },
+      { kind: 'line', id: 'ab', p1: 'a', p2: 'b' },
+      { kind: 'line', id: 'cd', p1: 'c', p2: 'd' },
+    ]);
+    expect(artifactDrawing(XY, crossing.entities).regions).toEqual([]);
+  });
+});
+
+describe('axisDrawing (M13)', () => {
+  /** World points of the ends of the 'axis' line of the drawing. */
+  function ends(axis: { readonly origin: Vec3; readonly direction: Vec3 }, size?: number) {
+    const drawing = axisDrawing(axis, size);
+    expect(drawing.curves).toHaveLength(1);
+    const [line] = drawing.curves;
+    if (line?.kind !== 'line') throw new Error('expected one line');
+    expect(line.id).toBe('axis');
+    expect(line.style).toBe('plane');
+    expect(drawing.points).toEqual([]);
+    expect(drawing.regions).toBeUndefined();
+    expect(plane.isOrthonormal(drawing.plane)).toBe(true);
+    return [plane.toWorld(drawing.plane, line.from), plane.toWorld(drawing.plane, line.to)];
+  }
+
+  it.each(ORIGIN_AXES.map((a) => [a.label, a] as const))(
+    '%s: a line of 100 mm centred in the origin, along the axis',
+    (_, axis) => {
+      const [from, to] = ends(axis);
+      expect(vec3.equals(from ?? [0, 0, 0], vec3.scale(axis.direction, -50))).toBe(true);
+      expect(vec3.equals(to ?? [0, 0, 0], vec3.scale(axis.direction, 50))).toBe(true);
+    },
+  );
+
+  it('a slanted axis off the origin, with a size', () => {
+    const direction: Vec3 = [1, 1, 1];
+    const origin: Vec3 = [1, 2, 3];
+    const [from, to] = ends({ origin, direction }, 20);
+    const unit = vec3.normalize(direction);
+    expect(vec3.equals(from ?? [0, 0, 0], vec3.add(origin, vec3.scale(unit, -10)))).toBe(true);
+    expect(vec3.equals(to ?? [0, 0, 0], vec3.add(origin, vec3.scale(unit, 10)))).toBe(true);
+  });
+
+  it('the plane: origin of the axis, xDir along it, normal by the rule of spec 10', () => {
+    const z = axisDrawing({ origin: [0, 0, 0], direction: [0, 0, 1] });
+    expect(z.plane.xDir).toEqual([0, 0, 1]);
+    // |d_z| >= 0.9: d × +X.
+    expect(vec3.equals(z.plane.normal, [0, 1, 0])).toBe(true);
+    const x = axisDrawing({ origin: [1, 2, 3], direction: [2, 0, 0] });
+    expect(x.plane.origin).toEqual([1, 2, 3]);
+    expect(x.plane.xDir).toEqual([1, 0, 0]);
+    // |d_z| < 0.9: d × +Z.
+    expect(vec3.equals(x.plane.normal, [0, -1, 0])).toBe(true);
+    expect(Object.isFrozen(x)).toBe(true);
   });
 });
 

@@ -13,6 +13,7 @@ import type {
   ParamIssue,
   ParamSpec,
 } from '@/document';
+import { ORIGIN_AXES, isParamVisible, parseAxisId } from '@/document';
 import type {
   FeatureAddOp,
   FeatureSetParamsOp,
@@ -64,7 +65,7 @@ export interface EditState {
   readonly issues: readonly ParamIssue[];
   /** In the order of schema.params. */
   readonly fields: readonly FieldState[];
-  /** A bodies/topo/region/planes param that accepts the selection. */
+  /** A visible bodies/topo/region/planes/axis param that accepts the selection. */
   readonly activeRefParam: string | null;
   /** false after commit/cancel. */
   readonly open: boolean;
@@ -83,6 +84,18 @@ export interface FieldState {
   readonly active: boolean;
   /** The chips of a 'bodies' param, one per item of the value; null for the other kinds (M11). */
   readonly refs: readonly FieldRef[] | null;
+  /** !isParamVisible(spec, params): the dialog does not draw the field (M13). */
+  readonly hidden: boolean;
+  /** spec.group, the translation key of the section heading (M13). */
+  readonly group: string | null;
+  /** The text of the reference of an 'axis' param with a value; null otherwise (M13). */
+  readonly refText: RefText | null;
+}
+
+/** The text of a reference for the UI (M13): a translation key and its values. */
+export interface RefText {
+  readonly key: string;
+  readonly params: Readonly<Record<string, string>>;
 }
 
 /** One item of the value of a 'bodies' param, as its chip shows it. */
@@ -197,13 +210,26 @@ export function createFeatureEditor(deps: {
 }
 
 /** Params that take the selection (focusRefParam); planes are picked in the Browser (M12). */
-const REF_KINDS: ReadonlySet<ParamSpec['kind']> = new Set(['bodies', 'topo', 'region', 'planes']);
+const REF_KINDS: ReadonlySet<ParamSpec['kind']> = new Set([
+  'bodies',
+  'topo',
+  'region',
+  'planes',
+  'axis',
+]);
 /**
  * Params focused on create: not planes, otherwise the sketcher would start with the refPick tool
  * instead of its own (M12).
  */
-const AUTO_FOCUS_KINDS: ReadonlySet<ParamSpec['kind']> = new Set(['bodies', 'topo', 'region']);
+const AUTO_FOCUS_KINDS: ReadonlySet<ParamSpec['kind']> = new Set([
+  'bodies',
+  'topo',
+  'region',
+  'axis',
+]);
 const NO_PARAMS: Readonly<Record<string, unknown>> = Object.freeze({});
+const NO_TEXT_PARAMS: Readonly<Record<string, string>> = Object.freeze({});
+const MISSING_REF: RefText = Object.freeze({ key: 'field.missingRef', params: NO_TEXT_PARAMS });
 
 function createSession(deps: {
   doc: DocumentReader;
@@ -215,9 +241,7 @@ function createSession(deps: {
   onClose: () => void;
 }): FeatureEditSession {
   const { doc, ops, tx, mode, featureId, schema, onClose } = deps;
-  // A new feature takes the selection into its first reference param right away; editing an
-  // existing one starts without (spec 10, R19).
-  let activeRefParam: string | null = mode === 'create' ? firstRefParam(schema) : null;
+  let activeRefParam: string | null = null;
   let open = true;
 
   /** The chips of a 'bodies' value; `prev` is reused when nothing in them changed. */
@@ -230,6 +254,9 @@ function createSession(deps: {
     return prev !== null && sameRefs(prev, refs) ? prev : Object.freeze(refs);
   }
 
+  // A new feature takes the selection into its first visible reference param right away; editing
+  // an existing one starts without (spec 10, R19).
+  if (mode === 'create') activeRefParam = firstRefParam(schema, readParams(null));
   const state = new ObservableValue<EditState>(buildState(null));
   // Labels of the chips come from the document (names of features, body metadata), so the
   // snapshot follows every change of it while the session is open.
@@ -247,9 +274,49 @@ function createSession(deps: {
     return isRecord(params) ? params : NO_PARAMS;
   }
 
+  /**
+   * The text of an 'axis' value (M13): the label of an origin axis, the name of the sketch of an
+   * entity; missing sketch or unknown axis → field.missingRef; null or an invalid value → null.
+   * `prev` is reused when equal.
+   */
+  function refTextOf(value: unknown, prev: RefText | null): RefText | null {
+    const next = axisText(value);
+    return prev !== null && next !== null && sameRefText(prev, next) ? prev : next;
+  }
+
+  function axisText(value: unknown): RefText | null {
+    if (!isRecord(value)) return null;
+    if (value['kind'] === 'axis') {
+      const axis = parseAxisId(value['axis']);
+      if (axis === undefined) return null;
+      const origin = ORIGIN_AXES.find((a) => a.id === axis);
+      return origin === undefined
+        ? MISSING_REF
+        : Object.freeze({ key: origin.label, params: NO_TEXT_PARAMS });
+    }
+    if (value['kind'] === 'sketchEntity') {
+      const { sketch, entity } = value;
+      if (!isNonEmptyString(sketch) || !isNonEmptyString(entity)) return null;
+      // A FeatureId only names a feature to look up here; an unknown one is simply missing.
+      const feature = doc.feature(sketch as FeatureId);
+      return feature === undefined
+        ? MISSING_REF
+        : Object.freeze({
+            key: 'field.sketchLine',
+            params: Object.freeze({ sketch: feature.name }),
+          });
+    }
+    return null;
+  }
+
   /** A new snapshot from the document, reusing everything unchanged from `prev`. */
   function buildState(prev: EditState | null): EditState {
     const params = readParams(prev);
+    // A change of the params that hides the focused param drops the focus (spec 10, M13).
+    if (activeRefParam !== null) {
+      const spec = schema.params[activeRefParam];
+      if (spec === undefined || !isParamVisible(spec, params)) activeRefParam = null;
+    }
     const freshIssues = schema.validate(params);
     const issues =
       prev !== null && sameIssues(prev.issues, freshIssues)
@@ -264,6 +331,9 @@ function createSession(deps: {
         issue: issues.find((issue) => issue.param === name) ?? null,
         active: name === activeRefParam,
         refs: spec.kind === 'bodies' ? refsOf(params[name], old?.refs ?? null) : null,
+        hidden: !isParamVisible(spec, params),
+        group: spec.group ?? null,
+        refText: spec.kind === 'axis' ? refTextOf(params[name], old?.refText ?? null) : null,
       };
       return old !== undefined && sameField(old, field) ? old : Object.freeze(field);
     });
@@ -369,6 +439,7 @@ function createSession(deps: {
           spec !== undefined && REF_KINDS.has(spec.kind),
           `focusRefParam: '${name}' is not a reference param`,
         );
+        assert(isParamVisible(spec, readParams(state.get())), `focusRefParam: '${name}' is hidden`);
       }
       activeRefParam = name;
       refresh();
@@ -388,10 +459,28 @@ function createSession(deps: {
   };
 }
 
-/** The first bodies, topo or region param in the order of the schema, or null. */
-function firstRefParam(schema: FeatureSchema): string | null {
-  const found = Object.entries(schema.params).find(([, spec]) => AUTO_FOCUS_KINDS.has(spec.kind));
+/** The first visible bodies, topo, region or axis param in the order of the schema, or null. */
+function firstRefParam(
+  schema: FeatureSchema,
+  params: Readonly<Record<string, unknown>>,
+): string | null {
+  const found = Object.entries(schema.params).find(
+    ([, spec]) => AUTO_FOCUS_KINDS.has(spec.kind) && isParamVisible(spec, params),
+  );
   return found === undefined ? null : found[0];
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function sameRefText(a: RefText, b: RefText): boolean {
+  const keys = Object.keys(a.params);
+  return (
+    a.key === b.key &&
+    keys.length === Object.keys(b.params).length &&
+    keys.every((key) => a.params[key] === b.params[key])
+  );
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -433,7 +522,10 @@ function sameField(a: FieldState, b: FieldState): boolean {
     Object.is(a.value, b.value) &&
     sameIssue(a.issue, b.issue) &&
     a.active === b.active &&
-    a.refs === b.refs
+    a.refs === b.refs &&
+    a.hidden === b.hidden &&
+    a.group === b.group &&
+    a.refText === b.refText
   );
 }
 

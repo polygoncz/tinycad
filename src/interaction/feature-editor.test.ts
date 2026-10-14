@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
-import { bodyId, createFeatureSchemaRegistry, toData, validateAgainstSchema } from '@/document';
+import {
+  ORIGIN_AXIS_IDS,
+  bodyId,
+  createFeatureSchemaRegistry,
+  toData,
+  validateAgainstSchema,
+} from '@/document';
 import type { FeatureId, FeatureSchema, ParamSchema } from '@/document';
 import { aFeature } from '@/document/testing';
 import type { DocumentOptions } from '@/document/testing';
@@ -8,6 +14,7 @@ import type { BatchOp, FeatureAddOp, Operation } from '@/ops';
 import { OP_VERSION } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import { createFeatureEditor } from './feature-editor';
+import type { EditState } from './feature-editor';
 
 interface BoxParams {
   readonly width: number;
@@ -111,6 +118,9 @@ describe('FeatureEditor.create', () => {
       issue: null,
       active: false,
       refs: null,
+      hidden: false,
+      group: null,
+      refText: null,
     });
     expect(state.fields[2]?.refs).toEqual([]);
     expect(Object.isFrozen(state)).toBe(true);
@@ -781,5 +791,201 @@ describe('FeatureEditSession.removeRef', () => {
     expect(() => {
       session.removeRef('depth', 0);
     }).toThrow();
+  });
+});
+
+// --- M13: conditional and grouped params, the axis param (spec 03, spec 10) ---
+
+interface ExtrudeLikeParams {
+  readonly operation: string;
+  readonly targets: readonly unknown[];
+  readonly regions: readonly unknown[];
+  readonly endType: string;
+  readonly distance: number;
+  readonly axis: unknown;
+}
+
+const EXTRUDE_LIKE_PARAMS: ParamSchema = {
+  operation: {
+    kind: 'enum',
+    label: 'x.operation',
+    default: 'new',
+    options: [
+      { value: 'new', label: 'x.new' },
+      { value: 'add', label: 'x.add' },
+    ],
+  },
+  targets: {
+    kind: 'bodies',
+    label: 'x.targets',
+    min: 1,
+    group: 'x.group.merge',
+    visibleWhen: (p) => p['operation'] !== 'new',
+  },
+  regions: { kind: 'region', label: 'x.regions', min: 1 },
+  endType: {
+    kind: 'enum',
+    label: 'x.endType',
+    default: 'blind',
+    options: [
+      { value: 'blind', label: 'x.blind' },
+      { value: 'symmetric', label: 'x.symmetric' },
+    ],
+  },
+  distance: {
+    kind: 'length',
+    label: 'x.distance',
+    default: 10,
+    visibleWhen: (p) => p['endType'] === 'blind',
+  },
+  axis: { kind: 'axis', label: 'x.axis' },
+};
+
+const EXTRUDE_LIKE: FeatureSchema<ExtrudeLikeParams> = {
+  type: 'xlike',
+  version: 1,
+  label: 'x.label',
+  params: EXTRUDE_LIKE_PARAMS,
+  defaults: () => ({
+    operation: 'new',
+    targets: [],
+    regions: [],
+    endType: 'blind',
+    distance: 10,
+    axis: null,
+  }),
+  validate: (params) => validateAgainstSchema(EXTRUDE_LIKE_PARAMS, params),
+};
+
+function setupExtrudeLike(init: DocumentOptions = {}) {
+  return setup(init, null, EXTRUDE_LIKE);
+}
+
+const fieldOf = (session: { state: { get(): EditState } }, name: string) =>
+  session.state.get().fields.find((f) => f.name === name);
+
+describe('FeatureEditSession conditional params (M13)', () => {
+  it('hidden and group follow the predicates of the schema', () => {
+    const { editor } = setupExtrudeLike();
+    const session = editor.create('xlike');
+
+    expect(fieldOf(session, 'targets')).toMatchObject({ hidden: true, group: 'x.group.merge' });
+    expect(fieldOf(session, 'distance')).toMatchObject({ hidden: false, group: null });
+    expect(fieldOf(session, 'regions')).toMatchObject({ hidden: false, group: null });
+
+    session.setParam('operation', 'add');
+    expect(fieldOf(session, 'targets')?.hidden).toBe(false);
+    session.setParam('endType', 'symmetric');
+    expect(fieldOf(session, 'distance')?.hidden).toBe(true);
+  });
+
+  it('create focuses the first visible reference param', () => {
+    const { editor } = setupExtrudeLike();
+    const session = editor.create('xlike');
+    // targets comes first but is hidden for 'new'.
+    expect(session.state.get().activeRefParam).toBe('regions');
+  });
+
+  it('create focuses an axis param when it is the first visible reference param', () => {
+    const params: ParamSchema = {
+      width: { kind: 'length', label: 'w', default: 1 },
+      axis: { kind: 'axis', label: 'a' },
+    };
+    const schema: FeatureSchema = {
+      type: 'rev',
+      version: 1,
+      label: 'rev',
+      params,
+      defaults: () => ({ width: 1, axis: null }),
+      validate: (p) => validateAgainstSchema(params, p),
+    };
+    const { editor } = setup({}, null, schema);
+    expect(editor.create('rev').state.get().activeRefParam).toBe('axis');
+  });
+
+  it('a change that hides the focused param drops the focus', () => {
+    const { editor } = setupExtrudeLike();
+    const session = editor.create('xlike');
+    session.setParam('operation', 'add');
+    session.focusRefParam('targets');
+    expect(fieldOf(session, 'targets')?.active).toBe(true);
+
+    session.setParam('operation', 'new');
+
+    expect(session.state.get().activeRefParam).toBeNull();
+    expect(fieldOf(session, 'targets')).toMatchObject({ hidden: true, active: false });
+  });
+
+  it('focusRefParam of a hidden param throws; an axis param can be focused', () => {
+    const { editor } = setupExtrudeLike();
+    const session = editor.create('xlike');
+    expect(() => {
+      session.focusRefParam('targets');
+    }).toThrow();
+    expect(session.state.get().activeRefParam).toBe('regions');
+
+    session.focusRefParam('axis');
+    expect(session.state.get().activeRefParam).toBe('axis');
+  });
+
+  it('an unchanged field stays the same object, the new fields included', () => {
+    const { editor } = setupExtrudeLike();
+    const session = editor.create('xlike');
+    session.setParam('axis', { kind: 'axis', axis: ORIGIN_AXIS_IDS.x });
+    const before = session.state.get();
+
+    session.setParam('distance', 5);
+
+    const after = session.state.get();
+    expect(fieldOf(session, 'axis')).toBe(before.fields.find((f) => f.name === 'axis'));
+    expect(after.fields.find((f) => f.name === 'targets')).toBe(
+      before.fields.find((f) => f.name === 'targets'),
+    );
+  });
+});
+
+describe('FeatureEditSession.refText (M13)', () => {
+  const sketch = aFeature({
+    id: 's1',
+    type: 'sketch',
+    name: 'Sketch 1',
+    params: { entities: [], constraints: [] },
+  });
+
+  function withAxis(value: unknown) {
+    const { editor } = setupExtrudeLike({ features: [sketch] });
+    const session = editor.create('xlike');
+    session.setParam('axis', value);
+    return session;
+  }
+
+  it('an origin axis shows its label', () => {
+    const session = withAxis({ kind: 'axis', axis: ORIGIN_AXIS_IDS.y });
+    expect(fieldOf(session, 'axis')?.refText).toEqual({ key: 'origin.axis.y', params: {} });
+  });
+
+  it('a sketch entity shows the name of its sketch', () => {
+    const session = withAxis({ kind: 'sketchEntity', sketch: 's1', entity: 'ab' });
+    expect(fieldOf(session, 'axis')?.refText).toEqual({
+      key: 'field.sketchLine',
+      params: { sketch: 'Sketch 1' },
+    });
+  });
+
+  it('a missing sketch or an unknown axis is a missing reference', () => {
+    expect(
+      fieldOf(withAxis({ kind: 'sketchEntity', sketch: 'gone', entity: 'ab' }), 'axis')?.refText,
+    ).toEqual({ key: 'field.missingRef', params: {} });
+    expect(fieldOf(withAxis({ kind: 'axis', axis: 'f9/axis:a' }), 'axis')?.refText).toEqual({
+      key: 'field.missingRef',
+      params: {},
+    });
+  });
+
+  it('null, an invalid value and the other kinds have no text', () => {
+    expect(fieldOf(withAxis(null), 'axis')?.refText).toBeNull();
+    expect(fieldOf(withAxis({ kind: 'axis', axis: 'junk' }), 'axis')?.refText).toBeNull();
+    expect(fieldOf(withAxis('x'), 'axis')?.refText).toBeNull();
+    expect(fieldOf(withAxis(null), 'regions')?.refText).toBeNull();
   });
 });

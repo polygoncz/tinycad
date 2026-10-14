@@ -1,10 +1,11 @@
 // Ring 1 – Regenerator, FeatureBuilder, regeneration state and cache.
 // Public API of regen (spec 07). Everything else in this folder is internal.
 
-export { EMPTY_NAMES, EMPTY_STATE, bodiesOf, planesOf, sketchesOf } from './state';
+export { EMPTY_NAMES, EMPTY_STATE, axesOf, bodiesOf, planesOf, sketchesOf } from './state';
 export type {
   Artifact,
   ArtifactId,
+  AxisArtifact,
   Body,
   FeatureError,
   FeatureStatus,
@@ -22,6 +23,10 @@ export type {
   FeatureBuilder,
   ModelingKernel,
   RefError,
+  ResolvedAxis,
+  ResolvedRegion,
 } from './builder';
+export { applyBodyOperation } from './body-operation';
+export type { BodyOperation } from './body-operation';
 export { createRegenerator } from './regenerator';
 export type { RegenEvents, RegenResult, Regenerator } from './regenerator';

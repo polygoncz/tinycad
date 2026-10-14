@@ -153,7 +153,7 @@ export function createToolManager(deps: {
       refParam = null;
       return;
     }
-    refPick ??= createRefPick(session, deps.ctx.viewport);
+    refPick ??= createRefPick(session, deps.ctx.viewport, deps.ctx.doc);
     // Another param may allow other targets: the old hover must not stay (spec 10).
     if (refParam !== null && refParam !== next) deps.ctx.viewport.highlight.setHover(null);
     refParam = next;

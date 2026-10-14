@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ObservableValue, createSequentialIdGenerator } from '@/core';
-import { ORIGIN_PLANE_IDS, bodyId, createFeatureSchemaRegistry } from '@/document';
+import { ORIGIN_AXIS_IDS, ORIGIN_PLANE_IDS, bodyId, createFeatureSchemaRegistry } from '@/document';
 import type { FeatureId, FeatureInstance } from '@/document';
 import { aFeature } from '@/document/testing';
 import {
@@ -30,11 +30,14 @@ import { cylinderMessages } from './messages';
 import { cylinderTool } from './tool';
 import * as cylinder from '.';
 
-/** The origin planes EMPTY_STATE is seeded with (spec 07); every builder keeps them in front. */
+/** The origin planes and axes EMPTY_STATE is seeded with (spec 07); every builder keeps them in front. */
 const ORIGIN_KEYS: readonly string[] = [
   ORIGIN_PLANE_IDS.xy,
   ORIGIN_PLANE_IDS.xz,
   ORIGIN_PLANE_IDS.yz,
+  ORIGIN_AXIS_IDS.x,
+  ORIGIN_AXIS_IDS.y,
+  ORIGIN_AXIS_IDS.z,
 ];
 
 function aCylinder(

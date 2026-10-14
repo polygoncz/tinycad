@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { ORIGIN_PLANE_IDS } from '@/document';
-import type { FeatureId } from '@/document';
+import { createSequentialIdGenerator } from '@/core';
+import { ORIGIN_PLANE_IDS, createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
+import type { FeatureId, FeatureSchema, ParamSchema } from '@/document';
+import { anOpsSession } from '@/ops/testing';
 import type { BodyId, HighlightTarget, SelectionItem } from '.';
+import { createFeatureEditor } from './feature-editor';
 import { bindSelectionHighlight, createSelectionModel, sameSelectionItem } from './selection';
 import { FakeRegenStatus, FakeViewport } from './testing';
 
@@ -281,5 +284,101 @@ describe('bindSelectionHighlight', () => {
     selection.set([FACE]);
 
     expect(viewport.selection).toEqual([]);
+  });
+});
+
+describe('bindSelectionHighlight with the feature dialog (M13)', () => {
+  const PARAMS: ParamSchema = {
+    mode: {
+      kind: 'enum',
+      label: 'mode',
+      default: 'on',
+      options: [
+        { value: 'on', label: 'on' },
+        { value: 'off', label: 'off' },
+      ],
+    },
+    regions: { kind: 'region', label: 'regions', visibleWhen: (p) => p['mode'] === 'on' },
+    others: { kind: 'region', label: 'others' },
+  };
+  const SCHEMA: FeatureSchema = {
+    type: 'profile',
+    version: 1,
+    label: 'profile',
+    params: PARAMS,
+    defaults: () => ({ mode: 'on', regions: [], others: [] }),
+    validate: (params) => validateAgainstSchema(PARAMS, params),
+  };
+  const region = (sketch: string, name: string) => ({ kind: 'region', sketch, region: name });
+
+  function setupDialog() {
+    const { selection } = setup();
+    const viewport = new FakeViewport();
+    const schemas = createFeatureSchemaRegistry();
+    schemas.register(SCHEMA);
+    const ops = anOpsSession({ schemas });
+    const editor = createFeatureEditor({
+      doc: ops.doc,
+      ops: ops.dispatcher,
+      schemas,
+      ids: createSequentialIdGenerator('new'),
+    });
+    const off = bindSelectionHighlight(selection, viewport.highlight, editor);
+    return { selection, viewport, editor, off };
+  }
+
+  it('adds the regions of visible region params after the selection, in schema order', () => {
+    const { selection, viewport, editor } = setupDialog();
+    selection.set([FACE]);
+    const session = editor.create('profile');
+    expect(viewport.selection).toEqual([{ kind: 'face', body: BODY, faceIndex: 2 }]);
+
+    session.setParams({
+      regions: [region('s1', 'ab,bc'), { kind: 'body', body: BODY }, 'junk'],
+      others: [region('s2', 'k')],
+    });
+
+    expect(viewport.selection).toEqual([
+      { kind: 'face', body: BODY, faceIndex: 2 },
+      { kind: 'sketchRegion', sketch: 's1/sketch', region: 'ab,bc' },
+      { kind: 'sketchRegion', sketch: 's2/sketch', region: 'k' },
+    ]);
+  });
+
+  it('follows a change of the value, a hidden param and the closing of the session', () => {
+    const { viewport, editor } = setupDialog();
+    const session = editor.create('profile');
+    session.setParam('regions', [region('s1', 'a')]);
+    expect(viewport.selection).toEqual([
+      { kind: 'sketchRegion', sketch: 's1/sketch', region: 'a' },
+    ]);
+
+    session.setParam('regions', [region('s1', 'a'), region('s1', 'b')]);
+    expect(viewport.selection).toHaveLength(2);
+
+    session.setParam('mode', 'off');
+    expect(viewport.selection).toEqual([]);
+
+    session.setParam('mode', 'on');
+    expect(viewport.selection).toHaveLength(2);
+
+    session.cancel();
+    expect(viewport.selection).toEqual([]);
+  });
+
+  it('follows the next session and stops after unsubscribing', () => {
+    const { viewport, editor, off } = setupDialog();
+    editor.create('profile').commit();
+    const second = editor.create('profile');
+    second.setParam('others', [region('s3', 'x')]);
+    expect(viewport.selection).toEqual([
+      { kind: 'sketchRegion', sketch: 's3/sketch', region: 'x' },
+    ]);
+
+    off();
+    second.setParam('others', []);
+    expect(viewport.selection).toEqual([
+      { kind: 'sketchRegion', sketch: 's3/sketch', region: 'x' },
+    ]);
   });
 });

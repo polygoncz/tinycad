@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { ORIGIN, ORIGIN_PLANES, ORIGIN_PLANE_IDS, bodyId } from '@/document';
+import {
+  ORIGIN,
+  ORIGIN_AXES,
+  ORIGIN_AXIS_IDS,
+  ORIGIN_PLANES,
+  ORIGIN_PLANE_IDS,
+  bodyId,
+} from '@/document';
 import type { FeatureId } from '@/document';
 import type { ShapeHandle } from '@/kernel';
-import { EMPTY_NAMES, EMPTY_STATE, bodiesOf, planesOf, sketchesOf } from './state';
+import { EMPTY_NAMES, EMPTY_STATE, axesOf, bodiesOf, planesOf, sketchesOf } from './state';
 import type { Artifact, Body, RegenState } from './state';
 import { aSketchArtifact } from './testing';
 
@@ -25,18 +32,37 @@ function aState(...artifacts: Artifact[]): RegenState {
 }
 
 describe('EMPTY_STATE', () => {
-  it('holds the three origin planes in the order xy, xz, yz', () => {
+  it('holds the three origin planes xy, xz, yz, then the three origin axes x, y, z', () => {
     expect([...EMPTY_STATE.artifacts.keys()]).toEqual([
       ORIGIN_PLANE_IDS.xy,
       ORIGIN_PLANE_IDS.xz,
       ORIGIN_PLANE_IDS.yz,
+      ORIGIN_AXIS_IDS.x,
+      ORIGIN_AXIS_IDS.y,
+      ORIGIN_AXIS_IDS.z,
     ]);
   });
 
   it('gives each origin plane the frame of ORIGIN_PLANES and the owner ORIGIN', () => {
-    expect([...EMPTY_STATE.artifacts.values()]).toEqual(
+    expect(planesOf(EMPTY_STATE)).toEqual(
       ORIGIN_PLANES.map(({ id, plane }) => ({ kind: 'plane', id, owner: ORIGIN, plane })),
     );
+  });
+
+  it('gives each origin axis the origin and direction of ORIGIN_AXES and the owner ORIGIN', () => {
+    expect(axesOf(EMPTY_STATE)).toEqual(
+      ORIGIN_AXES.map(({ id, origin, direction }) => ({
+        kind: 'axis',
+        id,
+        owner: ORIGIN,
+        origin,
+        direction,
+      })),
+    );
+    const [x, y, z] = axesOf(EMPTY_STATE);
+    expect(x?.direction).toEqual([1, 0, 0]);
+    expect(y?.direction).toEqual([0, 1, 0]);
+    expect(z?.direction).toEqual([0, 0, 1]);
   });
 
   it('has the frames of spec 12: XY normal +Z, XZ normal -Y, YZ x +Y and normal +X', () => {
@@ -54,6 +80,14 @@ describe('EMPTY_STATE', () => {
       expect(Object.isFrozen(artifact.plane.origin)).toBe(true);
       expect(Object.isFrozen(artifact.plane.xDir)).toBe(true);
       expect(Object.isFrozen(artifact.plane.normal)).toBe(true);
+    }
+  });
+
+  it('is frozen, its axis artifacts deeply', () => {
+    for (const artifact of axesOf(EMPTY_STATE)) {
+      expect(Object.isFrozen(artifact)).toBe(true);
+      expect(Object.isFrozen(artifact.origin)).toBe(true);
+      expect(Object.isFrozen(artifact.direction)).toBe(true);
     }
   });
 
@@ -76,12 +110,13 @@ describe('bodiesOf', () => {
     expect(bodiesOf(state)[0]).toBe(b);
   });
 
-  it('leaves out planes and sketches', () => {
+  it('leaves out planes, axes and sketches', () => {
     const a = aBody('a', 1);
     const b = aBody('b', 2);
     const [xy] = planesOf(EMPTY_STATE);
-    if (xy === undefined) expect.fail('EMPTY_STATE has no planes');
-    const state = aState(xy, a, aSketchArtifact('s', [3 as ShapeHandle]), b);
+    const [x] = axesOf(EMPTY_STATE);
+    if (xy === undefined || x === undefined) expect.fail('EMPTY_STATE has no planes or axes');
+    const state = aState(xy, a, x, aSketchArtifact('s', [3 as ShapeHandle]), b);
     expect(bodiesOf(state)).toEqual([a, b]);
   });
 });
@@ -105,6 +140,18 @@ describe('planesOf', () => {
     const state = aState(yz, aBody('a', 1), aSketchArtifact('s'), xy);
     expect(planesOf(state)).toEqual([yz, xy]);
     expect(planesOf(state)[0]).toBe(yz);
+  });
+});
+
+describe('axesOf', () => {
+  it('gives the axes in the order of the map and leaves out bodies, planes and sketches', () => {
+    const [x, y, z] = axesOf(EMPTY_STATE);
+    if (x === undefined || y === undefined || z === undefined) {
+      expect.fail('EMPTY_STATE has not three axes');
+    }
+    const state = aState(z, aBody('a', 1), ...planesOf(EMPTY_STATE), aSketchArtifact('s'), x);
+    expect(axesOf(state)).toEqual([z, x]);
+    expect(axesOf(state)[0]).toBe(z);
   });
 });
 

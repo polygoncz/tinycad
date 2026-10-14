@@ -9,6 +9,7 @@ describe('interaction public API', () => {
         'ACTION_IDS',
         'ALL_MODES',
         'artifactDrawing',
+        'axisDrawing',
         'createSketchActions',
         'createSketchEditor',
         'createSketchTools',

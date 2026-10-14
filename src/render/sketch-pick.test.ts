@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { betterSketchHit, pickSketch, type SketchHit } from './sketch-pick';
+import type { Plane, Vec2 } from '@/core';
+import type { SketchDrawing, SketchDrawingRegion } from '@/interaction';
+import {
+  betterSketchHit,
+  pickSketch,
+  pickSketchRegion,
+  pointInRegion,
+  type SketchHit,
+} from './sketch-pick';
 
 const f = (...values: number[]): Float32Array => new Float32Array(values);
 
@@ -54,5 +62,126 @@ describe('betterSketchHit', () => {
     expect(betterSketchHit(segment(1), segment(2))).toBe(true);
     expect(betterSketchHit(point(3), point(2))).toBe(false);
     expect(betterSketchHit(point(2), point(2))).toBe(false);
+  });
+});
+
+const square = (x0: number, y0: number, size: number): Vec2[] => [
+  [x0, y0],
+  [x0 + size, y0],
+  [x0 + size, y0 + size],
+  [x0, y0 + size],
+];
+
+/** 10 × 10 square with a 4 × 4 hole in the middle. */
+const framed: SketchDrawingRegion = {
+  id: 'r1',
+  outer: square(0, 0, 10),
+  holes: [square(3, 3, 4)],
+};
+
+describe('pointInRegion', () => {
+  it('is true inside the outer polygon and outside the holes', () => {
+    expect(pointInRegion([1, 1], framed)).toBe(true);
+    expect(pointInRegion([9, 5], framed)).toBe(true);
+  });
+
+  it('is false in a hole', () => {
+    expect(pointInRegion([5, 5], framed)).toBe(false);
+  });
+
+  it('is false outside', () => {
+    expect(pointInRegion([11, 5], framed)).toBe(false);
+    expect(pointInRegion([-1, -1], framed)).toBe(false);
+  });
+
+  it('follows a concave polygon (an L shape)', () => {
+    const l: SketchDrawingRegion = {
+      id: 'l',
+      outer: [
+        [0, 0],
+        [10, 0],
+        [10, 4],
+        [4, 4],
+        [4, 10],
+        [0, 10],
+      ],
+      holes: [],
+    };
+    expect(pointInRegion([2, 8], l)).toBe(true);
+    expect(pointInRegion([8, 2], l)).toBe(true);
+    // The notch of the L.
+    expect(pointInRegion([8, 8], l)).toBe(false);
+  });
+});
+
+const XY: Plane = { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, 0, 1] };
+
+function drawingOn(plane: Plane, regions?: readonly SketchDrawingRegion[]): SketchDrawing {
+  return regions === undefined
+    ? { plane, curves: [], points: [] }
+    : { plane, curves: [], points: [], regions };
+}
+
+/** Looking down -Z from above. */
+const downAt = (x: number, y: number) => ({
+  origin: [x, y, 100] as const,
+  direction: [0, 0, -1] as const,
+});
+
+describe('pickSketchRegion', () => {
+  it('hits a region under the ray with the point on the plane', () => {
+    const drawings = new Map([['f1/sketch', drawingOn(XY, [framed])]]);
+    const hit = pickSketchRegion(drawings, downAt(1, 2));
+    expect(hit).toEqual({ sketch: 'f1/sketch', region: 'r1', point: [1, 2, 0] });
+  });
+
+  it('gives null in a hole and outside the regions', () => {
+    const drawings = new Map([['f1/sketch', drawingOn(XY, [framed])]]);
+    expect(pickSketchRegion(drawings, downAt(5, 5))).toBeNull();
+    expect(pickSketchRegion(drawings, downAt(20, 5))).toBeNull();
+  });
+
+  it('gives null for a ray parallel to the plane', () => {
+    const drawings = new Map([['f1/sketch', drawingOn(XY, [framed])]]);
+    expect(pickSketchRegion(drawings, { origin: [1, 1, 0], direction: [1, 0, 0] })).toBeNull();
+  });
+
+  it('gives the nearest of two drawings along the ray', () => {
+    const lifted: Plane = { ...XY, origin: [0, 0, 20] };
+    const drawings = new Map([
+      ['low', drawingOn(XY, [framed])],
+      ['high', drawingOn(lifted, [{ ...framed, id: 'r2' }])],
+    ]);
+    expect(pickSketchRegion(drawings, downAt(1, 1))).toEqual({
+      sketch: 'high',
+      region: 'r2',
+      point: [1, 1, 20],
+    });
+    // From below the lower one is nearer.
+    expect(
+      pickSketchRegion(drawings, { origin: [1, 1, -100], direction: [0, 0, 1] }),
+    ).toMatchObject({ sketch: 'low', region: 'r1' });
+  });
+
+  it('maps a drawing on the XZ plane through its frame', () => {
+    // XZ: x axis +X, normal -Y, so the local y axis is normal × xDir = +Z.
+    const xz: Plane = { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, -1, 0] };
+    const drawings = new Map([['xz', drawingOn(xz, [framed])]]);
+    const ray = { origin: [1, -50, 2] as const, direction: [0, 1, 0] as const };
+    expect(pickSketchRegion(drawings, ray)).toEqual({
+      sketch: 'xz',
+      region: 'r1',
+      point: [1, 0, 2],
+    });
+    // Local (1, -2) is outside the square.
+    expect(pickSketchRegion(drawings, { ...ray, origin: [1, -50, -2] })).toBeNull();
+  });
+
+  it('skips drawings without regions', () => {
+    const drawings = new Map([
+      ['plain', drawingOn(XY)],
+      ['empty', drawingOn(XY, [])],
+    ]);
+    expect(pickSketchRegion(drawings, downAt(1, 1))).toBeNull();
   });
 });

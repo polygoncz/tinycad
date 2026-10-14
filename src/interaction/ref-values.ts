@@ -2,8 +2,17 @@
 // the view (refPick), the click in the browser (BrowserModel.select) and the chips of the dialog
 // (FieldState.refs). Internal to interaction.
 
-import type { BodyId, BodyRef, DocumentReader } from '@/document';
+import type {
+  AxisRef,
+  BodyId,
+  BodyRef,
+  DocumentReader,
+  FeatureId,
+  SketchEntityRef,
+  SketchRegionRef,
+} from '@/document';
 import { originOfBody, parseBodyId } from '@/document';
+import { parseSketchData } from '@/sketch';
 
 /**
  * Adds the body at the end, or removes it when it is there already. Keeps the order and
@@ -15,6 +24,42 @@ export function toggleBodyRef(value: unknown, body: BodyId): readonly unknown[] 
   if (items.some(isTheBody)) return Object.freeze(items.filter((item) => !isTheBody(item)));
   const ref: BodyRef = Object.freeze({ kind: 'body', body });
   return Object.freeze([...items, ref]);
+}
+
+/**
+ * Adds the region of the sketch at the end, or removes it when it is there already (M13). Keeps
+ * the order and any other items; a value that is not an array counts as empty.
+ */
+export function toggleRegionRef(
+  value: unknown,
+  sketch: FeatureId,
+  region: string,
+): readonly unknown[] {
+  const items: readonly unknown[] = Array.isArray(value) ? value : [];
+  const isTheRegion = (item: unknown): boolean =>
+    isRegionRef(item) && item.sketch === sketch && item.region === region;
+  if (items.some(isTheRegion)) return Object.freeze(items.filter((item) => !isTheRegion(item)));
+  const ref: SketchRegionRef = Object.freeze({ kind: 'region', sketch, region });
+  return Object.freeze([...items, ref]);
+}
+
+/** The reference, or null when the value already is the same reference (M13, a single 'axis'). */
+export function toggleAxisRef(
+  value: unknown,
+  ref: AxisRef | SketchEntityRef,
+): AxisRef | SketchEntityRef | null {
+  return sameAxisRef(value, ref) ? null : ref;
+}
+
+/**
+ * Whether the entity is a line in the data of the sketch feature (M13): the axis of Revolve may be
+ * a line of a sketch. A missing feature or invalid sketch data → false.
+ */
+export function isSketchLine(doc: DocumentReader, sketch: FeatureId, entity: string): boolean {
+  const params: unknown = doc.feature(sketch)?.params;
+  if (!isRecord(params)) return false;
+  const parsed = parseSketchData(params['entities'], params['constraints']);
+  return parsed.ok && parsed.value.entities.some((e) => e.id === entity && e.kind === 'line');
 }
 
 /**
@@ -54,4 +99,21 @@ function isBodyRef(value: unknown): value is { readonly kind: 'body'; readonly b
     value.kind === 'body' &&
     'body' in value
   );
+}
+
+function isRegionRef(
+  value: unknown,
+): value is { readonly kind: 'region'; readonly sketch: unknown; readonly region: unknown } {
+  return isRecord(value) && value['kind'] === 'region';
+}
+
+function sameAxisRef(value: unknown, ref: AxisRef | SketchEntityRef): boolean {
+  if (!isRecord(value) || value['kind'] !== ref.kind) return false;
+  return ref.kind === 'axis'
+    ? value['axis'] === ref.axis
+    : value['sketch'] === ref.sketch && value['entity'] === ref.entity;
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

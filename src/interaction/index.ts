@@ -46,7 +46,13 @@ export { createToolManager } from './tool-manager';
 export type { ToolManager } from './tool-manager';
 export { SELECT_TOOL } from './select-tool';
 export { createFeatureEditor } from './feature-editor';
-export type { EditState, FeatureEditor, FeatureEditSession, FieldState } from './feature-editor';
+export type {
+  EditState,
+  FeatureEditor,
+  FeatureEditSession,
+  FieldState,
+  RefText,
+} from './feature-editor';
 export { createFeatureTreeModel } from './feature-tree';
 export type { FeatureTreeModel, TreeRow, TreeStatus } from './feature-tree';
 export { createBrowserModel } from './browser-model';
@@ -65,6 +71,12 @@ export type {
   SketchSession,
   SketchState,
 } from './sketch-session';
-export { ORIGIN_POINT_ID, artifactDrawing, planeDrawing, toSketchDrawing } from './sketch-drawing';
+export {
+  ORIGIN_POINT_ID,
+  artifactDrawing,
+  axisDrawing,
+  planeDrawing,
+  toSketchDrawing,
+} from './sketch-drawing';
 export { SKETCH_ACTION_IDS, createSketchActions, sketchConstraintActionId } from './sketch-actions';
 export { createSketchTools } from './sketch-tools';

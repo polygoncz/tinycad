@@ -1,17 +1,26 @@
 // Drawings of sketches and planes (spec 09, "Skici"): SketchDrawing → fat lines and points in an
 // own group, drawn over the bodies, coloured per vertex by the style of the entity. A mirror like
 // the overlay, but pickable: pick projects the tessellated drawings into px and asks pickSketch.
+// Regions of a drawing (M13) get a transparent fill each, invisible until the highlight layer
+// hands their hover or selection over; pickRegion intersects the ray with the drawing planes.
 
 import * as THREE from 'three';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
-import { assertNever, type Disposable, type Vec3 } from '@/core';
-import type { PickResult, SketchDrawing, SketchPort, SketchStyle } from '@/interaction';
+import { assertNever, plane as planeMath, type Disposable, type Plane, type Vec3 } from '@/core';
+import type {
+  HighlightTarget,
+  PickResult,
+  SketchDrawing,
+  SketchDrawingRegion,
+  SketchPort,
+  SketchStyle,
+} from '@/interaction';
 import type { ScenePalette } from './palette';
 import { projectSegments, segmentPoint } from './pick-math';
 import { tessellateSketch, type SketchTessellation } from './sketch-drawing';
-import { betterSketchHit, pickSketch, type SketchHit } from './sketch-pick';
+import { betterSketchHit, pickSketch, pickSketchRegion, type SketchHit } from './sketch-pick';
 
 /** Width of sketch curves in CSS px. */
 const LINE_WIDTH_PX = 2;
@@ -19,6 +28,12 @@ const LINE_WIDTH_PX = 2;
 const POINT_SIZE = 7;
 /** After the bodies, the highlight and the overlay. */
 const RENDER_ORDER = 3;
+/** Region fills: under the sketch lines (spec 09, "Skici"). */
+const FILL_RENDER_ORDER = 2;
+const FILL_OPACITY = 0.35;
+
+/** A highlight target of a sketch region (M13). */
+export type RegionTarget = Extract<HighlightTarget, { readonly kind: 'sketchRegion' }>;
 
 /** Drawings of sketches and planes (spec 09, "Skici"): implements SketchPort. */
 export type SketchLayer = SketchPort;
@@ -38,6 +53,17 @@ export interface SketchLayerInternal extends SketchPort, Disposable {
     width: number,
     height: number,
   ): Extract<PickResult, { kind: 'sketchEntity' }> | null;
+  /** The nearest region under the ray across all drawings (M13); null = no hit. */
+  pickRegion(ray: {
+    readonly origin: Vec3;
+    readonly direction: Vec3;
+  }): Extract<PickResult, { kind: 'sketchRegion' }> | null;
+  /**
+   * Hover and selection of regions, from the highlight layer; replaces the whole state. The
+   * selection wins over the hover. Targets of unknown drawings or regions are kept and drawn once
+   * such a drawing is set. Requests a render.
+   */
+  setRegionHighlight(hover: RegionTarget | null, selection: readonly RegionTarget[]): void;
   /** Recolours every drawing (Q072); the caller requests the render. */
   setPalette(palette: ScenePalette): void;
   /** Canvas size in CSS px; fat-line materials need it to size their width in pixels. */
@@ -51,9 +77,12 @@ export interface SketchLayerOptions {
 
 /** One drawing: its tessellation (for picking and recolouring) and its Three.js objects. */
 interface Entry {
+  readonly drawing: SketchDrawing;
   readonly tessellation: SketchTessellation;
   readonly object: THREE.Group;
   readonly geometries: readonly THREE.BufferGeometry[];
+  /** Fill of every region by its id; hidden unless highlighted. */
+  readonly fills: ReadonlyMap<string, THREE.Mesh>;
 }
 
 export function createSketchLayer(options: SketchLayerOptions): SketchLayerInternal {
@@ -75,7 +104,13 @@ export function createSketchLayer(options: SketchLayerOptions): SketchLayerInter
     sizeAttenuation: false,
     depthTest: false,
   });
+  const hoverFill = createFillMaterial(palette.hover);
+  const selectionFill = createFillMaterial(palette.selection);
   const entries = new Map<string, Entry>();
+  /** The drawings by id, for pickSketchRegion. */
+  const drawings = new Map<string, SketchDrawing>();
+  let regionHover: RegionTarget | null = null;
+  let regionSelection: readonly RegionTarget[] = [];
   const scratch = new THREE.Color();
 
   function colorOf(style: SketchStyle): number {
@@ -108,9 +143,22 @@ export function createSketchLayer(options: SketchLayerOptions): SketchLayerInter
     return result;
   }
 
-  function build(tessellation: SketchTessellation): Entry {
+  function build(drawing: SketchDrawing, tessellation: SketchTessellation): Entry {
     const object = new THREE.Group();
     const geometries: THREE.BufferGeometry[] = [];
+    const fills = new Map<string, THREE.Mesh>();
+    const frame = frameMatrix(drawing.plane);
+    for (const region of drawing.regions ?? []) {
+      const geometry = new THREE.ShapeGeometry(regionShape(region));
+      // World coordinates in the geometry: the layer sits at the identity transform.
+      geometry.applyMatrix4(frame);
+      geometries.push(geometry);
+      const fill = new THREE.Mesh(geometry, hoverFill);
+      fill.visible = false;
+      fill.renderOrder = FILL_RENDER_ORDER;
+      fills.set(region.id, fill);
+      object.add(fill);
+    }
     // Empty geometries are left out: fat lines compute bounds from their instances.
     if (tessellation.segmentCurves.length > 0) {
       const geometry = new LineSegmentsGeometry()
@@ -133,11 +181,30 @@ export function createSketchLayer(options: SketchLayerOptions): SketchLayerInter
       points.renderOrder = RENDER_ORDER;
       object.add(points);
     }
-    return { tessellation, object, geometries };
+    return { drawing, tessellation, object, geometries, fills };
+  }
+
+  /** Shows the fill of every highlighted region of the entry in its colour, hides the others. */
+  function paintFills(id: string, entry: Entry): void {
+    for (const [region, fill] of entry.fills) {
+      const is = (target: RegionTarget | null): boolean =>
+        target !== null && target.sketch === id && target.region === region;
+      if (regionSelection.some(is)) {
+        fill.material = selectionFill;
+        fill.visible = true;
+      } else if (is(regionHover)) {
+        fill.material = hoverFill;
+        fill.visible = true;
+      } else {
+        fill.visible = false;
+      }
+    }
   }
 
   function show(id: string, entry: Entry): void {
     entries.set(id, entry);
+    drawings.set(id, entry.drawing);
+    paintFills(id, entry);
     group.add(entry.object);
   }
 
@@ -146,6 +213,7 @@ export function createSketchLayer(options: SketchLayerOptions): SketchLayerInter
     const entry = entries.get(id);
     if (entry === undefined) return false;
     entries.delete(id);
+    drawings.delete(id);
     group.remove(entry.object);
     for (const geometry of entry.geometries) geometry.dispose();
     return true;
@@ -157,7 +225,7 @@ export function createSketchLayer(options: SketchLayerOptions): SketchLayerInter
       // Tessellate first: a throw leaves the previous drawing under id.
       const tessellation = tessellateSketch(drawing);
       drop(id);
-      show(id, build(tessellation));
+      show(id, build(drawing, tessellation));
       requestRender();
     },
     remove(id: string): void {
@@ -206,13 +274,25 @@ export function createSketchLayer(options: SketchLayerOptions): SketchLayerInter
             segmentPoint(tessellation.segments, hit.index, hit.t);
       return { kind: 'sketchEntity', sketch: best.id, entity, point };
     },
+    pickRegion(ray) {
+      const hit = pickSketchRegion(drawings, ray);
+      return hit === null ? null : { kind: 'sketchRegion', ...hit };
+    },
+    setRegionHighlight(hover, selection): void {
+      regionHover = hover;
+      regionSelection = selection;
+      for (const [id, entry] of entries) paintFills(id, entry);
+      requestRender();
+    },
     setPalette(next: ScenePalette): void {
       palette = next;
+      hoverFill.color.setHex(next.hover);
+      selectionFill.color.setHex(next.selection);
       // Rebuilt rather than recoloured in place: replacing the colour attribute of a fat line
       // would leave its old GPU buffer behind. Palette changes are rare.
       for (const [id, entry] of [...entries]) {
         drop(id);
-        show(id, build(entry.tessellation));
+        show(id, build(entry.drawing, entry.tessellation));
       }
     },
     setResolution(width: number, height: number): void {
@@ -222,8 +302,44 @@ export function createSketchLayer(options: SketchLayerOptions): SketchLayerInter
       for (const id of [...entries.keys()]) drop(id);
       lineMaterial.dispose();
       pointMaterial.dispose();
+      hoverFill.dispose();
+      selectionFill.dispose();
     },
   };
+}
+
+function createFillMaterial(color: number): THREE.MeshBasicMaterial {
+  return new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: FILL_OPACITY,
+    // Seen from either side of the sketch plane.
+    side: THREE.DoubleSide,
+    // Over the bodies like the sketch lines (R47); transparent, so it writes no depth.
+    depthTest: false,
+    depthWrite: false,
+  });
+}
+
+/** The region in the 2D coordinates of its plane, holes as paths. */
+function regionShape(region: SketchDrawingRegion): THREE.Shape {
+  const shape = new THREE.Shape(region.outer.map(([x, y]) => new THREE.Vector2(x, y)));
+  for (const hole of region.holes) {
+    shape.holes.push(new THREE.Path(hole.map(([x, y]) => new THREE.Vector2(x, y))));
+  }
+  return shape;
+}
+
+/** Plane coordinates (x, y, 0) → world: columns xDir, yDir, normal, translation origin. */
+function frameMatrix(plane: Plane): THREE.Matrix4 {
+  const yDir = planeMath.yDir(plane);
+  return new THREE.Matrix4()
+    .makeBasis(
+      new THREE.Vector3(...plane.xDir),
+      new THREE.Vector3(...yDir),
+      new THREE.Vector3(...plane.normal),
+    )
+    .setPosition(...plane.origin);
 }
 
 /** Points (x, y, z each) as zero-length segments, so projectSegments projects and clips them. */

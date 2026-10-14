@@ -1,10 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { ORIGIN_PLANE_IDS, bodyId } from '@/document';
-import type { BodyId, BodyRef, FeatureId, PlaneId, PlaneRef } from '@/document';
+import type { Plane } from '@/core';
+import { ORIGIN_AXIS_IDS, ORIGIN_PLANES, ORIGIN_PLANE_IDS, bodyId } from '@/document';
+import type {
+  AxisId,
+  AxisRef,
+  BodyId,
+  BodyRef,
+  FeatureId,
+  PlaneId,
+  PlaneRef,
+  SketchEntityRef,
+  SketchRegionRef,
+} from '@/document';
 import type { ShapeHandle } from '@/kernel';
+import { parseSketchData } from '@/sketch';
+import type { SketchEntity } from '@/sketch';
 import { createFakeKernel } from '@/kernel/testing';
 import { createBuildSession } from './build-context';
-import { EMPTY_NAMES, EMPTY_STATE, planesOf } from './state';
+import { EMPTY_NAMES, EMPTY_STATE, axesOf, planesOf } from './state';
 import type { Artifact, Body, RegenState } from './state';
 import { aSketchArtifact } from './testing';
 
@@ -28,6 +41,56 @@ function aBody(origin: string, shape: number): Body {
 
 function aState(...artifacts: Artifact[]): RegenState {
   return { artifacts: new Map(artifacts.map((a) => [a.id, a])) };
+}
+
+const regionRef = (sketch: string, region: string): SketchRegionRef => ({
+  kind: 'region',
+  sketch: fid(sketch),
+  region,
+});
+const axisRef = (axis: AxisId): AxisRef => ({ kind: 'axis', axis });
+const entityRef = (sketch: string, entity: string): SketchEntityRef => ({
+  kind: 'sketchEntity',
+  sketch: fid(sketch),
+  entity,
+});
+
+/** The origin plane XZ: x = +X, y = normal × xDir = +Z (spec 12). */
+function xzPlane(): Plane {
+  const xz = ORIGIN_PLANES[1];
+  if (xz === undefined) throw new Error('ORIGIN_PLANES has no XZ plane');
+  return xz.plane;
+}
+
+/**
+ * Validated sketch entities: line 'l' from (1, 2) to (1, 5), construction line 'c' from (0, 0)
+ * to (3, 4), circle 'k' and the zero-length line 'z' between two points at (2, 2).
+ */
+function axisEntities(): readonly SketchEntity[] {
+  const r = parseSketchData(
+    [
+      { kind: 'point', id: 'a', x: 1, y: 2 },
+      { kind: 'point', id: 'b', x: 1, y: 5 },
+      { kind: 'line', id: 'l', p1: 'a', p2: 'b' },
+      { kind: 'point', id: 'o', x: 0, y: 0 },
+      { kind: 'point', id: 'e', x: 3, y: 4 },
+      { kind: 'line', id: 'c', p1: 'o', p2: 'e', construction: true },
+      { kind: 'circle', id: 'k', center: 'o', radius: 2 },
+      { kind: 'point', id: 'z1', x: 2, y: 2 },
+      { kind: 'point', id: 'z2', x: 2, y: 2 },
+      { kind: 'line', id: 'z', p1: 'z1', p2: 'z2' },
+    ],
+    [],
+  );
+  if (!r.ok) throw new Error(`invalid test sketch: ${JSON.stringify(r.error)}`);
+  return r.value.entities;
+}
+
+function expectVec(actual: readonly number[] | undefined, expected: readonly number[]): void {
+  expect(actual).toHaveLength(expected.length);
+  expected.forEach((v, i) => {
+    expect(actual?.[i]).toBeCloseTo(v, 12);
+  });
 }
 
 function setup(state: RegenState = EMPTY_STATE) {
@@ -150,5 +213,184 @@ describe('createBuildSession', () => {
     session.ctx.warn('first');
     session.ctx.warn('second');
     expect(session.warnings()).toBe('first\nsecond');
+  });
+
+  describe('resolveRegions', () => {
+    const f1 = 1 as ShapeHandle;
+    const f2 = 2 as ShapeHandle;
+    const f3 = 3 as ShapeHandle;
+
+    it('resolves a region to its sketch artifact and face', () => {
+      const s1 = aSketchArtifact('s1', [f1, f2]);
+      const { session } = setup(aState(...planesOf(EMPTY_STATE), s1));
+      const r1 = regionRef('s1', 'r2');
+      const result = session.ctx.resolveRegions([r1]);
+      expect(result).toEqual({ ok: true, value: [{ ref: r1, sketch: s1, face: f2 }] });
+      expect(result.ok && result.value[0]?.sketch).toBe(s1);
+      expect(result.ok && result.value[0]?.ref).toBe(r1);
+    });
+
+    it('resolves regions of two sketches in the order of refs', () => {
+      const s1 = aSketchArtifact('s1', [f1]);
+      const s2 = aSketchArtifact('s2', [f2, f3]);
+      const { session } = setup(aState(s1, s2));
+      const a = regionRef('s2', 'r2');
+      const b = regionRef('s1', 'r1');
+      expect(session.ctx.resolveRegions([a, b])).toEqual({
+        ok: true,
+        value: [
+          { ref: a, sketch: s2, face: f3 },
+          { ref: b, sketch: s1, face: f1 },
+        ],
+      });
+    });
+
+    it('resolves an empty list to an empty array', () => {
+      expect(setup().session.ctx.resolveRegions([])).toEqual({ ok: true, value: [] });
+    });
+
+    it('returns the first missing sketch as RefError', () => {
+      const { session } = setup(aState(aSketchArtifact('s1', [f1])));
+      const missing = regionRef('s9', 'r1');
+      const result = session.ctx.resolveRegions([regionRef('s1', 'r1'), missing]);
+      expect(result).toEqual({
+        ok: false,
+        error: { ref: missing, message: "Sketch 's9' not found" },
+      });
+      expect(!result.ok && result.error.ref).toBe(missing);
+    });
+
+    it('returns a missing region name as RefError', () => {
+      const { session } = setup(aState(aSketchArtifact('s1', [f1])));
+      const missing = regionRef('s1', 'r7');
+      expect(session.ctx.resolveRegions([missing])).toEqual({
+        ok: false,
+        error: { ref: missing, message: "Region 'r7' of sketch 's1' not found" },
+      });
+    });
+
+    it('returns a RefError when the sketch id holds an artifact of another kind', () => {
+      // A body stored under the sketch id of 'f1': the kind check rejects it.
+      const body = aBody('f1', 1);
+      const sketchIdOfF1 = aSketchArtifact('f1').id;
+      const { session } = setup({ artifacts: new Map([[sketchIdOfF1, body]]) });
+      const notSketch = regionRef('f1', 'r1');
+      expect(session.ctx.resolveRegions([notSketch])).toEqual({
+        ok: false,
+        error: { ref: notSketch, message: "Sketch 'f1' not found" },
+      });
+    });
+
+    it('does not take the body of the feature for its sketch', () => {
+      const { session } = setup(aState(aBody('f1', 1)));
+      const r = regionRef('f1', 'r1');
+      expect(session.ctx.resolveRegions([r])).toEqual({
+        ok: false,
+        error: { ref: r, message: "Sketch 'f1' not found" },
+      });
+    });
+  });
+
+  describe('resolveAxis', () => {
+    function sketchOnXz(): RegenState {
+      return aState(
+        ...planesOf(EMPTY_STATE),
+        ...axesOf(EMPTY_STATE),
+        aSketchArtifact('s1', [], { plane: xzPlane(), entities: axisEntities() }),
+      );
+    }
+
+    it('resolves the origin axis Z', () => {
+      const { session } = setup();
+      expect(session.ctx.resolveAxis(axisRef(ORIGIN_AXIS_IDS.z))).toEqual({
+        ok: true,
+        value: { origin: [0, 0, 0], direction: [0, 0, 1] },
+      });
+    });
+
+    it('returns a missing axis as RefError', () => {
+      const { session } = setup();
+      // An id in the shape of an axis id that no artifact has.
+      const missing = axisRef('origin/axis:w' as AxisId);
+      const result = session.ctx.resolveAxis(missing);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.ref).toBe(missing);
+      expect(result.error.message).toMatch(/origin\/axis:w/);
+    });
+
+    it('returns a RefError for the id of a plane given as an axis', () => {
+      const { session } = setup();
+      const notAxis = axisRef(ORIGIN_PLANE_IDS.xy as string as AxisId);
+      const result = session.ctx.resolveAxis(notAxis);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.ref).toBe(notAxis);
+      expect(result.error.message).toMatch(/origin\/plane:xy/);
+    });
+
+    it('turns a sketch line on the plane XZ into world coordinates', () => {
+      const { session } = setup(sketchOnXz());
+      const result = session.ctx.resolveAxis(entityRef('s1', 'l'));
+      if (!result.ok) expect.fail(result.error.message);
+      // (1, 2) and (1, 5) in XZ are the world points (1, 0, 2) and (1, 0, 5).
+      expectVec(result.value.origin, [1, 0, 2]);
+      expectVec(result.value.direction, [0, 0, 1]);
+    });
+
+    it('resolves a construction line with a unit direction', () => {
+      const { session } = setup(sketchOnXz());
+      const result = session.ctx.resolveAxis(entityRef('s1', 'c'));
+      if (!result.ok) expect.fail(result.error.message);
+      expectVec(result.value.origin, [0, 0, 0]);
+      expectVec(result.value.direction, [0.6, 0, 0.8]);
+    });
+
+    it('returns a RefError for a circle', () => {
+      const { session } = setup(sketchOnXz());
+      const circle = entityRef('s1', 'k');
+      expect(session.ctx.resolveAxis(circle)).toEqual({
+        ok: false,
+        error: { ref: circle, message: "Sketch entity 'k' is not a line" },
+      });
+    });
+
+    it('returns a RefError for a point', () => {
+      const { session } = setup(sketchOnXz());
+      const point = entityRef('s1', 'a');
+      expect(session.ctx.resolveAxis(point)).toEqual({
+        ok: false,
+        error: { ref: point, message: "Sketch entity 'a' is not a line" },
+      });
+    });
+
+    it('returns a missing entity as RefError', () => {
+      const { session } = setup(sketchOnXz());
+      const missing = entityRef('s1', 'q');
+      const result = session.ctx.resolveAxis(missing);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.ref).toBe(missing);
+      expect(result.error.message).toMatch(/'q'/);
+    });
+
+    it('returns a missing sketch as RefError', () => {
+      const { session } = setup(sketchOnXz());
+      const missing = entityRef('s9', 'l');
+      expect(session.ctx.resolveAxis(missing)).toEqual({
+        ok: false,
+        error: { ref: missing, message: "Sketch 's9' not found" },
+      });
+    });
+
+    it('returns a RefError for a line of zero length', () => {
+      const { session } = setup(sketchOnXz());
+      const zero = entityRef('s1', 'z');
+      const result = session.ctx.resolveAxis(zero);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.ref).toBe(zero);
+      expect(result.error.message).toMatch(/zero length/);
+    });
   });
 });

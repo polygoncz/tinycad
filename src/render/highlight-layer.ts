@@ -2,14 +2,15 @@
 // interaction holds (Q058): every call replaces the whole state. Each drawn target is a small own
 // copy of the face's triangles or the edge's segments (spec 09, "Reprezentace tělesa"), so
 // disposing it never touches the body's buffers. Not part of picking: the picker reads only the
-// meshes of BodyLayer.views.
+// meshes of BodyLayer.views. Sketch regions (M13) are not drawn here: their targets are handed
+// over to the sketch layer, which owns the region fills.
 
 import * as THREE from 'three';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import type { Disposable } from '@/core';
-import type { BodyId, HighlightPort } from '@/interaction';
+import type { BodyId, HighlightPort, HighlightTarget } from '@/interaction';
 import type { MeshData } from '@/kernel';
 import type { BodyView } from './body-view';
 import {
@@ -22,6 +23,7 @@ import {
 } from './highlight-targets';
 import { edgeSegments, faceTriangles } from './mesh-index';
 import type { ScenePalette } from './palette';
+import type { RegionTarget, SketchLayerInternal } from './sketch-layer';
 
 const FACE_OPACITY = 0.45;
 /** After the bodies (renderOrder 0), so an equal-depth highlight edge wins over the body edge. */
@@ -50,6 +52,8 @@ export interface HighlightLayerOptions {
   readonly views: ReadonlyMap<BodyId, BodyView>;
   readonly requestRender: () => void;
   readonly palette: ScenePalette;
+  /** Receives the sketch region targets (M13); none = they are dropped. */
+  readonly regions?: Pick<SketchLayerInternal, 'setRegionHighlight'>;
 }
 
 /** Face and edge material of one highlight kind (hover or selection). */
@@ -65,9 +69,12 @@ export function createHighlightLayer(options: HighlightLayerOptions): HighlightL
   const selectionLook = createLook(options.palette.selection);
   /** Geometries of the drawn objects; all replaced on every change. */
   let geometries: THREE.BufferGeometry[] = [];
-  /** Only faces and edges: sketch entities (M12) and regions (M13, Ú5) are dropped like invalid targets. */
+  /** Only faces and edges: sketch entities (M12) are dropped like invalid targets. */
   let hover: BodyTarget | null = null;
   let selection: readonly BodyTarget[] = [];
+  /** Sketch regions (M13), mirrored to options.regions. */
+  let regionHover: RegionTarget | null = null;
+  let regionSelection: readonly RegionTarget[] = [];
   let disposed = false;
 
   const meshOf = (body: BodyId): MeshData | undefined => views.get(body)?.mesh;
@@ -117,12 +124,22 @@ export function createHighlightLayer(options: HighlightLayerOptions): HighlightL
   return {
     group,
     setHover(target) {
+      const nextRegion = target !== null && isRegion(target) ? target : null;
+      if (!sameHover(nextRegion, regionHover)) {
+        regionHover = nextRegion;
+        options.regions?.setRegionHighlight(regionHover, regionSelection);
+      }
       const next = target !== null && validTarget(target, meshOf) ? target : null;
       if (sameHover(next, hover)) return;
       hover = next;
       redraw();
     },
     setSelection(targets) {
+      const nextRegions = targets.filter(isRegion);
+      if (!sameSelection(nextRegions, regionSelection)) {
+        regionSelection = nextRegions;
+        options.regions?.setRegionHighlight(regionHover, regionSelection);
+      }
       const next = validTargets(targets, meshOf);
       if (sameSelection(next, selection)) return;
       selection = next;
@@ -152,6 +169,10 @@ export function createHighlightLayer(options: HighlightLayerOptions): HighlightL
       }
     },
   };
+}
+
+function isRegion(target: HighlightTarget): target is RegionTarget {
+  return target.kind === 'sketchRegion';
 }
 
 function recolor(look: Look, color: number): void {

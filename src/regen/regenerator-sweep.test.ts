@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { ORIGIN_PLANE_IDS, createFeatureSchemaRegistry, sketchId } from '@/document';
+import {
+  ORIGIN_AXIS_IDS,
+  ORIGIN_PLANE_IDS,
+  createFeatureSchemaRegistry,
+  sketchId,
+} from '@/document';
 import type { FeatureInstance, PartStudioData } from '@/document';
 import { aFeature } from '@/document/testing';
 import type { DefaultParams } from '@/document/testing';
@@ -182,7 +187,7 @@ describe('Regenerator mark & sweep', () => {
     expect(await kernel.liveHandleCount()).toBe(3);
   });
 
-  it('marks the shapes of body artifacts; planes and a sketch without regions add nothing', async () => {
+  it('marks the shapes of body artifacts; planes, axes and a sketch without regions add nothing', async () => {
     const setup = aRegenSetup();
     const { regenerator, kernel } = setup;
     const other = aSketchArtifact('m');
@@ -199,6 +204,9 @@ describe('Regenerator mark & sweep', () => {
       ORIGIN_PLANE_IDS.xy,
       ORIGIN_PLANE_IDS.xz,
       ORIGIN_PLANE_IDS.yz,
+      ORIGIN_AXIS_IDS.x,
+      ORIGIN_AXIS_IDS.y,
+      ORIGIN_AXIS_IDS.z,
       'b/body',
       'a/body',
       'm/sketch',

@@ -1,15 +1,23 @@
 import { createRegistry } from '@/core';
-import type { Registry, Result } from '@/core';
-import type { BodyRef, FeatureInstance, PlaneRef } from '@/document';
+import type { Registry, Result, Vec3 } from '@/core';
+import type {
+  AxisRef,
+  BodyRef,
+  FeatureInstance,
+  PlaneRef,
+  SketchEntityRef,
+  SketchRegionRef,
+} from '@/document';
 import type {
   BooleanOps,
   PrimitiveOps,
   QueryOps,
+  ShapeHandle,
   SketchOps,
   SweepOps,
   TransformOps,
 } from '@/kernel';
-import type { Body, FeatureError, PlaneArtifact, RegenState } from './state';
+import type { Body, FeatureError, PlaneArtifact, RegenState, SketchArtifact } from './state';
 
 // The behaviour half of a feature type (ADR 0004): turns params into geometry.
 // The data half (params, validation) is FeatureSchema in document.
@@ -21,12 +29,26 @@ export interface BuildInput<P> {
 }
 
 /**
- * First reference resolveBodies or resolvePlanes could not find (Q044). PlaneRef since M12; M14
- * widens ref to TopoRef.
+ * First reference a resolve method of BuildContext could not find (Q044). PlaneRef since M12;
+ * region, axis and sketch entity since M13; M14 widens ref to TopoRef.
  */
 export interface RefError {
-  readonly ref: BodyRef | PlaneRef;
+  readonly ref: BodyRef | PlaneRef | SketchRegionRef | AxisRef | SketchEntityRef;
   readonly message: string;
+}
+
+/** A resolved region of a sketch (M13): its sketch artifact and its planar face in the kernel. */
+export interface ResolvedRegion {
+  readonly ref: SketchRegionRef;
+  readonly sketch: SketchArtifact;
+  readonly face: ShapeHandle;
+}
+
+/** A resolved axis in world coordinates (M13). */
+export interface ResolvedAxis {
+  readonly origin: Vec3;
+  /** Unit direction. */
+  readonly direction: Vec3;
 }
 
 /**
@@ -66,6 +88,17 @@ export interface BuildContext {
    * the first unresolved reference gives err. M12.
    */
   resolvePlanes(refs: readonly PlaneRef[]): Result<PlaneArtifact[], RefError>;
+  /**
+   * Regions of sketches (M13): the artifact sketchId(ref.sketch) of kind sketch and the name in
+   * its regions; the first unresolved reference gives err.
+   */
+  resolveRegions(refs: readonly SketchRegionRef[]): Result<ResolvedRegion[], RefError>;
+  /**
+   * An axis (M13): an artifact of kind axis, or a line of a sketch (construction too) turned into
+   * world coordinates through the plane of the sketch. Another entity kind or a zero-length
+   * line gives err.
+   */
+  resolveAxis(ref: AxisRef | SketchEntityRef): Result<ResolvedAxis, RefError>;
   /** Several calls are joined with '\n' into one 'warning' status (Q045). */
   warn(message: string): void;
 }

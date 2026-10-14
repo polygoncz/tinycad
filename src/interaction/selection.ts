@@ -7,6 +7,8 @@
 import { ObservableValue, assertNever } from '@/core';
 import type { Observable, Unsubscribe } from '@/core';
 import type { BodyId, FeatureId, PlaneId } from '@/document';
+import { isParamVisible, sketchId } from '@/document';
+import type { FeatureEditor, FeatureEditSession } from './feature-editor';
 import type { RegenStatusPort } from './regen-status-port';
 import type { HighlightPort, HighlightTarget } from './viewport-port';
 
@@ -94,16 +96,67 @@ export function createSelectionModel(deps: { regen: RegenStatusPort }): Selectio
   };
 }
 
-/** Mirrors the face/edge items of the selection into the highlight; returns the unbinding. */
+/**
+ * Mirrors the face/edge items of the selection into the highlight; returns the unbinding. With
+ * `editor` (M13, R76) the regions of the visible region params of the open session follow, in the
+ * order of the schema, as { kind: 'sketchRegion', sketch: sketchId(ref.sketch), region }: the
+ * drawing of a regenerated sketch has the id of its artifact.
+ */
 export function bindSelectionHighlight(
   selection: SelectionModel,
   highlight: HighlightPort,
+  editor?: Pick<FeatureEditor, 'current'>,
 ): Unsubscribe {
   const sync = (): void => {
-    highlight.setSelection(selection.items.get().flatMap(toHighlightTarget));
+    const session = editor?.current.get() ?? null;
+    highlight.setSelection([
+      ...selection.items.get().flatMap(toHighlightTarget),
+      ...(session === null ? [] : regionTargetsOf(session)),
+    ]);
   };
-  sync();
-  return selection.items.subscribe(sync);
+
+  let unsubscribeSession: Unsubscribe | null = null;
+  const followSession = (): void => {
+    unsubscribeSession?.();
+    const session = editor?.current.get() ?? null;
+    unsubscribeSession = session === null ? null : session.state.subscribe(sync);
+    sync();
+  };
+
+  const unsubscribeItems = selection.items.subscribe(sync);
+  const unsubscribeEditor = editor?.current.subscribe(followSession);
+  followSession();
+  return () => {
+    unsubscribeItems();
+    unsubscribeEditor?.();
+    unsubscribeSession?.();
+    unsubscribeSession = null;
+  };
+}
+
+/** The regions in the values of the visible region params of an open session. */
+function regionTargetsOf(session: FeatureEditSession): HighlightTarget[] {
+  const { open, params } = session.state.get();
+  if (!open) return [];
+  return Object.entries(session.schema.params).flatMap(([name, spec]) =>
+    spec.kind === 'region' && isParamVisible(spec, params) ? regionTargets(params[name]) : [],
+  );
+}
+
+/** Region references of an unchecked value; items of another shape are skipped. */
+function regionTargets(value: unknown): HighlightTarget[] {
+  const items: readonly unknown[] = Array.isArray(value) ? value : [];
+  return items.flatMap((item): HighlightTarget[] => {
+    if (typeof item !== 'object' || item === null) return [];
+    const ref: { readonly kind?: unknown; readonly sketch?: unknown; readonly region?: unknown } =
+      item;
+    const { kind, sketch, region } = ref;
+    // sketchId throws for an owner with '/'; such a value is invalid data, not an error.
+    if (kind !== 'region' || typeof sketch !== 'string' || typeof region !== 'string') return [];
+    if (sketch.length === 0 || sketch.includes('/')) return [];
+    // A FeatureId only names the owner of the artifact id here, it is not looked up.
+    return [{ kind: 'sketchRegion', sketch: sketchId(sketch as FeatureId), region }];
+  });
 }
 
 function sameItems(a: readonly SelectionItem[], b: readonly SelectionItem[]): boolean {

@@ -137,7 +137,17 @@ export function createViewport(deps: {
   scene.add(layer.group);
   // After the body layer, so they are disposed before it; rebuild after dispose is a no-op.
   const highlightLayer = lifetime.add(
-    createHighlightLayer({ views: layer.views, requestRender: scheduleFrame, palette }),
+    createHighlightLayer({
+      views: layer.views,
+      requestRender: scheduleFrame,
+      palette,
+      // The sketch layer is created below; the highlight is first set only after construction.
+      regions: {
+        setRegionHighlight: (hover, selection) => {
+          sketchLayer.setRegionHighlight(hover, selection);
+        },
+      },
+    }),
   );
   scene.add(highlightLayer.group);
   const overlayLayer = lifetime.add(createOverlayLayer({ requestRender: scheduleFrame, palette }));
@@ -165,6 +175,26 @@ export function createViewport(deps: {
     renderer.clear();
     renderer.render(scene, rig.camera);
     helpers.drawAxes(renderer, rig.camera);
+  }
+
+  /** Ray through (x, y) CSS px of a canvas of width × height CSS px (both > 0). */
+  function rayAt(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ): { origin: Vec3; direction: Vec3 } {
+    const cam = rig.camera;
+    cam.updateMatrixWorld();
+    // Orthographic: the origin is on the near plane (NDC z = -1), the direction is the view
+    // direction for the whole canvas (spec 09, "Picking" point 3).
+    const ndc = toNdc(x, y, width, height);
+    const origin = new THREE.Vector3(ndc.x, ndc.y, -1).unproject(cam);
+    const direction = new THREE.Vector3(0, 0, -1).transformDirection(cam.matrixWorld);
+    return {
+      origin: [origin.x, origin.y, origin.z],
+      direction: [direction.x, direction.y, direction.z],
+    };
   }
 
   function assertAlive(): void {
@@ -388,8 +418,11 @@ export function createViewport(deps: {
         const hit = sketchLayer.pick(rig.camera, x, y, clientWidth, clientHeight);
         if (hit !== null) return hit;
       }
-      // 'sketchRegion' (M13) is not picked yet: regions come with Ú5, so a filter with only
-      // it gives null through the picker.
+      // Then regions, also without occlusion (spec 09, "Skici": sketchEntity > sketchRegion).
+      if (filter?.includes('sketchRegion') === true && clientWidth > 0 && clientHeight > 0) {
+        const hit = sketchLayer.pickRegion(rayAt(x, y, clientWidth, clientHeight));
+        if (hit !== null) return hit;
+      }
       return picker.pick(rig.camera, x, y, clientWidth, clientHeight, filter);
     },
     screenToRay(x: number, y: number): { origin: Vec3; direction: Vec3 } {
@@ -398,17 +431,7 @@ export function createViewport(deps: {
       const width = mounted.canvas.clientWidth;
       const height = mounted.canvas.clientHeight;
       assert(width > 0 && height > 0, 'screenToRay needs a canvas with a size');
-      const cam = rig.camera;
-      cam.updateMatrixWorld();
-      // Orthographic: the origin is on the near plane (NDC z = -1), the direction is the view
-      // direction for the whole canvas (spec 09, "Picking" point 3).
-      const ndc = toNdc(x, y, width, height);
-      const origin = new THREE.Vector3(ndc.x, ndc.y, -1).unproject(cam);
-      const direction = new THREE.Vector3(0, 0, -1).transformDirection(cam.matrixWorld);
-      return {
-        origin: [origin.x, origin.y, origin.z],
-        direction: [direction.x, direction.y, direction.z],
-      };
+      return rayAt(x, y, width, height);
     },
     bodies,
     highlight,

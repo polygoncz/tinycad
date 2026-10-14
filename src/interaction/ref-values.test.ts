@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { bodyId } from '@/document';
-import type { FeatureId } from '@/document';
+import { ORIGIN_AXIS_IDS, bodyId } from '@/document';
+import type { AxisRef, FeatureId, SketchEntityRef } from '@/document';
 import { aDocument, aFeature } from '@/document/testing';
-import { bodyOfRef, bodyRefLabel } from './ref-values';
+import { rectangleData } from '@/sketch/testing';
+import {
+  bodyOfRef,
+  bodyRefLabel,
+  isSketchLine,
+  toggleAxisRef,
+  toggleRegionRef,
+} from './ref-values';
 
 const fid = (id: string): FeatureId => id as FeatureId; // test ids are trusted
 
@@ -64,5 +71,75 @@ describe('bodyRefLabel', () => {
     doc.removeFeature(fid('f3'));
     expect(bodyRefLabel(doc, B3)).toBeNull();
     expect(bodyRefLabel(doc, bodyId(fid('nope')))).toBeNull();
+  });
+});
+
+describe('toggleRegionRef (M13)', () => {
+  const region = (sketch: string, name: string) => ({ kind: 'region', sketch, region: name });
+
+  it('adds the region at the end as a frozen reference', () => {
+    const next = toggleRegionRef([region('s1', 'ab')], fid('s1'), 'cd');
+    expect(next).toEqual([region('s1', 'ab'), region('s1', 'cd')]);
+    expect(Object.isFrozen(next)).toBe(true);
+    expect(Object.isFrozen(next[1])).toBe(true);
+  });
+
+  it('removes the same sketch and region, keeps the rest in order', () => {
+    const value = [region('s1', 'ab'), region('s2', 'ab'), { kind: 'body', body: B1 }];
+    expect(toggleRegionRef(value, fid('s1'), 'ab')).toEqual([
+      region('s2', 'ab'),
+      { kind: 'body', body: B1 },
+    ]);
+  });
+
+  it('a value that is not an array counts as empty', () => {
+    expect(toggleRegionRef(null, fid('s1'), 'ab')).toEqual([region('s1', 'ab')]);
+  });
+});
+
+describe('toggleAxisRef (M13)', () => {
+  const x: AxisRef = { kind: 'axis', axis: ORIGIN_AXIS_IDS.x };
+  const line: SketchEntityRef = { kind: 'sketchEntity', sketch: fid('s1'), entity: 'ab' };
+
+  it('sets the reference when the value is empty or another one', () => {
+    expect(toggleAxisRef(null, x)).toBe(x);
+    expect(toggleAxisRef(line, x)).toBe(x);
+    expect(toggleAxisRef({ kind: 'axis', axis: ORIGIN_AXIS_IDS.y }, x)).toBe(x);
+    expect(toggleAxisRef({ kind: 'sketchEntity', sketch: 's1', entity: 'bc' }, line)).toBe(line);
+  });
+
+  it('the same reference again clears the value', () => {
+    expect(toggleAxisRef({ kind: 'axis', axis: ORIGIN_AXIS_IDS.x }, x)).toBeNull();
+    expect(toggleAxisRef({ kind: 'sketchEntity', sketch: 's1', entity: 'ab' }, line)).toBeNull();
+  });
+});
+
+describe('isSketchLine (M13)', () => {
+  const rect = rectangleData();
+  const withCircle = {
+    entities: [
+      ...rect.entities,
+      { kind: 'point', id: 'o', x: 5, y: 2 },
+      { kind: 'circle', id: 'k', center: 'o', radius: 1 },
+    ],
+    constraints: rect.constraints,
+  };
+  const doc = aDocument({
+    features: [
+      aFeature({ id: 's1', type: 'sketch', name: 'Sketch 1', params: withCircle }),
+      aFeature({ id: 'f1', name: 'Box 1' }),
+    ],
+  });
+
+  it('true for a line of the sketch data', () => {
+    expect(isSketchLine(doc, fid('s1'), 'ab')).toBe(true);
+  });
+
+  it('false for a circle, a point, an unknown entity, a missing or a non-sketch feature', () => {
+    expect(isSketchLine(doc, fid('s1'), 'k')).toBe(false);
+    expect(isSketchLine(doc, fid('s1'), 'a')).toBe(false);
+    expect(isSketchLine(doc, fid('s1'), 'nope')).toBe(false);
+    expect(isSketchLine(doc, fid('gone'), 'ab')).toBe(false);
+    expect(isSketchLine(doc, fid('f1'), 'ab')).toBe(false);
   });
 });

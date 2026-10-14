@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ORIGIN_PLANE_IDS, bodyId, createFeatureSchemaRegistry } from '@/document';
+import { ORIGIN_AXIS_IDS, ORIGIN_PLANE_IDS, bodyId, createFeatureSchemaRegistry } from '@/document';
 import type { FeatureId, FeatureInstance, ParamIssue, PartStudioData } from '@/document';
 import { aFeature } from '@/document/testing';
 import { createFakeKernel } from '@/kernel/testing';
@@ -37,8 +37,15 @@ function setup(opts: { now?: () => number } = {}) {
 }
 
 /** Ids of the bodies of the final state, in map order. */
-/** Ids of the origin planes, the first artifacts of every state (EMPTY_STATE seeds them). */
-const ORIGIN_IDS = [ORIGIN_PLANE_IDS.xy, ORIGIN_PLANE_IDS.xz, ORIGIN_PLANE_IDS.yz];
+/** Ids of the origin planes and axes, the first artifacts of every state (EMPTY_STATE seeds them). */
+const ORIGIN_IDS = [
+  ORIGIN_PLANE_IDS.xy,
+  ORIGIN_PLANE_IDS.xz,
+  ORIGIN_PLANE_IDS.yz,
+  ORIGIN_AXIS_IDS.x,
+  ORIGIN_AXIS_IDS.y,
+  ORIGIN_AXIS_IDS.z,
+];
 
 function bodyIds(result: RegenResult): string[] {
   return bodiesOf(result.finalState).map((b) => b.id);

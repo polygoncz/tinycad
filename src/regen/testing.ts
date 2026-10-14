@@ -3,6 +3,7 @@
 // feature lists and results. dependency-cruiser allows importing it only from *.test.ts.
 
 import { expect } from 'vitest';
+import type { Plane } from '@/core';
 import { ORIGIN_PLANES, bodyId, createFeatureSchemaRegistry, sketchId } from '@/document';
 import type {
   FeatureId,
@@ -15,6 +16,7 @@ import type {
 import { aFeature } from '@/document/testing';
 import type { DefaultParams } from '@/document/testing';
 import type { ShapeHandle } from '@/kernel';
+import type { SketchEntity } from '@/sketch';
 import { createFakeKernel } from '@/kernel/testing';
 import type { FakeKernel } from '@/kernel/testing';
 import { createBuildSession } from './build-context';
@@ -78,11 +80,15 @@ export const buildCube: FeatureBuilder['build'] = async ({ feature, state }, { k
 };
 
 /**
- * The sketch artifact of the feature `owner` on the origin plane XY, without entities, with the
- * `faces` as regions 'r1', 'r2', … (deeply frozen like the output of a builder). Code that reads
- * bodies must skip it.
+ * The sketch artifact of the feature `owner`, by default on the origin plane XY and without
+ * entities, with the `faces` as regions 'r1', 'r2', … (deeply frozen like the output of a
+ * builder). Code that reads bodies must skip it.
  */
-export function aSketchArtifact(owner: string, faces: readonly ShapeHandle[] = []): SketchArtifact {
+export function aSketchArtifact(
+  owner: string,
+  faces: readonly ShapeHandle[] = [],
+  opts: { readonly plane?: Plane; readonly entities?: readonly SketchEntity[] } = {},
+): SketchArtifact {
   // Feature ids in tests are plain strings; the id is minted by sketchId like in a builder.
   const feature = owner as FeatureId;
   const xy = ORIGIN_PLANES[0];
@@ -91,8 +97,8 @@ export function aSketchArtifact(owner: string, faces: readonly ShapeHandle[] = [
     kind: 'sketch',
     id: sketchId(feature),
     owner: feature,
-    plane: xy.plane,
-    entities: Object.freeze([]),
+    plane: opts.plane ?? xy.plane,
+    entities: Object.freeze([...(opts.entities ?? [])]),
     regions: new Map(faces.map((face, i) => [`r${String(i + 1)}`, face])),
   });
 }
@@ -118,7 +124,8 @@ export function result(r: RegenResult | 'superseded'): RegenResult {
 
 /**
  * The BuildContext the Regenerator gives a builder: the tracked `kernel` (its owned set stays
- * inside), resolveBodies and resolvePlanes over `state` and a warn whose messages are dropped.
+ * inside), resolveBodies, resolvePlanes, resolveRegions and resolveAxis over `state` and a warn
+ * whose messages are dropped.
  */
 export function aBuildContext(
   kernel: ModelingKernel,

@@ -1,10 +1,18 @@
-import { err, ok } from '@/core';
-import type { Result } from '@/core';
-import type { BodyRef, PlaneRef } from '@/document';
+import { EPSILON, err, ok, plane, vec3 } from '@/core';
+import type { Result, Vec2 } from '@/core';
+import { sketchId } from '@/document';
+import type { AxisRef, BodyRef, PlaneRef, SketchEntityRef, SketchRegionRef } from '@/document';
 import type { ShapeHandle } from '@/kernel';
-import type { BuildContext, ModelingKernel, RefError } from './builder';
-import { isBody, isPlane } from './state';
-import type { Body, PlaneArtifact, RegenState } from './state';
+import type { SketchEntity } from '@/sketch';
+import type {
+  BuildContext,
+  ModelingKernel,
+  RefError,
+  ResolvedAxis,
+  ResolvedRegion,
+} from './builder';
+import { isAxis, isBody, isPlane, isSketch } from './state';
+import type { Body, PlaneArtifact, RegenState, SketchArtifact } from './state';
 import { createTrackingKernel } from './tracking-kernel';
 
 // BuildContext of one feature build (spec 07, Builder featury). Internal to regen: the
@@ -15,7 +23,7 @@ export interface BuildSessionInit {
   readonly kernel: ModelingKernel;
   /** Handles owned by the Regenerator; the tracked kernel adds to it (Q041). */
   readonly owned: Set<ShapeHandle>;
-  /** Input state of the feature; resolveBodies and resolvePlanes look only at artifacts of their kind. */
+  /** Input state of the feature; every resolve method looks only at artifacts of its kind. */
   readonly state: RegenState;
 }
 
@@ -59,15 +67,88 @@ export function createBuildSession(init: BuildSessionInit): BuildSession {
     return ok(planes);
   };
 
+  /** The sketch artifact of the sketch feature `ref.sketch`, or a RefError for `ref`. */
+  const sketchOf = (ref: SketchRegionRef | SketchEntityRef): Result<SketchArtifact, RefError> => {
+    const artifact = state.artifacts.get(sketchId(ref.sketch));
+    if (artifact === undefined || !isSketch(artifact)) {
+      return err({ ref, message: `Sketch '${ref.sketch}' not found` });
+    }
+    return ok(artifact);
+  };
+
+  const resolveRegions = (refs: readonly SketchRegionRef[]): Result<ResolvedRegion[], RefError> => {
+    const regions: ResolvedRegion[] = [];
+    for (const ref of refs) {
+      const sketch = sketchOf(ref);
+      if (!sketch.ok) return sketch;
+      const face = sketch.value.regions.get(ref.region);
+      if (face === undefined) {
+        return err({ ref, message: `Region '${ref.region}' of sketch '${ref.sketch}' not found` });
+      }
+      regions.push(Object.freeze({ ref, sketch: sketch.value, face }));
+    }
+    return ok(regions);
+  };
+
+  const resolveOriginAxis = (ref: AxisRef): Result<ResolvedAxis, RefError> => {
+    const artifact = state.artifacts.get(ref.axis);
+    if (artifact === undefined) {
+      return err({ ref, message: `Axis '${ref.axis}' does not exist` });
+    }
+    if (!isAxis(artifact)) {
+      return err({ ref, message: `'${ref.axis}' is not an axis` });
+    }
+    // The values of an axis artifact are frozen already.
+    return ok(Object.freeze({ origin: artifact.origin, direction: artifact.direction }));
+  };
+
+  const resolveSketchLine = (ref: SketchEntityRef): Result<ResolvedAxis, RefError> => {
+    const sketch = sketchOf(ref);
+    if (!sketch.ok) return sketch;
+    const { entities, plane: frame } = sketch.value;
+    const line = entities.find((e) => e.id === ref.entity);
+    if (line === undefined) {
+      return err({
+        ref,
+        message: `Sketch entity '${ref.entity}' of sketch '${ref.sketch}' not found`,
+      });
+    }
+    if (line.kind !== 'line') {
+      return err({ ref, message: `Sketch entity '${ref.entity}' is not a line` });
+    }
+    const p1 = plane.toWorld(frame, pointOf(entities, line.p1));
+    const p2 = plane.toWorld(frame, pointOf(entities, line.p2));
+    const d = vec3.sub(p2, p1);
+    if (vec3.length(d) <= EPSILON) {
+      return err({ ref, message: `Sketch line '${ref.entity}' has zero length` });
+    }
+    return ok(Object.freeze({ origin: p1, direction: vec3.normalize(d) }));
+  };
+
+  const resolveAxis = (ref: AxisRef | SketchEntityRef): Result<ResolvedAxis, RefError> =>
+    ref.kind === 'axis' ? resolveOriginAxis(ref) : resolveSketchLine(ref);
+
   return {
     ctx: {
       kernel: createTrackingKernel(init.kernel, init.owned),
       resolveBodies,
       resolvePlanes,
+      resolveRegions,
+      resolveAxis,
       warn: (message) => {
         messages.push(message);
       },
     },
     warnings: () => (messages.length === 0 ? undefined : messages.join('\n')),
   };
+}
+
+/**
+ * The coordinates of the point `id` of a sketch. The entities of a sketch artifact come from
+ * validated sketch data (spec 12), so a line without its point is a programming error.
+ */
+function pointOf(entities: readonly SketchEntity[], id: string): Vec2 {
+  const point = entities.find((e) => e.id === id);
+  if (point?.kind !== 'point') throw new Error(`Sketch point '${id}' not found`);
+  return [point.x, point.y];
 }

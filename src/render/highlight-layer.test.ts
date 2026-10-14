@@ -141,17 +141,62 @@ describe('HighlightLayer and sketch entities', () => {
 });
 
 describe('HighlightLayer and sketch regions (M13)', () => {
-  it('ignores them for now: the fill of regions comes with Ú5', () => {
+  const r1 = { kind: 'sketchRegion', sketch: 'f1/sketch', region: 'r1' } as const;
+  const r2 = { kind: 'sketchRegion', sketch: 'f1/sketch', region: 'r2' } as const;
+
+  function withRegions() {
+    const calls: unknown[] = [];
+    const layer = createHighlightLayer({
+      views: new Map<BodyId, BodyView>([[A, viewOf(A)]]),
+      requestRender: () => undefined,
+      palette: LIGHT_PALETTE,
+      regions: {
+        setRegionHighlight: (hover, selection) => {
+          calls.push({ hover, selection });
+        },
+      },
+    });
+    return { layer, calls };
+  }
+
+  it('draws none of them itself', () => {
+    const { layer } = withRegions();
+    layer.setHover(r1);
+    layer.setSelection([r2, { kind: 'face', body: A, faceIndex: 0 }]);
+    expect(layer.group.children).toHaveLength(1);
+  });
+
+  it('hands hover and selection of regions to the sketch layer', () => {
+    const { layer, calls } = withRegions();
+    layer.setHover(r1);
+    layer.setSelection([r2, { kind: 'face', body: A, faceIndex: 0 }]);
+    expect(calls).toEqual([
+      { hover: r1, selection: [] },
+      { hover: r1, selection: [r2] },
+    ]);
+  });
+
+  it('does not hand over an unchanged state again', () => {
+    const { layer, calls } = withRegions();
+    layer.setHover(r1);
+    layer.setHover({ ...r1 });
+    layer.setSelection([]);
+    // A body hover clears the region hover.
+    layer.setHover({ kind: 'face', body: A, faceIndex: 1 });
+    expect(calls).toEqual([
+      { hover: r1, selection: [] },
+      { hover: null, selection: [] },
+    ]);
+  });
+
+  it('drops them without a sketch layer', () => {
     const layer = createHighlightLayer({
       views: new Map<BodyId, BodyView>([[A, viewOf(A)]]),
       requestRender: () => undefined,
       palette: LIGHT_PALETTE,
     });
-    layer.setHover({ kind: 'sketchRegion', sketch: 'f1/sketch', region: 'r1' });
-    layer.setSelection([
-      { kind: 'sketchRegion', sketch: 'f1/sketch', region: 'r2' },
-      { kind: 'face', body: A, faceIndex: 0 },
-    ]);
-    expect(layer.group.children).toHaveLength(1);
+    layer.setHover(r1);
+    layer.setSelection([r2]);
+    expect(layer.group.children).toHaveLength(0);
   });
 });

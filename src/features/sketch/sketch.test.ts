@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { ORIGIN_PLANES, ORIGIN_PLANE_IDS, createFeatureSchemaRegistry, sketchId } from '@/document';
+import {
+  ORIGIN_AXIS_IDS,
+  ORIGIN_PLANES,
+  ORIGIN_PLANE_IDS,
+  createFeatureSchemaRegistry,
+  sketchId,
+} from '@/document';
 import type { FeatureInstance, PlaneId, PlaneRef } from '@/document';
 import { aFeature } from '@/document/testing';
 import { createToolRegistry } from '@/interaction';
@@ -419,17 +425,16 @@ describe('sketchBuilder', () => {
       aBuildContext(kernel),
     );
     if (!output.ok) expect.fail(output.error.message);
-    expect([...EMPTY_STATE.artifacts.keys()]).toEqual([
+    const originKeys = [
       ORIGIN_PLANE_IDS.xy,
       ORIGIN_PLANE_IDS.xz,
       ORIGIN_PLANE_IDS.yz,
-    ]);
-    expect([...output.state.artifacts.keys()]).toEqual([
-      ORIGIN_PLANE_IDS.xy,
-      ORIGIN_PLANE_IDS.xz,
-      ORIGIN_PLANE_IDS.yz,
-      's1/sketch',
-    ]);
+      ORIGIN_AXIS_IDS.x,
+      ORIGIN_AXIS_IDS.y,
+      ORIGIN_AXIS_IDS.z,
+    ];
+    expect([...EMPTY_STATE.artifacts.keys()]).toEqual(originKeys);
+    expect([...output.state.artifacts.keys()]).toEqual([...originKeys, 's1/sketch']);
     expect(Object.isFrozen(output.state)).toBe(true);
     expect(Object.isFrozen(output.state.artifacts.get(sketchId(aSketch('s1').id)))).toBe(true);
   });

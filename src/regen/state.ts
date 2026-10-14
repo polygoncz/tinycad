@@ -1,6 +1,6 @@
-import type { Plane } from '@/core';
-import { ORIGIN, ORIGIN_PLANES } from '@/document';
-import type { BodyId, FeatureId, ParamIssue, PlaneId, SketchId } from '@/document';
+import type { Plane, Vec3 } from '@/core';
+import { ORIGIN, ORIGIN_AXES, ORIGIN_PLANES } from '@/document';
+import type { AxisId, BodyId, FeatureId, ParamIssue, PlaneId, SketchId } from '@/document';
 import type { ShapeHandle } from '@/kernel';
 import type { SketchEntity } from '@/sketch';
 
@@ -16,7 +16,7 @@ export type NameTable = Readonly<Record<string, never>>;
 export const EMPTY_NAMES: NameTable = Object.freeze({});
 
 /** Id of an artifact, always '<owner>/<kind>[:<n>]' (ADR 0015). */
-export type ArtifactId = BodyId | SketchId | PlaneId;
+export type ArtifactId = BodyId | SketchId | PlaneId | AxisId;
 
 /**
  * A solid. Its identity is its lineage (ADR 0015): the feature that creates it mints the id and
@@ -60,8 +60,19 @@ export interface SketchArtifact {
   readonly regions: ReadonlyMap<string, ShapeHandle>;
 }
 
+/** An axis (M13): the origin axes of the owner ORIGIN; construction axes later. */
+export interface AxisArtifact {
+  readonly kind: 'axis';
+  readonly id: AxisId;
+  /** ORIGIN for the origin axes. */
+  readonly owner: FeatureId;
+  readonly origin: Vec3;
+  /** Unit direction. */
+  readonly direction: Vec3;
+}
+
 /** Whatever a feature leaves for later features, told apart by `kind`. */
-export type Artifact = Body | SketchArtifact | PlaneArtifact;
+export type Artifact = Body | SketchArtifact | PlaneArtifact | AxisArtifact;
 
 export interface RegenState {
   readonly artifacts: ReadonlyMap<ArtifactId, Artifact>;
@@ -74,14 +85,23 @@ const ORIGIN_PLANE_ARTIFACTS: readonly PlaneArtifact[] = Object.freeze(
   ),
 );
 
+/** The origin axes as artifacts of the owner ORIGIN, in the order x, y, z (M13). */
+const ORIGIN_AXIS_ARTIFACTS: readonly AxisArtifact[] = Object.freeze(
+  ORIGIN_AXES.map(({ id, origin, direction }): AxisArtifact =>
+    Object.freeze({ kind: 'axis', id, owner: ORIGIN, origin, direction }),
+  ),
+);
+
 /**
- * The state in front of the first feature: the three origin planes (spec 12, Roviny a počátek),
- * so a sketch refers to them like to any other artifact. The plane values of ORIGIN_PLANES are
- * deeply frozen already. Object.freeze does not stop Map.set; ReadonlyMap guards the artifacts
- * at compile time.
+ * The state in front of the first feature: the three origin planes (spec 12, Roviny a počátek)
+ * and behind them the three origin axes (M13), so a sketch or a revolve refers to them like to
+ * any other artifact. The values of ORIGIN_PLANES and ORIGIN_AXES are deeply frozen already.
+ * Object.freeze does not stop Map.set; ReadonlyMap guards the artifacts at compile time.
  */
 export const EMPTY_STATE: RegenState = Object.freeze({
-  artifacts: new Map<ArtifactId, Artifact>(ORIGIN_PLANE_ARTIFACTS.map((a) => [a.id, a])),
+  artifacts: new Map<ArtifactId, Artifact>(
+    [...ORIGIN_PLANE_ARTIFACTS, ...ORIGIN_AXIS_ARTIFACTS].map((a) => [a.id, a]),
+  ),
 });
 
 /** The body artifacts of the state, in the order of the map. */
@@ -99,6 +119,11 @@ export function planesOf(state: RegenState): readonly PlaneArtifact[] {
   return [...state.artifacts.values()].filter(isPlane);
 }
 
+/** The axis artifacts of the state, in the order of the map (M13). */
+export function axesOf(state: RegenState): readonly AxisArtifact[] {
+  return [...state.artifacts.values()].filter(isAxis);
+}
+
 /** The artifact is a body. Internal to regen: resolveBodies and the sweep read only bodies. */
 export function isBody(artifact: Artifact): artifact is Body {
   return artifact.kind === 'body';
@@ -112,6 +137,11 @@ export function isSketch(artifact: Artifact): artifact is SketchArtifact {
 /** The artifact is a plane. Internal to regen: resolvePlanes reads only planes. */
 export function isPlane(artifact: Artifact): artifact is PlaneArtifact {
   return artifact.kind === 'plane';
+}
+
+/** The artifact is an axis. Internal to regen: resolveAxis reads only axes. */
+export function isAxis(artifact: Artifact): artifact is AxisArtifact {
+  return artifact.kind === 'axis';
 }
 
 export interface FeatureError {

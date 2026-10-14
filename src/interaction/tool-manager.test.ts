@@ -762,22 +762,18 @@ describe('createToolManager – refPick', () => {
     expect(session.state.get()).toBe(before);
   });
 
-  it('a region param picks nothing: pick is not called and nothing is hovered', () => {
+  it('a region param picks sketch regions only: a face is neither hovered nor added (M13)', () => {
     const { viewport, features } = setupRefPick();
     const session = features.create('ref');
     session.focusRefParam('profile');
     const before = session.state.get();
-    let picks = 0;
-    viewport.setPick(() => {
-      picks++;
-      return faceHit('f1/body');
-    });
+    viewport.setPick(faceHit('f1/body'));
     viewport.highlight.setHover(faceHit('f2/body'));
 
     viewport.emitPointer(at('move', 1, 1));
+    expect(viewport.lastFilter).toEqual(['sketchRegion']);
     expect(viewport.hover).toBeNull();
     click(viewport);
-    expect(picks).toBe(0);
     expect(session.state.get()).toBe(before);
   });
 
