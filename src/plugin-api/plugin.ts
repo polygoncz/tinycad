@@ -5,7 +5,7 @@ import type { FeatureBuilder } from '@/regen';
 /**
  * Unit of extensibility (spec 11): each layer has its own registry and knows only its part.
  * Fields grow with milestones: M6 has schema and builder, M9 adds tools, M10 adds messages,
- * M12 adds ops.
+ * (no plugin ops in M12, R36).
  */
 export interface FeaturePlugin<P = unknown> {
   /** Goes to FeatureSchemaRegistry (document). */
