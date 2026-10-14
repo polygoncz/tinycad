@@ -5,11 +5,12 @@
 import { ObservableValue, assert } from '@/core';
 import type { Observable, Plane } from '@/core';
 import { parsePlaneId } from '@/document';
-import type { FeatureId, PlaneId } from '@/document';
+import type { FeatureId, PlaneRef, TopoRef } from '@/document';
 import { SKETCH_FEATURE_TYPE } from '@/sketch';
 import type { ConstraintSolver } from '@/sketch';
 import type { FeatureEditSession, FeatureEditor } from './feature-editor';
 import type { Mode } from './mode';
+import { topoRefOf } from './ref-values';
 import { openSketchSession } from './sketch-session';
 import type { SketchSession } from './sketch-session';
 import type { ViewportPort } from './viewport-port';
@@ -18,8 +19,13 @@ export interface SketchEditor {
   readonly current: Observable<SketchSession | null>;
   /** 'sketch' ⇔ current !== null. */
   readonly mode: Observable<Mode>;
-  /** A new sketch on the plane: FeatureEditor.create(SKETCH_FEATURE_TYPE), setParam('plane') unless default. */
-  create(plane: PlaneId): SketchSession;
+  /**
+   * A new sketch on the plane: FeatureEditor.create(SKETCH_FEATURE_TYPE), setParam('plane') unless
+   * default. M14: also on a planar face of a body (TopoRef).
+   */
+  create(plane: PlaneRef | TopoRef): SketchSession;
+  /** The plane of the reference (deps.resolvePlane); the entry tool asks it about a selected face (M14). */
+  planeOf(ref: PlaneRef | TopoRef): Plane | undefined;
   /** Editing an existing sketch (FeatureEditor.edit). */
   edit(featureId: FeatureId): SketchSession;
 }
@@ -32,8 +38,8 @@ export function createSketchEditor(deps: {
   solver: ConstraintSolver;
   /** The edited sketch is drawn under EDIT_SKETCH_DRAWING_ID; only the drawings are needed. */
   viewport: Pick<ViewportPort, 'sketches'>;
-  /** app: ORIGIN_PLANES (M14: also faces from the regeneration). */
-  resolvePlane: (id: PlaneId) => Plane | undefined;
+  /** app: planeOfRef over the last regeneration state (M14: origin planes and planar faces). */
+  resolvePlane: (ref: PlaneRef | TopoRef) => Plane | undefined;
 }): SketchEditor {
   const { features, solver, viewport, resolvePlane } = deps;
   const current = new ObservableValue<SketchSession | null>(null);
@@ -73,20 +79,21 @@ export function createSketchEditor(deps: {
   return {
     current: current.asObservable(),
     mode: mode.asObservable(),
-    create(planeId) {
+    create(ref) {
       checkCanOpen('create');
-      const plane = resolvePlane(planeId);
-      assert(plane !== undefined, `create: unknown plane '${planeId}'`);
+      const plane = resolvePlane(ref);
+      assert(plane !== undefined, `create: unknown plane ${JSON.stringify(ref)}`);
       const edit = features.create(SKETCH_FEATURE_TYPE);
       return orCancel(edit, () => {
-        if (planeOf(edit.state.get().params) !== planeId) {
-          edit.setParam(
-            PLANE_PARAM,
-            Object.freeze([Object.freeze({ kind: 'plane', plane: planeId })]),
-          );
+        const current = planeRefOf(edit.state.get().params);
+        if (current === undefined || !sameRef(current, ref)) {
+          edit.setParam(PLANE_PARAM, Object.freeze([frozenRef(ref)]));
         }
         return open(edit, plane);
       });
+    },
+    planeOf(ref) {
+      return resolvePlane(ref);
     },
     edit(featureId) {
       checkCanOpen('edit');
@@ -96,8 +103,8 @@ export function createSketchEditor(deps: {
           edit.schema.type === SKETCH_FEATURE_TYPE,
           `edit: feature '${featureId}' is a '${edit.schema.type}', not a sketch`,
         );
-        const planeId = planeOf(edit.state.get().params);
-        const plane = planeId === undefined ? undefined : resolvePlane(planeId);
+        const ref = planeRefOf(edit.state.get().params);
+        const plane = ref === undefined ? undefined : resolvePlane(ref);
         assert(plane !== undefined, `edit: the plane of sketch '${featureId}' cannot be resolved`);
         return open(edit, plane);
       });
@@ -105,13 +112,30 @@ export function createSketchEditor(deps: {
   };
 }
 
-/** The plane of the first item of the param 'plane', or undefined when it is not a PlaneRef. */
-function planeOf(params: Readonly<Record<string, unknown>>): PlaneId | undefined {
+/**
+ * The first item of the param 'plane' as a PlaneRef or a TopoRef (M14), or undefined when it is
+ * neither.
+ */
+function planeRefOf(params: Readonly<Record<string, unknown>>): PlaneRef | TopoRef | undefined {
   const value = params[PLANE_PARAM];
   if (!Array.isArray(value)) return undefined;
   const items: readonly unknown[] = value;
   const first = items[0];
-  if (typeof first !== 'object' || first === null) return undefined;
-  if (!('kind' in first) || first.kind !== 'plane' || !('plane' in first)) return undefined;
-  return parsePlaneId(first.plane);
+  if (typeof first !== 'object' || first === null || !('kind' in first)) return undefined;
+  if (first.kind === 'topo') return topoRefOf(first) ?? undefined;
+  if (first.kind !== 'plane' || !('plane' in first)) return undefined;
+  const plane = parsePlaneId(first.plane);
+  return plane === undefined ? undefined : Object.freeze({ kind: 'plane', plane });
+}
+
+function sameRef(a: PlaneRef | TopoRef, b: PlaneRef | TopoRef): boolean {
+  if (a.kind === 'plane') return b.kind === 'plane' && a.plane === b.plane;
+  return b.kind === 'topo' && a.body === b.body && a.name === b.name;
+}
+
+/** A frozen copy with only the fields of its kind, never shared with the caller. */
+function frozenRef(ref: PlaneRef | TopoRef): PlaneRef | TopoRef {
+  return ref.kind === 'plane'
+    ? Object.freeze({ kind: 'plane', plane: ref.plane })
+    : Object.freeze({ kind: 'topo', body: ref.body, name: ref.name });
 }

@@ -86,3 +86,5 @@ export {
 } from './sketch-drawing';
 export { SKETCH_ACTION_IDS, createSketchActions, sketchConstraintActionId } from './sketch-actions';
 export { createSketchTools } from './sketch-tools';
+export { createTopoInspector } from './topo-inspector';
+export type { TopoHover, TopoInspector } from './topo-inspector';

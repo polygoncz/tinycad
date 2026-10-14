@@ -71,7 +71,7 @@ function setup() {
     features,
     solver: createInThreadPlanegcsSolver(),
     viewport,
-    resolvePlane: (id) => planes.get(id),
+    resolvePlane: (ref) => (ref.kind === 'plane' ? planes.get(ref.plane) : undefined),
   });
 
   /** Regenerates the document; the sketch artifacts of the final state. */
@@ -113,7 +113,7 @@ const WIDTH = 'w' as SketchConstraintId; // a test id is trusted
 
 /** A new sketch on XY: a 40 × 20 rectangle at the origin, a fixed, width and height. */
 async function constrainedRectangle(s: ReturnType<typeof setup>) {
-  const session = s.sketcher.create(ORIGIN_PLANE_IDS.xy);
+  const session = s.sketcher.create({ kind: 'plane', plane: ORIGIN_PLANE_IDS.xy });
   expect(await session.addGeometry(rectangleData({ x: 0, y: 0, width: 40, height: 20 }))).toBe(
     true,
   );
@@ -252,7 +252,7 @@ describe('sketch scenario (rectangle with the real solver)', () => {
 
   it('dragging a corner of an underdefined rectangle moves it to the target', async () => {
     const s = setup();
-    const session = s.sketcher.create(ORIGIN_PLANE_IDS.xy);
+    const session = s.sketcher.create({ kind: 'plane', plane: ORIGIN_PLANE_IDS.xy });
     await session.addGeometry(rectangleData({ x: 0, y: 0, width: 40, height: 20 }));
 
     session.drag(point(session, 'c').id, [50, 30]);

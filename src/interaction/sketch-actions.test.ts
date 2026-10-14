@@ -87,6 +87,7 @@ function setup() {
     current: current.asObservable(),
     mode: mode.asObservable(),
     create: () => expect.fail('create is not expected'),
+    planeOf: () => expect.fail('planeOf is not expected'),
     edit: () => expect.fail('edit is not expected'),
   };
   const registry = createActionRegistry({ mode: mode.asObservable() });

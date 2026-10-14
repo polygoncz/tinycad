@@ -7,7 +7,17 @@ import {
   createFeatureSchemaRegistry,
   validateAgainstSchema,
 } from '@/document';
-import type { FeatureId, FeatureInstance, FeatureSchema, ParamSchema, PlaneId } from '@/document';
+import type {
+  BodyId,
+  FeatureId,
+  FeatureInstance,
+  FeatureSchema,
+  ParamSchema,
+  PlaneId,
+  PlaneRef,
+  TopoName,
+  TopoRef,
+} from '@/document';
 import { aFeature } from '@/document/testing';
 import type { BatchOp, Operation } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
@@ -62,6 +72,24 @@ const BOX_SCHEMA: FeatureSchema = {
 };
 
 const [XY, XZ] = ORIGIN_PLANES.map((p) => p.plane) as [Plane, Plane, Plane]; // a fixed table of three
+
+/** The top face of a box [0, 10]³ as the regeneration would resolve it (M14; app: planeOfRef). */
+const TOP: Plane = Object.freeze<Plane>({ origin: [0, 0, 10], xDir: [1, 0, 0], normal: [0, 0, 1] });
+
+const planeRef = (plane: PlaneId): PlaneRef => ({ kind: 'plane', plane });
+// Test ids and names are trusted.
+const topoRef = (body: string, name: string): TopoRef => ({
+  kind: 'topo',
+  body: body as BodyId,
+  name: name as TopoName,
+});
+const TOP_FACE = topoRef('b1/body', 'b1/face:top');
+
+/** A fake of app's resolvePlane: the origin planes and the top face of 'b1/body' (M14). */
+function resolvePlane(ref: PlaneRef | TopoRef): Plane | undefined {
+  if (ref.kind === 'plane') return ORIGIN_PLANES.find((p) => p.id === ref.plane)?.plane;
+  return ref.body === TOP_FACE.body && ref.name === TOP_FACE.name ? TOP : undefined;
+}
 
 // Test ids are trusted.
 const fid = (id: string): FeatureId => id as FeatureId;
@@ -136,7 +164,7 @@ function setup(
     features: editor,
     solver: opts.solver ?? fake,
     viewport,
-    resolvePlane: (id: PlaneId) => ORIGIN_PLANES.find((p) => p.id === id)?.plane,
+    resolvePlane,
   });
   const applied: Operation[] = [];
   ops.dispatcher.events.on('applied', ({ op }) => applied.push(op));
@@ -175,7 +203,7 @@ describe('SketchEditor.create', () => {
     const modes: string[] = [];
     sketches.mode.subscribe(() => modes.push(sketches.mode.get()));
 
-    const session = sketches.create(ORIGIN_PLANE_IDS.xy);
+    const session = sketches.create(planeRef(ORIGIN_PLANE_IDS.xy));
 
     expect(sketches.current.get()).toBe(session);
     expect(sketches.mode.get()).toBe('sketch');
@@ -202,7 +230,7 @@ describe('SketchEditor.create', () => {
   it('sets the plane param for another plane', () => {
     const { doc, sketches } = setup();
 
-    const session = sketches.create(ORIGIN_PLANE_IDS.xz);
+    const session = sketches.create(planeRef(ORIGIN_PLANE_IDS.xz));
 
     expect(session.plane).toBe(XZ);
     expect(doc.feature(session.featureId)?.params).toMatchObject({
@@ -213,7 +241,7 @@ describe('SketchEditor.create', () => {
   it('throws for an unknown plane before creating the feature', () => {
     const { doc, editor, sketches, applied } = setup();
 
-    expect(() => sketches.create('origin/plane:ab' as PlaneId)).toThrow();
+    expect(() => sketches.create(planeRef('origin/plane:ab' as PlaneId))).toThrow();
 
     expect(doc.studio.features).toEqual([]);
     expect(applied).toEqual([]);
@@ -221,11 +249,35 @@ describe('SketchEditor.create', () => {
     expect(sketches.mode.get()).toBe('model');
   });
 
+  it('creates a sketch on a planar face: writes the TopoRef and opens on its plane (M14)', () => {
+    const { doc, sketches } = setup();
+
+    const session = sketches.create(TOP_FACE);
+
+    expect(session.plane).toBe(TOP);
+    expect(doc.feature(session.featureId)?.params).toMatchObject({
+      plane: [{ kind: 'topo', body: 'b1/body', name: 'b1/face:top' }],
+    });
+    expect(sketches.mode.get()).toBe('sketch');
+  });
+
+  it('throws for a face resolvePlane does not know, changing nothing (M14)', () => {
+    const { doc, editor, sketches, applied } = setup();
+
+    expect(() => sketches.create(topoRef('b1/body', 'b1/face:side'))).toThrow();
+
+    expect(doc.studio.features).toEqual([]);
+    expect(applied).toEqual([]);
+    expect(editor.current.get()).toBeNull();
+    expect(sketches.current.get()).toBeNull();
+    expect(sketches.mode.get()).toBe('model');
+  });
+
   it('throws while a session is open, changing nothing', () => {
     const { doc, sketches } = setup();
-    const first = sketches.create(ORIGIN_PLANE_IDS.xy);
+    const first = sketches.create(planeRef(ORIGIN_PLANE_IDS.xy));
 
-    expect(() => sketches.create(ORIGIN_PLANE_IDS.xy)).toThrow();
+    expect(() => sketches.create(planeRef(ORIGIN_PLANE_IDS.xy))).toThrow();
     expect(() => sketches.edit(first.featureId)).toThrow();
     expect(doc.studio.features).toHaveLength(1);
     expect(sketches.current.get()).toBe(first);
@@ -235,8 +287,18 @@ describe('SketchEditor.create', () => {
     const { editor, sketches } = setup();
     editor.create('box');
 
-    expect(() => sketches.create(ORIGIN_PLANE_IDS.xy)).toThrow();
+    expect(() => sketches.create(planeRef(ORIGIN_PLANE_IDS.xy))).toThrow();
     expect(sketches.current.get()).toBeNull();
+  });
+});
+
+describe('SketchEditor.planeOf', () => {
+  it('answers with resolvePlane: origin plane, known face, unknown face (M14)', () => {
+    const { sketches } = setup();
+
+    expect(sketches.planeOf(planeRef(ORIGIN_PLANE_IDS.xz))).toBe(XZ);
+    expect(sketches.planeOf(TOP_FACE)).toBe(TOP);
+    expect(sketches.planeOf(topoRef('b1/body', 'b1/face:side'))).toBeUndefined();
   });
 });
 
@@ -265,6 +327,18 @@ describe('SketchEditor.edit', () => {
     expect(sketches.current.get()).toBeNull();
     expect(log.entries()).toEqual([]);
     expect(doc.studio.rollbackIndex).toBe(1);
+  });
+
+  it('opens a sketch on a face with the plane of the face (M14)', () => {
+    const sketch = aFeature<Record<string, unknown>>({
+      id: 's2',
+      name: 'Sketch s2',
+      type: SKETCH_FEATURE_TYPE,
+      params: { plane: [TOP_FACE], entities: [], constraints: [] },
+    });
+    const { sketches } = setup({ others: [sketch] });
+
+    expect(sketches.edit(fid('s2')).plane).toBe(TOP);
   });
 
   it('throws for an unknown feature', () => {
@@ -322,7 +396,7 @@ describe('SketchSession first solve', () => {
 describe('SketchState.statusKey (the status line of the panel)', () => {
   it('solving before the first result, without params', () => {
     const { sketches } = setup();
-    const session = sketches.create(ORIGIN_PLANE_IDS.xy);
+    const session = sketches.create(planeRef(ORIGIN_PLANE_IDS.xy));
     expect(session.state.get()).toMatchObject({
       statusKey: 'sketch.status.solving',
       statusParams: {},
@@ -745,7 +819,7 @@ describe('SketchSession selection and panel rows', () => {
 
   it('shows invalid data as empty', () => {
     const ctx = setup();
-    const session = ctx.sketches.create(ORIGIN_PLANE_IDS.xy);
+    const session = ctx.sketches.create(planeRef(ORIGIN_PLANE_IDS.xy));
     ctx.editor.current.get()?.setParams({ entities: 'broken' });
 
     expect(session.state.get().entities).toEqual([]);
@@ -818,7 +892,7 @@ describe('SketchSession drawing', () => {
 describe('SketchSession finish and cancel', () => {
   it('a new sketch is one log entry batch[feature.add, feature.setParams]', async () => {
     const { sketches, log } = setup();
-    const session = sketches.create(ORIGIN_PLANE_IDS.xy);
+    const session = sketches.create(planeRef(ORIGIN_PLANE_IDS.xy));
     const added = data([
       { kind: 'point', id: 'p', x: 0, y: 0 },
       { kind: 'point', id: 'q', x: 4, y: 0 },
@@ -861,7 +935,7 @@ describe('SketchSession finish and cancel', () => {
 
   it('cancel leaves the log unchanged and removes a new sketch', async () => {
     const { sketches, log, doc } = setup();
-    const session = sketches.create(ORIGIN_PLANE_IDS.xy);
+    const session = sketches.create(planeRef(ORIGIN_PLANE_IDS.xy));
     await session.addGeometry(data([{ kind: 'point', id: 'p', x: 1, y: 1 }]));
 
     session.cancel();

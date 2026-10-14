@@ -7,7 +7,7 @@ import {
   createFeatureSchemaRegistry,
   validateAgainstSchema,
 } from '@/document';
-import type { FeatureSchema, ParamSchema, PlaneId } from '@/document';
+import type { BodyId, FeatureId, FeatureSchema, ParamSchema, PlaneRef, TopoRef } from '@/document';
 import { anOpsSession } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE, parseSketchData } from '@/sketch';
 import type { SketchConstraint, SketchData, SketchEntity } from '@/sketch';
@@ -20,7 +20,7 @@ import { createSketchEditor } from '../sketch-editor';
 import { EDIT_SKETCH_DRAWING_ID } from '../sketch-session';
 import type { SketchSession } from '../sketch-session';
 import { createSketchTools } from '../sketch-tools';
-import { FakeRegenStatus, FakeViewport } from '../testing';
+import { FakeRegenStatus, FakeViewport, aTopoNames } from '../testing';
 import { createToolManager } from '../tool-manager';
 import { createToolRegistry } from '../tools';
 import type { ToolContext } from '../tools';
@@ -58,7 +58,24 @@ const BOX_SCHEMA: FeatureSchema = {
   validate: (params) => validateAgainstSchema(BOX_PARAMS, params),
 };
 
-const [XY, XZ] = ORIGIN_PLANES.map((p) => p.plane) as [Plane, Plane, Plane]; // a fixed table of three
+const [XY, XZ, YZ] = ORIGIN_PLANES.map((p) => p.plane) as [Plane, Plane, Plane]; // a fixed table of three
+
+/** The top face of a box [0, 10]³ as the regeneration would resolve it (M14; app: planeOfRef). */
+const TOP: Plane = Object.freeze<Plane>({ origin: [0, 0, 10], xDir: [1, 0, 0], normal: [0, 0, 1] });
+// Test ids are trusted.
+const BODY = 'b1/body' as BodyId;
+
+/**
+ * A fake of app's resolvePlane: the origin planes and the planar faces 'b1/face:top' and
+ * 'b1/face:front' of BODY; 'b1/face:side' stands for a face that is not planar (M14).
+ */
+function resolvePlane(ref: PlaneRef | TopoRef): Plane | undefined {
+  if (ref.kind === 'plane') return ORIGIN_PLANES.find((p) => p.id === ref.plane)?.plane;
+  if (ref.body !== BODY) return undefined;
+  if (ref.name === 'b1/face:top') return TOP;
+  if (ref.name === 'b1/face:front') return XZ;
+  return undefined;
+}
 
 const NO_MODS: KeyMods = { shift: false, alt: false, mod: false };
 
@@ -121,9 +138,19 @@ function setup() {
     features: editor,
     solver,
     viewport,
-    resolvePlane: (id: PlaneId) => ORIGIN_PLANES.find((p) => p.id === id)?.plane,
+    resolvePlane,
   });
   const regen = new FakeRegenStatus();
+  // A box with named faces 0 (front), 2 (side) and 5 (top); face 1 has no name (M14).
+  regen.publish(new Map(), [
+    {
+      body: BODY,
+      feature: 'b1' as FeatureId,
+      names: aTopoNames({
+        faces: { 'b1/face:front': [0], 'b1/face:side': [2], 'b1/face:top': [5] },
+      }),
+    },
+  ]);
   const selection = createSelectionModel({ regen });
   const registry = createToolRegistry();
   registry.register(SELECT_TOOL);
@@ -329,6 +356,62 @@ describe('the entry tool sketch', () => {
     manager.activate('sketch');
 
     expect(sketches.current.get()?.plane).toBe(XZ);
+  });
+
+  it('creates the sketch on a selected named planar face (M14)', () => {
+    const { manager, sketches, selection, doc } = setup();
+    selection.set([{ kind: 'face', body: BODY, faceIndex: 5 }]);
+
+    manager.activate('sketch');
+
+    const session = sketches.current.get();
+    expect(session?.plane).toBe(TOP);
+    expect(doc.feature(session?.featureId ?? ('' as FeatureId))?.params).toMatchObject({
+      plane: [{ kind: 'topo', body: BODY, name: 'b1/face:top' }],
+    });
+  });
+
+  it('skips a face without a name and falls back to XY (M14)', () => {
+    const { manager, sketches, selection } = setup();
+    selection.set([{ kind: 'face', body: BODY, faceIndex: 1 }]);
+
+    manager.activate('sketch');
+
+    expect(sketches.current.get()?.plane).toBe(XY);
+  });
+
+  it('skips a face without a plane (not planar) and falls back to XY (M14)', () => {
+    const { manager, sketches, selection } = setup();
+    selection.set([{ kind: 'face', body: BODY, faceIndex: 2 }]);
+
+    manager.activate('sketch');
+
+    expect(sketches.current.get()?.plane).toBe(XY);
+  });
+
+  it('takes the first face with a plane after faces without one (M14)', () => {
+    const { manager, sketches, selection } = setup();
+    selection.set([
+      { kind: 'face', body: BODY, faceIndex: 2 },
+      { kind: 'face', body: BODY, faceIndex: 5 },
+      { kind: 'face', body: BODY, faceIndex: 0 },
+    ]);
+
+    manager.activate('sketch');
+
+    expect(sketches.current.get()?.plane).toBe(TOP);
+  });
+
+  it('prefers a plane from the Browser to a selected face (M14)', () => {
+    const { manager, sketches, selection } = setup();
+    selection.set([
+      { kind: 'face', body: BODY, faceIndex: 5 },
+      { kind: 'plane', plane: ORIGIN_PLANE_IDS.yz },
+    ]);
+
+    manager.activate('sketch');
+
+    expect(sketches.current.get()?.plane).toBe(YZ);
   });
 
   it('with an open feature dialog only finishes', () => {

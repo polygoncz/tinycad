@@ -179,7 +179,7 @@ function regionRefOf(item: unknown): SketchRegionRef | null {
 }
 
 /** One topo reference of the right shape as a frozen copy, otherwise null (as readRef in document). */
-function topoRefOf(item: unknown): TopoRef | null {
+export function topoRefOf(item: unknown): TopoRef | null {
   if (!isRecord(item) || item['kind'] !== 'topo') return null;
   const body = parseBodyId(item['body']);
   const name = item['name'];

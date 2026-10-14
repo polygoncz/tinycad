@@ -260,7 +260,9 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     features,
     solver: deps.solver,
     viewport,
-    resolvePlane: (id) => ORIGIN_PLANES.find((p) => p.id === id)?.plane,
+    // Origin planes only until Ú13 wires planeOfRef over the last regeneration (faces, M14).
+    resolvePlane: (ref) =>
+      ref.kind === 'plane' ? ORIGIN_PLANES.find((p) => p.id === ref.plane)?.plane : undefined,
   });
   const { mode } = sketches;
   const sketchEdit = (id: FeatureId): void => {

@@ -72,7 +72,7 @@ function setup(kernel: GeometryKernel) {
     features,
     solver: createInThreadPlanegcsSolver(),
     viewport: new FakeViewport(),
-    resolvePlane: (id) => planes.get(id),
+    resolvePlane: (ref) => (ref.kind === 'plane' ? planes.get(ref.plane) : undefined),
   });
 
   /** Creates a feature of the type through the dialog with the given params, OK. */
@@ -160,7 +160,7 @@ const WIDTH = 'w' as SketchConstraintId; // a test id is trusted
  */
 async function extrudedRectangle() {
   const s = setup(createFakeKernel());
-  const session = s.sketcher.create(ORIGIN_PLANE_IDS.xy);
+  const session = s.sketcher.create({ kind: 'plane', plane: ORIGIN_PLANE_IDS.xy });
   expect(await session.addGeometry(rectangleData({ x: 0, y: 0, width: 40, height: 20 }))).toBe(
     true,
   );
