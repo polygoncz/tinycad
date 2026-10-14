@@ -1,0 +1,51 @@
+import { assert, assertNever } from '@/core';
+import type { Vec2 } from '@/core';
+import type { SketchCurve, SketchData, SketchEntityId, SketchPoint } from './model';
+
+// 2D geometry of sketch curves for regions and the kernel (spec 12 "Geometrie a pomůcky editace").
+
+/** A 2D curve for regions and the kernel. The same shape as ProfileCurve in kernel (structural typing, ADR 0017). */
+export type Curve2 =
+  | { readonly kind: 'line'; readonly from: Vec2; readonly to: Vec2 }
+  | {
+      readonly kind: 'arc';
+      readonly center: Vec2;
+      readonly from: Vec2;
+      readonly to: Vec2;
+      readonly ccw: boolean;
+    }
+  | { readonly kind: 'circle'; readonly center: Vec2; readonly radius: number };
+
+export function pointsById(data: SketchData): ReadonlyMap<SketchEntityId, SketchPoint> {
+  const points = new Map<SketchEntityId, SketchPoint>();
+  for (const e of data.entities) if (e.kind === 'point') points.set(e.id, e);
+  return points;
+}
+
+/** The curve with its point coordinates; an arc becomes counter-clockwise. A missing point is a programming error. */
+export function curve2(
+  curve: SketchCurve,
+  points: ReadonlyMap<SketchEntityId, SketchPoint>,
+): Curve2 {
+  const at = (id: SketchEntityId): Vec2 => {
+    const p = points.get(id);
+    assert(p !== undefined, `curve2: curve '${curve.id}' refers to a missing point '${id}'`);
+    return [p.x, p.y];
+  };
+  switch (curve.kind) {
+    case 'line':
+      return { kind: 'line', from: at(curve.p1), to: at(curve.p2) };
+    case 'circle':
+      return { kind: 'circle', center: at(curve.center), radius: curve.radius };
+    case 'arc':
+      return {
+        kind: 'arc',
+        center: at(curve.center),
+        from: at(curve.start),
+        to: at(curve.end),
+        ccw: true,
+      };
+    default:
+      return assertNever(curve);
+  }
+}

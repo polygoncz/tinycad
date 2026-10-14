@@ -40,6 +40,13 @@ const edgePick = (b: BodyId, edgeIndex: number, point: [number, number, number])
   point,
 });
 
+/** M12: HighlightPort ignores sketch entities (the drawing style carries their highlight). */
+const sketchEntity = (sketch: string, entity: string): HighlightTarget => ({
+  kind: 'sketchEntity',
+  sketch,
+  entity,
+});
+
 /** Face keys 5 and 2 (out of order), edge keys 4 and 1. */
 const MESH: MeshData = {
   positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]),
@@ -62,6 +69,13 @@ describe('sameTarget', () => {
     expect(sameTarget(face(A, 1), face(B, 1))).toBe(false);
     expect(sameTarget(face(A, 1), face(A, 2))).toBe(false);
     expect(sameTarget(edge(A, 1), edge(A, 2))).toBe(false);
+  });
+
+  it('compares sketch entities by sketch and entity', () => {
+    expect(sameTarget(sketchEntity('s', 'p1'), sketchEntity('s', 'p1'))).toBe(true);
+    expect(sameTarget(sketchEntity('s', 'p1'), sketchEntity('s', 'p2'))).toBe(false);
+    expect(sameTarget(sketchEntity('s', 'p1'), sketchEntity('t', 'p1'))).toBe(false);
+    expect(sameTarget(sketchEntity('s', 'p1'), face(A, 1))).toBe(false);
   });
 });
 
@@ -100,6 +114,11 @@ describe('validTarget / validTargets', () => {
     // Edge keys are 4 and 1: an edge index 5 is a face key, not an edge key.
     expect(validTarget(edge(A, 5), meshOf)).toBe(false);
     expect(validTarget(edge(A, 0), meshOf)).toBe(false);
+  });
+
+  it('drops a sketch entity: the highlight layer ignores it', () => {
+    expect(validTarget(sketchEntity('s', 'p1'), meshOf)).toBe(false);
+    expect(validTargets([sketchEntity('s', 'p1'), face(A, 5)], meshOf)).toEqual([face(A, 5)]);
   });
 
   it('filters a list and keeps the order', () => {

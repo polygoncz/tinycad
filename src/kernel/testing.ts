@@ -8,10 +8,11 @@
 // as an RpcError carrying the same code.
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { mat4, type Mat4, type Vec3 } from '@/core';
+import { mat4, type Mat4, type Plane, type Vec2, type Vec3 } from '@/core';
 import { kernelErrorCode } from './errors';
 import type { KernelErrorCode } from './errors';
 import type { BooleanOp, GeometryKernel } from './kernel';
+import type { ProfileCurve, ProfileLoop } from './profile';
 import { validateMeshData } from './mesh';
 import type { BoundingBox, MeshData, MeshQuality, ShapeHandle } from './types';
 
@@ -239,6 +240,33 @@ const NOT_RIGID: readonly (readonly [string, Mat4])[] = [
   ['a non-affine bottom row', fromRows(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.1, 0, 0, 1)],
 ];
 
+// M12 fixtures: planes from the table in spec 12 (Roviny a počátek), loops in plane coordinates.
+const PLANE_XY: Plane = { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, 0, 1] };
+/** XZ moved to y = 5: x → +X, y → normal × xDir = +Z. */
+const PLANE_XZ_AT_Y5: Plane = { origin: [0, 5, 0], xDir: [1, 0, 0], normal: [0, -1, 0] };
+/** YZ moved to x = 3: x → +Y, y → +Z. */
+const PLANE_YZ_AT_X3: Plane = { origin: [3, 0, 0], xDir: [0, 1, 0], normal: [1, 0, 0] };
+
+const line = (from: Vec2, to: Vec2): ProfileCurve => ({ kind: 'line', from, to });
+
+/** Closed polygon through the points. */
+function polygon(...corners: Vec2[]): ProfileLoop {
+  return corners.map((p, i) => line(p, corners[(i + 1) % corners.length] ?? p));
+}
+
+/** [1, 2]..[4, 5] in XY: off the origin, so swapped axes show up. */
+const SQUARE = polygon([1, 2], [4, 2], [4, 5], [1, 5]);
+/** Square [0, 0]..[4, 4] with a circular hole of radius 1 in the middle. */
+const HOLED_OUTER = polygon([0, 0], [4, 0], [4, 4], [0, 4]);
+const HOLE: ProfileLoop = [{ kind: 'circle', center: [2, 2], radius: 1 }];
+/** Line (0, −1)–(0, 1) and a half circle back: through (−1, 0) when ccw, through (1, 0) when not. */
+const D_LOOP = (ccw: boolean): ProfileLoop => [
+  line([0, -1], [0, 1]),
+  { kind: 'arc', center: [0, 0], from: [0, 1], to: [0, -1], ccw },
+];
+type FaceParams = Parameters<GeometryKernel['makeFace']>[0];
+const FACE: FaceParams = { plane: PLANE_XY, outer: SQUARE, holes: [] };
+
 /** Kontraktová sada; factory vytvoří pro každý test čerstvé jádro. */
 export function describeGeometryKernelContract(
   name: string,
@@ -274,6 +302,7 @@ export function describeGeometryKernelContract(
         ['makeCylinder', (k: GeometryKernel) => k.makeCylinder({ ...CYLINDER, radius: 0 })],
         ['transform', (k: GeometryKernel) => k.transform(UNKNOWN, mat4.identity())],
         ['boolean', (k: GeometryKernel) => k.boolean('union', [], [])],
+        ['makeFace', (k: GeometryKernel) => k.makeFace({ ...FACE, outer: [] })],
         ['tessellate', (k: GeometryKernel) => k.tessellate(UNKNOWN, QUALITY)],
         ['boundingBox', (k: GeometryKernel) => k.boundingBox(UNKNOWN)],
         ['release', (k: GeometryKernel) => k.release([UNKNOWN])],
@@ -294,6 +323,7 @@ export function describeGeometryKernelContract(
           kernel.makeCylinder(CYLINDER),
           kernel.transform(shape, mat4.identity()),
           kernel.boolean('union', [shape], [other]),
+          kernel.makeFace(FACE),
           kernel.tessellate(shape, QUALITY),
           kernel.boundingBox(shape),
           kernel.liveHandleCount(),
@@ -539,6 +569,99 @@ export function describeGeometryKernelContract(
           const code = await rejectionCode(() => kernel.boolean('union', targets, tools));
           expect(code).toBe('unknown-handle');
           expect(await kernel.liveHandleCount()).toBe(1);
+        },
+      );
+    });
+
+    describe('makeFace', () => {
+      it.each([
+        ['a square in XY', { plane: PLANE_XY, outer: SQUARE, holes: [] }, [1, 2, 0], [4, 5, 0]],
+        [
+          'a rectangle in XZ moved to y = 5',
+          { plane: PLANE_XZ_AT_Y5, outer: polygon([0, 0], [2, 0], [2, 3], [0, 3]), holes: [] },
+          [0, 5, 0],
+          [2, 5, 3],
+        ],
+        [
+          'a circle in YZ moved to x = 3',
+          {
+            plane: PLANE_YZ_AT_X3,
+            outer: [{ kind: 'circle', center: [1, 2], radius: 0.5 }],
+            holes: [],
+          },
+          [3, 0.5, 1.5],
+          [3, 1.5, 2.5],
+        ],
+        ['a D, ccw', { plane: PLANE_XY, outer: D_LOOP(true), holes: [] }, [-1, -1, 0], [0, 1, 0]],
+        [
+          'a D, clockwise',
+          { plane: PLANE_XY, outer: D_LOOP(false), holes: [] },
+          [0, -1, 0],
+          [1, 1, 0],
+        ],
+        [
+          'a square with a circular hole',
+          { plane: PLANE_XY, outer: HOLED_OUTER, holes: [HOLE] },
+          [0, 0, 0],
+          [4, 4, 0],
+        ],
+        [
+          'a square in reverse orientation',
+          { plane: PLANE_XY, outer: polygon([1, 2], [1, 5], [4, 5], [4, 2]), holes: [] },
+          [1, 2, 0],
+          [4, 5, 0],
+        ],
+      ] satisfies [string, FaceParams, Vec3, Vec3][])(
+        '%s: a new handle with the bounding box of the outer loop and a valid mesh',
+        async (_, p, min, max) => {
+          const { shape } = await kernel.makeFace(p);
+          expect(Number.isInteger(shape)).toBe(true);
+          expect(shape).toBeGreaterThan(0);
+          expect(await kernel.liveHandleCount()).toBe(1);
+          expectBoxClose(await kernel.boundingBox(shape), min, max, 'face');
+          const mesh = await kernel.tessellate(shape, QUALITY);
+          expectValidMeshIn(mesh, min, max, 'face');
+        },
+      );
+
+      it('every call returns a new handle', async () => {
+        const a = (await kernel.makeFace(FACE)).shape;
+        const b = (await kernel.makeFace(FACE)).shape;
+        expect(b).not.toBe(a);
+        expect(await kernel.liveHandleCount()).toBe(2);
+      });
+
+      it.each([
+        ['a plane that is not orthonormal', { ...FACE, plane: { ...PLANE_XY, xDir: [2, 0, 0] } }],
+        ['an open loop', { ...FACE, outer: SQUARE.slice(0, 3) }],
+        [
+          'a circle in the middle of a loop of several curves',
+          {
+            ...FACE,
+            outer: [
+              ...SQUARE.slice(0, 2),
+              { kind: 'circle', center: [2, 3], radius: 0.5 },
+              ...SQUARE.slice(2),
+            ],
+          },
+        ],
+        ['a line of zero length', { ...FACE, outer: [...SQUARE, line([1, 2], [1, 2])] }],
+        [
+          'an arc with unequal radii',
+          {
+            ...FACE,
+            outer: [
+              line([0, -1], [0, 1.5]),
+              { kind: 'arc', center: [0, 0], from: [0, 1.5], to: [0, -1], ccw: true },
+            ],
+          },
+        ],
+        ['an empty outer loop', { ...FACE, outer: [] }],
+      ] satisfies [string, FaceParams][])(
+        '%s rejects with invalid-input and creates no handle',
+        async (_, p) => {
+          expect(await rejectionCode(() => kernel.makeFace(p))).toBe('invalid-input');
+          expect(await kernel.liveHandleCount()).toBe(0);
         },
       );
     });
@@ -912,6 +1035,35 @@ export function describeGeometryKernelContract(
           expectEnclosesBox(await kernel.boundingBox(a), ORIGIN, BOX_MAX);
         },
       );
+
+      it('changing makeFace inputs right after the call, before await, does not change the face', async () => {
+        const origin: Vec3 = [0, 0, 0];
+        const corner: Vec2 = [4, 2];
+        const outer: ProfileCurve[] = [
+          line([1, 2], corner),
+          line(corner, [4, 5]),
+          line([4, 5], [1, 5]),
+          line([1, 5], [1, 2]),
+        ];
+        const holes: ProfileLoop[] = [];
+        const created = callWithoutThrow(() =>
+          kernel.makeFace({ plane: { ...PLANE_XY, origin }, outer, holes }),
+        );
+        // The inputs are readonly; the test writes into them on purpose.
+        Reflect.set(origin, 2, 100);
+        Reflect.set(corner, 0, 40);
+        outer.push(line([1, 2], [1, 2]));
+        holes.push([]);
+        const { shape } = await created;
+        expectBoxClose(await kernel.boundingBox(shape), [1, 2, 0], [4, 5, 0], 'face');
+      });
+
+      it('makeFace(null) rejects instead of throwing and creates no handle', async () => {
+        // Input outside the types; the cast through unknown breaks the types on purpose.
+        const code = await rejectionCode(() => kernel.makeFace(null as unknown as FaceParams));
+        expect(code).toBe('invalid-input');
+        expect(await kernel.liveHandleCount()).toBe(0);
+      });
 
       it('the bounding box shares no array with the makeBox input', async () => {
         const a = (await kernel.makeBox(BOX)).shape;

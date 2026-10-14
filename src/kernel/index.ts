@@ -19,8 +19,11 @@ export type {
   MeshOps,
   PrimitiveOps,
   QueryOps,
+  SketchOps,
   TransformOps,
 } from './kernel';
+export { validateFaceInput } from './profile';
+export type { ProfileCurve, ProfileLoop } from './profile';
 export { isRigidMotion } from './transform';
 export { createKernelError, kernelErrorCode } from './errors';
 export type { KernelErrorCode } from './errors';

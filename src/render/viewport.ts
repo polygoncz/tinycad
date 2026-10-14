@@ -17,6 +17,7 @@ import type {
   OverlayPort,
   PickFilter,
   PickResult,
+  SketchPort,
   ViewKeyEvent,
   ViewPointerEvent,
   ViewportEvents,
@@ -58,6 +59,8 @@ export interface Viewport extends ViewportPort, Disposable {
   readonly highlight: HighlightLayer;
   /** Temporary geometry of tools (implements OverlayPort). */
   readonly overlay: OverlayLayer;
+  /** Drawings of sketches and planes (M12); a placeholder until Ú8 brings SketchLayer. */
+  readonly sketches: SketchPort;
   /** Fit all, standard views. */
   readonly camera: CameraController;
 
@@ -340,6 +343,16 @@ export function createViewport(deps: {
     },
   };
 
+  // Placeholder (M12, Ú8 replaces it with SketchLayer): accepts drawings and draws nothing.
+  const sketches: SketchPort = {
+    set() {
+      assertAlive();
+    },
+    remove() {
+      assertAlive();
+    },
+  };
+
   const camera: CameraController = {
     fitAll() {
       assertAlive();
@@ -385,6 +398,7 @@ export function createViewport(deps: {
     bodies,
     highlight,
     overlay,
+    sketches,
     camera,
     setPalette(next: ScenePalette): void {
       assertAlive();

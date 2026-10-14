@@ -20,6 +20,12 @@ const FACE_HIT: PickResult = {
   normal: [0, 0, 1],
 };
 const EDGE_HIT: PickResult = { kind: 'edge', body: BODY, edgeIndex: 5, point: [0, 0, 0] };
+const SKETCH_HIT: PickResult = {
+  kind: 'sketchEntity',
+  sketch: 's1',
+  entity: 'p1',
+  point: [0, 0, 0],
+};
 const FACE: SelectionItem = { kind: 'face', body: BODY, faceIndex: 2 };
 const EDGE: SelectionItem = { kind: 'edge', body: BODY, edgeIndex: 5 };
 
@@ -123,6 +129,17 @@ describe('SELECT_TOOL', () => {
       click(10, 10);
       expect(viewport.lastFilter).toBeUndefined();
       expect(selection.items.get()).toEqual([EDGE]);
+    });
+
+    it('ignores a sketch entity hit it never asks for, as if nothing was hit', () => {
+      const { viewport, selection, pointer, click } = setup();
+      // A viewport that does not respect the filter: the tool must still not use the hit.
+      viewport.pick = () => SKETCH_HIT;
+      selection.set([EDGE]);
+      pointer(ptr('move', 10, 0));
+      expect(viewport.hover).toBeNull();
+      click(10, 10);
+      expect(selection.items.get()).toEqual([]);
     });
 
     it('leave clears the hover', () => {

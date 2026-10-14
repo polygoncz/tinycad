@@ -1,21 +1,27 @@
 // ToolManager (spec 10, "Nástroje"): exactly one tool is active and gets the viewport
 // events. Every activation gets its own ctx whose finish is bound to that activation,
 // so a stale tool cannot switch tools any more. While the dialog has a focused
-// reference param, the inner refPick covers the active tool (Q066).
+// reference param, the inner refPick covers the active tool (Q066). With a mode (M12) only the
+// tools of the current mode can be active and each mode has its own default tool.
 
 import { ObservableValue } from '@/core';
 import type { Observable, RegistryReader, Unsubscribe } from '@/core';
 import type { FeatureEditSession } from './feature-editor';
 import { isPlainEscape } from './key-events';
+import type { Mode } from './mode';
 import { createRefPick } from './ref-pick-tool';
 import type { RefPick } from './ref-pick-tool';
+import { toolModes } from './tools';
 import type { Tool, ToolContext, ToolDescriptor } from './tools';
 import type { ViewKeyEvent, ViewPointerEvent } from './viewport-port';
 
 export interface ToolManager {
   /** Id of the active tool. */
   readonly active: Observable<string>;
-  /** Deactivates the previous tool. Unknown id throws, the active tool stays. */
+  /**
+   * Deactivates the previous tool. An unknown id or a tool outside the current mode throws, the
+   * active tool stays.
+   */
   activate(id: string): void;
   /** Unsubscribes from the events, deactivates the active tool. */
   dispose(): void;
@@ -33,15 +39,35 @@ interface Activation {
 export function createToolManager(deps: {
   registry: RegistryReader<ToolDescriptor>;
   ctx: Omit<ToolContext, 'finish'>;
+  /** The default tool of the mode 'model'. */
   defaultToolId: string;
+  /** The current mode (M12); without it the mode is always 'model'. */
+  mode?: Observable<Mode>;
+  /** Default tools of the other modes; with `mode`, the one of 'sketch' must be registered. */
+  defaultToolIds?: Partial<Record<Mode, string>>;
   /** Keys from the viewport the tool did not handle (app hooks ActionRegistry.handleKey here). */
   unhandledKey?: (e: ViewKeyEvent) => boolean;
 }): ToolManager {
-  const { registry, defaultToolId } = deps;
-  // Throws for an unknown default tool before anything is subscribed.
-  registry.get(defaultToolId);
+  const { registry } = deps;
+  const modeOf = (): Mode => deps.mode?.get() ?? 'model';
 
-  const active = new ObservableValue<string>(defaultToolId);
+  /** The default tool of the mode; 'model' always has defaultToolId. */
+  function defaultIdOf(mode: Mode): string {
+    if (mode === 'model') return deps.defaultToolId;
+    const id = deps.defaultToolIds?.[mode];
+    if (id === undefined) throw new Error(`No default tool for the mode '${mode}'`);
+    return id;
+  }
+
+  // Throws for an unknown default tool before anything is subscribed.
+  registry.get(deps.defaultToolId);
+  if (deps.mode !== undefined) registry.get(defaultIdOf('sketch'));
+
+  /** The mode the active tool was started for; followed by onModeChanged. */
+  let mode = modeOf();
+  const defaultToolId = (): string => defaultIdOf(mode);
+
+  const active = new ObservableValue<string>(defaultToolId());
   let current: Activation | null = null;
   let disposed = false;
 
@@ -57,7 +83,7 @@ export function createToolManager(deps: {
       activation = activateTool(id, descriptor.create());
     } catch (error) {
       current = null;
-      if (id !== defaultToolId) restoreDefault(error);
+      if (id !== defaultToolId()) restoreDefault(error);
       throw error;
     }
     // Outside the try: the tool is fine, only switching back to the default may fail.
@@ -82,7 +108,7 @@ export function createToolManager(deps: {
   /** After a failed tool; when the default fails too, both errors fly on. */
   function restoreDefault(cause: unknown): void {
     try {
-      start(defaultToolId);
+      start(defaultToolId());
     } catch (error) {
       throw new AggregateError([cause, error], 'The tool and the default tool failed', {
         cause: error,
@@ -91,13 +117,13 @@ export function createToolManager(deps: {
   }
 
   function finish(activation: Activation): void {
-    if (activation !== current || activation.id === defaultToolId) return;
+    if (activation !== current || activation.id === defaultToolId()) return;
     if (activation.activating) {
       // "Open a dialog and finish" tools: switch only after activate has returned.
       activation.finishRequested = true;
       return;
     }
-    switchTo(defaultToolId);
+    switchTo(defaultToolId());
   }
 
   function switchTo(id: string): void {
@@ -166,19 +192,28 @@ export function createToolManager(deps: {
     const activation = current;
     if (activation === null) return;
     if (activation.tool.onKey?.(e) === true) return;
-    if (isPlainEscape(e) && activation.id !== defaultToolId) {
-      switchTo(defaultToolId);
+    if (isPlainEscape(e) && activation.id !== defaultToolId()) {
+      switchTo(defaultToolId());
       return;
     }
     deps.unhandledKey?.(e);
   }
 
+  /** A new mode: the active tool gives way to the default tool of the mode. */
+  function onModeChanged(): void {
+    const next = modeOf();
+    if (next === mode) return;
+    mode = next;
+    switchTo(defaultToolId());
+  }
+
   // Start first: a failing default tool throws out of here with nothing subscribed.
-  start(defaultToolId);
+  start(defaultToolId());
   const subscriptions: readonly Unsubscribe[] = [
     deps.ctx.viewport.events.on('pointer', onPointer),
     deps.ctx.viewport.events.on('key', onKey),
     deps.ctx.features.current.subscribe(onSessionChanged),
+    ...(deps.mode === undefined ? [] : [deps.mode.subscribe(onModeChanged)]),
   ];
   onSessionChanged();
 
@@ -186,6 +221,10 @@ export function createToolManager(deps: {
     active: active.asObservable(),
     activate(id) {
       if (disposed) throw new Error('ToolManager is disposed');
+      // Throws for an unknown id first, then for a tool of another mode.
+      if (!toolModes(registry.get(id)).includes(mode)) {
+        throw new Error(`Tool '${id}' is not available in the mode '${mode}'`);
+      }
       switchTo(id);
     },
     dispose() {

@@ -6,6 +6,7 @@ import type { IdGenerator, Registry } from '@/core';
 import type { DocumentReader } from '@/document';
 import type { OperationDispatcher } from '@/ops';
 import type { FeatureEditor } from './feature-editor';
+import type { Mode } from './mode';
 import type { SelectionCommands } from './selection';
 import type { ViewKeyEvent, ViewPointerEvent, ViewportPort } from './viewport-port';
 
@@ -35,10 +36,20 @@ export interface ToolDescriptor {
   readonly label: string;
   /** Icon name, the UI translates it. */
   readonly icon: string;
-  readonly group: 'select' | 'primitive' | 'sketch' | 'feature' | 'modify';
+  /** 'draw' and 'constrain' since M12 (the sketcher toolbar). */
+  readonly group: 'select' | 'primitive' | 'sketch' | 'feature' | 'modify' | 'draw' | 'constrain';
+  /** Modes the tool exists in; default ['model'] (M12, see toolModes). */
+  readonly modes?: readonly Mode[];
   /** Information for the UI only; app registers the shortcut as an action. */
   readonly shortcut?: string;
   create(): Tool;
+}
+
+const MODEL_ONLY: readonly Mode[] = Object.freeze(['model']);
+
+/** The modes of the tool: its own, or ['model'] when it does not say. */
+export function toolModes(d: ToolDescriptor): readonly Mode[] {
+  return d.modes ?? MODEL_ONLY;
 }
 
 /** Key = id, see core. */

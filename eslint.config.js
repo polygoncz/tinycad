@@ -12,6 +12,7 @@ const platformIndependent = [
   'src/ops/**/*.ts',
   'src/persistence/**/*.ts',
   'src/kernel/**/*.ts',
+  'src/sketch/**/*.ts',
   'src/regen/**/*.ts',
   'src/plugin-api/**/*.ts',
   'src/features/**/*.ts',

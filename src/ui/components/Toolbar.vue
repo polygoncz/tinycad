@@ -54,12 +54,14 @@ const menu = ref<{ readonly x: number; readonly y: number; readonly groupId: str
 const menuGroup = computed(() => groups.value.find((g) => g.id === menu.value?.groupId));
 const menuItems = computed((): readonly ActionState[] =>
   (menuGroup.value?.items ?? []).map((item) =>
-    Object.freeze({
+    Object.freeze<ActionState>({
       id: item.id,
       label: item.label,
       shortcut: item.shortcut,
       group: null,
       enabled: item.enabled,
+      // Only displayed by the menu, which ignores the modes.
+      modes: ['model', 'sketch'],
     }),
   ),
 );

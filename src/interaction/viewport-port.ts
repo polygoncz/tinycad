@@ -3,7 +3,7 @@
 // only these types. No DOM types here: adapters convert DOM events into ViewPointerEvent
 // and ViewKeyEvent before they reach interaction (ring 2, ADR 0009).
 
-import type { Subscribable, Vec3 } from '@/core';
+import type { Plane, Subscribable, Vec2, Vec3 } from '@/core';
 import type { BodyId } from '@/document';
 
 export interface ViewportPort {
@@ -18,11 +18,15 @@ export interface ViewportPort {
   readonly highlight: HighlightPort;
   /** Temporary geometry of tools. */
   readonly overlay: OverlayPort;
+  /** Drawings of sketches and planes, pickable as 'sketchEntity' (M12). */
+  readonly sketches: SketchPort;
   readonly events: Subscribable<ViewportEvents>;
 }
 
-/** What pick can hit. M12 adds 'sketchEntity', M14 'vertex'. */
-export type PickKind = 'face' | 'edge';
+/**
+ * What pick can hit; 'sketchEntity' since M12 (not in the default filter), M14 adds 'vertex'.
+ */
+export type PickKind = 'face' | 'edge' | 'sketchEntity';
 
 /** Kinds pick may return, in any order; empty = nothing can be picked. */
 export type PickFilter = readonly PickKind[];
@@ -32,10 +36,15 @@ export interface ViewportEvents {
   readonly key: ViewKeyEvent;
 }
 
-/** What can be highlighted: a face or an edge of a body, without point and normal (Q065). */
+/**
+ * What can be highlighted: a face or an edge of a body, without point and normal (Q065), or an
+ * entity of a sketch drawing (M12). HighlightPort ignores the latter for now: the style of the
+ * drawing carries its highlight.
+ */
 export type HighlightTarget =
   | { readonly kind: 'face'; readonly body: BodyId; readonly faceIndex: number }
-  | { readonly kind: 'edge'; readonly body: BodyId; readonly edgeIndex: number };
+  | { readonly kind: 'edge'; readonly body: BodyId; readonly edgeIndex: number }
+  | { readonly kind: 'sketchEntity'; readonly sketch: string; readonly entity: string };
 
 /**
  * A HighlightTarget plus where it was hit, so it can be passed to setHover as it is.
@@ -54,6 +63,14 @@ export type PickResult =
       readonly kind: 'edge';
       readonly body: BodyId;
       readonly edgeIndex: number;
+      readonly point: Vec3;
+    }
+  | {
+      readonly kind: 'sketchEntity';
+      /** Id of the drawing (SketchPort.set). */
+      readonly sketch: string;
+      /** Id of the point or curve in the drawing. */
+      readonly entity: string;
       readonly point: Vec3;
     };
 
@@ -85,6 +102,50 @@ export interface OverlayPort {
   /** Unknown id = no-op. */
   remove(id: string): void;
   clear(): void;
+}
+
+/** Style of a sketch drawing element; render picks the colour (spec 09, "Skici"). */
+export type SketchStyle = 'normal' | 'defined' | 'construction' | 'hover' | 'selected' | 'plane';
+
+/** A curve of a drawing in the 2D coordinates of its plane. */
+export type SketchDrawingCurve =
+  | {
+      readonly kind: 'line';
+      readonly id: string;
+      readonly from: Vec2;
+      readonly to: Vec2;
+      readonly style: SketchStyle;
+    }
+  | {
+      readonly kind: 'arc';
+      readonly id: string;
+      readonly center: Vec2;
+      readonly radius: number;
+      /** Counter-clockwise from startAngle to endAngle > startAngle; a full circle = +2π. */
+      readonly startAngle: number;
+      readonly endAngle: number;
+      readonly style: SketchStyle;
+    };
+
+export interface SketchDrawingPoint {
+  readonly id: string;
+  readonly at: Vec2;
+  readonly style: SketchStyle;
+}
+
+/** A sketch or a plane as platform-neutral data: a plane plus 2D shapes with styles. */
+export interface SketchDrawing {
+  readonly plane: Plane;
+  readonly curves: readonly SketchDrawingCurve[];
+  readonly points: readonly SketchDrawingPoint[];
+}
+
+/** A mirror like the overlay, but with entity ids and pickable (render tessellates it). */
+export interface SketchPort {
+  /** Replaces the drawing under the id. */
+  set(id: string, drawing: SketchDrawing): void;
+  /** Unknown id = no-op. */
+  remove(id: string): void;
 }
 
 /**

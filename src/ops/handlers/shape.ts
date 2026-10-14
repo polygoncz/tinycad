@@ -1,4 +1,4 @@
-import { parseBodyId } from '@/document';
+import { ORIGIN, parseBodyId } from '@/document';
 import type { OperationLoadError } from '../load-error';
 
 // Small shape checks for validate of the built-in handlers (Q032). Only the shape of the
@@ -20,10 +20,13 @@ export const nonEmptyString = check(
   (v) => typeof v === 'string' && v !== '',
   'Must be a non-empty string',
 );
-/** A new feature id: the owner part of artifact ids, so it must not contain '/' (spec 03). */
+/**
+ * A new feature id: the owner part of artifact ids, so it must not contain '/', and 'origin' is
+ * the reserved owner of the origin geometry (spec 03, M12).
+ */
 export const featureIdText = check(
-  (v) => typeof v === 'string' && v !== '' && !v.includes('/'),
-  "Must be a non-empty string without '/'",
+  (v) => typeof v === 'string' && v !== '' && !v.includes('/') && v !== ORIGIN,
+  "Must be a non-empty string without '/', other than 'origin'",
 );
 /** A body id '<owner>/body[:<n>]', the shape bodyId mints (spec 03). */
 export const bodyIdText = check(

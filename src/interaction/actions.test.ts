@@ -2,6 +2,8 @@ import { ObservableValue } from '@/core';
 import { describe, expect, it } from 'vitest';
 import { createActionRegistry } from './actions';
 import type { Action } from './actions';
+import { ALL_MODES } from './mode';
+import type { Mode } from './mode';
 import type { KeyMods, ViewKeyEvent } from './viewport-port';
 
 interface TestAction extends Action {
@@ -11,7 +13,12 @@ interface TestAction extends Action {
 
 function anAction(
   id: string,
-  opts: { shortcut?: string | readonly string[]; enabled?: boolean; group?: string } = {},
+  opts: {
+    shortcut?: string | readonly string[];
+    enabled?: boolean;
+    group?: string;
+    modes?: readonly Mode[];
+  } = {},
 ): TestAction {
   const enabledValue = new ObservableValue(opts.enabled ?? true);
   let runs = 0;
@@ -20,6 +27,7 @@ function anAction(
     label: `Label ${id}`,
     ...(opts.shortcut === undefined ? {} : { shortcut: opts.shortcut }),
     ...(opts.group === undefined ? {} : { group: opts.group }),
+    ...(opts.modes === undefined ? {} : { modes: opts.modes }),
     enabled: enabledValue,
     enabledValue,
     run: () => {
@@ -47,6 +55,7 @@ describe('ActionRegistry', () => {
           shortcut: 'Mod+Z',
           group: null,
           enabled: true,
+          modes: ALL_MODES,
         },
         {
           id: 'edit.redo',
@@ -54,6 +63,7 @@ describe('ActionRegistry', () => {
           shortcut: null,
           group: null,
           enabled: false,
+          modes: ALL_MODES,
         },
       ]);
     });
@@ -299,6 +309,126 @@ describe('ActionRegistry', () => {
       const registry = createActionRegistry();
       registry.register(anAction('a'));
       expect(registry.handleKey(key('F2'))).toBe(false);
+    });
+  });
+
+  describe('modes', () => {
+    function withMode(initial: Mode = 'model') {
+      const mode = new ObservableValue<Mode>(initial);
+      return { mode, registry: createActionRegistry({ mode: mode.asObservable() }) };
+    }
+
+    it('the snapshot carries the modes of the action, all by default', () => {
+      const { registry } = withMode();
+      registry.register(anAction('a'));
+      registry.register(anAction('b', { modes: ['sketch'] }));
+      expect(registry.actions.get().map((s) => s.modes)).toEqual([ALL_MODES, ['sketch']]);
+    });
+
+    it('the same shortcut in disjoint modes is allowed', () => {
+      const { registry } = withMode();
+      registry.register(anAction('feature.delete', { shortcut: 'Delete', modes: ['model'] }));
+      expect(() => {
+        registry.register(anAction('sketch.delete', { shortcut: 'Delete', modes: ['sketch'] }));
+      }).not.toThrow();
+    });
+
+    it('the same shortcut in overlapping modes throws', () => {
+      const { registry } = withMode();
+      registry.register(anAction('a', { shortcut: 'X', modes: ['model'] }));
+      expect(() => {
+        registry.register(anAction('b', { shortcut: 'x', modes: ['model', 'sketch'] }));
+      }).toThrow(/'a'/);
+      expect(() => {
+        registry.register(anAction('c', { shortcut: 'X' }));
+      }).toThrow(/'a'/);
+    });
+
+    it('handleKey looks only among the actions of the current mode', () => {
+      const { registry, mode } = withMode();
+      const model = anAction('feature.delete', { shortcut: 'Delete', modes: ['model'] });
+      const sketch = anAction('sketch.delete', { shortcut: 'Delete', modes: ['sketch'] });
+      const onlyModel = anAction('feature.suppress', { shortcut: 'S', modes: ['model'] });
+      registry.register(model);
+      registry.register(sketch);
+      registry.register(onlyModel);
+
+      expect(registry.handleKey(key('Delete'))).toBe(true);
+      expect([model.runs(), sketch.runs()]).toEqual([1, 0]);
+
+      mode.set('sketch');
+      expect(registry.handleKey(key('Delete'))).toBe(true);
+      expect([model.runs(), sketch.runs()]).toEqual([1, 1]);
+      expect(registry.handleKey(key('s'))).toBe(false);
+      expect(onlyModel.runs()).toBe(0);
+    });
+
+    it('enabled in the snapshot is enabled of the action and the mode', () => {
+      const { registry } = withMode('sketch');
+      registry.register(anAction('a', { modes: ['model'] }));
+      registry.register(anAction('b', { modes: ['sketch'] }));
+      registry.register(anAction('c', { modes: ['sketch'], enabled: false }));
+      expect(registry.actions.get().map((s) => s.enabled)).toEqual([false, true, false]);
+    });
+
+    it('a change of mode gives one new snapshot replacing only the changed states', () => {
+      const { registry, mode } = withMode();
+      registry.register(anAction('a', { modes: ['model'] }));
+      registry.register(anAction('b'));
+      registry.register(anAction('c', { modes: ['sketch'] }));
+      registry.register(anAction('d', { modes: ['sketch'], enabled: false }));
+      const before = registry.actions.get();
+      let calls = 0;
+      registry.actions.subscribe(() => calls++);
+
+      mode.set('sketch');
+
+      const after = registry.actions.get();
+      expect(calls).toBe(1);
+      expect(after.map((s) => s.enabled)).toEqual([false, true, true, false]);
+      expect(after[1]).toBe(before[1]);
+      expect(after[3]).toBe(before[3]);
+      expect(after[0]).not.toBe(before[0]);
+      expect(Object.isFrozen(after)).toBe(true);
+    });
+
+    it('a change of mode that changes no state emits nothing', () => {
+      const { registry, mode } = withMode();
+      registry.register(anAction('a'));
+      let calls = 0;
+      registry.actions.subscribe(() => calls++);
+      mode.set('sketch');
+      expect(calls).toBe(0);
+    });
+
+    it('a change of enabled outside the mode keeps the state disabled', () => {
+      const { registry } = withMode();
+      const a = anAction('a', { modes: ['sketch'], enabled: false });
+      registry.register(a);
+      const before = registry.actions.get();
+      a.enabledValue.set(true);
+      expect(registry.actions.get()).toBe(before);
+      expect(registry.actions.get()[0]?.enabled).toBe(false);
+    });
+
+    it('run of an action outside the mode returns false and does not run it', () => {
+      const { registry, mode } = withMode();
+      const a = anAction('a', { modes: ['sketch'] });
+      registry.register(a);
+      expect(registry.run('a')).toBe(false);
+      expect(a.runs()).toBe(0);
+      mode.set('sketch');
+      expect(registry.run('a')).toBe(true);
+      expect(a.runs()).toBe(1);
+    });
+
+    it('without a mode the registry is in the mode model', () => {
+      const registry = createActionRegistry();
+      const a = anAction('a', { shortcut: 'X', modes: ['sketch'] });
+      registry.register(a);
+      expect(registry.actions.get()[0]?.enabled).toBe(false);
+      expect(registry.handleKey(key('x'))).toBe(false);
+      expect(registry.run('a')).toBe(false);
     });
   });
 });

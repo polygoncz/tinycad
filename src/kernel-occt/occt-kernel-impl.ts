@@ -1,5 +1,5 @@
 import type { NCollection_List_TopoDS_Shape, TopoDS_Shape } from 'replicad-opencascadejs';
-import type { Mat4, Vec3 } from '@/core';
+import type { Mat4, Plane, Vec3 } from '@/core';
 import {
   createKernelError,
   isRigidMotion,
@@ -8,9 +8,12 @@ import {
   type GeometryKernel,
   type MeshData,
   type MeshQuality,
+  type ProfileLoop,
   type ShapeHandle,
   type ShapeResult,
+  validateFaceInput,
 } from '@/kernel';
+import { copyFaceInput, faceShape } from './face';
 import { toKernelError, type Occt } from './occt';
 import { createShapeEntry, deleteShapeEntry, type ShapeEntry } from './shape-entry';
 import { tessellateEntry } from './tessellate';
@@ -119,6 +122,25 @@ export class OcctKernelImpl implements GeometryKernel {
       const targetShapes = lists.targets.map((h) => this.entry(h).shape);
       const toolShapes = lists.tools.map((h) => this.entry(h).shape);
       return this.add(this.booleanShape(op, targetShapes, toolShapes));
+    });
+  }
+
+  makeFace(p: {
+    readonly plane: Plane;
+    readonly outer: ProfileLoop;
+    readonly holes: readonly ProfileLoop[];
+  }): Promise<ShapeResult> {
+    // The check reads the whole input synchronously and never throws; a valid input is copied
+    // right away (isolation), an invalid one leaves only the messages.
+    const read = () => {
+      const errors = validateFaceInput(p);
+      return errors.length === 0 ? { input: copyFaceInput(p), errors } : { errors };
+    };
+    return this.run(read, ({ input, errors }) => {
+      if (input === undefined) {
+        throw createKernelError('invalid-input', `makeFace: ${errors.join('; ')}`);
+      }
+      return this.add(faceShape(this.oc, input));
     });
   }
 

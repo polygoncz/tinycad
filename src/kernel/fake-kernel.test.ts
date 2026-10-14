@@ -219,6 +219,71 @@ describe('FakeKernel', () => {
     });
   });
 
+  describe('makeFace (M12)', () => {
+    const XY = { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, 0, 1] } as const;
+    const SQUARE = [
+      { kind: 'line', from: [0, 0], to: [2, 0] },
+      { kind: 'line', from: [2, 0], to: [2, 2] },
+      { kind: 'line', from: [2, 2], to: [0, 2] },
+      { kind: 'line', from: [0, 2], to: [0, 0] },
+    ] as const;
+    const FACE = { plane: XY, outer: SQUARE, holes: [] };
+
+    it('a quarter arc adds only the cardinal points that lie on it', async () => {
+      const kernel = createFakeKernel();
+      // From (1, 0) ccw to (0, 1) about the origin: passes no other cardinal point.
+      const { shape } = await kernel.makeFace({
+        plane: XY,
+        outer: [
+          { kind: 'line', from: [0, 0], to: [1, 0] },
+          { kind: 'arc', center: [0, 0], from: [1, 0], to: [0, 1], ccw: true },
+          { kind: 'line', from: [0, 1], to: [0, 0] },
+        ],
+        holes: [],
+      });
+      expect(await kernel.boundingBox(shape)).toEqual({ min: [0, 0, 0], max: [1, 1, 0] });
+    });
+
+    it('the same quarter arc clockwise goes the long way round', async () => {
+      const kernel = createFakeKernel();
+      const { shape } = await kernel.makeFace({
+        plane: XY,
+        outer: [
+          { kind: 'line', from: [0, 0], to: [1, 0] },
+          { kind: 'arc', center: [0, 0], from: [1, 0], to: [0, 1], ccw: false },
+          { kind: 'line', from: [0, 1], to: [0, 0] },
+        ],
+        holes: [],
+      });
+      expect(await kernel.boundingBox(shape)).toEqual({ min: [-1, -1, 0], max: [1, 1, 0] });
+    });
+
+    it('is tessellated as a box of zero thickness', async () => {
+      const kernel = createFakeKernel();
+      const { shape } = await kernel.makeFace(FACE);
+      const mesh = await kernel.tessellate(shape, QUALITY);
+      expect(mesh.positions).toHaveLength(24 * 3);
+      expect(mesh.faceRanges).toHaveLength(6 * 3);
+    });
+
+    it('failNext works for makeFace and creates no handle', async () => {
+      const kernel = createFakeKernel();
+      kernel.failNext('makeFace', 'operation-failed', 'boom');
+      const e = await rejection(kernel.makeFace(FACE));
+      expect(kernelErrorCode(e)).toBe('operation-failed');
+      expect(e).toHaveProperty('message', 'boom');
+      expect(await kernel.liveHandleCount()).toBe(0);
+      await expect(kernel.makeFace(FACE)).resolves.toHaveProperty('shape');
+    });
+
+    it('callCount counts makeFace, failed calls included', async () => {
+      const kernel = createFakeKernel();
+      await kernel.makeFace(FACE);
+      await rejection(kernel.makeFace({ ...FACE, outer: [] }));
+      expect(kernel.callCount('makeFace')).toBe(2);
+    });
+  });
+
   describe('box', () => {
     it('the bounding box is exact', async () => {
       const kernel = createFakeKernel();

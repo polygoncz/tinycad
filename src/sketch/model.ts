@@ -1,0 +1,135 @@
+import type { Brand } from '@/core';
+
+// The data model of a sketch (spec 12 "Data"). Plain immutable data stored in the params of a
+// sketch feature; coordinates are already solved, so replaying the log never needs the solver.
+
+export type SketchEntityId = Brand<string, 'SketchEntityId'>;
+export type SketchConstraintId = Brand<string, 'SketchConstraintId'>;
+/** What can be selected in the sketcher: an entity or a constraint. */
+export type SketchItemId = SketchEntityId | SketchConstraintId;
+
+export interface SketchPoint {
+  readonly kind: 'point';
+  readonly id: SketchEntityId;
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface SketchLine {
+  readonly kind: 'line';
+  readonly id: SketchEntityId;
+  readonly p1: SketchEntityId;
+  readonly p2: SketchEntityId;
+  readonly construction?: true;
+}
+
+export interface SketchCircle {
+  readonly kind: 'circle';
+  readonly id: SketchEntityId;
+  readonly center: SketchEntityId;
+  readonly radius: number;
+  readonly construction?: true;
+}
+
+/** Counter-clockwise arc from start to end around center; radius = |start − center| = |end − center|. */
+export interface SketchArc {
+  readonly kind: 'arc';
+  readonly id: SketchEntityId;
+  readonly center: SketchEntityId;
+  readonly start: SketchEntityId;
+  readonly end: SketchEntityId;
+  readonly construction?: true;
+}
+
+export type SketchCurve = SketchLine | SketchCircle | SketchArc;
+export type SketchEntity = SketchPoint | SketchCurve;
+
+export type GeometricConstraintKind =
+  | 'coincident'
+  | 'horizontal'
+  | 'vertical'
+  | 'parallel'
+  | 'perpendicular'
+  | 'equal'
+  | 'tangent'
+  | 'fix';
+
+/** In this order: the order of the constraint actions in the toolbar. */
+export const GEOMETRIC_CONSTRAINT_KINDS: readonly GeometricConstraintKind[] = Object.freeze([
+  'coincident',
+  'horizontal',
+  'vertical',
+  'parallel',
+  'perpendicular',
+  'equal',
+  'tangent',
+  'fix',
+]);
+
+export type DimensionKind = 'distance' | 'radius';
+
+export type SketchConstraint =
+  /** Two points. */
+  | {
+      readonly kind: 'coincident';
+      readonly id: SketchConstraintId;
+      readonly a: SketchEntityId;
+      readonly b: SketchEntityId;
+    }
+  | {
+      readonly kind: 'horizontal' | 'vertical';
+      readonly id: SketchConstraintId;
+      readonly line: SketchEntityId;
+    }
+  /** Two lines. */
+  | {
+      readonly kind: 'parallel' | 'perpendicular';
+      readonly id: SketchConstraintId;
+      readonly a: SketchEntityId;
+      readonly b: SketchEntityId;
+    }
+  /** Two lines (length) or two circles/arcs (radius). */
+  | {
+      readonly kind: 'equal';
+      readonly id: SketchConstraintId;
+      readonly a: SketchEntityId;
+      readonly b: SketchEntityId;
+    }
+  /** A line and a circle/arc (either order), or two circles/arcs. */
+  | {
+      readonly kind: 'tangent';
+      readonly id: SketchConstraintId;
+      readonly a: SketchEntityId;
+      readonly b: SketchEntityId;
+    }
+  /** The point stays at its coordinates. */
+  | { readonly kind: 'fix'; readonly id: SketchConstraintId; readonly point: SketchEntityId }
+  /** Two points, value > 0. */
+  | {
+      readonly kind: 'distance';
+      readonly id: SketchConstraintId;
+      readonly a: SketchEntityId;
+      readonly b: SketchEntityId;
+      readonly value: number;
+    }
+  /** A circle or an arc, value > 0. */
+  | {
+      readonly kind: 'radius';
+      readonly id: SketchConstraintId;
+      readonly curve: SketchEntityId;
+      readonly value: number;
+    };
+
+export interface SketchData {
+  readonly entities: readonly SketchEntity[];
+  readonly constraints: readonly SketchConstraint[];
+}
+
+/** Omit that keeps a union a union (plain Omit would merge its members into one object type). */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
+/** A constraint before it gets its id (ids are generated before the operation, spec 12). */
+export type SketchConstraintDraft = DistributiveOmit<SketchConstraint, 'id'>;
+
+/** The feature type of a sketch: the only link of interaction and regen to the sketch plugin. */
+export const SKETCH_FEATURE_TYPE = 'sketch';

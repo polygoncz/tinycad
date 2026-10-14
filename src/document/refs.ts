@@ -28,8 +28,20 @@ export interface SketchRegionRef {
   readonly region: string;
 }
 
+/** '<owner>/plane:<name>' with the name [a-z0-9]+ (M12); the origin planes are owned by ORIGIN. */
+export type PlaneId = Brand<string, 'PlaneId'>;
+
+/** A plane, see spec 12 (M12). */
+export interface PlaneRef {
+  readonly kind: 'plane';
+  readonly plane: PlaneId;
+}
+
 /** Any reference; `kind` tells which. */
-export type EntityRef = BodyRef | TopoRef | SketchRegionRef;
+export type EntityRef = BodyRef | TopoRef | SketchRegionRef | PlaneRef;
+
+/** '<featureId>/sketch', the sketch artifact of a sketch feature (M12). */
+export type SketchId = Brand<string, 'SketchId'>;
 
 // Artifact ids are '<owner>/<kind>[:<n>]' (ADR 0015): the owner can always be read back,
 // so the dependency graph follows from the references alone.
@@ -50,12 +62,25 @@ export function bodyId(origin: FeatureId, n?: number): BodyId {
   return `${origin}/body${suffix}` as BodyId;
 }
 
+/** The id of the sketch of a feature: '<owner>/sketch'. The single place where a SketchId is minted. */
+export function sketchId(owner: FeatureId): SketchId {
+  assert(owner.length > 0 && !owner.includes('/'), `sketchId: invalid owner '${owner}'`);
+  // The trusted place where a SketchId is minted (ADR 0015).
+  return `${owner}/sketch` as SketchId;
+}
+
 /** The feature that minted the body id: the text before the first '/'. */
 export function originOfBody(body: BodyId): FeatureId {
-  const slash = body.indexOf('/');
-  assert(slash !== -1, `originOfBody: '${body}' is not a body id`);
-  // The text before '/' is the FeatureId that bodyId() was given.
-  return body.slice(0, slash) as FeatureId;
+  assert(body.includes('/'), `originOfBody: '${body}' is not a body id`);
+  return ownerOfId(body);
+}
+
+/** The owner of an artifact id: the text before the first '/' (ADR 0015). */
+function ownerOfId(id: string): FeatureId {
+  const slash = id.indexOf('/');
+  assert(slash !== -1, `ownerOf: '${id}' is not an artifact id`);
+  // The text before '/' is the FeatureId the id was minted for.
+  return id.slice(0, slash) as FeatureId;
 }
 
 /** The feature whose result the reference points to. */
@@ -66,6 +91,9 @@ export function ownerOf(ref: EntityRef): FeatureId {
       return originOfBody(ref.body);
     case 'region':
       return ref.sketch;
+    case 'plane':
+      // parsePlaneId guarantees one '/'; for the origin planes the owner is ORIGIN.
+      return ownerOfId(ref.plane);
     default:
       return assertNever(ref);
   }
@@ -94,6 +122,10 @@ export function readRef(kind: EntityRef['kind'], r: unknown): EntityRef | undefi
       return typeof r.sketch === 'string' && typeof r.region === 'string'
         ? Object.freeze({ kind, sketch: r.sketch as FeatureId, region: r.region })
         : undefined;
+    case 'plane': {
+      const plane = parsePlaneId(r.plane);
+      return plane === undefined ? undefined : Object.freeze({ kind, plane });
+    }
     default:
       return assertNever(kind);
   }
@@ -114,4 +146,16 @@ const BODY_ID = /^[^/]+\/body(?::[1-9][0-9]*)?$/;
 export function parseBodyId(v: unknown): BodyId | undefined {
   // The cast follows the shape check, as in fromData.
   return typeof v === 'string' && BODY_ID.test(v) ? (v as BodyId) : undefined;
+}
+
+/** '<owner>/plane:<name>': the owner non-empty without '/', the name [a-z0-9]+ (M12). */
+const PLANE_ID = /^[^/]+\/plane:[a-z0-9]+$/;
+
+/**
+ * Text in the shape of a plane id '<owner>/plane:<name>' -> PlaneId, otherwise undefined. The
+ * trusted place where a plane id from outside becomes branded (references, spec 03).
+ */
+export function parsePlaneId(v: unknown): PlaneId | undefined {
+  // The cast follows the shape check, as in fromData.
+  return typeof v === 'string' && PLANE_ID.test(v) ? (v as PlaneId) : undefined;
 }

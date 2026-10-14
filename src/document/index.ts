@@ -10,8 +10,20 @@ export type {
   FeatureInstance,
   PartStudioData,
 } from './model';
-export type { BodyId, BodyRef, EntityRef, SketchRegionRef, TopoName, TopoRef } from './refs';
-export { bodyId, originOfBody, ownerOf, parseBodyId } from './refs';
+export type {
+  BodyId,
+  BodyRef,
+  EntityRef,
+  PlaneId,
+  PlaneRef,
+  SketchId,
+  SketchRegionRef,
+  TopoName,
+  TopoRef,
+} from './refs';
+export { bodyId, originOfBody, ownerOf, parseBodyId, parsePlaneId, sketchId } from './refs';
+export { ORIGIN, ORIGIN_PLANE_IDS, ORIGIN_PLANES } from './origin';
+export type { OriginPlane } from './origin';
 export { dependenciesOf, dependentsOf, orderViolations, referencesOf } from './references';
 export type { OrderViolation } from './references';
 

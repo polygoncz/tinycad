@@ -55,7 +55,15 @@ export type ParamSpec =
       readonly label: string;
       readonly min?: number;
       readonly max?: number;
-    }; // SketchRegionRef[]
+    } // SketchRegionRef[]
+  | {
+      readonly kind: 'planes';
+      readonly label: string;
+      readonly min?: number;
+      readonly max?: number;
+    } // PlaneRef[] (M12)
+  // Any JSON data without a form field; the schema's own validate checks the content (M12, sketch).
+  | { readonly kind: 'data'; readonly label: string };
 
 export type ParamSchema = Readonly<Record<string, ParamSpec>>;
 

@@ -7,6 +7,7 @@ import type {
   OverlayShape,
   PickKind,
   PickResult,
+  SketchDrawing,
   ViewKeyEvent,
   ViewPointerEvent,
 } from '.';
@@ -33,6 +34,19 @@ const LINE: OverlayShape = {
   style: 'preview',
 };
 const POINT: OverlayShape = { kind: 'points', points: [[2, 2, 2]], style: 'construction' };
+const SKETCH_HIT: PickResult = {
+  kind: 'sketchEntity',
+  sketch: 's1',
+  entity: 'p1',
+  point: [1, 1, 0],
+};
+const XY = { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, 0, 1] } as const;
+const DRAWING_A: SketchDrawing = {
+  plane: XY,
+  curves: [{ kind: 'line', id: 'l1', from: [0, 0], to: [1, 0], style: 'normal' }],
+  points: [{ id: 'p1', at: [0, 0], style: 'selected' }],
+};
+const DRAWING_B: SketchDrawing = { plane: XY, curves: [], points: [] };
 
 describe('FakeViewport', () => {
   describe('pick', () => {
@@ -64,6 +78,14 @@ describe('FakeViewport', () => {
       view.setPick(FACE);
       expect(view.pick(0, 0, ['edge'])).toBeNull();
       expect(view.pick(0, 0, ['face'])).toBe(FACE);
+    });
+
+    it('returns a sketch entity only with sketchEntity in the filter', () => {
+      const view = new FakeViewport();
+      view.setPick(SKETCH_HIT);
+      expect(view.pick(0, 0)).toBeNull();
+      expect(view.pick(0, 0, ['face', 'edge'])).toBeNull();
+      expect(view.pick(0, 0, ['sketchEntity'])).toBe(SKETCH_HIT);
     });
 
     it('lastFilter is the filter of the last call, undefined without one', () => {
@@ -191,6 +213,42 @@ describe('FakeViewport', () => {
       const before = view.overlayShapes;
       view.overlay.clear();
       expect(before).toEqual(new Map([['a', [LINE]]]));
+    });
+  });
+
+  describe('sketches', () => {
+    it('starts empty', () => {
+      expect(new FakeViewport().sketchDrawings.size).toBe(0);
+    });
+
+    it('set replaces the drawing under the id and keeps other ids', () => {
+      const view = new FakeViewport();
+      view.sketches.set('a', DRAWING_A);
+      view.sketches.set('b', DRAWING_B);
+      view.sketches.set('a', DRAWING_B);
+      expect(view.sketchDrawings).toEqual(
+        new Map([
+          ['a', DRAWING_B],
+          ['b', DRAWING_B],
+        ]),
+      );
+    });
+
+    it('remove drops only the given id, an unknown id does nothing', () => {
+      const view = new FakeViewport();
+      view.sketches.set('a', DRAWING_A);
+      view.sketches.set('b', DRAWING_B);
+      view.sketches.remove('a');
+      view.sketches.remove('unknown');
+      expect(view.sketchDrawings).toEqual(new Map([['b', DRAWING_B]]));
+    });
+
+    it('a recorded snapshot does not change with later calls', () => {
+      const view = new FakeViewport();
+      view.sketches.set('a', DRAWING_A);
+      const before = view.sketchDrawings;
+      view.sketches.remove('a');
+      expect(before).toEqual(new Map([['a', DRAWING_A]]));
     });
   });
 

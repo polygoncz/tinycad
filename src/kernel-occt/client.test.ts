@@ -116,6 +116,7 @@ describe('endOnFatal', () => {
       makeCylinder: (p) => fake.makeCylinder(p),
       transform: (s, m) => fake.transform(s, m),
       boolean: (op, targets, tools) => fake.boolean(op, targets, tools),
+      makeFace: (p) => fake.makeFace(p),
       tessellate: (s, q) => fake.tessellate(s, q),
       boundingBox: (s) => fake.boundingBox(s),
       release: (h) => fake.release(h),

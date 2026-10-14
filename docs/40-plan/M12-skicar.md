@@ -50,10 +50,10 @@ updated: 2026-10-14
 ## Úkoly
 
 - [x] Ú1 `core`: rovina a 2D vektory (`Vec2`, `Plane`, `plane`)
-- [ ] Ú2 `document`, `ops`, `interaction`, `ui`: počáteční roviny, `PlaneRef`, `SketchId`, druhy parametrů `planes` a `data`
-- [ ] Ú3 `sketch` (nový modul): model skici, kontrola dat, pomůcky editace, oblasti, port řešiče, `FakeSolver`; hranice modulů
-- [ ] Ú4 `kernel`, `kernel-occt`, `regen`: `SketchOps.makeFace`
-- [ ] Ú5 `interaction` (+ zástupné místo v `render`, `app/testing`): režimy, `SketchPort`, `sketchEntity` v pickingu
+- [x] Ú2 `document`, `ops`, `interaction`, `ui`: počáteční roviny, `PlaneRef`, `SketchId`, druhy parametrů `planes` a `data`
+- [x] Ú3 `sketch` (nový modul): model skici, kontrola dat, pomůcky editace, oblasti, port řešiče, `FakeSolver`; hranice modulů
+- [x] Ú4 `kernel`, `kernel-occt`, `regen`: `SketchOps.makeFace`
+- [x] Ú5 `interaction` (+ zástupné místo v `render`, `app/testing`): režimy, `SketchPort`, `sketchEntity` v pickingu
 - [ ] Ú6 `solver-planegcs` (nový modul): adaptér řešiče ve workeru
 - [ ] Ú7 `regen`: artefakty `plane` a `sketch`, počátek v `EMPTY_STATE`, `resolvePlanes`, sweep ploch oblastí
 - [ ] Ú8 `render`: vrstva skic, picking entit skici, paleta, kamera kolmo na rovinu

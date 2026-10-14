@@ -13,6 +13,7 @@ milestones:
   - "[[M07-kernel-occt]]"
   - "[[M11-dalsi-entity]]"
   - "[[M12-skicar]]"
+  - "[[M13-extrude-revolve]]"
   - "[[M16-vlastni-occt-build]]"
 tags:
   - spec
@@ -154,15 +155,33 @@ export interface GeometryKernel extends PrimitiveOps, TransformOps, BooleanOps, 
 
 `Plane` a `Vec2` jsou z `core` ([[02-core]]). Builder skici volá `makeFace` jednou na oblast; křivky skici jako drát (`makeSketchCurves`) a `tessellateCurves` nevznikají – skicu kreslí `render` z dat ([[Rozhodnutí noční rychloakce#M12 – Skicář|R34]]).
 
+### Stav po M13
+
+M13 přidal tažení rovinné plochy – hranol a rotaci ([[M13-extrude-revolve|M13]], [[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R61]]). Profil je **handle plochy** z `makeFace` (oblast skici), ne data: `ProfileInput` z původního plánu odpadá, plochu už jádro má.
+
+```ts
+/** Osa: bod a směr (nemusí být jednotkový). */
+export interface Axis { readonly origin: Vec3; readonly direction: Vec3 }
+
+export interface SweepOps {
+  /** Hranol: plocha profile posunutá o distance ve směru direction (jádro směr normalizuje). */
+  extrude(profile: ShapeHandle, direction: Vec3, distance: number): Promise<ShapeResult>;
+  /** Rotační těleso: plocha profile otočená kolem osy o angle (radiány, kladně podle pravidla pravé ruky kolem axis.direction). */
+  revolve(profile: ShapeHandle, axis: Axis, angle: number): Promise<ShapeResult>;
+}
+
+export interface GeometryKernel extends PrimitiveOps, TransformOps, BooleanOps, SketchOps, SweepOps, MeshOps, QueryOps, LifecycleOps {}
+```
+
+- Jedna plocha na volání. Featura s více oblastmi zavolá `extrude` pro každou a výsledky spojí přes `boolean` (pravidla v [[07-regenerace#Operace tělesa (M13)]]); jádro tak nemusí umět compound profilů.
+- Symetrické vysunutí si builder složí z `transform` plochy o −d/2 a `extrude` o d; jádro „symetricky“ nezná.
+- `roles` (start, konec, boční plochy) M13 **nevyplňuje** ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R64]] ⚠): boční plochy potřebují vazbu hran plochy na id entit skici, kterou `makeFace` nevrací, a role bez historie booleanu by po „přidat/odebrat“ stejně neplatily. Obojí přijde s historií v [[M14-topologicke-pojmenovani|M14]].
+
 ### Plánované rozšíření
 
 Přidávají se do `GeometryKernel` v milníku, který je potřebuje, a kontraktová sada se o ně rozšíří:
 
 ```ts
-export interface SweepOps {          // M13
-  extrude(profile: ProfileInput, direction: Vec3, distance: number): Promise<ShapeResult>;
-  revolve(profile: ProfileInput, axis: Axis, angle: number): Promise<ShapeResult>;
-}
 export interface DressupOps {        // M14
   fillet(shape: ShapeHandle, edges: readonly number[], radius: number): Promise<ShapeResult>;
   chamfer(shape: ShapeHandle, edges: readonly number[], distance: number): Promise<ShapeResult>;
@@ -184,7 +203,9 @@ Ověřuje ho kontraktová sada ([[#Testy]]), spuštěná pro `FakeKernel` v M5 a
 - **`transform`** (M11): všech 16 prvků konečných a `isRigidMotion(m)`, jinak `'invalid-input'`; neznámý handle → `'unknown-handle'`. Vstupní tvar se nemění a zůstává platný. Bounding box výsledku = bounding box tvaru přemístěného `m` (tolerance 1e-5).
 - **`boolean`** (M11): `op` je jedna ze tří hodnot, `targets` i `tools` neprázdné a žádný handle se neopakuje (ani napříč seznamy), jinak `'invalid-input'`; neznámý handle → `'unknown-handle'`. Výsledek bez jediného solidu (prázdný průnik, rozdíl, který cíl celý odebere) a selhání algoritmu → `'operation-failed'`. Vstupy zůstávají platné. `union` = sjednocení všech vstupů, `subtract` = cíle bez nástrojů, `intersect` = společná část cílů a nástrojů.
 - **`makeFace`** (M12): `plane` má konečné složky, `xDir` i `normal` jednotkové a navzájem kolmé (`plane.isOrthonormal`, tolerance 1e-9); `outer` neprázdná; každá smyčka je buď jediná `circle` (poloměr konečný > 0), nebo ≥ 1 křivek `line`/`arc` (bez `circle`), kde konec každé křivky leží na začátku další a konec poslední na začátku první (tolerance `1e-7 · max(1, |souřadnice|)`); úsečka a oblouk nenulové délky (`from ≠ to`), oblouk s `|to − center| = |from − center|` (relativně 1e-7) a poloměrem > 1e-9. Jinak `'invalid-input'`. Orientace smyček je libovolná (jádro si ji srovná). Bounding box výsledku = obálka smyčky `outer` v prostoru (tolerance 1e-5; kontraktová sada jen pro roviny s osami rovnoběžnými se souřadnicovými). Plochu, kterou nejde postavit (samoprotínající se smyčka), OCCT hlásí `'operation-failed'`.
-- Žádná operace zatím nevyplňuje `history` ani `roles` (M14).
+- **`extrude`** (M13): neznámý handle → `'unknown-handle'`; `profile` není plocha (`TopAbs_FACE` – výsledek `makeFace` nebo jeho `transform`) → `'invalid-input'`; každá složka `direction` konečná a jeho délka > 1e-9, `distance` konečné > 0, jinak `'invalid-input'`. Vrací nový handle se solidem, profil zůstává platný. Bounding box výsledku = obálka bbox profilu a bbox profilu posunutého o `d̂ · distance` (tolerance 1e-5; kontraktová sada jen pro plochy v rovinách rovnoběžných se souřadnicovými). Směr rovnoběžný s rovinou plochy se nekontroluje; OCCT degenerovaný výsledek odhalí kontrolou platnosti → `'operation-failed'` ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R63]] ⚠).
+- **`revolve`** (M13): neznámý handle → `'unknown-handle'`; `profile` není plocha → `'invalid-input'`; složky `axis.origin` a `axis.direction` konečné, délka směru > 1e-9, `angle` konečný a `0 < angle ≤ 2π + 1e-9`, jinak `'invalid-input'`. Profil zůstává platný. Bounding box pro případy kontraktové sady (profil v rovině obsahující osu rovnoběžnou se souřadnicovou osou, úhel začíná na souřadnicové rovině) s tolerancí 1e-5. Osa, která profil protíná, se nekontroluje; neplatný výsledek OCCT hlásí `'operation-failed'` (R63 ⚠). Osa ležící na hraně profilu je platná (válec).
+- Žádná operace zatím nevyplňuje `history` ani `roles` (M14, pro `extrude` a `revolve` R64).
 - **`tessellate`:** `linearDeflection` i `angularDeflection` jsou konečná čísla > 0, jinak `'invalid-input'`. Neznámý handle → `'unknown-handle'`. Každé volání vrací **nové** buffery, nesdílené s jiným voláním, s jiným polem téže sítě ani s vnitřním stavem jádra, takže je volající smí přenést jako transferable. Že opakované volání vrátí stejná data, se **nezaručuje** (OCCT může síť zjemnit).
 - **`boundingBox`:** neznámý handle → `'unknown-handle'`. Vrací nový objekt.
 - **`release`:**
@@ -193,7 +214,7 @@ Ověřuje ho kontraktová sada ([[#Testy]]), spuštěná pro `FakeKernel` v M5 a
   - **Atomický:** při chybě se neuvolní nic. Přísnost odhalí chyby v mark & sweep, které by tolerantní `release` skryl.
 - **`liveHandleCount`:** počet vytvořených a neuvolněných handle. Neúspěšná operace žádný handle nevytvoří.
 - **Více chyb najednou** (např. neznámý handle i neplatná kvalita): který kód se vrátí, není určeno a sada to netestuje. `FakeKernel` dává přednost chybě z `failNext`.
-- **Izolace:** jádro si neponechává odkaz na vstupní objekty (`origin`, `size`, `base`, `axis`, matice, pole handle) a **čte je synchronně při volání**, jako by je klonoval `postMessage`. Změna vstupu hned po volání (před `await`) výsledek neovlivní. Vrácená data nesdílí paměť s ničím jiným. Když čtení vstupu selže (vstup mimo typy, např. `null`), je to také odmítnutý `Promise`, ne synchronní výjimka.
+- **Izolace:** jádro si neponechává odkaz na vstupní objekty (`origin`, `size`, `base`, `axis`, matice, pole handle) a **čte je synchronně při volání**, jako by je klonoval `postMessage`. Změna vstupu hned po volání (před `await`) výsledek neovlivní. Vrácená data nesdílí paměť s ničím jiným. Když čtení vstupu selže (vstup mimo typy, např. `null`), je to také odmítnutý `Promise`, ne synchronní výjimka (u `makeFace` s kódem `'invalid-input'`, protože `validateFaceInput` přijímá `unknown`; jinde `'internal'`).
 
 ### Výsledek operace a historie
 
@@ -319,7 +340,14 @@ Modulový worker inicializuje OCCT asynchronně. Zpráva, která do workeru dora
 
 - Rovina `gp_Ax3(gp_Pnt(origin), gp_Dir(normal), gp_Dir(xDir))`, `gp_Pln(ax3)`; bod roviny `(x, y)` → `origin + x·xDir + y·yDir` (`plane.toWorld` z `core`).
 - Hrany: úsečka `BRepBuilderAPI_MakeEdge(gp_Pnt, gp_Pnt)`; oblouk `BRepBuilderAPI_MakeEdge(gp_Circ, P1, P2)` s `gp_Circ(gp_Ax2(střed, normal, xDir), r)` – kružnice v OCCT běží proti směru hodinových ručiček kolem `normal`, takže pro `ccw: false` se body prohodí; kružnice `BRepBuilderAPI_MakeEdge(gp_Circ)`.
-- Smyčka `BRepBuilderAPI_MakeWire` (`Add` po hranách, `IsDone()` jinak `'operation-failed'`); plocha `BRepBuilderAPI_MakeFace(gp_Pln, outerWire, true)`, díry `Add(holeWire)`, pak `ShapeFix_Face` (srovná orientaci děr) a `BRepCheck_Analyzer(face).IsValid()` jinak `'operation-failed'`. Všechny objekty OCCT přes `using`.
+- Smyčka `BRepBuilderAPI_MakeWire` (`Add` po hranách, `IsDone()` jinak `'operation-failed'`); plocha `BRepBuilderAPI_MakeFace(gp_Pln, outerWire, true)`, díry `Add(holeWire)`, pak `ShapeFix_Face(face).FixOrientation()` (srovná orientaci děr; samotné `Perform()` to nestačí, ověřeno v M12) a `BRepCheck_Analyzer(face).IsValid()` jinak `'operation-failed'`. Všechny objekty OCCT přes `using`.
+
+### Tažení v adaptéru (M13)
+
+- Typ profilu: `shape.ShapeType()` musí být `TopAbs_FACE`, jinak `'invalid-input'` (kontrola před stavbou).
+- **Hranol:** `BRepPrimAPI_MakePrism(face, gp_Vec(d̂ · distance), false, true)` (bez kopie, kanonizace ploch). `IsDone()`, výsledek obsahuje solid (`TopExp_Explorer(…, TopAbs_SOLID).More()`) a `BRepCheck_Analyzer(výsledek).IsValid()`, jinak `'operation-failed'`.
+- **Rotace:** `gp_Ax1(gp_Pnt(origin), gp_Dir(direction))`, `BRepPrimAPI_MakeRevol(face, ax1, angle, false)`; stejné kontroly jako u hranolu.
+- `FirstShape()`/`LastShape()` (start a konec) a `Generated(hrana)` (boční plochy) algoritmus umí; využije je M14 pro `roles` a historii. Všechny objekty OCCT přes `using`.
 
 ### Volba WASM buildu OCCT (spike v M7)
 
@@ -352,6 +380,7 @@ export function describeGeometryKernelContract(name: string, factory: () => Prom
 
 - Žije v `kernel/testing.ts`, aby ho mohly používat testy modulů, které na `kernel` závisí hodnotově (`regen`, `features/*`). `render` má z `kernel` jen typy, testuje proti vlastnímu stubu `MeshOps`. Do produkčního kódu se fake nedostane.
 - Záznam tvaru (`AabbEntry`) je AABB. `makeBox` uloží `[origin, origin + size]`. Od M11: `makeCylinder` uloží AABB válce pro libovolnou osu (`â` jednotková osa, v ose `k` rozšíření `radius · sqrt(1 − â_k²)` kolem obou podstav); `transform` AABB osmi rohů vstupního AABB po `mat4.transformPoint`; `boolean('union')` obalový AABB všech vstupů, `'subtract'` obalový AABB cílů (jeden cíl beze změny – fake nic neodečítá), `'intersect'` průnik obalu cílů s obalem nástrojů, prázdný nebo nulové tloušťky → `'operation-failed'`. Od M12 `makeFace` uloží AABB smyčky `outer` v prostoru: koncové body křivek a u oblouků a kružnic body v lokálních úhlech 0, π/2, π, 3π/2, které na křivce leží, převedené `plane.toWorld` (přesné pro roviny s osami rovnoběžnými se souřadnicovými, jinde podhodnocené – fake to nevadí); `tessellate` plochy je kvádr s nulovou tloušťkou. Validace vstupů je stejná jako u OCCT.
+- Od M13 si záznam pamatuje příznak „plocha“ (`makeFace` ano, `transform` ho dědí, ostatní operace ne) pro kontrolu profilu v `extrude`/`revolve`. `extrude` uloží obálku AABB profilu a AABB posunutého o `d̂ · distance`; `revolve` obálku osmi rohů AABB profilu otočených kolem osy o úhly `0`, `angle` a každé `k · π/2` mezi nimi (přesné pro případy kontraktové sady, jinde přibližné – fake to nevadí).
 - `tessellate` vrací AABB jako kvádr: 6 ploch po 2 trojúhelnících (24 vrcholů, normály ploch), pořadí ploch −X, +X, −Y, +Y, −Z, +Z. Dál 12 hran po 2 bodech. Platí pro každý tvar, i válec a výsledek booleanu.
 - Volání `failNext` se týká jen dalšího volání dané metody. Injektovaná chyba nevytvoří handle a nic neuvolní.
 - Výsledky se vrací asynchronně (v mikroúloze), nikdy synchronně, aby testy vyšších vrstev nespoléhaly na pořadí, které by s workerem neplatilo.
@@ -365,6 +394,8 @@ export function describeGeometryKernelContract(name: string, factory: () => Prom
   - nové buffery při každém `tessellate`,
   - **M11** (bbox s tolerancí 1e-5, nic, co platí jen pro jedno jádro): `makeCylinder` pro osy X, Y a nejednotkovou Z a každý neplatný vstup; `transform` posun, rotace o 90° a 45° kolem Z, vstup zůstává platný, nerigidní matice (zrcadlení, měřítko, zkosení, `NaN`) → `'invalid-input'`; `boolean` – `union` překrývajících se i oddělených kvádrů (obalový bbox), `intersect` překrývajících se (přesný průnik) a oddělených (`'operation-failed'`, žádný handle), `subtract` s nástrojem, který odřízne roh (bbox cíle), neplatné seznamy a `op`; síť každého výsledku projde `validateMeshData` a leží v bbox; izolace vstupů.
 - **M12** (kontraktová sada): `makeFace` – čtverec v rovině XY, obdélník v rovině XZ posunuté do `origin [0, 5, 0]`, kružnice v rovině YZ, smyčka z úsečky a půlkruhového oblouku („D“, `ccw` true i false), čtverec s kruhovou dírou: bbox s tolerancí 1e-5, síť projde `validateMeshData`; neortonormální rovina, neuzavřená smyčka, kružnice uprostřed víceprvkové smyčky, nulová úsečka, oblouk s nestejným poloměrem, prázdná `outer` → `'invalid-input'` bez handle; izolace vstupu.
+- **M13** (kontraktová sada): `extrude` – čtverec 10 × 10 na XY o 5 ve směru +Z, o 5 ve směru `[0, 0, 3]` (nejednotkový), ve směru −Z, obdélník na XZ ve směru −Y: bbox s tolerancí 1e-5, síť projde `validateMeshData` a leží v bbox; profil zůstává platný; profil po `transform` (posunutý čtverec) funguje; `distance` 0, záporná, `NaN`, nulový směr, profil kvádr → `'invalid-input'` bez handle; neznámý handle; izolace vstupu. `revolve` – obdélník na XZ (`x ∈ [5, 10]`, `z ∈ [0, 10]`) kolem osy Z o 2π → bbox `[−10, 10]² × [0, 10]`, o π/2 → `[0, 10]² × [0, 10]`, o π/2 kolem osy s opačným směrem → `x ∈ [0, 10]`, `y ∈ [−10, 0]`; úhel 0, záporný, > 2π, `NaN`, nulový směr osy, profil kvádr → `'invalid-input'`; síť projde `validateMeshData`.
+- `kernel-occt` navíc (M13): hranol čtverce 10 × 10 × 5 má 6 ploch a objem 500 (1 %); hranol čtverce s kruhovou dírou r = 2 má 7 ploch a objem `(100 − 4π) · 5`; rotace obdélníku (`x ∈ [5, 10]`) o 2π má 4 plochy a objem `750π`, o π/2 6 ploch a čtvrtinu objemu; rotace obdélníku `x ∈ [0, 5]` (osa na hraně) o 2π má objem `250π`.
 - `kernel-occt` navíc (M12): plocha má v síti 1 plochu; obsah (`BRepGProp.SurfaceProperties`) čtverce s dírou = `a² − πr²` (relativně 1e-6), „D“ = obdélník + půlkruh; samoprotínající se smyčka (motýlek) → `'operation-failed'`.
 - `validateMeshData`: platná síť, každé pravidlo porušené zvlášť.
 - `kernelErrorCode`: vlastní chyba, `RpcError` se stejným kódem, cizí kód a ne-chyba → `undefined`.

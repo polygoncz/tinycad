@@ -49,6 +49,8 @@ const broken: readonly (readonly [string, Readonly<Record<string, unknown>>, str
   ['feature.add', withFeature({ id: '' }), 'feature.id'],
   ['feature.add', withFeature({ id: 3 }), 'feature.id'],
   ['feature.add', withFeature({ id: 'a/b' }), 'feature.id'],
+  // The reserved owner of the origin planes (M12).
+  ['feature.add', withFeature({ id: 'origin' }), 'feature.id'],
   ['feature.add', withFeature({ type: '' }), 'feature.type'],
   ['feature.add', withFeature({ type: undefined }), 'feature.type'],
   ['feature.add', withFeature({ typeVersion: 0 }), 'feature.typeVersion'],

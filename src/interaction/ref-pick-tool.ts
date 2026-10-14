@@ -41,6 +41,7 @@ export function pickFilterFor(spec: ParamSpec): PickFilter {
       return FACES_AND_EDGES;
     case 'topo':
       return TOPO_FILTERS[spec.entity];
+    // planes: picked in the Browser, not in the view (M12).
     default:
       return NOTHING;
   }
@@ -80,8 +81,9 @@ export function createRefPick(session: FeatureEditSession, viewport: ViewportPor
     const state = session.state.get();
     const name = state.activeRefParam;
     if (name === null) return;
-    // topo and region need topological naming and sketches (M13/M14).
-    if (session.schema.params[name]?.kind !== 'bodies') return;
+    // topo and region need topological naming and sketches (M13/M14). The filter of bodies has
+    // no 'sketchEntity'; the check only narrows the type.
+    if (session.schema.params[name]?.kind !== 'bodies' || hit.kind === 'sketchEntity') return;
     session.setParam(name, toggleBodyRef(state.params[name], hit.body));
   }
 

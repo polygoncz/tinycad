@@ -1,13 +1,14 @@
-import { mat4, type Mat4, type Vec3 } from '@/core';
+import { mat4, plane, type Mat4, type Plane, type Vec2, type Vec3 } from '@/core';
 import { createKernelError } from './errors';
 import type { KernelErrorCode } from './errors';
 import type { BooleanOp, GeometryKernel } from './kernel';
+import { parseFaceInput, type ProfileCurve, type ProfileLoop } from './profile';
 import { isRigidMotion } from './transform';
 import type { BoundingBox, MeshData, MeshQuality, ShapeHandle, ShapeResult } from './types';
 
 // In-memory GeometryKernel for tests of higher layers (spec 06, "FakeKernel"). A shape is its
-// axis-aligned bounding box (AABB): a cylinder, a moved shape and a boolean result are stored
-// as their AABB and tessellated as a box. Reached only through kernel/testing.ts, so it never
+// axis-aligned bounding box (AABB): a cylinder, a moved shape, a boolean result and a face are
+// stored as their AABB and tessellated as a box (a face as a box of zero thickness). Reached only through kernel/testing.ts, so it never
 // gets into production.
 
 export type KernelOp = keyof GeometryKernel;
@@ -182,6 +183,26 @@ class FakeKernelImpl implements FakeKernel {
     });
   }
 
+  makeFace(p: {
+    readonly plane: Plane;
+    readonly outer: ProfileLoop;
+    readonly holes: readonly ProfileLoop[];
+  }): Promise<ShapeResult> {
+    // parseFaceInput reads the input synchronously into a fresh copy and never throws.
+    return this.call(
+      'makeFace',
+      () => parseFaceInput(p),
+      (parsed) => {
+        if (!parsed.ok) {
+          throw createKernelError('invalid-input', `makeFace: ${parsed.error.join('; ')}`);
+        }
+        const { plane: frame, outer } = parsed.value;
+        const local = outer.flatMap(extremePoints);
+        return this.add(enclosing(local.map((v) => plane.toWorld(frame, v))));
+      },
+    );
+  }
+
   tessellate(shape: ShapeHandle, q: MeshQuality): Promise<MeshData> {
     const read = (): MeshQuality => ({
       linearDeflection: q.linearDeflection,
@@ -274,6 +295,43 @@ function positive(x: number): boolean {
 
 function toVec3(v: readonly number[]): Vec3 {
   return [v[0] ?? Number.NaN, v[1] ?? Number.NaN, v[2] ?? Number.NaN];
+}
+
+/** Local angles 0, π/2, π, 3π/2: where a circle reaches its extremes along the plane axes. */
+const CARDINAL_ANGLES = [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2];
+
+/**
+ * Points of the curve whose AABB is the AABB of the curve in plane coordinates (spec 06,
+ * FakeKernel): the end points, and for arcs and circles the cardinal points lying on them.
+ */
+function extremePoints(c: ProfileCurve): Vec2[] {
+  const at = (center: Vec2, r: number, angle: number): Vec2 => [
+    center[0] + r * Math.cos(angle),
+    center[1] + r * Math.sin(angle),
+  ];
+  switch (c.kind) {
+    case 'line':
+      return [c.from, c.to];
+    case 'circle':
+      return CARDINAL_ANGLES.map((a) => at(c.center, c.radius, a));
+    case 'arc': {
+      const r = Math.hypot(c.from[0] - c.center[0], c.from[1] - c.center[1]);
+      const angleOf = (v: Vec2): number => Math.atan2(v[1] - c.center[1], v[0] - c.center[0]);
+      // Walk counter-clockwise from `start` to `end`; a clockwise arc is the same set reversed.
+      const [start, end] = c.ccw
+        ? [angleOf(c.from), angleOf(c.to)]
+        : [angleOf(c.to), angleOf(c.from)];
+      const sweep = normalizeAngle(end - start);
+      const inside = CARDINAL_ANGLES.filter((a) => normalizeAngle(a - start) <= sweep);
+      return [c.from, c.to, ...inside.map((a) => at(c.center, r, a))];
+    }
+  }
+}
+
+/** The angle in [0, 2π). */
+function normalizeAngle(a: number): number {
+  const turn = 2 * Math.PI;
+  return ((a % turn) + turn) % turn;
 }
 
 /** The two extreme corners of the box: enough for `enclosing`. */

@@ -249,6 +249,35 @@ describe('FeatureEditor initial reference param (R19)', () => {
     expect(editor.create('plain').state.get().activeRefParam).toBeNull();
   });
 
+  // The sketch schema (M12): the plane is picked in the Browser, the sketch data has no field.
+  const SKETCH_LIKE: FeatureSchema = {
+    type: 'sketchLike',
+    version: 1,
+    label: 'sketchLike.label',
+    params: {
+      plane: { kind: 'planes', label: 'plane', min: 1, max: 1 },
+      sketch: { kind: 'data', label: 'sketch' },
+    },
+    defaults: () => ({ plane: [], sketch: {} }),
+    validate: () => [],
+  };
+
+  it('create does not activate a planes param (M12)', () => {
+    const { editor } = setup({}, EN, SKETCH_LIKE);
+    expect(editor.create('sketchLike').state.get().activeRefParam).toBeNull();
+  });
+
+  it('focusRefParam accepts a planes param, not a data param (M12)', () => {
+    const { editor } = setup({}, EN, SKETCH_LIKE);
+    const session = editor.create('sketchLike');
+    session.focusRefParam('plane');
+    expect(session.state.get().activeRefParam).toBe('plane');
+    expect(session.state.get().fields.map((f) => f.active)).toEqual([true, false]);
+    expect(() => {
+      session.focusRefParam('sketch');
+    }).toThrow();
+  });
+
   it('edit starts with null', () => {
     const { editor } = setup({ features: [aBox('a')] });
     const state = editor.edit(fid('a')).state.get();

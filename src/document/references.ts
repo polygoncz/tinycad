@@ -38,7 +38,8 @@ export function referencesOf(schema: FeatureSchema, params: unknown): readonly E
 /**
  * For every feature of the studio, in order: the features its references belong to,
  * without duplicates, in order of first occurrence. Leaves out features not in the
- * studio (regeneration reports the unresolved reference) and the feature itself.
+ * studio (regeneration reports the unresolved reference) and the feature itself, so a
+ * reference to the origin geometry (owner ORIGIN, not a feature) is no dependency.
  * An unknown feature type has no schema and gives [].
  */
 export function dependenciesOf(
@@ -105,12 +106,15 @@ function refKindOf(spec: ParamSpec): EntityRef['kind'] | undefined {
       return 'topo';
     case 'region':
       return 'region';
+    case 'planes':
+      return 'plane';
     case 'length':
     case 'angle':
     case 'number':
     case 'boolean':
     case 'enum':
     case 'point':
+    case 'data':
       return undefined;
     default:
       // A new param kind must say whether it holds references.

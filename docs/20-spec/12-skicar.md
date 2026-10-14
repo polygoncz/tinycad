@@ -100,7 +100,7 @@ export interface SketchIssue {
 export function parseSketchData(entities: unknown, constraints: unknown): Result<SketchData, readonly SketchIssue[]>;
 ```
 
-`sketch.invalidEntity` u položky `entities[index]`, když: není objekt; neznámý `kind`; chybí nebo přebývá vlastnost; id není neprázdný řetězec nebo už bylo použito (i vazbou – pak se hlásí u pozdějšího výskytu); souřadnice nebo poloměr není konečné číslo; `radius ≤ 0`; `construction` je jiné než `true`; odkaz (`p1`, `p2`, `center`, `start`, `end`) nevede na existující **bod** (v celém poli, i pozdějším); `p1 === p2`; body oblouku nejsou tři různé; u oblouku `| |end − center| − |start − center| | > 1e-6 · max(1, |start − center|)` nebo poloměr ≤ 1e-9. Pole, které není pole → jedna issue s `index: -1`.
+`sketch.invalidEntity` u položky `entities[index]`, když: není objekt; neznámý `kind`; chybí nebo přebývá vlastnost; id není neprázdný řetězec nebo už bylo použito (i vazbou – pak se hlásí u pozdějšího výskytu; entity se procházejí před vazbami, takže sdílené id entity a vazby se hlásí u vazby); souřadnice nebo poloměr není konečné číslo; `radius ≤ 0`; `construction` je jiné než `true`; odkaz (`p1`, `p2`, `center`, `start`, `end`) nevede na existující **bod** (v celém poli, i pozdějším); `p1 === p2`; body oblouku nejsou tři různé; u oblouku `| |end − center| − |start − center| | > 1e-6 · max(1, |start − center|)` nebo poloměr ≤ 1e-9. Pole, které není pole → jedna issue s `index: -1`.
 
 `sketch.invalidConstraint` u `constraints[index]` analogicky: tvar, unikátní id, odkazy na existující entity správného druhu podle tabulky výše (`a !== b`), `value` konečné > 0.
 
@@ -178,7 +178,7 @@ export function computeRegions(data: SketchData): RegionsResult;   // oblasti se
 
 1. **Křivky:** jen nekonstrukční úsečky, kružnice a oblouky; úsečka nulové délky (≤ tolerance) se vynechá. Tolerance `tol = 1e-9 · max(1, největší |souřadnice|)`.
 2. **Uzly:** konce křivek; konce bližší než `tol` jsou jeden uzel (body s vazbou `coincident` tak splynou). Kružnice je uzavřená hrana bez uzlu.
-3. **Křížení:** dvě křivky, které mají společný bod mimo sdílený koncový uzel (vnitřní průsečík, dotyk konce s vnitřkem jiné křivky, překryv), → `{ regions: [], crossing: true }`. Dělení křivek v průsečících je mimo rozsah M12 ([[Rozhodnutí noční rychloakce#M12 – Skicář|R40]] ⚠).
+3. **Křížení:** dvě křivky, které mají společný bod mimo sdílený koncový uzel (vnitřní průsečík, dotyk konce s vnitřkem jiné křivky, překryv), → `{ regions: [], crossing: true }`. Průsečík, který vyjde do `1e3 · tol` od společného uzlu, se k uzlu přiřadí (vzorce průsečíků jsou u téměř tečných křivek nepřesné). Dělení křivek v průsečících je mimo rozsah M12 ([[Rozhodnutí noční rychloakce#M12 – Skicář|R40]] ⚠).
 4. **Prořezání:** opakovaně se odeberou hrany s uzlem stupně 1 (otevřené čáry neohraničují nic).
 5. **Stěny:** polohrany (half-edge); v každém uzlu se odchozí polohrany seřadí proti směru hodinových ručiček podle úhlu tečny v uzlu; při shodě úhlu (do 1e-9 rad, tečný oblouk a úsečka) je dál ta, která se víc stáčí doleva (větší znaménková křivost: oblouk otáčející se proti směru `+1/r`, po směru `−1/r`, úsečka 0). `next(e)` = odchozí polohrana v cílovém uzlu bezprostředně **po směru** hodinových ručiček od `twin(e)`. Cykly se znaménkovou plochou (shoelace + kruhová úseč u oblouků) > 0 jsou omezené stěny, < 0 vnější hranice komponenty.
 6. **Díry:** vnější hranici komponenty (a kružnici jako samostatnou komponentu) přiřadí jako díru té omezené stěně **jiné** komponenty s nejmenší plochou, která obsahuje její libovolný bod (např. první bod první křivky). Bez takové stěny se nepřiřadí nikam.
@@ -237,6 +237,8 @@ Kontrakt v [[10-interakce#Skicář]]. Shrnutí chování:
 Skicu kreslí `render` z dat, ne z jádra ([[0017-modul-sketch-a-skicar|ADR 0017]]): `interaction` převede entity na `SketchDrawing` (rovina + úsečky, oblouky a body ve 2D se stylem) a pošle ji `ViewportPort.sketches.set(id, kresba)` ([[10-interakce#Port viewportu]], [[09-vykreslovani#Skici]]). Editovaná skica má id `'sketch-edit'` (kreslí ji `SketchEditor`, i s body a počátkem `'__origin'`); skici z poslední regenerace (bez konstrukčních křivek a bez bodů) a zapnuté počáteční roviny (čtverec 100 × 100 mm) kreslí `app` pod id artefaktu. Picking entit skici (`PickKind 'sketchEntity'`) dělá `render` nad vykreslenými křivkami a body v pixelech, ne `interaction` ručně.
 
 ## Mimo rozsah M12
+
+- „Most“ – úsečka spojující vnitřní smyčku s vnější: stěna ji obsahuje tam i zpět, díra nevznikne a `makeFace` nejspíš selže (`'operation-failed'`); uživatel most smaže.
 
 Každá položka je v [[Rozhodnutí noční rychloakce#M12 – Skicář|rozhodnutích R31–R50]]: splines, odsazení (offset), úhlová kóta a vzdálenost bod–přímka, vazba bod na křivce (snap na vnitřek úsečky), dělení křivek v průsečících (trim), popisky kót a značky vazeb ve viewportu (kóty a vazby jsou jen v panelu), tažení úseček a kružnic (jen body), undo uvnitř skicáře, skica na ploše tělesa (M14), osy počátku (M13), výplň rovin.
 

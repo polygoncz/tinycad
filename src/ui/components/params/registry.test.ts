@@ -14,10 +14,12 @@ const ALL_KINDS = {
   bodies: true,
   topo: true,
   region: true,
+  planes: true,
+  data: true,
 } as const satisfies Record<ParamSpec['kind'], true>;
 
-// region comes with the sketcher (M12); decided 2026-10-13.
-const WITHOUT_COMPONENT: readonly ParamSpec['kind'][] = ['region'];
+// region comes with Extrude (M13), decided 2026-10-13; data never has a field (M12).
+const WITHOUT_COMPONENT: readonly ParamSpec['kind'][] = ['region', 'data'];
 
 const kinds = Object.keys(ALL_KINDS) as ParamSpec['kind'][]; // keys of a literal typed above
 
@@ -26,8 +28,12 @@ describe('ParamField registry', () => {
     expect(paramFieldFor(kind)).toBeDefined();
   });
 
-  it('region has no component yet', () => {
-    expect(paramFieldFor('region')).toBeUndefined();
+  it.each(WITHOUT_COMPONENT)('%s has no component', (kind) => {
+    expect(paramFieldFor(kind)).toBeUndefined();
+  });
+
+  it('planes uses the reference list field, like bodies (M12)', () => {
+    expect(paramFieldFor('planes')).toBe(paramFieldFor('bodies'));
   });
 
   it('has no entries beyond the ParamSpec kinds', () => {

@@ -19,12 +19,16 @@ const modules = {
   'persistence/idb': { deps: ['core', 'document', 'ops', 'persistence'] },
   kernel: { deps: ['core'] },
   'kernel-occt': { deps: ['core', 'kernel'], npm: ['replicad-opencascadejs'] },
-  regen: { deps: ['core', 'document', 'kernel'] },
+  // M12: sketch data model, regions and the ConstraintSolver port (ADR 0017).
+  sketch: { deps: ['core'] },
+  // M12: solver adapter in a worker (ADR 0016); only app imports it.
+  'solver-planegcs': { deps: ['core', 'sketch'], npm: ['@salusoft89/planegcs'] },
+  regen: { deps: ['core', 'document', 'kernel', 'sketch'] },
   render: { deps: ['core'], types: ['kernel', 'interaction'], npm: ['three'] },
-  interaction: { deps: ['core', 'document', 'ops'] },
+  interaction: { deps: ['core', 'document', 'ops', 'sketch'] },
   'plugin-api': { deps: ['core', 'document', 'regen', 'interaction'] },
   'features/*': {
-    deps: ['core', 'document', 'ops', 'kernel', 'regen', 'interaction', 'plugin-api'],
+    deps: ['core', 'document', 'ops', 'kernel', 'sketch', 'regen', 'interaction', 'plugin-api'],
   },
   app: {
     deps: [
@@ -35,6 +39,8 @@ const modules = {
       'persistence/idb',
       'kernel',
       'kernel-occt',
+      'sketch',
+      'solver-planegcs',
       'regen',
       'render',
       'interaction',
@@ -199,7 +205,8 @@ module.exports = {
       from: {
         path:
           '^src/render/(body-diff|bounds|camera-math|edge-pick|frame-scheduler|highlight-targets|' +
-          'mesh-cache|mesh-index|orbit-direction|overlay-shapes|pick-math|scene-sync|view-events)\\.ts$',
+          'mesh-cache|mesh-index|orbit-direction|overlay-shapes|pick-math|scene-sync|sketch-drawing|' +
+          'sketch-pick|view-events)\\.ts$',
       },
       to: { path: 'node_modules/three/' },
     },

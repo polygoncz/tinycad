@@ -138,6 +138,44 @@ describe('validateAgainstSchema – each ParamSpec kind', () => {
   });
 });
 
+describe('validateAgainstSchema – sketcher kinds (M12)', () => {
+  const plane = (id: string) => ({ kind: 'plane', plane: id });
+
+  it('planes: PlaneRef[] with a plane id', () => {
+    const spec: ParamSpec = { kind: 'planes', label: 'P' };
+    ok(spec, []);
+    ok(spec, [plane('origin/plane:xy'), plane('f1/plane:1')]);
+    bad(spec, [plane('origin/plane:xy'), plane('origin/plane:XY')], 'param.invalidRef', {
+      index: 1,
+    });
+    bad(spec, [{ kind: 'plane' }], 'param.invalidRef', { index: 0 });
+    bad(spec, [{ kind: 'body', body: 'f1/body' }], 'param.invalidRef', { index: 0 });
+    bad(spec, plane('origin/plane:xy'), 'param.wrongType');
+  });
+
+  it('planes: the same plane is a duplicate', () => {
+    const spec: ParamSpec = { kind: 'planes', label: 'P' };
+    bad(spec, [plane('origin/plane:xy'), plane('origin/plane:xy')], 'param.duplicateRef', {
+      index: 1,
+    });
+  });
+
+  it('planes: count limits', () => {
+    const spec: ParamSpec = { kind: 'planes', label: 'P', min: 1, max: 1 };
+    ok(spec, [plane('origin/plane:xy')]);
+    bad(spec, [], 'param.tooFewRefs', { min: 1 });
+    bad(spec, [plane('origin/plane:xy'), plane('origin/plane:yz')], 'param.tooManyRefs', {
+      max: 1,
+    });
+  });
+
+  it('data: only required, anything else passes', () => {
+    const spec: ParamSpec = { kind: 'data', label: 'D' };
+    for (const value of [{}, { entities: [] }, [], 'x', 0, null, false]) ok(spec, value);
+    expect(validateAgainstSchema({ p: spec }, {})).toEqual([{ param: 'p', code: 'param.missing' }]);
+  });
+});
+
 describe('validateAgainstSchema – duplicate references (M11)', () => {
   const body = (b: string) => ({ kind: 'body', body: b });
   const topo = (b: string, name: string) => ({ kind: 'topo', body: b, name });

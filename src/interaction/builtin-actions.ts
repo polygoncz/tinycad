@@ -2,7 +2,8 @@
 // the selected features, the bar after the selected feature, fit all, the rollback bar steps of
 // the timeline and one action per tool with a shortcut. Their rules are presentation logic
 // (ADR 0010), so they live here and app only calls createBuiltInActions. Labels are translation
-// keys (ADR 0014); ui translates them.
+// keys (ADR 0014); ui translates them. Feature and timeline actions exist only in the mode
+// 'model'; a tool action exists in the modes of its tool (M12).
 
 import { DisposableStore, ObservableValue } from '@/core';
 import type { Disposable, Observable, Unsubscribe } from '@/core';
@@ -18,8 +19,10 @@ import type {
 import type { ActionRegistry } from './actions';
 import type { FeatureEditor } from './feature-editor';
 import type { FeatureTreeModel } from './feature-tree';
+import type { Mode } from './mode';
 import type { SelectionModel } from './selection';
 import type { ToolManager } from './tool-manager';
+import { toolModes } from './tools';
 import type { ToolDescriptor } from './tools';
 
 /** Ids of the built-in actions; ui takes them from AppSession.actionIds, never as literals. */
@@ -55,6 +58,9 @@ export function toolActionId(toolId: string): string {
 /** The group of the feature context menu in the Timeline. */
 const FEATURE_GROUP = 'feature';
 
+/** Modes of the actions that edit the studio: not inside the sketcher. */
+const MODEL_ONLY: readonly Mode[] = Object.freeze(['model']);
+
 /**
  * Registers the built-in actions into `deps.registry`. The returned Disposable unsubscribes the
  * `enabled` observables from their sources; the registry itself is disposed by its owner.
@@ -76,6 +82,8 @@ export function createBuiltInActions(deps: {
   camera: { fitAll(): void };
   /** Asks the user; true = go on. feature.delete asks before features lose a reference. */
   confirm: (request: ConfirmRequest) => boolean;
+  /** The current mode (M12); without it the mode is always 'model'. */
+  mode?: Observable<Mode>;
 }): Disposable {
   const { registry, doc, ops, undo, selection, featureTree, editor, tools, locked, camera } = deps;
   const { confirm } = deps;
@@ -158,6 +166,7 @@ export function createBuiltInActions(deps: {
   registry.register({
     id: ACTION_IDS.featureEdit,
     label: ACTION_IDS.featureEdit,
+    modes: MODEL_ONLY,
     group: FEATURE_GROUP,
     enabled: derived(hasSingleSelected, onFeatures),
     run: () => {
@@ -169,6 +178,7 @@ export function createBuiltInActions(deps: {
   registry.register({
     id: ACTION_IDS.featureRename,
     label: ACTION_IDS.featureRename,
+    modes: MODEL_ONLY,
     group: FEATURE_GROUP,
     enabled: derived(hasSingleSelected, onFeatures),
     run: () => {
@@ -180,6 +190,7 @@ export function createBuiltInActions(deps: {
   registry.register({
     id: ACTION_IDS.featureSuppress,
     label: ACTION_IDS.featureSuppress,
+    modes: MODEL_ONLY,
     shortcut: 'S',
     group: FEATURE_GROUP,
     enabled: derived(hasSelectedFeature, onFeatures),
@@ -211,6 +222,7 @@ export function createBuiltInActions(deps: {
   registry.register({
     id: ACTION_IDS.rollHere,
     label: ACTION_IDS.rollHere,
+    modes: MODEL_ONLY,
     group: FEATURE_GROUP,
     enabled: derived(() => !isLocked() && rollHereTarget() !== null, onFeatures),
     run: () => {
@@ -222,6 +234,7 @@ export function createBuiltInActions(deps: {
   registry.register({
     id: ACTION_IDS.featureDelete,
     label: ACTION_IDS.featureDelete,
+    modes: MODEL_ONLY,
     shortcut: ['Delete', 'Backspace'],
     group: FEATURE_GROUP,
     enabled: derived(hasSelectedFeature, onFeatures),
@@ -272,6 +285,7 @@ export function createBuiltInActions(deps: {
     registry.register({
       id: step.id,
       label: step.id,
+      modes: MODEL_ONLY,
       enabled: derived(() => !isLocked() && target() !== null, [onDoc, onLock]),
       run: () => {
         const index = target();
@@ -280,15 +294,23 @@ export function createBuiltInActions(deps: {
     });
   }
 
-  // Tools with a shortcut; a tool without one is reachable only from the toolbar.
-  const toolEnabled = derived(() => !isLocked(), [onLock]);
+  // Tools with a shortcut; a tool without one is reachable only from the toolbar. The sketcher
+  // is an open feature edit (locked), so in the mode 'sketch' the lock does not count.
+  const modeOf = (): Mode => deps.mode?.get() ?? 'model';
+  const onMode = (fn: () => void): Unsubscribe => deps.mode?.subscribe(fn) ?? (() => undefined);
   for (const tool of deps.toolList) {
     if (tool.shortcut === undefined) continue;
+    const modes = toolModes(tool);
+    const enabled = (): boolean => {
+      const mode = modeOf();
+      return modes.includes(mode) && (mode === 'sketch' || !isLocked());
+    };
     registry.register({
       id: toolActionId(tool.id),
       label: tool.label,
       shortcut: tool.shortcut,
-      enabled: toolEnabled,
+      modes,
+      enabled: derived(enabled, [onLock, onMode]),
       run: () => {
         tools.activate(tool.id);
       },

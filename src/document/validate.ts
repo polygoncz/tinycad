@@ -60,6 +60,11 @@ function checkParam(spec: ParamSpec): Check {
       return checkRefs(spec.min, spec.max, 'topo');
     case 'region':
       return checkRefs(spec.min, spec.max, 'region');
+    case 'planes':
+      return checkRefs(spec.min, spec.max, 'plane');
+    case 'data':
+      // Only required (checked above); the content is up to the schema's own validate (M12).
+      return () => undefined;
     default:
       return assertNever(spec);
   }
@@ -107,7 +112,7 @@ function checkRefs(
 
 /**
  * What makes two references the same (spec 03): body for body, body + name for topo, sketch +
- * region for region. Extra fields of the raw data are ignored, readRef keeps only these.
+ * region for region, plane for plane. Extra fields of the raw data are ignored, readRef keeps only these.
  * JSON of a tuple, so no separator character inside a name can make two keys collide.
  */
 function refKey(ref: EntityRef): string {
@@ -118,6 +123,8 @@ function refKey(ref: EntityRef): string {
       return JSON.stringify([ref.body, ref.name]);
     case 'region':
       return JSON.stringify([ref.sketch, ref.region]);
+    case 'plane':
+      return JSON.stringify([ref.plane]);
     default:
       return assertNever(ref);
   }

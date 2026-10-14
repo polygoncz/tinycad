@@ -3,15 +3,25 @@ import type { MeshData } from '@/kernel';
 
 // Pure logic of HighlightLayer (spec 09, "Vrstvy pro interakci" and point 9 of "Synchronizace s
 // regenerací"): comparing targets, which targets still exist, what is drawn. No three import, so
-// it is tested in Node.
+// it is tested in Node. Sketch entities (M12) are never valid here: HighlightPort ignores them,
+// the style of the sketch drawing carries their highlight (spec 10, "Port viewportu").
 
-/** Same face or edge: kind, body and index. A PickResult's point and normal do not count. */
+/** A face or an edge of a body: what this layer draws. */
+export type BodyTarget = Exclude<HighlightTarget, { readonly kind: 'sketchEntity' }>;
+
+/**
+ * Same face or edge: kind, body and index; same sketch entity: sketch and entity. A
+ * PickResult's point and normal do not count.
+ */
 export function sameTarget(a: HighlightTarget, b: HighlightTarget): boolean {
   if (a.kind === 'face' && b.kind === 'face') {
     return a.body === b.body && a.faceIndex === b.faceIndex;
   }
   if (a.kind === 'edge' && b.kind === 'edge') {
     return a.body === b.body && a.edgeIndex === b.edgeIndex;
+  }
+  if (a.kind === 'sketchEntity' && b.kind === 'sketchEntity') {
+    return a.sketch === b.sketch && a.entity === b.entity;
   }
   return false;
 }
@@ -34,14 +44,15 @@ export function sameSelection(
 }
 
 /**
- * True when the target's body is shown and its index is a key of the body's mesh (faceRanges
+ * True when the target is a face or an edge, its body is shown and its index is a key of the body's mesh (faceRanges
  * for a face, edgeRanges for an edge). Whether the index still means "the same" face after a
  * regeneration is left to topological naming (M14).
  */
 export function validTarget(
   target: HighlightTarget,
   meshOf: (body: BodyId) => MeshData | undefined,
-): boolean {
+): target is BodyTarget {
+  if (target.kind === 'sketchEntity') return false;
   const mesh = meshOf(target.body);
   if (mesh === undefined) return false;
   return target.kind === 'face'
@@ -53,7 +64,7 @@ export function validTarget(
 export function validTargets(
   targets: readonly HighlightTarget[],
   meshOf: (body: BodyId) => MeshData | undefined,
-): readonly HighlightTarget[] {
+): readonly BodyTarget[] {
   return targets.filter((target) => validTarget(target, meshOf));
 }
 
@@ -61,10 +72,10 @@ export function validTargets(
  * What is drawn: each selected target once, and the hover only when it is not selected
  * (the selection wins over the hover).
  */
-export function drawnTargets(
-  hover: HighlightTarget | null,
-  selection: readonly HighlightTarget[],
-): { readonly hover: HighlightTarget | null; readonly selection: readonly HighlightTarget[] } {
+export function drawnTargets<T extends HighlightTarget>(
+  hover: T | null,
+  selection: readonly T[],
+): { readonly hover: T | null; readonly selection: readonly T[] } {
   const unique = selection.filter(
     (target, i) => selection.findIndex((other) => sameTarget(other, target)) === i,
   );

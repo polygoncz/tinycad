@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FeatureId } from './model';
-import { bodyId, originOfBody, ownerOf, parseBodyId } from './refs';
-import type { BodyId, TopoName } from './refs';
+import { bodyId, originOfBody, ownerOf, parseBodyId, parsePlaneId, sketchId } from './refs';
+import type { BodyId, PlaneId, TopoName } from './refs';
 
 const fid = (s: string): FeatureId => s as FeatureId;
 const bid = (s: string): BodyId => s as BodyId;
@@ -49,6 +49,11 @@ describe('ownerOf', () => {
   it('a region reference belongs to its sketch', () => {
     expect(ownerOf({ kind: 'region', sketch: fid('s1'), region: 'r1' })).toBe('s1');
   });
+
+  it('a plane reference belongs to the text before the slash (M12)', () => {
+    expect(ownerOf({ kind: 'plane', plane: 'origin/plane:xy' as PlaneId })).toBe('origin');
+    expect(ownerOf({ kind: 'plane', plane: 'f3/plane:1' as PlaneId })).toBe('f3');
+  });
 });
 
 describe('parseBodyId', () => {
@@ -79,4 +84,46 @@ describe('parseBodyId', () => {
   it('gives back what bodyId mints', () => {
     expect(parseBodyId(bodyId(fid('f1'), 2))).toBe(bodyId(fid('f1'), 2));
   });
+});
+
+describe('sketchId (M12)', () => {
+  it('names the sketch of a feature <owner>/sketch', () => {
+    expect(sketchId(fid('f1'))).toBe('f1/sketch');
+  });
+
+  it.each(['', 'f/1', '/'])('rejects the owner %j (empty or with a slash)', (owner) => {
+    expect(() => sketchId(fid(owner))).toThrow();
+  });
+});
+
+describe('parsePlaneId (M12)', () => {
+  it.each(['origin/plane:xy', 'origin/plane:yz', 'f1/plane:1', 'a.b-c/plane:top2'])(
+    'accepts %j',
+    (text) => {
+      expect(parsePlaneId(text)).toBe(text);
+    },
+  );
+
+  it.each([
+    '',
+    'plane:xy',
+    '/plane:xy',
+    'a/b/plane:xy',
+    'origin/plane:',
+    'origin/plane',
+    'origin/plane:XY',
+    'origin/plane:x-y',
+    'origin/plane:xy/z',
+    'origin/body',
+    'origin/axis:z',
+  ])('rejects %j', (text) => {
+    expect(parsePlaneId(text)).toBeUndefined();
+  });
+
+  it.each([[undefined], [null], [3], [{}], [['origin/plane:xy']]])(
+    'rejects the non-string %j',
+    (value) => {
+      expect(parsePlaneId(value)).toBeUndefined();
+    },
+  );
 });

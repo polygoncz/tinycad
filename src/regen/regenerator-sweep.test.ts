@@ -65,6 +65,7 @@ function withRelease(
     makeCylinder: (p) => fake.makeCylinder(p),
     transform: (shape, m) => fake.transform(shape, m),
     boolean: (op, targets, tools) => fake.boolean(op, targets, tools),
+    makeFace: (p) => fake.makeFace(p),
     tessellate: (shape, q) => fake.tessellate(shape, q),
     boundingBox: (shape) => fake.boundingBox(shape),
     release: (handles) => release(handles, calls++),

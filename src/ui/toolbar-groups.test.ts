@@ -16,7 +16,7 @@ function aTool(id: string, group: ToolDescriptor['group'], shortcut?: string): T
 }
 
 function anAction(id: string, enabled = true, shortcut: string | null = null): ActionState {
-  return { id, label: id, shortcut, group: null, enabled };
+  return { id, label: id, shortcut, group: null, enabled, modes: ['model', 'sketch'] };
 }
 
 /** The ids are passed in, never known by the function (AppSession.actionIds). */

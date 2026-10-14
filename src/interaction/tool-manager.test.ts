@@ -5,6 +5,7 @@ import { anOpsSession } from '@/ops/testing';
 import { describe, expect, it } from 'vitest';
 import type { FeatureEditor, FeatureEditSession } from './feature-editor';
 import { createFeatureEditor } from './feature-editor';
+import type { Mode } from './mode';
 import { createSelectionModel } from './selection';
 import { FakeRegenStatus, FakeViewport } from './testing';
 import { createToolManager } from './tool-manager';
@@ -37,6 +38,7 @@ interface ToolOptions {
   readonly withoutOnKey?: boolean;
   readonly failCreate?: boolean;
   readonly failActivate?: boolean;
+  readonly modes?: readonly Mode[];
 }
 
 /** A descriptor whose tools log their lifecycle and events into the shared recorder. */
@@ -46,6 +48,7 @@ function aRecordingTool(id: string, rec: Recorder, opts: ToolOptions = {}): Tool
     label: id,
     icon: id,
     group: 'primitive',
+    ...(opts.modes === undefined ? {} : { modes: opts.modes }),
     create(): Tool {
       rec.calls.push(`${id}.create`);
       if (opts.failCreate === true) throw new Error(`${id} create failed`);
@@ -904,5 +907,147 @@ describe('createToolManager – refPick', () => {
     features.create('ref').focusRefParam('targets');
     click(viewport);
     expect(viewport.hover).toBeNull();
+  });
+});
+
+describe('createToolManager – modes', () => {
+  function setupModes(
+    options: {
+      initial?: Mode;
+      defaultToolIds?: Partial<Record<Mode, string>>;
+      tools?: (rec: Recorder) => readonly ToolDescriptor[];
+    } = {},
+  ) {
+    const rec: Recorder = { calls: [], contexts: [] };
+    const registry: ToolRegistry = createToolRegistry();
+    registry.register(aRecordingTool('select', rec));
+    const tools = options.tools?.(rec) ?? [
+      aRecordingTool('box', rec),
+      aRecordingTool('sketch.select', rec, { modes: ['sketch'] }),
+      aRecordingTool('sketch.line', rec, { modes: ['sketch'] }),
+    ];
+    for (const d of tools) registry.register(d);
+    const mode = new ObservableValue<Mode>(options.initial ?? 'model');
+    const viewport = new FakeViewport();
+    const session = anOpsSession();
+    const manager = createToolManager({
+      registry,
+      ctx: {
+        viewport,
+        selection: createSelectionModel({ regen: new FakeRegenStatus() }),
+        doc: session.doc,
+        ops: session.dispatcher,
+        ids: createSequentialIdGenerator(),
+        features: aFeatureEditorStub(),
+      },
+      defaultToolId: 'select',
+      mode: mode.asObservable(),
+      defaultToolIds: options.defaultToolIds ?? { sketch: 'sketch.select' },
+    });
+    const emitted: string[] = [];
+    manager.active.subscribe(() => emitted.push(manager.active.get()));
+    rec.calls.length = 0;
+    rec.contexts.length = 0;
+    return { manager, rec, viewport, mode, emitted };
+  }
+
+  it('starts with the default tool of the current mode', () => {
+    const { manager } = setupModes({ initial: 'sketch' });
+    expect(manager.active.get()).toBe('sketch.select');
+  });
+
+  it('a change of mode deactivates the active tool and activates the default of the new mode', () => {
+    const { manager, rec, mode, emitted } = setupModes();
+    manager.activate('box');
+    rec.calls.length = 0;
+    emitted.length = 0;
+    mode.set('sketch');
+    expect(rec.calls).toEqual(['box.deactivate', 'sketch.select.create', 'sketch.select.activate']);
+    expect(manager.active.get()).toBe('sketch.select');
+    expect(emitted).toEqual(['sketch.select']);
+
+    rec.calls.length = 0;
+    mode.set('model');
+    expect(rec.calls).toEqual(['sketch.select.deactivate', 'select.create', 'select.activate']);
+    expect(manager.active.get()).toBe('select');
+  });
+
+  it('activate of a tool outside the mode throws and keeps the active tool', () => {
+    const { manager, rec, mode, emitted } = setupModes();
+    expect(() => {
+      manager.activate('sketch.line');
+    }).toThrow(/sketch\.line/);
+    expect(manager.active.get()).toBe('select');
+
+    mode.set('sketch');
+    rec.calls.length = 0;
+    emitted.length = 0;
+    expect(() => {
+      manager.activate('box');
+    }).toThrow(/box/);
+    expect(manager.active.get()).toBe('sketch.select');
+    expect(rec.calls).toEqual([]);
+    expect(emitted).toEqual([]);
+  });
+
+  it('a tool in both modes can be activated in either', () => {
+    const { manager, mode } = setupModes({
+      tools: (r) => [
+        aRecordingTool('sketch.select', r, { modes: ['sketch'] }),
+        aRecordingTool('measure', r, { modes: ['model', 'sketch'] }),
+      ],
+    });
+    manager.activate('measure');
+    expect(manager.active.get()).toBe('measure');
+    mode.set('sketch');
+    manager.activate('measure');
+    expect(manager.active.get()).toBe('measure');
+  });
+
+  it('finish returns to the default tool of the current mode', () => {
+    const { manager, rec, mode } = setupModes();
+    mode.set('sketch');
+    manager.activate('sketch.line');
+    rec.calls.length = 0;
+    rec.contexts.at(-1)?.finish();
+    expect(manager.active.get()).toBe('sketch.select');
+    expect(rec.calls).toEqual([
+      'sketch.line.deactivate',
+      'sketch.select.create',
+      'sketch.select.activate',
+    ]);
+  });
+
+  it('finish of the default tool of the mode does nothing', () => {
+    const { manager, rec, mode, emitted } = setupModes();
+    mode.set('sketch');
+    const ctx = rec.contexts.at(-1);
+    rec.calls.length = 0;
+    emitted.length = 0;
+    ctx?.finish();
+    expect(manager.active.get()).toBe('sketch.select');
+    expect(rec.calls).toEqual([]);
+    expect(emitted).toEqual([]);
+  });
+
+  it('Escape returns to the default tool of the current mode', () => {
+    const { manager, viewport, mode } = setupModes();
+    mode.set('sketch');
+    manager.activate('sketch.line');
+    viewport.emitKey(key('Escape'));
+    expect(manager.active.get()).toBe('sketch.select');
+  });
+
+  it('a missing default tool of a mode throws at creation', () => {
+    expect(() => setupModes({ defaultToolIds: {} })).toThrow(/sketch/);
+    expect(() => setupModes({ defaultToolIds: { sketch: 'nope' } })).toThrow(/nope/);
+  });
+
+  it('dispose stops following the mode', () => {
+    const { manager, rec, mode } = setupModes();
+    manager.dispose();
+    rec.calls.length = 0;
+    mode.set('sketch');
+    expect(rec.calls).toEqual([]);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createSequentialIdGenerator } from '@/core';
+import { createSequentialIdGenerator, ObservableValue } from '@/core';
 import { bodyId, createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
 import type { BodyId, FeatureId, FeatureInstance, FeatureSchema, ParamSchema } from '@/document';
 import { aFeature } from '@/document/testing';
@@ -12,6 +12,8 @@ import type { ConfirmRequest } from './builtin-actions';
 import { createEditLock } from './edit-lock';
 import { createFeatureEditor } from './feature-editor';
 import { createFeatureTreeModel } from './feature-tree';
+import { ALL_MODES } from './mode';
+import type { Mode } from './mode';
 import { SELECT_TOOL } from './select-tool';
 import { createSelectionModel } from './selection';
 import { FakeRegenStatus, FakeViewport } from './testing';
@@ -65,13 +67,14 @@ const aUse = (id: string, ...owners: string[]): FeatureInstance =>
   });
 
 /** A tool that finishes at once (like the box tool after opening its dialog). */
-function aTool(id: string, shortcut?: string): ToolDescriptor {
+function aTool(id: string, shortcut?: string, modes?: readonly Mode[]): ToolDescriptor {
   return {
     id,
     label: `${id}.label`,
     icon: id,
     group: 'sketch',
     ...(shortcut === undefined ? {} : { shortcut }),
+    ...(modes === undefined ? {} : { modes }),
     create: () => ({
       activate: (ctx) => {
         ctx.finish();
@@ -83,12 +86,17 @@ function aTool(id: string, shortcut?: string): ToolDescriptor {
 
 const LINE_TOOL = aTool('line', 'L');
 const PLANE_TOOL = aTool('plane');
+/** The default tool of the sketch mode and a drawing tool of it, for the mode tests. */
+const SKETCH_SELECT_TOOL = aTool('sketch.select', undefined, ['sketch']);
+const RECT_TOOL = aTool('sketch.rectangle', 'R', ['sketch']);
 
 function setup(
   opts: {
     readOnly?: boolean;
     init?: DocumentOptions;
     confirm?: (r: ConfirmRequest) => boolean;
+    /** With a mode: the sketch tools are registered too and everything follows the mode. */
+    mode?: ObservableValue<Mode>;
   } = {},
 ) {
   const ops = anOpsSession(opts.init);
@@ -110,13 +118,17 @@ function setup(
   });
   const toolRegistry = createToolRegistry();
   for (const tool of [SELECT_TOOL, LINE_TOOL, PLANE_TOOL]) toolRegistry.register(tool);
+  const mode = opts.mode?.asObservable();
+  if (mode !== undefined)
+    for (const tool of [SKETCH_SELECT_TOOL, RECT_TOOL]) toolRegistry.register(tool);
   const viewport = new FakeViewport();
-  const registry = createActionRegistry();
+  const registry = createActionRegistry(mode === undefined ? {} : { mode });
   const tools = createToolManager({
     registry: toolRegistry,
     ctx: { viewport, selection, doc, ops: dispatcher, ids, features: editor },
     defaultToolId: SELECT_TOOL.id,
     unhandledKey: (e) => registry.handleKey(e),
+    ...(mode === undefined ? {} : { mode, defaultToolIds: { sketch: SKETCH_SELECT_TOOL.id } }),
   });
   const locked = createEditLock({ readOnly: opts.readOnly ?? false, editor });
   let fitAllCount = 0;
@@ -133,6 +145,7 @@ function setup(
     tools,
     toolList: toolRegistry.all(),
     locked,
+    ...(mode === undefined ? {} : { mode }),
     camera: {
       fitAll: () => {
         fitAllCount++;
@@ -613,5 +626,65 @@ describe('built-in actions – dispose', () => {
     s.builtIn.dispose();
     s.select(a);
     expect(s.enabled('feature.delete')).toBe(false);
+  });
+});
+
+describe('built-in actions – modes', () => {
+  it('feature and timeline actions exist only in the mode model, undo, redo and fit all in all', () => {
+    const s = setup({ mode: new ObservableValue<Mode>('model') });
+    const modes = Object.fromEntries(s.registry.actions.get().map((a) => [a.id, a.modes]));
+    for (const id of [
+      'feature.edit',
+      'feature.rename',
+      'feature.suppress',
+      'feature.delete',
+      'timeline.rollHere',
+      'timeline.toStart',
+      'timeline.stepBack',
+      'timeline.stepForward',
+      'timeline.toEnd',
+    ]) {
+      expect(modes[id]).toEqual(['model']);
+    }
+    for (const id of ['undo', 'redo', 'view.fitAll']) expect(modes[id]).toEqual(ALL_MODES);
+  });
+
+  it('a tool action has the modes of its tool', () => {
+    const s = setup({ mode: new ObservableValue<Mode>('model') });
+    expect(s.state('tool.line').modes).toEqual(['model']);
+    expect(s.state('tool.sketch.rectangle').modes).toEqual(['sketch']);
+  });
+
+  it('in the mode sketch a sketch tool action is enabled although locked, a model one is not', () => {
+    const mode = new ObservableValue<Mode>('model');
+    const s = setup({ mode });
+    expect(s.enabled('tool.sketch.rectangle')).toBe(false);
+    // The sketcher is an open feature edit: locked is true in it.
+    const edit = s.editor.create('box');
+    mode.set('sketch');
+    expect(s.enabled('tool.sketch.rectangle')).toBe(true);
+    expect(s.enabled('tool.line')).toBe(false);
+    s.viewport.emitKey(key('r'));
+    // The rectangle tool finishes at once: back to the default tool of the sketch mode.
+    expect(s.tools.active.get()).toBe('sketch.select');
+    expect(s.registry.run('tool.sketch.rectangle')).toBe(true);
+
+    mode.set('model');
+    expect(s.enabled('tool.sketch.rectangle')).toBe(false);
+    expect(s.enabled('tool.line')).toBe(false);
+    edit.cancel();
+    expect(s.enabled('tool.line')).toBe(true);
+  });
+
+  it('feature.delete is disabled in the mode sketch and does not claim its shortcut', () => {
+    const mode = new ObservableValue<Mode>('model');
+    const s = setup({ mode });
+    const a = s.addBox();
+    s.select(a);
+    expect(s.enabled('feature.delete')).toBe(true);
+    mode.set('sketch');
+    expect(s.enabled('feature.delete')).toBe(false);
+    expect(s.registry.handleKey(key('Delete'))).toBe(false);
+    expect(s.featureIds()).toEqual([a]);
   });
 });

@@ -294,6 +294,12 @@ describe('fromData – broken data (Q026)', () => {
     ]);
   });
 
+  it("rejects the feature id 'origin': it is the reserved owner of the origin planes (M12)", () => {
+    expect(loadIssues(rawData([box('origin', 1)])).map((i) => i.path)).toEqual([
+      'studio.features[0].id',
+    ]);
+  });
+
   it('reports every bad feature field with its path', () => {
     const bad = { id: 7, type: '', typeVersion: 0, name: null, params: [], suppressed: 'no' };
     expect(loadIssues(rawData([box('a', 1), bad])).map((i) => i.path)).toEqual([

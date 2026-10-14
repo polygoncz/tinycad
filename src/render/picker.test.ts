@@ -93,3 +93,17 @@ describe('Picker filter', () => {
     expect(sceneQueries()).toBe(0);
   });
 });
+
+describe('Picker and sketch entities', () => {
+  it('a filter with only sketchEntity returns null without looking at the bodies', () => {
+    const { pickNearEdge, pickCenter, sceneQueries } = setup();
+    expect(pickNearEdge(['sketchEntity'])).toBeNull();
+    expect(pickCenter(['sketchEntity'])).toBeNull();
+    expect(sceneQueries()).toBe(0);
+  });
+
+  it('sketchEntity next to body kinds does not change the body pick', () => {
+    const { pickNearEdge } = setup();
+    expect(pickNearEdge(['sketchEntity', 'edge', 'face'])).toMatchObject({ kind: 'edge' });
+  });
+});

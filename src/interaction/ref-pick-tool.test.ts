@@ -23,6 +23,10 @@ describe('pickFilterFor', () => {
     expect(pickFilterFor({ kind: 'region', label: 'Profile' })).toEqual([]);
   });
 
+  it('planes: nothing, planes are picked in the Browser (M12)', () => {
+    expect(pickFilterFor({ kind: 'planes', label: 'Plane' })).toEqual([]);
+  });
+
   it.each<ParamSpec>([
     { kind: 'length', label: 'Width', default: 10 },
     { kind: 'angle', label: 'Angle', default: 0 },
@@ -30,6 +34,7 @@ describe('pickFilterFor', () => {
     { kind: 'boolean', label: 'Flip', default: false },
     { kind: 'enum', label: 'Mode', default: 'a', options: [{ value: 'a', label: 'A' }] },
     { kind: 'point', label: 'Origin', default: [0, 0, 0] },
+    { kind: 'data', label: 'Sketch' },
   ])('a value param ($kind) picks nothing', (spec) => {
     expect(pickFilterFor(spec)).toEqual([]);
   });

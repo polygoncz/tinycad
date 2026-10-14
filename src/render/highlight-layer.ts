@@ -9,10 +9,11 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import type { Disposable } from '@/core';
-import type { BodyId, HighlightPort, HighlightTarget } from '@/interaction';
+import type { BodyId, HighlightPort } from '@/interaction';
 import type { MeshData } from '@/kernel';
 import type { BodyView } from './body-view';
 import {
+  type BodyTarget,
   drawnTargets,
   sameHover,
   sameSelection,
@@ -64,8 +65,9 @@ export function createHighlightLayer(options: HighlightLayerOptions): HighlightL
   const selectionLook = createLook(options.palette.selection);
   /** Geometries of the drawn objects; all replaced on every change. */
   let geometries: THREE.BufferGeometry[] = [];
-  let hover: HighlightTarget | null = null;
-  let selection: readonly HighlightTarget[] = [];
+  /** Only faces and edges: sketch entities are dropped like invalid targets (M12). */
+  let hover: BodyTarget | null = null;
+  let selection: readonly BodyTarget[] = [];
   let disposed = false;
 
   const meshOf = (body: BodyId): MeshData | undefined => views.get(body)?.mesh;
@@ -79,7 +81,7 @@ export function createHighlightLayer(options: HighlightLayerOptions): HighlightL
     requestRender();
   }
 
-  function draw(target: HighlightTarget, look: Look): void {
+  function draw(target: BodyTarget, look: Look): void {
     const view = views.get(target.body);
     // A hidden body keeps its targets in the state but draws none (spec 09, setBodyVisible);
     // rebuild after showing it draws them again.

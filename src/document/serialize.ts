@@ -11,6 +11,7 @@ import type {
   FeatureInstance,
   PartStudioData,
 } from './model';
+import { ORIGIN } from './origin';
 import { parseBodyId } from './refs';
 import type { FeatureSchema } from './schema';
 
@@ -184,8 +185,10 @@ function readFeature(
   }
   const { id, type, typeVersion, name, params, suppressed } = raw;
   // Report every bad field first, then narrow all of them at once.
-  // The owner of an artifact id is the text before the first '/', so a feature id has none (spec 03).
-  if (!isFeatureIdText(id)) at(`${path}.id`, "Must be a non-empty string without '/'");
+  // The owner of an artifact id is the text before the first '/', so a feature id has none, and
+  // 'origin' owns the origin geometry (spec 03).
+  if (!isFeatureIdText(id))
+    at(`${path}.id`, "Must be a non-empty string without '/', other than 'origin'");
   if (!isNonEmptyString(type)) at(`${path}.type`, 'Must be a non-empty string');
   if (!isWholeNumber(typeVersion) || typeVersion < 1)
     at(`${path}.typeVersion`, 'Must be a whole number >= 1');
@@ -297,7 +300,7 @@ function isNonEmptyString(v: unknown): v is string {
 }
 
 function isFeatureIdText(v: unknown): v is string {
-  return isNonEmptyString(v) && !v.includes('/');
+  return isNonEmptyString(v) && !v.includes('/') && v !== ORIGIN;
 }
 
 function isWholeNumber(v: unknown): v is number {

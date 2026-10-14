@@ -123,3 +123,19 @@ describe('HighlightLayer on a hidden body', () => {
     expect(layer.group.children).toHaveLength(2);
   });
 });
+
+describe('HighlightLayer and sketch entities', () => {
+  it('ignores them in hover and selection (the drawing style carries their highlight)', () => {
+    const layer = createHighlightLayer({
+      views: new Map<BodyId, BodyView>([[A, viewOf(A)]]),
+      requestRender: () => undefined,
+      palette: LIGHT_PALETTE,
+    });
+    layer.setHover({ kind: 'sketchEntity', sketch: 's', entity: 'p1' });
+    layer.setSelection([
+      { kind: 'sketchEntity', sketch: 's', entity: 'l1' },
+      { kind: 'face', body: A, faceIndex: 0 },
+    ]);
+    expect(layer.group.children).toHaveLength(1);
+  });
+});

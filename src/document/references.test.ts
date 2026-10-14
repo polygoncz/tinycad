@@ -3,8 +3,17 @@ import type { RegistryReader } from '@/core';
 import { describe, expect, it } from 'vitest';
 import type { FeatureId, FeatureInstance, PartStudioData } from './model';
 import { dependenciesOf, dependentsOf, orderViolations, referencesOf } from './references';
+import { ORIGIN_PLANE_IDS } from './origin';
 import { bodyId } from './refs';
-import type { BodyRef, EntityRef, SketchRegionRef, TopoName, TopoRef } from './refs';
+import type {
+  BodyRef,
+  EntityRef,
+  PlaneId,
+  PlaneRef,
+  SketchRegionRef,
+  TopoName,
+  TopoRef,
+} from './refs';
 import type { FeatureSchema } from './schema';
 import { aFeature } from './testing';
 
@@ -23,6 +32,7 @@ const regionRef = (sketch: string, region: string): SketchRegionRef => ({
   sketch: fid(sketch),
   region,
 });
+const planeRef = (plane: string): PlaneRef => ({ kind: 'plane', plane: plane as PlaneId });
 
 // One param of every reference kind plus a plain one, which never yields references.
 const schema: FeatureSchema = {
@@ -33,9 +43,11 @@ const schema: FeatureSchema = {
     targets: { kind: 'bodies', label: 'op.targets' },
     faces: { kind: 'topo', label: 'op.faces', entity: 'face' },
     profile: { kind: 'region', label: 'op.profile' },
+    plane: { kind: 'planes', label: 'op.plane' },
+    sketch: { kind: 'data', label: 'op.sketch' },
     width: { kind: 'length', label: 'op.width', default: 1 },
   },
-  defaults: () => ({ targets: [], faces: [], profile: [], width: 1 }),
+  defaults: () => ({ targets: [], faces: [], profile: [], plane: [], sketch: {}, width: 1 }),
   validate: () => [],
 };
 
@@ -49,6 +61,8 @@ interface OpParams {
   readonly targets: readonly EntityRef[];
   readonly faces: readonly EntityRef[];
   readonly profile: readonly EntityRef[];
+  readonly plane: readonly EntityRef[];
+  readonly sketch: unknown;
   readonly width: number;
 }
 
@@ -61,6 +75,8 @@ function op(id: string, ...refs: readonly EntityRef[]): FeatureInstance<OpParams
       targets: refs.filter((r) => r.kind === 'body'),
       faces: refs.filter((r) => r.kind === 'topo'),
       profile: refs.filter((r) => r.kind === 'region'),
+      plane: refs.filter((r) => r.kind === 'plane'),
+      sketch: {},
       width: 1,
     },
   });
@@ -118,6 +134,21 @@ describe('referencesOf', () => {
     expect(referencesOf(schema, params)).toEqual([bodyRef('a', 3), topoRef('b', 'Face1')]);
   });
 
+  it('takes plane references of a planes param and nothing from a data param (M12)', () => {
+    const params = {
+      targets: [],
+      faces: [],
+      profile: [],
+      plane: [planeRef('origin/plane:xz'), { kind: 'plane', plane: 'bad' }, planeRef('f1/plane:1')],
+      sketch: [bodyRef('a'), planeRef('origin/plane:xy')],
+      width: 1,
+    };
+    expect(referencesOf(schema, params)).toEqual([
+      planeRef('origin/plane:xz'),
+      planeRef('f1/plane:1'),
+    ]);
+  });
+
   it('returns [] for params that are not an object', () => {
     for (const params of [null, undefined, 3, 'x', [bodyRef('a')]]) {
       expect(referencesOf(schema, params)).toEqual([]);
@@ -158,6 +189,11 @@ describe('dependenciesOf', () => {
       op('x', bodyRef('a'), topoRef('b', 'Edge1'), regionRef('s', 'r1')),
     );
     expect(dependenciesOf(studio, schemas).get(fid('x'))).toEqual(['a', 'b', 's']);
+  });
+
+  it('a reference to an origin plane is no dependency (origin is not a feature, M12)', () => {
+    const studio = studioOf(op('a'), op('s', planeRef(ORIGIN_PLANE_IDS.xy), bodyRef('a')));
+    expect(dependenciesOf(studio, schemas).get(fid('s'))).toEqual(['a']);
   });
 
   it('leaves out references to features that are not in the studio', () => {

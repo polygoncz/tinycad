@@ -59,7 +59,7 @@ export interface EditState {
   readonly issues: readonly ParamIssue[];
   /** In the order of schema.params. */
   readonly fields: readonly FieldState[];
-  /** A bodies/topo/region param that accepts the selection. */
+  /** A bodies/topo/region/planes param that accepts the selection. */
   readonly activeRefParam: string | null;
   /** false after commit/cancel. */
   readonly open: boolean;
@@ -191,7 +191,13 @@ export function createFeatureEditor(deps: {
   };
 }
 
-const REF_KINDS: ReadonlySet<ParamSpec['kind']> = new Set(['bodies', 'topo', 'region']);
+/** Params that take the selection (focusRefParam); planes are picked in the Browser (M12). */
+const REF_KINDS: ReadonlySet<ParamSpec['kind']> = new Set(['bodies', 'topo', 'region', 'planes']);
+/**
+ * Params focused on create: not planes, otherwise the sketcher would start with the refPick tool
+ * instead of its own (M12).
+ */
+const AUTO_FOCUS_KINDS: ReadonlySet<ParamSpec['kind']> = new Set(['bodies', 'topo', 'region']);
 const NO_PARAMS: Readonly<Record<string, unknown>> = Object.freeze({});
 
 function createSession(deps: {
@@ -366,7 +372,7 @@ function createSession(deps: {
 
 /** The first bodies, topo or region param in the order of the schema, or null. */
 function firstRefParam(schema: FeatureSchema): string | null {
-  const found = Object.entries(schema.params).find(([, spec]) => REF_KINDS.has(spec.kind));
+  const found = Object.entries(schema.params).find(([, spec]) => AUTO_FOCUS_KINDS.has(spec.kind));
   return found === undefined ? null : found[0];
 }
 

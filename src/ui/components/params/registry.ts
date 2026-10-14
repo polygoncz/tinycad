@@ -12,8 +12,11 @@ import RefListField from './RefListField.vue';
 // component and one line here; a new feature type = nothing in ui. Every field takes
 // `field: FieldState` and reports changes with `update`; it never changes anything itself.
 
-/** 'region' gets its component with the sketcher (M12, decided 2026-10-13). */
-export type ParamFieldKind = Exclude<ParamSpec['kind'], 'region'>;
+/**
+ * 'region' gets its component with Extrude (M13, decided 2026-10-13); 'data' never has one, the
+ * dialog skips its field (M12).
+ */
+export type ParamFieldKind = Exclude<ParamSpec['kind'], 'region' | 'data'>;
 
 export const PARAM_FIELDS: Readonly<Record<ParamFieldKind, Component>> = Object.freeze({
   length: LengthField,
@@ -24,9 +27,11 @@ export const PARAM_FIELDS: Readonly<Record<ParamFieldKind, Component>> = Object.
   point: PointField,
   bodies: RefListField,
   topo: RefListField,
+  // The count only, without chips; the plane is picked in the Browser (M12).
+  planes: RefListField,
 });
 
 /** The component of a param kind, undefined for kinds without one yet. */
 export function paramFieldFor(kind: ParamSpec['kind']): Component | undefined {
-  return kind === 'region' ? undefined : PARAM_FIELDS[kind];
+  return kind === 'region' || kind === 'data' ? undefined : PARAM_FIELDS[kind];
 }

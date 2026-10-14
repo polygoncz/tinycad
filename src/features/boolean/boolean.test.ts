@@ -73,6 +73,7 @@ function aRecordingKernel() {
       calls.push({ op, targets: [...targets], tools: [...tools] });
       return fake.boolean(op, targets, tools);
     },
+    makeFace: (p) => fake.makeFace(p),
     boundingBox: (shape) => fake.boundingBox(shape),
   };
   return { fake, kernel, calls };

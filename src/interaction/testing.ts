@@ -13,6 +13,8 @@ import type {
   OverlayShape,
   PickFilter,
   PickResult,
+  SketchDrawing,
+  SketchPort,
   ViewKeyEvent,
   ViewPointerEvent,
   ViewportEvents,
@@ -31,13 +33,14 @@ const DEFAULT_RAY: RayFn = (x, y) => ({ origin: [x, y, 0] satisfies Vec3, direct
 
 /**
  * A ViewportPort for tests: preset pick results, a configurable screenToRay, recorded
- * highlight and overlay state, and manual emitting of pointer and key events.
+ * highlight, overlay and sketch drawing state, and manual emitting of pointer and key events.
  * pick returns the preset result only when its kind is in the filter and records the filter.
  * The recorded state is replaced on every call, so a read snapshot never changes later.
  */
 export class FakeViewport implements ViewportPort {
   readonly highlight: HighlightPort;
   readonly overlay: OverlayPort;
+  readonly sketches: SketchPort;
   private readonly emitter = new Emitter<ViewportEvents>();
   readonly events: Subscribable<ViewportEvents> = this.emitter;
 
@@ -47,6 +50,7 @@ export class FakeViewport implements ViewportPort {
   private hoverState: HighlightTarget | null = null;
   private selectionState: readonly HighlightTarget[] = [];
   private overlayState: ReadonlyMap<string, readonly OverlayShape[]> = new Map();
+  private sketchState: ReadonlyMap<string, SketchDrawing> = new Map();
 
   constructor() {
     this.highlight = {
@@ -69,6 +73,17 @@ export class FakeViewport implements ViewportPort {
       },
       clear: () => {
         this.overlayState = new Map();
+      },
+    };
+    this.sketches = {
+      set: (id, drawing) => {
+        this.sketchState = new Map(this.sketchState).set(id, drawing);
+      },
+      remove: (id) => {
+        if (!this.sketchState.has(id)) return;
+        const next = new Map(this.sketchState);
+        next.delete(id);
+        this.sketchState = next;
       },
     };
   }
@@ -111,6 +126,11 @@ export class FakeViewport implements ViewportPort {
   /** Current overlay content: id → shapes. */
   get overlayShapes(): ReadonlyMap<string, readonly OverlayShape[]> {
     return this.overlayState;
+  }
+
+  /** Current sketch drawings: id → the last drawing set under it. */
+  get sketchDrawings(): ReadonlyMap<string, SketchDrawing> {
+    return this.sketchState;
   }
 
   emitPointer(e: ViewPointerEvent): void {

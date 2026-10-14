@@ -7,6 +7,11 @@ import { createTrackingKernel } from './tracking-kernel';
 
 const BOX = { origin: [0, 0, 0], size: [1, 2, 3] } as const;
 const CYLINDER = { base: [0, 0, 0], axis: [0, 0, 1], radius: 1, height: 2 } as const;
+const FACE = {
+  plane: { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, 0, 1] },
+  outer: [{ kind: 'circle', center: [0, 0], radius: 1 }],
+  holes: [],
+} as const;
 
 function setup() {
   const real = createFakeKernel();
@@ -36,7 +41,18 @@ describe('createTrackingKernel', () => {
     expect([...owned]).toEqual([cylinder.shape, moved.shape, united.shape]);
   });
 
-  it.each(['makeCylinder', 'transform', 'boolean'] as const)(
+  it('adds the handle of makeFace to the owned set and returns the real result', async () => {
+    const { real, owned, kernel } = setup();
+    const result = await kernel.makeFace(FACE);
+    expect([...owned]).toEqual([result.shape]);
+    expect(real.callCount('makeFace')).toBe(1);
+    await expect(real.boundingBox(result.shape)).resolves.toEqual({
+      min: [-1, -1, 0],
+      max: [1, 1, 0],
+    });
+  });
+
+  it.each(['makeCylinder', 'transform', 'boolean', 'makeFace'] as const)(
     'passes a %s error through unchanged and records nothing new',
     async (op) => {
       const { real, owned, kernel } = setup();
@@ -46,6 +62,7 @@ describe('createTrackingKernel', () => {
         makeCylinder: () => kernel.makeCylinder(CYLINDER),
         transform: () => kernel.transform(a.shape, mat4.identity()),
         boolean: () => kernel.boolean('union', [a.shape], [b.shape]),
+        makeFace: () => kernel.makeFace(FACE),
       };
       real.failNext(op, 'operation-failed', 'boom');
       const error: unknown = await calls[op]().then(
@@ -80,6 +97,7 @@ describe('createTrackingKernel', () => {
       'boundingBox',
       'makeBox',
       'makeCylinder',
+      'makeFace',
       'transform',
     ]);
   });

@@ -11,6 +11,8 @@ import type {
   OverlayShape,
   PickFilter,
   PickResult,
+  SketchDrawing,
+  SketchPort,
   ViewKeyEvent,
   ViewPointerEvent,
   ViewportEvents,
@@ -36,6 +38,7 @@ export class FakeAppViewport implements AppViewport {
   private readonly port = new FakeViewport();
   readonly highlight: HighlightPort = this.port.highlight;
   readonly overlay: OverlayPort = this.port.overlay;
+  readonly sketches: SketchPort = this.port.sketches;
   readonly events: Subscribable<ViewportEvents> = this.port.events;
 
   /** Element of the last mount, null before any. */
@@ -114,6 +117,11 @@ export class FakeAppViewport implements AppViewport {
     return this.port.overlayShapes;
   }
 
+  /** Current sketch drawings per id (FakeViewport.sketchDrawings). */
+  get sketchDrawings(): ReadonlyMap<string, SketchDrawing> {
+    return this.port.sketchDrawings;
+  }
+
   emitPointer(e: ViewPointerEvent): void {
     this.port.emitPointer(e);
   }
@@ -148,6 +156,7 @@ export function createCrashableKernel(): CrashableKernel {
     makeCylinder: (p) => guard(() => fake.makeCylinder(p)),
     transform: (shape, m) => guard(() => fake.transform(shape, m)),
     boolean: (op, targets, tools) => guard(() => fake.boolean(op, targets, tools)),
+    makeFace: (p) => guard(() => fake.makeFace(p)),
     tessellate: (shape, q) => guard(() => fake.tessellate(shape, q)),
     boundingBox: (shape) => guard(() => fake.boundingBox(shape)),
     release: (handles) => guard(() => fake.release(handles)),

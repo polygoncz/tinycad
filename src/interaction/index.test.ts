@@ -7,6 +7,7 @@ describe('interaction public API', () => {
     expect(Object.keys(interaction).sort()).toEqual(
       [
         'ACTION_IDS',
+        'ALL_MODES',
         'bindSelectionHighlight',
         'createActionRegistry',
         'createBrowserModel',
@@ -20,6 +21,7 @@ describe('interaction public API', () => {
         'SELECT_TOOL',
         'sameSelectionItem',
         'toolActionId',
+        'toolModes',
       ].sort(),
     );
   });

@@ -25,6 +25,7 @@ export function createTrackingKernel(
     makeCylinder: (p) => kernel.makeCylinder(p).then(track),
     transform: (shape, m) => kernel.transform(shape, m).then(track),
     boolean: (op, targets, tools) => kernel.boolean(op, targets, tools).then(track),
+    makeFace: (p) => kernel.makeFace(p).then(track),
     boundingBox: (shape) => kernel.boundingBox(shape),
   };
 }

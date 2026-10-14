@@ -1,10 +1,10 @@
 <script setup lang="ts">
-// ParamSpec kinds 'bodies' and 'topo': the selected references and whether the field is the
+// ParamSpec kinds 'bodies', 'topo' and 'planes': the selected references and whether the field is the
 // active one that takes the selection from the view or the Browser (FieldState.active). The
 // references are set by the selection, not typed here, so the button reports only that the field
 // wants to become active (the dialog calls focusRefParam). A 'bodies' field lists the chosen
 // bodies as chips from FieldState.refs (names from the document, interaction); each chip reports
-// the removal of its item with × (the dialog calls removeRef). A 'topo' field shows the count only.
+// the removal of its item with × (the dialog calls removeRef). 'topo' and 'planes' show the count only.
 import { computed, useId } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FieldState } from '@/interaction';

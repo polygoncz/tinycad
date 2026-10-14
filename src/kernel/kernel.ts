@@ -1,4 +1,5 @@
-import type { Mat4, Vec3 } from '@/core';
+import type { Mat4, Plane, Vec3 } from '@/core';
+import type { ProfileLoop } from './profile';
 import type { BoundingBox, MeshData, MeshQuality, ShapeHandle, ShapeResult } from './types';
 
 // The GeometryKernel port (spec 06, ADR 0011), segregated by capability. It grows with the
@@ -34,6 +35,18 @@ export interface BooleanOps {
   ): Promise<ShapeResult>;
 }
 
+export interface SketchOps {
+  /**
+   * Planar face in `plane` bounded by the loop `outer`, with the holes `holes`. Loop coordinates
+   * are in the plane (x = xDir, y = normal × xDir); loop orientation is arbitrary.
+   */
+  makeFace(p: {
+    readonly plane: Plane;
+    readonly outer: ProfileLoop;
+    readonly holes: readonly ProfileLoop[];
+  }): Promise<ShapeResult>;
+}
+
 export interface MeshOps {
   tessellate(shape: ShapeHandle, q: MeshQuality): Promise<MeshData>;
 }
@@ -49,4 +62,4 @@ export interface LifecycleOps {
 }
 
 export interface GeometryKernel
-  extends PrimitiveOps, TransformOps, BooleanOps, MeshOps, QueryOps, LifecycleOps {}
+  extends PrimitiveOps, TransformOps, BooleanOps, SketchOps, MeshOps, QueryOps, LifecycleOps {}
