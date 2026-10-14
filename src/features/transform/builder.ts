@@ -58,8 +58,10 @@ export const transformBuilder: FeatureBuilder<TransformParams> = Object.freeze<
     }
     // Every moved body stays where it was in the map, the input state stays as it is.
     const next = replaceBodies(state, changed, new Set());
-    if (pivot !== 'bodiesCenter') return { ok: true, state: next };
-    // The Regenerator freezes the anchors deeply (spec 07).
+    // The Regenerator freezes the anchors deeply (spec 07). Origin and pivotPoint come from the
+    // params, so only bodiesCenter needs the anchor; the empty anchors still have to be there,
+    // the controller shows no handles for a feature without them.
+    if (pivot !== 'bodiesCenter') return { ok: true, state: next, anchors: {} };
     return { ok: true, state: next, anchors: { pivot: { point: p } } };
   },
 });

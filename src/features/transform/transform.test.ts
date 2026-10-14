@@ -557,8 +557,9 @@ describe('transformBuilder', () => {
     if (!output.ok) expect.fail(output.error.message);
     // [0, 2] x [0, 4] about (0, 4): x in [0, 4], y in [4, 6].
     expectBox(await bboxOf(kernel, output.state, 'b1/body'), { min: [0, 4, 0], max: [4, 6, 6] });
-    // pivotPoint is in the params, so there is no anchor (spec 07, the anchor is minimal).
-    expect(output.anchors).toBeUndefined();
+    // pivotPoint is in the params, so there is no pivot anchor (spec 07, the anchor is minimal),
+    // but the anchors are there (empty): without them the controller shows no handles.
+    expect(output.anchors).toEqual({});
   });
 
   it('pivot, then translation: T(translate) · T(p) · R · T(-p)', async () => {
@@ -575,7 +576,7 @@ describe('transformBuilder', () => {
     expectBox(await bboxOf(kernel, next, 'b1/body'), { min: [9, 1, 5], max: [13, 3, 7] });
   });
 
-  it('gives the anchor only for bodiesCenter, not for origin or point', async () => {
+  it('gives the pivot anchor only for bodiesCenter, empty anchors for origin or point', async () => {
     const kernel = createFakeKernel();
     const state = await aState(kernel, [BOX]);
 
@@ -585,7 +586,7 @@ describe('transformBuilder', () => {
         aBuildContext(kernel, state),
       );
       if (!output.ok) expect.fail(output.error.message);
-      expect(output.anchors, pivot).toBeUndefined();
+      expect(output.anchors, pivot).toEqual({});
     }
     const center = await transformBuilder.build(
       { feature: aTransform('t1', { pivot: 'bodiesCenter' }), state },

@@ -299,6 +299,28 @@ Zvýraznění plochy je **malá vlastní kopie** jejích trojúhelníků: čist�
 - **Štítek:** `setLabel` ukáže nebo skryje jeden absolutně pozicovaný `<div>` nad canvasem (rodič canvasu, `pointer-events: none`, třída `tc-manipulator-label`). Barvy jsou z CSS proměnných `ui` (`--chrome-bg`, `--text-primary`), `render` je jen odkazuje jménem. `unmount` prvek odebere, další `mount` ho vytvoří znovu.
 - `dispose` uvolní geometrie a materiály.
 
+### Vzhled od M19 (styl Fusion)
+
+M19 nahrazuje glyfy výše ([[0022-rezimy-a-hud-manipulatoru|ADR 0022]]). Velikosti jsou v CSS px, glyf se škáluje stejně jako dosud (světové jednotky na px):
+
+| Druh | Glyf | Picking |
+|---|---|---|
+| `linear` | dřík `LineSegments2` 4 px od 14 px do 80 px od `position` + kužel (délka 18 px, poloměr 6 px) na konci | úsečka 14–98 px, tolerance 8 px |
+| `angular` `quarter` | čtvrtkruh `LineSegments2` 4 px, poloměr `HANDLE_RING_PX = 72` px, od `zero` k `axis × zero`, 16 segmentů | lomená čára, tolerance 6 px |
+| `angular` `full` | kružnice 4 px, poloměr 72 px, 64 segmentů | lomená čára, tolerance 6 px |
+| `planar` | čtverec od 26 do 46 px po `u` i `v` od `origin`: výplň (průhlednost 0,35) + obrys 1,5 px | bod uvnitř promítnutého čtyřúhelníku |
+| `point` | kotouček o poloměru 9 px kolem `position` (stále natočený ke kameře), výplň barvou pozadí palety, obrys 2 px | vzdálenost od průmětu ≤ 10 px |
+
+- **Priorita pickingu:** `point` vyhrává vždy, když je v toleranci. Pak `planar` (bod uvnitř). Pak nejbližší z `linear` a `angular`, při shodě dřívější v pořadí `set`.
+- **Skrytí:** šipka podle `HANDLE_HIDE_COS` jako dosud; čtvrtkruh i kružnice podle `HANDLE_RING_HIDE_COS`; čtverec, jehož normála `u × v` je téměř kolmá na pohled (`|n · view| < 0,05`), se skryje (je vidět z hrany). Bod se neskrývá.
+- **`dashed`:** čárkovaný dřík šipky a obrys čtverce (`LineMaterial` s `dashed`, čárka 6 px, mezera 5 px). Střed v režimu pivotu kreslí deskriptor jako `point` s `dashed`: obrys místo výplně a tečka uprostřed.
+- **Barvy** jako dosud (`axes` pro x/y/z, `selection` pro neutral, `hover` pro hover a active). Výplň čtverce má barvu podle `tint` čtverce (normála roviny: čtverec XY má barvu Z).
+- **Štítek zaniká:** `setLabel`, `tc-manipulator-label` a jeho DOM prvek se ruší, text kreslí `ui` (HUD).
+- **`project(world)`** promítne bod kamerou do CSS px vůči ploše pohledu (stejně jako picking), nepřipojený viewport → `null`.
+- **`viewChanged`:** ve `draw` po vykreslení, když se od minulého snímku změnila kamera (`target`, `orientation`, `halfHeight`) nebo velikost plochy; `generation` roste o 1. Animace kamery ho tak posílá každý snímek, klidová scéna nikdy.
+- Čisté funkce v `manipulator-pick.ts` (`projectHandles`, `pickHandle`, `handleBounds`) se rozšíří o nové druhy; `projectHandles` vrací pro `planar` čtyři rohy a pro `point` střed a poloměr.
+
+
 ## Skici
 
 Kresby skic a rovin ([[12-skicar#Kresba a picking]], [[0017-modul-sketch-a-skicar|ADR 0017]]) přicházejí jako `SketchDrawing` přes `SketchPort` ([[10-interakce#Port viewportu]]); `render` je tesseluje a pickuje sám. Data skici ani jádro nezná.
