@@ -14,6 +14,7 @@ milestones:
   - "[[M11-dalsi-entity]]"
   - "[[M12-skicar]]"
   - "[[M13-extrude-revolve]]"
+  - "[[M14-topologicke-pojmenovani]]"
   - "[[M16-vlastni-occt-build]]"
 tags:
   - spec
@@ -177,17 +178,55 @@ export interface GeometryKernel extends PrimitiveOps, TransformOps, BooleanOps, 
 - Symetrické vysunutí si builder složí z `transform` plochy o −d/2 a `extrude` o d; jádro „symetricky“ nezná.
 - `roles` (start, konec, boční plochy) M13 **nevyplňuje** ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R64]] ⚠): boční plochy potřebují vazbu hran plochy na id entit skici, kterou `makeFace` nevrací, a role bez historie booleanu by po „přidat/odebrat“ stejně neplatily. Obojí přijde s historií v [[M14-topologicke-pojmenovani|M14]].
 
+### Stav po M14
+
+M14 přidal topologii tvaru, role a historii u všech operací a zaoblení/zkosení hran ([[M14-topologicke-pojmenovani|M14]], [[08-topologicke-pojmenovani|spec 08]], [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R91–R98]]):
+
+```ts
+// kernel/types.ts
+export type SurfaceType = 'plane' | 'cylinder' | 'cone' | 'sphere' | 'torus' | 'other';
+/** Rovina rovinné plochy: bod na rovině a jednotková normála ven z tělesa (orientace plochy započtená). */
+export interface FacePlane { readonly origin: Vec3; readonly normal: Vec3 }
+export interface FaceInfo { readonly surface: SurfaceType; readonly plane?: FacePlane }   // plane právě u 'plane'
+export interface EdgeInfo {
+  readonly faces: readonly number[];      // sousední plochy, vzestupně bez duplicit (šev pláště: jedna)
+  readonly vertices: readonly number[];   // koncové vrcholy, vzestupně bez duplicit (uzavřená hrana: jeden, bez vrcholu: žádný)
+  readonly midpoint: Vec3;                // bod hrany v polovině parametru (jen pro rozlišení #k, spec 08)
+}
+export interface TopologySummary {
+  readonly faces: readonly FaceInfo[];    // index = SubShapeIndex plochy
+  readonly edges: readonly EdgeInfo[];    // index = SubShapeIndex hrany
+  readonly vertexCount: number;
+}
+
+// kernel/profile.ts: ProfileCurve dostává u všech tří druhů readonly id?: string (id entity skici, R98)
+
+export interface QueryOps {
+  boundingBox(shape: ShapeHandle): Promise<BoundingBox>;
+  topology(shape: ShapeHandle): Promise<TopologySummary>;          // M14
+}
+
+export interface DressupOps {                                       // M14
+  /** Zaoblení hran edges (indexy hran tvaru shape) poloměrem radius. */
+  fillet(shape: ShapeHandle, edges: readonly number[], radius: number): Promise<ShapeResult>;
+  /** Symetrické zkosení hran o distance. */
+  chamfer(shape: ShapeHandle, edges: readonly number[], distance: number): Promise<ShapeResult>;
+}
+
+export interface GeometryKernel
+  extends PrimitiveOps, TransformOps, BooleanOps, SketchOps, SweepOps, DressupOps, MeshOps, QueryOps, LifecycleOps {}
+```
+
+- **Role** (`ShapeResult.roles`, klíče bez id featury, [[0018-format-topologickych-jmen|ADR 0018]]): `makeBox` → `face:top|bottom|front|back|left|right` podle světových os (+Z, −Z, −Y, +Y, −X, +X; [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R93]]), každá právě jedna plocha; `makeCylinder` → `face:bottom`, `face:top`, `face:side`; `makeFace` → `edge:<id>` pro každou křivku s `id` (hrana plochy z té křivky); `extrude` → `face:start`, `face:end`, `face:side:<id>` (boční plochy z hran profilu, které mají roli `edge:<id>`); `revolve` → `face:side:<id>` a `face:start`, `face:end`, jen pokud ve výsledku existují (úhel < 2π). Ostatní operace role nevrací.
+- **Role hran profilu si jádro pamatuje u handle** (u plochy z `makeFace`) a `transform` je přenese na nový handle; `extrude`/`revolve` z nich počítají `face:side:<id>`. Port tak nese id entit skici jen jako neprůhledné řetězce (kernel na `sketch` nezávisí).
+- **Historie** (`ShapeResult.history`) u operací se vstupními tvary: `transform` (vstup 0), `boolean` (vstupy = `[...targets, ...tools]` v pořadí volání), `extrude`, `revolve` (vstup 0 = profil), `fillet`, `chamfer` (vstup 0). Primitiva a `makeFace` historii nevrací (`undefined`). Obsah: `modified` a `deleted` jen pro **plochy** vstupů, `generated` = plochy výstupu vzniklé z plochy, hrany nebo vrcholu vstupu. Změny hran a vrcholů se nevrací – jména hran plynou z ploch ([[08-topologicke-pojmenovani#Hrany]], [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R91]]).
+- `topology` je dotaz bez nového handle; síť (`tessellate`) a topologie téhož handle mají stejné indexy ploch a hran.
+
 ### Plánované rozšíření
 
 Přidávají se do `GeometryKernel` v milníku, který je potřebuje, a kontraktová sada se o ně rozšíří:
 
 ```ts
-export interface DressupOps {        // M14
-  fillet(shape: ShapeHandle, edges: readonly number[], radius: number): Promise<ShapeResult>;
-  chamfer(shape: ShapeHandle, edges: readonly number[], distance: number): Promise<ShapeResult>;
-}
-// QueryOps (M14): počty a typy ploch a hran, pro naming a ladění
-topology(shape: ShapeHandle): Promise<TopologySummary>;
 export interface ExchangeOps {       // M15
   exportStep(shapes: readonly ShapeHandle[]): Promise<Uint8Array>;
 }
@@ -205,7 +244,9 @@ Ověřuje ho kontraktová sada ([[#Testy]]), spuštěná pro `FakeKernel` v M5 a
 - **`makeFace`** (M12): `plane` má konečné složky, `xDir` i `normal` jednotkové a navzájem kolmé (`plane.isOrthonormal`, tolerance 1e-9); `outer` neprázdná; každá smyčka je buď jediná `circle` (poloměr konečný > 0), nebo ≥ 1 křivek `line`/`arc` (bez `circle`), kde konec každé křivky leží na začátku další a konec poslední na začátku první (tolerance `1e-7 · max(1, |souřadnice|)`); úsečka a oblouk nenulové délky (`from ≠ to`), oblouk s `|to − center| = |from − center|` (relativně 1e-7) a poloměrem > 1e-9. Jinak `'invalid-input'`. Orientace smyček je libovolná (jádro si ji srovná). Bounding box výsledku = obálka smyčky `outer` v prostoru (tolerance 1e-5; kontraktová sada jen pro roviny s osami rovnoběžnými se souřadnicovými). Plochu, kterou nejde postavit (samoprotínající se smyčka), OCCT hlásí `'operation-failed'`.
 - **`extrude`** (M13): neznámý handle → `'unknown-handle'`; `profile` není plocha (`TopAbs_FACE` – výsledek `makeFace` nebo jeho `transform`) → `'invalid-input'`; každá složka `direction` konečná a jeho délka > 1e-9, `distance` konečné > 0, jinak `'invalid-input'`. Vrací nový handle se solidem, profil zůstává platný. Bounding box výsledku = obálka bbox profilu a bbox profilu posunutého o `d̂ · distance` (tolerance 1e-5; kontraktová sada jen pro plochy v rovinách rovnoběžných se souřadnicovými). Směr rovnoběžný s rovinou plochy se nekontroluje; OCCT degenerovaný výsledek odhalí kontrolou platnosti → `'operation-failed'` ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R63]] ⚠).
 - **`revolve`** (M13): neznámý handle → `'unknown-handle'`; `profile` není plocha → `'invalid-input'`; složky `axis.origin` a `axis.direction` konečné, délka směru > 1e-9, `angle` konečný a `0 < angle ≤ 2π + 1e-9`, jinak `'invalid-input'`. Profil zůstává platný. Bounding box pro případy kontraktové sady (profil v rovině obsahující osu rovnoběžnou se souřadnicovou osou, úhel začíná na souřadnicové rovině) s tolerancí 1e-5. Osa, která profil protíná, se nekontroluje; neplatný výsledek OCCT hlásí `'operation-failed'` (R63 ⚠). Osa ležící na hraně profilu je platná (válec).
-- Žádná operace zatím nevyplňuje `history` ani `roles` (M14, pro `extrude` a `revolve` R64).
+- **`roles` a `history`** (M14): podle [[#Stav po M14]]. Indexy v rolích a historii jsou platné indexy podtvarů výstupu (a vstupů), vzestupně bez duplicit. **Úplnost historie:** každá plocha každého vstupu je v `history` právě jednou – buď v `modified` (i nezměněná plocha jako identita na svůj index ve výstupu), nebo v `deleted`. Pořadí položek: podle vstupu, pak druhu (`face`, `edge`, `vertex`), pak indexu.
+- **`topology`** (M14): neznámý handle → `'unknown-handle'`; počty ploch a hran odpovídají síti (`tessellate`); kvádr má 6 rovinných ploch s normálami ±X, ±Y, ±Z ven z tělesa a bodem roviny na příslušné stěně, 12 hran se dvěma různými sousedními plochami a dvěma vrcholy, `vertexCount` 8.
+- **`fillet`, `chamfer`** (M14): neznámý handle → `'unknown-handle'`; `edges` neprázdné, celá čísla v rozsahu hran tvaru, bez duplicit, `radius`/`distance` konečné > 0, jinak `'invalid-input'`. Selhání algoritmu (poloměr větší než sousední plochy, hrana, kterou zaoblit nejde) → `'operation-failed'`, nikdy `'internal'`. Vstup zůstává platný. Bounding box zaobleného nebo zkoseného kvádru (jedna hrana) = bounding box kvádru (tolerance 1e-5).
 - **`tessellate`:** `linearDeflection` i `angularDeflection` jsou konečná čísla > 0, jinak `'invalid-input'`. Neznámý handle → `'unknown-handle'`. Každé volání vrací **nové** buffery, nesdílené s jiným voláním, s jiným polem téže sítě ani s vnitřním stavem jádra, takže je volající smí přenést jako transferable. Že opakované volání vrátí stejná data, se **nezaručuje** (OCCT může síť zjemnit).
 - **`boundingBox`:** neznámý handle → `'unknown-handle'`. Vrací nový objekt.
 - **`release`:**
@@ -223,8 +264,8 @@ Aby šlo stavět topologické pojmenování ([[08-topologicke-pojmenovani|08]]),
 ```ts
 export interface ShapeResult {
   readonly shape: ShapeHandle;
-  readonly history?: ShapeHistory;   // do M14 se nevyplňuje
-  readonly roles?: Readonly<Record<string, readonly SubShapeIndex[]>>; // pojmenované části, např. { 'face:top': [5] }; do M14 se nevyplňuje
+  readonly history?: ShapeHistory;   // od M14 u operací se vstupními tvary (Stav po M14)
+  readonly roles?: Readonly<Record<string, readonly SubShapeIndex[]>>; // pojmenované části, např. { 'face:top': [5] }; od M14 u primitiv, makeFace, extrude, revolve
 }
 
 /** Index podtvaru = pozice v TopExp::MapShapes(shape, TopAbs_FACE/EDGE/VERTEX), od 0 (OCCT počítá od 1, adaptér odečte). */
@@ -239,7 +280,7 @@ export interface ShapeHistory {
 export interface HistoryLink { readonly input: number; readonly from: SubShapeIndex; readonly to: readonly SubShapeIndex[] }
 ```
 
-Typy `ShapeHistory`, `HistoryLink` a `SubShapeIndex` vznikají už v M5, aby měl `ShapeResult` konečný tvar. V M5 je žádná implementace nevyplňuje.
+Typy `ShapeHistory`, `HistoryLink` a `SubShapeIndex` vznikají už v M5, aby měl `ShapeResult` konečný tvar. V M5 je žádná implementace nevyplňovala, od M14 je vyplňují obě podle [[#Stav po M14]].
 
 Indexy podtvarů platí jen pro konkrétní handle, napříč regeneracemi stabilní nejsou. Stabilitu zajišťují až jména.
 
@@ -349,6 +390,17 @@ Modulový worker inicializuje OCCT asynchronně. Zpráva, která do workeru dora
 - **Rotace:** `gp_Ax1(gp_Pnt(origin), gp_Dir(direction))`, `BRepPrimAPI_MakeRevol(face, ax1, angle, false)`; stejné kontroly jako u hranolu.
 - `FirstShape()`/`LastShape()` (start a konec) a `Generated(hrana)` (boční plochy) algoritmus umí; využije je M14 pro `roles` a historii. Všechny objekty OCCT přes `using`.
 
+### Historie, role a topologie v adaptéru (M14)
+
+- **Historie** jedním pomocníkem `collectHistory(maker, inputs: ShapeEntry[], output: ShapeEntry)` pro každý algoritmus s `Modified/Generated/IsDeleted` (`BRepBuilderAPI_MakeShape`, `BRepAlgoAPI_BuilderAlgo`, `BRepFilletAPI_*`): pro každou plochu `f` každého vstupu `IsDeleted(f)` → `deleted`; jinak `Modified(f)` → indexy ploch výstupu přes `IsSame`; prázdný seznam a `f` je ve výstupu (`IsSame`) → identita; prázdný a ve výstupu není → `deleted`. `Generated(s)` pro plochy, hrany a vrcholy vstupu → jen podtvary typu plocha, které ve výstupu jsou. Prvky seznamů (`NCollection_List_TopoDS_Shape`) a obaly z nich adaptér maže. Cena O(F_vstup · F_výstup) volání `IsSame`; zrychlení přes `TopTools_ShapeMapHasher.HashCode` (v buildu je) až bude potřeba.
+- Boolean: `SetToFillHistory(true)` je výchozí; `Modified` cílových i nástrojových ploch. Transformace: `BRepBuilderAPI_Transform` (`Modified` vrátí přemístěnou plochu).
+- **Role kvádru** z `BRepPrimAPI_MakeBox` přes tabulku: `TopFace` → `face:top`, `BottomFace` → `face:bottom`, `LeftFace` (YMin) → `face:front`, `RightFace` (YMax) → `face:back`, `BackFace` (XMin) → `face:left`, `FrontFace` (XMax) → `face:right`; index přes `IsSame` v mapě ploch. **Válec:** `Face()` z `BRepPrimAPI_MakeOneAxis` → `face:side`; ze dvou rovinných ploch je `face:bottom` ta, jejíž bod roviny má menší průmět na osu.
+- **`makeFace`:** hrany se staví s id křivky; po `ShapeFix_Face` se každá hrana výsledku přiřadí přes `IsSame` k postavené hraně (implementátor ověří, že `BRepBuilderAPI_MakeWire` hrany nekopíruje; jinak přes `Modified` drátu). `ShapeEntry` dostane `edgeRoles: ReadonlyMap<number, string>` (index hrany → id); `transform` ji přenese přes `Modified` hran (pořadí mapy podtvarů se tuhým pohybem nemění).
+- **Hranol a rotace:** `FirstShape()`/`LastShape()` → `face:start`/`face:end`, jen když je `IsSame` ve výsledku; `Generated(hrana profilu)` → `face:side:<id>` pro hrany s rolí; historie přes `collectHistory` (vstup 0 = profil).
+- **Topologie:** typ plochy `BRepAdaptor_Surface(face).GetType()` (`GeomAbs_Plane` → `'plane'`, `Cylinder`, `Cone`, `Sphere`, `Torus`, jinak `'other'`); rovina z `Plane()` (`Location`, `Axis().Direction()`), u plochy s orientací `TopAbs_REVERSED` obrácená normála; sousednost hrana → plochy přes `TopExp_Explorer(plocha, TopAbs_EDGE)` a `IsSame` v mapě hran; vrcholy hrany přes `TopExp_Explorer(hrana, TopAbs_VERTEX)`; střed `BRepAdaptor_Curve` v `(First + Last) / 2`. `TopTools_IndexedDataMapOfShapeListOfShape` (`TopExp::MapShapesAndAncestors`) build nemá, proto výpočet přes explorer, O(F · E).
+- **Zaoblení a zkosení:** `BRepFilletAPI_MakeFillet(shape)`, `Add(radius, TopoDS.Edge(hrana))` pro každou hranu, `Build()`; `BRepFilletAPI_MakeChamfer(shape)`, `Add(distance, hrana)`. Výjimka OCCT z `Build`/`Shape`, `!IsDone()`, výsledek bez solidu nebo neplatný (`BRepCheck_Analyzer`) → `'operation-failed'` se zprávou (trap WASM zůstává fatální, [[Q055 Pád WASM jádra|Q055]]). Historie přes `collectHistory`. Všechny objekty OCCT přes `using`.
+- Protokol workeru a klient přeposílají `topology`, `fillet` a `chamfer` jako ostatní metody.
+
 ### Volba WASM buildu OCCT (spike v M7)
 
 Rozhodnuto ([[Q012 Volba WASM buildu OCCT|Q012]], [[0013-replicad-opencascadejs|ADR 0013]]): **`replicad-opencascadejs` 1.1.0**. Měření ze spiku (`spikes/m07-occt/`) jsou v ADR.
@@ -381,6 +433,7 @@ export function describeGeometryKernelContract(name: string, factory: () => Prom
 - Žije v `kernel/testing.ts`, aby ho mohly používat testy modulů, které na `kernel` závisí hodnotově (`regen`, `features/*`). `render` má z `kernel` jen typy, testuje proti vlastnímu stubu `MeshOps`. Do produkčního kódu se fake nedostane.
 - Záznam tvaru (`AabbEntry`) je AABB. `makeBox` uloží `[origin, origin + size]`. Od M11: `makeCylinder` uloží AABB válce pro libovolnou osu (`â` jednotková osa, v ose `k` rozšíření `radius · sqrt(1 − â_k²)` kolem obou podstav); `transform` AABB osmi rohů vstupního AABB po `mat4.transformPoint`; `boolean('union')` obalový AABB všech vstupů, `'subtract'` obalový AABB cílů (jeden cíl beze změny – fake nic neodečítá), `'intersect'` průnik obalu cílů s obalem nástrojů, prázdný nebo nulové tloušťky → `'operation-failed'`. Od M12 `makeFace` uloží AABB smyčky `outer` v prostoru: koncové body křivek a u oblouků a kružnic body v lokálních úhlech 0, π/2, π, 3π/2, které na křivce leží, převedené `plane.toWorld` (přesné pro roviny s osami rovnoběžnými se souřadnicovými, jinde podhodnocené – fake to nevadí); `tessellate` plochy je kvádr s nulovou tloušťkou. Validace vstupů je stejná jako u OCCT.
 - Od M13 si záznam pamatuje příznak „plocha“ (`makeFace` ano, `transform` ho dědí, ostatní operace ne) pro kontrolu profilu v `extrude`/`revolve`. `extrude` uloží obálku AABB profilu a AABB posunutého o `d̂ · distance`; `revolve` obálku osmi rohů AABB profilu otočených kolem osy o úhly `0`, `angle` a každé `k · π/2` mezi nimi (přesné pro případy kontraktové sady, jinde přibližné – fake to nevadí).
+- Od M14: `topology` každého záznamu je topologie kvádru AABB – 6 rovinných ploch v pořadí sítě (−X, +X, −Y, +Y, −Z, +Z, rovina se středem stěny a normálou ven), 12 hran v pořadí sítě se sousedností a vrcholy odvozenými z rohů, 8 vrcholů, střed hrany = střed úsečky. Role: `makeBox` → `left 0, right 1, front 2, back 3, bottom 4, top 5`; `makeCylinder` → `bottom`/`top` = stěna ve směru −/+ převládající složky osy, `side` = zbylé 4; `extrude` → `start`/`end` = stěna ve směru −/+ převládající složky `d̂` (boční role fake nevrací); `makeFace` a `revolve` role nevrací. Historie: `transform`, `fillet`, `chamfer` identita 6 ploch; `boolean` identita prvního vstupu, ostatní vstupy `deleted`; `extrude`/`revolve` profil `deleted`. `fillet`/`chamfer` vrací AABB beze změny (nový handle) a kontrolují vstup jako OCCT (rozsah hran = 12).
 - `tessellate` vrací AABB jako kvádr: 6 ploch po 2 trojúhelnících (24 vrcholů, normály ploch), pořadí ploch −X, +X, −Y, +Y, −Z, +Z. Dál 12 hran po 2 bodech. Platí pro každý tvar, i válec a výsledek booleanu.
 - Volání `failNext` se týká jen dalšího volání dané metody. Injektovaná chyba nevytvoří handle a nic neuvolní.
 - Výsledky se vrací asynchronně (v mikroúloze), nikdy synchronně, aby testy vyšších vrstev nespoléhaly na pořadí, které by s workerem neplatilo.
@@ -395,6 +448,8 @@ export function describeGeometryKernelContract(name: string, factory: () => Prom
   - **M11** (bbox s tolerancí 1e-5, nic, co platí jen pro jedno jádro): `makeCylinder` pro osy X, Y a nejednotkovou Z a každý neplatný vstup; `transform` posun, rotace o 90° a 45° kolem Z, vstup zůstává platný, nerigidní matice (zrcadlení, měřítko, zkosení, `NaN`) → `'invalid-input'`; `boolean` – `union` překrývajících se i oddělených kvádrů (obalový bbox), `intersect` překrývajících se (přesný průnik) a oddělených (`'operation-failed'`, žádný handle), `subtract` s nástrojem, který odřízne roh (bbox cíle), neplatné seznamy a `op`; síť každého výsledku projde `validateMeshData` a leží v bbox; izolace vstupů.
 - **M12** (kontraktová sada): `makeFace` – čtverec v rovině XY, obdélník v rovině XZ posunuté do `origin [0, 5, 0]`, kružnice v rovině YZ, smyčka z úsečky a půlkruhového oblouku („D“, `ccw` true i false), čtverec s kruhovou dírou: bbox s tolerancí 1e-5, síť projde `validateMeshData`; neortonormální rovina, neuzavřená smyčka, kružnice uprostřed víceprvkové smyčky, nulová úsečka, oblouk s nestejným poloměrem, prázdná `outer` → `'invalid-input'` bez handle; izolace vstupu.
 - **M13** (kontraktová sada): `extrude` – čtverec 10 × 10 na XY o 5 ve směru +Z, o 5 ve směru `[0, 0, 3]` (nejednotkový), ve směru −Z, obdélník na XZ ve směru −Y: bbox s tolerancí 1e-5, síť projde `validateMeshData` a leží v bbox; profil zůstává platný; profil po `transform` (posunutý čtverec) funguje; `distance` 0, záporná, `NaN`, nulový směr, profil kvádr → `'invalid-input'` bez handle; neznámý handle; izolace vstupu. `revolve` – obdélník na XZ (`x ∈ [5, 10]`, `z ∈ [0, 10]`) kolem osy Z o 2π → bbox `[−10, 10]² × [0, 10]`, o π/2 → `[0, 10]² × [0, 10]`, o π/2 kolem osy s opačným směrem → `x ∈ [0, 10]`, `y ∈ [−10, 0]`; úhel 0, záporný, > 2π, `NaN`, nulový směr osy, profil kvádr → `'invalid-input'`; síť projde `validateMeshData`.
+- **M14** (kontraktová sada): `topology` kvádru (6 rovinných ploch s normálami ven, 12 hran, každá se dvěma plochami a dvěma vrcholy, 8 vrcholů; počty sedí se sítí; `unknown-handle`); role kvádru (6 klíčů, každý jedna plocha, různé, normála plochy role odpovídá ose podle tabulky) a válce (`top`/`bottom` po jedné rovinné ploše s normálou ±osa, `side` neprázdné, disjunktní); úplnost historie u `transform`, `boolean` (všechny tři operace), `extrude`, `revolve`, `fillet`, `chamfer` (každá plocha vstupu právě jednou v `modified` nebo `deleted`, indexy v rozsahu); `fillet`/`chamfer` jedné hrany kvádru – bbox beze změny, vstup platný, neplatné vstupy (`[]`, duplicita, index mimo rozsah, neceločíselný, poloměr 0, záporný, `NaN`) → `'invalid-input'` bez handle; izolace vstupu `edges`.
+- `kernel-occt` navíc (M14): kvádr minus procházející válec – plocha pláště válce je v `modified` z nástroje, horní a spodní stěna kvádru z cíle, podstavy válce `deleted`, topologie 7 ploch a hrana mezi horní stěnou a pláštěm; zaoblení hrany kvádru – 7 ploch, právě jedna `generated` z dané hrany, dvě sousední stěny `modified`; zkosení – 7 ploch, nová rovinná; poloměr 6 u kvádru 10 → `'operation-failed'`; `makeFace` obdélníku s id čtyř úseček – 4 role `edge:<id>` na různé hrany, po `transform` a `extrude` 4 role `face:side:<id>` + `start` + `end` (6 ploch); rotace o 2π bez `start`/`end`, o π/2 s nimi; kružnice s id → jedna boční plocha; válec `bottom` v `base`.
 - `kernel-occt` navíc (M13): hranol čtverce 10 × 10 × 5 má 6 ploch a objem 500 (1 %); hranol čtverce s kruhovou dírou r = 2 má 7 ploch a objem `(100 − 4π) · 5`; rotace obdélníku (`x ∈ [5, 10]`) o 2π má 4 plochy a objem `750π`, o π/2 6 ploch a čtvrtinu objemu; rotace obdélníku `x ∈ [0, 5]` (osa na hraně) o 2π má objem `250π`.
 - `kernel-occt` navíc (M12): plocha má v síti 1 plochu; obsah (`BRepGProp.SurfaceProperties`) čtverce s dírou = `a² − πr²` (relativně 1e-6), „D“ = obdélník + půlkruh; samoprotínající se smyčka (motýlek) → `'operation-failed'`.
 - `validateMeshData`: platná síť, každé pravidlo porušené zvlášť.

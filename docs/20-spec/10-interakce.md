@@ -11,6 +11,7 @@ milestones:
   - "[[M09-interakce]]"
   - "[[M12-skicar]]"
   - "[[M13-extrude-revolve]]"
+  - "[[M14-topologicke-pojmenovani]]"
 tags:
   - spec
 created: 2026-10-12
@@ -38,7 +39,7 @@ export interface ViewportPort {
   readonly events: Subscribable<{ pointer: ViewPointerEvent; key: ViewKeyEvent }>;
 }
 
-export type PickKind = 'face' | 'edge' | 'sketchEntity' | 'sketchRegion';   // 'sketchEntity' od M12, 'sketchRegion' od M13, M14 přidá 'vertex'
+export type PickKind = 'face' | 'edge' | 'sketchEntity' | 'sketchRegion';   // 'sketchEntity' od M12, 'sketchRegion' od M13; 'vertex' odložen (M14, R101 ⚠)
 export type PickFilter = readonly PickKind[];   // prázdné = nic nejde vybrat
 
 /** Co jde zvýraznit: plocha nebo hrana tělesa, bez bodu a normály (Q065). */
@@ -46,7 +47,8 @@ export type HighlightTarget =
   | { kind: 'face'; body: BodyId; faceIndex: number }
   | { kind: 'edge'; body: BodyId; edgeIndex: number }
   | { kind: 'sketchEntity'; sketch: string; entity: string }    // M12; HighlightPort ho zatím ignoruje (zvýraznění nese styl kresby)
-  | { kind: 'sketchRegion'; sketch: string; region: string };   // M13: oblast kresby (id kresby, id oblasti); render ji vyplní
+  | { kind: 'sketchRegion'; sketch: string; region: string }    // M13: oblast kresby (id kresby, id oblasti); render ji vyplní
+  | { kind: 'body'; body: BodyId };                             // M14: celé těleso (výběr v Prohlížeči, reference bodies v dialogu)
 
 /** Výsledek pickingu je HighlightTarget doplněný o místo zásahu, lze ho předat přímo do setHover. */
 export type PickResult =
@@ -108,7 +110,7 @@ export interface KeyMods { readonly shift: boolean; readonly alt: boolean; reado
 - `pick` s filtrem (M10.1): pořadí druhů ve filtru nemá význam, hrana má přednost před plochou jako dosud; prázdný filtr → `null` bez dotazu na scénu. Nástroj nebo parametr dialogu tak určí, co jde vybrat, a hover nezvýrazňuje nic jiného.
 - `sketches` (M12): stejné zrcadlo jako overlay, ale s id entit a pickovatelné (`'sketchEntity'` ve filtru; výchozí filtr ho neobsahuje, `SelectTool` o něm neví). Editovanou skicu kreslí `SketchEditor`, skici z regenerace a roviny `app` ([[#Skicář]]). `FakeViewport` kresby zaznamenává (`sketchDrawings: ReadonlyMap<string, SketchDrawing>`).
 - `sketchRegion` (M13): oblasti kresby z `SketchDrawing.regions` jsou pickovatelné jen se `'sketchRegion'` ve filtru (parametr `region` v dialogu); render je bez zvýraznění nekreslí ([[09-vykreslovani#Skici]]).
-- `PickResult` je definovaný jen tady, [[09-vykreslovani]] na něj odkazuje. Varianta `vertex` přibude, až bude výběr vrcholů potřeba ([[Q057 Tvar PickResult|Q057]]).
+- `PickResult` je definovaný jen tady, [[09-vykreslovani]] na něj odkazuje. Varianta `vertex` přibude, až bude výběr vrcholů potřeba ([[Q057 Tvar PickResult|Q057]]; v M14 znovu odloženo, [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R101]] ⚠). `PickResult` ani `HighlightTarget` nenesou topologické jméno: `render` jména nezná, `interaction` si je dohledá v portu stavu regenerace (`RegenBody.names`).
 - `HighlightPort` je zrcadlo: stav hoveru a výběru drží `interaction` a vždy ho předá celý. Bere `HighlightTarget`, protože výběr bod zásahu nezná ([[Q065 Cíl zvýraznění bez bodu a normály|Q065]]); `PickResult` je jeho podtyp, takže výsledek `pick` jde předat beze změny. `OverlayPort` nese jen platformově nezávislé tvary ve světových souřadnicích, žádné typy Three.js. Další druhy (síť pro náhled tělesa) přibudou s potřebou ([[Q058 Kontrakt HighlightPort a OverlayPort|Q058]]).
 - `ViewPointerEvent` chodí pro všechna tlačítka. Pravé a prostřední tlačítko zároveň ovládá kameru, nástroje je mají ignorovat. Kolečko se do `interaction` neposílá, patří jen kameře.
 - Převod DOM událostí na `ViewPointerEvent`/`ViewKeyEvent` dělají adaptéry (`render` pro canvas, `ui` pro globální klávesnici). Adaptér také převádí Cmd (macOS) / Ctrl (jinde) na `mods.mod`, takže `interaction` platformu nezná. Do `interaction` se DOM typ nikdy nedostane.
@@ -124,7 +126,16 @@ export type FeatureHealth =
   | { kind: 'warning'; message: string }
   | { kind: 'error'; message: string; issues?: readonly ParamIssue[] };   // issues = neplatné parametry (INVALID_PARAMS), překládá ui
 
-export interface RegenBody { readonly body: BodyId; readonly feature: FeatureId }
+export interface RegenBody { readonly body: BodyId; readonly feature: FeatureId; readonly names: TopoNames }   // names od M14
+
+/** Topologická jména tělesa poslední regenerace (M14, spec 08). Úzké rozhraní definované tady; NameTable z regen ho strukturálně splňuje. */
+export interface TopoNames {
+  nameOfFace(index: number): TopoName | undefined;
+  nameOfEdge(index: number): TopoName | undefined;
+  faces(name: TopoName): readonly number[];      // vzestupně; neznámé jméno → []
+  edges(name: TopoName): readonly number[];
+}
+export const NO_TOPO_NAMES: TopoNames;            // nic nemá jméno
 
 export interface RegenSnapshot {
   /** Roste o 1 s každou dokončenou regenerací; 0 = ještě žádná. */
@@ -146,7 +157,7 @@ export interface RegenStatusPort {
 
 - `health` je `ReadonlyMap`, ale `Map` zmrazit nejde: adaptér v `app` posílá v každém snapshotu **novou** mapu a už ji nemění. `interaction` ji jen čte.
 - Potlačení a pozice za barem port nenese: `interaction` je čte přímo z dokumentu, takže se projeví hned, ne až po regeneraci.
-- V testech port nahrazuje `FakeRegenStatus` (`testing.ts`) s metodou `publish(health, bodies?, sketches?)`, která zvýší `generation` (chybějící seznamy prázdné). Port nese `sketches` vedle `bodies` místo sjednocení `artifacts` z revize – stejná informace s menší změnou ([[Rozhodnutí noční rychloakce#M12 – Skicář|R38]] ⚠). `RegenBody` se exportuje, potřebuje ho adaptér v `app`.
+- V testech port nahrazuje `FakeRegenStatus` (`testing.ts`) s metodou `publish(health, bodies?, sketches?)`, která zvýší `generation` (chybějící seznamy prázdné; těleso bez `names` dostane `NO_TOPO_NAMES`, M14). `aTopoNames({ faces?: Record<string, number[]>, edges?: … })` v `testing.ts` sestaví `TopoNames` z ručně zadaných jmen. Port nese `sketches` vedle `bodies` místo sjednocení `artifacts` z revize – stejná informace s menší změnou ([[Rozhodnutí noční rychloakce#M12 – Skicář|R38]] ⚠). `RegenBody` se exportuje, potřebuje ho adaptér v `app`.
 
 ## Prezentační modely a `Observable`
 
@@ -174,8 +185,8 @@ Společná pravidla snapshotů:
 export type SelectionItem =
   | { kind: 'feature'; feature: FeatureId }
   | { kind: 'body'; body: BodyId }
-  | { kind: 'face'; body: BodyId; faceIndex: number }
-  | { kind: 'edge'; body: BodyId; edgeIndex: number }
+  | { kind: 'face'; body: BodyId; faceIndex: number; name?: TopoName }   // name doplní model z RegenBody.names (M14)
+  | { kind: 'edge'; body: BodyId; edgeIndex: number; name?: TopoName }
   | { kind: 'plane'; plane: PlaneId };   // M12: rovina z Prohlížeče (vstup do skici)
 
 export interface SelectionModel {
@@ -192,8 +203,8 @@ export type SelectionCommands = Omit<SelectionModel, 'dispose'>;
 export function createSelectionModel(deps: { regen: RegenStatusPort }): SelectionModel;
 export function sameSelectionItem(a: SelectionItem, b: SelectionItem): boolean;
 
-/** Zrcadlí položky face/edge výběru (a od M13 oblasti v otevřeném dialogu) do HighlightPort.setSelection; vrací odhlášení. */
-export function bindSelectionHighlight(selection: SelectionModel, highlight: HighlightPort, editor?: Pick<FeatureEditor, 'current'>): Unsubscribe;
+/** Zrcadlí položky face/edge/body výběru (a od M13 oblasti, od M14 topo a bodies reference otevřeného dialogu) do HighlightPort.setSelection; vrací odhlášení. */
+export function bindSelectionHighlight(selection: SelectionModel, highlight: HighlightPort, editor?: Pick<FeatureEditor, 'current'>, regen?: RegenStatusPort): Unsubscribe;
 ```
 
 - Výběr je **dočasný stav session**, neukládá se do dokumentu ani do logu.
@@ -202,8 +213,8 @@ export function bindSelectionHighlight(selection: SelectionModel, highlight: Hig
 - `toggle`: položka ve výběru → odebere ji; jinak ji přidá na konec.
 - Model ukládá zmrazené kopie položek jen s poli jejich druhu, nikdy objekt volajícího (předaný `PickResult` tak do výběru nezanese `point` a `normal`). Položka, která už ve výběru je, zůstává v novém snapshotu týmž objektem.
 - `clear` na prázdném výběru nic nevyšle.
-- Indexy ploch/hran platí jen pro aktuální regeneraci. Když `RegenStatusPort` ohlásí novou `generation`, výběr odebere položky `face` a `edge` (od M14 je přemapuje přes topologická jména). Položky `feature`, `body` a `plane` zůstávají.
-- `bindSelectionHighlight` při každé změně předá `HighlightPort.setSelection` položky `face`/`edge` v pořadí výběru (ihned při navázání i jednou). Zvýraznění `feature`/`body` přibude s potřebou. S `editor` (M13, [[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R76]]) přidá za ně reference viditelných parametrů druhu `region` otevřené session jako `{ kind: 'sketchRegion', sketch: sketchId(ref.sketch), region }` (kresba skici z regenerace má id artefaktu) a sleduje `editor.current` i `state` session.
+- Indexy ploch/hran platí jen pro aktuální regeneraci. **Jméno** (M14, [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R102]], nahrazuje pravidlo [[Q064 Výběr po regeneraci|Q064]]): `set`/`toggle` doplní položce `face`/`edge` `name` z `RegenBody.names` posledního snapshotu (`nameOfFace`/`nameOfEdge`; těleso nebo jméno chybí → položka bez `name`); jméno od volajícího se ignoruje. `sameSelectionItem` jméno neporovnává. Když `RegenStatusPort` ohlásí novou `generation`, položka `face`/`edge` s jménem se nahradí položkami pro **všechny** indexy `names.faces(name)` / `edges(name)` těla v novém snapshotu (vzestupně, na místě původní položky, bez duplicit); položka bez jména, s tělesem, které v novém snapshotu není, nebo s jménem, které zaniklo, vypadne. Beze změny obsahu se nový snapshot nevyšle. Položky `feature`, `body` a `plane` zůstávají.
+- `bindSelectionHighlight` při každé změně předá `HighlightPort.setSelection` položky `face`/`edge` a od M14 `body` (`{ kind: 'body', body }`, [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R104]]) v pořadí výběru (ihned při navázání i jednou). Zvýraznění `feature` přibude s potřebou. S `editor` (M13, [[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R76]]) přidá za ně reference viditelných parametrů druhu `region` otevřené session jako `{ kind: 'sketchRegion', sketch: sketchId(ref.sketch), region }` (kresba skici z regenerace má id artefaktu) a sleduje `editor.current` i `state` session. **M14:** s `regen` přidá i reference viditelných parametrů `topo` – pro každou `TopoRef` cíle `face`/`edge` pro všechny indexy `faces(name)`/`edges(name)` tělesa v posledním snapshotu (podle `spec.entity`; nevyřešená reference nic) – a `bodies` jako `{ kind: 'body', body }`; pořadí: výběr, pak parametry v pořadí schématu; duplicitní cíle se vynechají; sleduje i `regen.state`. Bez `regen` jen `region` jako v M13.
 - Filtr výběru (jen plochy, jen hrany…) nastavuje aktivní nástroj nebo parametr dialogu.
 
 ## Nástroje
@@ -251,6 +262,8 @@ export function createToolManager(deps: {
   defaultToolId: string;
   /** Klávesy z viewportu, které nástroj nezpracoval (app sem napojí ActionRegistry.handleKey). */
   unhandledKey?: (e: ViewKeyEvent) => boolean;
+  /** Jména těles pro refPick u parametru topo (M14); bez něj zásah do topo nic nepřidá. */
+  regen?: RegenStatusPort;
 }): ToolManager;
 
 export const SELECT_TOOL: ToolDescriptor;   // id 'select', group 'select'
@@ -265,7 +278,7 @@ export const SELECT_TOOL: ToolDescriptor;   // id 'select', group 'select'
 - Výjimka z `descriptor.create()` nebo `tool.activate()`: manager nástroj zahodí (bez `deactivate`), aktivuje výchozí nástroj a výjimku pošle dál; `active` pak ukazuje výchozí. Selže-li sám výchozí nástroj, manager zůstane bez aktivního nástroje (události zahazuje) a výjimka letí dál – chyba programátora; selhal-li předtím jiný nástroj, letí `AggregateError` s oběma chybami. `createToolManager` spouští výchozí nástroj před přihlášením k událostem, takže při jeho selhání nic nezůstane přihlášené.
 - Po `dispose` hodí `activate` výjimku, druhé `dispose` nic nedělá.
 - `ToolManager` přeposílá `pointer` a `key` z `ViewportPort.events` aktivnímu nástroji. Klávesa: nejdřív `tool.onKey`; když vrátí `false` nebo ho nemá, `Escape` bez modifikátorů mimo textové pole ukončí nevýchozí nástroj (návrat k výchozímu). Ostatní nezpracované klávesy jdou do `unhandledKey`.
-- **Referenční parametr dialogu** ([[Q066 Klik do referenčního parametru|Q066]]): `ToolManager` sleduje `ctx.features.current` a `state` aktuální session. Dokud má session `activeRefParam !== null`, posílá události vnitřnímu nástroji `refPick` místo aktivního nástroje (ten zůstává aktivní, `active` se nemění, jen je dočasně „zakrytý“). `refPick`: `move` → hover z `pick`; levý klik na cíl povoleného druhu → přidá/odebere referenci v parametru přes `setParam`; `Escape` → `focusRefParam(null)`. Když `activeRefParam` zmizí, `refPick` zruší hover a události jdou znovu aktivnímu nástroji. `FeatureEditor` o nástrojích neví, takže nevznikne cyklus. Filtr pickingu odvodí `refPick` z `ParamSpec` aktivního parametru čistou funkcí `pickFilterFor(spec): PickFilter` (M10.1): `bodies` → `['face', 'edge']` (zásah čehokoli je těleso), `topo` s `entity: 'face'` → `['face']`, `'edge'` → `['edge']`, `'vertex'` → `[]` (do M14), `region` → `['sketchRegion']` a `axis` → `['sketchEntity']` (M13), ostatní → `[]`; stejný filtr platí pro hover; `refPick` filtr odvozuje při každé události (`ToolManager` ho při přepnutí z jednoho referenčního parametru na jiný znovu nevytváří) a při změně `activeRefParam` zruší hover (`setHover(null)`), aby nezůstal zvýrazněný cíl, který nový filtr nepovoluje (rozhodnutí 2026-10-14). Převod pick → reference (`BodyRef`, `TopoRef`) je v M9 jen pro `bodies`: zásah plochy i hrany dá `{ kind: 'body', body }`, nové pole je zmrazené, pořadí se drží, hodnota, která není pole, se bere jako prázdné pole. `topo` se doplní s topologickým pojmenováním (M14). **M13:** zásah `sketchRegion`, jehož kresba je id skici (`parseSketchId`; editovaná `'sketch-edit'` ne), přidá nebo odebere `{ kind: 'region', sketch: ownerOfArtifact(id), region }` (`toggleRegionRef`); do parametru `axis` jde zásah `sketchEntity`, jehož kresba je osa (`parseAxisId` → `AxisRef`), nebo skica a entita je podle dat featury skici v dokumentu úsečka (`isSketchLine` → `SketchEntityRef`); stejná reference znovu hodnotu vymaže (`null`), jiný zásah se ignoruje a hover u osy ukáže jen převoditelné zásahy. `createRefPick` proto dostane i `doc`. `refPick` není `Tool` z registru (nepotřebuje `ToolContext` ani `finish`); zakrytý nástroj nedostane `deactivate` ani jiný signál a jeho hover obnoví až další `move`.
+- **Referenční parametr dialogu** ([[Q066 Klik do referenčního parametru|Q066]]): `ToolManager` sleduje `ctx.features.current` a `state` aktuální session. Dokud má session `activeRefParam !== null`, posílá události vnitřnímu nástroji `refPick` místo aktivního nástroje (ten zůstává aktivní, `active` se nemění, jen je dočasně „zakrytý“). `refPick`: `move` → hover z `pick`; levý klik na cíl povoleného druhu → přidá/odebere referenci v parametru přes `setParam`; `Escape` → `focusRefParam(null)`. Když `activeRefParam` zmizí, `refPick` zruší hover a události jdou znovu aktivnímu nástroji. `FeatureEditor` o nástrojích neví, takže nevznikne cyklus. Filtr pickingu odvodí `refPick` z `ParamSpec` aktivního parametru čistou funkcí `pickFilterFor(spec): PickFilter` (M10.1): `bodies` → `['face', 'edge']` (zásah čehokoli je těleso), `topo` s `entity: 'face'` → `['face']`, `'edge'` → `['edge']`, `'vertex'` → `[]` (vrcholy odloženy, R101 ⚠), `region` → `['sketchRegion']` a `axis` → `['sketchEntity']` (M13), ostatní → `[]`; stejný filtr platí pro hover; `refPick` filtr odvozuje při každé události (`ToolManager` ho při přepnutí z jednoho referenčního parametru na jiný znovu nevytváří) a při změně `activeRefParam` zruší hover (`setHover(null)`), aby nezůstal zvýrazněný cíl, který nový filtr nepovoluje (rozhodnutí 2026-10-14). Převod pick → reference (`BodyRef`, `TopoRef`) je v M9 jen pro `bodies`: zásah plochy i hrany dá `{ kind: 'body', body }`, nové pole je zmrazené, pořadí se drží, hodnota, která není pole, se bere jako prázdné pole. **M14 (`topo`):** zásah plochy/hrany povoleného druhu se převede přes `RegenBody.names` posledního snapshotu (`nameOfFace`/`nameOfEdge`) na `{ kind: 'topo', body, name }` a `toggleTopoRef(value, ref)` (stejné `body` + `name` → odebere, jinak připojí; nové pole zmrazené) ho zapíše přes `setParam`; zásah bez jména nebo bez `regen` se ignoruje a hover ukáže jen zásahy se jménem ([[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R103]]). `createRefPick` proto dostane i `regen`. **M13:** zásah `sketchRegion`, jehož kresba je id skici (`parseSketchId`; editovaná `'sketch-edit'` ne), přidá nebo odebere `{ kind: 'region', sketch: ownerOfArtifact(id), region }` (`toggleRegionRef`); do parametru `axis` jde zásah `sketchEntity`, jehož kresba je osa (`parseAxisId` → `AxisRef`), nebo skica a entita je podle dat featury skici v dokumentu úsečka (`isSketchLine` → `SketchEntityRef`); stejná reference znovu hodnotu vymaže (`null`), jiný zásah se ignoruje a hover u osy ukáže jen převoditelné zásahy. `createRefPick` proto dostane i `doc`. `refPick` není `Tool` z registru (nepotřebuje `ToolContext` ani `finish`); zakrytý nástroj nedostane `deactivate` ani jiný signál a jeho hover obnoví až další `move`.
 
 ### `SelectTool`
 
@@ -489,6 +502,24 @@ export function createBrowserModel(deps: {
 - Osy a oblasti (M13, [[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R72, R75]]): viditelnost os je stav pohledu jako u rovin; klik na osu nebo oblast jde jen do aktivního referenčního parametru dialogu (oblast ani osa nejsou položkou `SelectionModel`), jinak nic. Řádky oblastí jsou jen u skic a jen během aktivního parametru `region`, aby Prohlížeč nebyl zahlcený. Model se přepočítá i při změně `editor.current` a `state` otevřené session. Pořadí vyslání: `hidden`, `visiblePlanes`, `visibleAxes`, `bodies`, `planes`, `axes`, `sketches`.
 - Jména čipů v dialogu Prohlížeč nepočítá (od Ú9a, dřív `refLabel`): jsou ve `FieldState.refs` z interní `bodyRefLabel` ([[#Dialog featury: `FeatureEditor`]]).
 
+## Ladění jmen: `TopoInspector`
+
+Vývojářská pomůcka M14 ([[08-topologicke-pojmenovani#Ladění]], [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R111]]): ukáže jméno plochy nebo hrany pod kurzorem.
+
+```ts
+export interface TopoHover { readonly body: BodyId; readonly kind: 'face' | 'edge'; readonly index: number; readonly name: TopoName | null }
+export interface TopoInspector {
+  readonly enabled: Observable<boolean>;          // výchozí false
+  readonly hovered: Observable<TopoHover | null>;
+  setEnabled(on: boolean): void;
+  dispose(): void;                                // odhlásí se od událostí viewportu a portu
+}
+export function createTopoInspector(deps: { viewport: Pick<ViewportPort, 'pick' | 'events'>; regen: RegenStatusPort }): TopoInspector;
+```
+
+- Zapnutý: `move` → `viewport.pick(x, y)` s výchozím filtrem; zásah plochy nebo hrany → `TopoHover` se jménem z `RegenBody.names` (bez jména `null`), jinak `null`; `leave` → `null`. Vypnutý: `pick` nevolá a `hovered` je `null`. Nová generace → `hovered` `null` (index už neplatí). Snapshot jen při změně, zmrazený.
+- Je mimo nástroje (vlastní posluchač událostí), aby nic neměnil na výběru ani hoveru; při zapnutí pickuje navíc ke `SelectTool`, proto je výchozí vypnutý.
+
 ## Skicář
 
 Režim skicáře je prezentační logika, proto je v `interaction` a ne v pluginu ([[0017-modul-sketch-a-skicar|ADR 0017]], [[12-skicar#Režim skicáře (interaction)]]). Datový model, oblasti a port řešiče bere z modulu `sketch`.
@@ -514,7 +545,9 @@ export interface SketchEditor {
   readonly current: Observable<SketchSession | null>;
   readonly mode: Observable<Mode>;                       // 'sketch' ⇔ current !== null
   /** Nová skica na rovině: FeatureEditor.create(SKETCH_FEATURE_TYPE), u jiné než výchozí roviny setParam('plane'). */
-  create(plane: PlaneId): SketchSession;
+  create(plane: PlaneRef | TopoRef): SketchSession;          // M14: i rovinná plocha tělesa
+  /** Rovina pro referenci (deps.resolvePlane); nástroj skici podle ní pozná, jestli plocha z výběru jde použít (M14). */
+  planeOf(ref: PlaneRef | TopoRef): Plane | undefined;
   /** Úprava existující skici (FeatureEditor.edit). */
   edit(featureId: FeatureId): SketchSession;
 }
@@ -524,7 +557,7 @@ export function createSketchEditor(deps: {
   solver: ConstraintSolver;
   viewport: ViewportPort;                                 // kresba 'sketch-edit'
   ids: IdGenerator;
-  resolvePlane: (id: PlaneId) => Plane | undefined;       // app: ORIGIN_PLANES (M14: i plochy z regenerace)
+  resolvePlane: (ref: PlaneRef | TopoRef) => Plane | undefined;   // app: planeOfRef nad posledním stavem regenerace (M14), viz spec 07
 }): SketchEditor;
 
 export interface SketchSession {
@@ -618,7 +651,7 @@ export function createSketchActions(deps: { registry: ActionRegistry; sketches: 
 
 | Nástroj (`id`) | Režim, skupina, zkratka | Chování |
 |---|---|---|
-| `sketch` | `model`, `sketch`, `Shift+S` | je-li zavřený dialog i skicář: `sketches.create(rovina)` – rovina z výběru (první položka `plane`), jinak `ORIGIN_PLANE_IDS.xy`; skončí |
+| `sketch` | `model`, `sketch`, `Shift+S` | je-li zavřený dialog i skicář: `sketches.create(rovina)` – rovina z výběru – první položka `plane` (`PlaneRef`), nebo `face` se jménem, pro kterou `planeOf({ kind: 'topo', body, name })` vrátí rovinu (M14, [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R107]] ⚠), jinak `ORIGIN_PLANE_IDS.xy`; skončí |
 | `sketch.select` | `sketch`, `select` | výchozí v režimu skici; `move` → `setHover` z `pick(x, y, ['sketchEntity'])` (jen entity session, ne počátek); klik (do 4 px) → `select` (Shift = `additive`), do prázdna `clearSelection`; stisk na bodu a pohyb nad 4 px → `drag` při každém pohybu, uvolnění → `endDrag`; `Escape` s výběrem → `clearSelection` (`true`) |
 | `sketch.line` | `sketch`, `draw`, `L` | polyline: první klik začne řetěz, každý další přidá úsečku z posledního bodu (`addGeometry`); klik na první bod řetězu ho uzavře a ukončí; úhel do 3° od osy → `horizontal`/`vertical`; `Escape` s rozpracovaným řetězem ho ukončí (`true`), jinak nástroj skončí |
 | `sketch.rectangle` | `sketch`, `draw`, `R` | dva rohy → 4 body (rohy ze snapu znovu použité), 4 úsečky, 2× `horizontal`, 2× `vertical`; rohy se stejnou x nebo y nic |

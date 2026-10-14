@@ -11,6 +11,7 @@ milestones:
   - "[[M08-vykreslovani]]"
   - "[[M12-skicar]]"
   - "[[M13-extrude-revolve]]"
+  - "[[M14-topologicke-pojmenovani]]"
 tags:
   - spec
 created: 2026-10-12
@@ -148,7 +149,7 @@ Implementace `SceneSync`:
 6. Po výměně cache zapomene handle, které v posledním `sync` nejsou (regenerace je uvolnila a nové jádro je znovu nepoužije).
 7. **Výměna instance jádra** (restart workeru, [[Q060 Výměna jádra a cache sítí v render|Q060]], [[Q037 Pád workeru a čekající RPC volání|Q037]]): `app` zavolá `reset(newMeshes)` a vynutí plnou regeneraci. Handle jsou jedinečné jen v rámci instance a nové jádro čísluje znovu. Napojení v [[M10-ui|M10]].
 8. Logika bodů 1–7 je oddělená od Three.js (`SceneSync`, `scene-sync.ts`): výsledkem je plán `{ remove, add }`, který `BodyLayer` provede synchronně ve funkci `apply`. Plán, který nic nemění, se neprovádí (žádné zbytečné překreslení). `reset` provede plán, který odebere všechna zobrazená tělesa, takže `apply` musí snést volání i mimo `sync`.
-9. Po výměně scény `HighlightLayer` přestaví zvýraznění z nových sítí. Cíle, jejichž těleso zmizelo nebo index je mimo rozsah, tiše vypustí. Jestli index po regeneraci ukazuje na „stejnou“ plochu, řeší až [[08-topologicke-pojmenovani|topologické pojmenování]] (M14).
+9. Po výměně scény `HighlightLayer` přestaví zvýraznění z nových sítí. Cíle, jejichž těleso zmizelo nebo index je mimo rozsah, tiše vypustí. Jestli index po regeneraci ukazuje na „stejnou“ plochu, řeší [[08-topologicke-pojmenovani|topologické pojmenování]] v `interaction` (M14): výběr se přemapuje podle jména a `interaction` pošle nové cíle; `render` jména nezná.
 
 **Vlastnictví GPU zdrojů:** `MeshCache` drží jen `MeshData` (data na CPU). GPU zdroje (`BufferGeometry`, materiály) vlastní výhradně `BodyView`, který je vytvoří a v `dispose()` uvolní. Jeden vlastník, žádné počítání referencí. Sdílené materiály (stejné pro všechna tělesa) vlastní `BodyLayer` a uvolní je ve vlastním `dispose`.
 
@@ -167,6 +168,7 @@ Zvýraznění plochy je **malá vlastní kopie** jejích trojúhelníků: čist�
 - `HighlightLayer implements HighlightPort`: hover a výběr mají různé barvy, výběr vyhrává nad hoverem, pokud ukazují na totéž. `setHover`/`setSelection` vždy nahradí celý stav ([[Q058 Kontrakt HighlightPort a OverlayPort|Q058]]) a zavolají `requestRender()`. Volání se stejnou hodnotou jako minule nic nepřekresluje (porovnání podle `kind`, `body`, indexu). Od M9 bere `HighlightTarget` (bez `point` a `normal`, [[Q065 Cíl zvýraznění bez bodu a normály|Q065]]); čisté funkce v `highlight-targets.ts` pracují s ním.
   - Neplatné cíle (těleso není zobrazené, index není klíčem ve `faceRanges`/`edgeRanges`) se vypouští už v `setHover`/`setSelection`, nejen po výměně scény. Porovnání „stejná hodnota“ se dělá až po filtraci. Port to nehlásí: `interaction` může mít ve výběru cíl, který viewport právě nezobrazuje.
   - Plocha: neosvětlený průhledný `MeshBasicMaterial` (opacity 0,45, `depthWrite: false`, `polygonOffset` −1/−1, tedy ke kameře). Stínování tělesa zůstane vidět.
+  - Těleso (M14, cíl `{ kind: 'body', body }`): kopie všech trojúhelníků tělesa (`faceTriangles` pro každou plochu ve `faceRanges`, spojené) se stejným materiálem jako zvýraznění plochy; hover na těleso `pick` nevrací, takže jde jen o výběr (Prohlížeč, reference `bodies` v dialogu, [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R104]]). Neplatný cíl = těleso není zobrazené. Porovnání „stejná hodnota“ podle `kind` a `body`.
   - Hrana: **tlusté čáry** `LineSegments2` + `LineMaterial` z `three/addons` (3 px). WebGL kreslí `LineSegments` vždy 1 px široké bez ohledu na `linewidth`, takže by zvýraznění na hraně tělesa zaniklo. `LineMaterial` potřebuje rozlišení plátna, viewport ho předává při každé změně velikosti.
   - Přestavbu po výměně scény spouští `BodyLayer` volbou `afterApply` (volá se v `apply` po výměně, před `requestRender`).
 - `OverlayLayer implements OverlayPort`: `OverlayShape` → `LineSegments`/`Points` ve vlastní skupině scény, styly `preview` a `construction` jako dva sdílené materiály. `set(id, …)` uvolní předchozí geometrii pod stejným `id`. `lines` s lichým počtem bodů je chyba (assert), pod `id` pak zůstane předchozí stav. `construction` je čárkovaná (`LineDashedMaterial`).

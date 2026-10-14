@@ -34,6 +34,17 @@ updated: 2026-10-14
 - [ ] Výkon: měření regenerace a tessellace na větším modelu, případně cache sítí.
 - [ ] Úklid: projít otevřené otázky ve všech specifikacích, rozhodnout nebo přesunout do „Další nápady“.
 
+## Úkoly z M14
+
+Odloženo z [[M14-topologicke-pojmenovani|M14]] (rozhodnutí v [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|M14 – Topologické pojmenování]]); každý bod rozhodnout při upřesnění M15 – udělat, nebo přesunout do „Další nápady“:
+
+- [ ] **Boolean s více výslednými tělesy** ([[07-regenerace#Builder featury]], R8 → R100 ⚠): nový dotaz jádra na rozklad výsledku na solidy s historií, `bodyId(cíl.origin, n)` podle rodokmenu (např. podle nejmenšího jména plochy solidu), ošetření kolize id; test „změna parametru válce nepřehodí id dvou výsledných těles“. Platí i pro „odebrat“ ve Vysunutí (R67).
+- [ ] **Automatické cíle vysunutí** „sloučit se vším, čeho se dotkne“ (R66, R109 ⚠): dotaz jádra na průnik (`BRepExtrema_DistShapeShape` je v buildu).
+- [ ] **Obecné „Po plochu“** (nerovinná nebo nerovnoběžná plocha, „Po další“) – `BRepFeat_MakePrism` nebo řez hranolem (R109 ⚠).
+- [ ] **Vrcholy:** `PickKind 'vertex'`, reference na vrchol (R101 ⚠).
+- [ ] **Čipy referencí `topo`** v dialogu s jménem a × (R103 ⚠).
+- [ ] **Zkosení dvěma vzdálenostmi / vzdáleností a úhlem, zaoblení s proměnným poloměrem** (R105 ⚠).
+
 ## Další nápady (mimo rozsah)
 
 - Vlastní C++ modul OCCT přes Emscripten místo předpřipraveného buildu (výměna adaptéru za portem). → samostatný milník [[M16-vlastni-occt-build]].

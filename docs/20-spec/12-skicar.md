@@ -14,6 +14,7 @@ modules:
 milestones:
   - "[[M12-skicar]]"
   - "[[M13-extrude-revolve]]"
+  - "[[M14-topologicke-pojmenovani]]"
 tags:
   - spec
 created: 2026-10-12
@@ -115,7 +116,8 @@ export type Curve2 =
   | { readonly kind: 'arc'; readonly center: Vec2; readonly from: Vec2; readonly to: Vec2; readonly ccw: boolean }
   | { readonly kind: 'circle'; readonly center: Vec2; readonly radius: number };
 export function pointsById(data: SketchData): ReadonlyMap<SketchEntityId, SketchPoint>;
-export function curve2(curve: SketchCurve, points: ReadonlyMap<SketchEntityId, SketchPoint>): Curve2;   // arc → ccw: true
+export function curve2(curve: SketchCurve, points: ReadonlyMap<SketchEntityId, SketchPoint>): Curve2;   // arc → ccw: true; od M14 s id: curve.id
+// M14: každá varianta Curve2 má readonly id?: string – id entity skici; computeRegions ho vyplní u všech křivek outer i holes (R98), jádro z něj dělá role face:side:<id>
 
 // sketch/edit.ts
 /** Vazba pro vybrané entity (v pořadí výběru), nebo null, když výběr nesedí. */
@@ -137,7 +139,7 @@ export type SketchConstraintDraft = DistributiveOmit<SketchConstraint, 'id'>;
 
 ```ts
 export interface SketchParams {
-  readonly plane: readonly PlaneRef[];               // planes, min 1, max 1; výchozí [{ kind: 'plane', plane: ORIGIN_PLANE_IDS.xy }]
+  readonly plane: readonly (PlaneRef | TopoRef)[];   // planes, min 1, max 1; výchozí [{ kind: 'plane', plane: ORIGIN_PLANE_IDS.xy }]; TopoRef na rovinnou plochu od M14
   readonly entities: readonly SketchEntity[];        // data, výchozí []
   readonly constraints: readonly SketchConstraint[]; // data, výchozí []
 }
@@ -159,6 +161,8 @@ Počáteční roviny jsou [[Artefakt|artefakty]] vyhrazeného vlastníka `origin
 | `origin/plane:yz` | `origin.plane.yz` („Pravá“) | 0 | +Y | +X | `right` |
 
 Osa y roviny = `normal × xDir` vyjde u všech tří +Y, +Z, +Z – skica na přední a pravé rovině má „nahoru“ osu Z jako v Onshape. Osy počátku `origin/axis:x|y|z` přibyly s Revolve v M13 jako artefakty téhož vlastníka ([[03-dokument#Počáteční geometrie (M12)]], [[07-regenerace#Princip]]).
+
+**Skica na rovinné ploše tělesa** (M14, [[08-topologicke-pojmenovani#Reference ve featurách]], [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R106]]): `plane` může být `TopoRef` na plochu (`<box>/face:top`). `BuildContext.resolvePlanes` najde plochu podle jména (víc ploch → první a varování, nerovinná → `UNRESOLVED_REFERENCE`) a rámec spočítá čistá funkce `sketchPlaneOfFace({ origin, normal })` z `regen`: `normal` = normála plochy ven z tělesa, počátek = průmět počátku světa do roviny plochy, `xDir` = jednotkový průmět +X do roviny, a když `|normal · X| ≥ 0,9`, průmět +Y. Pro plochy rovnoběžné s počátečními rovinami tak vyjde stejný rámec jako u nich (horní stěna kvádru = XY posunutá do výšky stěny, přední = XZ…), nezávisle na parametrizaci plochy v OCCT. Skica se s plochou stěhuje: vyšší kvádr → rovina skici výš, entity skici v rovině zůstávají. Zanikne-li plocha, skica je červená a k úpravě ji otevřít nejde (výjimka v `SketchEditor.edit` jako u neznámé roviny, [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R108]] ⚠).
 
 ## Oblasti (profily)
 
@@ -185,7 +189,7 @@ export function computeRegions(data: SketchData): RegionsResult;   // oblasti se
 6. **Díry:** vnější hranici komponenty (a kružnici jako samostatnou komponentu) přiřadí jako díru té omezené stěně **jiné** komponenty s nejmenší plochou, která obsahuje její libovolný bod (např. první bod první křivky). Bez takové stěny se nepřiřadí nikam.
 7. **Jméno** z id hraničních křivek, takže je stabilní při změně kót i pořadí kreslení; jiná oblast stejné jméno mít nemůže (dvě omezené stěny s týmž souborem hran planární graf bez křížení nedovolí). Extrude ukládá `SketchRegionRef { sketch: FeatureId, region: name }` ([[03-dokument#Reference na jiné entity]]).
 
-**Spotřebitelé oblastí (M13):** Vysunutí a Rotace dostanou plochu oblasti přes `BuildContext.resolveRegions` ([[07-regenerace#Builder featury]]); `interaction` spočítá stejné oblasti z entit artefaktu znovu (`artifactDrawing`), aby je `render` uměl vyplnit a pickovat ([[10-interakce#Kresba skici]]) – jména se shodují, protože jde o stejnou čistou funkci nad stejnými daty. Osou Rotace může být úsečka skici, i konstrukční (`SketchEntityRef`).
+**Spotřebitelé oblastí (M13):** Vysunutí a Rotace dostanou plochu oblasti přes `BuildContext.resolveRegions` ([[07-regenerace#Builder featury]]); `interaction` spočítá stejné oblasti z entit artefaktu znovu (`artifactDrawing`), aby je `render` uměl vyplnit a pickovat ([[10-interakce#Kresba skici]]) – jména se shodují, protože jde o stejnou čistou funkci nad stejnými daty. Osou Rotace může být úsečka skici, i konstrukční (`SketchEntityRef`). **M14:** id křivek v oblastech (`Curve2.id`) dávají bočním plochám vysunutí a rotace jména `face:side:<id entity>` ([[08-topologicke-pojmenovani#Plochy]]).
 
 ## Řešič vazeb
 
@@ -227,7 +231,7 @@ Editace skici zapisuje **`feature.setParams`** přes `FeatureEditSession.setPara
 
 Kontrakt v [[10-interakce#Skicář]]. Shrnutí chování:
 
-- **Vstup:** nástroj `sketch` (lišta *Skica*, `Shift+S`) vytvoří skicu na rovině vybrané v Prohlížeči (položka výběru `plane`), jinak na `origin/plane:xy`; dvojklik na skicu v Timeline nebo v Prohlížeči ji otevře k úpravě. Aplikace přejde do režimu `'sketch'`: lišta ukáže nástroje skicáře, kamera se natočí kolmo na rovinu (`setViewDirection(plane.normal)`), dialog featury se nekreslí, místo něj panel skici.
+- **Vstup:** nástroj `sketch` (lišta *Skica*, `Shift+S`) vytvoří skicu na rovině vybrané v Prohlížeči (položka výběru `plane`), od M14 i na vybrané rovinné ploše tělesa (položka `face` se jménem, `TopoRef`), jinak na `origin/plane:xy`; dvojklik na skicu v Timeline nebo v Prohlížeči ji otevře k úpravě. Aplikace přejde do režimu `'sketch'`: lišta ukáže nástroje skicáře, kamera se natočí kolmo na rovinu (`setViewDirection(plane.normal)`), dialog featury se nekreslí, místo něj panel skici.
 - **Nástroje:** výběr a tažení bodů (`sketch.select`, výchozí v režimu skici), úsečka – polyline (`L`), obdélník (`R`), kružnice střed + bod (`C`), oblouk střed + začátek + konec (`A`), kóta (`D`).
 - **Automatické vazby:** snap na existující bod (picking v okruhu 6 px, body mají přednost) použije jeho id; snap na počátek roviny vytvoří bod `[0, 0]` s vazbou `fix`; úsečka, která svírá s osou x nebo y roviny úhel do 3°, dostane `horizontal`/`vertical`; obdélník má vždy dvě `horizontal` a dvě `vertical`.
 - **Vazby** jsou akce nad výběrem (lišta, zkratky `H`, `V`, `I`): `constraintFor(kind, výběr)`; konfliktní nebo redundantní vazba se nepřidá a panel ukáže hlášku. **Kóta** vznikne se změřenou hodnotou a její pole v panelu dostane fokus; změna hodnoty přepočítá skicu, konflikt hodnotu odmítne.

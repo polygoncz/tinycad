@@ -12,6 +12,7 @@ milestones:
   - "[[M11-dalsi-entity]]"
   - "[[M12-skicar]]"
   - "[[M13-extrude-revolve]]"
+  - "[[M14-topologicke-pojmenovani]]"
 tags:
   - spec
 created: 2026-10-12
@@ -38,7 +39,7 @@ export interface Body {
   readonly origin: FeatureId;                        // featura, jejíž builder id razil; v rodokmenu se nemění
   readonly lastModifiedBy: FeatureId;                // poslední featura, která tělesu dala nový tvar
   readonly shape: ShapeHandle;
-  readonly names: NameTable;                         // topologická jména ploch/hran tohoto tvaru (spec 08), do M14 prázdné
+  readonly names: NameTable;                         // jména ploch/hran a topologie tohoto tvaru (spec 08), od M14 z nameShape
 }
 
 /** Rovina (M12): počáteční roviny vlastníka ORIGIN; později konstrukční roviny. */
@@ -101,7 +102,7 @@ export interface BuildInput<P> {
 }
 
 /** Část jádra, kterou smí builder používat: tvoří a ptá se, neuvolňuje (Q041). */
-export type ModelingKernel = PrimitiveOps & TransformOps & BooleanOps & SketchOps & SweepOps & QueryOps;   // M11 přidal TransformOps a BooleanOps, M12 SketchOps, M13 SweepOps
+export type ModelingKernel = PrimitiveOps & TransformOps & BooleanOps & SketchOps & SweepOps & DressupOps & QueryOps;   // M11 přidal TransformOps a BooleanOps, M12 SketchOps, M13 SweepOps, M14 DressupOps (a QueryOps.topology)
 
 export interface BuildContext {
   /** Sledované jádro: každý vrácený handle patří Regeneratoru (Q041). */
@@ -109,23 +110,31 @@ export interface BuildContext {
   /** Tělesa ze vstupního stavu (artefakty druhu body; jiný druh pod tím id → err); první nevyřešená reference → err (Q044). */
   resolveBodies(refs: readonly BodyRef[]): Result<Body[], RefError>;
   /** Roviny ze vstupního stavu (artefakty druhu plane; chybějící nebo jiný druh → err, první nevyřešená reference), M12. */
-  resolvePlanes(refs: readonly PlaneRef[]): Result<PlaneArtifact[], RefError>;
+  resolvePlanes(refs: readonly (PlaneRef | TopoRef)[]): Result<ResolvedPlane[], RefError>;   // M14: i rovinná plocha tělesa (TopoRef), spec 08
   /** Oblasti skic (M13): artefakt sketchId(ref.sketch) druhu sketch a jméno v jeho regions; první nevyřešená reference → err. */
   resolveRegions(refs: readonly SketchRegionRef[]): Result<ResolvedRegion[], RefError>;
   /** Osa (M13): artefakt druhu axis, nebo úsečka skici (i konstrukční) převedená do světa přes rovinu skici. */
   resolveAxis(ref: AxisRef | SketchEntityRef): Result<ResolvedAxis, RefError>;
   /** Více volání se spojí znakem '\n' do statusu 'warning' (Q045). */
   warn(message: string): void;
-  // resolveTopo(refs: readonly TopoRef[]): Result<ResolvedTopo[], RefError> – přidá M14
+  /** Plochy nebo hrany těles podle jména (M14, spec 08): 0 nálezů → err, víc ploch → warn + všechny. */
+  resolveTopo(refs: readonly TopoRef[], entity: 'face' | 'edge'): Result<ResolvedTopo[], RefError>;
 }
 
 export interface RefError {
-  readonly ref: BodyRef | PlaneRef | SketchRegionRef | AxisRef | SketchEntityRef;   // PlaneRef od M12, oblast, osa a entita skici od M13, v M14 i TopoRef
+  readonly ref: BodyRef | PlaneRef | SketchRegionRef | AxisRef | SketchEntityRef | TopoRef;   // PlaneRef od M12, oblast, osa a entita skici od M13, TopoRef od M14
   readonly message: string;
 }
 
 export interface ResolvedRegion { readonly ref: SketchRegionRef; readonly sketch: SketchArtifact; readonly face: ShapeHandle }   // M13
 export interface ResolvedAxis { readonly origin: Vec3; readonly direction: Vec3 }   // M13, direction jednotkový
+export interface ResolvedPlane { readonly ref: PlaneRef | TopoRef; readonly plane: Plane }   // M14: rovina artefaktu, nebo sketchPlaneOfFace(plocha)
+export interface ResolvedTopo { readonly ref: TopoRef; readonly body: Body; readonly indices: readonly number[] }   // M14, indices vzestupně, ≥ 1
+
+/** Rámec roviny skici na rovinné ploše (M14, spec 12): počátek = průmět počátku světa, xDir = průmět +X (při |n·X| ≥ 0,9 průmět +Y). */
+export function sketchPlaneOfFace(face: FacePlane): Plane;
+/** Totéž co resolvePlanes pro jednu referenci nad hotovým stavem, bez varování; app ho používá pro rovinu editované skici (M14). */
+export function planeOfRef(state: RegenState, ref: PlaneRef | TopoRef): Plane | undefined;
 
 export type BuildOutput =
   | { ok: true; state: RegenState }
@@ -141,7 +150,7 @@ export function createBuilderRegistry(): BuilderRegistry;
 
 Pravidla pro builder:
 - nesmí mutovat vstupní stav, vrací nový (`new Map(state.artifacts)` + změny),
-- dodržuje identitu [[Artefakt|artefaktů]] ([[0015-artefakty-a-identita-telesa|ADR 0015]]): featura, která těleso **vytváří**, razí id `bodyId(feature.id)` (jediné těleso je bez čísla; při více tělesech dostane každé `bodyId(feature.id, n)` s `n` od 1 podle rodokmenu, ne podle pořadí z jádra – `f/body` a `f/body:1` jsou různá id; přesné pravidlo pro Boolean a Transform doplní M11) a nastaví `origin` i `lastModifiedBy` na sebe; featura, která těleso **mění**, zachová `id`, `origin` i `names` a nastaví `lastModifiedBy`; featura, která těleso **spotřebuje**, ho z mapy odebere (pravidla Transform a Boolean níže),
+- dodržuje identitu [[Artefakt|artefaktů]] ([[0015-artefakty-a-identita-telesa|ADR 0015]]): featura, která těleso **vytváří**, razí id `bodyId(feature.id)` (jediné těleso je bez čísla; při více tělesech dostane každé `bodyId(feature.id, n)` s `n` od 1 podle rodokmenu, ne podle pořadí z jádra – `f/body` a `f/body:1` jsou různá id; přesné pravidlo pro Boolean a Transform doplní M11) a nastaví `origin` i `lastModifiedBy` na sebe; featura, která těleso **mění**, zachová `id` i `origin`, nastaví `lastModifiedBy` a od M14 jména přepočítá z historie jádra (`names = await nameShape(…)` se vstupy v pořadí volání jádra, [[08-topologicke-pojmenovani#Tabulka jmen a přenos]]; jméno nezměněné plochy se tak zachová); featura, která těleso **spotřebuje**, ho z mapy odebere (pravidla Transform a Boolean níže),
 - nesmí uvolňovat handle (to dělá `Regenerator`),
 - všechny tvary vytváří přes `ctx.kernel`, ten každý vrácený handle zapíše do množiny vlastněné Regeneratorem – i mezivýsledky a tvary z builderu, který pak selže ([[Q041 Úklid mezivýsledků builderu|Q041]]),
 - očekávanou chybu vrací jako `{ ok: false }` (nevyřešenou referenci přes `unresolvedReference(param, e)` jako `UNRESOLVED_REFERENCE` s `issues`, aby ji UI přeložilo u parametru, [[Q044 RefError a nevyřešené reference|Q044]]), výjimky jádra může nechat proletět – `Regenerator` je převede na chybu featury `KERNEL`. Výjimka, která z jádra nepochází (`kernelErrorCode(e) === undefined`), je chyba programu: `run` po úklidu handle odmítne s touto výjimkou ([[Q043 Výjimka builderu mimo jádro|Q043]]),
@@ -149,8 +158,9 @@ Pravidla pro builder:
 
 **Identita u featur, které tělesa mění** ([[M11-dalsi-entity|M11]], [[0015-artefakty-a-identita-telesa|ADR 0015]]):
 
-- **Transform:** každé vybrané těleso zůstane pod svým `id` a na svém místě v mapě, zachová `origin` a `names`, dostane nový `shape` a `lastModifiedBy` = transform. Ostatní artefakty beze změny.
-- **Boolean:** výsledek je **jedno** těleso `{ ...první cíl, shape, lastModifiedBy: boolean }` – dědí `id`, `origin`, `names` a místo v mapě prvního cíle. Ostatní cíle a nástroje z mapy zmizí; s `keepTools` nástroje zůstanou beze změny (tentýž objekt). Jádro vrátí jeden handle i pro nesouvislý výsledek (compound více solidů). Rozpad výsledku na více těles `bodyId(cíl.origin, n)` podle rodokmenu z historie jádra (`Generated`/`Modified`, ne pořadí výstupu) je úkol [[M14-topologicke-pojmenovani|M14]] ([[Rozhodnutí noční rychloakce#M11 – Další entity|R8]] ⚠).
+- **Transform:** každé vybrané těleso zůstane pod svým `id` a na svém místě v mapě, zachová `origin`, dostane nový `shape`, `names` z `nameShape` (identita – jména stejná) a `lastModifiedBy` = transform. Ostatní artefakty beze změny.
+- **Boolean:** výsledek je **jedno** těleso `{ ...první cíl, shape, names, lastModifiedBy: boolean }` – dědí `id`, `origin` a místo v mapě prvního cíle, `names` z `nameShape` se vstupy v pořadí volání jádra (cíle, pak nástroje; u `union` první cíl, pak ostatní cíle a nástroje). Ostatní cíle a nástroje z mapy zmizí; s `keepTools` nástroje zůstanou beze změny (tentýž objekt). Jádro vrátí jeden handle i pro nesouvislý výsledek (compound více solidů). Rozpad výsledku na více těles `bodyId(cíl.origin, n)` podle rodokmenu z historie jádra (`Generated`/`Modified`, ne pořadí výstupu) byl úkol M14, znovu odložený do [[M15-export-a-dokonceni|M15]] ([[Rozhodnutí noční rychloakce#M11 – Další entity|R8]] ⚠, [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R100]] ⚠).
+- **Fillet a Chamfer** (M14): hrany se seskupí podle tělesa (pořadí prvního výskytu v parametru), na každé těleso jedno volání `fillet`/`chamfer` se všemi jeho hranami; těleso zachová `id`, `origin` a místo v mapě, dostane `shape`, `names` z `nameShape` (`generatedTag` `'fillet'`/`'chamfer'`) a `lastModifiedBy` = featura.
 - Změna parametru featury, ze které těleso pochází, ani nástroje booleanu id výsledku nemění (id je rodokmen, ne pořadí výstupu jádra).
 - **Vysunutí a Rotace** (M13): podle operace featury, viz [[#Operace tělesa (M13)]].
 
@@ -165,7 +175,7 @@ export function applyBodyOperation(p: {
   readonly state: RegenState;
   readonly feature: FeatureId;
   readonly op: BodyOperation;
-  readonly shapes: readonly ShapeHandle[];      // nové tvary featury (hranol na oblast), ≥ 1
+  readonly shapes: readonly ShapeResult[];      // nové tvary featury (hranol na oblast) i s rolemi, ≥ 1 (M14: ShapeResult místo ShapeHandle)
   readonly targets: readonly Body[];            // vyřešená cílová tělesa; ≥ 1 pro jiné operace než 'new', u 'new' ignorovaná
 }): Promise<RegenState>;
 ```
@@ -173,10 +183,11 @@ export function applyBodyOperation(p: {
 - **`new`:** jeden tvar = tvar tělesa, víc tvarů → `boolean('union', [první], ostatní)` (oddělené tvary dají compound jednoho tělesa jako R8 ⚠). Nové těleso `bodyId(feature)`, `origin` i `lastModifiedBy` = featura, na konec mapy.
 - **`add`:** `boolean('union', [cíl₁], [ostatní cíle…, tvary…])`; výsledek dědí `id`, `origin`, `names` a místo v mapě prvního cíle, `lastModifiedBy` = featura; ostatní cíle z mapy zmizí (jako Boolean union).
 - **`remove`** a **`intersect`:** pro **každý** cíl zvlášť `boolean('subtract' | 'intersect', [cíl], tvary)`; každý cíl zachová `id`, `origin`, `names` i místo v mapě, `lastModifiedBy` = featura. Cíle se tak neslijí do jednoho tělesa.
+- **Jména** (M14): každý tvar z `shapes` se pojmenuje `nameShape` (vstupy `[]`, role z jádra), výsledek booleanu `nameShape` se vstupy v pořadí volání jádra; u `new` s jediným tvarem jsou jména tělesa jména hranolu.
 - Prázdný výsledek (odebrání celého cíle, prázdný průnik) je chyba jádra `'operation-failed'` → featura `KERNEL` (Onshape by těleso smazal; R67 ⚠).
 - Mezivýsledky (hranoly) ve stavu nezůstanou, takže je sweep uvolní. Výsledná tělesa i stav jsou zmrazené. `shapes` prázdné nebo chybějící cíle u `add`/`remove`/`intersect` → výjimka (chyba programu; schéma má `min: 1`).
 
-`resolveRegions` hlásí `Sketch '<f>' not found` (artefakt chybí nebo je jiného druhu) a `Region '<jméno>' of sketch '<f>' not found`. `resolveAxis` hlásí chybějící osu, chybějící skicu nebo entitu, entitu jiného druhu než `line` (`Sketch entity '<id>' is not a line`) a úsečku nulové délky. Builder je převede přes `unresolvedReference(param, e)`.
+`resolveTopo` a `resolvePlanes` s `TopoRef` hlásí chybějící těleso (`Body '<b>' does not exist`, `'<b>' is not a body`), chybějící jméno (`Face '<jméno>' not found on body '<b>'`, `Edge …`) a nerovinnou plochu (`Face '<jméno>' is not planar`); víc ploch pod jedním jménem → `warn` a u `resolvePlanes` plocha s nejmenším indexem ([[08-topologicke-pojmenovani#Reference ve featurách]]). `resolveRegions` hlásí `Sketch '<f>' not found` (artefakt chybí nebo je jiného druhu) a `Region '<jméno>' of sketch '<f>' not found`. `resolveAxis` hlásí chybějící osu, chybějící skicu nebo entitu, entitu jiného druhu než `line` (`Sketch entity '<id>' is not a line`) a úsečku nulové délky. Builder je převede přes `unresolvedReference(param, e)`.
 
 Příklad:
 
@@ -187,7 +198,8 @@ export const boxBuilder: FeatureBuilder<BoxParams> = {
     const { origin, width, depth, height } = feature.params;
     const r = await kernel.makeBox({ origin, size: [width, depth, height] });
     const id = bodyId(feature.id);   // z document: jediné místo, kde BodyId vzniká (ADR 0015)
-    const body: Body = { kind: 'body', id, origin: feature.id, lastModifiedBy: feature.id, shape: r.shape, names: EMPTY_NAMES };
+    const names = await nameShape({ kernel, featureId: feature.id, result: r, inputs: [] });   // role kvádru → '<fid>/face:top'… (M14)
+    const body: Body = { kind: 'body', id, origin: feature.id, lastModifiedBy: feature.id, shape: r.shape, names };
     return { ok: true, state: { artifacts: new Map(state.artifacts).set(id, body) } };
   },
 };
@@ -314,6 +326,7 @@ Handle se z vlastněné množiny odeberou ještě před čekáním na `release` 
 - Neznámý typ featury (chybí schéma nebo builder) → `UNKNOWN_TYPE`, regenerace pokračuje.
 - M12: `EMPTY_STATE` má tři roviny; `resolvePlanes` (existující rovina, chybějící id, id tělesa → err); sledované jádro zapíše handle z `makeFace`; sweep: plochy oblastí skici jsou živé, po smazání skici se uvolní (`liveHandleCount`).
 - M13: `EMPTY_STATE` má za rovinami tři osy; `axesOf`; `resolveRegions` (oblast, chybějící skica, chybějící jméno, id tělesa); `resolveAxis` (osa počátku, úsečka skici na XZ ve světových souřadnicích, konstrukční úsečka, kružnice → err, nulová délka); `applyBodyOperation` pro všechny čtyři operace (identita, pořadí mapy, jedno `union` u více tvarů, cíle zvlášť u `remove`/`intersect`); sledované jádro zapíše handle z `extrude` a `revolve`.
+- M14: `propagateNames` na ručně sestavených historiích ([[08-topologicke-pojmenovani]] – role, identita, rozdělení, sloučení, generated z hrany a vrcholu, zánik, hrany včetně kontextu a `#k`, šev, plocha bez jména, determinismus vůči pořadí, výjimka u indexu mimo rozsah); `nameShape` s `FakeKernel`; `resolveTopo` (plocha, hrana, víc ploch → varování, víc hran bez varování, chybějící jméno, chybějící těleso, artefakt jiného druhu); `resolvePlanes` s `TopoRef` (horní plocha kvádru → rovina `z = h` s rámcem X/Y, nerovinná plocha → err, víc ploch → varování); `sketchPlaneOfFace` pro normály ±X, ±Y, ±Z a šikmou; `planeOfRef`; `applyBodyOperation` s jmény (role hranolu, přenos přes boolean); sledované jádro zapíše handle z `fillet` a `chamfer`.
 - Featura s `typeVersion` jiným, než má schéma → `STALE_VERSION`, builder se nezavolá, stav propuštěn.
 - Suppressed featura propustí stav, builder se nezavolá.
 - Status z cache se zachová (`warning` i `error` featury před změnou).

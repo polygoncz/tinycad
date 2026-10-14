@@ -1,14 +1,14 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[08-topologicke-pojmenovani]]"
 decide_by: "[[M14-topologicke-pojmenovani]]"
 proposal: "Použít všechny části + varování"
-decision: ""
+decision: "Jméno na víc ploch: použijí se všechny + varování featury; rovina skici a Po plochu vezmou první plochu + varování"
 tags:
   - otazka
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-14
 ---
 # Q015 Rozdělená plocha a reference
 
@@ -24,4 +24,6 @@ Onshape to řeší dalším výběrem. My zatím použijeme všechny části a v
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do [[08-topologicke-pojmenovani]]. Zásadní rozhodnutí → nové ADR.)_
+2026-10-14 (noční rychloakce, bez Pavla – [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R96]] ⚠): **podle návrhu.** Rozdělená plocha předá jméno všem částem (`modified` 1 → n, [[08-topologicke-pojmenovani#Tabulka jmen a přenos]]); `BuildContext.resolveTopo` pro plochy vrátí všechny indexy a zavolá `ctx.warn` („Reference '<jméno>' matches <n> faces; all are used“), featura je žlutá, ne červená. U hran se víc nálezů použije bez varování (zaoblit obě části rozdělené hrany je obvykle chtěné).
+
+Kde jde použít jen jedna plocha (rovina skici na ploše, konec vysunutí „Po plochu“), vezme se plocha s nejmenším indexem a varování zůstává. Index je v rámci jedné regenerace deterministický, mezi regeneracemi ne – proto varování. Zúžení výběru na jednu část (Onshape to řeší dalším výběrem) je mimo rozsah M14. Formát jmen v [[0018-format-topologickych-jmen|ADR 0018]].
