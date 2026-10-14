@@ -3,8 +3,9 @@
 // Vytvořit, Upravit, Konstrukce, Zobrazit). Which button sits in which group and whether it is
 // enabled is the pure function toolbarGroups; this component only draws it and runs commands.
 // Icon without a label, a tooltip "name  shortcut", under each group its label opening a menu
-// of the group. Tabs Modelling/Sketch come with the sketcher (M12). The tooltip opens under the
-// whole bar, so it never covers the group label under the button.
+// of the group. In the sketch mode (M12) the bar shows the tools and actions of the sketcher
+// instead (toolbarGroups gets the mode). The tooltip opens under the whole bar, so it never covers
+// the group label under the button.
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ActionState } from '@/interaction';
@@ -23,6 +24,7 @@ const isMac = isMacPlatform(globalThis.navigator.userAgent);
 const actionStates = useObservable(session.actions.actions);
 const locked = useObservable(session.locked);
 const activeTool = useObservable(session.tools.active);
+const mode = useObservable(session.mode);
 
 const groups = computed(() =>
   toolbarGroups({
@@ -31,6 +33,9 @@ const groups = computed(() =>
     actionIds: session.actionIds,
     toolActionId: (id) => session.toolActionId(id),
     locked: locked.value,
+    mode: mode.value,
+    sketchActionIds: session.sketchActionIds,
+    sketchConstraintActionId: (kind) => session.sketchConstraintActionId(kind),
   }),
 );
 

@@ -4,17 +4,19 @@ import type { DocumentId } from '@/document';
 import { createMemoryDocumentStore } from '@/persistence';
 import type { FeaturePlugin } from '@/plugin-api';
 import { createManualScheduler } from '@/persistence/testing';
+import { createFakeSolver } from '@/sketch/testing';
 import { BUILT_IN_PLUGINS, createAppSession } from './index';
 import { aKernelFactory, FakeAppViewport } from './testing';
 
 describe('BUILT_IN_PLUGINS', () => {
-  it('is frozen and has the four plugins in toolbar order', () => {
+  it('is frozen and has the five plugins in toolbar order', () => {
     expect(Object.isFrozen(BUILT_IN_PLUGINS)).toBe(true);
     expect(BUILT_IN_PLUGINS.map((p) => p.schema.type)).toEqual([
       'box',
       'cylinder',
       'transform',
       'boolean',
+      'sketch',
     ]);
   });
 
@@ -31,15 +33,19 @@ describe('BUILT_IN_PLUGINS', () => {
       translate: (key) => key,
       confirm: () => true,
       readOnly: false,
+      solver: createFakeSolver(),
     });
     expect(session.toolList.map((t) => t.id)).toEqual(
-      expect.arrayContaining(['box', 'cylinder', 'transform', 'boolean']),
+      expect.arrayContaining(['box', 'cylinder', 'transform', 'boolean', 'sketch']),
     );
-    // No two tools share a shortcut.
-    const shortcuts = session.toolList.flatMap((t) =>
-      t.shortcut === undefined ? [] : [t.shortcut],
-    );
-    expect(new Set(shortcuts).size).toBe(shortcuts.length);
+    // No two tools of one mode share a shortcut (tools of disjoint modes may: C is the cylinder
+    // in the model and the circle in the sketch, spec 10 "Režim").
+    for (const mode of ['model', 'sketch'] as const) {
+      const shortcuts = session.toolList
+        .filter((t) => (t.modes ?? ['model']).includes(mode))
+        .flatMap((t) => (t.shortcut === undefined ? [] : [t.shortcut]));
+      expect(new Set(shortcuts).size).toBe(shortcuts.length);
+    }
     session.dispose();
   });
 

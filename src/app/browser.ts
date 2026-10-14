@@ -1,6 +1,6 @@
 // openAppSession (spec 11, "Kompoziční kořen (app)"): the thin browser layer. It builds what
 // createAppSession takes as deps – the OCCT kernel worker, the IndexedDB store, the Web Lock
-// (Q038) and the three.js viewport – and releases them again. Only the e2e test covers it; the
+// (Q038), the three.js viewport and the planegcs solver worker (M12) – and releases them again. Only the e2e test covers it; the
 // parts with logic (documents.ts, doc-lock.ts) are tested in Node.
 
 import { createRandomIdGenerator, DisposableStore } from '@/core';
@@ -13,6 +13,7 @@ import type { DocumentInfo, DocumentStore, Scheduler } from '@/persistence';
 import { createIdbDocumentStore } from '@/persistence/idb';
 import type { FeaturePlugin } from '@/plugin-api';
 import { createViewport, DARK_PALETTE, LIGHT_PALETTE } from '@/render';
+import { createPlanegcsSolver } from '@/solver-planegcs';
 import { acquireDocumentLock } from './doc-lock';
 import { disposeOpenSession } from './dispose-open-session';
 import * as documents from './documents';
@@ -45,8 +46,12 @@ export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSe
     // Before loading (spec 05): the lock decides whether this tab may write.
     const lock = lifetime.add(await acquireDocumentLock(navigator.locks, opts.docId));
     const store = lifetime.add(createIdbDocumentStore());
-    // dispose releases the viewport before the store and the lock, which wait for the flush.
+    // dispose releases the viewport (and the solver) before the store and the lock, which wait
+    // for the flush.
     const screen = lifetime.add(new DisposableStore());
+    // The worker starts on the first solve; released together with the viewport, after the
+    // session, so no sketch session outlives it.
+    const solver = screen.add(createPlanegcsSolver());
     const viewport = screen.add(
       createViewport({
         meshes: NO_KERNEL_YET,
@@ -65,6 +70,7 @@ export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSe
       translate: opts.translate,
       confirm: opts.confirm,
       readOnly: !lock.held,
+      solver,
       // Replay the whole log on every open while developing (spec 05, "verify").
       verify: import.meta.env.DEV,
     });

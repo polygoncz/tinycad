@@ -5,17 +5,20 @@
 
 import { DisposableStore, ObservableValue, RpcError } from '@/core';
 import type { Disposable, IdGenerator, Observable } from '@/core';
-import { createDocument, createFeatureSchemaRegistry } from '@/document';
+import { createDocument, createFeatureSchemaRegistry, ORIGIN_PLANES } from '@/document';
 import type {
   BodyId,
   DocumentId,
   DocumentMeta,
   DocumentReader,
   DocumentWriter,
+  FeatureId,
   FeatureSchemaRegistry,
+  PlaneId,
 } from '@/document';
 import {
   ACTION_IDS,
+  artifactDrawing,
   bindSelectionHighlight,
   createActionRegistry,
   createBrowserModel,
@@ -25,9 +28,15 @@ import {
   toolActionId,
   createFeatureTreeModel,
   createSelectionModel,
+  createSketchActions,
+  createSketchEditor,
+  createSketchTools,
   createToolManager,
   createToolRegistry,
+  planeDrawing,
   SELECT_TOOL,
+  SKETCH_ACTION_IDS,
+  sketchConstraintActionId,
 } from '@/interaction';
 import type {
   ActionRegistry,
@@ -35,7 +44,9 @@ import type {
   ConfirmRequest,
   FeatureEditor,
   FeatureTreeModel,
+  Mode,
   SelectionModel,
+  SketchEditor,
   ToolDescriptor,
   ToolManager,
   ViewportPort,
@@ -58,10 +69,11 @@ import type {
 } from '@/persistence';
 import { registerPlugin } from '@/plugin-api';
 import type { FeaturePlugin, PluginMessages } from '@/plugin-api';
-import { bodiesOf, createBuilderRegistry, createRegenerator } from '@/regen';
-import type { BuilderRegistry, RegenResult } from '@/regen';
+import { bodiesOf, createBuilderRegistry, createRegenerator, sketchesOf } from '@/regen';
+import type { BuilderRegistry, RegenResult, SketchArtifact } from '@/regen';
 import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
 import type { BodyLayer, CameraController, ScenePalette } from '@/render';
+import type { ConstraintSolver, GeometricConstraintKind } from '@/sketch';
 import { createKernelSupervisor } from './kernel-supervisor';
 import type { KernelUiState } from './kernel-supervisor';
 import { createRegenScheduler } from './regen-scheduler';
@@ -114,6 +126,8 @@ export interface AppSessionDeps {
   readonly readOnly: boolean;
   /** Handed to loadDocument: replay the whole log from the base and compare (spec 05). */
   readonly verify?: boolean;
+  /** M12: the solver of the sketcher; tests FakeSolver, the browser createPlanegcsSolver(). */
+  readonly solver: ConstraintSolver;
 }
 
 export interface AppSession extends Disposable {
@@ -145,6 +159,14 @@ export interface AppSession extends Disposable {
   readonly actions: ActionRegistry;
   /** Dictionaries of the plugins for vue-i18n (ADR 0014). */
   readonly messages: PluginMessages;
+  /** M12: the sketcher (sketch panel, mode). */
+  readonly sketches: SketchEditor;
+  /** M12: = sketches.mode; the Toolbar and the dialog vs. the sketch panel follow it. */
+  readonly mode: Observable<Mode>;
+  /** M12: the ids of the sketcher actions; ui may not import values of interaction. */
+  readonly sketchActionIds: typeof SKETCH_ACTION_IDS;
+  /** M12: id of the action adding a geometric constraint of the kind. */
+  sketchConstraintActionId(kind: GeometricConstraintKind): string;
 
   mountViewport(el: HTMLElement): void;
   /** Q072: app picks the ScenePalette, ui does not know render. */
@@ -164,6 +186,8 @@ export interface AppSession extends Disposable {
 }
 
 const NAME_OF_NEW_DOCUMENT = 'document.untitled';
+/** The default tool of the sketch mode (spec 10, "Nástroje a akce skicáře"). */
+const SKETCH_SELECT_TOOL_ID = 'sketch.select';
 
 /**
  * Opens the document `docId` and wires a session over it. Rejects when a plugin is broken, the
@@ -220,19 +244,51 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     ids: deps.ids,
     translate: deps.translate,
   });
+  // The sketcher (M12, spec 11 "Skicář"): the mode is the open sketch session, nothing else.
+  const sketches = createSketchEditor({
+    features,
+    solver: deps.solver,
+    viewport,
+    ids: deps.ids,
+    resolvePlane: (id) => ORIGIN_PLANES.find((p) => p.id === id)?.plane,
+  });
+  const { mode } = sketches;
+  const sketchEdit = (id: FeatureId): void => {
+    sketches.edit(id);
+  };
+  // After the tools of the plugins.
+  for (const tool of createSketchTools({ sketches })) toolRegistry.register(tool);
   const featureTree = lifetime.add(
-    createFeatureTreeModel({ doc, ops, schemas, regen: regenStatus, editor: features, selection }),
+    createFeatureTreeModel({
+      doc,
+      ops,
+      schemas,
+      regen: regenStatus,
+      editor: features,
+      selection,
+      sketchEdit,
+    }),
   );
   const locked = createEditLock({ readOnly, editor: features });
   const browser = lifetime.add(
-    createBrowserModel({ doc, ops, regen: regenStatus, selection, editor: features, locked }),
+    createBrowserModel({
+      doc,
+      ops,
+      regen: regenStatus,
+      selection,
+      editor: features,
+      locked,
+      sketchEdit,
+    }),
   );
-  const actions = lifetime.add(createActionRegistry());
+  const actions = lifetime.add(createActionRegistry({ mode }));
   const tools = lifetime.add(
     createToolManager({
       registry: toolRegistry,
       ctx: { viewport, selection, doc, ops, ids: deps.ids, features },
       defaultToolId: SELECT_TOOL.id,
+      mode,
+      defaultToolIds: { sketch: SKETCH_SELECT_TOOL_ID },
       unhandledKey: (e) => actions.handleKey(e),
     }),
   );
@@ -252,8 +308,10 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       locked,
       camera: viewport.camera,
       confirm: deps.confirm,
+      mode,
     }),
   );
+  lifetime.add(createSketchActions({ registry: actions, sketches, ids: deps.ids }));
 
   // 4. Regeneration: doc.changed → scheduler → Regenerator of the current kernel → port, viewport.
   const regenUi = new ObservableValue<RegenUiState>(
@@ -282,6 +340,11 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     onError: reportError,
   });
 
+  /** Sketches of the last regeneration; drawn by drawSketches (step 6). */
+  let regenSketches: readonly SketchArtifact[] = [];
+  /** What the viewport shows per sketch id, so an unchanged artifact is not drawn again. */
+  const drawnSketches = new Map<string, SketchArtifact>();
+
   async function regenerate(): Promise<void> {
     const regenerator = supervisor.regenerator();
     // No kernel (starting, restarting, failed): onReady requests a run once there is one.
@@ -299,8 +362,10 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     }
     if (result === 'superseded' || disposed) return;
     regenStatus.publish(result);
-    // Only bodies go to the counter and the view; other kinds of artifacts get their own channel
-    // with M12 (ADR 0015).
+    regenSketches = sketchesOf(result.finalState);
+    drawSketches();
+    // Only bodies go to the counter and the body layer; sketches have their own channel above
+    // (ViewportPort.sketches, ADR 0015).
     const bodies = bodiesOf(result.finalState).map(({ id, shape }) => ({ id, shape }));
     updateRegenUi({
       bodyCount: bodies.length,
@@ -339,6 +404,50 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     if (disposed) return;
     for (const body of browser.hidden.get()) viewport.setBodyVisible(body, false);
   }
+
+  // 6. Sketches and planes (M12): app draws the sketches of the regeneration and the planes
+  // switched on in the browser; the edited sketch is drawn by the SketchEditor.
+  function drawSketches(): void {
+    if (disposed) return;
+    const edited = sketches.current.get()?.featureId;
+    const shown = new Set<string>();
+    for (const artifact of regenSketches) {
+      if (artifact.owner === edited) continue;
+      shown.add(artifact.id);
+      // The regeneration keeps the artifact of an unchanged feature: no new drawing for it.
+      if (drawnSketches.get(artifact.id) === artifact) continue;
+      drawnSketches.set(artifact.id, artifact);
+      viewport.sketches.set(artifact.id, artifactDrawing(artifact.plane, artifact.entities));
+    }
+    for (const id of [...drawnSketches.keys()]) {
+      if (shown.has(id)) continue;
+      drawnSketches.delete(id);
+      viewport.sketches.remove(id);
+    }
+  }
+  lifetime.add(
+    sketches.current.subscribe(() => {
+      const session = sketches.current.get();
+      // Entering a sketch: look at it straight on (spec 11, "Skicář").
+      if (session !== null) viewport.camera.setViewDirection(session.plane.normal);
+      drawSketches();
+    }),
+  );
+
+  let shownPlanes: ReadonlySet<PlaneId> = new Set();
+  lifetime.add(
+    browser.visiblePlanes.subscribe(() => {
+      const next = browser.visiblePlanes.get();
+      for (const origin of ORIGIN_PLANES) {
+        if (next.has(origin.id) && !shownPlanes.has(origin.id)) {
+          viewport.sketches.set(origin.id, planeDrawing(origin.plane));
+        } else if (!next.has(origin.id) && shownPlanes.has(origin.id)) {
+          viewport.sketches.remove(origin.id);
+        }
+      }
+      shownPlanes = next;
+    }),
+  );
 
   lifetime.add(
     doc.events.on('changed', () => {
@@ -392,6 +501,10 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     features,
     actions,
     messages,
+    sketches,
+    mode,
+    sketchActionIds: SKETCH_ACTION_IDS,
+    sketchConstraintActionId,
     mountViewport(el) {
       viewport.mount(el);
     },

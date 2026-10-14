@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // The window of one open document (spec 11, "Rozvržení"): docked title bar and toolbar on top,
 // the Timeline at the bottom, the viewport filling the area between them and the floating
-// Browser and feature dialog over it. The panels are DOM siblings of the viewport host, never
+// Browser and the feature dialog over it – or, in the sketch mode (M12), the sketch panel instead
+// of the dialog: the sketch is a feature edit session too, but it has its own panel. The panels are DOM siblings of the viewport host, never
 // its children, so pointer and wheel events over a panel never reach the view.
 // Also the page-level bindings of a session: the theme (Q072) and the global keyboard.
 import { onMounted, onUnmounted, useTemplateRef, watch } from 'vue';
@@ -12,6 +13,7 @@ import { isMacPlatform, toViewKeyEvent } from '../keyboard';
 import { useTheme } from '../theme/use-theme';
 import Browser from './Browser.vue';
 import FeatureDialog from './FeatureDialog.vue';
+import SketchPanel from './SketchPanel.vue';
 import Timeline from './Timeline.vue';
 import TitleBar from './TitleBar.vue';
 import Toolbar from './Toolbar.vue';
@@ -23,6 +25,8 @@ const session = props.session;
 provideSession(session);
 
 const editSession = useObservable(session.features.current);
+const sketchSession = useObservable(session.sketches.current);
+const mode = useObservable(session.mode);
 
 // The theme belongs to the page; the session only follows it with the scene palette.
 const { theme } = useTheme();
@@ -64,7 +68,16 @@ onUnmounted(() => {
     <main class="stage">
       <ViewportHost ref="viewport" />
       <Browser class="floating-browser" />
-      <FeatureDialog v-if="editSession !== null" :key="editSession.featureId" :edit="editSession" />
+      <SketchPanel
+        v-if="mode === 'sketch' && sketchSession !== null"
+        :key="sketchSession.featureId"
+        :sketch="sketchSession"
+      />
+      <FeatureDialog
+        v-else-if="mode === 'model' && editSession !== null"
+        :key="editSession.featureId"
+        :edit="editSession"
+      />
     </main>
     <Timeline />
   </div>

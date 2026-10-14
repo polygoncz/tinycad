@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { BUILT_IN_PLUGINS } from '@/app';
 import type { ParamIssue } from '@/document';
 import { cs } from './cs';
 import { en } from './en';
@@ -61,6 +62,49 @@ const COMPOSED_KEYS = [
   'toolbar.group.view',
 ];
 
+// Keys of the sketcher (M12): labels of its tools and actions, the toolbar groups of the sketch
+// mode, the composed constraint and status keys of the sketch panel and the Browser groups.
+const SKETCH_KEYS = [
+  'tool.sketch',
+  'tool.line',
+  'tool.rectangle',
+  'tool.circle',
+  'tool.arc',
+  'tool.dimension',
+  'toolbar.group.sketch',
+  'toolbar.group.select',
+  'toolbar.group.draw',
+  'toolbar.group.constrain',
+  'toolbar.group.finish',
+  'sketch.finish',
+  'sketch.cancel',
+  'sketch.delete',
+  'sketch.construction',
+  'sketch.constraint.coincident',
+  'sketch.constraint.horizontal',
+  'sketch.constraint.vertical',
+  'sketch.constraint.parallel',
+  'sketch.constraint.perpendicular',
+  'sketch.constraint.equal',
+  'sketch.constraint.tangent',
+  'sketch.constraint.fix',
+  'sketch.constraint.distance',
+  'sketch.constraint.radius',
+  'sketch.status.defined',
+  'sketch.status.dof',
+  'sketch.status.solving',
+  'sketch.conflict',
+  'sketch.redundant',
+  'sketch.solverFailed',
+  'sketchPanel.constraints',
+  'sketchPanel.remove',
+  'browser.origin',
+  'browser.sketches',
+  'origin.plane.xy',
+  'origin.plane.xz',
+  'origin.plane.yz',
+];
+
 const PLUGIN = {
   cs: { 'box.label': 'Kvádr', 'box.width': 'Šířka' },
   en: { 'box.label': 'Box', 'box.width': 'Width' },
@@ -91,13 +135,20 @@ describe('built-in dictionaries', () => {
     expect(Object.keys(en).sort()).toEqual(Object.keys(cs).sort());
   });
 
-  it.each([...ISSUE_CODES, ...DOMAIN_KEYS, ...ACTION_KEYS, ...COMPOSED_KEYS])(
+  it.each([...ISSUE_CODES, ...DOMAIN_KEYS, ...ACTION_KEYS, ...COMPOSED_KEYS, ...SKETCH_KEYS])(
     '%s has a text in cs and en',
     (key) => {
       expect(cs[key]).toBeTruthy();
       expect(en[key]).toBeTruthy();
     },
   );
+
+  it('the texts of the built-in plugins do not clash with them (the sketch plugin included)', () => {
+    const merged = (lang: 'cs' | 'en'): Record<string, string> =>
+      Object.fromEntries(BUILT_IN_PLUGINS.flatMap((p) => Object.entries(p.messages?.[lang] ?? {})));
+    const plugins = { cs: merged('cs'), en: merged('en') };
+    expect(() => createUiI18n(plugins, { storage: null, language: 'cs' })).not.toThrow();
+  });
 
   it('are frozen', () => {
     expect(Object.isFrozen(cs)).toBe(true);

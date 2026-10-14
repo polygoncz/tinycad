@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
-import { bodyId, createDocument } from '@/document';
-import type { DocumentId } from '@/document';
+import { bodyId, createDocument, ORIGIN_PLANE_IDS, ORIGIN_PLANES, sketchId } from '@/document';
+import type { DocumentId, FeatureId } from '@/document';
 import { boxPlugin } from '@/features/box';
+import { sketchPlugin } from '@/features/sketch';
+import { EDIT_SKETCH_DRAWING_ID, planeDrawing } from '@/interaction';
 import type { ConfirmRequest, ViewKeyEvent } from '@/interaction';
 import { createMemoryDocumentStore, createSnapshot } from '@/persistence';
 import type { DocumentStore } from '@/persistence';
@@ -11,6 +13,7 @@ import type { ManualScheduler } from '@/persistence/testing';
 import type { FeaturePlugin } from '@/plugin-api';
 import { aSchema, aSketchArtifact, aSpyBuilder } from '@/regen/testing';
 import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
+import { createFakeSolver, rectangleData } from '@/sketch/testing';
 import { createAppSession } from './index';
 import { RESTART_WINDOW_MS } from './kernel-supervisor';
 import type { AppSession, AppSessionDeps, KernelUiState } from './index';
@@ -57,6 +60,7 @@ async function open(
     translate,
     confirm: () => true,
     readOnly: false,
+    solver: createFakeSolver(),
     ...overrides,
   });
   await settle();
@@ -163,7 +167,18 @@ describe('createAppSession – opening', () => {
 
   it('exposes every tool, the select tool active, and the merged plugin messages', async () => {
     const { session } = await open();
-    expect(session.toolList.map((t) => t.id)).toEqual(['select', 'box']);
+    // The tools of the sketcher come after the tools of the plugins (spec 11, "Skicář").
+    expect(session.toolList.map((t) => t.id)).toEqual([
+      'select',
+      'box',
+      'sketch',
+      'sketch.select',
+      'sketch.line',
+      'sketch.rectangle',
+      'sketch.circle',
+      'sketch.arc',
+      'sketch.dimension',
+    ]);
     expect(session.tools.active.get()).toBe('select');
     expect(session.messages.cs['box.label']).toBe(boxPlugin.messages?.cs['box.label']);
     expect(session.messages.en['box.label']).toBe(boxPlugin.messages?.en['box.label']);
@@ -562,6 +577,121 @@ describe('createAppSession – first view', () => {
     const store = await aStoredDocumentWithBox();
     const { viewport } = await open({ store });
     expect(viewport.fitAllCount).toBe(1);
+  });
+});
+
+describe('createAppSession – sketcher', () => {
+  /** A session with the sketch plugin; `sketch` opens a new sketch through the entry tool. */
+  async function openSketcher(): Promise<Harness> {
+    return open({ plugins: [boxPlugin, sketchPlugin] });
+  }
+
+  function enterSketch(session: AppSession): void {
+    expect(session.actions.run(session.toolActionId('sketch'))).toBe(true);
+  }
+
+  /** The open sketch session; fails the test without one. */
+  function currentSketch(session: AppSession) {
+    return session.sketches.current.get() ?? fail();
+  }
+
+  it('the tool sketch enters the sketch mode: camera normal to XY, sketch.select active', async () => {
+    const { session, viewport } = await openSketcher();
+    expect(session.mode.get()).toBe('model');
+    enterSketch(session);
+    expect(session.mode.get()).toBe('sketch');
+    expect(viewport.viewDirections.at(-1)).toEqual([0, 0, 1]);
+    expect(session.tools.active.get()).toBe('sketch.select');
+    expect(session.sketchActionIds.finish).toBe('sketch.finish');
+    expect(session.sketchConstraintActionId('horizontal')).toBe('sketch.constraint.horizontal');
+  });
+
+  it('sketch.finish goes back to the model mode with one entry in the log', async () => {
+    const { session, store, scheduler } = await openSketcher();
+    enterSketch(session);
+    await currentSketch(session).addGeometry(rectangleData({ width: 40, height: 20 }));
+    expect(session.actions.run(session.sketchActionIds.finish)).toBe(true);
+    expect(session.mode.get()).toBe('model');
+    expect(session.tools.active.get()).toBe('select');
+    expect(session.doc.studio.features.map((f) => f.type)).toEqual(['sketch']);
+    scheduler.advance(1000);
+    await settle();
+    expect((await store.load(DOC))?.entries).toHaveLength(1);
+  });
+
+  it('the tools of the sketch mode and the sketch actions are registered', async () => {
+    const { session } = await openSketcher();
+    const tools = session.toolList.map((t) => t.id);
+    expect(tools).toEqual(
+      expect.arrayContaining(['sketch', 'sketch.select', 'sketch.line', 'sketch.dimension']),
+    );
+    // After the tools of the plugins.
+    expect(tools.indexOf('sketch')).toBeGreaterThan(tools.indexOf('box'));
+    const actions = session.actions.actions.get().map((a) => a.id);
+    expect(actions).toEqual(
+      expect.arrayContaining([
+        'sketch.finish',
+        'sketch.cancel',
+        'sketch.delete',
+        'sketch.constraint.horizontal',
+      ]),
+    );
+  });
+
+  it('a regenerated sketch is drawn under its id, but not while it is being edited', async () => {
+    const { session, viewport } = await openSketcher();
+    enterSketch(session);
+    const feature: FeatureId = currentSketch(session).featureId;
+    await currentSketch(session).addGeometry(rectangleData({ width: 40, height: 20 }));
+    await settle();
+    // While editing the regeneration has the sketch, the editor draws it.
+    expect([...viewport.sketchDrawings.keys()]).toEqual([EDIT_SKETCH_DRAWING_ID]);
+
+    session.actions.run(session.sketchActionIds.finish);
+    await settle();
+    const drawn = viewport.sketchDrawings.get(sketchId(feature)) ?? fail();
+    expect(drawn.curves).toHaveLength(4);
+    expect(viewport.sketchDrawings.has(EDIT_SKETCH_DRAWING_ID)).toBe(false);
+
+    session.featureTree.edit(feature);
+    expect(session.mode.get()).toBe('sketch');
+    expect(viewport.sketchDrawings.has(sketchId(feature))).toBe(false);
+    expect(viewport.sketchDrawings.has(EDIT_SKETCH_DRAWING_ID)).toBe(true);
+
+    currentSketch(session).cancel();
+    expect(viewport.sketchDrawings.has(sketchId(feature))).toBe(true);
+  });
+
+  it('a sketch that disappears from the regeneration is no longer drawn', async () => {
+    const { session, viewport } = await openSketcher();
+    enterSketch(session);
+    const feature = currentSketch(session).featureId;
+    session.actions.run(session.sketchActionIds.finish);
+    await settle();
+    expect(viewport.sketchDrawings.has(sketchId(feature))).toBe(true);
+    session.actions.run(session.actionIds.undo);
+    await settle();
+    expect(viewport.sketchDrawings.has(sketchId(feature))).toBe(false);
+  });
+
+  it('a plane switched on in the browser is drawn under its id, switched off removed', async () => {
+    const { session, viewport } = await openSketcher();
+    const xy = ORIGIN_PLANES[0] ?? fail();
+    session.browser.setPlaneVisible(ORIGIN_PLANE_IDS.xy, true);
+    expect(viewport.sketchDrawings.get(ORIGIN_PLANE_IDS.xy)).toEqual(planeDrawing(xy.plane));
+    session.browser.setPlaneVisible(ORIGIN_PLANE_IDS.xy, false);
+    expect(viewport.sketchDrawings.has(ORIGIN_PLANE_IDS.xy)).toBe(false);
+  });
+
+  it('a double click on a sketch in the browser opens the sketcher', async () => {
+    const { session } = await openSketcher();
+    enterSketch(session);
+    const feature = currentSketch(session).featureId;
+    session.actions.run(session.sketchActionIds.finish);
+    await settle();
+    session.browser.editSketch(feature);
+    expect(session.mode.get()).toBe('sketch');
+    expect(currentSketch(session).featureId).toBe(feature);
   });
 });
 

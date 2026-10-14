@@ -1,13 +1,15 @@
 <script setup lang="ts">
 // The Browser (spec 11, "Komponenty"; Prohlížeč): a floating panel on the left with the result
-// of modelling – document › Bodies › Body n. Click selects a body (or puts it into the active
-// bodies field of the dialog), the eye toggles its visibility, a double click on the name renames
-// it; both are stored in the document (Q071) and disabled without BrowserModel.canEdit (R14).
-// Only bindings and layout (rule 4): rows, the rename mode and canEdit come from BrowserModel,
-// changes go back through it. Origin and Sketches come with M12.
+// of modelling – document › Origin, Sketches, Bodies. Click selects a body (or puts it into the
+// active bodies field of the dialog), the eye toggles its visibility, a double click on the name
+// renames it; both are stored in the document (Q071) and disabled without BrowserModel.canEdit
+// (R14). Origin (M12): the three planes, click = select, the eye draws the plane – view state
+// only (R48), so it stays enabled. Sketches (M12): click selects the feature, a double click opens
+// the sketcher; sketches have no eye. Only bindings and layout (rule 4): rows, the rename mode
+// and canEdit come from BrowserModel, changes go back through it.
 import { nextTick, ref, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { BrowserBodyRow } from '@/interaction';
+import type { BrowserBodyRow, BrowserPlaneRow, BrowserSketchRow } from '@/interaction';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
 
@@ -16,6 +18,8 @@ const { browser } = session;
 const { t } = useI18n();
 
 const bodies = useObservable(browser.bodies);
+const planes = useObservable(browser.planes);
+const sketches = useObservable(browser.sketches);
 const canEdit = useObservable(browser.canEdit);
 const renaming = useObservable(browser.renaming);
 // No rename of documents in M10, so the name is read once.
@@ -24,9 +28,24 @@ const documentName = session.doc.meta.name;
 // Collapsed sections are view state of this panel only.
 const panelOpen = ref(true);
 const bodiesOpen = ref(true);
+// Collapsed by default like the Origin folder of Fusion: the planes are rarely needed.
+const originOpen = ref(false);
+const sketchesOpen = ref(true);
+
+function additive(e: MouseEvent): boolean {
+  return e.shiftKey || e.metaKey || e.ctrlKey;
+}
+
+function selectPlane(row: BrowserPlaneRow, e: MouseEvent): void {
+  browser.selectPlane(row.plane, { additive: additive(e) });
+}
+
+function selectSketch(row: BrowserSketchRow, e: MouseEvent): void {
+  browser.selectSketch(row.feature, { additive: additive(e) });
+}
 
 function select(row: BrowserBodyRow, e: MouseEvent): void {
-  browser.select(row.body, { additive: e.shiftKey || e.metaKey || e.ctrlKey });
+  browser.select(row.body, { additive: additive(e) });
 }
 
 function displayName(row: BrowserBodyRow): string {
@@ -75,6 +94,77 @@ function cancelRename(): void {
         <i class="ti ti-cube document-icon" aria-hidden="true" />
         <span class="name document-name">{{ documentName }}</span>
       </div>
+
+      <div
+        class="node level-1"
+        role="treeitem"
+        :aria-expanded="originOpen"
+        @click="originOpen = !originOpen"
+      >
+        <i
+          class="ti chevron"
+          :class="originOpen ? 'ti-chevron-down' : 'ti-chevron-right'"
+          aria-hidden="true"
+        />
+        <i class="ti ti-folder" aria-hidden="true" />
+        <span class="name">{{ t('browser.origin') }}</span>
+      </div>
+
+      <template v-if="originOpen">
+        <div
+          v-for="row in planes"
+          :key="row.plane"
+          class="node level-2"
+          :class="{ selected: row.selected, hidden: !row.visible }"
+          role="treeitem"
+          :aria-selected="row.selected"
+          @click="selectPlane(row, $event)"
+        >
+          <span class="chevron" />
+          <i class="ti ti-square-dashed" aria-hidden="true" />
+          <span class="name">{{ t(row.label) }}</span>
+          <button
+            type="button"
+            class="eye"
+            :title="row.visible ? t('browser.hide') : t('browser.show')"
+            @click.stop="browser.setPlaneVisible(row.plane, !row.visible)"
+          >
+            <i class="ti" :class="row.visible ? 'ti-eye' : 'ti-eye-off'" aria-hidden="true" />
+          </button>
+        </div>
+      </template>
+
+      <div
+        class="node level-1"
+        role="treeitem"
+        :aria-expanded="sketchesOpen"
+        @click="sketchesOpen = !sketchesOpen"
+      >
+        <i
+          class="ti chevron"
+          :class="sketchesOpen ? 'ti-chevron-down' : 'ti-chevron-right'"
+          aria-hidden="true"
+        />
+        <i class="ti ti-folder" aria-hidden="true" />
+        <span class="name">{{ t('browser.sketches') }}</span>
+      </div>
+
+      <template v-if="sketchesOpen">
+        <div
+          v-for="row in sketches"
+          :key="row.sketch"
+          class="node level-2"
+          :class="{ selected: row.selected }"
+          role="treeitem"
+          :aria-selected="row.selected"
+          @click="selectSketch(row, $event)"
+          @dblclick="browser.editSketch(row.feature)"
+        >
+          <span class="chevron" />
+          <i class="ti ti-pencil" aria-hidden="true" />
+          <span class="name">{{ row.name }}</span>
+        </div>
+      </template>
 
       <div
         class="node level-1"

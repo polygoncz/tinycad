@@ -4,6 +4,7 @@ import type { DocumentId } from '@/document';
 import { createMemoryDocumentStore } from '@/persistence';
 import type { DocumentStore } from '@/persistence';
 import { createManualScheduler } from '@/persistence/testing';
+import { createFakeSolver } from '@/sketch/testing';
 import { disposeOpenSession } from './dispose-open-session';
 import { BUILT_IN_PLUGINS, createAppSession } from './index';
 import { aKernelFactory, FakeAppViewport, settle } from './testing';
@@ -90,6 +91,7 @@ describe('disposeOpenSession', () => {
       translate: (key) => key,
       confirm: () => true,
       readOnly: false,
+      solver: createFakeSolver(),
     });
     await settle();
     const edit = session.features.create('box');
