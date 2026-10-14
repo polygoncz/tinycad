@@ -1,6 +1,6 @@
 import { ok } from '@/core';
 import type { Vec3 } from '@/core';
-import type { ShapeHandle } from '@/kernel';
+import type { ShapeResult } from '@/kernel';
 import { applyBodyOperation, unresolvedReference } from '@/regen';
 import type { Body, FeatureBuilder } from '@/regen';
 import { flipApplies } from './schema';
@@ -33,9 +33,10 @@ export const revolveBuilder: FeatureBuilder<RevolveParams> = Object.freeze<
     const kernelAxis = { origin, direction: flip && flipApplies(angle) ? reversed : direction };
     // One region after another: a deterministic order of the kernel calls. A kernel error
     // propagates and becomes KERNEL.
-    const shapes: ShapeHandle[] = [];
+    // The results keep their roles and history: applyBodyOperation names the solids (M14).
+    const shapes: ShapeResult[] = [];
     for (const { face } of regions.value) {
-      shapes.push((await ctx.kernel.revolve(face, kernelAxis, angle)).shape);
+      shapes.push(await ctx.kernel.revolve(face, kernelAxis, angle));
     }
     const next = await applyBodyOperation({
       kernel: ctx.kernel,

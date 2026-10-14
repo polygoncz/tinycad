@@ -12,8 +12,11 @@ describe('regen public API', () => {
       'bodiesOf',
       'createBuilderRegistry',
       'createRegenerator',
+      'nameShape',
+      'planeOfRef',
       'planesOf',
       'propagateNames',
+      'sketchPlaneOfFace',
       'sketchesOf',
       'unresolvedReference',
     ]);

@@ -76,6 +76,8 @@ function aRecordingKernel() {
     makeFace: (p) => fake.makeFace(p),
     extrude: (profile, direction, distance) => fake.extrude(profile, direction, distance),
     revolve: (profile, axis, angle) => fake.revolve(profile, axis, angle),
+    fillet: (shape, edges, radius) => fake.fillet(shape, edges, radius),
+    chamfer: (shape, edges, distance) => fake.chamfer(shape, edges, distance),
     boundingBox: (shape) => fake.boundingBox(shape),
     topology: (shape) => fake.topology(shape),
   };

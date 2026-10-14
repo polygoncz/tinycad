@@ -1,6 +1,6 @@
 import { mat4, vec3 } from '@/core';
 import type { Vec3 } from '@/core';
-import type { ShapeHandle } from '@/kernel';
+import type { ShapeHandle, ShapeResult } from '@/kernel';
 import { applyBodyOperation, unresolvedReference } from '@/regen';
 import type { Body, FeatureBuilder, ModelingKernel, ResolvedRegion } from '@/regen';
 import { flipApplies } from './schema';
@@ -39,10 +39,11 @@ export const extrudeBuilder: FeatureBuilder<ExtrudeParams> = Object.freeze<
 
     // One prism per region in the order of the regions: a deterministic order of kernel calls.
     // A kernel error propagates and becomes KERNEL.
-    const shapes: ShapeHandle[] = [];
+    // The results keep their roles and history: applyBodyOperation names the prisms (M14).
+    const shapes: ShapeResult[] = [];
     for (const region of regions.value) {
       const profile = await profileOf(ctx.kernel, region, endType, direction, distance);
-      shapes.push((await ctx.kernel.extrude(profile, direction, distance)).shape);
+      shapes.push(await ctx.kernel.extrude(profile, direction, distance));
     }
 
     const next = await applyBodyOperation({

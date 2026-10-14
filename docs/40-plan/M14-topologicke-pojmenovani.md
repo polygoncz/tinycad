@@ -52,7 +52,7 @@ updated: 2026-10-14
 - [x] Ú3 `interaction` (+ zástupné místo v `render`, `app`): `TopoNames` v portu, výběr přežije regeneraci, `HighlightTarget` druhu `body`
 - [x] Ú4 `sketch`: id křivek v oblastech
 - [x] Ú5 `document`: `planes` přijímá `TopoRef`
-- [ ] Ú6 `regen`: `nameShape`, `resolveTopo`, `resolvePlanes` s plochou, `sketchPlaneOfFace`, `planeOfRef`, jména v `applyBodyOperation`, `DressupOps` v `ModelingKernel`
+- [x] Ú6 `regen`: `nameShape`, `resolveTopo`, `resolvePlanes` s plochou, `sketchPlaneOfFace`, `planeOfRef`, jména v `applyBodyOperation`, `DressupOps` v `ModelingKernel`
 - [x] Ú7 `render`: zvýraznění celého tělesa
 - [x] Ú8 `interaction`: `refPick` pro `topo`, zvýraznění referencí `topo` a `bodies` v dialogu
 - [ ] Ú9 `features/box|cylinder|transform|boolean`: pojmenování v builderech

@@ -67,31 +67,57 @@ describe('createTrackingKernel', () => {
     });
   });
 
-  it.each(['makeCylinder', 'transform', 'boolean', 'makeFace', 'extrude', 'revolve'] as const)(
-    'passes a %s error through unchanged and records nothing new',
-    async (op) => {
-      const { real, owned, kernel } = setup();
-      const a = await kernel.makeBox(BOX);
-      const b = await kernel.makeBox(BOX);
-      const face = await kernel.makeFace(FACE);
-      const calls = {
-        makeCylinder: () => kernel.makeCylinder(CYLINDER),
-        transform: () => kernel.transform(a.shape, mat4.identity()),
-        boolean: () => kernel.boolean('union', [a.shape], [b.shape]),
-        makeFace: () => kernel.makeFace(FACE),
-        extrude: () => kernel.extrude(face.shape, [0, 0, 1], 2),
-        revolve: () => kernel.revolve(face.shape, Y_AXIS, Math.PI),
-      };
-      real.failNext(op, 'operation-failed', 'boom');
-      const error: unknown = await calls[op]().then(
-        () => undefined,
-        (e: unknown) => e,
-      );
-      expect(kernelErrorCode(error)).toBe('operation-failed');
-      expect(error).toHaveProperty('message', 'boom');
-      expect([...owned]).toEqual([a.shape, b.shape, face.shape]);
-    },
-  );
+  it('adds the handles of fillet and chamfer to the owned set (M14)', async () => {
+    const { real, owned, kernel } = setup();
+    const box = await kernel.makeBox(BOX);
+    const filleted = await kernel.fillet(box.shape, [0], 0.1);
+    const chamfered = await kernel.chamfer(filleted.shape, [1, 2], 0.1);
+    expect([...owned]).toEqual([box.shape, filleted.shape, chamfered.shape]);
+    expect(real.callCount('fillet')).toBe(1);
+    expect(real.callCount('chamfer')).toBe(1);
+    expect(filleted.history).toBeDefined();
+  });
+
+  it('passes topology through without recording a handle (M14)', async () => {
+    const { real, owned, kernel } = setup();
+    const box = await kernel.makeBox(BOX);
+    await expect(kernel.topology(box.shape)).resolves.toEqual(await real.topology(box.shape));
+    expect([...owned]).toEqual([box.shape]);
+  });
+
+  it.each([
+    'makeCylinder',
+    'transform',
+    'boolean',
+    'makeFace',
+    'extrude',
+    'revolve',
+    'fillet',
+    'chamfer',
+  ] as const)('passes a %s error through unchanged and records nothing new', async (op) => {
+    const { real, owned, kernel } = setup();
+    const a = await kernel.makeBox(BOX);
+    const b = await kernel.makeBox(BOX);
+    const face = await kernel.makeFace(FACE);
+    const calls = {
+      makeCylinder: () => kernel.makeCylinder(CYLINDER),
+      transform: () => kernel.transform(a.shape, mat4.identity()),
+      boolean: () => kernel.boolean('union', [a.shape], [b.shape]),
+      makeFace: () => kernel.makeFace(FACE),
+      extrude: () => kernel.extrude(face.shape, [0, 0, 1], 2),
+      revolve: () => kernel.revolve(face.shape, Y_AXIS, Math.PI),
+      fillet: () => kernel.fillet(a.shape, [0], 0.1),
+      chamfer: () => kernel.chamfer(a.shape, [0], 0.1),
+    };
+    real.failNext(op, 'operation-failed', 'boom');
+    const error: unknown = await calls[op]().then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(kernelErrorCode(error)).toBe('operation-failed');
+    expect(error).toHaveProperty('message', 'boom');
+    expect([...owned]).toEqual([a.shape, b.shape, face.shape]);
+  });
 
   it('passes kernel errors through unchanged and records nothing', async () => {
     const { real, owned, kernel } = setup();
@@ -113,7 +139,9 @@ describe('createTrackingKernel', () => {
     expect(Object.keys(kernel).sort()).toEqual([
       'boolean',
       'boundingBox',
+      'chamfer',
       'extrude',
+      'fillet',
       'makeBox',
       'makeCylinder',
       'makeFace',

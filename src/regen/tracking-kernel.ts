@@ -29,6 +29,8 @@ export function createTrackingKernel(
     extrude: (profile, direction, distance) =>
       kernel.extrude(profile, direction, distance).then(track),
     revolve: (profile, axis, angle) => kernel.revolve(profile, axis, angle).then(track),
+    fillet: (shape, edges, radius) => kernel.fillet(shape, edges, radius).then(track),
+    chamfer: (shape, edges, distance) => kernel.chamfer(shape, edges, distance).then(track),
     boundingBox: (shape) => kernel.boundingBox(shape),
     topology: (shape) => kernel.topology(shape),
   };

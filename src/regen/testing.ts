@@ -12,10 +12,11 @@ import type {
   FeatureSchemaRegistry,
   ParamIssue,
   PartStudioData,
+  TopoName,
 } from '@/document';
 import { aFeature } from '@/document/testing';
 import type { DefaultParams } from '@/document/testing';
-import type { ShapeHandle } from '@/kernel';
+import type { ShapeHandle, TopologySummary } from '@/kernel';
 import type { SketchEntity } from '@/sketch';
 import { createFakeKernel } from '@/kernel/testing';
 import type { FakeKernel } from '@/kernel/testing';
@@ -31,7 +32,7 @@ import type {
 import { createRegenerator } from './regenerator';
 import type { RegenResult, Regenerator } from './regenerator';
 import { EMPTY_NAMES, EMPTY_STATE } from './state';
-import type { Body, RegenState, SketchArtifact } from './state';
+import type { Body, NameTable, RegenState, SketchArtifact } from './state';
 
 /** Validation of the default test schema: params of aFeature() with `size` > 0. */
 export function validateSize(params: unknown): readonly ParamIssue[] {
@@ -124,14 +125,81 @@ export function result(r: RegenResult | 'superseded'): RegenResult {
 
 /**
  * The BuildContext the Regenerator gives a builder: the tracked `kernel` (its owned set stays
- * inside), resolveBodies, resolvePlanes, resolveRegions and resolveAxis over `state` and a warn
- * whose messages are dropped.
+ * inside), resolveBodies, resolvePlanes, resolveRegions, resolveAxis and resolveTopo (M14) over
+ * `state` and a warn whose messages are dropped.
  */
 export function aBuildContext(
   kernel: ModelingKernel,
   state: RegenState = EMPTY_STATE,
 ): BuildContext {
   return createBuildSession({ kernel, owned: new Set<ShapeHandle>(), state }).ctx;
+}
+
+/**
+ * A name table for tests of builders (M14) from hand-written names: face and edge name →
+ * indices. `topology` defaults to just enough faces and edges for every index, none of them
+ * planar (surface 'other', edges without faces and vertices); give one for planes of faces.
+ * Frozen like a table of propagateNames.
+ */
+export function aNameTable(
+  names: {
+    readonly faces?: Readonly<Record<string, readonly number[]>>;
+    readonly edges?: Readonly<Record<string, readonly number[]>>;
+    readonly topology?: TopologySummary;
+  } = {},
+): NameTable {
+  const faceEntries = entriesOf(names.faces ?? {});
+  const edgeEntries = entriesOf(names.edges ?? {});
+  const topology = names.topology ?? defaultTopology(faceEntries, edgeEntries);
+  const namesAt = (byName: ReadonlyMap<TopoName, readonly number[]>, index: number) =>
+    Object.freeze([...byName].filter(([, indices]) => indices.includes(index)).map(([n]) => n));
+  return Object.freeze({
+    faces: (name: TopoName) => faceEntries.get(name) ?? NO_INDICES,
+    edges: (name: TopoName) => edgeEntries.get(name) ?? NO_INDICES,
+    nameOfFace: (index: number) => namesAt(faceEntries, index)[0],
+    nameOfEdge: (index: number) => namesAt(edgeEntries, index)[0],
+    namesOfFace: (index: number) => namesAt(faceEntries, index),
+    faceEntries,
+    edgeEntries,
+    topology,
+  });
+}
+
+const NO_INDICES: readonly number[] = Object.freeze([]);
+
+/** Name → frozen ascending indices, the names in sorted order. */
+function entriesOf(
+  record: Readonly<Record<string, readonly number[]>>,
+): ReadonlyMap<TopoName, readonly number[]> {
+  return new Map(
+    Object.keys(record)
+      .sort()
+      .map((name) => [
+        // Test helper: the hand-written strings stand for names minted by propagateNames.
+        name as TopoName,
+        Object.freeze([...(record[name] ?? [])].sort((a, b) => a - b)),
+      ]),
+  );
+}
+
+/** Faces and edges up to the largest index of the entries, none planar. */
+function defaultTopology(
+  faces: ReadonlyMap<TopoName, readonly number[]>,
+  edges: ReadonlyMap<TopoName, readonly number[]>,
+): TopologySummary {
+  const countOf = (byName: ReadonlyMap<TopoName, readonly number[]>): number =>
+    Math.max(0, ...[...byName.values()].flat().map((i) => i + 1));
+  return Object.freeze({
+    faces: Object.freeze(
+      Array.from({ length: countOf(faces) }, () => Object.freeze({ surface: 'other' as const })),
+    ),
+    edges: Object.freeze(
+      Array.from({ length: countOf(edges) }, () =>
+        Object.freeze({ faces: NO_INDICES, vertices: NO_INDICES, midpoint: [0, 0, 0] as const }),
+      ),
+    ),
+    vertexCount: 0,
+  });
 }
 
 /** A builder that records every call before delegating to `build`. */

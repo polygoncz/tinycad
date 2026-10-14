@@ -79,6 +79,8 @@ function aRecordingKernel() {
     makeFace: (p) => fake.makeFace(p),
     extrude: (profile, direction, distance) => fake.extrude(profile, direction, distance),
     revolve: (profile, axis, angle) => fake.revolve(profile, axis, angle),
+    fillet: (shape, edges, radius) => fake.fillet(shape, edges, radius),
+    chamfer: (shape, edges, distance) => fake.chamfer(shape, edges, distance),
     boundingBox: (shape) => fake.boundingBox(shape),
     topology: (shape) => fake.topology(shape),
   };
@@ -552,7 +554,9 @@ describe('extrudeBuilder', () => {
 
     expect(calls).toEqual([{ op: 'union', targets: [box.shape], tools: [expect.anything()] }]);
     const body = bodyOf(out, 'k');
-    expect(body).toEqual({ ...box, shape: body.shape, lastModifiedBy: 'e' });
+    // The names are recomputed from the kernel history (M14), the identity stays.
+    expect(body).toEqual({ ...box, shape: body.shape, names: body.names, lastModifiedBy: 'e' });
+    expect([...body.names.faceEntries]).toEqual([...box.names.faceEntries]);
     expect(out.artifacts.has(bodyId('e' as FeatureId))).toBe(false);
     expect(await fake.boundingBox(body.shape)).toEqual({ min: [0, 0, -10], max: [40, 20, 10] });
   });
@@ -571,7 +575,9 @@ describe('extrudeBuilder', () => {
 
     expect(calls).toEqual([{ op: 'subtract', targets: [box.shape], tools: [expect.anything()] }]);
     const body = bodyOf(out, 'k');
-    expect(body).toEqual({ ...box, shape: body.shape, lastModifiedBy: 'e' });
+    // The names are recomputed from the kernel history (M14), the identity stays.
+    expect(body).toEqual({ ...box, shape: body.shape, names: body.names, lastModifiedBy: 'e' });
+    expect([...body.names.faceEntries]).toEqual([...box.names.faceEntries]);
     expect([...out.artifacts.keys()]).toEqual(['k/body', 's/sketch']);
   });
 

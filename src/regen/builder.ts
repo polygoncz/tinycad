@@ -1,5 +1,5 @@
 import { createRegistry } from '@/core';
-import type { Registry, Result, Vec3 } from '@/core';
+import type { Plane, Registry, Result, Vec3 } from '@/core';
 import type {
   AxisRef,
   BodyRef,
@@ -7,9 +7,11 @@ import type {
   PlaneRef,
   SketchEntityRef,
   SketchRegionRef,
+  TopoRef,
 } from '@/document';
 import type {
   BooleanOps,
+  DressupOps,
   PrimitiveOps,
   QueryOps,
   ShapeHandle,
@@ -17,7 +19,7 @@ import type {
   SweepOps,
   TransformOps,
 } from '@/kernel';
-import type { Body, FeatureError, PlaneArtifact, RegenState, SketchArtifact } from './state';
+import type { Body, FeatureError, RegenState, SketchArtifact } from './state';
 
 // The behaviour half of a feature type (ADR 0004): turns params into geometry.
 // The data half (params, validation) is FeatureSchema in document.
@@ -30,10 +32,10 @@ export interface BuildInput<P> {
 
 /**
  * First reference a resolve method of BuildContext could not find (Q044). PlaneRef since M12;
- * region, axis and sketch entity since M13; M14 widens ref to TopoRef.
+ * region, axis and sketch entity since M13, TopoRef since M14.
  */
 export interface RefError {
-  readonly ref: BodyRef | PlaneRef | SketchRegionRef | AxisRef | SketchEntityRef;
+  readonly ref: BodyRef | PlaneRef | SketchRegionRef | AxisRef | SketchEntityRef | TopoRef;
   readonly message: string;
 }
 
@@ -52,15 +54,32 @@ export interface ResolvedAxis {
 }
 
 /**
+ * A resolved plane (M14): the plane of a plane artifact, or the sketch frame of a planar body
+ * face (sketchPlaneOfFace).
+ */
+export interface ResolvedPlane {
+  readonly ref: PlaneRef | TopoRef;
+  readonly plane: Plane;
+}
+
+/** Faces or edges of a body found by name (M14, spec 08): indices ascending, at least one. */
+export interface ResolvedTopo {
+  readonly ref: TopoRef;
+  readonly body: Body;
+  readonly indices: readonly number[];
+}
+
+/**
  * The part of the kernel a builder may use: it creates shapes and asks about them, it never
  * releases (Q041). Defined here by its consumer (ADR 0011); M11 added TransformOps and
- * BooleanOps, M12 SketchOps, M13 SweepOps.
+ * BooleanOps, M12 SketchOps, M13 SweepOps, M14 DressupOps (and QueryOps.topology).
  */
 export type ModelingKernel = PrimitiveOps &
   TransformOps &
   BooleanOps &
   SketchOps &
   SweepOps &
+  DressupOps &
   QueryOps;
 
 /**
@@ -85,9 +104,10 @@ export interface BuildContext {
   resolveBodies(refs: readonly BodyRef[]): Result<Body[], RefError>;
   /**
    * Planes of the input state (artifacts of kind plane; a missing id or another kind gives err);
-   * the first unresolved reference gives err. M12.
+   * the first unresolved reference gives err. M12. Since M14 also a planar body face (TopoRef,
+   * spec 08): the face with the smallest index (several → warn), a non-planar face gives err.
    */
-  resolvePlanes(refs: readonly PlaneRef[]): Result<PlaneArtifact[], RefError>;
+  resolvePlanes(refs: readonly (PlaneRef | TopoRef)[]): Result<ResolvedPlane[], RefError>;
   /**
    * Regions of sketches (M13): the artifact sketchId(ref.sketch) of kind sketch and the name in
    * its regions; the first unresolved reference gives err.
@@ -101,6 +121,11 @@ export interface BuildContext {
   resolveAxis(ref: AxisRef | SketchEntityRef): Result<ResolvedAxis, RefError>;
   /** Several calls are joined with '\n' into one 'warning' status (Q045). */
   warn(message: string): void;
+  /**
+   * Faces or edges of bodies by name (M14, spec 08), in the order of refs: no match gives err,
+   * several faces warn and are all used, several edges are all used without a warning.
+   */
+  resolveTopo(refs: readonly TopoRef[], entity: 'face' | 'edge'): Result<ResolvedTopo[], RefError>;
 }
 
 export type BuildOutput =
@@ -110,7 +135,8 @@ export type BuildOutput =
 /**
  * Rules (spec 07): never mutate the input state, return a new one; keep the identity of
  * artifacts (ADR 0015: a created body gets bodyId(feature.id) with origin and lastModifiedBy
- * the feature, a changed body keeps id, origin and names and gets lastModifiedBy, a consumed
+ * the feature, a changed body keeps id and origin, gets lastModifiedBy and its names from
+ * nameShape over the kernel history (M14), a consumed
  * body leaves the map); never release handles; create every shape through ctx.kernel; return
  * expected failures as { ok: false } (an unresolved reference through unresolvedReference).
  * Params are already validated.

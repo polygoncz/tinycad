@@ -11,15 +11,19 @@ import type {
   PlaneRef,
   SketchEntityRef,
   SketchRegionRef,
+  TopoName,
+  TopoRef,
 } from '@/document';
 import type { ShapeHandle } from '@/kernel';
 import { parseSketchData } from '@/sketch';
 import type { SketchEntity } from '@/sketch';
 import { createFakeKernel } from '@/kernel/testing';
 import { createBuildSession } from './build-context';
+import { nameShape } from './names';
+import type { NameTable } from './names';
 import { EMPTY_NAMES, EMPTY_STATE, axesOf, planesOf } from './state';
 import type { Artifact, Body, RegenState } from './state';
-import { aSketchArtifact } from './testing';
+import { aNameTable, aSketchArtifact } from './testing';
 
 // Feature ids and handles are created by a cast in tests only: the regen state needs no real
 // shapes. Body ids come from bodyId, the one place that mints them (ADR 0015).
@@ -153,15 +157,27 @@ describe('createBuildSession', () => {
   it('resolves the origin planes of EMPTY_STATE in the order of refs', () => {
     const [xy, , yz] = planesOf(EMPTY_STATE);
     const { session } = setup();
-    expect(
-      session.ctx.resolvePlanes([planeRef(ORIGIN_PLANE_IDS.yz), planeRef(ORIGIN_PLANE_IDS.xy)]),
-    ).toEqual({ ok: true, value: [yz, xy] });
+    const yzRef = planeRef(ORIGIN_PLANE_IDS.yz);
+    const xyRef = planeRef(ORIGIN_PLANE_IDS.xy);
+    expect(session.ctx.resolvePlanes([yzRef, xyRef])).toEqual({
+      ok: true,
+      value: [
+        { ref: yzRef, plane: yz?.plane },
+        { ref: xyRef, plane: xy?.plane },
+      ],
+    });
   });
 
-  it('resolves the planes as the very artifacts of the state', () => {
+  it('resolves a plane ref to the very plane of the artifact (M14: ResolvedPlane)', () => {
     const { session } = setup();
-    const result = session.ctx.resolvePlanes([planeRef(ORIGIN_PLANE_IDS.xz)]);
-    expect(result.ok && result.value[0]).toBe(EMPTY_STATE.artifacts.get(ORIGIN_PLANE_IDS.xz));
+    const xzRef = planeRef(ORIGIN_PLANE_IDS.xz);
+    const result = session.ctx.resolvePlanes([xzRef]);
+    const artifact = EMPTY_STATE.artifacts.get(ORIGIN_PLANE_IDS.xz);
+    expect(artifact?.kind).toBe('plane');
+    if (!result.ok || artifact?.kind !== 'plane') return;
+    expect(result.value[0]?.ref).toBe(xzRef);
+    expect(result.value[0]?.plane).toBe(artifact.plane);
+    expect(Object.isFrozen(result.value[0])).toBe(true);
   });
 
   it('resolves an empty list of planes to an empty array', () => {
@@ -391,6 +407,191 @@ describe('createBuildSession', () => {
       if (result.ok) return;
       expect(result.error.ref).toBe(zero);
       expect(result.error.message).toMatch(/zero length/);
+    });
+  });
+
+  describe('resolveTopo (M14)', () => {
+    const tn = (s: string): TopoName => s as TopoName;
+    const topo = (origin: string, name: string): TopoRef => ({
+      kind: 'topo',
+      body: bodyOf(origin),
+      name: tn(name),
+    });
+    const named = (origin: string, names: NameTable): Body => ({ ...aBody(origin, 1), names });
+    const box = named(
+      'b',
+      aNameTable({
+        faces: { 'b/face:top': [5], 'b/face:split': [2, 4] },
+        edges: { 'edge:e1': [3], 'edge:twice': [7, 1] },
+      }),
+    );
+
+    it('resolves a face to its body and index', () => {
+      const { session } = setup(aState(box));
+      const r = topo('b', 'b/face:top');
+      expect(session.ctx.resolveTopo([r], 'face')).toEqual({
+        ok: true,
+        value: [{ ref: r, body: box, indices: [5] }],
+      });
+      expect(session.warnings()).toBeUndefined();
+    });
+
+    it('resolves edges in the order of refs, all indices of a name without a warning', () => {
+      const { session } = setup(aState(box));
+      const twice = topo('b', 'edge:twice');
+      const e1 = topo('b', 'edge:e1');
+      const result = session.ctx.resolveTopo([twice, e1], 'edge');
+      expect(result).toEqual({
+        ok: true,
+        value: [
+          { ref: twice, body: box, indices: [1, 7] },
+          { ref: e1, body: box, indices: [3] },
+        ],
+      });
+      expect(result.ok && Object.isFrozen(result.value[0])).toBe(true);
+      expect(session.warnings()).toBeUndefined();
+    });
+
+    it('warns when a face name matches several faces and uses them all', () => {
+      const { session } = setup(aState(box));
+      const r = topo('b', 'b/face:split');
+      const result = session.ctx.resolveTopo([r], 'face');
+      expect(result.ok && result.value[0]?.indices).toEqual([2, 4]);
+      expect(session.warnings()).toBe("Reference 'b/face:split' matches 2 faces; all are used");
+    });
+
+    it('looks a face name up only among faces and an edge name only among edges', () => {
+      const { session } = setup(aState(box));
+      const asEdge = topo('b', 'b/face:top');
+      const result = session.ctx.resolveTopo([asEdge], 'edge');
+      expect(result).toEqual({
+        ok: false,
+        error: { ref: asEdge, message: "Edge 'b/face:top' not found on body 'b/body'" },
+      });
+    });
+
+    it('returns the first missing name as RefError', () => {
+      const { session } = setup(aState(box));
+      const missing = topo('b', 'b/face:gone');
+      const result = session.ctx.resolveTopo(
+        [topo('b', 'b/face:top'), missing, topo('b', 'b/face:other')],
+        'face',
+      );
+      expect(result).toEqual({
+        ok: false,
+        error: { ref: missing, message: "Face 'b/face:gone' not found on body 'b/body'" },
+      });
+    });
+
+    it('returns a RefError for a missing body and for an artifact of another kind', () => {
+      const other = aSketchArtifact('s1');
+      const { session } = setup(aState(box, other));
+      const missing = topo('x', 'b/face:top');
+      expect(session.ctx.resolveTopo([missing], 'face')).toEqual({
+        ok: false,
+        error: { ref: missing, message: "Body 'x/body' does not exist" },
+      });
+      const notBody: TopoRef = { ...missing, body: other.id as string as BodyId };
+      expect(session.ctx.resolveTopo([notBody], 'face')).toEqual({
+        ok: false,
+        error: { ref: notBody, message: "'s1/sketch' is not a body" },
+      });
+    });
+
+    it('resolves an empty list to an empty array', () => {
+      expect(setup().session.ctx.resolveTopo([], 'edge')).toEqual({ ok: true, value: [] });
+    });
+  });
+
+  describe('resolvePlanes with a face (M14)', () => {
+    const tn = (s: string): TopoName => s as TopoName;
+
+    /** The FakeKernel box [0, 10]³ of the feature 'b', named by nameShape. */
+    async function boxSetup() {
+      const real = createFakeKernel();
+      const result = await real.makeBox({ origin: [0, 0, 0], size: [10, 10, 10] });
+      const names = await nameShape({ kernel: real, featureId: fid('b'), result, inputs: [] });
+      const body: Body = { ...aBody('b', 0), shape: result.shape, names };
+      const owned = new Set<ShapeHandle>();
+      const state = aState(...planesOf(EMPTY_STATE), body);
+      return { session: createBuildSession({ kernel: real, owned, state }), body };
+    }
+    const face = (name: string): TopoRef => ({ kind: 'topo', body: bodyOf('b'), name: tn(name) });
+
+    it('gives the frame of XY moved to z = 10 for the top face of the box', async () => {
+      const { session } = await boxSetup();
+      const top = face('b/face:top');
+      const result = session.ctx.resolvePlanes([top]);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const [resolved] = result.value;
+      expect(resolved?.ref).toBe(top);
+      expectVec(resolved?.plane.origin, [0, 0, 10]);
+      expectVec(resolved?.plane.xDir, [1, 0, 0]);
+      expectVec(resolved?.plane.normal, [0, 0, 1]);
+      expect(session.warnings()).toBeUndefined();
+    });
+
+    it('gives the frame of XZ for the front face (−Y)', async () => {
+      const { session } = await boxSetup();
+      const result = session.ctx.resolvePlanes([face('b/face:front')]);
+      if (!result.ok) expect.fail(result.error.message);
+      const plane = result.value[0]?.plane;
+      const xz = xzPlane();
+      expectVec(plane?.origin, xz.origin);
+      expectVec(plane?.xDir, xz.xDir);
+      expectVec(plane?.normal, xz.normal);
+    });
+
+    it('mixes origin planes and faces in the order of refs', async () => {
+      const { session } = await boxSetup();
+      const result = session.ctx.resolvePlanes([face('b/face:top'), planeRef(ORIGIN_PLANE_IDS.xz)]);
+      expect(result.ok && result.value.map((r) => r.ref.kind)).toEqual(['topo', 'plane']);
+    });
+
+    it('takes the face with the smallest index and warns when the name matches several', () => {
+      const names = aNameTable({
+        faces: { 'b/face:split': [4, 2] },
+        topology: {
+          faces: [0, 1, 2, 3, 4].map((i) => ({
+            surface: 'plane' as const,
+            plane: { origin: [0, 0, i] as const, normal: [0, 0, 1] as const },
+          })),
+          edges: [],
+          vertexCount: 0,
+        },
+      });
+      const { session } = setup(aState({ ...aBody('b', 1), names }));
+      const result = session.ctx.resolvePlanes([face('b/face:split')]);
+      if (!result.ok) expect.fail(result.error.message);
+      expectVec(result.value[0]?.plane.origin, [0, 0, 2]);
+      expect(session.warnings()).toBe(
+        "Reference 'b/face:split' matches 2 faces; the first is used",
+      );
+    });
+
+    it('returns a RefError for a face that is not planar', () => {
+      const names = aNameTable({ faces: { 'c/face:side': [0] } });
+      const { session } = setup(aState({ ...aBody('b', 1), names }));
+      const side = face('c/face:side');
+      expect(session.ctx.resolvePlanes([side])).toEqual({
+        ok: false,
+        error: { ref: side, message: "Face 'c/face:side' is not planar" },
+      });
+    });
+
+    it('returns a RefError for a missing name and a missing body', async () => {
+      const { session } = await boxSetup();
+      const gone = face('b/face:gone');
+      expect(session.ctx.resolvePlanes([gone])).toEqual({
+        ok: false,
+        error: { ref: gone, message: "Face 'b/face:gone' not found on body 'b/body'" },
+      });
+      const noBody: TopoRef = { kind: 'topo', body: bodyOf('x'), name: tn('b/face:top') };
+      expect(session.ctx.resolvePlanes([noBody])).toEqual({
+        ok: false,
+        error: { ref: noBody, message: "Body 'x/body' does not exist" },
+      });
     });
   });
 });

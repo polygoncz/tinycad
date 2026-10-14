@@ -1,5 +1,12 @@
 import { ORIGIN_PLANE_IDS, validateAgainstSchema } from '@/document';
-import type { FeatureSchema, ParamIssue, ParamSchema, ParamSpec, PlaneRef } from '@/document';
+import type {
+  FeatureSchema,
+  ParamIssue,
+  ParamSchema,
+  ParamSpec,
+  PlaneRef,
+  TopoRef,
+} from '@/document';
 import { SKETCH_FEATURE_TYPE, parseSketchData } from '@/sketch';
 import type { SketchConstraint, SketchEntity } from '@/sketch';
 
@@ -8,8 +15,8 @@ import type { SketchConstraint, SketchEntity } from '@/sketch';
 // the solver.
 
 export interface SketchParams {
-  /** Exactly one plane; the origin plane XY by default. */
-  readonly plane: readonly PlaneRef[];
+  /** Exactly one plane; the origin plane XY by default; a planar body face since M14. */
+  readonly plane: readonly (PlaneRef | TopoRef)[];
   readonly entities: readonly SketchEntity[];
   readonly constraints: readonly SketchConstraint[];
 }

@@ -17,9 +17,9 @@ export const sketchBuilder: FeatureBuilder<SketchParams> = Object.freeze<
     const resolved = ctx.resolvePlanes(feature.params.plane);
     if (!resolved.ok) return { ok: false, error: unresolvedReference('plane', resolved.error) };
     // The schema allows exactly one plane (min 1, max 1) and validated the params already.
-    const [planeArtifact] = resolved.value;
-    if (planeArtifact === undefined) throw new Error(`Sketch '${feature.id}' has no plane`);
-    const { plane } = planeArtifact;
+    const [resolvedPlane] = resolved.value;
+    if (resolvedPlane === undefined) throw new Error(`Sketch '${feature.id}' has no plane`);
+    const { plane } = resolvedPlane;
     // The Regenerator ran sketchSchema.validate first: invalid data here is a program error.
     const parsed = parseSketchData(feature.params.entities, feature.params.constraints);
     if (!parsed.ok) throw new Error(`Sketch '${feature.id}' has invalid data after validation`);

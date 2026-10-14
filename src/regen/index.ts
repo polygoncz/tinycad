@@ -13,7 +13,8 @@ export type {
   RegenState,
   SketchArtifact,
 } from './state';
-export { propagateNames } from './names';
+export { nameShape, propagateNames } from './names';
+export { planeOfRef, sketchPlaneOfFace } from './face-plane';
 export type { NameTable } from './names';
 export { createBuilderRegistry, unresolvedReference } from './builder';
 export type {
@@ -25,7 +26,9 @@ export type {
   ModelingKernel,
   RefError,
   ResolvedAxis,
+  ResolvedPlane,
   ResolvedRegion,
+  ResolvedTopo,
 } from './builder';
 export { applyBodyOperation } from './body-operation';
 export type { BodyOperation } from './body-operation';

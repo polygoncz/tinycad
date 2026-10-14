@@ -1,5 +1,5 @@
 import type { FeatureId, TopoName } from '@/document';
-import type { ShapeHistory, SubShapeIndex, TopologySummary } from '@/kernel';
+import type { QueryOps, ShapeHistory, ShapeResult, SubShapeIndex, TopologySummary } from '@/kernel';
 
 // Topological names (spec 08, ADR 0018): from the roles and the history the kernel returns and
 // from the topology of the output, a pure function builds the name table of one shape. This is
@@ -100,6 +100,30 @@ export function propagateNames(p: {
   const primary = sortedFaceNames.map((names): string | undefined => names[0]);
   for (const e of topology.edges) for (const f of e.faces) output({ type: 'face', index: f });
   return createNameTable(sortedFaceNames, edgeNames(topology, primary), topology);
+}
+
+/**
+ * The name table of a kernel result: kernel.topology(result.shape) and propagateNames over its
+ * roles and history. The one call a builder makes; `inputs` are the tables of the input shapes
+ * in the order the builder passed them to the kernel (spec 08).
+ */
+export async function nameShape(p: {
+  readonly kernel: Pick<QueryOps, 'topology'>;
+  readonly featureId: FeatureId;
+  readonly result: ShapeResult;
+  readonly inputs: readonly NameTable[];
+  readonly generatedTag?: string;
+}): Promise<NameTable> {
+  const { result } = p;
+  const topology = await p.kernel.topology(result.shape);
+  return propagateNames({
+    featureId: p.featureId,
+    inputs: p.inputs,
+    topology,
+    ...(result.history === undefined ? {} : { history: result.history }),
+    ...(result.roles === undefined ? {} : { roles: result.roles }),
+    ...(p.generatedTag === undefined ? {} : { generatedTag: p.generatedTag }),
+  });
 }
 
 /** Rule 7 and Q014: an edge is named after its two faces, then the faces at its ends, then #k by its midpoint. */

@@ -119,6 +119,8 @@ function aRecordingKernel(): {
     makeFace: (p) => fake.makeFace(p),
     extrude: (profile, direction, distance) => fake.extrude(profile, direction, distance),
     revolve: (profile, axis, angle) => fake.revolve(profile, axis, angle),
+    fillet: (shape, edges, radius) => fake.fillet(shape, edges, radius),
+    chamfer: (shape, edges, distance) => fake.chamfer(shape, edges, distance),
     boundingBox: (shape) => fake.boundingBox(shape),
     topology: (shape) => fake.topology(shape),
   };
@@ -587,7 +589,9 @@ describe('revolveBuilder', () => {
     );
 
     const body = bodyOf(out, 'b');
-    expect(body).toEqual({ ...target, shape: body.shape, lastModifiedBy: 'rv' });
+    // The names are recomputed from the kernel history (M14), the identity stays.
+    expect(body).toEqual({ ...target, shape: body.shape, names: body.names, lastModifiedBy: 'rv' });
+    expect([...body.names.faceEntries]).toEqual([...target.names.faceEntries]);
     expect(out.artifacts.has(bodyId('rv' as FeatureId))).toBe(false);
     expect(calls).toEqual([
       { op: 'subtract', targets: [target.shape], tools: [expect.anything()] },
