@@ -54,7 +54,7 @@ updated: 2026-10-14
 - [x] Ú8 `features/extrude`: plugin Vysunutí
 - [x] Ú9 `features/revolve`: plugin Rotace
 - [ ] Ú10 `app`, `ui`: registrace pluginů, pole osy, skupiny a skrytá pole v dialogu, úniková cesta pro vlastní dialog, Prohlížeč, lišta, překlady
-- [ ] Ú11 `tests`: integrační scénáře (změna kóty, díra v OCCT, rotace v OCCT)
+- [x] Ú11 `tests`: integrační scénáře (změna kóty, díra v OCCT, rotace v OCCT)
 - [ ] Ú12 `e2e`: akceptační scénář s OCCT a planegcs v prohlížeči
 - [ ] Ú13 hlavní sezení: kontrola, vault, `architecture-reviewer`, retrospektiva
 
@@ -338,7 +338,7 @@ Proč `applyBodyOperation` v `regen` a ne v pluginu: pravidla identity „nové 
 - **Kontrakt:** propojení jako `tests/boolean-scenario.test.ts` a `tests/sketch-scenario.test.ts` (dokument, dispečer, log, `UndoManager`, `Regenerator`, `FeatureEditor`, pluginy přes `registerPlugin`: box, sketch, extrude, revolve).
 - **Testy:**
   1. **Změna kóty** (`FakeKernel`, `createSketchEditor` s `createInThreadPlanegcsSolver()`): skica obdélníku 40 × 20 s `fix` a dvěma kótami, „Hotovo“; `features.create('extrude')`, `setParam('regions', [{ kind: 'region', sketch, region }])` (jméno oblasti z `SketchArtifact.regions`), `commit` → log o jeden záznam delší, jedno těleso `bodyId(extrude)` s bbox `[0, 40] × [0, 20] × [0, 10]`; úprava skici (`setDimension` šířky na 60, `finish`) → totéž `BodyId`, bbox `x ∈ [0, 60]`, extrude bez chyby; undo → bbox zpět 40; `replayLog` do nového dokumentu = stejný `toData`; smazání úsečky obdélníku ve skice → extrude `UNRESOLVED_REFERENCE` s `issues` `param: 'regions'`.
-  2. **Díra** (`createInThreadOcctKernel()` z `@/kernel-occt/testing`, data skici přes `FeatureEditSession.setParams` bez řešiče): kvádr `origin [0, 0, 0]`, 10 × 10 × 10; skica na XY s kružnicí střed `[5, 5]`, r = 2; extrude `operation 'remove'`, `targets` [kvádr], `distance 10` → v konečném stavu jediné těleso s `BodyId` kvádru a `lastModifiedBy` = extrude; síť (`tessellate`) má 7 ploch a objem `1000 − 40π` (1 %); `liveHandleCount()` = počet živých handle (těleso + plocha oblasti).
+  2. **Díra** (`createInThreadOcctKernel()` z `@/kernel-occt/testing`, data skici přes `FeatureEditSession.setParams` bez řešiče): kvádr `origin [0, 0, 0]`, 10 × 10 × 10; skica na XY s kružnicí střed `[5, 5]`, r = 2; extrude `operation 'remove'`, `targets` [kvádr], `distance 10` → v konečném stavu jediné těleso s `BodyId` kvádru a `lastModifiedBy` = extrude; síť (`tessellate`) má 7 ploch a objem `1000 − 40π` (1 %); `liveHandleCount()` = počet živých handle (těleso, plocha oblasti a původní tvar kvádru, který drží cache stavů – mark & sweep počítá živé tvary ze všech stavů v cache).
   3. **Rotace** (OCCT): skica na XZ s obdélníkem `x ∈ [5, 10]`, `z ∈ [0, 10]`, revolve kolem `ORIGIN_AXIS_IDS.z` o 2π → 4 plochy, objem `750π` (1 %); kolem konstrukční úsečky skici na ose `x = 0` stejný výsledek.
 - **Hotovo když:** `npm run test:integration` a `npm run check` projdou.
 
