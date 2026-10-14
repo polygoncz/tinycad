@@ -42,6 +42,7 @@ describe('document public API', () => {
         'parseBodyId',
         'parsePlaneId',
         'parseSketchId',
+        'readRefOf',
         'referencesOf',
         'sketchId',
         'toData',

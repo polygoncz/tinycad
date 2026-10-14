@@ -16,6 +16,7 @@ import {
   toggleRegionRef,
   toggleTopoRef,
 } from './ref-values';
+import { nameOfHit } from './regen-status-port';
 import type { RegenStatusPort } from './regen-status-port';
 import { CLICK_TOLERANCE_PX } from './select-tool';
 import type {
@@ -117,9 +118,9 @@ export function createRefPick(
    */
   function topoRefOf(hit: PickResult): TopoRef | null {
     if (hit.kind !== 'face' && hit.kind !== 'edge') return null;
-    const names = regen?.state.get().bodies.find((b) => b.body === hit.body)?.names;
-    const name =
-      hit.kind === 'face' ? names?.nameOfFace(hit.faceIndex) : names?.nameOfEdge(hit.edgeIndex);
+    if (regen === undefined) return null;
+    const index = hit.kind === 'face' ? hit.faceIndex : hit.edgeIndex;
+    const name = nameOfHit(regen.state.get(), hit.body, hit.kind, index);
     return name === undefined ? null : Object.freeze({ kind: 'topo', body: hit.body, name });
   }
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { FeatureId } from './model';
 import {
   bodyId,
@@ -9,8 +9,10 @@ import {
   parseBodyId,
   parsePlaneId,
   parseSketchId,
+  readRefOf,
   sketchId,
 } from './refs';
+import type { PlaneRef, TopoRef } from './refs';
 import type { AxisId, BodyId, PlaneId, SketchId, TopoName } from './refs';
 
 const fid = (s: string): FeatureId => s as FeatureId;
@@ -224,5 +226,33 @@ describe('ownerOfArtifact (M13)', () => {
 
   it('throws on an id without a slash (programmer error)', () => {
     expect(() => ownerOfArtifact('f1' as SketchId)).toThrow();
+  });
+});
+
+describe('readRefOf (M14, one reading of references outside document)', () => {
+  it('reads a topo reference as a frozen copy with only its fields', () => {
+    const ref = readRefOf(['topo'], { kind: 'topo', body: 'b/body', name: 'b/face:top', x: 1 });
+    expect(ref).toEqual({ kind: 'topo', body: 'b/body', name: 'b/face:top' });
+    expect(Object.isFrozen(ref)).toBe(true);
+  });
+
+  it.each([
+    ['an empty name', { kind: 'topo', body: 'b/body', name: '' }],
+    ['a name that is not a string', { kind: 'topo', body: 'b/body', name: 3 }],
+    ['a body id of a wrong shape', { kind: 'topo', body: 'b', name: 'b/face:top' }],
+    ['another kind', { kind: 'body', body: 'b/body' }],
+    ['not an object', 'b/face:top'],
+    ['null', null],
+  ])('gives undefined for %s', (_, value) => {
+    expect(readRefOf(['topo'], value)).toBeUndefined();
+  });
+
+  it('takes the first of the kinds the value has and narrows the type to them', () => {
+    const plane = readRefOf(['plane', 'topo'], { kind: 'plane', plane: 'origin/plane:xy' });
+    const topo = readRefOf(['plane', 'topo'], { kind: 'topo', body: 'b/body', name: 'n' });
+    expect(plane).toEqual({ kind: 'plane', plane: 'origin/plane:xy' });
+    expect(topo).toEqual({ kind: 'topo', body: 'b/body', name: 'n' });
+    expect(readRefOf(['plane', 'topo'], { kind: 'body', body: 'b/body' })).toBeUndefined();
+    expectTypeOf(plane).toEqualTypeOf<PlaneRef | TopoRef | undefined>();
   });
 });

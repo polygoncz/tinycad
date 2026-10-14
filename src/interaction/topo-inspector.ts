@@ -6,6 +6,7 @@
 import { ObservableValue } from '@/core';
 import type { Observable } from '@/core';
 import type { BodyId, TopoName } from '@/document';
+import { nameOfHit } from './regen-status-port';
 import type { RegenStatusPort } from './regen-status-port';
 import type { PickResult, ViewPointerEvent, ViewportPort } from './viewport-port';
 
@@ -22,6 +23,8 @@ export interface TopoInspector {
   readonly enabled: Observable<boolean>;
   readonly hovered: Observable<TopoHover | null>;
   setEnabled(on: boolean): void;
+  /** setEnabled(!enabled): the switch of the debug panel (spec 11). */
+  toggle(): void;
   /** Unsubscribes from the events of the viewport and from the port. */
   dispose(): void;
 }
@@ -44,13 +47,14 @@ export function createTopoInspector(deps: {
   /** The hit as a hover with its name from the last snapshot; other hits and misses → null. */
   const hoverOf = (hit: PickResult | null): TopoHover | null => {
     if (hit === null || (hit.kind !== 'face' && hit.kind !== 'edge')) return null;
-    const names = regen.state.get().bodies.find((b) => b.body === hit.body)?.names;
-    if (hit.kind === 'face') {
-      const name = names?.nameOfFace(hit.faceIndex) ?? null;
-      return { body: hit.body, kind: 'face', index: hit.faceIndex, name };
-    }
-    const name = names?.nameOfEdge(hit.edgeIndex) ?? null;
-    return { body: hit.body, kind: 'edge', index: hit.edgeIndex, name };
+    const index = hit.kind === 'face' ? hit.faceIndex : hit.edgeIndex;
+    const name = nameOfHit(regen.state.get(), hit.body, hit.kind, index) ?? null;
+    return { body: hit.body, kind: hit.kind, index, name };
+  };
+
+  const setEnabled = (on: boolean): void => {
+    enabled.set(on);
+    if (!on) publish(null);
   };
 
   const onPointer = (e: ViewPointerEvent): void => {
@@ -72,9 +76,9 @@ export function createTopoInspector(deps: {
   return {
     enabled: enabled.asObservable(),
     hovered: hovered.asObservable(),
-    setEnabled(on) {
-      enabled.set(on);
-      if (!on) publish(null);
+    setEnabled,
+    toggle() {
+      setEnabled(!enabled.get());
     },
     dispose() {
       unsubscribePointer();

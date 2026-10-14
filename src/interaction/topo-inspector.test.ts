@@ -183,6 +183,21 @@ describe('createTopoInspector', () => {
     expect(picks()).toBe(1);
   });
 
+  it('toggle switches on and off; off clears the hover like setEnabled(false)', () => {
+    const { viewport, inspector, picks } = setup();
+
+    inspector.toggle();
+    expect(inspector.enabled.get()).toBe(true);
+    viewport.emitPointer(pointer('move'));
+    expect(inspector.hovered.get()).toMatchObject({ kind: 'face', index: 5 });
+
+    inspector.toggle();
+    viewport.emitPointer(pointer('move'));
+    expect(inspector.enabled.get()).toBe(false);
+    expect(inspector.hovered.get()).toBeNull();
+    expect(picks()).toBe(1);
+  });
+
   it('dispose unsubscribes from the viewport and the port', () => {
     const { viewport, regen, inspector, picks } = setup();
     inspector.setEnabled(true);

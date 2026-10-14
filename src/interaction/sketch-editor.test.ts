@@ -341,6 +341,23 @@ describe('SketchEditor.edit', () => {
     expect(sketches.edit(fid('s2')).plane).toBe(TOP);
   });
 
+  it.each([
+    ['a face reference with an empty name', { kind: 'topo', body: 'b1/body', name: '' }],
+    ['a face reference with a body id of a wrong shape', { ...TOP_FACE, body: 'b1' }],
+    ['a reference of another kind', { kind: 'body', body: 'b1/body' }],
+  ])('throws for a sketch whose plane is %s (one reading with document)', (_, plane) => {
+    const sketch = aFeature<Record<string, unknown>>({
+      id: 's2',
+      name: 'Sketch s2',
+      type: SKETCH_FEATURE_TYPE,
+      params: { plane: [plane], entities: [], constraints: [] },
+    });
+    const { sketches } = setup({ others: [sketch] });
+
+    expect(() => sketches.edit(fid('s2'))).toThrow();
+    expect(sketches.current.get()).toBeNull();
+  });
+
   it('throws for an unknown feature', () => {
     const { sketches } = setup();
     expect(() => sketches.edit(fid('nope'))).toThrow();

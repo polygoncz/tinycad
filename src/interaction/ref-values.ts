@@ -10,10 +10,16 @@ import type {
   FeatureId,
   SketchEntityRef,
   SketchRegionRef,
-  TopoName,
   TopoRef,
 } from '@/document';
-import { originOfBody, ownerOfArtifact, parseAxisId, parseBodyId, parseSketchId } from '@/document';
+import {
+  originOfBody,
+  ownerOfArtifact,
+  parseAxisId,
+  parseBodyId,
+  parseSketchId,
+  readRefOf,
+} from '@/document';
 import { parseSketchData } from '@/sketch';
 
 /**
@@ -178,15 +184,12 @@ function regionRefOf(item: unknown): SketchRegionRef | null {
     : Object.freeze({ kind: 'region', sketch, region });
 }
 
-/** One topo reference of the right shape as a frozen copy, otherwise null (as readRef in document). */
-export function topoRefOf(item: unknown): TopoRef | null {
-  if (!isRecord(item) || item['kind'] !== 'topo') return null;
-  const body = parseBodyId(item['body']);
-  const name = item['name'];
-  return body === undefined || typeof name !== 'string' || name.length === 0
-    ? null
-    : // Names are minted by regen only; a stored non-empty string is taken as one (spec 03).
-      Object.freeze({ kind: 'topo', body, name: name as TopoName });
+/**
+ * One topo reference of the right shape as a frozen copy, otherwise null: the reading of document
+ * (readRefOf), so a stored name becomes a TopoName in one place (spec 03).
+ */
+function topoRefOf(item: unknown): TopoRef | null {
+  return readRefOf(['topo'], item) ?? null;
 }
 
 /**

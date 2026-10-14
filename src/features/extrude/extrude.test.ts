@@ -881,8 +881,39 @@ describe('extrudeBuilder up to face', () => {
     });
   });
 
-  it('a non-planar face gives INVALID_PARAMS at upTo', async () => {
-    await expectUnusableFace({ surface: 'cylinder' });
+  it('a non-planar face gives UNRESOLVED_REFERENCE at upTo, as resolvePlanes rejects it', async () => {
+    const { fake, kernel } = aRecordingKernel();
+    const state = await stateWithTarget(kernel, { surface: 'cylinder' });
+
+    const output = await run(upToFace(), state, kernel);
+
+    if (output.ok) expect.fail('Expected an error');
+    expect(output.error).toEqual({
+      code: 'UNRESOLVED_REFERENCE',
+      message: `Face '${BOTTOM}' is not planar`,
+      issues: [{ param: 'upTo', code: 'param.unresolvedRef' }],
+    });
+    expect(fake.callCount('extrude')).toBe(0);
+  });
+
+  // The warning of several faces is resolvePlanes's (build-context.test.ts); aBuildContext drops it.
+  it('a name on several faces uses the face with the smallest index', async () => {
+    const { fake, kernel } = aRecordingKernel();
+    const sketch = await rectangleState(kernel);
+    const top: FaceInfo = { surface: 'plane', plane: { origin: [0, 0, 15], normal: [0, 0, 1] } };
+    const names = aNameTable({
+      faces: { [BOTTOM]: [0, 1] },
+      topology: { faces: [bottomFace, top], edges: [], vertexCount: 0 },
+    });
+    const body = await boxBody(kernel, 'b', [-10, -10, 5], [60, 40, 10], names);
+    const state = stateOf(...sketch.artifacts.values(), body);
+
+    const out = await build(upToFace(), state, kernel);
+
+    expect(await fake.boundingBox(bodyOf(out, 'e').shape)).toEqual({
+      min: [0, 0, 0],
+      max: [40, 20, 5],
+    });
   });
 
   it('a missing name gives UNRESOLVED_REFERENCE at upTo without calling the kernel', async () => {

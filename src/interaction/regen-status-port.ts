@@ -69,3 +69,18 @@ export interface RegenSnapshot {
 export interface RegenStatusPort {
   readonly state: Observable<RegenSnapshot>;
 }
+
+/**
+ * The name of the face or edge `index` of `body` in `snapshot` (M14), undefined when the body is
+ * not in the snapshot or the face or edge has no name. The one lookup of the name of a hit in
+ * interaction: the reference pick, the selection and the TopoInspector.
+ */
+export function nameOfHit(
+  snapshot: RegenSnapshot,
+  body: BodyId,
+  kind: 'face' | 'edge',
+  index: number,
+): TopoName | undefined {
+  const names = snapshot.bodies.find((b) => b.body === body)?.names;
+  return kind === 'face' ? names?.nameOfFace(index) : names?.nameOfEdge(index);
+}

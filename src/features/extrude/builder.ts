@@ -1,6 +1,6 @@
 import { err, mat4, ok, vec3 } from '@/core';
-import type { Result, Vec3 } from '@/core';
-import type { FacePlane, ShapeHandle, ShapeResult } from '@/kernel';
+import type { Plane, Result, Vec3 } from '@/core';
+import type { ShapeHandle, ShapeResult } from '@/kernel';
 import { applyBodyOperation, unresolvedReference } from '@/regen';
 import type {
   Body,
@@ -79,9 +79,10 @@ export const extrudeBuilder: FeatureBuilder<ExtrudeParams> = Object.freeze<
 });
 
 /**
- * The length from the plane of each region up to the face upTo (R109): the face with the
- * smallest index of the name, its plane from the topology of the body. A face that is not
- * planar, not parallel to the sketch or not in front of a region is an INVALID_PARAMS at upTo.
+ * The length from the plane of each region up to the face upTo (R109): its plane from
+ * resolvePlanes (the face with the smallest index of the name, several warn; a missing or a
+ * non-planar face is an unresolved reference, spec 08). A face that is not parallel to the
+ * sketch or not in front of a region is an INVALID_PARAMS at upTo.
  */
 function upToLengths(
   ctx: BuildContext,
@@ -89,16 +90,15 @@ function upToLengths(
   regions: readonly ResolvedRegion[],
   direction: Vec3,
 ): Result<number[], FeatureError> {
-  const resolved = ctx.resolveTopo(params.upTo, 'face');
+  const resolved = ctx.resolvePlanes(params.upTo);
   if (!resolved.ok) return err(unresolvedReference('upTo', resolved.error));
   const [target] = resolved.value;
-  // min 1 and max 1 are checked by the schema, resolveTopo gives at least one index.
-  const index = target?.indices[0];
-  if (target === undefined || index === undefined) throw new Error('Extrude up to no face');
+  // min 1 and max 1 are checked by the schema; a hole here would be a bug of the Regenerator.
+  if (target === undefined) throw new Error('Extrude up to no face');
 
-  const name = target.ref.name;
-  const plane = target.body.names.topology.faces[index]?.plane;
-  if (plane === undefined) return err(unusableFace(`Face '${name}' is not planar`));
+  // upTo holds only topo references (schema), so the name is there for the messages.
+  const name = target.ref.kind === 'topo' ? target.ref.name : target.ref.plane;
+  const { plane } = target;
   if (!isParallel(plane, direction)) {
     return err(unusableFace(`Face '${name}' is not parallel to the sketch`));
   }
@@ -114,7 +114,7 @@ function upToLengths(
 }
 
 /** Either side of the face counts: the normal points out of the solid, along or against d̂. */
-function isParallel(plane: FacePlane, direction: Vec3): boolean {
+function isParallel(plane: Plane, direction: Vec3): boolean {
   return Math.abs(vec3.dot(plane.normal, direction)) >= 1 - UP_TO_TOLERANCE;
 }
 

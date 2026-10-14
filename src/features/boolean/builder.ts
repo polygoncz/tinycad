@@ -1,5 +1,6 @@
-import { nameShape, unresolvedReference } from '@/regen';
-import type { Artifact, ArtifactId, Body, FeatureBuilder } from '@/regen';
+import type { BodyId } from '@/document';
+import { modifyBody, replaceBodies, unresolvedReference } from '@/regen';
+import type { FeatureBuilder } from '@/regen';
 import type { BooleanParams } from './schema';
 
 // The behaviour half of the boolean feature (ADR 0004): one kernel boolean, one result body
@@ -32,31 +33,20 @@ export const booleanBuilder: FeatureBuilder<BooleanParams> = Object.freeze<
       kernelTargets.map((b) => b.shape),
       kernelTools.map((b) => b.shape),
     );
-    const names = await nameShape({
+    // The result changes the first target: it keeps id and origin (ADR 0015), the names come
+    // from the history of the boolean (spec 08).
+    const result = await modifyBody({
       kernel: ctx.kernel,
-      featureId: feature.id,
+      feature: feature.id,
+      body: first,
       result: shapeResult,
       inputs: [...kernelTargets, ...kernelTools].map((b) => b.names),
     });
-
-    // The result changes the first target: it keeps id and origin (ADR 0015), the names come
-    // from the history of the boolean (spec 08).
-    const result: Body = Object.freeze({
-      ...first,
-      shape: shapeResult.shape,
-      names,
-      lastModifiedBy: feature.id,
-    });
-    const consumed = new Set<ArtifactId>(otherTargets.map((b) => b.id));
+    const consumed = new Set<BodyId>(otherTargets.map((b) => b.id));
     if (!keepTools) for (const tool of tools.value) consumed.add(tool.id);
 
-    // A new map in the order of the input state: the result takes the place of the first
-    // target, consumed bodies leave, everything else stays the same object.
-    const artifacts = new Map<ArtifactId, Artifact>();
-    for (const [id, artifact] of state.artifacts) {
-      if (id === first.id) artifacts.set(id, result);
-      else if (!consumed.has(id)) artifacts.set(id, artifact);
-    }
-    return { ok: true, state: Object.freeze({ artifacts }) };
+    // The result takes the place of the first target, consumed bodies leave, everything else
+    // stays the same object.
+    return { ok: true, state: replaceBodies(state, new Map([[first.id, result]]), consumed) };
   },
 });

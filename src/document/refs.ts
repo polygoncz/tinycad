@@ -169,14 +169,27 @@ export function readRef(kind: EntityRef['kind'], r: unknown): EntityRef | undefi
 
 /**
  * The first of the kinds whose shape the data has, as readRef reads it; undefined when none.
- * For params that hold more than one kind of reference, the axis (M13).
+ * For params that hold more than one kind of reference, the axis (M13). Public since M14: the
+ * one reading of references from unchecked values outside document too (interaction), so a
+ * TopoName is taken from data in one place (spec 03).
  */
-export function readRefOf(kinds: readonly EntityRef['kind'][], r: unknown): EntityRef | undefined {
+export function readRefOf<K extends EntityRef['kind']>(
+  kinds: readonly K[],
+  r: unknown,
+): Extract<EntityRef, { readonly kind: K }> | undefined {
   for (const kind of kinds) {
     const ref = readRef(kind, r);
-    if (ref !== undefined) return ref;
+    if (ref !== undefined && isOfKind(ref, kind)) return ref;
   }
   return undefined;
+}
+
+/** readRef(kind, …) gives a reference of that kind; the guard tells it the type system. */
+function isOfKind<K extends EntityRef['kind']>(
+  ref: EntityRef,
+  kind: K,
+): ref is Extract<EntityRef, { readonly kind: K }> {
+  return ref.kind === kind;
 }
 
 function isRecord(v: unknown): v is Readonly<Record<string, unknown>> {

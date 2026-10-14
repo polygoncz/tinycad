@@ -30,7 +30,7 @@ function reload(): void {
 }
 
 function toggleTopoNames(): void {
-  session.topoInspector.setEnabled(!topoNamesShown.value);
+  session.topoInspector.toggle();
 }
 </script>
 

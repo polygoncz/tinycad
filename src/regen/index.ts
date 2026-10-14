@@ -31,6 +31,7 @@ export type {
   ResolvedTopo,
 } from './builder';
 export { applyBodyOperation } from './body-operation';
+export { modifyBody, replaceBodies } from './body-change';
 export type { BodyOperation } from './body-operation';
 export { createRegenerator } from './regenerator';
 export type { RegenEvents, RegenResult, Regenerator } from './regenerator';

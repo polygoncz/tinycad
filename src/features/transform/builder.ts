@@ -1,6 +1,7 @@
 import { mat4 } from '@/core';
 import type { Vec3 } from '@/core';
-import { nameShape, unresolvedReference } from '@/regen';
+import type { BodyId } from '@/document';
+import { modifyBody, replaceBodies, unresolvedReference } from '@/regen';
 import type { Body, FeatureBuilder } from '@/regen';
 import type { TransformParams } from './schema';
 
@@ -26,26 +27,22 @@ export const transformBuilder: FeatureBuilder<TransformParams> = Object.freeze<
     if (!resolved.ok) return { ok: false, error: unresolvedReference('bodies', resolved.error) };
     // Rotate about the axis through the world origin first, then translate: T · R.
     const m = mat4.multiply(mat4.translation(translate), mat4.rotationAxisAngle(AXIS[axis], angle));
-    // A new map, the input state stays as it is. Map.set on an existing key keeps its position,
-    // so every moved body stays where it was in the map.
-    const artifacts = new Map(state.artifacts);
+    const changed = new Map<BodyId, Body>();
     for (const body of resolved.value) {
       const result = await ctx.kernel.transform(body.shape, m);
       // The history of a rigid motion is the identity, so the names stay the same (spec 08).
-      const names = await nameShape({
-        kernel: ctx.kernel,
-        featureId: feature.id,
-        result,
-        inputs: [body.names],
-      });
-      const moved: Body = Object.freeze({
-        ...body,
-        shape: result.shape,
-        names,
-        lastModifiedBy: feature.id,
-      });
-      artifacts.set(body.id, moved);
+      changed.set(
+        body.id,
+        await modifyBody({
+          kernel: ctx.kernel,
+          feature: feature.id,
+          body,
+          result,
+          inputs: [body.names],
+        }),
+      );
     }
-    return { ok: true, state: Object.freeze({ artifacts }) };
+    // Every moved body stays where it was in the map, the input state stays as it is.
+    return { ok: true, state: replaceBodies(state, changed, new Set()) };
   },
 });

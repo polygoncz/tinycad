@@ -15,7 +15,6 @@ import {
   createFeatureSchemaRegistry,
   type DocumentId,
   type FeatureId,
-  type TopoName,
   type TopoRef,
 } from '@/document';
 import { booleanPlugin } from '@/features/boolean';
@@ -145,16 +144,22 @@ function onlyBody(result: RegenResult): Body {
 }
 
 /**
- * The 4 vertical edges of the plate: the edges between two of its side faces (ADR 0018,
- * 'edge:<A>|<B>'), looked up in the name table of the body.
+ * The 4 vertical edges of the plate: the edges between two of its side faces, found from the
+ * topology of the body and the names of its faces; the edge names are only stored, never taken
+ * apart (ADR 0018).
  */
 function verticalEdges(body: Body, plate: FeatureId): readonly TopoRef[] {
   const sides = ['front', 'back', 'left', 'right'].map((s) => `${plate}/face:${s}`);
-  const vertical = [...body.names.edgeEntries.keys()].filter((name: TopoName) => {
-    const [a, b] = name.replace(/^edge:/, '').split('|');
-    return a !== b && sides.includes(a ?? '') && sides.includes(b ?? '');
-  });
-  return vertical.map((name) => ({ kind: 'topo', body: body.id, name }));
+  const refs: TopoRef[] = [];
+  for (const [index, edge] of body.names.topology.edges.entries()) {
+    const faces = edge.faces.map((f) => body.names.nameOfFace(f) ?? '');
+    if (faces.length !== 2 || new Set(faces).size !== 2 || !faces.every((f) => sides.includes(f)))
+      continue;
+    const name = body.names.nameOfEdge(index);
+    if (name === undefined) expect.fail(`Vertical edge ${String(index)} has no name`);
+    if (!refs.some((r) => r.name === name)) refs.push({ kind: 'topo', body: body.id, name });
+  }
+  return refs;
 }
 
 describe('performance of regeneration and tessellation (OCCT, plate with 36 holes)', () => {

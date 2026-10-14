@@ -1,10 +1,11 @@
 import { bodyId } from '@/document';
-import type { FeatureId } from '@/document';
+import type { BodyId, FeatureId } from '@/document';
 import type { ShapeHandle, ShapeResult } from '@/kernel';
+import { modifyBody, replaceBodies } from './body-change';
 import type { ModelingKernel } from './builder';
 import { EMPTY_NAMES, nameShape } from './names';
 import type { NameTable } from './names';
-import type { Artifact, ArtifactId, Body, RegenState } from './state';
+import type { Body, RegenState } from './state';
 
 // The body operation of features that build a new shape from a sketch (spec 07, Operace tělesa;
 // R65–R67): Extrude, Revolve, later Sweep and Loft. One function for all of them, because the
@@ -56,13 +57,24 @@ export async function applyBodyOperation(p: {
   }
 
   if (op === 'add') {
-    const result = await united(kernel, feature, firstTarget, [...otherTargets, ...named]);
-    const changed = new Map([[firstTarget.id, modified(firstTarget, result, feature)]]);
-    return replaced(state, changed, new Set(otherTargets.map((b) => b.id)));
+    // others is never empty here: there is at least one shape.
+    const others = [...otherTargets, ...named];
+    const result = await kernel.boolean(
+      'union',
+      [firstTarget.shape],
+      others.map((o) => o.shape),
+    );
+    const inputs = [firstTarget.names, ...others.map((o) => o.names)];
+    const body = await modifyBody({ kernel, feature, body: firstTarget, result, inputs });
+    return replaceBodies(
+      state,
+      new Map([[firstTarget.id, body]]),
+      new Set(otherTargets.map((b) => b.id)),
+    );
   }
 
   const booleanOp = op === 'remove' ? 'subtract' : 'intersect';
-  const changed = new Map<ArtifactId, Body>();
+  const changed = new Map<BodyId, Body>();
   // One target after another: a deterministic order of the kernel calls.
   for (const target of targets) {
     const result = await kernel.boolean(
@@ -71,10 +83,9 @@ export async function applyBodyOperation(p: {
       named.map((n) => n.shape),
     );
     const inputs = [target.names, ...named.map((n) => n.names)];
-    const names = await nameShape({ kernel, featureId: feature, result, inputs });
-    changed.set(target.id, modified(target, { shape: result.shape, names }, feature));
+    changed.set(target.id, await modifyBody({ kernel, feature, body: target, result, inputs }));
   }
-  return replaced(state, changed, new Set());
+  return replaceBodies(state, changed, new Set());
 }
 
 /** A shape with the name table of it. */
@@ -130,26 +141,4 @@ function addNewBody({ shape, names }: Named, state: RegenState, feature: Feature
     names,
   });
   return Object.freeze({ artifacts: new Map(state.artifacts).set(id, body) });
-}
-
-/** The body with a new shape and names from the feature: id and origin stay (ADR 0015). */
-function modified(body: Body, { shape, names }: Named, feature: FeatureId): Body {
-  return Object.freeze({ ...body, shape, names, lastModifiedBy: feature });
-}
-
-/**
- * A new state in the order of `state`: changed bodies take their place, consumed ones leave,
- * everything else stays the same object.
- */
-function replaced(
-  state: RegenState,
-  changed: ReadonlyMap<ArtifactId, Body>,
-  consumed: ReadonlySet<ArtifactId>,
-): RegenState {
-  const artifacts = new Map<ArtifactId, Artifact>();
-  for (const [id, artifact] of state.artifacts) {
-    if (consumed.has(id)) continue;
-    artifacts.set(id, changed.get(id) ?? artifact);
-  }
-  return Object.freeze({ artifacts });
 }

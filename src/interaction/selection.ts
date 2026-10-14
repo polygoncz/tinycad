@@ -11,6 +11,7 @@ import type { BodyId, FeatureId, PlaneId, TopoName } from '@/document';
 import { isParamVisible, sketchId } from '@/document';
 import type { FeatureEditor, FeatureEditSession } from './feature-editor';
 import { bodyOfRef, regionRefsOf, topoRefsOf } from './ref-values';
+import { nameOfHit } from './regen-status-port';
 import type { RegenSnapshot, RegenStatusPort, TopoNames } from './regen-status-port';
 import type { HighlightPort, HighlightTarget } from './viewport-port';
 
@@ -331,7 +332,7 @@ function frozenCopy(item: SelectionItem, snapshot: RegenSnapshot): SelectionItem
       return Object.freeze({ kind: 'body', body: item.body });
     case 'face': {
       const { body, faceIndex } = item;
-      const name = namesOf(snapshot, body)?.nameOfFace(faceIndex);
+      const name = nameOfHit(snapshot, body, 'face', faceIndex);
       return Object.freeze(
         name === undefined
           ? { kind: 'face', body, faceIndex }
@@ -340,7 +341,7 @@ function frozenCopy(item: SelectionItem, snapshot: RegenSnapshot): SelectionItem
     }
     case 'edge': {
       const { body, edgeIndex } = item;
-      const name = namesOf(snapshot, body)?.nameOfEdge(edgeIndex);
+      const name = nameOfHit(snapshot, body, 'edge', edgeIndex);
       return Object.freeze(
         name === undefined
           ? { kind: 'edge', body, edgeIndex }

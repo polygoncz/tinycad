@@ -4,13 +4,12 @@
 
 import { ObservableValue, assert } from '@/core';
 import type { Observable, Plane } from '@/core';
-import { parsePlaneId } from '@/document';
+import { readRefOf } from '@/document';
 import type { FeatureId, PlaneRef, TopoRef } from '@/document';
 import { SKETCH_FEATURE_TYPE } from '@/sketch';
 import type { ConstraintSolver } from '@/sketch';
 import type { FeatureEditSession, FeatureEditor } from './feature-editor';
 import type { Mode } from './mode';
-import { topoRefOf } from './ref-values';
 import { openSketchSession } from './sketch-session';
 import type { SketchSession } from './sketch-session';
 import type { ViewportPort } from './viewport-port';
@@ -120,12 +119,7 @@ function planeRefOf(params: Readonly<Record<string, unknown>>): PlaneRef | TopoR
   const value = params[PLANE_PARAM];
   if (!Array.isArray(value)) return undefined;
   const items: readonly unknown[] = value;
-  const first = items[0];
-  if (typeof first !== 'object' || first === null || !('kind' in first)) return undefined;
-  if (first.kind === 'topo') return topoRefOf(first) ?? undefined;
-  if (first.kind !== 'plane' || !('plane' in first)) return undefined;
-  const plane = parsePlaneId(first.plane);
-  return plane === undefined ? undefined : Object.freeze({ kind: 'plane', plane });
+  return readRefOf(['plane', 'topo'], items[0]);
 }
 
 function sameRef(a: PlaneRef | TopoRef, b: PlaneRef | TopoRef): boolean {
