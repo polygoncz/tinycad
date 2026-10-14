@@ -8,6 +8,7 @@ import {
   SELECT_TOOL,
   createSelectionModel,
   createToolManager,
+  createManipulatorRegistry,
   createToolRegistry,
 } from '@/interaction';
 import type { FeatureEditor, FeatureEditSession } from '@/interaction';
@@ -198,6 +199,7 @@ describe('boolean public API', () => {
       schemas: createFeatureSchemaRegistry(),
       builders: createBuilderRegistry(),
       tools: createToolRegistry(),
+      manipulators: createManipulatorRegistry(),
     };
     registerPlugin(boolean.booleanPlugin, regs);
     expect(regs.schemas.get('boolean')).toBe(booleanSchema);
@@ -668,7 +670,12 @@ function aRegenerator() {
   const builders = createBuilderRegistry();
   schemas.register(blockSchema);
   builders.register(aSpyBuilder('block', buildBlock));
-  registerPlugin(boolean.booleanPlugin, { schemas, builders, tools: createToolRegistry() });
+  registerPlugin(boolean.booleanPlugin, {
+    schemas,
+    builders,
+    tools: createToolRegistry(),
+    manipulators: createManipulatorRegistry(),
+  });
   const regenerator = createRegenerator({ kernel, schemas, builders, now: stoppedClock });
   return { kernel, regenerator };
 }

@@ -2,9 +2,13 @@
 // Public API of interaction (spec 10). Everything else in this folder is internal.
 
 export type {
+  HandleState,
+  HandleView,
   HighlightPort,
   HighlightTarget,
   KeyMods,
+  ManipulatorLabel,
+  ManipulatorPort,
   OverlayPort,
   OverlayShape,
   OverlayStyle,
@@ -28,6 +32,8 @@ export type { BodyId } from '@/document';
 export type { TopoName } from '@/document';
 export { NO_TOPO_NAMES } from './regen-status-port';
 export type {
+  Anchor,
+  FeatureAnchors,
   FeatureHealth,
   RegenBody,
   RegenSketch,
@@ -35,6 +41,18 @@ export type {
   RegenStatusPort,
   TopoNames,
 } from './regen-status-port';
+export type {
+  AngularHandle,
+  Handle,
+  HandleTint,
+  HandleUnit,
+  LinearHandle,
+  ManipulatorDescriptor,
+  ManipulatorRegistry,
+} from './manipulators';
+export { createManipulatorRegistry } from './manipulators';
+export { createManipulatorController } from './manipulator-controller';
+export type { ManipulatorController } from './manipulator-controller';
 export { bindSelectionHighlight, createSelectionModel, sameSelectionItem } from './selection';
 export type { SelectionCommands, SelectionItem, SelectionModel } from './selection';
 export { ALL_MODES } from './mode';

@@ -5,6 +5,7 @@ import { applyBodyOperation, unresolvedReference } from '@/regen';
 import type {
   Body,
   BuildContext,
+  FeatureAnchors,
   FeatureBuilder,
   FeatureError,
   ModelingKernel,
@@ -15,6 +16,9 @@ import type { ExtrudeParams } from './schema';
 
 // The behaviour half of the extrude feature (ADR 0004): one prism per region along the normal
 // of the sketch, applied to the model by the shared body operation (spec 07, Operace tělesa).
+// For 'blind' and 'symmetric' it also gives the anchor 'base' of the distance arrow (M18,
+// ADR 0021): the center of the regions in the sketch plane and the sketch normal. flip is in
+// the params, so the manipulator applies it itself (spec 07, the anchor is minimal).
 
 /** Tolerance of the up-to-face checks (R109): parallel and in front of the profile. */
 const UP_TO_TOLERANCE = 1e-9;
@@ -74,7 +78,17 @@ export const extrudeBuilder: FeatureBuilder<ExtrudeParams> = Object.freeze<
       shapes,
       targets,
     });
-    return { ok: true, state: next };
+    // From the regions and the sketch plane only, so it depends neither on distance nor on flip
+    // (anchor invariant). Up to face has no handle, so no anchor. The Regenerator freezes it
+    // (spec 07).
+    if (endType === 'upToFace') return { ok: true, state: next };
+    const anchors: FeatureAnchors = {
+      base: {
+        point: await baseOf(ctx.kernel, regions.value, first.sketch.plane),
+        direction: normal,
+      },
+    };
+    return { ok: true, state: next, anchors };
   },
 });
 
@@ -142,4 +156,34 @@ async function profileOf(
   if (endType !== 'symmetric') return region.face;
   const back = mat4.translation(vec3.scale(direction, -distance / 2));
   return (await kernel.transform(region.face, back)).shape;
+}
+
+/**
+ * The center of the joined bounding box of the region faces, projected into the sketch plane
+ * (the plane of the first region, which also gives the direction):
+ * q − n·((q − origin)·n). For a slanted plane the center of the box may lie off the plane.
+ */
+async function baseOf(
+  kernel: ModelingKernel,
+  regions: readonly ResolvedRegion[],
+  plane: Plane,
+): Promise<Vec3> {
+  let min: Vec3 = [Infinity, Infinity, Infinity];
+  let max: Vec3 = [-Infinity, -Infinity, -Infinity];
+  for (const region of regions) {
+    const box = await kernel.boundingBox(region.face);
+    min = [
+      Math.min(min[0], box.min[0]),
+      Math.min(min[1], box.min[1]),
+      Math.min(min[2], box.min[2]),
+    ];
+    max = [
+      Math.max(max[0], box.max[0]),
+      Math.max(max[1], box.max[1]),
+      Math.max(max[2], box.max[2]),
+    ];
+  }
+  const q = vec3.scale(vec3.add(min, max), 0.5);
+  const { origin, normal } = plane;
+  return vec3.sub(q, vec3.scale(normal, vec3.dot(vec3.sub(q, origin), normal)));
 }

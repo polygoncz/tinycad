@@ -1,5 +1,5 @@
 import { Emitter, RpcError } from '@/core';
-import type { RegistryReader, Subscribable } from '@/core';
+import type { RegistryReader, Subscribable, Vec3 } from '@/core';
 import type {
   FeatureId,
   FeatureInstance,
@@ -10,7 +10,7 @@ import type {
 import { kernelErrorCode } from '@/kernel';
 import type { GeometryKernel, ShapeHandle } from '@/kernel';
 import { createBuildSession } from './build-context';
-import type { BuildOutput, FeatureBuilder } from './builder';
+import type { Anchor, BuildOutput, FeatureAnchors, FeatureBuilder } from './builder';
 import { EMPTY_STATE, bodiesOf, sketchesOf } from './state';
 import type { FeatureError, FeatureStatus, RegenState } from './state';
 
@@ -23,6 +23,11 @@ export interface RegenResult {
   readonly finalState: RegenState;
   /** Every feature of the studio, in feature order. */
   readonly statuses: ReadonlyMap<FeatureId, FeatureStatus>;
+  /**
+   * Anchors of manipulators (M18): every feature in front of the rollback bar with status ok or
+   * warning whose builder returned anchors, built or cached; deeply frozen.
+   */
+  readonly anchors: ReadonlyMap<FeatureId, FeatureAnchors>;
   readonly durationMs: number;
 }
 
@@ -43,11 +48,15 @@ export interface Regenerator {
   readonly events: Subscribable<RegenEvents>;
 }
 
-/** Cache entry of one position (Q042): the feature, its output state and its status. */
+/**
+ * Cache entry of one position (Q042): the feature, its output state and its status; since M18
+ * the deeply frozen anchors its builder returned (only with ok or warning).
+ */
 interface CacheEntry {
   readonly feature: FeatureInstance;
   readonly state: RegenState;
   readonly status: FeatureStatus;
+  readonly anchors?: FeatureAnchors;
 }
 
 // Statuses go to listeners and the UI and stay in the cache, so each one is frozen (spec 07).
@@ -132,7 +141,9 @@ export function createRegenerator(deps: {
     const warnings = session.warnings();
     const status: FeatureStatus =
       warnings === undefined ? OK : Object.freeze({ kind: 'warning', message: warnings });
-    return { feature, state: output.state, status };
+    return output.anchors === undefined
+      ? { feature, state: output.state, status }
+      : { feature, state: output.state, status, anchors: freezeAnchors(output.anchors) };
   }
 
   /**
@@ -218,12 +229,16 @@ export function createRegenerator(deps: {
 
     // Step 4: features behind the bar are rolledBack whatever the cache holds for them.
     const statuses = new Map<FeatureId, FeatureStatus>();
+    const anchors = new Map<FeatureId, FeatureAnchors>();
     features.forEach((feature, i) => {
       const built = i < rollbackIndex ? entries[i]?.status : undefined;
       const status = built ?? ROLLED_BACK;
       // Built and cached features already got their featureDone above.
       if (built === undefined) done(feature.id, status);
       statuses.set(feature.id, status);
+      // Only an entry built with ok or warning has anchors; rolledBack features have none.
+      const featureAnchors = i < rollbackIndex ? entries[i]?.anchors : undefined;
+      if (featureAnchors !== undefined) anchors.set(feature.id, featureAnchors);
     });
 
     // Only the current generation of a live kernel gets here, so only it writes the cache.
@@ -233,6 +248,7 @@ export function createRegenerator(deps: {
       generation: current,
       finalState: entries[rollbackIndex - 1]?.state ?? EMPTY_STATE,
       statuses,
+      anchors,
     };
   }
 
@@ -286,7 +302,7 @@ export function createRegenerator(deps: {
     // removed the dead handles before the await.
     if (current !== generation) return 'superseded';
 
-    // The statuses map is not frozen; ReadonlyMap guards it (spec 07).
+    // The statuses and anchors maps are not frozen; ReadonlyMap guards them (spec 07).
     const result: RegenResult = Object.freeze({ ...outcome, durationMs: now() - start });
     emitter.emit('finished', { generation: current, result });
     return result;
@@ -298,6 +314,27 @@ export function createRegenerator(deps: {
 /** RpcError of a kernel that is gone (Q037); recognised by code, the message is free text. */
 function isDisconnected(e: unknown): e is RpcError {
   return e instanceof RpcError && e.code === 'disconnected';
+}
+
+/**
+ * A deeply frozen copy of the anchors (spec 07, Kotvy manipulátorů): they live in the cache and
+ * go to the UI; copies, so freezing does not touch the objects the builder returned.
+ */
+function freezeAnchors(anchors: FeatureAnchors): FeatureAnchors {
+  const frozen: Record<string, Anchor> = {};
+  for (const [name, { point, direction }] of Object.entries(anchors)) {
+    frozen[name] = Object.freeze(
+      direction === undefined
+        ? { point: freezeVec(point) }
+        : { point: freezeVec(point), direction: freezeVec(direction) },
+    );
+  }
+  return Object.freeze(frozen);
+}
+
+function freezeVec(v: Vec3): Vec3 {
+  const copy: Vec3 = [v[0], v[1], v[2]];
+  return Object.freeze(copy);
 }
 
 /** 'param: code', or the code alone for an issue of the params as a whole (codes since ADR 0014). */

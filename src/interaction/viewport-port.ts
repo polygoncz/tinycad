@@ -5,6 +5,7 @@
 
 import type { Plane, Subscribable, Vec2, Vec3 } from '@/core';
 import type { BodyId } from '@/document';
+import type { HandleTint } from './manipulators';
 
 export interface ViewportPort {
   /**
@@ -20,6 +21,8 @@ export interface ViewportPort {
   readonly overlay: OverlayPort;
   /** Drawings of sketches and planes, pickable as 'sketchEntity' (M12) and 'sketchRegion' (M13). */
   readonly sketches: SketchPort;
+  /** Handles of manipulators (M18). */
+  readonly manipulators: ManipulatorPort;
   readonly events: Subscribable<ViewportEvents>;
 }
 
@@ -205,4 +208,42 @@ export interface KeyMods {
   readonly alt: boolean;
   /** Cmd on Mac, Ctrl elsewhere. */
   readonly mod: boolean;
+}
+
+/** State of a handle view: the dragged handle is active, the one under the cursor hover (M18). */
+export type HandleState = 'idle' | 'hover' | 'active';
+
+/** What render draws for a handle (M18): no functions and no value. */
+export type HandleView =
+  | {
+      readonly kind: 'linear';
+      readonly id: string;
+      readonly position: Vec3;
+      readonly direction: Vec3;
+      readonly tint: HandleTint;
+      readonly state: HandleState;
+    }
+  | {
+      readonly kind: 'angular';
+      readonly id: string;
+      readonly center: Vec3;
+      readonly axis: Vec3;
+      readonly tint: HandleTint;
+      readonly state: HandleState;
+    };
+
+/** The value label next to the cursor while dragging (M18); x, y in px relative to the view area. */
+export interface ManipulatorLabel {
+  readonly x: number;
+  readonly y: number;
+  readonly text: string;
+}
+
+/** A mirror like HighlightPort (M18): the controller holds the state and passes it whole. */
+export interface ManipulatorPort {
+  /** Always the whole state; [] = nothing. */
+  set(handles: readonly HandleView[]): void;
+  /** Id of the handle under the cursor (by the last set); null = none. */
+  pick(x: number, y: number): string | null;
+  setLabel(label: ManipulatorLabel | null): void;
 }

@@ -3,7 +3,9 @@ import { sketchId } from '@/document';
 import type { FeatureId } from '@/document';
 import type {
   BodyId,
+  FeatureAnchors,
   FeatureHealth,
+  HandleView,
   RegenSketch,
   HighlightTarget,
   OverlayShape,
@@ -290,6 +292,45 @@ describe('FakeViewport', () => {
     });
   });
 
+  describe('manipulators (M18)', () => {
+    const VIEW: HandleView = {
+      kind: 'linear',
+      id: 'a',
+      position: [0, 0, 0],
+      direction: [1, 0, 0],
+      tint: 'x',
+      state: 'idle',
+    };
+
+    it('starts with no views, no label and a pick of null', () => {
+      const viewport = new FakeViewport();
+      expect(viewport.manipulatorViews).toEqual([]);
+      expect(viewport.manipulatorLabel).toBeNull();
+      expect(viewport.manipulators.pick(1, 2)).toBeNull();
+    });
+
+    it('records the last views as a frozen copy and the last label', () => {
+      const viewport = new FakeViewport();
+      const views = [VIEW];
+      viewport.manipulators.set(views);
+      views.push({ ...VIEW, id: 'b' });
+      expect(viewport.manipulatorViews).toEqual([VIEW]);
+      expect(Object.isFrozen(viewport.manipulatorViews)).toBe(true);
+
+      viewport.manipulators.setLabel({ x: 1, y: 2, text: '3 mm' });
+      expect(viewport.manipulatorLabel).toEqual({ x: 1, y: 2, text: '3 mm' });
+      viewport.manipulators.setLabel(null);
+      expect(viewport.manipulatorLabel).toBeNull();
+    });
+
+    it('pick calls the prepared function with the coordinates', () => {
+      const viewport = new FakeViewport();
+      viewport.prepareHandlePick((x, y) => (x === 3 && y === 4 ? 'a' : null));
+      expect(viewport.manipulators.pick(3, 4)).toBe('a');
+      expect(viewport.manipulators.pick(0, 0)).toBeNull();
+    });
+  });
+
   describe('events', () => {
     it('delivers emitted pointer events to subscribers', () => {
       const view = new FakeViewport();
@@ -334,7 +375,19 @@ describe('FakeRegenStatus', () => {
     expect(snapshot.health.size).toBe(0);
     expect(snapshot.bodies).toEqual([]);
     expect(snapshot.sketches).toEqual([]);
+    expect(snapshot.anchors.size).toBe(0);
     expect(Object.isFrozen(snapshot)).toBe(true);
+  });
+
+  it('publish sets a copy of the anchors; without them there are none (M18)', () => {
+    const regen = new FakeRegenStatus();
+    const anchors = new Map<FeatureId, FeatureAnchors>([[F1, { pivot: { point: [1, 2, 3] } }]]);
+    regen.publish(new Map(), [], [], anchors);
+    anchors.set(F2, {});
+    expect(regen.state.get().anchors).toEqual(new Map([[F1, { pivot: { point: [1, 2, 3] } }]]));
+
+    regen.publish(new Map());
+    expect(regen.state.get().anchors.size).toBe(0);
   });
 
   it('publish sets frozen copies of the sketches; without them there are none (M12)', () => {

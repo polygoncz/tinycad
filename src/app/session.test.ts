@@ -14,6 +14,7 @@ import { boxPlugin } from '@/features/box';
 import { extrudePlugin } from '@/features/extrude';
 import { filletPlugin } from '@/features/fillet';
 import { sketchPlugin } from '@/features/sketch';
+import { transformPlugin } from '@/features/transform';
 import { axisDrawing, EDIT_SKETCH_DRAWING_ID, planeDrawing } from '@/interaction';
 import type { ConfirmRequest, ViewKeyEvent, ViewPointerEvent } from '@/interaction';
 import { createMemoryDocumentStore, createSnapshot } from '@/persistence';
@@ -34,6 +35,7 @@ import {
   aKernelFactory,
   createCrashableKernel,
   FakeAppViewport,
+  formatTestValue,
   settle,
 } from './testing';
 import type { CrashableKernel, KernelFactory } from './testing';
@@ -84,6 +86,7 @@ async function open(
     solver: createFakeSolver(),
     download: downloads.download,
     theme: 'light',
+    formatValue: formatTestValue,
     ...overrides,
   });
   await settle();
@@ -1188,6 +1191,70 @@ describe('createAppSession – export, history and colours (M15)', () => {
   it('defaultBodyColor starts with the face colour of the theme at the start', async () => {
     const { session } = await open({ theme: 'dark' });
     expect(session.defaultBodyColor.get()).toBe('#3b6aa6');
+  });
+});
+
+describe('createAppSession – manipulators (M18)', () => {
+  const NO_MODS = { shift: false, alt: false, mod: false };
+  const pointer = (type: ViewPointerEvent['type'], x: number, y: number): ViewPointerEvent => ({
+    type,
+    x,
+    y,
+    button: 'left',
+    mods: NO_MODS,
+  });
+
+  /** A box and an open Transform dialog moving it, regenerated. */
+  async function openTransform(): Promise<Harness & { readonly transform: FeatureId }> {
+    const harness = await open({ plugins: [boxPlugin, transformPlugin] });
+    addBox(harness.session);
+    await settle();
+    const body = harness.session.browser.bodies.get()[0]?.body ?? fail();
+    const edit = harness.session.features.create('transform');
+    edit.setParam('bodies', [{ kind: 'body', body }]);
+    await settle();
+    return { ...harness, transform: edit.featureId };
+  }
+
+  it('shows the six handles of the Transform in the open dialog', async () => {
+    const { viewport } = await openTransform();
+    expect(viewport.manipulatorViews.map((v) => v.id)).toEqual([
+      'tx',
+      'ty',
+      'tz',
+      'rx',
+      'ry',
+      'rz',
+    ]);
+  });
+
+  it('dragging tz changes translate, OK writes one entry, the label uses formatValue', async () => {
+    const { session, viewport, store, scheduler, transform } = await openTransform();
+    scheduler.advance(1000);
+    await settle();
+    const before = (await store.load(DOC))?.entries.length ?? fail();
+    viewport.prepareHandlePick((x, y) => (x === 0 && y === 0 ? 'tz' : null));
+    // A horizontal ray at height y: its closest point on the vertical arrow is at z = y.
+    viewport.setScreenToRay((_x, y) => ({ origin: [1000, 0, y], direction: [-1, 0, 0] }));
+
+    viewport.emitPointer(pointer('down', 0, 0));
+    viewport.emitPointer(pointer('move', 0, 7));
+    expect(viewport.manipulatorLabel?.text).toBe('7 length');
+    viewport.emitPointer(pointer('up', 0, 7));
+    expect(session.doc.feature(transform)?.params).toMatchObject({ translate: [0, 0, 7] });
+
+    session.features.current.get()?.commit();
+    scheduler.advance(1000);
+    await settle();
+    expect((await store.load(DOC))?.entries).toHaveLength(before + 1);
+    expect(viewport.manipulatorViews).toEqual([]);
+  });
+
+  it('dispose clears the handles in the view', async () => {
+    const { session, viewport } = await openTransform();
+    expect(viewport.manipulatorViews).toHaveLength(6);
+    session.dispose();
+    expect(viewport.manipulatorViews).toEqual([]);
   });
 });
 

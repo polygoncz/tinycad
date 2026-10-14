@@ -5,8 +5,12 @@ import { Emitter, RpcError } from '@/core';
 import type { Disposable, Subscribable, Unsubscribe, Vec3 } from '@/core';
 import type { BodyId } from '@/document';
 import type {
+  HandleUnit,
+  HandleView,
   HighlightPort,
   HighlightTarget,
+  ManipulatorLabel,
+  ManipulatorPort,
   OverlayPort,
   OverlayShape,
   PickFilter,
@@ -32,7 +36,8 @@ type Ray = ReturnType<FakeViewport['screenToRay']>;
 /**
  * An AppViewport for tests: the ViewportPort part of FakeViewport plus recorded mount, body
  * syncs, kernel resets, camera calls (views and view directions), palettes, body visibility,
- * body colours (M15), view cube labels (M17) and rotation modes (M17.1); emitOrbitModeToggle
+ * body colours (M15), view cube labels (M17), rotation modes (M17.1) and manipulator views and
+ * label (M18); emitOrbitModeToggle
  * plays a click on the rotation mode button. sync resolves at once.
  * It wraps a FakeViewport instead of extending it: a class of another module is no base
  * class (ADR 0011), so its members are passed on one by one.
@@ -42,6 +47,7 @@ export class FakeAppViewport implements AppViewport {
   readonly highlight: HighlightPort = this.port.highlight;
   readonly overlay: OverlayPort = this.port.overlay;
   readonly sketches: SketchPort = this.port.sketches;
+  readonly manipulators: ManipulatorPort = this.port.manipulators;
   readonly events: Subscribable<ViewportEvents> = this.port.events;
 
   /** Element of the last mount, null before any. */
@@ -130,6 +136,11 @@ export class FakeAppViewport implements AppViewport {
     this.port.setScreenToRay(fn);
   }
 
+  /** The result of manipulators.pick (FakeViewport.prepareHandlePick, M18). */
+  prepareHandlePick(fn: (x: number, y: number) => string | null): void {
+    this.port.prepareHandlePick(fn);
+  }
+
   pick(x: number, y: number, filter?: PickFilter): PickResult | null {
     return this.port.pick(x, y, filter);
   }
@@ -156,6 +167,16 @@ export class FakeAppViewport implements AppViewport {
   /** Current sketch drawings per id (FakeViewport.sketchDrawings). */
   get sketchDrawings(): ReadonlyMap<string, SketchDrawing> {
     return this.port.sketchDrawings;
+  }
+
+  /** Last state passed to manipulators.set (M18). */
+  get manipulatorViews(): readonly HandleView[] {
+    return this.port.manipulatorViews;
+  }
+
+  /** Last label passed to manipulators.setLabel (M18). */
+  get manipulatorLabel(): ManipulatorLabel | null {
+    return this.port.manipulatorLabel;
   }
 
   emitPointer(e: ViewPointerEvent): void {
@@ -273,6 +294,11 @@ export function aFakeLocks(): {
     },
   };
   return { locks, held, requests };
+}
+
+/** AppSessionDeps.formatValue for tests (M18): the raw value and the unit, '7 length'. */
+export function formatTestValue(value: number, unit: HandleUnit): string {
+  return `${String(value)} ${unit}`;
 }
 
 /** AppSessionDeps.download that keeps every file (M15). */

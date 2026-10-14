@@ -18,10 +18,12 @@ export { planeOfRef, sketchPlaneOfFace } from './face-plane';
 export type { NameTable } from './names';
 export { createBuilderRegistry, unresolvedReference } from './builder';
 export type {
+  Anchor,
   BuildContext,
   BuildInput,
   BuilderRegistry,
   BuildOutput,
+  FeatureAnchors,
   FeatureBuilder,
   ModelingKernel,
   RefError,

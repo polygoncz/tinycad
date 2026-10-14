@@ -22,7 +22,7 @@ import { booleanPlugin } from '@/features/boolean';
 import { boxPlugin } from '@/features/box';
 import { cylinderPlugin } from '@/features/cylinder';
 import { filletPlugin } from '@/features/fillet';
-import { createFeatureEditor, createToolRegistry } from '@/interaction';
+import { createFeatureEditor, createManipulatorRegistry, createToolRegistry } from '@/interaction';
 import type { GeometryKernel, MeshQuality } from '@/kernel';
 import { createInThreadOcctKernel } from '@/kernel-occt/testing';
 import { createOpHandlerRegistry, createOperationDispatcher, createOperationLog } from '@/ops';
@@ -92,9 +92,10 @@ function setup(kernel: GeometryKernel) {
   const schemas = createFeatureSchemaRegistry();
   const builders = createBuilderRegistry();
   const tools = createToolRegistry();
+  const manipulators = createManipulatorRegistry();
   // The plugins of the scenario directly: app (BUILT_IN_PLUGINS) needs the DOM types.
   for (const plugin of [boxPlugin, cylinderPlugin, booleanPlugin, filletPlugin]) {
-    registerPlugin(plugin, { schemas, builders, tools });
+    registerPlugin(plugin, { schemas, builders, tools, manipulators });
   }
   const doc = createDocument({ meta: META });
   const log = createOperationLog();

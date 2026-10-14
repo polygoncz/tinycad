@@ -8,6 +8,7 @@ import {
   SELECT_TOOL,
   createSelectionModel,
   createToolManager,
+  createManipulatorRegistry,
   createToolRegistry,
 } from '@/interaction';
 import type { FeatureEditor, FeatureEditSession } from '@/interaction';
@@ -156,6 +157,7 @@ describe('chamfer public API', () => {
       schemas: createFeatureSchemaRegistry(),
       builders: createBuilderRegistry(),
       tools: createToolRegistry(),
+      manipulators: createManipulatorRegistry(),
     };
     registerPlugin(chamfer.chamferPlugin, regs);
     expect(regs.schemas.get('chamfer')).toBe(chamferSchema);

@@ -9,6 +9,7 @@ import type { BodyId, FeatureId, TopoName } from '@/document';
 import type { FileExporter } from './file-actions';
 import { NO_TOPO_NAMES } from './regen-status-port';
 import type {
+  FeatureAnchors,
   FeatureHealth,
   RegenBody,
   RegenSketch,
@@ -17,8 +18,11 @@ import type {
   TopoNames,
 } from './regen-status-port';
 import type {
+  HandleView,
   HighlightPort,
   HighlightTarget,
+  ManipulatorLabel,
+  ManipulatorPort,
   OverlayPort,
   OverlayShape,
   PickFilter,
@@ -34,6 +38,7 @@ import type {
 type Ray = ReturnType<ViewportPort['screenToRay']>;
 type PickFn = (x: number, y: number) => PickResult | null;
 type RayFn = (x: number, y: number) => Ray;
+type HandlePickFn = (x: number, y: number) => string | null;
 
 /** The filter of a pick called without one (spec 10, "Port viewportu"). */
 const DEFAULT_FILTER: PickFilter = Object.freeze(['edge', 'face']);
@@ -43,14 +48,15 @@ const DEFAULT_RAY: RayFn = (x, y) => ({ origin: [x, y, 0] satisfies Vec3, direct
 
 /**
  * A ViewportPort for tests: preset pick results, a configurable screenToRay, recorded
- * highlight, overlay and sketch drawing state, and manual emitting of pointer and key events.
- * pick returns the preset result only when its kind is in the filter and records the filter.
+ * highlight, overlay, sketch drawing and manipulator state (M18), a preset handle pick, and
+ * manual emitting of pointer and key events. pick returns the preset result only when its kind is in the filter and records the filter.
  * The recorded state is replaced on every call, so a read snapshot never changes later.
  */
 export class FakeViewport implements ViewportPort {
   readonly highlight: HighlightPort;
   readonly overlay: OverlayPort;
   readonly sketches: SketchPort;
+  readonly manipulators: ManipulatorPort;
   private readonly emitter = new Emitter<ViewportEvents>();
   readonly events: Subscribable<ViewportEvents> = this.emitter;
 
@@ -61,6 +67,9 @@ export class FakeViewport implements ViewportPort {
   private selectionState: readonly HighlightTarget[] = [];
   private overlayState: ReadonlyMap<string, readonly OverlayShape[]> = new Map();
   private sketchState: ReadonlyMap<string, SketchDrawing> = new Map();
+  private handlePickFn: HandlePickFn = () => null;
+  private manipulatorViewState: readonly HandleView[] = Object.freeze([]);
+  private manipulatorLabelState: ManipulatorLabel | null = null;
 
   constructor() {
     this.highlight = {
@@ -96,11 +105,25 @@ export class FakeViewport implements ViewportPort {
         this.sketchState = next;
       },
     };
+    this.manipulators = {
+      set: (handles) => {
+        this.manipulatorViewState = Object.freeze([...handles]);
+      },
+      pick: (x, y) => this.handlePickFn(x, y),
+      setLabel: (label) => {
+        this.manipulatorLabelState = label;
+      },
+    };
   }
 
   /** A fixed result, or a function of the view coordinates. */
   setPick(result: PickResult | null | PickFn): void {
     this.pickFn = typeof result === 'function' ? result : () => result;
+  }
+
+  /** The result of manipulators.pick as a function of the view coordinates; default null (M18). */
+  prepareHandlePick(fn: HandlePickFn): void {
+    this.handlePickFn = fn;
   }
 
   setScreenToRay(fn: RayFn): void {
@@ -143,6 +166,16 @@ export class FakeViewport implements ViewportPort {
     return this.sketchState;
   }
 
+  /** Last state passed to manipulators.set (M18); [] before any. */
+  get manipulatorViews(): readonly HandleView[] {
+    return this.manipulatorViewState;
+  }
+
+  /** Last label passed to manipulators.setLabel (M18); null before any. */
+  get manipulatorLabel(): ManipulatorLabel | null {
+    return this.manipulatorLabelState;
+  }
+
   emitPointer(e: ViewPointerEvent): void {
     this.emitter.emit('pointer', e);
   }
@@ -157,26 +190,34 @@ type PublishedBody = Omit<RegenBody, 'names'> & { readonly names?: TopoNames };
 
 const NO_BODIES: readonly RegenBody[] = Object.freeze([]);
 const NO_SKETCHES: readonly RegenSketch[] = Object.freeze([]);
+const NO_ANCHORS: ReadonlyMap<FeatureId, FeatureAnchors> = new Map();
 
 /**
  * A RegenStatusPort for tests: starts with no regeneration (generation 0, no health, no
- * bodies, no sketches); each publish stands for one finished regeneration.
+ * bodies, no sketches, no anchors); each publish stands for one finished regeneration.
  */
 export class FakeRegenStatus implements RegenStatusPort {
   private readonly value = new ObservableValue<RegenSnapshot>(
-    Object.freeze({ generation: 0, health: new Map(), bodies: NO_BODIES, sketches: NO_SKETCHES }),
+    Object.freeze({
+      generation: 0,
+      health: new Map(),
+      bodies: NO_BODIES,
+      sketches: NO_SKETCHES,
+      anchors: new Map(),
+    }),
   );
   readonly state: Observable<RegenSnapshot> = this.value.asObservable();
 
   /**
    * A new frozen snapshot with generation + 1 and copies of health, bodies (a body without
-   * names gets NO_TOPO_NAMES, M14) and sketches (with their regions; empty when omitted);
-   * notifies subscribers.
+   * names gets NO_TOPO_NAMES, M14), sketches (with their regions) and anchors (M18; each empty
+   * when omitted); notifies subscribers.
    */
   publish(
     health: ReadonlyMap<FeatureId, FeatureHealth>,
     bodies: readonly PublishedBody[] = NO_BODIES,
     sketches: readonly RegenSketch[] = NO_SKETCHES,
+    anchors: ReadonlyMap<FeatureId, FeatureAnchors> = NO_ANCHORS,
   ): void {
     this.value.set(
       Object.freeze({
@@ -192,6 +233,8 @@ export class FakeRegenStatus implements RegenStatusPort {
             Object.freeze({ sketch, feature, regions: Object.freeze([...regions]) }),
           ),
         ),
+        // A new map, like health; the anchors themselves are passed on as they are.
+        anchors: new Map(anchors),
       }),
     );
   }

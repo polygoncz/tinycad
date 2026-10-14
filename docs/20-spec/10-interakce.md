@@ -165,7 +165,7 @@ export interface RegenStatusPort {
 
 - `health` je `ReadonlyMap`, ale `Map` zmrazit nejde: adaptér v `app` posílá v každém snapshotu **novou** mapu a už ji nemění. `interaction` ji jen čte.
 - Potlačení a pozice za barem port nenese: `interaction` je čte přímo z dokumentu, takže se projeví hned, ne až po regeneraci.
-- `anchors` (M18): stejně jako `health` nová mapa v každém snapshotu. `FakeRegenStatus.publish` dostane volitelný čtvrtý argument `anchors` (chybějící = prázdná mapa).
+- `anchors` (M18): stejně jako `health` nová mapa v každém snapshotu. Typy `Anchor` a `FeatureAnchors` jsou veřejné API `interaction`, pluginy je potřebují pro podpis `ManipulatorDescriptor.handles`. `FakeRegenStatus.publish` dostane volitelný čtvrtý argument `anchors` (chybějící = prázdná mapa).
 - V testech port nahrazuje `FakeRegenStatus` (`testing.ts`) s metodou `publish(health, bodies?, sketches?)`, která zvýší `generation` (chybějící seznamy prázdné; těleso bez `names` dostane `NO_TOPO_NAMES`, M14). `aTopoNames({ faces?: Record<string, number[]>, edges?: … })` v `testing.ts` sestaví `TopoNames` z ručně zadaných jmen. Port nese `sketches` vedle `bodies` místo sjednocení `artifacts` z revize – stejná informace s menší změnou ([[Rozhodnutí noční rychloakce#M12 – Skicář|R38]] ⚠). `RegenBody` se exportuje, potřebuje ho adaptér v `app`.
 
 ## Prezentační modely a `Observable`
@@ -488,6 +488,7 @@ export function snapValue(value: number, h: { unit: HandleUnit; min?: number; ma
 
 - **Lineární tah:** při stisku `t₀ = linearParam(…)`, při pohybu `raw = value₀ + (t − t₀)`. `t = null` → pohyb se ignoruje (hodnota zůstane).
 - **Úhlový tah:** při stisku `a₀`, při každém pohybu `acc += unwrapDelta(aPrev, a)`, `aPrev = a`, `raw = value₀ + acc`. Tah tak umí víc než jednu otáčku. `a = null` → pohyb se ignoruje.
+- Paprsek se v obou funkcích bere jako celá přímka (záporné `s` u průsečíku se nezahazuje). V ortografické kameře leží úchyt vždy před počátkem paprsku na blízké rovině, takže to nevadí. Směry se normalizují uvnitř, `linearParam` vrací `t` v jednotkách zadaného `direction`.
 - Přichycení je na **absolutní** hodnotu (`Math.round(raw / step) * step`), ne na přírůstek. Ořez až po přichycení. `snapValue` vrací `−0` jako `0`.
 
 ### `ManipulatorController` (`manipulator-controller.ts`)
@@ -500,7 +501,7 @@ export interface ManipulatorController extends Disposable {
 }
 
 export function createManipulatorController(deps: {
-  features: FeatureEditor;
+  features: Pick<FeatureEditor, 'current'>;
   regen: RegenStatusPort;
   registry: RegistryReader<ManipulatorDescriptor>;
   viewport: Pick<ViewportPort, 'manipulators' | 'screenToRay'>;
@@ -526,6 +527,9 @@ export function createManipulatorController(deps: {
 | `leave` | zruší hover; `false` | `true` (ukazatel je zachycený, tah pokračuje) |
 | `Escape` | `false` | `session.setParams(původní hodnoty)`, konec tažení, štítek `null`; `true` |
 
+- Přerušený tah: `pointercancel` přichází z viewportu jako levé `up` (spec 09, Události), takže tah skončí s posledním zapsaným stavem.
+- Matematika tažení (`manipulator-drag.ts`) není veřejné API modulu, používá ji jen controller.
+- `Escape` ruší tah s jakýmikoli modifikátory (ne `isPlainEscape`): uživatel může kvůli jemnému tahu ještě držet Shift.
 - Původní hodnoty jsou hodnoty params pro klíče, které vrací `toParams`. U kružnice jiné osy tak Esc vrátí i `axis`, ne jen úhel.
 - Session zavřená během tažení (Zrušit nebo OK z dialogu) → tažení skončí bez zápisu, pohledy `[]`, štítek `null`.
 - `dispose`: odhlásí se, pošle `set([])` a `setLabel(null)`. Druhé `dispose` nic.
@@ -535,7 +539,7 @@ export function createManipulatorController(deps: {
 
 `createToolManager` dostane volitelné `manipulators?: ManipulatorController`. Pořadí vrstev pro ukazatel: **manipulátory → `refPick` → aktivní nástroj**.
 
-- `pointer` jde nejdřív do `manipulators.onPointer`. Když vrátí `true`, dál nejde. Když vrátí `true` pro `move` a spodní vrstva naposledy dostala něco jiného než `leave`, dostane spodní vrstva jednou syntetický `{ type: 'leave', … }` se stejnými souřadnicemi, aby po ní nezůstal hover pod úchytem.
+- `pointer` jde nejdřív do `manipulators.onPointer`. Když vrátí `true`, dál nejde. Když vrátí `true` pro `move` a spodní vrstva naposledy dostala něco jiného než `leave`, dostane spodní vrstva jednou syntetický `{ ...e, type: 'leave' }` (na začátku se bere, že `leave` ještě nedostala), aby po ní nezůstal hover pod úchytem.
 - Klávesa jde nejdřív do `manipulators.onKey`, pak jako dosud (`tool.onKey`, Escape, `unhandledKey`).
 - Bez `manipulators` se `ToolManager` chová jako dřív.
 

@@ -17,7 +17,7 @@ import {
 import type { AxisRef, DocumentId, FeatureId, SketchEntityRef, SketchRegionRef } from '@/document';
 import { revolvePlugin } from '@/features/revolve';
 import { sketchPlugin } from '@/features/sketch';
-import { createFeatureEditor, createToolRegistry } from '@/interaction';
+import { createFeatureEditor, createManipulatorRegistry, createToolRegistry } from '@/interaction';
 import type { GeometryKernel, MeshData } from '@/kernel';
 import { createInThreadOcctKernel } from '@/kernel-occt/testing';
 import {
@@ -44,9 +44,10 @@ function setup() {
   const schemas = createFeatureSchemaRegistry();
   const builders = createBuilderRegistry();
   const tools = createToolRegistry();
+  const manipulators = createManipulatorRegistry();
   // The plugins of the scenario directly: app (BUILT_IN_PLUGINS) needs the DOM types.
   for (const plugin of [sketchPlugin, revolvePlugin]) {
-    registerPlugin(plugin, { schemas, builders, tools });
+    registerPlugin(plugin, { schemas, builders, tools, manipulators });
   }
   const doc = createDocument({ meta: META });
   const log = createOperationLog();

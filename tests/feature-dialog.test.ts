@@ -7,7 +7,7 @@ import { createSequentialIdGenerator } from '@/core';
 import { createDocument, createFeatureSchemaRegistry } from '@/document';
 import type { DocumentId } from '@/document';
 import { boxPlugin } from '@/features/box';
-import { createFeatureEditor, createToolRegistry } from '@/interaction';
+import { createFeatureEditor, createManipulatorRegistry, createToolRegistry } from '@/interaction';
 import { createFakeKernel } from '@/kernel/testing';
 import { createOpHandlerRegistry, createOperationDispatcher, createOperationLog } from '@/ops';
 import { registerPlugin } from '@/plugin-api';
@@ -17,7 +17,12 @@ function setup() {
   const kernel = createFakeKernel();
   const schemas = createFeatureSchemaRegistry();
   const builders = createBuilderRegistry();
-  registerPlugin(boxPlugin, { schemas, builders, tools: createToolRegistry() });
+  registerPlugin(boxPlugin, {
+    schemas,
+    builders,
+    tools: createToolRegistry(),
+    manipulators: createManipulatorRegistry(),
+  });
   const doc = createDocument({
     meta: { id: 'dialog' as DocumentId, name: 'Dialog', createdAt: 0 }, // a test id is trusted
   });

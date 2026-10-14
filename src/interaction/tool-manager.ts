@@ -2,12 +2,14 @@
 // events. Every activation gets its own ctx whose finish is bound to that activation,
 // so a stale tool cannot switch tools any more. While the dialog has a focused
 // reference param, the inner refPick covers the active tool (Q066). With a mode (M12) only the
-// tools of the current mode can be active and each mode has its own default tool.
+// tools of the current mode can be active and each mode has its own default tool. Manipulators
+// (M18) are a layer above both: manipulators → refPick → the active tool.
 
 import { ObservableValue } from '@/core';
 import type { Observable, RegistryReader, Unsubscribe } from '@/core';
 import type { FeatureEditSession } from './feature-editor';
 import { isPlainEscape } from './key-events';
+import type { ManipulatorController } from './manipulator-controller';
 import type { Mode } from './mode';
 import { createRefPick } from './ref-pick-tool';
 import type { RefPick } from './ref-pick-tool';
@@ -50,6 +52,8 @@ export function createToolManager(deps: {
   unhandledKey?: (e: ViewKeyEvent) => boolean;
   /** Names of the bodies for refPick in a topo param (M14); without it a hit into topo adds nothing. */
   regen?: RegenStatusPort;
+  /** The layer of manipulators above refPick and the tool (M18); without it nothing changes. */
+  manipulators?: ManipulatorController;
 }): ToolManager {
   const { registry } = deps;
   const modeOf = (): Mode => deps.mode?.get() ?? 'model';
@@ -180,7 +184,20 @@ export function createToolManager(deps: {
     syncRefPick();
   }
 
+  /** The lower layer (refPick or the tool) last got a leave: no synthetic one is due. */
+  let lowerLeft = false;
+
   function onPointer(e: ViewPointerEvent): void {
+    if (deps.manipulators?.onPointer(e) === true) {
+      // A handle took the move: no hover may stay under it in the lower layer (spec 10).
+      if (e.type === 'move' && !lowerLeft) toLowerLayer({ ...e, type: 'leave' });
+      return;
+    }
+    toLowerLayer(e);
+  }
+
+  function toLowerLayer(e: ViewPointerEvent): void {
+    lowerLeft = e.type === 'leave';
     if (refPick !== null) {
       refPick.onPointer(e);
       return;
@@ -189,6 +206,7 @@ export function createToolManager(deps: {
   }
 
   function onKey(e: ViewKeyEvent): void {
+    if (deps.manipulators?.onKey(e) === true) return;
     if (refPick !== null) {
       if (!refPick.onKey(e)) deps.unhandledKey?.(e);
       return;

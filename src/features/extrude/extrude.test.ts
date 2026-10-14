@@ -17,9 +17,10 @@ import {
   SELECT_TOOL,
   createSelectionModel,
   createToolManager,
+  createManipulatorRegistry,
   createToolRegistry,
 } from '@/interaction';
-import type { FeatureEditor, FeatureEditSession } from '@/interaction';
+import type { FeatureEditor, FeatureEditSession, Handle, LinearHandle } from '@/interaction';
 import { FakeRegenStatus, FakeViewport } from '@/interaction/testing';
 import type { BooleanOp, FaceInfo, ShapeHandle } from '@/kernel';
 import { createFakeKernel } from '@/kernel/testing';
@@ -37,6 +38,7 @@ import type {
 } from '@/regen';
 import { aBuildContext, aNameTable, aSketchArtifact } from '@/regen/testing';
 import { extrudeBuilder } from './builder';
+import { extrudeManipulators } from './manipulators';
 import { extrudeMessages } from './messages';
 import { extrudeSchema, flipApplies } from './schema';
 import type { ExtrudeParams } from './schema';
@@ -187,6 +189,13 @@ function bodyOf(state: RegenState, feature: string): Body {
   return body;
 }
 
+function expectVec(actual: Vec3 | undefined, expected: Vec3): void {
+  if (actual === undefined) expect.fail('No vector');
+  for (let i = 0; i < 3; i++) {
+    expect(actual[i], `[${String(i)}]`).toBeCloseTo(expected[i] ?? Number.NaN, 9);
+  }
+}
+
 function paramOf(key: string): ParamSpec {
   const spec = extrudeSchema.params[key];
   if (spec === undefined) expect.fail(`No param ${key}`);
@@ -200,11 +209,12 @@ describe('extrude public API', () => {
     expect(Object.keys(extrude)).toEqual(['extrudePlugin']);
   });
 
-  it('extrudePlugin joins the schema, the builder, the tool and the messages', () => {
+  it('extrudePlugin joins the schema, the builder, the tool, the messages and the manipulators', () => {
     expect(extrude.extrudePlugin.schema).toBe(extrudeSchema);
     expect(extrude.extrudePlugin.builder).toBe(extrudeBuilder);
     expect(extrude.extrudePlugin.tools).toEqual([extrudeTool]);
     expect(extrude.extrudePlugin.messages).toBe(extrudeMessages);
+    expect(extrude.extrudePlugin.manipulators).toBe(extrudeManipulators);
     expect(extrudeSchema.type).toBe('extrude');
     expect(extrudeBuilder.type).toBe('extrude');
   });
@@ -220,11 +230,13 @@ describe('extrude public API', () => {
       schemas: createFeatureSchemaRegistry(),
       builders: createBuilderRegistry(),
       tools: createToolRegistry(),
+      manipulators: createManipulatorRegistry(),
     };
     registerPlugin(extrude.extrudePlugin, regs);
     expect(regs.schemas.get('extrude')).toBe(extrudeSchema);
     expect(regs.builders.get('extrude')).toBe(extrudeBuilder);
     expect(regs.tools.get('extrude')).toBe(extrudeTool);
+    expect(regs.manipulators.get('extrude')).toBe(extrudeManipulators);
   });
 });
 
@@ -811,6 +823,16 @@ describe('extrudeBuilder up to face', () => {
     expect(fake.callCount('transform')).toBe(0);
   });
 
+  it('gives no anchors (no manipulator for up to face)', async () => {
+    const { kernel } = aRecordingKernel();
+    const state = await stateWithTarget(kernel, bottomFace);
+
+    const output = await run(upToFace(), state, kernel);
+
+    if (!output.ok) expect.fail(`Unexpected build error: ${output.error.message}`);
+    expect(output.anchors).toBeUndefined();
+  });
+
   it('ignores the hidden distance and flip', async () => {
     const { fake, kernel } = aRecordingKernel();
     const state = await stateWithTarget(kernel, bottomFace);
@@ -932,6 +954,174 @@ describe('extrudeBuilder up to face', () => {
       issues: [{ param: 'upTo', code: 'param.unresolvedRef' }],
     });
     expect(fake.callCount('extrude')).toBe(0);
+  });
+});
+
+describe('extrudeBuilder anchors', () => {
+  async function anchorsOf(
+    feature: FeatureInstance<ExtrudeParams>,
+    state: RegenState,
+    kernel: ModelingKernel,
+  ) {
+    const output = await run(feature, state, kernel);
+    if (!output.ok) expect.fail(`Unexpected build error: ${output.error.message}`);
+    return output.anchors;
+  }
+
+  it('blind: base at the center of the region in the sketch plane, along the normal', async () => {
+    const { kernel } = aRecordingKernel();
+    const state = await rectangleState(kernel);
+
+    const anchors = await anchorsOf(anExtrude('e'), state, kernel);
+
+    expect(Object.keys(anchors ?? {})).toEqual(['base']);
+    expectVec(anchors?.['base']?.point, [20, 10, 0]);
+    expectVec(anchors?.['base']?.direction, [0, 0, 1]);
+  });
+
+  it('blind with flip: the direction is still the normal, handles() applies flip', async () => {
+    const { kernel } = aRecordingKernel();
+    const state = await rectangleState(kernel);
+
+    const anchors = await anchorsOf(anExtrude('e', { flip: true }), state, kernel);
+
+    expectVec(anchors?.['base']?.point, [20, 10, 0]);
+    expectVec(anchors?.['base']?.direction, [0, 0, 1]);
+  });
+
+  it('symmetric: base in the sketch plane along the normal, a set flip is ignored', async () => {
+    const { kernel } = aRecordingKernel();
+    const state = await rectangleState(kernel);
+
+    for (const flip of [false, true]) {
+      const feature = anExtrude('e', { endType: 'symmetric', flip });
+      const anchors = await anchorsOf(feature, state, kernel);
+      expectVec(anchors?.['base']?.point, [20, 10, 0]);
+      expectVec(anchors?.['base']?.direction, [0, 0, 1]);
+    }
+  });
+
+  it('a sketch on XZ has the direction −Y', async () => {
+    const { kernel } = aRecordingKernel();
+    const state = await rectangleState(kernel, originPlane(XZ));
+
+    const anchors = await anchorsOf(anExtrude('e'), state, kernel);
+
+    expectVec(anchors?.['base']?.point, [20, 0, 10]);
+    expectVec(anchors?.['base']?.direction, [0, -1, 0]);
+  });
+
+  it('two regions: the center of their joined bounding box', async () => {
+    const { kernel } = aRecordingKernel();
+    const xy = originPlane(XY);
+    const a = await rectangle(kernel, xy, [0, 0], [10, 10]);
+    const b = await rectangle(kernel, xy, [30, 20], [10, 10]);
+    const state = stateOf(aSketchArtifact('s', [a, b], { plane: xy }));
+
+    const anchors = await anchorsOf(
+      anExtrude('e', { regions: [region('r1'), region('r2')] }),
+      state,
+      kernel,
+    );
+
+    expectVec(anchors?.['base']?.point, [20, 15, 0]);
+  });
+
+  it('the base lies in a slanted sketch plane away from the origin', async () => {
+    const { kernel } = aRecordingKernel();
+    const [s2, s3] = [Math.SQRT1_2, 1 / Math.sqrt(3)];
+    const plane: Plane = { origin: [3, 4, 5], xDir: [s2, -s2, 0], normal: [s3, s3, s3] };
+    // Two regions of different size: the center of their joined box is off the plane.
+    const a = await rectangle(kernel, plane, [0, 0], [10, 10]);
+    const b = await rectangle(kernel, plane, [20, -30], [1, 1]);
+    const state = stateOf(aSketchArtifact('s', [a, b], { plane }));
+
+    const anchors = await anchorsOf(
+      anExtrude('e', { regions: [region('r1'), region('r2')] }),
+      state,
+      kernel,
+    );
+
+    const base = anchors?.['base'];
+    if (base === undefined) expect.fail('No anchor base');
+    expect(Math.abs(vec3.dot(vec3.sub(base.point, plane.origin), plane.normal))).toBeLessThan(1e-9);
+    expectVec(base.direction, plane.normal);
+  });
+
+  it('the anchor does not depend on the distance (spec 07, anchor invariant)', async () => {
+    const { kernel } = aRecordingKernel();
+    const state = await rectangleState(kernel);
+
+    for (const endType of ['blind', 'symmetric'] as const) {
+      const near = await anchorsOf(anExtrude('e', { endType, distance: 2 }), state, kernel);
+      const far = await anchorsOf(anExtrude('e', { endType, distance: 37 }), state, kernel);
+      expect(near?.['base'], endType).toBeDefined();
+      expect(far, endType).toEqual(near);
+    }
+  });
+});
+
+describe('extrudeManipulators', () => {
+  // The anchor carries the sketch normal; flip comes from the live params (spec 07).
+  const ANCHORS = { base: { point: [1, 2, 3] as Vec3, direction: [0, 0, 1] as Vec3 } };
+
+  function only(handles: readonly Handle[]): LinearHandle {
+    expect(handles.map((h) => h.id)).toEqual(['distance']);
+    const [h] = handles;
+    if (h?.kind !== 'linear') expect.fail('distance is not linear');
+    return h;
+  }
+
+  it('gives no handles without the anchor base', () => {
+    expect(extrudeManipulators.handles(anExtrude('e').params, {})).toEqual([]);
+  });
+
+  it('blind: one neutral length arrow at base + d·distance with min 0.01', () => {
+    const h = only(extrudeManipulators.handles(anExtrude('e', { distance: 10 }).params, ANCHORS));
+    expect(h).toMatchObject({ unit: 'length', tint: 'neutral', min: 0.01, value: 10 });
+    expectVec(h.position, [1, 2, 13]);
+    expect(h.direction).toEqual([0, 0, 1]);
+    expect(h.toParams(12)).toEqual({ distance: 12 });
+    expect(h.display?.(12) ?? 12).toBe(12);
+  });
+
+  it('blind with flip: the arrow points against the normal of the anchor', () => {
+    const params = anExtrude('e', { distance: 10, flip: true }).params;
+    const h = only(extrudeManipulators.handles(params, ANCHORS));
+    expectVec(h.position, [1, 2, -7]);
+    expectVec(h.direction, [0, 0, -1]);
+    expect(h.value).toBe(10);
+    expect(h.toParams(12)).toEqual({ distance: 12 });
+  });
+
+  it('symmetric: the arrow at base + d·distance/2, the label shows the whole distance', () => {
+    const params = anExtrude('e', { endType: 'symmetric', distance: 10 }).params;
+    const h = only(extrudeManipulators.handles(params, ANCHORS));
+    expect(h).toMatchObject({ unit: 'length', tint: 'neutral', min: 0.01, value: 5 });
+    expectVec(h.position, [1, 2, 8]);
+    expect(h.direction).toEqual([0, 0, 1]);
+    expect(h.toParams(6)).toEqual({ distance: 12 });
+    expect(h.display?.(6)).toBe(12);
+  });
+
+  it('symmetric ignores a set flip: the arrow goes along the normal', () => {
+    const params = anExtrude('e', { endType: 'symmetric', distance: 10, flip: true }).params;
+    const h = only(extrudeManipulators.handles(params, ANCHORS));
+    expectVec(h.position, [1, 2, 8]);
+    expectVec(h.direction, [0, 0, 1]);
+  });
+
+  it('up to face gives no handles even with an old anchor base', () => {
+    const params = anExtrude('e', { endType: 'upToFace' }).params;
+    expect(extrudeManipulators.handles(params, ANCHORS)).toEqual([]);
+  });
+
+  it('the handles are frozen', () => {
+    const handles = extrudeManipulators.handles(anExtrude('e').params, ANCHORS);
+    expect(Object.isFrozen(handles)).toBe(true);
+    const h = only(handles);
+    expect(Object.isFrozen(h)).toBe(true);
+    expect(Object.isFrozen(h.position)).toBe(true);
   });
 });
 

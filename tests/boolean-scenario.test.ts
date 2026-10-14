@@ -27,6 +27,7 @@ import {
   createFeatureTreeModel,
   createSelectionModel,
   createToolManager,
+  createManipulatorRegistry,
   createToolRegistry,
   SELECT_TOOL,
   type ConfirmRequest,
@@ -50,11 +51,12 @@ function setup() {
   const schemas = createFeatureSchemaRegistry();
   const builders = createBuilderRegistry();
   const toolRegistry = createToolRegistry();
+  const manipulators = createManipulatorRegistry();
   toolRegistry.register(SELECT_TOOL);
   // The plugins of the scenario directly: app (BUILT_IN_PLUGINS) needs the DOM types.
-  registerPlugin(boxPlugin, { schemas, builders, tools: toolRegistry });
-  registerPlugin(cylinderPlugin, { schemas, builders, tools: toolRegistry });
-  registerPlugin(booleanPlugin, { schemas, builders, tools: toolRegistry });
+  registerPlugin(boxPlugin, { schemas, builders, tools: toolRegistry, manipulators });
+  registerPlugin(cylinderPlugin, { schemas, builders, tools: toolRegistry, manipulators });
+  registerPlugin(booleanPlugin, { schemas, builders, tools: toolRegistry, manipulators });
   const doc = createDocument({ meta: META });
   const log = createOperationLog();
   const handlers = createOpHandlerRegistry({ schemas });

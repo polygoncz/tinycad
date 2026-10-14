@@ -5,6 +5,9 @@ import { anOpsSession } from '@/ops/testing';
 import { describe, expect, it } from 'vitest';
 import type { FeatureEditor, FeatureEditSession } from './feature-editor';
 import { createFeatureEditor } from './feature-editor';
+import { createManipulatorController } from './manipulator-controller';
+import type { ManipulatorController } from './manipulator-controller';
+import { createManipulatorRegistry } from './manipulators';
 import type { Mode } from './mode';
 import { createSelectionModel } from './selection';
 import { FakeRegenStatus, FakeViewport, aTopoNames } from './testing';
@@ -1117,5 +1120,244 @@ describe('createToolManager – modes', () => {
     rec.calls.length = 0;
     mode.set('sketch');
     expect(rec.calls).toEqual([]);
+  });
+});
+
+// --- manipulators (M18): a layer above refPick and the active tool ---
+
+/** A ManipulatorController that records the events and handles what `handles` says. */
+function aManipulatorStub(handles: {
+  pointer?: (e: ViewPointerEvent) => boolean;
+  key?: (e: ViewKeyEvent) => boolean;
+}) {
+  const calls: string[] = [];
+  const controller: ManipulatorController = {
+    onPointer(e) {
+      calls.push(`pointer:${e.type}`);
+      return handles.pointer?.(e) ?? false;
+    },
+    onKey(e) {
+      calls.push(`key:${e.key}`);
+      return handles.key?.(e) ?? false;
+    },
+    dispose() {
+      calls.push('dispose');
+    },
+  };
+  return { controller, calls };
+}
+
+function setupManipulators(manipulators: ManipulatorController) {
+  const rec: Recorder = { calls: [], contexts: [] };
+  const registry: ToolRegistry = createToolRegistry();
+  registry.register(aRecordingTool('select', rec));
+  registry.register(aRecordingTool('box', rec));
+  const viewport = new FakeViewport();
+  const ops = anOpsSession();
+  const ctx = {
+    viewport,
+    selection: createSelectionModel({ regen: new FakeRegenStatus() }),
+    doc: ops.doc,
+    ops: ops.dispatcher,
+    ids: createSequentialIdGenerator(),
+    features: aFeatureEditorStub(),
+  };
+  const unhandled: string[] = [];
+  const manager = createToolManager({
+    registry,
+    ctx,
+    defaultToolId: 'select',
+    unhandledKey: (e) => {
+      unhandled.push(e.key);
+      return false;
+    },
+    manipulators,
+  });
+  rec.calls.length = 0;
+  return { manager, rec, viewport, unhandled };
+}
+
+describe('createToolManager – manipulators', () => {
+  it('pointer events go to the manipulators first; unhandled ones reach the tool', () => {
+    const { controller, calls } = aManipulatorStub({});
+    const { rec, viewport } = setupManipulators(controller);
+    viewport.emitPointer(at('move', 1, 2));
+    viewport.emitPointer(at('down', 1, 2));
+    expect(calls).toEqual(['pointer:move', 'pointer:down']);
+    expect(rec.calls).toEqual(['select.pointer:move', 'select.pointer:down']);
+  });
+
+  it('a move over a handle does not reach the tool; it gets one leave at the same place', () => {
+    let overHandle = false;
+    const { controller } = aManipulatorStub({ pointer: (e) => e.type === 'move' && overHandle });
+    const { rec, viewport, manager } = setupManipulators(controller);
+    manager.activate('box');
+    rec.calls.length = 0;
+
+    viewport.emitPointer(at('move', 1, 1));
+    overHandle = true;
+    viewport.emitPointer(at('move', 2, 2));
+    viewport.emitPointer(at('move', 3, 3));
+    overHandle = false;
+    viewport.emitPointer(at('move', 4, 4));
+    overHandle = true;
+    viewport.emitPointer(at('move', 5, 5));
+    expect(rec.calls).toEqual([
+      'box.pointer:move',
+      'box.pointer:leave',
+      'box.pointer:move',
+      'box.pointer:leave',
+    ]);
+  });
+
+  it('the synthetic leave carries the coordinates of the move', () => {
+    const { controller } = aManipulatorStub({ pointer: (e) => e.type === 'move' });
+    const seen: ViewPointerEvent[] = [];
+    const rec: Recorder = { calls: [], contexts: [] };
+    const registry: ToolRegistry = createToolRegistry();
+    registry.register({
+      ...aRecordingTool('select', rec),
+      create: () => ({
+        activate: () => undefined,
+        deactivate: () => undefined,
+        onPointer: (e) => seen.push(e),
+      }),
+    });
+    const viewport = new FakeViewport();
+    const ops = anOpsSession();
+    createToolManager({
+      registry,
+      ctx: {
+        viewport,
+        selection: createSelectionModel({ regen: new FakeRegenStatus() }),
+        doc: ops.doc,
+        ops: ops.dispatcher,
+        ids: createSequentialIdGenerator(),
+        features: aFeatureEditorStub(),
+      },
+      defaultToolId: 'select',
+      manipulators: controller,
+    });
+    viewport.emitPointer(at('move', 7, 8));
+    expect(seen).toEqual([{ type: 'leave', x: 7, y: 8, button: 'left', mods: NO_MODS }]);
+  });
+
+  it('a real leave to the tool is not followed by a synthetic one', () => {
+    let overHandle = false;
+    const { controller } = aManipulatorStub({ pointer: (e) => e.type === 'move' && overHandle });
+    const { rec, viewport } = setupManipulators(controller);
+    viewport.emitPointer(at('leave', 1, 1));
+    overHandle = true;
+    viewport.emitPointer(at('move', 2, 2));
+    expect(rec.calls).toEqual(['select.pointer:leave']);
+  });
+
+  it('handled downs, ups and leaves reach neither the tool nor a synthetic leave', () => {
+    const { controller } = aManipulatorStub({ pointer: (e) => e.type !== 'move' });
+    const { rec, viewport } = setupManipulators(controller);
+    viewport.emitPointer(at('move', 1, 1));
+    viewport.emitPointer(at('down', 1, 1));
+    viewport.emitPointer(at('up', 1, 1));
+    viewport.emitPointer(at('leave', 1, 1));
+    expect(rec.calls).toEqual(['select.pointer:move']);
+  });
+
+  it('keys go to the manipulators first; a handled Escape does not end the tool', () => {
+    const { controller, calls } = aManipulatorStub({ key: (e) => e.key === 'Escape' });
+    const { rec, viewport, manager, unhandled } = setupManipulators(controller);
+    manager.activate('box');
+    rec.calls.length = 0;
+
+    viewport.emitKey(key('Escape'));
+    expect(rec.calls).toEqual([]);
+    expect(manager.active.get()).toBe('box');
+    expect(unhandled).toEqual([]);
+
+    viewport.emitKey(key('x'));
+    expect(calls).toEqual(['key:Escape', 'key:x']);
+    expect(rec.calls).toEqual(['box.key:x']);
+    expect(unhandled).toEqual(['x']);
+  });
+
+  it('dispose of the manager does not dispose the controller and stops routing to it', () => {
+    const { controller, calls } = aManipulatorStub({});
+    const { viewport, manager } = setupManipulators(controller);
+    manager.dispose();
+    viewport.emitPointer(at('move', 1, 1));
+    viewport.emitKey(key('a'));
+    expect(calls).toEqual([]);
+  });
+
+  it('with a real controller a left down on a handle reaches neither the tool nor refPick', () => {
+    const rec: Recorder = { calls: [], contexts: [] };
+    const registry: ToolRegistry = createToolRegistry();
+    registry.register(aRecordingTool('select', rec));
+    const viewport = new FakeViewport();
+    const ops = anOpsSession();
+    const schemas = createFeatureSchemaRegistry();
+    schemas.register(REF_SCHEMA);
+    const features = createFeatureEditor({
+      doc: ops.doc,
+      ops: ops.dispatcher,
+      schemas,
+      ids: createSequentialIdGenerator('new'),
+    });
+    const handles = createManipulatorRegistry();
+    handles.register({
+      type: 'ref',
+      handles: (p: RefParams) => [
+        {
+          kind: 'linear',
+          id: 'w',
+          position: [p.width, 0, 0],
+          direction: [1, 0, 0],
+          value: p.width,
+          unit: 'length',
+          tint: 'x',
+          toParams: (v) => ({ width: v }),
+        },
+      ],
+    });
+    const regen = new FakeRegenStatus();
+    const controller = createManipulatorController({
+      features,
+      regen,
+      registry: handles,
+      viewport,
+      formatValue: (v) => String(v),
+    });
+    createToolManager({
+      registry,
+      ctx: {
+        viewport,
+        selection: createSelectionModel({ regen }),
+        doc: ops.doc,
+        ops: ops.dispatcher,
+        ids: createSequentialIdGenerator(),
+        features,
+      },
+      defaultToolId: 'select',
+      manipulators: controller,
+    });
+    // create focuses 'targets': refPick covers the tool.
+    const session = features.create('ref');
+    regen.publish(
+      new Map(),
+      [],
+      [],
+      new Map([[session.featureId, { base: { point: [0, 0, 0] } }]]),
+    );
+    expect(session.state.get().activeRefParam).toBe('targets');
+    viewport.setPick(faceHit('f1/body'));
+    viewport.prepareHandlePick(() => 'w');
+    rec.calls.length = 0;
+
+    viewport.emitPointer(at('down', 10, 0));
+    viewport.emitPointer(at('move', 12, 0));
+    viewport.emitPointer(at('up', 12, 0));
+
+    expect(rec.calls).toEqual([]);
+    expect(session.state.get().params['targets']).toEqual([]);
+    expect(session.state.get().params['width']).toBe(12);
   });
 });

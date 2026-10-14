@@ -32,6 +32,7 @@ import {
   toolActionId,
   toolModes,
   createFeatureTreeModel,
+  createManipulatorController,
   createSelectionModel,
   createSketchActions,
   createSketchEditor,
@@ -51,6 +52,7 @@ import type {
   FeatureEditor,
   FeatureTreeModel,
   FileActions,
+  HandleUnit,
   HistoryModel,
   Mode,
   SelectionModel,
@@ -153,6 +155,8 @@ export interface AppSessionDeps {
   readonly download: (file: DownloadFile) => void;
   /** M15: the theme at the start: the first value of defaultBodyColor; later setTheme. */
   readonly theme: 'light' | 'dark';
+  /** M18: the text of the manipulator label; ui brings the units and the format (mm, °). */
+  readonly formatValue: (value: number, unit: HandleUnit) => string;
 }
 
 export interface AppSession extends Disposable {
@@ -251,6 +255,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     schemas,
     builders,
     tools: toolRegistry,
+    manipulators: manipulatorRegistry,
     handlers,
     messages,
   } = createPluginRegistries(deps.plugins);
@@ -334,6 +339,17 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     }),
   );
   const actions = lifetime.add(createActionRegistry({ mode }));
+  // M18: the layer of manipulators above refPick and the tools. Added before ToolManager, so the
+  // reverse order of release disposes it after ToolManager.
+  const manipulators = lifetime.add(
+    createManipulatorController({
+      features,
+      regen: regenStatus,
+      registry: manipulatorRegistry,
+      viewport,
+      formatValue: deps.formatValue,
+    }),
+  );
   const tools = lifetime.add(
     createToolManager({
       registry: toolRegistry,
@@ -343,6 +359,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       mode,
       defaultToolIds: { sketch: SKETCH_SELECT_TOOL_ID },
       unhandledKey: (e) => actions.handleKey(e),
+      manipulators,
     }),
   );
   const toolList = Object.freeze(toolRegistry.all());

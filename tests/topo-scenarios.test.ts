@@ -21,7 +21,7 @@ import { cylinderPlugin } from '@/features/cylinder';
 import { extrudePlugin } from '@/features/extrude';
 import { filletPlugin } from '@/features/fillet';
 import { sketchPlugin } from '@/features/sketch';
-import { createFeatureEditor, createToolRegistry } from '@/interaction';
+import { createFeatureEditor, createManipulatorRegistry, createToolRegistry } from '@/interaction';
 import type { BoundingBox, GeometryKernel } from '@/kernel';
 import { createInThreadOcctKernel } from '@/kernel-occt/testing';
 import {
@@ -45,6 +45,7 @@ function setup(kernel: GeometryKernel) {
   const schemas = createFeatureSchemaRegistry();
   const builders = createBuilderRegistry();
   const tools = createToolRegistry();
+  const manipulators = createManipulatorRegistry();
   // The plugins of the scenarios directly: app (BUILT_IN_PLUGINS) needs the DOM types.
   const plugins = [
     boxPlugin,
@@ -55,7 +56,7 @@ function setup(kernel: GeometryKernel) {
     filletPlugin,
     chamferPlugin,
   ];
-  for (const plugin of plugins) registerPlugin(plugin, { schemas, builders, tools });
+  for (const plugin of plugins) registerPlugin(plugin, { schemas, builders, tools, manipulators });
   const doc = createDocument({ meta: META });
   const log = createOperationLog();
   const handlers = createOpHandlerRegistry({ schemas });

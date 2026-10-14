@@ -128,8 +128,22 @@ export interface BuildContext {
   resolveTopo(refs: readonly TopoRef[], entity: 'face' | 'edge'): Result<ResolvedTopo[], RefError>;
 }
 
+/** A point and an optional unit direction in world coordinates (M18, ADR 0021). */
+export interface Anchor {
+  readonly point: Vec3;
+  readonly direction?: Vec3;
+}
+
+/**
+ * Anchors of one feature by name ('pivot', 'base'…): geometry for the handles of its manipulator
+ * that only the builder knows (M18, ADR 0021). The plugin chooses names and meaning. An anchor
+ * may depend only on inputs the handles of the feature do not drag.
+ */
+export type FeatureAnchors = Readonly<Record<string, Anchor>>;
+
+/** `anchors` (M18) only by builders of features with a manipulator. */
 export type BuildOutput =
-  | { readonly ok: true; readonly state: RegenState }
+  | { readonly ok: true; readonly state: RegenState; readonly anchors?: FeatureAnchors }
   | { readonly ok: false; readonly error: FeatureError };
 
 /**

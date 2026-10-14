@@ -21,7 +21,12 @@ import type { DocumentId, FeatureId, PlaneId, SketchRegionRef } from '@/document
 import { boxPlugin } from '@/features/box';
 import { extrudePlugin } from '@/features/extrude';
 import { sketchPlugin } from '@/features/sketch';
-import { createFeatureEditor, createSketchEditor, createToolRegistry } from '@/interaction';
+import {
+  createFeatureEditor,
+  createSketchEditor,
+  createManipulatorRegistry,
+  createToolRegistry,
+} from '@/interaction';
 import type { SketchSession } from '@/interaction';
 import { FakeViewport } from '@/interaction/testing';
 import type { BoundingBox, GeometryKernel, MeshData } from '@/kernel';
@@ -55,9 +60,10 @@ function setup(kernel: GeometryKernel) {
   const schemas = createFeatureSchemaRegistry();
   const builders = createBuilderRegistry();
   const tools = createToolRegistry();
+  const manipulators = createManipulatorRegistry();
   // The plugins of the scenario directly: app (BUILT_IN_PLUGINS) needs the DOM types.
   for (const plugin of [boxPlugin, sketchPlugin, extrudePlugin]) {
-    registerPlugin(plugin, { schemas, builders, tools });
+    registerPlugin(plugin, { schemas, builders, tools, manipulators });
   }
   const doc = createDocument({ meta: META });
   const log = createOperationLog();

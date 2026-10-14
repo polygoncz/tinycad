@@ -7,7 +7,7 @@ import { createRandomIdGenerator, DisposableStore } from '@/core';
 import type { Disposable, IdGenerator } from '@/core';
 import type { Result } from '@/core';
 import type { DocumentId, DocumentLoadError } from '@/document';
-import type { ConfirmRequest } from '@/interaction';
+import type { ConfirmRequest, HandleUnit } from '@/interaction';
 import type { MeshOps } from '@/kernel';
 import { createOcctKernel } from '@/kernel-occt';
 import type { DocumentInfo, DocumentStore, Scheduler } from '@/persistence';
@@ -34,6 +34,8 @@ export interface OpenAppSessionOptions {
   readonly theme: 'light' | 'dark';
   /** M15: downloads an exported file (ui: a Blob and <a download>). */
   readonly download: (file: DownloadFile) => void;
+  /** M18: the text of the manipulator label (ui: field-values formatHandleValue). */
+  readonly formatValue: (value: number, unit: HandleUnit) => string;
 }
 
 /**
@@ -77,6 +79,7 @@ export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSe
       solver,
       download: opts.download,
       theme: opts.theme,
+      formatValue: opts.formatValue,
       // Replay the whole log on every open while developing (spec 05, "verify").
       verify: import.meta.env.DEV,
     });

@@ -8,6 +8,7 @@ import { useI18n } from 'vue-i18n';
 import { openAppSession } from '@/app';
 import type { AppSession, OpenAppSessionOptions } from '@/app';
 import AppShell from './components/AppShell.vue';
+import { formatHandleValue } from './components/params/field-values';
 import DocumentList from './components/DocumentList.vue';
 import { createDocumentSwitcher } from './document-switcher';
 import { downloadFile } from './download';
@@ -37,6 +38,8 @@ const switcher = createDocumentSwitcher<AppSession>({
       download: (file) => {
         downloadFile(file);
       },
+      // M18: the label of a dragged manipulator, in mm and degrees like the fields.
+      formatValue: formatHandleValue,
     });
     try {
       addPluginMessages(i18n, session.messages);

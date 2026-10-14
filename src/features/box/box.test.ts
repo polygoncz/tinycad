@@ -7,6 +7,7 @@ import {
   SELECT_TOOL,
   createSelectionModel,
   createToolManager,
+  createManipulatorRegistry,
   createToolRegistry,
 } from '@/interaction';
 import type { FeatureEditor, FeatureEditSession } from '@/interaction';
@@ -84,6 +85,7 @@ describe('box public API', () => {
       schemas: createFeatureSchemaRegistry(),
       builders: createBuilderRegistry(),
       tools: createToolRegistry(),
+      manipulators: createManipulatorRegistry(),
     };
     registerPlugin(box.boxPlugin, regs);
     expect(regs.tools.get('box')).toBe(boxTool);
@@ -282,7 +284,12 @@ describe('box plugin in the Regenerator', () => {
     const kernel = createFakeKernel();
     const schemas = createFeatureSchemaRegistry();
     const builders = createBuilderRegistry();
-    registerPlugin(box.boxPlugin, { schemas, builders, tools: createToolRegistry() });
+    registerPlugin(box.boxPlugin, {
+      schemas,
+      builders,
+      tools: createToolRegistry(),
+      manipulators: createManipulatorRegistry(),
+    });
     const regenerator = createRegenerator({ kernel, schemas, builders, now: stoppedClock });
     const features = [aBox('b1'), aBox('b2', { origin: [20, 0, 0] })];
 

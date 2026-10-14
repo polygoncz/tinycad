@@ -3,6 +3,7 @@
 
 import type { FeaturePlugin } from '@/plugin-api';
 import { transformBuilder } from './builder';
+import { transformManipulators } from './manipulators';
 import { transformMessages } from './messages';
 import { transformSchema } from './schema';
 import type { TransformParams } from './schema';
@@ -17,4 +18,5 @@ export const transformPlugin: FeaturePlugin<TransformParams> = Object.freeze<
   builder: transformBuilder,
   tools: Object.freeze([transformTool]),
   messages: transformMessages,
+  manipulators: transformManipulators,
 });

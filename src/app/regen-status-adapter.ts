@@ -1,12 +1,13 @@
 // Adapter of RegenStatusPort (spec 10, "Port stavu regenerace"): interaction must not know regen,
 // so app turns every RegenResult into a RegenSnapshot – health of the evaluated features, the
 // bodies (with their topological names, M14) and the sketches (with region names) of the final
-// state (plane artifacts are not listed: the Browser shows the origin planes from document) and
-// its own generation counter.
+// state (plane artifacts are not listed: the Browser shows the origin planes from document), the
+// anchors of the manipulators (M18) and its own generation counter.
 
 import { ObservableValue } from '@/core';
 import type { FeatureId } from '@/document';
 import type {
+  FeatureAnchors,
   FeatureHealth,
   RegenBody,
   RegenSketch,
@@ -26,6 +27,7 @@ const EMPTY: RegenSnapshot = Object.freeze({
   health: new Map<FeatureId, FeatureHealth>(),
   bodies: Object.freeze([]),
   sketches: Object.freeze([]),
+  anchors: new Map<FeatureId, FeatureAnchors>(),
 });
 
 export function createRegenStatusAdapter(): RegenStatusAdapter {
@@ -57,10 +59,19 @@ export function createRegenStatusAdapter(): RegenStatusAdapter {
           }),
         ),
       );
+      // A new map like health; the anchors are deeply frozen by regen already and regen's Anchor
+      // fits the one of interaction structurally (M18, spec 10), so they pass on unchanged.
+      const anchors = new Map<FeatureId, FeatureAnchors>(result.anchors);
       // Generation of the port, not of the Regenerator: a restarted kernel brings a new
       // Regenerator that counts from 1 again, the port must keep growing (spec 10).
       state.set(
-        Object.freeze({ generation: state.get().generation + 1, health, bodies, sketches }),
+        Object.freeze({
+          generation: state.get().generation + 1,
+          health,
+          bodies,
+          sketches,
+          anchors,
+        }),
       );
     },
   };

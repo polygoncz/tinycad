@@ -34,6 +34,8 @@ describe('interaction public API', () => {
         'createSelectionModel',
         'createToolManager',
         'createToolRegistry',
+        'createManipulatorRegistry',
+        'createManipulatorController',
         'createTopoInspector',
         'SELECT_TOOL',
         'sameSelectionItem',

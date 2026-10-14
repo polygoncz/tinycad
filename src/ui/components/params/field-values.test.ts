@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   asPoint,
   degToRad,
+  formatHandleValue,
   formatNumber,
   parseNumber,
   radToDeg,
@@ -67,6 +68,18 @@ describe('angles', () => {
     expect(radToDeg(Math.PI)).toBeCloseTo(180);
     expect(degToRad(90)).toBeCloseTo(Math.PI / 2);
     expect(formatNumber(radToDeg(degToRad(30)))).toBe('30');
+  });
+});
+
+describe('formatHandleValue', () => {
+  it('shows a length in mm rounded to two decimals', () => {
+    expect(formatHandleValue(12.345, 'length')).toBe('12.35 mm');
+    expect(formatHandleValue(-3, 'length')).toBe('-3 mm');
+  });
+
+  it('shows an angle in degrees rounded to two decimals', () => {
+    expect(formatHandleValue(Math.PI / 4, 'angle')).toBe('45°');
+    expect(formatHandleValue(degToRad(12.345), 'angle')).toBe('12.35°');
   });
 });
 

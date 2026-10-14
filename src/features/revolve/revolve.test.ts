@@ -21,6 +21,7 @@ import {
   SELECT_TOOL,
   createSelectionModel,
   createToolManager,
+  createManipulatorRegistry,
   createToolRegistry,
 } from '@/interaction';
 import type { FeatureEditor, FeatureEditSession } from '@/interaction';
@@ -231,6 +232,7 @@ describe('revolve public API', () => {
       schemas: createFeatureSchemaRegistry(),
       builders: createBuilderRegistry(),
       tools: createToolRegistry(),
+      manipulators: createManipulatorRegistry(),
     };
     registerPlugin(revolve.revolvePlugin, regs);
     expect(regs.schemas.get('revolve')).toBe(revolveSchema);

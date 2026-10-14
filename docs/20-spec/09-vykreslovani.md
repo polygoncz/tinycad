@@ -158,7 +158,7 @@ Vstupní posuny jsou v CSS px plátna, `width`/`height` je velikost plátna, osa
 
 #### Near a far
 
-Před každým snímkem (`draw`) a před každým `pick`/`screenToRay` rig nastaví `position`, `near`, `far` podle `clipRange` nad **obálkou všeho viditelného**: viditelná tělesa (`BodyLayer.bounds()`), kresby skic (`SketchLayer.bounds()`, nové), overlay nástrojů (`OverlayLayer.bounds()`, nové), mřížka (±100 mm v z = 0) a cíl kamery. Žádná situace (posun a otočení, zoom ke kurzoru, nové těleso bez `fitAll`, skica mimo tělesa) tak model neořízne. U ortografické kamery mění `near`/`far` jen hloubkový řez, ne velikost obrazu.
+Před každým snímkem (`draw`) a před každým `pick`/`screenToRay` rig nastaví `position`, `near`, `far` podle `clipRange` nad **obálkou všeho viditelného**: viditelná tělesa (`BodyLayer.bounds()`), kresby skic (`SketchLayer.bounds()`, nové), overlay nástrojů (`OverlayLayer.bounds()`, nové), úchyty manipulátorů (M18), mřížka (±100 mm v z = 0) a cíl kamery. Žádná situace (posun a otočení, zoom ke kurzoru, nové těleso bez `fitAll`, skica mimo tělesa) tak model neořízne. U ortografické kamery mění `near`/`far` jen hloubkový řez, ne velikost obrazu.
 
 #### Vstup (`CameraInput`: čisté funkce v `camera-input.ts`, DOM posluchače v `camera-rig-input.ts`)
 
@@ -226,7 +226,7 @@ export type ViewCubeLabels = Readonly<Record<ViewCubeLabelKey, string>>;
 
 - Canvas převádí `pointerdown`/`pointermove`/`pointerup`/`pointerleave` na `ViewPointerEvent` a `keydown` (canvas má `tabIndex = 0`) na `ViewKeyEvent` s `inTextField: false`. Kolečko se nepřeposílá.
 - Převod je čistá funkce nad prostými hodnotami (ne DOM typy): `toViewPointerEvent({ type, offsetX, offsetY, button, shiftKey, altKey, ctrlKey, metaKey }, isMac)`. `button` 0/1/2 → `'left'/'middle'/'right'`, u `move` a `leave` `null`. `mod` = `metaKey` na Macu, jinak `ctrlKey`.
-- Levé `pointerdown` zavolá `canvas.setPointerCapture(pointerId)` (M18), aby tažení manipulátoru pokračovalo i mimo canvas. `pointerup` zachycení uvolní sám prohlížeč. Pravé a prostřední tlačítko zachycuje dál `CameraInput`.
+- Levé `pointerdown` zavolá `canvas.setPointerCapture(pointerId)` (M18), aby tažení manipulátoru pokračovalo i mimo canvas. `pointerup` zachycení uvolní sám prohlížeč. Pravé a prostřední tlačítko zachycuje dál `CameraInput`. `pointercancel` (systém tah přerušil) se přepošle jako `up` s tlačítkem `left`, aby tažení manipulátoru neuvízlo. `lostpointercapture` se nepřeposílá: chodí i po každém běžném `pointerup` a `SelectTool` by viděl klik dvakrát.
 - Viewport sám nic nevybírá ani nezvýrazňuje, jen hlásí události.
 
 ## Synchronizace s regenerací
@@ -277,15 +277,25 @@ Zvýraznění plochy je **malá vlastní kopie** jejích trojúhelníků: čist�
 
 ## Manipulátory (M18)
 
-`ManipulatorLayer implements ManipulatorPort` ([[10-interakce#Manipulátory (M18)]], [[0021-manipulatory-kotvy-z-regenerace|ADR 0021]]) kreslí úchyty [[Manipulátor|manipulátorů]], pickuje je a ukazuje štítek s hodnotou.
+`ManipulatorLayer` (typ splňuje `ManipulatorPort`; vnitřní vrstva má `pick` s projekcí a port za ni doplní viewport, stejně jako u skic; [[10-interakce#Manipulátory (M18)]], [[0021-manipulatory-kotvy-z-regenerace|ADR 0021]]) kreslí úchyty [[Manipulátor|manipulátorů]], pickuje je a ukazuje štítek s hodnotou.
 
 - **Glyfy s konstantní velikostí na obrazovce.** Lineární úchyt je šipka: dřík `LineSegments2` (3 px) a kužel (`ConeGeometry`) na konci, celková délka `HANDLE_ARROW_PX = 80` px od `position` ve směru `direction`. Úhlový úchyt je kružnice: `LineSegments2` (3 px), 64 segmentů, poloměr `HANDLE_RING_PX = 60` px kolem `center` v rovině kolmé na `axis`. Měřítko skupiny glyfu = světové jednotky na pixel ortografické kamery (`(top − bottom) / zoom / výška plátna`), přepočítané ve `draw` viewportu před `renderer.render` (kamera se mohla změnit gestem nebo animací).
 - **Barvy:** `tint` `x`/`y`/`z` → `palette.axes[0..2]`, `neutral` → `palette.selection`. Stav `hover` a `active` → `palette.hover`. `setPalette` přebarví. Paleta se nemění.
 - `depthTest: false`, `renderOrder` 4: úchyt je vidět i uvnitř nebo za tělesem, které posouvá (nad skicami, které mají 3).
 - **Skrytí šipky:** lineární úchyt s `|direction · směr pohledu| > HANDLE_HIDE_COS = 0,98` se nekreslí a `pick` ho nevrátí. Táhnout ho stejně nejde (`PARALLEL_LIMIT` ve spec 10).
+- **Skrytí kružnice z hrany:** úhlový úchyt s `|axis · směr pohledu| < HANDLE_RING_HIDE_COS = 0,05` se nekreslí a `pick` ho nevrátí. Ve standardních pohledech jsou tak dvě ze tří kružnic Transformace skryté, protože z nich zbude čára, kterou táhnout nejde. Mez je přísnější než `EDGE_ON_LIMIT` (0,02), takže viditelná kružnice jde táhnout vždy (rozhodnutí 2026-10-14).
 - `set(handles)` nahradí vše. Glyf se stejným `id` a `kind` se znovu použije (jen pozice, orientace, barva), ostatní se uvolní. Stejné pohledy jako minule nic nepřekreslují, jinak `requestRender()`.
 - **Picking** (`pick(x, y)`) je čistá funkce `pickHandle(screenHandles, x, y)` v `manipulator-pick.ts` (bez `three`). Viewport předá úchyty promítnuté do px: šipka jako úsečka od `position` po špičku, kružnice jako uzavřená lomená čára ze 64 bodů. Tolerance je `HANDLE_PICK_PX = 8` px u šipky a 6 px u kružnice. Vyhrává nejmenší vzdálenost, při shodě dřívější úchyt v pořadí `set`. Žádný úchyt → `null`. Nepřipojený viewport → `null`.
-- **Promítnutí** obstará čistá funkce `projectHandles(handles, project, worldPerPx)` v `manipulator-pick.ts`. `project: (p: Vec3) => [x, y]` dodá viewport z kamery, takže tvar glyfu (délka, poloměr, skrytí) se počítá na jednom místě pro kreslení i picking.
+- **Promítnutí** obstará čistá funkce v `manipulator-pick.ts`. Viewport dodá `project` z kamery, takže tvar glyfu (délka, poloměr, skrytí) se počítá na jednom místě pro kreslení i picking:
+  ```ts
+  type ScreenPoint = readonly [x: number, y: number];
+  type ScreenHandle =
+    | { kind: 'linear'; id: string; from: ScreenPoint; to: ScreenPoint }
+    | { kind: 'angular'; id: string; points: readonly ScreenPoint[] };   // HANDLE_RING_SEGMENTS = 64 bodů, uzavřená
+  function projectHandles(handles: readonly HandleView[], project: (p: Vec3) => ScreenPoint, worldPerPx: number, viewDirection: Vec3): readonly ScreenHandle[];
+  // skryté úchyty vynechá (arrowHidden, ringHidden), pořadí zachová; tolerance HANDLE_PICK_PX = 8, HANDLE_RING_PICK_PX = 6
+  ```
+- **Near a far:** obálka zobrazených úchytů (`handleBounds(handles, worldPerPx)`: krychle o poloviční straně délky šipky nebo poloměru kružnice × `worldPerPx` kolem `position`/`center`, i u skrytých úchytů, aby obálka při otáčení neskákala; bez úchytů `null`) patří do obálky všeho viditelného ([[#Near a far]]), aby glyf daleko od těles neořízl hloubkový řez.
 - **Štítek:** `setLabel` ukáže nebo skryje jeden absolutně pozicovaný `<div>` nad canvasem (rodič canvasu, `pointer-events: none`, třída `tc-manipulator-label`). Barvy jsou z CSS proměnných `ui` (`--chrome-bg`, `--text-primary`), `render` je jen odkazuje jménem. `unmount` prvek odebere, další `mount` ho vytvoří znovu.
 - `dispose` uvolní geometrie a materiály.
 
@@ -318,7 +328,7 @@ Filtr (`PickFilter`, [[10-interakce#Port viewportu]], M10.1): průchod přes hra
 ## Testy
 
 `render` se testuje nejhůř, proto v něm má být co nejméně logiky ([[Q061 Testy render v Node|Q061]]):
-- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, od M17 operace kamery (`orbit`, `pan`, `zoomAt`, `turn`, `ease`, `interpolate`, `clipRange`, `orientationFor`), `cameraGesture`, `wheelFactor`, `buildViewCube` a `cubeRegionAt`, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor` (od M17 zaniká), od M13 `pickSketchRegion` a `pointInRegion`, od M15 `parseHexColor`, od M18 `pickHandle` a `projectHandles` (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
+- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, od M17 operace kamery (`orbit`, `pan`, `zoomAt`, `turn`, `ease`, `interpolate`, `clipRange`, `orientationFor`), `cameraGesture`, `wheelFactor`, `buildViewCube` a `cubeRegionAt`, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor` (od M17 zaniká), od M13 `pickSketchRegion` a `pointInRegion`, od M15 `parseHexColor`, od M18 `pickHandle`, `projectHandles`, `handleBounds`, `arrowHidden` a `ringHidden` (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
 - Testy `render` nesmí importovat `@/kernel/testing` (`FakeKernel`): `render` závisí na `kernel` jen typově a `testing.ts` otevírá jen hodnotovým závislostem ([[01-architektura]]). Sítě v testech jsou ruční, malé a záměrně s klíči ploch mimo pořadí.
 - Kód s Three.js (`Viewport`, `BodyView`, vrstvy, picking) se ověřuje ručně na dev stránce `dev/viewport.html`. Smoke test v prohlížeči (Playwright) později.
 

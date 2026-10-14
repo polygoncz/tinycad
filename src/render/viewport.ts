@@ -29,6 +29,12 @@ import { createCameraRig, type CameraController } from './camera-controller';
 import type { OrbitMode } from './camera-ops';
 import { createFrameScheduler } from './frame-scheduler';
 import { createHighlightLayer } from './highlight-layer';
+import {
+  createManipulatorLayer,
+  type HandleProjection,
+  type ManipulatorLayer,
+} from './manipulator-layer';
+import type { ScreenPoint } from './manipulator-pick';
 import { createOverlayLayer } from './overlay-layer';
 import { LIGHT_PALETTE, type ScenePalette } from './palette';
 import { toNdc } from './pick-math';
@@ -65,6 +71,8 @@ export interface Viewport extends ViewportPort, Disposable {
   readonly overlay: OverlayLayer;
   /** Drawings of sketches and planes (M12, implements SketchPort). */
   readonly sketches: SketchLayer;
+  /** Handles of manipulators (M18, implements ManipulatorPort). */
+  readonly manipulators: ManipulatorLayer;
   /** Fit all, standard views, normal to a plane (M12). */
   readonly camera: CameraController;
 
@@ -183,6 +191,11 @@ export function createViewport(deps: {
   scene.add(overlayLayer.group);
   const sketchLayer = lifetime.add(createSketchLayer({ requestRender: scheduleFrame, palette }));
   scene.add(sketchLayer.group);
+  // Order in the scene does not matter: renderOrder 4 draws the handles after the sketches.
+  const manipulatorLayer = lifetime.add(
+    createManipulatorLayer({ requestRender: scheduleFrame, palette }),
+  );
+  scene.add(manipulatorLayer.group);
   const rig = lifetime.add(
     createCameraRig({
       getBounds: () => layer.bounds(),
@@ -214,7 +227,7 @@ export function createViewport(deps: {
 
   /**
    * Box of everything visible (spec 09, "Near a far"): bodies, sketch drawings, tool overlay,
-   * the grid and the camera target. Never null thanks to the grid.
+   * manipulator handles (M18), the grid and the camera target. Never null thanks to the grid.
    */
   function sceneBounds(): BoundingBox {
     const target = rig.target;
@@ -223,6 +236,8 @@ export function createViewport(deps: {
         layer.bounds(),
         sketchLayer.bounds(),
         overlayLayer.bounds(),
+        // The glyph size follows the zoom; drawing and picking run mounted only.
+        manipulatorLayer.bounds(worldPerPx(mounted?.canvas.clientHeight ?? 0)),
         GRID_BOUNDS,
         { min: target, max: target },
       ]) ?? GRID_BOUNDS
@@ -242,6 +257,8 @@ export function createViewport(deps: {
     const animating = rig.tick(time);
     const fading = viewCube.tick(time);
     updateClip();
+    // Constant size on the screen for the camera of this frame (a gesture or animation moved it).
+    manipulatorLayer.beforeRender(worldPerPx(mounted.canvas.clientHeight), viewDirection());
     // autoClear is off because of the view cube drawn over the main scene.
     renderer.clear();
     renderer.render(scene, rig.camera);
@@ -270,6 +287,43 @@ export function createViewport(deps: {
     };
   }
 
+  /**
+   * World units per CSS px of the orthographic camera on a canvas `height` CSS px tall; a canvas
+   * without a size gives 1, whatever is drawn then is not seen.
+   */
+  function worldPerPx(height: number): number {
+    const cam = rig.camera;
+    return height > 0 ? (cam.top - cam.bottom) / cam.zoom / height : 1;
+  }
+
+  /** Unit direction the camera looks in. */
+  function viewDirection(): Vec3 {
+    const cam = rig.camera;
+    cam.updateMatrixWorld();
+    const d = new THREE.Vector3(0, 0, -1).transformDirection(cam.matrixWorld);
+    return [d.x, d.y, d.z];
+  }
+
+  /** World → CSS px of a width × height CSS px canvas by the current camera (spec 09, M18). */
+  function handleProjection(width: number, height: number): HandleProjection {
+    const cam = rig.camera;
+    const direction = viewDirection();
+    cam.updateProjectionMatrix();
+    const matrix = new THREE.Matrix4().multiplyMatrices(
+      cam.projectionMatrix,
+      cam.matrixWorldInverse,
+    );
+    const scratch = new THREE.Vector3();
+    return {
+      project: (p: Vec3): ScreenPoint => {
+        scratch.set(...p).applyMatrix4(matrix);
+        return [((scratch.x + 1) / 2) * width, ((1 - scratch.y) / 2) * height];
+      },
+      worldPerPx: worldPerPx(height),
+      viewDirection: direction,
+    };
+  }
+
   function assertAlive(): void {
     assert(!disposed, 'Viewport used after dispose');
   }
@@ -285,6 +339,7 @@ export function createViewport(deps: {
     rig.resize(width, height);
     highlightLayer.setResolution(width, height);
     sketchLayer.setResolution(width, height);
+    manipulatorLayer.setResolution(width, height);
     scheduleFrame();
   }
 
@@ -300,12 +355,13 @@ export function createViewport(deps: {
     });
   }
 
-  function emitPointer(type: ViewPointerEvent['type'], e: PointerEvent): void {
+  /** `button` overrides PointerEvent.button (pointercancel reports -1). */
+  function emitPointer(type: ViewPointerEvent['type'], e: PointerEvent, button = e.button): void {
     const input = {
       type,
       offsetX: e.offsetX,
       offsetY: e.offsetY,
-      button: e.button,
+      button,
       shiftKey: e.shiftKey,
       altKey: e.altKey,
       ctrlKey: e.ctrlKey,
@@ -369,15 +425,30 @@ export function createViewport(deps: {
     resources.add(() => {
       viewCube.unmount();
     });
+    // After the view cube, so the label stacks above it.
+    manipulatorLayer.mountLabel(canvas);
+    resources.add(() => {
+      manipulatorLayer.unmountLabel();
+    });
 
     listen(resources, canvas, 'pointerdown', (e) => {
+      // A manipulator drag goes on outside the canvas (spec 09, "Události"); the browser
+      // releases the capture on pointerup. Right and middle are captured by the camera input.
+      // Emitted first: a capture that throws (an unknown pointerId) must not swallow the down.
       emitPointer('down', e);
+      if (e.button === 0) canvas.setPointerCapture(e.pointerId);
     });
     listen(resources, canvas, 'pointermove', (e) => {
       emitPointer('move', e);
     });
     listen(resources, canvas, 'pointerup', (e) => {
       emitPointer('up', e);
+    });
+    // The system broke the gesture off (spec 09, "Události"): a left up, so a manipulator drag
+    // does not get stuck. Not lostpointercapture: it also follows every plain pointerup and the
+    // SelectTool would see the click twice.
+    listen(resources, canvas, 'pointercancel', (e) => {
+      emitPointer('up', e, 0);
     });
     listen(resources, canvas, 'pointerleave', (e) => {
       emitPointer('leave', e);
@@ -465,6 +536,26 @@ export function createViewport(deps: {
     },
   };
 
+  const manipulators: ManipulatorLayer = {
+    set(handles) {
+      assertAlive();
+      manipulatorLayer.set(handles);
+    },
+    pick(x, y) {
+      assertAlive();
+      if (mounted === null) return null;
+      const { clientWidth, clientHeight } = mounted.canvas;
+      if (clientWidth <= 0 || clientHeight <= 0) return null;
+      // The camera as the next frame draws it (near/far may move the camera along its view).
+      updateClip();
+      return manipulatorLayer.pick(x, y, handleProjection(clientWidth, clientHeight));
+    },
+    setLabel(label) {
+      assertAlive();
+      manipulatorLayer.setLabel(label);
+    },
+  };
+
   const camera: CameraController = {
     fitAll() {
       assertAlive();
@@ -517,6 +608,7 @@ export function createViewport(deps: {
     highlight,
     overlay,
     sketches,
+    manipulators,
     camera,
     setPalette(next: ScenePalette): void {
       assertAlive();
@@ -525,6 +617,7 @@ export function createViewport(deps: {
       highlightLayer.setPalette(next);
       overlayLayer.setPalette(next);
       sketchLayer.setPalette(next);
+      manipulatorLayer.setPalette(next);
       helpers.setPalette(next);
       viewCube.setPalette(next);
       // While unmounted, mount takes the background from `palette`.
@@ -566,8 +659,9 @@ export function createViewport(deps: {
         highlightLayer.group,
         overlayLayer.group,
         sketchLayer.group,
+        manipulatorLayer.group,
       );
-      // In reverse order: view cube, helpers, camera rig, sketches, overlay, highlight, then the body
+      // In reverse order: view cube, helpers, camera rig, manipulators, sketches, overlay, highlight, then the body
       // layer, which disposes every BodyView and its shared materials and makes a running sync
       // stale.
       lifetime.dispose();

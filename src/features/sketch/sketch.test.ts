@@ -8,7 +8,7 @@ import {
 } from '@/document';
 import type { FeatureInstance, PlaneId, PlaneRef } from '@/document';
 import { aFeature } from '@/document/testing';
-import { createToolRegistry } from '@/interaction';
+import { createManipulatorRegistry, createToolRegistry } from '@/interaction';
 import { createFakeKernel } from '@/kernel/testing';
 import type { FakeKernel } from '@/kernel/testing';
 import { registerPlugin } from '@/plugin-api';
@@ -131,6 +131,7 @@ describe('sketch public API', () => {
       schemas: createFeatureSchemaRegistry(),
       builders: createBuilderRegistry(),
       tools: createToolRegistry(),
+      manipulators: createManipulatorRegistry(),
     };
     registerPlugin(sketch.sketchPlugin, regs);
     expect(regs.schemas.get(SKETCH_FEATURE_TYPE)).toBe(sketchSchema);
@@ -447,6 +448,7 @@ describe('sketch plugin in the Regenerator', () => {
       schemas: setup.schemas,
       builders: setup.builders,
       tools: createToolRegistry(),
+      manipulators: createManipulatorRegistry(),
     });
     return setup;
   }

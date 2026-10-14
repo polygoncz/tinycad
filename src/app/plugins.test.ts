@@ -6,7 +6,7 @@ import type { FeaturePlugin } from '@/plugin-api';
 import { createManualScheduler } from '@/persistence/testing';
 import { createFakeSolver } from '@/sketch/testing';
 import { BUILT_IN_PLUGINS, createAppSession } from './index';
-import { aKernelFactory, FakeAppViewport } from './testing';
+import { aKernelFactory, FakeAppViewport, formatTestValue } from './testing';
 
 describe('BUILT_IN_PLUGINS', () => {
   it('is frozen and has the nine plugins in toolbar order', () => {
@@ -40,6 +40,7 @@ describe('BUILT_IN_PLUGINS', () => {
       solver: createFakeSolver(),
       download: () => undefined,
       theme: 'light',
+      formatValue: formatTestValue,
     });
     expect(session.toolList.map((t) => t.id)).toEqual(
       expect.arrayContaining([

@@ -3,6 +3,7 @@
 // The document stores millimetres and radians (spec 01, "Souřadnice a jednotky"); the UI shows
 // millimetres and degrees.
 
+import type { HandleUnit } from '@/app';
 import type { Vec3 } from '@/core';
 
 /** Number typed by the user, '.' or ',' as the decimal mark; null for anything else. */
@@ -49,6 +50,20 @@ export function radToDeg(rad: number): number {
 
 export function degToRad(deg: number): number {
   return (deg * Math.PI) / 180;
+}
+
+/**
+ * Text of the label of a manipulator (spec 11, rule 7): millimetres or degrees rounded to two
+ * decimals, the same numbers as in the fields and independent of the language.
+ */
+export function formatHandleValue(value: number, unit: HandleUnit): string {
+  return unit === 'length'
+    ? `${formatNumber(round2(value))} mm`
+    : `${formatNumber(round2(radToDeg(value)))}°`;
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 /** The translated text of the button of a RefListField: a key of the ui messages and its params. */

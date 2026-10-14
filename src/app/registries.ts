@@ -4,8 +4,8 @@
 
 import { createFeatureSchemaRegistry } from '@/document';
 import type { FeatureSchemaRegistry } from '@/document';
-import { createToolRegistry, SELECT_TOOL } from '@/interaction';
-import type { ToolRegistry } from '@/interaction';
+import { createManipulatorRegistry, createToolRegistry, SELECT_TOOL } from '@/interaction';
+import type { ManipulatorRegistry, ToolRegistry } from '@/interaction';
 import { createOpHandlerRegistry } from '@/ops';
 import type { OpHandlerRegistry } from '@/ops';
 import { registerPlugin } from '@/plugin-api';
@@ -18,6 +18,8 @@ export interface PluginRegistries {
   readonly builders: BuilderRegistry;
   /** The select tool first, then the tools of the plugins; a session adds the sketch tools. */
   readonly tools: ToolRegistry;
+  /** Manipulator descriptors of the plugins by feature type (M18). */
+  readonly manipulators: ManipulatorRegistry;
   /** The built-in handlers of operations over `schemas`. */
   readonly handlers: OpHandlerRegistry;
   /** Dictionaries of the plugins for vue-i18n (ADR 0014). */
@@ -33,13 +35,14 @@ export function createPluginRegistries(plugins: readonly FeaturePlugin[]): Plugi
   const builders = createBuilderRegistry();
   const tools = createToolRegistry();
   tools.register(SELECT_TOOL);
+  const manipulators = createManipulatorRegistry();
   for (const plugin of plugins) {
-    registerPlugin(plugin, { schemas, builders, tools });
+    registerPlugin(plugin, { schemas, builders, tools, manipulators });
   }
   checkComplete(schemas, builders);
   const messages = mergeMessages(plugins);
   const handlers = createOpHandlerRegistry({ schemas });
-  return { schemas, builders, tools, handlers, messages };
+  return { schemas, builders, tools, manipulators, handlers, messages };
 }
 
 /** Every type has a schema and a builder; registerPlugin guarantees it, this guards app. */

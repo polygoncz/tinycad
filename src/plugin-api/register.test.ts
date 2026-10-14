@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createFeatureSchemaRegistry } from '@/document';
 import type { FeatureSchema } from '@/document';
-import { createToolRegistry } from '@/interaction';
-import type { Tool, ToolDescriptor } from '@/interaction';
+import { createManipulatorRegistry, createToolRegistry } from '@/interaction';
+import type { ManipulatorDescriptor, Tool, ToolDescriptor } from '@/interaction';
 import { createBuilderRegistry } from '@/regen';
 import type { FeatureBuilder } from '@/regen';
 import { aSchema, aSpyBuilder, validateSize } from '@/regen/testing';
@@ -14,6 +14,7 @@ function registries() {
     schemas: createFeatureSchemaRegistry(),
     builders: createBuilderRegistry(),
     tools: createToolRegistry(),
+    manipulators: createManipulatorRegistry(),
   };
 }
 
@@ -32,6 +33,20 @@ function aTool(id: string): ToolDescriptor {
       throw new Error('Tool.create is not expected in registration tests');
     },
   };
+}
+
+/** A descriptor that is never asked for handles here: registration only stores it. */
+function aManipulator(type: string): ManipulatorDescriptor {
+  return {
+    type,
+    handles() {
+      throw new Error('ManipulatorDescriptor.handles is not expected in registration tests');
+    },
+  };
+}
+
+function aPluginWithManipulator(type: string, manipulatorType = type): FeaturePlugin {
+  return { ...aPlugin(type), manipulators: aManipulator(manipulatorType) };
 }
 
 function aPluginWithTools(type: string, toolIds: readonly string[]): FeaturePlugin {
@@ -162,5 +177,87 @@ describe('registerPlugin', () => {
       registerPlugin(aPluginWithTools('box', ['box']), regs);
     }).toThrow(/box/);
     expect(regs.tools.all()).toEqual([]);
+  });
+
+  it('registers the manipulator descriptor of the plugin under its type', () => {
+    const regs = registries();
+    const plugin = aPluginWithManipulator('box');
+    registerPlugin(plugin, regs);
+    expect(regs.manipulators.get('box')).toBe(plugin.manipulators);
+  });
+
+  it('leaves the manipulator registry alone for a plugin without a descriptor', () => {
+    const regs = registries();
+    registerPlugin(aPlugin(), regs);
+    expect(regs.manipulators.all()).toEqual([]);
+  });
+
+  it('throws on a descriptor type other than the schema type and registers nothing', () => {
+    const regs = registries();
+    expect(() => {
+      registerPlugin(
+        { ...aPluginWithTools('box', ['box']), manipulators: aManipulator('cube') },
+        regs,
+      );
+    }).toThrow(/box.*cube|cube.*box/);
+    expect(regs.schemas.all()).toEqual([]);
+    expect(regs.builders.all()).toEqual([]);
+    expect(regs.tools.all()).toEqual([]);
+    expect(regs.manipulators.all()).toEqual([]);
+  });
+
+  it('throws on a type already in the manipulator registry and registers nothing more', () => {
+    const regs = registries();
+    const existing = aManipulator('box');
+    regs.manipulators.register(existing);
+    expect(() => {
+      registerPlugin(
+        { ...aPluginWithTools('box', ['box']), manipulators: aManipulator('box') },
+        regs,
+      );
+    }).toThrow("Duplicate manipulator 'box'");
+    expect(regs.schemas.all()).toEqual([]);
+    expect(regs.builders.all()).toEqual([]);
+    expect(regs.tools.all()).toEqual([]);
+    expect(regs.manipulators.all()).toEqual([existing]);
+  });
+
+  it('accepts a plugin with a manipulator descriptor typed with its own params', () => {
+    // Compile-time check: handles is a method, so FeaturePlugin<P> with ManipulatorDescriptor<P>
+    // must be passable as FeaturePlugin without a cast (spec 10, "Deskriptor a úchyty").
+    interface SizeParams {
+      readonly size: number;
+    }
+    const plugin: FeaturePlugin<SizeParams> = {
+      schema: {
+        type: 'cube',
+        version: 1,
+        label: 'cube.label',
+        params: {
+          size: { kind: 'length', label: 'cube.size', default: 1, min: 0, exclusiveMin: true },
+        },
+        defaults: () => ({ size: 1 }),
+        validate: validateSize,
+      },
+      builder: { type: 'cube', build: async ({ state }) => Promise.resolve({ ok: true, state }) },
+      manipulators: {
+        type: 'cube',
+        handles: (params) => [
+          {
+            kind: 'linear',
+            id: 'size',
+            value: params.size,
+            unit: 'length',
+            tint: 'neutral',
+            position: [0, 0, 0],
+            direction: [0, 0, 1],
+            toParams: (size) => ({ size }),
+          },
+        ],
+      },
+    };
+    const regs = registries();
+    registerPlugin(plugin, regs);
+    expect(regs.manipulators.get('cube')).toBe(plugin.manipulators);
   });
 });

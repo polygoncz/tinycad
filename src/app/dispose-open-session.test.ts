@@ -7,7 +7,7 @@ import { createManualScheduler } from '@/persistence/testing';
 import { createFakeSolver } from '@/sketch/testing';
 import { disposeOpenSession } from './dispose-open-session';
 import { BUILT_IN_PLUGINS, createAppSession } from './index';
-import { aKernelFactory, FakeAppViewport, settle } from './testing';
+import { aKernelFactory, FakeAppViewport, formatTestValue, settle } from './testing';
 
 const DOC = 'doc1' as DocumentId; // test value
 
@@ -94,6 +94,7 @@ describe('disposeOpenSession', () => {
       solver: createFakeSolver(),
       download: () => undefined,
       theme: 'light',
+      formatValue: formatTestValue,
     });
     await settle();
     const edit = session.features.create('box');

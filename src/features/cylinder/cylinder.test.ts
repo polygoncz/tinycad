@@ -7,6 +7,7 @@ import {
   SELECT_TOOL,
   createSelectionModel,
   createToolManager,
+  createManipulatorRegistry,
   createToolRegistry,
 } from '@/interaction';
 import type { FeatureEditor, FeatureEditSession } from '@/interaction';
@@ -84,6 +85,7 @@ describe('cylinder public API', () => {
       schemas: createFeatureSchemaRegistry(),
       builders: createBuilderRegistry(),
       tools: createToolRegistry(),
+      manipulators: createManipulatorRegistry(),
     };
     registerPlugin(cylinder.cylinderPlugin, regs);
     expect(regs.tools.get('cylinder')).toBe(cylinderTool);
@@ -338,7 +340,12 @@ describe('cylinder plugin in the Regenerator', () => {
     const kernel = createFakeKernel();
     const schemas = createFeatureSchemaRegistry();
     const builders = createBuilderRegistry();
-    registerPlugin(cylinder.cylinderPlugin, { schemas, builders, tools: createToolRegistry() });
+    registerPlugin(cylinder.cylinderPlugin, {
+      schemas,
+      builders,
+      tools: createToolRegistry(),
+      manipulators: createManipulatorRegistry(),
+    });
     const regenerator = createRegenerator({ kernel, schemas, builders, now: stoppedClock });
     const features = [aCylinder('c1'), aCylinder('c2', { axis: 'x', base: [20, 0, 0] })];
 
@@ -361,7 +368,12 @@ describe('cylinder plugin in the Regenerator', () => {
     const kernel = createFakeKernel();
     const schemas = createFeatureSchemaRegistry();
     const builders = createBuilderRegistry();
-    registerPlugin(cylinder.cylinderPlugin, { schemas, builders, tools: createToolRegistry() });
+    registerPlugin(cylinder.cylinderPlugin, {
+      schemas,
+      builders,
+      tools: createToolRegistry(),
+      manipulators: createManipulatorRegistry(),
+    });
     const regenerator = createRegenerator({ kernel, schemas, builders, now: stoppedClock });
     const features = [aCylinder('c1', { radius: 0 })];
 

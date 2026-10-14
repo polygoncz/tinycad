@@ -38,6 +38,7 @@ function aResult(
     generation: 7,
     finalState: { artifacts: new Map(artifacts.map((a) => [a.id, a])) },
     statuses: new Map(statuses.map(([id, s]) => [fid(id), s])),
+    anchors: new Map(),
     durationMs: 3,
   };
 }
@@ -50,6 +51,7 @@ describe('RegenStatusAdapter', () => {
     expect(snapshot.health.size).toBe(0);
     expect(snapshot.bodies).toEqual([]);
     expect(snapshot.sketches).toEqual([]);
+    expect(snapshot.anchors.size).toBe(0);
   });
 
   it('maps the statuses of evaluated features to health and leaves the others out', () => {
@@ -148,6 +150,21 @@ describe('RegenStatusAdapter', () => {
     const regions = adapter.state.get().sketches[0]?.regions;
     expect(regions).toEqual(['r1', 'r2', 'r3']);
     expect(Object.isFrozen(regions)).toBe(true);
+  });
+
+  it('passes the anchors of the result on in a new map (M18)', () => {
+    const adapter = createRegenStatusAdapter();
+    const pivot = Object.freeze({ point: Object.freeze([1, 2, 3] as const) });
+    const anchors = Object.freeze({ pivot });
+    const result: RegenResult = {
+      ...aResult([['a', { kind: 'ok' }]]),
+      anchors: new Map([[fid('a'), anchors]]),
+    };
+    adapter.publish(result);
+    const published = adapter.state.get().anchors;
+    expect(published).not.toBe(result.anchors);
+    expect(published).toEqual(new Map([[fid('a'), { pivot: { point: [1, 2, 3] } }]]));
+    expect(published.get(fid('a'))).toBe(anchors);
   });
 
   it('grows the generation by one with every published result, whatever the Regenerator counts', () => {

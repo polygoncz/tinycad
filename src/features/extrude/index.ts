@@ -3,6 +3,7 @@
 
 import type { FeaturePlugin } from '@/plugin-api';
 import { extrudeBuilder } from './builder';
+import { extrudeManipulators } from './manipulators';
 import { extrudeMessages } from './messages';
 import { extrudeSchema } from './schema';
 import type { ExtrudeParams } from './schema';
@@ -17,4 +18,5 @@ export const extrudePlugin: FeaturePlugin<ExtrudeParams> = Object.freeze<
   builder: extrudeBuilder,
   tools: Object.freeze([extrudeTool]),
   messages: extrudeMessages,
+  manipulators: extrudeManipulators,
 });

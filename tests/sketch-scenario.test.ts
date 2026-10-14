@@ -17,7 +17,12 @@ import {
 } from '@/document';
 import type { DocumentId, FeatureId, PlaneId } from '@/document';
 import { sketchPlugin } from '@/features/sketch';
-import { createFeatureEditor, createSketchEditor, createToolRegistry } from '@/interaction';
+import {
+  createFeatureEditor,
+  createSketchEditor,
+  createManipulatorRegistry,
+  createToolRegistry,
+} from '@/interaction';
 import type { SketchSession } from '@/interaction';
 import { FakeViewport } from '@/interaction/testing';
 import { createFakeKernel } from '@/kernel/testing';
@@ -50,7 +55,12 @@ function setup() {
   const schemas = createFeatureSchemaRegistry();
   const builders = createBuilderRegistry();
   // The plugin directly: app (BUILT_IN_PLUGINS) needs the DOM types.
-  registerPlugin(sketchPlugin, { schemas, builders, tools: createToolRegistry() });
+  registerPlugin(sketchPlugin, {
+    schemas,
+    builders,
+    tools: createToolRegistry(),
+    manipulators: createManipulatorRegistry(),
+  });
   const doc = createDocument({ meta: META });
   const log = createOperationLog();
   const handlers = createOpHandlerRegistry({ schemas });

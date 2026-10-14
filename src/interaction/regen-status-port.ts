@@ -4,7 +4,7 @@
 // it from RegenState (Q063, R102). Suppression and the rollback bar are not here: interaction reads
 // them from the document directly, so they show at once, not after a regeneration.
 
-import type { Observable } from '@/core';
+import type { Observable, Vec3 } from '@/core';
 import type { BodyId, FeatureId, ParamIssue, SketchId, TopoName } from '@/document';
 
 export type FeatureHealth =
@@ -55,6 +55,18 @@ export interface RegenSketch {
   readonly regions: readonly string[];
 }
 
+/**
+ * An anchor of a manipulator (M18, ADR 0021): a point and an optional unit direction in world
+ * coordinates. Structurally the same as regen's Anchor, so app passes it on unchanged.
+ */
+export interface Anchor {
+  readonly point: Vec3;
+  readonly direction?: Vec3;
+}
+
+/** Anchors of one feature by name ('pivot', 'base'…); the plugin chooses names and meaning. */
+export type FeatureAnchors = Readonly<Record<string, Anchor>>;
+
 export interface RegenSnapshot {
   /** Grows by 1 with each finished regeneration; 0 = none yet. */
   readonly generation: number;
@@ -64,6 +76,8 @@ export interface RegenSnapshot {
   readonly bodies: readonly RegenBody[];
   /** Sketches of the final state of the last regeneration, in its order (the browser, M12). */
   readonly sketches: readonly RegenSketch[];
+  /** Anchors of the manipulators of the last regeneration's features (M18, RegenResult.anchors). */
+  readonly anchors: ReadonlyMap<FeatureId, FeatureAnchors>;
 }
 
 export interface RegenStatusPort {

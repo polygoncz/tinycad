@@ -1,20 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import { ObservableValue, createSequentialIdGenerator } from '@/core';
 import type { Vec3 } from '@/core';
-import { bodyId, createFeatureSchemaRegistry } from '@/document';
-import type { BodyId, BodyRef, FeatureId, FeatureInstance, TopoName } from '@/document';
+import {
+  bodyId,
+  createDocument,
+  createFeatureSchemaRegistry,
+  fromData,
+  isParamVisible,
+} from '@/document';
+import type { BodyId, BodyRef, DocumentId, FeatureId, FeatureInstance, TopoName } from '@/document';
 import { aFeature } from '@/document/testing';
 import {
   SELECT_TOOL,
   createSelectionModel,
   createToolManager,
+  createManipulatorRegistry,
   createToolRegistry,
 } from '@/interaction';
-import type { FeatureEditor, FeatureEditSession } from '@/interaction';
+import type {
+  AngularHandle,
+  FeatureEditor,
+  FeatureEditSession,
+  Handle,
+  LinearHandle,
+} from '@/interaction';
 import { FakeRegenStatus, FakeViewport } from '@/interaction/testing';
 import type { BoundingBox } from '@/kernel';
 import { createFakeKernel } from '@/kernel/testing';
 import type { FakeKernel } from '@/kernel/testing';
+import { OP_VERSION, createOpHandlerRegistry, parseLogEntry, replayLog } from '@/ops';
+import type { LogEntry } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import { registerPlugin } from '@/plugin-api';
 import { EMPTY_STATE, bodiesOf, createBuilderRegistry, nameShape } from '@/regen';
@@ -25,6 +40,7 @@ import { transformSchema } from './schema';
 import type { TransformParams } from './schema';
 import { transformMessages } from './messages';
 import { transformTool } from './tool';
+import { transformManipulators } from './manipulators';
 import * as transform from '.';
 
 function ref(body: string): BodyRef {
@@ -44,6 +60,7 @@ function aTransform(
   return aFeature({
     id,
     type: 'transform',
+    typeVersion: transformSchema.version,
     params: { ...transformSchema.defaults(), bodies: [ref('b1/body')], ...params },
   });
 }
@@ -91,6 +108,13 @@ async function bboxOf(kernel: FakeKernel, state: RegenState, id: string): Promis
   return kernel.boundingBox(body.shape);
 }
 
+function expectVec(actual: Vec3 | undefined, expected: Vec3): void {
+  if (actual === undefined) expect.fail('No vector');
+  for (let i = 0; i < 3; i++) {
+    expect(actual[i], `[${String(i)}]`).toBeCloseTo(expected[i] ?? Number.NaN, 9);
+  }
+}
+
 function expectBox(actual: BoundingBox, expected: { min: Vec3; max: Vec3 }): void {
   for (let i = 0; i < 3; i++) {
     expect(actual.min[i], `min[${String(i)}]`).toBeCloseTo(expected.min[i] ?? Number.NaN, 9);
@@ -108,6 +132,8 @@ describe('transform public API', () => {
     expect(transform.transformPlugin.builder).toBe(transformBuilder);
     expect(transform.transformPlugin.messages).toBe(transformMessages);
     expect(transform.transformPlugin.tools).toEqual([transformTool]);
+    expect(transform.transformPlugin.manipulators).toBe(transformManipulators);
+    expect(transformManipulators.type).toBe('transform');
     expect(transformSchema.type).toBe('transform');
     expect(transformBuilder.type).toBe('transform');
   });
@@ -117,29 +143,33 @@ describe('transform public API', () => {
       schemas: createFeatureSchemaRegistry(),
       builders: createBuilderRegistry(),
       tools: createToolRegistry(),
+      manipulators: createManipulatorRegistry(),
     };
     registerPlugin(transform.transformPlugin, regs);
     expect(regs.schemas.get('transform')).toBe(transformSchema);
     expect(regs.builders.get('transform')).toBe(transformBuilder);
     expect(regs.tools.get('transform')).toBe(transformTool);
+    expect(regs.manipulators.get('transform')).toBe(transformManipulators);
   });
 });
 
 describe('transformSchema', () => {
-  it('is version 1 of type transform with the icon arrows-move', () => {
+  it('is version 2 of type transform with the icon arrows-move', () => {
     expect(transformSchema).toMatchObject({
       type: 'transform',
-      version: 1,
+      version: 2,
       label: 'transform.label',
       icon: 'arrows-move',
     });
   });
 
-  it('has the params bodies, translate, axis, angle in this order with translation keys', () => {
+  it('has the params bodies, pivot, pivotPoint, translate, axis, angle in this order', () => {
     expect(
       Object.entries(transformSchema.params).map(([key, spec]) => [key, spec.kind, spec.label]),
     ).toEqual([
       ['bodies', 'bodies', 'transform.bodies'],
+      ['pivot', 'enum', 'transform.pivot'],
+      ['pivotPoint', 'point', 'transform.pivotPoint'],
       ['translate', 'point', 'transform.translate'],
       ['axis', 'enum', 'transform.axis'],
       ['angle', 'angle', 'transform.angle'],
@@ -161,6 +191,43 @@ describe('transformSchema', () => {
     expect(angle).toEqual({ kind: 'angle', label: 'transform.angle', default: 0 });
   });
 
+  it('pivot is bodiesCenter by default with the options bodiesCenter, origin, point', () => {
+    expect(transformSchema.params['pivot']).toMatchObject({
+      default: 'bodiesCenter',
+      options: [
+        { value: 'bodiesCenter', label: 'transform.pivot.bodiesCenter' },
+        { value: 'origin', label: 'transform.pivot.origin' },
+        { value: 'point', label: 'transform.pivot.point' },
+      ],
+    });
+    expect(transformSchema.params['pivotPoint']).toMatchObject({ default: [0, 0, 0] });
+  });
+
+  it('shows pivotPoint only for the pivot point', () => {
+    const spec = transformSchema.params['pivotPoint'];
+    if (spec === undefined) expect.fail('No pivotPoint param');
+    const params = transformSchema.defaults();
+    expect(isParamVisible(spec, { ...params, pivot: 'point' })).toBe(true);
+    expect(isParamVisible(spec, { ...params, pivot: 'origin' })).toBe(false);
+    expect(isParamVisible(spec, { ...params, pivot: 'bodiesCenter' })).toBe(false);
+    expect(isParamVisible(spec, {})).toBe(false);
+  });
+
+  it('does not check a hidden pivotPoint, checks a visible one', () => {
+    const params = aTransform('t1').params;
+    const broken = { ...params, pivotPoint: 'nowhere' };
+    expect(transformSchema.validate({ ...broken, pivot: 'origin' })).toEqual([]);
+    expect(transformSchema.validate({ ...broken, pivot: 'point' }).map((i) => i.param)).toEqual([
+      'pivotPoint',
+    ]);
+  });
+
+  it('rejects an unknown pivot', () => {
+    expect(transformSchema.validate({ ...aTransform('t1').params, pivot: 'centroid' })).toEqual([
+      { param: 'pivot', code: 'param.unknownOption' },
+    ]);
+  });
+
   it('is frozen deeply', () => {
     expect(Object.isFrozen(transformSchema)).toBe(true);
     expect(Object.isFrozen(transformSchema.params)).toBe(true);
@@ -170,15 +237,22 @@ describe('transformSchema', () => {
     const translate = transformSchema.params['translate'];
     if (translate?.kind !== 'point') expect.fail('translate is not a point param');
     expect(Object.isFrozen(translate.default)).toBe(true);
-    const axis = transformSchema.params['axis'];
-    if (axis?.kind !== 'enum') expect.fail('axis is not an enum param');
-    expect(Object.isFrozen(axis.options)).toBe(true);
-    for (const option of axis.options) expect(Object.isFrozen(option)).toBe(true);
+    const pivotPoint = transformSchema.params['pivotPoint'];
+    if (pivotPoint?.kind !== 'point') expect.fail('pivotPoint is not a point param');
+    expect(Object.isFrozen(pivotPoint.default)).toBe(true);
+    for (const key of ['axis', 'pivot']) {
+      const spec = transformSchema.params[key];
+      if (spec?.kind !== 'enum') expect.fail(`${key} is not an enum param`);
+      expect(Object.isFrozen(spec.options), key).toBe(true);
+      for (const option of spec.options) expect(Object.isFrozen(option), key).toBe(true);
+    }
   });
 
-  it('defaults move nothing: no body, no translation, axis z, angle 0', () => {
+  it('defaults move nothing: no body, pivot at the bodies center, no translation, axis z, angle 0', () => {
     expect(transformSchema.defaults()).toEqual({
       bodies: [],
+      pivot: 'bodiesCenter',
+      pivotPoint: [0, 0, 0],
       translate: [0, 0, 0],
       axis: 'z',
       angle: 0,
@@ -199,6 +273,7 @@ describe('transformSchema', () => {
     expect(a).not.toBe(b);
     expect(a.bodies).not.toBe(b.bodies);
     expect(a.translate).not.toBe(b.translate);
+    expect(a.pivotPoint).not.toBe(b.pivotPoint);
     expect(a).toEqual(b);
   });
 
@@ -255,6 +330,55 @@ describe('transformSchema', () => {
   });
 });
 
+describe('transformSchema.migrate', () => {
+  const v1 = {
+    bodies: [ref('b1/body')],
+    translate: [1, 2, 3],
+    axis: 'x',
+    angle: 0.5,
+  };
+
+  it('version 1 gets the pivot origin and pivotPoint [0, 0, 0], the other params stay', () => {
+    const migrated = transformSchema.migrate?.(1, v1);
+
+    expect(migrated).toEqual({ ...v1, pivot: 'origin', pivotPoint: [0, 0, 0] });
+    expect(transformSchema.validate(migrated)).toEqual([]);
+  });
+
+  it('throws for an unknown version', () => {
+    for (const version of [0, 2, 3]) {
+      expect(() => transformSchema.migrate?.(version, v1), String(version)).toThrow(
+        /transform.*version/,
+      );
+    }
+  });
+
+  it('throws for data of version 1 that are not an object', () => {
+    for (const raw of [null, 42, 'params', [1, 2]]) {
+      expect(() => transformSchema.migrate?.(1, raw), JSON.stringify(raw)).toThrow();
+    }
+  });
+
+  it('fromData loads a feature of version 1 as version 2 with the pivot origin', () => {
+    const schemas = createFeatureSchemaRegistry();
+    schemas.register(transformSchema);
+    const feature = { ...aTransform('t1'), typeVersion: 1, params: v1 };
+
+    const loaded = fromData(
+      {
+        meta: { id: 'doc1', name: 'Old', createdAt: 0 },
+        studio: { features: [feature], rollbackIndex: 1 },
+      },
+      schemas,
+    );
+
+    if (!loaded.ok) expect.fail(JSON.stringify(loaded.error));
+    expect(loaded.value.studio.features).toMatchObject([
+      { id: 't1', typeVersion: 2, params: { ...v1, pivot: 'origin', pivotPoint: [0, 0, 0] } },
+    ]);
+  });
+});
+
 describe('transformMessages', () => {
   /** Every translation key of the schema: its label, the param labels and enum option labels. */
   function schemaKeys(): readonly string[] {
@@ -285,6 +409,11 @@ describe('transformMessages', () => {
     expect(texts('cs')).toEqual([
       'Transformace',
       'Tělesa',
+      'Střed otáčení',
+      'Střed těles',
+      'Počátek',
+      'Bod',
+      'Bod otáčení',
       'Posun',
       'Osa rotace',
       'X',
@@ -295,6 +424,11 @@ describe('transformMessages', () => {
     expect(texts('en')).toEqual([
       'Transform',
       'Bodies',
+      'Pivot',
+      'Bodies center',
+      'Origin',
+      'Point',
+      'Pivot point',
       'Translation',
       'Rotation axis',
       'X',
@@ -339,11 +473,15 @@ describe('transformBuilder', () => {
     expectBox(await bboxOf(kernel, next, 'b1/body'), { min: [10, 20, 30], max: [12, 24, 36] });
   });
 
-  it('rotates by 90 degrees about z through the world origin', async () => {
+  it('rotates by 90 degrees about z through the world origin with the pivot origin (as v1)', async () => {
     const kernel = createFakeKernel();
     const state = await aState(kernel, [BOX]);
 
-    const next = await build(aTransform('t1', { axis: 'z', angle: Math.PI / 2 }), state, kernel);
+    const next = await build(
+      aTransform('t1', { pivot: 'origin', axis: 'z', angle: Math.PI / 2 }),
+      state,
+      kernel,
+    );
 
     expectBox(await bboxOf(kernel, next, 'b1/body'), { min: [-4, 0, 0], max: [0, 2, 6] });
   });
@@ -355,7 +493,11 @@ describe('transformBuilder', () => {
     const kernel = createFakeKernel();
     const state = await aState(kernel, [BOX]);
 
-    const next = await build(aTransform('t1', { axis, angle: Math.PI / 2 }), state, kernel);
+    const next = await build(
+      aTransform('t1', { pivot: 'origin', axis, angle: Math.PI / 2 }),
+      state,
+      kernel,
+    );
 
     expectBox(await bboxOf(kernel, next, 'b1/body'), {
       min: [...expected.min],
@@ -368,7 +510,7 @@ describe('transformBuilder', () => {
     const state = await aState(kernel, [BOX]);
 
     const next = await build(
-      aTransform('t1', { translate: [10, 0, 0], axis: 'z', angle: Math.PI / 2 }),
+      aTransform('t1', { pivot: 'origin', translate: [10, 0, 0], axis: 'z', angle: Math.PI / 2 }),
       state,
       kernel,
     );
@@ -376,6 +518,113 @@ describe('transformBuilder', () => {
     // T · R: rotated to x in [-4, 0], y in [0, 2], then moved by 10 along x.
     // R · T would give x in [-4, 0], y in [10, 12].
     expectBox(await bboxOf(kernel, next, 'b1/body'), { min: [6, 0, 0], max: [10, 2, 6] });
+  });
+
+  it('bodiesCenter rotates about the center of the bounding box: the center stays', async () => {
+    const kernel = createFakeKernel();
+    const state = await aState(kernel, [{ id: 'b1', origin: [10, 0, 0], size: [2, 2, 2] }]);
+
+    const output = await transformBuilder.build(
+      {
+        feature: aTransform('t1', { pivot: 'bodiesCenter', axis: 'z', angle: Math.PI / 2 }),
+        state,
+      },
+      aBuildContext(kernel, state),
+    );
+
+    if (!output.ok) expect.fail(output.error.message);
+    expectBox(await bboxOf(kernel, output.state, 'b1/body'), { min: [10, 0, 0], max: [12, 2, 2] });
+    expectVec(output.anchors?.['pivot']?.point, [11, 1, 1]);
+  });
+
+  it('point rotates about pivotPoint', async () => {
+    const kernel = createFakeKernel();
+    const state = await aState(kernel, [BOX]);
+
+    const output = await transformBuilder.build(
+      {
+        feature: aTransform('t1', {
+          pivot: 'point',
+          pivotPoint: [0, 4, 0],
+          axis: 'z',
+          angle: Math.PI / 2,
+        }),
+        state,
+      },
+      aBuildContext(kernel, state),
+    );
+
+    if (!output.ok) expect.fail(output.error.message);
+    // [0, 2] x [0, 4] about (0, 4): x in [0, 4], y in [4, 6].
+    expectBox(await bboxOf(kernel, output.state, 'b1/body'), { min: [0, 4, 0], max: [4, 6, 6] });
+    // pivotPoint is in the params, so there is no anchor (spec 07, the anchor is minimal).
+    expect(output.anchors).toBeUndefined();
+  });
+
+  it('pivot, then translation: T(translate) · T(p) · R · T(-p)', async () => {
+    const kernel = createFakeKernel();
+    const state = await aState(kernel, [{ id: 'b1', origin: [10, 0, 0], size: [2, 4, 2] }]);
+
+    const next = await build(
+      aTransform('t1', { translate: [0, 0, 5], axis: 'z', angle: Math.PI / 2 }),
+      state,
+      kernel,
+    );
+
+    // Center (11, 2, 1); rotated in place x in [9, 13], y in [1, 3], then up by 5.
+    expectBox(await bboxOf(kernel, next, 'b1/body'), { min: [9, 1, 5], max: [13, 3, 7] });
+  });
+
+  it('gives the anchor only for bodiesCenter, not for origin or point', async () => {
+    const kernel = createFakeKernel();
+    const state = await aState(kernel, [BOX]);
+
+    for (const pivot of ['origin', 'point'] as const) {
+      const output = await transformBuilder.build(
+        { feature: aTransform('t1', { pivot, pivotPoint: [7, 7, 7] }), state },
+        aBuildContext(kernel, state),
+      );
+      if (!output.ok) expect.fail(output.error.message);
+      expect(output.anchors, pivot).toBeUndefined();
+    }
+    const center = await transformBuilder.build(
+      { feature: aTransform('t1', { pivot: 'bodiesCenter' }), state },
+      aBuildContext(kernel, state),
+    );
+    if (!center.ok) expect.fail(center.error.message);
+    expect(Object.keys(center.anchors ?? {})).toEqual(['pivot']);
+  });
+
+  it('the anchor pivot of two bodies is the center of their joined bounding box', async () => {
+    const kernel = createFakeKernel();
+    const state = await aState(kernel, [BOX, { id: 'b2', origin: [20, -2, 0], size: [2, 2, 10] }]);
+
+    const output = await transformBuilder.build(
+      { feature: aTransform('t1', { bodies: [ref('b1/body'), ref('b2/body')] }), state },
+      aBuildContext(kernel, state),
+    );
+
+    if (!output.ok) expect.fail(output.error.message);
+    // Joined box [0, -2, 0]–[22, 4, 10].
+    expect(Object.keys(output.anchors ?? {})).toEqual(['pivot']);
+    expectVec(output.anchors?.['pivot']?.point, [11, 1, 5]);
+  });
+
+  it('the anchor does not depend on translate or angle (spec 07, anchor invariant)', async () => {
+    const kernel = createFakeKernel();
+    const state = await aState(kernel, [BOX]);
+    const anchorsOf = async (params: Partial<TransformParams>) => {
+      const feature = aTransform('t1', { pivot: 'bodiesCenter', ...params });
+      const output = await transformBuilder.build({ feature, state }, aBuildContext(kernel, state));
+      if (!output.ok) expect.fail(output.error.message);
+      return output.anchors;
+    };
+
+    const a = await anchorsOf({ translate: [0, 0, 0], angle: 0 });
+    const b = await anchorsOf({ translate: [5, -3, 9], axis: 'x', angle: 1.2 });
+
+    expect(b).toEqual(a);
+    expectVec(a?.['pivot']?.point, [1, 2, 3]);
   });
 
   it('moves two bodies at once, both keep their id and place in the map', async () => {
@@ -465,6 +714,7 @@ describe('transform plugin in the Regenerator', () => {
       schemas: setup.schemas,
       builders: setup.builders,
       tools: createToolRegistry(),
+      manipulators: createManipulatorRegistry(),
     });
     return setup;
   }
@@ -521,6 +771,60 @@ describe('transform plugin in the Regenerator', () => {
     expectBox(await bboxOf(kernel, r.finalState, 'b1/body'), { min: [0, 0, 0], max: [1, 1, 1] });
   });
 
+  it('a log of version 1 replays to version 2 with the pivot origin and builds as before', async () => {
+    const { kernel, schemas, regenerator } = aSetup();
+    const handlers = createOpHandlerRegistry({ schemas });
+    const box = aFeature({ id: 'b1', params: { size: 2 } });
+    const v1 = { bodies: [ref('b1/body')], translate: [0, 0, 0], axis: 'z', angle: 0 };
+    const t1 = { id: 't1', type: 'transform', typeVersion: 1, name: 'T', suppressed: false };
+    const rotated = { ...v1, angle: Math.PI / 2 };
+    const moved = { ...rotated, translate: [10, 0, 0] };
+    // Raw entries as stored before M18: feature.add with typeVersion 1 inside the feature,
+    // feature.setParams of the current version with typeVersion 1 and one from before M10.1.
+    const raw = [
+      { op: { type: 'feature.add', v: 1, feature: box, index: 0 } },
+      { op: { type: 'feature.add', v: 1, feature: { ...t1, params: v1 }, index: 1 } },
+      {
+        op: {
+          type: 'feature.setParams',
+          v: OP_VERSION['feature.setParams'],
+          featureId: 't1',
+          typeVersion: 1,
+          params: rotated,
+        },
+      },
+      { op: { type: 'feature.setParams', v: 1, featureId: 't1', params: moved } },
+    ].map((entry, i) => ({
+      ...entry,
+      seq: i + 1,
+      kind: 'do',
+      // The inverse is not replayed; any valid operation does.
+      inverse: { type: 'feature.remove', v: 1, featureId: 't1' },
+      label: 'old',
+      time: 0,
+    }));
+    const entries: LogEntry[] = raw.map((entry) => {
+      const parsed = parseLogEntry(handlers, entry);
+      if (!parsed.ok) expect.fail(JSON.stringify(parsed.error));
+      return parsed.value;
+    });
+    const doc = createDocument({
+      meta: { id: 'doc1' as DocumentId, name: 'Old', createdAt: 0 }, // a test id is trusted
+    });
+
+    replayLog(doc, handlers, entries);
+
+    const feature = doc.studio.features.find((f) => f.id === 't1');
+    expect(feature).toMatchObject({
+      typeVersion: 2,
+      params: { ...moved, pivot: 'origin', pivotPoint: [0, 0, 0] },
+    });
+    const r = result(await regenerator.run({ features: doc.studio.features, rollbackIndex: 2 }));
+    expect(r.statuses.get('t1' as FeatureId)).toEqual({ kind: 'ok' });
+    // As in version 1: rotated about z through the origin to x in [-2, 0], then by 10 along x.
+    expectBox(await bboxOf(kernel, r.finalState, 'b1/body'), { min: [8, 0, 0], max: [10, 2, 2] });
+  });
+
   it('an empty body list is a validation error of the feature', async () => {
     const { regenerator } = aSetup();
     const box = aFeature({ id: 'b1' });
@@ -530,6 +834,127 @@ describe('transform plugin in the Regenerator', () => {
 
     expect(r.statuses.get(moved.id)).toMatchObject({ kind: 'error' });
     expect(JSON.stringify(r.statuses.get(moved.id))).toContain('param.tooFewRefs');
+  });
+});
+
+describe('transformManipulators', () => {
+  const ANCHORS = { pivot: { point: [1, 2, 3] as Vec3 } };
+  const params = (overrides: Partial<TransformParams> = {}): TransformParams => ({
+    ...aTransform('t1').params,
+    pivot: 'bodiesCenter',
+    translate: [10, 20, 30],
+    axis: 'z',
+    angle: 0.7,
+    ...overrides,
+  });
+
+  function handle(handles: readonly Handle[], id: string): Handle {
+    const found = handles.find((h) => h.id === id);
+    if (found === undefined) expect.fail(`No handle ${id}`);
+    return found;
+  }
+  function linear(handles: readonly Handle[], id: string): LinearHandle {
+    const h = handle(handles, id);
+    if (h.kind !== 'linear') expect.fail(`${id} is not linear`);
+    return h;
+  }
+  function angular(handles: readonly Handle[], id: string): AngularHandle {
+    const h = handle(handles, id);
+    if (h.kind !== 'angular') expect.fail(`${id} is not angular`);
+    return h;
+  }
+
+  it('bodiesCenter gives no handles without the anchor pivot', () => {
+    expect(transformManipulators.handles(params(), {})).toEqual([]);
+  });
+
+  it('origin: the handles stand at translate without any anchor', () => {
+    const handles = transformManipulators.handles(params({ pivot: 'origin' }), {});
+    expect(handles).toHaveLength(6);
+    expect(linear(handles, 'tx').position).toEqual([10, 20, 30]);
+    expect(angular(handles, 'rz').center).toEqual([10, 20, 30]);
+  });
+
+  it('point: the handles stand at pivotPoint + translate without any anchor', () => {
+    const p = params({ pivot: 'point', pivotPoint: [-1, 0, 2] });
+    const handles = transformManipulators.handles(p, {});
+    expect(handles).toHaveLength(6);
+    expect(linear(handles, 'tz').position).toEqual([9, 20, 32]);
+    expect(angular(handles, 'rx').center).toEqual([9, 20, 32]);
+  });
+
+  it('origin and point ignore a stale anchor pivot', () => {
+    const origin = transformManipulators.handles(params({ pivot: 'origin' }), ANCHORS);
+    expect(linear(origin, 'tx').position).toEqual([10, 20, 30]);
+    const point = transformManipulators.handles(
+      params({ pivot: 'point', pivotPoint: [-1, 0, 2] }),
+      ANCHORS,
+    );
+    expect(linear(point, 'tx').position).toEqual([9, 20, 32]);
+  });
+
+  it('gives six handles tx, ty, tz, rx, ry, rz', () => {
+    const handles = transformManipulators.handles(params(), ANCHORS);
+    expect(handles.map((h) => [h.id, h.kind, h.unit, h.tint])).toEqual([
+      ['tx', 'linear', 'length', 'x'],
+      ['ty', 'linear', 'length', 'y'],
+      ['tz', 'linear', 'length', 'z'],
+      ['rx', 'angular', 'angle', 'x'],
+      ['ry', 'angular', 'angle', 'y'],
+      ['rz', 'angular', 'angle', 'z'],
+    ]);
+  });
+
+  it('arrows stand at pivot + translate along the world axes with the translate values', () => {
+    const handles = transformManipulators.handles(params(), ANCHORS);
+    const expected: readonly [string, Vec3, number][] = [
+      ['tx', [1, 0, 0], 10],
+      ['ty', [0, 1, 0], 20],
+      ['tz', [0, 0, 1], 30],
+    ];
+    for (const [id, direction, value] of expected) {
+      const h = linear(handles, id);
+      expect(h.position, id).toEqual([11, 22, 33]);
+      expect(h.direction, id).toEqual(direction);
+      expect(h.value, id).toBe(value);
+    }
+  });
+
+  it('toParams of ty changes only the y of translate', () => {
+    const ty = linear(transformManipulators.handles(params(), ANCHORS), 'ty');
+    expect(ty.toParams(-4)).toEqual({ translate: [10, -4, 30] });
+  });
+
+  it('rings stand at pivot + translate about the world axes with zero Y, Z, X', () => {
+    const handles = transformManipulators.handles(params(), ANCHORS);
+    const expected: readonly [string, Vec3, Vec3][] = [
+      ['rx', [1, 0, 0], [0, 1, 0]],
+      ['ry', [0, 1, 0], [0, 0, 1]],
+      ['rz', [0, 0, 1], [1, 0, 0]],
+    ];
+    for (const [id, axis, zero] of expected) {
+      const h = angular(handles, id);
+      expect(h.center, id).toEqual([11, 22, 33]);
+      expect(h.axis, id).toEqual(axis);
+      expect(h.zero, id).toEqual(zero);
+    }
+  });
+
+  it('the ring of the current axis has the angle, the others 0 and switch the axis', () => {
+    const handles = transformManipulators.handles(params({ axis: 'z', angle: 0.7 }), ANCHORS);
+    expect(angular(handles, 'rz').value).toBe(0.7);
+    expect(angular(handles, 'rx').value).toBe(0);
+    expect(angular(handles, 'ry').value).toBe(0);
+    expect(angular(handles, 'rx').toParams(0.3)).toEqual({ axis: 'x', angle: 0.3 });
+    expect(angular(handles, 'rz').toParams(1.1)).toEqual({ axis: 'z', angle: 1.1 });
+  });
+
+  it('the handles are frozen', () => {
+    const handles = transformManipulators.handles(params(), ANCHORS);
+    expect(Object.isFrozen(handles)).toBe(true);
+    for (const h of handles) expect(Object.isFrozen(h), h.id).toBe(true);
+    expect(Object.isFrozen(linear(handles, 'tx').position)).toBe(true);
+    expect(Object.isFrozen(angular(handles, 'rx').center)).toBe(true);
   });
 });
 

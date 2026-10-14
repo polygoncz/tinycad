@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 18
 aliases:
   - M18
@@ -22,7 +22,7 @@ specs:
 depends_on:
   - "[[M17.1-rezim-otaceni]]"
 started: 2026-10-14
-finished:
+finished: 2026-10-14
 tags:
   - milnik
 created: 2026-10-14
@@ -46,14 +46,15 @@ updated: 2026-10-14
 
 ## Úkoly
 
-- [ ] 1. `regen`: kotvy ve výstupu builderu, v cache a v `RegenResult`
-- [ ] 2. `interaction`: typy úchytů a matematika tažení
-- [ ] 3. `interaction` + `plugin-api`: registr manipulátorů a pole pluginu
-- [ ] 4. `interaction`: `ManipulatorController`, směrování v `ToolManager`, testovací porty
-- [ ] 5. `render`: `ManipulatorLayer`, picking, štítek, zachycení ukazatele
-- [ ] 6. `features/transform`: schéma v2, migrace, pivot, kotva, manipulátor
-- [ ] 7. `features/extrude`: kotva a manipulátor vzdálenosti
-- [ ] 8. `app` + `ui`: zapojení, `formatValue`, ruční ověření, revize
+- [x] 1. `regen`: kotvy ve výstupu builderu, v cache a v `RegenResult`
+- [x] 2. `interaction`: typy úchytů a matematika tažení
+- [x] 3. `interaction` + `plugin-api`: registr manipulátorů a pole pluginu
+- [x] 4. `interaction`: `ManipulatorController`, směrování v `ToolManager`, testovací porty
+- [x] 5. `render`: `ManipulatorLayer`, picking, štítek, zachycení ukazatele
+- [x] 6. `features/transform`: schéma v2, migrace, pivot, kotva, manipulátor
+- [x] 7. `features/extrude`: kotva a manipulátor vzdálenosti
+- [x] 8. `app` + `ui`: zapojení, `formatValue`, ruční ověření, revize
+- [x] 9. Opravy z revize architektury
 
 ## Implementační plán
 
@@ -111,7 +112,7 @@ updated: 2026-10-14
 
 ### 4. `ManipulatorController` a směrování
 
-- **Soubory:** `src/interaction/viewport-port.ts` (`ManipulatorPort`, `HandleView`, `HandleState`, `ManipulatorLabel`, `ViewportPort.manipulators`), `src/interaction/regen-status-port.ts` (`Anchor`, `FeatureAnchors`, `RegenSnapshot.anchors`), `src/interaction/manipulator-controller.ts` (+ test), `src/interaction/tool-manager.ts` (+ test), `src/interaction/testing.ts` (`FakeViewport`: `manipulatorViews`, `manipulatorLabel`, `prepareHandlePick`; `FakeRegenStatus.publish(…, anchors?)`), `src/interaction/index.ts`. Dotčená místa, která sestavují `RegenSnapshot` nebo implementují `ViewportPort`: `src/app/regen-status-adapter.ts` (zatím prázdná mapa, plnění v úkolu 8), `src/render/viewport.ts` (zatím prázdná implementace `manipulators`, skutečná v úkolu 5).
+- **Soubory:** `src/interaction/viewport-port.ts` (`ManipulatorPort`, `HandleView`, `HandleState`, `ManipulatorLabel`, `ViewportPort.manipulators`), `src/interaction/regen-status-port.ts` (`Anchor`, `FeatureAnchors`, `RegenSnapshot.anchors`), `src/interaction/manipulator-controller.ts` (+ test), `src/interaction/tool-manager.ts` (+ test), `src/interaction/testing.ts` (`FakeViewport`: `manipulatorViews`, `manipulatorLabel`, `prepareHandlePick`; `FakeRegenStatus.publish(…, anchors?)`), `src/interaction/index.ts`. Dotčená místa, která sestavují `RegenSnapshot` nebo implementují `ViewportPort`: `src/app/regen-status-adapter.ts` (`anchors` z `RegenResult.anchors`, hotové už v úkolu 4), `src/render/viewport.ts` (zatím prázdná implementace `manipulators`, skutečná v úkolu 5).
 - **Kontrakt:** [[10-interakce#Port (`viewport-port.ts`)]], [[10-interakce#`ManipulatorController` (`manipulator-controller.ts`)]], [[10-interakce#Směrování v `ToolManager`]], `RegenSnapshot.anchors` v [[10-interakce#Port stavu regenerace]].
 - **Testy:** odrážky `manipulator-controller` a `tool-manager` v [[10-interakce#Testy]] (sekce Manipulátory) a k tomu krajní případy 2–4 výše. Testovací deskriptor se dvěma úchyty: lineární `'a'` nad parametrem `x` a úhlový `'b'`, který přepíná `mode` a nastavuje `angle`.
 - **Hotovo když:** testy projdou, `npm run check` je zelený a bez `manipulators` v `createToolManager` projdou stávající testy beze změny.
@@ -138,9 +139,9 @@ updated: 2026-10-14
   - **Builder:**
     - `p` je střed sjednocené obálky (`kernel.boundingBox` každého vstupního tělesa, `(min + max) / 2`), nebo `[0, 0, 0]`, nebo `pivotPoint`.
     - `m = T(translate) · T(p) · R(AXIS[axis], angle) · T(−p)`.
-    - Výstup `anchors: { pivot: { point: p } }`.
+    - Výstup `anchors: { pivot: { point: p } }` jen pro `pivot: 'bodiesCenter'` (revize: počátek a `pivotPoint` jdou spočítat z params).
     - Identita těles beze změny ([[07-regenerace#Builder featury]]).
-  - **Manipulátor** (`handles(params, anchors)`): bez kotvy `pivot` → `[]`. Jinak `c = pivot.point + translate`:
+  - **Manipulátor** (`handles(params, anchors)`): pivot `p` = `[0, 0, 0]` pro `origin`, `pivotPoint` pro `point`, kotva `pivot` pro `bodiesCenter` (bez kotvy → `[]`). `c = p + translate`:
     - `tx`/`ty`/`tz`: `linear`, `position: c`, `direction` = jednotkový vektor světové osy, `value = translate[i]`, `toParams(v) = { translate: translate s nahrazenou složkou i }`, `unit: 'length'`, `tint` podle osy.
     - `rx`/`ry`/`rz`: `angular`, `center: c`, `axis` = světová osa, `zero`: pro X je to Y, pro Y je to Z, pro Z je to X. `value = axis === k ? angle : 0`, `toParams(v) = { axis: k, angle: v }`, `unit: 'angle'`, `tint` podle osy.
 - **Testy:**
@@ -160,8 +161,8 @@ updated: 2026-10-14
 - **Kontrakt:**
   - **Kotva `base`** jen pro `endType` `'blind'` a `'symmetric'` (u `'upToFace'` bez kotev):
     - `point` = střed sjednocené obálky ploch oblastí (`kernel.boundingBox` každého `ResolvedRegion.face`), promítnutý do roviny skici: `q − n·((q − plane.origin)·n)`.
-    - `direction` = směr vysunutí tak, jak ho builder počítá (`flip` jen u `blind`).
-  - **Manipulátor:** bez kotvy `base` → `[]`. Jinak jeden úchyt `distance` (`linear`, `tint: 'neutral'`, `unit: 'length'`, `min: 0.01`, `direction = base.direction`):
+    - `direction` = normála roviny skici, **bez** `flip` (revize: `flip` a `endType` jdou spočítat z params).
+  - **Manipulátor:** `endType === 'upToFace'` nebo bez kotvy `base` → `[]`. Směr `d` = `−normal` pro `blind` s `flip`, jinak `normal`. Jeden úchyt `distance` (`linear`, `tint: 'neutral'`, `unit: 'length'`, `min: 0.01`, `direction = d`):
     - `blind`: `position = base + d·distance`, `value = distance`, `toParams(v) = { distance: v }`.
     - `symmetric`: `position = base + d·distance/2`, `value = distance/2`, `toParams(v) = { distance: 2v }`, `display(v) = 2v`.
 - **Testy:**
@@ -174,7 +175,7 @@ updated: 2026-10-14
 
 ### 8. Zapojení v `app` a `ui`
 
-- **Soubory:** `src/app/regen-status-adapter.ts` (+ test: `anchors` z `RegenResult`), `src/app/session.ts` (controller, `formatValue` v `AppSessionDeps`, předání do `ToolManager`, `dispose`), `src/app/browser.ts` (`OpenAppSessionOptions.formatValue`), `src/app/index.ts` (re-export `HandleUnit`), `src/app/testing.ts`, `src/app/session.test.ts`, `src/ui/components/params/field-values.ts` (+ test: `formatHandleValue`), místo v `ui`, kde se volá `openAppSession`.
+- **Soubory:** `src/app/session.ts` (controller, `formatValue` v `AppSessionDeps`, předání do `ToolManager`, `dispose`), `src/app/browser.ts` (`OpenAppSessionOptions.formatValue`), `src/app/index.ts` (re-export `HandleUnit`), `src/app/testing.ts`, `src/app/session.test.ts`, `src/ui/components/params/field-values.ts` (+ test: `formatHandleValue`), místo v `ui`, kde se volá `openAppSession`.
 - **Kontrakt:** odrážka „Manipulátory“ v [[11-ui#Kompoziční kořen (app)]], pravidlo 7 v [[11-ui#Pravidla]].
 - **Testy:**
   - `app`: po regeneraci s Transformací v otevřeném dialogu má `FakeViewport.manipulatorViews` šest úchytů. Tah `tz` (připravený `pick` a paprsky) změní `translate` v dokumentu. Po OK je v logu jedna položka. Po `dispose` jsou pohledy prázdné.
@@ -188,6 +189,20 @@ updated: 2026-10-14
   - tmavý režim
 - **Na konci:** `architecture-reviewer`, pak `/milnik konec M18`.
 - **Hotovo když:** testy projdou, `npm run check` a `npm run test:e2e` jsou zelené a ruční ověření prošlo.
+
+### 9. Opravy z revize architektury
+
+- **Soubory:** `src/render/viewport.ts`, `src/interaction/manipulator-controller.ts` (+ test), `src/interaction/index.ts` (+ `index.test.ts`), `src/features/extrude/{builder,manipulators}.ts` (+ test), `src/features/transform/{builder,manipulators}.ts` (+ test), dotčená volání.
+- **Kontrakt:**
+  - `pointercancel` → levé `up` ([[09-vykreslovani#Události]]).
+  - `createManipulatorController` bere `features: Pick<FeatureEditor, 'current'>`.
+  - Matematika tažení zmizí z `interaction/index.ts`.
+  - Kotva je co nejmenší ([[07-regenerace#Kotvy manipulátorů (M18)]]): u Extrude kotva bez `flip`, `flip` a `upToFace` řeší `handles()`; u Transformace kotva jen pro `bodiesCenter`.
+- **Testy:**
+  - Extrude: kotva má normálu i s `flip`; `handles` s `flip` míří proti normále; `upToFace` se starou kotvou → `[]`.
+  - Transformace: `origin` a `point` bez kotvy dají úchyty v `p + translate`; `bodiesCenter` bez kotvy `[]`; builder vrací kotvu jen pro `bodiesCenter`.
+  - Controller: typ deps (stávající testy).
+- **Hotovo když:** `npm run check` a e2e zelené.
 
 ## Akceptační kritéria
 
@@ -212,4 +227,18 @@ updated: 2026-10-14
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+**Co šlo dobře**
+- Rozdělení „kotva z regenerace + živé úchyty v `interaction`“ se osvědčilo. Extrude přidal jen kotvu a deskriptor a `render` ani `interaction` nepotřebovaly žádnou změnu, takže akceptační kritérium rozšiřitelnosti ověřila revize na skutečném kódu.
+- Čočka (`value` + `toParams`) zvládla bez úpravy controlleru i přepnutí osy u kružnic Transformace (Esc vrací dva klíče) a symetrické vysunutí (`2v`).
+- První migrace schématu (Transformace v2) prošla celým řetězcem (`fromData`, přehrání logu, upcast `setParams`) bez obchvatu. Infrastruktura z M3 a M10.1 byla připravená.
+
+**Co bylo jinak, než se čekalo**
+- Revize ukázala, že invariant „kotva nezávisí na taženém parametru“ nestačí. Kotva nesla i `flip` a `pivotPoint`, takže úchyt po změně v dialogu čekal na regeneraci. Platí silnější pravidlo: kotva nese jen to, co z params spočítat nejde (úkol 9, [[Kotva je jen to, co z dat spočítat nejde]]).
+- Ve standardních pohledech jsou dvě ze tří kružnic vidět z hrany. Skrytí kružnice (`HANDLE_RING_HIDE_COS`) se rozhodlo až při kontrole úkolu 5.
+- `setPointerCapture` před předáním `pointerdown` by s neplatným `pointerId` událost spolkl. Ukázalo se to při ručním ověření se syntetickými událostmi, pořadí je teď opačné. Syntetické `PointerEvent` mají v Chromu chybné `offsetX/offsetY`, takže tažení se v prohlížeči ověřovalo skutečnou myší se sondou v posluchači.
+- Matematika tažení byla nejdřív zbytečně veřejné API `interaction`. Revize ji vrátila dovnitř modulu.
+
+**Co dál**
+- Revolve: kotva osy a jeden úhlový úchyt. Má to být čistá deklarace a ověří to abstrakci potřetí.
+- Kontrast úchytu Z na tělese zvýrazněném modrou barvou výběru je slabý (modrá na modré). Pomohl by obrys nebo světlejší stav `idle`.
+- Pivot zatím nejde táhnout manipulátorem (rovinný úchyt nebo úchyt bodu, nový druh v `interaction` a `render`).
