@@ -62,6 +62,13 @@ export interface SketchState {
   readonly dof: number | null;
   /** status 'ok' && dof === 0 */
   readonly fullyDefined: boolean;
+  /**
+   * The status line of the panel, a translation key: 'sketch.status.solving' | 'sketch.conflict'
+   * | 'sketch.solverFailed' | 'sketch.status.defined' | 'sketch.status.dof'; ui only translates.
+   */
+  readonly statusKey: string;
+  /** The params of statusKey ({ n: dof } for 'sketch.status.dof', otherwise {}). */
+  readonly statusParams: Readonly<Record<string, number>>;
   /** In selection order, only existing items. */
   readonly selection: readonly SketchItemId[];
   readonly hover: SketchItemId | null;
@@ -92,6 +99,7 @@ const EMPTY_DATA: SketchData = Object.freeze({
   constraints: Object.freeze([]),
 });
 const NO_ITEMS: readonly SketchItemId[] = Object.freeze([]);
+const NO_PARAMS: Readonly<Record<string, number>> = Object.freeze({});
 const MESSAGES: { readonly [K in SketchMessageKey]: { readonly key: K } } = Object.freeze({
   'sketch.conflict': Object.freeze({ key: 'sketch.conflict' }),
   'sketch.redundant': Object.freeze({ key: 'sketch.redundant' }),
@@ -108,7 +116,8 @@ export function openSketchSession(deps: {
   edit: FeatureEditSession;
   plane: Plane;
   solver: ConstraintSolver;
-  viewport: ViewportPort;
+  /** Only the drawings: the session draws the edited sketch and nothing else. */
+  viewport: Pick<ViewportPort, 'sketches'>;
   onClose: () => void;
 }): SketchSession {
   const { edit, plane, solver, viewport, onClose } = deps;
@@ -154,6 +163,8 @@ export function openSketchSession(deps: {
     if (hover !== null && !exists.has(hover)) hover = null;
     if (editingDimension !== null && !exists.has(editingDimension)) editingDimension = null;
     const rows = constraintRows(constraints, selection, prev?.constraintRows ?? []);
+    const fullyDefined = status === 'ok' && dof === 0;
+    const statusKey = statusKeyOf(status, fullyDefined);
     return Object.freeze({
       open,
       name: edit.state.get().name,
@@ -161,7 +172,9 @@ export function openSketchSession(deps: {
       constraints,
       status,
       dof,
-      fullyDefined: status === 'ok' && dof === 0,
+      fullyDefined,
+      statusKey,
+      statusParams: statusParamsOf(statusKey, dof, prev?.statusParams ?? NO_PARAMS),
       selection: prev !== null && sameIds(prev.selection, selection) ? prev.selection : selection,
       hover,
       message,
@@ -463,6 +476,31 @@ export function openSketchSession(deps: {
     const s = state.get();
     return s.entities.some((e) => e.id === id) || s.constraints.some((c) => c.id === id);
   }
+}
+
+/** The translation key of the status line (spec 11, "Skicář"). */
+function statusKeyOf(status: SketchState['status'], fullyDefined: boolean): string {
+  switch (status) {
+    case 'solving':
+      return 'sketch.status.solving';
+    case 'conflict':
+      return 'sketch.conflict';
+    case 'failed':
+      return 'sketch.solverFailed';
+    case 'ok':
+      return fullyDefined ? 'sketch.status.defined' : 'sketch.status.dof';
+  }
+}
+
+/** The params of the status key; the previous object while they stay the same. */
+function statusParamsOf(
+  key: string,
+  dof: number | null,
+  prev: Readonly<Record<string, number>>,
+): Readonly<Record<string, number>> {
+  if (key !== 'sketch.status.dof') return NO_PARAMS;
+  const n = dof ?? 0;
+  return prev.n === n ? prev : Object.freeze({ n });
 }
 
 /** The rows of the panel; an unchanged row stays the same object. */

@@ -3,13 +3,15 @@ import type { RegistryReader } from '@/core';
 import { describe, expect, it } from 'vitest';
 import type { FeatureId, FeatureInstance, PartStudioData } from './model';
 import { dependenciesOf, dependentsOf, orderViolations, referencesOf } from './references';
-import { ORIGIN_PLANE_IDS } from './origin';
+import { ORIGIN_AXIS_IDS, ORIGIN_PLANE_IDS } from './origin';
 import { bodyId } from './refs';
 import type {
+  AxisRef,
   BodyRef,
   EntityRef,
   PlaneId,
   PlaneRef,
+  SketchEntityRef,
   SketchRegionRef,
   TopoName,
   TopoRef,
@@ -271,5 +273,112 @@ describe('orderViolations', () => {
     const result = violations(studioOf(op('b', bodyRef('a')), op('a')));
     expect(Object.isFrozen(result)).toBe(true);
     expect(Object.isFrozen(result[0])).toBe(true);
+  });
+});
+
+// A schema in the style of Revolve (M13): one axis and targets only for operations other than 'new'.
+describe('references of conditional and axis params (M13)', () => {
+  const revolve: FeatureSchema = {
+    type: 'rev',
+    version: 1,
+    label: 'rev.label',
+    params: {
+      profile: { kind: 'region', label: 'rev.profile' },
+      axis: { kind: 'axis', label: 'rev.axis' },
+      operation: {
+        kind: 'enum',
+        label: 'rev.operation',
+        default: 'new',
+        options: [
+          { value: 'new', label: 'rev.operation.new' },
+          { value: 'add', label: 'rev.operation.add' },
+        ],
+      },
+      targets: {
+        kind: 'bodies',
+        label: 'rev.targets',
+        visibleWhen: (p) => p.operation !== 'new',
+      },
+    },
+    defaults: () => ({ profile: [], axis: null, operation: 'new', targets: [] }),
+    validate: () => [],
+  };
+  const revSchemas: RegistryReader<FeatureSchema> = (() => {
+    const registry = createRegistry<FeatureSchema>({
+      what: 'feature schema',
+      keyOf: (s) => s.type,
+    });
+    registry.register(schema);
+    registry.register(revolve);
+    return registry;
+  })();
+  const lineRef = (sketch: string, entity: string): SketchEntityRef => ({
+    kind: 'sketchEntity',
+    sketch: fid(sketch),
+    entity,
+  });
+  const originAxis: AxisRef = { kind: 'axis', axis: ORIGIN_AXIS_IDS.z };
+  const rev = (id: string, params: Readonly<Record<string, unknown>>) =>
+    aFeature({
+      id,
+      type: 'rev',
+      params: { profile: [], axis: null, operation: 'new', targets: [], ...params },
+    });
+
+  it('skips a hidden param', () => {
+    const params = { profile: [], axis: null, operation: 'new', targets: [bodyRef('a')] };
+    expect(referencesOf(revolve, params)).toEqual([]);
+  });
+
+  it('takes a visible param that was hidden before', () => {
+    const params = { profile: [], axis: null, operation: 'add', targets: [bodyRef('a')] };
+    expect(referencesOf(revolve, params)).toEqual([bodyRef('a')]);
+  });
+
+  it('an axis gives one reference, in schema order', () => {
+    const params = {
+      profile: [regionRef('s1', 'r1')],
+      axis: lineRef('s1', 'l1'),
+      operation: 'new',
+      targets: [],
+    };
+    expect(referencesOf(revolve, params)).toEqual([regionRef('s1', 'r1'), lineRef('s1', 'l1')]);
+  });
+
+  it('an origin axis is a reference too', () => {
+    const params = { profile: [], axis: originAxis, operation: 'new', targets: [] };
+    expect(referencesOf(revolve, params)).toEqual([originAxis]);
+  });
+
+  it.each([
+    [null],
+    [undefined],
+    [[originAxis]],
+    [{ kind: 'axis', axis: 'bad' }],
+    [{ kind: 'sketchEntity', sketch: 's1', entity: '' }],
+  ])('an axis %j gives nothing', (axis) => {
+    expect(referencesOf(revolve, { profile: [], axis, operation: 'new', targets: [] })).toEqual([]);
+  });
+
+  it('returns a frozen copy of the axis reference', () => {
+    const axis = { ...lineRef('s1', 'l1'), note: 'x' };
+    const refs = referencesOf(revolve, { profile: [], axis, operation: 'new', targets: [] });
+    expect(refs[0]).toEqual(lineRef('s1', 'l1'));
+    expect(Object.isFrozen(refs[0])).toBe(true);
+  });
+
+  it('a revolve around a sketch line depends on the sketch', () => {
+    const studio = studioOf(op('s'), rev('r', { axis: lineRef('s', 'l1') }));
+    expect(dependenciesOf(studio, revSchemas).get(fid('r'))).toEqual(['s']);
+  });
+
+  it('a revolve around an origin axis depends on nothing', () => {
+    const studio = studioOf(op('s'), rev('r', { axis: originAxis }));
+    expect(dependenciesOf(studio, revSchemas).get(fid('r'))).toEqual([]);
+  });
+
+  it('a hidden param makes no dependency', () => {
+    const studio = studioOf(op('a'), rev('r', { operation: 'new', targets: [bodyRef('a')] }));
+    expect(dependenciesOf(studio, revSchemas).get(fid('r'))).toEqual([]);
   });
 });

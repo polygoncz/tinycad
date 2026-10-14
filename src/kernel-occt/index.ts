@@ -45,6 +45,8 @@ export async function createOcctKernel(): Promise<GeometryKernel & Disposable> {
     transform: (shape, m) => client.transform(shape, m),
     boolean: (op, targets, tools) => client.boolean(op, targets, tools),
     makeFace: (p) => client.makeFace(p),
+    extrude: (profile, direction, distance) => client.extrude(profile, direction, distance),
+    revolve: (profile, axis, angle) => client.revolve(profile, axis, angle),
     tessellate: (shape, q) => client.tessellate(shape, q),
     boundingBox: (shape) => client.boundingBox(shape),
     release: (handles) => client.release(handles),

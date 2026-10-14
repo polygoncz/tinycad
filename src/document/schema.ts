@@ -15,55 +15,78 @@ interface Bounds {
   readonly exclusiveMax?: boolean;
 }
 
+/** Fields every kind of ParamSpec may have (M13, spec 03 "Podmíněné a seskupené parametry"). */
+interface ParamCommon {
+  /** Translation key of the dialog section heading; validation ignores it. */
+  readonly group?: string;
+  /**
+   * Pure predicate over the UNCHECKED params, without exceptions; compare values, do not assume
+   * types (`p => p.operation !== 'new'`). A hidden param is neither required nor checked.
+   */
+  readonly visibleWhen?: (params: Readonly<Record<string, unknown>>) => boolean;
+}
+
 // One ParamSpec drives three things: validation, the generated UI form (spec 11)
 // and telling reference params apart for picking in the feature dialog.
 // Every label (of a ParamSpec, an enum option and a FeatureSchema) is a translation key,
 // 'box.width', never a text; the plugin brings the texts in its messages (ADR 0014).
-export type ParamSpec =
-  | ({ readonly kind: 'length'; readonly label: string; readonly default: number } & Bounds)
-  | ({ readonly kind: 'angle'; readonly label: string; readonly default: number } & Bounds)
-  | ({
-      readonly kind: 'number';
-      readonly label: string;
-      readonly default: number;
-      readonly integer?: boolean;
-    } & Bounds)
-  | { readonly kind: 'boolean'; readonly label: string; readonly default: boolean }
-  | {
-      readonly kind: 'enum';
-      readonly label: string;
-      readonly default: string;
-      readonly options: readonly { readonly value: string; readonly label: string }[];
-    }
-  | { readonly kind: 'point'; readonly label: string; readonly default: Vec3 }
-  // Reference params hold arrays; min/max count the references and default to 0..∞.
-  | {
-      readonly kind: 'bodies';
-      readonly label: string;
-      readonly min?: number;
-      readonly max?: number;
-    } // BodyRef[]
-  | {
-      readonly kind: 'topo';
-      readonly label: string;
-      readonly entity: 'face' | 'edge' | 'vertex';
-      readonly min?: number;
-      readonly max?: number;
-    } // TopoRef[]
-  | {
-      readonly kind: 'region';
-      readonly label: string;
-      readonly min?: number;
-      readonly max?: number;
-    } // SketchRegionRef[]
-  | {
-      readonly kind: 'planes';
-      readonly label: string;
-      readonly min?: number;
-      readonly max?: number;
-    } // PlaneRef[] (M12)
-  // Any JSON data without a form field; the schema's own validate checks the content (M12, sketch).
-  | { readonly kind: 'data'; readonly label: string };
+export type ParamSpec = ParamCommon &
+  (
+    | ({ readonly kind: 'length'; readonly label: string; readonly default: number } & Bounds)
+    | ({ readonly kind: 'angle'; readonly label: string; readonly default: number } & Bounds)
+    | ({
+        readonly kind: 'number';
+        readonly label: string;
+        readonly default: number;
+        readonly integer?: boolean;
+      } & Bounds)
+    | { readonly kind: 'boolean'; readonly label: string; readonly default: boolean }
+    | {
+        readonly kind: 'enum';
+        readonly label: string;
+        readonly default: string;
+        readonly options: readonly { readonly value: string; readonly label: string }[];
+      }
+    | { readonly kind: 'point'; readonly label: string; readonly default: Vec3 }
+    // Reference params hold arrays; min/max count the references and default to 0..∞.
+    | {
+        readonly kind: 'bodies';
+        readonly label: string;
+        readonly min?: number;
+        readonly max?: number;
+      } // BodyRef[]
+    | {
+        readonly kind: 'topo';
+        readonly label: string;
+        readonly entity: 'face' | 'edge' | 'vertex';
+        readonly min?: number;
+        readonly max?: number;
+      } // TopoRef[]
+    | {
+        readonly kind: 'region';
+        readonly label: string;
+        readonly min?: number;
+        readonly max?: number;
+      } // SketchRegionRef[]
+    | {
+        readonly kind: 'planes';
+        readonly label: string;
+        readonly min?: number;
+        readonly max?: number;
+      } // PlaneRef[] (M12)
+    // Any JSON data without a form field; the schema's own validate checks the content (M12, sketch).
+    | { readonly kind: 'data'; readonly label: string }
+    // A single reference, not an array: AxisRef | SketchEntityRef, empty as null (M13, Revolve).
+    | { readonly kind: 'axis'; readonly label: string }
+  );
+
+/** Whether the param applies to these params; true without a predicate (M13). */
+export function isParamVisible(
+  spec: ParamSpec,
+  params: Readonly<Record<string, unknown>>,
+): boolean {
+  return spec.visibleWhen?.(params) ?? true;
+}
 
 export type ParamSchema = Readonly<Record<string, ParamSpec>>;
 

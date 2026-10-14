@@ -65,7 +65,16 @@ function setup() {
   const selection = createSelectionModel({ regen });
   const ids = createSequentialIdGenerator('f');
   const editor = createFeatureEditor({ doc, ops, schemas, ids, translate: (key) => key });
-  const featureTree = createFeatureTreeModel({ doc, ops, schemas, regen, editor, selection });
+  const locked = createEditLock({ readOnly: false, editor });
+  const featureTree = createFeatureTreeModel({
+    doc,
+    ops,
+    schemas,
+    regen,
+    editor,
+    selection,
+    locked,
+  });
   const viewport = new FakeViewport();
   const actions = createActionRegistry();
   const tools = createToolManager({
@@ -85,7 +94,7 @@ function setup() {
     editor,
     tools,
     toolList: toolRegistry.all(),
-    locked: createEditLock({ readOnly: false, editor }),
+    locked,
     camera: { fitAll: () => undefined },
     confirm: (request) => {
       confirms.push(request);

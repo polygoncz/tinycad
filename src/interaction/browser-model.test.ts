@@ -774,6 +774,18 @@ describe('BrowserModel sketches (M12)', () => {
     expect(edited).toEqual([fid('s2')]);
   });
 
+  it('editSketch does nothing without canEdit (read-only or an open dialog)', () => {
+    const edited: FeatureId[] = [];
+    const readOnly = setup({ readOnly: true, sketchEdit: (feature) => edited.push(feature) });
+    readOnly.regen.publish(new Map(), [], SKETCHES);
+    readOnly.browser.editSketch(fid('s1'));
+    const open = setup({ sketchEdit: (feature) => edited.push(feature) });
+    open.regen.publish(new Map(), [], SKETCHES);
+    open.editor.create('bool');
+    open.browser.editSketch(fid('s1'));
+    expect(edited).toEqual([]);
+  });
+
   it('editSketch without sketchEdit does nothing', () => {
     const s = setup();
     s.regen.publish(new Map(), [], SKETCHES);

@@ -1,11 +1,14 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { FeatureId, FeatureInstance, PartStudioData } from './model';
 import type {
+  AxisId,
+  AxisRef,
   BodyId,
   BodyRef,
   EntityRef,
   PlaneId,
   PlaneRef,
+  SketchEntityRef,
   SketchId,
   SketchRegionRef,
   TopoName,
@@ -19,6 +22,8 @@ describe('document model types', () => {
     expectTypeOf<TopoName>().not.toExtend<BodyId>();
     expectTypeOf<PlaneId>().not.toExtend<BodyId>();
     expectTypeOf<SketchId>().not.toExtend<FeatureId>();
+    expectTypeOf<AxisId>().not.toExtend<PlaneId>();
+    expectTypeOf<PlaneId>().not.toExtend<AxisId>();
   });
 
   it('is readonly all the way to the feature params', () => {
@@ -42,6 +47,12 @@ describe('document model types', () => {
         case 'plane':
           expectTypeOf(ref).toEqualTypeOf<PlaneRef>();
           return ref.plane;
+        case 'axis':
+          expectTypeOf(ref).toEqualTypeOf<AxisRef>();
+          return ref.axis;
+        case 'sketchEntity':
+          expectTypeOf(ref).toEqualTypeOf<SketchEntityRef>();
+          return `${ref.sketch}:${ref.entity}`;
       }
     };
     const ref: EntityRef = { kind: 'topo', body: 'f1/body' as BodyId, name: 'face1' as TopoName };

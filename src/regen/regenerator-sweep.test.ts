@@ -106,6 +106,8 @@ function withRelease(
     transform: (shape, m) => fake.transform(shape, m),
     boolean: (op, targets, tools) => fake.boolean(op, targets, tools),
     makeFace: (p) => fake.makeFace(p),
+    extrude: (profile, direction, distance) => fake.extrude(profile, direction, distance),
+    revolve: (profile, axis, angle) => fake.revolve(profile, axis, angle),
     tessellate: (shape, q) => fake.tessellate(shape, q),
     boundingBox: (shape) => fake.boundingBox(shape),
     release: (handles) => release(handles, calls++),

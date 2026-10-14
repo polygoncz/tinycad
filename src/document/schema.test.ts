@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createFeatureSchemaRegistry } from './schema';
-import type { FeatureSchema } from './schema';
+import { createFeatureSchemaRegistry, isParamVisible } from './schema';
+import type { FeatureSchema, ParamSpec } from './schema';
 
 function schema(type: string, version: number, migrate?: FeatureSchema['migrate']): FeatureSchema {
   return {
@@ -48,5 +48,38 @@ describe('createFeatureSchemaRegistry', () => {
         registry.register(schema('box', version));
       }).toThrow(/invalid version/);
     }
+  });
+});
+
+describe('isParamVisible (M13)', () => {
+  const plain: ParamSpec = { kind: 'length', label: 'L', default: 1 };
+
+  it('is true without a predicate', () => {
+    expect(isParamVisible(plain, {})).toBe(true);
+  });
+
+  it('follows the predicate over the params', () => {
+    const spec: ParamSpec = {
+      kind: 'bodies',
+      label: 'B',
+      visibleWhen: (p) => p.operation !== 'new',
+    };
+    expect(isParamVisible(spec, { operation: 'add' })).toBe(true);
+    expect(isParamVisible(spec, { operation: 'new' })).toBe(false);
+  });
+
+  it('passes the params object itself to the predicate', () => {
+    const params = { operation: 'new' };
+    const seen: unknown[] = [];
+    const spec: ParamSpec = {
+      ...plain,
+      visibleWhen: (p) => {
+        seen.push(p);
+        return true;
+      },
+    };
+    isParamVisible(spec, params);
+    expect(seen).toEqual([params]);
+    expect(seen[0]).toBe(params);
   });
 });

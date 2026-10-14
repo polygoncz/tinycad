@@ -121,7 +121,6 @@ function setup() {
     features: editor,
     solver,
     viewport,
-    ids,
     resolvePlane: (id: PlaneId) => ORIGIN_PLANES.find((p) => p.id === id)?.plane,
   });
   const regen = new FakeRegenStatus();

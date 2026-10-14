@@ -35,6 +35,8 @@ function aFakeSession() {
       status: 'ok',
       dof: 4,
       fullyDefined: false,
+      statusKey: 'sketch.status.dof',
+      statusParams: { n: 4 },
       selection: [],
       hover: null,
       message: null,

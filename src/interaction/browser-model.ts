@@ -88,7 +88,7 @@ export interface BrowserModel {
   setPlaneVisible(plane: PlaneId, visible: boolean): void;
   /** → selection.set / toggle of the feature item */
   selectSketch(feature: FeatureId, opts?: { additive?: boolean }): void;
-  /** → deps.sketchEdit; without it nothing. */
+  /** → deps.sketchEdit; without it or without canEdit (and in a transaction) nothing. */
   editSketch(feature: FeatureId): void;
   dispose(): void;
 }
@@ -329,6 +329,8 @@ export function createBrowserModel(deps: {
       else selection.set([item]);
     },
     editSketch(feature) {
+      // The same guard as the metadata: the sketcher opens a transaction of its own.
+      if (!canEdit.get() || ops.inTransaction) return;
       sketchEdit?.(feature);
     },
     dispose() {

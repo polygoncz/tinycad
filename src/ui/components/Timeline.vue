@@ -45,10 +45,6 @@ function select(id: FeatureId, additive: boolean): void {
   featureTree.select(id, { additive });
 }
 
-function edit(id: FeatureId): void {
-  if (!locked.value) featureTree.edit(id);
-}
-
 // Context menu of a feature (spec 10, "Vestavěné akce"): the snapshot of the actions of the group
 // 'feature'. The right button selects the feature first, so the actions work on the selection;
 // rename puts the feature into the rename mode of the tree, which shows the inline field.
@@ -142,7 +138,7 @@ function onBarCancel(): void {
           :row="row"
           :renaming="renamingId === row.id"
           @select="select(row.id, $event)"
-          @edit="edit(row.id)"
+          @edit="featureTree.edit(row.id)"
           @menu="openMenu(row.id, $event)"
           @rename="rename(row.id, $event)"
           @cancel-rename="featureTree.cancelRename()"

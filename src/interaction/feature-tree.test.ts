@@ -8,6 +8,7 @@ import type { FeatureAddOp, FeatureSetParamsOp, FeatureSuppressOp } from '@/ops'
 import { OP_VERSION } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE } from '@/sketch';
+import { createEditLock } from './edit-lock';
 import { createFeatureEditor } from './feature-editor';
 import { createFeatureTreeModel } from './feature-tree';
 import type { FeatureHealth } from './regen-status-port';
@@ -67,7 +68,7 @@ function aBox(id: string, type = 'box'): ReturnType<typeof aFeature<BoxParams>> 
   return aFeature<BoxParams>({ id, name: `Name ${id}`, type, params: { width: 1 } });
 }
 
-function setup(init: DocumentOptions = {}, sketchEdit?: (id: FeatureId) => void) {
+function setup(init: DocumentOptions = {}, sketchEdit?: (id: FeatureId) => void, readOnly = false) {
   const session = anOpsSession(init);
   const schemas = createFeatureSchemaRegistry();
   schemas.register(BOX);
@@ -87,6 +88,7 @@ function setup(init: DocumentOptions = {}, sketchEdit?: (id: FeatureId) => void)
     regen,
     editor,
     selection,
+    locked: createEditLock({ readOnly, editor }),
     ...(sketchEdit === undefined ? {} : { sketchEdit }),
   });
   /** Counts emissions of rows. */
@@ -557,6 +559,20 @@ describe('FeatureTreeModel.edit of a sketch (M12)', () => {
     s.tree.edit(fid('a'));
     expect(edited).toEqual([]);
     expect(s.editor.current.get()?.featureId).toBe(fid('a'));
+  });
+
+  it('does nothing while locked: read-only or an open dialog', () => {
+    const edited: FeatureId[] = [];
+    const readOnly = setup({ features: [aBox('a'), aSketch('s')] }, (id) => edited.push(id), true);
+    readOnly.tree.edit(fid('a'));
+    readOnly.tree.edit(fid('s'));
+    expect(readOnly.editor.current.get()).toBeNull();
+    const open = setup({ features: [aBox('a'), aBox('b'), aSketch('s')] }, (id) => edited.push(id));
+    open.tree.edit(fid('a'));
+    open.tree.edit(fid('b'));
+    open.tree.edit(fid('s'));
+    expect(open.editor.current.get()?.featureId).toBe(fid('a'));
+    expect(edited).toEqual([]);
   });
 
   it('without sketchEdit edits a sketch like any feature', () => {

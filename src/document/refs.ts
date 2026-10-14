@@ -37,8 +37,27 @@ export interface PlaneRef {
   readonly plane: PlaneId;
 }
 
+/** '<owner>/axis:<name>' with the name [a-z0-9]+ (M13); the origin axes are owned by ORIGIN. */
+export type AxisId = Brand<string, 'AxisId'>;
+
+/** An axis, e.g. an origin axis for Revolve (M13). */
+export interface AxisRef {
+  readonly kind: 'axis';
+  readonly axis: AxisId;
+}
+
+/**
+ * An entity of a sketch, e.g. a line as the axis of Revolve (M13). Whether it really is a line
+ * is only known when regenerating (BuildContext.resolveAxis, spec 07).
+ */
+export interface SketchEntityRef {
+  readonly kind: 'sketchEntity';
+  readonly sketch: FeatureId;
+  readonly entity: string;
+}
+
 /** Any reference; `kind` tells which. */
-export type EntityRef = BodyRef | TopoRef | SketchRegionRef | PlaneRef;
+export type EntityRef = BodyRef | TopoRef | SketchRegionRef | PlaneRef | AxisRef | SketchEntityRef;
 
 /** '<featureId>/sketch', the sketch artifact of a sketch feature (M12). */
 export type SketchId = Brand<string, 'SketchId'>;
@@ -72,13 +91,16 @@ export function sketchId(owner: FeatureId): SketchId {
 /** The feature that minted the body id: the text before the first '/'. */
 export function originOfBody(body: BodyId): FeatureId {
   assert(body.includes('/'), `originOfBody: '${body}' is not a body id`);
-  return ownerOfId(body);
+  return ownerOfArtifact(body);
 }
 
-/** The owner of an artifact id: the text before the first '/' (ADR 0015). */
-function ownerOfId(id: string): FeatureId {
+/**
+ * The owner of an artifact id: the text before the first '/' (ADR 0015). An id without '/'
+ * throws, a programmer error (M13).
+ */
+export function ownerOfArtifact(id: BodyId | SketchId | PlaneId | AxisId): FeatureId {
   const slash = id.indexOf('/');
-  assert(slash !== -1, `ownerOf: '${id}' is not an artifact id`);
+  assert(slash !== -1, `ownerOfArtifact: '${id}' is not an artifact id`);
   // The text before '/' is the FeatureId the id was minted for.
   return id.slice(0, slash) as FeatureId;
 }
@@ -93,7 +115,12 @@ export function ownerOf(ref: EntityRef): FeatureId {
       return ref.sketch;
     case 'plane':
       // parsePlaneId guarantees one '/'; for the origin planes the owner is ORIGIN.
-      return ownerOfId(ref.plane);
+      return ownerOfArtifact(ref.plane);
+    case 'axis':
+      // parseAxisId guarantees one '/'; for the origin axes the owner is ORIGIN.
+      return ownerOfArtifact(ref.axis);
+    case 'sketchEntity':
+      return ref.sketch;
     default:
       return assertNever(ref);
   }
@@ -126,13 +153,37 @@ export function readRef(kind: EntityRef['kind'], r: unknown): EntityRef | undefi
       const plane = parsePlaneId(r.plane);
       return plane === undefined ? undefined : Object.freeze({ kind, plane });
     }
+    case 'axis': {
+      const axis = parseAxisId(r.axis);
+      return axis === undefined ? undefined : Object.freeze({ kind, axis });
+    }
+    case 'sketchEntity':
+      return isNonEmptyString(r.sketch) && isNonEmptyString(r.entity)
+        ? Object.freeze({ kind, sketch: r.sketch as FeatureId, entity: r.entity })
+        : undefined;
     default:
       return assertNever(kind);
   }
 }
 
+/**
+ * The first of the kinds whose shape the data has, as readRef reads it; undefined when none.
+ * For params that hold more than one kind of reference, the axis (M13).
+ */
+export function readRefOf(kinds: readonly EntityRef['kind'][], r: unknown): EntityRef | undefined {
+  for (const kind of kinds) {
+    const ref = readRef(kind, r);
+    if (ref !== undefined) return ref;
+  }
+  return undefined;
+}
+
 function isRecord(v: unknown): v is Readonly<Record<string, unknown>> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function isNonEmptyString(v: unknown): v is string {
+  return typeof v === 'string' && v.length > 0;
 }
 
 /** '<owner>/body' or '<owner>/body:<n>' with n >= 1, as bodyId mints it; data from outside is checked here. */
@@ -158,4 +209,28 @@ const PLANE_ID = /^[^/]+\/plane:[a-z0-9]+$/;
 export function parsePlaneId(v: unknown): PlaneId | undefined {
   // The cast follows the shape check, as in fromData.
   return typeof v === 'string' && PLANE_ID.test(v) ? (v as PlaneId) : undefined;
+}
+
+/** '<owner>/axis:<name>': the owner non-empty without '/', the name [a-z0-9]+ (M13). */
+const AXIS_ID = /^[^/]+\/axis:[a-z0-9]+$/;
+
+/**
+ * Text in the shape of an axis id '<owner>/axis:<name>' -> AxisId, otherwise undefined. The
+ * trusted place where an axis id from outside becomes branded (references, spec 03).
+ */
+export function parseAxisId(v: unknown): AxisId | undefined {
+  // The cast follows the shape check, as in fromData.
+  return typeof v === 'string' && AXIS_ID.test(v) ? (v as AxisId) : undefined;
+}
+
+/** '<owner>/sketch' with the owner non-empty without '/', as sketchId mints it (M13). */
+const SKETCH_ID = /^[^/]+\/sketch$/;
+
+/**
+ * Text in the shape of a sketch id '<owner>/sketch' -> SketchId, otherwise undefined (M13).
+ * interaction reads the feature of a drawing id with it.
+ */
+export function parseSketchId(v: unknown): SketchId | undefined {
+  // The cast follows the shape check, as in fromData.
+  return typeof v === 'string' && SKETCH_ID.test(v) ? (v as SketchId) : undefined;
 }

@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { mat4, type Mat4, type Plane, type Vec2, type Vec3 } from '@/core';
 import { kernelErrorCode } from './errors';
 import type { KernelErrorCode } from './errors';
-import type { BooleanOp, GeometryKernel } from './kernel';
+import type { Axis, BooleanOp, GeometryKernel } from './kernel';
 import type { ProfileCurve, ProfileLoop } from './profile';
 import { validateMeshData } from './mesh';
 import type { BoundingBox, MeshData, MeshQuality, ShapeHandle } from './types';
@@ -267,6 +267,30 @@ const D_LOOP = (ccw: boolean): ProfileLoop => [
 type FaceParams = Parameters<GeometryKernel['makeFace']>[0];
 const FACE: FaceParams = { plane: PLANE_XY, outer: SQUARE, holes: [] };
 
+// M13 fixtures: profiles for extrude and revolve.
+/** XZ through the origin: x → +X, y → normal × xDir = +Z. */
+const PLANE_XZ: Plane = { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, -1, 0] };
+/** Square [0, 10]² in XY. */
+const SQUARE_10: FaceParams = {
+  plane: PLANE_XY,
+  outer: polygon([0, 0], [10, 0], [10, 10], [0, 10]),
+  holes: [],
+};
+/** Rectangle x ∈ [0, 2], z ∈ [0, 3] in XZ. */
+const RECTANGLE_XZ: FaceParams = {
+  plane: PLANE_XZ,
+  outer: polygon([0, 0], [2, 0], [2, 3], [0, 3]),
+  holes: [],
+};
+/** Rectangle x ∈ [5, 10], z ∈ [0, 10] in XZ: off the Z axis, a ring when revolved about it. */
+const RING_PROFILE: FaceParams = {
+  plane: PLANE_XZ,
+  outer: polygon([5, 0], [10, 0], [10, 10], [5, 10]),
+  holes: [],
+};
+const Z_AXIS = { origin: [0, 0, 0], direction: [0, 0, 1] } as const satisfies Axis;
+const TURN = 2 * Math.PI;
+
 /** Kontraktová sada; factory vytvoří pro každý test čerstvé jádro. */
 export function describeGeometryKernelContract(
   name: string,
@@ -303,6 +327,8 @@ export function describeGeometryKernelContract(
         ['transform', (k: GeometryKernel) => k.transform(UNKNOWN, mat4.identity())],
         ['boolean', (k: GeometryKernel) => k.boolean('union', [], [])],
         ['makeFace', (k: GeometryKernel) => k.makeFace({ ...FACE, outer: [] })],
+        ['extrude', (k: GeometryKernel) => k.extrude(UNKNOWN, [0, 0, 1], 5)],
+        ['revolve', (k: GeometryKernel) => k.revolve(UNKNOWN, Z_AXIS, TURN)],
         ['tessellate', (k: GeometryKernel) => k.tessellate(UNKNOWN, QUALITY)],
         ['boundingBox', (k: GeometryKernel) => k.boundingBox(UNKNOWN)],
         ['release', (k: GeometryKernel) => k.release([UNKNOWN])],
@@ -319,11 +345,14 @@ export function describeGeometryKernelContract(
         expect(created).toBeInstanceOf(Promise);
         const { shape } = await created;
         const other = (await kernel.makeBox(OVERLAPPING)).shape;
+        const profile = (await kernel.makeFace(RING_PROFILE)).shape;
         const calls = [
           kernel.makeCylinder(CYLINDER),
           kernel.transform(shape, mat4.identity()),
           kernel.boolean('union', [shape], [other]),
           kernel.makeFace(FACE),
+          kernel.extrude(profile, [0, 0, 1], 5),
+          kernel.revolve(profile, Z_AXIS, TURN),
           kernel.tessellate(shape, QUALITY),
           kernel.boundingBox(shape),
           kernel.liveHandleCount(),
@@ -664,6 +693,152 @@ export function describeGeometryKernelContract(
           expect(await kernel.liveHandleCount()).toBe(0);
         },
       );
+    });
+
+    describe('extrude', () => {
+      async function aProfile(p: FaceParams = SQUARE_10): Promise<ShapeHandle> {
+        return (await kernel.makeFace(p)).shape;
+      }
+
+      it.each([
+        ['a square in XY by 5 along +Z', SQUARE_10, [0, 0, 1], 5, [0, 0, 0], [10, 10, 5]],
+        ['a square in XY by 5 along [0, 0, 3]', SQUARE_10, [0, 0, 3], 5, [0, 0, 0], [10, 10, 5]],
+        ['a square in XY by 5 along −Z', SQUARE_10, [0, 0, -1], 5, [0, 0, -5], [10, 10, 0]],
+        ['a rectangle in XZ by 4 along −Y', RECTANGLE_XZ, [0, -1, 0], 4, [0, -4, 0], [2, 0, 3]],
+      ] satisfies [string, FaceParams, Vec3, number, Vec3, Vec3][])(
+        '%s: a new handle with the swept bounding box and a valid mesh',
+        async (_, face, direction, distance, min, max) => {
+          const profile = await aProfile(face);
+          const { shape } = await kernel.extrude(profile, direction, distance);
+          expect(shape).not.toBe(profile);
+          expect(await kernel.liveHandleCount()).toBe(2);
+          expectBoxClose(await kernel.boundingBox(shape), min, max, 'prism');
+          expectValidMeshIn(await kernel.tessellate(shape, QUALITY), min, max, 'prism');
+        },
+      );
+
+      it('the profile stays valid; every call returns a new handle', async () => {
+        const profile = await aProfile();
+        const a = (await kernel.extrude(profile, [0, 0, 1], 5)).shape;
+        const b = (await kernel.extrude(profile, [0, 0, 1], 5)).shape;
+        expect(b).not.toBe(a);
+        expect(await kernel.liveHandleCount()).toBe(3);
+        expectBoxClose(await kernel.boundingBox(profile), [0, 0, 0], [10, 10, 0], 'profile');
+      });
+
+      it('a moved profile (transform of a face) is a face too', async () => {
+        const moved = await kernel.transform(await aProfile(), mat4.translation([0, 0, 7]));
+        const { shape } = await kernel.extrude(moved.shape, [0, 0, 1], 5);
+        expectBoxClose(await kernel.boundingBox(shape), [0, 0, 7], [10, 10, 12], 'prism');
+      });
+
+      it.each([
+        ['a distance of 0', [0, 0, 1], 0],
+        ['a negative distance', [0, 0, 1], -5],
+        ['a NaN distance', [0, 0, 1], Number.NaN],
+        ['an infinite distance', [0, 0, 1], INF],
+        ['a zero direction', [0, 0, 0], 5],
+        ['a direction with NaN', [0, Number.NaN, 1], 5],
+      ] satisfies [string, Vec3, number][])(
+        '%s rejects with invalid-input and creates no handle',
+        async (_, direction, distance) => {
+          const profile = await aProfile();
+          const code = await rejectionCode(() => kernel.extrude(profile, direction, distance));
+          expect(code).toBe('invalid-input');
+          expect(await kernel.liveHandleCount()).toBe(1);
+        },
+      );
+
+      it('a profile that is not a face (a box) rejects with invalid-input', async () => {
+        const box = await aBox();
+        expect(await rejectionCode(() => kernel.extrude(box, [0, 0, 1], 5))).toBe('invalid-input');
+        expect(await kernel.liveHandleCount()).toBe(1);
+      });
+
+      it('a prism is not a face either', async () => {
+        const prism = (await kernel.extrude(await aProfile(), [0, 0, 1], 5)).shape;
+        const code = await rejectionCode(() => kernel.extrude(prism, [0, 0, 1], 5));
+        expect(code).toBe('invalid-input');
+        expect(await kernel.liveHandleCount()).toBe(2);
+      });
+
+      it.each(NEVER_ISSUED)('handle %s, never issued, rejects with unknown-handle', async (h) => {
+        await aProfile();
+        expect(await rejectionCode(() => kernel.extrude(h, [0, 0, 1], 5))).toBe('unknown-handle');
+        expect(await kernel.liveHandleCount()).toBe(1);
+      });
+    });
+
+    describe('revolve', () => {
+      async function aRing(): Promise<ShapeHandle> {
+        return (await kernel.makeFace(RING_PROFILE)).shape;
+      }
+
+      it.each([
+        ['about Z by 2π', Z_AXIS, TURN, [-10, -10, 0], [10, 10, 10]],
+        ['about Z by π/2', Z_AXIS, TURN / 4, [0, 0, 0], [10, 10, 10]],
+        [
+          'about −Z by π/2',
+          { origin: [0, 0, 0], direction: [0, 0, -1] },
+          TURN / 4,
+          [0, -10, 0],
+          [10, 0, 10],
+        ],
+        [
+          'about Z (a non-unit direction) by π/2',
+          { origin: [0, 0, 0], direction: [0, 0, 4] },
+          TURN / 4,
+          [0, 0, 0],
+          [10, 10, 10],
+        ],
+      ] satisfies [string, Axis, number, Vec3, Vec3][])(
+        'a rectangle in XZ %s: a new handle with its bounding box and a valid mesh',
+        async (_, axis, angle, min, max) => {
+          const profile = await aRing();
+          const { shape } = await kernel.revolve(profile, axis, angle);
+          expect(shape).not.toBe(profile);
+          expect(await kernel.liveHandleCount()).toBe(2);
+          expectBoxClose(await kernel.boundingBox(shape), min, max, 'revolved');
+          expectValidMeshIn(await kernel.tessellate(shape, QUALITY), min, max, 'revolved');
+        },
+      );
+
+      it('the profile stays valid', async () => {
+        const profile = await aRing();
+        await kernel.revolve(profile, Z_AXIS, TURN);
+        expectBoxClose(await kernel.boundingBox(profile), [5, 0, 0], [10, 0, 10], 'profile');
+        expect(await kernel.liveHandleCount()).toBe(2);
+      });
+
+      it.each([
+        ['an angle of 0', Z_AXIS, 0],
+        ['a negative angle', Z_AXIS, -1],
+        ['an angle over 2π', Z_AXIS, TURN + 1e-6],
+        ['a NaN angle', Z_AXIS, Number.NaN],
+        ['a zero axis direction', { origin: [0, 0, 0], direction: [0, 0, 0] }, TURN],
+        ['an axis origin with Infinity', { origin: [INF, 0, 0], direction: [0, 0, 1] }, TURN],
+      ] satisfies [string, Axis, number][])(
+        '%s rejects with invalid-input and creates no handle',
+        async (_, axis, angle) => {
+          const profile = await aRing();
+          expect(await rejectionCode(() => kernel.revolve(profile, axis, angle))).toBe(
+            'invalid-input',
+          );
+          expect(await kernel.liveHandleCount()).toBe(1);
+        },
+      );
+
+      it('a profile that is not a face (a box) rejects with invalid-input', async () => {
+        const box = await aBox();
+        expect(await rejectionCode(() => kernel.revolve(box, Z_AXIS, TURN))).toBe('invalid-input');
+        expect(await kernel.liveHandleCount()).toBe(1);
+      });
+
+      it.each(NEVER_ISSUED)('handle %s, never issued, rejects with unknown-handle', async (h) => {
+        await aRing();
+        expect(await rejectionCode(() => kernel.revolve(h, Z_AXIS, TURN))).toBe('unknown-handle');
+        expect(await kernel.liveHandleCount()).toBe(1);
+      });
     });
 
     describe('handles', () => {
@@ -1026,6 +1201,14 @@ export function describeGeometryKernelContract(
           (k: GeometryKernel) =>
             k.boolean('union', null as unknown as readonly ShapeHandle[], [UNKNOWN]),
         ],
+        [
+          'extrude(handle, null, 5)',
+          (k: GeometryKernel) => k.extrude(UNKNOWN, null as unknown as Vec3, 5),
+        ],
+        [
+          'revolve(handle, null, 2π)',
+          (k: GeometryKernel) => k.revolve(UNKNOWN, null as unknown as Axis, TURN),
+        ],
       ])(
         '%s: a failed read of the input rejects with internal, not synchronously',
         async (_, call) => {
@@ -1056,6 +1239,30 @@ export function describeGeometryKernelContract(
         holes.push([]);
         const { shape } = await created;
         expectBoxClose(await kernel.boundingBox(shape), [1, 2, 0], [4, 5, 0], 'face');
+      });
+
+      it('changing the extrude direction right after the call, before await, does not change the prism', async () => {
+        const profile = (await kernel.makeFace(SQUARE_10)).shape;
+        const direction: Vec3 = [0, 0, 1];
+        const created = callWithoutThrow(() => kernel.extrude(profile, direction, 5));
+        // The input is a readonly tuple; the test writes into it on purpose.
+        Reflect.set(direction, 2, -1);
+        const { shape } = await created;
+        expectBoxClose(await kernel.boundingBox(shape), [0, 0, 0], [10, 10, 5], 'prism');
+      });
+
+      it('changing the revolve axis right after the call, before await, does not change the result', async () => {
+        const profile = (await kernel.makeFace(RING_PROFILE)).shape;
+        const origin: Vec3 = [0, 0, 0];
+        const direction: Vec3 = [0, 0, 1];
+        const created = callWithoutThrow(() =>
+          kernel.revolve(profile, { origin, direction }, TURN / 4),
+        );
+        // The inputs are readonly tuples; the test writes into them on purpose.
+        Reflect.set(direction, 2, -1);
+        Reflect.set(origin, 0, 3);
+        const { shape } = await created;
+        expectBoxClose(await kernel.boundingBox(shape), [0, 0, 0], [10, 10, 10], 'revolved');
       });
 
       it('makeFace(null) rejects instead of throwing and creates no handle', async () => {

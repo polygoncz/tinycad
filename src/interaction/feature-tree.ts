@@ -52,7 +52,10 @@ export interface TreeRow {
 export interface FeatureTreeModel {
   readonly rows: Observable<readonly TreeRow[]>;
   readonly rollbackIndex: Observable<number>;
-  /** → FeatureEditor.edit; a sketch → sketchEdit when given (M12). */
+  /**
+   * → FeatureEditor.edit; a sketch → sketchEdit when given (M12). While `locked` (read-only or
+   * an open dialog or sketch) nothing.
+   */
   edit(id: FeatureId): void;
   /** → dispatch feature.rename */
   rename(id: FeatureId, name: string): void;
@@ -83,10 +86,12 @@ export function createFeatureTreeModel(deps: {
   regen: RegenStatusPort;
   editor: Pick<FeatureEditor, 'current' | 'edit'>;
   selection: SelectionCommands;
+  /** The edit lock (createEditLock): read-only or an open feature dialog. */
+  locked: Observable<boolean>;
   /** M12: a feature of type SKETCH_FEATURE_TYPE is edited here instead of FeatureEditor.edit. */
   sketchEdit?: (id: FeatureId) => void;
 }): FeatureTreeModel {
-  const { doc, ops, schemas, regen, editor, selection, sketchEdit } = deps;
+  const { doc, ops, schemas, regen, editor, selection, locked, sketchEdit } = deps;
 
   /** The dependency graph of `graphOf`; recomputed only when the studio changes. */
   let graphOf: PartStudioData | null = null;
@@ -154,6 +159,8 @@ export function createFeatureTreeModel(deps: {
     rows: rows.asObservable(),
     rollbackIndex: rollbackIndex.asObservable(),
     edit(id) {
+      // An open session or a read-only document: FeatureEditor.edit would throw or fail later.
+      if (locked.get()) return;
       // A sketch has no feature dialog: the sketcher opens it (spec 12, "Skicář").
       if (sketchEdit !== undefined && doc.feature(id)?.type === SKETCH_FEATURE_TYPE) {
         sketchEdit(id);

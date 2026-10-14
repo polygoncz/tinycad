@@ -12,6 +12,7 @@ const FACE = {
   outer: [{ kind: 'circle', center: [0, 0], radius: 1 }],
   holes: [],
 } as const;
+const Y_AXIS = { origin: [0, 0, 0], direction: [0, 1, 0] } as const;
 
 function setup() {
   const real = createFakeKernel();
@@ -52,17 +53,34 @@ describe('createTrackingKernel', () => {
     });
   });
 
-  it.each(['makeCylinder', 'transform', 'boolean', 'makeFace'] as const)(
+  it('adds the handles of extrude and revolve to the owned set and returns the real results', async () => {
+    const { real, owned, kernel } = setup();
+    const face = await kernel.makeFace(FACE);
+    const prism = await kernel.extrude(face.shape, [0, 0, 1], 2);
+    const revolved = await kernel.revolve(face.shape, Y_AXIS, Math.PI);
+    expect([...owned]).toEqual([face.shape, prism.shape, revolved.shape]);
+    expect(real.callCount('extrude')).toBe(1);
+    expect(real.callCount('revolve')).toBe(1);
+    await expect(real.boundingBox(prism.shape)).resolves.toEqual({
+      min: [-1, -1, 0],
+      max: [1, 1, 2],
+    });
+  });
+
+  it.each(['makeCylinder', 'transform', 'boolean', 'makeFace', 'extrude', 'revolve'] as const)(
     'passes a %s error through unchanged and records nothing new',
     async (op) => {
       const { real, owned, kernel } = setup();
       const a = await kernel.makeBox(BOX);
       const b = await kernel.makeBox(BOX);
+      const face = await kernel.makeFace(FACE);
       const calls = {
         makeCylinder: () => kernel.makeCylinder(CYLINDER),
         transform: () => kernel.transform(a.shape, mat4.identity()),
         boolean: () => kernel.boolean('union', [a.shape], [b.shape]),
         makeFace: () => kernel.makeFace(FACE),
+        extrude: () => kernel.extrude(face.shape, [0, 0, 1], 2),
+        revolve: () => kernel.revolve(face.shape, Y_AXIS, Math.PI),
       };
       real.failNext(op, 'operation-failed', 'boom');
       const error: unknown = await calls[op]().then(
@@ -71,7 +89,7 @@ describe('createTrackingKernel', () => {
       );
       expect(kernelErrorCode(error)).toBe('operation-failed');
       expect(error).toHaveProperty('message', 'boom');
-      expect([...owned]).toEqual([a.shape, b.shape]);
+      expect([...owned]).toEqual([a.shape, b.shape, face.shape]);
     },
   );
 
@@ -95,9 +113,11 @@ describe('createTrackingKernel', () => {
     expect(Object.keys(kernel).sort()).toEqual([
       'boolean',
       'boundingBox',
+      'extrude',
       'makeBox',
       'makeCylinder',
       'makeFace',
+      'revolve',
       'transform',
     ]);
   });

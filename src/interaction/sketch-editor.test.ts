@@ -136,7 +136,6 @@ function setup(
     features: editor,
     solver: opts.solver ?? fake,
     viewport,
-    ids: createSequentialIdGenerator('s'),
     resolvePlane: (id: PlaneId) => ORIGIN_PLANES.find((p) => p.id === id)?.plane,
   });
   const applied: Operation[] = [];
@@ -317,6 +316,68 @@ describe('SketchSession first solve', () => {
     await settle();
 
     expect(session.state.get()).toMatchObject({ status: 'ok', dof: 0, fullyDefined: true });
+  });
+});
+
+describe('SketchState.statusKey (the status line of the panel)', () => {
+  it('solving before the first result, without params', () => {
+    const { sketches } = setup();
+    const session = sketches.create(ORIGIN_PLANE_IDS.xy);
+    expect(session.state.get()).toMatchObject({
+      statusKey: 'sketch.status.solving',
+      statusParams: {},
+    });
+  });
+
+  it('degrees of freedom with n while not fully defined', async () => {
+    const ctx = setup({ features: [['s1', rectangleData()]] });
+    ctx.solver.next({ dof: 4 });
+    const session = ctx.sketches.edit(fid('s1'));
+    await settle();
+    expect(session.state.get()).toMatchObject({
+      statusKey: 'sketch.status.dof',
+      statusParams: { n: 4 },
+    });
+  });
+
+  it('fully defined', async () => {
+    const ctx = setup({ features: [['s1', rectangleData()]] });
+    ctx.solver.next({ dof: 0 });
+    const session = ctx.sketches.edit(fid('s1'));
+    await settle();
+    expect(session.state.get()).toMatchObject({
+      statusKey: 'sketch.status.defined',
+      statusParams: {},
+    });
+  });
+
+  it('a conflicting or failed last solve', async () => {
+    const ctx = setup({ features: [['s1', rectangleData()]] });
+    ctx.solver.next({ status: 'conflict', entities: null, conflicting: [] });
+    const conflict = ctx.sketches.edit(fid('s1'));
+    await settle();
+    expect(conflict.state.get().statusKey).toBe('sketch.conflict');
+    conflict.cancel();
+    const failing: ConstraintSolver = { solve: () => Promise.reject(new Error('disconnected')) };
+    const { session } = await editing(rectangleData(), failing);
+    expect(session.state.get()).toMatchObject({
+      statusKey: 'sketch.solverFailed',
+      statusParams: {},
+    });
+  });
+
+  it('keeps the params object while the degrees of freedom stay', async () => {
+    const ctx = setup({ features: [['s1', rectangleData()]] });
+    ctx.solver.next({ dof: 4 });
+    const session = ctx.sketches.edit(fid('s1'));
+    await settle();
+    const before = session.state.get();
+    const first = before.entities[0];
+    if (first === undefined) throw new Error('the rectangle has no entity');
+    session.select(first.id);
+    const after = session.state.get();
+    expect(after).not.toBe(before);
+    expect(after.statusParams).toBe(before.statusParams);
   });
 });
 

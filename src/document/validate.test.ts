@@ -265,3 +265,168 @@ describe('validateAgainstSchema – exclusive bounds (Q050)', () => {
     bad(spec, -1, 'param.belowMin', { min: 0 });
   });
 });
+
+// A schema in the style of Extrude (M13): targets only for add/remove/intersect, distance only
+// for a blind end and the face only for 'up to face'.
+describe('validateAgainstSchema – conditional params (M13)', () => {
+  const schema: ParamSchema = {
+    operation: {
+      kind: 'enum',
+      label: 'x.operation',
+      default: 'new',
+      options: [
+        { value: 'new', label: 'x.operation.new' },
+        { value: 'add', label: 'x.operation.add' },
+      ],
+    },
+    targets: {
+      kind: 'bodies',
+      label: 'x.targets',
+      min: 1,
+      group: 'x.group.merge',
+      visibleWhen: (p) => p.operation !== 'new',
+    },
+    endType: {
+      kind: 'enum',
+      label: 'x.endType',
+      default: 'blind',
+      options: [
+        { value: 'blind', label: 'x.endType.blind' },
+        { value: 'upToFace', label: 'x.endType.upToFace' },
+      ],
+    },
+    distance: {
+      kind: 'length',
+      label: 'x.distance',
+      default: 10,
+      min: 0,
+      exclusiveMin: true,
+      visibleWhen: (p) => p.endType === 'blind',
+    },
+    upTo: {
+      kind: 'topo',
+      label: 'x.upTo',
+      entity: 'face',
+      min: 1,
+      visibleWhen: (p) => p.endType === 'upToFace',
+    },
+  };
+  const target = { kind: 'body', body: 'f1/body' };
+
+  it("'new' with empty targets passes (targets hidden)", () => {
+    expect(
+      validateAgainstSchema(schema, {
+        operation: 'new',
+        targets: [],
+        endType: 'blind',
+        distance: 10,
+        upTo: [],
+      }),
+    ).toEqual([]);
+  });
+
+  it("'add' with empty targets is too few references", () => {
+    expect(
+      validateAgainstSchema(schema, {
+        operation: 'add',
+        targets: [],
+        endType: 'blind',
+        distance: 10,
+        upTo: [],
+      }),
+    ).toEqual([{ param: 'targets', code: 'param.tooFewRefs', params: { min: 1 } }]);
+  });
+
+  it('a missing hidden param passes', () => {
+    expect(
+      validateAgainstSchema(schema, { operation: 'new', endType: 'blind', distance: 5 }),
+    ).toEqual([]);
+  });
+
+  it('a missing visible param is param.missing', () => {
+    expect(validateAgainstSchema(schema, { operation: 'add', endType: 'upToFace' })).toEqual([
+      { param: 'targets', code: 'param.missing' },
+      { param: 'upTo', code: 'param.missing' },
+    ]);
+  });
+
+  it('an invalid value of a hidden param passes and is not unexpected', () => {
+    expect(
+      validateAgainstSchema(schema, {
+        operation: 'new',
+        targets: 'nonsense',
+        endType: 'upToFace',
+        distance: -1,
+        upTo: [{ kind: 'topo', body: 'f1/body', name: 'Face1' }],
+      }),
+    ).toEqual([]);
+  });
+
+  it('checks a visible param as usual', () => {
+    expect(
+      validateAgainstSchema(schema, {
+        operation: 'add',
+        targets: [target, 'x'],
+        endType: 'blind',
+        distance: 0,
+      }),
+    ).toEqual([
+      { param: 'targets', code: 'param.invalidRef', params: { index: 1 } },
+      { param: 'distance', code: 'param.atOrBelowMin', params: { min: 0 } },
+    ]);
+  });
+
+  it('does not call the predicates for params that are not an object', () => {
+    const throwing: ParamSchema = {
+      p: {
+        kind: 'boolean',
+        label: 'B',
+        default: false,
+        visibleWhen: () => {
+          throw new Error('called');
+        },
+      },
+    };
+    expect(validateAgainstSchema(throwing, null)).toEqual([{ param: '', code: 'param.wrongType' }]);
+  });
+});
+
+describe('validateAgainstSchema – axis (M13)', () => {
+  const spec: ParamSpec = { kind: 'axis', label: 'A' };
+
+  it('null is too few references, the axis is always required', () => {
+    bad(spec, null, 'param.tooFewRefs', { min: 1 });
+  });
+
+  it('an origin axis passes', () => {
+    ok(spec, { kind: 'axis', axis: 'origin/axis:z' });
+  });
+
+  it('a sketch entity passes', () => {
+    ok(spec, { kind: 'sketchEntity', sketch: 's1', entity: 'l1' });
+  });
+
+  it.each([
+    [{ kind: 'axis', axis: 'origin/axis:Z' }],
+    [{ kind: 'axis', axis: 'origin/plane:xy' }],
+    [{ kind: 'axis' }],
+    [{ kind: 'sketchEntity', sketch: '', entity: 'l1' }],
+    [{ kind: 'sketchEntity', sketch: 's1', entity: '' }],
+    [{ kind: 'sketchEntity', sketch: 's1' }],
+    [{ kind: 'plane', plane: 'origin/plane:xy' }],
+    [{ kind: 'body', body: 'f1/body' }],
+    ['origin/axis:z'],
+    [3],
+    [undefined],
+  ])('an invalid item %j is param.invalidRef without params', (value) => {
+    bad(spec, value, 'param.invalidRef');
+  });
+
+  it('an array instead of an object is param.invalidRef', () => {
+    bad(spec, [{ kind: 'axis', axis: 'origin/axis:z' }], 'param.invalidRef');
+  });
+
+  it('is required like any param', () => {
+    expect(validateAgainstSchema({ p: spec }, {})).toEqual([{ param: 'p', code: 'param.missing' }]);
+  });
+});

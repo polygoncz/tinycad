@@ -22,8 +22,20 @@ function aTool(
   };
 }
 
-function anAction(id: string, enabled = true, shortcut: string | null = null): ActionState {
-  return { id, label: id, shortcut, group: null, enabled, modes: ['model', 'sketch'] };
+const BOTH: readonly Mode[] = ['model', 'sketch'];
+
+function anAction(
+  id: string,
+  enabled = true,
+  shortcut: string | null = null,
+  change: Partial<ActionState> = {},
+): ActionState {
+  return { id, label: id, shortcut, group: null, enabled, modes: BOTH, ...change };
+}
+
+/** A constraint action of the sketcher: the group and the mode of createSketchActions. */
+function aConstraintAction(id: string, shortcut: string | null = null): ActionState {
+  return anAction(id, false, shortcut, { group: 'sketch.constraint', modes: ['sketch'] });
 }
 
 /** The ids are passed in, never known by the function (AppSession.actionIds). */
@@ -41,6 +53,8 @@ function groupsOf(
   return toolbarGroups({
     actionIds: IDS,
     toolActionId,
+    // AppSession.toolModes in the app; the default of interaction.
+    toolModes: (tool) => tool.modes ?? ['model'],
     locked: false,
     mode: 'model',
     sketchActionIds: SKETCH_IDS,
@@ -54,7 +68,8 @@ const ACTIONS: readonly ActionState[] = [
   anAction('redo', false, 'Mod+Shift+Z'),
   anAction('feature.delete'),
   anAction('view.fitAll', true, 'F'),
-  anAction('tool.box', true, 'B'),
+  // A tool action exists in the modes of its tool (createBuiltInActions).
+  anAction('tool.box', true, 'B', { modes: ['model'] }),
 ];
 
 describe('toolbarGroups', () => {
@@ -91,7 +106,9 @@ describe('toolbarGroups', () => {
         label: 'undo',
         icon: 'arrow-back-up',
         shortcut: 'Mod+Z',
+        group: 'history',
         enabled: true,
+        modes: BOTH,
         command: { kind: 'action', id: 'undo' },
       },
       {
@@ -99,7 +116,9 @@ describe('toolbarGroups', () => {
         label: 'redo',
         icon: 'arrow-forward-up',
         shortcut: 'Mod+Shift+Z',
+        group: 'history',
         enabled: false,
+        modes: BOTH,
         command: { kind: 'action', id: 'redo' },
       },
     ]);
@@ -125,7 +144,9 @@ describe('toolbarGroups', () => {
         label: 'box.label',
         icon: 'box',
         shortcut: 'B',
+        group: 'primitive',
         enabled: false,
+        modes: ['model'],
         command: { kind: 'action', id: 'tool.box' },
       },
     ]);
@@ -185,7 +206,9 @@ describe('toolbarGroups', () => {
       label: 'sketch.finish',
       icon: 'check',
       shortcut: null,
+      group: 'finish',
       enabled: true,
+      modes: BOTH,
       command: { kind: 'action', id: 'sketch.finish' },
     });
     expect(items.get('sketch.cancel')?.icon).toBe('x');
@@ -212,6 +235,42 @@ describe('toolbarGroups', () => {
       'circle-dot',
       'lock',
     ]);
+  });
+
+  it('the constraint buttons are the actions of the group sketch.constraint in their order', () => {
+    const actions = [
+      aConstraintAction('sketch.constraint.fix'),
+      anAction('other', true, null, { group: 'sketch', modes: ['sketch'] }),
+      aConstraintAction('sketch.constraint.custom'),
+      aConstraintAction('sketch.constraint.horizontal'),
+    ];
+    const groups = groupsOf({ tools: [], actions, mode: 'sketch' });
+    expect(groups.map((g) => [g.id, g.items.map((i) => [i.id, i.icon])])).toEqual([
+      [
+        'constrain',
+        [
+          ['sketch.constraint.fix', 'lock'],
+          ['sketch.constraint.custom', 'link'],
+          ['sketch.constraint.horizontal', 'arrows-horizontal'],
+        ],
+      ],
+    ]);
+  });
+
+  it('the modes of a tool with an action are those of the action', () => {
+    const tools = [aTool('box', 'primitive', 'B')];
+    const actions = [anAction('tool.box', true, 'B', { modes: ['sketch'] })];
+    expect(groupsOf({ tools, actions })).toEqual([]);
+    const [group] = groupsOf({ tools, actions, mode: 'sketch' });
+    expect(group?.items[0]?.modes).toEqual(['sketch']);
+  });
+
+  it('a tool without an action takes its modes from toolModes', () => {
+    const tools = [aTool('probe', 'modify')];
+    const toolModes = (): readonly Mode[] => ['sketch'];
+    expect(groupsOf({ tools, actions: [], toolModes })).toEqual([]);
+    const [group] = groupsOf({ tools, actions: [], toolModes, mode: 'sketch' });
+    expect(group?.items[0]).toMatchObject({ id: 'probe', group: 'modify', modes: ['sketch'] });
   });
 });
 
@@ -241,6 +300,6 @@ const SKETCHER_ACTIONS: readonly ActionState[] = [
   anAction('sketch.finish'),
   anAction('sketch.cancel'),
   ...KINDS.map((kind) =>
-    anAction(`sketch.constraint.${kind}`, false, kind === 'horizontal' ? 'H' : null),
+    aConstraintAction(`sketch.constraint.${kind}`, kind === 'horizontal' ? 'H' : null),
   ),
 ];

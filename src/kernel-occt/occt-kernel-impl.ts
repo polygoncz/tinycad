@@ -3,6 +3,7 @@ import type { Mat4, Plane, Vec3 } from '@/core';
 import {
   createKernelError,
   isRigidMotion,
+  type Axis,
   type BooleanOp,
   type BoundingBox,
   type GeometryKernel,
@@ -14,8 +15,9 @@ import {
   validateFaceInput,
 } from '@/kernel';
 import { copyFaceInput, faceShape } from './face';
-import { toKernelError, type Occt } from './occt';
+import { hasSolid, toKernelError, type Occt } from './occt';
 import { createShapeEntry, deleteShapeEntry, type ShapeEntry } from './shape-entry';
+import { prismShape, requireFace, revolShape } from './sweep';
 import { tessellateEntry } from './tessellate';
 
 // GeometryKernel over the OCCT module (spec 06, "kernel-occt: adapter architecture"). Runs in
@@ -25,8 +27,13 @@ import { tessellateEntry } from './tessellate';
 /** `read` of a method whose inputs are primitives: nothing to copy. */
 const noInput = (): undefined => undefined;
 
-/** Spec 06: a cylinder axis must be longer than this. */
+/** Spec 06: a cylinder axis, an extrude direction and a revolve axis must be longer than this. */
 const MIN_AXIS_LENGTH = 1e-9;
+
+/** Spec 06: revolve takes 0 < angle ≤ 2π + this. */
+const ANGLE_TOLERANCE = 1e-9;
+
+const TURN = 2 * Math.PI;
 
 const BOOLEAN_OPS: readonly BooleanOp[] = ['union', 'subtract', 'intersect'];
 
@@ -141,6 +148,57 @@ export class OcctKernelImpl implements GeometryKernel {
         throw createKernelError('invalid-input', `makeFace: ${errors.join('; ')}`);
       }
       return this.add(faceShape(this.oc, input));
+    });
+  }
+
+  extrude(profile: ShapeHandle, direction: Vec3, distance: number): Promise<ShapeResult> {
+    const read = (): { direction: Vec3; distance: number } => ({
+      direction: [direction[0], direction[1], direction[2]],
+      distance,
+    });
+    return this.run(read, (input) => {
+      if (!input.direction.every(Number.isFinite)) {
+        throw createKernelError('invalid-input', 'extrude: direction must be finite');
+      }
+      const length = Math.hypot(...input.direction);
+      if (!(length > MIN_AXIS_LENGTH)) {
+        throw createKernelError('invalid-input', 'extrude: direction must not be zero');
+      }
+      if (!(Number.isFinite(input.distance) && input.distance > 0)) {
+        throw createKernelError('invalid-input', 'extrude: distance must be finite and > 0');
+      }
+      const face = this.entry(profile).shape;
+      requireFace(this.oc, face, 'extrude');
+      const k = input.distance / length;
+      const shift: Vec3 = [input.direction[0] * k, input.direction[1] * k, input.direction[2] * k];
+      return this.add(prismShape(this.oc, face, shift));
+    });
+  }
+
+  revolve(profile: ShapeHandle, axis: Axis, angle: number): Promise<ShapeResult> {
+    const read = (): { axis: Axis; angle: number } => ({
+      axis: {
+        origin: [axis.origin[0], axis.origin[1], axis.origin[2]],
+        direction: [axis.direction[0], axis.direction[1], axis.direction[2]],
+      },
+      angle,
+    });
+    return this.run(read, (input) => {
+      const { origin, direction } = input.axis;
+      if (!origin.every(Number.isFinite) || !direction.every(Number.isFinite)) {
+        throw createKernelError('invalid-input', 'revolve: the axis must be finite');
+      }
+      if (!(Math.hypot(...direction) > MIN_AXIS_LENGTH)) {
+        throw createKernelError('invalid-input', 'revolve: the axis direction must not be zero');
+      }
+      const valid = Number.isFinite(input.angle) && input.angle > 0;
+      if (!(valid && input.angle <= TURN + ANGLE_TOLERANCE)) {
+        throw createKernelError('invalid-input', 'revolve: angle must be in (0, 2π]');
+      }
+      const face = this.entry(profile).shape;
+      requireFace(this.oc, face, 'revolve');
+      // An angle within the tolerance above 2π is a full turn.
+      return this.add(revolShape(this.oc, face, input.axis, Math.min(input.angle, TURN)));
     });
   }
 
@@ -282,7 +340,7 @@ export class OcctKernelImpl implements GeometryKernel {
     }
     const result = algo.Shape();
     try {
-      if (!this.hasSolid(result)) {
+      if (!hasSolid(this.oc, result)) {
         throw createKernelError('operation-failed', `boolean ${op}: the result has no solid`);
       }
     } catch (e) {
@@ -316,12 +374,6 @@ export class OcctKernelImpl implements GeometryKernel {
       throw e;
     }
     return list;
-  }
-
-  private hasSolid(shape: TopoDS_Shape): boolean {
-    const { TopAbs_SOLID, TopAbs_SHAPE } = this.oc.TopAbs_ShapeEnum;
-    using explorer = new this.oc.TopExp_Explorer(shape, TopAbs_SOLID, TopAbs_SHAPE);
-    return explorer.More();
   }
 
   private nextHandle(): ShapeHandle {

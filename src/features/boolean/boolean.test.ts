@@ -74,6 +74,8 @@ function aRecordingKernel() {
       return fake.boolean(op, targets, tools);
     },
     makeFace: (p) => fake.makeFace(p),
+    extrude: (profile, direction, distance) => fake.extrude(profile, direction, distance),
+    revolve: (profile, axis, angle) => fake.revolve(profile, axis, angle),
     boundingBox: (shape) => fake.boundingBox(shape),
   };
   return { fake, kernel, calls };

@@ -73,6 +73,13 @@ export function mapSubShapes(
   return found;
 }
 
+/** Whether `shape` contains at least one solid (TopExp_Explorer over TopAbs_SOLID). */
+export function hasSolid(oc: Occt, shape: TopoDS_Shape): boolean {
+  const { TopAbs_SOLID, TopAbs_SHAPE } = oc.TopAbs_ShapeEnum;
+  using explorer = new oc.TopExp_Explorer(shape, TopAbs_SOLID, TopAbs_SHAPE);
+  return explorer.More();
+}
+
 /**
  * Converts anything thrown inside the adapter to a kernel error (spec 06, Errors). An OCCT
  * exception (WebAssembly.Exception) becomes 'internal' with the OCCT type in the message;

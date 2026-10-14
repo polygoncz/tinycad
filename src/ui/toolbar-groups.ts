@@ -4,7 +4,8 @@ import type { ActionState, Mode, ToolDescriptor } from '@/interaction';
 // The groups of the Toolbar (spec 11, "Komponenty"): Historie, Skica, Vytvořit, Upravit,
 // Konstrukce, Zobrazit, Výběr in the model mode; Historie, Výběr, Kreslit, Vazby, Dokončit,
 // Zobrazit in the sketch mode (M12). Tools fall into groups by ToolDescriptor.group and show only
-// in their modes; undo/redo, fit all, the constraints and finish/cancel of a sketch are actions.
+// in their modes; undo/redo, fit all, the constraints (the action group 'sketch.constraint') and
+// finish/cancel of a sketch are actions.
 // A pure function of the snapshots, so the Toolbar component holds only bindings (rule 4).
 // The label of a group is the translation key `toolbar.group.<id>`.
 
@@ -12,15 +13,15 @@ import type { ActionState, Mode, ToolDescriptor } from '@/interaction';
 export type ToolbarCommand =
   { readonly kind: 'action'; readonly id: string } | { readonly kind: 'tool'; readonly id: string };
 
-export interface ToolbarItem {
-  readonly id: string;
-  /** Translation key. */
-  readonly label: string;
+/**
+ * A button, and at the same time an item of the menu under its group label: it is an
+ * ActionState (id = the item, group = the toolbar group, modes of its tool or action), so the
+ * menu shows the items as they are.
+ */
+export interface ToolbarItem extends ActionState {
+  readonly group: string;
   /** Tabler icon name without the `ti-` prefix. */
   readonly icon: string;
-  /** For the tooltip; null = none. */
-  readonly shortcut: string | null;
-  readonly enabled: boolean;
   readonly command: ToolbarCommand;
 }
 
@@ -43,7 +44,14 @@ export type ToolbarSketchActionIds = Readonly<Record<'finish' | 'cancel', string
 
 type ConstraintKind = Parameters<AppSession['sketchConstraintActionId']>[0];
 
-/** Icons of the constraint actions, in toolbar order (the order of GEOMETRIC_CONSTRAINT_KINDS). */
+/**
+ * The action group of the geometric constraints (spec 10, "Nástroje a akce skicáře"): its actions
+ * are the buttons of the toolbar group 'constrain', after the dimension tool, in registration order.
+ */
+const CONSTRAINT_ACTION_GROUP = 'sketch.constraint';
+const CONSTRAINT_TOOLBAR_GROUP = 'constrain';
+
+/** Icons of the constraint actions; an action without one gets DEFAULT_CONSTRAINT_ICON. */
 const CONSTRAINT_ICONS: readonly (readonly [ConstraintKind, string])[] = [
   ['coincident', 'point'],
   ['horizontal', 'arrows-horizontal'],
@@ -54,50 +62,48 @@ const CONSTRAINT_ICONS: readonly (readonly [ConstraintKind, string])[] = [
   ['tangent', 'circle-dot'],
   ['fix', 'lock'],
 ];
+const DEFAULT_CONSTRAINT_ICON = 'link';
 
 type Buttons = Readonly<Record<string, readonly { readonly id: string; readonly icon: string }[]>>;
 
 /**
- * The actions shown as buttons, by group: `before` the tools of the group, `after` them (the
- * constraints follow the dimension tool). The sketch actions are buttons only in the sketch mode.
+ * The actions shown as buttons by a fixed id, by group, before the tools of the group. The
+ * sketch actions are buttons only in the sketch mode.
  */
 function actionButtons(input: {
   readonly mode: Mode;
   readonly actionIds: ToolbarActionIds;
   readonly sketchActionIds: ToolbarSketchActionIds;
-  readonly sketchConstraintActionId: (kind: ConstraintKind) => string;
-}): { readonly before: Buttons; readonly after: Buttons } {
+}): Buttons {
   const { actionIds: ids, sketchActionIds: sketch } = input;
   const history = [
     { id: ids.undo, icon: 'arrow-back-up' },
     { id: ids.redo, icon: 'arrow-forward-up' },
   ];
   const view = [{ id: ids.fitAll, icon: 'zoom-scan' }];
-  if (input.mode === 'model') return { before: { history, view }, after: {} };
+  if (input.mode === 'model') return { history, view };
   return {
-    before: {
-      history,
-      finish: [
-        { id: sketch.cancel, icon: 'x' },
-        { id: sketch.finish, icon: 'check' },
-      ],
-      view,
-    },
-    after: {
-      constrain: CONSTRAINT_ICONS.map(([kind, icon]) => ({
-        id: input.sketchConstraintActionId(kind),
-        icon,
-      })),
-    },
+    history,
+    finish: [
+      { id: sketch.cancel, icon: 'x' },
+      { id: sketch.finish, icon: 'check' },
+    ],
+    view,
   };
 }
 
-/**
- * The modes of a tool: its own, or ['model'] (spec 10, "Režim"). ui may not import the value
- * toolModes of interaction, so the default is repeated here.
- */
-function modesOf(tool: ToolDescriptor): readonly Mode[] {
-  return tool.modes ?? ['model'];
+/** The item of an action button in the toolbar group `group`. */
+function actionItem(action: ActionState, group: string, icon: string): ToolbarItem {
+  return Object.freeze({
+    id: action.id,
+    label: action.label,
+    shortcut: action.shortcut,
+    group,
+    enabled: action.enabled,
+    modes: action.modes,
+    icon,
+    command: Object.freeze({ kind: 'action', id: action.id }),
+  });
 }
 
 export function toolbarGroups(input: {
@@ -106,55 +112,60 @@ export function toolbarGroups(input: {
   readonly actionIds: ToolbarActionIds;
   /** AppSession.toolActionId: the action that activates a tool, if app registered one. */
   readonly toolActionId: (toolId: string) => string;
+  /** AppSession.toolModes: the modes of a tool without an action (with one: ActionState.modes). */
+  readonly toolModes: (tool: ToolDescriptor) => readonly Mode[];
   /** AppSession.locked: tools without an action are disabled. */
   readonly locked: boolean;
-  /** AppSession.mode: only the tools and the groups of this mode are shown (M12). */
+  /** AppSession.mode: only the tools, actions and groups of this mode are shown (M12). */
   readonly mode: Mode;
   /** AppSession.sketchActionIds. */
   readonly sketchActionIds: ToolbarSketchActionIds;
-  /** AppSession.sketchConstraintActionId. */
+  /** AppSession.sketchConstraintActionId: finds the icon of a constraint action. */
   readonly sketchConstraintActionId: (kind: ConstraintKind) => string;
 }): readonly ToolbarGroup[] {
   const actionById = new Map(input.actions.map((a) => [a.id, a]));
   const items = new Map<string, ToolbarItem[]>();
-  const add = (group: string, item: ToolbarItem): void => {
-    const list = items.get(group);
-    if (list === undefined) items.set(group, [item]);
+  const add = (item: ToolbarItem): void => {
+    const list = items.get(item.group);
+    if (list === undefined) items.set(item.group, [item]);
     else list.push(item);
   };
-  const addActions = (buttons: Buttons): void => {
-    for (const [group, list] of Object.entries(buttons)) {
-      for (const { id, icon } of list) {
-        const action = actionById.get(id);
-        if (action === undefined) continue;
-        add(group, {
-          id,
-          label: action.label,
-          icon,
-          shortcut: action.shortcut,
-          enabled: action.enabled,
-          command: { kind: 'action', id },
-        });
-      }
-    }
-  };
 
-  const buttons = actionButtons(input);
-  addActions(buttons.before);
-  for (const tool of input.tools) {
-    if (!modesOf(tool).includes(input.mode)) continue;
-    const action = actionById.get(input.toolActionId(tool.id));
-    add(tool.group, {
-      id: tool.id,
-      label: tool.label,
-      icon: tool.icon,
-      shortcut: tool.shortcut ?? null,
-      enabled: action?.enabled ?? !input.locked,
-      command:
-        action === undefined ? { kind: 'tool', id: tool.id } : { kind: 'action', id: action.id },
-    });
+  for (const [group, list] of Object.entries(actionButtons(input))) {
+    for (const { id, icon } of list) {
+      const action = actionById.get(id);
+      if (action !== undefined) add(actionItem(action, group, icon));
+    }
   }
-  addActions(buttons.after);
+
+  for (const tool of input.tools) {
+    const action = actionById.get(input.toolActionId(tool.id));
+    const modes = action?.modes ?? input.toolModes(tool);
+    if (!modes.includes(input.mode)) continue;
+    add(
+      Object.freeze({
+        id: tool.id,
+        label: tool.label,
+        shortcut: tool.shortcut ?? null,
+        group: tool.group,
+        enabled: action?.enabled ?? !input.locked,
+        modes,
+        icon: tool.icon,
+        command: Object.freeze(
+          action === undefined ? { kind: 'tool', id: tool.id } : { kind: 'action', id: action.id },
+        ),
+      }),
+    );
+  }
+
+  const constraintIcons = new Map(
+    CONSTRAINT_ICONS.map(([kind, icon]) => [input.sketchConstraintActionId(kind), icon]),
+  );
+  for (const action of input.actions) {
+    if (action.group !== CONSTRAINT_ACTION_GROUP || !action.modes.includes(input.mode)) continue;
+    const icon = constraintIcons.get(action.id) ?? DEFAULT_CONSTRAINT_ICON;
+    add(actionItem(action, CONSTRAINT_TOOLBAR_GROUP, icon));
+  }
 
   const order = GROUP_ORDER[input.mode];
   const unknown = [...items.keys()].filter((group) => !order.includes(group));

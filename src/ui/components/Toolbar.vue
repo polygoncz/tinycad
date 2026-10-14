@@ -8,7 +8,6 @@
 // the group label under the button.
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { ActionState } from '@/interaction';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
 import { isMacPlatform, shortcutText } from '../keyboard';
@@ -32,6 +31,7 @@ const groups = computed(() =>
     actions: actionStates.value,
     actionIds: session.actionIds,
     toolActionId: (id) => session.toolActionId(id),
+    toolModes: (tool) => session.toolModes(tool),
     locked: locked.value,
     mode: mode.value,
     sketchActionIds: session.sketchActionIds,
@@ -54,22 +54,9 @@ function run(item: ToolbarItem): void {
   else session.tools.activate(item.command.id);
 }
 
-// The menu under a group label: the same items with their names and shortcuts.
+// The menu under a group label: the same items (a ToolbarItem is an ActionState).
 const menu = ref<{ readonly x: number; readonly y: number; readonly groupId: string } | null>(null);
 const menuGroup = computed(() => groups.value.find((g) => g.id === menu.value?.groupId));
-const menuItems = computed((): readonly ActionState[] =>
-  (menuGroup.value?.items ?? []).map((item) =>
-    Object.freeze<ActionState>({
-      id: item.id,
-      label: item.label,
-      shortcut: item.shortcut,
-      group: null,
-      enabled: item.enabled,
-      // Only displayed by the menu, which ignores the modes.
-      modes: ['model', 'sketch'],
-    }),
-  ),
-);
 
 function openMenu(group: ToolbarGroup, e: MouseEvent): void {
   const target = e.currentTarget;
@@ -115,7 +102,7 @@ function runMenuItem(id: string): void {
 
     <ContextMenu
       v-if="menu !== null"
-      :items="menuItems"
+      :items="menuGroup?.items ?? []"
       :x="menu.x"
       :y="menu.y"
       @run="runMenuItem"

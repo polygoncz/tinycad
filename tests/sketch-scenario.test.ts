@@ -71,7 +71,6 @@ function setup() {
     features,
     solver: createInThreadPlanegcsSolver(),
     viewport,
-    ids: createSequentialIdGenerator('s'),
     resolvePlane: (id) => planes.get(id),
   });
 

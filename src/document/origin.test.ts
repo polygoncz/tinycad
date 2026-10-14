@@ -1,8 +1,8 @@
 import { plane } from '@/core';
 import type { Vec3 } from '@/core';
 import { describe, expect, it } from 'vitest';
-import { ORIGIN, ORIGIN_PLANE_IDS, ORIGIN_PLANES } from './origin';
-import { parsePlaneId } from './refs';
+import { ORIGIN, ORIGIN_AXES, ORIGIN_AXIS_IDS, ORIGIN_PLANE_IDS, ORIGIN_PLANES } from './origin';
+import { parseAxisId, parsePlaneId } from './refs';
 
 /** +0 for -0, so that toEqual compares directions by value. */
 const plain = (v: Vec3): Vec3 => [v[0] + 0, v[1] + 0, v[2] + 0];
@@ -68,6 +68,56 @@ describe('ORIGIN_PLANES (M12)', () => {
       expect(Object.isFrozen(p.plane.origin)).toBe(true);
       expect(Object.isFrozen(p.plane.xDir)).toBe(true);
       expect(Object.isFrozen(p.plane.normal)).toBe(true);
+    }
+  });
+});
+
+describe('ORIGIN_AXIS_IDS (M13)', () => {
+  it('names the three axes <origin>/axis:<name>', () => {
+    expect(ORIGIN_AXIS_IDS).toEqual({
+      x: 'origin/axis:x',
+      y: 'origin/axis:y',
+      z: 'origin/axis:z',
+    });
+  });
+
+  it('are valid axis ids', () => {
+    for (const id of Object.values(ORIGIN_AXIS_IDS)) expect(parseAxisId(id)).toBe(id);
+  });
+
+  it('is frozen', () => {
+    expect(Object.isFrozen(ORIGIN_AXIS_IDS)).toBe(true);
+  });
+});
+
+describe('ORIGIN_AXES (M13)', () => {
+  it('lists x, y, z in this order with their translation keys', () => {
+    expect(ORIGIN_AXES.map((a) => [a.id, a.label])).toEqual([
+      [ORIGIN_AXIS_IDS.x, 'origin.axis.x'],
+      [ORIGIN_AXIS_IDS.y, 'origin.axis.y'],
+      [ORIGIN_AXIS_IDS.z, 'origin.axis.z'],
+    ]);
+  });
+
+  it('starts at the origin with the unit directions +X, +Y, +Z', () => {
+    expect(ORIGIN_AXES.map((a) => a.origin)).toEqual([
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+    ]);
+    expect(ORIGIN_AXES.map((a) => a.direction)).toEqual([
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1],
+    ]);
+  });
+
+  it('is deeply frozen', () => {
+    expect(Object.isFrozen(ORIGIN_AXES)).toBe(true);
+    for (const a of ORIGIN_AXES) {
+      expect(Object.isFrozen(a)).toBe(true);
+      expect(Object.isFrozen(a.origin)).toBe(true);
+      expect(Object.isFrozen(a.direction)).toBe(true);
     }
   });
 });

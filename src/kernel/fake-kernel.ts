@@ -1,15 +1,15 @@
 import { mat4, plane, type Mat4, type Plane, type Vec2, type Vec3 } from '@/core';
 import { createKernelError } from './errors';
 import type { KernelErrorCode } from './errors';
-import type { BooleanOp, GeometryKernel } from './kernel';
+import type { Axis, BooleanOp, GeometryKernel } from './kernel';
 import { parseFaceInput, type ProfileCurve, type ProfileLoop } from './profile';
 import { isRigidMotion } from './transform';
 import type { BoundingBox, MeshData, MeshQuality, ShapeHandle, ShapeResult } from './types';
 
 // In-memory GeometryKernel for tests of higher layers (spec 06, "FakeKernel"). A shape is its
-// axis-aligned bounding box (AABB): a cylinder, a moved shape, a boolean result and a face are
-// stored as their AABB and tessellated as a box (a face as a box of zero thickness). Reached only through kernel/testing.ts, so it never
-// gets into production.
+// axis-aligned bounding box (AABB): a cylinder, a moved shape, a boolean result, a face and a
+// swept solid are stored as their AABB and tessellated as a box (a face as a box of zero
+// thickness). Reached only through kernel/testing.ts, so it never gets into production.
 
 export type KernelOp = keyof GeometryKernel;
 
@@ -23,8 +23,11 @@ export interface FakeKernel extends GeometryKernel {
 /** `read` of a method whose inputs are primitives: nothing to copy. */
 const noInput = (): undefined => undefined;
 
-/** Spec 06: a cylinder axis must be longer than this. */
+/** Spec 06: a cylinder axis, an extrude direction and a revolve axis must be longer than this. */
 const MIN_AXIS_LENGTH = 1e-9;
+
+/** Spec 06: revolve takes 0 < angle ≤ 2π + this. */
+const ANGLE_TOLERANCE = 1e-9;
 
 const BOOLEAN_OPS: readonly BooleanOp[] = ['union', 'subtract', 'intersect'];
 
@@ -38,13 +41,21 @@ interface AabbEntry {
   readonly max: Vec3;
 }
 
+/**
+ * A stored shape: its AABB and whether it is a face (spec 06, M13) – a makeFace result or its
+ * transform – which extrude and revolve require of the profile.
+ */
+interface StoredShape extends AabbEntry {
+  readonly face: boolean;
+}
+
 interface InjectedFailure {
   readonly code: KernelErrorCode;
   readonly message: string;
 }
 
 class FakeKernelImpl implements FakeKernel {
-  private readonly shapes = new Map<ShapeHandle, AabbEntry>();
+  private readonly shapes = new Map<ShapeHandle, StoredShape>();
   /** Increasing counter: a handle is never reused within one instance. */
   private lastHandle = 0;
   private readonly failures = new Map<KernelOp, InjectedFailure[]>();
@@ -131,15 +142,10 @@ class FakeKernelImpl implements FakeKernel {
         if (!isRigidMotion(matrix)) {
           throw createKernelError('invalid-input', 'transform: m must be a rigid motion');
         }
-        const { min, max } = this.entry(shape);
-        const corners = [0, 1, 2, 3, 4, 5, 6, 7].map((i) =>
-          mat4.transformPoint(matrix, [
-            i & 1 ? max[0] : min[0],
-            i & 2 ? max[1] : min[1],
-            i & 4 ? max[2] : min[2],
-          ]),
-        );
-        return this.add(enclosing(corners));
+        const entry = this.entry(shape);
+        const corners = cornersOf(entry).map((c) => mat4.transformPoint(matrix, c));
+        // A moved face is still a face (spec 06, M13).
+        return this.add(enclosing(corners), entry.face);
       },
     );
   }
@@ -198,9 +204,61 @@ class FakeKernelImpl implements FakeKernel {
         }
         const { plane: frame, outer } = parsed.value;
         const local = outer.flatMap(extremePoints);
-        return this.add(enclosing(local.map((v) => plane.toWorld(frame, v))));
+        return this.add(enclosing(local.map((v) => plane.toWorld(frame, v))), true);
       },
     );
+  }
+
+  extrude(profile: ShapeHandle, direction: Vec3, distance: number): Promise<ShapeResult> {
+    const read = (): { direction: Vec3; distance: number } => ({
+      direction: [direction[0], direction[1], direction[2]],
+      distance,
+    });
+    return this.call('extrude', read, (input) => {
+      if (!input.direction.every(Number.isFinite)) {
+        throw createKernelError('invalid-input', 'extrude: direction must be finite');
+      }
+      const length = Math.hypot(...input.direction);
+      if (!(length > MIN_AXIS_LENGTH)) {
+        throw createKernelError('invalid-input', 'extrude: direction must not be zero');
+      }
+      if (!positive(input.distance)) {
+        throw createKernelError('invalid-input', 'extrude: distance must be finite and > 0');
+      }
+      const entry = this.face(profile, 'extrude');
+      const shift = input.direction.map((c) => (c / length) * input.distance);
+      const moved = (p: Vec3): Vec3 => toVec3(p.map((c, k) => c + (shift[k] ?? Number.NaN)));
+      return this.add(enclosing([...extremes(entry), ...extremes(entry).map(moved)]));
+    });
+  }
+
+  revolve(profile: ShapeHandle, axis: Axis, angle: number): Promise<ShapeResult> {
+    const read = (): { origin: Vec3; direction: Vec3; angle: number } => ({
+      origin: [axis.origin[0], axis.origin[1], axis.origin[2]],
+      direction: [axis.direction[0], axis.direction[1], axis.direction[2]],
+      angle,
+    });
+    return this.call('revolve', read, (input) => {
+      if (!input.origin.every(Number.isFinite) || !input.direction.every(Number.isFinite)) {
+        throw createKernelError('invalid-input', 'revolve: the axis must be finite');
+      }
+      if (!(Math.hypot(...input.direction) > MIN_AXIS_LENGTH)) {
+        throw createKernelError('invalid-input', 'revolve: the axis direction must not be zero');
+      }
+      if (!(positive(input.angle) && input.angle <= 2 * Math.PI + ANGLE_TOLERANCE)) {
+        throw createKernelError('invalid-input', 'revolve: angle must be in (0, 2π]');
+      }
+      const entry = this.face(profile, 'revolve');
+      // Spec 06, FakeKernel: the corners turned by 0, the angle and every k·π/2 in between –
+      // exact for the cases of the contract suite, approximate elsewhere.
+      const quarter = Math.PI / 2;
+      const steps = Array.from({ length: Math.ceil(input.angle / quarter) }, (_, k) => k * quarter);
+      const turned = [...steps, input.angle].flatMap((a) => {
+        const m = rotationAbout(input.origin, input.direction, a);
+        return cornersOf(entry).map((c) => mat4.transformPoint(m, c));
+      });
+      return this.add(enclosing(turned));
+    });
   }
 
   tessellate(shape: ShapeHandle, q: MeshQuality): Promise<MeshData> {
@@ -267,10 +325,10 @@ class FakeKernelImpl implements FakeKernel {
     return Promise.resolve().then(() => body(input));
   }
 
-  /** Stores the entry under a new handle. */
-  private add(entry: AabbEntry): ShapeResult {
+  /** Stores the AABB under a new handle; `face` marks a face (spec 06, M13). */
+  private add({ min, max }: AabbEntry, face = false): ShapeResult {
     const shape = this.nextHandle();
-    this.shapes.set(shape, entry);
+    this.shapes.set(shape, { min, max, face });
     return { shape };
   }
 
@@ -280,7 +338,16 @@ class FakeKernelImpl implements FakeKernel {
     return this.lastHandle as ShapeHandle;
   }
 
-  private entry(shape: ShapeHandle): AabbEntry {
+  /** The entry of a profile for `op`: it must be a face, else 'invalid-input'. */
+  private face(profile: ShapeHandle, op: KernelOp): StoredShape {
+    const entry = this.entry(profile);
+    if (!entry.face) {
+      throw createKernelError('invalid-input', `${op}: the profile is not a face`);
+    }
+    return entry;
+  }
+
+  private entry(shape: ShapeHandle): StoredShape {
     const entry = this.shapes.get(shape);
     if (entry === undefined) {
       throw createKernelError('unknown-handle', `Unknown shape handle ${String(shape)}`);
@@ -332,6 +399,24 @@ function extremePoints(c: ProfileCurve): Vec2[] {
 function normalizeAngle(a: number): number {
   const turn = 2 * Math.PI;
   return ((a % turn) + turn) % turn;
+}
+
+/** The 8 corners of the box. */
+function cornersOf({ min, max }: AabbEntry): Vec3[] {
+  return [0, 1, 2, 3, 4, 5, 6, 7].map((i) => [
+    i & 1 ? max[0] : min[0],
+    i & 2 ? max[1] : min[1],
+    i & 4 ? max[2] : min[2],
+  ]);
+}
+
+/** Rotation by `angle` about the axis through `origin` along `direction`. */
+function rotationAbout(origin: Vec3, direction: Vec3, angle: number): Mat4 {
+  const back: Vec3 = [-origin[0], -origin[1], -origin[2]];
+  return mat4.multiply(
+    mat4.translation(origin),
+    mat4.multiply(mat4.rotationAxisAngle(direction, angle), mat4.translation(back)),
+  );
 }
 
 /** The two extreme corners of the box: enough for `enclosing`. */

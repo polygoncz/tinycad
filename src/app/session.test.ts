@@ -595,6 +595,15 @@ describe('createAppSession – sketcher', () => {
     return session.sketches.current.get() ?? fail();
   }
 
+  it('toolModes gives the modes of a tool, the select tool the default model', async () => {
+    const { session } = await openSketcher();
+    const modes = new Map(session.toolList.map((tool) => [tool.id, session.toolModes(tool)]));
+    expect(modes.get('select')).toEqual(['model']);
+    expect(modes.get('sketch')).toEqual(['model']);
+    expect(modes.get('sketch.select')).toEqual(['sketch']);
+    expect(modes.get('sketch.line')).toEqual(['sketch']);
+  });
+
   it('the tool sketch enters the sketch mode: camera normal to XY, sketch.select active', async () => {
     const { session, viewport } = await openSketcher();
     expect(session.mode.get()).toBe('model');

@@ -1,6 +1,8 @@
 import { assertNever } from '@/core';
-import { readRef } from './refs';
+import { refKindsOf } from './references';
+import { readRefOf } from './refs';
 import type { EntityRef } from './refs';
+import { isParamVisible } from './schema';
 import type { ParamIssue, ParamSchema, ParamSpec } from './schema';
 
 // Generic checks driven by ParamSpec. A FeatureSchema calls this from validate()
@@ -26,6 +28,8 @@ export function validateAgainstSchema(schema: ParamSchema, params: unknown): rea
   if (!isRecord(params)) return [{ param: '', ...WRONG_TYPE }];
   const issues: ParamIssue[] = [];
   for (const [key, spec] of Object.entries(schema)) {
+    // A hidden param is neither required nor checked; present, it is not unexpected (M13).
+    if (!isParamVisible(spec, params)) continue;
     if (!Object.hasOwn(params, key)) {
       issues.push({ param: key, code: 'param.missing' });
       continue;
@@ -53,18 +57,17 @@ function checkParam(spec: ParamSpec): Check {
     case 'point':
       return (v) =>
         Array.isArray(v) && v.length === 3 && v.every(isFiniteNumber) ? undefined : WRONG_TYPE;
+    // Whether a topo name really is a face/edge/vertex is only known after regeneration.
     case 'bodies':
-      return checkRefs(spec.min, spec.max, 'body');
     case 'topo':
-      // Whether the name really is a face/edge/vertex is only known after regeneration.
-      return checkRefs(spec.min, spec.max, 'topo');
     case 'region':
-      return checkRefs(spec.min, spec.max, 'region');
     case 'planes':
-      return checkRefs(spec.min, spec.max, 'plane');
+      return checkRefs(spec.min, spec.max, refKindsOf(spec));
     case 'data':
       // Only required (checked above); the content is up to the schema's own validate (M12).
       return () => undefined;
+    case 'axis':
+      return checkAxis(refKindsOf(spec));
     default:
       return assertNever(spec);
   }
@@ -87,10 +90,22 @@ function checkNumber(v: unknown, rules: NumberRules): Problem | undefined {
   return undefined;
 }
 
+/**
+ * A single reference, always required (M13): null is too few, a valid reference of the kinds
+ * passes, anything else (an array too) is an invalid reference without an index.
+ */
+function checkAxis(kinds: readonly EntityRef['kind'][]): Check {
+  return (v) => {
+    if (v === null) return { code: 'param.tooFewRefs', params: { min: 1 } };
+    // Same shape check as referencesOf, so both agree on what a reference is.
+    return readRefOf(kinds, v) === undefined ? { code: 'param.invalidRef' } : undefined;
+  };
+}
+
 function checkRefs(
   min: number | undefined,
   max: number | undefined,
-  kind: EntityRef['kind'],
+  kinds: readonly EntityRef['kind'][],
 ): Check {
   return (v) => {
     if (!Array.isArray(v)) return WRONG_TYPE;
@@ -98,7 +113,7 @@ function checkRefs(
     const keys: string[] = [];
     // Array.isArray narrows to any[]; the items are unchecked data.
     for (const [index, r] of (v as readonly unknown[]).entries()) {
-      const ref = readRef(kind, r);
+      const ref = readRefOf(kinds, r);
       if (ref === undefined) return { code: 'param.invalidRef', params: { index } };
       keys.push(refKey(ref));
     }
@@ -112,7 +127,9 @@ function checkRefs(
 
 /**
  * What makes two references the same (spec 03): body for body, body + name for topo, sketch +
- * region for region, plane for plane. Extra fields of the raw data are ignored, readRef keeps only these.
+ * region for region, plane for plane, axis for axis, sketch + entity for a sketch entity (M13;
+ * an axis param holds one reference, so it never has duplicates, but the switch stays exhaustive).
+ * Extra fields of the raw data are ignored, readRef keeps only these.
  * JSON of a tuple, so no separator character inside a name can make two keys collide.
  */
 function refKey(ref: EntityRef): string {
@@ -125,6 +142,10 @@ function refKey(ref: EntityRef): string {
       return JSON.stringify([ref.sketch, ref.region]);
     case 'plane':
       return JSON.stringify([ref.plane]);
+    case 'axis':
+      return JSON.stringify([ref.axis]);
+    case 'sketchEntity':
+      return JSON.stringify([ref.sketch, ref.entity]);
     default:
       return assertNever(ref);
   }

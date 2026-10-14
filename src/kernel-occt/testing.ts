@@ -1,4 +1,16 @@
-// Test helpers of kernel-occt; only *.test.ts may import this file.
+// Test helpers of kernel-occt; only *.test.ts may import this file (also tests/).
+import type { GeometryKernel } from '@/kernel';
+import { loadOcct } from './occt';
+import { OcctKernelImpl } from './occt-kernel-impl';
+
+/**
+ * The OCCT kernel in the calling thread, without a worker (spec 06, M13): loadOcct() and an
+ * OcctKernelImpl over it, for tests in Node that need real geometry. Every call loads the
+ * module again (a few hundred ms); load it once per test file.
+ */
+export async function createInThreadOcctKernel(): Promise<GeometryKernel> {
+  return new OcctKernelImpl(await loadOcct());
+}
 
 /**
  * A WebAssembly.RuntimeError like the one a trap throws. Built through the global at run

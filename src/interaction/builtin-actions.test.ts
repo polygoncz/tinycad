@@ -108,6 +108,7 @@ function setup(
   const regen = new FakeRegenStatus();
   const selection = createSelectionModel({ regen });
   const editor = createFeatureEditor({ doc, ops: dispatcher, schemas, ids });
+  const locked = createEditLock({ readOnly: opts.readOnly ?? false, editor });
   const featureTree = createFeatureTreeModel({
     doc,
     ops: dispatcher,
@@ -115,6 +116,7 @@ function setup(
     regen,
     editor,
     selection,
+    locked,
   });
   const toolRegistry = createToolRegistry();
   for (const tool of [SELECT_TOOL, LINE_TOOL, PLANE_TOOL]) toolRegistry.register(tool);
@@ -130,7 +132,6 @@ function setup(
     unhandledKey: (e) => registry.handleKey(e),
     ...(mode === undefined ? {} : { mode, defaultToolIds: { sketch: SKETCH_SELECT_TOOL.id } }),
   });
-  const locked = createEditLock({ readOnly: opts.readOnly ?? false, editor });
   let fitAllCount = 0;
   const confirms: ConfirmRequest[] = [];
   const answer = opts.confirm ?? (() => true);

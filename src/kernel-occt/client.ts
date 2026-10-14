@@ -19,6 +19,8 @@ export function createOcctKernelClient(
     transform: (shape, m) => rpc.call('transform', shape, m),
     boolean: (op, targets, tools) => rpc.call('boolean', op, targets, tools),
     makeFace: (p) => rpc.call('makeFace', p),
+    extrude: (profile, direction, distance) => rpc.call('extrude', profile, direction, distance),
+    revolve: (profile, axis, angle) => rpc.call('revolve', profile, axis, angle),
     tessellate: (shape, q) => rpc.call('tessellate', shape, q),
     boundingBox: (shape) => rpc.call('boundingBox', shape),
     release: (handles) => rpc.call('release', handles),

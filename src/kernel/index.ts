@@ -12,6 +12,7 @@ export type {
   SubShapeIndex,
 } from './types';
 export type {
+  Axis,
   BooleanOp,
   BooleanOps,
   GeometryKernel,
@@ -20,6 +21,7 @@ export type {
   PrimitiveOps,
   QueryOps,
   SketchOps,
+  SweepOps,
   TransformOps,
 } from './kernel';
 export { validateFaceInput } from './profile';

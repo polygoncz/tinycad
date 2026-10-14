@@ -26,6 +26,9 @@ export function createTrackingKernel(
     transform: (shape, m) => kernel.transform(shape, m).then(track),
     boolean: (op, targets, tools) => kernel.boolean(op, targets, tools).then(track),
     makeFace: (p) => kernel.makeFace(p).then(track),
+    extrude: (profile, direction, distance) =>
+      kernel.extrude(profile, direction, distance).then(track),
+    revolve: (profile, axis, angle) => kernel.revolve(profile, axis, angle).then(track),
     boundingBox: (shape) => kernel.boundingBox(shape),
   };
 }

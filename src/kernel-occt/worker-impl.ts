@@ -55,6 +55,9 @@ export function createOcctWorkerImpl(
     transform: (shape, m) => onKernel((k) => k.transform(shape, m)),
     boolean: (op, targets, tools) => onKernel((k) => k.boolean(op, targets, tools)),
     makeFace: (p) => onKernel((k) => k.makeFace(p)),
+    extrude: (profile, direction, distance) =>
+      onKernel((k) => k.extrude(profile, direction, distance)),
+    revolve: (profile, axis, angle) => onKernel((k) => k.revolve(profile, axis, angle)),
     tessellate: async (shape, q) => {
       const mesh = await onKernel((k) => k.tessellate(shape, q));
       // The kernel returns new buffers every call (spec 06), so the worker can give them away.

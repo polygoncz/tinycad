@@ -284,6 +284,107 @@ describe('FakeKernel', () => {
     });
   });
 
+  describe('extrude and revolve (M13)', () => {
+    const XY = { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, 0, 1] } as const;
+    const XZ = { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, -1, 0] } as const;
+    const square = (x0: number, y0: number, x1: number, y1: number) =>
+      [
+        { kind: 'line', from: [x0, y0], to: [x1, y0] },
+        { kind: 'line', from: [x1, y0], to: [x1, y1] },
+        { kind: 'line', from: [x1, y1], to: [x0, y1] },
+        { kind: 'line', from: [x0, y1], to: [x0, y0] },
+      ] as const;
+    const FACE = { plane: XY, outer: square(0, 0, 2, 2), holes: [] };
+    const RING = { plane: XZ, outer: square(5, 0, 10, 10), holes: [] };
+    const Z_AXIS = { origin: [0, 0, 0], direction: [0, 0, 1] } as const;
+
+    async function aFace(kernel = createFakeKernel()) {
+      return { kernel, profile: (await kernel.makeFace(FACE)).shape };
+    }
+
+    it('extrude along a slanted direction: the AABB of the profile and of the moved profile', async () => {
+      const { kernel, profile } = await aFace();
+      // d̂ · 5 = [3, 0, 4].
+      const { shape } = await kernel.extrude(profile, [0.6, 0, 0.8], 5);
+      expect(await kernel.boundingBox(shape)).toEqual({ min: [0, 0, 0], max: [5, 2, 4] });
+    });
+
+    it('revolve turns the AABB corners at 0, the angle and every π/2 in between', async () => {
+      const kernel = createFakeKernel();
+      const ring = (await kernel.makeFace(RING)).shape;
+      const { shape } = await kernel.revolve(ring, Z_AXIS, (3 * Math.PI) / 4);
+      const box = await kernel.boundingBox(shape);
+      // Corners x ∈ {5, 10} at 0, π/2 and 3π/4: x down to 10·cos(3π/4), y up to 10.
+      expect(box.min[0]).toBeCloseTo(-10 * Math.SQRT1_2, 9);
+      expect(box.max[0]).toBeCloseTo(10, 9);
+      expect(box.min[1]).toBeCloseTo(0, 9);
+      expect(box.max[1]).toBeCloseTo(10, 9);
+      expect([box.min[2], box.max[2]]).toEqual([0, 10]);
+    });
+
+    it('revolve about an axis off the origin turns about that axis', async () => {
+      const kernel = createFakeKernel();
+      const ring = (await kernel.makeFace(RING)).shape;
+      const axis = { origin: [5, 0, 0], direction: [0, 0, 1] } as const;
+      const { shape } = await kernel.revolve(ring, axis, Math.PI);
+      const box = await kernel.boundingBox(shape);
+      expect(box.min[0]).toBeCloseTo(0, 9);
+      expect(box.max[0]).toBeCloseTo(10, 9);
+      expect(box.min[1]).toBeCloseTo(0, 9);
+      expect(box.max[1]).toBeCloseTo(5, 9);
+    });
+
+    it('a boolean result is not a face', async () => {
+      const { kernel, profile } = await aFace();
+      const other = (await kernel.makeFace(FACE)).shape;
+      const united = await kernel.boolean('union', [profile], [other]);
+      const e = await rejection(kernel.extrude(united.shape, [0, 0, 1], 1));
+      expect(kernelErrorCode(e)).toBe('invalid-input');
+    });
+
+    it('the result is tessellated as a box', async () => {
+      const { kernel, profile } = await aFace();
+      const { shape } = await kernel.extrude(profile, [0, 0, 1], 1);
+      const mesh = await kernel.tessellate(shape, QUALITY);
+      expect(mesh.faceRanges).toHaveLength(6 * 3);
+    });
+
+    it('returns no roles and no history', async () => {
+      const { kernel, profile } = await aFace();
+      const results = [
+        await kernel.extrude(profile, [0, 0, 1], 1),
+        await kernel.revolve(profile, { origin: [0, 0, 0], direction: [0, 1, 0] }, 1),
+      ];
+      for (const result of results) expect(result).toEqual({ shape: result.shape });
+    });
+
+    it.each(['extrude', 'revolve'] as const)(
+      'failNext works for %s and creates no handle',
+      async (op) => {
+        const { kernel, profile } = await aFace();
+        const calls = {
+          extrude: () => kernel.extrude(profile, [0, 0, 1], 1),
+          revolve: () => kernel.revolve(profile, { origin: [0, 0, 0], direction: [0, 1, 0] }, 1),
+        };
+        kernel.failNext(op, 'operation-failed', 'boom');
+        const e = await rejection(calls[op]());
+        expect(kernelErrorCode(e)).toBe('operation-failed');
+        expect(e).toHaveProperty('message', 'boom');
+        expect(await kernel.liveHandleCount()).toBe(1);
+        await expect(calls[op]()).resolves.toHaveProperty('shape');
+      },
+    );
+
+    it('callCount counts extrude and revolve, failed calls included', async () => {
+      const { kernel, profile } = await aFace();
+      await kernel.extrude(profile, [0, 0, 1], 1);
+      await rejection(kernel.extrude(profile, [0, 0, 1], 0));
+      await rejection(kernel.revolve(profile, Z_AXIS, 0));
+      expect(kernel.callCount('extrude')).toBe(2);
+      expect(kernel.callCount('revolve')).toBe(1);
+    });
+  });
+
   describe('box', () => {
     it('the bounding box is exact', async () => {
       const kernel = createFakeKernel();

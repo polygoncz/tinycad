@@ -44,8 +44,8 @@ updated: 2026-10-14
 
 ## Úkoly
 
-- [ ] Ú1 `document`: podmíněné a seskupené parametry, druh `axis`, reference na osu a entitu skici, osy počátku
-- [ ] Ú2 `kernel`, `kernel-occt`, `regen`: `SweepOps.extrude` a `revolve`, OCCT v Node pro testy
+- [x] Ú1 `document`: podmíněné a seskupené parametry, druh `axis`, reference na osu a entitu skici, osy počátku
+- [x] Ú2 `kernel`, `kernel-occt`, `regen`: `SweepOps.extrude` a `revolve`, OCCT v Node pro testy
 - [ ] Ú3 `interaction` (+ zástupné místo v `render`, `app`): porty – oblast skici v pickingu a kresbě, oblasti v portu regenerace, zúžení `ToolContext.ops` (Q069)
 - [ ] Ú4 `regen`: osy počátku v `EMPTY_STATE`, `resolveRegions`, `resolveAxis`, `applyBodyOperation`
 - [ ] Ú5 `render`: výplň a picking oblastí skici

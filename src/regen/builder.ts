@@ -1,7 +1,14 @@
 import { createRegistry } from '@/core';
 import type { Registry, Result } from '@/core';
 import type { BodyRef, FeatureInstance, PlaneRef } from '@/document';
-import type { BooleanOps, PrimitiveOps, QueryOps, SketchOps, TransformOps } from '@/kernel';
+import type {
+  BooleanOps,
+  PrimitiveOps,
+  QueryOps,
+  SketchOps,
+  SweepOps,
+  TransformOps,
+} from '@/kernel';
 import type { Body, FeatureError, PlaneArtifact, RegenState } from './state';
 
 // The behaviour half of a feature type (ADR 0004): turns params into geometry.
@@ -25,9 +32,14 @@ export interface RefError {
 /**
  * The part of the kernel a builder may use: it creates shapes and asks about them, it never
  * releases (Q041). Defined here by its consumer (ADR 0011); M11 added TransformOps and
- * BooleanOps, M12 SketchOps.
+ * BooleanOps, M12 SketchOps, M13 SweepOps.
  */
-export type ModelingKernel = PrimitiveOps & TransformOps & BooleanOps & SketchOps & QueryOps;
+export type ModelingKernel = PrimitiveOps &
+  TransformOps &
+  BooleanOps &
+  SketchOps &
+  SweepOps &
+  QueryOps;
 
 /**
  * The feature error for an unresolved reference of the param `param` (Q044): the UI translates

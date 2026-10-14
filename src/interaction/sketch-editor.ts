@@ -3,7 +3,7 @@
 // is 'sketch' exactly while a SketchSession is open; there is no other mode state (R45).
 
 import { ObservableValue, assert } from '@/core';
-import type { IdGenerator, Observable, Plane } from '@/core';
+import type { Observable, Plane } from '@/core';
 import { parsePlaneId } from '@/document';
 import type { FeatureId, PlaneId } from '@/document';
 import { SKETCH_FEATURE_TYPE } from '@/sketch';
@@ -30,10 +30,8 @@ const PLANE_PARAM = 'plane';
 export function createSketchEditor(deps: {
   features: FeatureEditor;
   solver: ConstraintSolver;
-  /** The edited sketch is drawn under EDIT_SKETCH_DRAWING_ID. */
-  viewport: ViewportPort;
-  /** Ids of new entities and constraints are minted by the tools and actions; kept for them. */
-  ids: IdGenerator;
+  /** The edited sketch is drawn under EDIT_SKETCH_DRAWING_ID; only the drawings are needed. */
+  viewport: Pick<ViewportPort, 'sketches'>;
   /** app: ORIGIN_PLANES (M14: also faces from the regeneration). */
   resolvePlane: (id: PlaneId) => Plane | undefined;
 }): SketchEditor {

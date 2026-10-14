@@ -11,26 +11,39 @@ export type {
   PartStudioData,
 } from './model';
 export type {
+  AxisId,
+  AxisRef,
   BodyId,
   BodyRef,
   EntityRef,
   PlaneId,
   PlaneRef,
+  SketchEntityRef,
   SketchId,
   SketchRegionRef,
   TopoName,
   TopoRef,
 } from './refs';
-export { bodyId, originOfBody, ownerOf, parseBodyId, parsePlaneId, sketchId } from './refs';
-export { ORIGIN, ORIGIN_PLANE_IDS, ORIGIN_PLANES } from './origin';
-export type { OriginPlane } from './origin';
+export {
+  bodyId,
+  originOfBody,
+  ownerOf,
+  ownerOfArtifact,
+  parseAxisId,
+  parseBodyId,
+  parsePlaneId,
+  parseSketchId,
+  sketchId,
+} from './refs';
+export { ORIGIN, ORIGIN_AXES, ORIGIN_AXIS_IDS, ORIGIN_PLANE_IDS, ORIGIN_PLANES } from './origin';
+export type { OriginAxis, OriginPlane } from './origin';
 export { dependenciesOf, dependentsOf, orderViolations, referencesOf } from './references';
 export type { OrderViolation } from './references';
 
 export { createDocument } from './cad-document';
 export type { CreateDocumentInit } from './cad-document';
 
-export { createFeatureSchemaRegistry } from './schema';
+export { createFeatureSchemaRegistry, isParamVisible } from './schema';
 export type {
   FeatureSchema,
   FeatureSchemaRegistry,

@@ -3,19 +3,19 @@
 // dialog while the sketcher is open (AppShell mounts one panel per sketch session). The name of
 // the sketch, the status of the last solve (role="status"), the message of the last refused
 // command, the constraints – a dimension with its value field, click = select, × = remove – and
-// Cancel / Finish. Everything goes to the SketchSession; the texts come from ../sketch-panel.
-import { computed, nextTick, useTemplateRef, watch } from 'vue';
+// Cancel / Finish. Everything goes to the SketchSession; the status line is its statusKey, the row
+// names come from ../sketch-panel.
+import { nextTick, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { SketchConstraintRow, SketchSession } from '@/interaction';
 import { useObservable } from '../composables/use-observable';
-import { constraintRowLabel, sketchStatusText } from '../sketch-panel';
+import { constraintRowLabel } from '../sketch-panel';
 import NumericInput from './params/NumericInput.vue';
 
 const props = defineProps<{ sketch: SketchSession }>();
 
 const { t } = useI18n();
 const state = useObservable(props.sketch.state);
-const status = computed(() => sketchStatusText(state.value));
 
 function label(row: SketchConstraintRow): string {
   return constraintRowLabel(t, row);
@@ -64,7 +64,7 @@ watch(
     </header>
 
     <p class="status" :class="{ defined: state.fullyDefined }" role="status">
-      {{ t(status.key, status.params) }}
+      {{ t(state.statusKey, state.statusParams) }}
     </p>
     <p v-if="state.message !== null" class="message" role="alert">{{ t(state.message.key) }}</p>
 

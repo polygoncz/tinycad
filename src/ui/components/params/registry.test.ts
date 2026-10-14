@@ -16,10 +16,11 @@ const ALL_KINDS = {
   region: true,
   planes: true,
   data: true,
+  axis: true,
 } as const satisfies Record<ParamSpec['kind'], true>;
 
-// region comes with Extrude (M13), decided 2026-10-13; data never has a field (M12).
-const WITHOUT_COMPONENT: readonly ParamSpec['kind'][] = ['region', 'data'];
+// region and axis come with Extrude and Revolve (M13, Ú10); data never has a field (M12).
+const WITHOUT_COMPONENT: readonly ParamSpec['kind'][] = ['region', 'data', 'axis'];
 
 const kinds = Object.keys(ALL_KINDS) as ParamSpec['kind'][]; // keys of a literal typed above
 

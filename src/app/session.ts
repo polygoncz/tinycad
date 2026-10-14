@@ -26,6 +26,7 @@ import {
   createEditLock,
   createFeatureEditor,
   toolActionId,
+  toolModes,
   createFeatureTreeModel,
   createSelectionModel,
   createSketchActions,
@@ -140,6 +141,8 @@ export interface AppSession extends Disposable {
   readonly actionIds: typeof ACTION_IDS;
   /** Id of the action that activates a tool (ui must not build it itself, spec 10). */
   toolActionId(toolId: string): string;
+  /** The modes of a tool (its own or the default, spec 10 "Režim"); ui may not import toolModes. */
+  toolModes(tool: ToolDescriptor): readonly Mode[];
   readonly regen: Observable<RegenUiState>;
   /** Q055: restart after a kernel crash. */
   readonly kernel: Observable<KernelUiState>;
@@ -249,7 +252,6 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     features,
     solver: deps.solver,
     viewport,
-    ids: deps.ids,
     resolvePlane: (id) => ORIGIN_PLANES.find((p) => p.id === id)?.plane,
   });
   const { mode } = sketches;
@@ -258,6 +260,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   };
   // After the tools of the plugins.
   for (const tool of createSketchTools({ sketches })) toolRegistry.register(tool);
+  const locked = createEditLock({ readOnly, editor: features });
   const featureTree = lifetime.add(
     createFeatureTreeModel({
       doc,
@@ -266,10 +269,10 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       regen: regenStatus,
       editor: features,
       selection,
+      locked,
       sketchEdit,
     }),
   );
-  const locked = createEditLock({ readOnly, editor: features });
   const browser = lifetime.add(
     createBrowserModel({
       doc,
@@ -489,6 +492,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     locked,
     actionIds: ACTION_IDS,
     toolActionId,
+    toolModes,
     regen: regenUi.asObservable(),
     kernel: supervisor.state,
     kernelError: supervisor.error,

@@ -1,8 +1,9 @@
 import { assertNever } from '@/core';
 import type { RegistryReader } from '@/core';
 import type { FeatureId, PartStudioData } from './model';
-import { ownerOf, readRef } from './refs';
+import { ownerOf, readRefOf } from './refs';
 import type { EntityRef } from './refs';
+import { isParamVisible } from './schema';
 import type { FeatureSchema, ParamSpec } from './schema';
 
 // References between features and the dependency graph that follows from them (spec 03,
@@ -17,22 +18,30 @@ export interface OrderViolation {
 
 /**
  * The references in the params, in schema order and then array order. Takes only the
- * items that are a valid reference of the param's kind; anything else is skipped, the
- * validation reports it. Params that are not an object give [].
+ * items that are a valid reference of the param's kinds; anything else is skipped, the
+ * validation reports it. Hidden params are skipped (M13), so an old value of a hidden param
+ * makes no dependency; an axis param gives 0 or 1 reference. Params that are not an object give [].
  */
 export function referencesOf(schema: FeatureSchema, params: unknown): readonly EntityRef[] {
   if (!isRecord(params)) return Object.freeze([]);
   const refs: EntityRef[] = [];
   for (const [key, spec] of Object.entries(schema.params)) {
-    const kind = refKindOf(spec);
+    const kinds = refKindsOf(spec);
+    if (kinds.length === 0 || !isParamVisible(spec, params)) continue;
     const value = Object.hasOwn(params, key) ? params[key] : undefined;
-    if (kind === undefined || !Array.isArray(value)) continue;
-    for (const item of value) {
-      const ref = readRef(kind, item);
+    for (const item of referenceItems(spec, value)) {
+      const ref = readRefOf(kinds, item);
       if (ref !== undefined) refs.push(ref);
     }
   }
   return Object.freeze(refs);
+}
+
+/** The candidate items of a reference param: the array, or the single value of an axis. */
+function referenceItems(spec: ParamSpec, value: unknown): readonly unknown[] {
+  if (spec.kind === 'axis') return value === null || value === undefined ? [] : [value];
+  // Array.isArray narrows to any[]; the items are unchecked data.
+  return Array.isArray(value) ? (value as readonly unknown[]) : [];
 }
 
 /**
@@ -97,17 +106,30 @@ export function orderViolations(
   return Object.freeze(violations);
 }
 
-/** The reference kind a param holds, undefined for a plain param. */
-function refKindOf(spec: ParamSpec): EntityRef['kind'] | undefined {
+const NO_KINDS: readonly EntityRef['kind'][] = Object.freeze([]);
+const BODY: readonly EntityRef['kind'][] = Object.freeze(['body']);
+const TOPO: readonly EntityRef['kind'][] = Object.freeze(['topo']);
+const REGION: readonly EntityRef['kind'][] = Object.freeze(['region']);
+const PLANE: readonly EntityRef['kind'][] = Object.freeze(['plane']);
+const AXIS: readonly EntityRef['kind'][] = Object.freeze(['axis', 'sketchEntity']);
+
+/**
+ * The reference kinds a param holds, [] for a plain param. Internal to document; shared by
+ * referencesOf and validateAgainstSchema, so both agree on what a reference is.
+ */
+export function refKindsOf(spec: ParamSpec): readonly EntityRef['kind'][] {
   switch (spec.kind) {
     case 'bodies':
-      return 'body';
+      return BODY;
     case 'topo':
-      return 'topo';
+      return TOPO;
     case 'region':
-      return 'region';
+      return REGION;
     case 'planes':
-      return 'plane';
+      return PLANE;
+    case 'axis':
+      // An origin axis or a line of a sketch (M13).
+      return AXIS;
     case 'length':
     case 'angle':
     case 'number':
@@ -115,7 +137,7 @@ function refKindOf(spec: ParamSpec): EntityRef['kind'] | undefined {
     case 'enum':
     case 'point':
     case 'data':
-      return undefined;
+      return NO_KINDS;
     default:
       // A new param kind must say whether it holds references.
       return assertNever(spec);

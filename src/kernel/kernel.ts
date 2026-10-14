@@ -47,6 +47,25 @@ export interface SketchOps {
   }): Promise<ShapeResult>;
 }
 
+/** An axis: a point and a direction (need not be unit length). */
+export interface Axis {
+  readonly origin: Vec3;
+  readonly direction: Vec3;
+}
+
+export interface SweepOps {
+  /**
+   * Prism: the face `profile` (a makeFace result or its transform) moved by `distance` along
+   * `direction` (need not be unit length; the kernel normalises it). The profile stays valid.
+   */
+  extrude(profile: ShapeHandle, direction: Vec3, distance: number): Promise<ShapeResult>;
+  /**
+   * Solid of revolution: the face `profile` turned about `axis` by `angle` radians, positive by
+   * the right-hand rule about axis.direction, 0 < angle ≤ 2π. The profile stays valid.
+   */
+  revolve(profile: ShapeHandle, axis: Axis, angle: number): Promise<ShapeResult>;
+}
+
 export interface MeshOps {
   tessellate(shape: ShapeHandle, q: MeshQuality): Promise<MeshData>;
 }
@@ -62,4 +81,12 @@ export interface LifecycleOps {
 }
 
 export interface GeometryKernel
-  extends PrimitiveOps, TransformOps, BooleanOps, SketchOps, MeshOps, QueryOps, LifecycleOps {}
+  extends
+    PrimitiveOps,
+    TransformOps,
+    BooleanOps,
+    SketchOps,
+    SweepOps,
+    MeshOps,
+    QueryOps,
+    LifecycleOps {}

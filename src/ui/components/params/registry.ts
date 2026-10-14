@@ -13,10 +13,10 @@ import RefListField from './RefListField.vue';
 // `field: FieldState` and reports changes with `update`; it never changes anything itself.
 
 /**
- * 'region' gets its component with Extrude (M13, decided 2026-10-13); 'data' never has one, the
- * dialog skips its field (M12).
+ * 'region' and 'axis' get their components with Extrude and Revolve (M13, Ú10); 'data' never has
+ * one, the dialog skips its field (M12).
  */
-export type ParamFieldKind = Exclude<ParamSpec['kind'], 'region' | 'data'>;
+export type ParamFieldKind = Exclude<ParamSpec['kind'], 'region' | 'data' | 'axis'>;
 
 export const PARAM_FIELDS: Readonly<Record<ParamFieldKind, Component>> = Object.freeze({
   length: LengthField,
@@ -33,5 +33,5 @@ export const PARAM_FIELDS: Readonly<Record<ParamFieldKind, Component>> = Object.
 
 /** The component of a param kind, undefined for kinds without one yet. */
 export function paramFieldFor(kind: ParamSpec['kind']): Component | undefined {
-  return kind === 'region' || kind === 'data' ? undefined : PARAM_FIELDS[kind];
+  return kind === 'region' || kind === 'data' || kind === 'axis' ? undefined : PARAM_FIELDS[kind];
 }

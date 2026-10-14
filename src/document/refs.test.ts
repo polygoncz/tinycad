@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { FeatureId } from './model';
-import { bodyId, originOfBody, ownerOf, parseBodyId, parsePlaneId, sketchId } from './refs';
-import type { BodyId, PlaneId, TopoName } from './refs';
+import {
+  bodyId,
+  originOfBody,
+  ownerOf,
+  ownerOfArtifact,
+  parseAxisId,
+  parseBodyId,
+  parsePlaneId,
+  parseSketchId,
+  sketchId,
+} from './refs';
+import type { AxisId, BodyId, PlaneId, SketchId, TopoName } from './refs';
 
 const fid = (s: string): FeatureId => s as FeatureId;
 const bid = (s: string): BodyId => s as BodyId;
@@ -53,6 +63,15 @@ describe('ownerOf', () => {
   it('a plane reference belongs to the text before the slash (M12)', () => {
     expect(ownerOf({ kind: 'plane', plane: 'origin/plane:xy' as PlaneId })).toBe('origin');
     expect(ownerOf({ kind: 'plane', plane: 'f3/plane:1' as PlaneId })).toBe('f3');
+  });
+
+  it('an axis reference belongs to the text before the slash (M13)', () => {
+    expect(ownerOf({ kind: 'axis', axis: 'origin/axis:z' as AxisId })).toBe('origin');
+    expect(ownerOf({ kind: 'axis', axis: 'f4/axis:1' as AxisId })).toBe('f4');
+  });
+
+  it('a sketch entity reference belongs to its sketch (M13)', () => {
+    expect(ownerOf({ kind: 'sketchEntity', sketch: fid('s1'), entity: 'l1' })).toBe('s1');
   });
 });
 
@@ -126,4 +145,84 @@ describe('parsePlaneId (M12)', () => {
       expect(parsePlaneId(value)).toBeUndefined();
     },
   );
+});
+
+describe('parseAxisId (M13)', () => {
+  it.each(['origin/axis:x', 'origin/axis:z', 'f1/axis:1', 'a.b-c/axis:main2'])(
+    'accepts %j',
+    (text) => {
+      expect(parseAxisId(text)).toBe(text);
+    },
+  );
+
+  it.each([
+    '',
+    'axis:x',
+    '/axis:x',
+    'a/b/axis:x',
+    'origin/axis:',
+    'origin/axis',
+    'origin/axis:X',
+    'origin/axis:x-y',
+    'origin/axis:x/y',
+    'origin/plane:xy',
+    'origin/body',
+  ])('rejects %j', (text) => {
+    expect(parseAxisId(text)).toBeUndefined();
+  });
+
+  it.each([[undefined], [null], [3], [{}], [['origin/axis:x']]])(
+    'rejects the non-string %j',
+    (value) => {
+      expect(parseAxisId(value)).toBeUndefined();
+    },
+  );
+});
+
+describe('parseSketchId (M13)', () => {
+  it.each(['f1/sketch', 'a.b-c/sketch', 'S1/sketch'])('accepts %j', (text) => {
+    expect(parseSketchId(text)).toBe(text);
+  });
+
+  it.each([
+    '',
+    'sketch',
+    '/sketch',
+    'a/b/sketch',
+    'f1/sketch:1',
+    'f1/Sketch',
+    'f1/sketch/x',
+    'f1/body',
+    'sketch-edit',
+  ])('rejects %j', (text) => {
+    expect(parseSketchId(text)).toBeUndefined();
+  });
+
+  it.each([[undefined], [null], [3], [{}], [['f1/sketch']]])(
+    'rejects the non-string %j',
+    (value) => {
+      expect(parseSketchId(value)).toBeUndefined();
+    },
+  );
+
+  it('gives back what sketchId mints', () => {
+    expect(parseSketchId(sketchId(fid('f1')))).toBe(sketchId(fid('f1')));
+  });
+});
+
+describe('ownerOfArtifact (M13)', () => {
+  it('reads the owner of every artifact id', () => {
+    expect(ownerOfArtifact(bodyId(fid('f1'), 2))).toBe('f1');
+    expect(ownerOfArtifact(sketchId(fid('s1')))).toBe('s1');
+    expect(ownerOfArtifact('origin/plane:xy' as PlaneId)).toBe('origin');
+    expect(ownerOfArtifact('origin/axis:z' as AxisId)).toBe('origin');
+  });
+
+  it('takes the text before the first slash', () => {
+    expect(ownerOfArtifact('f1/sketch/x' as SketchId)).toBe('f1');
+  });
+
+  it('throws on an id without a slash (programmer error)', () => {
+    expect(() => ownerOfArtifact('f1' as SketchId)).toThrow();
+  });
 });
