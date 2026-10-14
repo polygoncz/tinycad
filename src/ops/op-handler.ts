@@ -19,7 +19,8 @@ export interface OpHandler<O extends Operation = Operation> {
   upcast?(fromVersion: number, raw: unknown): O;
   /**
    * Checks the payload shape of an operation of the current version when loading (the envelope
-   * is already checked). Empty array = fine. Shape only, not the relation to the document.
+   * is already checked) and before every apply (M19.1), so a write never accepts what loading
+   * refuses. Empty array = fine. Shape only, not the relation to the document.
    */
   validate?(raw: Readonly<Record<string, unknown>>): readonly OperationLoadError[];
 }

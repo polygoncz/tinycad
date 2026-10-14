@@ -23,6 +23,9 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'feature.edit': 'Upravit featuru',
   'browser.body': 'Těleso {n}',
   'tool.select': 'Vybrat',
+  'ref.edge': 'Hrana {n}',
+  'ref.face': 'Plocha {n}',
+  'ref.vertex': 'Vrchol {n}',
   'feature.delete.confirm': 'Počet featur, které ztratí referenci: {n}. Přesto smazat?',
 
   // Labels of the built-in actions (app); feature.edit is above, it is a transaction label too.
@@ -82,11 +85,16 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'titleBar.readOnlyHint': 'Dokument je otevřený v jiné záložce. Změny zde nejsou možné.',
   'titleBar.persistence.saved': 'Uloženo',
   'titleBar.persistence.pending': 'Ukládám…',
-  'titleBar.persistence.error': 'Uložení selhalo',
+  'titleBar.persistence.error': 'Ukládání selhalo, zkouším znovu',
+  'titleBar.persistence.failed': 'Ukládání nefunguje. Exportujte dokument.',
+  'titleBar.persistence.export': 'Exportovat',
+  'titleBar.kernel.starting': 'Spouštím geometrické jádro…',
   'titleBar.kernel.restarting': 'Geometrické jádro se restartuje…',
   'titleBar.kernel.failed': 'Geometrické jádro opakovaně spadlo.',
   'titleBar.kernel.unavailable': 'Geometrické jádro se nepodařilo spustit.',
-  'titleBar.kernel.reload': 'Obnovit stránku',
+  'titleBar.kernel.retry': 'Zkusit znovu',
+  'titleBar.regen.failed': 'Přepočet selhal',
+  'titleBar.details': 'Podrobnosti',
   'titleBar.language': 'Jazyk: {language}',
   'titleBar.locale.cs': 'čeština',
   'titleBar.locale.en': 'angličtina',
@@ -108,6 +116,8 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'toolbar.group.select': 'Výběr',
   'toolbar.group.sketch': 'Skica',
   'toolbar.group.feature': 'Featury',
+  // The button of the groups that do not fit into the bar (M19.1).
+  'toolbar.more': 'Další nástroje',
 
   // Sketcher (M12): tools, toolbar groups, actions, constraints, the sketch panel.
   'tool.sketch': 'Skica',
@@ -159,6 +169,8 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'dialog.ok': 'OK',
   'dialog.cancel': 'Zrušit',
   'dialog.move': 'Přesunout',
+  // The block of errors under the fields (M19.1): the heading of a technical message.
+  'dialog.featureFailed': 'Featuru se nepodařilo přepočítat',
 
   // Document list.
   'documents.title': 'Dokumenty',
@@ -168,6 +180,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'documents.loading': 'Načítám…',
   'documents.empty': 'Zatím tu nejsou žádné dokumenty.',
   'documents.error.list': 'Seznam dokumentů se nepodařilo načíst: {error}',
+  'documents.retry': 'Zkusit znovu',
   'documents.error.create': 'Dokument se nepodařilo vytvořit: {error}',
   'documents.error.delete': 'Dokument se nepodařilo smazat: {error}',
   'documents.import': 'Importovat',
@@ -179,6 +192,9 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'file.exportDocument': 'Exportovat dokument',
   'file.running': 'Exportuji…',
   'file.failed': 'Export se nezdařil',
+  // The warning of a finished export (M19.1, D4): FileStatus.warning is the key.
+  'file.exportedWithoutHistory':
+    'Dokument byl exportován bez historie úprav, protože ukládání nefunguje.',
 
   // History panel (M15).
   'history.title': 'Historie úprav',

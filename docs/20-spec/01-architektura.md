@@ -142,9 +142,11 @@ document emit('changed')
          ├─ najde první featuru, jejíž instance se změnila (identita objektu)
          ├─ builder.build(...) → kernel.makeBox(...)   ── postMessage ──► worker (OCCT)
          └─ RegenResult { finalState: { artifacts }, statuses }
-  └─ render/SceneSync.update(result)
+  └─ app: await viewport.bodies.sync(tělesa)            (render/SceneSync)
        ├─ kernel.tessellate(handle) pro nové handle   ── worker ──►
        └─ Three.js mesh, requestRender()
+  └─ app: regenStatus.publish(result), kresby skic, čítače   (až po sync: index
+       z pickingu a jména patří k téže generaci, M19.1)
 ui: strom featur a stav se překreslí přes composables
 ...uživatel klikne OK
   └─ tx.commit() → OperationLog.append(1 záznam) → persistence (worker, IndexedDB)

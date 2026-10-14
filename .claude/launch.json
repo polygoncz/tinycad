@@ -4,8 +4,22 @@
     {
       "name": "tinycad-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 5173
+    },
+    {
+      "name": "tinycad-lan-https",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "--config",
+        "/private/tmp/claude-501/-Users-pavel-Development-tinycad/47e44be6-6628-4b98-a6ce-cbc897530007/scratchpad/lan-https/vite.lan.config.ts"
+      ],
+      "port": 5176,
+      "url": "https://localhost:5176"
     }
   ]
 }

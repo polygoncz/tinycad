@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createRpcClient } from './client';
 import { RpcError } from './error';
 import { serveRpc, type RpcImpl } from './server';
@@ -217,6 +217,79 @@ describe('rpc disconnect', () => {
       code: 'disconnected',
       message: 'first',
     });
+  });
+
+  it('onDisconnected is told once, with the error of failAll', () => {
+    const client = connect(impl);
+    const errors: RpcError[] = [];
+    client.onDisconnected((e) => errors.push(e));
+    client.failAll('worker crashed');
+    client.failAll('again');
+    client.dispose();
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toBeInstanceOf(RpcError);
+    expect(errors[0]).toMatchObject({ code: 'disconnected', message: 'worker crashed' });
+  });
+
+  it('onDisconnected is told before the pending calls reject', async () => {
+    const client = connect(impl);
+    const order: string[] = [];
+    client.onDisconnected(() => order.push('disconnected'));
+    const pending = client.call('echoLater', 'x', 20).catch(() => order.push('rejected'));
+    client.failAll('gone');
+    await pending;
+    expect(order).toEqual(['disconnected', 'rejected']);
+  });
+
+  it('onDisconnected is not told by dispose, not even to a late listener', () => {
+    const client = connect(impl);
+    const early = vi.fn();
+    client.onDisconnected(early);
+    client.dispose();
+    client.failAll('after dispose');
+    const late = vi.fn();
+    client.onDisconnected(late);
+    expect(early).not.toHaveBeenCalled();
+    expect(late).not.toHaveBeenCalled();
+  });
+
+  it('a listener that subscribes after failAll is told at once', () => {
+    const client = connect(impl);
+    client.failAll('gone');
+    const late = vi.fn();
+    const unsubscribe = client.onDisconnected(late);
+    expect(late).toHaveBeenCalledTimes(1);
+    expect(late).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'disconnected', message: 'gone' }),
+    );
+    expect(() => {
+      unsubscribe();
+    }).not.toThrow();
+  });
+
+  it('an unsubscribed listener is not told', () => {
+    const client = connect(impl);
+    const listener = vi.fn();
+    const other = vi.fn();
+    const unsubscribe = client.onDisconnected(listener);
+    client.onDisconnected(other);
+    unsubscribe();
+    client.failAll('gone');
+    expect(listener).not.toHaveBeenCalled();
+    expect(other).toHaveBeenCalledTimes(1);
+  });
+
+  it('a throwing listener does not keep the others from being told', () => {
+    const client = connect(impl);
+    const other = vi.fn();
+    client.onDisconnected(() => {
+      throw new Error('listener failed');
+    });
+    client.onDisconnected(other);
+    expect(() => {
+      client.failAll('gone');
+    }).toThrow('listener failed');
+    expect(other).toHaveBeenCalledTimes(1);
   });
 
   it('dispose behaves like failAll("RPC client disposed")', async () => {

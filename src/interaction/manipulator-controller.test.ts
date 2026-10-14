@@ -877,6 +877,14 @@ describe('createManipulatorController – setValue (M19)', () => {
     expect(setParams).not.toHaveBeenCalled();
   });
 
+  it.each([NaN, Infinity, -Infinity])('writes nothing for %s', (value) => {
+    const { controller, open } = setup({ displayScale: 2 });
+    const session = open();
+    const setParams = vi.spyOn(session, 'setParams');
+    controller.setValue('a', value);
+    expect(setParams).not.toHaveBeenCalled();
+  });
+
   it('does nothing during a drag', () => {
     const { controller, open, pickAt } = setup();
     const session = open();

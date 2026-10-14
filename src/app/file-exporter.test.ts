@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ObservableValue } from '@/core';
-import { bodyId, createDocument, createFeatureSchemaRegistry } from '@/document';
+import { bodyId, createDocument, createFeatureSchemaRegistry, toData } from '@/document';
 import type { BodyId, DocumentId, FeatureId } from '@/document';
+import { aDocument, aFeature } from '@/document/testing';
 import type { GeometryKernel, ShapeHandle } from '@/kernel';
 import { createFakeKernel } from '@/kernel/testing';
 import { createOpHandlerRegistry } from '@/ops';
-import { createMemoryDocumentStore, createSnapshot } from '@/persistence';
+import { createMemoryDocumentStore, createSnapshot, exportDocument } from '@/persistence';
+import type { PersistenceStatus } from '@/persistence';
 import { EMPTY_NAMES, EMPTY_STATE } from '@/regen';
 import type { RegenState } from '@/regen';
 import { createFileExporter } from './file-exporter';
@@ -41,7 +43,14 @@ function text(data: DownloadFile['data']): string {
   return typeof data === 'string' ? data : new TextDecoder().decode(data);
 }
 
-async function setup(opts: { readonly name?: string; readonly stored?: boolean } = {}) {
+async function setup(
+  opts: {
+    readonly name?: string;
+    readonly stored?: boolean;
+    readonly persistence?: PersistenceStatus;
+    readonly flushError?: Error;
+  } = {},
+) {
   const kernel = createFakeKernel();
   const small = (await kernel.makeBox({ origin: [0, 0, 0], size: [1, 1, 1] })).shape;
   const large = (await kernel.makeBox({ origin: [0, 0, 0], size: [7, 7, 7] })).shape;
@@ -50,7 +59,7 @@ async function setup(opts: { readonly name?: string; readonly stored?: boolean }
     { id: A, shape: small },
     { id: B, shape: large },
   ]);
-  let live: GeometryKernel | null = kernel;
+  let liveKernel: GeometryKernel | null = kernel;
   const downloads: DownloadFile[] = [];
   const order: string[] = [];
   const meta = { id: DOC, name: opts.name ?? 'Držák', createdAt: 0 };
@@ -58,16 +67,23 @@ async function setup(opts: { readonly name?: string; readonly stored?: boolean }
   const doc = createDocument({ meta });
   const store = createMemoryDocumentStore({ now: () => 0 });
   if (opts.stored ?? true) await store.createDocument(meta, createSnapshot(doc, 0));
+  // The live document holds work the store does not: a feature that was never saved.
+  const live = aDocument({ meta, features: [aFeature({ id: 'unsaved', name: 'Not saved' })] });
   const schemas = createFeatureSchemaRegistry();
   const exporter = createFileExporter({
     name: () => name,
     regenBusy: busy.asObservable(),
     lastState: () => state,
-    kernel: () => live,
+    kernel: () => liveKernel,
     flush: () => {
       order.push('flush');
-      return Promise.resolve();
+      return opts.flushError === undefined ? Promise.resolve() : Promise.reject(opts.flushError);
     },
+    liveFile: () => {
+      order.push('liveFile');
+      return exportDocument(live);
+    },
+    persistenceStatus: () => opts.persistence ?? 'saved',
     store,
     docId: DOC,
     schemas,
@@ -85,11 +101,12 @@ async function setup(opts: { readonly name?: string; readonly stored?: boolean }
     exporter,
     downloads,
     order,
+    live,
     setState: (next: RegenState) => {
       state = next;
     },
     setKernel: (next: GeometryKernel | null) => {
-      live = next;
+      liveKernel = next;
     },
     rename: (next: string) => {
       name = next;
@@ -172,7 +189,8 @@ describe('FileExporter – STEP', () => {
 describe('FileExporter – document', () => {
   it('flushes, then downloads <name>.tinycad.json as indented JSON of the stored document', async () => {
     const { exporter, downloads, order } = await setup();
-    await exporter.exportDocument();
+    expect(await exporter.exportDocument()).toEqual({ withHistory: true });
+    // The live file is not made when the store has the document.
     expect(order).toEqual(['flush', 'download']);
     const [file] = downloads;
     expect(file?.name).toBe('Držák.tinycad.json');
@@ -182,6 +200,35 @@ describe('FileExporter – document', () => {
     const parsed: unknown = JSON.parse(data);
     expect(data).toBe(`${JSON.stringify(parsed, null, 2)}\n`);
     expect(parsed).toMatchObject({ format: 'tinycad.file', formatVersion: 2 });
+    expect(parsed).toHaveProperty('history');
+  });
+
+  it('the store failed for good (D4) → downloads the live file without history, no flush', async () => {
+    const { exporter, downloads, order, live } = await setup({ persistence: 'failed' });
+    expect(await exporter.exportDocument()).toEqual({ withHistory: false });
+    expect(order).toEqual(['liveFile', 'download']);
+    const [file] = downloads;
+    expect(file?.name).toBe('Držák.tinycad.json');
+    const parsed: unknown = JSON.parse(text(file?.data ?? ''));
+    const document: unknown = JSON.parse(JSON.stringify(toData(live)));
+    expect(parsed).not.toHaveProperty('history');
+    expect(parsed).toEqual({
+      format: 'tinycad.file',
+      formatVersion: 2,
+      snapshot: { format: 'tinycad.snapshot', formatVersion: 1, atSeq: 0, document },
+    });
+  });
+
+  it('a failed flush → downloads the live file without history', async () => {
+    const { exporter, downloads, order, live } = await setup({
+      persistence: 'error',
+      flushError: new Error('quota exceeded'),
+    });
+    expect(await exporter.exportDocument()).toEqual({ withHistory: false });
+    expect(order).toEqual(['flush', 'liveFile', 'download']);
+    const parsed: unknown = JSON.parse(text(downloads[0]?.data ?? ''));
+    expect(parsed).not.toHaveProperty('history');
+    expect(parsed).toMatchObject({ snapshot: { atSeq: 0, document: { studio: live.studio } } });
   });
 
   it('rejects when the stored document cannot be read, without a download', async () => {

@@ -1,5 +1,8 @@
+import { err, ok } from '@/core';
+import type { Result } from '@/core';
 import type { DocumentId, DocumentMeta } from '@/document';
 import type { LogEntry } from '@/ops';
+import { deepEqual } from './load';
 import type { DocumentSnapshot } from './snapshot';
 import { createStoreError, snapshotSeqsToKeep } from './store';
 import type { DocumentInfo, DocumentStore, DocumentStoreErrorCode, StoredDocument } from './store';
@@ -21,11 +24,26 @@ interface StoredRecord {
 
 /**
  * A deep copy through JSON, both on the way in and on the way out (data isolation).
- * Stricter than the structured clone of IndexedDB: data that is not plain JSON shows up here.
+ * Stricter than the structured clone of IndexedDB: data that is not plain JSON throws here.
+ * Without the comparison the copy would quietly turn NaN into null and drop undefined, and a
+ * test would pass on data the real document cannot load (M19.1).
  */
 function copy<T>(value: T): T {
-  // JSON.parse returns any; the value went in as a T made of plain JSON.
-  return JSON.parse(JSON.stringify(value)) as T;
+  const result: unknown = JSON.parse(JSON.stringify(value));
+  if (!deepEqual(result, value)) {
+    throw new Error('Data is not plain JSON: it changes in a JSON round trip');
+  }
+  // The round trip gave back data equal to the T that went in.
+  return result as T;
+}
+
+/** copy() as a Result: a method copies everything first and rejects before it writes anything. */
+function tryCopy<T>(value: T): Result<T> {
+  try {
+    return ok(copy(value));
+  } catch (e) {
+    return err(e instanceof Error ? e : new Error(String(e)));
+  }
 }
 
 // Every method checks everything before it changes anything, so a rejected call writes
@@ -66,12 +84,14 @@ class MemoryDocumentStore implements DocumentStore {
         `The initial snapshot belongs to '${initial.document.meta.id}', not '${meta.id}'`,
       );
     }
+    const copied = tryCopy({ meta, initial });
+    if (!copied.ok) return Promise.reject(copied.error);
     this.docs.set(meta.id, {
-      meta: copy(meta),
+      meta: copied.value.meta,
       lastSeq: 0,
       updatedAt: this.now(),
       entries: new Map(),
-      snapshots: new Map([[0, copy(initial)]]),
+      snapshots: new Map([[0, copied.value.initial]]),
     });
     return Promise.resolve();
   }
@@ -107,7 +127,9 @@ class MemoryDocumentStore implements DocumentStore {
         );
       }
     }
-    for (const e of entries) record.entries.set(e.seq, copy(e));
+    const copied = tryCopy(entries);
+    if (!copied.ok) return Promise.reject(copied.error);
+    for (const e of copied.value) record.entries.set(e.seq, e);
     record.lastSeq = Math.max(record.lastSeq, last.seq);
     record.updatedAt = this.now();
     return Promise.resolve();
@@ -129,7 +151,9 @@ class MemoryDocumentStore implements DocumentStore {
         `Snapshot at ${String(atSeq)} is ahead of the last stored entry ${String(record.lastSeq)}`,
       );
     }
-    record.snapshots.set(atSeq, copy(snapshot));
+    const copied = tryCopy(snapshot);
+    if (!copied.ok) return Promise.reject(copied.error);
+    record.snapshots.set(atSeq, copied.value);
     const keep = new Set(snapshotSeqsToKeep([...record.snapshots.keys()]));
     for (const s of [...record.snapshots.keys()]) if (!keep.has(s)) record.snapshots.delete(s);
     return Promise.resolve();

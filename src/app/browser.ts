@@ -70,6 +70,8 @@ export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSe
       viewport,
       scheduler: TIMER_SCHEDULER,
       now: Date.now,
+      // Not unbound: performance.now needs `performance` as `this`.
+      monotonic: () => performance.now(),
       ids: randomIds(),
       translate: opts.translate,
       confirm: opts.confirm,

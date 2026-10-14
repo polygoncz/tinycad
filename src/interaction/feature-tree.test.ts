@@ -231,6 +231,24 @@ describe('FeatureTreeModel rows', () => {
     expect(s.tree.rows.get().map((r) => r.issues)).toEqual([issues, null, null]);
   });
 
+  it('a row with issues has no technical message: the translated issues replace it (ADR 0010)', () => {
+    const s = setup({ features: [aBox('a'), aBox('b'), aBox('c')] });
+    const issues = [{ param: 'radius', code: 'fillet.failed' }];
+    s.regen.publish(
+      new Map<FeatureId, FeatureHealth>([
+        [fid('a'), { kind: 'error', message: 'radius: fillet.failed', issues }],
+        // No translated issues (a kernel error, an unresolved reference): the message stays.
+        [fid('b'), { kind: 'error', message: 'BRep_API: command not done', issues: [] }],
+        [fid('c'), { kind: 'error', message: 'cannot resolve f1/body' }],
+      ]),
+    );
+    expect(s.tree.rows.get().map((r) => [r.status, r.message, r.issues])).toEqual([
+      ['error', null, issues],
+      ['error', 'BRep_API: command not done', []],
+      ['error', 'cannot resolve f1/body', null],
+    ]);
+  });
+
   it('drops the issues of a suppressed feature', () => {
     const s = setup({ features: [aBox('a')] });
     const issues = [{ param: 'width', code: 'param.atOrBelowMin', params: { min: 0 } }];
@@ -357,9 +375,9 @@ describe('FeatureTreeModel commands', () => {
     expect(s.log.entries()).toHaveLength(0);
   });
 
-  it('rename and moveRollbackBar throw during an open transaction', () => {
+  it('rename and moveRollbackBar throw during a transaction outside the edit lock', () => {
     const s = setup({ features: [aBox('a'), aBox('b')] });
-    s.tree.edit(fid('b'));
+    s.dispatcher.begin('other');
     expect(() => {
       s.tree.rename(fid('a'), 'X');
     }).toThrow();
@@ -533,10 +551,78 @@ describe('FeatureTreeModel move', () => {
     expect(s.doc.studio.features.map((f) => f.id)).toEqual(['u', 'b', 'a']);
   });
 
-  it('throws during an open transaction, like rename', () => {
+  it('throws during a transaction outside the edit lock, like rename', () => {
     const s = setup({ features: [aBox('a'), aBox('b')] });
-    s.tree.edit(fid('b'));
+    s.dispatcher.begin('other');
     expect(() => s.tree.move(fid('a'), 1)).toThrow();
+  });
+});
+
+describe('FeatureTreeModel edit lock', () => {
+  /** Calls every command that changes the document or starts an edit; none may throw. */
+  function tryAll(s: ReturnType<typeof setup>): void {
+    s.tree.beginRename(fid('a'));
+    s.tree.rename(fid('a'), 'Renamed');
+    s.tree.moveRollbackBar(0);
+    expect(s.tree.move(fid('a'), 2)).toEqual([]);
+  }
+
+  it('read-only: rename, beginRename, moveRollbackBar and move do nothing and do not throw', () => {
+    const s = setup({ features: [aBox('a'), aBox('b'), aBox('c')] }, undefined, true);
+    const studio = s.doc.studio;
+    expect(() => {
+      tryAll(s);
+    }).not.toThrow();
+    expect(s.doc.studio).toBe(studio);
+    expect(s.log.entries()).toHaveLength(0);
+    expect(s.tree.renaming.get()).toBeNull();
+    expect(s.tree.rollbackIndex.get()).toBe(3);
+  });
+
+  it('an open dialog: the commands do nothing and do not throw', () => {
+    const s = setup({ features: [aBox('a'), aBox('b'), aBox('c')] });
+    s.tree.edit(fid('c'));
+    const studio = s.doc.studio;
+    expect(() => {
+      tryAll(s);
+    }).not.toThrow();
+    expect(s.doc.studio).toBe(studio);
+    expect(s.tree.renaming.get()).toBeNull();
+
+    s.editor.current.get()?.cancel();
+    expect(s.doc.studio.features.map((f) => [f.id, f.name])).toEqual([
+      ['a', 'Name a'],
+      ['b', 'Name b'],
+      ['c', 'Name c'],
+    ]);
+    expect(s.doc.studio.rollbackIndex).toBe(3);
+    expect(s.log.entries()).toHaveLength(0);
+  });
+
+  it('the lock turning on ends the rename mode, turning off does not start it again', () => {
+    const s = setup({ features: [aBox('a'), aBox('b')] });
+    s.tree.beginRename(fid('a'));
+    let emits = 0;
+    s.tree.renaming.subscribe(() => {
+      emits++;
+    });
+
+    s.tree.edit(fid('b'));
+    expect(s.tree.renaming.get()).toBeNull();
+    expect(emits).toBe(1);
+
+    s.editor.current.get()?.cancel();
+    expect(s.tree.renaming.get()).toBeNull();
+    expect(emits).toBe(1);
+    expect(s.log.entries()).toHaveLength(0);
+  });
+
+  it('after dispose the lock no longer ends the rename mode', () => {
+    const s = setup({ features: [aBox('a'), aBox('b')] });
+    s.tree.beginRename(fid('a'));
+    s.tree.dispose();
+    s.editor.edit(fid('b'));
+    expect(s.tree.renaming.get()).toBe('a');
   });
 });
 

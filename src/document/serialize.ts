@@ -2,6 +2,7 @@ import { assert, err, ok } from '@/core';
 import type { RegistryReader, Result } from '@/core';
 import { createDocument } from './cad-document';
 import type { DocumentReader, DocumentWriter } from './document';
+import { isJsonObject } from './json';
 import { isBodyColor } from './model';
 import type {
   BodyId,
@@ -279,23 +280,6 @@ export function migrateFeatureData(
     });
   }
   return ok({ ...data, typeVersion: schema.version, params });
-}
-
-/**
- * Plain JSON (spec 03): IndexedDB stores structured clones, so Map, Date, class instances,
- * undefined or NaN could otherwise slip into the document and break the JSON round trip.
- */
-function isJsonObject(v: unknown): v is Record<string, unknown> {
-  if (!isRecord(v)) return false;
-  const proto: unknown = Object.getPrototypeOf(v);
-  return (proto === Object.prototype || proto === null) && Object.values(v).every(isJsonValue);
-}
-
-function isJsonValue(v: unknown): boolean {
-  if (v === null || typeof v === 'string' || typeof v === 'boolean') return true;
-  if (typeof v === 'number') return Number.isFinite(v);
-  if (Array.isArray(v)) return v.every(isJsonValue);
-  return isJsonObject(v);
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {

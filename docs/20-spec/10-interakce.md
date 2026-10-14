@@ -372,6 +372,9 @@ export interface FieldRef {
   readonly index: number;              // pozice položky v hodnotě
   readonly body: BodyId | null;        // null = položka není odkaz na těleso správného tvaru
   readonly label: string | null;       // bodyRefLabel(doc, body); null = chybějící těleso („Chybí těleso“)
+  readonly text: RefText | null;       // M19.1: klíč popisku – topo pořadový (ref.edge/face/vertex, n = index + 1), chybějící těleso field.refs.missing, neplatná položka field.missingRef;
+                                       //        u každého čipu je vyplněné právě jedno z label (jméno od uživatele) a text
+  readonly missing: boolean;           // M19.1: styl chyby; bodies: label === null, topo: body === null
 }
 ```
 
@@ -613,7 +616,7 @@ export interface HudField {
 - **Režim** je stav UI, ne dokumentu. Při otevření session (nové `features.current`) je výchozí první režim deskriptoru. `setMode(id)` přepne, přepočítá rámec, zruší hover a pole HUD (`field: null`). Stejné id nic.
 - **Umístění pole:** `ui` promítne `at` a `at + direction`, ze dvou bodů vezme směr na obrazovce a pole postaví `FIELD_OFFSET_PX` od průmětu `at` (lineární 96 px = šipka 80 + 16, úhlový 88 px = poloměr 72 + 16). Délky glyfů tak `interaction` znát nemusí.
 - **Pole HUD** patří poslednímu použitému skalárnímu úchytu: úchyt, za který se táhlo, nebo na který se jen kliklo (levé `down` + `up` bez pohybu, hodnota se nezmění). Pole drží hodnotu z aktuálního rámce (po změně params z dialogu se aktualizuje). Zmizí, když úchyt v rámci není (jiný režim, jiný typ konce u Extrude). Rovinný a bodový úchyt pole nemají.
-- `setValue(handleId, shown)`: během tahu nic; úchyt musí být v aktuálním rámci a skalární, jinak nic. `v = shown / (displayScale ?? 1)`, ořez na `[min, max]` bez přichycení; liší-li se od `value` → `session.setParams(toParams(v))`.
+- `setValue(handleId, shown)`: během tahu nic; úchyt musí být v aktuálním rámci a skalární, jinak nic. Hodnota, která není konečné číslo (`NaN`, ±`Infinity`), → nic (M19.1). `v = shown / (displayScale ?? 1)`, ořez na `[min, max]` bez přichycení; liší-li se od `value` → `session.setParams(toParams(v))`.
 - `hud` je nový objekt jen při změně obsahu (porovnání po polích, vektory po složkách), aby se Vue nepřekreslovalo při každém snapshotu.
 
 ### Směrování v `ToolManager`
@@ -643,7 +646,7 @@ export interface TreeRow {
   readonly icon: string | null;        // schema.icon (název ikony Tabler); neznámý typ → null
   readonly issues: readonly ParamIssue[] | null;  // z FeatureHealth error (neplatné parametry), jinak null
   readonly status: TreeStatus;
-  readonly message: string | null;     // u warning/error
+  readonly message: string | null;     // u warning/error; null u chyby s neprázdnými issues (UI ukáže přeložená issues, M19.1)
   readonly selected: boolean;          // výběr obsahuje { kind: 'feature', feature: id }
   readonly editing: boolean;           // featura otevřené session
   readonly dependents: number;         // počet featur, které na featuře závisí (dependentsOf, M11) – tooltip
@@ -653,15 +656,15 @@ export interface FeatureTreeModel {
   readonly rows: Observable<readonly TreeRow[]>;
   readonly rollbackIndex: Observable<number>;
   edit(id: FeatureId): void;                                   // → FeatureEditor.edit (skica → sketchEdit); při locked nic
-  rename(id: FeatureId, name: string): void;                   // → dispatch feature.rename
-  moveRollbackBar(index: number): void;                        // → dispatch studio.setRollback
+  rename(id: FeatureId, name: string): void;                   // → dispatch feature.rename; ukončí přejmenování; při locked jinak nic
+  moveRollbackBar(index: number): void;                        // → dispatch studio.setRollback; při locked nic
   readonly renaming: Observable<FeatureId | null>;             // featura v režimu přejmenování (inline pole v Timeline)
-  beginRename(id: FeatureId): void;                            // akce feature.rename
+  beginRename(id: FeatureId): void;                            // akce feature.rename; při locked nic
   cancelRename(): void;                                        // rename() režim také ukončí; beginRename neznámé featury → výjimka; zmizelá featura → id nesedí na žádný řádek
   select(id: FeatureId, opts?: { additive?: boolean }): void;  // → selection.set / toggle
   /** Featury mimo ids, které závisí na kterékoli z ids; v pořadí studia, bez duplicit (M11). */
   dependentsOf(ids: readonly FeatureId[]): readonly FeatureId[];
-  /** Přesun featury; prázdné = přesunuto (feature.move), jinak nová porušení pořadí a nic se nestalo (M11). */
+  /** Přesun featury; prázdné = přesunuto (feature.move) nebo locked a nic se nestalo, jinak nová porušení pořadí a nic se nestalo (M11, M19.1). */
   move(id: FeatureId, toIndex: number): readonly OrderViolation[];
   dispose(): void;
 }
@@ -675,6 +678,7 @@ export function createFeatureTreeModel(deps: {
 ```
 
 - `edit` při `locked` (otevřený dialog nebo skicář, dokument jen pro čtení) nic neudělá. Zábrana je v presenteru, ne v komponentě (oprava revize M12, Ú16a, [[0010-prezentacni-model|ADR 0010]]).
+- **Zámek u všech příkazů** ([[M19.1-opravy-z-revize|M19.1]], stejně jako `BrowserModel`): `rename`, `beginRename`, `moveRollbackBar` a `move` jsou při `locked` tiše bez účinku. Zámek se kontroluje dřív než argumenty, takže ani neznámé id při zámku nevyhodí. `rename` při zámku jen ukončí přejmenování. Zapnutí zámku (otevření dialogu) rozpracované přejmenování ukončí bez změny (`renaming` = `null`). `Timeline.vue` vlastní kontroly zámku nemá.
 
 - `typeLabel` a `message` jsou od [[0014-preklady-vue-i18n-a-klice|ADR 0014]] klíče překladu (případně s parametry), překládá je `ui`. Zprávy z jádra (`KernelError.message`) zůstávají technický text a UI je ukáže pod přeloženým nadpisem chyby.
 - Řádky v pořadí featur dokumentu. Stav: `suppressed` (z dokumentu) > `rolledBack` (index `>= rollbackIndex`) > `health` z portu (`ok`/`warning`/`error`) > `pending` (featura v `health` chybí, např. ještě neproběhla regenerace).
@@ -682,7 +686,7 @@ export function createFeatureTreeModel(deps: {
 - `rows` a `rollbackIndex` se přepočítají v jednom kroku, ale vyšlou se postupně (nejdřív `rows`). Odběratel jednoho proto nemá v callbacku číst druhé; Vue překresluje dávkově v mikroúloze, takže v UI nekonzistence nevznikne. Kdyby to vadilo jinde, sloučí se do jednoho `Observable<TreeSnapshot>`.
 - Nezměněný řádek se pozná porovnáním s řádkem na stejné pozici; po přesunu featury proto dostanou nový objekt i řádky, které se jen posunuly.
 - `rename` neznámé featury → výjimka. `rename`: jméno se ořízne, prázdné nebo stejné → nic. `moveRollbackBar`: stejný index → nic, mimo `0..features.length` → výjimka.
-- `rename` a `moveRollbackBar` během otevřené transakce hodí výjimku (z dispečera); UI je má v tu chvíli zakázat podle `editing`.
+- `rename` a `moveRollbackBar` během otevřené transakce **mimo zámek** (transakce, kterou neotevřel `FeatureEditor`) hodí výjimku z dispečera. Transakci dialogu kryje zámek výše.
 - **Závislosti** (M11, nález 3 z [[Revize architektury 2026-10-13]]): strom při každém přepočtu po změně dokumentu spočítá `dependenciesOf(doc.studio, schemas)` z [[03-dokument#Id těles a závislosti|document]]; `dependents` je součástí porovnání nezměněného řádku. Pravidla závislostí jsou prezentační logika, proto tady a ne v handleru (`ops` by jinak potřeboval schémata).
 - `move(id, toIndex)`: neznámé id nebo `toIndex` mimo `0..features.length − 1` → výjimka; stejný index → `[]` a nic. Odmítne přesun, po kterém by v `orderViolations` byla dvojice, která tam teď není, a vrátí právě tato nová porušení (dokument ani log se nezmění). Porušení, která už v dokumentu jsou (data zvenku), jiný přesun neblokují. Jinak `dispatch(feature.move)`. Tažení featur v Timeline v M11 nevzniká, příkaz je připravený pro ně ([[Rozhodnutí noční rychloakce#M11 – Další entity|R17]] ⚠).
 
@@ -811,18 +815,18 @@ export const FILE_ACTION_IDS = { exportStep: 'file.exportStep', exportDocument: 
 /** Port: app exportuje a soubor stáhne; odmítnutí = export se nepovedl. */
 export interface FileExporter {
   exportStep(bodies: readonly BodyId[]): Promise<void>;
-  exportDocument(): Promise<void>;
+  exportDocument(): Promise<{ readonly withHistory: boolean }>;   // M19.1: false = živý dokument bez historie (úložiště nefunguje)
 }
 
 export type FileTask = 'step' | 'document';
 export type FileStatus =
-  | { readonly kind: 'idle' }
+  | { readonly kind: 'idle'; readonly warning: 'file.exportedWithoutHistory' | null }   // warning: M19.1
   | { readonly kind: 'running'; readonly task: FileTask }
   | { readonly kind: 'failed'; readonly task: FileTask; readonly message: string };   // message technická, ui ukáže v tooltipu
 
 export interface FileActions extends Disposable {
   readonly status: Observable<FileStatus>;
-  dismiss(): void;                    // 'failed' → 'idle', jinak nic
+  dismiss(): void;                    // 'failed' → 'idle'; 'idle' s upozorněním → bez upozornění (M19.1); jinak nic
 }
 
 export function createFileActions(deps: {
@@ -909,6 +913,7 @@ export interface SketchState {
   readonly statusParams: Readonly<Record<string, number>>; // parametry statusKey
   readonly constraintRows: readonly SketchConstraintRow[]; // pro panel
   readonly editingDimension: SketchConstraintId | null;    // právě vytvořená kóta (ui dá jejímu poli fokus)
+  readonly busy: boolean;                                  // M19.1 D8: běží nebo čeká job, který může zapsat
 }
 export type SketchMessageKey = 'sketch.conflict' | 'sketch.redundant' | 'sketch.solverFailed';
 export interface SketchConstraintRow {
@@ -931,6 +936,13 @@ export const ORIGIN_POINT_ID = '__origin';                 // bod počátku v kr
 - Data beze změny (stejné hodnoty) se nezapisují.
 - Výsledek, který dorazí po zavření session, se zahodí (`false`). Po zavření hodí každý příkaz výjimku hned (ne odmítnutý slib).
 - `remove` a `toggleConstruction` z výběru odeberou zmizelé položky; `toggleConstruction` zapíše hned (konstrukce řešení nemění).
+- **Fronta a výjimky** ([[M19.1-opravy-z-revize|M19.1]]):
+  - Job, který vyhodí synchronně, odmítne svůj slib a fronta pokračuje dalším. Dřív zůstala fronta navždy obsazená (revize C9).
+  - Prázdná fronta dál spouští job synchronně.
+  - Slib příkazu se splní až po uvolnění fronty, takže po `await` je `busy` už aktuální.
+  - Chyba odloženého `toggleConstruction` (za rozpracovaným řešením) nemá volajícího a končí jako neošetřené odmítnutí.
+- **`busy` (D8):** `open` a ve frontě běží nebo čeká job, který může zapsat do skici: výsledek řešení (`addGeometry`, `addConstraint`, `setDimension`, `remove`), tažení a odložený `toggleConstruction`. Úvodní řešení po otevření nic nezapisuje, a proto se nepočítá. Zavřená session má `false`. Akce `sketch.finish` a tlačítko „Hotovo“ jsou při `busy` zakázané, takže geometrie nakreslená těsně před „Hotovo“ se neztratí. `finish()` sám zůstává synchronní a rozpracované výsledky zahodí.
+- **Úklid při zavření** je odolný vůči výjimce odběratele: kresba zmizí, `onClose` proběhne a `SketchEditor.mode` se vrátí na `'model'` vždy (`try/finally`). Výjimka pak letí dál. Totéž platí pro `FeatureEditor` (`current` = `null` vždy).
 
 **Tažení:** `drag(point, to)` je nejvýš jeden rozpracovaný `solve` s `drag` a jeden čekající cíl (další `drag` čekající cíl přepíše). Výsledek `'ok'` se zapíše jako výše; `'conflict'`/`'failed'` se tiše zahodí. Tažení se řadí do stejné fronty jako ostatní příkazy. `endDrag` se splní, až je fronta tažení prázdná.
 
@@ -1002,14 +1014,14 @@ export function createEditLock(deps: { readOnly: boolean; editor: FeatureEditor 
 
 export function createBuiltInActions(deps: {
   registry: ActionRegistry; doc: DocumentReader; ops: OperationDispatcher; undo: UndoManager;
-  selection: SelectionModel; featureTree: FeatureTreeModel; editor: FeatureEditor; tools: ToolManager;
+  selection: SelectionModel; featureTree: FeatureTreeModel; tools: ToolManager;
   toolList: readonly ToolDescriptor[]; locked: Observable<boolean>;
   camera: { fitAll(): void };                         // úzké rozhraní, render interaction nezná
 }): Disposable;
 ```
 
 - `createBuiltInActions` dostane od M11 i `confirm: (request: ConfirmRequest) => boolean` s `ConfirmRequest = { key: string; params: Readonly<Record<string, string | number>> }` (klíč překladu a hodnoty; `interaction` nezná DOM, dialog dodá `ui` přes `app`). `feature.delete` spočítá `featureTree.dependentsOf(odstraňované)`; je-li jich `n > 0`, zeptá se `confirm({ key: 'feature.delete.confirm', params: { n } })` a při `false` nic nesmaže ani nezmění výběr (jako Fusion: „N featur ztratí referenci“, [[Rozhodnutí noční rychloakce#M11 – Další entity|R16]]). Bez závislých se neptá; maže-li se featura spolu se všemi svými závislými, je `n = 0` (`dependentsOf` počítá jen featury mimo odstraňované) a také se neptá.
-- Skupina `feature` (kontextové menu) v pořadí: `feature.edit`, `feature.rename` (→ `featureTree.beginRename`), `feature.suppress`, `timeline.rollHere`, `feature.delete`. Menu v [[Timeline]] je jen vykreslený snapshot akcí této skupiny.
+- Skupina `feature` (kontextové menu) v pořadí: `feature.edit` (→ `featureTree.edit`, takže skica se otevře ve skicáři; [[M19.1-opravy-z-revize|M19.1]], dřív `FeatureEditor.edit` a skica dostala obecný dialog), `feature.rename` (→ `featureTree.beginRename`), `feature.suppress`, `timeline.rollHere`, `feature.delete`. Menu v [[Timeline]] je jen vykreslený snapshot akcí této skupiny.
 - `ui` id akcí nezná natvrdo: bere je z `AppSession.actionIds` (reexport `ACTION_IDS`).
 
 ## Akce a klávesové zkratky

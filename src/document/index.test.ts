@@ -32,6 +32,8 @@ describe('document public API', () => {
         'dependentsOf',
         'fromData',
         'isBodyColor',
+        'isJsonObject',
+        'isJsonValue',
         'isParamVisible',
         'migrateFeatureData',
         'orderViolations',

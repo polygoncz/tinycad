@@ -93,7 +93,6 @@ function setup() {
     undo,
     selection,
     featureTree,
-    editor,
     tools,
     toolList: toolRegistry.all(),
     locked,

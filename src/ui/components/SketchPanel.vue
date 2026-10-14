@@ -3,8 +3,8 @@
 // dialog while the sketcher is open (AppShell mounts one panel per sketch session). The name of
 // the sketch, the status of the last solve (role="status"), the message of the last refused
 // command, the constraints – a dimension with its value field, click = select, × = remove – and
-// Cancel / Finish. Everything goes to the SketchSession; the status line is its statusKey, the row
-// names come from ../sketch-panel.
+// Cancel / Finish (disabled while the session is busy, D8). Everything goes to the SketchSession;
+// the status line is its statusKey, the row names come from ../sketch-panel.
 import { nextTick, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { SketchConstraintRow, SketchSession } from '@/interaction';
@@ -110,7 +110,7 @@ watch(
       <button type="button" class="button" @click="sketch.cancel()">
         {{ t('sketch.cancel') }}
       </button>
-      <button type="button" class="button primary" @click="sketch.finish()">
+      <button type="button" class="button primary" :disabled="state.busy" @click="sketch.finish()">
         {{ t('sketch.finish') }}
       </button>
     </footer>

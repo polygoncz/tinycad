@@ -22,6 +22,9 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'feature.edit': 'Edit feature',
   'browser.body': 'Body {n}',
   'tool.select': 'Select',
+  'ref.edge': 'Edge {n}',
+  'ref.face': 'Face {n}',
+  'ref.vertex': 'Vertex {n}',
   'feature.delete.confirm': 'Features that will lose a reference: {n}. Delete anyway?',
 
   // Labels of the built-in actions (app); feature.edit is above, it is a transaction label too.
@@ -81,11 +84,16 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'titleBar.readOnlyHint': 'The document is open in another tab. Changes are not possible here.',
   'titleBar.persistence.saved': 'Saved',
   'titleBar.persistence.pending': 'Saving…',
-  'titleBar.persistence.error': 'Saving failed',
+  'titleBar.persistence.error': 'Saving failed, retrying',
+  'titleBar.persistence.failed': 'Saving does not work. Export the document.',
+  'titleBar.persistence.export': 'Export',
+  'titleBar.kernel.starting': 'Starting the geometry kernel…',
   'titleBar.kernel.restarting': 'The geometry kernel is restarting…',
   'titleBar.kernel.failed': 'The geometry kernel crashed repeatedly.',
   'titleBar.kernel.unavailable': 'The geometry kernel could not be started.',
-  'titleBar.kernel.reload': 'Reload page',
+  'titleBar.kernel.retry': 'Try again',
+  'titleBar.regen.failed': 'Regeneration failed',
+  'titleBar.details': 'Details',
   'titleBar.language': 'Language: {language}',
   'titleBar.locale.cs': 'Czech',
   'titleBar.locale.en': 'English',
@@ -107,6 +115,8 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'toolbar.group.select': 'Select',
   'toolbar.group.sketch': 'Sketch',
   'toolbar.group.feature': 'Features',
+  // The button of the groups that do not fit into the bar (M19.1).
+  'toolbar.more': 'More tools',
 
   // Sketcher (M12): tools, toolbar groups, actions, constraints, the sketch panel.
   'tool.sketch': 'Sketch',
@@ -158,6 +168,8 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'dialog.ok': 'OK',
   'dialog.cancel': 'Cancel',
   'dialog.move': 'Move',
+  // The block of errors under the fields (M19.1): the heading of a technical message.
+  'dialog.featureFailed': 'The feature could not be regenerated',
 
   // Document list.
   'documents.title': 'Documents',
@@ -167,6 +179,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'documents.loading': 'Loading…',
   'documents.empty': 'There are no documents yet.',
   'documents.error.list': 'The document list could not be loaded: {error}',
+  'documents.retry': 'Try again',
   'documents.error.create': 'The document could not be created: {error}',
   'documents.error.delete': 'The document could not be deleted: {error}',
   'documents.import': 'Import',
@@ -178,6 +191,9 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'file.exportDocument': 'Export document',
   'file.running': 'Exporting…',
   'file.failed': 'Export failed',
+  // The warning of a finished export (M19.1, D4): FileStatus.warning is the key.
+  'file.exportedWithoutHistory':
+    'The document was exported without its edit history because saving does not work.',
 
   // History panel (M15).
   'history.title': 'Edit history',

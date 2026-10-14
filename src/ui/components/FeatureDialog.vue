@@ -6,17 +6,27 @@
 // focusRefParam, commit, cancel). Movable by its header; the offset is view state of this panel
 // only. Enter is OK and Esc is Cancel while the focus is in
 // the dialog. On opening the first field gets the focus (spec 11, "Přístupnost"), so the keys
-// work at once.
+// work at once. M19.1 (revize U2): under the fields a block of errors (role="alert") shows what
+// the fields cannot – the issues of the whole form and the error of the edited feature from its
+// row in the tree (dialogErrors, featureErrorOf); the fields keep a line for their own issue, so
+// nothing jumps when it comes or goes (U9, FieldShell).
 import { computed, onMounted, ref, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FeatureEditSession, FieldState } from '@/interaction';
 import { useObservable } from '../composables/use-observable';
+import { useSession } from '../composables/use-session';
+import { dialogErrors, featureErrorOf } from '../feature-errors';
+import { issueText } from '../i18n/i18n';
 import { paramFieldFor } from './params/registry';
 
 const props = defineProps<{ edit: FeatureEditSession }>();
 
 const { t } = useI18n();
 const state = useObservable(props.edit.state);
+const treeRows = useObservable(useSession().featureTree.rows);
+const errors = computed(() =>
+  dialogErrors(state.value.issues, featureErrorOf(treeRows.value, props.edit.featureId)),
+);
 
 const icon = computed(() => `ti-${props.edit.schema.icon ?? 'cube'}`);
 // The name of the feature from the session (generated on create, spec 10 "Dialog featury").
@@ -118,6 +128,20 @@ function onGripUp(): void {
       </template>
     </div>
 
+    <div v-if="errors !== null" class="errors" role="alert">
+      <p v-for="(issue, i) in errors.issues" :key="i" class="error">
+        <i class="ti ti-alert-triangle" aria-hidden="true" />
+        <span>{{ issueText(t, issue) }}</span>
+      </p>
+      <template v-if="errors.message !== null">
+        <p class="error">
+          <i class="ti ti-alert-triangle" aria-hidden="true" />
+          <span>{{ t('dialog.featureFailed') }}</span>
+        </p>
+        <p class="message">{{ errors.message }}</p>
+      </template>
+    </div>
+
     <footer class="buttons">
       <button type="button" class="button" @click="edit.cancel()">{{ t('dialog.cancel') }}</button>
       <button type="button" class="button primary" @click="edit.commit()">
@@ -188,6 +212,30 @@ function onGripUp(): void {
   font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+}
+.errors {
+  margin: 0 14px 8px;
+  padding: 7px 9px;
+  border-radius: var(--radius-control);
+  background: var(--danger-bg);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height);
+}
+.error {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin: 0;
+  color: var(--danger);
+}
+.error + .error {
+  margin-top: 3px;
+}
+.message {
+  margin: 2px 0 0 18px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+  user-select: text;
 }
 .buttons {
   display: flex;

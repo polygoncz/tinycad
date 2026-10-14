@@ -22,11 +22,11 @@ import type { DocumentStore } from '@/persistence';
 import { createManualScheduler } from '@/persistence/testing';
 import type { ManualScheduler } from '@/persistence/testing';
 import type { FeaturePlugin } from '@/plugin-api';
-import { aSchema, aSketchArtifact, aSpyBuilder } from '@/regen/testing';
+import { aSchema, aSketchArtifact, aSpyBuilder, buildCube } from '@/regen/testing';
 import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
 import { createFakeSolver, rectangleData } from '@/sketch/testing';
 import { createAppSession } from './index';
-import { RESTART_WINDOW_MS } from './kernel-supervisor';
+import { RESTART_LIMIT } from './kernel-supervisor';
 import type { AppSession, AppSessionDeps, KernelUiState, ViewCubeLabels } from './index';
 import { importDocumentFile } from './documents';
 import type { DownloadFile } from './file-exporter';
@@ -57,7 +57,7 @@ interface Harness {
   readonly scheduler: ManualScheduler;
   /** Files downloaded through the session (M15). */
   readonly downloads: readonly DownloadFile[];
-  /** Moves the clock of `now`. */
+  /** Moves the monotonic clock (the restart window of the kernel, M19.1). */
   readonly advance: (ms: number) => void;
 }
 
@@ -69,7 +69,7 @@ async function open(
   const viewport = new FakeAppViewport();
   const scheduler = createManualScheduler();
   const downloads = aDownloads();
-  let time = 1_000_000;
+  let monotonic = 0;
   const session = await createAppSession({
     plugins: [boxPlugin],
     store,
@@ -77,7 +77,8 @@ async function open(
     createKernel: kernels.create,
     viewport,
     scheduler,
-    now: () => time,
+    now: () => 1_000_000,
+    monotonic: () => monotonic,
     ids: createSequentialIdGenerator('f'),
     translate,
     confirm: () => true,
@@ -96,8 +97,29 @@ async function open(
     scheduler,
     downloads: downloads.files,
     advance: (ms) => {
-      time += ms;
+      monotonic += ms;
     },
+  };
+}
+
+/** Deps of a session without the harness, for tests that call createAppSession themselves. */
+function sessionDeps(kernels: KernelFactory): AppSessionDeps {
+  return {
+    plugins: [boxPlugin],
+    store: createMemoryDocumentStore({ now: () => 0 }),
+    docId: DOC,
+    createKernel: kernels.create,
+    viewport: new FakeAppViewport(),
+    scheduler: createManualScheduler(),
+    now: () => 0,
+    monotonic: () => 0,
+    ids: createSequentialIdGenerator('f'),
+    translate,
+    confirm: () => true,
+    readOnly: false,
+    solver: createFakeSolver(),
+    download: () => undefined,
+    theme: 'light',
   };
 }
 
@@ -278,7 +300,7 @@ describe('createAppSession – changes', () => {
     expect(session.browser.bodies.get().map((r) => r.body)).toEqual([bodyId(box)]);
   });
 
-  it('ten quick changes regenerate at most twice', async () => {
+  it('ten quick changes regenerate at most twice and show the last height', async () => {
     const { session, viewport, kernels } = await open();
     addBox(session);
     await settle();
@@ -291,9 +313,17 @@ describe('createAppSession – changes', () => {
     edit.commit();
     await settle();
 
-    expect(viewport.syncs.length - syncsBefore).toBeLessThanOrEqual(2);
-    expect(kernels.last.fake.callCount('makeBox') - boxesBefore).toBeLessThanOrEqual(2);
+    // At least one run, so no run at all (or only a stale one) does not pass (revize, testy T3).
+    const syncs = viewport.syncs.length - syncsBefore;
+    expect(syncs).toBeGreaterThanOrEqual(1);
+    expect(syncs).toBeLessThanOrEqual(2);
+    const boxes = kernels.last.fake.callCount('makeBox') - boxesBefore;
+    expect(boxes).toBeGreaterThanOrEqual(1);
+    expect(boxes).toBeLessThanOrEqual(2);
     expect(session.regen.get().busy).toBe(false);
+    const shown = viewport.shown[0]?.shape ?? fail();
+    const { min, max } = await kernels.last.fake.boundingBox(shown);
+    expect(max[2] - min[2]).toBe(20);
   });
 
   it('busy is true while a regeneration runs', async () => {
@@ -337,6 +367,184 @@ describe('createAppSession – changes', () => {
   });
 });
 
+describe('createAppSession – generation and errors of a regeneration (M19.1)', () => {
+  const idsOf = (bodies: readonly { readonly id: BodyId }[]): BodyId[] => bodies.map((b) => b.id);
+  /** The bodies of the snapshot in the port, as the browser lists them. */
+  const portBodies = (session: AppSession): BodyId[] =>
+    session.browser.bodies.get().map((row) => row.body);
+
+  /** A feature whose builder throws (a bug, not a kernel error) while `broken()`. */
+  const aFragilePlugin = (broken: () => boolean): FeaturePlugin => ({
+    schema: aSchema('fragile'),
+    builder: aSpyBuilder('fragile', (input, ctx) =>
+      broken() ? Promise.reject(new Error('builder bug')) : buildCube(input, ctx),
+    ),
+  });
+
+  it('publishes the snapshot only once the view shows the bodies of the same generation (D3)', async () => {
+    const { session, viewport } = await open();
+    viewport.holdSyncs();
+    addBox(session, 10);
+    await settle();
+    // The regeneration finished, the view still tessellates: nothing of it is published yet.
+    expect(viewport.heldSyncs).toBe(1);
+    expect(portBodies(session)).toEqual([]);
+    expect(session.regen.get()).toMatchObject({ busy: true, bodyCount: 0 });
+    expect(viewport.fitAllCount).toBe(0);
+
+    viewport.releaseSyncs();
+    await settle();
+    const first = bodyId(session.doc.studio.features[0]?.id ?? fail());
+    expect(portBodies(session)).toEqual([first]);
+    expect(idsOf(viewport.shown)).toEqual([first]);
+    expect(session.regen.get()).toMatchObject({ busy: false, bodyCount: 1 });
+    expect(viewport.fitAllCount).toBe(1);
+
+    viewport.holdSyncs();
+    addBox(session, 20);
+    await settle();
+    // The port keeps the generation the view shows, so a picked index and the names agree (C6).
+    expect(portBodies(session)).toEqual([first]);
+    expect(idsOf(viewport.shown)).toEqual(portBodies(session));
+
+    viewport.releaseSyncs();
+    await settle();
+    const second = bodyId(session.doc.studio.features[1]?.id ?? fail());
+    expect(portBodies(session)).toEqual([first, second]);
+    expect(idsOf(viewport.shown)).toEqual(portBodies(session));
+    expect(session.regen.get()).toMatchObject({ busy: false, bodyCount: 2 });
+  });
+
+  it('the sketches of a regeneration are drawn only once its bodies are shown', async () => {
+    const { session, viewport } = await open({ plugins: [boxPlugin, sketchPlugin] });
+    viewport.holdSyncs();
+    expect(session.actions.run(session.toolActionId('sketch'))).toBe(true);
+    const feature = session.sketches.current.get()?.featureId ?? fail();
+    session.actions.run(session.sketchActionIds.finish);
+    await settle();
+    expect(viewport.sketchDrawings.has(sketchId(feature))).toBe(false);
+
+    viewport.releaseSyncs();
+    await settle();
+    expect(viewport.sketchDrawings.has(sketchId(feature))).toBe(true);
+  });
+
+  it('a kernel restart during a held sync drops its result: the port never gets it', async () => {
+    const { session, viewport, kernels } = await open();
+    addBox(session, 10);
+    await settle();
+    const first = bodyId(session.doc.studio.features[0]?.id ?? fail());
+    const published: BodyId[][] = [];
+    session.browser.bodies.subscribe(() => published.push(portBodies(session)));
+
+    viewport.holdSyncs();
+    addBox(session, 20);
+    await settle();
+    expect(viewport.heldSyncs).toBe(1);
+    const crashed = kernels.last;
+    crashed.crash();
+    await settle();
+    // The new kernel reset the view, so the held sync settled stale; its result belongs to the
+    // dead kernel. The catch-up run over the new kernel waits in a sync of its own.
+    expect(session.kernel.get()).toBe('ready');
+    expect(kernels.last).not.toBe(crashed);
+    expect(viewport.heldSyncs).toBe(1);
+    expect(published).toEqual([]);
+    expect(portBodies(session)).toEqual([first]);
+
+    viewport.releaseSyncs();
+    await settle();
+    expect(published).toHaveLength(1);
+    expect(portBodies(session)).toHaveLength(2);
+    expect(idsOf(viewport.shown)).toEqual(portBodies(session));
+    expect(session.regen.get()).toMatchObject({ busy: false, bodyCount: 2, failed: null });
+  });
+
+  it('the result of a kernel that died after its last call sends no tessellation', async () => {
+    let crash: (() => void) | null = null;
+    const doomed: FeaturePlugin = {
+      schema: aSchema('doomed'),
+      // The kernel dies once the build is done: the run still ends with a result.
+      builder: aSpyBuilder('doomed', async (input, ctx) => {
+        const output = await buildCube(input, ctx);
+        crash?.();
+        crash = null;
+        return output;
+      }),
+    };
+    const { session, viewport, kernels } = await open({ plugins: [doomed] });
+    const syncs = viewport.syncs.length;
+    const first = kernels.last;
+    crash = () => {
+      first.crash();
+    };
+    session.features.create('doomed').commit();
+    await settle();
+    expect(first.disposed).toBe(true);
+    expect(kernels.last).not.toBe(first);
+    // Only the catch-up run over the new kernel reaches the view, after its reset.
+    expect(viewport.syncs).toHaveLength(syncs + 1);
+    expect(viewport.resets[viewport.resets.length - 1]).toBe(kernels.last);
+    expect(session.regen.get()).toMatchObject({ busy: false, bodyCount: 1, failed: null });
+  });
+
+  it('a builder that throws sets failed; the next successful regeneration clears it', async () => {
+    let broken = true;
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { session } = await open({ plugins: [boxPlugin, aFragilePlugin(() => broken)] });
+    expect(session.regen.get().failed).toBeNull();
+
+    session.features.create('fragile').commit();
+    await settle();
+    expect(session.regen.get()).toMatchObject({ busy: false, failed: 'builder bug' });
+    // Still reported, not only shown.
+    expect(errors).toHaveBeenCalledWith(new Error('builder bug'));
+
+    broken = false;
+    addBox(session);
+    await settle();
+    expect(session.regen.get()).toMatchObject({ busy: false, bodyCount: 2, failed: null });
+    errors.mockRestore();
+  });
+
+  it('a kernel lost during a regeneration is a restart, not a failed regeneration', async () => {
+    const { session, kernels } = await open();
+    addBox(session);
+    // The run is under way: the kernel dies before it ends.
+    kernels.last.crash();
+    await settle();
+    expect(session.kernel.get()).toBe('ready');
+    expect(session.regen.get()).toMatchObject({ busy: false, bodyCount: 1, failed: null });
+  });
+
+  it('a subscriber of the port that throws does not stop the step; it is reported after it', async () => {
+    const { session, viewport } = await open();
+    // What was done of the step when the error was reported.
+    const reported: { error: unknown; fitAll: number; bodyCount: number }[] = [];
+    const errors = vi.spyOn(console, 'error').mockImplementation((error: unknown) => {
+      reported.push({
+        error,
+        fitAll: viewport.fitAllCount,
+        bodyCount: session.regen.get().bodyCount,
+      });
+    });
+    const bug = new Error('subscriber bug');
+    session.browser.bodies.subscribe(() => {
+      throw bug;
+    });
+
+    addBox(session);
+    await settle();
+    const body = bodyId(session.doc.studio.features[0]?.id ?? fail());
+    expect(idsOf(viewport.shown)).toEqual([body]);
+    expect(session.regen.get()).toMatchObject({ busy: false, bodyCount: 1, failed: null });
+    expect(viewport.fitAllCount).toBe(1);
+    // After the whole step: the counters and the first view were done already.
+    expect(reported).toEqual([{ error: bug, fitAll: 1, bodyCount: 1 }]);
+    errors.mockRestore();
+  });
+});
+
 describe('createAppSession – kernel restart', () => {
   it('a crashed kernel is replaced: restarting → ready, bodies shown again', async () => {
     const { session, kernels, viewport } = await open();
@@ -358,20 +566,122 @@ describe('createAppSession – kernel restart', () => {
     expect(session.regen.get().bodyCount).toBe(2);
   });
 
-  it('two crashes within the window → failed', async () => {
-    const { session, kernels, advance } = await open();
+  it('a crash during a tessellation of the viewport restarts the kernel and shows the bodies again', async () => {
+    const { session, kernels, viewport } = await open();
     addBox(session);
     await settle();
-    kernels.last.crash();
+    const states: KernelUiState[] = [];
+    session.kernel.subscribe(() => states.push(session.kernel.get()));
+    const crashed = kernels.last;
+    const syncs = viewport.syncs.length;
+    const body = viewport.lastSync[0] ?? fail();
+
+    // The viewport tessellates through the kernel app handed it (bodies.reset); the worker dies
+    // meanwhile. No regeneration runs and the document does not change (revize C7).
+    const meshes = viewport.resets[viewport.resets.length - 1] ?? fail();
+    const tessellation = meshes
+      .tessellate(body.shape, { linearDeflection: 0.1, angularDeflection: 0.5 })
+      .catch((e: unknown) => e);
+    crashed.crash('OCCT crashed: unreachable');
+    await settle();
+
+    expect(await tessellation).toMatchObject({ code: 'disconnected' });
+    expect(states).toEqual(['restarting', 'ready']);
+    expect(crashed.disposed).toBe(true);
+    expect(viewport.resets[viewport.resets.length - 1]).toBe(kernels.last);
+    expect(viewport.syncs).toHaveLength(syncs + 1);
+    expect(viewport.lastSync.map((b) => b.id)).toEqual([body.id]);
+    expect(kernels.last.fake.callCount('makeBox')).toBe(1);
+    expect(session.doc.studio.features).toHaveLength(1);
+  });
+
+  it('crashes over the limit → failed with the cause; retryKernel starts the kernel again', async () => {
+    const { session, kernels, viewport } = await open();
     addBox(session);
     await settle();
-    advance(RESTART_WINDOW_MS - 1);
-    kernels.last.crash();
-    addBox(session);
+    for (let i = 0; i < RESTART_LIMIT; i++) {
+      kernels.last.crash();
+      await settle();
+      expect(session.kernel.get()).toBe('ready');
+    }
+    kernels.last.crash('OCCT crashed: memory access out of bounds');
     await settle();
     expect(session.kernel.get()).toBe('failed');
-    expect(kernels.kernels).toHaveLength(2);
+    expect(session.kernelError.get()).toBe('OCCT crashed: memory access out of bounds');
+    expect(kernels.kernels).toHaveLength(RESTART_LIMIT + 1);
+
+    session.retryKernel();
+    expect(session.kernel.get()).toBe('starting');
+    await settle();
+    expect(session.kernel.get()).toBe('ready');
+    expect(session.kernelError.get()).toBeNull();
+    expect(viewport.resets[viewport.resets.length - 1]).toBe(kernels.last);
+    expect(viewport.lastSync).toHaveLength(1);
   });
+
+  it('after a restart the STEP export sends no handle of the old kernel', async () => {
+    // A feature whose builder breaks (a bug, not a kernel error) once the kernel was restarted:
+    // the regeneration over the new kernel never finishes, so the last state is the old one.
+    let broken = false;
+    const fragile: FeaturePlugin = {
+      schema: aSchema('fragile'),
+      builder: aSpyBuilder('fragile', (input, ctx) =>
+        broken ? Promise.reject(new Error('builder bug')) : buildCube(input, ctx),
+      ),
+    };
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { session, kernels, downloads } = await open({ plugins: [fragile] });
+    session.features.create('fragile').commit();
+    await settle();
+    expect(session.regen.get().bodyCount).toBe(1);
+
+    broken = true;
+    kernels.last.crash();
+    await settle();
+    expect(session.kernel.get()).toBe('ready');
+    expect(errors).toHaveBeenCalledWith(new Error('builder bug'));
+
+    expect(session.actions.run(session.fileActionIds.exportStep)).toBe(true);
+    await settle();
+    // The handles of the old kernel mean other shapes, or nothing, in the new one (revize AF13).
+    expect(kernels.last.fake.callCount('exportStep')).toBe(0);
+    expect(downloads).toEqual([]);
+    expect(session.files.status.get()).toMatchObject({ kind: 'failed', task: 'step' });
+    errors.mockRestore();
+  });
+
+  it('an error while a ready kernel is wired goes to reportError, not to an unhandled rejection', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const viewport = new FakeAppViewport();
+    const failure = new Error('reset failed');
+    viewport.bodies.reset = () => {
+      throw failure;
+    };
+    const session = await createAppSession({ ...sessionDeps(aKernelFactory()), viewport });
+    await settle();
+    expect(session.kernel.get()).toBe('ready');
+    expect(errors).toHaveBeenCalledWith(failure);
+    errors.mockRestore();
+  });
+
+  it('starts the kernel only once the session is built: a failing step leaves no worker', async () => {
+    const kernels = aKernelFactory();
+    const viewport = new FakeAppViewport();
+    const deps = { ...sessionDeps(kernels), viewport };
+    // The theme is read by the last step of the construction (the default body colour).
+    Object.defineProperty(deps, 'theme', {
+      get: () => {
+        throw new Error('step failed');
+      },
+    });
+    await expect(createAppSession(deps)).rejects.toThrow('step failed');
+    await settle();
+    expect(kernels.kernels).toHaveLength(0);
+    // What the steps built is released: keys of the view reach no action (fit all is F).
+    viewport.emitKey(key('f'));
+    expect(viewport.fitAllCount).toBe(0);
+  });
+
   it('a kernel that fails to start → unavailable, kernelError carries its text', async () => {
     const kernels = aKernelFactory();
     kernels.failNext(new Error('OCCT worker failed: SyntaxError'));
@@ -405,9 +715,10 @@ describe('createAppSession – read-only', () => {
       session.tools.activate('box');
     }).toThrow(/read-only/);
     const id = session.doc.studio.features[0]?.id ?? fail();
-    expect(() => {
-      session.featureTree.rename(id, 'Other');
-    }).toThrow(/read-only/);
+    const name = session.doc.feature(id)?.name;
+    // The tree holds the edit lock itself: read-only, its command does nothing (M19.1).
+    session.featureTree.rename(id, 'Other');
+    expect(session.doc.feature(id)?.name).toBe(name);
 
     scheduler.advance(10_000);
     session.dispose();
@@ -1057,7 +1368,7 @@ describe('createAppSession – export, history and colours (M15)', () => {
     expect(downloads).toHaveLength(1);
     expect(downloads[0]).toMatchObject({ name: `${UNTITLED}.step`, mime: 'model/step' });
     expect(textOf(downloads[0]).startsWith('ISO-10303-21;')).toBe(true);
-    expect(session.files.status.get()).toEqual({ kind: 'idle' });
+    expect(session.files.status.get()).toEqual({ kind: 'idle', warning: null });
   });
 
   it('exportStep is disabled without a body and when the only body is hidden', async () => {
@@ -1189,6 +1500,44 @@ describe('createAppSession – export, history and colours (M15)', () => {
   it('defaultBodyColor starts with the face colour of the theme at the start', async () => {
     const { session } = await open({ theme: 'dark' });
     expect(session.defaultBodyColor.get()).toBe('#3b6aa6');
+  });
+});
+
+describe('createAppSession – a store that fails for good (M19.1, D4)', () => {
+  it('persistence failed with its error; the export downloads the live document without history', async () => {
+    const { session, store, scheduler, downloads } = await open();
+    expect(session.persistenceError.get()).toBeNull();
+    // The document disappears from the store (e.g. site data cleared): every write is refused.
+    await store.deleteDocument(DOC);
+    addBox(session, 10);
+    scheduler.advance(1000);
+    await settle();
+    expect(session.persistence.get()).toBe('failed');
+    expect(session.persistenceError.get()).toBe(`Document '${DOC}' does not exist`);
+
+    addBox(session, 20);
+    session.actions.run(session.fileActionIds.exportDocument);
+    await settle();
+    // The File actions warn that the file lacks the history (M19.1).
+    expect(session.files.status.get()).toEqual({
+      kind: 'idle',
+      warning: 'file.exportedWithoutHistory',
+    });
+    expect(downloads).toHaveLength(1);
+    const data = downloads[0]?.data ?? fail();
+    const raw: unknown = JSON.parse(
+      typeof data === 'string' ? data : new TextDecoder().decode(data),
+    );
+    expect(raw).not.toHaveProperty('history');
+    expect(raw).toMatchObject({
+      snapshot: { atSeq: 0, document: { studio: { features: [{}, {}] } } },
+    });
+  });
+
+  it('persistenceError is null in a read-only session', async () => {
+    const store = await aStoredDocumentWithBox();
+    const { session } = await open({ store, readOnly: true });
+    expect(session.persistenceError.get()).toBeNull();
   });
 });
 

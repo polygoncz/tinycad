@@ -3,15 +3,18 @@
 // whether the field is the active one that takes the selection from the view or the Browser
 // (FieldState.active). The references are set by the selection, not typed here, so the button
 // reports only that the field wants to become active (the dialog calls focusRefParam). A 'bodies'
-// field lists the chosen bodies as chips from FieldState.refs (names from the document,
-// interaction); each chip reports the removal of its item with × (the dialog calls removeRef).
-// 'topo', 'planes' and 'region' show the count only (R77). The count stays in the active state too
-// (R87).
+// or 'topo' field lists its items as chips from FieldState.refs (interaction: a 'bodies' chip has
+// the name from the document or the text of a missing body, a 'topo' chip an ordinal text, D5 of
+// M19.1); the style of a missing reference follows FieldRef.missing. Each chip reports the
+// removal of its item with × (the dialog calls removeRef). 'planes' and 'region' show the count
+// only (R77). The count stays in the active state too (R87).
 import { computed, useId } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FieldState } from '@/interaction';
 import { refListText } from './field-values';
 import FieldShell from './FieldShell.vue';
+
+type Chip = NonNullable<FieldState['refs']>[number];
 
 const props = defineProps<{ field: FieldState }>();
 const emit = defineEmits<{ update: [value: unknown]; activate: []; remove: [index: number] }>();
@@ -24,6 +27,11 @@ const text = computed(() => {
   return t(key, params);
 });
 const chips = computed(() => props.field.refs ?? []);
+// The presenter gives a chip either a text (a key: topo, a missing body) or a label (the name of
+// the body from the user); the view only draws the one it gets.
+function chipName(chip: Chip): string {
+  return chip.text === null ? (chip.label ?? '') : t(chip.text.key, chip.text.params);
+}
 </script>
 
 <template>
@@ -46,13 +54,13 @@ const chips = computed(() => props.field.refs ?? []);
           v-for="chip in chips"
           :key="`${String(chip.index)}:${chip.body ?? ''}`"
           class="chip"
-          :class="{ missing: chip.label === null }"
+          :class="{ missing: chip.missing }"
         >
-          <span class="chip-name">{{ chip.label ?? t('field.refs.missing') }}</span>
+          <span class="chip-name">{{ chipName(chip) }}</span>
           <button
             type="button"
             class="chip-remove"
-            :aria-label="t('field.refs.remove', { name: chip.label ?? t('field.refs.missing') })"
+            :aria-label="t('field.refs.remove', { name: chipName(chip) })"
             @click="emit('remove', chip.index)"
           >
             <i class="ti ti-x" aria-hidden="true" />

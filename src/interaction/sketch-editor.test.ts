@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
 import type { Plane } from '@/core';
 import {
@@ -32,8 +32,10 @@ import type {
   SolveInput,
 } from '@/sketch';
 import { createFakeSolver, rectangleData } from '@/sketch/testing';
+import { createActionRegistry } from './actions';
 import { createFeatureEditor } from './feature-editor';
 import { ORIGIN_POINT_ID } from './sketch-drawing';
+import { SKETCH_ACTION_IDS, createSketchActions } from './sketch-actions';
 import { createSketchEditor } from './sketch-editor';
 import { EDIT_SKETCH_DRAWING_ID } from './sketch-session';
 import type { SketchSession } from './sketch-session';
@@ -196,6 +198,24 @@ async function editing(sketch: SketchData = rectangleData(), solver?: Constraint
 
 /** Solver calls after the first one (the solve on opening). */
 const laterCalls = (calls: readonly SolveInput[]) => calls.slice(1);
+
+/**
+ * Collects the unhandled rejections until `stop`. Vitest treats an unhandled rejection as handled
+ * by the test when another listener exists, so the run does not fail on the expected one.
+ */
+function catchUnhandledRejections(): { readonly reasons: readonly unknown[]; stop(): void } {
+  const reasons: unknown[] = [];
+  const listener = (reason: unknown): void => {
+    reasons.push(reason);
+  };
+  process.on('unhandledRejection', listener);
+  return {
+    reasons,
+    stop() {
+      process.off('unhandledRejection', listener);
+    },
+  };
+}
 
 describe('SketchEditor.create', () => {
   it('creates a sketch on the default plane XY and enters the sketch mode', () => {
@@ -693,6 +713,44 @@ describe('SketchSession writing changes', () => {
     expect(written.constraints.map((c) => c.id)).toEqual(['f']);
   });
 
+  it('a queued job that throws synchronously does not block the next command', async () => {
+    const { session, doc, solver } = await editing(LINE);
+    const unhandled = catchUnhandledRejections();
+    try {
+      solver.hold();
+      const added = session.addConstraint(constraint(LINE, { kind: 'fix', id: 'f', point: 'p' }));
+      // Behind the pending solve the toggle waits in the queue; its job is not async.
+      session.toggleConstruction([item('pq')]);
+      const failure = new Error('subscriber failed');
+      let thrown = false;
+      session.state.subscribe(() => {
+        const pq = session.state.get().entities[2];
+        if (thrown || pq?.kind !== 'line' || pq.construction !== true) return;
+        thrown = true;
+        throw failure;
+      });
+      let done: boolean | 'pending' = 'pending';
+      void session
+        .addConstraint(constraint(LINE, { kind: 'horizontal', id: 'h', line: 'pq' }))
+        .then((written) => {
+          done = written;
+        });
+
+      solver.release();
+      await settle();
+
+      expect(await added).toBe(true);
+      expect(done).toBe(true);
+      const written = docData(doc, fid('s1'));
+      expect(written.entities[2]).toMatchObject({ construction: true });
+      expect(written.constraints.map((c) => c.id)).toEqual(['f', 'h']);
+      // The toggle has no promise for the caller: its failure is not swallowed.
+      expect(unhandled.reasons).toEqual([failure]);
+    } finally {
+      unhandled.stop();
+    }
+  });
+
   it('runs commands one after another, each on the data of the one before', async () => {
     const { session, solver, doc } = await editing(LINE);
     solver.hold();
@@ -776,6 +834,116 @@ describe('SketchSession dragging', () => {
   it('endDrag without dragging settles at once', async () => {
     const { session } = await editing(LINE);
     await expect(session.endDrag()).resolves.toBeUndefined();
+  });
+
+  it('keeps busy until the last result of the drag', async () => {
+    const { session, solver } = await editing(LINE);
+    const seen: boolean[] = [];
+    session.state.subscribe(() => {
+      const { busy } = session.state.get();
+      if (seen.at(-1) !== busy) seen.push(busy);
+    });
+    solver.hold();
+
+    session.drag(eid('q'), [5, 5]);
+    session.drag(eid('q'), [6, 6]);
+    expect(session.state.get().busy).toBe(true);
+    solver.release();
+    await session.endDrag();
+    await settle();
+
+    expect(session.state.get().busy).toBe(false);
+    // Never idle between the two solves of the drag.
+    expect(seen).toEqual([true, false]);
+  });
+});
+
+describe('SketchState.busy (D8)', () => {
+  it('is false while the first solve runs, so Finish is enabled right after opening', async () => {
+    const { sketches, solver } = setup({ features: [['s1', LINE]] });
+    const registry = createActionRegistry({ mode: sketches.mode });
+    createSketchActions({ registry, sketches, ids: createSequentialIdGenerator('c') });
+    const finishEnabled = () =>
+      registry.actions.get().find((a) => a.id === SKETCH_ACTION_IDS.finish)?.enabled;
+    solver.hold();
+
+    const session = sketches.edit(fid('s1'));
+
+    expect(session.state.get()).toMatchObject({ status: 'solving', busy: false });
+    expect(finishEnabled()).toBe(true);
+    // A command waits behind the first solve: busy at once.
+    const added = session.addGeometry(data([{ kind: 'point', id: 'r', x: 1, y: 1 }]));
+    expect(session.state.get().busy).toBe(true);
+    expect(finishEnabled()).toBe(false);
+    solver.release();
+    expect(await added).toBe(true);
+    expect(session.state.get().busy).toBe(false);
+    expect(finishEnabled()).toBe(true);
+  });
+
+  it('is true while a deferred toggle of construction waits', async () => {
+    const { session, solver } = await editing(LINE);
+    solver.hold();
+    const added = session.addConstraint(constraint(LINE, { kind: 'fix', id: 'f', point: 'p' }));
+    session.toggleConstruction([item('pq')]);
+    let busyAtToggle: boolean | null = null;
+    session.state.subscribe(() => {
+      const { busy, entities } = session.state.get();
+      const pq = entities[2];
+      if (busyAtToggle === null && pq?.kind === 'line' && pq.construction === true) {
+        busyAtToggle = busy;
+      }
+    });
+
+    solver.release();
+    await added;
+    await settle();
+
+    // The toggle still counts when it writes, after the solve before it is done.
+    expect(busyAtToggle).toBe(true);
+    expect(session.state.get().busy).toBe(false);
+  });
+
+  it('is true while a command waits for the solver and false once its promise settles', async () => {
+    const { session, solver } = await editing(LINE);
+    solver.hold();
+
+    const added = session.addGeometry(data([{ kind: 'point', id: 'r', x: 1, y: 1 }]));
+    expect(session.state.get().busy).toBe(true);
+    solver.release();
+    expect(await added).toBe(true);
+
+    // At once, so Finish right after an awaited command is enabled.
+    expect(session.state.get().busy).toBe(false);
+  });
+
+  it('stays true while a second command waits behind the first', async () => {
+    const { session, solver } = await editing(LINE);
+    solver.hold();
+    const first = session.addGeometry(data([{ kind: 'point', id: 'r', x: 1, y: 1 }]));
+    const second = session.addGeometry(data([{ kind: 'point', id: 's', x: 2, y: 2 }]));
+
+    // The second solve starts once the first command is done; it stays held.
+    solver.release();
+    solver.hold();
+    expect(await first).toBe(true);
+    expect(session.state.get().busy).toBe(true);
+    solver.release();
+    expect(await second).toBe(true);
+
+    expect(session.state.get().busy).toBe(false);
+  });
+
+  it('is false once the session is closed with a command still waiting', async () => {
+    const { session, solver } = await editing(LINE);
+    solver.hold();
+    const added = session.addGeometry(data([{ kind: 'point', id: 'r', x: 1, y: 1 }]));
+
+    session.cancel();
+
+    expect(session.state.get().busy).toBe(false);
+    solver.release();
+    expect(await added).toBe(false);
   });
 });
 
@@ -1012,5 +1180,54 @@ describe('SketchSession finish and cancel', () => {
     const { session, sketches } = await editing(LINE);
     session.cancel();
     expect(sketches.edit(fid('s1'))).toBe(sketches.current.get());
+  });
+
+  it.each(['finish', 'cancel'] as const)(
+    'a state subscriber that throws on %s still cleans up; its error goes on',
+    async (end) => {
+      const { session, sketches, editor, viewport } = await editing(LINE);
+      session.state.subscribe(() => {
+        if (!session.state.get().open) throw new Error('subscriber failed');
+      });
+
+      expect(() => {
+        session[end]();
+      }).toThrow('subscriber failed');
+
+      expect(session.state.get().open).toBe(false);
+      expect(viewport.sketchDrawings.has(EDIT_SKETCH_DRAWING_ID)).toBe(false);
+      expect(sketches.current.get()).toBeNull();
+      expect(sketches.mode.get()).toBe('model');
+      expect(editor.current.get()).toBeNull();
+      expect(sketches.edit(fid('s1'))).toBe(sketches.current.get());
+    },
+  );
+
+  it('a viewport that throws on removing the drawing still leaves the sketch mode', async () => {
+    const { session, sketches, viewport } = await editing(LINE);
+    vi.spyOn(viewport.sketches, 'remove').mockImplementation(() => {
+      throw new Error('viewport failed');
+    });
+
+    expect(() => {
+      session.cancel();
+    }).toThrow('viewport failed');
+
+    expect(sketches.current.get()).toBeNull();
+    expect(sketches.mode.get()).toBe('model');
+  });
+
+  it('a subscriber of current that throws on closing still returns to the model mode', async () => {
+    const { session, sketches } = await editing(LINE);
+    sketches.current.subscribe(() => {
+      if (sketches.current.get() === null) throw new Error('subscriber failed');
+    });
+
+    expect(() => {
+      session.finish();
+    }).toThrow('subscriber failed');
+
+    expect(sketches.current.get()).toBeNull();
+    expect(sketches.mode.get()).toBe('model');
   });
 });

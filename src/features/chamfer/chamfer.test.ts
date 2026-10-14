@@ -245,18 +245,27 @@ describe('chamferMessages', () => {
       'chamfer.label': 'Zkosení',
       'chamfer.edges': 'Hrany',
       'chamfer.distance': 'Vzdálenost',
+      'chamfer.failed': 'Zkosení se nepodařilo. Zkuste menší vzdálenost nebo jiné hrany.',
     });
     expect(chamferMessages.en).toEqual({
       'chamfer.label': 'Chamfer',
       'chamfer.edges': 'Edges',
       'chamfer.distance': 'Distance',
+      'chamfer.failed': 'The chamfer failed. Try a smaller distance or other edges.',
     });
   });
 
-  it('has a text for every key of the schema', () => {
-    const keys = [chamferSchema.label, ...Object.values(chamferSchema.params).map((s) => s.label)];
-    expect(Object.keys(chamferMessages.cs).sort()).toEqual([...keys].sort());
-  });
+  it.each(['cs', 'en'] as const)(
+    '%s has a text for every key of the schema and the issue code of the builder',
+    (lang) => {
+      const keys = [
+        chamferSchema.label,
+        ...Object.values(chamferSchema.params).map((s) => s.label),
+        'chamfer.failed',
+      ];
+      expect(Object.keys(chamferMessages[lang]).sort()).toEqual([...keys].sort());
+    },
+  );
 
   it('is frozen', () => {
     expect(Object.isFrozen(chamferMessages)).toBe(true);
@@ -417,14 +426,68 @@ describe('chamferBuilder', () => {
     expect(fake.callCount('chamfer')).toBe(0);
   });
 
-  it('lets an error of the kernel through', async () => {
+  it('turns operation-failed of the kernel into INVALID_PARAMS at distance (D6)', async () => {
     const { fake, kernel } = aRecordingKernel();
     const state = await boxesState(kernel, ['a']);
-    fake.failNext('chamfer', 'operation-failed');
+    fake.failNext('chamfer', 'operation-failed', 'chamfer: the algorithm failed');
 
-    await expect(run(aChamfer('f'), state, kernel)).rejects.toMatchObject({
-      code: 'operation-failed',
+    const output = await run(aChamfer('f', { distance: 50 }), state, kernel);
+
+    if (output.ok) expect.fail('Expected an error');
+    expect(output.error).toEqual({
+      code: 'INVALID_PARAMS',
+      message: 'chamfer: the algorithm failed',
+      issues: [{ param: 'distance', code: 'chamfer.failed' }],
     });
+    expect(Object.isFrozen(output.error)).toBe(true);
+    expect(Object.isFrozen(output.error.issues)).toBe(true);
+    expect(Object.isFrozen(output.error.issues?.[0])).toBe(true);
+  });
+
+  it('turns operation-failed of the second body into the same issue', async () => {
+    const { fake, kernel, calls } = aRecordingKernel();
+    const state = await boxesState(kernel, ['a', 'b']);
+    // The first call succeeds, the second one fails.
+    const chamfer = kernel.chamfer.bind(kernel);
+    let n = 0;
+    const failing: ModelingKernel = {
+      ...kernel,
+      chamfer(shape, edges, distance) {
+        n++;
+        if (n === 2) fake.failNext('chamfer', 'operation-failed');
+        return chamfer(shape, edges, distance);
+      },
+    };
+
+    const output = await run(
+      aChamfer('f', { edges: [edge('a', 'e3'), edge('b', 'e3')] }),
+      state,
+      failing,
+    );
+
+    expect(calls).toHaveLength(2);
+    if (output.ok) expect.fail('Expected an error');
+    expect(output.error.issues).toEqual([{ param: 'distance', code: 'chamfer.failed' }]);
+  });
+
+  it.each(['invalid-input', 'unknown-handle', 'internal'] as const)(
+    'lets the kernel error %s through',
+    async (code) => {
+      const { fake, kernel } = aRecordingKernel();
+      const state = await boxesState(kernel, ['a']);
+      fake.failNext('chamfer', code);
+
+      await expect(run(aChamfer('f'), state, kernel)).rejects.toMatchObject({ code });
+    },
+  );
+
+  it('lets an error that is not from the kernel through', async () => {
+    const { kernel } = aRecordingKernel();
+    const state = await boxesState(kernel, ['a']);
+    const bug = new Error('a bug');
+    const throwing: ModelingKernel = { ...kernel, chamfer: () => Promise.reject(bug) };
+
+    await expect(run(aChamfer('f'), state, throwing)).rejects.toBe(bug);
   });
 });
 

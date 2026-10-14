@@ -1,4 +1,5 @@
-import type { Disposable } from '../disposable';
+import type { Disposable, Unsubscribe } from '../disposable';
+import { Emitter } from '../emitter';
 import { RpcError } from './error';
 import {
   isRpcResponse,
@@ -14,7 +15,13 @@ export interface RpcClient<P extends RpcProtocol<P>> extends Disposable {
   call<K extends keyof P & string>(method: K, ...args: P[K]['args']): Promise<P[K]['result']>;
   /** The connection is dead: rejects pending and all later calls with RpcError('disconnected', message). */
   failAll(message: string): void;
-  /** Same as failAll('RPC client disposed'). */
+  /**
+   * The connection died (failAll: a crashed worker, a WASM trap, an undecodable message): told
+   * once, with the error of failAll. Never told by dispose. A listener that subscribes after
+   * failAll is told at once. Errors of listeners are rethrown by failAll once all were told.
+   */
+  onDisconnected(listener: (error: RpcError) => void): Unsubscribe;
+  /** Same as failAll('RPC client disposed'), but onDisconnected is not told. */
   dispose(): void;
 }
 
@@ -26,8 +33,11 @@ interface Pending {
 export function createRpcClient<P extends RpcProtocol<P>>(ep: MessageEndpoint): RpcClient<P> {
   let nextId = 1;
   const pending = new Map<number, Pending>();
-  // Set once by failAll; the first message wins (Q037).
+  // Set once by failAll or dispose; the first message wins (Q037).
   let disconnected: RpcError | undefined;
+  // Set only when failAll came first: dispose is not a crash and tells nobody.
+  let crash: RpcError | undefined;
+  const events = new Emitter<{ disconnected: RpcError }>();
 
   listen(ep, (data) => {
     if (!isRpcResponse(data)) return;
@@ -39,13 +49,15 @@ export function createRpcClient<P extends RpcProtocol<P>>(ep: MessageEndpoint): 
     else p.reject(new RpcError(data.error.code, data.error.message));
   });
 
-  function failAll(message: string): void {
-    if (disconnected) return;
+  /** Rejects pending and later calls; the error, or undefined when the connection was dead. */
+  function disconnect(message: string): RpcError | undefined {
+    if (disconnected) return undefined;
     const error = new RpcError('disconnected', message);
     disconnected = error;
     const waiting = [...pending.values()];
     pending.clear();
     for (const p of waiting) p.reject(error);
+    return error;
   }
 
   return {
@@ -65,9 +77,22 @@ export function createRpcClient<P extends RpcProtocol<P>>(ep: MessageEndpoint): 
         }
       });
     },
-    failAll,
+    failAll(message) {
+      const error = disconnect(message);
+      if (error === undefined) return;
+      crash = error;
+      // After the pending calls are rejected: a throwing listener cannot leave one hanging.
+      events.emit('disconnected', error);
+    },
+    onDisconnected(listener) {
+      if (crash !== undefined) {
+        listener(crash);
+        return () => undefined;
+      }
+      return events.on('disconnected', listener);
+    },
     dispose: () => {
-      failAll('RPC client disposed');
+      disconnect('RPC client disposed');
     },
   };
 }

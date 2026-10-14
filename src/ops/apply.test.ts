@@ -3,9 +3,13 @@ import type { DocumentWriter, FeatureId } from '@/document';
 import { createFeatureSchemaRegistry, toData } from '@/document';
 import { aDocument, aFeature } from '@/document/testing';
 import { applyOperation } from './apply';
+import { createOperationDispatcher } from './dispatcher';
 import { createOpHandlerRegistry } from './handler';
+import { createOperationLog } from './log';
+import type { LogEntry } from './log';
 import type {
   BatchOp,
+  BodySetColorOp,
   FeatureAddOp,
   FeatureMoveOp,
   FeatureRemoveOp,
@@ -15,6 +19,9 @@ import type {
   Operation,
   StudioSetRollbackOp,
 } from './operation';
+import { replayLog } from './replay';
+import { anOpsSession } from './testing';
+import { createUndoManager } from './undo';
 
 // Union of concrete ops keeps excess-property checks on the literals.
 type Op =
@@ -249,5 +256,209 @@ describe('applyOperation – subscriber exceptions', () => {
     // earlier deferred, then the one thrown while reverting
     expect(errors.slice(1)).toEqual([sub, sub]);
     expect(names(doc)).toEqual(['A', 'B', 'C']);
+  });
+});
+
+describe('applyOperation – validation on write (D1)', () => {
+  const setParams = (params: unknown): FeatureSetParamsOp => ({
+    type: 'feature.setParams',
+    v: 2,
+    featureId: id('b'),
+    typeVersion: 1,
+    params,
+  });
+
+  /** Runs `act`, expects it to throw and the document to stay as it was, without events. */
+  function expectRejected(doc: DocumentWriter, act: () => unknown, message: RegExp): void {
+    const studio = doc.studio;
+    const before = toData(doc);
+    let changes = 0;
+    const off = doc.events.on('changed', () => {
+      changes++;
+    });
+    expect(act).toThrow(message);
+    off();
+    expect(doc.studio).toBe(studio);
+    expect(toData(doc)).toEqual(before);
+    expect(changes).toBe(0);
+  }
+
+  it.each([
+    ['NaN', { size: Number.NaN }],
+    ['Infinity', { size: Number.POSITIVE_INFINITY }],
+    ['-Infinity', { size: Number.NEGATIVE_INFINITY }],
+    ['undefined', { size: 1, extra: undefined }],
+    ['NaN deep inside', { list: [{ x: Number.NaN }] }],
+    ['a Date', { at: new Date(0) }],
+  ])('feature.setParams with %s in params throws and changes nothing', (_, params) => {
+    const doc = setup(3);
+    expectRejected(doc, () => applyOperation(doc, handlers, setParams(params)), /params/);
+  });
+
+  it('feature.add with params that are not plain JSON throws and changes nothing', () => {
+    const doc = setup(3);
+    const op: FeatureAddOp = {
+      type: 'feature.add',
+      v: 1,
+      feature: aFeature({ id: 'n', params: { size: Number.NaN } }),
+      index: 0,
+    };
+    expectRejected(doc, () => applyOperation(doc, handlers, op), /feature\.params/);
+  });
+
+  it("feature.add with the id 'a/b' throws: the file could not be read back", () => {
+    const doc = setup(3);
+    const op: FeatureAddOp = {
+      type: 'feature.add',
+      v: 1,
+      feature: aFeature({ id: 'a/b' }),
+      index: 0,
+    };
+    expectRejected(doc, () => applyOperation(doc, handlers, op), /feature\.id/);
+  });
+
+  it("body.setColor with '#FF0000' throws: only lower case passes loading", () => {
+    const doc = setup(3);
+    const op: BodySetColorOp = {
+      type: 'body.setColor',
+      v: 1,
+      body: 'a/body' as BodySetColorOp['body'],
+      color: '#FF0000',
+    };
+    expectRejected(doc, () => applyOperation(doc, handlers, op), /color/);
+  });
+
+  it('lists every problem of the operation in the error', () => {
+    const doc = setup(3);
+    const op: FeatureAddOp = {
+      type: 'feature.add',
+      v: 1,
+      feature: aFeature({ id: 'a/b', params: { size: Number.NaN } }),
+      index: 0,
+    };
+    expect(() => applyOperation(doc, handlers, op)).toThrow(/feature\.id.*feature\.params/s);
+  });
+
+  it('validates before invert: bad params of a missing feature report the params', () => {
+    const doc = setup(3);
+    const op: FeatureSetParamsOp = { ...setParams({ size: Number.NaN }), featureId: id('zzz') };
+    expect(() => applyOperation(doc, handlers, op)).toThrow(/params/);
+  });
+
+  it('a bad sub-operation reverts the batch', () => {
+    const doc = setup(3);
+    const before = toData(doc);
+    expect(() =>
+      applyOperation(doc, handlers, batch(rename('a', 'A1'), setParams({ size: Number.NaN }))),
+    ).toThrow(/params/);
+    // The rename was applied and reverted: equal data, not the same object.
+    expect(toData(doc)).toEqual(before);
+  });
+
+  it('dispatch of a bad operation throws and appends nothing', () => {
+    const { doc, log, dispatcher } = anOpsSession({ features: [aFeature({ id: 'b' })] });
+    expectRejected(doc, () => dispatcher.dispatch(setParams({ size: Number.NaN })), /params/);
+    expect(log.lastSeq).toBe(0);
+  });
+
+  it('a transaction refuses a bad operation and stays open and unchanged', () => {
+    const { doc, log, dispatcher } = anOpsSession({ features: [aFeature({ id: 'b' })] });
+    const tx = dispatcher.begin('Edit');
+    expectRejected(
+      doc,
+      () => {
+        tx.apply(setParams({ size: undefined }));
+      },
+      /params/,
+    );
+    expectRejected(
+      doc,
+      () => {
+        tx.applyTransient(setParams({ size: Number.NaN }));
+      },
+      /params/,
+    );
+    expect(dispatcher.inTransaction).toBe(true);
+    expect(tx.commit()).toBeNull();
+    expect(log.lastSeq).toBe(0);
+  });
+
+  it('undo of an entry whose inverse is not plain JSON throws and appends nothing', () => {
+    const doc = aDocument({ features: [aFeature({ id: 'b', name: 'B' })] });
+    const entry: LogEntry = {
+      seq: 1,
+      kind: 'do',
+      op: rename('b', 'B'),
+      inverse: setParams({ size: Number.NaN }),
+      label: 'Broken',
+      time: 0,
+    };
+    const log = createOperationLog([entry]);
+    const dispatcher = createOperationDispatcher({ doc, handlers, log });
+    const undo = createUndoManager({ dispatcher, log });
+    expectRejected(
+      doc,
+      () => {
+        undo.undo();
+      },
+      /params/,
+    );
+    expect(log.lastSeq).toBe(1);
+    expect(undo.stacks()).toEqual({ undo: [1], redo: [] });
+  });
+
+  it('replaying a log entry with a bad operation throws', () => {
+    const doc = aDocument({ features: [aFeature({ id: 'b' })] });
+    const entry: LogEntry = {
+      seq: 1,
+      kind: 'do',
+      op: setParams({ size: Number.POSITIVE_INFINITY }),
+      inverse: setParams({ size: 1 }),
+      label: 'Broken',
+      time: 0,
+    };
+    expectRejected(
+      doc,
+      () => {
+        replayLog(doc, handlers, [entry]);
+      },
+      /params/,
+    );
+  });
+
+  it.each([
+    ['a newer', 3],
+    // Upcast belongs to loading only: a write is always in the current version.
+    ['an older', 1],
+  ])('feature.setParams in %s version throws and changes nothing', (_, v) => {
+    const doc = setup(3);
+    const op: FeatureSetParamsOp = { ...setParams({ size: 7 }), v };
+    expectRejected(
+      doc,
+      () => applyOperation(doc, handlers, op),
+      new RegExp(`feature\\.setParams.*${String(v)}.*2`),
+    );
+  });
+
+  it('a batch with another version throws and applies none of its operations', () => {
+    const doc = setup(3);
+    const op: BatchOp = { type: 'batch', v: 2, ops: [rename('a', 'A1')] };
+    expectRejected(doc, () => applyOperation(doc, handlers, op), /batch.*2.*1/);
+  });
+
+  it('a sub-operation with another version reverts the batch', () => {
+    const doc = setup(3);
+    const before = toData(doc);
+    const stale: FeatureRenameOp = { type: 'feature.rename', v: 2, featureId: id('b'), name: 'X' };
+    expect(() => applyOperation(doc, handlers, batch(rename('a', 'A1'), stale))).toThrow(
+      /feature\.rename.*2.*1/,
+    );
+    expect(toData(doc)).toEqual(before);
+  });
+
+  it('a valid operation still passes', () => {
+    const doc = setup(3);
+    applyOperation(doc, handlers, setParams({ size: 7, list: [1, { x: -0 }], ref: null }));
+    expect(doc.feature(id('b'))?.params).toEqual({ size: 7, list: [1, { x: -0 }], ref: null });
   });
 });

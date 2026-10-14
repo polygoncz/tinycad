@@ -13,9 +13,9 @@ import { OP_VERSION } from '../operation';
 import {
   boolean,
   featureIdText,
+  jsonObject,
   nonEmptyString,
   object,
-  plainObject,
   string,
   validateShape,
   wholeNumber,
@@ -80,7 +80,7 @@ function addHandler(schemas: Schemas): OpHandler<FeatureAddOp> {
         typeVersion: wholeNumber(1),
         name: string,
         suppressed: boolean,
-        params: plainObject,
+        params: jsonObject,
       }),
       index: wholeNumber(0),
     }),
@@ -139,7 +139,7 @@ function setParamsHandler(schemas: Schemas): OpHandler<FeatureSetParamsOp> {
     validate: validateShape({
       featureId: nonEmptyString,
       typeVersion: wholeNumber(1),
-      params: plainObject,
+      params: jsonObject,
     }),
   };
 }

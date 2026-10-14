@@ -2,9 +2,10 @@ import fc from 'fast-check';
 import { describe, it, expect } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
 import { bodyId, toData } from '@/document';
-import type { BodyId, FeatureId } from '@/document';
+import type { BodyId, DocumentData, FeatureId } from '@/document';
 import { aDocument, aFeature } from '@/document/testing';
 import { replayLog } from './replay';
+import type { LogEntry } from './log';
 import { anOpsSession } from './testing';
 import type {
   BatchOp,
@@ -122,6 +123,21 @@ describe('replayLog (property)', () => {
         const { doc, handlers, log, dispatcher, undo } = anOpsSession({ meta: META });
         const ids = createSequentialIdGenerator('p');
 
+        // The state before and after every 'do' entry, by seq. Undo must give back the state
+        // before its target and redo the state after it: replay alone cannot catch a wrong
+        // inverse, because it replays that very inverse (revision, domain).
+        const before = new Map<number, DocumentData>();
+        const after = new Map<number, DocumentData>();
+        const record = (entry: LogEntry | null, start: DocumentData): void => {
+          if (entry === null) return;
+          before.set(entry.seq, start);
+          after.set(entry.seq, toData(doc));
+        };
+        const dispatch = (op: Operation): void => {
+          const start = toData(doc);
+          record(dispatcher.dispatch(op), start);
+        };
+
         const featureAt = (i: number): FeatureId | undefined => {
           const fs = doc.studio.features;
           return fs[i % Math.max(fs.length, 1)]?.id;
@@ -179,12 +195,20 @@ describe('replayLog (property)', () => {
 
         for (const s of steps) {
           switch (s.k) {
-            case 'undo':
-              if (undo.canUndo()) undo.undo();
+            case 'undo': {
+              const target = undo.stacks().undo.at(-1);
+              if (target === undefined) break;
+              undo.undo();
+              expect(toData(doc)).toEqual(before.get(target));
               break;
-            case 'redo':
-              if (undo.canRedo()) undo.redo();
+            }
+            case 'redo': {
+              const target = undo.stacks().redo.at(-1);
+              if (target === undefined) break;
+              undo.redo();
+              expect(toData(doc)).toEqual(after.get(target));
               break;
+            }
             case 'batch': {
               // Order-independent ops on existing features, plus optionally one add at the end.
               const ops: Operation[] = [];
@@ -215,22 +239,23 @@ describe('replayLog (property)', () => {
                 });
               }
               const batch: BatchOp = { type: 'batch', v: 1, ops };
-              dispatcher.dispatch(batch);
+              dispatch(batch);
               break;
             }
             case 'tx': {
+              const start = toData(doc);
               const tx = dispatcher.begin('tx');
               for (const sub of s.steps) {
                 const op = toOp(sub);
                 if (op !== null) tx.apply(op);
               }
-              if (s.commit) tx.commit();
+              if (s.commit) record(tx.commit(), start);
               else tx.abort();
               break;
             }
             default: {
               const op = toOp(s);
-              if (op !== null) dispatcher.dispatch(op);
+              if (op !== null) dispatch(op);
             }
           }
         }

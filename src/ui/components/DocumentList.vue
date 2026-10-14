@@ -4,14 +4,19 @@
 // hash (#/d/<id>), App.vue does the rest. Deleting a document open in another tab is refused by
 // app (its lock) and the error is shown here. The header has the same switches of language and
 // theme as the TitleBar. M15: import of a document file (R126) – a hidden file input, the text
-// goes through importDocumentText; a stored file opens like a new document.
-import { onMounted, ref, shallowRef, useTemplateRef } from 'vue';
+// goes through importDocumentText; a stored file opens like a new document. M19.1 (revize U3,
+// U11): the list that fails to load shows its error and Try again instead of an endless
+// "Loading…" (loadDocumentList); the delete button stays in the tab order (hidden by opacity
+// only); one date formatter for the whole list.
+import { computed, onMounted, ref, shallowRef, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { createNewDocument, deleteDocument, importDocumentFile, listDocuments } from '@/app';
 import type { DocumentInfo, OpenAppSessionOptions } from '@/app';
 import type { DocumentId } from '@/document';
 import { importDocumentText } from '../document-import';
 import type { ImportOutcome } from '../document-import';
+import { loadDocumentList, updatedFormatter } from '../document-list';
+import type { DocumentListState } from '../document-list';
 import { docHash } from '../route';
 import ThemeLocaleToggles from './ThemeLocaleToggles.vue';
 
@@ -20,20 +25,25 @@ const props = defineProps<{ plugins: OpenAppSessionOptions['plugins'] }>();
 
 const { t, locale } = useI18n();
 
-// null while loading; a frozen list from app, never deep-reactive.
-const documents = shallowRef<readonly DocumentInfo[] | null>(null);
+// A frozen state with the frozen list from app, never deep-reactive.
+const list = shallowRef<DocumentListState>({ kind: 'loading' });
+const updatedText = computed(() => updatedFormatter(locale.value));
+// The error of an action (create, delete, import); a failed load is a state of the list.
 const error = ref<string | null>(null);
 // The technical detail of a failed import (its first issue), in the tooltip of the error.
 const errorDetail = ref<string | null>(null);
 const busy = ref(false);
 const fileInput = useTemplateRef<HTMLInputElement>('fileInput');
 
+/** Loads the list again; the cards stay until the new list is there (after a delete). */
 async function load(): Promise<void> {
-  try {
-    documents.value = await listDocuments();
-  } catch (e) {
-    error.value = t('documents.error.list', { error: errorText(e) });
-  }
+  list.value = await loadDocumentList(listDocuments);
+}
+
+/** Try again after a failed load: "Loading…" until it settles. */
+function retry(): void {
+  list.value = { kind: 'loading' };
+  void load();
 }
 
 function open(id: DocumentId): void {
@@ -101,12 +111,6 @@ function clearError(): void {
   errorDetail.value = null;
 }
 
-function updatedText(info: DocumentInfo): string {
-  return new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(
-    info.updatedAt,
-  );
-}
-
 function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
@@ -142,15 +146,19 @@ onMounted(() => {
       {{ error }}
     </p>
 
-    <p v-if="documents === null" class="empty">{{ t('documents.loading') }}</p>
-    <p v-else-if="documents.length === 0" class="empty">{{ t('documents.empty') }}</p>
+    <p v-if="list.kind === 'loading'" class="empty">{{ t('documents.loading') }}</p>
+    <div v-else-if="list.kind === 'failed'" class="load-failed" role="alert">
+      <p class="error">{{ t('documents.error.list', { error: list.error }) }}</p>
+      <button type="button" class="retry" @click="retry">{{ t('documents.retry') }}</button>
+    </div>
+    <p v-else-if="list.documents.length === 0" class="empty">{{ t('documents.empty') }}</p>
     <div v-else class="cards">
-      <article v-for="info in documents" :key="info.meta.id" class="card">
+      <article v-for="info in list.documents" :key="info.meta.id" class="card">
         <button type="button" class="open" @click="open(info.meta.id)">
           <span class="preview"><i class="ti ti-box" aria-hidden="true" /></span>
           <span class="meta">
             <span class="name">{{ info.meta.name }}</span>
-            <span class="date">{{ updatedText(info) }}</span>
+            <span class="date">{{ updatedText(info.updatedAt) }}</span>
           </span>
         </button>
         <button
@@ -297,11 +305,13 @@ onMounted(() => {
   color: var(--text-secondary);
   font-size: var(--font-size-small);
 }
+/* Hidden by opacity, not display: none, so it stays in the tab order and on touch screens. */
 .delete {
   position: absolute;
   top: 6px;
   right: 6px;
-  display: none;
+  display: inline-flex;
+  opacity: 0;
   padding: 3px;
   border: none;
   border-radius: var(--radius-row);
@@ -310,7 +320,35 @@ onMounted(() => {
   font-size: 16px;
 }
 .card:hover .delete,
+.card:focus-within .delete,
 .delete:focus-visible {
-  display: inline-flex;
+  opacity: 1;
+}
+/* Without hover (touch) the button is always there. */
+@media (hover: none) {
+  .delete {
+    opacity: 1;
+  }
+}
+.load-failed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 24px 0;
+  text-align: center;
+}
+.load-failed .error {
+  margin: 0;
+}
+.retry {
+  height: var(--field-height);
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--control-hover);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 500;
 }
 </style>

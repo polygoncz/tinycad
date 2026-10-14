@@ -45,7 +45,7 @@ Typů je záměrně málo a jsou malé: log žije navždy, každá změna tvaru 
 |---|---|---|---|
 | `feature.add` | `feature: FeatureInstance, index: number` | `feature.remove { featureId: feature.id }` | `insertFeature` |
 | `feature.remove` | `featureId` | `feature.add` s aktuální instancí a jejím indexem | `removeFeature` |
-| `feature.setParams` (`v: 2`) | `featureId, typeVersion: number, params: unknown` (celé nové parametry a verze schématu, se kterou vznikly) | `feature.setParams` s aktuálními `typeVersion` a parametry | `replaceFeature({ ...f, typeVersion, params })` po migraci |
+| `feature.setParams` (`v: 2`) | `featureId, typeVersion: number, params` (čistý JSON objekt; celé nové parametry a verze schématu, se kterou vznikly) | `feature.setParams` s aktuálními `typeVersion` a parametry | `replaceFeature({ ...f, typeVersion, params })` po migraci |
 | `feature.rename` | `featureId, name: string` | `feature.rename` s aktuálním jménem | `replaceFeature({ ...f, name })` |
 | `feature.suppress` | `featureId, suppressed: boolean` | `feature.suppress` s aktuální hodnotou | `replaceFeature({ ...f, suppressed })` |
 | `feature.move` | `featureId, toIndex: number` | `feature.move` na aktuální index | `moveFeature` |
@@ -79,7 +79,7 @@ export interface OpHandler<O extends Operation = Operation> {
   merge?(prev: O, next: O): O | null;
   /** Převod starší verze operace na aktuální při načítání logu. */
   upcast?(fromVersion: number, raw: unknown): O;
-  /** Kontrola tvaru payloadu operace aktuální verze při načítání (obálka už je ověřená). Prázdné pole = v pořádku. */
+  /** Kontrola tvaru payloadu operace aktuální verze při načítání i před každým apply (M19.1). Prázdné pole = v pořádku. */
   validate?(raw: Readonly<Record<string, unknown>>): readonly OperationLoadError[];
 }
 
@@ -91,6 +91,12 @@ export function createOpHandlerRegistry(deps: { schemas: RegistryReader<FeatureS
 Kontrakt handleru:
 - `invert` na neexistující featuru (`featureId` není v dokumentu) **vyhodí** – je to chyba volajícího. Protože `invert` běží před `apply`, dokument zůstane beze změny.
 - `apply` kontroly invariantů nedělá sám, nechává je na mutátorech dokumentu ([[03-dokument|spec 03]]), které při porušení vyhodí a nic nezmění.
+- **Validace při zápisu** ([[M19.1-opravy-z-revize|M19.1]], D1, [[Parse, don't validate]]). Co by načtení odmítlo, se nesmí zapsat, jinak by log obsahoval záznam, který nikdo nepřečte, a dokument by nešel otevřít (revize C5). `applyOperation` proto před `invert` zkontroluje:
+  - `op.v === handler.version`, u dávky `v` dávky; upcast patří jen k načítání;
+  - `handler.validate(op)`.
+
+  Při chybě vyhodí `Error` (`Invalid operation '<type>': …` se všemi chybami) a dokument se nezmění. Platí to pro dispatch, transakce, undo/redo, přehrání logu i podoperace dávky.
+  - `params` v `feature.add` a `feature.setParams` musí být **čistý JSON objekt** (`isJsonObject` z [[03-dokument|document]]: konečná čísla, řetězce, booleany, `null`, pole bez děr a prosté objekty; žádné `undefined`, `NaN`, `Date`). Je to stejná kontrola, kterou dělá `fromData`.
 - Inverze má `v` rovné aktuální verzi **handleru svého typu** (inverze `feature.add` je `feature.remove` ve verzi handleru `feature.remove`). Verze každého typu operace je proto jedna konstanta, kterou sdílí handler i každý, kdo operaci toho typu vytváří. Vestavěné verze jsou v `OP_VERSION` (objekt `typ → verze`), který `ops/index.ts` exportuje pro tvůrce operací mimo `ops` (`interaction`, dev stránky); vlastní operace pluginu (M12) mají verzi u svého handleru.
 - Handler se o [[Rollback bar|rollback bar]] nestará – viz [[#Dávka a rollback bar]].
 - `merge(prev, next)` vrací operaci `m`, pro kterou platí: aplikace `m` na stav před `prev` = aplikace `prev` a pak `next`, a `prev`ova inverze z `m` vrátí stav před `prev`. Jinak vrací `null`. V M3 ho má jen `feature.setParams`: stejné `featureId` → `next`, jinak `null`.

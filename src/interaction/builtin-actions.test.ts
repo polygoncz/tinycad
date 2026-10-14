@@ -5,6 +5,7 @@ import type { BodyId, FeatureId, FeatureInstance, FeatureSchema, ParamSchema } f
 import { aFeature } from '@/document/testing';
 import type { DocumentOptions } from '@/document/testing';
 import { anOpsSession } from '@/ops/testing';
+import { SKETCH_FEATURE_TYPE } from '@/sketch';
 import { createActionRegistry } from './actions';
 import type { ActionState } from './actions';
 import { ACTION_IDS, createBuiltInActions, toolActionId } from './builtin-actions';
@@ -97,6 +98,8 @@ function setup(
     confirm?: (r: ConfirmRequest) => boolean;
     /** With a mode: the sketch tools are registered too and everything follows the mode. */
     mode?: ObservableValue<Mode>;
+    /** The sketcher of the feature tree (M12). */
+    sketchEdit?: (id: FeatureId) => void;
   } = {},
 ) {
   const ops = anOpsSession(opts.init);
@@ -117,6 +120,7 @@ function setup(
     editor,
     selection,
     locked,
+    ...(opts.sketchEdit === undefined ? {} : { sketchEdit: opts.sketchEdit }),
   });
   const toolRegistry = createToolRegistry();
   for (const tool of [SELECT_TOOL, LINE_TOOL, PLANE_TOOL]) toolRegistry.register(tool);
@@ -142,7 +146,6 @@ function setup(
     undo,
     selection,
     featureTree,
-    editor,
     tools,
     toolList: toolRegistry.all(),
     locked,
@@ -463,6 +466,25 @@ describe('built-in actions – edit and rename', () => {
     expect(s.editor.current.get()?.featureId).toBe(a);
     // The dialog holds a transaction: no second edit.
     expect(s.enabled('feature.edit')).toBe(false);
+  });
+
+  it('edit opens a sketch in the sketcher and a box in the feature dialog', () => {
+    const sketch = aFeature({ id: 's', type: SKETCH_FEATURE_TYPE, params: {} });
+    const sketched: FeatureId[] = [];
+    const s = setup({
+      init: { features: [aBox('a'), sketch] },
+      sketchEdit: (id) => sketched.push(id),
+    });
+
+    s.select(fid('s'));
+    expect(s.registry.run('feature.edit')).toBe(true);
+    expect(sketched).toEqual(['s']);
+    expect(s.editor.current.get()).toBeNull();
+
+    s.select(fid('a'));
+    expect(s.registry.run('feature.edit')).toBe(true);
+    expect(s.editor.current.get()?.featureId).toBe('a');
+    expect(sketched).toEqual(['s']);
   });
 
   it('edit is disabled with more than one or no selected feature', () => {

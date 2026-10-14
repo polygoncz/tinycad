@@ -186,9 +186,10 @@ function regionRefOf(item: unknown): SketchRegionRef | null {
 
 /**
  * One topo reference of the right shape as a frozen copy, otherwise null: the reading of document
- * (readRefOf), so a stored name becomes a TopoName in one place (spec 03).
+ * (readRefOf), so a stored name becomes a TopoName in one place (spec 03). Also read item by item
+ * for the chips of the dialog (FieldState.refs, D5 of M19.1).
  */
-function topoRefOf(item: unknown): TopoRef | null {
+export function topoRefOf(item: unknown): TopoRef | null {
   return readRefOf(['topo'], item) ?? null;
 }
 

@@ -1,6 +1,6 @@
 // Ring 3 – OpenCascade (WASM, worker) adapter of GeometryKernel. Imported only by app.
 import { createRpcClient } from '@/core';
-import type { Disposable } from '@/core';
+import type { Disposable, Unsubscribe } from '@/core';
 import type { GeometryKernel } from '@/kernel';
 import { createOcctKernelClient, endOnFatal } from './client';
 import type { OcctKernelProtocol } from './protocol';
@@ -13,9 +13,13 @@ import type { OcctKernelProtocol } from './protocol';
  *   'disconnected'.
  * Later, a crashed worker or an undecodable message fails all pending and later calls with
  * 'disconnected' (Q037). So does a WASM trap the worker reports ('OCCT crashed: …', Q055),
- * and the worker is terminated. dispose() does the same and terminates the worker.
+ * and the worker is terminated. Each of these tells onDisconnected once (the RPC client's, M19.1),
+ * so the owner learns of the crash even when no call is under way. dispose() fails the calls the
+ * same way, tells nobody and terminates the worker.
  */
-export async function createOcctKernel(): Promise<GeometryKernel & Disposable> {
+export async function createOcctKernel(): Promise<
+  GeometryKernel & Disposable & { onDisconnected(listener: (error: Error) => void): Unsubscribe }
+> {
   const worker = new Worker(new URL('./occt.worker.ts', import.meta.url), { type: 'module' });
   const rpc = createRpcClient<OcctKernelProtocol>(worker);
   worker.onerror = (e) => {
@@ -38,7 +42,7 @@ export async function createOcctKernel(): Promise<GeometryKernel & Disposable> {
     dispose();
     throw e;
   }
-  // Only the port and dispose go out: `ready` belongs to the start-up.
+  // Only the port, dispose and onDisconnected go out: `ready` belongs to the start-up.
   return {
     makeBox: (p) => client.makeBox(p),
     makeCylinder: (p) => client.makeCylinder(p),
@@ -55,6 +59,7 @@ export async function createOcctKernel(): Promise<GeometryKernel & Disposable> {
     topology: (shape) => client.topology(shape),
     release: (handles) => client.release(handles),
     liveHandleCount: () => client.liveHandleCount(),
+    onDisconnected: (listener) => rpc.onDisconnected(listener),
     dispose,
   };
 }

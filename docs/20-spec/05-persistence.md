@@ -117,7 +117,7 @@ export function snapshotSeqsToKeep(atSeqs: readonly number[]): readonly number[]
 - `deleteDocument` smaže dokument, jeho záznamy i snapshoty v jedné transakci.
 - Kontrolu kontraktu dělá každá metoda **před** zápisem: odmítnutá metoda nezmění nic.
 - Promazání snapshotů přes port vidět nejde (`load` vrací jen nejnovější a základní). Kontraktová sada ověří jen to, že základní zůstane. Pravidlo „3 nejvyšší“ testuje `snapshotSeqsToKeep` a adaptér IDB přímým čtením databáze.
-- **Izolace dat:** store nikdy nevrací objekt, který dostal, ani objekt, který vrátil dřív. Pozdější změna vstupu ani výstupu se uloženého stavu nedotkne. IndexedDB to dělá structured clone. `MemoryDocumentStore` kopíruje přes `JSON.parse(JSON.stringify(x))`: je to přísnější než structured clone a odhalí data, která nejsou čisté JSON.
+- **Izolace dat:** store nikdy nevrací objekt, který dostal, ani objekt, který vrátil dřív. Pozdější změna vstupu ani výstupu se uloženého stavu nedotkne. IndexedDB to dělá structured clone. `MemoryDocumentStore` kopíruje přes `JSON.parse(JSON.stringify(x))` a výsledek porovná s originálem. Data, která se kopií změní (`NaN` → `null`, zmizelé `undefined`), volání odmítne obyčejnou chybou dřív, než se cokoli zapíše ([[M19.1-opravy-z-revize|M19.1]]). Dřív je kopie potichu „opravila“ a testy pak procházely nad daty, která skutečný dokument nenačte.
 - Store čas nezná sám: dostane `now: () => number` v továrně.
 
 Implementace:
@@ -164,12 +164,14 @@ Databáze `tinycad`, verze 1, object stores:
 ## Služba na hlavním vlákně
 
 ```ts
-export type PersistenceStatus = 'saved' | 'pending' | 'error';
+export type PersistenceStatus = 'saved' | 'pending' | 'error' | 'failed';  // 'failed': trvalá chyba storu (M19.1)
 
 export interface PersistenceService extends Disposable {
   /** Zapíše frontu. Volání během běžícího flush počká a pak zapíše, co zbylo. Při chybě odmítne. */
   flush(): Promise<void>;
   readonly status: PersistenceStatus;
+  /** Text poslední chyby; null právě mimo 'error' a 'failed' (M19.1). */
+  readonly lastError: Observable<string | null>;
   readonly events: Subscribable<{ status: { status: PersistenceStatus; error?: unknown } }>;
 }
 
@@ -195,7 +197,8 @@ export function createPersistenceService(deps: {
 - `flush()`: zapíše dávku záznamů (`appendEntries`) a **teprve po jejím úspěchu** snapshoty s `atSeq ≤` poslednímu zapsanému `seq`. Úspěšně zapsané položky odebere z fronty.
 - Stav: `saved`, když je fronta prázdná a nic neběží. `pending`, když je co ukládat. `error` po neúspěšném zápisu. Událost `status` jen při změně (u `error` s chybou).
 - **Chyba zápisu:** fronta se nezahodí, `status: 'error'`, naplánuje se nový pokus za `retryMs`. Nový záznam naplánuje flush jako obvykle. Flush spuštěný časovačem chybu nehlásí odmítnutím (nikdo na něj nečeká), hlásí ji stavem.
-- **Stav `error` je lepivý:** nový záznam ho nepřepne na `pending`. Zůstává, dokud se zápis nepovede, aby uživatel dál viděl, že ukládání selhává. Opakovaná chyba novou událost nevyšle (stav se nemění). Pokud bude UI chtít ukázat poslední chybu, přibude vlastnost `lastError` (M10).
+- **Stav `error` je lepivý:** nový záznam ho nepřepne na `pending`. Zůstává, dokud se zápis nepovede, aby uživatel dál viděl, že ukládání selhává. Opakovaná chyba novou událost nevyšle (stav se nemění). Poslední chybu nese `lastError: Observable<string | null>` (od [[M19.1-opravy-z-revize|M19.1]]): text `Error.message`, není `null` právě ve stavech `'error'` a `'failed'`. Při chybě se nastaví nejdřív text, pak stav. Po úspěchu nejdřív stav, pak `null`.
+- **Trvalá chyba** ([[M19.1-opravy-z-revize|M19.1]], D4): chyba zápisu s kódem storu (`storeErrorCode(e) !== undefined`: `not-found`, `invalid`, `seq-gap`, `snapshot-ahead`) se neopakuje. Stav je `'failed'` až do konce služby, fronta i snapshot se zahodí a nové záznamy se už neřadí, protože by je nic nezapsalo. `flush()` pak hned odmítne s původní chybou a store nevolá. Ostatní chyby (I/O) se opakují jako dosud (`'error'`). Dřív se trvalá chyba opakovala každých 5 s navždy a export čekal na flush, takže selhal přesně tehdy, když bylo úložiště rozbité. Export pak stáhne živý dokument bez historie ([[11-ui#Kompoziční kořen (app)]]). `close()` po `'failed'` odmítne chybou storu.
 - **Snapshot a selhání:** snapshot, jehož záznamy se nepodařilo zapsat, čeká ve frontě. Novější snapshot ho nahradí. Když záznamy projdou a selže jen `saveSnapshot`, záznamy se z fronty odeberou a další flush uloží jen snapshot.
 - Zápis bere dávku až ve chvíli, kdy opravdu začíná. Záznam přidaný hned po zavolání `flush()` se do ní ještě dostane.
 - Na `pagehide` a `visibilitychange` (hidden) volá `flush()` **`app`**, ne služba ([[Q034 Uložení při zavírání stránky|Q034]]).

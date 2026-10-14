@@ -3,12 +3,13 @@
 // bottom. Only bindings and layout (rule 4): the rows, the bar and the step actions come from
 // the session, every change goes back through featureTree or actions. On the right the state
 // of the regeneration, the body count and the selection (replaces a status bar).
-import { computed, ref, useTemplateRef } from 'vue';
+import { computed, onUnmounted, ref, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FeatureId } from '@/document';
 import type { ActionState } from '@/interaction';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
+import { rollbackIndexAt } from '../rollback-bar';
 import ContextMenu from './ContextMenu.vue';
 import TimelineItem from './TimelineItem.vue';
 
@@ -21,7 +22,8 @@ const rollbackIndex = useObservable(featureTree.rollbackIndex);
 const actionStates = useObservable(actions.actions);
 const regen = useObservable(session.regen);
 const selection = useObservable(session.selection.items);
-// Read-only or the feature dialog is open (spec 10, "Vestavěné akce"): the bar does not move.
+// Read-only or the feature dialog is open (spec 10, "Vestavěné akce"): the bar is drawn disabled.
+// The commands guard the lock themselves (FeatureTreeModel), the view only binds it.
 const locked = useObservable(session.locked);
 const renamingId = useObservable(featureTree.renaming);
 
@@ -63,48 +65,62 @@ function runMenuItem(actionId: string): void {
   actions.run(actionId);
 }
 
-function rename(id: FeatureId, name: string): void {
-  if (locked.value) featureTree.cancelRename();
-  else featureTree.rename(id, name);
-}
-
-// Dragging the rollback marker: only the position under the pointer is local view state;
-// the bar moves in the document once, on release.
+// Dragging the rollback marker (revision C2). The bar is one element for the whole drag, placed
+// among the features by the flex order: re-creating it at every index dropped its pointer
+// capture, so a drag over two features got stuck after one step. Move, up and cancel are heard on
+// the window from the press until the release. Only the index under the pointer is local view
+// state; the bar moves in the document once, on release.
 const itemsEl = useTemplateRef<HTMLElement>('items');
+const barEl = useTemplateRef<HTMLElement>('bar');
 const dragIndex = ref<number | null>(null);
 const barIndex = computed(() => dragIndex.value ?? rollbackIndex.value);
+/** Removes the window listeners of the drag in progress; null when there is no drag. */
+let stopDrag: (() => void) | null = null;
 
-/** Number of features whose centre is left of `clientX` = bar index under the pointer. */
+/** The bar index under the pointer, from the boxes of the features (the items but the bar). */
 function indexAt(clientX: number): number {
-  const items = itemsEl.value?.querySelectorAll('.timeline-item') ?? [];
-  let index = 0;
-  for (const item of items) {
-    const box = item.getBoundingClientRect();
-    if (clientX > box.left + box.width / 2) index++;
-  }
-  return index;
+  const boxes = Array.from(itemsEl.value?.children ?? [])
+    .filter((el) => el !== barEl.value)
+    .map((el) => el.getBoundingClientRect());
+  return rollbackIndexAt(clientX, boxes);
 }
 
 function onBarDown(e: PointerEvent): void {
-  if (locked.value || e.button !== 0) return;
-  if (e.currentTarget instanceof Element) e.currentTarget.setPointerCapture(e.pointerId);
+  if (e.button !== 0 || stopDrag !== null) return;
+  const { pointerId } = e;
+  const onMove = (ev: PointerEvent): void => {
+    if (ev.pointerId === pointerId) dragIndex.value = indexAt(ev.clientX);
+  };
+  const onUp = (ev: PointerEvent): void => {
+    if (ev.pointerId !== pointerId) return;
+    const target = dragIndex.value;
+    endDrag();
+    if (target !== null && target !== rollbackIndex.value) featureTree.moveRollbackBar(target);
+  };
+  const onCancel = (ev: PointerEvent): void => {
+    if (ev.pointerId === pointerId) endDrag();
+  };
+  globalThis.addEventListener('pointermove', onMove);
+  globalThis.addEventListener('pointerup', onUp);
+  globalThis.addEventListener('pointercancel', onCancel);
+  stopDrag = () => {
+    globalThis.removeEventListener('pointermove', onMove);
+    globalThis.removeEventListener('pointerup', onUp);
+    globalThis.removeEventListener('pointercancel', onCancel);
+  };
+  // The capture keeps the moves and the release coming while the pointer is outside the window.
+  barEl.value?.setPointerCapture(pointerId);
   dragIndex.value = rollbackIndex.value;
 }
 
-function onBarMove(e: PointerEvent): void {
-  if (dragIndex.value === null) return;
-  dragIndex.value = indexAt(e.clientX);
-}
-
-function onBarUp(): void {
-  const target = dragIndex.value;
-  dragIndex.value = null;
-  if (target !== null && target !== rollbackIndex.value) featureTree.moveRollbackBar(target);
-}
-
-function onBarCancel(): void {
+/** Ends the drag without moving the bar in the document: it is back at the rollback index. */
+function endDrag(): void {
+  stopDrag?.();
+  stopDrag = null;
   dragIndex.value = null;
 }
+
+onUnmounted(endDrag);
 </script>
 
 <template>
@@ -123,36 +139,25 @@ function onBarCancel(): void {
     <div class="separator" />
 
     <div ref="items" class="items">
-      <template v-for="(row, i) in rows" :key="row.id">
-        <div
-          v-if="i === barIndex"
-          class="bar"
-          :class="{ dragging: dragIndex !== null, locked }"
-          :title="t('timeline.rollbackBar')"
-          @pointerdown="onBarDown"
-          @pointermove="onBarMove"
-          @pointerup="onBarUp"
-          @pointercancel="onBarCancel"
-        />
-        <TimelineItem
-          :row="row"
-          :renaming="renamingId === row.id"
-          @select="select(row.id, $event)"
-          @edit="featureTree.edit(row.id)"
-          @menu="openMenu(row.id, $event)"
-          @rename="rename(row.id, $event)"
-          @cancel-rename="featureTree.cancelRename()"
-        />
-      </template>
       <div
-        v-if="barIndex >= rows.length"
+        ref="bar"
         class="bar"
         :class="{ dragging: dragIndex !== null, locked }"
+        :style="{ order: 2 * barIndex }"
         :title="t('timeline.rollbackBar')"
         @pointerdown="onBarDown"
-        @pointermove="onBarMove"
-        @pointerup="onBarUp"
-        @pointercancel="onBarCancel"
+      />
+      <TimelineItem
+        v-for="(row, i) in rows"
+        :key="row.id"
+        :style="{ order: 2 * i + 1 }"
+        :row="row"
+        :renaming="renamingId === row.id"
+        @select="select(row.id, $event)"
+        @edit="featureTree.edit(row.id)"
+        @menu="openMenu(row.id, $event)"
+        @rename="featureTree.rename(row.id, $event)"
+        @cancel-rename="featureTree.cancelRename()"
       />
     </div>
 
@@ -260,8 +265,9 @@ function onBarCancel(): void {
 .bar.dragging {
   opacity: 0.7;
 }
+/* Disabled while locked: the drag does not even start (FeatureTreeModel would ignore it). */
 .bar.locked {
-  cursor: default;
+  pointer-events: none;
 }
 .status {
   display: flex;

@@ -25,8 +25,15 @@ const ISSUE_CODES = [
 ];
 
 // Keys the domain and interaction hand to ui (ADR 0014): transaction label, body row name,
-// label of the select tool (SELECT_TOOL.label).
-const DOMAIN_KEYS = ['feature.edit', 'browser.body', 'tool.select'];
+// label of the select tool (SELECT_TOOL.label), the ordinal texts of topo chips (D5 of M19.1).
+const DOMAIN_KEYS = [
+  'feature.edit',
+  'browser.body',
+  'tool.select',
+  'ref.edge',
+  'ref.face',
+  'ref.vertex',
+];
 
 // Labels of the built-in actions of app (M10, Ú7b) and the UI-only rename item of the menu.
 const ACTION_KEYS = [

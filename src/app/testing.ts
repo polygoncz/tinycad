@@ -2,7 +2,7 @@
 // records the kernels it made and a download port that captures the files (M15). dependency-cruiser allows importing it only from *.test.ts.
 
 import { Emitter, RpcError } from '@/core';
-import type { Disposable, Subscribable, Unsubscribe, Vec3 } from '@/core';
+import type { Subscribable, Unsubscribe, Vec3 } from '@/core';
 import type { BodyId } from '@/document';
 import type {
   HandleView,
@@ -21,12 +21,13 @@ import type {
   ViewportEvents,
 } from '@/interaction';
 import { FakeViewport } from '@/interaction/testing';
-import type { GeometryKernel, MeshOps, ShapeHandle } from '@/kernel';
+import type { MeshOps, ShapeHandle } from '@/kernel';
 import { createFakeKernel } from '@/kernel/testing';
 import type { FakeKernel } from '@/kernel/testing';
 import type { OrbitMode, ScenePalette, StandardView, ViewCubeLabels } from '@/render';
 import type { DocumentLocks } from './doc-lock';
 import type { DownloadFile } from './file-exporter';
+import type { SupervisedKernel } from './kernel-supervisor';
 import type { AppViewport } from './session';
 
 type SyncedBody = { readonly id: BodyId; readonly shape: ShapeHandle };
@@ -36,8 +37,10 @@ type Ray = ReturnType<FakeViewport['screenToRay']>;
  * An AppViewport for tests: the ViewportPort part of FakeViewport plus recorded mount, body
  * syncs, kernel resets, camera calls (views and view directions), palettes, body visibility,
  * body colours (M15), view cube labels (M17), rotation modes (M17.1) and manipulator views
- * (M18), a prepared projection (M19); emitOrbitModeToggle
- * plays a click on the rotation mode button, emitViewChanged a move of the view (M19). sync resolves at once.
+ * (M18), a prepared projection (M19); emitOrbitModeToggle plays a click on the rotation mode
+ * button, emitViewChanged a move of the view (M19). sync settles at once, or while held only on
+ * releaseSyncs (M19.1); like BodyLayer, a newer sync or a reset makes a held sync stale, so it
+ * settles without showing its bodies (spec 09).
  * It wraps a FakeViewport instead of extending it: a class of another module is no base
  * class (ADR 0011), so its members are passed on one by one.
  */
@@ -70,14 +73,30 @@ export class FakeAppViewport implements AppViewport {
   /** Mode of every setOrbitMode call, oldest first (M17.1). */
   readonly orbitModes: OrbitMode[] = [];
   private readonly orbitModeToggles = new Emitter<{ toggle: undefined }>();
+  /** Bodies of the last sync that settled current, [] after a reset (M19.1). */
+  private shownBodies: readonly SyncedBody[] = [];
+  /** Syncs waiting for releaseSyncs (M19.1); at most one, a newer sync makes the held one stale. */
+  private readonly held: { readonly bodies: readonly SyncedBody[]; readonly settle: () => void }[] =
+    [];
+  private holding = false;
 
   readonly bodies = {
     sync: (bodies: readonly SyncedBody[]): Promise<void> => {
-      this.syncs.push(bodies.map(({ id, shape }) => ({ id, shape })));
-      return Promise.resolve();
+      const copy = bodies.map(({ id, shape }) => ({ id, shape }));
+      this.syncs.push(copy);
+      this.dropHeld();
+      if (!this.holding) {
+        this.shownBodies = copy;
+        return Promise.resolve();
+      }
+      return new Promise((resolve) => {
+        this.held.push({ bodies: copy, settle: resolve });
+      });
     },
     reset: (meshes: MeshOps): void => {
       this.resets.push(meshes);
+      this.shownBodies = [];
+      this.dropHeld();
     },
   };
 
@@ -200,22 +219,68 @@ export class FakeAppViewport implements AppViewport {
   get lastSync(): readonly SyncedBody[] {
     return this.syncs[this.syncs.length - 1] ?? [];
   }
+
+  /** Bodies the view shows: those of the last sync that settled current (M19.1). */
+  get shown(): readonly SyncedBody[] {
+    return this.shownBodies;
+  }
+
+  /** Number of syncs held back now (M19.1). */
+  get heldSyncs(): number {
+    return this.held.length;
+  }
+
+  /** Every later sync stays pending until releaseSyncs, a newer sync or a reset (M19.1). */
+  holdSyncs(): void {
+    this.holding = true;
+  }
+
+  /** Settles the held sync and shows its bodies; later syncs settle at once again. */
+  releaseSyncs(): void {
+    this.holding = false;
+    for (const { bodies, settle } of this.held.splice(0)) {
+      this.shownBodies = bodies;
+      settle();
+    }
+  }
+
+  /** A newer sync or a reset makes the held syncs stale: they settle and show nothing. */
+  private dropHeld(): void {
+    for (const { settle } of this.held.splice(0)) settle();
+  }
 }
 
-/** A FakeKernel that can crash like a dead worker: every later call rejects 'disconnected'. */
-export interface CrashableKernel extends GeometryKernel, Disposable {
+/**
+ * A FakeKernel that can crash like a dead worker (a SupervisedKernel, M19.1): crash() rejects the
+ * calls under way and every later one with RpcError 'disconnected' and tells onDisconnected.
+ * Like RpcClient.onDisconnected: told once, never by dispose, a late listener at once.
+ */
+export interface CrashableKernel extends SupervisedKernel {
   readonly fake: FakeKernel;
-  /** From now on every call rejects with RpcError 'disconnected'. */
-  crash(): void;
+  /** The worker died: calls under way and later reject 'disconnected' with `message`. */
+  crash(message?: string): void;
   readonly disposed: boolean;
 }
 
 export function createCrashableKernel(): CrashableKernel {
   const fake = createFakeKernel();
-  let crashed = false;
+  let crashed: RpcError | null = null;
+  /** The crash onDisconnected told: not one that came after dispose. */
+  let told: RpcError | null = null;
   let disposed = false;
-  const guard = <T>(call: () => Promise<T>): Promise<T> =>
-    crashed ? Promise.reject(new RpcError('disconnected', 'Kernel crashed')) : call();
+  /** Rejects of the calls under way. */
+  const running = new Set<(error: RpcError) => void>();
+  const listeners = new Emitter<{ disconnected: RpcError }>();
+  const guard = <T>(call: () => Promise<T>): Promise<T> => {
+    if (crashed !== null) return Promise.reject(crashed);
+    return new Promise<T>((resolve, reject) => {
+      running.add(reject);
+      // After a crash the promise is rejected already, so the late result changes nothing.
+      call()
+        .then(resolve, reject)
+        .finally(() => running.delete(reject));
+    });
+  };
   return {
     fake,
     makeBox: (p) => guard(() => fake.makeBox(p)),
@@ -234,8 +299,23 @@ export function createCrashableKernel(): CrashableKernel {
     topology: (shape) => guard(() => fake.topology(shape)),
     release: (handles) => guard(() => fake.release(handles)),
     liveHandleCount: () => guard(() => fake.liveHandleCount()),
-    crash: () => {
-      crashed = true;
+    crash: (message = 'Kernel crashed') => {
+      if (crashed !== null) return;
+      const error = new RpcError('disconnected', message);
+      crashed = error;
+      const waiting = [...running];
+      running.clear();
+      for (const reject of waiting) reject(error);
+      if (disposed) return;
+      told = error;
+      listeners.emit('disconnected', error);
+    },
+    onDisconnected: (listener) => {
+      if (told !== null) {
+        listener(told);
+        return () => undefined;
+      }
+      return listeners.on('disconnected', listener);
     },
     dispose: () => {
       disposed = true;

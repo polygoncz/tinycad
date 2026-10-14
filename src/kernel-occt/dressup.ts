@@ -13,8 +13,9 @@ export type DressupKind = 'fillet' | 'chamfer';
  * The fillet (BRepFilletAPI_MakeFillet, radius `size`) or the symmetric chamfer
  * (BRepFilletAPI_MakeChamfer, distance `size`) of the edges `edges` of `entry`, stored through
  * `add` with the history of the algorithm (input 0 = `entry`). Every failure of the algorithm
- * – an OCCT exception from Build or Shape, not done, a result without a solid or not valid –
- * is 'operation-failed'; a WASM trap still passes unchanged (fatal, Q055).
+ * – an edge OCCT does not accept, an OCCT exception from Build or Shape, not done, a result
+ * without a solid or not valid – is 'operation-failed'; a WASM trap still passes unchanged
+ * (fatal, Q055).
  */
 export function dressupResult(
   oc: Occt,
@@ -35,6 +36,14 @@ export function dressupResult(
     }
     using edge = oc.TopoDS.Edge(sub);
     maker.Add(size, edge);
+    // Add is void and skips an edge it cannot use (the seam of a cylinder, M19.1): such an
+    // edge is in no contour. Without this check the result would lack it and still succeed.
+    if (maker.Contour(edge) === 0) {
+      throw createKernelError(
+        'operation-failed',
+        `${kind}: OCCT did not accept edge ${String(index)}`,
+      );
+    }
   }
   const result = built(oc, kind, maker);
   try {

@@ -1,5 +1,5 @@
 import type { TopoDS_Shape } from 'replicad-opencascadejs';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createKernelError, kernelErrorCode } from '@/kernel';
 import { loadOcct, mapSubShapes, occtExceptionText, toKernelError, type Occt } from './occt';
 import { aWasmTrap } from './testing';
@@ -30,6 +30,44 @@ function centre(shape: TopoDS_Shape): [number, number, number] {
 
 function release(shapes: readonly TopoDS_Shape[]): void {
   for (const s of shapes) s.delete();
+}
+
+const ZERO_DIR = 'gp_Dir() - input vector has zero norm';
+
+/**
+ * A caught OCCT exception (WebAssembly.Exception) that owns nothing else on the heap:
+ * gp_Dir of a zero vector throws Standard_ConstructionError before it allocates. A failing
+ * modelling operation would not do: OCCT itself leaves memory behind after it (Q054).
+ */
+function anOcctException(): unknown {
+  try {
+    new oc.gp_Dir(0, 0, 0).delete();
+  } catch (e) {
+    return e;
+  }
+  return expect.fail('Expected gp_Dir of a zero vector to throw');
+}
+
+/** Size of the block heapTop allocates. */
+const HEAP_PROBE = 256 * 1024;
+
+/**
+ * The top of the used WASM heap: the address of a fresh block of HEAP_PROBE bytes, freed at
+ * once. A block this big comes from the top of the heap, above every live allocation, so a
+ * leak of small blocks moves it up. The size of the memory (wasmMemory.buffer.byteLength) is
+ * no measure here: the module starts with 100 MB and the memory grows only after ~90 MB leak.
+ * malloc and free are exports of this build that its .d.ts does not declare.
+ */
+function heapTop(): number {
+  const malloc: unknown = Reflect.get(oc, '___libc_malloc');
+  const free: unknown = Reflect.get(oc, '___libc_free');
+  if (typeof malloc !== 'function' || typeof free !== 'function') {
+    throw new Error('The OCCT build does not export ___libc_malloc and ___libc_free');
+  }
+  const address: unknown = Reflect.apply(malloc, undefined, [HEAP_PROBE]);
+  if (typeof address !== 'number' || address === 0) throw new Error('malloc failed');
+  Reflect.apply(free, undefined, [address]);
+  return address >>> 0;
 }
 
 describe('loadOcct', () => {
@@ -177,5 +215,43 @@ describe('occtExceptionText (M14)', () => {
     expect(occtExceptionText(oc, aWasmTrap())).toBeUndefined();
     expect(occtExceptionText(oc, new Error('boom'))).toBeUndefined();
     expect(occtExceptionText(oc, createKernelError('internal', 'x'))).toBeUndefined();
+  });
+});
+
+describe('occtExceptionText releases the OCCT exception (M19.1, C8)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('decrements the refcount of the exception it reads, once', () => {
+    const caught = anOcctException();
+    const release = vi.spyOn(oc, 'decrementExceptionRefcount');
+    expect(occtExceptionText(oc, caught)).toBe('Standard_ConstructionError: ' + ZERO_DIR);
+    expect(release).toHaveBeenCalledExactlyOnceWith(caught);
+  });
+
+  it('releases nothing for a WASM trap or another error', () => {
+    const release = vi.spyOn(oc, 'decrementExceptionRefcount');
+    occtExceptionText(oc, aWasmTrap());
+    occtExceptionText(oc, new Error('boom'));
+    expect(release).not.toHaveBeenCalled();
+  });
+
+  it('toKernelError releases the exception it converts', () => {
+    const caught = anOcctException();
+    const release = vi.spyOn(oc, 'decrementExceptionRefcount');
+    expect(kernelErrorCode(toKernelError(oc, caught))).toBe('internal');
+    expect(release).toHaveBeenCalledExactlyOnceWith(caught);
+  });
+
+  it('a loop of OCCT exceptions converted by toKernelError does not grow the WASM heap', () => {
+    // Each C++ exception that reaches JS also leaks 32 B of the Emscripten stack (8 MB, so
+    // ~262 000 exceptions per module, Q055); the 22 000 here use less than a tenth of it.
+    const fail = () => toKernelError(oc, anOcctException());
+    for (let i = 0; i < 2_000; i++) fail();
+    const before = heapTop();
+    for (let i = 0; i < 20_000; i++) fail();
+    // Unreleased, the 20 000 exceptions move the top by ~2.8 MB (~140 B each).
+    expect(heapTop() - before).toBeLessThan(HEAP_PROBE);
   });
 });

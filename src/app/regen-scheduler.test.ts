@@ -1,25 +1,31 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createRegenScheduler } from './regen-scheduler';
 
-/** A run the test finishes by hand. */
+/** A run the test finishes or fails by hand. */
 function deferredRuns(): {
   run: () => Promise<void>;
   finish: () => Promise<void>;
+  fail: (error: unknown) => Promise<void>;
   count: () => number;
 } {
-  const pending: (() => void)[] = [];
+  const pending: { resolve: () => void; reject: (error: unknown) => void }[] = [];
   let count = 0;
+  /** Lets the scheduler see the settled run and start the next one. */
+  const settle = () => new Promise((r) => setTimeout(r, 0));
   return {
     run: () => {
       count++;
-      return new Promise<void>((resolve) => {
-        pending.push(resolve);
+      return new Promise<void>((resolve, reject) => {
+        pending.push({ resolve, reject });
       });
     },
     finish: async () => {
-      pending.shift()?.();
-      // Lets the scheduler see the finished run and start the next one.
-      await new Promise((r) => setTimeout(r, 0));
+      pending.shift()?.resolve();
+      await settle();
+    },
+    fail: async (error) => {
+      pending.shift()?.reject(error);
+      await settle();
     },
     count: () => count,
   };
@@ -74,6 +80,23 @@ describe('RegenScheduler', () => {
     scheduler.request();
     await new Promise((r) => setTimeout(r, 0));
     expect(count).toBe(2);
+  });
+
+  it('runs once more after a failed run, however many requests came during it', async () => {
+    const runs = deferredRuns();
+    const onError = vi.fn();
+    const scheduler = createRegenScheduler({ run: runs.run, onError });
+    scheduler.request();
+    scheduler.request();
+    scheduler.request();
+    await runs.fail(new Error('boom'));
+    expect(onError).toHaveBeenCalledExactlyOnceWith(new Error('boom'));
+    // The failure does not drop the requests made meanwhile: one catch-up run, still busy.
+    expect(runs.count()).toBe(2);
+    expect(scheduler.busy.get()).toBe(true);
+    await runs.finish();
+    expect(runs.count()).toBe(2);
+    expect(scheduler.busy.get()).toBe(false);
   });
 
   it('busy follows the runs', async () => {

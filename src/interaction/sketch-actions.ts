@@ -98,7 +98,8 @@ export function createSketchActions(deps: {
     label: SKETCH_ACTION_IDS.finish,
     group: SKETCH_GROUP,
     modes: SKETCH_ONLY,
-    enabled: whileOpen,
+    // Not while a command waits for the solver: Finish would drop its result (D8).
+    enabled: enabledWhen((state) => !state.busy),
     run: () => {
       session()?.finish();
     },

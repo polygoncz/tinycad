@@ -1,16 +1,20 @@
 <script setup lang="ts">
 // The title bar (spec 11, "Komponenty"): the way to the document list, the document name with a
-// dot for the save state (green saved, orange pending, red error), the read-only notice (Q038),
-// the kernel notices (restart and crash, Q055; a kernel that did not start, with its error in the
-// tooltip) and the switches of language and theme; in development builds also the switch of the
-// debug panel of topological names (M14, R111). M15: the File menu (the actions of
-// session.fileActionIds) with the state of an export, and the switch of the history panel (its
-// open state is layout of AppShell). Only bindings.
+// dot for the save state while saving works (green saved, orange pending), the read-only notice
+// (Q038), the notices of the states that need the user's attention (M19.1, titleBarNotices: a
+// save that fails or no longer works with Export, the kernel that starts, restarts or does not
+// run with Try again, a regeneration that threw; the technical cause in expandable Details) and
+// the switches of language and theme; in development builds also the switch of the debug panel
+// of topological names (M14, R111). M15: the File menu (the actions of session.fileActionIds)
+// with the state of an export and its warning (M19.1: a document exported without history), and
+// the switch of the history panel (its open state is layout of AppShell). Only bindings.
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
 import { fileMenuItems } from '../file-menu';
+import { saveDotOf, titleBarNotices } from '../title-bar-status';
+import type { NoticeAction } from '../title-bar-status';
 import ContextMenu from './ContextMenu.vue';
 import ThemeLocaleToggles from './ThemeLocaleToggles.vue';
 
@@ -34,8 +38,20 @@ function openFileMenu(e: MouseEvent): void {
 }
 
 const persistence = useObservable(session.persistence);
+const persistenceError = useObservable(session.persistenceError);
 const kernel = useObservable(session.kernel);
 const kernelError = useObservable(session.kernelError);
+const regen = useObservable(session.regen);
+const saveDot = computed(() => saveDotOf(persistence.value));
+const notices = computed(() =>
+  titleBarNotices({
+    persistence: persistence.value,
+    persistenceError: persistenceError.value,
+    kernel: kernel.value,
+    kernelError: kernelError.value,
+    regenFailed: regen.value.failed,
+  }),
+);
 // The debug switch exists only in development builds (spec 11); production drops it.
 const debugSwitch = import.meta.env.DEV;
 const topoNamesShown = useObservable(session.topoInspector.enabled);
@@ -46,8 +62,9 @@ function showDocuments(): void {
   globalThis.location.hash = '';
 }
 
-function reload(): void {
-  globalThis.location.reload();
+function runNotice(action: NoticeAction): void {
+  if (action === 'retryKernel') session.retryKernel();
+  else session.actions.run(session.fileActionIds.exportDocument);
 }
 
 function toggleTopoNames(): void {
@@ -96,6 +113,22 @@ function toggleTopoNames(): void {
         <i class="ti ti-x" aria-hidden="true" />
       </button>
     </span>
+    <span
+      v-else-if="fileStatus.kind === 'idle' && fileStatus.warning !== null"
+      class="file-status warning"
+      role="status"
+    >
+      <i class="ti ti-alert-circle" aria-hidden="true" /> {{ t(fileStatus.warning) }}
+      <button
+        type="button"
+        class="dismiss"
+        :title="t('app.dismiss')"
+        :aria-label="t('app.dismiss')"
+        @click="session.files.dismiss()"
+      >
+        <i class="ti ti-x" aria-hidden="true" />
+      </button>
+    </span>
 
     <div class="title">
       <span class="name">{{ documentName }}</span>
@@ -103,33 +136,40 @@ function toggleTopoNames(): void {
         <i class="ti ti-lock" aria-hidden="true" /> {{ t('titleBar.readOnly') }}
       </span>
       <span
-        v-else
+        v-else-if="saveDot !== null"
         class="save-dot"
-        :class="persistence"
+        :class="saveDot"
         role="status"
-        :title="t(`titleBar.persistence.${persistence}`)"
-        :aria-label="t(`titleBar.persistence.${persistence}`)"
+        :title="t(`titleBar.persistence.${saveDot}`)"
+        :aria-label="t(`titleBar.persistence.${saveDot}`)"
       />
     </div>
 
-    <span v-if="kernel === 'restarting'" class="kernel" role="status">
-      <i class="ti ti-loader-2" aria-hidden="true" /> {{ t('titleBar.kernel.restarting') }}
-    </span>
-    <span v-else-if="kernel === 'failed'" class="kernel failed" role="alert">
-      <i class="ti ti-alert-triangle" aria-hidden="true" /> {{ t('titleBar.kernel.failed') }}
-      <button type="button" class="reload" @click="reload">
-        {{ t('titleBar.kernel.reload') }}
-      </button>
-    </span>
+    <!-- A new state is a new element (the key has the text), so a screen reader announces it. -->
     <span
-      v-else-if="kernel === 'unavailable'"
-      class="kernel failed"
-      role="alert"
-      :title="kernelError ?? undefined"
+      v-for="notice in notices"
+      :key="`${notice.id}:${notice.text}`"
+      class="notice"
+      :class="notice.tone"
+      :role="notice.tone === 'error' ? 'alert' : 'status'"
     >
-      <i class="ti ti-alert-triangle" aria-hidden="true" /> {{ t('titleBar.kernel.unavailable') }}
-      <button type="button" class="reload" @click="reload">
-        {{ t('titleBar.kernel.reload') }}
+      <i
+        class="ti"
+        :class="notice.tone === 'error' ? 'ti-alert-triangle' : 'ti-loader-2'"
+        aria-hidden="true"
+      />
+      {{ t(notice.text) }}
+      <details v-if="notice.detail !== null" class="details">
+        <summary>{{ t('titleBar.details') }}</summary>
+        <p class="detail">{{ notice.detail }}</p>
+      </details>
+      <button
+        v-if="notice.action !== null"
+        type="button"
+        class="notice-action"
+        @click="runNotice(notice.action.kind)"
+      >
+        {{ t(notice.action.label) }}
       </button>
     </span>
 
@@ -172,7 +212,8 @@ function toggleTopoNames(): void {
 
 <style scoped>
 /* The backdrop filter makes the bar a stacking context; above the Toolbar that follows it, so
-   the File menu (fixed, inside the bar) is not covered by it. */
+   the Details of a notice (absolute, dropping out of the bar) are not covered by it. The File
+   menu does not need it: ContextMenu is teleported to <body> (M19.1). */
 .title-bar {
   position: relative;
   z-index: 1;
@@ -229,9 +270,6 @@ function toggleTopoNames(): void {
 .save-dot.pending {
   background: var(--warning);
 }
-.save-dot.error {
-  background: var(--danger);
-}
 .read-only {
   display: inline-flex;
   align-items: center;
@@ -243,15 +281,47 @@ function toggleTopoNames(): void {
   font-size: var(--font-size-small);
   font-weight: 500;
 }
-.kernel {
+.notice {
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   color: var(--text-secondary);
   font-size: var(--font-size-small);
+  white-space: nowrap;
 }
-.kernel.failed {
+.notice.error {
   color: var(--danger);
+}
+.details {
+  position: relative;
+  color: var(--text-secondary);
+}
+.details > summary {
+  cursor: pointer;
+  list-style: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.details > summary::-webkit-details-marker {
+  display: none;
+}
+.detail {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: max-content;
+  max-width: 360px;
+  margin: 0;
+  padding: 6px 9px;
+  border-radius: var(--radius-row);
+  background: var(--tooltip-bg);
+  color: var(--tooltip-text);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
 }
 .file-status {
   display: inline-flex;
@@ -262,6 +332,10 @@ function toggleTopoNames(): void {
 }
 .file-status.failed {
   color: var(--danger);
+}
+/* Orange text would be hard to read on the bar; the icon carries the colour. */
+.file-status.warning > .ti {
+  color: var(--warning);
 }
 .dismiss {
   display: inline-flex;
@@ -274,7 +348,7 @@ function toggleTopoNames(): void {
 .dismiss:hover {
   background: var(--control-hover);
 }
-.reload {
+.notice-action {
   height: 22px;
   margin-left: 4px;
   padding: 0 10px;

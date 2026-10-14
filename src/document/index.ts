@@ -54,5 +54,6 @@ export type {
   ParamSpec,
 } from './schema';
 export { validateAgainstSchema } from './validate';
+export { isJsonObject, isJsonValue } from './json';
 export { fromData, migrateFeatureData, toData } from './serialize';
 export type { DocumentData, DocumentLoadError, DocumentLoadIssue, FeatureData } from './serialize';

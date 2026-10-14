@@ -244,18 +244,27 @@ describe('filletMessages', () => {
       'fillet.label': 'Zaoblení',
       'fillet.edges': 'Hrany',
       'fillet.radius': 'Poloměr',
+      'fillet.failed': 'Zaoblení se nepodařilo. Zkuste menší poloměr nebo jiné hrany.',
     });
     expect(filletMessages.en).toEqual({
       'fillet.label': 'Fillet',
       'fillet.edges': 'Edges',
       'fillet.radius': 'Radius',
+      'fillet.failed': 'The fillet failed. Try a smaller radius or other edges.',
     });
   });
 
-  it('has a text for every key of the schema', () => {
-    const keys = [filletSchema.label, ...Object.values(filletSchema.params).map((s) => s.label)];
-    expect(Object.keys(filletMessages.cs).sort()).toEqual([...keys].sort());
-  });
+  it.each(['cs', 'en'] as const)(
+    '%s has a text for every key of the schema and the issue code of the builder',
+    (lang) => {
+      const keys = [
+        filletSchema.label,
+        ...Object.values(filletSchema.params).map((s) => s.label),
+        'fillet.failed',
+      ];
+      expect(Object.keys(filletMessages[lang]).sort()).toEqual([...keys].sort());
+    },
+  );
 
   it('is frozen', () => {
     expect(Object.isFrozen(filletMessages)).toBe(true);
@@ -416,14 +425,68 @@ describe('filletBuilder', () => {
     expect(fake.callCount('fillet')).toBe(0);
   });
 
-  it('lets an error of the kernel through', async () => {
+  it('turns operation-failed of the kernel into INVALID_PARAMS at radius (D6)', async () => {
     const { fake, kernel } = aRecordingKernel();
     const state = await boxesState(kernel, ['a']);
-    fake.failNext('fillet', 'operation-failed');
+    fake.failNext('fillet', 'operation-failed', 'fillet: the algorithm failed');
 
-    await expect(run(aFillet('f'), state, kernel)).rejects.toMatchObject({
-      code: 'operation-failed',
+    const output = await run(aFillet('f', { radius: 50 }), state, kernel);
+
+    if (output.ok) expect.fail('Expected an error');
+    expect(output.error).toEqual({
+      code: 'INVALID_PARAMS',
+      message: 'fillet: the algorithm failed',
+      issues: [{ param: 'radius', code: 'fillet.failed' }],
     });
+    expect(Object.isFrozen(output.error)).toBe(true);
+    expect(Object.isFrozen(output.error.issues)).toBe(true);
+    expect(Object.isFrozen(output.error.issues?.[0])).toBe(true);
+  });
+
+  it('turns operation-failed of the second body into the same issue', async () => {
+    const { fake, kernel, calls } = aRecordingKernel();
+    const state = await boxesState(kernel, ['a', 'b']);
+    // The first call succeeds, the second one fails.
+    const fillet = kernel.fillet.bind(kernel);
+    let n = 0;
+    const failing: ModelingKernel = {
+      ...kernel,
+      fillet(shape, edges, radius) {
+        n++;
+        if (n === 2) fake.failNext('fillet', 'operation-failed');
+        return fillet(shape, edges, radius);
+      },
+    };
+
+    const output = await run(
+      aFillet('f', { edges: [edge('a', 'e3'), edge('b', 'e3')] }),
+      state,
+      failing,
+    );
+
+    expect(calls).toHaveLength(2);
+    if (output.ok) expect.fail('Expected an error');
+    expect(output.error.issues).toEqual([{ param: 'radius', code: 'fillet.failed' }]);
+  });
+
+  it.each(['invalid-input', 'unknown-handle', 'internal'] as const)(
+    'lets the kernel error %s through',
+    async (code) => {
+      const { fake, kernel } = aRecordingKernel();
+      const state = await boxesState(kernel, ['a']);
+      fake.failNext('fillet', code);
+
+      await expect(run(aFillet('f'), state, kernel)).rejects.toMatchObject({ code });
+    },
+  );
+
+  it('lets an error that is not from the kernel through', async () => {
+    const { kernel } = aRecordingKernel();
+    const state = await boxesState(kernel, ['a']);
+    const bug = new Error('a bug');
+    const throwing: ModelingKernel = { ...kernel, fillet: () => Promise.reject(bug) };
+
+    await expect(run(aFillet('f'), state, throwing)).rejects.toBe(bug);
   });
 });
 

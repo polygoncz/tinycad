@@ -31,3 +31,12 @@ Návrh: **A**, implementovat s napojením jádra v [[M10-ui]] (tam vzniká `app`
 ## Rozhodnutí
 
 2026-10-13 (Pavel): **varianta A v [[M10-ui]].** Vlastní build ([[M16-vlastni-occt-build]]) trapy jen omezí (nativní výjimky, větší zásobník), neodstraní, takže cesta restartu je potřeba tak jako tak. Propsáno do [[06-geometricke-jadro]] a [[11-ui]].
+
+## Doplněk 2026-10-14: příčina pádu po ~262 000 výjimkách ([[M19.1-opravy-z-revize|M19.1]])
+
+[[Revize kódu 2026-10-14]] podezírala z pádu neuvolněné výjimky, protože adaptér nevolal `decrementExceptionRefcount`. Úkol Ú5 v M19.1 změřil, že skutečná příčina je jinde:
+
+- **Zásobník Emscriptenu.** Výjimka C++, která doletí do JS, nechá `__stack_pointer` posunutý o 32 B, protože epilogy funkcí po cestě neproběhnou. Zásobník má 8 MiB, takže 8 MiB / 32 B = 2^18 = 262 144 výjimek. Pád nastal deterministicky po 262 172 výjimkách ve všech variantách (s `decrement` i bez, s větší haldou). S ručním `stackRestore` po každém volání prošlo 400 000 výjimek bez pádu.
+- **Halda.** Neuvolněná výjimka stojí asi 140 B haldy. To M19.1 opravilo (`decrementExceptionRefcount` v `occtExceptionText`). Na pád to ale vliv nemá.
+- **Proč to neopravujeme hned.** Build `replicad-opencascadejs` nevystavuje `stackSave` / `stackRestore`, jen minifikované exporty dostupné přes `instantiateWasm`, což je křehké.
+- **Co platí do té doby.** Pád po ~262 000 výjimkách zachytí restart jádra (varianta A, od M19.1 hlášený přes `onDisconnected` a s posuvným oknem). Trvalé řešení je vlastní build ([[M16-vlastni-occt-build]]) s exportem `stackRestore`, nebo počítání výjimek v workeru a restart předem.

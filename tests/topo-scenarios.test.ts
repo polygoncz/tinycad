@@ -7,7 +7,8 @@
 // 2. a sketch on the top face and an extrude added to the box survive a new height;
 // 3. a fillet on an edge of a hole survives moving the cylinder that made the hole;
 // 4. a deleted box leaves the fillet with an unresolved reference, the rest of the model stays;
-// and a chamfer on a box edge.
+// and a chamfer on a box edge, and a fillet or chamfer the kernel cannot make (an issue at its
+// size, D6 of M19.1).
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
@@ -322,5 +323,27 @@ describe('topological naming scenarios (spec 08, OCCT)', () => {
       `${chamfer}/face:chamfer:edge:${box}/face:front|${box}/face:top`,
     ]);
     expectBox(await kernel.boundingBox(body.shape), [0, 0, 0], [10, 10, 10]);
+  });
+
+  it.each([
+    ['fillet', 'radius'],
+    ['chamfer', 'distance'],
+  ])('a %s larger than the box is the issue %s.failed at %s, the box stays', async (type, size) => {
+    const s = setup(kernel);
+    const box = s.add('box', BOX);
+    const feature = s.add(type, {
+      edges: [topo(box, `edge:${box}/face:front|${box}/face:top`)],
+      [size]: 11,
+    });
+
+    const result = await s.regenerate();
+    const status = result.statuses.get(feature);
+    if (status?.kind !== 'error') expect.fail(`The ${type} is not an error`);
+    expect(status.error.code).toBe('INVALID_PARAMS');
+    expect(status.error.issues).toEqual([{ param: size, code: `${type}.failed` }]);
+    expect(result.statuses.get(box)).toEqual({ kind: 'ok' });
+    const body = bodyOf(result, box);
+    expect(body.lastModifiedBy).toBe(box);
+    expect(await faceCount(kernel, body)).toBe(6);
   });
 });

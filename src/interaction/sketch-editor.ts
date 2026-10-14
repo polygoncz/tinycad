@@ -55,9 +55,13 @@ export function createSketchEditor(deps: {
       plane,
       solver,
       viewport,
+      // The mode goes back even if a subscriber of current throws; its error goes on after.
       onClose: () => {
-        current.set(null);
-        mode.set('model');
+        try {
+          current.set(null);
+        } finally {
+          mode.set('model');
+        }
       },
     });
     current.set(session);

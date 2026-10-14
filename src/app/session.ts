@@ -62,10 +62,14 @@ import type {
   TopoInspector,
   ViewportPort,
 } from '@/interaction';
-import type { GeometryKernel } from '@/kernel';
 import { createOperationDispatcher, createOperationLog, createUndoManager } from '@/ops';
 import type { OperationDispatcher, OperationLog, OpHandlerRegistry } from '@/ops';
-import { createPersistenceService, createSnapshot, loadDocument } from '@/persistence';
+import {
+  createPersistenceService,
+  createSnapshot,
+  exportDocument,
+  loadDocument,
+} from '@/persistence';
 import type {
   DocumentStore,
   PersistenceService,
@@ -74,7 +78,7 @@ import type {
 } from '@/persistence';
 import type { FeaturePlugin, PluginMessages } from '@/plugin-api';
 import { bodiesOf, createRegenerator, EMPTY_STATE, planeOfRef, sketchesOf } from '@/regen';
-import type { RegenResult, RegenState, SketchArtifact } from '@/regen';
+import type { Regenerator, RegenState, SketchArtifact } from '@/regen';
 import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
 import type {
   BodyLayer,
@@ -87,11 +91,12 @@ import type { ConstraintSolver, GeometricConstraintKind } from '@/sketch';
 import { createFileExporter } from './file-exporter';
 import type { DownloadFile } from './file-exporter';
 import { createKernelSupervisor } from './kernel-supervisor';
-import type { KernelUiState } from './kernel-supervisor';
+import type { KernelUiState, SupervisedKernel } from './kernel-supervisor';
 import { describeLoadError } from './load-error';
 import { createRegenScheduler } from './regen-scheduler';
 import { createRegenStatusAdapter } from './regen-status-adapter';
 import { createPluginRegistries } from './registries';
+import type { PluginRegistries } from './registries';
 
 export type RegenUiState = {
   /** A regeneration is running or due. */
@@ -102,6 +107,11 @@ export type RegenUiState = {
   readonly errorCount: number;
   /** Duration of the last finished regeneration; null before the first. */
   readonly lastMs: number | null;
+  /**
+   * M19.1: text of the error of the last regeneration that threw (a bug, not a lost kernel);
+   * null before the first such error and after a successful regeneration.
+   */
+  readonly failed: string | null;
 };
 
 /**
@@ -132,13 +142,21 @@ export interface AppSessionDeps {
   readonly plugins: readonly FeaturePlugin[];
   readonly store: DocumentStore;
   readonly docId: DocumentId;
-  /** A new kernel for the start and for every restart after a crash (Q055). */
-  readonly createKernel: () => Promise<GeometryKernel & Disposable>;
+  /**
+   * A new kernel for the start, for every restart after a crash (Q055) and for a retry; it
+   * reports its own crash (onDisconnected, M19.1).
+   */
+  readonly createKernel: () => Promise<SupervisedKernel>;
   readonly viewport: AppViewport;
   /** Timers of the persistence service (ring 1 knows no setTimeout, ADR 0009). */
   readonly scheduler: Scheduler;
-  /** Clock in ms: log entry times, regeneration durations, the restart window. */
+  /** Clock in ms: log entry times, regeneration durations. */
   readonly now: () => number;
+  /**
+   * M19.1: monotonic clock in ms (performance.now in the browser) for the restart window of the
+   * kernel; unlike `now` it does not jump when the system time is set.
+   */
+  readonly monotonic: () => number;
   /** Ids of new features. */
   readonly ids: IdGenerator;
   /** Translation of keys: the name of a new feature and of a new document (ADR 0014). */
@@ -172,10 +190,23 @@ export interface AppSession extends Disposable {
   readonly regen: Observable<RegenUiState>;
   /** Q055: restart after a kernel crash. */
   readonly kernel: Observable<KernelUiState>;
-  /** Why the kernel did not start ('unavailable'), for the tooltip; null otherwise. */
+  /**
+   * Why the kernel did not start ('unavailable') or its last crash ('failed'), for the UI; null
+   * otherwise.
+   */
   readonly kernelError: Observable<string | null>;
+  /**
+   * M19.1: from 'failed' or 'unavailable' starts the kernel again, with an empty restart window;
+   * in any other state it does nothing.
+   */
+  retryKernel(): void;
   /** Always 'saved' when read-only. */
   readonly persistence: Observable<PersistenceStatus>;
+  /**
+   * M19.1: the text of the last failed write while `persistence` is 'error' or 'failed', for the
+   * UI; null otherwise and when read-only.
+   */
+  readonly persistenceError: Observable<string | null>;
   readonly selection: SelectionModel;
   /** Timeline. */
   readonly featureTree: FeatureTreeModel;
@@ -260,9 +291,35 @@ const SKETCH_SELECT_TOOL_ID = 'sketch.select';
  * background: the session comes back with `kernel` 'starting' and regenerates once it is ready.
  */
 export async function createAppSession(deps: AppSessionDeps): Promise<AppSession> {
-  const { viewport, readOnly } = deps;
-
   // 1. Registries and plugins, before anything is opened or started.
+  const registries = createPluginRegistries(deps.plugins);
+
+  // 2. The document.
+  const { doc, log } = await openDocument(deps, registries.schemas, registries.handlers);
+
+  // 3.–7. Synchronous wiring. A step that throws releases what the steps before it built; the
+  // kernel starts only after the last step, so no worker is left behind (M19.1).
+  const lifetime = new DisposableStore();
+  try {
+    return wireSession(deps, registries, { doc, log }, lifetime);
+  } catch (e) {
+    lifetime.dispose();
+    throw e;
+  }
+}
+
+/**
+ * Steps 3–7 of createAppSession over the opened document. Everything it builds that needs
+ * releasing goes to `lifetime`; the persistence service, released by dispose separately, holds
+ * nothing outside the session before the first change. Starts the kernel as its last step.
+ */
+function wireSession(
+  deps: AppSessionDeps,
+  registries: PluginRegistries,
+  { doc, log }: { readonly doc: DocumentWriter; readonly log: OperationLog },
+  lifetime: DisposableStore,
+): AppSession {
+  const { viewport, readOnly } = deps;
   const {
     schemas,
     builders,
@@ -270,13 +327,9 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     manipulators: manipulatorRegistry,
     handlers,
     messages,
-  } = createPluginRegistries(deps.plugins);
-
-  // 2. The document.
-  const { doc, log } = await openDocument(deps, schemas, handlers);
+  } = registries;
 
   // 3. Services and models.
-  const lifetime = new DisposableStore();
   let disposed = false;
   const dispatcher = createOperationDispatcher({ doc, handlers, log, now: deps.now });
   // Q038: everything that changes the document goes through `ops`, so this one guard covers
@@ -296,6 +349,8 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       }),
     );
   }
+  const persistenceError =
+    persistence?.lastError ?? new ObservableValue<string | null>(null).asObservable();
 
   const regenStatus = createRegenStatusAdapter();
   const selection = lifetime.add(createSelectionModel({ regen: regenStatus }));
@@ -383,7 +438,6 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       undo,
       selection,
       featureTree,
-      editor: features,
       tools,
       toolList,
       locked,
@@ -396,9 +450,10 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   // Debugging the names (M14, R111): starts disabled, ui switches it on in development only.
   const topoInspector = lifetime.add(createTopoInspector({ viewport, regen: regenStatus }));
 
-  // 4. Regeneration: doc.changed → scheduler → Regenerator of the current kernel → port, viewport.
+  // 4. Regeneration: doc.changed → scheduler → Regenerator of the current kernel → viewport,
+  // then the port and the rest of the UI (D3).
   const regenUi = new ObservableValue<RegenUiState>(
-    Object.freeze({ busy: false, bodyCount: 0, errorCount: 0, lastMs: null }),
+    Object.freeze({ busy: false, bodyCount: 0, errorCount: 0, lastMs: null, failed: null }),
   );
   const updateRegenUi = (change: Partial<RegenUiState>): void => {
     regenUi.set(Object.freeze({ ...regenUi.get(), ...change }));
@@ -411,14 +466,21 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     }),
   );
 
+  // Started by the last step (supervisor.start()), once everything it calls into exists.
   const supervisor = createKernelSupervisor({
     createKernel: deps.createKernel,
     createRegenerator: (kernel) => createRegenerator({ kernel, builders, schemas, now: deps.now }),
-    now: deps.now,
+    monotonic: deps.monotonic,
     onReady: (kernel) => {
-      // A new kernel numbers its handles anew: drop the meshes of the old one (spec 09).
-      viewport.bodies.reset(kernel);
-      scheduler.request();
+      try {
+        // A new kernel numbers its handles anew: no handle of the old one may reach it, through
+        // the last state (the STEP export, revize AF13) or the meshes of the view (spec 09).
+        lastState = EMPTY_STATE;
+        viewport.bodies.reset(kernel);
+        scheduler.request();
+      } catch (e) {
+        reportError(e);
+      }
     },
     onError: reportError,
   });
@@ -428,40 +490,72 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   /** What the viewport shows per sketch id, so an unchanged artifact is not drawn again. */
   const drawnSketches = new Map<string, SketchArtifact>();
 
+  /** One run of the scheduler: a regeneration with the Regenerator of the live kernel. */
   async function regenerate(): Promise<void> {
     const regenerator = supervisor.regenerator();
     // No kernel (starting, restarting, failed): onReady requests a run once there is one.
     if (regenerator === null) return;
-    let result: RegenResult | 'superseded';
     try {
-      result = await regenerator.run(doc.studio);
+      await regenerateWith(regenerator);
     } catch (e) {
       // Q049: the Regenerator is dead with its kernel; the supervisor starts a new pair.
       if (e instanceof RpcError && e.code === 'disconnected') {
         supervisor.lost(regenerator);
         return;
       }
+      // M19.1: shown in the UI, so the model does not stay stale silently; reported as well.
+      if (!disposed) updateRegenUi({ failed: errorText(e) });
       throw e;
     }
-    if (result === 'superseded' || disposed) return;
-    lastState = result.finalState;
-    regenStatus.publish(result);
-    regenSketches = sketchesOf(result.finalState);
-    drawSketches();
-    // Only bodies go to the counter and the body layer; sketches have their own channel above
+  }
+
+  /** The session lives and `regenerator` is still the one of the live kernel. */
+  function isCurrent(regenerator: Regenerator): boolean {
+    return !disposed && supervisor.regenerator() === regenerator;
+  }
+
+  /**
+   * D3 (M19.1): the result is published only once the view shows its bodies, so an index picked
+   * in the view and the names in the port belong to the same generation (revize C6). The
+   * scheduler runs one regeneration at a time and this one includes the tessellation, so a stale
+   * result neither publishes a snapshot nor sends a tessellation.
+   */
+  async function regenerateWith(regenerator: Regenerator): Promise<void> {
+    const result = await regenerator.run(doc.studio);
+    // Also when the kernel died after its last call: the next kernel numbers its handles anew, so
+    // these must not reach its view.
+    if (result === 'superseded' || !isCurrent(regenerator)) return;
+    // Only bodies go to the counter and the body layer; sketches have their own channel
     // (ViewportPort.sketches, ADR 0015).
     const bodies = bodiesOf(result.finalState).map(({ id, shape }) => ({ id, shape }));
-    updateRegenUi({
-      bodyCount: bodies.length,
-      errorCount: [...result.statuses.values()].filter((s) => s.kind === 'error').length,
-      lastMs: result.durationMs,
-    });
-    // sync never rejects and drops a stale result itself (spec 09).
-    void viewport.bodies.sync(bodies).then(() => {
+    // Never rejects; settles once the scene is swapped or the sync is stale (spec 09).
+    await viewport.bodies.sync(bodies);
+    // A restart meanwhile reset the view (onReady): the result belongs to a dead kernel.
+    if (!isCurrent(regenerator)) return;
+
+    lastState = result.finalState;
+    // A subscriber that throws does not stop the step; its error is reported after it.
+    let subscriberError: { readonly error: unknown } | null = null;
+    try {
+      regenStatus.publish(result);
+    } catch (error) {
+      subscriberError = { error };
+    }
+    try {
+      regenSketches = sketchesOf(result.finalState);
+      drawSketches();
+      updateRegenUi({
+        bodyCount: bodies.length,
+        errorCount: [...result.statuses.values()].filter((s) => s.kind === 'error').length,
+        lastMs: result.durationMs,
+        failed: null,
+      });
       applyHidden();
       applyColors();
       fitFirstView(bodies.length);
-    });
+    } finally {
+      if (subscriberError !== null) reportError(subscriberError.error);
+    }
   }
 
   // First view (spec 11): fit the camera once, after the first regeneration with a body; later
@@ -579,6 +673,9 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     lastState: () => lastState,
     kernel: () => supervisor.kernel(),
     flush: () => persistence?.flush() ?? Promise.resolve(),
+    persistenceStatus: () => persistenceStatus.get(),
+    // The exporter gets the file of the live document, not the document (ADR 0011).
+    liveFile: () => exportDocument(doc),
     store: deps.store,
     docId: deps.docId,
     schemas,
@@ -631,7 +728,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   }
   let closing: Promise<void> | null = null;
 
-  return {
+  const session: AppSession = {
     doc,
     readOnly,
     locked,
@@ -641,7 +738,11 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     regen: regenUi.asObservable(),
     kernel: supervisor.state,
     kernelError: supervisor.error,
+    retryKernel() {
+      supervisor.retry();
+    },
     persistence: persistenceStatus.asObservable(),
+    persistenceError,
     selection,
     featureTree,
     browser,
@@ -702,6 +803,9 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     },
     dispose,
   };
+  // Last: everything the kernel's onReady and the regeneration call into exists now.
+  supervisor.start();
+  return session;
 }
 
 /** Loads the document; a missing one is created, unless read-only. */
@@ -758,4 +862,9 @@ function refuseChanges(inner: OperationDispatcher): OperationDispatcher {
 /** Errors with nobody to hand them to (a regeneration bug, a failed save or kernel start). */
 function reportError(error: unknown): void {
   console.error(error);
+}
+
+/** The text of an error for the UI (RegenUiState.failed). */
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

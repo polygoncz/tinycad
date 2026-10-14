@@ -82,8 +82,9 @@ export function hasSolid(oc: Occt, shape: TopoDS_Shape): boolean {
 
 /**
  * Converts anything thrown inside the adapter to a kernel error (spec 06, Errors). An OCCT
- * exception (WebAssembly.Exception) becomes 'internal' with the OCCT type in the message;
- * an error that already has a kernel code passes unchanged; anything else is 'internal'.
+ * exception (WebAssembly.Exception) becomes 'internal' with the OCCT type in the message and
+ * is released (occtExceptionText); an error that already has a kernel code passes unchanged;
+ * anything else is 'internal'.
  * A WASM trap (WebAssembly.RuntimeError) passes unchanged too: it is fatal, not a kernel
  * error, and the worker must still recognise it (Q055).
  */
@@ -98,10 +99,16 @@ export function toKernelError(oc: Occt, e: unknown): Error {
 /**
  * The text of an OCCT exception (WebAssembly.Exception): `<OCCT type>: <message>`, just the
  * type when the message is empty; undefined for anything else (a trap included).
+ *
+ * Releases the exception after reading it (M19.1, C8): a C++ exception that reaches JS keeps
+ * its reference count of 1 and no C++ catch frees it, so its object would stay on the WASM
+ * heap. Every path that catches a WebAssembly.Exception must therefore end here, exactly once;
+ * afterwards the exception must not be read or rethrown.
  */
 export function occtExceptionText(oc: Occt, e: unknown): string | undefined {
   if (!isWasmException(e)) return undefined;
   const [type, message] = oc.getExceptionMessage(e);
+  oc.decrementExceptionRefcount(e);
   return message ? `${type}: ${message}` : type;
 }
 

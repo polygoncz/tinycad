@@ -1,7 +1,8 @@
 // The FileExporter of interaction (spec 11, "Export a historie", M15): what the File actions
 // export and how. STEP comes from the live kernel and the bodies of the last regeneration; the
-// document file from the store, with its history. The file goes to the `download` port, which ui
-// implements (app knows no DOM).
+// document file from the store, with its history, or from the live document without history when
+// the store cannot take the work (M19.1, D4), which the result tells the File actions. The file
+// goes to the `download` port, which ui implements (app knows no DOM).
 
 import type { Observable } from '@/core';
 import type { BodyId, DocumentId, FeatureSchemaRegistry } from '@/document';
@@ -9,7 +10,7 @@ import type { FileExporter } from '@/interaction';
 import type { ExchangeOps, ShapeHandle } from '@/kernel';
 import type { OpHandlerRegistry } from '@/ops';
 import { exportStoredDocument } from '@/persistence';
-import type { DocumentStore } from '@/persistence';
+import type { DocumentStore, PersistenceStatus, TinycadFile } from '@/persistence';
 import { bodiesOf } from '@/regen';
 import type { RegenState } from '@/regen';
 import { safeFileName } from './file-names';
@@ -33,6 +34,14 @@ export function createFileExporter(deps: {
   readonly kernel: () => ExchangeOps | null;
   /** Writes the queue of the persistence; read-only: nothing. */
   readonly flush: () => Promise<void>;
+  /** The status of the persistence; read-only: 'saved'. */
+  readonly persistenceStatus: () => PersistenceStatus;
+  /**
+   * The file of the live document without history (exportDocument of persistence), made only
+   * when the store cannot be used (D4). A function, not the document: the exporter needs only
+   * the file (ADR 0011).
+   */
+  readonly liveFile: () => TinycadFile;
   readonly store: DocumentStore;
   readonly docId: DocumentId;
   readonly schemas: FeatureSchemaRegistry;
@@ -51,6 +60,32 @@ export function createFileExporter(deps: {
     });
   }
 
+  /**
+   * The stored document with its history; the live one without history when the store failed for
+   * good or the flush fails (D4): then the live document is the only record of the work.
+   */
+  async function documentFile(): Promise<{
+    readonly file: TinycadFile;
+    readonly withHistory: boolean;
+  }> {
+    const live = () => ({ file: deps.liveFile(), withHistory: false });
+    if (deps.persistenceStatus() === 'failed') return live();
+    try {
+      await deps.flush();
+    } catch {
+      // The persistence reports the error itself (status, lastError).
+      return live();
+    }
+    const file = await exportStoredDocument(deps.store, deps.docId, {
+      schemas: deps.schemas,
+      handlers: deps.handlers,
+    });
+    if (!file.ok) {
+      throw new Error(`Cannot export document '${deps.docId}': ${describeLoadError(file.error)}`);
+    }
+    return { file: file.value, withHistory: true };
+  }
+
   return {
     async exportStep(bodies: readonly BodyId[]): Promise<void> {
       await idle();
@@ -64,21 +99,16 @@ export function createFileExporter(deps: {
       deps.download({ name: `${safeFileName(deps.name())}.step`, mime: 'model/step', data });
     },
 
-    async exportDocument(): Promise<void> {
-      await deps.flush();
-      const file = await exportStoredDocument(deps.store, deps.docId, {
-        schemas: deps.schemas,
-        handlers: deps.handlers,
-      });
-      if (!file.ok) {
-        throw new Error(`Cannot export document '${deps.docId}': ${describeLoadError(file.error)}`);
-      }
+    async exportDocument(): Promise<{ readonly withHistory: boolean }> {
+      const { file, withHistory } = await documentFile();
       deps.download({
         name: `${safeFileName(deps.name())}.tinycad.json`,
         mime: 'application/json',
         // Indented: diffs of exported files stay readable in git (spec 11).
-        data: `${JSON.stringify(file.value, null, 2)}\n`,
+        data: `${JSON.stringify(file, null, 2)}\n`,
       });
+      // The File actions warn that the file lacks the history (M19.1).
+      return { withHistory };
     },
   };
 }

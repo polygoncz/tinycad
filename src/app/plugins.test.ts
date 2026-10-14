@@ -33,6 +33,7 @@ describe('BUILT_IN_PLUGINS', () => {
       viewport: new FakeAppViewport(),
       scheduler: createManualScheduler(),
       now: () => 0,
+      monotonic: () => 0,
       ids: createSequentialIdGenerator('f'),
       translate: (key) => key,
       confirm: () => true,

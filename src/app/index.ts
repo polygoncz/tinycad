@@ -13,7 +13,7 @@ export type { OpenAppSessionOptions } from './browser';
 export { BUILT_IN_PLUGINS } from './plugins';
 export { BUILT_IN_OPERATION_TYPES } from './operation-types';
 export type { AppSession, AppSessionDeps, AppViewport, RegenUiState } from './session';
-export type { KernelUiState } from './kernel-supervisor';
+export type { KernelUiState, SupervisedKernel } from './kernel-supervisor';
 export type { DownloadFile } from './file-exporter';
 export type { PluginMessages } from '@/plugin-api';
 export type { DocumentInfo } from '@/persistence';

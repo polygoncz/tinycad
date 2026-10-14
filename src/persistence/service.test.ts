@@ -10,6 +10,7 @@ import { createPersistenceService } from './service';
 import type { PersistenceService, PersistenceStatus } from './service';
 import { createSnapshot } from './snapshot';
 import type { DocumentSnapshot } from './snapshot';
+import { createStoreError, storeErrorCode } from './store';
 import type { DocumentStore } from './store';
 import { createManualScheduler } from './testing';
 import type { ManualScheduler } from './testing';
@@ -461,6 +462,183 @@ describe('PersistenceService', () => {
       expect(controlled.calls.map((c) => c.seqs)).toEqual([[1], [1, 2]]);
       expect(s.status).toBe('saved');
       expect(scheduler.pending).toBe(0);
+    });
+  });
+
+  describe('permanent store errors (M19.1, D4)', () => {
+    it('a store error (not-found) → failed, without any further attempt', async () => {
+      const s = start({ retryMs: 1000 });
+      const events = statusEvents(s);
+      edit();
+      // The document is gone from the store: every write would fail the same way.
+      await memory.deleteDocument(id);
+      const error = await rejection(s.flush());
+      expect(storeErrorCode(error)).toBe('not-found');
+      expect(s.status).toBe('failed');
+      expect(events).toEqual([{ status: 'pending' }, { status: 'failed', error }]);
+      expect(scheduler.pending).toBe(0);
+
+      // Nothing is scheduled again: neither a retry nor a flush for new entries.
+      edit(2);
+      expect(scheduler.pending).toBe(0);
+      scheduler.advance(10_000);
+      await settle();
+      expect(controlled.calls).toHaveLength(1);
+      expect(s.status).toBe('failed');
+      expect(events).toHaveLength(2);
+    });
+
+    it('an explicit flush after failed rejects with the same error and does not touch the store', async () => {
+      const s = start();
+      edit();
+      await memory.deleteDocument(id);
+      const error = await rejection(s.flush());
+      edit();
+      expect(await rejection(s.flush())).toBe(error);
+      expect(controlled.calls).toHaveLength(1);
+      expect(s.status).toBe('failed');
+    });
+
+    it('a store error in a timer flush → failed, no retry', async () => {
+      const s = start({ retryMs: 1000 });
+      edit();
+      const hold = controlled.holdNextCall();
+      scheduler.advance(300);
+      hold.fail(createStoreError('seq-gap', 'Entry 1 does not follow the last stored entry 7'));
+      await settle();
+      expect(s.status).toBe('failed');
+      expect(scheduler.pending).toBe(0);
+    });
+
+    it('a store error in a retry after an I/O error → failed, the retries stop', async () => {
+      const s = start({ retryMs: 1000 });
+      const events = statusEvents(s);
+      edit();
+      controlled.failNext.appendEntries = 1;
+      scheduler.advance(300);
+      await settle();
+      expect(s.status).toBe('error');
+      await memory.deleteDocument(id);
+      scheduler.advance(1000);
+      await settle();
+      expect(s.status).toBe('failed');
+      expect(events.map((e) => e.status)).toEqual(['pending', 'error', 'failed']);
+      expect(scheduler.pending).toBe(0);
+    });
+
+    it('a flush waiting for a write that fails permanently rejects without writing', async () => {
+      const s = start();
+      edit();
+      const hold = controlled.holdNextCall();
+      const first = s.flush();
+      const second = s.flush();
+      const error = createStoreError('invalid', 'Entry seq must be a whole number >= 1');
+      hold.fail(error);
+      expect(await rejection(first)).toBe(error);
+      expect(await rejection(second)).toBe(error);
+      expect(controlled.calls).toHaveLength(1);
+    });
+
+    it('an error with a code that is not a store code is an I/O error and is retried', async () => {
+      const s = start({ retryMs: 1000 });
+      edit();
+      const hold = controlled.holdNextCall();
+      const first = s.flush();
+      // E.g. the RpcError of a lost worker: it has a code, but not one of the store.
+      hold.fail(Object.assign(new Error('Worker gone'), { code: 'disconnected' }));
+      await rejection(first);
+      expect(s.status).toBe('error');
+      expect(scheduler.pending).toBe(1);
+      scheduler.advance(1000);
+      await settle();
+      expect(controlled.calls).toHaveLength(2);
+      expect(s.status).toBe('saved');
+    });
+
+    it('a throwing subscriber on failed: flush rejects with both errors, nothing is scheduled', async () => {
+      const s = start();
+      const failure = new Error('subscriber failed on failed');
+      s.events.on('status', (e) => {
+        if (e.status === 'failed') throw failure;
+      });
+      edit();
+      await memory.deleteDocument(id);
+      const error = await rejection(s.flush());
+      expect(error).toBeInstanceOf(AggregateError);
+      // Checked by the instanceof above; AggregateError types its errors as any[].
+      const errors: readonly unknown[] = (error as AggregateError).errors;
+      expect(errors).toHaveLength(2);
+      expect(storeErrorCode(errors[0])).toBe('not-found');
+      expect(errors[1]).toBe(failure);
+      expect(s.status).toBe('failed');
+      expect(scheduler.pending).toBe(0);
+    });
+  });
+
+  describe('lastError (M19.1)', () => {
+    it('is null at the start and the text of the error after a failed write', async () => {
+      const s = start();
+      expect(s.lastError.get()).toBeNull();
+      edit();
+      controlled.failNext.appendEntries = 1;
+      await rejection(s.flush());
+      expect(s.lastError.get()).toBe('appendEntries failed');
+    });
+
+    it('is set before the status event, so a status subscriber can read it', async () => {
+      const s = start();
+      const seen: (string | null)[] = [];
+      s.events.on('status', () => {
+        seen.push(s.lastError.get());
+      });
+      edit();
+      await memory.deleteDocument(id);
+      await rejection(s.flush());
+      expect(seen).toEqual([null, "Document 'd1' does not exist"]);
+    });
+
+    it('follows a repeated error with another text, although the status stays error', async () => {
+      const s = start();
+      const events = statusEvents(s);
+      edit();
+      controlled.failNext.appendEntries = 1;
+      await rejection(s.flush());
+      const hold = controlled.holdNextCall();
+      const again = s.flush();
+      hold.fail(new Error('quota exceeded'));
+      await rejection(again);
+      expect(s.status).toBe('error');
+      expect(events.map((e) => e.status)).toEqual(['pending', 'error']);
+      expect(s.lastError.get()).toBe('quota exceeded');
+    });
+
+    it('is null again after a successful write', async () => {
+      const s = start();
+      const changes: (string | null)[] = [];
+      s.lastError.subscribe(() => {
+        changes.push(s.lastError.get());
+      });
+      edit();
+      controlled.failNext.appendEntries = 1;
+      await rejection(s.flush());
+      await s.flush();
+      expect(s.status).toBe('saved');
+      expect(s.lastError.get()).toBeNull();
+      expect(changes).toEqual(['appendEntries failed', null]);
+    });
+
+    it('a throwing lastError subscriber does not stop the status or the retry', async () => {
+      const s = start({ retryMs: 1000 });
+      const failure = new Error('lastError subscriber failed');
+      s.lastError.subscribe(() => {
+        if (s.lastError.get() !== null) throw failure;
+      });
+      edit();
+      controlled.failNext.appendEntries = 1;
+      const error = await rejection(s.flush());
+      expect(error).toBeInstanceOf(AggregateError);
+      expect(s.status).toBe('error');
+      expect(scheduler.pending).toBe(1);
     });
   });
 

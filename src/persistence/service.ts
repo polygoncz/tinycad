@@ -1,18 +1,32 @@
-import { Emitter } from '@/core';
-import type { Disposable, Subscribable } from '@/core';
+import { Emitter, ObservableValue } from '@/core';
+import type { Disposable, Observable, Subscribable } from '@/core';
 import type { DocumentReader } from '@/document';
 import type { LogEntry, OperationLogReader } from '@/ops';
 import { createSnapshot } from './snapshot';
 import type { DocumentSnapshot } from './snapshot';
+import { storeErrorCode } from './store';
 import type { DocumentStore } from './store';
 
-export type PersistenceStatus = 'saved' | 'pending' | 'error';
+/**
+ * 'error': a write failed and is retried. 'failed' (M19.1): the store refused a write with a
+ * code (storeErrorCode); repeating it cannot help, so nothing is written until the end of the
+ * session.
+ */
+export type PersistenceStatus = 'saved' | 'pending' | 'error' | 'failed';
 
 export interface PersistenceService extends Disposable {
-  /** Writes the queue. A call during a running flush waits, then writes what is left. Rejects on error. */
+  /**
+   * Writes the queue. A call during a running flush waits, then writes what is left. Rejects on
+   * error; once 'failed', at once with the store error, without writing.
+   */
   flush(): Promise<void>;
   readonly status: PersistenceStatus;
   readonly events: Subscribable<{ status: { status: PersistenceStatus; error?: unknown } }>;
+  /**
+   * M19.1: the text of the error of the last failed write, for the UI; null again after a write
+   * succeeds. Not null exactly while the status is 'error' or 'failed'.
+   */
+  readonly lastError: Observable<string | null>;
 }
 
 /** Timer scheduler. Ring 1 knows no setTimeout (ADR 0009); app or a test provides it. */
@@ -52,6 +66,8 @@ class QueuedPersistenceService implements PersistenceService {
     on: (type, fn) => this.emitter.on(type, fn),
     once: (type, fn) => this.emitter.once(type, fn),
   };
+  private readonly lastErrorValue = new ObservableValue<string | null>(null);
+  readonly lastError: Observable<string | null> = this.lastErrorValue.asObservable();
 
   private readonly store: DocumentStore;
   private readonly doc: DocumentReader;
@@ -73,6 +89,8 @@ class QueuedPersistenceService implements PersistenceService {
   private retryTimer: Disposable | undefined;
   /** The last started flush; the next one waits for it. */
   private running: Promise<void> | undefined;
+  /** The store error that ended saving ('failed'); every later write rejects with it. */
+  private failure: { readonly error: unknown } | undefined;
   private disposed = false;
 
   constructor(deps: Parameters<typeof createPersistenceService>[0]) {
@@ -110,6 +128,8 @@ class QueuedPersistenceService implements PersistenceService {
   }
 
   private onAppended(entry: LogEntry): void {
+    // Nothing will be written any more: no queue, no snapshot, no flush to schedule.
+    if (this.failure !== undefined) return;
     this.queue = [...this.queue, entry];
     // The dispatcher emits `appended` after applying the operation: doc is the state after seq.
     if (entry.seq % this.snapshotEvery === 0) {
@@ -133,6 +153,7 @@ class QueuedPersistenceService implements PersistenceService {
   private async write(): Promise<void> {
     // This write covers everything queued so far; a timer would only repeat it.
     this.cancelTimers();
+    if (this.failure !== undefined) throw this.failure.error;
     const id = this.doc.meta.id;
     try {
       const batch = this.queue;
@@ -149,7 +170,15 @@ class QueuedPersistenceService implements PersistenceService {
         if (this.snapshot === snapshot) this.snapshot = undefined;
       }
     } catch (error) {
-      if (!this.disposed) {
+      const permanent = storeErrorCode(error) !== undefined;
+      if (permanent) {
+        // D4: the store refused the data, not the I/O; the same write would fail again.
+        this.failure = { error };
+        this.queue = [];
+        this.snapshot = undefined;
+        // A flush scheduled by an entry appended during the write.
+        this.cancelTimers();
+      } else if (!this.disposed) {
         this.retryTimer ??= this.scheduler.schedule(() => {
           this.retryTimer = undefined;
           this.flushFromTimer();
@@ -157,7 +186,15 @@ class QueuedPersistenceService implements PersistenceService {
       }
       // Emitted after the retry is scheduled: a throwing subscriber must not stop it (Q030).
       try {
-        this.setStatus('error', error);
+        // The text first, so a subscriber of the status can read it (as the kernel supervisor).
+        updateAll([
+          () => {
+            this.lastErrorValue.set(errorText(error));
+          },
+          () => {
+            this.setStatus(permanent ? 'failed' : 'error', error);
+          },
+        ]);
       } catch (subscriberError) {
         // Both matter: the store error says why saving fails, the other is a bug in a subscriber.
         throw new AggregateError(
@@ -169,7 +206,15 @@ class QueuedPersistenceService implements PersistenceService {
       throw error;
     }
     // The queue is already updated; a throwing subscriber rejects flush, the data are stored.
-    this.setStatus(this.hasWork() ? 'pending' : 'saved');
+    // The mirror of a failure: the status leaves first, then the text.
+    updateAll([
+      () => {
+        this.setStatus(this.hasWork() ? 'pending' : 'saved');
+      },
+      () => {
+        this.lastErrorValue.set(null);
+      },
+    ]);
   }
 
   private hasWork(): boolean {
@@ -186,6 +231,30 @@ class QueuedPersistenceService implements PersistenceService {
   private setStatus(status: PersistenceStatus, error?: unknown): void {
     if (status === this.current) return;
     this.current = status;
-    this.emitter.emit('status', status === 'error' ? { status, error } : { status });
+    this.emitter.emit(
+      'status',
+      status === 'error' || status === 'failed' ? { status, error } : { status },
+    );
   }
+}
+
+/**
+ * Runs every update even when a subscriber of an earlier one throws (Q030), then rethrows: one
+ * error as it is, more as an AggregateError.
+ */
+function updateAll(updates: readonly (() => void)[]): void {
+  const errors: unknown[] = [];
+  for (const update of updates) {
+    try {
+      update();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length === 1) throw errors[0];
+  if (errors.length > 1) throw new AggregateError(errors, 'Several persistence subscribers failed');
+}
+
+function errorText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }

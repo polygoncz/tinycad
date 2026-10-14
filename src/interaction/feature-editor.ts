@@ -23,7 +23,7 @@ import type {
 } from '@/ops';
 import { OP_VERSION } from '@/ops';
 import { nextFeatureName } from './feature-name';
-import { axisRefOf, bodyOfRef, bodyRefLabel } from './ref-values';
+import { axisRefOf, bodyOfRef, bodyRefLabel, topoRefOf } from './ref-values';
 
 export interface FeatureEditor {
   /** Creates a new feature of the type at the rollback bar and opens an edit session for it. */
@@ -82,7 +82,10 @@ export interface FieldState {
   readonly issue: ParamIssue | null;
   /** name === activeRefParam */
   readonly active: boolean;
-  /** The chips of a 'bodies' param, one per item of the value; null for the other kinds (M11). */
+  /**
+   * The chips of a 'bodies' (M11) or a 'topo' (D5 of M19.1) param, one per item of the value; null
+   * for the other kinds.
+   */
   readonly refs: readonly FieldRef[] | null;
   /** !isParamVisible(spec, params): the dialog does not draw the field (M13). */
   readonly hidden: boolean;
@@ -103,14 +106,30 @@ export interface RefText {
   readonly params: Readonly<Record<string, string>>;
 }
 
-/** One item of the value of a 'bodies' param, as its chip shows it. */
+/**
+ * One item of the value of a 'bodies' or a 'topo' param, as its chip shows it. Exactly one of
+ * `label` (a name from the user) and `text` (a translation key) is not null, so the view only
+ * draws the one it gets (ADR 0010).
+ */
 export interface FieldRef {
   /** Position of the item in the value. */
   readonly index: number;
-  /** null for an item that is not a body reference of the right shape. */
+  /** null for an item that is not a body (topo) reference of the right shape. */
   readonly body: BodyId | null;
-  /** Name from the document only (bodyRefLabel); null = a missing body. */
+  /** 'bodies': the name from the document only (bodyRefLabel), null = a missing body; 'topo': null. */
   readonly label: string | null;
+  /**
+   * 'topo' (D5 of M19.1): the ordinal text by the entity of the param, 'ref.edge' / 'ref.face' /
+   * 'ref.vertex' with n = index + 1; the name itself is never taken apart (ADR 0018). An item
+   * that is not a topo reference → field.missingRef. 'bodies': field.refs.missing for a missing
+   * body ("Chybí těleso"), otherwise null.
+   */
+  readonly text: RefText | null;
+  /**
+   * The chip shows a missing reference in the error style (D5 of M19.1): 'bodies' label === null
+   * (an invalid item or a missing origin feature), 'topo' body === null (an invalid item).
+   */
+  readonly missing: boolean;
 }
 
 export function createFeatureEditor(deps: {
@@ -235,6 +254,11 @@ const AUTO_FOCUS_KINDS: ReadonlySet<ParamSpec['kind']> = new Set([
 const NO_PARAMS: Readonly<Record<string, unknown>> = Object.freeze({});
 const NO_TEXT_PARAMS: Readonly<Record<string, string>> = Object.freeze({});
 const MISSING_REF: RefText = Object.freeze({ key: 'field.missingRef', params: NO_TEXT_PARAMS });
+/** The text of the chip of a body that is missing or not a body reference ("Chybí těleso"). */
+const MISSING_BODY: RefText = Object.freeze({
+  key: 'field.refs.missing',
+  params: NO_TEXT_PARAMS,
+});
 
 function createSession(deps: {
   doc: DocumentReader;
@@ -250,13 +274,26 @@ function createSession(deps: {
   let open = true;
 
   /** The chips of a 'bodies' value; `prev` is reused when nothing in them changed. */
-  function refsOf(value: unknown, prev: readonly FieldRef[] | null): readonly FieldRef[] {
+  function bodyChipsOf(value: unknown, prev: readonly FieldRef[] | null): readonly FieldRef[] {
     const items: readonly unknown[] = Array.isArray(value) ? value : [];
     const refs = items.map((item, index): FieldRef => {
       const body = bodyOfRef(item);
-      return Object.freeze({ index, body, label: body === null ? null : bodyRefLabel(doc, body) });
+      const label = body === null ? null : bodyRefLabel(doc, body);
+      const missing = label === null;
+      return Object.freeze({ index, body, label, text: missing ? MISSING_BODY : null, missing });
     });
     return prev !== null && sameRefs(prev, refs) ? prev : Object.freeze(refs);
+  }
+
+  /** FieldState.refs: the chips of a 'bodies' or 'topo' param, null for the other kinds. */
+  function chipsOf(
+    spec: ParamSpec,
+    value: unknown,
+    prev: readonly FieldRef[] | null,
+  ): readonly FieldRef[] | null {
+    if (spec.kind === 'bodies') return bodyChipsOf(value, prev);
+    if (spec.kind === 'topo') return topoChipsOf(spec.entity, value, prev);
+    return null;
   }
 
   // A new feature takes the selection into its first visible reference param right away; editing
@@ -336,7 +373,7 @@ function createSession(deps: {
         value: params[name],
         issue: issues.find((issue) => issue.param === name) ?? null,
         active: name === activeRefParam,
-        refs: spec.kind === 'bodies' ? refsOf(params[name], old?.refs ?? null) : null,
+        refs: chipsOf(spec, params[name], old?.refs ?? null),
         hidden,
         group,
         heading,
@@ -376,7 +413,10 @@ function createSession(deps: {
     assert(open, `${what}: the feature edit session is closed`);
   }
 
-  /** Closes the session once the transaction has really ended, even if subscribers threw. */
+  /**
+   * Closes the session once the transaction has really ended, even if subscribers threw: of the
+   * end, of the closed snapshot or of current. Their error goes on after the cleanup.
+   */
   function closeAfter(end: () => void): void {
     try {
       end();
@@ -385,8 +425,11 @@ function createSession(deps: {
         unsubscribeDoc();
         open = false;
         activeRefParam = null;
-        refresh();
-        onClose();
+        try {
+          refresh();
+        } finally {
+          onClose();
+        }
       }
     }
   }
@@ -477,6 +520,42 @@ function firstRefParam(
   return found === undefined ? null : found[0];
 }
 
+/** The translation key of the ordinal chip text of a 'topo' param by its entity (D5). */
+const TOPO_TEXT_KEYS = Object.freeze({
+  edge: 'ref.edge',
+  face: 'ref.face',
+  vertex: 'ref.vertex',
+} as const);
+
+/**
+ * The chips of a 'topo' value (D5 of M19.1): the body of each topo reference with an ordinal text
+ * by the entity; an item of another shape is a missing chip. `prev` is reused when equal.
+ */
+function topoChipsOf(
+  entity: keyof typeof TOPO_TEXT_KEYS,
+  value: unknown,
+  prev: readonly FieldRef[] | null,
+): readonly FieldRef[] {
+  const items: readonly unknown[] = Array.isArray(value) ? value : [];
+  const refs = items.map((item, index): FieldRef => {
+    const ref = topoRefOf(item);
+    return Object.freeze({
+      index,
+      body: ref === null ? null : ref.body,
+      label: null,
+      text:
+        ref === null
+          ? MISSING_REF
+          : Object.freeze({
+              key: TOPO_TEXT_KEYS[entity],
+              params: Object.freeze({ n: String(index + 1) }),
+            }),
+      missing: ref === null,
+    });
+  });
+  return prev !== null && sameRefs(prev, refs) ? prev : Object.freeze(refs);
+}
+
 function sameRefText(a: RefText, b: RefText): boolean {
   const keys = Object.keys(a.params);
   return (
@@ -538,7 +617,18 @@ function sameRefs(a: readonly FieldRef[], b: readonly FieldRef[]): boolean {
     a.length === b.length &&
     a.every((ref, i) => {
       const other = b[i];
-      return other !== undefined && ref.body === other.body && ref.label === other.label;
+      return (
+        other !== undefined &&
+        ref.body === other.body &&
+        ref.label === other.label &&
+        sameOptionalRefText(ref.text, other.text) &&
+        ref.missing === other.missing
+      );
     })
   );
+}
+
+function sameOptionalRefText(a: RefText | null, b: RefText | null): boolean {
+  if (a === null || b === null) return a === b;
+  return sameRefText(a, b);
 }

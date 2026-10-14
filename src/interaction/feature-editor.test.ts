@@ -7,7 +7,7 @@ import {
   toData,
   validateAgainstSchema,
 } from '@/document';
-import type { FeatureId, FeatureSchema, ParamSchema } from '@/document';
+import type { FeatureId, FeatureSchema, ParamSchema, TopoName, TopoRef } from '@/document';
 import { aFeature } from '@/document/testing';
 import type { DocumentOptions } from '@/document/testing';
 import type { BatchOp, FeatureAddOp, Operation } from '@/ops';
@@ -567,6 +567,26 @@ describe('FeatureEditSession', () => {
     expect(editor.current.get()).toBe(second);
   });
 
+  it.each(['commit', 'cancel'] as const)(
+    'a subscriber that throws on %s still closes the session; its error goes on',
+    (end) => {
+      const { editor } = setup();
+      const session = editor.create('box');
+      session.state.subscribe(() => {
+        if (!session.state.get().open) throw new Error('subscriber failed');
+      });
+
+      expect(() => {
+        session[end]();
+      }).toThrow('subscriber failed');
+
+      expect(session.state.get().open).toBe(false);
+      expect(editor.current.get()).toBeNull();
+      const second = editor.create('box');
+      expect(editor.current.get()).toBe(second);
+    },
+  );
+
   it('undo is disabled during the session', () => {
     const { dispatcher, undo, editor } = setup();
     const add: FeatureAddOp = {
@@ -662,6 +682,8 @@ describe('FeatureEditSession.setParams (M12)', () => {
 describe('FeatureEditSession reference chips (FieldState.refs)', () => {
   const A = bodyId(fid('a'));
   const B2 = bodyId(fid('b'), 2);
+  /** The text of a chip of a missing body ("Chybí těleso"), from the presenter (M19.1 Ú13a). */
+  const MISSING_BODY = { key: 'field.refs.missing', params: {} };
 
   function withTargets(targets: readonly unknown[]) {
     const s = setup({ features: [aBox('a', 'Box 1'), aBox('b', 'Box 2')] });
@@ -680,31 +702,44 @@ describe('FeatureEditSession reference chips (FieldState.refs)', () => {
     ]);
     const refs = targetsOf(session);
     expect(refs).toEqual([
-      { index: 0, body: A, label: 'Box 1' },
-      { index: 1, body: B2, label: 'Box 2 (2)' },
+      { index: 0, body: A, label: 'Box 1', text: null, missing: false },
+      { index: 1, body: B2, label: 'Box 2 (2)', text: null, missing: false },
     ]);
     expect(Object.isFrozen(refs)).toBe(true);
     expect(Array.isArray(refs) && refs.every((r) => Object.isFrozen(r))).toBe(true);
   });
 
-  it('an item of an invalid shape has body and label null; a non-array is empty', () => {
+  it('an item of an invalid shape has body and label null and the missing text; a non-array is empty', () => {
     const { session } = withTargets([
       'junk',
       { kind: 'body', body: 'a' },
       { kind: 'body', body: A },
     ]);
     expect(targetsOf(session)).toEqual([
-      { index: 0, body: null, label: null },
-      { index: 1, body: null, label: null },
-      { index: 2, body: A, label: 'Box 1' },
+      { index: 0, body: null, label: null, text: MISSING_BODY, missing: true },
+      { index: 1, body: null, label: null, text: MISSING_BODY, missing: true },
+      { index: 2, body: A, label: 'Box 1', text: null, missing: false },
     ]);
     session.setParam('targets', 'junk');
     expect(targetsOf(session)).toEqual([]);
   });
 
-  it('the label is null when the origin feature is not in the document', () => {
+  it('a missing body: the chip has the text field.refs.missing instead of a label', () => {
     const { session } = withTargets([{ kind: 'body', body: bodyId(fid('gone')) }]);
-    expect(targetsOf(session)).toEqual([{ index: 0, body: 'gone/body', label: null }]);
+    expect(targetsOf(session)).toEqual([
+      { index: 0, body: 'gone/body', label: null, text: MISSING_BODY, missing: true },
+    ]);
+  });
+
+  it('a chip has exactly one of a label (a name from the user) and a text (a key)', () => {
+    const { session } = withTargets([
+      'junk',
+      { kind: 'body', body: A },
+      { kind: 'body', body: bodyId(fid('gone')) },
+    ]);
+    const refs = session.state.get().fields[2]?.refs ?? [];
+    expect(refs).toHaveLength(3);
+    for (const ref of refs) expect((ref.label === null) !== (ref.text === null)).toBe(true);
   });
 
   it('follows a change of the body metadata in the document', () => {
@@ -712,7 +747,9 @@ describe('FeatureEditSession reference chips (FieldState.refs)', () => {
     const before = session.state.get();
     doc.setBodyMeta(A, { name: 'Base' });
     const state = session.state.get();
-    expect(state.fields[2]?.refs).toEqual([{ index: 0, body: A, label: 'Base' }]);
+    expect(state.fields[2]?.refs).toEqual([
+      { index: 0, body: A, label: 'Base', text: null, missing: false },
+    ]);
     expect(state.fields[0]).toBe(before.fields[0]);
   });
 
@@ -732,6 +769,141 @@ describe('FeatureEditSession reference chips (FieldState.refs)', () => {
     const closed = session.state.get();
     doc.setBodyMeta(A, { name: 'Base' });
     expect(session.state.get()).toBe(closed);
+  });
+});
+
+describe('FeatureEditSession topo chips (FieldState.refs, D5 of M19.1)', () => {
+  const TOPO_PARAMS: ParamSchema = {
+    edges: { kind: 'topo', label: 'edges', entity: 'edge' },
+    faces: { kind: 'topo', label: 'faces', entity: 'face' },
+    points: { kind: 'topo', label: 'points', entity: 'vertex' },
+    targets: { kind: 'bodies', label: 'targets' },
+  };
+  const TOPO_SCHEMA: FeatureSchema = {
+    type: 'topoLike',
+    version: 1,
+    label: 'topoLike.label',
+    params: TOPO_PARAMS,
+    defaults: () => ({ edges: [], faces: [], points: [], targets: [] }),
+    validate: () => [],
+  };
+  const A = bodyId(fid('a'));
+
+  // Test data: the names stand for names minted by propagateNames; the chip never reads them.
+  const topo = (name: string): TopoRef => ({ kind: 'topo', body: A, name: name as TopoName });
+  const E1 = topo('edge:a/face:front|a/face:top');
+  const E2 = topo('edge:a/face:back|a/face:top');
+
+  function withParams(params: Readonly<Record<string, unknown>>) {
+    const s = setup({ features: [aBox('a', 'Box 1')] }, EN, TOPO_SCHEMA);
+    const session = s.editor.create('topoLike');
+    session.setParams(params);
+    return { ...s, session };
+  }
+
+  const refsOf = (session: { state: { get(): EditState } }, name: string) =>
+    session.state.get().fields.find((f) => f.name === name)?.refs;
+
+  it('lists two edges as ordinal chips with the body and no label', () => {
+    const { session } = withParams({ edges: [E1, E2] });
+    const refs = refsOf(session, 'edges');
+    expect(refs).toEqual([
+      {
+        index: 0,
+        body: A,
+        label: null,
+        text: { key: 'ref.edge', params: { n: '1' } },
+        missing: false,
+      },
+      {
+        index: 1,
+        body: A,
+        label: null,
+        text: { key: 'ref.edge', params: { n: '2' } },
+        missing: false,
+      },
+    ]);
+    expect(Object.isFrozen(refs)).toBe(true);
+    for (const ref of refs ?? []) {
+      expect(Object.isFrozen(ref)).toBe(true);
+      expect(Object.isFrozen(ref.text)).toBe(true);
+      expect(Object.isFrozen(ref.text?.params)).toBe(true);
+    }
+  });
+
+  it('takes the key from the entity of the param, faces and vertices too', () => {
+    const { session } = withParams({ faces: [topo('a/face:top')], points: [topo('vertex:x')] });
+    expect(refsOf(session, 'faces')).toEqual([
+      {
+        index: 0,
+        body: A,
+        label: null,
+        text: { key: 'ref.face', params: { n: '1' } },
+        missing: false,
+      },
+    ]);
+    expect(refsOf(session, 'points')).toEqual([
+      {
+        index: 0,
+        body: A,
+        label: null,
+        text: { key: 'ref.vertex', params: { n: '1' } },
+        missing: false,
+      },
+    ]);
+  });
+
+  it('an item that is not a topo reference is a missing chip; a non-array is empty', () => {
+    const { session } = withParams({
+      edges: ['junk', { kind: 'topo', body: 'a', name: 'e' }, { kind: 'body', body: A }, E1],
+    });
+    const missing = { key: 'field.missingRef', params: {} };
+    expect(refsOf(session, 'edges')).toEqual([
+      { index: 0, body: null, label: null, text: missing, missing: true },
+      { index: 1, body: null, label: null, text: missing, missing: true },
+      { index: 2, body: null, label: null, text: missing, missing: true },
+      {
+        index: 3,
+        body: A,
+        label: null,
+        text: { key: 'ref.edge', params: { n: '4' } },
+        missing: false,
+      },
+    ]);
+    session.setParam('edges', 'junk');
+    expect(refsOf(session, 'edges')).toEqual([]);
+  });
+
+  it('removeRef removes one of two edges and the chips follow', () => {
+    const { doc, session } = withParams({ edges: [E1, E2] });
+
+    session.removeRef('edges', 0);
+
+    expect(doc.feature(fid('new1'))?.params).toMatchObject({ edges: [E2] });
+    expect(refsOf(session, 'edges')).toEqual([
+      {
+        index: 0,
+        body: A,
+        label: null,
+        text: { key: 'ref.edge', params: { n: '1' } },
+        missing: false,
+      },
+    ]);
+  });
+
+  it('keeps the chips and the field when a change elsewhere leaves them equal', () => {
+    const { doc, session } = withParams({ edges: [E1, E2] });
+    const before = session.state.get().fields[0];
+    session.setParam('faces', [topo('a/face:top')]);
+    doc.setBodyMeta(A, { name: 'Base' });
+    expect(session.state.get().fields[0]).toBe(before);
+  });
+
+  it('a bodies param keeps its chips without a text', () => {
+    const { session } = withParams({ targets: [{ kind: 'body', body: A }] });
+    expect(refsOf(session, 'targets')).toEqual([
+      { index: 0, body: A, label: 'Box 1', text: null, missing: false },
+    ]);
   });
 });
 
@@ -1001,8 +1173,22 @@ describe('FeatureEditSession.refText (M13)', () => {
 
   it('null, a missing value and the other kinds have no text', () => {
     expect(fieldOf(withAxis(null), 'axis')?.refText).toBeNull();
-    expect(fieldOf(withAxis(undefined), 'axis')?.refText).toBeNull();
     expect(fieldOf(withAxis(null), 'regions')?.refText).toBeNull();
+    // A missing value comes from a stored feature: writing undefined is refused (M19.1).
+    const withoutAxis = {
+      operation: 'new',
+      targets: [],
+      regions: [],
+      endType: 'blind',
+      distance: 10,
+    };
+    const stored = aFeature({ id: 'x1', type: 'xlike', params: withoutAxis });
+    const { editor } = setupExtrudeLike({ features: [sketch, stored] });
+    expect(fieldOf(editor.edit(fid('x1')), 'axis')).toMatchObject({
+      name: 'axis',
+      value: undefined,
+      refText: null,
+    });
   });
 });
 

@@ -1,6 +1,6 @@
 // The edit lock (spec 10, "Vestavěné akce"): nothing may change the document while it is open
 // read-only (Q038) or while the feature dialog holds its transaction. The one place of the rule;
-// the built-in actions, the Timeline and the Toolbar all read it from here.
+// the built-in actions, FeatureTreeModel, BrowserModel and the Toolbar all read it from here.
 
 import type { Observable, Unsubscribe } from '@/core';
 import type { FeatureEditor } from './feature-editor';

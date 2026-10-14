@@ -29,6 +29,7 @@ function aFakeSession() {
   const state = new ObservableValue<SketchState>(
     Object.freeze({
       open: true,
+      busy: false,
       name: 'Sketch 1',
       entities: RECT.entities,
       constraints: RECT.constraints,
@@ -77,7 +78,10 @@ function aFakeSession() {
   const select = (...ids: string[]): void => {
     state.set(Object.freeze({ ...state.get(), selection: Object.freeze(ids.map(item)) }));
   };
-  return { session, calls, select };
+  const setBusy = (busy: boolean): void => {
+    state.set(Object.freeze({ ...state.get(), busy }));
+  };
+  return { session, calls, select, setBusy };
 }
 
 function setup() {
@@ -176,6 +180,20 @@ describe('createSketchActions', () => {
 
     close();
     expect(enabled(SKETCH_ACTION_IDS.finish)).toBe(false);
+  });
+
+  it('finish is disabled while the session is busy, cancel is not (D8)', () => {
+    const { registry, open, enabled } = setup();
+    const { calls, setBusy } = open();
+
+    setBusy(true);
+
+    expect(enabled(SKETCH_ACTION_IDS.finish)).toBe(false);
+    expect(enabled(SKETCH_ACTION_IDS.cancel)).toBe(true);
+    expect(registry.run(SKETCH_ACTION_IDS.finish)).toBe(false);
+    expect(calls).toEqual([]);
+    setBusy(false);
+    expect(enabled(SKETCH_ACTION_IDS.finish)).toBe(true);
   });
 
   it('delete is enabled with a selection and removes it (Delete and Backspace)', () => {

@@ -25,7 +25,7 @@ Testy jsou součástí návrhu, ne dodatek. Architektura je postavená tak, aby 
 |---|---|---|---|
 | Unit | `core`, `document`, `ops`, `regen` (s `FakeKernel`), `persistence` (s `MemoryDocumentStore` a `fake-indexeddb`), `interaction`, čisté funkce z `render` | Vitest (Node) | vždy, `npm test` |
 | Kontraktové | stejná sada testů pro všechny implementace portu (`FakeKernel` × `OcctKernelImpl`, `MemoryDocumentStore` × `IdbDocumentStore`) | Vitest | vždy (OCCT verze v integrační sadě) |
-| Integrační | `kernel-occt` s reálným WASM v Node | Vitest, projekt `integration` | `npm run test:integration` |
+| Integrační | `kernel-occt` s reálným WASM v Node | Vitest, projekt `integration` | `npm run test:integration`, od M19.1 i součást `npm run check` (1,7 s) |
 | Property-based | replay logu, undo/redo, regenerace bez úniků handle | fast-check | vždy |
 | E2E smoke | otevřít aplikaci, vytvořit kvádr, změnit parametr, undo, reload | Playwright, Chrome (`channel: 'chrome'`) a WebKit (Safari) | od M10, `npm run test:e2e`; test padá na chybě v konzoli nebo nezachycené výjimce na kterékoli stránce kontextu (fixture `e2e/fixtures.ts`). Známé chyby jen v seznamu `IGNORED_CONSOLE_ERRORS` s důvodem a úzkým vzorem. Stažené soubory (M15) přes `page.waitForEvent('download')`, nahrání přes `setInputFiles`. |
 | Měření výkonu | regenerace a tessellace většího modelu s OCCT v Node, [[#Měření výkonu]] | Vitest, projekt `integration` (`tests/perf.test.ts`) | od M15, `npm run test:integration` |

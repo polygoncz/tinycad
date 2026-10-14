@@ -1,5 +1,5 @@
 import type { DocumentWriter } from '@/document';
-import type { OpHandlerRegistry } from './op-handler';
+import type { OpHandler, OpHandlerRegistry } from './op-handler';
 import { OP_VERSION } from './operation';
 import type { BatchOp, Operation, StudioSetRollbackOp } from './operation';
 
@@ -11,8 +11,8 @@ export interface ApplyResult {
 
 /**
  * The one place where an operation reaches the document (spec 04): shared by the dispatcher,
- * transactions and replayLog, so batch inverses, rollback bar restoring and subscriber
- * exceptions are handled the same everywhere.
+ * transactions and replayLog, so validation, batch inverses, rollback bar restoring and
+ * subscriber exceptions are handled the same everywhere.
  */
 export function applyOperation(
   doc: DocumentWriter,
@@ -26,7 +26,8 @@ export function applyOperation(
 
 function applySingle(doc: DocumentWriter, handlers: OpHandlerRegistry, op: Operation): ApplyResult {
   const handler = handlers.get(op.type);
-  // Throws straight away: nothing has changed yet.
+  // Both throw straight away: nothing has changed yet.
+  assertValid(handler, op);
   const handlerInverse = handler.invert(doc, op);
 
   const barBefore = doc.studio.rollbackIndex;
@@ -67,7 +68,34 @@ function applySingle(doc: DocumentWriter, handlers: OpHandlerRegistry, op: Opera
   return { inverse, deferred };
 }
 
+/**
+ * What loading refuses or changes must not be written (D1, M19.1): the current version of the
+ * handler and the same validate as upcastOperation. Otherwise an operation with NaN in its params
+ * or a newer version would reach the log and the document could not be opened again, and an
+ * older one would be upcast on loading into something else than what was applied. Lists every
+ * problem of the payload.
+ */
+function assertValid(handler: OpHandler, op: Operation): void {
+  assertVersion(op, handler.version);
+  // Operation is a plain JSON object, so viewing it as a record for validate is safe; through
+  // unknown because an interface has no index signature.
+  const errors = handler.validate?.(op as unknown as Readonly<Record<string, unknown>>) ?? [];
+  if (errors.length === 0) return;
+  const list = errors.map(({ path, message }) => `${path}: ${message}`).join('; ');
+  throw new Error(`Invalid operation '${op.type}': ${list}`);
+}
+
+/** Upcast belongs to loading only: a write is always in the current version of its type. */
+function assertVersion(op: Operation, version: number): void {
+  if (op.v === version) return;
+  throw new Error(
+    `Invalid operation '${op.type}': version ${String(op.v)}, expected ${String(version)}`,
+  );
+}
+
 function applyBatch(doc: DocumentWriter, handlers: OpHandlerRegistry, op: BatchOp): ApplyResult {
+  // Throws straight away: nothing has changed yet.
+  assertVersion(op, OP_VERSION.batch);
   const inverses: Operation[] = [];
   const deferred: unknown[] = [];
   for (const sub of op.ops) {

@@ -3,7 +3,8 @@ import { defineConfig } from '@playwright/test';
 // E2E smoke test (M10, Ú11): the production build served by `vite preview`, driven in the
 // installed Google Chrome and in Playwright's WebKit (Safari; spec 13, M10 Ú13). Every test gets a
 // fresh browser context, so IndexedDB and localStorage start empty.
-const PORT = 4173;
+// E2E_PORT: a separate port per worktree, so parallel runs never reach each other's server.
+const PORT = Number(process.env.E2E_PORT ?? 4173);
 const BASE_URL = `http://localhost:${String(PORT)}`;
 
 export default defineConfig({

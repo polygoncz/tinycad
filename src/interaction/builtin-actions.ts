@@ -17,7 +17,6 @@ import type {
   UndoManager,
 } from '@/ops';
 import type { ActionRegistry } from './actions';
-import type { FeatureEditor } from './feature-editor';
 import type { FeatureTreeModel } from './feature-tree';
 import type { Mode } from './mode';
 import type { SelectionModel } from './selection';
@@ -73,7 +72,6 @@ export function createBuiltInActions(deps: {
   undo: UndoManager;
   selection: SelectionModel;
   featureTree: FeatureTreeModel;
-  editor: FeatureEditor;
   tools: ToolManager;
   toolList: readonly ToolDescriptor[];
   /** createEditLock: read-only or an open feature dialog. */
@@ -85,7 +83,7 @@ export function createBuiltInActions(deps: {
   /** The current mode (M12); without it the mode is always 'model'. */
   mode?: Observable<Mode>;
 }): Disposable {
-  const { registry, doc, ops, undo, selection, featureTree, editor, tools, locked, camera } = deps;
+  const { registry, doc, ops, undo, selection, featureTree, tools, locked, camera } = deps;
   const { confirm } = deps;
   const subscriptions = new DisposableStore();
 
@@ -171,7 +169,8 @@ export function createBuiltInActions(deps: {
     enabled: derived(hasSingleSelected, onFeatures),
     run: () => {
       const id = singleSelected();
-      if (id !== null) editor.edit(id);
+      // Through the tree, so a sketch opens in the sketcher, not in the feature dialog.
+      if (id !== null) featureTree.edit(id);
     },
   });
 

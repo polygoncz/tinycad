@@ -51,7 +51,7 @@ export interface ManipulatorController extends Disposable {
   setMode(id: string): void;
   /**
    * M19: writes the shown value of a scalar handle from the field of the HUD
-   * (value = shown / displayScale, clipped, not snapped).
+   * (value = shown / displayScale, clipped, not snapped); NaN or an infinity → nothing (M19.1).
    */
   setValue(handleId: string, shown: number): void;
 }
@@ -384,6 +384,8 @@ export function createManipulatorController(deps: {
   function setValue(handleId: string, shownValue: number): void {
     // The field only shows the value while dragging.
     if (disposed || drag !== null || session === null || shown === null) return;
+    // NaN or an infinity never reaches the params, whatever ui lets through (M19.1).
+    if (!Number.isFinite(shownValue)) return;
     const handle = shown.handles.find((h) => h.id === handleId);
     if (handle === undefined || !isScalar(handle)) return;
     const value = clip(shownValue / (handle.displayScale ?? 1), handle);

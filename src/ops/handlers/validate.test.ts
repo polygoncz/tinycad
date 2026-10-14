@@ -61,6 +61,9 @@ const broken: readonly (readonly [string, Readonly<Record<string, unknown>>, str
   ['feature.add', withFeature({ params: null }), 'feature.params'],
   ['feature.add', withFeature({ params: [] }), 'feature.params'],
   ['feature.add', withFeature({ params: 'x' }), 'feature.params'],
+  // Params must be plain JSON, as fromData demands (M19.1): IndexedDB keeps NaN or a Date.
+  ['feature.add', withFeature({ params: { size: Number.NaN } }), 'feature.params'],
+  ['feature.add', withFeature({ params: { at: new Date(0) } }), 'feature.params'],
   ['feature.add', { ...valid['feature.add'], index: -1 }, 'index'],
   ['feature.add', { ...valid['feature.add'], index: 0.5 }, 'index'],
   ['feature.add', without(valid['feature.add'] ?? {}, 'index'), 'index'],
@@ -74,6 +77,12 @@ const broken: readonly (readonly [string, Readonly<Record<string, unknown>>, str
   ['feature.setParams', { ...valid['feature.setParams'], params: null }, 'params'],
   ['feature.setParams', { ...valid['feature.setParams'], params: [1] }, 'params'],
   ['feature.setParams', without(valid['feature.setParams'] ?? {}, 'params'), 'params'],
+  ['feature.setParams', { ...valid['feature.setParams'], params: { size: undefined } }, 'params'],
+  [
+    'feature.setParams',
+    { ...valid['feature.setParams'], params: { list: [Number.POSITIVE_INFINITY] } },
+    'params',
+  ],
   ['feature.rename', { ...valid['feature.rename'], featureId: '' }, 'featureId'],
   ['feature.rename', { ...valid['feature.rename'], name: null }, 'name'],
   ['feature.suppress', { ...valid['feature.suppress'], featureId: '' }, 'featureId'],

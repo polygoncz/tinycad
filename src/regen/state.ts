@@ -152,7 +152,8 @@ export interface FeatureError {
   /** Technical text for logs and kernel errors; the UI does not show it for INVALID_PARAMS. */
   readonly message: string;
   /**
-   * INVALID_PARAMS: the problems from schema.validate; UNRESOLVED_REFERENCE: one issue
+   * INVALID_PARAMS: the problems from schema.validate, or ones a builder found itself
+   * ('extrude.upToFace', 'fillet.failed', 'chamfer.failed'); UNRESOLVED_REFERENCE: one issue
    * 'param.unresolvedRef' at the param (unresolvedReference). Translated by the UI (ADR 0014).
    */
   readonly issues?: readonly ParamIssue[];

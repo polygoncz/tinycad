@@ -26,6 +26,8 @@ const fid = (id: string): FeatureId => id as FeatureId; // test ids are trusted
 const bid = (id: string): BodyId => id as BodyId; // test ids are trusted
 
 const A = bid('a/body');
+/** Idle without a warning: the state before any export and after a full one. */
+const IDLE = { kind: 'idle', warning: null };
 const B = bid('b/body');
 const C = bid('c/body');
 
@@ -97,7 +99,7 @@ describe('createFileActions', () => {
 
   it('starts idle', () => {
     const { actions } = setup();
-    expect(actions.status.get()).toEqual({ kind: 'idle' });
+    expect(actions.status.get()).toEqual(IDLE);
   });
 
   describe('exportStep', () => {
@@ -168,7 +170,7 @@ describe('createFileActions', () => {
       expect(exporter.calls).toHaveLength(1);
       exporter.resolve();
       await flush();
-      expect(actions.status.get()).toEqual({ kind: 'idle' });
+      expect(actions.status.get()).toEqual(IDLE);
       expect(enabled(FILE_ACTION_IDS.exportStep)).toBe(true);
       expect(enabled(FILE_ACTION_IDS.exportDocument)).toBe(true);
     });
@@ -186,7 +188,7 @@ describe('createFileActions', () => {
       });
       expect(enabled(FILE_ACTION_IDS.exportDocument)).toBe(true);
       actions.dismiss();
-      expect(actions.status.get()).toEqual({ kind: 'idle' });
+      expect(actions.status.get()).toEqual(IDLE);
     });
 
     it('uses String(e) for a rejection that is not an Error', async () => {
@@ -207,10 +209,51 @@ describe('createFileActions', () => {
       expect(actions.status.get()).toEqual({ kind: 'running', task: 'document' });
     });
 
-    it('dismiss does nothing unless failed', () => {
+    it('a document exported without history → idle with the warning (M19.1, D4)', async () => {
+      const { registry, exporter, actions } = setup();
+      registry.run(FILE_ACTION_IDS.exportDocument);
+      exporter.resolve({ withHistory: false });
+      await flush();
+      expect(actions.status.get()).toEqual({
+        kind: 'idle',
+        warning: 'file.exportedWithoutHistory',
+      });
+      expect(Object.isFrozen(actions.status.get())).toBe(true);
+    });
+
+    it('a document exported with its history → idle without a warning', async () => {
+      const { registry, exporter, actions } = setup();
+      registry.run(FILE_ACTION_IDS.exportDocument);
+      exporter.resolve({ withHistory: true });
+      await flush();
+      expect(actions.status.get()).toEqual(IDLE);
+    });
+
+    it('dismiss clears the warning', async () => {
+      const { registry, exporter, actions } = setup();
+      registry.run(FILE_ACTION_IDS.exportDocument);
+      exporter.resolve({ withHistory: false });
+      await flush();
+      actions.dismiss();
+      expect(actions.status.get()).toEqual(IDLE);
+    });
+
+    it('a new run replaces the warning; a full export then leaves none', async () => {
+      const { registry, exporter, actions } = setup();
+      registry.run(FILE_ACTION_IDS.exportDocument);
+      exporter.resolve({ withHistory: false });
+      await flush();
+      registry.run(FILE_ACTION_IDS.exportDocument);
+      expect(actions.status.get()).toEqual({ kind: 'running', task: 'document' });
+      exporter.resolve({ withHistory: true });
+      await flush();
+      expect(actions.status.get()).toEqual(IDLE);
+    });
+
+    it('dismiss does nothing unless failed or warned', () => {
       const { registry, actions } = setup();
       actions.dismiss();
-      expect(actions.status.get()).toEqual({ kind: 'idle' });
+      expect(actions.status.get()).toEqual(IDLE);
       registry.run(FILE_ACTION_IDS.exportDocument);
       actions.dismiss();
       expect(actions.status.get()).toEqual({ kind: 'running', task: 'document' });

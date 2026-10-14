@@ -26,11 +26,19 @@ async function aBoxEdge(kernel: OcctKernelImpl) {
   return { box: box.shape, edge, top, front };
 }
 
-async function codeOf(p: Promise<unknown>) {
+async function rejection(p: Promise<unknown>): Promise<unknown> {
   return p.then(
     () => expect.fail('Expected the call to reject'),
-    (e: unknown) => kernelErrorCode(e),
+    (e: unknown) => e,
   );
+}
+
+async function codeOf(p: Promise<unknown>) {
+  return kernelErrorCode(await rejection(p));
+}
+
+function messageOf(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }
 
 describe('OcctKernelImpl.fillet and chamfer (M14)', () => {
@@ -102,6 +110,45 @@ describe('OcctKernelImpl.fillet and chamfer (M14)', () => {
     expect(await codeOf(kernel.fillet(shape, [circle], 5))).toBe('operation-failed');
     expect(await kernel.liveHandleCount()).toBe(1);
   });
+
+  describe.each(['fillet', 'chamfer'] as const)(
+    '%s of an edge OCCT does not accept: the seam of a cylinder (M19.1)',
+    (op) => {
+      /** A cylinder r = 1, h = 10; its seam lies on the side face only, a cap on two faces. */
+      async function aCylinderSeam(kernel: OcctKernelImpl) {
+        const { shape } = await kernel.makeCylinder({
+          base: [0, 0, 0],
+          axis: [0, 0, 1],
+          radius: 1,
+          height: 10,
+        });
+        const { edges } = await kernel.topology(shape);
+        const cap = edges.findIndex((e) => e.faces.length === 2);
+        const seam = edges.findIndex((e) => e.faces.length === 1);
+        expect([cap, seam].every((i) => i >= 0)).toBe(true);
+        return { shape, cap, seam };
+      }
+
+      it('with a cap edge: rejects with operation-failed naming the seam, not just the cap', async () => {
+        // Without the check OCCT drops the seam silently (Contour = 0) and builds the cap only.
+        const kernel = new OcctKernelImpl(oc);
+        const { shape, cap, seam } = await aCylinderSeam(kernel);
+        const error = await rejection(kernel[op](shape, [cap, seam], 0.5));
+        expect(kernelErrorCode(error)).toBe('operation-failed');
+        expect(messageOf(error)).toContain(`edge ${String(seam)}`);
+        expect(await kernel.liveHandleCount()).toBe(1);
+      });
+
+      it('alone: rejects with operation-failed naming the seam', async () => {
+        const kernel = new OcctKernelImpl(oc);
+        const { shape, seam } = await aCylinderSeam(kernel);
+        const error = await rejection(kernel[op](shape, [seam], 0.5));
+        expect(kernelErrorCode(error)).toBe('operation-failed');
+        expect(messageOf(error)).toContain(`edge ${String(seam)}`);
+        expect(await kernel.liveHandleCount()).toBe(1);
+      });
+    },
+  );
 
   it('an edge index of a released shape rejects with unknown-handle', async () => {
     const kernel = new OcctKernelImpl(oc);

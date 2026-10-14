@@ -52,6 +52,12 @@ export interface SketchSession {
 
 export interface SketchState {
   readonly open: boolean;
+  /**
+   * A job that may write to the sketch is running or waiting in the queue: a solve with a result
+   * to write, a drag, a deferred toggle of construction. Not the first solve after opening, which
+   * writes nothing. Finish waits for false (D8); false once closed.
+   */
+  readonly busy: boolean;
   /** Name of the feature. */
   readonly name: string;
   /** From the params of the feature (parseSketchData; invalid data → []). */
@@ -130,6 +136,11 @@ export function openSketchSession(deps: {
   let hover: SketchItemId | null = null;
   let message: SketchState['message'] = null;
   let editingDimension: SketchConstraintId | null = null;
+  /**
+   * Queued or running jobs that may write to the sketch (SketchState.busy while open); a toggle of
+   * construction waits for them.
+   */
+  let writers = 0;
 
   const state = new ObservableValue<SketchState>(buildState(null));
   draw();
@@ -167,6 +178,7 @@ export function openSketchSession(deps: {
     const statusKey = statusKeyOf(status, fullyDefined);
     return Object.freeze({
       open,
+      busy: open && writers > 0,
       name: edit.state.get().name,
       entities,
       constraints,
@@ -212,13 +224,20 @@ export function openSketchSession(deps: {
     );
   }
 
+  /** The drawing goes and onClose runs even if a subscriber throws; its error goes on after. */
   function close(): void {
     if (!open) return;
     open = false;
     unsubscribeEdit();
-    refresh();
-    viewport.sketches.remove(EDIT_SKETCH_DRAWING_ID);
-    onClose();
+    try {
+      refresh();
+    } finally {
+      try {
+        viewport.sketches.remove(EDIT_SKETCH_DRAWING_ID);
+      } finally {
+        onClose();
+      }
+    }
   }
 
   function checkOpen(what: string): void {
@@ -232,38 +251,48 @@ export function openSketchSession(deps: {
 
   /**
    * Runs the job after the ones before it; an idle queue starts it synchronously, so the solver
-   * reads its input in the call of the command.
+   * reads its input in the call of the command. A job that throws synchronously rejects its
+   * promise like an async one, and the queue goes on with the next job (C9).
    */
-  function enqueue<T>(job: () => Promise<T>): Promise<T> {
+  function enqueue<T>(job: () => Promise<T>, onSettled?: () => void): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const start = (): void => {
         running = true;
-        job()
-          .then(resolve, reject)
+        promiseOf(job)
+          // The queue moves on before the caller hears of its job: once the promise of a command
+          // settles, busy is up to date and the next job has started.
           .finally(() => {
-            const next = waiting.shift();
-            if (next === undefined) running = false;
-            else next();
-          });
+            try {
+              onSettled?.();
+            } finally {
+              startNext();
+            }
+          })
+          .then(resolve, reject);
       };
       if (running) waiting.push(start);
       else start();
     });
   }
 
-  /** Queued or running jobs that write a solution; a toggle of construction waits for them. */
-  let writers = 0;
+  function startNext(): void {
+    const start = waiting.shift();
+    if (start === undefined) running = false;
+    else start();
+  }
 
-  /** A job that writes what it solved from the data it read at its start. */
+  /**
+   * A job that may write to the sketch: the session is busy from now until it settles (D8). A
+   * throwing subscriber of busy goes to the caller; the job stays queued and counted.
+   */
   function enqueueWrite<T>(job: () => Promise<T>): Promise<T> {
     writers++;
-    return enqueue(async () => {
-      try {
-        return await job();
-      } finally {
-        writers--;
-      }
+    const done = enqueue(job, () => {
+      writers--;
+      if (writers === 0 && open) refresh();
     });
+    if (writers === 1) refresh();
+    return done;
   }
 
   /** The solver's answer, or null when it rejected (infrastructure failure). */
@@ -422,7 +451,7 @@ export function openSketchSession(deps: {
       // undo it (the solve read the data before the toggle).
       if (writers === 0) apply();
       else
-        void enqueue(() => {
+        void enqueueWrite(() => {
           if (open) apply();
           return Promise.resolve();
         });
@@ -475,6 +504,16 @@ export function openSketchSession(deps: {
   function itemExists(id: SketchItemId): boolean {
     const s = state.get();
     return s.entities.some((e) => e.id === id) || s.constraints.some((c) => c.id === id);
+  }
+}
+
+/** The promise of the job; a synchronous throw becomes its rejection. */
+function promiseOf<T>(job: () => Promise<T>): Promise<T> {
+  try {
+    return job();
+  } catch (e) {
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- rejects with exactly what the job threw, like an async job
+    return Promise.reject(e);
   }
 }
 

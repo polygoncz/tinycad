@@ -2,6 +2,8 @@
 // One feature of the Timeline: the icon, the state of the row and a tooltip with the name and
 // the translated issues and how many features depend on it. The row is a frozen TreeRow snapshot, passed as a prop (never put into
 // ref()/reactive()). While `renaming`, the name is an inline field; the Timeline does the rest.
+// The technical message is drawn as the row has it: the presenter leaves it only to a row
+// without translated issues (FeatureTreeModel, ADR 0010).
 // Accessibility (spec 11, "Přístupnost"): the name of the item is the feature name, the details
 // of the tooltip (type, state, message, issues) are its description; the tooltip is hidden until
 // hover, which aria-describedby does not mind.

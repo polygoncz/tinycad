@@ -1,4 +1,4 @@
-import { isBodyColor, ORIGIN, parseBodyId } from '@/document';
+import { isBodyColor, isJsonObject, ORIGIN, parseBodyId } from '@/document';
 import type { OperationLoadError } from '../load-error';
 
 // Small shape checks for validate of the built-in handlers (Q032). Only the shape of the
@@ -40,7 +40,11 @@ export const bodyColorOrNull = check(
 );
 export const string = check((v) => typeof v === 'string', 'Must be a string');
 export const boolean = check((v) => typeof v === 'boolean', 'Must be a boolean');
-export const plainObject = check(isRecord, 'Must be an object');
+/**
+ * Feature params: a plain JSON object as fromData demands (spec 03), so neither a stored log
+ * nor a live write can carry NaN, undefined or a Date that the document could not load back.
+ */
+export const jsonObject = check(isJsonObject, 'Must be a plain JSON object');
 export const wholeNumber = (min: number): Check =>
   check(
     (v) => typeof v === 'number' && Number.isInteger(v) && v >= min,

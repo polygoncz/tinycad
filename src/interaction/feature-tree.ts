@@ -39,7 +39,10 @@ export interface TreeRow {
   /** Invalid params of a FeatureHealth error (INVALID_PARAMS), otherwise null; ui translates them. */
   readonly issues: readonly ParamIssue[] | null;
   readonly status: TreeStatus;
-  /** For warning/error. */
+  /**
+   * The technical message of a warning or an error, for one without translated `issues` (a kernel
+   * error, an unresolved reference); null when the row has issues, which replace it (ADR 0010).
+   */
   readonly message: string | null;
   /** The selection contains { kind: 'feature', feature: id }. */
   readonly selected: boolean;
@@ -57,23 +60,24 @@ export interface FeatureTreeModel {
    * an open dialog or sketch) nothing.
    */
   edit(id: FeatureId): void;
-  /** → dispatch feature.rename */
+  /** → dispatch feature.rename; ends the rename mode. While `locked` nothing else. */
   rename(id: FeatureId, name: string): void;
-  /** → dispatch studio.setRollback */
+  /** → dispatch studio.setRollback. While `locked` nothing. */
   moveRollbackBar(index: number): void;
   /** The feature in the rename mode (the inline field of the Timeline); null = none. */
   readonly renaming: Observable<FeatureId | null>;
-  /** The action feature.rename: puts the feature into the rename mode. */
+  /** The action feature.rename: puts the feature into the rename mode. While `locked` nothing. */
   beginRename(id: FeatureId): void;
-  /** Ends the rename mode without renaming; rename() ends it too. */
+  /** Ends the rename mode without renaming; rename() and the lock turning on end it too. */
   cancelRename(): void;
   /** → selection.set / toggle */
   select(id: FeatureId, opts?: { additive?: boolean }): void;
   /** The features outside ids that depend on any of ids; in studio order, without duplicates (M11). */
   dependentsOf(ids: readonly FeatureId[]): readonly FeatureId[];
   /**
-   * Moves the feature to the final index toIndex (feature.move). Empty = moved; otherwise the
-   * new order violations the move would bring, and nothing happened (M11).
+   * Moves the feature to the final index toIndex (feature.move). Empty = moved, or `locked` and
+   * nothing happened; otherwise the new order violations the move would bring, and nothing
+   * happened (M11).
    */
   move(id: FeatureId, toIndex: number): readonly OrderViolation[];
   dispose(): void;
@@ -153,6 +157,10 @@ export function createFeatureTreeModel(deps: {
     regen.state.subscribe(refresh),
     selection.items.subscribe(refresh),
     editor.current.subscribe(refresh),
+    // The dialog opening (or the document being read-only) ends the rename without a change.
+    locked.subscribe(() => {
+      if (locked.get()) renaming.set(null);
+    }),
   ];
 
   return {
@@ -171,6 +179,8 @@ export function createFeatureTreeModel(deps: {
     rename(id, name) {
       // The inline field is done whatever happens to the name.
       renaming.set(null);
+      // The commands that change the document are silent while locked, like in BrowserModel.
+      if (locked.get()) return;
       const feature = doc.feature(id);
       assert(feature !== undefined, `rename: unknown feature '${id}'`);
       const trimmed = name.trim();
@@ -184,6 +194,7 @@ export function createFeatureTreeModel(deps: {
       ops.dispatch(op);
     },
     moveRollbackBar(index) {
+      if (locked.get()) return;
       const { features, rollbackIndex: bar } = doc.studio;
       if (index === bar) return;
       assert(
@@ -199,6 +210,7 @@ export function createFeatureTreeModel(deps: {
     },
     renaming: renaming.asObservable(),
     beginRename(id) {
+      if (locked.get()) return;
       assert(doc.feature(id) !== undefined, `beginRename: unknown feature '${id}'`);
       renaming.set(id);
     },
@@ -220,6 +232,7 @@ export function createFeatureTreeModel(deps: {
       return Object.freeze(found);
     },
     move(id, toIndex) {
+      if (locked.get()) return Object.freeze([]);
       const studio = doc.studio;
       const { features } = studio;
       const from = features.findIndex((f) => f.id === id);
@@ -278,7 +291,8 @@ interface RowStatus {
 
 /**
  * suppressed > rolledBack > health from the port > pending (not evaluated yet). Message and
- * issues only come with the status that shows them, never from a stale health.
+ * issues only come with the status that shows them, never from a stale health. The translated
+ * issues replace the technical message ('radius: fillet.failed'), so the views only draw the row.
  */
 function statusOf(
   feature: FeatureInstance,
@@ -292,7 +306,9 @@ function statusOf(
   if (health.kind === 'warning') {
     return { status: 'warning', message: health.message, issues: null };
   }
-  return { status: 'error', message: health.message, issues: health.issues ?? null };
+  const issues = health.issues ?? null;
+  const translated = issues !== null && issues.length > 0;
+  return { status: 'error', message: translated ? null : health.message, issues };
 }
 
 function sameRow(a: TreeRow, b: TreeRow): boolean {
