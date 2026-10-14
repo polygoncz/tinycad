@@ -25,7 +25,7 @@ specs:
   - "[[11-ui]]"
 depends_on:
   - "[[M12-skicar]]"
-started: 2026-10-15
+started: 2026-10-14
 finished: 
 tags:
   - milnik
