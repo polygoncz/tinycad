@@ -5,7 +5,8 @@
 
 import { createRandomIdGenerator, DisposableStore } from '@/core';
 import type { Disposable, IdGenerator } from '@/core';
-import type { DocumentId } from '@/document';
+import type { Result } from '@/core';
+import type { DocumentId, DocumentLoadError } from '@/document';
 import type { ConfirmRequest } from '@/interaction';
 import type { MeshOps } from '@/kernel';
 import { createOcctKernel } from '@/kernel-occt';
@@ -17,6 +18,7 @@ import { createPlanegcsSolver } from '@/solver-planegcs';
 import { acquireDocumentLock } from './doc-lock';
 import { disposeOpenSession } from './dispose-open-session';
 import * as documents from './documents';
+import type { DownloadFile } from './file-exporter';
 import { flushOnPageHide } from './page-lifecycle';
 import { createAppSession } from './session';
 import type { AppSession } from './session';
@@ -30,6 +32,8 @@ export interface OpenAppSessionOptions {
   readonly confirm: (request: ConfirmRequest) => boolean;
   /** The theme at the start, for the palette of the viewport; later AppSession.setTheme. */
   readonly theme: 'light' | 'dark';
+  /** M15: downloads an exported file (ui: a Blob and <a download>). */
+  readonly download: (file: DownloadFile) => void;
 }
 
 /**
@@ -71,6 +75,7 @@ export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSe
       confirm: opts.confirm,
       readOnly: !lock.held,
       solver,
+      download: opts.download,
       // Replay the whole log on every open while developing (spec 05, "verify").
       verify: import.meta.env.DEV,
     });
@@ -134,6 +139,23 @@ export function createNewDocument(opts: {
       ids: randomIds(),
       now: Date.now,
       translate: opts.translate,
+    }),
+  );
+}
+
+/**
+ * Stores a parsed document file (M15) as a new document and returns its id; a broken file is an
+ * error with issues and stores nothing. The file is checked against the registries of `plugins`.
+ */
+export function importDocumentFile(
+  raw: unknown,
+  opts: { readonly plugins: readonly FeaturePlugin[] },
+): Promise<Result<DocumentId, DocumentLoadError>> {
+  return withStore((store) =>
+    documents.importDocumentFile(store, raw, {
+      plugins: opts.plugins,
+      ids: randomIds(),
+      now: Date.now,
     }),
   );
 }

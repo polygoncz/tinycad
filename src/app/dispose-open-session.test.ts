@@ -92,6 +92,7 @@ describe('disposeOpenSession', () => {
       confirm: () => true,
       readOnly: false,
       solver: createFakeSolver(),
+      download: () => undefined,
     });
     await settle();
     const edit = session.features.create('box');

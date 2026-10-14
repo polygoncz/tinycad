@@ -32,6 +32,11 @@ const switcher = createDocumentSwitcher<AppSession>({
       // Like deleting a document in DocumentList: the browser's own dialog (R16).
       confirm: ({ key, params }) => globalThis.confirm(i18n.global.t(key, params)),
       theme: theme.theme.value,
+      // M15 Ú9 replaces this with downloadFile (a Blob and <a download>); until then an
+      // export ends as 'failed' with this message.
+      download: () => {
+        throw new Error('Downloading files is not available yet');
+      },
     });
     try {
       addPluginMessages(i18n, session.messages);

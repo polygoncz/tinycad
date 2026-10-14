@@ -1,5 +1,5 @@
-// Test-only entry point of app: a fake AppViewport, a kernel that can crash and a factory that
-// records the kernels it made. dependency-cruiser allows importing it only from *.test.ts.
+// Test-only entry point of app: a fake AppViewport, a kernel that can crash, a factory that
+// records the kernels it made and a download port that captures the files (M15). dependency-cruiser allows importing it only from *.test.ts.
 
 import { RpcError } from '@/core';
 import type { Disposable, Subscribable, Vec3 } from '@/core';
@@ -23,6 +23,7 @@ import { createFakeKernel } from '@/kernel/testing';
 import type { FakeKernel } from '@/kernel/testing';
 import type { ScenePalette, StandardView } from '@/render';
 import type { DocumentLocks } from './doc-lock';
+import type { DownloadFile } from './file-exporter';
 import type { AppViewport } from './session';
 
 type SyncedBody = { readonly id: BodyId; readonly shape: ShapeHandle };
@@ -30,8 +31,8 @@ type Ray = ReturnType<FakeViewport['screenToRay']>;
 
 /**
  * An AppViewport for tests: the ViewportPort part of FakeViewport plus recorded mount, body
- * syncs, kernel resets, camera calls (views and view directions), palettes and body
- * visibility. sync resolves at once.
+ * syncs, kernel resets, camera calls (views and view directions), palettes, body visibility
+ * and body colours (M15). sync resolves at once.
  * It wraps a FakeViewport instead of extending it: a class of another module is no base
  * class (ADR 0011), so its members are passed on one by one.
  */
@@ -56,6 +57,8 @@ export class FakeAppViewport implements AppViewport {
   palette: ScenePalette | null = null;
   /** Every setBodyVisible call, oldest first. */
   readonly visibilityCalls: { readonly body: BodyId; readonly visible: boolean }[] = [];
+  /** Every setBodyColor call, oldest first (M15). */
+  readonly colorCalls: { readonly body: BodyId; readonly color: string | null }[] = [];
 
   readonly bodies = {
     sync: (bodies: readonly SyncedBody[]): Promise<void> => {
@@ -89,6 +92,10 @@ export class FakeAppViewport implements AppViewport {
 
   setBodyVisible(body: BodyId, visible: boolean): void {
     this.visibilityCalls.push({ body, visible });
+  }
+
+  setBodyColor(body: BodyId, color: string | null): void {
+    this.colorCalls.push({ body, color });
   }
 
   /** A fixed result, or a function of the view coordinates (FakeViewport.setPick). */
@@ -243,4 +250,19 @@ export function aFakeLocks(): {
     },
   };
   return { locks, held, requests };
+}
+
+/** AppSessionDeps.download that keeps every file (M15). */
+export function aDownloads(): {
+  readonly download: (file: DownloadFile) => void;
+  /** Downloaded files, oldest first. */
+  readonly files: readonly DownloadFile[];
+} {
+  const files: DownloadFile[] = [];
+  return {
+    download: (file) => {
+      files.push(file);
+    },
+    files,
+  };
 }

@@ -5,12 +5,7 @@
 
 import { DisposableStore, ObservableValue, RpcError } from '@/core';
 import type { Disposable, IdGenerator, Observable } from '@/core';
-import {
-  createDocument,
-  createFeatureSchemaRegistry,
-  ORIGIN_AXES,
-  ORIGIN_PLANES,
-} from '@/document';
+import { createDocument, ORIGIN_AXES, ORIGIN_PLANES } from '@/document';
 import type {
   AxisId,
   BodyId,
@@ -32,6 +27,8 @@ import {
   createBuiltInActions,
   createEditLock,
   createFeatureEditor,
+  createFileActions,
+  createHistoryModel,
   toolActionId,
   toolModes,
   createFeatureTreeModel,
@@ -40,8 +37,8 @@ import {
   createSketchEditor,
   createSketchTools,
   createToolManager,
-  createToolRegistry,
   createTopoInspector,
+  FILE_ACTION_IDS,
   planeDrawing,
   SELECT_TOOL,
   SKETCH_ACTION_IDS,
@@ -53,6 +50,8 @@ import type {
   ConfirmRequest,
   FeatureEditor,
   FeatureTreeModel,
+  FileActions,
+  HistoryModel,
   Mode,
   SelectionModel,
   SketchEditor,
@@ -62,39 +61,29 @@ import type {
   ViewportPort,
 } from '@/interaction';
 import type { GeometryKernel } from '@/kernel';
-import {
-  createOperationDispatcher,
-  createOperationLog,
-  createOpHandlerRegistry,
-  createUndoManager,
-} from '@/ops';
+import { createOperationDispatcher, createOperationLog, createUndoManager } from '@/ops';
 import type { OperationDispatcher, OperationLog, OpHandlerRegistry } from '@/ops';
 import { createPersistenceService, createSnapshot, loadDocument } from '@/persistence';
 import type {
   DocumentStore,
-  LoadDocumentError,
   PersistenceService,
   PersistenceStatus,
   Scheduler,
 } from '@/persistence';
-import { registerPlugin } from '@/plugin-api';
 import type { FeaturePlugin, PluginMessages } from '@/plugin-api';
-import {
-  bodiesOf,
-  createBuilderRegistry,
-  createRegenerator,
-  EMPTY_STATE,
-  planeOfRef,
-  sketchesOf,
-} from '@/regen';
-import type { BuilderRegistry, RegenResult, RegenState, SketchArtifact } from '@/regen';
+import { bodiesOf, createRegenerator, EMPTY_STATE, planeOfRef, sketchesOf } from '@/regen';
+import type { RegenResult, RegenState, SketchArtifact } from '@/regen';
 import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
 import type { BodyLayer, CameraController, ScenePalette } from '@/render';
 import type { ConstraintSolver, GeometricConstraintKind } from '@/sketch';
+import { createFileExporter } from './file-exporter';
+import type { DownloadFile } from './file-exporter';
 import { createKernelSupervisor } from './kernel-supervisor';
 import type { KernelUiState } from './kernel-supervisor';
+import { describeLoadError } from './load-error';
 import { createRegenScheduler } from './regen-scheduler';
 import { createRegenStatusAdapter } from './regen-status-adapter';
+import { createPluginRegistries } from './registries';
 
 export type RegenUiState = {
   /** A regeneration is running or due. */
@@ -109,7 +98,8 @@ export type RegenUiState = {
 
 /**
  * What app needs from the 3D view: the port of interaction plus mounting, the body layer, the
- * camera, the palette and body visibility. render's Viewport is one; tests use a fake.
+ * camera, the palette, body visibility and body colour (M15). render's Viewport is one; tests
+ * use a fake.
  * app hands the kernel to the view through `bodies.reset` whenever a kernel becomes ready
  * (spec 09, "Výměna instance jádra"), so the meshes the view was created with are replaced
  * before the first sync.
@@ -120,6 +110,8 @@ export interface AppViewport extends ViewportPort {
   readonly camera: CameraController;
   setPalette(palette: ScenePalette): void;
   setBodyVisible(body: BodyId, visible: boolean): void;
+  /** '#rrggbb', null = the face colour of the palette (spec 09, M15). */
+  setBodyColor(body: BodyId, color: string | null): void;
 }
 
 export interface AppSessionDeps {
@@ -145,6 +137,8 @@ export interface AppSessionDeps {
   readonly verify?: boolean;
   /** M12: the solver of the sketcher; tests FakeSolver, the browser createPlanegcsSolver(). */
   readonly solver: ConstraintSolver;
+  /** M15: downloads an exported file; tests capture it, the browser hands ui's implementation. */
+  readonly download: (file: DownloadFile) => void;
 }
 
 export interface AppSession extends Disposable {
@@ -188,6 +182,14 @@ export interface AppSession extends Disposable {
   sketchConstraintActionId(kind: GeometricConstraintKind): string;
   /** M14: the name of the face or edge under the cursor, for the debug panel (R111). */
   readonly topoInspector: TopoInspector;
+  /** M15: the edit history panel. */
+  readonly history: HistoryModel;
+  /** M15: the state of an export; the actions themselves are in `actions`, group 'file'. */
+  readonly files: FileActions;
+  /** M15: the ids of the File actions; ui may not import values of interaction. */
+  readonly fileActionIds: typeof FILE_ACTION_IDS;
+  /** M15: '#rrggbb' face colour of the current palette (setTheme), for the colour field in ui. */
+  readonly defaultBodyColor: Observable<string>;
 
   mountViewport(el: HTMLElement): void;
   /** Q072: app picks the ScenePalette, ui does not know render. */
@@ -219,16 +221,13 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   const { viewport, readOnly } = deps;
 
   // 1. Registries and plugins, before anything is opened or started.
-  const schemas = createFeatureSchemaRegistry();
-  const builders = createBuilderRegistry();
-  const toolRegistry = createToolRegistry();
-  toolRegistry.register(SELECT_TOOL);
-  for (const plugin of deps.plugins) {
-    registerPlugin(plugin, { schemas, builders, tools: toolRegistry });
-  }
-  checkComplete(schemas, builders);
-  const messages = mergeMessages(deps.plugins);
-  const handlers = createOpHandlerRegistry({ schemas });
+  const {
+    schemas,
+    builders,
+    tools: toolRegistry,
+    handlers,
+    messages,
+  } = createPluginRegistries(deps.plugins);
 
   // 2. The document.
   const { doc, log } = await openDocument(deps, schemas, handlers);
@@ -406,6 +405,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     // sync never rejects and drops a stale result itself (spec 09).
     void viewport.bodies.sync(bodies).then(() => {
       applyHidden();
+      applyColors();
       fitFirstView(bodies.length);
     });
   }
@@ -434,6 +434,26 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   function applyHidden(): void {
     if (disposed) return;
     for (const body of browser.hidden.get()) viewport.setBodyVisible(body, false);
+  }
+
+  // Colours of bodies (M15): like visibility; a colour set before the body is shown is dropped by
+  // the view, so it is applied again after every sync.
+  let shownColors: ReadonlyMap<BodyId, string> = browser.colors.get();
+  lifetime.add(
+    browser.colors.subscribe(() => {
+      const next = browser.colors.get();
+      for (const [body, color] of next) {
+        if (shownColors.get(body) !== color) viewport.setBodyColor(body, color);
+      }
+      for (const body of shownColors.keys()) {
+        if (!next.has(body)) viewport.setBodyColor(body, null);
+      }
+      shownColors = next;
+    }),
+  );
+  function applyColors(): void {
+    if (disposed) return;
+    for (const [body, color] of browser.colors.get()) viewport.setBodyColor(body, color);
   }
 
   // 6. Sketches, planes and axes (M12, M13): app draws the sketches of the regeneration (with
@@ -497,6 +517,32 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     }),
   );
 
+  // 7. Edit history and export (M15).
+  const history = lifetime.add(createHistoryModel({ log }));
+  const exporter = createFileExporter({
+    doc,
+    regenBusy: scheduler.busy,
+    lastState: () => lastState,
+    kernel: () => supervisor.kernel(),
+    flush: () => persistence?.flush() ?? Promise.resolve(),
+    store: deps.store,
+    docId: deps.docId,
+    schemas,
+    handlers,
+    download: deps.download,
+  });
+  const files = lifetime.add(
+    createFileActions({
+      registry: actions,
+      exporter,
+      regen: regenStatus,
+      browser,
+      editor: features,
+      mode,
+    }),
+  );
+  const defaultBodyColor = new ObservableValue(hexColor(LIGHT_PALETTE.face));
+
   lifetime.add(
     doc.events.on('changed', () => {
       scheduler.request();
@@ -555,11 +601,17 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     sketchActionIds: SKETCH_ACTION_IDS,
     sketchConstraintActionId,
     topoInspector,
+    history,
+    files,
+    fileActionIds: FILE_ACTION_IDS,
+    defaultBodyColor: defaultBodyColor.asObservable(),
     mountViewport(el) {
       viewport.mount(el);
     },
     setTheme(theme) {
-      viewport.setPalette(theme === 'dark' ? DARK_PALETTE : LIGHT_PALETTE);
+      const palette = theme === 'dark' ? DARK_PALETTE : LIGHT_PALETTE;
+      viewport.setPalette(palette);
+      defaultBodyColor.set(hexColor(palette.face));
     },
     async flush() {
       await persistence?.flush();
@@ -599,53 +651,9 @@ async function openDocument(
   return { doc, log: createOperationLog() };
 }
 
-function describeLoadError(error: LoadDocumentError): string {
-  switch (error.kind) {
-    case 'not-found':
-      return 'not found';
-    case 'snapshot':
-      return `broken ${error.which} snapshot: ${error.error.issues
-        .map((i) => `${i.path}: ${i.message}`)
-        .join('; ')}`;
-    case 'entry':
-      return `broken log entry ${String(error.seq)}: ${error.error.path}: ${error.error.message}`;
-  }
-}
-
-/** Every type has a schema and a builder; registerPlugin guarantees it, this guards app. */
-function checkComplete(schemas: FeatureSchemaRegistry, builders: BuilderRegistry): void {
-  const schemaTypes = schemas.all().map((s) => s.type);
-  const builderTypes = builders.all().map((b) => b.type);
-  const missing = [
-    ...schemaTypes.filter((t) => !builders.has(t)).map((t) => `builder of '${t}'`),
-    ...builderTypes.filter((t) => !schemas.has(t)).map((t) => `schema of '${t}'`),
-  ];
-  if (missing.length > 0) throw new Error(`Incomplete registries: missing ${missing.join(', ')}`);
-}
-
-/** One dictionary per language over all plugins; a key defined twice is a programmer error. */
-function mergeMessages(plugins: readonly FeaturePlugin[]): PluginMessages {
-  const cs: Record<string, string> = {};
-  const en: Record<string, string> = {};
-  for (const plugin of plugins) {
-    if (plugin.messages === undefined) continue;
-    addMessages(cs, plugin.messages.cs, plugin.schema.type);
-    addMessages(en, plugin.messages.en, plugin.schema.type);
-  }
-  return Object.freeze({ cs: Object.freeze(cs), en: Object.freeze(en) });
-}
-
-function addMessages(
-  into: Record<string, string>,
-  from: Readonly<Record<string, string>>,
-  type: string,
-): void {
-  for (const [key, text] of Object.entries(from)) {
-    if (Object.hasOwn(into, key)) {
-      throw new Error(`Duplicate message '${key}' in the plugin '${type}'`);
-    }
-    into[key] = text;
-  }
+/** 0xRRGGBB of a palette → '#rrggbb', the form of a body colour in the document. */
+function hexColor(color: number): string {
+  return `#${color.toString(16).padStart(6, '0')}`;
 }
 
 /** Q038: a dispatcher that refuses every change; reading and its events stay. */

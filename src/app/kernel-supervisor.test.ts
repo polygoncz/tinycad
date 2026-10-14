@@ -54,6 +54,35 @@ describe('KernelSupervisor', () => {
     expect(regenerator).not.toBeNull();
   });
 
+  it('kernel(): null while starting, the live kernel when ready, null after a crash', async () => {
+    const { factory, supervisor } = aSupervisor();
+    expect(supervisor.kernel()).toBeNull();
+    await settle();
+    expect(supervisor.kernel()).toBe(factory.last);
+    const first = supervisor.regenerator();
+    if (first === null) throw new Error('not ready');
+    supervisor.lost(first);
+    expect(supervisor.kernel()).toBeNull();
+    await settle();
+    expect(supervisor.kernel()).toBe(factory.last);
+    supervisor.dispose();
+    expect(supervisor.kernel()).toBeNull();
+  });
+
+  it('kernel() is null when the kernel did not start', async () => {
+    const factory = aKernelFactory();
+    factory.failNext();
+    const supervisor = createKernelSupervisor({
+      createKernel: factory.create,
+      createRegenerator: aRegenerator,
+      now: () => 0,
+      onReady: vi.fn(),
+      onError: vi.fn(),
+    });
+    await settle();
+    expect(supervisor.kernel()).toBeNull();
+  });
+
   it('a failed start → unavailable with the text of the error, not failed; reported', async () => {
     const factory = aKernelFactory();
     factory.failNext(new Error('no wasm'));

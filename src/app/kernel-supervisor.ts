@@ -25,6 +25,11 @@ export interface KernelSupervisor extends Disposable {
    */
   regenerator(): Regenerator | null;
   /**
+   * The live kernel (the one of regenerator(), for the STEP export, M15); null in the same
+   * states as regenerator().
+   */
+  kernel(): GeometryKernel | null;
+  /**
    * The Regenerator rejected with RpcError 'disconnected': its kernel is gone. The loss of a
    * Regenerator that is no longer current is an echo and is ignored.
    */
@@ -85,6 +90,7 @@ export function createKernelSupervisor(deps: {
     state: state.asObservable(),
     error: error.asObservable(),
     regenerator: () => live?.regenerator ?? null,
+    kernel: () => live?.kernel ?? null,
     lost(regenerator) {
       if (disposed || live?.regenerator !== regenerator) return;
       drop();

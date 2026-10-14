@@ -27,7 +27,15 @@ import { createFakeSolver, rectangleData } from '@/sketch/testing';
 import { createAppSession } from './index';
 import { RESTART_WINDOW_MS } from './kernel-supervisor';
 import type { AppSession, AppSessionDeps, KernelUiState } from './index';
-import { aKernelFactory, createCrashableKernel, FakeAppViewport, settle } from './testing';
+import { importDocumentFile } from './documents';
+import type { DownloadFile } from './file-exporter';
+import {
+  aDownloads,
+  aKernelFactory,
+  createCrashableKernel,
+  FakeAppViewport,
+  settle,
+} from './testing';
 import type { CrashableKernel, KernelFactory } from './testing';
 
 // Branded ids are created by a cast at one place in tests.
@@ -46,6 +54,8 @@ interface Harness {
   readonly kernels: KernelFactory;
   readonly viewport: FakeAppViewport;
   readonly scheduler: ManualScheduler;
+  /** Files downloaded through the session (M15). */
+  readonly downloads: readonly DownloadFile[];
   /** Moves the clock of `now`. */
   readonly advance: (ms: number) => void;
 }
@@ -57,6 +67,7 @@ async function open(
   const kernels = overrides.kernels ?? aKernelFactory();
   const viewport = new FakeAppViewport();
   const scheduler = createManualScheduler();
+  const downloads = aDownloads();
   let time = 1_000_000;
   const session = await createAppSession({
     plugins: [boxPlugin],
@@ -71,6 +82,7 @@ async function open(
     confirm: () => true,
     readOnly: false,
     solver: createFakeSolver(),
+    download: downloads.download,
     ...overrides,
   });
   await settle();
@@ -80,6 +92,7 @@ async function open(
     kernels,
     viewport,
     scheduler,
+    downloads: downloads.files,
     advance: (ms) => {
       time += ms;
     },
@@ -973,6 +986,153 @@ describe('createAppSession – topological names (M14)', () => {
     viewport.setPick({ kind: 'face', body, faceIndex: 5, point: [0, 0, 10], normal: [0, 0, 1] });
     viewport.emitPointer(pointerAt('move'));
     expect(session.topoInspector.hovered.get()).toBeNull();
+  });
+});
+
+describe('createAppSession – export, history and colours (M15)', () => {
+  const textOf = (file: DownloadFile | undefined): string => {
+    const data = file?.data ?? fail();
+    return typeof data === 'string' ? data : new TextDecoder().decode(data);
+  };
+  const enabled = (session: AppSession, id: string): boolean | undefined =>
+    session.actions.actions.get().find((a) => a.id === id)?.enabled;
+
+  it('exportStep after a regeneration downloads <document name>.step', async () => {
+    const { session, downloads } = await open();
+    addBox(session);
+    await settle();
+    expect(session.actions.run(session.fileActionIds.exportStep)).toBe(true);
+    await settle();
+    expect(downloads).toHaveLength(1);
+    expect(downloads[0]).toMatchObject({ name: `${UNTITLED}.step`, mime: 'model/step' });
+    expect(textOf(downloads[0]).startsWith('ISO-10303-21;')).toBe(true);
+    expect(session.files.status.get()).toEqual({ kind: 'idle' });
+  });
+
+  it('exportStep is disabled without a body and when the only body is hidden', async () => {
+    const { session } = await open();
+    expect(enabled(session, session.fileActionIds.exportStep)).toBe(false);
+    addBox(session);
+    await settle();
+    expect(enabled(session, session.fileActionIds.exportStep)).toBe(true);
+    const body = session.browser.bodies.get()[0]?.body ?? fail();
+    session.browser.setVisible(body, false);
+    expect(enabled(session, session.fileActionIds.exportStep)).toBe(false);
+  });
+
+  it('a failed kernel export → files.status failed, nothing downloaded', async () => {
+    const { session, kernels, downloads } = await open();
+    addBox(session);
+    await settle();
+    kernels.last.fake.failNext('exportStep', 'operation-failed', 'writer failed');
+    session.actions.run(session.fileActionIds.exportStep);
+    await settle();
+    expect(session.files.status.get()).toEqual({
+      kind: 'failed',
+      task: 'step',
+      message: 'writer failed',
+    });
+    expect(downloads).toEqual([]);
+  });
+
+  it('an export during a regeneration waits and exports the new state', async () => {
+    const { session, kernels, viewport, downloads } = await open();
+    addBox(session, 10);
+    await settle();
+    const before = viewport.lastSync[0]?.shape ?? fail();
+    const exportStep = vi.spyOn(kernels.last.fake, 'exportStep');
+    const id = session.doc.studio.features[0]?.id ?? fail();
+    const edit = session.features.edit(id);
+    edit.setParam('height', 20);
+    edit.commit();
+    // The change regenerates; the export is asked for while that runs.
+    expect(session.regen.get().busy).toBe(true);
+    expect(session.actions.run(session.fileActionIds.exportStep)).toBe(true);
+    await settle();
+    const after = viewport.lastSync[0]?.shape ?? fail();
+    expect(after).not.toBe(before);
+    expect(exportStep.mock.calls).toEqual([[[after]]]);
+    expect(downloads).toHaveLength(1);
+  });
+
+  it('exportDocument → importDocumentFile → a new session has the same studio and undo', async () => {
+    const { session, store, scheduler, downloads } = await open();
+    addBox(session, 10);
+    addBox(session, 20);
+    await settle();
+    session.actions.run(session.fileActionIds.exportDocument);
+    await settle();
+    expect(downloads).toHaveLength(1);
+    expect(downloads[0]).toMatchObject({
+      name: `${UNTITLED}.tinycad.json`,
+      mime: 'application/json',
+    });
+    const raw: unknown = JSON.parse(textOf(downloads[0]));
+    const imported = await importDocumentFile(store, raw, {
+      plugins: [boxPlugin],
+      ids: createSequentialIdGenerator('imp'),
+      now: () => 5,
+    });
+    if (!imported.ok) throw new Error('import failed');
+    expect(imported.value).not.toBe(DOC);
+    scheduler.advance(1000);
+    session.dispose();
+    await settle();
+
+    const copy = await open({ store, docId: imported.value });
+    expect(copy.session.doc.studio).toEqual(session.doc.studio);
+    expect(enabled(copy.session, copy.session.actionIds.undo)).toBe(true);
+    copy.session.actions.run(copy.session.actionIds.undo);
+    expect(copy.session.doc.studio.features).toHaveLength(1);
+  });
+
+  it('history shows a created feature and its undo, newest first', async () => {
+    const { session } = await open();
+    expect(session.history.state.get()).toEqual({ rows: [], total: 0 });
+    addBox(session);
+    session.actions.run(session.actionIds.undo);
+    const { rows, total } = session.history.state.get();
+    expect(total).toBe(2);
+    expect(rows.map((r) => [r.kind, r.status])).toEqual([
+      ['undo', null],
+      ['do', 'undone'],
+    ]);
+  });
+
+  it('a colour set in the browser goes to the viewport, again after a sync, null resets it', async () => {
+    const { session, viewport } = await open();
+    addBox(session);
+    await settle();
+    const body = session.browser.bodies.get()[0]?.body ?? fail();
+    session.browser.setColor(body, '#ff0000');
+    expect(viewport.colorCalls).toEqual([{ body, color: '#ff0000' }]);
+    viewport.colorCalls.length = 0;
+    addBox(session);
+    await settle();
+    expect(viewport.colorCalls).toContainEqual({ body, color: '#ff0000' });
+    session.browser.setColor(body, null);
+    expect(viewport.colorCalls[viewport.colorCalls.length - 1]).toEqual({ body, color: null });
+  });
+
+  it('a stored colour is shown after a reopen', async () => {
+    const { session, store } = await open();
+    addBox(session);
+    await settle();
+    const body = session.browser.bodies.get()[0]?.body ?? fail();
+    session.browser.setColor(body, '#00ff00');
+    await session.close();
+
+    const reopened = await open({ store });
+    expect(reopened.viewport.colorCalls).toContainEqual({ body, color: '#00ff00' });
+  });
+
+  it('defaultBodyColor is the face colour of the palette of the theme', async () => {
+    const { session } = await open();
+    expect(session.defaultBodyColor.get()).toBe('#b9c3d1');
+    session.setTheme('dark');
+    expect(session.defaultBodyColor.get()).toBe('#3b6aa6');
+    session.setTheme('light');
+    expect(session.defaultBodyColor.get()).toBe('#b9c3d1');
   });
 });
 
