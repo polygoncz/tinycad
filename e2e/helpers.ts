@@ -102,3 +102,66 @@ export async function drawDimensionedRectangle(page: Page, sketch: string): Prom
   await expect(dimensionInput(panel, 'Vzdálenost 2')).toBeVisible();
   return panel;
 }
+
+/** Toolbar → the dialog of the new feature, named by the feature. */
+export async function openTool(page: Page, tool: string, feature: string): Promise<Locator> {
+  await toolbarButton(page, tool).click();
+  const dialog = page.getByRole('dialog', { name: feature, exact: true });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+/** OK of the feature dialog; the dialog closes. */
+export async function confirmDialog(dialog: Locator): Promise<void> {
+  await dialog.getByRole('button', { name: 'OK', exact: true }).click();
+  await expect(dialog).toBeHidden();
+}
+
+/** The button of a reference field of the dialog, named by its label and its own text. */
+export function refField(dialog: Locator, label: string): Locator {
+  return dialog.getByRole('button', { name: new RegExp(`^${label} `) });
+}
+
+/** No feature of the model has an error: the Timeline shows no "Chyby: n". */
+export async function expectNoErrors(page: Page): Promise<void> {
+  await expect(page.getByText(/Chyby: /)).toHaveCount(0);
+}
+
+type Point3 = readonly [number, number, number];
+
+/**
+ * Where a model point lies on the canvas, in px from its centre (x right, y down), in the iso
+ * view fitted on the bounds `min`…`max` – the first view of a document (spec 11: fitAll once
+ * the first body is there; spec 09: the iso view, orthographic camera). The same math as the
+ * camera fit of render (camera-math fitOrtho, margin 10 %), repeated here so the test clicks
+ * computed coordinates and needs no hook into the page.
+ */
+export async function isoCanvasOffset(
+  page: Page,
+  min: Point3,
+  max: Point3,
+  point: Point3,
+): Promise<{ dx: number; dy: number }> {
+  const box = await page.locator('canvas').first().boundingBox();
+  if (box === null) throw new Error('the canvas is not visible');
+  // The iso camera looks from (1, −1, 1); up is +Z in the view plane, right = up × direction.
+  const right: Point3 = [1 / Math.SQRT2, 1 / Math.SQRT2, 0];
+  const up: Point3 = [-1 / Math.sqrt(6), 1 / Math.sqrt(6), 2 / Math.sqrt(6)];
+  const dot = (a: Point3, b: Point3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const target: Point3 = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
+  const rel = (p: Point3): Point3 => [p[0] - target[0], p[1] - target[1], p[2] - target[2]];
+  let halfWidth = 0;
+  let halfHeight = 0;
+  for (const x of [min[0], max[0]])
+    for (const y of [min[1], max[1]])
+      for (const z of [min[2], max[2]]) {
+        const r = rel([x, y, z]);
+        halfWidth = Math.max(halfWidth, Math.abs(dot(r, right)));
+        halfHeight = Math.max(halfHeight, Math.abs(dot(r, up)));
+      }
+  const aspect = box.width / box.height;
+  const visibleHalfHeight = 1.1 * Math.max(halfHeight, halfWidth / aspect);
+  const pxPerMm = box.height / 2 / visibleHalfHeight;
+  const r = rel(point);
+  return { dx: dot(r, right) * pxPerMm, dy: -dot(r, up) * pxPerMm };
+}

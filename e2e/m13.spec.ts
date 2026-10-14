@@ -2,11 +2,15 @@ import { expect, test } from './fixtures';
 import type { Locator, Page } from '@playwright/test';
 import {
   clickCanvas,
+  confirmDialog,
   createDocument,
   dimensionInput,
   dimensionValue,
   drawDimensionedRectangle,
+  expectNoErrors,
   fillParam,
+  openTool,
+  refField,
   reloadWhenSaved,
   sketchPanel,
   timelineFeature,
@@ -21,28 +25,6 @@ import {
 /** A row of the Browser, named by its displayed text ("Těleso 1", "Oblast 1", "Osa X"). */
 function browserRow(page: Page, name: string): Locator {
   return page.getByRole('treeitem').filter({ has: page.getByText(name, { exact: true }) });
-}
-
-/** Toolbar → the dialog of the new feature, named by the feature. */
-async function openTool(page: Page, tool: string, feature: string): Promise<Locator> {
-  await toolbarButton(page, tool).click();
-  const dialog = page.getByRole('dialog', { name: feature, exact: true });
-  await expect(dialog).toBeVisible();
-  return dialog;
-}
-
-async function confirmDialog(dialog: Locator): Promise<void> {
-  await dialog.getByRole('button', { name: 'OK', exact: true }).click();
-  await expect(dialog).toBeHidden();
-}
-
-/** The button of a reference field of the dialog, named by its label and its own text. */
-function refField(dialog: Locator, label: string): Locator {
-  return dialog.getByRole('button', { name: new RegExp(`^${label} `) });
-}
-
-async function expectNoErrors(page: Page): Promise<void> {
-  await expect(page.getByText(/Chyby: /)).toHaveCount(0);
 }
 
 test('extrude a rectangle, edit the sketch, cut a hole, undo, reload, revolve', async ({
