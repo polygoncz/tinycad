@@ -137,7 +137,7 @@ export function sketchPlaneOfFace(face: FacePlane): Plane;
 export function planeOfRef(state: RegenState, ref: PlaneRef | TopoRef): Plane | undefined;
 
 export type BuildOutput =
-  | { ok: true; state: RegenState }
+  | { ok: true; state: RegenState; anchors?: FeatureAnchors }   // anchors od M18, viz Kotvy manipulátorů
   | { ok: false; error: FeatureError };
 
 /** Chyba featury pro nevyřešenou referenci parametru param (Q044); hluboce zmrazená. */
@@ -158,7 +158,7 @@ Pravidla pro builder:
 
 **Identita u featur, které tělesa mění** ([[M11-dalsi-entity|M11]], [[0015-artefakty-a-identita-telesa|ADR 0015]]):
 
-- **Transform:** každé vybrané těleso zůstane pod svým `id` a na svém místě v mapě, zachová `origin`, dostane nový `shape`, `names` z `nameShape` (identita – jména stejná) a `lastModifiedBy` = transform. Ostatní artefakty beze změny.
+- **Transform:** (M18: matice `T(translate) · T(p) · R · T(−p)` s pivotem `p`, viz [[M18-manipulatory#6. Transformace v2|M18]]) každé vybrané těleso zůstane pod svým `id` a na svém místě v mapě, zachová `origin`, dostane nový `shape`, `names` z `nameShape` (identita – jména stejná) a `lastModifiedBy` = transform. Ostatní artefakty beze změny.
 - **Boolean:** výsledek je **jedno** těleso `{ ...první cíl, shape, names, lastModifiedBy: boolean }` – dědí `id`, `origin` a místo v mapě prvního cíle, `names` z `nameShape` se vstupy v pořadí volání jádra (cíle, pak nástroje; u `union` první cíl, pak ostatní cíle a nástroje). Ostatní cíle a nástroje z mapy zmizí; s `keepTools` nástroje zůstanou beze změny (tentýž objekt). Jádro vrátí jeden handle i pro nesouvislý výsledek (compound více solidů). Rozpad výsledku na více těles `bodyId(cíl.origin, n)` podle rodokmenu z historie jádra (`Generated`/`Modified`, ne pořadí výstupu) byl úkol M14, znovu odložený do [[M15-export-a-dokonceni|M15]] ([[Rozhodnutí noční rychloakce#M11 – Další entity|R8]] ⚠, [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R100]] ⚠).
 - **Fillet a Chamfer** (M14): hrany se seskupí podle tělesa (pořadí prvního výskytu v parametru), na každé těleso jedno volání `fillet`/`chamfer` se všemi jeho hranami; těleso zachová `id`, `origin` a místo v mapě, dostane `shape`, `names` z `nameShape` (`generatedTag` `'fillet'`/`'chamfer'`) a `lastModifiedBy` = featura.
 - Změna parametru featury, ze které těleso pochází, ani nástroje booleanu id výsledku nemění (id je rodokmen, ne pořadí výstupu jádra).
@@ -171,6 +171,23 @@ export function modifyBody(p: { kernel: Pick<QueryOps, 'topology'>; feature: Fea
 export function replaceBodies(state: RegenState, changed: ReadonlyMap<BodyId, Body>, consumed: ReadonlySet<BodyId>): RegenState;
 ```
 - **Vysunutí a Rotace** (M13): podle operace featury, viz [[#Operace tělesa (M13)]].
+
+### Kotvy manipulátorů (M18)
+
+[[Kotva manipulátoru|Kotvy]] jsou geometrie pro úchyty [[Manipulátor|manipulátorů]], kterou zná jen builder ([[0021-manipulatory-kotvy-z-regenerace|ADR 0021]]).
+
+```ts
+/** Bod a volitelný jednotkový směr ve světových souřadnicích. */
+export interface Anchor { readonly point: Vec3; readonly direction?: Vec3 }
+/** Kotvy jedné featury podle jména ('pivot', 'base'…); jména a význam určuje plugin. */
+export type FeatureAnchors = Readonly<Record<string, Anchor>>;
+```
+
+- Builder vrací kotvy jen s `{ ok: true }`. Pole je volitelné, featury bez manipulátoru ho nevyplňují.
+- **Invariant:** kotva smí záviset jen na vstupech, které úchyty featury netáhnou (pivot Transformace nezávisí na `translate` ani `angle`, základna Extrude nezávisí na `distance`). Hlídají ho testy pluginu.
+- `Regenerator` kotvy **hluboce zmrazí** (`Object.freeze` na mapě jmen, každé kotvě a jejích vektorech) a uloží je do záznamu cache featury vedle stavu a statusu. Featura převzatá z cache tak má kotvy z posledního výpočtu bez volání builderu.
+- `RegenResult.anchors` obsahuje kotvy každé featury před rollback barem se statusem `ok` nebo `warning`, jejíž builder kotvy vrátil (z výpočtu i z cache). Chybná, potlačená a `rolledBack` featura v mapě není.
+- Kotvy nenesou handle tvaru, jen čísla. Sweep ani úklid handle se jich netýká.
 
 ### Operace tělesa (M13)
 
@@ -297,13 +314,14 @@ export interface RegenResult {
   readonly generation: number;
   readonly finalState: RegenState;                 // stav na rollback baru
   readonly statuses: ReadonlyMap<FeatureId, FeatureStatus>;
+  readonly anchors: ReadonlyMap<FeatureId, FeatureAnchors>;   // M18, viz Kotvy manipulátorů
   readonly durationMs: number;
 }
 ```
 
 ### Cache podle identity
 
-Regenerator si pamatuje pro každou pozici `i` trojici *(instance featury, výstupní stav, status)* ([[Q042 Obsah cache regenerace|Q042]]). Cache obsahuje i chybné a suppressed featury, ne však `rolledBack`. Při `run`:
+Regenerator si pamatuje pro každou pozici `i` trojici *(instance featury, výstupní stav, status)*, od M18 navíc kotvy featury ([[Q042 Obsah cache regenerace|Q042]]). Cache obsahuje i chybné a suppressed featury, ne však `rolledBack`. Při `run`:
 
 1. Projde featury od začátku a najde první index `k`, kde `features[i] !== cache[i].feature` (porovnání **identity objektu**). Díky neměnným datům změna parametru, vložení, smazání i přesun featury automaticky změní identitu na dané pozici nebo posune pole. ([[0006-nemenna-data|ADR 0006]])
 2. Cache `0..k-1` platí. Stav před `k` je `cache[k-1].state` (nebo `EMPTY_STATE`).
@@ -352,6 +370,7 @@ Handle se z vlastněné množiny odeberou ještě před čekáním na `release` 
 - Neplatné parametry → `INVALID_PARAMS`, builder se nezavolá.
 - `unresolvedReference` dá kód, zprávu z `RefError` a `issues` s parametrem, zmrazené do hloubky; sledované jádro zapíše handle z `makeCylinder`, `transform` a `boolean` (M11).
 - Neznámý typ featury (chybí schéma nebo builder) → `UNKNOWN_TYPE`, regenerace pokračuje.
+- Kotvy (M18): builder s kotvami → `RegenResult.anchors` je má pod id featury, hluboce zmrazené; featura z cache (builder se nevolá) je má také; chybná, potlačená a `rolledBack` featura ani featura bez kotev v mapě nejsou; po opravě chybné featury se kotvy vrátí.
 - M12: `EMPTY_STATE` má tři roviny; `resolvePlanes` (existující rovina, chybějící id, id tělesa → err); sledované jádro zapíše handle z `makeFace`; sweep: plochy oblastí skici jsou živé, po smazání skici se uvolní (`liveHandleCount`).
 - M13: `EMPTY_STATE` má za rovinami tři osy; `axesOf`; `resolveRegions` (oblast, chybějící skica, chybějící jméno, id tělesa); `resolveAxis` (osa počátku, úsečka skici na XZ ve světových souřadnicích, konstrukční úsečka, kružnice → err, nulová délka); `applyBodyOperation` pro všechny čtyři operace (identita, pořadí mapy, jedno `union` u více tvarů, cíle zvlášť u `remove`/`intersect`); sledované jádro zapíše handle z `extrude` a `revolve`.
 - M14: `propagateNames` na ručně sestavených historiích ([[08-topologicke-pojmenovani]] – role, identita, rozdělení, sloučení, generated z hrany a vrcholu, zánik, hrany včetně kontextu a `#k`, šev, plocha bez jména, determinismus vůči pořadí, výjimka u indexu mimo rozsah); `nameShape` s `FakeKernel`; `resolveTopo` (plocha, hrana, víc ploch → varování, víc hran bez varování, chybějící jméno, chybějící těleso, artefakt jiného druhu); `resolvePlanes` s `TopoRef` (horní plocha kvádru → rovina `z = h` s rámcem X/Y, nerovinná plocha → err, víc ploch → varování); `sketchPlaneOfFace` pro normály ±X, ±Y, ±Z a šikmou; `planeOfRef`; `applyBodyOperation` s jmény (role hranolu, přenos přes boolean); sledované jádro zapíše handle z `fillet` a `chamfer`.

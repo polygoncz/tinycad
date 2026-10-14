@@ -39,6 +39,7 @@ Jediná entita až do M10 je **kvádr (Box)**. Druhá entita v M11 je zkouška r
 | [[M16-vlastni-occt-build\|M16]] | Vlastní OCCT build | `kernel-occt` | vlastní C++ modul přes Emscripten místo předpřipraveného buildu |
 | [[M17-kamera-a-view-cube\|M17]] | Kamera a view cube | `core`, `render`, `app`, `ui` | kamera bez ořezávání, vlastní ovládání, view cube jako v Onshape |
 | [[M17.1-rezim-otaceni\|M17.1]] | Režim otáčení | `render`, `app`, `ui` | turntable (Z nahoru) jako výchozí, volná rotace přepínatelná u view cube |
+| [[M18-manipulatory\|M18]] | Manipulátory | `regen`, `interaction`, `plugin-api`, `render`, `app`, `ui`, `features/*` | úchyty ve viewportu: posun a rotace Transformace, vzdálenost Extrude; obecná abstrakce přes kotvy z regenerace ([[0021-manipulatory-kotvy-z-regenerace\|ADR 0021]]) |
 
 **Noční rychloakce 2026-10-14:** [[M11-dalsi-entity|M11]]–[[M15-export-a-dokonceni|M15]] implementovány bez průběžného schvalování, rozhodnutí v [[Rozhodnutí noční rychloakce]]. M16 se nedělá – předpřipravený build stačil na celou první verzi.
 
@@ -52,7 +53,7 @@ Stav milníků (`todo` / `doing` / `done`) je **jen ve vlastnostech** souborů m
 M0 → M1 → M2 → M3 ─┬─► M4 ────────────────────────┐
                    │                              │
           M1 → M5 ─┴─► M6 ─► M7 ─► M8 ─► M9 ─► M10 ─► M10.1 ─► M11 ─► M12 ─► M13 ─► M14 ─► M15 ─► M16
-                                                                                             └─► M17 ─► M17.1
+                                                                                             └─► M17 ─► M17.1 ─► M18
 ```
 
 M4 (persistence) a M5 (port jádra) na sobě nezávisí – pořadí lze prohodit. Persistence je dřív, protože ověří formát logu, dokud je čerstvý.
