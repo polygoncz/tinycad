@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
 import {
+  ORIGIN_AXIS_IDS,
   ORIGIN_PLANE_IDS,
   bodyId,
   createFeatureSchemaRegistry,
@@ -8,7 +9,7 @@ import {
   toData,
   validateAgainstSchema,
 } from '@/document';
-import type { FeatureId, FeatureSchema, ParamSchema, PlaneId } from '@/document';
+import type { AxisId, FeatureId, FeatureSchema, ParamSchema, PlaneId } from '@/document';
 import { aFeature } from '@/document/testing';
 import type { BodyRenameOp, BodySetVisibleOp, FeatureRenameOp, Operation } from '@/ops';
 import { OP_VERSION } from '@/ops';
@@ -54,6 +55,19 @@ const TOPO: FeatureSchema = {
   validate: () => [],
 };
 
+const REV_PARAMS: ParamSchema = {
+  axis: { kind: 'axis', label: 'axis' },
+  regions: { kind: 'region', label: 'regions' },
+};
+const REV: FeatureSchema = {
+  type: 'rev',
+  version: 1,
+  label: 'rev.label',
+  params: REV_PARAMS,
+  defaults: () => ({ axis: null, regions: [] }),
+  validate: () => [],
+};
+
 const SKETCHES: readonly RegenSketch[] = [
   { sketch: sketchId(fid('s1')), feature: fid('s1'), regions: [] },
   { sketch: sketchId(fid('s2')), feature: fid('s2'), regions: [] },
@@ -63,6 +77,7 @@ function setup(opts: { readOnly?: boolean; sketchEdit?: (feature: FeatureId) => 
   const schemas = createFeatureSchemaRegistry();
   schemas.register(BOOL);
   schemas.register(TOPO);
+  schemas.register(REV);
   const ops = anOpsSession({
     schemas,
     features: [
@@ -98,6 +113,8 @@ function setup(opts: { readOnly?: boolean; sketchEdit?: (feature: FeatureId) => 
   browser.visiblePlanes.subscribe(() => order.push('visiblePlanes'));
   browser.planes.subscribe(() => order.push('planes'));
   browser.sketches.subscribe(() => order.push('sketches'));
+  browser.visibleAxes.subscribe(() => order.push('visibleAxes'));
+  browser.axes.subscribe(() => order.push('axes'));
   const count = (what: string): number => order.filter((o) => o === what).length;
   return {
     ...ops,
@@ -110,6 +127,7 @@ function setup(opts: { readOnly?: boolean; sketchEdit?: (feature: FeatureId) => 
     hiddenEmits: () => count('hidden'),
     planeEmits: () => count('planes'),
     sketchEmits: () => count('sketches'),
+    axisEmits: () => count('axes'),
   };
 }
 
@@ -705,8 +723,8 @@ describe('BrowserModel sketches (M12)', () => {
     s.regen.publish(new Map(), BODIES, SKETCHES);
     const rows = s.browser.sketches.get();
     expect(rows).toEqual([
-      { sketch: S1, feature: 's1', name: 'Sketch 1', selected: false },
-      { sketch: S2, feature: 's2', name: 'Sketch 2', selected: false },
+      { sketch: S1, feature: 's1', name: 'Sketch 1', selected: false, regions: [] },
+      { sketch: S2, feature: 's2', name: 'Sketch 2', selected: false, regions: [] },
     ]);
     expect(Object.isFrozen(rows)).toBe(true);
     expect(rows.every((r) => Object.isFrozen(r))).toBe(true);
@@ -799,5 +817,221 @@ describe('BrowserModel sketches (M12)', () => {
     s.browser.dispose();
     s.regen.publish(new Map(), [], SKETCHES);
     expect(s.browser.sketches.get()).toEqual([]);
+  });
+});
+
+describe('BrowserModel axes (M13)', () => {
+  const { x, y, z } = ORIGIN_AXIS_IDS;
+
+  it('lists the three origin axes in order, hidden and not active, frozen', () => {
+    const s = setup();
+    const rows = s.browser.axes.get();
+    expect(rows).toEqual([
+      { axis: x, label: 'origin.axis.x', visible: false, active: false },
+      { axis: y, label: 'origin.axis.y', visible: false, active: false },
+      { axis: z, label: 'origin.axis.z', visible: false, active: false },
+    ]);
+    expect(Object.isFrozen(rows)).toBe(true);
+    expect(rows.every((r) => Object.isFrozen(r))).toBe(true);
+    expect(s.browser.visibleAxes.get().size).toBe(0);
+  });
+
+  it('setAxisVisible changes only the view state; the other rows stay the same objects', () => {
+    const s = setup();
+    const before = s.browser.axes.get();
+    const set0 = s.browser.visibleAxes.get();
+    s.browser.setAxisVisible(y, true);
+    expect([...s.browser.visibleAxes.get()]).toEqual([y]);
+    expect(set0.size).toBe(0);
+    const rows = s.browser.axes.get();
+    expect(rows.map((r) => r.visible)).toEqual([false, true, false]);
+    expect(rows[0]).toBe(before[0]);
+    expect(rows[2]).toBe(before[2]);
+    expect(loggedOps(s)).toEqual([]);
+    s.browser.setAxisVisible(y, false);
+    expect(s.browser.visibleAxes.get().size).toBe(0);
+  });
+
+  it('the same visibility, or an axis outside the origin axes, emits nothing', () => {
+    const s = setup();
+    s.browser.setAxisVisible(x, true);
+    s.order.length = 0;
+    s.browser.setAxisVisible(x, true);
+    s.browser.setAxisVisible(z, false);
+    s.browser.setAxisVisible('f1/axis:a' as AxisId, true); // a test id in the shape of AxisId
+    expect(s.order).toEqual([]);
+  });
+
+  it('selectAxis without a dialog does nothing', () => {
+    const s = setup();
+    s.browser.selectAxis(x);
+    expect(s.selection.items.get()).toEqual([]);
+    expect(loggedOps(s)).toEqual([]);
+  });
+
+  it('selectAxis with an active axis param sets the axis, the second time clears it', () => {
+    const s = setup();
+    const session = s.editor.create('rev');
+    expect(session.state.get().activeRefParam).toBe('axis');
+    s.browser.selectAxis(z);
+    expect(session.state.get().params['axis']).toEqual({ kind: 'axis', axis: z });
+    expect(s.browser.axes.get().map((r) => r.active)).toEqual([false, false, true]);
+    s.browser.selectAxis(x);
+    expect(session.state.get().params['axis']).toEqual({ kind: 'axis', axis: x });
+    s.browser.selectAxis(x);
+    expect(session.state.get().params['axis']).toBeNull();
+    expect(s.browser.axes.get().map((r) => r.active)).toEqual([false, false, false]);
+    expect(s.selection.items.get()).toEqual([]);
+  });
+
+  it('selectAxis with an active param of another kind does nothing', () => {
+    const s = setup();
+    const session = s.editor.create('rev');
+    session.focusRefParam('regions');
+    s.browser.selectAxis(z);
+    expect(session.state.get().params['axis']).toBeNull();
+  });
+
+  it('active only while the axis param is the active one', () => {
+    const s = setup();
+    const session = s.editor.create('rev');
+    s.browser.selectAxis(y);
+    expect(s.browser.axes.get()[1]?.active).toBe(true);
+    session.focusRefParam('regions');
+    expect(s.browser.axes.get()[1]?.active).toBe(false);
+    session.focusRefParam('axis');
+    expect(s.browser.axes.get()[1]?.active).toBe(true);
+    session.cancel();
+    expect(s.browser.axes.get()[1]?.active).toBe(false);
+  });
+
+  it('a regeneration or a document change keeps the axis rows without emitting', () => {
+    const s = setup();
+    const before = s.browser.axes.get();
+    s.regen.publish(new Map(), BODIES, SKETCHES);
+    s.browser.setVisible(B1, false);
+    expect(s.browser.axes.get()).toBe(before);
+    expect(s.axisEmits()).toBe(0);
+  });
+
+  it('axis visibility is a view state: it works read-only too', () => {
+    const s = setup({ readOnly: true });
+    s.browser.setAxisVisible(x, true);
+    expect(s.browser.axes.get()[0]?.visible).toBe(true);
+  });
+
+  it('setAxisVisible emits only visibleAxes and axes', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES, SKETCHES);
+    s.order.length = 0;
+    s.browser.setAxisVisible(x, true);
+    expect(s.order).toEqual(['visibleAxes', 'axes']);
+  });
+
+  it('dispose stops following the dialog', () => {
+    const s = setup();
+    s.browser.dispose();
+    s.editor.create('rev');
+    s.browser.selectAxis(x);
+    expect(s.browser.axes.get()[0]?.active).toBe(false);
+  });
+});
+
+describe('BrowserModel regions (M13)', () => {
+  const WITH_REGIONS: readonly RegenSketch[] = [
+    { sketch: sketchId(fid('s1')), feature: fid('s1'), regions: ['r2', 'r1'] },
+    { sketch: sketchId(fid('s2')), feature: fid('s2'), regions: [] },
+  ];
+
+  it('without a dialog every sketch has no region rows, the same frozen array', () => {
+    const s = setup();
+    s.regen.publish(new Map(), [], WITH_REGIONS);
+    const rows = s.browser.sketches.get();
+    expect(rows.map((r) => r.regions)).toEqual([[], []]);
+    expect(rows[0]?.regions).toBe(rows[1]?.regions);
+    expect(Object.isFrozen(rows[0]?.regions)).toBe(true);
+  });
+
+  it('with an active region param lists the regions in order numbered from 1, frozen', () => {
+    const s = setup();
+    s.regen.publish(new Map(), [], WITH_REGIONS);
+    const session = s.editor.create('rev');
+    session.focusRefParam('regions');
+    const rows = s.browser.sketches.get();
+    expect(rows[0]?.regions).toEqual([
+      { region: 'r2', n: 1, selected: false },
+      { region: 'r1', n: 2, selected: false },
+    ]);
+    expect(rows[1]?.regions).toEqual([]);
+    expect(Object.isFrozen(rows[0]?.regions)).toBe(true);
+    expect(rows[0]?.regions.every((r) => Object.isFrozen(r))).toBe(true);
+  });
+
+  it('an active param of another kind gives no region rows', () => {
+    const s = setup();
+    s.regen.publish(new Map(), [], WITH_REGIONS);
+    const rev = s.editor.create('rev');
+    expect(s.browser.sketches.get()[0]?.regions).toEqual([]);
+    rev.cancel();
+    s.editor.create('bool');
+    expect(s.browser.sketches.get()[0]?.regions).toEqual([]);
+  });
+
+  it('selectRegion adds and removes the region in the active param; selected follows', () => {
+    const s = setup();
+    s.regen.publish(new Map(), [], WITH_REGIONS);
+    const session = s.editor.create('rev');
+    session.focusRefParam('regions');
+    s.browser.selectRegion(fid('s1'), 'r1');
+    s.browser.selectRegion(fid('s1'), 'r2');
+    expect(session.state.get().params['regions']).toEqual([
+      { kind: 'region', sketch: 's1', region: 'r1' },
+      { kind: 'region', sketch: 's1', region: 'r2' },
+    ]);
+    expect(s.browser.sketches.get()[0]?.regions.map((r) => r.selected)).toEqual([true, true]);
+    s.browser.selectRegion(fid('s1'), 'r1');
+    expect(session.state.get().params['regions']).toEqual([
+      { kind: 'region', sketch: 's1', region: 'r2' },
+    ]);
+    expect(s.browser.sketches.get()[0]?.regions.map((r) => r.selected)).toEqual([true, false]);
+    expect(s.selection.items.get()).toEqual([]);
+  });
+
+  it('selectRegion without a dialog or with another active param does nothing', () => {
+    const s = setup();
+    s.regen.publish(new Map(), [], WITH_REGIONS);
+    s.browser.selectRegion(fid('s1'), 'r1');
+    expect(s.selection.items.get()).toEqual([]);
+    const session = s.editor.create('rev');
+    s.browser.selectRegion(fid('s1'), 'r1');
+    expect(session.state.get().params['regions']).toEqual([]);
+    expect(session.state.get().params['axis']).toBeNull();
+  });
+
+  it('closing the dialog drops the region rows', () => {
+    const s = setup();
+    s.regen.publish(new Map(), [], WITH_REGIONS);
+    const session = s.editor.create('rev');
+    session.focusRefParam('regions');
+    expect(s.browser.sketches.get()[0]?.regions).toHaveLength(2);
+    session.cancel();
+    expect(s.browser.sketches.get()[0]?.regions).toEqual([]);
+  });
+
+  it('a new snapshot only on a change: an unrelated dialog change keeps the sketch rows', () => {
+    const s = setup();
+    s.regen.publish(new Map(), [], WITH_REGIONS);
+    const session = s.editor.create('rev');
+    session.focusRefParam('regions');
+    const before = s.browser.sketches.get();
+    const emits = s.sketchEmits();
+    session.setParam('axis', { kind: 'axis', axis: ORIGIN_AXIS_IDS.x });
+    expect(s.browser.sketches.get()).toBe(before);
+    expect(s.sketchEmits()).toBe(emits);
+    s.browser.selectRegion(fid('s1'), 'r2');
+    const after = s.browser.sketches.get();
+    expect(after).not.toBe(before);
+    expect(after[1]).toBe(before[1]);
+    expect(after[0]?.regions[1]).toBe(before[0]?.regions[1]);
   });
 });

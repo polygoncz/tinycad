@@ -57,9 +57,11 @@ export { createFeatureTreeModel } from './feature-tree';
 export type { FeatureTreeModel, TreeRow, TreeStatus } from './feature-tree';
 export { createBrowserModel } from './browser-model';
 export type {
+  BrowserAxisRow,
   BrowserBodyRow,
   BrowserModel,
   BrowserPlaneRow,
+  BrowserRegionRow,
   BrowserSketchRow,
 } from './browser-model';
 export { createSketchEditor } from './sketch-editor';

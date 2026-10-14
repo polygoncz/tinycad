@@ -5,15 +5,18 @@
 // feature), so the metadata never move over to another body after a history change.
 // Since M12 it also lists the origin planes (their visibility is a view state, never saved, R48)
 // and the sketches of the last regeneration (no eye: a sketch is shown unless edited).
+// Since M13 it lists the origin axes (a view state like the planes) and, while the dialog has an
+// active region param, the regions of each sketch. A click on an axis or a region goes only into
+// the active reference param of the dialog: neither is an item of the selection (R72, R75).
 
 import { ObservableValue } from '@/core';
 import type { Observable, Unsubscribe } from '@/core';
-import { ORIGIN_PLANES } from '@/document';
-import type { BodyId, DocumentReader, FeatureId, PlaneId, SketchId } from '@/document';
+import { ORIGIN_AXES, ORIGIN_PLANES } from '@/document';
+import type { AxisId, BodyId, DocumentReader, FeatureId, PlaneId, SketchId } from '@/document';
 import type { BodyRenameOp, BodySetVisibleOp, OperationDispatcher } from '@/ops';
 import { OP_VERSION } from '@/ops';
-import type { FeatureEditor } from './feature-editor';
-import { toggleBodyRef } from './ref-values';
+import type { FeatureEditor, FeatureEditSession } from './feature-editor';
+import { toggleAxisRef, toggleBodyRef, toggleRegionRef } from './ref-values';
 import type { RegenStatusPort } from './regen-status-port';
 import type { SelectionCommands } from './selection';
 
@@ -42,6 +45,26 @@ export interface BrowserPlaneRow {
   readonly selected: boolean;
 }
 
+/** An origin axis (M13). */
+export interface BrowserAxisRow {
+  readonly axis: AxisId;
+  /** The translation key of the axis ('origin.axis.x' …), translated by ui. */
+  readonly label: string;
+  /** In visibleAxes. */
+  readonly visible: boolean;
+  /** The axis is the value of the active 'axis' param of the dialog. */
+  readonly active: boolean;
+}
+
+/** A region of a sketch, listed only while the dialog has an active 'region' param (M13). */
+export interface BrowserRegionRow {
+  readonly region: string;
+  /** From 1 in the order of RegenSketch.regions. */
+  readonly n: number;
+  /** In the value of the active 'region' param. */
+  readonly selected: boolean;
+}
+
 /** A sketch of the last regeneration (M12). */
 export interface BrowserSketchRow {
   readonly sketch: SketchId;
@@ -50,6 +73,8 @@ export interface BrowserSketchRow {
   readonly name: string;
   /** The selection contains { kind: 'feature', feature }. */
   readonly selected: boolean;
+  /** Only with an active 'region' param (M13), otherwise [] (one shared frozen array). */
+  readonly regions: readonly BrowserRegionRow[];
 }
 
 export interface BrowserModel {
@@ -90,11 +115,30 @@ export interface BrowserModel {
   selectSketch(feature: FeatureId, opts?: { additive?: boolean }): void;
   /** → deps.sketchEdit; without it or without canEdit (and in a transaction) nothing. */
   editSketch(feature: FeatureId): void;
+  /** ORIGIN_AXES in order (M13). */
+  readonly axes: Observable<readonly BrowserAxisRow[]>;
+  /** The shown origin axes: a view state, empty at start, never saved; app → axis drawing. */
+  readonly visibleAxes: Observable<ReadonlySet<AxisId>>;
+  /** Shows or hides an origin axis; another axis id does nothing. */
+  setAxisVisible(axis: AxisId, visible: boolean): void;
+  /** Active 'axis' param → setParam(toggleAxisRef); otherwise nothing. */
+  selectAxis(axis: AxisId): void;
+  /** Active 'region' param → setParam(toggleRegionRef); otherwise nothing. */
+  selectRegion(feature: FeatureId, region: string): void;
   dispose(): void;
 }
 
 const EMPTY_ROWS: readonly BrowserBodyRow[] = Object.freeze([]);
 const EMPTY_SKETCHES: readonly BrowserSketchRow[] = Object.freeze([]);
+const NO_REGIONS: readonly BrowserRegionRow[] = Object.freeze([]);
+
+/** The active reference param of an open dialog, with its kind and current value. */
+interface ActiveParam {
+  readonly session: FeatureEditSession;
+  readonly name: string;
+  readonly kind: string;
+  readonly value: unknown;
+}
 
 export function createBrowserModel(deps: {
   doc: DocumentReader;
@@ -116,6 +160,8 @@ export function createBrowserModel(deps: {
   const visiblePlanes = new ObservableValue<ReadonlySet<PlaneId>>(new Set());
   const planeRows = new ObservableValue<readonly BrowserPlaneRow[]>(buildPlaneRows([]));
   const sketchRows = new ObservableValue<readonly BrowserSketchRow[]>(EMPTY_SKETCHES);
+  const visibleAxes = new ObservableValue<ReadonlySet<AxisId>>(new Set());
+  const axisRows = new ObservableValue<readonly BrowserAxisRow[]>(buildAxisRows([]));
   // Derived from the lock without an own state: it changes exactly when the lock does.
   const canEdit: Observable<boolean> = Object.freeze({
     get: () => !locked.get(),
@@ -193,17 +239,33 @@ export function createBrowserModel(deps: {
     const selected = new Set(
       selection.items.get().flatMap((item) => (item.kind === 'feature' ? [item.feature] : [])),
     );
-    const next = regen.state.get().sketches.flatMap(({ sketch, feature }, i) => {
+    const active = activeParam();
+    const regionValue: unknown = active?.kind === 'region' ? active.value : undefined;
+    const next = regen.state.get().sketches.flatMap(({ sketch, feature, regions }, i) => {
       const instance = doc.feature(feature);
       if (instance === undefined) return [];
       const old = prev[i];
-      const row = { sketch, feature, name: instance.name, selected: selected.has(feature) };
+      const row = {
+        sketch,
+        feature,
+        name: instance.name,
+        selected: selected.has(feature),
+        regions:
+          active?.kind === 'region'
+            ? buildRegionRows(old?.feature === feature ? old.regions : NO_REGIONS, {
+                feature,
+                regions,
+                value: regionValue,
+              })
+            : NO_REGIONS,
+      };
       if (
         old !== undefined &&
         old.sketch === row.sketch &&
         old.feature === row.feature &&
         old.name === row.name &&
-        old.selected === row.selected
+        old.selected === row.selected &&
+        old.regions === row.regions
       ) {
         return [old];
       }
@@ -213,18 +275,91 @@ export function createBrowserModel(deps: {
   }
 
   /**
-   * hidden, visiblePlanes, bodies, planes, sketches in this order (spec 10); each only when it
-   * changed. `shown` is the new set of visible planes (setPlaneVisible), otherwise the current.
+   * The region rows of one sketch for the value of the active region param, reusing every
+   * unchanged row of `prev` (and `prev` itself when nothing changed).
    */
-  function refresh(shown: ReadonlySet<PlaneId> = visiblePlanes.get()): void {
+  function buildRegionRows(
+    prev: readonly BrowserRegionRow[],
+    sketch: {
+      readonly feature: FeatureId;
+      readonly regions: readonly string[];
+      readonly value: unknown;
+    },
+  ): readonly BrowserRegionRow[] {
+    if (sketch.regions.length === 0) return NO_REGIONS;
+    const chosen = regionsOf(sketch.value, sketch.feature);
+    const next = sketch.regions.map((region, i): BrowserRegionRow => {
+      const old = prev[i];
+      const row = { region, n: i + 1, selected: chosen.has(region) };
+      if (
+        old !== undefined &&
+        old.region === row.region &&
+        old.n === row.n &&
+        old.selected === row.selected
+      ) {
+        return old;
+      }
+      return Object.freeze(row);
+    });
+    return sameItems(prev, next) ? prev : Object.freeze(next);
+  }
+
+  /** The origin axis rows, reusing every unchanged row of `prev`. */
+  function buildAxisRows(prev: readonly BrowserAxisRow[]): readonly BrowserAxisRow[] {
+    // visibleAxes is created before the first build, so it can be read here.
+    const shown = visibleAxes.get();
+    const active = activeParam();
+    const value: unknown = active?.kind === 'axis' ? active.value : undefined;
+    const next = ORIGIN_AXES.map(({ id, label }, i): BrowserAxisRow => {
+      const old = prev[i];
+      const row = { axis: id, label, visible: shown.has(id), active: isAxisValue(value, id) };
+      if (
+        old !== undefined &&
+        old.axis === row.axis &&
+        old.label === row.label &&
+        old.visible === row.visible &&
+        old.active === row.active
+      ) {
+        return old;
+      }
+      return Object.freeze(row);
+    });
+    return sameItems(prev, next) ? prev : Object.freeze(next);
+  }
+
+  /** The active reference param of the open dialog, or null without one. */
+  function activeParam(): ActiveParam | null {
+    const session = editor.current.get();
+    if (session === null) return null;
+    const state = session.state.get();
+    const name = state.open ? state.activeRefParam : null;
+    if (name === null) return null;
+    const spec = session.schema.params[name];
+    if (spec === undefined) return null;
+    return { session, name, kind: spec.kind, value: state.params[name] };
+  }
+
+  /**
+   * hidden, visiblePlanes, visibleAxes, bodies, planes, axes, sketches in this order (spec 10);
+   * each only when it changed. `view` holds a new set of visible planes or axes
+   * (setPlaneVisible, setAxisVisible); the missing one stays.
+   */
+  function refresh(
+    view: {
+      readonly planes?: ReadonlySet<PlaneId>;
+      readonly axes?: ReadonlySet<AxisId>;
+    } = {},
+  ): void {
     const next = buildHidden();
     const current = hidden.get();
     if (next.size !== current.size || [...next].some((body) => !current.has(body))) {
       hidden.set(next);
     }
-    visiblePlanes.set(shown);
+    if (view.planes !== undefined) visiblePlanes.set(view.planes);
+    if (view.axes !== undefined) visibleAxes.set(view.axes);
     rows.set(buildRows(rows.get()));
     planeRows.set(buildPlaneRows(planeRows.get()));
+    axisRows.set(buildAxisRows(axisRows.get()));
     sketchRows.set(buildSketchRows(sketchRows.get()));
   }
 
@@ -235,8 +370,23 @@ export function createBrowserModel(deps: {
     );
   }
 
+  // The state of the open session (the active param and its value) feeds the axis and region
+  // rows, so the model follows the session that is current.
+  let unsubscribeSession: Unsubscribe | null = null;
+  const followSession = (): void => {
+    unsubscribeSession?.();
+    const session = editor.current.get();
+    unsubscribeSession =
+      session === null
+        ? null
+        : session.state.subscribe(() => {
+            refresh();
+          });
+    refresh();
+  };
+
   const unsubscribes: readonly Unsubscribe[] = [
-    // Wrapped: refresh takes an optional plane set, not the event of the source.
+    // Wrapped: refresh takes an optional view state, not the event of the source.
     regen.state.subscribe(() => {
       refresh();
     }),
@@ -250,8 +400,9 @@ export function createBrowserModel(deps: {
     locked.subscribe(() => {
       if (!canEdit.get()) renaming.set(null);
     }),
+    editor.current.subscribe(followSession),
   ];
-  refresh();
+  followSession();
 
   return {
     bodies: rows.asObservable(),
@@ -259,6 +410,8 @@ export function createBrowserModel(deps: {
     planes: planeRows.asObservable(),
     visiblePlanes: visiblePlanes.asObservable(),
     sketches: sketchRows.asObservable(),
+    axes: axisRows.asObservable(),
+    visibleAxes: visibleAxes.asObservable(),
     canEdit,
     renaming: renaming.asObservable(),
     select(body, opts) {
@@ -321,7 +474,27 @@ export function createBrowserModel(deps: {
       const next = new Set(current);
       if (visible) next.add(plane);
       else next.delete(plane);
-      refresh(next);
+      refresh({ planes: next });
+    },
+    setAxisVisible(axis, visible) {
+      // Like the planes: only the origin axes have a row, a view state only (R72).
+      if (!ORIGIN_AXES.some((a) => a.id === axis)) return;
+      const current = visibleAxes.get();
+      if (current.has(axis) === visible) return;
+      const next = new Set(current);
+      if (visible) next.add(axis);
+      else next.delete(axis);
+      refresh({ axes: next });
+    },
+    selectAxis(axis) {
+      const active = activeParam();
+      if (active?.kind !== 'axis') return;
+      active.session.setParam(active.name, toggleAxisRef(active.value, { kind: 'axis', axis }));
+    },
+    selectRegion(feature, region) {
+      const active = activeParam();
+      if (active?.kind !== 'region') return;
+      active.session.setParam(active.name, toggleRegionRef(active.value, feature, region));
     },
     selectSketch(feature, opts) {
       const item = { kind: 'feature', feature } as const;
@@ -335,8 +508,31 @@ export function createBrowserModel(deps: {
     },
     dispose() {
       for (const unsubscribe of unsubscribes) unsubscribe();
+      unsubscribeSession?.();
+      unsubscribeSession = null;
     },
   };
+}
+
+/** The regions of the sketch in a region param value; items of another shape are skipped. */
+function regionsOf(value: unknown, sketch: FeatureId): ReadonlySet<string> {
+  const items: readonly unknown[] = Array.isArray(value) ? value : [];
+  return new Set(
+    items.flatMap((item) => {
+      if (!isRecord(item) || item['kind'] !== 'region' || item['sketch'] !== sketch) return [];
+      const region = item['region'];
+      return typeof region === 'string' ? [region] : [];
+    }),
+  );
+}
+
+/** Whether an axis param value is the reference to this origin axis. */
+function isAxisValue(value: unknown, axis: AxisId): boolean {
+  return isRecord(value) && value['kind'] === 'axis' && value['axis'] === axis;
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /** Same length and the same objects at every position. */
