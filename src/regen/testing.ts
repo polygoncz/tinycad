@@ -3,7 +3,7 @@
 // feature lists and results. dependency-cruiser allows importing it only from *.test.ts.
 
 import { expect } from 'vitest';
-import { bodyId, createFeatureSchemaRegistry } from '@/document';
+import { ORIGIN_PLANES, bodyId, createFeatureSchemaRegistry, sketchId } from '@/document';
 import type {
   FeatureId,
   FeatureInstance,
@@ -29,7 +29,7 @@ import type {
 import { createRegenerator } from './regenerator';
 import type { RegenResult, Regenerator } from './regenerator';
 import { EMPTY_NAMES, EMPTY_STATE } from './state';
-import type { Artifact, Body, RegenState } from './state';
+import type { Body, RegenState, SketchArtifact } from './state';
 
 /** Validation of the default test schema: params of aFeature() with `size` > 0. */
 export function validateSize(params: unknown): readonly ParamIssue[] {
@@ -78,12 +78,23 @@ export const buildCube: FeatureBuilder['build'] = async ({ feature, state }, { k
 };
 
 /**
- * An artifact of a kind regen does not have yet (M12 adds 'sketch'), with the given id and no
- * shape. Code that reads bodies must skip it.
+ * The sketch artifact of the feature `owner` on the origin plane XY, without entities, with the
+ * `faces` as regions 'r1', 'r2', … (deeply frozen like the output of a builder). Code that reads
+ * bodies must skip it.
  */
-export function aForeignArtifact(id: string): Artifact {
-  // Artifact is only Body until M12, so no other kind type-checks; the test fakes one.
-  return Object.freeze({ kind: 'sketch', id }) as unknown as Artifact;
+export function aSketchArtifact(owner: string, faces: readonly ShapeHandle[] = []): SketchArtifact {
+  // Feature ids in tests are plain strings; the id is minted by sketchId like in a builder.
+  const feature = owner as FeatureId;
+  const xy = ORIGIN_PLANES[0];
+  if (xy === undefined) throw new Error('ORIGIN_PLANES has no XY plane');
+  return Object.freeze({
+    kind: 'sketch',
+    id: sketchId(feature),
+    owner: feature,
+    plane: xy.plane,
+    entities: Object.freeze([]),
+    regions: new Map(faces.map((face, i) => [`r${String(i + 1)}`, face])),
+  });
 }
 
 /** Features 'f1'..'fn' of the default test type, each a new object. */
@@ -107,7 +118,7 @@ export function result(r: RegenResult | 'superseded'): RegenResult {
 
 /**
  * The BuildContext the Regenerator gives a builder: the tracked `kernel` (its owned set stays
- * inside), resolveBodies over `state` and a warn whose messages are dropped.
+ * inside), resolveBodies and resolvePlanes over `state` and a warn whose messages are dropped.
  */
 export function aBuildContext(
   kernel: ModelingKernel,

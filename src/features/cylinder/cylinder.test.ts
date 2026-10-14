@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ObservableValue, createSequentialIdGenerator } from '@/core';
-import { bodyId, createFeatureSchemaRegistry } from '@/document';
+import { ORIGIN_PLANE_IDS, bodyId, createFeatureSchemaRegistry } from '@/document';
 import type { FeatureId, FeatureInstance } from '@/document';
 import { aFeature } from '@/document/testing';
 import {
@@ -29,6 +29,13 @@ import type { CylinderParams } from './schema';
 import { cylinderMessages } from './messages';
 import { cylinderTool } from './tool';
 import * as cylinder from '.';
+
+/** The origin planes EMPTY_STATE is seeded with (spec 07); every builder keeps them in front. */
+const ORIGIN_KEYS: readonly string[] = [
+  ORIGIN_PLANE_IDS.xy,
+  ORIGIN_PLANE_IDS.xz,
+  ORIGIN_PLANE_IDS.yz,
+];
 
 function aCylinder(
   id: string,
@@ -261,7 +268,7 @@ describe('cylinderBuilder', () => {
     const feature = aCylinder('c1');
     const state = await build(feature);
     const id = bodyId(feature.id);
-    expect([...state.artifacts.keys()]).toEqual([id]);
+    expect([...state.artifacts.keys()]).toEqual([...ORIGIN_KEYS, id]);
     expect(state.artifacts.get(id)).toMatchObject({
       kind: 'body',
       id: 'c1/body',
@@ -281,7 +288,7 @@ describe('cylinderBuilder', () => {
     const feature = aCylinder('c1', { base: [1, 2, 3], axis, radius: 2, height: 4 });
     const state = await build(feature, EMPTY_STATE, kernel);
     const body = state.artifacts.get(bodyId(feature.id));
-    if (body === undefined) expect.fail('No body');
+    if (body?.kind !== 'body') expect.fail('No body');
     const box = await kernel.boundingBox(body.shape);
     for (const k of [0, 1, 2] as const) {
       expect(box.min[k], `min[${String(k)}]`).toBeCloseTo(want.min[k], 9);
@@ -296,10 +303,10 @@ describe('cylinderBuilder', () => {
     const first = await build(c1, EMPTY_STATE, kernel);
     const firstBody = first.artifacts.get(bodyId(c1.id));
     const second = await build(aCylinder('c2'), first, kernel);
-    expect([...first.artifacts.keys()]).toEqual(['c1/body']);
-    expect([...second.artifacts.keys()]).toEqual(['c1/body', 'c2/body']);
+    expect([...first.artifacts.keys()]).toEqual([...ORIGIN_KEYS, 'c1/body']);
+    expect([...second.artifacts.keys()]).toEqual([...ORIGIN_KEYS, 'c1/body', 'c2/body']);
     expect(second.artifacts.get(bodyId(c1.id))).toBe(firstBody);
-    expect(EMPTY_STATE.artifacts.size).toBe(0);
+    expect([...EMPTY_STATE.artifacts.keys()]).toEqual(ORIGIN_KEYS);
   });
 
   it('freezes the output state and the new body', async () => {
@@ -366,6 +373,7 @@ function aRecordingEditor(open = false) {
       name: 'Cylinder 1',
     }),
     setParam: () => expect.fail('setParam is not expected'),
+    setParams: () => expect.fail('setParams is not expected'),
     removeRef: () => expect.fail('removeRef is not expected'),
     focusRefParam: () => expect.fail('focusRefParam is not expected'),
     commit: () => expect.fail('commit is not expected'),

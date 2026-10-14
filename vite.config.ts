@@ -9,10 +9,10 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
-  // OCCT (replicad-opencascadejs, spec 06 "Vite"): the dep optimizer would bundle the Emscripten
-  // glue away from its .wasm; the worker loads the file via `?url` instead.
+  // OCCT (replicad-opencascadejs, spec 06 "Vite") and planegcs (ADR 0016): the dep optimizer
+  // would bundle the Emscripten glue away from its .wasm; the workers load the file via `?url`.
   optimizeDeps: {
-    exclude: ['replicad-opencascadejs'],
+    exclude: ['replicad-opencascadejs', '@salusoft89/planegcs'],
   },
   // Dev serves TypeScript transformed for 'esnext', so `using` (kernel-occt) reached the browser
   // as is and Safari, which lacks it, could not load the OCCT worker. Lower newer syntax in dev
@@ -20,7 +20,7 @@ export default defineConfig({
   oxc: {
     target: 'es2022',
   },
-  // The OCCT worker is a module worker (top-level imports); the default 'iife' cannot code-split.
+  // The OCCT and solver workers are module workers (top-level imports); the default 'iife' cannot code-split.
   worker: {
     format: 'es',
   },

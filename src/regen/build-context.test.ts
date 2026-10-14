@@ -1,17 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { bodyId } from '@/document';
-import type { BodyId, BodyRef, FeatureId } from '@/document';
+import { ORIGIN_PLANE_IDS, bodyId } from '@/document';
+import type { BodyId, BodyRef, FeatureId, PlaneId, PlaneRef } from '@/document';
 import type { ShapeHandle } from '@/kernel';
 import { createFakeKernel } from '@/kernel/testing';
 import { createBuildSession } from './build-context';
-import { EMPTY_NAMES, EMPTY_STATE } from './state';
+import { EMPTY_NAMES, EMPTY_STATE, planesOf } from './state';
 import type { Artifact, Body, RegenState } from './state';
-import { aForeignArtifact } from './testing';
+import { aSketchArtifact } from './testing';
 
 // Feature ids and handles are created by a cast in tests only: the regen state needs no real
 // shapes. Body ids come from bodyId, the one place that mints them (ADR 0015).
 const fid = (s: string): FeatureId => s as FeatureId;
 const ref = (body: BodyId): BodyRef => ({ kind: 'body', body });
+const planeRef = (plane: PlaneId): PlaneRef => ({ kind: 'plane', plane });
 const bodyOf = (origin: string): BodyId => bodyId(fid(origin));
 
 function aBody(origin: string, shape: number): Body {
@@ -75,14 +76,69 @@ describe('createBuildSession', () => {
   });
 
   it('returns a RefError for an id under which there is an artifact of another kind', () => {
-    const other = aForeignArtifact('s1/sketch');
+    const other = aSketchArtifact('s1');
     const { session } = setup(aState(aBody('f1', 1), other));
-    const notBody = ref(other.id);
+    // A sketch id where a body id belongs: the kind check, not the id type, rejects it.
+    const notBody = ref(other.id as string as BodyId);
     const result = session.ctx.resolveBodies([ref(bodyOf('f1')), notBody]);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.ref).toBe(notBody);
     expect(result.error.message).toMatch(/s1\/sketch/);
+  });
+
+  it('resolves the origin planes of EMPTY_STATE in the order of refs', () => {
+    const [xy, , yz] = planesOf(EMPTY_STATE);
+    const { session } = setup();
+    expect(
+      session.ctx.resolvePlanes([planeRef(ORIGIN_PLANE_IDS.yz), planeRef(ORIGIN_PLANE_IDS.xy)]),
+    ).toEqual({ ok: true, value: [yz, xy] });
+  });
+
+  it('resolves the planes as the very artifacts of the state', () => {
+    const { session } = setup();
+    const result = session.ctx.resolvePlanes([planeRef(ORIGIN_PLANE_IDS.xz)]);
+    expect(result.ok && result.value[0]).toBe(EMPTY_STATE.artifacts.get(ORIGIN_PLANE_IDS.xz));
+  });
+
+  it('resolves an empty list of planes to an empty array', () => {
+    expect(setup().session.ctx.resolvePlanes([])).toEqual({ ok: true, value: [] });
+  });
+
+  it('returns the first missing plane as RefError', () => {
+    const { session } = setup();
+    // An id in the shape of a plane id that no artifact has.
+    const missing = planeRef('origin/plane:ab' as PlaneId);
+    const result = session.ctx.resolvePlanes([
+      planeRef(ORIGIN_PLANE_IDS.xy),
+      missing,
+      planeRef('origin/plane:cd' as PlaneId),
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.ref).toBe(missing);
+    expect(result.error.message).toMatch(/origin\/plane:ab/);
+  });
+
+  it('returns a RefError for the id of a body given as a plane', () => {
+    const { session } = setup(aState(...planesOf(EMPTY_STATE), aBody('f1', 1)));
+    // A body id where a plane id belongs: the kind check, not the id shape, rejects it.
+    const notPlane = planeRef(bodyOf('f1') as string as PlaneId);
+    const result = session.ctx.resolvePlanes([notPlane]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.ref).toBe(notPlane);
+    expect(result.error.message).toMatch(/f1\/body/);
+  });
+
+  it('resolveBodies gives a RefError for the id of a plane', () => {
+    const { session } = setup();
+    // A plane id where a body id belongs: the kind check rejects it.
+    const notBody = ref(ORIGIN_PLANE_IDS.xy as string as BodyId);
+    const result = session.ctx.resolveBodies([notBody]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.ref).toBe(notBody);
   });
 
   it('has no warnings when warn is not called', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bodyId, createFeatureSchemaRegistry } from '@/document';
+import { ORIGIN_PLANE_IDS, bodyId, createFeatureSchemaRegistry } from '@/document';
 import type { FeatureId, FeatureInstance, ParamIssue, PartStudioData } from '@/document';
 import { aFeature } from '@/document/testing';
 import { createFakeKernel } from '@/kernel/testing';
@@ -37,6 +37,9 @@ function setup(opts: { now?: () => number } = {}) {
 }
 
 /** Ids of the bodies of the final state, in map order. */
+/** Ids of the origin planes, the first artifacts of every state (EMPTY_STATE seeds them). */
+const ORIGIN_IDS = [ORIGIN_PLANE_IDS.xy, ORIGIN_PLANE_IDS.xz, ORIGIN_PLANE_IDS.yz];
+
 function bodyIds(result: RegenResult): string[] {
   return bodiesOf(result.finalState).map((b) => b.id);
 }
@@ -77,7 +80,7 @@ describe('Regenerator.run', () => {
       const { run, box } = setup();
       await run(aStudio(features(2)));
       expect(box.calls[0]?.state).toBe(EMPTY_STATE);
-      expect([...(box.calls[1]?.state.artifacts.keys() ?? [])]).toEqual(['f1/body']);
+      expect([...(box.calls[1]?.state.artifacts.keys() ?? [])]).toEqual([...ORIGIN_IDS, 'f1/body']);
     });
 
     it('an empty studio gives EMPTY_STATE and no statuses', async () => {
@@ -449,7 +452,7 @@ describe('Regenerator.run', () => {
         { kind: 'suppressed' },
         OK,
       ]);
-      expect([...(box.calls[1]?.state.artifacts.keys() ?? [])]).toEqual(['a/body']);
+      expect([...(box.calls[1]?.state.artifacts.keys() ?? [])]).toEqual([...ORIGIN_IDS, 'a/body']);
       expect(bodyIds(result)).toEqual(['a/body', 'd/body']);
     });
 

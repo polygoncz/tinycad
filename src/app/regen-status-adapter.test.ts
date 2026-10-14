@@ -4,7 +4,7 @@ import type { BodyId, FeatureId } from '@/document';
 import type { ShapeHandle } from '@/kernel';
 import { EMPTY_NAMES } from '@/regen';
 import type { Artifact, Body, FeatureStatus, RegenResult } from '@/regen';
-import { aForeignArtifact } from '@/regen/testing';
+import { aSketchArtifact } from '@/regen/testing';
 import { createRegenStatusAdapter } from './regen-status-adapter';
 
 // Branded ids are created by a cast at one place in tests; body ids by bodyId (ADR 0015).
@@ -105,7 +105,7 @@ describe('RegenStatusAdapter', () => {
 
   it('leaves out artifacts that are not bodies', () => {
     const adapter = createRegenStatusAdapter();
-    adapter.publish(aResult([], [aBody('a', 1), aForeignArtifact('s/sketch'), aBody('b', 2)]));
+    adapter.publish(aResult([], [aBody('a', 1), aSketchArtifact('s'), aBody('b', 2)]));
     expect(adapter.state.get().bodies.map((b) => b.body)).toEqual([bid('a'), bid('b')]);
   });
 

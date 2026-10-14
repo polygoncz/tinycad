@@ -17,6 +17,8 @@ Cíl projektu je **naučit se**, ne konkurovat. Hlavní důraz je na čistou arc
 | Persistence | IndexedDB, operační log + snapshoty |
 | Testy | Vitest |
 
+Řešič vazeb `@salusoft89/planegcs` (GCS z FreeCADu) je pod licencí LGPL-2.0-or-later; používá se beze změn jako samostatný soubor WASM načítaný za běhu.
+
 ## Dokumentace
 
 Složka [`docs/`](docs/) je **Obsidian vault** – otevři ji v Obsidianu jako vault (*Open folder as vault*). Vstupní bod je `docs/Domů.md`, pravidla vaultu `docs/00-meta/Konvence vaultu.md`.

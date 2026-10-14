@@ -54,10 +54,10 @@ updated: 2026-10-14
 - [x] Ú3 `sketch` (nový modul): model skici, kontrola dat, pomůcky editace, oblasti, port řešiče, `FakeSolver`; hranice modulů
 - [x] Ú4 `kernel`, `kernel-occt`, `regen`: `SketchOps.makeFace`
 - [x] Ú5 `interaction` (+ zástupné místo v `render`, `app/testing`): režimy, `SketchPort`, `sketchEntity` v pickingu
-- [ ] Ú6 `solver-planegcs` (nový modul): adaptér řešiče ve workeru
-- [ ] Ú7 `regen`: artefakty `plane` a `sketch`, počátek v `EMPTY_STATE`, `resolvePlanes`, sweep ploch oblastí
-- [ ] Ú8 `render`: vrstva skic, picking entit skici, paleta, kamera kolmo na rovinu
-- [ ] Ú9 `interaction`: `SketchEditor`, `SketchSession`, akce skicáře, kresba skici, `FeatureEditSession.setParams`, výběr roviny
+- [x] Ú6 `solver-planegcs` (nový modul): adaptér řešiče ve workeru
+- [x] Ú7 `regen`: artefakty `plane` a `sketch`, počátek v `EMPTY_STATE`, `resolvePlanes`, sweep ploch oblastí
+- [x] Ú8 `render`: vrstva skic, picking entit skici, paleta, kamera kolmo na rovinu
+- [x] Ú9 `interaction`: `SketchEditor`, `SketchSession`, akce skicáře, kresba skici, `FeatureEditSession.setParams`, výběr roviny
 - [ ] Ú10 `features/sketch`: plugin skici (schéma, builder, slovník)
 - [ ] Ú11 `interaction`, `app`: Prohlížeč (Počátek, Skici), port regenerace se skicami, úprava skici z Timeline
 - [ ] Ú12 `interaction`: nástroje skicáře

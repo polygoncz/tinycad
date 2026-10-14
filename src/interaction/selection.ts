@@ -1,11 +1,12 @@
 // The selection (spec 10, "Výběr"): temporary session state, never stored in the document
 // or the log. Items are compared by value; the snapshot holds no duplicates and keeps the
 // order in which items were added. Face and edge indices are valid for one regeneration
-// only, so a new generation from RegenStatusPort removes them (Q064).
+// only, so a new generation from RegenStatusPort removes them (Q064); features, bodies and
+// planes stay.
 
 import { ObservableValue, assertNever } from '@/core';
 import type { Observable, Unsubscribe } from '@/core';
-import type { BodyId, FeatureId } from '@/document';
+import type { BodyId, FeatureId, PlaneId } from '@/document';
 import type { RegenStatusPort } from './regen-status-port';
 import type { HighlightPort, HighlightTarget } from './viewport-port';
 
@@ -13,7 +14,9 @@ export type SelectionItem =
   | { readonly kind: 'feature'; readonly feature: FeatureId }
   | { readonly kind: 'body'; readonly body: BodyId }
   | { readonly kind: 'face'; readonly body: BodyId; readonly faceIndex: number }
-  | { readonly kind: 'edge'; readonly body: BodyId; readonly edgeIndex: number };
+  | { readonly kind: 'edge'; readonly body: BodyId; readonly edgeIndex: number }
+  /** A plane from the Browser: where a new sketch goes (M12). */
+  | { readonly kind: 'plane'; readonly plane: PlaneId };
 
 export interface SelectionModel {
   readonly items: Observable<readonly SelectionItem[]>;
@@ -38,6 +41,8 @@ export function sameSelectionItem(a: SelectionItem, b: SelectionItem): boolean {
       return b.kind === 'face' && a.body === b.body && a.faceIndex === b.faceIndex;
     case 'edge':
       return b.kind === 'edge' && a.body === b.body && a.edgeIndex === b.edgeIndex;
+    case 'plane':
+      return b.kind === 'plane' && a.plane === b.plane;
     default:
       return assertNever(a);
   }
@@ -60,7 +65,7 @@ export function createSelectionModel(deps: { regen: RegenStatusPort }): Selectio
     const next = deps.regen.state.get().generation;
     if (next === generation) return;
     generation = next;
-    publish(items.get().filter((item) => item.kind === 'feature' || item.kind === 'body'));
+    publish(items.get().filter((item) => item.kind !== 'face' && item.kind !== 'edge'));
   });
 
   return {
@@ -122,6 +127,8 @@ function frozenCopy(item: SelectionItem): SelectionItem {
       return Object.freeze({ kind: 'face', body: item.body, faceIndex: item.faceIndex });
     case 'edge':
       return Object.freeze({ kind: 'edge', body: item.body, edgeIndex: item.edgeIndex });
+    case 'plane':
+      return Object.freeze({ kind: 'plane', plane: item.plane });
     default:
       return assertNever(item);
   }
@@ -135,7 +142,8 @@ function toHighlightTarget(item: SelectionItem): HighlightTarget[] {
       return [{ kind: 'edge', body: item.body, edgeIndex: item.edgeIndex }];
     case 'feature':
     case 'body':
-      // Highlighting whole features and bodies comes when needed (spec 10).
+    case 'plane':
+      // Highlighting whole features, bodies and planes comes when needed (spec 10).
       return [];
     default:
       return assertNever(item);

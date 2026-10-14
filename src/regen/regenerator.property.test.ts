@@ -5,7 +5,7 @@ import { aFeature } from '@/document/testing';
 import type { DefaultParams } from '@/document/testing';
 import type { FeatureBuilder } from './builder';
 import type { RegenResult } from './regenerator';
-import { bodiesOf } from './state';
+import { EMPTY_STATE, bodiesOf, planesOf } from './state';
 import { aRegenSetup, aSchema, aSpyBuilder, validateSize } from './testing';
 import type { RegenSetup } from './testing';
 
@@ -142,6 +142,9 @@ describe('Regenerator (property)', () => {
           const fromScratch = await runOk(scratchSetup, studio);
 
           expect([...withCache.statuses]).toEqual([...fromScratch.statuses]);
+          // The origin planes seeded into EMPTY_STATE pass through every feature unchanged.
+          expect(planesOf(withCache.finalState)).toEqual(planesOf(EMPTY_STATE));
+          expect(planesOf(fromScratch.finalState)).toEqual(planesOf(EMPTY_STATE));
           expect(await bodySummary(cachedSetup, withCache)).toEqual(
             await bodySummary(scratchSetup, fromScratch),
           );

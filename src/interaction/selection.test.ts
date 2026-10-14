@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ORIGIN_PLANE_IDS } from '@/document';
 import type { FeatureId } from '@/document';
 import type { BodyId, HighlightTarget, SelectionItem } from '.';
 import { bindSelectionHighlight, createSelectionModel, sameSelectionItem } from './selection';
@@ -13,6 +14,7 @@ const FACE: SelectionItem = { kind: 'face', body: BODY, faceIndex: 2 };
 const EDGE: SelectionItem = { kind: 'edge', body: BODY, edgeIndex: 5 };
 const BODY_ITEM: SelectionItem = { kind: 'body', body: BODY };
 const FEATURE_ITEM: SelectionItem = { kind: 'feature', feature: FEATURE };
+const PLANE_ITEM: SelectionItem = { kind: 'plane', plane: ORIGIN_PLANE_IDS.xy };
 
 function setup() {
   const regen = new FakeRegenStatus();
@@ -33,6 +35,15 @@ describe('sameSelectionItem', () => {
     expect(sameSelectionItem(BODY_ITEM, { kind: 'body', body: OTHER_BODY })).toBe(false);
     expect(sameSelectionItem(FEATURE_ITEM, { kind: 'feature', feature: FEATURE })).toBe(true);
     expect(sameSelectionItem(FEATURE_ITEM, BODY_ITEM)).toBe(false);
+  });
+
+  it('compares planes by id (M12)', () => {
+    expect(sameSelectionItem(PLANE_ITEM, { kind: 'plane', plane: ORIGIN_PLANE_IDS.xy })).toBe(true);
+    expect(sameSelectionItem(PLANE_ITEM, { kind: 'plane', plane: ORIGIN_PLANE_IDS.xz })).toBe(
+      false,
+    );
+    expect(sameSelectionItem(PLANE_ITEM, FEATURE_ITEM)).toBe(false);
+    expect(sameSelectionItem(FEATURE_ITEM, PLANE_ITEM)).toBe(false);
   });
 });
 
@@ -168,6 +179,17 @@ describe('SelectionModel', () => {
       expect(emits()).toBe(2);
     });
 
+    it('keeps plane items (M12)', () => {
+      const { regen, selection } = setup();
+      selection.set([PLANE_ITEM, FACE]);
+      const [plane] = selection.items.get();
+
+      regen.publish(new Map());
+
+      expect(selection.items.get()).toEqual([PLANE_ITEM]);
+      expect(selection.items.get()[0]).toBe(plane);
+    });
+
     it('emits nothing without face or edge items', () => {
       const { regen, selection, emits } = setup();
       selection.set([FEATURE_ITEM, BODY_ITEM]);
@@ -200,6 +222,29 @@ describe('SelectionModel', () => {
 
       expect(selection.items.get()).toEqual([FACE]);
     });
+  });
+});
+
+describe('plane items (M12)', () => {
+  it('stores a frozen copy with only the plane field', () => {
+    const { selection } = setup();
+    const mutable = { kind: 'plane' as const, plane: ORIGIN_PLANE_IDS.yz, extra: 1 };
+
+    selection.set([mutable]);
+
+    const [stored] = selection.items.get();
+    expect(stored).toEqual({ kind: 'plane', plane: ORIGIN_PLANE_IDS.yz });
+    expect(Object.isFrozen(stored)).toBe(true);
+  });
+
+  it('is not highlighted', () => {
+    const { selection } = setup();
+    const viewport = new FakeViewport();
+    bindSelectionHighlight(selection, viewport.highlight);
+
+    selection.set([PLANE_ITEM, FACE]);
+
+    expect(viewport.selection).toEqual([{ kind: 'face', body: BODY, faceIndex: 2 }]);
   });
 });
 

@@ -1,8 +1,8 @@
 import { createRegistry } from '@/core';
 import type { Registry, Result } from '@/core';
-import type { BodyRef, FeatureInstance } from '@/document';
+import type { BodyRef, FeatureInstance, PlaneRef } from '@/document';
 import type { BooleanOps, PrimitiveOps, QueryOps, SketchOps, TransformOps } from '@/kernel';
-import type { Body, FeatureError, RegenState } from './state';
+import type { Body, FeatureError, PlaneArtifact, RegenState } from './state';
 
 // The behaviour half of a feature type (ADR 0004): turns params into geometry.
 // The data half (params, validation) is FeatureSchema in document.
@@ -13,9 +13,12 @@ export interface BuildInput<P> {
   readonly state: RegenState;
 }
 
-/** First body reference resolveBodies could not find (Q044). M14 widens ref to TopoRef. */
+/**
+ * First reference resolveBodies or resolvePlanes could not find (Q044). PlaneRef since M12; M14
+ * widens ref to TopoRef.
+ */
 export interface RefError {
-  readonly ref: BodyRef;
+  readonly ref: BodyRef | PlaneRef;
   readonly message: string;
 }
 
@@ -46,6 +49,11 @@ export interface BuildContext {
    * the first unresolved reference gives err (Q044).
    */
   resolveBodies(refs: readonly BodyRef[]): Result<Body[], RefError>;
+  /**
+   * Planes of the input state (artifacts of kind plane; a missing id or another kind gives err);
+   * the first unresolved reference gives err. M12.
+   */
+  resolvePlanes(refs: readonly PlaneRef[]): Result<PlaneArtifact[], RefError>;
   /** Several calls are joined with '\n' into one 'warning' status (Q045). */
   warn(message: string): void;
 }

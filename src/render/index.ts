@@ -6,5 +6,6 @@ export { DARK_PALETTE, LIGHT_PALETTE } from './palette';
 export type { ScenePalette } from './palette';
 export type { HighlightLayer, OverlayLayer, Viewport } from './viewport';
 export type { BodyLayer } from './body-layer';
+export type { SketchLayer } from './sketch-layer';
 export type { CameraController } from './camera-controller';
 export type { StandardView } from './camera-math';

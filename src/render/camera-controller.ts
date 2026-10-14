@@ -6,13 +6,18 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { assert, type Disposable, type Vec3 } from '@/core';
 import type { BoundingBox } from '@/kernel';
 import { fitOrtho, type StandardView } from './camera-math';
-import { orbitDirection } from './orbit-direction';
+import { orbitDirection, viewDirectionFor } from './orbit-direction';
 
 export interface CameraController {
   /** Bounds of all bodies; an empty scene → the default 200 × 200 mm frame around the origin. */
   fitAll(): void;
   /** Sets the view direction and then fitAll(). */
   setView(view: StandardView): void;
+  /**
+   * M12: the camera in `direction` from the target (like the standard views), then fitAll();
+   * normal to a sketch plane = setViewDirection(plane.normal). Zero direction = error.
+   */
+  setViewDirection(direction: Vec3): void;
 }
 
 /** What the viewport needs on top of CameraController; internal to render. */
@@ -109,6 +114,10 @@ export function createCameraRig(options: CameraRigOptions): CameraRig {
     setView(view: StandardView): void {
       assertAlive();
       fit(orbitDirection(view));
+    },
+    setViewDirection(direction: Vec3): void {
+      assertAlive();
+      fit(viewDirectionFor(direction));
     },
     attach(element: HTMLElement): void {
       assertAlive();

@@ -2,7 +2,7 @@
 // records the kernels it made. dependency-cruiser allows importing it only from *.test.ts.
 
 import { RpcError } from '@/core';
-import type { Disposable, Subscribable } from '@/core';
+import type { Disposable, Subscribable, Vec3 } from '@/core';
 import type { BodyId } from '@/document';
 import type {
   HighlightPort,
@@ -30,7 +30,8 @@ type Ray = ReturnType<FakeViewport['screenToRay']>;
 
 /**
  * An AppViewport for tests: the ViewportPort part of FakeViewport plus recorded mount, body
- * syncs, kernel resets, camera calls, palettes and body visibility. sync resolves at once.
+ * syncs, kernel resets, camera calls (views and view directions), palettes and body
+ * visibility. sync resolves at once.
  * It wraps a FakeViewport instead of extending it: a class of another module is no base
  * class (ADR 0011), so its members are passed on one by one.
  */
@@ -49,6 +50,8 @@ export class FakeAppViewport implements AppViewport {
   readonly resets: MeshOps[] = [];
   fitAllCount = 0;
   readonly views: StandardView[] = [];
+  /** Directions of every camera.setViewDirection call, oldest first. */
+  readonly viewDirections: Vec3[] = [];
   /** Palette of the last setPalette, null before any. */
   palette: ScenePalette | null = null;
   /** Every setBodyVisible call, oldest first. */
@@ -70,6 +73,9 @@ export class FakeAppViewport implements AppViewport {
     },
     setView: (view: StandardView): void => {
       this.views.push(view);
+    },
+    setViewDirection: (direction: Vec3): void => {
+      this.viewDirections.push(direction);
     },
   };
 

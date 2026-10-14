@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ObservableValue, createSequentialIdGenerator } from '@/core';
-import { bodyId, createFeatureSchemaRegistry } from '@/document';
+import { ORIGIN_PLANE_IDS, bodyId, createFeatureSchemaRegistry } from '@/document';
 import type { FeatureId, FeatureInstance } from '@/document';
 import { aFeature } from '@/document/testing';
 import {
@@ -29,6 +29,13 @@ import type { BoxParams } from './schema';
 import { boxMessages } from './messages';
 import { boxTool } from './tool';
 import * as box from '.';
+
+/** The origin planes EMPTY_STATE is seeded with (spec 07); every builder keeps them in front. */
+const ORIGIN_KEYS: readonly string[] = [
+  ORIGIN_PLANE_IDS.xy,
+  ORIGIN_PLANE_IDS.xz,
+  ORIGIN_PLANE_IDS.yz,
+];
 
 function aBox(id: string, params: Partial<BoxParams> = {}): FeatureInstance<BoxParams> {
   return aFeature({ id, type: 'box', params: { ...boxSchema.defaults(), ...params } });
@@ -204,7 +211,7 @@ describe('boxBuilder', () => {
     const feature = aBox('b1');
     const state = await build(feature);
     const id = bodyId(feature.id);
-    expect([...state.artifacts.keys()]).toEqual([id]);
+    expect([...state.artifacts.keys()]).toEqual([...ORIGIN_KEYS, id]);
     expect(state.artifacts.get(id)).toMatchObject({
       kind: 'body',
       id: 'b1/body',
@@ -219,7 +226,7 @@ describe('boxBuilder', () => {
     const feature = aBox('b1', { origin: [1, 2, 3], width: 4, depth: 5, height: 6 });
     const state = await build(feature, EMPTY_STATE, kernel);
     const body = state.artifacts.get(bodyId(feature.id));
-    if (body === undefined) expect.fail('No body');
+    if (body?.kind !== 'body') expect.fail('No body');
     expect(await kernel.boundingBox(body.shape)).toEqual({ min: [1, 2, 3], max: [5, 7, 9] });
   });
 
@@ -229,10 +236,10 @@ describe('boxBuilder', () => {
     const first = await build(b1, EMPTY_STATE, kernel);
     const firstBody = first.artifacts.get(bodyId(b1.id));
     const second = await build(aBox('b2'), first, kernel);
-    expect([...first.artifacts.keys()]).toEqual(['b1/body']);
-    expect([...second.artifacts.keys()]).toEqual(['b1/body', 'b2/body']);
+    expect([...first.artifacts.keys()]).toEqual([...ORIGIN_KEYS, 'b1/body']);
+    expect([...second.artifacts.keys()]).toEqual([...ORIGIN_KEYS, 'b1/body', 'b2/body']);
     expect(second.artifacts.get(bodyId(b1.id))).toBe(firstBody);
-    expect(EMPTY_STATE.artifacts.size).toBe(0);
+    expect([...EMPTY_STATE.artifacts.keys()]).toEqual(ORIGIN_KEYS);
   });
 
   it('freezes the output state and the new body', async () => {
@@ -284,6 +291,7 @@ function aRecordingEditor(open = false) {
       name: 'Box 1',
     }),
     setParam: () => expect.fail('setParam is not expected'),
+    setParams: () => expect.fail('setParams is not expected'),
     removeRef: () => expect.fail('removeRef is not expected'),
     focusRefParam: () => expect.fail('focusRefParam is not expected'),
     commit: () => expect.fail('commit is not expected'),

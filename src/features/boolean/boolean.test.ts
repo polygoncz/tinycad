@@ -134,7 +134,7 @@ async function build(
 
 function bodyOf(state: RegenState, feature: string): Body {
   const body = state.artifacts.get(bodyId(feature as FeatureId));
-  if (body === undefined) expect.fail(`No body of ${feature}`);
+  if (body?.kind !== 'body') expect.fail(`No body of ${feature}`);
   return body;
 }
 
@@ -677,6 +677,7 @@ function aRecordingEditor(open = false) {
       name: 'Boolean 1',
     }),
     setParam: () => expect.fail('setParam is not expected'),
+    setParams: () => expect.fail('setParams is not expected'),
     removeRef: () => expect.fail('removeRef is not expected'),
     focusRefParam: () => expect.fail('focusRefParam is not expected'),
     commit: () => expect.fail('commit is not expected'),

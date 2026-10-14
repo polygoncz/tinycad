@@ -41,6 +41,11 @@ export interface FeatureEditSession {
   /** → tx.apply(feature.setParams) */
   setParam(name: string, value: unknown): void;
   /**
+   * Several params with one feature.setParams (M12, the sketcher). Every key must be a param of
+   * the schema, otherwise it throws and applies nothing; all values the same → nothing.
+   */
+  setParams(patch: Readonly<Record<string, unknown>>): void;
+  /**
    * Removes the item at the index from the value of the param (the × of a chip) → setParam.
    * An index out of range, a non-array value or a closed session do nothing (M11).
    */
@@ -309,23 +314,33 @@ function createSession(deps: {
     }
   }
 
-  /** → tx.apply(feature.setParams) */
-  function setParam(name: string, value: unknown): void {
-    checkOpen('setParam');
-    assert(Object.hasOwn(schema.params, name), `setParam: unknown param '${name}'`);
+  /** → tx.apply(feature.setParams) with the patch over the current params. */
+  function applyPatch(what: string, patch: Readonly<Record<string, unknown>>): void {
+    checkOpen(what);
+    const names = Object.keys(patch);
+    for (const name of names) {
+      assert(Object.hasOwn(schema.params, name), `${what}: unknown param '${name}'`);
+    }
     const params = readParams(state.get());
-    if (Object.hasOwn(params, name) && Object.is(params[name], value)) return;
+    const same = names.every(
+      (name) => Object.hasOwn(params, name) && Object.is(params[name], patch[name]),
+    );
+    if (same) return;
     const op: FeatureSetParamsOp = {
       type: 'feature.setParams',
       v: OP_VERSION['feature.setParams'],
       featureId,
       // The params are written in the shape of this schema version (Q035).
       typeVersion: schema.version,
-      params: { ...params, [name]: value },
+      params: { ...params, ...patch },
     };
     // A failing handler throws here, before anything changed: the session stays as it was.
     tx.apply(op);
     refresh();
+  }
+
+  function setParam(name: string, value: unknown): void {
+    applyPatch('setParam', { [name]: value });
   }
 
   return {
@@ -334,6 +349,9 @@ function createSession(deps: {
     schema,
     state: state.asObservable(),
     setParam,
+    setParams(patch) {
+      applyPatch('setParams', patch);
+    },
     removeRef(name, index) {
       if (!open) return;
       assert(Object.hasOwn(schema.params, name), `removeRef: unknown param '${name}'`);

@@ -11,7 +11,7 @@ import { kernelErrorCode } from '@/kernel';
 import type { GeometryKernel, ShapeHandle } from '@/kernel';
 import { createBuildSession } from './build-context';
 import type { BuildOutput, FeatureBuilder } from './builder';
-import { EMPTY_STATE, bodiesOf } from './state';
+import { EMPTY_STATE, bodiesOf, sketchesOf } from './state';
 import type { FeatureError, FeatureStatus, RegenState } from './state';
 
 // Replays the features of a part studio through the kernel (spec 07, Regenerator) with a cache
@@ -147,15 +147,21 @@ export function createRegenerator(deps: {
   }
 
   /**
-   * Mark & sweep (spec 07, Životnost handle): live = handles of the body artifacts of all states
-   * in the cache, every other owned handle is released in one release call. Failures of release
+   * Mark & sweep (spec 07, Životnost handle): live = the shapes of the body artifacts and the
+   * region faces of the sketch artifacts of all states in the cache (planes have no handle);
+   * every other owned handle is released in one release call. Failures of release
    * by code (Q040).
    */
   async function sweep(): Promise<void> {
     // A dead kernel has nothing to release to (Q049).
     assertKernelAlive();
     const live = new Set<ShapeHandle>();
-    for (const entry of cache) for (const body of bodiesOf(entry.state)) live.add(body.shape);
+    for (const entry of cache) {
+      for (const body of bodiesOf(entry.state)) live.add(body.shape);
+      for (const sketch of sketchesOf(entry.state)) {
+        for (const face of sketch.regions.values()) live.add(face);
+      }
+    }
     const dead = [...owned].filter((h) => !live.has(h));
     if (dead.length === 0) return;
     // Out of the owned set before the await: when a newer run sweeps while this release is

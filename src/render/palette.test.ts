@@ -9,6 +9,8 @@ const KEYS = [
   'selection',
   'preview',
   'construction',
+  'sketch',
+  'sketchDefined',
   'axes',
   'grid',
 ] as const satisfies readonly (keyof ScenePalette)[];
@@ -53,6 +55,8 @@ describe('palettes', () => {
       selection: 0x2563eb,
       preview: 0x2563eb,
       construction: 0x6b7280,
+      sketch: 0x0a84ff,
+      sketchDefined: 0x1c1c1e,
       axes: [0xff3b30, 0x34c759, 0x0a84ff],
       grid: [0xb4b9c1, 0xd5d8dd],
     });
@@ -67,6 +71,8 @@ describe('palettes', () => {
       hover: 0x5e9ff5,
       preview: 0x0a84ff,
       construction: 0x6b7280,
+      sketch: 0x409cff,
+      sketchDefined: 0xf2f2f7,
     });
   });
 });

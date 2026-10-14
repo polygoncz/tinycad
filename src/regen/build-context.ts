@@ -1,10 +1,10 @@
 import { err, ok } from '@/core';
 import type { Result } from '@/core';
-import type { BodyRef } from '@/document';
+import type { BodyRef, PlaneRef } from '@/document';
 import type { ShapeHandle } from '@/kernel';
 import type { BuildContext, ModelingKernel, RefError } from './builder';
-import { isBody } from './state';
-import type { Body, RegenState } from './state';
+import { isBody, isPlane } from './state';
+import type { Body, PlaneArtifact, RegenState } from './state';
 import { createTrackingKernel } from './tracking-kernel';
 
 // BuildContext of one feature build (spec 07, Builder featury). Internal to regen: the
@@ -15,7 +15,7 @@ export interface BuildSessionInit {
   readonly kernel: ModelingKernel;
   /** Handles owned by the Regenerator; the tracked kernel adds to it (Q041). */
   readonly owned: Set<ShapeHandle>;
-  /** Input state of the feature; resolveBodies looks only at its body artifacts. */
+  /** Input state of the feature; resolveBodies and resolvePlanes look only at artifacts of their kind. */
   readonly state: RegenState;
 }
 
@@ -44,10 +44,26 @@ export function createBuildSession(init: BuildSessionInit): BuildSession {
     return ok(bodies);
   };
 
+  const resolvePlanes = (refs: readonly PlaneRef[]): Result<PlaneArtifact[], RefError> => {
+    const planes: PlaneArtifact[] = [];
+    for (const ref of refs) {
+      const artifact = state.artifacts.get(ref.plane);
+      if (artifact === undefined) {
+        return err({ ref, message: `Plane '${ref.plane}' does not exist` });
+      }
+      if (!isPlane(artifact)) {
+        return err({ ref, message: `'${ref.plane}' is not a plane` });
+      }
+      planes.push(artifact);
+    }
+    return ok(planes);
+  };
+
   return {
     ctx: {
       kernel: createTrackingKernel(init.kernel, init.owned),
       resolveBodies,
+      resolvePlanes,
       warn: (message) => {
         messages.push(message);
       },

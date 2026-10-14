@@ -83,7 +83,7 @@ async function build(
 
 async function bboxOf(kernel: FakeKernel, state: RegenState, id: string): Promise<BoundingBox> {
   const body = state.artifacts.get(id as BodyId);
-  if (body === undefined) expect.fail(`No body ${id}`);
+  if (body?.kind !== 'body') expect.fail(`No body ${id}`);
   return kernel.boundingBox(body.shape);
 }
 
@@ -325,8 +325,9 @@ describe('transformBuilder', () => {
       origin: 'b1',
       lastModifiedBy: 't1',
     });
-    expect(after?.names).toBe(SOME_NAMES);
-    expect(after?.shape).not.toBe(before?.shape);
+    if (after?.kind !== 'body' || before?.kind !== 'body') expect.fail('No body b1/body');
+    expect(after.names).toBe(SOME_NAMES);
+    expect(after.shape).not.toBe(before.shape);
     expectBox(await bboxOf(kernel, next, 'b1/body'), { min: [10, 20, 30], max: [12, 24, 36] });
   });
 
@@ -540,6 +541,7 @@ function aRecordingEditor(open = false) {
       name: 'Transform 1',
     }),
     setParam: () => expect.fail('setParam is not expected'),
+    setParams: () => expect.fail('setParams is not expected'),
     removeRef: () => expect.fail('removeRef is not expected'),
     focusRefParam: () => expect.fail('focusRefParam is not expected'),
     commit: () => expect.fail('commit is not expected'),

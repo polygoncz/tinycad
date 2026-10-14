@@ -17,7 +17,6 @@ import type {
   OverlayPort,
   PickFilter,
   PickResult,
-  SketchPort,
   ViewKeyEvent,
   ViewPointerEvent,
   ViewportEvents,
@@ -33,6 +32,7 @@ import { LIGHT_PALETTE, type ScenePalette } from './palette';
 import { toNdc } from './pick-math';
 import { createPicker } from './picker';
 import { createSceneHelpers } from './scene-helpers';
+import { createSketchLayer, type SketchLayer } from './sketch-layer';
 import { toViewKeyEvent, toViewPointerEvent } from './view-events';
 
 /** Hover and selection (spec 09, "Vrstvy pro interakci"). */
@@ -59,9 +59,9 @@ export interface Viewport extends ViewportPort, Disposable {
   readonly highlight: HighlightLayer;
   /** Temporary geometry of tools (implements OverlayPort). */
   readonly overlay: OverlayLayer;
-  /** Drawings of sketches and planes (M12); a placeholder until Ú8 brings SketchLayer. */
-  readonly sketches: SketchPort;
-  /** Fit all, standard views. */
+  /** Drawings of sketches and planes (M12, implements SketchPort). */
+  readonly sketches: SketchLayer;
+  /** Fit all, standard views, normal to a plane (M12). */
   readonly camera: CameraController;
 
   /** Recolours the existing materials and the background, creates nothing anew (Q072). */
@@ -142,6 +142,8 @@ export function createViewport(deps: {
   scene.add(highlightLayer.group);
   const overlayLayer = lifetime.add(createOverlayLayer({ requestRender: scheduleFrame, palette }));
   scene.add(overlayLayer.group);
+  const sketchLayer = lifetime.add(createSketchLayer({ requestRender: scheduleFrame, palette }));
+  scene.add(sketchLayer.group);
   const rig = lifetime.add(
     createCameraRig({
       getBounds: () => layer.bounds(),
@@ -179,6 +181,7 @@ export function createViewport(deps: {
     mounted.renderer.setSize(width, height, false);
     rig.resize(width, height);
     highlightLayer.setResolution(width, height);
+    sketchLayer.setResolution(width, height);
     scheduleFrame();
   }
 
@@ -343,13 +346,14 @@ export function createViewport(deps: {
     },
   };
 
-  // Placeholder (M12, Ú8 replaces it with SketchLayer): accepts drawings and draws nothing.
-  const sketches: SketchPort = {
-    set() {
+  const sketches: SketchLayer = {
+    set(id, drawing) {
       assertAlive();
+      sketchLayer.set(id, drawing);
     },
-    remove() {
+    remove(id) {
       assertAlive();
+      sketchLayer.remove(id);
     },
   };
 
@@ -361,6 +365,10 @@ export function createViewport(deps: {
     setView(view) {
       assertAlive();
       rig.setView(view);
+    },
+    setViewDirection(direction) {
+      assertAlive();
+      rig.setViewDirection(direction);
     },
   };
 
@@ -375,6 +383,11 @@ export function createViewport(deps: {
       assertAlive();
       if (mounted === null) return null;
       const { clientWidth, clientHeight } = mounted.canvas;
+      // Sketches first, over the bodies and without occlusion (spec 09, "Skici").
+      if (filter?.includes('sketchEntity') === true) {
+        const hit = sketchLayer.pick(rig.camera, x, y, clientWidth, clientHeight);
+        if (hit !== null) return hit;
+      }
       return picker.pick(rig.camera, x, y, clientWidth, clientHeight, filter);
     },
     screenToRay(x: number, y: number): { origin: Vec3; direction: Vec3 } {
@@ -406,6 +419,7 @@ export function createViewport(deps: {
       layer.setPalette(next);
       highlightLayer.setPalette(next);
       overlayLayer.setPalette(next);
+      sketchLayer.setPalette(next);
       helpers.setPalette(next);
       // While unmounted, mount takes the background from `palette`.
       mounted?.renderer.setClearColor(next.background);
@@ -422,9 +436,16 @@ export function createViewport(deps: {
       disposed = true;
       // Dropping the emitter drops every subscriber.
       emitter = new Emitter<ViewportEvents>();
-      scene.remove(rig.camera, layer.group, highlightLayer.group, overlayLayer.group);
-      // In reverse order: helpers, camera rig, overlay, highlight, then the body layer, which
-      // disposes every BodyView and its shared materials and makes a running sync stale.
+      scene.remove(
+        rig.camera,
+        layer.group,
+        highlightLayer.group,
+        overlayLayer.group,
+        sketchLayer.group,
+      );
+      // In reverse order: helpers, camera rig, sketches, overlay, highlight, then the body
+      // layer, which disposes every BodyView and its shared materials and makes a running sync
+      // stale.
       lifetime.dispose();
     },
   };

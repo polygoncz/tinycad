@@ -44,3 +44,15 @@ export { createFeatureTreeModel } from './feature-tree';
 export type { FeatureTreeModel, TreeRow, TreeStatus } from './feature-tree';
 export { createBrowserModel } from './browser-model';
 export type { BrowserBodyRow, BrowserModel } from './browser-model';
+export { createSketchEditor } from './sketch-editor';
+export type { SketchEditor } from './sketch-editor';
+export { EDIT_SKETCH_DRAWING_ID } from './sketch-session';
+export type {
+  SketchConstraintRow,
+  SketchMessageKey,
+  SketchSession,
+  SketchState,
+} from './sketch-session';
+export { ORIGIN_POINT_ID, artifactDrawing, planeDrawing, toSketchDrawing } from './sketch-drawing';
+export { SKETCH_ACTION_IDS, createSketchActions, sketchConstraintActionId } from './sketch-actions';
+export { createSketchTools } from './sketch-tools';

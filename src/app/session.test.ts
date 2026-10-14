@@ -9,7 +9,7 @@ import type { DocumentStore } from '@/persistence';
 import { createManualScheduler } from '@/persistence/testing';
 import type { ManualScheduler } from '@/persistence/testing';
 import type { FeaturePlugin } from '@/plugin-api';
-import { aForeignArtifact, aSchema, aSpyBuilder } from '@/regen/testing';
+import { aSchema, aSketchArtifact, aSpyBuilder } from '@/regen/testing';
 import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
 import { createAppSession } from './index';
 import { RESTART_WINDOW_MS } from './kernel-supervisor';
@@ -72,14 +72,11 @@ async function open(
   };
 }
 
-/**
- * A plugin whose feature leaves an artifact that is not a body. M12 brings the first such kind
- * (the sketch); until then the artifact is faked.
- */
+/** A plugin whose feature leaves an artifact that is not a body: a sketch without regions. */
 const markPlugin: FeaturePlugin = {
   schema: aSchema('mark'),
   builder: aSpyBuilder('mark', ({ feature, state }) => {
-    const mark = aForeignArtifact(`${feature.id}/sketch`);
+    const mark = aSketchArtifact(feature.id);
     return Promise.resolve({
       ok: true,
       state: { artifacts: new Map(state.artifacts).set(mark.id, mark) },

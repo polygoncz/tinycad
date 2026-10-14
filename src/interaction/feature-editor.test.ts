@@ -573,6 +573,81 @@ describe('FeatureEditSession', () => {
   });
 });
 
+describe('FeatureEditSession.setParams (M12)', () => {
+  it('applies several params with one feature.setParams', () => {
+    const { dispatcher, editor } = setup({ features: [aBox('a')] });
+    const session = editor.edit(fid('a'));
+    const applied: Operation[] = [];
+    dispatcher.events.on('applied', ({ op }) => applied.push(op));
+    let emits = 0;
+    session.state.subscribe(() => emits++);
+
+    session.setParams({ width: 5, height: 6 });
+
+    expect(applied).toHaveLength(1);
+    expect(applied[0]).toMatchObject({
+      type: 'feature.setParams',
+      featureId: 'a',
+      typeVersion: 1,
+      params: { width: 5, height: 6, targets: [] },
+    });
+    expect(session.state.get().params).toEqual({ width: 5, height: 6, targets: [] });
+    expect(emits).toBe(1);
+  });
+
+  it('create -> setParams -> commit writes one entry batch[feature.add, feature.setParams]', () => {
+    const { log, editor } = setup();
+    const session = editor.create('box');
+    session.setParams({ width: 1 });
+    session.setParams({ width: 2, height: 3 });
+    session.commit();
+
+    const entries = log.entries();
+    expect(entries).toHaveLength(1);
+    const ops = (entries[0]?.op as BatchOp).ops; // the entry of create is a batch
+    expect(ops.map((op) => op.type)).toEqual(['feature.add', 'feature.setParams']);
+    expect(ops[1]).toMatchObject({ params: { width: 2, height: 3, targets: [] } });
+  });
+
+  it('an unknown key throws and applies nothing', () => {
+    const { dispatcher, editor } = setup();
+    const session = editor.create('box');
+    const applied: Operation[] = [];
+    dispatcher.events.on('applied', ({ op }) => applied.push(op));
+    const before = session.state.get();
+
+    expect(() => {
+      session.setParams({ width: 3, depth: 1 });
+    }).toThrow();
+    expect(applied).toEqual([]);
+    expect(session.state.get()).toBe(before);
+  });
+
+  it('applies nothing when all values are the same', () => {
+    const { dispatcher, editor } = setup();
+    const session = editor.create('box');
+    const applied: Operation[] = [];
+    dispatcher.events.on('applied', ({ op }) => applied.push(op));
+    let emits = 0;
+    session.state.subscribe(() => emits++);
+
+    session.setParams({ width: 10, height: 20 });
+    session.setParams({});
+
+    expect(applied).toEqual([]);
+    expect(emits).toBe(0);
+  });
+
+  it('throws after closing', () => {
+    const { editor } = setup();
+    const session = editor.create('box');
+    session.cancel();
+    expect(() => {
+      session.setParams({ width: 1 });
+    }).toThrow();
+  });
+});
+
 describe('FeatureEditSession reference chips (FieldState.refs)', () => {
   const A = bodyId(fid('a'));
   const B2 = bodyId(fid('b'), 2);

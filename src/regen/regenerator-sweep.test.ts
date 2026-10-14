@@ -1,21 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { createFeatureSchemaRegistry } from '@/document';
+import { ORIGIN_PLANE_IDS, createFeatureSchemaRegistry, sketchId } from '@/document';
 import type { FeatureInstance, PartStudioData } from '@/document';
 import { aFeature } from '@/document/testing';
 import type { DefaultParams } from '@/document/testing';
 import { RpcError } from '@/core';
 import { kernelErrorCode } from '@/kernel';
-import type { GeometryKernel, ShapeHandle } from '@/kernel';
+import type { GeometryKernel, ShapeHandle, SketchOps } from '@/kernel';
 import { createFakeKernel } from '@/kernel/testing';
 import type { FakeKernel } from '@/kernel/testing';
 import { createBuilderRegistry } from './builder';
 import type { FeatureBuilder } from './builder';
 import { createRegenerator } from './regenerator';
 import type { RegenResult, Regenerator } from './regenerator';
-import { bodiesOf } from './state';
-import type { RegenState } from './state';
+import { EMPTY_STATE, bodiesOf, sketchesOf } from './state';
+import type { RegenState, SketchArtifact } from './state';
 import {
-  aForeignArtifact,
+  aSketchArtifact,
   aGatedBuild,
   aRegenSetup,
   aSchema,
@@ -36,6 +36,46 @@ import type { Deferred, RegenSetup } from './testing';
 function handlesOf(state: RegenState): ShapeHandle[] {
   return bodiesOf(state).map((b) => b.shape);
 }
+
+/** A square region of side `size` with its corner at the origin. */
+function aSquare(size: number): Parameters<SketchOps['makeFace']>[0] {
+  const p = (x: number, y: number): readonly [number, number] => [x * size, y * size];
+  const corners = [p(0, 0), p(1, 0), p(1, 1), p(0, 1)];
+  const xy = EMPTY_STATE.artifacts.get(ORIGIN_PLANE_IDS.xy);
+  if (xy?.kind !== 'plane') throw new Error('EMPTY_STATE has no XY plane');
+  return {
+    plane: xy.plane,
+    outer: corners.map((from, i) => ({ kind: 'line', from, to: corners[(i + 1) % 4] ?? from })),
+    holes: [],
+  };
+}
+
+/**
+ * A test sketch builder (not the real plugin): the sketch artifact of the feature on the plane
+ * XY with two region faces made by makeFace through ctx.kernel.
+ */
+const buildTwoFaceSketch: FeatureBuilder['build'] = async ({ feature, state }, { kernel }) => {
+  const a = await kernel.makeFace(aSquare(1));
+  const b = await kernel.makeFace(aSquare(2));
+  const xy = EMPTY_STATE.artifacts.get(ORIGIN_PLANE_IDS.xy);
+  if (xy?.kind !== 'plane') throw new Error('EMPTY_STATE has no XY plane');
+  const id = sketchId(feature.id);
+  const sketch: SketchArtifact = Object.freeze({
+    kind: 'sketch',
+    id,
+    owner: feature.id,
+    plane: xy.plane,
+    entities: Object.freeze([]),
+    regions: new Map([
+      ['a', a.shape],
+      ['b', b.shape],
+    ]),
+  });
+  return {
+    ok: true,
+    state: Object.freeze({ artifacts: new Map(state.artifacts).set(id, sketch) }),
+  };
+};
 
 /** A build that creates an intermediate box and then fails as an expected feature error. */
 const buildScrapAndFail: FeatureBuilder['build'] = async (_, { kernel }) => {
@@ -140,10 +180,10 @@ describe('Regenerator mark & sweep', () => {
     expect(await kernel.liveHandleCount()).toBe(3);
   });
 
-  it('marks only the shapes of body artifacts; an artifact of another kind is skipped', async () => {
+  it('marks the shapes of body artifacts; planes and a sketch without regions add nothing', async () => {
     const setup = aRegenSetup();
     const { regenerator, kernel } = setup;
-    const other = aForeignArtifact('m/sketch');
+    const other = aSketchArtifact('m');
     registerType(setup, 'mark', ({ state }) =>
       Promise.resolve({
         ok: true,
@@ -153,10 +193,45 @@ describe('Regenerator mark & sweep', () => {
     const list = [aFeature({ id: 'a' }), aFeature({ id: 'm', type: 'mark' })];
     await runOk(regenerator, aStudio(list));
     const r = await runOk(regenerator, aStudio([aFeature({ id: 'b' }), ...list]));
-    expect([...r.finalState.artifacts.keys()]).toEqual(['b/body', 'a/body', 'm/sketch']);
+    expect([...r.finalState.artifacts.keys()]).toEqual([
+      ORIGIN_PLANE_IDS.xy,
+      ORIGIN_PLANE_IDS.xz,
+      ORIGIN_PLANE_IDS.yz,
+      'b/body',
+      'a/body',
+      'm/sketch',
+    ]);
     // The old body of a died with the insertion in front of it; the new bodies stay.
     expect(kernel.callCount('release')).toBe(1);
     expect(await kernel.liveHandleCount()).toBe(2);
+  });
+
+  it('keeps the region faces of a sketch alive and releases them when the sketch is removed', async () => {
+    const setup = aRegenSetup();
+    const { regenerator, kernel } = setup;
+    registerType(setup, 'sketch', buildTwoFaceSketch);
+    const sketch = aFeature({ id: 's', type: 'sketch' });
+    const r = await runOk(regenerator, aStudio([sketch]));
+    expect(kernel.callCount('makeFace')).toBe(2);
+    expect(await kernel.liveHandleCount()).toBe(2);
+    const [artifact] = sketchesOf(r.finalState);
+    for (const face of artifact?.regions.values() ?? []) await kernel.boundingBox(face);
+
+    await runOk(regenerator, aStudio([]));
+    expect(await kernel.liveHandleCount()).toBe(0);
+  });
+
+  it('a rebuilt sketch releases its old region faces and keeps the new ones', async () => {
+    const setup = aRegenSetup();
+    const { regenerator, kernel } = setup;
+    registerType(setup, 'sketch', buildTwoFaceSketch);
+    const sketch = aFeature({ id: 's', type: 'sketch' });
+    await runOk(regenerator, aStudio([sketch]));
+    // A new object of the same feature: the sketch is built again with two new faces.
+    await runOk(regenerator, aStudio([{ ...sketch }, aFeature({ id: 'f1' })]));
+    expect(kernel.callCount('makeFace')).toBe(4);
+    expect(kernel.callCount('release')).toBe(1);
+    expect(await kernel.liveHandleCount()).toBe(3);
   });
 
   it('a builder that creates an intermediate shape and fails leaks nothing', async () => {
