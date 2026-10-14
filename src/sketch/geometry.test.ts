@@ -37,25 +37,32 @@ describe('pointsById', () => {
 describe('curve2', () => {
   const points = pointsById(DATA);
 
-  it('turns a line into from/to coordinates', () => {
-    expect(curve2(curve(DATA, 'l'), points)).toEqual({ kind: 'line', from: [4, 2], to: [1, 5] });
+  it('turns a line into from/to coordinates with the entity id', () => {
+    expect(curve2(curve(DATA, 'l'), points)).toEqual({
+      kind: 'line',
+      from: [4, 2],
+      to: [1, 5],
+      id: 'l',
+    });
   });
 
-  it('turns a circle into center and radius', () => {
+  it('turns a circle into center and radius with the entity id', () => {
     expect(curve2(curve(DATA, 'k'), points)).toEqual({
       kind: 'circle',
       center: [1, 2],
       radius: 7,
+      id: 'k',
     });
   });
 
-  it('turns an arc into a counter-clockwise arc', () => {
+  it('turns an arc into a counter-clockwise arc with the entity id', () => {
     expect(curve2(curve(DATA, 'q'), points)).toEqual({
       kind: 'arc',
       center: [1, 2],
       from: [4, 2],
       to: [1, 5],
       ccw: true,
+      id: 'q',
     });
   });
 

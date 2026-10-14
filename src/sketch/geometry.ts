@@ -31,7 +31,10 @@ export function pointsById(data: SketchData): ReadonlyMap<SketchEntityId, Sketch
   return points;
 }
 
-/** The curve with its point coordinates; an arc becomes counter-clockwise. A missing point is a programming error. */
+/**
+ * The curve with its point coordinates and the entity id (M14); an arc becomes counter-clockwise.
+ * A missing point is a programming error.
+ */
 export function curve2(
   curve: SketchCurve,
   points: ReadonlyMap<SketchEntityId, SketchPoint>,
@@ -43,9 +46,9 @@ export function curve2(
   };
   switch (curve.kind) {
     case 'line':
-      return { kind: 'line', from: at(curve.p1), to: at(curve.p2) };
+      return { kind: 'line', from: at(curve.p1), to: at(curve.p2), id: curve.id };
     case 'circle':
-      return { kind: 'circle', center: at(curve.center), radius: curve.radius };
+      return { kind: 'circle', center: at(curve.center), radius: curve.radius, id: curve.id };
     case 'arc':
       return {
         kind: 'arc',
@@ -53,6 +56,7 @@ export function curve2(
         from: at(curve.start),
         to: at(curve.end),
         ccw: true,
+        id: curve.id,
       };
     default:
       return assertNever(curve);

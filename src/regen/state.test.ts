@@ -156,8 +156,10 @@ describe('axesOf', () => {
 });
 
 describe('EMPTY_NAMES', () => {
-  it('is empty and frozen', () => {
-    expect(Object.keys(EMPTY_NAMES)).toEqual([]);
+  it('is the empty frozen name table of names.ts', () => {
+    expect(EMPTY_NAMES.faceEntries.size).toBe(0);
+    expect(EMPTY_NAMES.edgeEntries.size).toBe(0);
+    expect(EMPTY_NAMES.topology).toEqual({ faces: [], edges: [], vertexCount: 0 });
     expect(Object.isFrozen(EMPTY_NAMES)).toBe(true);
   });
 });

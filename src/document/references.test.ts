@@ -151,6 +151,37 @@ describe('referencesOf', () => {
     ]);
   });
 
+  it('takes face references of a planes param, skipping an empty name (M14)', () => {
+    const params = {
+      targets: [],
+      faces: [],
+      profile: [],
+      plane: [
+        topoRef('b', 'face:top'),
+        { kind: 'topo', body: 'b/body', name: '' },
+        planeRef('origin/plane:xy'),
+      ],
+      sketch: {},
+      width: 1,
+    };
+    expect(referencesOf(schema, params)).toEqual([
+      topoRef('b', 'face:top'),
+      planeRef('origin/plane:xy'),
+    ]);
+  });
+
+  it('skips topo references with an empty name (M14)', () => {
+    const params = {
+      targets: [],
+      faces: [{ kind: 'topo', body: 'b/body', name: '' }, topoRef('b', 'Face1')],
+      profile: [],
+      plane: [],
+      sketch: {},
+      width: 1,
+    };
+    expect(referencesOf(schema, params)).toEqual([topoRef('b', 'Face1')]);
+  });
+
   it('returns [] for params that are not an object', () => {
     for (const params of [null, undefined, 3, 'x', [bodyRef('a')]]) {
       expect(referencesOf(schema, params)).toEqual([]);
@@ -196,6 +227,23 @@ describe('dependenciesOf', () => {
   it('a reference to an origin plane is no dependency (origin is not a feature, M12)', () => {
     const studio = studioOf(op('a'), op('s', planeRef(ORIGIN_PLANE_IDS.xy), bodyRef('a')));
     expect(dependenciesOf(studio, schemas).get(fid('s'))).toEqual(['a']);
+  });
+
+  it('a sketch on a face of a body depends on the owner of the body (M14)', () => {
+    const sketch = aFeature({
+      id: 's',
+      type: 'op',
+      params: {
+        targets: [],
+        faces: [],
+        profile: [],
+        plane: [topoRef('box', 'face:top')],
+        sketch: {},
+        width: 1,
+      },
+    });
+    const deps = dependenciesOf(studioOf(op('box'), sketch), schemas);
+    expect(deps.get(fid('s'))).toEqual(['box']);
   });
 
   it('leaves out references to features that are not in the studio', () => {

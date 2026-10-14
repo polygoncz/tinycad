@@ -17,7 +17,7 @@ import { createFakeKernel } from '@/kernel/testing';
 import type { FakeKernel } from '@/kernel/testing';
 import { anOpsSession } from '@/ops/testing';
 import { registerPlugin } from '@/plugin-api';
-import { EMPTY_STATE, bodiesOf, createBuilderRegistry } from '@/regen';
+import { EMPTY_STATE, bodiesOf, createBuilderRegistry, propagateNames } from '@/regen';
 import type { Artifact, Body, NameTable, RegenState } from '@/regen';
 import { aBuildContext, aRegenSetup, resized, result } from '@/regen/testing';
 import { transformBuilder } from './builder';
@@ -44,7 +44,12 @@ function aTransform(
 }
 
 /** A name table that is not EMPTY_NAMES by identity, so the test sees the transform keeps it. */
-const SOME_NAMES: NameTable = Object.freeze({});
+const SOME_NAMES: NameTable = propagateNames({
+  // Test data: any feature id will do, the table never parses it.
+  featureId: 'names' as FeatureId,
+  inputs: [],
+  topology: { faces: [], edges: [], vertexCount: 0 },
+});
 
 /** A state with one box body per entry, each created by its own feature `<id>`. */
 async function aState(

@@ -200,3 +200,19 @@ describe('HighlightLayer and sketch regions (M13)', () => {
     expect(layer.group.children).toHaveLength(0);
   });
 });
+
+describe('HighlightLayer and whole bodies (M14)', () => {
+  it('ignores them in hover and selection until M14 Ú7', () => {
+    const layer = createHighlightLayer({
+      views: new Map<BodyId, BodyView>([[A, viewOf(A)]]),
+      requestRender: () => undefined,
+      palette: LIGHT_PALETTE,
+    });
+    layer.setHover({ kind: 'body', body: A });
+    layer.setSelection([
+      { kind: 'body', body: A },
+      { kind: 'face', body: A, faceIndex: 0 },
+    ]);
+    expect(layer.group.children).toHaveLength(1);
+  });
+});

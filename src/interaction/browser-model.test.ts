@@ -18,6 +18,7 @@ import { createBrowserModel } from './browser-model';
 import { createEditLock } from './edit-lock';
 import { createFeatureEditor } from './feature-editor';
 import type { RegenBody, RegenSketch } from './regen-status-port';
+import { NO_TOPO_NAMES } from './regen-status-port';
 import { createSelectionModel } from './selection';
 import { FakeRegenStatus } from './testing';
 
@@ -27,8 +28,8 @@ const B1 = bodyId(fid('f1'));
 const B2 = bodyId(fid('f2'));
 const B3 = bodyId(fid('f3'));
 const BODIES: readonly RegenBody[] = [
-  { body: B1, feature: fid('f1') },
-  { body: B2, feature: fid('f2') },
+  { body: B1, feature: fid('f1'), names: NO_TOPO_NAMES },
+  { body: B2, feature: fid('f2'), names: NO_TOPO_NAMES },
 ];
 
 const BOOL_PARAMS: ParamSchema = {

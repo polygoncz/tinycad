@@ -3,15 +3,19 @@ import { createSequentialIdGenerator } from '@/core';
 import { ORIGIN_PLANE_IDS, createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
 import type { FeatureId, FeatureSchema, ParamSchema } from '@/document';
 import { anOpsSession } from '@/ops/testing';
-import type { BodyId, HighlightTarget, SelectionItem } from '.';
+import type { BodyId, HighlightTarget, SelectionItem, TopoName } from '.';
 import { createFeatureEditor } from './feature-editor';
 import { bindSelectionHighlight, createSelectionModel, sameSelectionItem } from './selection';
-import { FakeRegenStatus, FakeViewport } from './testing';
+import { FakeRegenStatus, FakeViewport, aTopoNames } from './testing';
 
 // Branded ids are created by a cast in tests only.
 const BODY = 'f1/body' as BodyId;
 const OTHER_BODY = 'f2/body' as BodyId;
 const FEATURE = 'f1' as FeatureId;
+const OTHER_FEATURE = 'f2' as FeatureId;
+const TOP = 'f1/face:top' as TopoName;
+const SIDE = 'f1/face:side' as TopoName;
+const RIM = 'f1/edge:top|side' as TopoName;
 
 const FACE: SelectionItem = { kind: 'face', body: BODY, faceIndex: 2 };
 const EDGE: SelectionItem = { kind: 'edge', body: BODY, edgeIndex: 5 };
@@ -38,6 +42,12 @@ describe('sameSelectionItem', () => {
     expect(sameSelectionItem(BODY_ITEM, { kind: 'body', body: OTHER_BODY })).toBe(false);
     expect(sameSelectionItem(FEATURE_ITEM, { kind: 'feature', feature: FEATURE })).toBe(true);
     expect(sameSelectionItem(FEATURE_ITEM, BODY_ITEM)).toBe(false);
+  });
+
+  it('ignores the name (M14)', () => {
+    expect(sameSelectionItem({ ...FACE, name: TOP }, FACE)).toBe(true);
+    expect(sameSelectionItem({ ...FACE, name: TOP }, { ...FACE, name: SIDE })).toBe(true);
+    expect(sameSelectionItem({ ...EDGE, name: RIM }, EDGE)).toBe(true);
   });
 
   it('compares planes by id (M12)', () => {
@@ -252,7 +262,7 @@ describe('plane items (M12)', () => {
 });
 
 describe('bindSelectionHighlight', () => {
-  it('passes only face and edge items in selection order, at once and after a change', () => {
+  it('passes face, edge and body items in selection order, at once and after a change', () => {
     const { selection } = setup();
     const viewport = new FakeViewport();
     selection.set([EDGE, FEATURE_ITEM]);
@@ -262,7 +272,11 @@ describe('bindSelectionHighlight', () => {
     expect(viewport.selection).toEqual([expectedEdge]);
 
     selection.set([BODY_ITEM, FACE, EDGE]);
-    expect(viewport.selection).toEqual([{ kind: 'face', body: BODY, faceIndex: 2 }, expectedEdge]);
+    expect(viewport.selection).toEqual([
+      { kind: 'body', body: BODY },
+      { kind: 'face', body: BODY, faceIndex: 2 },
+      expectedEdge,
+    ]);
   });
 
   it('passes an empty array when nothing is selected', () => {
@@ -379,6 +393,170 @@ describe('bindSelectionHighlight with the feature dialog (M13)', () => {
     second.setParam('others', []);
     expect(viewport.selection).toEqual([
       { kind: 'sketchRegion', sketch: 's3/sketch', region: 'x' },
+    ]);
+  });
+});
+
+describe('topological names (M14)', () => {
+  /** A selection whose last snapshot has BODY named by `names` and OTHER_BODY without names. */
+  function named(faces: Record<string, number[]>, edges: Record<string, number[]> = {}) {
+    const ctx = setup();
+    ctx.regen.publish(new Map(), [
+      { body: BODY, feature: FEATURE, names: aTopoNames({ faces, edges }) },
+      { body: OTHER_BODY, feature: OTHER_FEATURE },
+    ]);
+    return ctx;
+  }
+
+  describe('set and toggle', () => {
+    it('fill in the name from the last snapshot', () => {
+      const { selection } = named({ [TOP]: [2] }, { [RIM]: [5] });
+
+      selection.set([FACE]);
+      expect(selection.items.get()).toEqual([{ ...FACE, name: TOP }]);
+
+      selection.toggle(EDGE);
+      expect(selection.items.get()).toEqual([
+        { ...FACE, name: TOP },
+        { ...EDGE, name: RIM },
+      ]);
+      expect(selection.items.get().every((item) => Object.isFrozen(item))).toBe(true);
+    });
+
+    it('ignore the name of the caller', () => {
+      const { selection } = named({ [TOP]: [2] });
+
+      selection.set([
+        { ...FACE, name: SIDE },
+        { kind: 'face', body: BODY, faceIndex: 3, name: SIDE },
+      ]);
+
+      expect(selection.items.get()).toEqual([
+        { ...FACE, name: TOP },
+        { kind: 'face', body: BODY, faceIndex: 3 },
+      ]);
+    });
+
+    it('leave out the name when the body is not in the snapshot or has no names', () => {
+      const { selection } = named({ [TOP]: [2] });
+      const missing = 'f9/body' as BodyId;
+
+      selection.set([
+        { kind: 'face', body: missing, faceIndex: 2 },
+        { kind: 'face', body: OTHER_BODY, faceIndex: 2 },
+      ]);
+
+      const items = selection.items.get();
+      expect(items).toEqual([
+        { kind: 'face', body: missing, faceIndex: 2 },
+        { kind: 'face', body: OTHER_BODY, faceIndex: 2 },
+      ]);
+      expect(items.every((item) => !('name' in item))).toBe(true);
+    });
+
+    it('fill in no name before the first regeneration', () => {
+      const { selection } = setup();
+      selection.set([FACE]);
+      expect('name' in (selection.items.get()[0] ?? {})).toBe(false);
+    });
+  });
+
+  describe('new regeneration', () => {
+    it('moves a selected edge to the new index of its name', () => {
+      const { regen, selection } = named({}, { [RIM]: [5] });
+      selection.set([EDGE]);
+
+      regen.publish(new Map(), [
+        { body: BODY, feature: FEATURE, names: aTopoNames({ edges: { [RIM]: [8] } }) },
+      ]);
+
+      expect(selection.items.get()).toEqual([
+        { kind: 'edge', body: BODY, edgeIndex: 8, name: RIM },
+      ]);
+      expect(Object.isFrozen(selection.items.get()[0])).toBe(true);
+    });
+
+    it('replaces a face whose name now has two faces by both, in place and ascending', () => {
+      const { regen, selection } = named({ [TOP]: [2] });
+      selection.set([FEATURE_ITEM, FACE, BODY_ITEM]);
+
+      regen.publish(new Map(), [
+        { body: BODY, feature: FEATURE, names: aTopoNames({ faces: { [TOP]: [7, 4] } }) },
+      ]);
+
+      expect(selection.items.get()).toEqual([
+        FEATURE_ITEM,
+        { kind: 'face', body: BODY, faceIndex: 4, name: TOP },
+        { kind: 'face', body: BODY, faceIndex: 7, name: TOP },
+        BODY_ITEM,
+      ]);
+    });
+
+    it('drops duplicates of the remapped items, the first occurrence wins', () => {
+      const { regen, selection } = named({ [TOP]: [2], [SIDE]: [3] });
+      selection.set([FACE, { kind: 'face', body: BODY, faceIndex: 3 }]);
+
+      // The two names merged on one face.
+      regen.publish(new Map(), [
+        {
+          body: BODY,
+          feature: FEATURE,
+          names: aTopoNames({ faces: { [TOP]: [6], [SIDE]: [6] } }),
+        },
+      ]);
+
+      expect(selection.items.get()).toEqual([
+        { kind: 'face', body: BODY, faceIndex: 6, name: TOP },
+      ]);
+    });
+
+    it('drops a vanished name, a vanished body and an item without a name', () => {
+      const { regen, selection } = named({ [TOP]: [2], [SIDE]: [3] });
+      const unnamed: SelectionItem = { kind: 'face', body: BODY, faceIndex: 9 };
+      const other: SelectionItem = { kind: 'face', body: OTHER_BODY, faceIndex: 1 };
+      selection.set([FACE, { kind: 'face', body: BODY, faceIndex: 3 }, unnamed, other, PLANE_ITEM]);
+
+      regen.publish(new Map(), [
+        { body: BODY, feature: FEATURE, names: aTopoNames({ faces: { [SIDE]: [3] } }) },
+      ]);
+
+      expect(selection.items.get()).toEqual([
+        { kind: 'face', body: BODY, faceIndex: 3, name: SIDE },
+        PLANE_ITEM,
+      ]);
+
+      regen.publish(new Map());
+      expect(selection.items.get()).toEqual([PLANE_ITEM]);
+    });
+
+    it('emits nothing and keeps the items identical when nothing moved', () => {
+      const { regen, selection, emits } = named({ [TOP]: [2] }, { [RIM]: [5] });
+      selection.set([FACE, EDGE, BODY_ITEM]);
+      const before = selection.items.get();
+
+      regen.publish(new Map(), [
+        {
+          body: BODY,
+          feature: FEATURE,
+          names: aTopoNames({ faces: { [TOP]: [2] }, edges: { [RIM]: [5] } }),
+        },
+      ]);
+
+      expect(selection.items.get()).toBe(before);
+      expect(emits()).toBe(1);
+    });
+  });
+
+  it('bindSelectionHighlight passes body items as body targets', () => {
+    const { selection } = setup();
+    const viewport = new FakeViewport();
+    bindSelectionHighlight(selection, viewport.highlight);
+
+    selection.set([BODY_ITEM, FEATURE_ITEM, FACE, PLANE_ITEM]);
+
+    expect(viewport.selection).toEqual([
+      { kind: 'body', body: BODY },
+      { kind: 'face', body: BODY, faceIndex: 2 },
     ]);
   });
 });

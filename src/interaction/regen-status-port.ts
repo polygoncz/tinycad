@@ -1,11 +1,11 @@
 // The regeneration status port (spec 10, "Port stavu regenerace"): interaction must not know
 // regen, yet the feature tree shows regeneration errors and the selection of subshapes is
-// cleared after a regeneration. So interaction defines its own port and app feeds it from
-// RegenState (Q063, Q064). Suppression and the rollback bar are not here: interaction reads
+// follows a regeneration by topological names. So interaction defines its own port and app feeds
+// it from RegenState (Q063, R102). Suppression and the rollback bar are not here: interaction reads
 // them from the document directly, so they show at once, not after a regeneration.
 
 import type { Observable } from '@/core';
-import type { BodyId, FeatureId, ParamIssue, SketchId } from '@/document';
+import type { BodyId, FeatureId, ParamIssue, SketchId, TopoName } from '@/document';
 
 export type FeatureHealth =
   | { readonly kind: 'ok' }
@@ -17,11 +17,35 @@ export type FeatureHealth =
       readonly issues?: readonly ParamIssue[];
     };
 
-/** A body of the last regeneration and the feature that made it. */
+/** A body of the last regeneration, the feature that made it and its names (M14). */
 export interface RegenBody {
   readonly body: BodyId;
   readonly feature: FeatureId;
+  readonly names: TopoNames;
 }
+
+/**
+ * Topological names of a body of the last regeneration (M14, spec 08). A narrow interface
+ * defined here so interaction does not know regen; regen's NameTable fits it structurally.
+ */
+export interface TopoNames {
+  nameOfFace(index: number): TopoName | undefined;
+  nameOfEdge(index: number): TopoName | undefined;
+  /** Indices of the faces with the name, ascending; an unknown name → []. */
+  faces(name: TopoName): readonly number[];
+  /** Indices of the edges with the name, ascending; an unknown name → []. */
+  edges(name: TopoName): readonly number[];
+}
+
+const NO_INDICES: readonly number[] = Object.freeze([]);
+
+/** Names nothing: a body whose names are not known. */
+export const NO_TOPO_NAMES: TopoNames = Object.freeze({
+  nameOfFace: () => undefined,
+  nameOfEdge: () => undefined,
+  faces: () => NO_INDICES,
+  edges: () => NO_INDICES,
+});
 
 /** A sketch of the last regeneration and the feature that made it (M12). */
 export interface RegenSketch {

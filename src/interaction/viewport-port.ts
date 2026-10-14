@@ -39,7 +39,7 @@ export interface ViewportEvents {
 
 /**
  * What can be highlighted: a face or an edge of a body, without point and normal (Q065), an
- * entity of a sketch drawing (M12) or a region of a drawing (M13). HighlightPort ignores
+ * entity of a sketch drawing (M12), a region of a drawing (M13) or a whole body (M14). HighlightPort ignores
  * sketch entities: the style of the drawing carries their highlight; render fills a region.
  */
 export type HighlightTarget =
@@ -52,7 +52,9 @@ export type HighlightTarget =
       readonly sketch: string;
       /** Id of the region in the drawing (the region name). */
       readonly region: string;
-    };
+    }
+  /** M14: a whole body (selected in the Browser, bodies references in the dialog, R104). */
+  | { readonly kind: 'body'; readonly body: BodyId };
 
 /**
  * A HighlightTarget plus where it was hit, so it can be passed to setHover as it is.

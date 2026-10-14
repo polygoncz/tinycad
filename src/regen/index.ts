@@ -9,11 +9,12 @@ export type {
   Body,
   FeatureError,
   FeatureStatus,
-  NameTable,
   PlaneArtifact,
   RegenState,
   SketchArtifact,
 } from './state';
+export { propagateNames } from './names';
+export type { NameTable } from './names';
 export { createBuilderRegistry, unresolvedReference } from './builder';
 export type {
   BuildContext,

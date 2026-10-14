@@ -110,7 +110,9 @@ const NO_KINDS: readonly EntityRef['kind'][] = Object.freeze([]);
 const BODY: readonly EntityRef['kind'][] = Object.freeze(['body']);
 const TOPO: readonly EntityRef['kind'][] = Object.freeze(['topo']);
 const REGION: readonly EntityRef['kind'][] = Object.freeze(['region']);
-const PLANE: readonly EntityRef['kind'][] = Object.freeze(['plane']);
+// A plane of the history, or a planar face of a body to sketch on (M14); whether the face
+// really is planar is only known when regenerating.
+const PLANE: readonly EntityRef['kind'][] = Object.freeze(['plane', 'topo']);
 const AXIS: readonly EntityRef['kind'][] = Object.freeze(['axis', 'sketchEntity']);
 
 /**

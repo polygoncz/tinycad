@@ -142,6 +142,12 @@ describe('validTarget / validTargets', () => {
     expect(validTargets([sketchRegion('s', 'r1'), face(A, 5)], meshOf)).toEqual([face(A, 5)]);
   });
 
+  it('drops a whole body for now: its highlight comes in M14 Ú7', () => {
+    const whole: HighlightTarget = { kind: 'body', body: A };
+    expect(validTarget(whole, meshOf)).toBe(false);
+    expect(validTargets([whole, face(A, 5)], meshOf)).toEqual([face(A, 5)]);
+  });
+
   it('filters a list and keeps the order', () => {
     expect(validTargets([edge(A, 1), face(B, 5), face(A, 9), face(A, 5)], meshOf)).toEqual([
       edge(A, 1),

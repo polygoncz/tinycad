@@ -14,6 +14,7 @@ describe('interaction public API', () => {
         'createSketchEditor',
         'createSketchTools',
         'EDIT_SKETCH_DRAWING_ID',
+        'NO_TOPO_NAMES',
         'ORIGIN_POINT_ID',
         'planeDrawing',
         'SKETCH_ACTION_IDS',

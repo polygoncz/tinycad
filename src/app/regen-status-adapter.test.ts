@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { bodyId, sketchId } from '@/document';
 import type { BodyId, FeatureId } from '@/document';
 import type { ShapeHandle } from '@/kernel';
+import { NO_TOPO_NAMES } from '@/interaction';
 import { EMPTY_NAMES } from '@/regen';
 import type { Artifact, Body, FeatureStatus, RegenResult } from '@/regen';
 import { aSketchArtifact } from '@/regen/testing';
@@ -93,15 +94,23 @@ describe('RegenStatusAdapter', () => {
       ),
     );
     expect(adapter.state.get().bodies).toEqual([
-      { body: bid('b'), feature: fid('b') },
-      { body: bid('a'), feature: fid('a') },
+      { body: bid('b'), feature: fid('b'), names: NO_TOPO_NAMES },
+      { body: bid('a'), feature: fid('a'), names: NO_TOPO_NAMES },
     ]);
   });
 
   it('the feature of a body is its origin, not the feature that modified it last', () => {
     const adapter = createRegenStatusAdapter();
     adapter.publish(aResult([['a', { kind: 'ok' }]], [aBody('a', 1, 'm')]));
-    expect(adapter.state.get().bodies).toEqual([{ body: bid('a'), feature: fid('a') }]);
+    expect(adapter.state.get().bodies).toEqual([
+      { body: bid('a'), feature: fid('a'), names: NO_TOPO_NAMES },
+    ]);
+  });
+
+  it('publishes the names of each body; no names yet (M14, real ones come with Ú13)', () => {
+    const adapter = createRegenStatusAdapter();
+    adapter.publish(aResult([['a', { kind: 'ok' }]], [aBody('a', 1)]));
+    expect(adapter.state.get().bodies[0]?.names).toBe(NO_TOPO_NAMES);
   });
 
   it('leaves out artifacts that are not bodies', () => {

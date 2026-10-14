@@ -42,6 +42,8 @@ const RECT = [
   ln('da', 'd', 'a'),
 ];
 
+const ids = (loop: readonly Curve2[]) => loop.map((c) => c.id);
+
 const names = (data: SketchData) => computeRegions(data).regions.map((r) => r.name);
 
 const start = (c: Curve2) => (c.kind === 'circle' ? undefined : c.from);
@@ -110,9 +112,9 @@ describe('computeRegions', () => {
     expect(regions.map((r) => r.name)).toEqual(['ab,bc,cd,da,k', 'k']);
     const [outer, disc] = regions;
     expect(outer?.area).toBeCloseTo(50 - 4 * Math.PI, 9);
-    expect(outer?.holes).toEqual([[{ kind: 'circle', center: [5, 2.5], radius: 2 }]]);
+    expect(outer?.holes).toEqual([[{ kind: 'circle', center: [5, 2.5], radius: 2, id: 'k' }]]);
     expect(disc?.area).toBeCloseTo(4 * Math.PI, 9);
-    expect(disc?.outer).toEqual([{ kind: 'circle', center: [5, 2.5], radius: 2 }]);
+    expect(disc?.outer).toEqual([{ kind: 'circle', center: [5, 2.5], radius: 2, id: 'k' }]);
     expect(disc?.holes).toEqual([]);
   });
 
@@ -204,6 +206,7 @@ describe('computeRegions', () => {
       from: [5, 5],
       to: [0, 0],
       ccw: false,
+      id: 'q',
     });
   });
 
@@ -314,6 +317,74 @@ describe('computeRegions', () => {
     );
     expect(names(moved)).toEqual(['ab,bc,cd,da']);
     expect(computeRegions(moved).regions[0]?.area).toBeCloseTo(44 * 16, 9);
+  });
+
+  it('every outer curve of a rectangle carries the id of its line (M14)', () => {
+    const [r] = computeRegions(sketch(RECT)).regions;
+    expect(ids(r?.outer ?? []).sort()).toEqual(['ab', 'bc', 'cd', 'da']);
+    expect(r?.name).toBe('ab,bc,cd,da');
+  });
+
+  it('a circle hole carries the id of its circle (M14)', () => {
+    const data = sketch([...RECT, pt('o', 5, 2.5), circle('k', 'o', 2)]);
+    const [outer, disc] = computeRegions(data).regions;
+    expect(ids(outer?.outer ?? []).sort()).toEqual(['ab', 'bc', 'cd', 'da']);
+    expect(outer?.holes.map(ids)).toEqual([['k']]);
+    expect(ids(disc?.outer ?? [])).toEqual(['k']);
+  });
+
+  it('a clockwise polygon hole carries the ids of its lines (M14)', () => {
+    const data = sketch([
+      ...RECT,
+      pt('p', 2, 1),
+      pt('q', 4, 1),
+      pt('r', 4, 3),
+      ln('pq', 'p', 'q'),
+      ln('qr', 'q', 'r'),
+      ln('rp', 'r', 'p'),
+    ]);
+    const [outer, inner] = computeRegions(data).regions;
+    expect(outer?.holes.map((h) => ids(h).sort())).toEqual([['pq', 'qr', 'rp']]);
+    expect(ids(inner?.outer ?? []).sort()).toEqual(['pq', 'qr', 'rp']);
+  });
+
+  it('a slot keeps the ids of its lines and arcs, reversed or not (M14)', () => {
+    const data = sketch([
+      pt('a', 0, 0),
+      pt('b', 10, 0),
+      pt('c', 10, 10),
+      pt('d', 0, 10),
+      pt('m1', 10, 5),
+      pt('m2', 0, 5),
+      ln('l1', 'a', 'b'),
+      arc('a1', 'm1', 'b', 'c'),
+      ln('l2', 'c', 'd'),
+      arc('a2', 'm2', 'd', 'a'),
+    ]);
+    const [r] = computeRegions(data).regions;
+    expect(r?.name).toBe('a1,a2,l1,l2');
+    expect(ids(r?.outer ?? []).sort()).toEqual(['a1', 'a2', 'l1', 'l2']);
+    // The same slot as a hole of a large rectangle: the hole is clockwise, so its arcs are reversed.
+    const holed = sketch([
+      ...data.entities,
+      pt('A', -20, -20),
+      pt('B', 30, -20),
+      pt('C', 30, 30),
+      pt('D', -20, 30),
+      ln('AB', 'A', 'B'),
+      ln('BC', 'B', 'C'),
+      ln('CD', 'C', 'D'),
+      ln('DA', 'D', 'A'),
+    ]);
+    const outer = computeRegions(holed).regions.find((x) => x.holes.length === 1);
+    const hole = outer?.holes[0] ?? [];
+    expect(hole.filter((c) => c.kind === 'arc').map((c) => [c.ccw, c.id])).toEqual(
+      expect.arrayContaining([
+        [false, 'a1'],
+        [false, 'a2'],
+      ]),
+    );
+    expect(ids(hole).sort()).toEqual(['a1', 'a2', 'l1', 'l2']);
   });
 
   it('sorts names by string comparison', () => {

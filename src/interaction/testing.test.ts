@@ -10,14 +10,16 @@ import type {
   PickKind,
   PickResult,
   SketchDrawing,
+  TopoName,
   ViewKeyEvent,
   ViewPointerEvent,
 } from '.';
-import type { RegenBody } from './regen-status-port';
-import { FakeRegenStatus, FakeViewport } from './testing';
+import { NO_TOPO_NAMES } from './regen-status-port';
+import { FakeRegenStatus, FakeViewport, aTopoNames } from './testing';
 
-// Branded ids are created by a cast in tests only.
+// Branded ids and names are created by a cast in tests only.
 const BODY = 'f1/body' as BodyId;
+const topoName = (s: string): TopoName => s as TopoName;
 const FACE: PickResult = {
   kind: 'face',
   body: BODY,
@@ -361,16 +363,24 @@ describe('FakeRegenStatus', () => {
 
   it('publish sets frozen copies of the bodies; without them there are none', () => {
     const regen = new FakeRegenStatus();
-    const bodies: RegenBody[] = [{ body: BODY, feature: F1 }];
+    const names = aTopoNames({ faces: { top: [5] } });
+    const bodies = [{ body: BODY, feature: F1, names }];
     regen.publish(new Map(), bodies);
     const snapshot = regen.state.get();
-    bodies.push({ body: BODY, feature: F2 });
-    expect(snapshot.bodies).toEqual([{ body: BODY, feature: F1 }]);
+    bodies.push({ body: BODY, feature: F2, names });
+    expect(snapshot.bodies).toEqual([{ body: BODY, feature: F1, names }]);
+    expect(snapshot.bodies[0]?.names).toBe(names);
     expect(Object.isFrozen(snapshot.bodies)).toBe(true);
     expect(snapshot.bodies.every((b) => Object.isFrozen(b))).toBe(true);
 
     regen.publish(new Map());
     expect(regen.state.get().bodies).toEqual([]);
+  });
+
+  it('publish gives a body without names NO_TOPO_NAMES (M14)', () => {
+    const regen = new FakeRegenStatus();
+    regen.publish(new Map(), [{ body: BODY, feature: F1 }]);
+    expect(regen.state.get().bodies[0]?.names).toBe(NO_TOPO_NAMES);
   });
 
   it('publish increments the generation, sets the health and notifies subscribers', () => {
@@ -403,5 +413,55 @@ describe('FakeRegenStatus', () => {
     health.set(F2, { kind: 'ok' });
     expect(Object.isFrozen(snapshot)).toBe(true);
     expect(snapshot.health).toEqual(new Map([[F1, ERROR]]));
+  });
+});
+
+describe('NO_TOPO_NAMES', () => {
+  it('names nothing', () => {
+    expect(NO_TOPO_NAMES.nameOfFace(0)).toBeUndefined();
+    expect(NO_TOPO_NAMES.nameOfEdge(0)).toBeUndefined();
+    expect(NO_TOPO_NAMES.faces(topoName('f1/face:top'))).toEqual([]);
+    expect(NO_TOPO_NAMES.edges(topoName('f1/edge:a|b'))).toEqual([]);
+    expect(Object.isFrozen(NO_TOPO_NAMES)).toBe(true);
+  });
+});
+
+describe('aTopoNames', () => {
+  const names = aTopoNames({
+    faces: {
+      'f1/face:top': [5],
+      'f1/face:split': [3, 1],
+      'a/face:merged': [4],
+      'b/face:merged': [4],
+    },
+    edges: { 'f1/edge:a|b': [7] },
+  });
+
+  it('finds the indices of a name, ascending; an unknown name has none', () => {
+    expect(names.faces(topoName('f1/face:top'))).toEqual([5]);
+    expect(names.faces(topoName('f1/face:split'))).toEqual([1, 3]);
+    expect(names.edges(topoName('f1/edge:a|b'))).toEqual([7]);
+    expect(names.faces(topoName('f1/edge:a|b'))).toEqual([]);
+    expect(names.edges(topoName('unknown'))).toEqual([]);
+  });
+
+  it('names an index; with several names the first in sorted order', () => {
+    expect(names.nameOfFace(5)).toBe('f1/face:top');
+    expect(names.nameOfFace(1)).toBe('f1/face:split');
+    expect(names.nameOfFace(4)).toBe('a/face:merged');
+    expect(names.nameOfFace(0)).toBeUndefined();
+    expect(names.nameOfEdge(7)).toBe('f1/edge:a|b');
+    expect(names.nameOfEdge(5)).toBeUndefined();
+  });
+
+  it('without arguments names nothing', () => {
+    const empty = aTopoNames();
+    expect(empty.nameOfFace(0)).toBeUndefined();
+    expect(empty.faces(topoName('x'))).toEqual([]);
+  });
+
+  it('returns frozen arrays', () => {
+    expect(Object.isFrozen(names.faces(topoName('f1/face:split')))).toBe(true);
+    expect(Object.isFrozen(names.faces(topoName('unknown')))).toBe(true);
   });
 });

@@ -24,12 +24,16 @@ export type {
 } from './viewport-port';
 // Part of the port's vocabulary: render takes BodyId from here, never from document (Q056).
 export type { BodyId } from '@/document';
+// Part of the port's vocabulary as well: the names of TopoNames (M14).
+export type { TopoName } from '@/document';
+export { NO_TOPO_NAMES } from './regen-status-port';
 export type {
   FeatureHealth,
   RegenBody,
   RegenSketch,
   RegenSnapshot,
   RegenStatusPort,
+  TopoNames,
 } from './regen-status-port';
 export { bindSelectionHighlight, createSelectionModel, sameSelectionItem } from './selection';
 export type { SelectionCommands, SelectionItem, SelectionModel } from './selection';

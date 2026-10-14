@@ -151,6 +151,9 @@ Plán a kontrakty: [[M14-topologicke-pojmenovani#Implementační plán]], spec [
 - **R112 – Akceptace: čtyři scénáře spec 08 + zkosení jako integrační testy s OCCT v Node, jména zadaná jako řetězce podle spec; e2e jen zaoblení hrany kvádru a změna výšky.** Proč: `FakeKernel` nezaobluje (R3) a test v Node ověří zároveň formát jmen; e2e prověří picking hrany a tok dialogu ([[M14-topologicke-pojmenovani#Ú14 `tests`: akceptační scénáře|Ú14]]).
 - **R113 – Featura, která těleso mění, jména nekopíruje, ale přepočítá přes `nameShape` z historie (i Transform s identitou).** Proč: jedno pravidlo pro všechny featury; ADR 0015 „zachová names“ se tím zpřesňuje na „zachová jména nezměněných ploch“ ([[07-regenerace#Builder featury]]).
 
+- **R114 – Indexy vstupu v historii se kontrolují jen u vstupu s neprázdnou topologií.** Proč: vstup bez jmen (plocha profilu) je `EMPTY_NAMES` s prázdnou topologií, ale historie vysunutí na plochu profilu odkazuje; doslovné pravidlo 8 by vždy vyhodilo výjimku ([[08-topologicke-pojmenovani#Tabulka jmen a přenos]]).
+- **R115 – Plochy bez jména se do kontextu hrany nepočítají; vrchol, kolem kterého je plocha bez jména, zůstává bez jména.** Proč: jméno složené z neznámých částí by nebylo stabilní; stejné pravidlo jako u hran (R97) ([[08-topologicke-pojmenovani#Hrany]]).
+- **R116 – Přemapovaná položka výběru nese jméno, podle kterého se mapovala** (ne primární jméno nového indexu); při sloučení dvou vybraných jmen na jednu plochu vyhraje první v pořadí výběru. Proč: jméno vybrané uživatelem zůstává stabilní ([[10-interakce#Výběr]]).
 ## M15 – Export a dokončení
 
 Plán a kontrakty: [[M15-export-a-dokonceni#Implementační plán]]. Rozsah (STEP, export a import dokumentu, panel historie, měření výkonu, úklid otázek, akceptační kritéria) zadalo hlavní sezení, podrobnosti rozhodl plánovač milníku. Čísla R114–R120 jsou rezervovaná pro implementaci M14.

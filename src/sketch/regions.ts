@@ -287,7 +287,7 @@ function compareOutgoing(a: HalfEdge | undefined, b: HalfEdge | undefined): numb
   return a.curvature - b.curvature;
 }
 
-/** Forward (from → to) and reverse half-edges of an edge, in this order. */
+/** Forward (from → to) and reverse half-edges of an edge, in this order; both keep the entity id (M14). */
 function halfEdges(e: Edge): readonly [HalfEdge, HalfEdge] {
   const { curve } = e;
   if (curve.kind === 'line') {
@@ -299,7 +299,7 @@ function halfEdges(e: Edge): readonly [HalfEdge, HalfEdge] {
         dest: e.from,
         angle: direction([-d[0], -d[1]]),
         curvature: 0,
-        curve: { kind: 'line', from: curve.to, to: curve.from },
+        curve: { kind: 'line', from: curve.to, to: curve.from, id: e.id },
       },
     ];
   }
@@ -314,7 +314,14 @@ function halfEdges(e: Edge): readonly [HalfEdge, HalfEdge] {
       dest: e.from,
       angle: direction([t[1], -t[0]]),
       curvature: -1 / r,
-      curve: { kind: 'arc', center: curve.center, from: curve.to, to: curve.from, ccw: false },
+      curve: {
+        kind: 'arc',
+        center: curve.center,
+        from: curve.to,
+        to: curve.from,
+        ccw: false,
+        id: e.id,
+      },
     },
   ];
 }

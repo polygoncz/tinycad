@@ -330,10 +330,10 @@ describe('sketchBuilder', () => {
       {
         plane: ORIGIN_PLANES[0]?.plane,
         outer: [
-          { kind: 'line', from: [0, 0], to: [10, 0] },
-          { kind: 'line', from: [10, 0], to: [10, 5] },
-          { kind: 'line', from: [10, 5], to: [0, 5] },
-          { kind: 'line', from: [0, 5], to: [0, 0] },
+          { kind: 'line', from: [0, 0], to: [10, 0], id: 'ab' },
+          { kind: 'line', from: [10, 0], to: [10, 5], id: 'bc' },
+          { kind: 'line', from: [10, 5], to: [0, 5], id: 'cd' },
+          { kind: 'line', from: [0, 5], to: [0, 0], id: 'da' },
         ],
         holes: [],
       },

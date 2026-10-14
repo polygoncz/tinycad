@@ -4,13 +4,15 @@
 
 import { Emitter, ObservableValue } from '@/core';
 import type { Observable, Subscribable, Vec3 } from '@/core';
-import type { FeatureId } from '@/document';
+import type { FeatureId, TopoName } from '@/document';
+import { NO_TOPO_NAMES } from './regen-status-port';
 import type {
   FeatureHealth,
   RegenBody,
   RegenSketch,
   RegenSnapshot,
   RegenStatusPort,
+  TopoNames,
 } from './regen-status-port';
 import type {
   HighlightPort,
@@ -148,6 +150,9 @@ export class FakeViewport implements ViewportPort {
   }
 }
 
+/** A body for FakeRegenStatus.publish: without names it gets NO_TOPO_NAMES (M14). */
+type PublishedBody = Omit<RegenBody, 'names'> & { readonly names?: TopoNames };
+
 const NO_BODIES: readonly RegenBody[] = Object.freeze([]);
 const NO_SKETCHES: readonly RegenSketch[] = Object.freeze([]);
 
@@ -162,19 +167,24 @@ export class FakeRegenStatus implements RegenStatusPort {
   readonly state: Observable<RegenSnapshot> = this.value.asObservable();
 
   /**
-   * A new frozen snapshot with generation + 1 and copies of health, bodies and sketches
-   * (with their regions; empty when omitted); notifies subscribers.
+   * A new frozen snapshot with generation + 1 and copies of health, bodies (a body without
+   * names gets NO_TOPO_NAMES, M14) and sketches (with their regions; empty when omitted);
+   * notifies subscribers.
    */
   publish(
     health: ReadonlyMap<FeatureId, FeatureHealth>,
-    bodies: readonly RegenBody[] = NO_BODIES,
+    bodies: readonly PublishedBody[] = NO_BODIES,
     sketches: readonly RegenSketch[] = NO_SKETCHES,
   ): void {
     this.value.set(
       Object.freeze({
         generation: this.value.get().generation + 1,
         health: new Map(health),
-        bodies: Object.freeze(bodies.map(({ body, feature }) => Object.freeze({ body, feature }))),
+        bodies: Object.freeze(
+          bodies.map(({ body, feature, names }) =>
+            Object.freeze({ body, feature, names: names ?? NO_TOPO_NAMES }),
+          ),
+        ),
         sketches: Object.freeze(
           sketches.map(({ sketch, feature, regions }) =>
             Object.freeze({ sketch, feature, regions: Object.freeze([...regions]) }),
@@ -183,4 +193,50 @@ export class FakeRegenStatus implements RegenStatusPort {
       }),
     );
   }
+}
+
+/**
+ * TopoNames from hand-written names: name → indices (spec 10, M14). faces/edges return the
+ * indices ascending; an index with several names is named by the first of them in sorted order.
+ */
+export function aTopoNames(
+  names: {
+    readonly faces?: Readonly<Record<string, readonly number[]>>;
+    readonly edges?: Readonly<Record<string, readonly number[]>>;
+  } = {},
+): TopoNames {
+  const faces = indexByName(names.faces ?? {});
+  const edges = indexByName(names.edges ?? {});
+  return Object.freeze({
+    nameOfFace: (index: number) => nameOf(faces, index),
+    nameOfEdge: (index: number) => nameOf(edges, index),
+    faces: (name: TopoName) => faces.get(name) ?? NO_INDICES,
+    edges: (name: TopoName) => edges.get(name) ?? NO_INDICES,
+  });
+}
+
+const NO_INDICES: readonly number[] = Object.freeze([]);
+
+/** Name → frozen ascending indices, the names in sorted order. */
+function indexByName(
+  record: Readonly<Record<string, readonly number[]>>,
+): ReadonlyMap<TopoName, readonly number[]> {
+  return new Map(
+    Object.keys(record)
+      .sort()
+      .map((name) => [
+        // Test helper: the hand-written strings stand for names minted by regen.
+        name as TopoName,
+        Object.freeze([...(record[name] ?? [])].sort((a, b) => a - b)),
+      ]),
+  );
+}
+
+/** The first name (in sorted order) whose indices contain `index`. */
+function nameOf(
+  byName: ReadonlyMap<TopoName, readonly number[]>,
+  index: number,
+): TopoName | undefined {
+  for (const [name, indices] of byName) if (indices.includes(index)) return name;
+  return undefined;
 }

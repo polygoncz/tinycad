@@ -3,17 +3,14 @@ import { ORIGIN, ORIGIN_AXES, ORIGIN_PLANES } from '@/document';
 import type { AxisId, BodyId, FeatureId, ParamIssue, PlaneId, SketchId } from '@/document';
 import type { ShapeHandle } from '@/kernel';
 import type { SketchEntity } from '@/sketch';
+import type { NameTable } from './names';
 
 // Regeneration state (spec 07): an immutable snapshot of what exists after a feature.
 // A feature is a function `output state = f(input state, params)`.
 
-/**
- * Topological names of the faces and edges of one shape (spec 08).
- * Empty until M14 fills it in; until then every body carries EMPTY_NAMES.
- */
-export type NameTable = Readonly<Record<string, never>>;
-
-export const EMPTY_NAMES: NameTable = Object.freeze({});
+// The name table of a body lives in names.ts (spec 08); state re-exports it for the Body type.
+export { EMPTY_NAMES } from './names';
+export type { NameTable } from './names';
 
 /** Id of an artifact, always '<owner>/<kind>[:<n>]' (ADR 0015). */
 export type ArtifactId = BodyId | SketchId | PlaneId | AxisId;

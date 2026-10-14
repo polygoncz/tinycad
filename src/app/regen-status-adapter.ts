@@ -5,6 +5,7 @@
 
 import { ObservableValue } from '@/core';
 import type { FeatureId } from '@/document';
+import { NO_TOPO_NAMES } from '@/interaction';
 import type {
   FeatureHealth,
   RegenBody,
@@ -38,9 +39,12 @@ export function createRegenStatusAdapter(): RegenStatusAdapter {
         const h = toHealth(status);
         if (h !== undefined) health.set(id, h);
       }
-      // The feature of a body is its origin, the one that minted the id (ADR 0015).
+      // The feature of a body is its origin, the one that minted the id (ADR 0015). No names
+      // yet: the real ones (Body.names) come with M14 Ú13.
       const bodies: readonly RegenBody[] = Object.freeze(
-        bodiesOf(result.finalState).map((b) => Object.freeze({ body: b.id, feature: b.origin })),
+        bodiesOf(result.finalState).map((b) =>
+          Object.freeze({ body: b.id, feature: b.origin, names: NO_TOPO_NAMES }),
+        ),
       );
       // The feature of a sketch is its owner (spec 12); regions in the order of the artifact (M13).
       const sketches: readonly RegenSketch[] = Object.freeze(

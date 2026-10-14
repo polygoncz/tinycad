@@ -131,6 +131,12 @@ describe('validateAgainstSchema – each ParamSpec kind', () => {
     bad(spec, [{ kind: 'topo', body: 'f1/body' }], 'param.invalidRef', { index: 0 });
   });
 
+  it('topo: an empty name is an invalid reference (M14)', () => {
+    const spec: ParamSpec = { kind: 'topo', label: 'T', entity: 'edge' };
+    bad(spec, [{ kind: 'topo', body: 'f1/body', name: '' }], 'param.invalidRef', { index: 0 });
+    bad(spec, [{ kind: 'topo', body: 'f1/body', name: 7 }], 'param.invalidRef', { index: 0 });
+  });
+
   it('region: SketchRegionRef[]', () => {
     const spec: ParamSpec = { kind: 'region', label: 'R', min: 1 };
     ok(spec, [{ kind: 'region', sketch: 's1', region: 'r1' }]);
@@ -158,6 +164,22 @@ describe('validateAgainstSchema – sketcher kinds (M12)', () => {
     bad(spec, [plane('origin/plane:xy'), plane('origin/plane:xy')], 'param.duplicateRef', {
       index: 1,
     });
+  });
+
+  it('planes: a TopoRef to a face of a body is a plane too (M14)', () => {
+    const spec: ParamSpec = { kind: 'planes', label: 'P', max: 2 };
+    const face = { kind: 'topo', body: 'f1/body', name: 'face:top' };
+    ok(spec, [face]);
+    ok(spec, [plane('origin/plane:xy'), face]);
+    bad(spec, [{ kind: 'topo', body: 'f1/body', name: '' }], 'param.invalidRef', { index: 0 });
+    bad(spec, [{ kind: 'topo', body: 'f1', name: 'face:top' }], 'param.invalidRef', { index: 0 });
+  });
+
+  it('planes: the same body and name is a duplicate, other names are not (M14)', () => {
+    const spec: ParamSpec = { kind: 'planes', label: 'P' };
+    const face = (b: string, name: string) => ({ kind: 'topo', body: b, name });
+    bad(spec, [face('a/body', 'f1'), face('a/body', 'f1')], 'param.duplicateRef', { index: 1 });
+    ok(spec, [face('a/body', 'f1'), face('a/body', 'f2'), face('b/body', 'f1')]);
   });
 
   it('planes: count limits', () => {

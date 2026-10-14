@@ -48,10 +48,10 @@ updated: 2026-10-14
 
 - [x] Ú0 hlavní sezení: typy portu jádra a `Curve2.id` (vlna 0)
 - [ ] Ú1 `kernel`, `kernel-occt`: `topology`, role, historie u všech operací, `DressupOps.fillet`/`chamfer`
-- [ ] Ú2 `regen`: `NameTable`, `propagateNames` (čistá funkce)
-- [ ] Ú3 `interaction` (+ zástupné místo v `render`, `app`): `TopoNames` v portu, výběr přežije regeneraci, `HighlightTarget` druhu `body`
-- [ ] Ú4 `sketch`: id křivek v oblastech
-- [ ] Ú5 `document`: `planes` přijímá `TopoRef`
+- [x] Ú2 `regen`: `NameTable`, `propagateNames` (čistá funkce)
+- [x] Ú3 `interaction` (+ zástupné místo v `render`, `app`): `TopoNames` v portu, výběr přežije regeneraci, `HighlightTarget` druhu `body`
+- [x] Ú4 `sketch`: id křivek v oblastech
+- [x] Ú5 `document`: `planes` přijímá `TopoRef`
 - [ ] Ú6 `regen`: `nameShape`, `resolveTopo`, `resolvePlanes` s plochou, `sketchPlaneOfFace`, `planeOfRef`, jména v `applyBodyOperation`, `DressupOps` v `ModelingKernel`
 - [ ] Ú7 `render`: zvýraznění celého tělesa
 - [ ] Ú8 `interaction`: `refPick` pro `topo`, zvýraznění referencí `topo` a `bodies` v dialogu

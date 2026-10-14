@@ -141,7 +141,8 @@ export function readRef(kind: EntityRef['kind'], r: unknown): EntityRef | undefi
     }
     case 'topo': {
       const body = parseBodyId(r.body);
-      return body !== undefined && typeof r.name === 'string'
+      // An empty name names nothing (M14); the name itself is minted by regen only.
+      return body !== undefined && isNonEmptyString(r.name)
         ? Object.freeze({ kind, body, name: r.name as TopoName })
         : undefined;
     }
