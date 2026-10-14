@@ -7,7 +7,9 @@
 // only (R48), so it stays enabled. Sketches (M12): click selects the feature, a double click opens
 // the sketcher; sketches have no eye. M13: the three origin axes under the planes (click = into
 // the active axis field of the dialog, the eye draws the axis) and, while the dialog has an active
-// region field, the regions of each sketch under its row (click = add or remove). Only bindings
+// region field, the regions of each sketch under its row (click = add or remove). M15: the colour
+// field of a body (metadata like the eye, body.setColor) and, with a colour set, the button back
+// to the default colour of the palette. Only bindings
 // and layout (rule 4): rows, the rename mode and canEdit come from BrowserModel, changes go back
 // through it.
 import { nextTick, ref, useTemplateRef, watch } from 'vue';
@@ -26,6 +28,7 @@ const axes = useObservable(browser.axes);
 const sketches = useObservable(browser.sketches);
 const canEdit = useObservable(browser.canEdit);
 const renaming = useObservable(browser.renaming);
+const defaultBodyColor = useObservable(session.defaultBodyColor);
 // No rename of documents in M10, so the name is read once.
 const documentName = session.doc.meta.name;
 
@@ -54,6 +57,12 @@ function select(row: BrowserBodyRow, e: MouseEvent): void {
 
 function displayName(row: BrowserBodyRow): string {
   return row.userName ?? t(row.name.key, { n: row.name.n });
+}
+
+// `change`, not `input`: dragging in the picker would dispatch an operation per step. The
+// value of <input type="color"> is always '#rrggbb' in lower case.
+function changeColor(row: BrowserBodyRow, e: Event): void {
+  if (e.target instanceof HTMLInputElement) browser.setColor(row.body, e.target.value);
 }
 
 // The inline field, like TimelineItem. Enter and blur both commit; the flag keeps the blur after
@@ -251,6 +260,27 @@ function cancelRename(): void {
             >{{ displayName(row) }}</span
           >
           <button
+            v-if="row.color !== null"
+            type="button"
+            class="eye"
+            :title="t('browser.defaultColor')"
+            :aria-label="t('browser.defaultColor')"
+            :disabled="!canEdit"
+            @click.stop="browser.setColor(row.body, null)"
+          >
+            <i class="ti ti-palette" aria-hidden="true" />
+          </button>
+          <input
+            type="color"
+            class="color"
+            :value="row.color ?? defaultBodyColor"
+            :aria-label="t('browser.color', { name: displayName(row) })"
+            :title="t('browser.color', { name: displayName(row) })"
+            :disabled="!canEdit"
+            @click.stop
+            @change="changeColor(row, $event)"
+          />
+          <button
             type="button"
             class="eye"
             :title="row.visible ? t('browser.hide') : t('browser.show')"
@@ -374,6 +404,29 @@ function cancelRename(): void {
   background: var(--panel-bg);
   color: var(--text-primary);
   font: inherit;
+}
+.color {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0.5px solid var(--panel-border);
+  border-radius: var(--radius-row);
+  background: none;
+}
+.color::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.color::-webkit-color-swatch {
+  border: none;
+  border-radius: var(--radius-row);
+}
+.color::-moz-color-swatch {
+  border: none;
+  border-radius: var(--radius-row);
+}
+.color:disabled {
+  opacity: 0.4;
 }
 .node.hidden .eye {
   color: var(--text-tertiary);

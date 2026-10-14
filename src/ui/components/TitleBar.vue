@@ -3,14 +3,34 @@
 // dot for the save state (green saved, orange pending, red error), the read-only notice (Q038),
 // the kernel notices (restart and crash, Q055; a kernel that did not start, with its error in the
 // tooltip) and the switches of language and theme; in development builds also the switch of the
-// debug panel of topological names (M14, R111). Only bindings.
+// debug panel of topological names (M14, R111). M15: the File menu (the actions of the group
+// 'file') with the state of an export, and the switch of the history panel (its open state is
+// layout of AppShell). Only bindings.
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
+import { fileMenuItems } from '../file-menu';
+import ContextMenu from './ContextMenu.vue';
 import ThemeLocaleToggles from './ThemeLocaleToggles.vue';
+
+defineProps<{ historyOpen: boolean }>();
+const emit = defineEmits<{ toggleHistory: [] }>();
 
 const session = useSession();
 const { t } = useI18n();
+
+const actionStates = useObservable(session.actions.actions);
+const fileItems = computed(() => fileMenuItems(actionStates.value));
+const fileStatus = useObservable(session.files.status);
+const fileMenu = ref<{ readonly x: number; readonly y: number } | null>(null);
+
+function openFileMenu(e: MouseEvent): void {
+  const target = e.currentTarget;
+  if (!(target instanceof HTMLElement)) return;
+  const box = target.getBoundingClientRect();
+  fileMenu.value = { x: box.left, y: box.bottom + 4 };
+}
 
 const persistence = useObservable(session.persistence);
 const kernel = useObservable(session.kernel);
@@ -44,6 +64,37 @@ function toggleTopoNames(): void {
     >
       <i class="ti ti-layout-grid" aria-hidden="true" />
     </button>
+    <button
+      type="button"
+      class="icon-button"
+      :title="t('titleBar.file')"
+      :aria-label="t('titleBar.file')"
+      aria-haspopup="menu"
+      :aria-expanded="fileMenu !== null"
+      @click="openFileMenu"
+    >
+      <i class="ti ti-file-export" aria-hidden="true" />
+    </button>
+    <span v-if="fileStatus.kind === 'running'" class="file-status" role="status">
+      <i class="ti ti-loader-2" aria-hidden="true" /> {{ t('file.running') }}
+    </span>
+    <span
+      v-else-if="fileStatus.kind === 'failed'"
+      class="file-status failed"
+      role="alert"
+      :title="fileStatus.message"
+    >
+      <i class="ti ti-alert-triangle" aria-hidden="true" /> {{ t('file.failed') }}
+      <button
+        type="button"
+        class="dismiss"
+        :title="t('app.dismiss')"
+        :aria-label="t('app.dismiss')"
+        @click="session.files.dismiss()"
+      >
+        <i class="ti ti-x" aria-hidden="true" />
+      </button>
+    </span>
 
     <div class="title">
       <span class="name">{{ documentName }}</span>
@@ -93,12 +144,37 @@ function toggleTopoNames(): void {
       <i class="ti ti-tag" aria-hidden="true" />
     </button>
 
+    <button
+      type="button"
+      class="icon-button"
+      :class="{ active: historyOpen }"
+      :title="t('history.title')"
+      :aria-label="t('history.title')"
+      :aria-pressed="historyOpen"
+      @click="emit('toggleHistory')"
+    >
+      <i class="ti ti-history" aria-hidden="true" />
+    </button>
+
     <ThemeLocaleToggles />
+
+    <ContextMenu
+      v-if="fileMenu !== null"
+      :items="fileItems"
+      :x="fileMenu.x"
+      :y="fileMenu.y"
+      @run="(id) => session.actions.run(id)"
+      @close="fileMenu = null"
+    />
   </div>
 </template>
 
 <style scoped>
+/* The backdrop filter makes the bar a stacking context; above the Toolbar that follows it, so
+   the File menu (fixed, inside the bar) is not covered by it. */
 .title-bar {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -175,6 +251,27 @@ function toggleTopoNames(): void {
 }
 .kernel.failed {
   color: var(--danger);
+}
+.file-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+}
+.file-status.failed {
+  color: var(--danger);
+}
+.dismiss {
+  display: inline-flex;
+  border: none;
+  background: none;
+  padding: 2px;
+  border-radius: var(--radius-row);
+  color: var(--text-secondary);
+}
+.dismiss:hover {
+  background: var(--control-hover);
 }
 .reload {
   height: 22px;

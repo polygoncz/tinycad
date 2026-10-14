@@ -6,8 +6,11 @@
 // sketch is a feature edit session too, but it has its own panel. In development the debug panel
 // of topological names floats bottom left (M14). The panels are DOM siblings of the viewport
 // host, never its children, so pointer and wheel events over a panel never reach the view.
+// M15: the history panel floats on the right where the dialog and the sketch panel are, so it is
+// drawn only without them; whether it is open is layout state of this window (the TitleBar
+// switch), nothing of the session.
 // Also the page-level bindings of a session: the theme (Q072) and the global keyboard.
-import { onMounted, onUnmounted, useTemplateRef, watch } from 'vue';
+import { onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue';
 import type { AppSession } from '@/app';
 import { provideSession } from '../composables/use-session';
 import { useObservable } from '../composables/use-observable';
@@ -15,6 +18,7 @@ import { isMacPlatform, toViewKeyEvent } from '../keyboard';
 import { useTheme } from '../theme/use-theme';
 import Browser from './Browser.vue';
 import { dialogFor } from './feature-dialogs';
+import HistoryPanel from './HistoryPanel.vue';
 import SketchPanel from './SketchPanel.vue';
 import Timeline from './Timeline.vue';
 import TitleBar from './TitleBar.vue';
@@ -29,6 +33,7 @@ provideSession(session);
 
 const editSession = useObservable(session.features.current);
 const sketchSession = useObservable(session.sketches.current);
+const historyOpen = ref(false);
 
 // The theme belongs to the page; the session only follows it with the scene palette.
 const { theme } = useTheme();
@@ -64,7 +69,7 @@ onUnmounted(() => {
 <template>
   <div class="app-shell">
     <header class="top">
-      <TitleBar />
+      <TitleBar :history-open="historyOpen" @toggle-history="historyOpen = !historyOpen" />
       <Toolbar />
     </header>
     <main class="stage">
@@ -82,6 +87,7 @@ onUnmounted(() => {
         :key="editSession.featureId"
         :edit="editSession"
       />
+      <HistoryPanel v-else-if="historyOpen" />
     </main>
     <Timeline />
   </div>

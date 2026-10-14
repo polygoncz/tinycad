@@ -53,7 +53,7 @@ updated: 2026-10-14
 - [x] Ú6 `tests`: měření regenerace a tessellace na větším modelu
 - [x] Ú7 `interaction`: barva tělesa v `BrowserModel`
 - [x] Ú8 `app`: exportér (STEP, dokument), port `download`, `importDocumentFile`, historie, barvy do viewportu
-- [ ] Ú9 `ui`: menu Soubor, stažení, import v seznamu dokumentů, panel historie, barva v Prohlížeči, překlady
+- [x] Ú9 `ui`: menu Soubor, stažení, import v seznamu dokumentů, panel historie, barva v Prohlížeči, překlady
 - [ ] Ú10 `e2e`: stažení STEP, export a import dokumentu s historií, panel historie
 - [ ] Ú11 hlavní sezení: kontrola, výsledky měření do Q007, vault, `architecture-reviewer`, retrospektiva první verze
 

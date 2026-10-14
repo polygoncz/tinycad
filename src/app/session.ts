@@ -180,8 +180,11 @@ export interface AppSession extends Disposable {
   readonly sketchActionIds: typeof SKETCH_ACTION_IDS;
   /** M12: id of the action adding a geometric constraint of the kind. */
   sketchConstraintActionId(kind: GeometricConstraintKind): string;
-  /** M14: the name of the face or edge under the cursor, for the debug panel (R111). */
-  readonly topoInspector: TopoInspector;
+  /**
+   * M14: the name of the face or edge under the cursor, for the debug panel (R111). Without
+   * dispose: the inspector belongs to the session, which disposes it (ADR 0011).
+   */
+  readonly topoInspector: Omit<TopoInspector, 'dispose'>;
   /** M15: the edit history panel. */
   readonly history: HistoryModel;
   /** M15: the state of an export; the actions themselves are in `actions`, group 'file'. */

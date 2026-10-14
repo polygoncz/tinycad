@@ -10,6 +10,7 @@ import type { AppSession, OpenAppSessionOptions } from '@/app';
 import AppShell from './components/AppShell.vue';
 import DocumentList from './components/DocumentList.vue';
 import { createDocumentSwitcher } from './document-switcher';
+import { downloadFile } from './download';
 import { addPluginMessages } from './i18n/i18n';
 import { useUiI18n } from './i18n/use-ui-i18n';
 import { parseDocHash } from './route';
@@ -32,10 +33,9 @@ const switcher = createDocumentSwitcher<AppSession>({
       // Like deleting a document in DocumentList: the browser's own dialog (R16).
       confirm: ({ key, params }) => globalThis.confirm(i18n.global.t(key, params)),
       theme: theme.theme.value,
-      // M15 Ú9 replaces this with downloadFile (a Blob and <a download>); until then an
-      // export ends as 'failed' with this message.
-      download: () => {
-        throw new Error('Downloading files is not available yet');
+      // M15: an exported file as a Blob behind a temporary <a download>.
+      download: (file) => {
+        downloadFile(file);
       },
     });
     try {
@@ -96,7 +96,7 @@ function hotPromise(data: unknown, key: string): Promise<unknown> | null {
 <template>
   <AppShell v-if="view.session !== null" :key="view.docId ?? ''" :session="view.session" />
   <div v-else class="start">
-    <DocumentList v-if="view.docId === null" />
+    <DocumentList v-if="view.docId === null" :plugins="props.plugins" />
     <div v-else class="notice" role="status">
       <template v-if="view.openError !== null">
         <i class="ti ti-alert-triangle error-icon" aria-hidden="true" />

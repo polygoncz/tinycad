@@ -120,6 +120,40 @@ const SWEEP_KEYS = [
 // Keys of the debug panel of topological names (M14, R111).
 const DEBUG_KEYS = ['debug.topoNames', 'debug.unnamed', 'debug.face', 'debug.edge'];
 
+// Keys of export, import, the history panel and the body colour (M15).
+const FILE_KEYS = [
+  'file.exportStep',
+  'file.exportDocument',
+  'titleBar.file',
+  'file.running',
+  'file.failed',
+  'history.title',
+  'history.undo',
+  'history.redo',
+  'history.older',
+  'documents.import',
+  'documents.importError',
+  'browser.color',
+  'browser.defaultColor',
+];
+
+// The types of the built-in operations (ops, Operation['type']): the dispatcher writes the type
+// as the label of an entry without one, so the history panel translates it (spec 11, M15). ui
+// may not import ops, so the list is copied here; a new type fails this test until it has a text.
+const OPERATION_TYPES = [
+  'feature.add',
+  'feature.remove',
+  'feature.setParams',
+  'feature.rename',
+  'feature.suppress',
+  'feature.move',
+  'studio.setRollback',
+  'body.rename',
+  'body.setVisible',
+  'body.setColor',
+  'batch',
+];
+
 const PLUGIN = {
   cs: { 'box.label': 'Kvádr', 'box.width': 'Šířka' },
   en: { 'box.label': 'Box', 'box.width': 'Width' },
@@ -158,6 +192,8 @@ describe('built-in dictionaries', () => {
     ...SKETCH_KEYS,
     ...SWEEP_KEYS,
     ...DEBUG_KEYS,
+    ...FILE_KEYS,
+    ...OPERATION_TYPES,
   ])('%s has a text in cs and en', (key) => {
     expect(cs[key]).toBeTruthy();
     expect(en[key]).toBeTruthy();

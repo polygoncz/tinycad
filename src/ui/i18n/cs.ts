@@ -170,4 +170,35 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'documents.error.list': 'Seznam dokumentů se nepodařilo načíst: {error}',
   'documents.error.create': 'Dokument se nepodařilo vytvořit: {error}',
   'documents.error.delete': 'Dokument se nepodařilo smazat: {error}',
+  'documents.import': 'Importovat',
+  'documents.importError': 'Soubor není platný dokument tinycad',
+
+  // File menu and export (M15).
+  'titleBar.file': 'Soubor',
+  'file.exportStep': 'Exportovat STEP',
+  'file.exportDocument': 'Exportovat dokument',
+  'file.running': 'Exportuji…',
+  'file.failed': 'Export se nezdařil',
+
+  // History panel (M15).
+  'history.title': 'Historie úprav',
+  'history.undo': 'Zpět: {label}',
+  'history.redo': 'Znovu: {label}',
+  'history.older': 'Starší záznamy: {n}',
+
+  // Body colour in the Browser (M15).
+  'browser.color': 'Barva {name}',
+  'browser.defaultColor': 'Výchozí barva',
+
+  // Labels of the built-in operations in the history panel: the dispatcher writes the op type
+  // as the label of an entry without one. feature.rename and feature.suppress are above (actions).
+  'feature.add': 'Přidat featuru',
+  'feature.remove': 'Odebrat featuru',
+  'feature.setParams': 'Změnit parametry',
+  'feature.move': 'Přesunout featuru',
+  'studio.setRollback': 'Posunout rollback bar',
+  'body.rename': 'Přejmenovat těleso',
+  'body.setVisible': 'Viditelnost tělesa',
+  'body.setColor': 'Barva tělesa',
+  batch: 'Více změn',
 });

@@ -169,4 +169,35 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'documents.error.list': 'The document list could not be loaded: {error}',
   'documents.error.create': 'The document could not be created: {error}',
   'documents.error.delete': 'The document could not be deleted: {error}',
+  'documents.import': 'Import',
+  'documents.importError': 'The file is not a valid tinycad document',
+
+  // File menu and export (M15).
+  'titleBar.file': 'File',
+  'file.exportStep': 'Export STEP',
+  'file.exportDocument': 'Export document',
+  'file.running': 'Exporting…',
+  'file.failed': 'Export failed',
+
+  // History panel (M15).
+  'history.title': 'Edit history',
+  'history.undo': 'Undo: {label}',
+  'history.redo': 'Redo: {label}',
+  'history.older': 'Older entries: {n}',
+
+  // Body colour in the Browser (M15).
+  'browser.color': 'Color of {name}',
+  'browser.defaultColor': 'Default color',
+
+  // Labels of the built-in operations in the history panel: the dispatcher writes the op type
+  // as the label of an entry without one. feature.rename and feature.suppress are above (actions).
+  'feature.add': 'Add feature',
+  'feature.remove': 'Remove feature',
+  'feature.setParams': 'Change parameters',
+  'feature.move': 'Move feature',
+  'studio.setRollback': 'Move rollback bar',
+  'body.rename': 'Rename body',
+  'body.setVisible': 'Body visibility',
+  'body.setColor': 'Body color',
+  batch: 'Several changes',
 });

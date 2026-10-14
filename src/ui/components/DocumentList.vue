@@ -3,21 +3,29 @@
 // documents, newest first. New, open and delete go through app; opening is only a change of the
 // hash (#/d/<id>), App.vue does the rest. Deleting a document open in another tab is refused by
 // app (its lock) and the error is shown here. The header has the same switches of language and
-// theme as the TitleBar.
-import { onMounted, ref, shallowRef } from 'vue';
+// theme as the TitleBar. M15: import of a document file (R126) – a hidden file input, the text
+// goes through importDocumentText; a stored file opens like a new document.
+import { onMounted, ref, shallowRef, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { createNewDocument, deleteDocument, listDocuments } from '@/app';
-import type { DocumentInfo } from '@/app';
+import { createNewDocument, deleteDocument, importDocumentFile, listDocuments } from '@/app';
+import type { DocumentInfo, OpenAppSessionOptions } from '@/app';
 import type { DocumentId } from '@/document';
+import { importDocumentText } from '../document-import';
 import { docHash } from '../route';
 import ThemeLocaleToggles from './ThemeLocaleToggles.vue';
+
+// The plugins of the sessions: the file is checked against their registries.
+const props = defineProps<{ plugins: OpenAppSessionOptions['plugins'] }>();
 
 const { t, locale } = useI18n();
 
 // null while loading; a frozen list from app, never deep-reactive.
 const documents = shallowRef<readonly DocumentInfo[] | null>(null);
 const error = ref<string | null>(null);
+// The technical detail of a failed import (its first issue), in the tooltip of the error.
+const errorDetail = ref<string | null>(null);
 const busy = ref(false);
+const fileInput = useTemplateRef<HTMLInputElement>('fileInput');
 
 async function load(): Promise<void> {
   try {
@@ -34,7 +42,7 @@ function open(id: DocumentId): void {
 async function create(): Promise<void> {
   if (busy.value) return;
   busy.value = true;
-  error.value = null;
+  clearError();
   try {
     open(await createNewDocument({ translate: (key) => t(key) }));
   } catch (e) {
@@ -48,7 +56,7 @@ async function remove(info: DocumentInfo): Promise<void> {
   if (busy.value) return;
   if (!globalThis.confirm(t('documents.confirmDelete', { name: info.meta.name }))) return;
   busy.value = true;
-  error.value = null;
+  clearError();
   try {
     await deleteDocument(info.meta.id);
     await load();
@@ -57,6 +65,42 @@ async function remove(info: DocumentInfo): Promise<void> {
   } finally {
     busy.value = false;
   }
+}
+
+function chooseFile(): void {
+  if (busy.value) return;
+  fileInput.value?.click();
+}
+
+async function importChosen(e: Event): Promise<void> {
+  const input = e.target instanceof HTMLInputElement ? e.target : null;
+  const file = input?.files?.[0];
+  // Choosing the same file again fires change once more.
+  if (input !== null) input.value = '';
+  if (file === undefined || busy.value) return;
+  busy.value = true;
+  clearError();
+  try {
+    const outcome = await importDocumentText(await file.text(), (raw) =>
+      importDocumentFile(raw, { plugins: props.plugins }),
+    );
+    if (outcome.ok) {
+      open(outcome.id);
+    } else {
+      error.value = t('documents.importError');
+      errorDetail.value = outcome.detail;
+    }
+  } catch (e) {
+    error.value = t('documents.importError');
+    errorDetail.value = errorText(e);
+  } finally {
+    busy.value = false;
+  }
+}
+
+function clearError(): void {
+  error.value = null;
+  errorDetail.value = null;
 }
 
 function updatedText(info: DocumentInfo): string {
@@ -79,12 +123,26 @@ onMounted(() => {
     <header class="header">
       <h1 class="title">{{ t('documents.title') }}</h1>
       <ThemeLocaleToggles />
+      <button type="button" class="import" :disabled="busy" @click="chooseFile">
+        <i class="ti ti-file-import" aria-hidden="true" /> {{ t('documents.import') }}
+      </button>
+      <input
+        ref="fileInput"
+        type="file"
+        accept=".json,application/json"
+        class="file-input"
+        tabindex="-1"
+        aria-hidden="true"
+        @change="importChosen"
+      />
       <button type="button" class="new" :disabled="busy" @click="create">
         <i class="ti ti-plus" aria-hidden="true" /> {{ t('documents.new') }}
       </button>
     </header>
 
-    <p v-if="error !== null" class="error" role="alert">{{ error }}</p>
+    <p v-if="error !== null" class="error" role="alert" :title="errorDetail ?? undefined">
+      {{ error }}
+    </p>
 
     <p v-if="documents === null" class="empty">{{ t('documents.loading') }}</p>
     <p v-else-if="documents.length === 0" class="empty">{{ t('documents.empty') }}</p>
@@ -159,8 +217,25 @@ onMounted(() => {
   font: inherit;
   font-weight: 500;
 }
-.new:disabled {
+.new:disabled,
+.import:disabled {
   opacity: 0.6;
+}
+.import {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--field-height);
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--control-hover);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 500;
+}
+.file-input {
+  display: none;
 }
 .error {
   margin: 0 0 12px;
