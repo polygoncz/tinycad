@@ -8,6 +8,7 @@ import {
   circlePoints,
   clearPreview,
   clickTool,
+  snapGrid,
   distance,
   newEntityId,
   previewPolyline,
@@ -22,14 +23,14 @@ export function createCircleTool(sketches: SketchEditor): Tool {
     reset() {
       center = null;
     },
-    onMove(ctx, session, x, y) {
+    onMove(ctx, session, x, y, mods) {
       if (center === null) return;
-      const rim = snapAt(ctx, session, x, y);
+      const rim = snapAt(ctx, session, x, y, snapGrid(sketches, mods));
       if (rim === null) return;
       previewPolyline(ctx, session, circlePoints(center.at, distance(center.at, rim.at)));
     },
-    onClick(ctx, session, x, y) {
-      const target = snapAt(ctx, session, x, y);
+    onClick(ctx, session, x, y, mods) {
+      const target = snapAt(ctx, session, x, y, snapGrid(sketches, mods));
       if (target === null) return;
       if (center === null) {
         center = target;

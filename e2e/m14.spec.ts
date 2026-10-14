@@ -36,10 +36,12 @@ test('fillet an edge picked in the viewport, change the box height, undo, reload
 }) => {
   await createDocument(page);
 
-  // 1. The default box; the camera fits on it once (the first view).
+  // 1. The default box. The camera of a new document stays put (M19.2 D7), so "Zobrazit vše"
+  // (F) fits it on the box for isoCanvasOffset.
   const box = await openTool(page, 'Kvádr', 'Kvádr 1');
   await confirmDialog(box);
   await expect(page.getByText('Tělesa: 1')).toBeVisible();
+  await page.keyboard.press('f');
 
   // 2. Fillet: the edge field is active, a click on the top front edge picks it.
   const fillet = await openTool(page, 'Zaoblení', 'Zaoblení 1');

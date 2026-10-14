@@ -37,18 +37,16 @@ test('extrude a rectangle, edit the sketch, cut a hole, undo, reload, revolve', 
   await panel.getByRole('button', { name: 'Hotovo', exact: true }).click();
   await expect(panel).toHaveCount(0);
 
-  // 2. Extrude: a new body, so "Sloučit s" is hidden; the region field is active and takes the
-  // region from the Browser (R75), the count stays visible (R87).
+  // 2. Extrude: a new body, so "Sloučit s" is hidden; the region field is active and already
+  // holds the only region of the sketch (M19.2 D6), the count stays visible (R87).
   const extrude = await openTool(page, 'Vysunutí', 'Vysunutí 1');
   await expect(refField(extrude, 'Sloučit s')).toHaveCount(0);
   const regions = refField(extrude, 'Oblasti');
   await expect(regions).toHaveAttribute('aria-pressed', 'true');
-  await expect(regions).toHaveText('Vybráno: 0 · vyberte v pohledu');
+  await expect(regions).toHaveText('Vybráno: 1 · vyberte v pohledu');
   const region = browserRow(page, 'Oblast 1');
   await expect(region).toHaveCount(1);
-  await region.click();
   await expect(region).toHaveAttribute('aria-selected', 'true');
-  await expect(regions).toHaveText('Vybráno: 1 · vyberte v pohledu');
   await confirmDialog(extrude);
   await expect(timelineFeature(page, 'Vysunutí 1')).toBeVisible();
   await expectNoErrors(page);
@@ -91,8 +89,9 @@ test('extrude a rectangle, edit the sketch, cut a hole, undo, reload, revolve', 
   await expectNoErrors(page);
 
   const cut = await openTool(page, 'Vysunutí', 'Vysunutí 2');
-  // The regions of both sketches are listed, those of Skica 2 after those of Skica 1.
-  await browserRow(page, 'Oblast 1').nth(1).click();
+  // The regions of both sketches are listed, those of Skica 2 after those of Skica 1; the only
+  // region of the last sketch (the circle) is preselected (M19.2 D6).
+  await expect(browserRow(page, 'Oblast 1').nth(1)).toHaveAttribute('aria-selected', 'true');
   await expect(refField(cut, 'Oblasti')).toHaveText('Vybráno: 1 · vyberte v pohledu');
   await expect(refField(cut, 'Sloučit s')).toHaveCount(0);
   await cut.getByRole('combobox', { name: 'Operace', exact: true }).selectOption({
@@ -125,6 +124,8 @@ test('extrude a rectangle, edit the sketch, cut a hole, undo, reload, revolve', 
   // 6. Revolve the rectangle about the origin X axis: its bottom edge lies on the axis, so the
   // profile does not cross it and the solid is valid.
   const revolve = await openTool(page, 'Rotace', 'Rotace 1');
+  // The circle of the last sketch is preselected (M19.2 D6): swap it for the rectangle.
+  await browserRow(page, 'Oblast 1').nth(1).click();
   await browserRow(page, 'Oblast 1').first().click();
   await expect(refField(revolve, 'Oblasti')).toHaveText('Vybráno: 1 · vyberte v pohledu');
   const axis = refField(revolve, 'Osa');

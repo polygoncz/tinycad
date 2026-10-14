@@ -19,6 +19,8 @@ import type {
   SolveStatus,
 } from '@/sketch';
 import type { FeatureEditSession } from './feature-editor';
+import { constraintNumbers, dimensionViews } from './sketch-dimensions';
+import type { SketchDimensionView } from './sketch-dimensions';
 import { toSketchDrawing } from './sketch-drawing';
 import type { SketchStyle, ViewportPort } from './viewport-port';
 
@@ -83,6 +85,8 @@ export interface SketchState {
   readonly constraintRows: readonly SketchConstraintRow[];
   /** The dimension just created (ui focuses its field). */
   readonly editingDimension: SketchConstraintId | null;
+  /** The distance and radius dimensions for the viewport (dimensionViews, M19.2 D4). */
+  readonly dimensions: readonly SketchDimensionView[];
 }
 
 export type SketchMessageKey = 'sketch.conflict' | 'sketch.redundant' | 'sketch.solverFailed';
@@ -192,6 +196,7 @@ export function openSketchSession(deps: {
       message,
       constraintRows: rows,
       editingDimension,
+      dimensions: dimensionViews(plane, entities, constraints, selection, prev?.dimensions ?? []),
     });
   }
 
@@ -220,7 +225,10 @@ export function openSketchSession(deps: {
     );
     viewport.sketches.set(
       EDIT_SKETCH_DRAWING_ID,
-      toSketchDrawing(plane, s, (id) => styleOf(id, construction.has(id)), { origin: true }),
+      toSketchDrawing(plane, s, (id) => styleOf(id, construction.has(id)), {
+        origin: true,
+        editing: true,
+      }),
     );
   }
 
@@ -548,14 +556,12 @@ function constraintRows(
   selection: readonly SketchItemId[],
   prev: readonly SketchConstraintRow[],
 ): readonly SketchConstraintRow[] {
-  const counts = new Map<SketchConstraint['kind'], number>();
+  const numbers = constraintNumbers(constraints);
   const rows = constraints.map((c, i): SketchConstraintRow => {
-    const n = (counts.get(c.kind) ?? 0) + 1;
-    counts.set(c.kind, n);
     const row: SketchConstraintRow = {
       id: c.id,
       kind: c.kind,
-      n,
+      n: numbers[i] ?? 0,
       value: isDimension(c) ? c.value : null,
       selected: selection.includes(c.id),
     };

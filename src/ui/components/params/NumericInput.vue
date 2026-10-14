@@ -3,7 +3,8 @@
 // every keystroke. Text that is not a number is not reported; the field shows the last value.
 // The typed text is a local string (pure UI state); no DOM types in the script, so the
 // component typechecks in the DOM-free test project too. The name comes from the field label
-// (labelledby, spec 11 "Přístupnost"); the unit is not part of it.
+// (labelledby, spec 11 "Přístupnost"); the unit is not part of it. `format` turns the value
+// into the shown text (formatNumber by default; dimensions of a sketch show it rounded, M19.2 D4).
 import { ref, watch } from 'vue';
 import { formatNumber, parseNumber } from './field-values';
 
@@ -15,20 +16,26 @@ const props = defineProps<{
   labelledby: string;
   /** Id of the issue text, when there is one (aria-describedby). */
   describedby?: string | undefined;
+  /** The text of the value; formatNumber when not given. */
+  format?: (value: unknown) => string;
 }>();
 const emit = defineEmits<{ commit: [value: number] }>();
 
-const text = ref(formatNumber(props.value));
+function shown(value: unknown): string {
+  return (props.format ?? formatNumber)(value);
+}
+
+const text = ref(shown(props.value));
 watch(
   () => props.value,
   (value) => {
-    text.value = formatNumber(value);
+    text.value = shown(value);
   },
 );
 
 function onChange(): void {
   const value = parseNumber(text.value);
-  if (value === null) text.value = formatNumber(props.value);
+  if (value === null) text.value = shown(props.value);
   else emit('commit', value);
 }
 </script>

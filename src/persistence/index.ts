@@ -3,7 +3,7 @@
 
 export { createSnapshot } from './snapshot';
 export type { DocumentSnapshot } from './snapshot';
-export { createStoreError, snapshotSeqsToKeep, storeErrorCode } from './store';
+export { createStoreError, renamedTo, snapshotSeqsToKeep, storeErrorCode } from './store';
 export type { DocumentInfo, DocumentStore, DocumentStoreErrorCode, StoredDocument } from './store';
 export { createMemoryDocumentStore } from './memory-store';
 export { createPersistenceService } from './service';

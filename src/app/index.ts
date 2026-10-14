@@ -8,6 +8,7 @@ export {
   importDocumentFile,
   listDocuments,
   openAppSession,
+  renameDocument,
 } from './browser';
 export type { OpenAppSessionOptions } from './browser';
 export { BUILT_IN_PLUGINS } from './plugins';

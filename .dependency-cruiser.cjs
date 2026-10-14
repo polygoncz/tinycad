@@ -206,7 +206,7 @@ module.exports = {
         path:
           '^src/render/(body-diff|bounds|camera-input|camera-math|camera-model|camera-ops|' +
           'edge-pick|frame-scheduler|highlight-targets|manipulator-pick|mesh-cache|mesh-index|' +
-          'overlay-shapes|pick-math|scene-sync|sketch-drawing|sketch-pick|view-cube-fade|' +
+          'overlay-shapes|pick-math|scene-sync|sketch-drawing|sketch-grid|sketch-pick|view-cube-fade|' +
           'view-change|view-cube-geometry|view-cube-labels|view-cube-layout|view-events)\\.ts$',
       },
       to: { path: 'node_modules/three/' },

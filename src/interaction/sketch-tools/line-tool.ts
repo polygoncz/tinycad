@@ -12,6 +12,7 @@ import {
   MIN_LENGTH,
   clearPreview,
   clickTool,
+  snapGrid,
   distance,
   newConstraintId,
   newEntityId,
@@ -66,14 +67,14 @@ export function createLineTool(sketches: SketchEditor): Tool {
     reset() {
       chain = null;
     },
-    onMove(ctx, session, x, y) {
+    onMove(ctx, session, x, y, mods) {
       if (chain === null) return;
-      const target = snapAt(ctx, session, x, y);
+      const target = snapAt(ctx, session, x, y, snapGrid(sketches, mods));
       if (target === null) return;
       previewPairs(ctx, session, [chain.last.at, target.at]);
     },
-    onClick(ctx, session, x, y) {
-      const target = snapAt(ctx, session, x, y);
+    onClick(ctx, session, x, y, mods) {
+      const target = snapAt(ctx, session, x, y, snapGrid(sketches, mods));
       if (target === null) return;
       if (chain === null) {
         const first = placePoint(ctx, target);

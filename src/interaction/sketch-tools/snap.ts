@@ -31,20 +31,28 @@ const ORIGIN: Vec2 = Object.freeze([0, 0] as const);
 /**
  * pick(x, y, ['sketchEntity']) over the drawing of the edited sketch: a point of the session → it;
  * ORIGIN_POINT_ID → the origin; otherwise (a curve, another drawing, nothing) the free point on
- * the plane. null when the ray is parallel to the plane (the click is ignored).
+ * the plane, rounded to the multiples of `grid` in plane coordinates (M19.2 D4; null = no grid).
+ * null when the ray is parallel to the plane (the click is ignored).
  */
 export function snapAt(
   ctx: ToolContext,
   session: SketchSession,
   x: number,
   y: number,
+  grid: number | null,
 ): SnapTarget | null {
   const hit = editedEntityAt(ctx, x, y);
   if (hit === ORIGIN_POINT_ID) return { kind: 'origin', at: ORIGIN };
   const point = hit === null ? undefined : entityOf(session, hit);
   if (point?.kind === 'point') return { kind: 'point', id: point.id, at: [point.x, point.y] };
   const at = cursorAt(ctx, session, x, y);
-  return at === null ? null : { kind: 'free', at };
+  if (at === null) return null;
+  return { kind: 'free', at: grid === null ? at : [toGrid(at[0], grid), toGrid(at[1], grid)] };
+}
+
+/** The nearest multiple of the step; −0 becomes 0. */
+function toGrid(v: number, step: number): number {
+  return Math.round(v / step) * step + 0;
 }
 
 /** The point for the target; new ids from ctx.ids. */

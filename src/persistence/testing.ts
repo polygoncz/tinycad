@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { DocumentId, DocumentMeta, FeatureId } from '@/document';
 import { aDocument, aFeature } from '@/document/testing';
 import { OP_VERSION } from '@/ops';
-import type { FeatureRenameOp, LogEntry } from '@/ops';
+import type { DocumentRenameOp, FeatureRenameOp, LogEntry } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import { createSnapshot } from './snapshot';
 import type { DocumentSnapshot } from './snapshot';
@@ -57,6 +57,33 @@ function aHistory(
     snapshots.push(createSnapshot(session.doc, n));
   }
   return { entries: session.log.entries(), snapshots };
+}
+
+/**
+ * Log entries of document `id`, one per item of `names`: a document.rename to that name, or for
+ * '' a rename of feature 'a' (an entry without a document rename).
+ */
+function aRenameHistory(id: string, names: readonly string[]): readonly LogEntry[] {
+  const session = anOpsSession({ meta: metaOf(id), features: [aFeature({ id: 'a', name: 'A' })] });
+  names.forEach((name, n) => {
+    if (name === '') {
+      const rename: FeatureRenameOp = {
+        type: 'feature.rename',
+        v: OP_VERSION['feature.rename'],
+        featureId: featureA,
+        name: `A${String(n)}`,
+      };
+      session.dispatcher.dispatch(rename);
+    } else {
+      const rename: DocumentRenameOp = {
+        type: 'document.rename',
+        v: OP_VERSION['document.rename'],
+        name,
+      };
+      session.dispatcher.dispatch(rename);
+    }
+  });
+  return session.log.entries();
 }
 
 /** Item `i` of a test fixture list; fails the test instead of a non-null assertion. */
@@ -318,6 +345,55 @@ export function describeDocumentStoreContract(name: string, factory: DocumentSto
         time = 4000;
         await store.appendEntries(docId('d1'), entries.slice(0, 2));
         expect(await infoOf('d1')).toEqual({ meta: metaOf('d1'), lastSeq: 4, updatedAt: 4000 });
+        expect((await store.load(docId('d1')))?.entries).toEqual(entries);
+      });
+    });
+
+    describe('appendEntries and the name of the document (M19.2, D5)', () => {
+      it('a batch with document.rename sets meta.name of the listed document', async () => {
+        const entries = aRenameHistory('d1', ['', 'Part']);
+        await store.createDocument(metaOf('d1'), baseOf('d1'));
+        time = 2000;
+        await store.appendEntries(docId('d1'), entries);
+        expect(await infoOf('d1')).toEqual({
+          meta: { ...metaOf('d1'), name: 'Part' },
+          lastSeq: 2,
+          updatedAt: 2000,
+        });
+      });
+
+      it('the last document.rename of the batch wins', async () => {
+        const entries = aRenameHistory('d1', ['First', 'Second', '']);
+        await store.createDocument(metaOf('d1'), baseOf('d1'));
+        await store.appendEntries(docId('d1'), entries);
+        expect((await infoOf('d1'))?.meta.name).toBe('Second');
+      });
+
+      it('a later batch without document.rename keeps the name', async () => {
+        const entries = aRenameHistory('d1', ['Part', '', '']);
+        await store.createDocument(metaOf('d1'), baseOf('d1'));
+        await store.appendEntries(docId('d1'), entries.slice(0, 1));
+        await store.appendEntries(docId('d1'), entries.slice(1));
+        expect((await infoOf('d1'))?.meta).toEqual({ ...metaOf('d1'), name: 'Part' });
+      });
+
+      it('a batch without document.rename keeps the name', async () => {
+        await aStoredDocument('d1', 3);
+        expect((await infoOf('d1'))?.meta).toEqual(metaOf('d1'));
+      });
+
+      it('a rejected batch with document.rename keeps the name', async () => {
+        const entries = aRenameHistory('d1', ['', '', 'Part']);
+        await store.createDocument(metaOf('d1'), baseOf('d1'));
+        const broken = [nth(entries, 0), nth(entries, 2)];
+        expect(await rejectionCode(store.appendEntries(docId('d1'), broken))).toBe('seq-gap');
+        expect((await infoOf('d1'))?.meta).toEqual(metaOf('d1'));
+      });
+
+      it('load still returns the entries unchanged', async () => {
+        const entries = aRenameHistory('d1', ['Part']);
+        await store.createDocument(metaOf('d1'), baseOf('d1'));
+        await store.appendEntries(docId('d1'), entries);
         expect((await store.load(docId('d1')))?.entries).toEqual(entries);
       });
     });

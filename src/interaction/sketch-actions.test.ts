@@ -43,6 +43,7 @@ function aFakeSession() {
       message: null,
       constraintRows: [],
       editingDimension: null,
+      dimensions: [],
     }),
   );
   const record =
@@ -93,6 +94,9 @@ function setup() {
     create: () => expect.fail('create is not expected'),
     planeOf: () => expect.fail('planeOf is not expected'),
     edit: () => expect.fail('edit is not expected'),
+    gridSnap: new ObservableValue(true).asObservable(),
+    setGridSnap: () => expect.fail('setGridSnap is not expected'),
+    gridStep: () => expect.fail('gridStep is not expected'),
   };
   const registry = createActionRegistry({ mode: mode.asObservable() });
   const actions = createSketchActions({

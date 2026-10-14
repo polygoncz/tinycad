@@ -1,14 +1,25 @@
 // Drawings of sketches and planes (spec 09, "Skici"): SketchDrawing → fat lines and points in an
-// own group, drawn over the bodies, coloured per vertex by the style of the entity. A mirror like
-// the overlay, but pickable: pick projects the tessellated drawings into px and asks pickSketch.
-// Regions of a drawing (M13) get a transparent fill each, invisible until the highlight layer
-// hands their hover or selection over; pickRegion intersects the ray with the drawing planes.
+// own group, coloured per vertex by the style of the entity. Bodies hide them (M19.2, D2): depth
+// is tested, pulled slightly towards the viewer so a line on a body face does not fight it. The
+// edited sketch (SketchDrawing.editing) has a second, faint and dashed pass for its hidden parts
+// and the sketch grid in its plane. A mirror like the overlay, but pickable: pick projects the
+// tessellated drawings into px, asks sketchHits and skips hits hidden behind bodies. Regions of a
+// drawing (M13) get a transparent fill each, invisible until the highlight layer hands their hover
+// or selection over; pickRegion intersects the ray with the drawing planes.
 
 import * as THREE from 'three';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
-import { assertNever, plane as planeMath, type Disposable, type Plane, type Vec3 } from '@/core';
+import {
+  assert,
+  assertNever,
+  plane as planeMath,
+  type Disposable,
+  type Plane,
+  type Vec2,
+  type Vec3,
+} from '@/core';
 import type {
   HighlightTarget,
   PickResult,
@@ -22,7 +33,8 @@ import { meshBounds, unionBounds } from './bounds';
 import type { ScenePalette } from './palette';
 import { projectSegments, segmentPoint } from './pick-math';
 import { tessellateSketch, type SketchTessellation } from './sketch-drawing';
-import { betterSketchHit, pickSketch, pickSketchRegion, type SketchHit } from './sketch-pick';
+import { gridLines, sketchGridStep } from './sketch-grid';
+import { betterSketchHit, pickSketchRegion, sketchHits, type SketchHit } from './sketch-pick';
 
 /** Width of sketch curves in CSS px. */
 const LINE_WIDTH_PX = 2;
@@ -33,6 +45,15 @@ const RENDER_ORDER = 3;
 /** Region fills: under the sketch lines (spec 09, "Skici"). */
 const FILL_RENDER_ORDER = 2;
 const FILL_OPACITY = 0.35;
+/** The sketch grid: over the bodies, under the region fills and the sketch lines (M19.2). */
+const GRID_RENDER_ORDER = 1.5;
+/** Opacity of the hidden parts of the edited sketch (M19.2, D2). */
+const HIDDEN_OPACITY = 0.35;
+/** Dashes of the hidden parts of the edited sketch, in CSS px. */
+const DASH_PX = 6;
+const GAP_PX = 4;
+/** Pulls lines and fills towards the viewer; body faces are pushed back by +1/+1 (body-view). */
+const PULL_FORWARD = { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 };
 
 /** A highlight target of a sketch region (M13). */
 export type RegionTarget = Extract<HighlightTarget, { readonly kind: 'sketchRegion' }>;
@@ -46,7 +67,8 @@ export interface SketchLayerInternal extends SketchPort, Disposable {
   readonly group: THREE.Group;
   /**
    * The sketch entity under (x, y) in CSS px of a canvas of width × height CSS px, across all
-   * drawings: points before curves, no occlusion by bodies. null = no hit.
+   * drawings: points before curves. In each drawing the first hit whose 3D point is `visible`
+   * (not hidden behind a body) counts; the edited drawing skips the check (M19.2). null = no hit.
    */
   pick(
     camera: THREE.Camera,
@@ -54,12 +76,16 @@ export interface SketchLayerInternal extends SketchPort, Disposable {
     y: number,
     width: number,
     height: number,
+    visible: (point: Vec3) => boolean,
   ): Extract<PickResult, { kind: 'sketchEntity' }> | null;
-  /** The nearest region under the ray across all drawings (M13); null = no hit. */
-  pickRegion(ray: {
-    readonly origin: Vec3;
-    readonly direction: Vec3;
-  }): Extract<PickResult, { kind: 'sketchRegion' }> | null;
+  /**
+   * The nearest region under the ray across all drawings (M13) whose hit is `visible`; regions of
+   * the edited drawing count without the check (M19.2). null = no hit.
+   */
+  pickRegion(
+    ray: { readonly origin: Vec3; readonly direction: Vec3 },
+    visible: (point: Vec3) => boolean,
+  ): Extract<PickResult, { kind: 'sketchRegion' }> | null;
   /**
    * Hover and selection of regions, from the highlight layer; replaces the whole state. The
    * selection wins over the hover. Targets of unknown drawings or regions are kept and drawn once
@@ -70,7 +96,17 @@ export interface SketchLayerInternal extends SketchPort, Disposable {
   setPalette(palette: ScenePalette): void;
   /** Canvas size in CSS px; fat-line materials need it to size their width in pixels. */
   setResolution(width: number, height: number): void;
-  /** Box around the curves and points of every drawing (spec 09, "Near a far"); null = none. */
+  /**
+   * The camera of the next frame (M19.2), called by the viewport before every frame: `worldPerPx`
+   * mm per CSS px sizes the dashes of the hidden parts (6 px, gaps 4 px) and the grid step; the
+   * grid of the edited drawing spans half of `viewportDiagonalPx` around the camera `target`
+   * projected onto its plane. The grid is rebuilt only when it changes enough.
+   */
+  setPixelSize(worldPerPx: number, target: Vec3, viewportDiagonalPx: number): void;
+  /**
+   * Box around the curves and points of every drawing and the sketch grid (spec 09, "Near a far");
+   * null = none.
+   */
   bounds(): BoundingBox | null;
 }
 
@@ -91,6 +127,25 @@ interface Entry {
   readonly bounds: BoundingBox | null;
 }
 
+/** The sketch grid as built (M19.2): what it was built for and its Three.js objects. */
+interface Grid {
+  readonly plane: Plane;
+  readonly step: number;
+  /** Centre of the square in the coordinates of the plane. */
+  readonly center: Vec2;
+  readonly halfExtent: number;
+  readonly minor: THREE.LineSegments;
+  readonly major: THREE.LineSegments;
+  readonly bounds: BoundingBox | null;
+}
+
+/** The camera of the last setPixelSize. */
+interface PixelSize {
+  readonly worldPerPx: number;
+  readonly target: Vec3;
+  readonly viewportDiagonalPx: number;
+}
+
 export function createSketchLayer(options: SketchLayerOptions): SketchLayerInternal {
   const { requestRender } = options;
   let palette = options.palette;
@@ -100,16 +155,47 @@ export function createSketchLayer(options: SketchLayerOptions): SketchLayerInter
     color: 0xffffff,
     linewidth: LINE_WIDTH_PX,
     vertexColors: true,
-    // Over the bodies: the plane of a sketch often lies on a body face (spec 09, R47).
-    depthTest: false,
+    // Bodies hide the sketch (M19.2, D2); pulled forward, a line on a body face wins its depth.
+    depthTest: true,
+    depthWrite: false,
+    ...PULL_FORWARD,
   });
   const pointMaterial = new THREE.PointsMaterial({
     color: 0xffffff,
     vertexColors: true,
     size: POINT_SIZE,
     sizeAttenuation: false,
-    depthTest: false,
+    // Polygon offset does not apply to points; the push-back of the body faces is enough.
+    depthTest: true,
+    depthWrite: false,
   });
+  // The second pass of the edited drawing: only where a body is in front (GreaterDepth), faint and
+  // dashed. The same offset as the first pass, otherwise it would show over the visible part too.
+  const hiddenLineMaterial = new LineMaterial({
+    color: 0xffffff,
+    linewidth: LINE_WIDTH_PX,
+    vertexColors: true,
+    depthTest: true,
+    depthWrite: false,
+    depthFunc: THREE.GreaterDepth,
+    transparent: true,
+    opacity: HIDDEN_OPACITY,
+    dashed: true,
+    ...PULL_FORWARD,
+  });
+  const hiddenPointMaterial = new THREE.PointsMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    size: POINT_SIZE,
+    sizeAttenuation: false,
+    depthTest: true,
+    depthWrite: false,
+    depthFunc: THREE.GreaterDepth,
+    transparent: true,
+    opacity: HIDDEN_OPACITY,
+  });
+  const minorGridMaterial = createGridMaterial(palette.grid[1]);
+  const majorGridMaterial = createGridMaterial(palette.grid[0]);
   const hoverFill = createFillMaterial(palette.hover);
   const selectionFill = createFillMaterial(palette.selection);
   const entries = new Map<string, Entry>();
@@ -117,6 +203,8 @@ export function createSketchLayer(options: SketchLayerOptions): SketchLayerInter
   const drawings = new Map<string, SketchDrawing>();
   let regionHover: RegionTarget | null = null;
   let regionSelection: readonly RegionTarget[] = [];
+  let grid: Grid | null = null;
+  let pixelSize: PixelSize | null = null;
   const scratch = new THREE.Color();
 
   function colorOf(style: SketchStyle): number {
@@ -174,6 +262,13 @@ export function createSketchLayer(options: SketchLayerOptions): SketchLayerInter
       const lines = new LineSegments2(geometry, lineMaterial);
       lines.renderOrder = RENDER_ORDER;
       object.add(lines);
+      if (drawing.editing === true) {
+        const hidden = new LineSegments2(geometry, hiddenLineMaterial);
+        // The dashes need the distances along the lines (attributes of the shared geometry).
+        hidden.computeLineDistances();
+        hidden.renderOrder = RENDER_ORDER;
+        object.add(hidden);
+      }
     }
     if (tessellation.pointIds.length > 0) {
       const geometry = new THREE.BufferGeometry();
@@ -186,6 +281,11 @@ export function createSketchLayer(options: SketchLayerOptions): SketchLayerInter
       const points = new THREE.Points(geometry, pointMaterial);
       points.renderOrder = RENDER_ORDER;
       object.add(points);
+      if (drawing.editing === true) {
+        const hidden = new THREE.Points(geometry, hiddenPointMaterial);
+        hidden.renderOrder = RENDER_ORDER;
+        object.add(hidden);
+      }
     }
     const bounds = unionBounds([
       meshBounds(tessellation.segments),
@@ -229,6 +329,59 @@ export function createSketchLayer(options: SketchLayerOptions): SketchLayerInter
     return true;
   }
 
+  /** The plane of the edited drawing; null = no drawing is edited. */
+  function editedPlane(): Plane | null {
+    for (const entry of entries.values()) {
+      if (entry.drawing.editing === true) return entry.drawing.plane;
+    }
+    return null;
+  }
+
+  function dropGrid(): void {
+    if (grid === null) return;
+    group.remove(grid.minor, grid.major);
+    grid.minor.geometry.dispose();
+    grid.major.geometry.dispose();
+    grid = null;
+  }
+
+  /**
+   * Builds, keeps or drops the grid for the edited drawing and the last pixel size. Rebuilt when
+   * the plane or the step changes, the centre moves by more than a quarter of the half extent, or
+   * the view outgrows the built square.
+   */
+  function updateGrid(): void {
+    const plane = editedPlane();
+    if (plane === null || pixelSize === null) {
+      dropGrid();
+      return;
+    }
+    const step = sketchGridStep(pixelSize.worldPerPx);
+    const halfExtent = (pixelSize.worldPerPx * pixelSize.viewportDiagonalPx) / 2;
+    const center = planeMath.toLocal(plane, pixelSize.target);
+    if (
+      grid !== null &&
+      grid.plane === plane &&
+      grid.step === step &&
+      halfExtent <= grid.halfExtent &&
+      Math.hypot(center[0] - grid.center[0], center[1] - grid.center[1]) <= grid.halfExtent / 4
+    ) {
+      return;
+    }
+    dropGrid();
+    if (!(halfExtent > 0)) return;
+    const lines = gridLines(step, center, halfExtent);
+    const frame = frameMatrix(plane);
+    const minor = gridObject(lines.minor, frame, minorGridMaterial);
+    const major = gridObject(lines.major, frame, majorGridMaterial);
+    group.add(minor, major);
+    const bounds = unionBounds([
+      meshBounds(positionsOf(minor.geometry)),
+      meshBounds(positionsOf(major.geometry)),
+    ]);
+    grid = { plane, step, center, halfExtent, minor, major, bounds };
+  }
+
   return {
     group,
     set(id: string, drawing: SketchDrawing): void {
@@ -236,12 +389,15 @@ export function createSketchLayer(options: SketchLayerOptions): SketchLayerInter
       const tessellation = tessellateSketch(drawing);
       drop(id);
       show(id, build(drawing, tessellation));
+      updateGrid();
       requestRender();
     },
     remove(id: string): void {
-      if (drop(id)) requestRender();
+      if (!drop(id)) return;
+      updateGrid();
+      requestRender();
     },
-    pick(camera, x, y, width, height) {
+    pick(camera, x, y, width, height, visible) {
       if (entries.size === 0 || width <= 0 || height <= 0) return null;
       camera.updateMatrixWorld();
       // The layer and its drawings sit at the identity transform: world = model coordinates.
@@ -251,41 +407,36 @@ export function createSketchLayer(options: SketchLayerOptions): SketchLayerInter
       ).elements;
       let best: {
         readonly id: string;
-        readonly entry: Entry;
+        readonly entity: string;
+        readonly point: Vec3;
         readonly hit: SketchHit;
       } | null = null;
       for (const [id, entry] of entries) {
-        const { segments, points } = entry.tessellation;
-        const screenSegments = projectSegments(segments, matrix, width, height);
+        const { tessellation } = entry;
+        const screenSegments = projectSegments(tessellation.segments, matrix, width, height);
         const screenPoints = toScreenPoints(
-          projectSegments(asSegments(points), matrix, width, height),
+          projectSegments(asSegments(tessellation.points), matrix, width, height),
         );
-        const hit = pickSketch(screenSegments, screenPoints, x, y);
-        if (hit === null) continue;
+        // The edited sketch is never hidden (M19.2, D2); the others take their first visible hit.
+        const found = sketchHits(screenSegments, screenPoints, x, y)
+          .map((hit) => resolveHit(tessellation, hit))
+          .find(
+            (resolved) =>
+              resolved !== null && (entry.drawing.editing === true || visible(resolved.point)),
+          );
+        if (found === undefined || found === null) continue;
         // A point of any drawing wins over a curve of any drawing, then the nearer one.
-        if (best === null || betterSketchHit(hit, best.hit)) best = { id, entry, hit };
+        if (best === null || betterSketchHit(found.hit, best.hit)) best = { id, ...found };
       }
       if (best === null) return null;
-      const { tessellation } = best.entry;
-      const { hit } = best;
-      const entity =
-        hit.kind === 'point'
-          ? tessellation.pointIds[hit.index]
-          : tessellation.segmentCurves[hit.index];
-      if (entity === undefined) return null;
-      const point: Vec3 =
-        hit.kind === 'point'
-          ? [
-              tessellation.points[3 * hit.index] ?? 0,
-              tessellation.points[3 * hit.index + 1] ?? 0,
-              tessellation.points[3 * hit.index + 2] ?? 0,
-            ]
-          : // The screen parameter is also the 3D one: the orthographic projection is affine.
-            segmentPoint(tessellation.segments, hit.index, hit.t);
-      return { kind: 'sketchEntity', sketch: best.id, entity, point };
+      return { kind: 'sketchEntity', sketch: best.id, entity: best.entity, point: best.point };
     },
-    pickRegion(ray) {
-      const hit = pickSketchRegion(drawings, ray);
+    pickRegion(ray, visible) {
+      const hit = pickSketchRegion(
+        drawings,
+        ray,
+        (sketch, point) => drawings.get(sketch)?.editing === true || visible(point),
+      );
       return hit === null ? null : { kind: 'sketchRegion', ...hit };
     },
     setRegionHighlight(hover, selection): void {
@@ -298,6 +449,8 @@ export function createSketchLayer(options: SketchLayerOptions): SketchLayerInter
       palette = next;
       hoverFill.color.setHex(next.hover);
       selectionFill.color.setHex(next.selection);
+      minorGridMaterial.color.setHex(next.grid[1]);
+      majorGridMaterial.color.setHex(next.grid[0]);
       // Rebuilt rather than recoloured in place: replacing the colour attribute of a fat line
       // would leave its old GPU buffer behind. Palette changes are rare.
       for (const [id, entry] of [...entries]) {
@@ -307,14 +460,30 @@ export function createSketchLayer(options: SketchLayerOptions): SketchLayerInter
     },
     setResolution(width: number, height: number): void {
       lineMaterial.resolution.set(width, height);
+      hiddenLineMaterial.resolution.set(width, height);
+    },
+    setPixelSize(worldPerPx: number, target: Vec3, viewportDiagonalPx: number): void {
+      // LineMaterial dashes are measured in model units along the line.
+      hiddenLineMaterial.dashSize = DASH_PX * worldPerPx;
+      hiddenLineMaterial.gapSize = GAP_PX * worldPerPx;
+      pixelSize = { worldPerPx, target, viewportDiagonalPx };
+      updateGrid();
     },
     bounds(): BoundingBox | null {
-      return unionBounds([...entries.values()].map((entry) => entry.bounds));
+      return unionBounds([
+        ...[...entries.values()].map((entry) => entry.bounds),
+        grid?.bounds ?? null,
+      ]);
     },
     dispose(): void {
       for (const id of [...entries.keys()]) drop(id);
+      dropGrid();
       lineMaterial.dispose();
       pointMaterial.dispose();
+      hiddenLineMaterial.dispose();
+      hiddenPointMaterial.dispose();
+      minorGridMaterial.dispose();
+      majorGridMaterial.dispose();
       hoverFill.dispose();
       selectionFill.dispose();
     },
@@ -328,10 +497,64 @@ function createFillMaterial(color: number): THREE.MeshBasicMaterial {
     opacity: FILL_OPACITY,
     // Seen from either side of the sketch plane.
     side: THREE.DoubleSide,
-    // Over the bodies like the sketch lines (R47); transparent, so it writes no depth.
-    depthTest: false,
+    // Bodies hide it like the sketch lines (M19.2, D2), so a highlighted region no longer tints
+    // a whole body; pulled forward like them. Transparent, so it writes no depth.
+    depthTest: true,
     depthWrite: false,
+    ...PULL_FORWARD,
   });
+}
+
+/** 1 px lines of the sketch grid: hidden by bodies, writing no depth (M19.2). */
+function createGridMaterial(color: number): THREE.LineBasicMaterial {
+  return new THREE.LineBasicMaterial({ color, depthTest: true, depthWrite: false });
+}
+
+/** Grid segments u0, v0, u1, v1 in the plane → world LineSegments placed by the plane frame. */
+function gridObject(
+  segments: readonly number[],
+  frame: THREE.Matrix4,
+  material: THREE.LineBasicMaterial,
+): THREE.LineSegments {
+  const positions = new Float32Array((segments.length / 2) * 3);
+  for (let i = 0; i < segments.length / 2; i++) {
+    positions[3 * i] = segments[2 * i] ?? 0;
+    positions[3 * i + 1] = segments[2 * i + 1] ?? 0;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  // World coordinates in the geometry: the layer sits at the identity transform.
+  geometry.applyMatrix4(frame);
+  const lines = new THREE.LineSegments(geometry, material);
+  lines.renderOrder = GRID_RENDER_ORDER;
+  return lines;
+}
+
+/** World positions of a geometry built by gridObject. */
+function positionsOf(geometry: THREE.BufferGeometry): Float32Array {
+  const array = geometry.getAttribute('position').array;
+  assert(array instanceof Float32Array, 'Grid positions must be a Float32Array');
+  return array;
+}
+
+/** The entity id and the 3D point of a hit; null when the hit is out of the tessellation. */
+function resolveHit(
+  tessellation: SketchTessellation,
+  hit: SketchHit,
+): { readonly entity: string; readonly point: Vec3; readonly hit: SketchHit } | null {
+  const entity =
+    hit.kind === 'point' ? tessellation.pointIds[hit.index] : tessellation.segmentCurves[hit.index];
+  if (entity === undefined) return null;
+  const point: Vec3 =
+    hit.kind === 'point'
+      ? [
+          tessellation.points[3 * hit.index] ?? 0,
+          tessellation.points[3 * hit.index + 1] ?? 0,
+          tessellation.points[3 * hit.index + 2] ?? 0,
+        ]
+      : // The screen parameter is also the 3D one: the orthographic projection is affine.
+        segmentPoint(tessellation.segments, hit.index, hit.t);
+  return { entity, point, hit };
 }
 
 /** The region in the 2D coordinates of its plane, holes as paths. */

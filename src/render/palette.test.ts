@@ -53,6 +53,18 @@ describe.each([
   it('has the axes of the mockup', () => {
     expect(palette.axes).toEqual([0xff3b30, 0x34c759, 0x0a84ff]);
   });
+
+  // M19.2 D1 (review U13): a selected or hovered entity must not look like an axis or like
+  // a body in its default colour.
+  it('keeps selection and hover apart from the axes, the faces and each other', () => {
+    for (const key of ['selection', 'hover'] as const) {
+      expect(palette.axes, key).not.toContain(palette[key]);
+      expect(palette[key], key).not.toBe(palette.face);
+      expect(palette[key], key).not.toBe(palette.preview);
+      expect(palette[key], key).not.toBe(palette.sketch);
+    }
+    expect(palette.hover).not.toBe(palette.selection);
+  });
 });
 
 describe('parseHexColor', () => {
@@ -80,13 +92,13 @@ describe('toCssColor', () => {
 });
 
 describe('palettes', () => {
-  it('light keeps the colours of M8 and M9, axes by the mockup', () => {
+  it('light keeps the colours of M8 and M9 except the orange selection (M19.2)', () => {
     expect(LIGHT_PALETTE).toEqual({
       background: 0xf3f4f6,
       face: 0xb9c3d1,
       edge: 0x1f2328,
-      hover: 0xf59e0b,
-      selection: 0x2563eb,
+      hover: 0xfb923c,
+      selection: 0xea580c,
       preview: 0x2563eb,
       construction: 0x6b7280,
       sketch: 0x0a84ff,
@@ -97,13 +109,13 @@ describe('palettes', () => {
     });
   });
 
-  it('dark follows the mockup', () => {
+  it('dark follows the mockup except the orange selection (M19.2)', () => {
     expect(DARK_PALETTE).toMatchObject({
       background: 0x1f2023,
       face: 0x3b6aa6,
       edge: 0x9cc3f5,
-      selection: 0x0a84ff,
-      hover: 0x5e9ff5,
+      selection: 0xff9f0a,
+      hover: 0xffc266,
       preview: 0x0a84ff,
       construction: 0x6b7280,
       sketch: 0x409cff,

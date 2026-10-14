@@ -193,7 +193,10 @@ describe('createAppSession – opening', () => {
     const { session, kernels } = await open();
     expect(kernels.kernels).toHaveLength(1);
     expect(session.kernel.get()).toBe('ready');
-    expect(session.regen.get()).toMatchObject({ busy: false, bodyCount: 0, errorCount: 0 });
+    expect(session.regen.get()).toMatchObject({ busy: false, bodyCount: 0 });
+    // D6 of M19.2: the error count comes from the feature tree, which knows a draft.
+    expect(session.regen.get()).not.toHaveProperty('errorCount');
+    expect(session.featureTree.errorCount.get()).toBe(0);
   });
 
   it('opens a stored document and shows its bodies', async () => {
@@ -273,7 +276,8 @@ describe('createAppSession – changes', () => {
     await settle();
     expect(viewport.lastSync).toHaveLength(1);
     const regen = session.regen.get();
-    expect(regen).toMatchObject({ busy: false, bodyCount: 1, errorCount: 0 });
+    expect(regen).toMatchObject({ busy: false, bodyCount: 1 });
+    expect(session.featureTree.errorCount.get()).toBe(0);
     expect(regen.lastMs).not.toBeNull();
     expect(session.browser.bodies.get()).toHaveLength(1);
     expect(session.featureTree.rows.get()[0]?.status).toBe('ok');
@@ -295,7 +299,8 @@ describe('createAppSession – changes', () => {
     session.features.create('mark').commit();
     await settle();
     const box = session.doc.studio.features[0]?.id ?? fail();
-    expect(session.regen.get()).toMatchObject({ bodyCount: 1, errorCount: 0 });
+    expect(session.regen.get()).toMatchObject({ bodyCount: 1 });
+    expect(session.featureTree.errorCount.get()).toBe(0);
     expect(viewport.lastSync.map((b) => b.id)).toEqual([bodyId(box)]);
     expect(session.browser.bodies.get().map((r) => r.body)).toEqual([bodyId(box)]);
   });
@@ -341,7 +346,8 @@ describe('createAppSession – changes', () => {
     addBox(session, 10);
     addBox(session, 0);
     await settle();
-    expect(session.regen.get()).toMatchObject({ bodyCount: 1, errorCount: 1 });
+    expect(session.regen.get()).toMatchObject({ bodyCount: 1 });
+    expect(session.featureTree.errorCount.get()).toBe(1);
     expect(viewport.lastSync).toHaveLength(1);
     expect(session.featureTree.rows.get().map((r) => r.status)).toEqual(['ok', 'error']);
   });
@@ -398,7 +404,8 @@ describe('createAppSession – generation and errors of a regeneration (M19.1)',
     expect(portBodies(session)).toEqual([first]);
     expect(idsOf(viewport.shown)).toEqual([first]);
     expect(session.regen.get()).toMatchObject({ busy: false, bodyCount: 1 });
-    expect(viewport.fitAllCount).toBe(1);
+    // A new document: its empty first regeneration decided the first view (D7 of M19.2).
+    expect(viewport.fitAllCount).toBe(0);
 
     viewport.holdSyncs();
     addBox(session, 20);
@@ -538,9 +545,10 @@ describe('createAppSession – generation and errors of a regeneration (M19.1)',
     const body = bodyId(session.doc.studio.features[0]?.id ?? fail());
     expect(idsOf(viewport.shown)).toEqual([body]);
     expect(session.regen.get()).toMatchObject({ busy: false, bodyCount: 1, failed: null });
-    expect(viewport.fitAllCount).toBe(1);
-    // After the whole step: the counters and the first view were done already.
-    expect(reported).toEqual([{ error: bug, fitAll: 1, bodyCount: 1 }]);
+    // A new document is not fitted (D7 of M19.2); the order of the first view is tested there.
+    expect(viewport.fitAllCount).toBe(0);
+    // After the whole step: the counters were done already.
+    expect(reported).toEqual([{ error: bug, fitAll: 0, bodyCount: 1 }]);
     errors.mockRestore();
   });
 });
@@ -947,21 +955,83 @@ describe('createAppSession – actions', () => {
 });
 
 describe('createAppSession – first view', () => {
-  it('the first regeneration with a body fits the camera once', async () => {
-    const { session, viewport } = await open();
-    expect(viewport.fitAllCount).toBe(0);
-    addBox(session);
-    await settle();
+  // D7 (M19.2): the first finished regeneration after opening decides; later ones never move
+  // the camera.
+  /** Ids of a reopened session, apart from the ones of the session that stored the document. */
+  const reopenedIds = () => createSequentialIdGenerator('g');
+
+  it('a stored document with a box is fitted once; a later change does not move the camera', async () => {
+    const store = await aStoredDocumentWithBox();
+    const { session, viewport } = await open({ store, ids: reopenedIds() });
     expect(viewport.fitAllCount).toBe(1);
     addBox(session);
     await settle();
     expect(viewport.fitAllCount).toBe(1);
   });
 
-  it('a stored document with bodies is fitted once after opening', async () => {
+  it('a new document is never fitted: the first regeneration has no body', async () => {
+    const { session, viewport } = await open();
+    expect(session.regen.get()).toMatchObject({ busy: false, bodyCount: 0 });
+    addBox(session);
+    await settle();
+    expect(session.regen.get().bodyCount).toBe(1);
+    expect(viewport.fitAllCount).toBe(0);
+  });
+
+  it('fits only once the view shows the bodies of the first regeneration', async () => {
     const store = await aStoredDocumentWithBox();
-    const { viewport } = await open({ store });
+    const viewport = new FakeAppViewport();
+    viewport.holdSyncs();
+    await open({ store, ids: reopenedIds(), viewport });
+    expect(viewport.heldSyncs).toBe(1);
+    expect(viewport.fitAllCount).toBe(0);
+    viewport.releaseSyncs();
+    await settle();
+    expect(viewport.shown).toHaveLength(1);
     expect(viewport.fitAllCount).toBe(1);
+  });
+
+  it('a kernel restart does not decide again', async () => {
+    const store = await aStoredDocumentWithBox();
+    const { session, kernels, viewport } = await open({ store, ids: reopenedIds() });
+    kernels.last.crash();
+    addBox(session);
+    await settle();
+    expect(kernels.kernels).toHaveLength(2);
+    expect(session.regen.get().bodyCount).toBe(2);
+    expect(viewport.fitAllCount).toBe(1);
+  });
+
+  it('a regeneration that throws does not decide; the next successful one does', async () => {
+    let broken = false;
+    const plugins = [
+      boxPlugin,
+      {
+        schema: aSchema('fragile'),
+        builder: aSpyBuilder('fragile', (input, ctx) =>
+          broken ? Promise.reject(new Error('builder bug')) : buildCube(input, ctx),
+        ),
+      },
+    ];
+    const first = await open({ plugins });
+    first.session.features.create('fragile').commit();
+    first.scheduler.advance(1000);
+    await settle();
+    first.session.dispose();
+    await settle();
+
+    broken = true;
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { session, viewport } = await open({ plugins, store: first.store, ids: reopenedIds() });
+    expect(session.regen.get().failed).toBe('builder bug');
+    expect(viewport.fitAllCount).toBe(0);
+
+    broken = false;
+    addBox(session);
+    await settle();
+    expect(session.regen.get()).toMatchObject({ bodyCount: 2, failed: null });
+    expect(viewport.fitAllCount).toBe(1);
+    errors.mockRestore();
   });
 });
 
@@ -1097,7 +1167,7 @@ describe('createAppSession – sketcher', () => {
     expect(drawn.regions).toHaveLength(1);
   });
 
-  it('a region picked in the extrude dialog is highlighted in the viewport', async () => {
+  it('the region preselected in the extrude dialog is highlighted, a pick toggles it', async () => {
     const { session, viewport } = await open({
       plugins: [boxPlugin, sketchPlugin, extrudePlugin],
     });
@@ -1107,11 +1177,21 @@ describe('createAppSession – sketcher', () => {
     session.actions.run(session.sketchActionIds.finish);
     await settle();
 
-    session.features.create('extrude');
-    // The dialog focuses its regions param, so the browser lists the regions of the sketch.
+    // The only region of the last sketch is preselected (D6 of M19.2), so it is highlighted.
+    const edit = session.features.create('extrude');
     const region = session.browser.sketches.get()[0]?.regions[0]?.region ?? fail();
-    session.browser.selectRegion(feature, region);
+    expect(edit.state.get().params['regions']).toEqual([
+      { kind: 'region', sketch: feature, region },
+    ]);
     expect(viewport.selection).toContainEqual({
+      kind: 'sketchRegion',
+      sketch: sketchId(feature),
+      region,
+    });
+    // The dialog keeps its regions param focused: picking the region again removes it.
+    session.browser.selectRegion(feature, region);
+    expect(edit.state.get().params['regions']).toEqual([]);
+    expect(viewport.selection).not.toContainEqual({
       kind: 'sketchRegion',
       sketch: sketchId(feature),
       region,
@@ -1649,6 +1729,54 @@ describe('createAppSession – manipulators (M18)', () => {
     off();
     viewport.emitViewChanged({ generation: 2 });
     expect(calls).toBe(1);
+  });
+});
+
+describe('createAppSession: view and grid (M19.2)', () => {
+  it('view.project and view.onViewChanged are forwarded from the viewport', async () => {
+    const { session, viewport } = await open();
+    expect(session.view.project([1, 2, 3])).toBeNull();
+    viewport.prepareProject(([x, y]) => [x * 10, y * 10]);
+    expect(session.view.project([1, 2, 3])).toEqual([10, 20]);
+
+    let calls = 0;
+    const off = session.view.onViewChanged(() => {
+      calls++;
+    });
+    viewport.emitViewChanged({ generation: 1 });
+    off();
+    viewport.emitViewChanged({ generation: 2 });
+    expect(calls).toBe(1);
+  });
+
+  it('the sketch tools snap to the grid step drawn by the viewport', async () => {
+    const { session, viewport } = await open({ plugins: [boxPlugin, sketchPlugin] });
+    // Only the tools read the step; the facade does not offer it (Ú13a).
+    expectTypeOf(session.sketches).not.toHaveProperty('gridStep');
+    viewport.prepareSketchGridStep(5);
+    expect(session.actions.run(session.toolActionId('sketch'))).toBe(true);
+    session.tools.activate('sketch.line');
+    const click = (x: number, y: number): void => {
+      for (const type of ['move', 'down', 'up'] as const)
+        viewport.emitPointer({
+          type,
+          x,
+          y,
+          button: type === 'move' ? null : 'left',
+          mods: { shift: false, alt: false, mod: false },
+        });
+    };
+    click(7, 3);
+    await settle();
+    click(13, 9);
+    await settle();
+    const points = (session.sketches.current.get()?.state.get().entities ?? []).flatMap((e) =>
+      e.kind === 'point' ? [[e.x, e.y]] : [],
+    );
+    expect(points).toEqual([
+      [5, 5],
+      [15, 10],
+    ]);
   });
 });
 

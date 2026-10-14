@@ -24,6 +24,7 @@ describe('interaction public API', () => {
         'createActionRegistry',
         'createBrowserModel',
         'createBuiltInActions',
+        'createDocumentNameModel',
         'createEditLock',
         'createFeatureEditor',
         'createFeatureTreeModel',

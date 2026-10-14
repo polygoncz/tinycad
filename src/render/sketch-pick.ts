@@ -1,7 +1,8 @@
 // Picking of sketch entities in screen space (spec 09, "Skici"): a point within the tolerance
 // wins over every curve, otherwise the nearest segment. Pure, no three; the sketch layer projects
-// the tessellated drawings into px and maps the hit back to the entity. Regions (M13) are picked
-// in the plane of the drawing instead: ray ∩ plane, then point in polygon.
+// the tessellated drawings into px, skips hits hidden behind bodies (M19.2) and maps the hit back
+// to the entity. Regions (M13) are picked in the plane of the drawing instead: ray ∩ plane, then
+// point in polygon.
 
 import { assert, plane as planeMath, vec3, type Vec2, type Vec3 } from '@/core';
 import type { SketchDrawing, SketchDrawingRegion } from '@/interaction';
@@ -22,9 +23,39 @@ export type SketchHit =
     };
 
 /**
+ * Every sketch hit within the tolerance of (x, y): the points by distance, then the segments by
+ * distance (spec 09, "Skici"); the sketch layer takes the first one that bodies do not hide.
  * screenSegments: x0, y0, x1, y1 per segment in px; screenPoints: x, y per point in px. NaN
- * coordinates (off the view) are skipped. Ties go to the first in the input.
+ * coordinates (off the view) are skipped. Ties keep the order of the input.
  */
+export function sketchHits(
+  screenSegments: Float32Array,
+  screenPoints: Float32Array,
+  x: number,
+  y: number,
+  tolerancePx = DEFAULT_TOLERANCE_PX,
+): readonly SketchHit[] {
+  assert(screenPoints.length % 2 === 0, 'screenPoints must hold 2 numbers per point');
+  const points: SketchHit[] = [];
+  for (let i = 0; i < screenPoints.length; i += 2) {
+    const px = screenPoints[i] ?? NaN;
+    const py = screenPoints[i + 1] ?? NaN;
+    // NaN fails the comparison, so a point off the view never counts.
+    const distancePx = Math.hypot(px - x, py - y);
+    if (distancePx <= tolerancePx) points.push({ kind: 'point', index: i / 2, distancePx });
+  }
+  // Array.prototype.sort is stable: equal distances keep the order of the input.
+  points.sort((a, b) => a.distancePx - b.distancePx);
+  const segments = closestSegments(screenSegments, x, y, tolerancePx).map((c): SketchHit => ({
+    kind: 'segment',
+    index: c.segment,
+    t: c.t,
+    distancePx: c.distancePx,
+  }));
+  return [...points, ...segments];
+}
+
+/** The first of sketchHits: a point within the tolerance wins over every curve; null = no hit. */
 export function pickSketch(
   screenSegments: Float32Array,
   screenPoints: Float32Array,
@@ -32,22 +63,7 @@ export function pickSketch(
   y: number,
   tolerancePx = DEFAULT_TOLERANCE_PX,
 ): SketchHit | null {
-  assert(screenPoints.length % 2 === 0, 'screenPoints must hold 2 numbers per point');
-  let best: SketchHit | null = null;
-  for (let i = 0; i < screenPoints.length; i += 2) {
-    const px = screenPoints[i] ?? NaN;
-    const py = screenPoints[i + 1] ?? NaN;
-    // NaN fails both comparisons, so a point off the view never wins.
-    const distancePx = Math.hypot(px - x, py - y);
-    if (distancePx <= tolerancePx && (best === null || distancePx < best.distancePx)) {
-      best = { kind: 'point', index: i / 2, distancePx };
-    }
-  }
-  if (best !== null) return best;
-
-  const nearest = closestSegments(screenSegments, x, y, tolerancePx)[0];
-  if (nearest === undefined) return null;
-  return { kind: 'segment', index: nearest.segment, t: nearest.t, distancePx: nearest.distancePx };
+  return sketchHits(screenSegments, screenPoints, x, y, tolerancePx)[0] ?? null;
 }
 
 /** Across drawings: a point wins over a curve, then the smaller distance; a tie keeps `than`. */
@@ -57,12 +73,14 @@ export function betterSketchHit(hit: SketchHit, than: SketchHit): boolean {
 }
 
 /**
- * Nearest region under the ray; null = none. Drawings without regions are skipped. Occlusion by
- * bodies is not checked (spec 09, "Skici", like R47).
+ * Nearest region under the ray; null = none. Drawings without regions are skipped. A region whose
+ * hit `accept` refuses (the sketch layer: hidden behind a body, M19.2) is skipped and the search
+ * goes on along the ray; without `accept` every hit counts.
  */
 export function pickSketchRegion(
   drawings: ReadonlyMap<string, SketchDrawing>,
   ray: { readonly origin: Vec3; readonly direction: Vec3 },
+  accept: (sketch: string, point: Vec3) => boolean = () => true,
 ): { readonly sketch: string; readonly region: string; readonly point: Vec3 } | null {
   let best: {
     readonly sketch: string;
@@ -80,7 +98,9 @@ export function pickSketchRegion(
     if (best !== null && t >= best.t) continue;
     const local = planeMath.toLocal(drawing.plane, point);
     const region = regions.find((r) => pointInRegion(local, r));
-    if (region !== undefined) best = { sketch, region: region.id, point, t };
+    if (region !== undefined && accept(sketch, point)) {
+      best = { sketch, region: region.id, point, t };
+    }
   }
   return best === null ? null : { sketch: best.sketch, region: best.region, point: best.point };
 }

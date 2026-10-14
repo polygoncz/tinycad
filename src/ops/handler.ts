@@ -2,6 +2,7 @@ import { createRegistry } from '@/core';
 import type { RegistryReader } from '@/core';
 import type { FeatureSchema } from '@/document';
 import { bodyHandlers } from './handlers/body';
+import { documentHandlers } from './handlers/document';
 import { createFeatureHandlers } from './handlers/feature';
 import { studioHandlers } from './handlers/studio';
 import type { OpHandler, OpHandlerRegistry } from './op-handler';
@@ -29,6 +30,7 @@ export function createOpHandlerRegistry(deps: {
     ...createFeatureHandlers(deps.schemas),
     ...studioHandlers,
     ...bodyHandlers,
+    ...documentHandlers,
   ]) {
     guarded.register(handler);
   }

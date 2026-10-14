@@ -9,17 +9,30 @@
 // the active axis field of the dialog, the eye draws the axis) and, while the dialog has an active
 // region field, the regions of each sketch under its row (click = add or remove). M15: the colour
 // field of a body (metadata like the eye, body.setColor) and, with a colour set, the button back
-// to the default colour of the palette. Only bindings
+// to the default colour of the palette. M19.2 (D14): the ARIA pattern tree over one flat list of
+// the visible rows (browserTreeRows) with aria-level, a roving tabindex and the keys of treeKey;
+// Enter, the space bar and Delete (or Backspace) act on the row (rowKeyAction). Ctrl/Cmd adds to
+// the selection (isAdditive), as in the Timeline. Only bindings
 // and layout (rule 4): rows, the rename mode and canEdit come from BrowserModel, changes go back
 // through it.
-import { nextTick, ref, useTemplateRef, watch } from 'vue';
+import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { BrowserBodyRow, BrowserPlaneRow, BrowserSketchRow } from '@/interaction';
+import type { BodyId } from '@/document';
+import type { BrowserBodyRow, BrowserSketchRow } from '@/interaction';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
+import { finishEdit } from '../inline-rename';
+import { isAdditive, runOnSelected } from '../item-actions';
+import { browserTreeRows, navItemOf, rowKeyAction, treeKey } from '../tree-navigation';
+import type {
+  BrowserFolder,
+  BrowserFolders,
+  BrowserTreeRow,
+  RowKeyAction,
+} from '../tree-navigation';
 
 const session = useSession();
-const { browser } = session;
+const { browser, actions, actionIds } = session;
 const { t } = useI18n();
 
 const bodies = useObservable(browser.bodies);
@@ -29,30 +42,82 @@ const sketches = useObservable(browser.sketches);
 const canEdit = useObservable(browser.canEdit);
 const renaming = useObservable(browser.renaming);
 const defaultBodyColor = useObservable(session.defaultBodyColor);
-// No rename of documents in M10, so the name is read once.
-const documentName = session.doc.meta.name;
+// Follows document.rename (M19.2, D5).
+const documentName = useObservable(session.documentName.name);
 
 // Collapsed sections are view state of this panel only.
 const panelOpen = ref(true);
-const bodiesOpen = ref(true);
-// Collapsed by default like the Origin folder of Fusion: the planes are rarely needed.
-const originOpen = ref(false);
-const sketchesOpen = ref(true);
+const folders = ref<BrowserFolders>({
+  // Collapsed by default like the Origin folder of Fusion: the planes are rarely needed.
+  origin: false,
+  sketches: true,
+  bodies: true,
+});
 
-function additive(e: MouseEvent): boolean {
-  return e.shiftKey || e.metaKey || e.ctrlKey;
+const FOLDER_LABELS: Readonly<Record<BrowserFolder, string>> = {
+  origin: 'browser.origin',
+  sketches: 'browser.sketches',
+  bodies: 'browser.bodies',
+};
+
+// The visible rows (browserTreeRows): the template and the keyboard (ARIA tree, D14) share them.
+const rows = computed(() =>
+  browserTreeRows({
+    folders: folders.value,
+    planes: planes.value,
+    axes: axes.value,
+    sketches: sketches.value,
+    bodies: bodies.value,
+  }),
+);
+
+function selected(row: BrowserTreeRow): boolean | undefined {
+  switch (row.kind) {
+    case 'plane':
+    case 'sketch':
+    case 'body':
+      return row.row.selected;
+    case 'axis':
+      return row.row.active;
+    case 'region':
+      return row.region.selected;
+    default:
+      return undefined;
+  }
 }
 
-function selectPlane(row: BrowserPlaneRow, e: MouseEvent): void {
-  browser.selectPlane(row.plane, { additive: additive(e) });
+function hidden(row: BrowserTreeRow): boolean {
+  return (row.kind === 'plane' || row.kind === 'axis' || row.kind === 'body') && !row.row.visible;
 }
 
-function selectSketch(row: BrowserSketchRow, e: MouseEvent): void {
-  browser.selectSketch(row.feature, { additive: additive(e) });
+function toggleFolder(folder: BrowserFolder): void {
+  folders.value = { ...folders.value, [folder]: !folders.value[folder] };
 }
 
-function select(row: BrowserBodyRow, e: MouseEvent): void {
-  browser.select(row.body, { additive: additive(e) });
+/** A click on the row (and the space bar, D14). */
+function activate(row: BrowserTreeRow, e: MouseEvent | KeyboardEvent): void {
+  switch (row.kind) {
+    case 'folder':
+      toggleFolder(row.folder);
+      return;
+    case 'plane':
+      browser.selectPlane(row.row.plane, { additive: isAdditive(e) });
+      return;
+    case 'axis':
+      browser.selectAxis(row.row.axis);
+      return;
+    case 'sketch':
+      browser.selectSketch(row.row.feature, { additive: isAdditive(e) });
+      return;
+    case 'region':
+      browser.selectRegion(row.sketch.feature, row.region.region);
+      return;
+    case 'body':
+      browser.select(row.row.body, { additive: isAdditive(e) });
+      return;
+    case 'document':
+      return;
+  }
 }
 
 function displayName(row: BrowserBodyRow): string {
@@ -65,28 +130,95 @@ function changeColor(row: BrowserBodyRow, e: Event): void {
   if (e.target instanceof HTMLInputElement) browser.setColor(row.body, e.target.value);
 }
 
-// The inline field, like TimelineItem. Enter and blur both commit; the flag keeps the blur after
-// Enter or Escape from repeating it.
+// Keyboard (ARIA tree, D14): a roving tabindex – only the active row (the last focused one,
+// otherwise the first) is in the tab order – and the keys of treeKey over the visible rows.
+const treeEl = useTemplateRef<HTMLElement>('tree');
+const activeKey = ref<string | null>(null);
+const activeIndex = computed(() => {
+  const i = rows.value.findIndex((row) => row.key === activeKey.value);
+  return i === -1 ? 0 : i;
+});
+
+async function focusRow(index: number): Promise<void> {
+  const row = rows.value[index];
+  if (row === undefined) return;
+  activeKey.value = row.key;
+  await nextTick();
+  treeEl.value?.querySelectorAll<HTMLElement>('[role="treeitem"]')[index]?.focus();
+}
+
+/** Delete on a sketch (D14): as in the Timeline, the feature becomes the selection first. */
+function deleteSketch(row: BrowserSketchRow): void {
+  runOnSelected(
+    () => {
+      browser.selectSketch(row.feature);
+    },
+    actions,
+    actionIds.featureDelete,
+  );
+}
+
+/** A double click on a sketch opens the sketcher. */
+function openSketch(row: BrowserTreeRow): void {
+  if (row.kind === 'sketch') browser.editSketch(row.row.feature);
+}
+
+function onKeydown(index: number, e: KeyboardEvent): void {
+  // Keys of the inline field and of the buttons in the row are theirs.
+  if (e.target !== e.currentTarget) return;
+  const row = rows.value[index];
+  if (row === undefined) return;
+  const action = rowKeyAction(row.kind, e.key);
+  if (action !== null) {
+    e.preventDefault();
+    runRowAction(row, action, e);
+    return;
+  }
+  const result = treeKey(rows.value.map(navItemOf), index, e.key);
+  if (result === null) return;
+  e.preventDefault();
+  if ('focus' in result) {
+    void focusRow(result.focus);
+    return;
+  }
+  const target = rows.value[result.toggle];
+  if (target?.kind === 'folder') toggleFolder(target.folder);
+}
+
+/** The action of a key on the row (rowKeyAction, D14). */
+function runRowAction(row: BrowserTreeRow, action: RowKeyAction, e: KeyboardEvent): void {
+  if (action === 'activate') activate(row, e);
+  else if (action === 'editSketch' && row.kind === 'sketch') browser.editSketch(row.row.feature);
+  else if (action === 'rename' && row.kind === 'body') browser.beginRename(row.row.body);
+  else if (action === 'delete' && row.kind === 'sketch') deleteSketch(row.row);
+}
+
+// The inline field, like TimelineItem. Enter and blur both commit; finishEdit keeps the blur
+// after Enter or Escape from repeating it.
 const input = useTemplateRef<HTMLInputElement[]>('input');
-let done = false;
+const editing: { value: BodyId | null } = { value: null };
 watch(renaming, async (body) => {
+  editing.value = body;
   if (body === null) return;
-  done = false;
   await nextTick();
   input.value?.[0]?.select();
 });
 
 function commitRename(row: BrowserBodyRow): void {
-  if (done) return;
-  done = true;
+  if (finishEdit(editing) === null) return;
   // An untouched field (still the filled-in name) keeps an unnamed body on its automatic name.
   const text = input.value?.[0]?.value;
   browser.rename(row.body, text === undefined || text === displayName(row) ? null : text);
 }
 function cancelRename(): void {
-  if (done) return;
-  done = true;
+  if (finishEdit(editing) === null) return;
   browser.cancelRename();
+}
+
+/** Enter or Escape in the field: the field goes away, so the focus goes back to its row. */
+function endRenameByKey(index: number, end: () => void): void {
+  end();
+  void focusRow(index);
 }
 </script>
 
@@ -101,196 +233,132 @@ function cancelRename(): void {
       <span>{{ t('browser.title') }}</span>
     </button>
 
-    <div v-if="panelOpen" class="tree" role="tree">
-      <div class="node level-0" role="treeitem">
-        <i class="ti ti-chevron-down chevron" aria-hidden="true" />
-        <i class="ti ti-cube document-icon" aria-hidden="true" />
-        <span class="name document-name">{{ documentName }}</span>
-      </div>
-
+    <div v-if="panelOpen" ref="tree" class="tree" role="tree" :aria-label="t('browser.title')">
       <div
-        class="node level-1"
+        v-for="(row, index) in rows"
+        :key="row.key"
+        class="node"
+        :class="[`level-${row.level}`, { selected: selected(row), hidden: hidden(row) }]"
         role="treeitem"
-        :aria-expanded="originOpen"
-        @click="originOpen = !originOpen"
+        :aria-level="row.level + 1"
+        :aria-expanded="row.expanded"
+        :aria-selected="selected(row)"
+        :tabindex="index === activeIndex ? 0 : -1"
+        @focus="activeKey = row.key"
+        @keydown="onKeydown(index, $event)"
+        @click="activate(row, $event)"
+        @dblclick="openSketch(row)"
       >
-        <i
-          class="ti chevron"
-          :class="originOpen ? 'ti-chevron-down' : 'ti-chevron-right'"
-          aria-hidden="true"
-        />
-        <i class="ti ti-folder" aria-hidden="true" />
-        <span class="name">{{ t('browser.origin') }}</span>
-      </div>
+        <template v-if="row.kind === 'document'">
+          <i class="ti ti-chevron-down chevron" aria-hidden="true" />
+          <i class="ti ti-cube document-icon" aria-hidden="true" />
+          <span class="name document-name">{{ documentName }}</span>
+        </template>
 
-      <template v-if="originOpen">
-        <div
-          v-for="row in planes"
-          :key="row.plane"
-          class="node level-2"
-          :class="{ selected: row.selected, hidden: !row.visible }"
-          role="treeitem"
-          :aria-selected="row.selected"
-          @click="selectPlane(row, $event)"
-        >
+        <template v-else-if="row.kind === 'folder'">
+          <i
+            class="ti chevron"
+            :class="folders[row.folder] ? 'ti-chevron-down' : 'ti-chevron-right'"
+            aria-hidden="true"
+          />
+          <i class="ti ti-folder" aria-hidden="true" />
+          <span class="name">{{ t(FOLDER_LABELS[row.folder]) }}</span>
+        </template>
+
+        <template v-else-if="row.kind === 'plane'">
           <span class="chevron" />
           <i class="ti ti-square-dashed" aria-hidden="true" />
-          <span class="name">{{ t(row.label) }}</span>
+          <span class="name">{{ t(row.row.label) }}</span>
           <button
             type="button"
             class="eye"
-            :title="row.visible ? t('browser.hide') : t('browser.show')"
-            @click.stop="browser.setPlaneVisible(row.plane, !row.visible)"
+            :title="row.row.visible ? t('browser.hide') : t('browser.show')"
+            @click.stop="browser.setPlaneVisible(row.row.plane, !row.row.visible)"
           >
-            <i class="ti" :class="row.visible ? 'ti-eye' : 'ti-eye-off'" aria-hidden="true" />
+            <i class="ti" :class="row.row.visible ? 'ti-eye' : 'ti-eye-off'" aria-hidden="true" />
           </button>
-        </div>
-        <div
-          v-for="row in axes"
-          :key="row.axis"
-          class="node level-2"
-          :class="{ selected: row.active, hidden: !row.visible }"
-          role="treeitem"
-          :aria-selected="row.active"
-          @click="browser.selectAxis(row.axis)"
-        >
+        </template>
+
+        <template v-else-if="row.kind === 'axis'">
           <span class="chevron" />
           <i class="ti ti-line-dashed" aria-hidden="true" />
-          <span class="name">{{ t(row.label) }}</span>
+          <span class="name">{{ t(row.row.label) }}</span>
           <button
             type="button"
             class="eye"
-            :title="row.visible ? t('browser.hide') : t('browser.show')"
-            @click.stop="browser.setAxisVisible(row.axis, !row.visible)"
+            :title="row.row.visible ? t('browser.hide') : t('browser.show')"
+            @click.stop="browser.setAxisVisible(row.row.axis, !row.row.visible)"
           >
-            <i class="ti" :class="row.visible ? 'ti-eye' : 'ti-eye-off'" aria-hidden="true" />
+            <i class="ti" :class="row.row.visible ? 'ti-eye' : 'ti-eye-off'" aria-hidden="true" />
           </button>
-        </div>
-      </template>
-
-      <div
-        class="node level-1"
-        role="treeitem"
-        :aria-expanded="sketchesOpen"
-        @click="sketchesOpen = !sketchesOpen"
-      >
-        <i
-          class="ti chevron"
-          :class="sketchesOpen ? 'ti-chevron-down' : 'ti-chevron-right'"
-          aria-hidden="true"
-        />
-        <i class="ti ti-folder" aria-hidden="true" />
-        <span class="name">{{ t('browser.sketches') }}</span>
-      </div>
-
-      <template v-if="sketchesOpen">
-        <template v-for="row in sketches" :key="row.sketch">
-          <div
-            class="node level-2"
-            :class="{ selected: row.selected }"
-            role="treeitem"
-            :aria-selected="row.selected"
-            @click="selectSketch(row, $event)"
-            @dblclick="browser.editSketch(row.feature)"
-          >
-            <span class="chevron" />
-            <i class="ti ti-pencil" aria-hidden="true" />
-            <span class="name">{{ row.name }}</span>
-          </div>
-          <div
-            v-for="region in row.regions"
-            :key="region.region"
-            class="node level-3"
-            :class="{ selected: region.selected }"
-            role="treeitem"
-            :aria-selected="region.selected"
-            @click="browser.selectRegion(row.feature, region.region)"
-          >
-            <span class="chevron" />
-            <i class="ti ti-shape" aria-hidden="true" />
-            <span class="name">{{ t('browser.region', { n: region.n }) }}</span>
-          </div>
         </template>
-      </template>
 
-      <div
-        class="node level-1"
-        role="treeitem"
-        :aria-expanded="bodiesOpen"
-        @click="bodiesOpen = !bodiesOpen"
-      >
-        <i
-          class="ti chevron"
-          :class="bodiesOpen ? 'ti-chevron-down' : 'ti-chevron-right'"
-          aria-hidden="true"
-        />
-        <i class="ti ti-folder" aria-hidden="true" />
-        <span class="name">{{ t('browser.bodies') }}</span>
-      </div>
+        <template v-else-if="row.kind === 'sketch'">
+          <span class="chevron" />
+          <i class="ti ti-pencil" aria-hidden="true" />
+          <span class="name">{{ row.row.name }}</span>
+        </template>
 
-      <template v-if="bodiesOpen">
-        <div
-          v-for="row in bodies"
-          :key="row.body"
-          class="node level-2"
-          :class="{ selected: row.selected, hidden: !row.visible }"
-          role="treeitem"
-          :aria-selected="row.selected"
-          @click="select(row, $event)"
-        >
+        <template v-else-if="row.kind === 'region'">
+          <span class="chevron" />
+          <i class="ti ti-shape" aria-hidden="true" />
+          <span class="name">{{ t('browser.region', { n: row.region.n }) }}</span>
+        </template>
+
+        <template v-else>
           <span class="chevron" />
           <i class="ti ti-box" aria-hidden="true" />
           <input
-            v-if="renaming === row.body"
+            v-if="renaming === row.row.body"
             ref="input"
             class="rename"
-            :value="displayName(row)"
+            :value="displayName(row.row)"
             :aria-label="t('browser.rename')"
             @click.stop
             @dblclick.stop
-            @keydown.enter.prevent="commitRename(row)"
-            @keydown.escape.prevent="cancelRename"
-            @blur="commitRename(row)"
+            @keydown.enter.prevent="endRenameByKey(index, () => commitRename(row.row))"
+            @keydown.escape.prevent="endRenameByKey(index, cancelRename)"
+            @blur="commitRename(row.row)"
           />
           <span
             v-else
             class="name"
             :title="t('browser.rename')"
-            @dblclick.stop="browser.beginRename(row.body)"
-            >{{ displayName(row) }}</span
+            @dblclick.stop="browser.beginRename(row.row.body)"
+            >{{ displayName(row.row) }}</span
           >
           <button
-            v-if="row.color !== null"
+            v-if="row.row.color !== null"
             type="button"
             class="eye"
             :title="t('browser.defaultColor')"
             :aria-label="t('browser.defaultColor')"
             :disabled="!canEdit"
-            @click.stop="browser.setColor(row.body, null)"
+            @click.stop="browser.setColor(row.row.body, null)"
           >
             <i class="ti ti-palette" aria-hidden="true" />
           </button>
           <input
             type="color"
             class="color"
-            :value="row.color ?? defaultBodyColor"
-            :aria-label="t('browser.color', { name: displayName(row) })"
-            :title="t('browser.color', { name: displayName(row) })"
+            :value="row.row.color ?? defaultBodyColor"
+            :aria-label="t('browser.color', { name: displayName(row.row) })"
+            :title="t('browser.color', { name: displayName(row.row) })"
             :disabled="!canEdit"
             @click.stop
-            @change="changeColor(row, $event)"
+            @change="changeColor(row.row, $event)"
           />
           <button
             type="button"
             class="eye"
-            :title="row.visible ? t('browser.hide') : t('browser.show')"
+            :title="row.row.visible ? t('browser.hide') : t('browser.show')"
             :disabled="!canEdit"
-            @click.stop="browser.setVisible(row.body, !row.visible)"
+            @click.stop="browser.setVisible(row.row.body, !row.row.visible)"
           >
-            <i class="ti" :class="row.visible ? 'ti-eye' : 'ti-eye-off'" aria-hidden="true" />
+            <i class="ti" :class="row.row.visible ? 'ti-eye' : 'ti-eye-off'" aria-hidden="true" />
           </button>
-        </div>
-      </template>
+        </template>
+      </div>
     </div>
   </aside>
 </template>
@@ -353,7 +421,11 @@ function cancelRename(): void {
   padding-left: 52px;
 }
 .node.selected {
-  background: var(--accent-soft);
+  background: var(--selection-soft);
+}
+.node:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 .node.hidden .name,
 .node.hidden > i {

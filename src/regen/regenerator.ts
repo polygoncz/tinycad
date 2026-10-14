@@ -8,7 +8,7 @@ import type {
   PartStudioData,
 } from '@/document';
 import { kernelErrorCode } from '@/kernel';
-import type { GeometryKernel, ShapeHandle } from '@/kernel';
+import type { GeometryKernel, KernelErrorCode, ShapeHandle } from '@/kernel';
 import { createBuildSession } from './build-context';
 import type { Anchor, BuildOutput, FeatureAnchors, FeatureBuilder } from './builder';
 import { EMPTY_STATE, bodiesOf, sketchesOf } from './state';
@@ -133,8 +133,14 @@ export function createRegenerator(deps: {
       output = await builder.build({ feature, state: input }, session.ctx);
     } catch (e) {
       // Q043: only a kernel error is a feature error; anything else is a bug and rejects run.
-      if (kernelErrorCode(e) === undefined) throw e;
-      return failed({ code: 'KERNEL', message: e instanceof Error ? e.message : String(e) });
+      const code = kernelErrorCode(e);
+      if (code === undefined) throw e;
+      // D9 of M19.2: the UI shows the translated issue, the message goes to the details.
+      return failed({
+        code: 'KERNEL',
+        message: e instanceof Error ? e.message : String(e),
+        issues: freezeIssues([{ param: '', code: kernelIssueCode(code) }]),
+      });
     }
     if (!output.ok) return failed(output.error);
 
@@ -309,6 +315,21 @@ export function createRegenerator(deps: {
   }
 
   return { run, events: emitter };
+}
+
+/**
+ * The translation key of a kernel error caught by the Regenerator (D9 of M19.2); a builder that
+ * converts the error itself (fillet, chamfer, extrude.upToFace) returns its own issues instead.
+ */
+function kernelIssueCode(code: KernelErrorCode): string {
+  switch (code) {
+    case 'operation-failed':
+      return 'kernel.operationFailed';
+    case 'invalid-input':
+      return 'kernel.invalidInput';
+    default:
+      return 'kernel.internal';
+  }
 }
 
 /** RpcError of a kernel that is gone (Q037); recognised by code, the message is free text. */

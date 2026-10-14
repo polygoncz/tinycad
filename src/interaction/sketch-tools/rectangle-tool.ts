@@ -10,6 +10,7 @@ import {
   MIN_LENGTH,
   clearPreview,
   clickTool,
+  snapGrid,
   newConstraintId,
   newEntityId,
   previewPolyline,
@@ -24,15 +25,15 @@ export function createRectangleTool(sketches: SketchEditor): Tool {
     reset() {
       corner = null;
     },
-    onMove(ctx, session, x, y) {
+    onMove(ctx, session, x, y, mods) {
       if (corner === null) return;
-      const target = snapAt(ctx, session, x, y);
+      const target = snapAt(ctx, session, x, y, snapGrid(sketches, mods));
       if (target === null) return;
       const [a, b, c, d] = corners(corner.at, target.at);
       previewPolyline(ctx, session, [a, b, c, d, a]);
     },
-    onClick(ctx, session, x, y) {
-      const target = snapAt(ctx, session, x, y);
+    onClick(ctx, session, x, y, mods) {
+      const target = snapAt(ctx, session, x, y, snapGrid(sketches, mods));
       if (target === null) return;
       const start = corner;
       if (start === null) {

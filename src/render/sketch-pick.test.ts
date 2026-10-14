@@ -6,6 +6,7 @@ import {
   pickSketch,
   pickSketchRegion,
   pointInRegion,
+  sketchHits,
   type SketchHit,
 } from './sketch-pick';
 
@@ -41,6 +42,32 @@ describe('pickSketch', () => {
 
   it('rejects screen points with an odd length', () => {
     expect(() => pickSketch(f(), f(1, 2, 3), 0, 0)).toThrow();
+  });
+});
+
+describe('sketchHits', () => {
+  it('gives every hit within the tolerance, points first, then by distance', () => {
+    // Two segments 1 and 3 px away, two points 5 and 2 px away, one point out of reach.
+    const hits = sketchHits(f(0, 11, 100, 11, 0, 7, 100, 7), f(55, 10, 52, 10, 90, 40), 50, 10);
+    expect(hits.map((h) => [h.kind, h.index])).toEqual([
+      ['point', 1],
+      ['point', 0],
+      ['segment', 0],
+      ['segment', 1],
+    ]);
+  });
+
+  it('starts with what pickSketch gives', () => {
+    const segments = f(0, 0, 100, 0, 0, 3, 100, 3);
+    const points = f(54, 10, 49, 1);
+    expect(sketchHits(segments, points, 50, 2)[0]).toEqual(pickSketch(segments, points, 50, 2));
+    expect(sketchHits(f(), f(), 0, 0)).toEqual([]);
+  });
+
+  it('honours a custom tolerance and skips points off the view (NaN)', () => {
+    expect(sketchHits(f(), f(NaN, NaN, 60, 0), 50, 0, 12)).toEqual([
+      { kind: 'point', index: 1, distancePx: 10 },
+    ]);
   });
 });
 
@@ -175,6 +202,21 @@ describe('pickSketchRegion', () => {
     });
     // Local (1, -2) is outside the square.
     expect(pickSketchRegion(drawings, { ...ray, origin: [1, -50, -2] })).toBeNull();
+  });
+
+  it('skips a region refused by accept and goes on to a farther one', () => {
+    const lifted: Plane = { ...XY, origin: [0, 0, 20] };
+    const drawings = new Map([
+      ['low', drawingOn(XY, [framed])],
+      ['high', drawingOn(lifted, [{ ...framed, id: 'r2' }])],
+    ]);
+    const asked: string[] = [];
+    const hit = pickSketchRegion(drawings, downAt(1, 1), (sketch, point) => {
+      asked.push(sketch);
+      return point[2] < 10;
+    });
+    expect(hit).toEqual({ sketch: 'low', region: 'r1', point: [1, 1, 0] });
+    expect(asked.sort()).toEqual(['high', 'low']);
   });
 
   it('skips drawings without regions', () => {

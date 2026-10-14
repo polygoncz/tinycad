@@ -6,6 +6,7 @@ export type {
   BodyRenameOp,
   BodySetColorOp,
   BodySetVisibleOp,
+  DocumentRenameOp,
   FeatureAddOp,
   FeatureMoveOp,
   FeatureRemoveOp,
@@ -15,7 +16,7 @@ export type {
   Operation,
   StudioSetRollbackOp,
 } from './operation';
-export { OP_VERSION } from './operation';
+export { isDocumentRename, OP_VERSION } from './operation';
 export { createOpHandlerRegistry } from './handler';
 export type { OpHandler, OpHandlerRegistry } from './handler';
 export { createOperationLog } from './log';

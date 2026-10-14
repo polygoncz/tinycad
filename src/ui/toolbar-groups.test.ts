@@ -39,7 +39,17 @@ function aConstraintAction(id: string, shortcut: string | null = null): ActionSt
 }
 
 /** The ids are passed in, never known by the function (AppSession.actionIds). */
-const IDS = { undo: 'undo', redo: 'redo', fitAll: 'view.fitAll' } as const;
+const VIEW_IDS = {
+  viewFront: 'view.front',
+  viewBack: 'view.back',
+  viewRight: 'view.right',
+  viewLeft: 'view.left',
+  viewTop: 'view.top',
+  viewBottom: 'view.bottom',
+  viewIso: 'view.iso',
+} as const;
+const IDS = { undo: 'undo', redo: 'redo', fitAll: 'view.fitAll', ...VIEW_IDS } as const;
+const VIEW_ACTIONS: readonly ActionState[] = Object.values(VIEW_IDS).map((id) => anAction(id));
 const toolActionId = (id: string): string => `tool.${id}`;
 const SKETCH_IDS = { finish: 'sketch.finish', cancel: 'sketch.cancel' } as const;
 const constraintActionId = (kind: string): string => `sketch.constraint.${kind}`;
@@ -123,6 +133,7 @@ describe('toolbarGroups', () => {
         enabled: true,
         modes: BOTH,
         command: { kind: 'action', id: 'undo' },
+        menuOnly: false,
       },
       {
         id: 'redo',
@@ -133,19 +144,38 @@ describe('toolbarGroups', () => {
         enabled: false,
         modes: BOTH,
         command: { kind: 'action', id: 'redo' },
+        menuOnly: false,
       },
     ]);
     expect(groups[1]?.items.map((i) => i.id)).toEqual(['view.fitAll']);
   });
 
   it('finds the action buttons by the ids it is given', () => {
-    const ids = { undo: 'my.undo', redo: 'my.redo', fitAll: 'my.fit' };
+    const ids = { ...IDS, undo: 'my.undo', redo: 'my.redo', fitAll: 'my.fit' };
     const actions = [anAction('my.undo'), anAction('undo'), anAction('my.fit')];
     const groups = groupsOf({ tools: [], actions, actionIds: ids });
     expect(groups.map((g) => g.items.map((i) => i.command))).toEqual([
       [{ kind: 'action', id: 'my.undo' }],
       [{ kind: 'action', id: 'my.fit' }],
     ]);
+  });
+
+  it('the view group has fit all as a button and the seven standard views only in the menu', () => {
+    for (const mode of ['model', 'sketch'] as const) {
+      const actions = [...ACTIONS, ...VIEW_ACTIONS];
+      const view = groupsOf({ tools: [], actions, mode }).find((g) => g.id === 'view');
+      expect(view?.items.map((i) => [i.id, i.icon, i.menuOnly])).toEqual([
+        ['view.fitAll', 'zoom-scan', false],
+        ['view.front', 'square', true],
+        ['view.back', 'square', true],
+        ['view.right', 'square', true],
+        ['view.left', 'square', true],
+        ['view.top', 'square', true],
+        ['view.bottom', 'square', true],
+        ['view.iso', 'cube', true],
+      ]);
+      expect(view?.items[1]?.command).toEqual({ kind: 'action', id: 'view.front' });
+    }
   });
 
   it('a tool with an action runs and is enabled through it', () => {
@@ -161,6 +191,7 @@ describe('toolbarGroups', () => {
         enabled: false,
         modes: ['model'],
         command: { kind: 'action', id: 'tool.box' },
+        menuOnly: false,
       },
     ]);
   });
@@ -223,6 +254,7 @@ describe('toolbarGroups', () => {
       enabled: true,
       modes: BOTH,
       command: { kind: 'action', id: 'sketch.finish' },
+      menuOnly: false,
     });
     expect(items.get('sketch.cancel')?.icon).toBe('x');
     expect(items.get('sketch.constraint.horizontal')).toMatchObject({

@@ -49,6 +49,13 @@ export interface Picker {
     height: number,
     filter?: PickFilter,
   ): PickResult | null;
+  /**
+   * True when no shown body hides the world point from the camera: the ray from the camera to the
+   * point hits no face closer than the point minus the occlusion tolerance (the rule of edges,
+   * spec 09, "Picking" point 2). The sketch layer uses it for sketch hits (M19.2). Without shown
+   * bodies true.
+   */
+  isVisible(camera: THREE.Camera, point: Vec3): boolean;
 }
 
 /** One projected segment: its body and its index among the body's segments. */
@@ -168,17 +175,34 @@ export function createPicker(options: PickerOptions): Picker {
     };
   }
 
+  /** The shown bodies with their world matrices up to date; a hidden one (Q071) hides nothing. */
+  function shownViews(): BodyView[] {
+    const views = [...options.views()].filter((view) => view.object.visible);
+    for (const view of views) view.object.updateMatrixWorld();
+    return views;
+  }
+
   return {
+    isVisible(camera, point) {
+      const views = shownViews();
+      if (views.length === 0) return true;
+      camera.updateMatrixWorld();
+      return visible(
+        camera,
+        views.map((view) => view.faces),
+        new THREE.Vector3(...point),
+        occlusionTolerance(options.bounds()),
+      );
+    },
     pick(camera, x, y, width, height, filter = DEFAULT_FILTER) {
       // Only body kinds look at the scene; 'sketchEntity' (M12) or 'sketchRegion' (M13) alone
       // hits nothing here, the sketch drawings are picked by the viewport (spec 09, "Skici").
       const bodyKinds = filter.includes('edge') || filter.includes('face');
       if (!bodyKinds || width <= 0 || height <= 0) return null;
       // A hidden body (Q071) is neither picked nor hides what is behind it.
-      const views = [...options.views()].filter((view) => view.object.visible);
+      const views = shownViews();
       if (views.length === 0) return null;
       camera.updateMatrixWorld();
-      for (const view of views) view.object.updateMatrixWorld();
       const meshes = views.map((view) => view.faces);
 
       // An edge within the tolerance wins over the face under the cursor (spec 09).

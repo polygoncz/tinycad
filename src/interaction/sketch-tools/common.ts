@@ -32,6 +32,14 @@ export const newEntityId = (ctx: ToolContext): SketchEntityId => ctx.ids.next() 
 export const newConstraintId = (ctx: ToolContext): SketchConstraintId =>
   ctx.ids.next() as SketchConstraintId;
 
+/**
+ * The grid step a drawing tool snaps to (M19.2 D4): the current step of the editor while the snap
+ * is on and Alt is not held, otherwise null (no grid). Read on every move and click.
+ */
+export function snapGrid(sketches: SketchEditor, mods: KeyMods): number | null {
+  return sketches.gridSnap.get() && !mods.alt ? sketches.gridStep() : null;
+}
+
 /** The cursor in the coordinates of the plane of the session; null for a ray parallel to it. */
 export function cursorAt(
   ctx: ToolContext,
@@ -115,8 +123,8 @@ export function clearPreview(ctx: ToolContext): void {
 
 /** What a drawing tool reacts to; every call has an open session. */
 export interface ClickHandlers {
-  /** The cursor moved (preview). */
-  onMove?(ctx: ToolContext, session: SketchSession, x: number, y: number): void;
+  /** The cursor moved (preview); the modifiers decide the grid snap (Alt = off, M19.2 D4). */
+  onMove?(ctx: ToolContext, session: SketchSession, x: number, y: number, mods: KeyMods): void;
   /** A left click (up within the click tolerance of its down). */
   onClick(ctx: ToolContext, session: SketchSession, x: number, y: number, mods: KeyMods): void;
   /** Escape etc.; true = handled. */
@@ -165,7 +173,7 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
       if (session === null) return;
       switch (e.type) {
         case 'move':
-          handlers.onMove?.(c, session, e.x, e.y);
+          handlers.onMove?.(c, session, e.x, e.y, e.mods);
           return;
         case 'leave':
           return;

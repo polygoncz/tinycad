@@ -25,6 +25,7 @@ import {
   createActionRegistry,
   createBrowserModel,
   createBuiltInActions,
+  createDocumentNameModel,
   createEditLock,
   createFeatureEditor,
   createFileActions,
@@ -49,6 +50,7 @@ import type {
   ActionRegistry,
   BrowserModel,
   ConfirmRequest,
+  DocumentNameModel,
   FeatureEditor,
   FeatureTreeModel,
   FileActions,
@@ -103,8 +105,6 @@ export type RegenUiState = {
   readonly busy: boolean;
   /** Bodies of the last finished regeneration. */
   readonly bodyCount: number;
-  /** Features with an error in the last finished regeneration. */
-  readonly errorCount: number;
   /** Duration of the last finished regeneration; null before the first. */
   readonly lastMs: number | null;
   /**
@@ -136,6 +136,8 @@ export interface AppViewport extends ViewportPort {
   setOrbitMode(mode: OrbitMode): void;
   /** M17.1: click on the rotation mode button of the view cube. */
   onOrbitModeToggle(listener: () => void): Unsubscribe;
+  /** M19.2: the step of the drawn sketch grid in mm; the sketcher snaps to it (D4). */
+  sketchGridStep(): number;
 }
 
 export interface AppSessionDeps {
@@ -219,8 +221,11 @@ export interface AppSession extends Disposable {
   readonly actions: ActionRegistry;
   /** Dictionaries of the plugins for vue-i18n (ADR 0014). */
   readonly messages: PluginMessages;
-  /** M12: the sketcher (sketch panel, mode). */
-  readonly sketches: SketchEditor;
+  /**
+   * M12: the sketcher (sketch panel, mode). Without gridStep (M19.2): the step of the grid is
+   * the viewport's, only the sketch tools read it.
+   */
+  readonly sketches: Omit<SketchEditor, 'gridStep'>;
   /** M12: = sketches.mode; the Toolbar and the dialog vs. the sketch panel follow it. */
   readonly mode: Observable<Mode>;
   /** M12: the ids of the sketcher actions; ui may not import values of interaction. */
@@ -244,6 +249,11 @@ export interface AppSession extends Disposable {
   /** M15: '#rrggbb' face colour of the current palette (setTheme), for the colour field in ui. */
   readonly defaultBodyColor: Observable<string>;
   /**
+   * M19.2: the name of the document in the title bar and its rename (document.rename, outside
+   * undo). Without dispose: the session disposes it (ADR 0011).
+   */
+  readonly documentName: Omit<DocumentNameModel, 'dispose'>;
+  /**
    * M19: the HUD of the manipulator (mode bar and value field, spec 11 rule 8). hud, setMode and
    * setValue are the controller's; project and onViewChanged are forwarded from the viewport, so
    * ui can place the HUD over the view without knowing render.
@@ -255,6 +265,17 @@ export interface AppSession extends Disposable {
     /** Px relative to the view area; null when the view is not mounted. */
     project(world: Vec3): readonly [x: number, y: number] | null;
     /** The view moved (camera, resize): positions of the HUD are stale; every frame of an animation. */
+    onViewChanged(listener: () => void): Unsubscribe;
+  };
+  /**
+   * M19.2: projection of world points onto the view and its moves, forwarded from the viewport
+   * like manipulator.project and onViewChanged, for everything ui places over the view (the
+   * dimensions of a sketch, D4).
+   */
+  readonly view: {
+    /** Px relative to the view area; null when the view is not mounted. */
+    project(world: Vec3): readonly [x: number, y: number] | null;
+    /** The view moved (camera, resize): every frame of an animation. */
     onViewChanged(listener: () => void): Unsubscribe;
   };
 
@@ -360,6 +381,8 @@ function wireSession(
     schemas,
     ids: deps.ids,
     translate: deps.translate,
+    // A new Extrude or Revolve takes the only region of the last sketch (D6 of M19.2).
+    regen: regenStatus,
   });
   // With the editor, the regions, edges, faces and bodies picked in the dialog are highlighted in
   // the view (M13, M14, spec 10); the port gives the indices of the named edges and faces.
@@ -374,6 +397,8 @@ function wireSession(
     // Origin planes and planar faces of the last regeneration (M14); before the first one
     // EMPTY_STATE still has the origin planes.
     resolvePlane: (ref) => planeOfRef(lastState, ref),
+    // M19.2 D4: the tools snap to the step of the grid drawn on the screen.
+    gridStep: () => viewport.sketchGridStep(),
   });
   const { mode } = sketches;
   const sketchEdit = (id: FeatureId): void => {
@@ -453,7 +478,7 @@ function wireSession(
   // 4. Regeneration: doc.changed → scheduler → Regenerator of the current kernel → viewport,
   // then the port and the rest of the UI (D3).
   const regenUi = new ObservableValue<RegenUiState>(
-    Object.freeze({ busy: false, bodyCount: 0, errorCount: 0, lastMs: null, failed: null }),
+    Object.freeze({ busy: false, bodyCount: 0, lastMs: null, failed: null }),
   );
   const updateRegenUi = (change: Partial<RegenUiState>): void => {
     regenUi.set(Object.freeze({ ...regenUi.get(), ...change }));
@@ -546,7 +571,6 @@ function wireSession(
       drawSketches();
       updateRegenUi({
         bodyCount: bodies.length,
-        errorCount: [...result.statuses.values()].filter((s) => s.kind === 'error').length,
         lastMs: result.durationMs,
         failed: null,
       });
@@ -558,13 +582,15 @@ function wireSession(
     }
   }
 
-  // First view (spec 11): fit the camera once, after the first regeneration with a body; later
-  // changes leave the camera where the user put it.
+  // First view (spec 11, D7 of M19.2): the first finished regeneration after opening decides. It
+  // fits the camera when the document has bodies; either way later regenerations (new bodies, a
+  // kernel restart) leave the camera where the user put it. A regeneration that throws never
+  // gets here, so the next successful one decides.
   let fitted = false;
   function fitFirstView(bodyCount: number): void {
-    if (disposed || fitted || bodyCount === 0) return;
+    if (disposed || fitted) return;
     fitted = true;
-    viewport.camera.fitAll();
+    if (bodyCount > 0) viewport.camera.fitAll();
   }
 
   // 5. Visibility of bodies (Q071): the document holds it, the browser reads it, the viewport
@@ -667,6 +693,9 @@ function wireSession(
 
   // 7. Edit history and export (M15).
   const history = lifetime.add(createHistoryModel({ log }));
+  // M19.2: the name of the document (title bar); `ops` refuses changes when read-only, `locked`
+  // says so in advance.
+  const documentName = lifetime.add(createDocumentNameModel({ doc, ops, locked }));
   const exporter = createFileExporter({
     name: () => doc.meta.name,
     regenBusy: scheduler.busy,
@@ -728,6 +757,18 @@ function wireSession(
   }
   let closing: Promise<void> | null = null;
 
+  // M19.2: the view for ui; manipulator.project and onViewChanged delegate to it.
+  const view: AppSession['view'] = {
+    project(world) {
+      return viewport.project(world);
+    },
+    onViewChanged(listener) {
+      return viewport.events.on('viewChanged', () => {
+        listener();
+      });
+    },
+  };
+
   const session: AppSession = {
     doc,
     readOnly,
@@ -760,6 +801,7 @@ function wireSession(
     files,
     fileActionIds: FILE_ACTION_IDS,
     defaultBodyColor: defaultBodyColor.asObservable(),
+    documentName,
     manipulator: {
       hud: manipulators.hud,
       setMode(id) {
@@ -769,14 +811,13 @@ function wireSession(
         manipulators.setValue(handleId, shown);
       },
       project(world) {
-        return viewport.project(world);
+        return view.project(world);
       },
       onViewChanged(listener) {
-        return viewport.events.on('viewChanged', () => {
-          listener();
-        });
+        return view.onViewChanged(listener);
       },
     },
+    view,
     mountViewport(el) {
       viewport.mount(el);
     },

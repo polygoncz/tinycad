@@ -107,6 +107,15 @@ describe('toSketchDrawing', () => {
     expect(withOrigin.points.at(-1)).toEqual({ id: ORIGIN_POINT_ID, at: [0, 0], style: 'normal' });
   });
 
+  it('marks the drawing of the edited sketch on request and only then', () => {
+    const editing = toSketchDrawing(XY, rectangleData(), normal, { origin: true, editing: true });
+    const plain = toSketchDrawing(XY, rectangleData(), normal, { origin: true });
+
+    expect(editing.editing).toBe(true);
+    expect(Object.isFrozen(editing)).toBe(true);
+    expect('editing' in plain).toBe(false);
+  });
+
   it('is frozen', () => {
     const drawing = toSketchDrawing(XY, ROUND, normal, { origin: true });
 

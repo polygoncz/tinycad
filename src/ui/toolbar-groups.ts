@@ -5,7 +5,8 @@ import type { ActionState, Mode, ToolDescriptor } from '@/interaction';
 // Konstrukce, Zobrazit, Výběr in the model mode; Historie, Výběr, Kreslit, Vazby, Dokončit,
 // Zobrazit in the sketch mode (M12). Tools fall into groups by ToolDescriptor.group and show only
 // in their modes; undo/redo, fit all, the constraints (the action group 'sketch.constraint') and
-// finish/cancel of a sketch are actions.
+// finish/cancel of a sketch are actions. The standard views (M19.2, D8) are items of the group
+// 'view' only in its menu, not buttons.
 // A pure function of the snapshots, so the Toolbar component holds only bindings (rule 4).
 // The label of a group is the translation key `toolbar.group.<id>`.
 
@@ -23,6 +24,8 @@ export interface ToolbarItem extends ActionState {
   /** Tabler icon name without the `ti-` prefix. */
   readonly icon: string;
   readonly command: ToolbarCommand;
+  /** Only in the menu of the group and of "…", not drawn as a button (the standard views). */
+  readonly menuOnly: boolean;
 }
 
 export interface ToolbarGroup {
@@ -37,7 +40,21 @@ const GROUP_ORDER: Readonly<Record<Mode, readonly string[]>> = {
 };
 
 /** The ids of the actions the toolbar shows as buttons; ui passes AppSession.actionIds. */
-export type ToolbarActionIds = Readonly<Record<'undo' | 'redo' | 'fitAll', string>>;
+export type ToolbarActionIds = Readonly<
+  Record<
+    | 'undo'
+    | 'redo'
+    | 'fitAll'
+    | 'viewFront'
+    | 'viewBack'
+    | 'viewRight'
+    | 'viewLeft'
+    | 'viewTop'
+    | 'viewBottom'
+    | 'viewIso',
+    string
+  >
+>;
 
 /** The ids of finish and cancel of a sketch; ui passes AppSession.sketchActionIds. */
 export type ToolbarSketchActionIds = Readonly<Record<'finish' | 'cancel', string>>;
@@ -64,11 +81,18 @@ const CONSTRAINT_ICONS: readonly (readonly [ConstraintKind, string])[] = [
 ];
 const DEFAULT_CONSTRAINT_ICON = 'link';
 
-type Buttons = Readonly<Record<string, readonly { readonly id: string; readonly icon: string }[]>>;
+interface ButtonSpec {
+  readonly id: string;
+  readonly icon: string;
+  readonly menuOnly?: boolean;
+}
+
+type Buttons = Readonly<Record<string, readonly ButtonSpec[]>>;
 
 /**
  * The actions shown as buttons by a fixed id, by group, before the tools of the group. The
- * sketch actions are buttons only in the sketch mode.
+ * sketch actions are buttons only in the sketch mode; the standard views follow fit all in the
+ * menu only, in both modes.
  */
 function actionButtons(input: {
   readonly mode: Mode;
@@ -80,7 +104,13 @@ function actionButtons(input: {
     { id: ids.undo, icon: 'arrow-back-up' },
     { id: ids.redo, icon: 'arrow-forward-up' },
   ];
-  const view = [{ id: ids.fitAll, icon: 'zoom-scan' }];
+  const view: readonly ButtonSpec[] = [
+    { id: ids.fitAll, icon: 'zoom-scan' },
+    ...[ids.viewFront, ids.viewBack, ids.viewRight, ids.viewLeft, ids.viewTop, ids.viewBottom].map(
+      (id) => ({ id, icon: 'square', menuOnly: true }),
+    ),
+    { id: ids.viewIso, icon: 'cube', menuOnly: true },
+  ];
   if (input.mode === 'model') return { history, view };
   return {
     history,
@@ -93,7 +123,12 @@ function actionButtons(input: {
 }
 
 /** The item of an action button in the toolbar group `group`. */
-function actionItem(action: ActionState, group: string, icon: string): ToolbarItem {
+function actionItem(
+  action: ActionState,
+  group: string,
+  icon: string,
+  menuOnly = false,
+): ToolbarItem {
   return Object.freeze({
     id: action.id,
     label: action.label,
@@ -103,6 +138,7 @@ function actionItem(action: ActionState, group: string, icon: string): ToolbarIt
     modes: action.modes,
     icon,
     command: Object.freeze({ kind: 'action', id: action.id }),
+    menuOnly,
   });
 }
 
@@ -132,9 +168,9 @@ export function toolbarGroups(input: {
   };
 
   for (const [group, list] of Object.entries(actionButtons(input))) {
-    for (const { id, icon } of list) {
+    for (const { id, icon, menuOnly } of list) {
       const action = actionById.get(id);
-      if (action !== undefined) add(actionItem(action, group, icon));
+      if (action !== undefined) add(actionItem(action, group, icon, menuOnly));
     }
   }
 
@@ -154,6 +190,7 @@ export function toolbarGroups(input: {
         command: Object.freeze(
           action === undefined ? { kind: 'tool', id: tool.id } : { kind: 'action', id: action.id },
         ),
+        menuOnly: false,
       }),
     );
   }

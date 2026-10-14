@@ -26,7 +26,12 @@ import type { FeatureEditor } from './feature-editor';
 import type { FeatureHealth, RegenStatusPort } from './regen-status-port';
 import type { SelectionCommands } from './selection';
 
-export type TreeStatus = 'ok' | 'warning' | 'error' | 'suppressed' | 'rolledBack' | 'pending';
+/**
+ * 'draft' (D6 of M19.2): a new feature whose dialog is open and that only misses its required
+ * references; the dialog shows that at the fields, so it is not an error yet.
+ */
+export type TreeStatus =
+  'ok' | 'warning' | 'error' | 'suppressed' | 'rolledBack' | 'pending' | 'draft';
 
 export interface TreeRow {
   readonly id: FeatureId;
@@ -44,6 +49,11 @@ export interface TreeRow {
    * error, an unresolved reference); null when the row has issues, which replace it (ADR 0010).
    */
   readonly message: string | null;
+  /**
+   * The technical message of a warning or an error whose main text is the translated `issues`
+   * (D9 of M19.2), for the details of the dialog; null otherwise.
+   */
+  readonly detail: string | null;
   /** The selection contains { kind: 'feature', feature: id }. */
   readonly selected: boolean;
   /** The feature of the open edit session. */
@@ -55,6 +65,8 @@ export interface TreeRow {
 export interface FeatureTreeModel {
   readonly rows: Observable<readonly TreeRow[]>;
   readonly rollbackIndex: Observable<number>;
+  /** The number of rows with status 'error'; a draft is not one (D6 of M19.2). */
+  readonly errorCount: Observable<number>;
   /**
    * → FeatureEditor.edit; a sketch → sketchEdit when given (M12). While `locked` (read-only or
    * an open dialog or sketch) nothing.
@@ -111,6 +123,7 @@ export function createFeatureTreeModel(deps: {
 
   const rows = new ObservableValue<readonly TreeRow[]>(buildRows([]));
   const rollbackIndex = new ObservableValue<number>(doc.studio.rollbackIndex);
+  const errorCount = new ObservableValue<number>(countErrors(rows.get()));
   const renaming = new ObservableValue<FeatureId | null>(null);
 
   /** The rows from all sources, reusing every unchanged row of `prev`. */
@@ -120,11 +133,22 @@ export function createFeatureTreeModel(deps: {
     const selected = new Set(
       selection.items.get().flatMap((item) => (item.kind === 'feature' ? [item.feature] : [])),
     );
-    const editing = editor.current.get()?.featureId ?? null;
+    const session = editor.current.get();
+    const editing = session?.featureId ?? null;
+    // Only a new feature in an open dialog can be a draft (D6 of M19.2).
+    const draftable =
+      session !== null && session.mode === 'create' && session.state.get().open
+        ? session.featureId
+        : null;
     const dependents = countDependents(dependencies());
 
     const next = features.map((feature, i): TreeRow => {
-      const { status, message, issues } = statusOf(feature, i >= bar, health.get(feature.id));
+      const { status, message, issues, detail } = statusOf(
+        feature,
+        i >= bar,
+        health.get(feature.id),
+        feature.id === draftable,
+      );
       const schema = schemas.find(feature.type);
       const row: TreeRow = {
         id: feature.id,
@@ -135,6 +159,7 @@ export function createFeatureTreeModel(deps: {
         issues,
         status,
         message,
+        detail,
         selected: selected.has(feature.id),
         editing: feature.id === editing,
         dependents: dependents.get(feature.id) ?? 0,
@@ -149,6 +174,7 @@ export function createFeatureTreeModel(deps: {
 
   function refresh(): void {
     rows.set(buildRows(rows.get()));
+    errorCount.set(countErrors(rows.get()));
     rollbackIndex.set(doc.studio.rollbackIndex);
   }
 
@@ -166,6 +192,7 @@ export function createFeatureTreeModel(deps: {
   return {
     rows: rows.asObservable(),
     rollbackIndex: rollbackIndex.asObservable(),
+    errorCount: errorCount.asObservable(),
     edit(id) {
       // An open session or a read-only document: FeatureEditor.edit would throw or fail later.
       if (locked.get()) return;
@@ -266,6 +293,10 @@ export function createFeatureTreeModel(deps: {
   };
 }
 
+function countErrors(rows: readonly TreeRow[]): number {
+  return rows.filter((row) => row.status === 'error').length;
+}
+
 /** Per feature, how many features depend on it. */
 function countDependents(
   deps: ReadonlyMap<FeatureId, readonly FeatureId[]>,
@@ -287,28 +318,46 @@ interface RowStatus {
   readonly status: TreeStatus;
   readonly message: string | null;
   readonly issues: readonly ParamIssue[] | null;
+  readonly detail: string | null;
 }
 
+/** The only code of a draft: a new feature that still misses its required references. */
+const MISSING_REFS_CODE = 'param.tooFewRefs';
+
 /**
- * suppressed > rolledBack > health from the port > pending (not evaluated yet). Message and
- * issues only come with the status that shows them, never from a stale health. The translated
- * issues replace the technical message ('radius: fillet.failed'), so the views only draw the row.
+ * suppressed > rolledBack > health from the port > pending (not evaluated yet). Message, issues
+ * and detail only come with the status that shows them, never from a stale health. The translated
+ * issues replace the technical message ('radius: fillet.failed'), which moves to the detail, so
+ * the views only draw the row. A `draftable` feature (new, in an open dialog) whose error is only
+ * missing references is a draft without any text (D6 of M19.2).
  */
 function statusOf(
   feature: FeatureInstance,
   rolledBack: boolean,
   health: FeatureHealth | undefined,
+  draftable: boolean,
 ): RowStatus {
-  if (feature.suppressed) return { status: 'suppressed', message: null, issues: null };
-  if (rolledBack) return { status: 'rolledBack', message: null, issues: null };
-  if (health === undefined) return { status: 'pending', message: null, issues: null };
-  if (health.kind === 'ok') return { status: 'ok', message: null, issues: null };
+  const plain = (status: TreeStatus): RowStatus => ({
+    status,
+    message: null,
+    issues: null,
+    detail: null,
+  });
+  if (feature.suppressed) return plain('suppressed');
+  if (rolledBack) return plain('rolledBack');
+  if (health === undefined) return plain('pending');
+  if (health.kind === 'ok') return plain('ok');
   if (health.kind === 'warning') {
-    return { status: 'warning', message: health.message, issues: null };
+    return { status: 'warning', message: health.message, issues: null, detail: null };
   }
   const issues = health.issues ?? null;
   const translated = issues !== null && issues.length > 0;
-  return { status: 'error', message: translated ? null : health.message, issues };
+  if (translated && draftable && issues.every((issue) => issue.code === MISSING_REFS_CODE)) {
+    return plain('draft');
+  }
+  return translated
+    ? { status: 'error', message: null, issues, detail: health.message }
+    : { status: 'error', message: health.message, issues, detail: null };
 }
 
 function sameRow(a: TreeRow, b: TreeRow): boolean {
@@ -321,6 +370,7 @@ function sameRow(a: TreeRow, b: TreeRow): boolean {
     sameIssues(a.issues, b.issues) &&
     a.status === b.status &&
     a.message === b.message &&
+    a.detail === b.detail &&
     a.selected === b.selected &&
     a.editing === b.editing &&
     a.dependents === b.dependents

@@ -27,7 +27,10 @@ import { edgeSegments, faceTriangles } from './mesh-index';
 import type { ScenePalette } from './palette';
 import type { RegionTarget, SketchLayerInternal } from './sketch-layer';
 
-const FACE_OPACITY = 0.45;
+// Selection is nearly opaque so the orange stays orange over a blue body (M19.2 D1); hover is
+// a hint and lets the body show through.
+const SELECTION_FACE_OPACITY = 0.7;
+const HOVER_FACE_OPACITY = 0.5;
 /** After the bodies (renderOrder 0), so an equal-depth highlight edge wins over the body edge. */
 const RENDER_ORDER = 1;
 /** Width of a highlighted edge in CSS px (fat line, see draw). */
@@ -67,8 +70,8 @@ interface Look {
 export function createHighlightLayer(options: HighlightLayerOptions): HighlightLayerInternal {
   const { views, requestRender } = options;
   const group = new THREE.Group();
-  const hoverLook = createLook(options.palette.hover);
-  const selectionLook = createLook(options.palette.selection);
+  const hoverLook = createLook(options.palette.hover, HOVER_FACE_OPACITY);
+  const selectionLook = createLook(options.palette.selection, SELECTION_FACE_OPACITY);
   /** Geometries of the drawn objects; all replaced on every change. */
   let geometries: THREE.BufferGeometry[] = [];
   /** Only faces, edges and whole bodies: sketch entities (M12) are dropped like invalid targets. */
@@ -186,12 +189,12 @@ function recolor(look: Look, color: number): void {
   look.edge.color.setHex(color);
 }
 
-function createLook(color: number): Look {
+function createLook(color: number, faceOpacity: number): Look {
   return {
     face: new THREE.MeshBasicMaterial({
       color,
       transparent: true,
-      opacity: FACE_OPACITY,
+      opacity: faceOpacity,
       depthTest: true,
       // Transparent: it must not hide the body's edges drawn at the same depth.
       depthWrite: false,

@@ -11,6 +11,7 @@ import {
   openTool,
   paramInput,
   refField,
+  timelineFeature,
 } from './helpers';
 
 // Visible errors of M19.1 (Ú13, revize U2, U3, U9) with OCCT in the browser, in Czech: a field
@@ -37,7 +38,7 @@ function browserRow(page: Page, name: string): Locator {
   return page.getByRole('treeitem').filter({ has: page.getByText(name, { exact: true }) });
 }
 
-/** The default box: 10 × 10 × 10 mm at the origin; the first view is fitted on it. */
+/** The default box: 10 × 10 × 10 mm at the origin; "Zobrazit vše" (F) fits the view on it. */
 const BOX_MIN = [0, 0, 0] as const;
 const BOX_MAX = [10, 10, 10] as const;
 /** The middle of the top front edge (y = 0, z = 10): the iso view sees its front and top face. */
@@ -70,18 +71,23 @@ test('the region pick of a new extrude does not move the fields below', async ({
   await panel.getByRole('button', { name: 'Hotovo', exact: true }).click();
   await expect(panel).toHaveCount(0);
 
-  // A new extrude without its region: the issue at the field, no block of errors.
+  // A new extrude takes the only region by itself (M19.2 D6); removing it brings the issue.
   const extrude = await openTool(page, 'Vysunutí', 'Vysunutí 1');
+  const regions = refField(extrude, 'Oblasti');
+  await expect(regions).toHaveText('Vybráno: 1 · vyberte v pohledu');
   const issue = extrude.getByText('Vyberte aspoň 1', { exact: true });
-  await expect(issue).toBeVisible();
-  await expectFeatureErrors(page, 1);
-  await expect(extrude.getByRole('alert')).toHaveCount(0);
   const operation = extrude.getByRole('combobox', { name: 'Operace', exact: true });
   const before = await topOf(operation);
+  await browserRow(page, 'Oblast 1').click();
+  await expect(issue).toBeVisible();
+  // Only a missing reference: a draft, no block of errors.
+  await expect(timelineFeature(page, 'Vysunutí 1')).toHaveClass(/\bdraft\b/);
+  await expect(extrude.getByRole('alert')).toHaveCount(0);
+  expect(await topOf(operation)).toBe(before);
 
   // The pick takes the issue away (revize U9: the next field jumped up by a line).
   await browserRow(page, 'Oblast 1').click();
-  await expect(refField(extrude, 'Oblasti')).toHaveText('Vybráno: 1 · vyberte v pohledu');
+  await expect(regions).toHaveText('Vybráno: 1 · vyberte v pohledu');
   await expect(issue).toHaveCount(0);
   expect(await topOf(operation)).toBe(before);
   await confirmDialog(extrude);
@@ -92,11 +98,13 @@ test('the dialog shows the error of a fillet the kernel could not make', async (
   await createDocument(page);
   await confirmDialog(await openTool(page, 'Kvádr', 'Kvádr 1'));
   await expect(page.getByText('Tělesa: 1')).toBeVisible();
+  // The camera of a new document stays put (M19.2 D7): fit it on the box for isoCanvasOffset.
+  await page.keyboard.press('f');
 
-  // A new fillet without edges: only the issue at the field.
+  // A new fillet without edges: only the issue at the field, a draft (M19.2 D6).
   const fillet = await openTool(page, 'Zaoblení', 'Zaoblení 1');
   await expect(fillet.getByText('Vyberte aspoň 1', { exact: true })).toBeVisible();
-  await expectFeatureErrors(page, 1);
+  await expect(timelineFeature(page, 'Zaoblení 1')).toHaveClass(/\bdraft\b/);
   await expect(fillet.getByRole('alert')).toHaveCount(0);
 
   // An edge and a radius larger than the box: OCCT fails, the block says why (D6).
@@ -105,7 +113,9 @@ test('the dialog shows the error of a fillet the kernel could not make', async (
   await expect(refField(fillet, 'Hrany')).toHaveText('Vybráno: 1 · vyberte v pohledu');
   await fillParam(page, 'Poloměr', '11');
   const errors = fillet.getByRole('alert');
-  await expect(errors).toHaveText('Zaoblení se nepodařilo. Zkuste menší poloměr nebo jiné hrany.');
+  await expect(errors).toContainText(
+    'Zaoblení se nepodařilo. Zkuste menší poloměr nebo jiné hrany.',
+  );
 
   // A radius that fits: the block goes away once the fillet regenerates.
   await fillParam(page, 'Poloměr', '1');

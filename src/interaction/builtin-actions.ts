@@ -1,5 +1,6 @@
 // Built-in actions (spec 10, "Vestavěné akce"): undo, redo, edit, rename, suppress and delete of
-// the selected features, the bar after the selected feature, fit all, the rollback bar steps of
+// the selected features, the bar after the selected feature, fit all, the standard views (M19.2),
+// the rollback bar steps of
 // the timeline and one action per tool with a shortcut. Their rules are presentation logic
 // (ADR 0010), so they live here and app only calls createBuiltInActions. Labels are translation
 // keys (ADR 0014); ui translates them. Feature and timeline actions exist only in the mode
@@ -29,6 +30,13 @@ export const ACTION_IDS = Object.freeze({
   undo: 'undo',
   redo: 'redo',
   fitAll: 'view.fitAll',
+  viewFront: 'view.front',
+  viewBack: 'view.back',
+  viewRight: 'view.right',
+  viewLeft: 'view.left',
+  viewTop: 'view.top',
+  viewBottom: 'view.bottom',
+  viewIso: 'view.iso',
   featureEdit: 'feature.edit',
   featureRename: 'feature.rename',
   featureSuppress: 'feature.suppress',
@@ -39,6 +47,23 @@ export const ACTION_IDS = Object.freeze({
   stepForward: 'timeline.stepForward',
   toEnd: 'timeline.toEnd',
 } as const);
+
+/**
+ * A standard view of the camera. The same values as render's StandardView, so render's
+ * CameraController fits the dependency `camera` structurally; interaction does not know render.
+ */
+export type StandardViewId = 'front' | 'back' | 'right' | 'left' | 'top' | 'bottom' | 'iso';
+
+/** The standard view actions in menu order (spec 11, "Toolbar"). */
+const STANDARD_VIEWS: readonly (readonly [string, StandardViewId])[] = [
+  [ACTION_IDS.viewFront, 'front'],
+  [ACTION_IDS.viewBack, 'back'],
+  [ACTION_IDS.viewRight, 'right'],
+  [ACTION_IDS.viewLeft, 'left'],
+  [ACTION_IDS.viewTop, 'top'],
+  [ACTION_IDS.viewBottom, 'bottom'],
+  [ACTION_IDS.viewIso, 'iso'],
+];
 
 /**
  * A yes/no question for the user: a translation key and its params. interaction knows no DOM,
@@ -77,7 +102,7 @@ export function createBuiltInActions(deps: {
   /** createEditLock: read-only or an open feature dialog. */
   locked: Observable<boolean>;
   /** Narrow on purpose: interaction does not know render. */
-  camera: { fitAll(): void };
+  camera: { fitAll(): void; setView(view: StandardViewId): void };
   /** Asks the user; true = go on. feature.delete asks before features lose a reference. */
   confirm: (request: ConfirmRequest) => boolean;
   /** The current mode (M12); without it the mode is always 'model'. */
@@ -267,6 +292,19 @@ export function createBuiltInActions(deps: {
       camera.fitAll();
     },
   });
+
+  // The standard views: like fit all they do not change the document, so always enabled; no
+  // shortcuts, they are reached from the menu of the toolbar group "Zobrazit" (D8).
+  for (const [id, view] of STANDARD_VIEWS) {
+    registry.register({
+      id,
+      label: id,
+      enabled: new ObservableValue(true).asObservable(),
+      run: () => {
+        camera.setView(view);
+      },
+    });
+  }
 
   // Rollback bar steps; target() of the action is null when the step leads nowhere.
   const barSteps: readonly { id: string; target: () => number }[] = [

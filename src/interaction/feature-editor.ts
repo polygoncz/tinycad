@@ -12,6 +12,7 @@ import type {
   FeatureSchema,
   ParamIssue,
   ParamSpec,
+  SketchRegionRef,
 } from '@/document';
 import { ORIGIN_AXES, isParamVisible } from '@/document';
 import type {
@@ -24,6 +25,7 @@ import type {
 import { OP_VERSION } from '@/ops';
 import { nextFeatureName } from './feature-name';
 import { axisRefOf, bodyOfRef, bodyRefLabel, topoRefOf } from './ref-values';
+import type { RegenStatusPort } from './regen-status-port';
 
 export interface FeatureEditor {
   /** Creates a new feature of the type at the rollback bar and opens an edit session for it. */
@@ -139,8 +141,13 @@ export function createFeatureEditor(deps: {
   ids: IdGenerator;
   /** Translates schema.label for the name of a new feature (ADR 0014); identity by default. */
   translate?: (key: string) => string;
+  /**
+   * create preselects the only region of the last sketch (D6 of M19.2); without it nothing is
+   * preselected. The selection plays no part: it never holds a region.
+   */
+  regen?: Pick<RegenStatusPort, 'state'>;
 }): FeatureEditor {
-  const { doc, ops, schemas, ids } = deps;
+  const { doc, ops, schemas, ids, regen } = deps;
   const translate = deps.translate ?? ((key: string) => key);
   const current = new ObservableValue<FeatureEditSession | null>(null);
 
@@ -182,6 +189,24 @@ export function createFeatureEditor(deps: {
     return session;
   }
 
+  /**
+   * The defaults of a new feature (D6 of M19.2): when its first auto-focused param is a region
+   * param, nothing is selected and the last sketch of the last regeneration has exactly one
+   * region, the param gets that region, like in Fusion. By the kind of the param, so it holds for
+   * every plugin with a region param (Extrude, Revolve).
+   */
+  function initialParams(schema: FeatureSchema): unknown {
+    const defaults = schema.defaults();
+    if (regen === undefined || !isRecord(defaults)) return defaults;
+    const param = firstRefParam(schema, defaults);
+    if (param === null || schema.params[param]?.kind !== 'region') return defaults;
+    const sketch = regen.state.get().sketches.at(-1);
+    const region = sketch?.regions.length === 1 ? sketch.regions[0] : undefined;
+    if (sketch === undefined || region === undefined) return defaults;
+    const ref: SketchRegionRef = { kind: 'region', sketch: sketch.feature, region };
+    return { ...defaults, [param]: [ref] };
+  }
+
   return {
     current: current.asObservable(),
     create(type) {
@@ -195,7 +220,7 @@ export function createFeatureEditor(deps: {
         // The name is plain text in the current language; a later switch does not rename it.
         name: nextFeatureName(doc.studio, translate(schema.label)),
         // FeatureInstance.params is Readonly<P> with P = unknown, which rejects a plain unknown.
-        params: schema.defaults() as FeatureInstance['params'],
+        params: initialParams(schema) as FeatureInstance['params'],
         suppressed: false,
       };
       // The label of the transaction stays the key, translated only when shown (ADR 0014).

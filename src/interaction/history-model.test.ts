@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OP_VERSION } from '@/ops';
-import type { StudioSetRollbackOp } from '@/ops';
+import type { DocumentRenameOp, StudioSetRollbackOp } from '@/ops';
 import { createOperationLog } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import { HISTORY_LIMIT, createHistoryModel } from './history-model';
@@ -11,6 +11,13 @@ const BAR: StudioSetRollbackOp = {
   type: 'studio.setRollback',
   v: OP_VERSION['studio.setRollback'],
   index: 0,
+};
+
+/** Renaming the document: outside undo, so outside the history panel (M19.2, D5). */
+const RENAME: DocumentRenameOp = {
+  type: 'document.rename',
+  v: OP_VERSION['document.rename'],
+  name: 'Díl',
 };
 
 function setup() {
@@ -137,6 +144,23 @@ describe('createHistoryModel', () => {
     undo.undo();
     const restored = createHistoryModel({ log: createOperationLog(log.entries()) });
     expect(restored.state.get()).toEqual(history.state.get());
+  });
+
+  it('leaves out document.rename: no row, not counted, no notification', () => {
+    const { doOp, dispatcher, rows, history, log } = setup();
+    doOp('a');
+    let count = 0;
+    history.state.subscribe(() => count++);
+    dispatcher.dispatch(RENAME);
+    doOp('b');
+    expect(log.lastSeq).toBe(3);
+    expect(rows().map(brief)).toEqual([
+      { seq: 3, kind: 'do', target: null, status: 'active' },
+      { seq: 1, kind: 'do', target: null, status: 'active' },
+    ]);
+    expect(history.state.get().total).toBe(2);
+    expect(history.state.get().older).toBe(0);
+    expect(count).toBe(1);
   });
 
   it('stops following the log after dispose', () => {

@@ -4,7 +4,7 @@ import type { DocumentId, DocumentMeta } from '@/document';
 import type { LogEntry } from '@/ops';
 import { deepEqual } from './load';
 import type { DocumentSnapshot } from './snapshot';
-import { createStoreError, snapshotSeqsToKeep } from './store';
+import { createStoreError, renamedTo, snapshotSeqsToKeep } from './store';
 import type { DocumentInfo, DocumentStore, DocumentStoreErrorCode, StoredDocument } from './store';
 
 /** In-memory DocumentStore: for tests and as the reference implementation of the contract. */
@@ -130,6 +130,8 @@ class MemoryDocumentStore implements DocumentStore {
     const copied = tryCopy(entries);
     if (!copied.ok) return Promise.reject(copied.error);
     for (const e of copied.value) record.entries.set(e.seq, e);
+    const name = renamedTo(copied.value);
+    if (name !== undefined) record.meta = { ...record.meta, name };
     record.lastSeq = Math.max(record.lastSeq, last.seq);
     record.updatedAt = this.now();
     return Promise.resolve();

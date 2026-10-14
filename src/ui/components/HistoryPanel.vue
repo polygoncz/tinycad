@@ -53,12 +53,13 @@ const timeText = computed(() => historyTimeFormat(locale.value));
 .history-panel {
   position: absolute;
   right: 14px;
-  top: 12px;
+  /* Under the view cube, so the panel never covers it (M19.2, D8). */
+  top: var(--view-cube-reserve);
   z-index: 20;
   display: flex;
   flex-direction: column;
   width: 260px;
-  max-height: calc(100% - 24px);
+  max-height: calc(100% - var(--view-cube-reserve) - 12px);
   padding-bottom: 6px;
   border-radius: var(--radius-panel);
   background: var(--panel-bg);

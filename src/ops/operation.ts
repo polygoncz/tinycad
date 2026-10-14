@@ -21,6 +21,7 @@ export const OP_VERSION = {
   'body.rename': 1,
   'body.setVisible': 1,
   'body.setColor': 1,
+  'document.rename': 1,
   batch: 1,
 } as const;
 
@@ -94,6 +95,25 @@ export interface BodySetColorOp extends Operation {
   readonly body: BodyId;
   /** '#rrggbb' in lower case (isBodyColor); null = the default color. */
   readonly color: string | null;
+}
+
+/**
+ * Name of the document (M19.2, D5). Metadata outside undo: UndoManager skips its 'do' entries,
+ * the log, replay and snapshots carry it like any other change.
+ */
+export interface DocumentRenameOp extends Operation {
+  readonly type: 'document.rename';
+  /** Trimmed and not empty. */
+  readonly name: string;
+}
+
+/**
+ * The operation renames the document (M19.2, D5). The one test of the rule "the name is outside
+ * undo" for undo, the history panel and the stores; checks the name too, because a store reads
+ * entries no handler has validated.
+ */
+export function isDocumentRename(op: Operation): op is DocumentRenameOp {
+  return op.type === 'document.rename' && 'name' in op && typeof op.name === 'string';
 }
 
 /** Structural operation without a handler in the registry (Q031). */

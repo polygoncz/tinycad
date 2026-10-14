@@ -1,4 +1,5 @@
 import type { DocumentId, DocumentMeta } from '@/document';
+import { isDocumentRename } from '@/ops';
 import type { LogEntry } from '@/ops';
 import type { DocumentSnapshot } from './snapshot';
 
@@ -30,6 +31,11 @@ export interface DocumentStore {
   createDocument(meta: DocumentMeta, initial: DocumentSnapshot): Promise<void>;
   /** Missing id → nothing happens (idempotent). */
   deleteDocument(id: DocumentId): Promise<void>;
+  /**
+   * Writes the batch atomically. When an entry of the batch has a document.rename operation,
+   * meta.name of the document record takes the name of the last one, in the same write
+   * (M19.2, D5), so listDocuments shows the new name.
+   */
   appendEntries(id: DocumentId, entries: readonly LogEntry[]): Promise<void>;
   saveSnapshot(id: DocumentId, snapshot: DocumentSnapshot): Promise<void>;
   /** Missing id → undefined (a result, not an error). */
@@ -85,4 +91,13 @@ export function snapshotSeqsToKeep(atSeqs: readonly number[]): readonly number[]
     .sort((a, b) => b - a)
     .slice(0, KEPT_SNAPSHOTS);
   return atSeqs.includes(0) ? [0, ...newest] : newest;
+}
+
+/**
+ * The name the last document.rename of the batch gives the document (M19.2, D5), so the list
+ * shows it without loading the log; undefined = the batch does not rename it. Both adapters set
+ * DocumentInfo.meta.name by it in appendEntries.
+ */
+export function renamedTo(entries: readonly LogEntry[]): string | undefined {
+  return entries.map((e) => e.op).findLast(isDocumentRename)?.name;
 }

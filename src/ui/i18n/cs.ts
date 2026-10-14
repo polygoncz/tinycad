@@ -17,6 +17,11 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'param.invalidRef': 'Neplatná položka výběru',
   'param.duplicateRef': 'Položka {index} je ve výběru dvakrát',
   'param.unresolvedRef': 'Odkazovaná položka neexistuje',
+  // Codes of kernel errors from the Regenerator (D9 of M19.2).
+  'kernel.operationFailed':
+    'Geometrické jádro operaci neprovedlo. Zkuste jiné hodnoty nebo reference.',
+  'kernel.invalidInput': 'Jádro odmítlo zadané hodnoty.',
+  'kernel.internal': 'Vnitřní chyba geometrického jádra.',
 
   // Keys handed over by the domain and interaction.
   'document.untitled': 'Bez názvu',
@@ -36,6 +41,13 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'feature.rename': 'Přejmenovat',
   'timeline.rollHere': 'Posunout bar sem',
   'view.fitAll': 'Zobrazit vše',
+  'view.front': 'Zepředu',
+  'view.back': 'Zezadu',
+  'view.right': 'Zprava',
+  'view.left': 'Zleva',
+  'view.top': 'Shora',
+  'view.bottom': 'Zdola',
+  'view.iso': 'Izometrický',
   'timeline.toStart': 'Na začátek',
   'timeline.stepBack': 'O krok zpět',
   'timeline.stepForward': 'O krok vpřed',
@@ -50,11 +62,15 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
 
   // Timeline.
   'timeline.rollbackBar': 'Rollback bar – táhněte',
+  'timeline.label': 'Timeline',
+  'timeline.scrollLeft': 'Posunout doleva',
+  'timeline.scrollRight': 'Posunout doprava',
   'timeline.status.warning': 'Varování',
   'timeline.status.error': 'Chyba',
   'timeline.status.suppressed': 'Potlačeno',
   'timeline.status.rolledBack': 'Za rollback barem',
   'timeline.status.pending': 'Čeká na přepočet',
+  'timeline.status.draft': 'Rozpracovaná',
   'timeline.regen.busy': 'Přepočítávám…',
   'timeline.regen.errors': 'Chyby: {n}',
   'timeline.regen.ms': '{ms} ms',
@@ -81,6 +97,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
 
   // Title bar.
   'titleBar.documents': 'Dokumenty',
+  'titleBar.rename': 'Přejmenovat dokument',
   'titleBar.readOnly': 'Jen pro čtení',
   'titleBar.readOnlyHint': 'Dokument je otevřený v jiné záložce. Změny zde nejsou možné.',
   'titleBar.persistence.saved': 'Uloženo',
@@ -151,6 +168,8 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'sketch.solverFailed': 'Skicu se nepodařilo vyřešit',
   'sketchPanel.constraints': 'Vazby',
   'sketchPanel.remove': 'Odebrat {name}',
+  'sketchPanel.gridSnap': 'Přichytit k mřížce',
+  'sketchPanel.gridSnapHint': 'Dočasně vypnete podržením Alt',
 
   // Browser: origin and sketches (M12).
   'browser.origin': 'Počátek',
@@ -171,11 +190,15 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'dialog.move': 'Přesunout',
   // The block of errors under the fields (M19.1): the heading of a technical message.
   'dialog.featureFailed': 'Featuru se nepodařilo přepočítat',
+  // The collapsible technical message behind the translated issues (D9 of M19.2).
+  'dialog.details': 'Podrobnosti',
 
   // Document list.
   'documents.title': 'Dokumenty',
   'documents.new': 'Nový',
   'documents.delete': 'Smazat dokument',
+  'documents.rename': 'Přejmenovat',
+  'documents.name': 'Název dokumentu',
   'documents.confirmDelete': 'Smazat dokument „{name}“ i s historií?',
   'documents.loading': 'Načítám…',
   'documents.empty': 'Zatím tu nejsou žádné dokumenty.',
@@ -183,6 +206,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'documents.retry': 'Zkusit znovu',
   'documents.error.create': 'Dokument se nepodařilo vytvořit: {error}',
   'documents.error.delete': 'Dokument se nepodařilo smazat: {error}',
+  'documents.error.rename': 'Dokument se nepodařilo přejmenovat: {error}',
   'documents.import': 'Importovat',
   'documents.importError': 'Soubor není platný dokument tinycad',
 
@@ -237,5 +261,6 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'body.rename': 'Přejmenovat těleso',
   'body.setVisible': 'Viditelnost tělesa',
   'body.setColor': 'Barva tělesa',
+  'document.rename': 'Přejmenovat dokument',
   batch: 'Více změn',
 });

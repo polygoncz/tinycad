@@ -1,6 +1,6 @@
 import type { DocumentId, DocumentMeta } from '@/document';
 import type { LogEntry } from '@/ops';
-import { createStoreError, snapshotSeqsToKeep } from '@/persistence';
+import { createStoreError, renamedTo, snapshotSeqsToKeep } from '@/persistence';
 import type { DocumentInfo, DocumentSnapshot, DocumentStore, StoredDocument } from '@/persistence';
 
 // The real IndexedDB DocumentStore (spec 05, "Schéma IndexedDB"). Runs inside the worker but
@@ -137,8 +137,11 @@ class IdbDocumentStore implements DocumentStore {
         }
       }
       const store = tx.objectStore(ENTRIES);
+      // The name in the same transaction as the entries that change it (M19.2, D5).
+      const name = renamedTo(entries);
       const updated: DocumentRecord = {
         ...record,
+        ...(name === undefined ? {} : { meta: { ...record.meta, name } }),
         lastSeq: Math.max(record.lastSeq, last.seq),
         updatedAt: this.now(),
       };

@@ -1,6 +1,8 @@
 // The view cube (spec 09, "View cube"): orientation display and camera control in the top-right
 // corner. Drawn by its small scene into the shared renderer; a transparent DOM overlay over the
-// corner receives the pointer events and holds the arrow buttons and the rotation mode button.
+// corner holds the arrow buttons, the rotation mode button and a transparent target over the cube
+// square. Only those take the pointer (D13 of M19.2): the rest of the overlay lets the wheel and
+// the right drag through to the viewport.
 
 import type * as THREE from 'three';
 import { assert, DisposableStore, type Disposable, type Quat } from '@/core';
@@ -190,13 +192,13 @@ export function createViewCube(options: ViewCubeOptions): ViewCube {
     return ndc === null ? null : cube.regionAt(ndc.x, ndc.y);
   }
 
-  function onPointerDown(e: PointerEvent, root: HTMLDivElement): void {
+  function onPointerDown(e: PointerEvent, root: HTMLDivElement, cubeTarget: HTMLDivElement): void {
     // Other buttons are ignored; arrows handle their own clicks.
     if (e.button !== 0 || press !== null) return;
     if (e.target instanceof Element && e.target.closest('button') !== null) return;
     const box = root.getBoundingClientRect();
     if (cubeNdc(e.clientX - box.left, e.clientY - box.top) === null) return;
-    root.setPointerCapture(e.pointerId);
+    cubeTarget.setPointerCapture(e.pointerId);
     press = {
       pointerId: e.pointerId,
       startX: e.clientX,
@@ -223,12 +225,12 @@ export function createViewCube(options: ViewCubeOptions): ViewCube {
     rig.orbit(e.clientX - lastX, e.clientY - lastY);
   }
 
-  function onPointerUp(e: PointerEvent, root: HTMLDivElement): void {
+  function onPointerUp(e: PointerEvent, cubeTarget: HTMLDivElement): void {
     if (press === null || e.pointerId !== press.pointerId) return;
     const { dragging } = press;
     // Cleared before releasing the capture, whose lostpointercapture would end it again.
     press = null;
-    if (root.hasPointerCapture(e.pointerId)) root.releasePointerCapture(e.pointerId);
+    if (cubeTarget.hasPointerCapture(e.pointerId)) cubeTarget.releasePointerCapture(e.pointerId);
     const region = regionAt(e.clientX, e.clientY);
     if (!dragging && region !== null) rig.animateTo(orientationFor(region));
     setHover(region);
@@ -246,7 +248,22 @@ export function createViewCube(options: ViewCubeOptions): ViewCube {
       height: `${String(VIEW_CUBE.box)}px`,
       touchAction: 'none',
       userSelect: 'none',
+      // Off the cube and its buttons the input goes to the viewport (D13 of M19.2).
+      pointerEvents: 'none',
     });
+
+    // The listeners stay on the root: the events of the target and the buttons bubble up to it.
+    const cubeTarget = document.createElement('div');
+    Object.assign(cubeTarget.style, {
+      position: 'absolute',
+      left: `${String(INSET)}px`,
+      top: `${String(INSET)}px`,
+      width: `${String(VIEW_CUBE.cube)}px`,
+      height: `${String(VIEW_CUBE.cube)}px`,
+      pointerEvents: 'auto',
+    });
+    // Before the arrows, so the buttons stack above it.
+    root.appendChild(cubeTarget);
 
     const arrows = document.createElement('div');
     Object.assign(arrows.style, {
@@ -301,18 +318,19 @@ export function createViewCube(options: ViewCubeOptions): ViewCube {
       updateActive();
     });
     listen('pointerdown', (e) => {
-      onPointerDown(e, root);
+      onPointerDown(e, root, cubeTarget);
     });
     listen('pointermove', onPointerMove);
     listen('pointerup', (e) => {
-      onPointerUp(e, root);
+      onPointerUp(e, cubeTarget);
     });
     const endPress = (e: PointerEvent): void => {
       if (press?.pointerId === e.pointerId) press = null;
     };
     listen('pointercancel', endPress);
     listen('lostpointercapture', endPress);
-    // Over the cube the wheel and the context menu do nothing (spec 09, "Události v překryvu").
+    // Over the cube and its buttons the wheel and the context menu do nothing (spec 09, "Události
+    // v překryvu"); elsewhere in the overlay they reach the canvas, not the root.
     listen(
       'wheel',
       (e) => {

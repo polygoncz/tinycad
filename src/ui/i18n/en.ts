@@ -16,6 +16,11 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'param.invalidRef': 'Invalid selection item',
   'param.duplicateRef': 'Item {index} is selected twice',
   'param.unresolvedRef': 'The referenced item does not exist',
+  // Codes of kernel errors from the Regenerator (D9 of M19.2).
+  'kernel.operationFailed':
+    'The geometry kernel could not perform the operation. Try other values or references.',
+  'kernel.invalidInput': 'The kernel rejected the values.',
+  'kernel.internal': 'Internal error of the geometry kernel.',
 
   // Keys handed over by the domain and interaction.
   'document.untitled': 'Untitled',
@@ -35,6 +40,13 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'feature.rename': 'Rename',
   'timeline.rollHere': 'Roll here',
   'view.fitAll': 'Fit all',
+  'view.front': 'Front',
+  'view.back': 'Back',
+  'view.right': 'Right',
+  'view.left': 'Left',
+  'view.top': 'Top',
+  'view.bottom': 'Bottom',
+  'view.iso': 'Isometric',
   'timeline.toStart': 'To start',
   'timeline.stepBack': 'Step back',
   'timeline.stepForward': 'Step forward',
@@ -49,11 +61,15 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
 
   // Timeline.
   'timeline.rollbackBar': 'Rollback bar – drag',
+  'timeline.label': 'Timeline',
+  'timeline.scrollLeft': 'Scroll left',
+  'timeline.scrollRight': 'Scroll right',
   'timeline.status.warning': 'Warning',
   'timeline.status.error': 'Error',
   'timeline.status.suppressed': 'Suppressed',
   'timeline.status.rolledBack': 'After the rollback bar',
   'timeline.status.pending': 'Waiting for regeneration',
+  'timeline.status.draft': 'In progress',
   'timeline.regen.busy': 'Regenerating…',
   'timeline.regen.errors': 'Errors: {n}',
   'timeline.regen.ms': '{ms} ms',
@@ -80,6 +96,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
 
   // Title bar.
   'titleBar.documents': 'Documents',
+  'titleBar.rename': 'Rename document',
   'titleBar.readOnly': 'Read-only',
   'titleBar.readOnlyHint': 'The document is open in another tab. Changes are not possible here.',
   'titleBar.persistence.saved': 'Saved',
@@ -150,6 +167,8 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'sketch.solverFailed': 'The sketch could not be solved',
   'sketchPanel.constraints': 'Constraints',
   'sketchPanel.remove': 'Remove {name}',
+  'sketchPanel.gridSnap': 'Snap to grid',
+  'sketchPanel.gridSnapHint': 'Hold Alt to turn it off for a moment',
 
   // Browser: origin and sketches (M12).
   'browser.origin': 'Origin',
@@ -170,11 +189,15 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'dialog.move': 'Move',
   // The block of errors under the fields (M19.1): the heading of a technical message.
   'dialog.featureFailed': 'The feature could not be regenerated',
+  // The collapsible technical message behind the translated issues (D9 of M19.2).
+  'dialog.details': 'Details',
 
   // Document list.
   'documents.title': 'Documents',
   'documents.new': 'New',
   'documents.delete': 'Delete document',
+  'documents.rename': 'Rename',
+  'documents.name': 'Document name',
   'documents.confirmDelete': 'Delete the document “{name}” with its history?',
   'documents.loading': 'Loading…',
   'documents.empty': 'There are no documents yet.',
@@ -182,6 +205,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'documents.retry': 'Try again',
   'documents.error.create': 'The document could not be created: {error}',
   'documents.error.delete': 'The document could not be deleted: {error}',
+  'documents.error.rename': 'The document could not be renamed: {error}',
   'documents.import': 'Import',
   'documents.importError': 'The file is not a valid tinycad document',
 
@@ -236,5 +260,6 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'body.rename': 'Rename body',
   'body.setVisible': 'Body visibility',
   'body.setColor': 'Body color',
+  'document.rename': 'Rename document',
   batch: 'Several changes',
 });

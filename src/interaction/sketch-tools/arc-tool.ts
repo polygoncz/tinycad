@@ -10,6 +10,7 @@ import {
   ccwSweep,
   clearPreview,
   clickTool,
+  snapGrid,
   distance,
   newEntityId,
   previewPairs,
@@ -27,9 +28,9 @@ export function createArcTool(sketches: SketchEditor): Tool {
       center = null;
       start = null;
     },
-    onMove(ctx, session, x, y) {
+    onMove(ctx, session, x, y, mods) {
       if (center === null) return;
-      const cursor = snapAt(ctx, session, x, y);
+      const cursor = snapAt(ctx, session, x, y, snapGrid(sketches, mods));
       if (cursor === null) return;
       if (start === null) {
         previewPairs(ctx, session, [center.at, cursor.at]);
@@ -45,8 +46,8 @@ export function createArcTool(sketches: SketchEditor): Tool {
         arcPoints(center.at, distance(center.at, start.at), from, sweep),
       );
     },
-    onClick(ctx, session, x, y) {
-      const target = snapAt(ctx, session, x, y);
+    onClick(ctx, session, x, y, mods) {
+      const target = snapAt(ctx, session, x, y, snapGrid(sketches, mods));
       if (target === null) return;
       if (center === null) {
         center = target;

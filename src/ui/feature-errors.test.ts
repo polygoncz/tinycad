@@ -11,7 +11,11 @@ const F2 = fid('f2');
 function aRow(
   id: FeatureId,
   status: TreeStatus,
-  extra: { readonly message?: string | null; readonly issues?: readonly ParamIssue[] | null } = {},
+  extra: {
+    readonly message?: string | null;
+    readonly issues?: readonly ParamIssue[] | null;
+    readonly detail?: string | null;
+  } = {},
 ): TreeRow {
   return {
     id,
@@ -22,6 +26,7 @@ function aRow(
     issues: extra.issues ?? null,
     status,
     message: extra.message ?? null,
+    detail: extra.detail ?? null,
     selected: false,
     editing: true,
     dependents: 0,
@@ -45,7 +50,11 @@ describe('featureErrorOf', () => {
 
   it('an error with issues: the issues (the presenter already dropped the message)', () => {
     const rows = [aRow(F2, 'ok'), aRow(F1, 'error', { issues: [FILLET_FAILED] })];
-    expect(featureErrorOf(rows, F1)).toEqual({ message: null, issues: [FILLET_FAILED] });
+    expect(featureErrorOf(rows, F1)).toEqual({
+      message: null,
+      issues: [FILLET_FAILED],
+      detail: null,
+    });
   });
 
   it('shows the row as the presenter made it: no rule of its own about the message', () => {
@@ -54,6 +63,7 @@ describe('featureErrorOf', () => {
     expect(featureErrorOf(rows, F1)).toEqual({
       message: 'radius: fillet.failed',
       issues: [FILLET_FAILED],
+      detail: null,
     });
   });
 
@@ -62,9 +72,28 @@ describe('featureErrorOf', () => {
     expect(featureErrorOf(rows, F1)).toEqual({
       message: 'BRep_API: command not done',
       issues: [],
+      detail: null,
     });
     const empty = [aRow(F1, 'error', { message: 'Standard_Failure', issues: [] })];
-    expect(featureErrorOf(empty, F1)).toEqual({ message: 'Standard_Failure', issues: [] });
+    expect(featureErrorOf(empty, F1)).toEqual({
+      message: 'Standard_Failure',
+      issues: [],
+      detail: null,
+    });
+  });
+
+  it('carries the detail of a row with translated issues (D9 of M19.2)', () => {
+    const kernel: ParamIssue = { param: '', code: 'kernel.operationFailed' };
+    const rows = [aRow(F1, 'error', { issues: [kernel], detail: 'BRep_API: command not done' })];
+    expect(featureErrorOf(rows, F1)).toEqual({
+      message: null,
+      issues: [kernel],
+      detail: 'BRep_API: command not done',
+    });
+  });
+
+  it('is null for a draft row (D6 of M19.2)', () => {
+    expect(featureErrorOf([aRow(F1, 'draft')], F1)).toBeNull();
   });
 
   it('is null for an error with neither a message nor issues', () => {
@@ -81,6 +110,7 @@ describe('dialogErrors', () => {
     expect(dialogErrors([TOO_FEW_EDGES, WHOLE_FORM], null)).toEqual({
       message: null,
       issues: [WHOLE_FORM],
+      detail: null,
     });
   });
 
@@ -91,7 +121,11 @@ describe('dialogErrors', () => {
 
   it('an issue the fields do not show (the fillet the kernel could not make) is in the block', () => {
     const error = featureErrorOf([aRow(F1, 'error', { issues: [FILLET_FAILED] })], F1);
-    expect(dialogErrors([], error)).toEqual({ message: null, issues: [FILLET_FAILED] });
+    expect(dialogErrors([], error)).toEqual({
+      message: null,
+      issues: [FILLET_FAILED],
+      detail: null,
+    });
   });
 
   it('an issue repeats in the block only once, by its param and code', () => {
@@ -103,6 +137,7 @@ describe('dialogErrors', () => {
     expect(dialogErrors([TOO_FEW_EDGES, WHOLE_FORM], error)).toEqual({
       message: null,
       issues: [WHOLE_FORM, FILLET_FAILED],
+      detail: null,
     });
   });
 
@@ -111,7 +146,22 @@ describe('dialogErrors', () => {
     expect(dialogErrors([WHOLE_FORM], error)).toEqual({
       message: 'kernel says no',
       issues: [WHOLE_FORM],
+      detail: null,
     });
+  });
+
+  it('carries the detail of the feature error (D9 of M19.2)', () => {
+    const kernel: ParamIssue = { param: '', code: 'kernel.operationFailed' };
+    const error = featureErrorOf([aRow(F1, 'error', { issues: [kernel], detail: 'BRep' })], F1);
+    expect(dialogErrors([], error)).toEqual({ message: null, issues: [kernel], detail: 'BRep' });
+  });
+
+  it('a detail alone makes no block: the fields already show every issue', () => {
+    const error = featureErrorOf(
+      [aRow(F1, 'error', { issues: [TOO_FEW_EDGES], detail: 'edges: param.tooFewRefs' })],
+      F1,
+    );
+    expect(dialogErrors([TOO_FEW_EDGES], error)).toBeNull();
   });
 
   it('is frozen', () => {

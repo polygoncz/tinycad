@@ -96,7 +96,7 @@ function setup() {
     tools,
     toolList: toolRegistry.all(),
     locked,
-    camera: { fitAll: () => undefined },
+    camera: { fitAll: () => undefined, setView: () => undefined },
     confirm: (request) => {
       confirms.push(request);
       return answer;

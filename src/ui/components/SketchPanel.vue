@@ -5,17 +5,34 @@
 // command, the constraints – a dimension with its value field, click = select, × = remove – and
 // Cancel / Finish (disabled while the session is busy, D8). Everything goes to the SketchSession;
 // the status line is its statusKey, the row names come from ../sketch-panel.
+// M19.2 D4: the values of the dimensions are shown rounded (formatDimension, the model stays
+// exact) and the switch of snapping to the grid belongs to the sketcher (session.sketches), so it
+// survives closing the sketch. The panel starts below the view cube (D8).
 import { nextTick, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { SketchConstraintRow, SketchSession } from '@/interaction';
 import { useObservable } from '../composables/use-observable';
+import { useSession } from '../composables/use-session';
+import { isAdditive } from '../item-actions';
 import { constraintRowLabel } from '../sketch-panel';
+import { formatDimension } from './params/field-values';
 import NumericInput from './params/NumericInput.vue';
 
 const props = defineProps<{ sketch: SketchSession }>();
 
 const { t } = useI18n();
+const session = useSession();
 const state = useObservable(props.sketch.state);
+const gridSnap = useObservable(session.sketches.gridSnap);
+
+function toggleGridSnap(): void {
+  session.sketches.setGridSnap(!gridSnap.value);
+}
+
+/** The text of a dimension field: rounded to two decimals; '' for a non-number. */
+function dimensionText(value: unknown): string {
+  return typeof value === 'number' ? formatDimension(value) : '';
+}
 
 function label(row: SketchConstraintRow): string {
   return constraintRowLabel(t, row);
@@ -27,7 +44,7 @@ function labelId(row: SketchConstraintRow): string {
 }
 
 function select(row: SketchConstraintRow, e: MouseEvent): void {
-  props.sketch.select(row.id, { additive: e.shiftKey || e.metaKey || e.ctrlKey });
+  props.sketch.select(row.id, { additive: isAdditive(e) });
 }
 
 function remove(row: SketchConstraintRow): void {
@@ -68,6 +85,20 @@ watch(
     </p>
     <p v-if="state.message !== null" class="message" role="alert">{{ t(state.message.key) }}</p>
 
+    <div class="options">
+      <button
+        type="button"
+        class="toggle"
+        :class="{ on: gridSnap }"
+        :aria-pressed="gridSnap"
+        :title="t('sketchPanel.gridSnapHint')"
+        @click="toggleGridSnap"
+      >
+        <i class="ti ti-grid-dots" aria-hidden="true" />
+        {{ t('sketchPanel.gridSnap') }}
+      </button>
+    </div>
+
     <h3 class="section">{{ t('sketchPanel.constraints') }}</h3>
     <ul ref="list" class="constraints">
       <li
@@ -93,6 +124,7 @@ watch(
           unit="mm"
           :invalid="false"
           :labelledby="labelId(row)"
+          :format="dimensionText"
           @commit="setDimension(row, $event)"
         />
         <button
@@ -121,10 +153,10 @@ watch(
 .sketch-panel {
   position: absolute;
   right: 14px;
-  top: 12px;
+  top: var(--view-cube-reserve);
   z-index: 20;
   width: 280px;
-  max-height: calc(100% - 24px);
+  max-height: calc(100% - var(--view-cube-reserve) - 12px);
   overflow: auto;
   padding-bottom: 12px;
   border-radius: var(--radius-panel);
@@ -176,6 +208,28 @@ watch(
   color: var(--danger);
   font-size: var(--font-size-small);
 }
+.options {
+  margin: 4px 14px 6px;
+}
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--field-height);
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+}
+.toggle:hover {
+  background: var(--control-hover);
+}
+.toggle.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
 .section {
   margin: 10px 14px 4px;
   color: var(--text-secondary);
@@ -197,8 +251,9 @@ watch(
   padding: 2px 4px;
   border-radius: var(--radius-row);
 }
+/* A selected constraint is a selected entity: the colour of the selection (M19.2 D1). */
 .row.selected {
-  background: var(--accent-soft);
+  background: var(--selection-soft);
 }
 .name {
   flex: 1;

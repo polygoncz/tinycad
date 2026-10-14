@@ -39,6 +39,7 @@ import { LIGHT_PALETTE, type ScenePalette } from './palette';
 import { toNdc } from './pick-math';
 import { createPicker } from './picker';
 import { createSceneHelpers, GRID_BOUNDS } from './scene-helpers';
+import { sketchGridStep } from './sketch-grid';
 import { createSketchLayer, type SketchLayer } from './sketch-layer';
 import { createViewCube } from './view-cube';
 import { DEFAULT_VIEW_CUBE_LABELS, type ViewCubeLabels } from './view-cube-labels';
@@ -75,6 +76,11 @@ export interface Viewport extends ViewportPort, Disposable {
   readonly manipulators: ManipulatorLayer;
   /** Fit all, standard views, normal to a plane (M12). */
   readonly camera: CameraController;
+  /**
+   * M19.2: step of the sketch grid in mm (1–2–5 × 10ⁿ, lines at least 10 px apart) for the size of
+   * a pixel of the last drawn frame; 1 before the first frame. The sketcher snaps to it.
+   */
+  sketchGridStep(): number;
 
   /** Recolours the existing materials and the background, creates nothing anew (Q072). */
   setPalette(palette: ScenePalette): void;
@@ -141,6 +147,8 @@ export function createViewport(deps: {
   let lastView: ViewSnapshot | null = null;
   /** Grows by one with every viewChanged; never reset, so a remount keeps it growing. */
   let viewGeneration = 0;
+  /** mm per CSS px of the last drawn frame (sketch grid, M19.2); 0 = no frame yet. */
+  let lastWorldPerPx = 0;
 
   const scheduler = lifetime.add(
     createFrameScheduler({
@@ -264,6 +272,10 @@ export function createViewport(deps: {
     const time = now();
     const animating = rig.tick(time);
     const fading = viewCube.tick(time);
+    // Before updateClip: the sketch grid follows the zoom and is part of the scene bounds.
+    const { clientWidth, clientHeight } = mounted.canvas;
+    lastWorldPerPx = worldPerPx(clientHeight);
+    sketchLayer.setPixelSize(lastWorldPerPx, rig.target, Math.hypot(clientWidth, clientHeight));
     updateClip();
     // Constant size on the screen for the camera of this frame (a gesture or animation moved it).
     manipulatorLayer.beforeRender(
@@ -607,14 +619,16 @@ export function createViewport(deps: {
       if (mounted === null) return null;
       updateClip();
       const { clientWidth, clientHeight } = mounted.canvas;
-      // Sketches first, over the bodies and without occlusion (spec 09, "Skici").
+      // Sketches first; a hit hidden behind a body does not count, except in the edited sketch
+      // (spec 09, "Skici", M19.2).
+      const visible = (point: Vec3): boolean => picker.isVisible(rig.camera, point);
       if (filter?.includes('sketchEntity') === true) {
-        const hit = sketchLayer.pick(rig.camera, x, y, clientWidth, clientHeight);
+        const hit = sketchLayer.pick(rig.camera, x, y, clientWidth, clientHeight, visible);
         if (hit !== null) return hit;
       }
-      // Then regions, also without occlusion (spec 09, "Skici": sketchEntity > sketchRegion).
+      // Then regions, with the same occlusion (spec 09, "Skici": sketchEntity > sketchRegion).
       if (filter?.includes('sketchRegion') === true && clientWidth > 0 && clientHeight > 0) {
-        const hit = sketchLayer.pickRegion(rayAt(x, y, clientWidth, clientHeight));
+        const hit = sketchLayer.pickRegion(rayAt(x, y, clientWidth, clientHeight), visible);
         if (hit !== null) return hit;
       }
       return picker.pick(rig.camera, x, y, clientWidth, clientHeight, filter);
@@ -643,6 +657,10 @@ export function createViewport(deps: {
     sketches,
     manipulators,
     camera,
+    sketchGridStep(): number {
+      assertAlive();
+      return sketchGridStep(lastWorldPerPx);
+    },
     setPalette(next: ScenePalette): void {
       assertAlive();
       palette = next;

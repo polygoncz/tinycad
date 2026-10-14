@@ -9,7 +9,8 @@
 // work at once. M19.1 (revize U2): under the fields a block of errors (role="alert") shows what
 // the fields cannot – the issues of the whole form and the error of the edited feature from its
 // row in the tree (dialogErrors, featureErrorOf); the fields keep a line for their own issue, so
-// nothing jumps when it comes or goes (U9, FieldShell).
+// nothing jumps when it comes or goes (U9, FieldShell). M19.2 (D9): the technical message behind
+// translated issues (a kernel error) is in collapsible details, not in the main text.
 import { computed, onMounted, ref, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FeatureEditSession, FieldState } from '@/interaction';
@@ -140,6 +141,10 @@ function onGripUp(): void {
         </p>
         <p class="message">{{ errors.message }}</p>
       </template>
+      <details v-if="errors.detail !== null" class="details">
+        <summary>{{ t('dialog.details') }}</summary>
+        <p class="message">{{ errors.detail }}</p>
+      </details>
     </div>
 
     <footer class="buttons">
@@ -155,9 +160,12 @@ function onGripUp(): void {
 .feature-dialog {
   position: absolute;
   right: 14px;
-  top: 12px;
+  /* Under the view cube, so the dialog never covers it (M19.2, D8); dragging moves from here. */
+  top: var(--view-cube-reserve);
   z-index: 20;
   width: 280px;
+  max-height: calc(100% - var(--view-cube-reserve) - 12px);
+  overflow-y: auto;
   padding-bottom: 12px;
   border-radius: var(--radius-panel);
   background: var(--panel-bg);
@@ -236,6 +244,19 @@ function onGripUp(): void {
   color: var(--text-secondary);
   overflow-wrap: anywhere;
   user-select: text;
+}
+.details {
+  margin-top: 3px;
+  color: var(--text-secondary);
+}
+.details > summary {
+  margin-left: 18px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.details > .message {
+  margin-top: 2px;
 }
 .buttons {
   display: flex;

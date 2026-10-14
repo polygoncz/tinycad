@@ -171,6 +171,25 @@ export function deleteDocument(id: DocumentId): Promise<void> {
   return withStore((store) => documents.deleteDocument({ store, locks: navigator.locks }, id));
 }
 
+/**
+ * Renames a stored document from the list (M19.2, D5): the operation document.rename appended to
+ * its log, outside undo. Rejects when the document is open in another tab or the trimmed name is
+ * empty. The log is replayed with the registries of `plugins`.
+ */
+export function renameDocument(
+  id: DocumentId,
+  name: string,
+  opts: { readonly plugins: readonly FeaturePlugin[] },
+): Promise<void> {
+  return withStore((store) =>
+    documents.renameDocument(
+      { store, locks: navigator.locks, plugins: opts.plugins, now: Date.now },
+      id,
+      name,
+    ),
+  );
+}
+
 /** A store worker for one call of the document list, terminated after it. */
 async function withStore<T>(call: (store: DocumentStore) => Promise<T>): Promise<T> {
   const store = createIdbDocumentStore();

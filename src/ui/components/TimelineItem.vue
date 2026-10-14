@@ -1,18 +1,32 @@
 <script setup lang="ts">
-// One feature of the Timeline: the icon, the state of the row and a tooltip with the name and
-// the translated issues and how many features depend on it. The row is a frozen TreeRow snapshot, passed as a prop (never put into
-// ref()/reactive()). While `renaming`, the name is an inline field; the Timeline does the rest.
+// One feature of the Timeline: the icon and the state of the row. The row is a frozen TreeRow
+// snapshot, passed as a prop (never put into ref()/reactive()). While `renaming`, the name is an
+// inline field; the Timeline does the rest.
 // The technical message is drawn as the row has it: the presenter leaves it only to a row
 // without translated issues (FeatureTreeModel, ADR 0010).
 // Accessibility (spec 11, "Přístupnost"): the name of the item is the feature name, the details
-// of the tooltip (type, state, message, issues) are its description; the tooltip is hidden until
-// hover, which aria-describedby does not mind.
-import { nextTick, useId, useTemplateRef, watch } from 'vue';
+// (type, state, message, issues, dependents) are its description in a visually hidden span, so the
+// description is there also without the tooltip. The tooltip itself is one for the whole Timeline
+// (M19.2 D9), drawn by the Timeline from the same row. A draft (a new feature still missing its
+// references, D6 of M19.2) is neutral: no red and no badge, only its state in the description.
+// M19.2 D10: the items scroll, so the rename field would be clipped by the scroll container; it is
+// teleported to <body> and placed over the item by placeTooltip, hidden until measured.
+// The keys of the item (roving focus, D14) are heard by the Timeline on the root of the item.
+import { nextTick, shallowRef, useId, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { TreeRow } from '@/interaction';
 import { issueText } from '../i18n/i18n';
+import { finishEdit } from '../inline-rename';
+import { isAdditive } from '../item-actions';
+import { placeTooltip } from '../tooltip-position';
+import type { TooltipPlacement } from '../tooltip-position';
 
-const props = defineProps<{ row: TreeRow; renaming: boolean }>();
+const props = defineProps<{
+  row: TreeRow;
+  renaming: boolean;
+  /** The roving tabindex (D14): 0 for the one active item of the Timeline, −1 for the others. */
+  tabindex: number;
+}>();
 const emit = defineEmits<{
   select: [additive: boolean];
   edit: [];
@@ -24,71 +38,101 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const detailsId = useId();
 
+const root = useTemplateRef<HTMLElement>('root');
 const input = useTemplateRef<HTMLInputElement>('input');
-// Enter and blur both commit; the flag keeps the blur after Enter or Escape from repeating it.
-let done = false;
+/** Where the teleported rename field stands; null until measured (hidden till then). */
+const placement = shallowRef<TooltipPlacement | null>(null);
+
+// Enter and blur both commit; finishEdit keeps the blur after Enter or Escape from repeating it.
+const editing: { value: true | null } = { value: null };
 watch(
   () => props.renaming,
   async (renaming) => {
-    done = false;
+    editing.value = renaming ? true : null;
+    placement.value = null;
     if (!renaming) return;
+    await nextTick();
+    placeField();
+    // Only a visible field takes the focus.
     await nextTick();
     input.value?.select();
   },
 );
+
+function placeField(): void {
+  const item = root.value;
+  const field = input.value;
+  // Unmounted or out of the rename mode meanwhile: nothing to place.
+  if (item === null || field === null) return;
+  const box = field.getBoundingClientRect();
+  placement.value = placeTooltip(
+    item.getBoundingClientRect(),
+    { width: box.width, height: box.height },
+    { width: globalThis.innerWidth, height: globalThis.innerHeight },
+  );
+}
+
 function commit(): void {
-  if (done) return;
-  done = true;
+  if (finishEdit(editing) === null) return;
   emit('rename', input.value?.value ?? props.row.name);
 }
-function cancel(): void {
-  if (done) return;
-  done = true;
+
+// Enter and Escape end the rename from the keyboard: the focus goes back to the item before the
+// field leaves the DOM (its blur then finds the rename done), so the keyboard user stays in the
+// Timeline instead of on <body>.
+function commitFromKey(): void {
+  if (finishEdit(editing) === null) return;
+  const name = input.value?.value ?? props.row.name;
+  root.value?.focus();
+  emit('rename', name);
+}
+function cancelFromKey(): void {
+  if (finishEdit(editing) === null) return;
+  root.value?.focus();
   emit('cancelRename');
 }
 </script>
 
 <template>
   <div
+    ref="root"
     class="timeline-item"
     :class="[row.status, { selected: row.selected, editing: row.editing }]"
     role="button"
+    :tabindex="tabindex"
     :aria-label="row.name"
-    :aria-describedby="renaming ? undefined : detailsId"
-    @click="emit('select', $event.shiftKey || $event.metaKey || $event.ctrlKey)"
+    :aria-describedby="detailsId"
+    @click="emit('select', isAdditive($event))"
     @dblclick="emit('edit')"
     @contextmenu.prevent="emit('menu', $event)"
   >
     <i class="ti" :class="`ti-${row.icon ?? 'cube'}`" aria-hidden="true" />
     <span v-if="row.status === 'error'" class="badge" aria-hidden="true">!</span>
-    <input
-      v-if="renaming"
-      ref="input"
-      class="rename"
-      :value="row.name"
-      :aria-label="t('feature.rename')"
-      @click.stop
-      @dblclick.stop
-      @keydown.enter.prevent="commit"
-      @keydown.escape.prevent="cancel"
-      @blur="commit"
-    />
-    <span v-else class="tooltip">
-      <span class="name">{{ row.name }}</span>
-      <span :id="detailsId" class="details">
-        <span class="type">{{ t(row.typeLabel) }}</span>
-        <span v-if="row.status !== 'ok'" class="state">{{
-          t(`timeline.status.${row.status}`)
-        }}</span>
-        <span v-if="row.message !== null" class="message">{{ row.message }}</span>
-        <span v-for="(issue, i) in row.issues ?? []" :key="i" class="issue">
-          {{ issueText(t, issue) }}
-        </span>
-        <span v-if="row.dependents > 0" class="dependents">{{
-          t('timeline.dependents', { n: row.dependents })
-        }}</span>
-      </span>
+    <span :id="detailsId" class="details">
+      <span>{{ t(row.typeLabel) }}</span>
+      <span v-if="row.status !== 'ok'">{{ t(`timeline.status.${row.status}`) }}</span>
+      <span v-if="row.message !== null">{{ row.message }}</span>
+      <span v-for="(issue, i) in row.issues ?? []" :key="i">{{ issueText(t, issue) }}</span>
+      <span v-if="row.dependents > 0">{{ t('timeline.dependents', { n: row.dependents }) }}</span>
     </span>
+    <Teleport to="body">
+      <input
+        v-if="renaming"
+        ref="input"
+        class="timeline-rename"
+        :class="{ measuring: placement === null }"
+        :style="
+          placement === null
+            ? undefined
+            : { left: `${String(placement.left)}px`, top: `${String(placement.top)}px` }
+        "
+        :value="row.name"
+        :aria-label="t('feature.rename')"
+        @keydown.enter.prevent="commitFromKey"
+        @keydown.escape.prevent="cancelFromKey"
+        @blur="commit"
+      />
+    </Teleport>
   </div>
 </template>
 
@@ -111,7 +155,16 @@ function cancel(): void {
 .timeline-item:hover {
   background: var(--control-hover);
 }
-.timeline-item.selected,
+.timeline-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* Selected = the colour of the selection (M19.2 D1); edited = a mode, the accent, and wins. */
+.timeline-item.selected {
+  background: var(--selection-soft);
+  color: var(--selection);
+  box-shadow: inset 0 0 0 1.5px var(--selection);
+}
 .timeline-item.editing {
   background: var(--accent-soft);
   color: var(--accent);
@@ -129,6 +182,9 @@ function cancel(): void {
   height: 1.5px;
   background: var(--text-tertiary);
   transform: rotate(-45deg);
+}
+.timeline-item.draft {
+  color: var(--text-secondary);
 }
 .timeline-item.warning {
   color: var(--warning);
@@ -152,56 +208,31 @@ function cancel(): void {
   align-items: center;
   justify-content: center;
 }
-.tooltip {
-  display: none;
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
-  flex-direction: column;
-  gap: 2px;
-  max-width: 280px;
-  width: max-content;
-  padding: 4px 8px;
-  border-radius: var(--radius-row);
-  background: var(--tooltip-bg);
-  color: var(--tooltip-text);
-  font-size: var(--font-size-small);
-  pointer-events: none;
-}
-.timeline-item:hover .tooltip {
-  display: flex;
-}
-.name {
-  font-weight: 600;
-}
-/* Only groups the description for aria-describedby; the tooltip lays out its children. */
+/* The description for aria-describedby: read by assistive technology, never drawn. */
 .details {
-  display: contents;
-}
-.type,
-.state,
-.dependents {
-  opacity: 0.7;
-}
-.message,
-.issue {
-  white-space: normal;
-}
-.rename {
   position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.timeline-rename {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 100;
   width: 160px;
   padding: 3px 6px;
   border: 1px solid var(--accent);
   border-radius: var(--radius-row);
   background: var(--panel-bg);
   color: var(--text-primary);
-  font: inherit;
+  font-family: var(--font-ui);
   font-size: var(--font-size);
+}
+/* Rendered for the measurement, not yet placed. */
+.timeline-rename.measuring {
+  visibility: hidden;
 }
 </style>

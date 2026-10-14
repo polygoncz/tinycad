@@ -105,6 +105,7 @@ export function snapshotSeqsToKeep(atSeqs: readonly number[]): readonly number[]
   - Záznamy musí jít po sobě (`seq` + 1) a první musí mít `seq ≤ lastSeq + 1`. Jinak `'seq-gap'` a nezapíše se nic.
   - Záznam se `seq ≤ lastSeq` se **přepíše** (`put`). Opakovaný zápis stejné dávky po chybě, kdy se zápis povedl a ztratila se jen odpověď, je tedy neškodný (idempotence).
   - Dávka se zapíše atomicky (jedna transakce) a nastaví `lastSeq = max(lastSeq, poslední seq)` a `updatedAt = now()`.
+  - **Jméno dokumentu** (M19.2, [[M19.2-ux-backlog|D5]]): když dávka obsahuje záznam, jehož operace (na nejvyšší úrovni, ne v dávce) je `document.rename`, nastaví se uložené `meta.name` podle **posledního** takového záznamu, ve stejné transakci jako záznamy (oba adaptéry). Záznam najde společná `renamedTo(entries): string | undefined` z `persistence/store.ts`, kterou `@/persistence` vyváží, protože adaptér IndexedDB smí importovat jen přes `index.ts`. `listDocuments` tak ukáže nové jméno bez načtení logu. Signatura portu se nemění. Krajní případ: opakovaný idempotentní zápis starší dávky s `document.rename` (po ztracené odpovědi, viz výše) vrátí v seznamu jméno z té dávky, i když mezitím proběhlo novější přejmenování. Log i snapshoty zůstávají správné a seznam se srovná dalším přejmenováním.
 - **`saveSnapshot`:**
   - `atSeq > lastSeq` → `'snapshot-ahead'`. Snapshot z budoucnosti by po pádu dal stav, který log nepokrývá.
   - `atSeq` musí být celé číslo ≥ 1. Základní snapshot vzniká jen v `createDocument`, jinak `'invalid'`.

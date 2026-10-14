@@ -37,7 +37,7 @@ type Ray = ReturnType<FakeViewport['screenToRay']>;
  * An AppViewport for tests: the ViewportPort part of FakeViewport plus recorded mount, body
  * syncs, kernel resets, camera calls (views and view directions), palettes, body visibility,
  * body colours (M15), view cube labels (M17), rotation modes (M17.1) and manipulator views
- * (M18), a prepared projection (M19); emitOrbitModeToggle plays a click on the rotation mode
+ * (M18), a prepared projection (M19) and step of the sketch grid (M19.2); emitOrbitModeToggle plays a click on the rotation mode
  * button, emitViewChanged a move of the view (M19). sync settles at once, or while held only on
  * releaseSyncs (M19.1); like BodyLayer, a newer sync or a reset makes a held sync stale, so it
  * settles without showing its bodies (spec 09).
@@ -79,6 +79,7 @@ export class FakeAppViewport implements AppViewport {
   private readonly held: { readonly bodies: readonly SyncedBody[]; readonly settle: () => void }[] =
     [];
   private holding = false;
+  private gridStep = 1;
 
   readonly bodies = {
     sync: (bodies: readonly SyncedBody[]): Promise<void> => {
@@ -170,6 +171,15 @@ export class FakeAppViewport implements AppViewport {
   /** The result of project as a function of the world point (FakeViewport.prepareProject, M19). */
   prepareProject(fn: (world: Vec3) => readonly [x: number, y: number] | null): void {
     this.port.prepareProject(fn);
+  }
+
+  /** The step sketchGridStep returns from now on (M19.2); 1 until a test prepares another. */
+  prepareSketchGridStep(step: number): void {
+    this.gridStep = step;
+  }
+
+  sketchGridStep(): number {
+    return this.gridStep;
   }
 
   /** FakeViewport.project: null until a test prepares it (M19). */

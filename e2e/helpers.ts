@@ -87,10 +87,14 @@ export async function drawDimensionedRectangle(page: Page, sketch: string): Prom
   await expect(panel).toBeVisible();
   const status = panel.getByRole('status');
 
-  // A rectangle from the origin (snap → fix): two degrees of freedom stay (width, height).
+  // A rectangle from the origin (snap → fix): two degrees of freedom stay (width, height). The
+  // corner is placed with Alt held, so it does not snap to the grid (M19.2 D4) and its edges stay
+  // under the clicks below.
   await toolbarButton(page, 'Obdélník').click();
   await clickCanvas(page, 0, 0);
+  await page.keyboard.down('Alt');
   await clickCanvas(page, 120, -80);
+  await page.keyboard.up('Alt');
   await expect(status).toHaveText('Stupně volnosti: 2');
 
   // Dimensions of the bottom and the right edge → fully defined.
@@ -131,8 +135,8 @@ type Point3 = readonly [number, number, number];
 
 /**
  * Where a model point lies on the canvas, in px from its centre (x right, y down), in the iso
- * view fitted on the bounds `min`…`max` – the first view of a document (spec 11: fitAll once
- * the first body is there; spec 09: the iso view, orthographic camera). The same math as the
+ * view fitted on the bounds `min`…`max` – after "Zobrazit vše" (F) in a new document, whose
+ * camera stays put (M19.2 D7; spec 09: the iso view, orthographic camera). The same math as the
  * camera fit of render (camera-math fitOrtho, margin 10 %), repeated here so the test clicks
  * computed coordinates and needs no hook into the page.
  */

@@ -176,6 +176,12 @@ export interface SketchDrawing {
   readonly points: readonly SketchDrawingPoint[];
   /** Closed regions, pickable as 'sketchRegion' (M13); none = no regions. */
   readonly regions?: readonly SketchDrawingRegion[];
+  /**
+   * The sketch edited in the sketcher (M19.2): bodies do not hide it from picking, its hidden parts
+   * are drawn faint and dashed and the sketch grid lies in its plane. Absent = false; drawings of
+   * the regeneration, planes and axes never have it.
+   */
+  readonly editing?: boolean;
 }
 
 /** A mirror like the overlay, but with entity ids and pickable (render tessellates it). */

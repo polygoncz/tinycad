@@ -6,7 +6,12 @@ import { createOperationDispatcher } from './dispatcher';
 import { createOpHandlerRegistry } from './handler';
 import { createOperationLog } from './log';
 import type { LogEntry } from './log';
-import type { FeatureRemoveOp, FeatureRenameOp, StudioSetRollbackOp } from './operation';
+import type {
+  DocumentRenameOp,
+  FeatureRemoveOp,
+  FeatureRenameOp,
+  StudioSetRollbackOp,
+} from './operation';
 import { replayLog } from './replay';
 import { createUndoManager, rebuildUndoStacks } from './undo';
 
@@ -34,6 +39,11 @@ function setup() {
   return { doc, handlers, log, dispatcher, undo };
 }
 const nameOf = (doc: DocumentWriter, f: string): string | undefined => doc.feature(id(f))?.name;
+const renameDocument = (name: string): DocumentRenameOp => ({
+  type: 'document.rename',
+  v: 1,
+  name,
+});
 
 describe('undo / redo', () => {
   it('walks do, undo, redo and keeps the stacks in sync', () => {
@@ -179,6 +189,64 @@ describe('undo / redo', () => {
     dispatcher.begin('t').abort();
     expect(seen).toEqual([]);
     expect(undo.stacks()).toEqual({ undo: [], redo: [] });
+  });
+});
+
+describe('document.rename stays out of undo (M19.2, D5)', () => {
+  it('leaves canUndo and the stacks as they were; undo reverts the step before, not the name', () => {
+    const { doc, dispatcher, undo } = setup();
+    dispatcher.dispatch(rename('a', 'X'));
+    const before = undo.stacks();
+    const changed: unknown[] = [];
+    undo.events.on('changed', (e) => changed.push(e));
+    dispatcher.dispatch(renameDocument('Part'));
+    expect(undo.stacks()).toEqual(before);
+    expect(undo.canUndo()).toBe(true);
+    expect(changed).toEqual([]);
+    undo.undo();
+    expect(nameOf(doc, 'a')).toBe('A');
+    expect(doc.meta.name).toBe('Part');
+    expect(undo.canUndo()).toBe(false);
+  });
+
+  it('does not clear the redo stack', () => {
+    const { doc, dispatcher, undo } = setup();
+    dispatcher.dispatch(rename('a', 'X'));
+    undo.undo();
+    dispatcher.dispatch(renameDocument('Part'));
+    expect(undo.canRedo()).toBe(true);
+    undo.redo();
+    expect(nameOf(doc, 'a')).toBe('X');
+    expect(doc.meta.name).toBe('Part');
+  });
+
+  it('with nothing else in the log there is nothing to undo', () => {
+    const { dispatcher, undo } = setup();
+    dispatcher.dispatch(renameDocument('Part'));
+    expect(undo.canUndo()).toBe(false);
+    expect(undo.stacks()).toEqual({ undo: [], redo: [] });
+  });
+
+  it('rebuildUndoStacks skips it the same way', () => {
+    const { dispatcher, log, undo } = setup();
+    dispatcher.dispatch(rename('a', 'X'));
+    dispatcher.dispatch(rename('a', 'Y'));
+    undo.undo();
+    dispatcher.dispatch(renameDocument('Part'));
+    expect(rebuildUndoStacks(log.entries())).toEqual({ undo: [1], redo: [2] });
+    expect(undo.stacks()).toEqual({ undo: [1], redo: [2] });
+  });
+
+  it('replayLog renames the document', () => {
+    const live = setup();
+    live.dispatcher.dispatch(rename('a', 'X'));
+    live.dispatcher.dispatch(renameDocument('Part'));
+    const doc = aDocument({
+      features: [aFeature({ id: 'a', name: 'A' }), aFeature({ id: 'b', name: 'B' })],
+    });
+    replayLog(doc, live.handlers, live.log.entries());
+    expect(doc.meta.name).toBe('Part');
+    expect(toData(doc)).toEqual(toData(live.doc));
   });
 });
 

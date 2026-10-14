@@ -40,13 +40,14 @@ const AXIS_Z_LIMIT = 0.9;
 
 /**
  * All curves and points of the data with the style from `styleOf`; `origin` adds the point
- * ORIGIN_POINT_ID at [0, 0] in the style 'normal' after the points of the sketch. Frozen.
+ * ORIGIN_POINT_ID at [0, 0] in the style 'normal' after the points of the sketch; `editing` marks
+ * the drawing of the sketch edited in the sketcher (SketchDrawing.editing). Frozen.
  */
 export function toSketchDrawing(
   plane: Plane,
   data: SketchData,
   styleOf: (id: SketchItemId) => SketchStyle,
-  opts: { readonly origin?: boolean } = {},
+  opts: { readonly origin?: boolean; readonly editing?: boolean } = {},
 ): SketchDrawing {
   const points = pointsById(data);
   const curves = data.entities
@@ -60,7 +61,9 @@ export function toSketchDrawing(
   if (opts.origin === true) {
     drawn.push(Object.freeze({ id: ORIGIN_POINT_ID, at: vec2(0, 0), style: 'normal' }));
   }
-  return freezeDrawing(plane, curves, drawn);
+  const drawing = freezeDrawing(plane, curves, drawn);
+  // Only the edited sketch carries the flag; the others stay without the property.
+  return opts.editing === true ? Object.freeze({ ...drawing, editing: true }) : drawing;
 }
 
 /**

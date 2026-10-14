@@ -497,12 +497,12 @@ describe('transformMessages', () => {
       'Bod',
       'Bod otáčení',
       'Posun',
-      'Rotace X',
-      'Rotace Y',
-      'Rotace Z',
+      'Otočení X',
+      'Otočení Y',
+      'Otočení Z',
       'Volný',
       'Posun',
-      'Rotace',
+      'Otočení',
       'Nastavit pivot',
     ]);
     expect(texts('en')).toEqual([

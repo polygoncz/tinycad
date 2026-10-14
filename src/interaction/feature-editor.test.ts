@@ -15,6 +15,9 @@ import { OP_VERSION } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import { createFeatureEditor } from './feature-editor';
 import type { EditState } from './feature-editor';
+import type { RegenSketch } from './regen-status-port';
+import { createSelectionModel } from './selection';
+import { FakeRegenStatus } from './testing';
 
 interface BoxParams {
   readonly width: number;
@@ -294,6 +297,95 @@ describe('FeatureEditor initial reference param (R19)', () => {
     const state = editor.edit(fid('a')).state.get();
     expect(state.activeRefParam).toBeNull();
     expect(state.fields.every((f) => !f.active)).toBe(true);
+  });
+});
+
+describe('FeatureEditor.create preselects the only region (D6 of M19.2)', () => {
+  const EXT_PARAMS: ParamSchema = {
+    profile: { kind: 'region', label: 'profile', min: 1 },
+    distance: { kind: 'length', label: 'distance', default: 10 },
+  };
+  const EXT: FeatureSchema = {
+    type: 'ext',
+    version: 1,
+    label: 'ext.label',
+    params: EXT_PARAMS,
+    defaults: () => ({ profile: [], distance: 10 }),
+    validate: (params) => validateAgainstSchema(EXT_PARAMS, params),
+  };
+  const sketch = (feature: string, regions: readonly string[]): RegenSketch => ({
+    sketch: `${feature}/sketch` as RegenSketch['sketch'], // test ids are trusted
+    feature: fid(feature),
+    regions,
+  });
+
+  /** `withPorts: false` leaves regen out of the deps. */
+  function setupWith(sketches: readonly RegenSketch[] | null, withPorts = true) {
+    const schemas = createFeatureSchemaRegistry();
+    schemas.register(EXT);
+    schemas.register(BOX);
+    const session = anOpsSession({ schemas });
+    const regen = new FakeRegenStatus();
+    if (sketches !== null) regen.publish(new Map(), [], sketches);
+    const selection = createSelectionModel({ regen });
+    const editor = createFeatureEditor({
+      doc: session.doc,
+      ops: session.dispatcher,
+      schemas,
+      ids: createSequentialIdGenerator('new'),
+      ...(withPorts ? { regen } : {}),
+    });
+    return { ...session, editor, selection };
+  }
+
+  it('fills the region param when the last sketch has exactly one region', () => {
+    const { editor, doc } = setupWith([sketch('s0', ['a', 'b']), sketch('s1', ['r1'])]);
+    const session = editor.create('ext');
+    const profile = [{ kind: 'region', sketch: 's1', region: 'r1' }];
+    expect(doc.feature(session.featureId)?.params).toEqual({ profile, distance: 10 });
+    expect(session.state.get().params['profile']).toEqual(profile);
+    expect(session.state.get().issues).toEqual([]);
+    // The focus stays on the region, so another click adds or removes one.
+    expect(session.state.get().activeRefParam).toBe('profile');
+  });
+
+  it('after the preselection the commit writes one feature.add', () => {
+    const { editor, log } = setupWith([sketch('s1', ['r1'])]);
+    editor.create('ext').commit();
+    const ops = loggedOps(log.entries().map((e) => e.op));
+    expect(log.entries()).toHaveLength(1);
+    expect(ops.map((op) => op.type)).toEqual(['feature.add']);
+  });
+
+  it('does not preselect with two regions in the last sketch', () => {
+    const { editor, doc } = setupWith([sketch('s0', ['r0']), sketch('s1', ['r1', 'r2'])]);
+    const session = editor.create('ext');
+    expect(doc.feature(session.featureId)?.params).toEqual({ profile: [], distance: 10 });
+  });
+
+  // The sketch just finished stays selected; a selection never holds a region, so it does not
+  // stand in the way (the case of e2e m13: Finish, then Extrude).
+  it('preselects with something else selected', () => {
+    const { editor, doc, selection } = setupWith([sketch('s1', ['r1'])]);
+    selection.set([{ kind: 'feature', feature: fid('x') }]);
+    const session = editor.create('ext');
+    expect(doc.feature(session.featureId)?.params).toEqual({
+      profile: [{ kind: 'region', sketch: 's1', region: 'r1' }],
+      distance: 10,
+    });
+  });
+
+  it('does not preselect without a snapshot or without the ports', () => {
+    const none = setupWith(null).editor.create('ext');
+    expect(none.state.get().params['profile']).toEqual([]);
+    const noPorts = setupWith([sketch('s1', ['r1'])], false).editor.create('ext');
+    expect(noPorts.state.get().params['profile']).toEqual([]);
+  });
+
+  it('does not preselect for a feature whose first reference param is not a region', () => {
+    const { editor, doc } = setupWith([sketch('s1', ['r1'])]);
+    const session = editor.create('box');
+    expect(doc.feature(session.featureId)?.params).toEqual({ width: 10, height: 20, targets: [] });
   });
 });
 

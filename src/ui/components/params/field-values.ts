@@ -61,6 +61,14 @@ export function handleValueNumber(value: number, unit: HandleUnit): string {
   return formatNumber(round2(unit === 'length' ? value : radToDeg(value)));
 }
 
+/**
+ * The text of a sketch dimension (M19.2 D4): at most two decimals without trailing zeros
+ * (83.523654 → '83.52', 40 → '40'); the model keeps the exact value.
+ */
+export function formatDimension(value: number): string {
+  return formatNumber(round2(value));
+}
+
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }

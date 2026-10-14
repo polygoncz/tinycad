@@ -13,16 +13,25 @@
   --accent: #007aff;
   --accent-soft: rgba(0, 122, 255, 0.14);
   --on-accent: #fff;
-  --danger: #ff3b30;
-  --danger-soft: rgba(255, 59, 48, 0.18);
-  --danger-bg: rgba(255, 59, 48, 0.12);
+  /* Darker than the system red: 4.5:1 on a panel over the scene (M19.2 D11) */
+  --danger: #d70015;
+  --danger-soft: rgba(215, 0, 21, 0.18);
+  --danger-bg: rgba(215, 0, 21, 0.12);
   --success: #34c759;
   --warning: #ff9f0a;
+
+  /*
+   * Selection: what is selected in the scene (reference chips, selected rows). Matches
+   * ScenePalette.selection of render (M19.2 D1); controls stay on --accent.
+   */
+  --selection: #ea580c;
+  --selection-soft: rgba(234, 88, 12, 0.16);
 
   /* Text */
   --text-primary: #1d1d1f;
   --text-secondary: #6e6e73;
-  --text-tertiary: #a1a1a6;
+  /* The lightest grey with 4.5:1 on a panel over the scene (M19.2 D11) */
+  --text-tertiary: #707075;
 
   /* Floating panels (Browser, dialog, menu): translucent glass */
   --panel-opacity: 0.42;
@@ -65,6 +74,8 @@
   --toolbar-icon: 24px;
   --timeline-item: 34px;
   --tree-row: 26px;
+  /* Corner kept free for the view cube: margin + cube + margin (8 + 132 + 8) */
+  --view-cube-reserve: 148px;
 
   /* Materials */
   --panel-blur: blur(18px) saturate(200%);
@@ -77,11 +88,16 @@
   --accent: #0a84ff;
   --accent-soft: rgba(10, 132, 255, 0.25);
   --danger: #ff453a;
+  --danger-soft: rgba(255, 69, 58, 0.18);
+  --danger-bg: rgba(255, 69, 58, 0.12);
   --success: #30d158;
+
+  --selection: #ff9f0a;
+  --selection-soft: rgba(255, 159, 10, 0.25);
 
   --text-primary: #f5f5f7;
   --text-secondary: #a1a1a6;
-  --text-tertiary: #6e6e73;
+  --text-tertiary: #8e8e93;
 
   --panel-opacity: 0.45;
   --panel-bg: rgba(38, 38, 42, var(--panel-opacity));

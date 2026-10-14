@@ -6,8 +6,12 @@ export interface ScenePalette {
   readonly background: number;
   readonly face: number;
   readonly edge: number;
+  /** A lighter shade of selection (M19.2 D1). */
   readonly hover: number;
-  /** Matches --accent in CSS. */
+  /**
+   * Orange, apart from the RGB axes and the default face colour (M19.2 D1). Not --accent in
+   * CSS: the scene selection and the accent of the controls are two different roles.
+   */
   readonly selection: number;
   /** Overlay of tools. */
   readonly preview: number;
@@ -34,8 +38,8 @@ export const LIGHT_PALETTE: ScenePalette = freezePalette({
   background: 0xf3f4f6,
   face: 0xb9c3d1,
   edge: 0x1f2328,
-  hover: 0xf59e0b,
-  selection: 0x2563eb,
+  hover: 0xfb923c,
+  selection: 0xea580c,
   preview: 0x2563eb,
   construction: 0x6b7280,
   sketch: 0x0a84ff,
@@ -50,8 +54,8 @@ export const DARK_PALETTE: ScenePalette = freezePalette({
   background: 0x1f2023,
   face: 0x3b6aa6,
   edge: 0x9cc3f5,
-  hover: 0x5e9ff5,
-  selection: 0x0a84ff,
+  hover: 0xffc266,
+  selection: 0xff9f0a,
   preview: 0x0a84ff,
   construction: 0x6b7280,
   sketch: 0x409cff,

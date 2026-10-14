@@ -111,7 +111,7 @@ function chipName(chip: Chip): string {
   max-width: 100%;
   padding: 1px 2px 1px 8px;
   border-radius: var(--radius-row);
-  background: var(--accent-soft);
+  background: var(--selection-soft);
   color: var(--text-primary);
 }
 .chip.missing {

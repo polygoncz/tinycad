@@ -13,6 +13,7 @@ describe('persistence public API', () => {
       'exportStoredDocument',
       'importDocument',
       'loadDocument',
+      'renamedTo',
       'snapshotSeqsToKeep',
       'storeErrorCode',
     ]);

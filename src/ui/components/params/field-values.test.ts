@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   asPoint,
   degToRad,
+  formatDimension,
   handleValueNumber,
   formatNumber,
   parseNumber,
@@ -75,6 +76,20 @@ describe('handleValueNumber', () => {
   it('is the number rounded to two decimals, degrees for an angle', () => {
     expect(handleValueNumber(12.345, 'length')).toBe('12.35');
     expect(handleValueNumber(degToRad(12.345), 'angle')).toBe('12.35');
+  });
+});
+
+describe('formatDimension', () => {
+  it('rounds to at most two decimals without trailing zeros (M19.2 D4)', () => {
+    expect(formatDimension(83.523654)).toBe('83.52');
+    expect(formatDimension(40)).toBe('40');
+    expect(formatDimension(0.005)).toBe('0.01');
+    expect(formatDimension(12.5)).toBe('12.5');
+  });
+
+  it('shows minus zero and a value rounding to zero as 0', () => {
+    expect(formatDimension(-0)).toBe('0');
+    expect(formatDimension(-0.001)).toBe('0');
   });
 });
 

@@ -82,7 +82,8 @@ export type SketchDrawingCurve =
   | { kind: 'line'; id: string; from: Vec2; to: Vec2; style: SketchStyle }
   | { kind: 'arc'; id: string; center: Vec2; radius: number; startAngle: number; endAngle: number; style: SketchStyle };  // proti směru hodin, endAngle > startAngle; kruh = +2π
 export interface SketchDrawingPoint { id: string; at: Vec2; style: SketchStyle }
-export interface SketchDrawing { plane: Plane; curves: readonly SketchDrawingCurve[]; points: readonly SketchDrawingPoint[]; regions?: readonly SketchDrawingRegion[] }
+export interface SketchDrawing { plane: Plane; curves: readonly SketchDrawingCurve[]; points: readonly SketchDrawingPoint[]; regions?: readonly SketchDrawingRegion[];
+  editing?: boolean }   // M19.2: kresba skici editované ve skicáři; chybí = false
 /** Oblast kresby (M13): uzavřený polygon v rovině (poslední bod ≠ první), díry jako další polygony; id = jméno oblasti. */
 export interface SketchDrawingRegion { id: string; outer: readonly Vec2[]; holes: readonly (readonly Vec2[])[] }
 
@@ -115,6 +116,7 @@ export interface KeyMods { readonly shift: boolean; readonly alt: boolean; reado
 - V kódu mají všechna pole typů portu `readonly` ([[Neměnná data]]), ve výpisu výše jsou kvůli čitelnosti vynechaná. Mapa událostí `{ pointer, key }` má v kódu jméno `ViewportEvents`.
 - `pick` s filtrem (M10.1): pořadí druhů ve filtru nemá význam, hrana má přednost před plochou jako dosud; prázdný filtr → `null` bez dotazu na scénu. Nástroj nebo parametr dialogu tak určí, co jde vybrat, a hover nezvýrazňuje nic jiného.
 - `sketches` (M12): stejné zrcadlo jako overlay, ale s id entit a pickovatelné (`'sketchEntity'` ve filtru; výchozí filtr ho neobsahuje, `SelectTool` o něm neví). Editovanou skicu kreslí `SketchEditor`, skici z regenerace a roviny `app` ([[#Skicář]]). `FakeViewport` kresby zaznamenává (`sketchDrawings: ReadonlyMap<string, SketchDrawing>`).
+- `SketchDrawing.editing` (M19.2 D2) má jen kresba `SketchEditor` (`toSketchDrawing(…, { editing: true })`). Kresby z regenerace, roviny a osy ho nemají. Tělesa takovou kresbu pro picking nezakrývají, její zakryté části `render` kreslí slabě a čárkovaně a v její rovině kreslí mřížku skici ([[09-vykreslovani#Skici]]). Ostatní kresby tělesa zakrývají i pro picking.
 - `sketchRegion` (M13): oblasti kresby z `SketchDrawing.regions` jsou pickovatelné jen se `'sketchRegion'` ve filtru (parametr `region` v dialogu); render je bez zvýraznění nekreslí ([[09-vykreslovani#Skici]]).
 - `PickResult` je definovaný jen tady, [[09-vykreslovani]] na něj odkazuje. Varianta `vertex` přibude, až bude výběr vrcholů potřeba ([[Q057 Tvar PickResult|Q057]]; v M14 znovu odloženo, [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R101]] ⚠). `PickResult` ani `HighlightTarget` nenesou topologické jméno: `render` jména nezná, `interaction` si je dohledá v portu stavu regenerace (`RegenBody.names`).
 - `HighlightPort` je zrcadlo: stav hoveru a výběru drží `interaction` a vždy ho předá celý. Bere `HighlightTarget`, protože výběr bod zásahu nezná ([[Q065 Cíl zvýraznění bez bodu a normály|Q065]]); `PickResult` je jeho podtyp, takže výsledek `pick` jde předat beze změny. `OverlayPort` nese jen platformově nezávislé tvary ve světových souřadnicích, žádné typy Three.js. Další druhy (síť pro náhled tělesa) přibudou s potřebou ([[Q058 Kontrakt HighlightPort a OverlayPort|Q058]]).
@@ -328,6 +330,7 @@ export interface FeatureEditor {
 export function createFeatureEditor(deps: {
   doc: DocumentReader; ops: OperationDispatcher; schemas: RegistryReader<FeatureSchema>; ids: IdGenerator;
   translate?: (key: string) => string;   // výchozí identita; název nové featury = nextFeatureName(studio, translate(schema.label))
+  regen?: Pick<RegenStatusPort, 'state'>; // M19.2 D6: create předvybere jedinou oblast poslední skici; bez něj nic
 }): FeatureEditor;
 
 export interface FeatureEditSession {   // vytváří ji jen FeatureEditor
@@ -381,6 +384,7 @@ export interface FieldRef {
 **`create(type)`**
 1. Předpoklady (jinak výjimka, nic se nezmění): žádná otevřená session, dispečer není v transakci, typ je v `schemas`.
 2. `ops.begin(schema.label)`, pak `tx.apply(feature.add)` s `id = ids.next()`, `typeVersion = schema.version`, `params = schema.defaults()`, `suppressed: false`, `index = rollbackIndex`.
+   - **Předvýběr oblasti** (M19.2 D6, jako ve Fusion): s `regen` v deps, když první automaticky fokusovaný parametr (pravidlo bodu 5) je druhu `region` a poslední skica posledního stavu regenerace (`regen.state.get().sketches.at(-1)`) má právě jednu oblast, dostane `feature.add` rovnou `params = { ...defaults, [param]: [{ kind: 'region', sketch: <feature skici>, region: <jméno> }] }`. Je to pořád jedna operace `feature.add`, žádný další krok v transakci. Pravidlo je obecné podle druhu parametru (Vysunutí i Rotace), pluginy se nemění. `activeRefParam` zůstává na oblasti, další klik oblast přidá nebo odebere. Výběr roli nehraje: oblast ve výběru nikdy není. Bez `regen`, bez snapshotu nebo s jiným počtem oblastí se nepředvybírá nic.
 3. Jméno: `"<schema.label> <n>"`, kde `n` je nejmenší kladné číslo, pro které takové jméno ve studiu ještě není.
 4. Vložení na pozici baru posune bar za novou featuru samo (pravidlo mutátoru v [[03-dokument]]), takže nová featura je aktivní ([[Q068 Kam se vloží nová featura|Q068]]).
 5. `activeRefParam` nové session = první **viditelný** parametr schématu druhu `bodies`, `topo`, `region` nebo (M13) `axis` (v pořadí schématu), jinak `null` – výběr ve viewportu a v Prohlížeči jde rovnou do něj, jako v Onshape (M11, [[Rozhodnutí noční rychloakce#M11 – Další entity|R19]]). `edit` začíná s `null`.
@@ -636,7 +640,7 @@ export interface HudField {
 ## Strom featur: `FeatureTreeModel`
 
 ```ts
-export type TreeStatus = 'ok' | 'warning' | 'error' | 'suppressed' | 'rolledBack' | 'pending';
+export type TreeStatus = 'ok' | 'warning' | 'error' | 'suppressed' | 'rolledBack' | 'pending' | 'draft';   // draft: M19.2 D6
 
 export interface TreeRow {
   readonly id: FeatureId;
@@ -647,6 +651,7 @@ export interface TreeRow {
   readonly issues: readonly ParamIssue[] | null;  // z FeatureHealth error (neplatné parametry), jinak null
   readonly status: TreeStatus;
   readonly message: string | null;     // u warning/error; null u chyby s neprázdnými issues (UI ukáže přeložená issues, M19.1)
+  readonly detail: string | null;      // M19.2 D9: technická zpráva chyby, jejímž hlavním textem jsou přeložená issues; jinak null
   readonly selected: boolean;          // výběr obsahuje { kind: 'feature', feature: id }
   readonly editing: boolean;           // featura otevřené session
   readonly dependents: number;         // počet featur, které na featuře závisí (dependentsOf, M11) – tooltip
@@ -655,6 +660,7 @@ export interface TreeRow {
 export interface FeatureTreeModel {
   readonly rows: Observable<readonly TreeRow[]>;
   readonly rollbackIndex: Observable<number>;
+  readonly errorCount: Observable<number>;                     // M19.2: počet řádků se stavem 'error' (draft se nepočítá)
   edit(id: FeatureId): void;                                   // → FeatureEditor.edit (skica → sketchEdit); při locked nic
   rename(id: FeatureId, name: string): void;                   // → dispatch feature.rename; ukončí přejmenování; při locked jinak nic
   moveRollbackBar(index: number): void;                        // → dispatch studio.setRollback; při locked nic
@@ -682,6 +688,9 @@ export function createFeatureTreeModel(deps: {
 
 - `typeLabel` a `message` jsou od [[0014-preklady-vue-i18n-a-klice|ADR 0014]] klíče překladu (případně s parametry), překládá je `ui`. Zprávy z jádra (`KernelError.message`) zůstávají technický text a UI je ukáže pod přeloženým nadpisem chyby.
 - Řádky v pořadí featur dokumentu. Stav: `suppressed` (z dokumentu) > `rolledBack` (index `>= rollbackIndex`) > `health` z portu (`ok`/`warning`/`error`) > `pending` (featura v `health` chybí, např. ještě neproběhla regenerace).
+- **Rozpracovaná featura** (`draft`, M19.2 D6): řádek je `draft`, když otevřená session editoru má `mode === 'create'` a `featureId` řádku, její `state.open` platí, zdraví je `error` s neprázdnými `issues` a **všechna** issues mají kód `param.tooFewRefs`. `message`, `issues` i `detail` jsou pak `null`. Dialog nové featury tak bez vybrané reference neukáže v timeline chybu, hlášky u polí zůstávají. Jiná chyba nové featury (jádro, neplatná hodnota) zůstává `error`, editace existující featury `draft` nikdy nedá a po skončení session je tatáž chyba `error`.
+- **`detail`** (M19.2 D9): u stavu `error` s přeloženými issues nese technickou zprávu zdraví (`health.message`), kterou issues v hlavním textu nahradila. Jinak `null` (i u `warning`, která issues nemá). Ukazuje ho jen dialog v „Podrobnostech“ ([[11-ui#Komponenty]]), tooltip timeline ne.
+- **`errorCount`** (M19.2) = počet řádků se stavem `error`, přepočítá se s `rows`. Čte ho stavový řádek Timeline. Rozpracovaná featura „Chyby: 1“ neukáže.
 - Model se přepočítá při `doc.events.changed`, změně `regen.state`, `selection.items` a `editor.current`. Nezměněný řádek je týž objekt, nezměněný seznam týž snapshot.
 - `rows` a `rollbackIndex` se přepočítají v jednom kroku, ale vyšlou se postupně (nejdřív `rows`). Odběratel jednoho proto nemá v callbacku číst druhé; Vue překresluje dávkově v mikroúloze, takže v UI nekonzistence nevznikne. Kdyby to vadilo jinde, sloučí se do jednoho `Observable<TreeSnapshot>`.
 - Nezměněný řádek se pozná porovnáním s řádkem na stejné pozici; po přesunu featury proto dostanou nový objekt i řádky, které se jen posunuly.
@@ -791,7 +800,7 @@ export interface HistoryRow {
 }
 export interface HistoryState {
   readonly rows: readonly HistoryRow[];
-  readonly total: number;
+  readonly total: number;            // počet záznamů logu bez document.rename (M19.2)
   readonly older: number;            // záznamy mimo rows (starší než nejnovějších HISTORY_LIMIT): total - rows.length
 }
 export const HISTORY_LIMIT = 200;
@@ -800,10 +809,34 @@ export interface HistoryModel extends Disposable { readonly state: Observable<Hi
 export function createHistoryModel(deps: { log: OperationLogReader }): HistoryModel;
 ```
 
-- `rows`: nejnovější první, nejvýš `HISTORY_LIMIT` (DOM s tisíci řádky by byl pomalý); `total` = počet všech záznamů logu; `older` = `total − rows.length` (ui ho jen ukáže, nepočítá – oprava revize M15).
+- `rows`: nejnovější první, nejvýš `HISTORY_LIMIT` (DOM s tisíci řádky by byl pomalý); `total` = počet záznamů logu kromě `document.rename`; `older` = `total − rows.length` (ui ho jen ukáže, nepočítá – oprava revize M15).
 - `status` se počítá z `rebuildUndoStacks(log.entries())` (`ops`), stejného pravidla jako `UndoManager`; model na `UndoManager` nezávisí (pořadí odběratelů `appended` by nebylo jisté). Přepočet je O(n) na záznam – pro naše logy zanedbatelné.
 - Přepočet po `log.events.appended`; nový snapshot jen při změně, řádek, jehož hodnoty se nezměnily, je **tentýž objekt** (pravidla snapshotů výše). Zmrazené. `dispose` odhlásí odběr.
+- **Přejmenování dokumentu** (M19.2, [[M19.2-ux-backlog|D5]]): záznamy s operací `document.rename` (na nejvyšší úrovni) model vynechá z `rows` i z počtů (`total`, `older`). Panel ukazuje kroky undo a přejmenování mezi ně nepatří ([[04-operace-a-historie#Operace dokumentu]]); jinak by se ukázalo jako `abandoned`. `status` ostatních řádků se dál počítá z celého logu.
 - Klik na řádek nic nedělá: návrat k dřívějšímu záznamu by byl větvení logu ([[Q006 Větvení operačního logu|Q006]], R127 ⚠).
+
+## Jméno dokumentu: `DocumentNameModel`
+
+M19.2 ([[M19.2-ux-backlog|D5]]). Prezentační model jména dokumentu pro titulek (`document-name.ts`). Přejmenování je operace `document.rename`, takže jméno se uloží, přežije reload a jde s exportem souboru, ale zůstává mimo undo ([[04-operace-a-historie#Operace dokumentu]]).
+
+```ts
+export interface DocumentNameModel {
+  readonly name: Observable<string>;        // DocumentMeta.name; sleduje doc.events.changed (stejné jméno odběratele nebudí)
+  readonly canRename: Observable<boolean>;  // = !locked (jen pro čtení, nebo otevřený dialog drží transakci a dispatch by vyhodil)
+  rename(name: string): boolean;            // ořízne mezery → dispatch document.rename; prázdné jméno nebo zámek → false a nic; stejné jméno → true bez operace
+  dispose(): void;
+}
+
+export function createDocumentNameModel(deps: {
+  doc: Pick<DocumentReader, 'meta' | 'events'>;
+  ops: Pick<OperationDispatcher, 'dispatch'>;
+  locked: Observable<boolean>;              // zámek editace (createEditLock)
+}): DocumentNameModel;
+```
+
+- `canRename` nemá vlastní stav, odvozuje se ze zámku a mění se přesně s ním.
+- Záznam `document.rename` jde bez `label`, takže popisek v logu je typ operace (klíč přeloží `ui`).
+- `app` ho vystaví jako `AppSession.documentName` bez `dispose` ([[11-ui#Kompoziční kořen (app)]]).
 
 ## Export: akce Soubor
 
@@ -856,7 +889,7 @@ Režim je `'sketch'`, právě když je otevřená `SketchSession` (`SketchEditor
 
 - **Nástroje** (`ToolDescriptor.modes`, výchozí `['model']`): `ToolManager` dostane `mode?: Observable<Mode>` a `defaultToolIds?: Partial<Record<Mode, string>>` (výchozí nástroj režimu `model` je dál `defaultToolId`; s `mode` musí být `defaultToolIds.sketch` v registru, jinak výjimka při vytvoření). Změna režimu deaktivuje aktivní nástroj a aktivuje výchozí nástroj nového režimu. `activate(id)` nástroje, který v aktuálním režimu není, hodí výjimku a aktivní nástroj zůstane. `finish()` i `Escape` vrací na výchozí nástroj **aktuálního** režimu.
 - **Akce** (`Action.modes`, výchozí `ALL_MODES`): `createActionRegistry(deps?: { mode?: Observable<Mode> })`. Dvě akce smí mít stejnou zkratku, jen když mají disjunktní `modes` (jinak výjimka v `register`). `handleKey` hledá jen mezi akcemi aktuálního režimu. `ActionState` nese `modes` a jeho `enabled` = `action.enabled` **a** režim je v `modes`; změna režimu vytvoří nový snapshot jen se změněnými stavy. `run` akce mimo režim vrátí `false`.
-- **Vestavěné akce** (`createBuiltInActions`, deps `mode?: Observable<Mode>`): `feature.*` a `timeline.*` mají `modes: ['model']`, `undo`, `redo`, `view.fitAll` všechny režimy. Akce nástroje má `modes` nástroje a `enabled` = v režimu `sketch` „nástroj je pro `sketch`“, v režimu `model` „`!locked` a nástroj je pro `model`“ (skicář je otevřená editace featury, takže `locked` je v něm `true`).
+- **Vestavěné akce** (`createBuiltInActions`, deps `mode?: Observable<Mode>`): `feature.*` a `timeline.*` mají `modes: ['model']`, `undo`, `redo`, `view.fitAll` a od M19.2 standardní pohledy `view.*` všechny režimy. Akce nástroje má `modes` nástroje a `enabled` = v režimu `sketch` „nástroj je pro `sketch`“, v režimu `model` „`!locked` a nástroj je pro `model`“ (skicář je otevřená editace featury, takže `locked` je v něm `true`).
 
 ### `SketchEditor` a `SketchSession`
 
@@ -870,6 +903,11 @@ export interface SketchEditor {
   planeOf(ref: PlaneRef | TopoRef): Plane | undefined;
   /** Úprava existující skici (FeatureEditor.edit). */
   edit(featureId: FeatureId): SketchSession;
+  /** M19.2 D4: nové body kreslicích nástrojů se přichytí k mřížce; výchozí true, stav editoru (přežije zavření a otevření skici), neukládá se. */
+  readonly gridSnap: Observable<boolean>;
+  setGridSnap(on: boolean): void;
+  /** M19.2: aktuální krok mřížky v mm (deps.gridStep); nástroje ho čtou při každém přichycení. */
+  gridStep(): number;
 }
 
 export function createSketchEditor(deps: {
@@ -877,6 +915,7 @@ export function createSketchEditor(deps: {
   solver: ConstraintSolver;
   viewport: Pick<ViewportPort, 'sketches'>;               // jen kresba 'sketch-edit' (Ú16a, ADR 0011); ids skicář nepotřebuje
   resolvePlane: (ref: PlaneRef | TopoRef) => Plane | undefined;   // app: planeOfRef nad posledním stavem regenerace (M14), viz spec 07
+  gridStep?: () => number;                                 // M19.2: krok mřížky v mm, čte se při každém pohybu a kliku; výchozí () => 1
 }): SketchEditor;
 
 export interface SketchSession {
@@ -914,6 +953,7 @@ export interface SketchState {
   readonly constraintRows: readonly SketchConstraintRow[]; // pro panel
   readonly editingDimension: SketchConstraintId | null;    // právě vytvořená kóta (ui dá jejímu poli fokus)
   readonly busy: boolean;                                  // M19.1 D8: běží nebo čeká job, který může zapsat
+  readonly dimensions: readonly SketchDimensionView[];     // M19.2 D4: kóty pro viewport (dimensionViews)
 }
 export type SketchMessageKey = 'sketch.conflict' | 'sketch.redundant' | 'sketch.solverFailed';
 export interface SketchConstraintRow {
@@ -923,9 +963,22 @@ export interface SketchConstraintRow {
   readonly value: number | null;                           // jen distance a radius
   readonly selected: boolean;
 }
+export interface SketchDimensionView {                      // M19.2, sketch-dimensions.ts
+  readonly id: SketchConstraintId;
+  readonly kind: 'distance' | 'radius';
+  readonly value: number;                                  // přesná hodnota vazby; zaokrouhluje až ui
+  readonly from: Vec3;                                     // distance: bod a; radius: střed křivky (světové souřadnice)
+  readonly to: Vec3;                                       // distance: bod b; radius: bod na křivce (kružnice pod π/4, oblouk v půlce úhlu)
+  readonly n: number;                                      // pořadí v rámci druhu jako SketchConstraintRow.n
+  readonly selected: boolean;
+}
+export function dimensionViews(plane: Plane, entities: readonly SketchEntity[], constraints: readonly SketchConstraint[],
+  selection: readonly SketchItemId[], prev: readonly SketchDimensionView[]): readonly SketchDimensionView[];
 export const EDIT_SKETCH_DRAWING_ID = 'sketch-edit';
 export const ORIGIN_POINT_ID = '__origin';                 // bod počátku v kresbě (snap)
 ```
+
+**Kóty pro viewport** (`SketchState.dimensions`, M19.2 D4): `buildState` volá čistou `dimensionViews` (`sketch-dimensions.ts`, z `index.ts` se exportuje jen typ `SketchDimensionView`). Vazby `distance` a `radius` v pořadí vazeb. `n` se počítá jako `SketchConstraintRow.n`: počítá se každá vazba druhu, i vynechaná. Kóta, které chybí entita (nebo poloměr na něčem jiném než kružnici či oblouku), se vynechá. Nezměněná položka zůstává týmž objektem z `prev` a nezměněný výsledek týmž polem (společná pravidla snapshotů výše).
 
 **`create` / `edit`:** předpoklady jako u `FeatureEditor` (žádná otevřená session, dispečer mimo transakci; jinak výjimka a nic se nezmění); `create` s rovinou, kterou `resolvePlane` nezná, → výjimka před vytvořením featury; `edit` featury jiného typu než `SKETCH_FEATURE_TYPE` → výjimka; `edit` čte rovinu z první položky parametru `plane` (`readRefOf(['plane', 'topo'], …)`, tedy i `TopoRef`, M14); skica s nevyřešitelnou rovinou → session featury se zruší a výjimka. Session hned spustí řešení aktuálních dat **bez zápisu** (jen `status` a `dof`; zápis by do logu dostal šum výpočtu). Když se `FeatureEditSession` zavře jinak (dispose session aplikace), `SketchSession` se zavře také.
 
@@ -948,7 +1001,7 @@ export const ORIGIN_POINT_ID = '__origin';                 // bod počátku v kr
 
 **Stavový řádek** (Ú16a; dřív `sketchStatusText` v `ui`): `statusKey` je `'sketch.status.solving'` (status `'solving'`), `'sketch.conflict'`, `'sketch.solverFailed'` (status `'failed'`), u statusu `'ok'` `'sketch.status.defined'` (`fullyDefined`), jinak `'sketch.status.dof'`; `ui` ho jen přeloží. `statusParams` je `{ n: dof }` jen u `'sketch.status.dof'` (`dof` `null` → 0), jinak `{}`; zůstává týž objekt, dokud se klíč a DoF nezmění, aby se snapshot `state` zbytečně neměnil. Session vzniká interní `openSketchSession(deps)` (`sketch-session.ts`, mimo `index.ts`), která dostává také jen `viewport: Pick<ViewportPort, 'sketches'>`.
 
-**Kresba:** při každé změně `state` session pošle `viewport.sketches.set(EDIT_SKETCH_DRAWING_ID, toSketchDrawing(plane, data, styleOf, { origin: true }))`; po zavření `remove`. Styl křivky: vybraná → `selected`, jinak pod kurzorem → `hover`, jinak konstrukční → `construction`, jinak `fullyDefined ? 'defined' : 'normal'`; body stejně bez konstrukce.
+**Kresba:** při každé změně `state` session pošle `viewport.sketches.set(EDIT_SKETCH_DRAWING_ID, toSketchDrawing(plane, data, styleOf, { origin: true, editing: true }))`; po zavření `remove`. Styl křivky: vybraná → `selected`, jinak pod kurzorem → `hover`, jinak konstrukční → `construction`, jinak `fullyDefined ? 'defined' : 'normal'`; body stejně bez konstrukce.
 
 **Kóty a výběr:** kóta vytvořená přes `addConstraint` (`distance`, `radius`) a zapsaná nastaví `editingDimension`. `select`/`clearSelection`/`setHover` mění jen stav session (výběr v režimu skicáře je oddělený od `SelectionModel`). Neznámé id u `select` nic.
 
@@ -957,7 +1010,7 @@ export const ORIGIN_POINT_ID = '__origin';                 // bod počátku v kr
 ```ts
 // interaction/sketch-drawing.ts (čisté funkce, export z index.ts – používá je i app)
 export function toSketchDrawing(plane: Plane, data: SketchData, styleOf: (id: SketchItemId) => SketchStyle,
-  opts?: { readonly origin?: boolean }): SketchDrawing;   // všechny křivky a body; origin → bod ORIGIN_POINT_ID v [0, 0] stylu 'normal'
+  opts?: { readonly origin?: boolean; readonly editing?: boolean }): SketchDrawing;   // všechny křivky a body; origin → bod ORIGIN_POINT_ID v [0, 0] stylu 'normal'; editing → SketchDrawing.editing (M19.2)
 export function artifactDrawing(plane: Plane, entities: readonly SketchEntity[]): SketchDrawing;   // křivky (nekonstrukční 'normal', od M13 konstrukční 'construction'), bez bodů; od M13 regions z computeRegions
 export function planeDrawing(plane: Plane, size?: number): SketchDrawing;   // čtverec size × size (výchozí 100) se středem v počátku roviny, 4 úsečky stylem 'plane'
 export function axisDrawing(axis: { readonly origin: Vec3; readonly direction: Vec3 }, size?: number): SketchDrawing;   // M13: úsečka 'axis' délky size (výchozí 100) se středem v origin, stylem 'plane'
@@ -990,7 +1043,9 @@ export function createSketchActions(deps: { registry: ActionRegistry; sketches: 
 | `sketch.arc` | `sketch`, `draw`, `A` | střed, začátek, konec (promítnutý na kružnici) → oblouk proti směru hodinových ručiček |
 | `sketch.dimension` | `sketch`, `constrain`, `D` | klik na úsečku → `distance(p1, p2)`, na kružnici/oblouk → `radius`, na bod a pak druhý bod → `distance`; hodnota změřená (`dimensionFor`), `addConstraint` |
 
-- **Bod pod kurzorem** (pomocník `snapAt` v `sketch-tools/snap.ts`): `pick(x, y, ['sketchEntity'])`; zásah bodu session → jeho id a souřadnice; zásah `ORIGIN_POINT_ID` → nový bod `[0, 0]` a vazba `fix`; jinak nový bod v průsečíku paprsku `screenToRay` s rovinou (`plane.intersectRay`, `toLocal`; rovnoběžný paprsek → klik se ignoruje). Nové id z `ids.next()`.
+- **Bod pod kurzorem** (pomocník `snapAt(ctx, session, x, y, grid: number | null)` v `sketch-tools/snap.ts`): `pick(x, y, ['sketchEntity'])`; zásah bodu session → jeho id a souřadnice; zásah `ORIGIN_POINT_ID` → nový bod `[0, 0]` a vazba `fix`; jinak (křivka, jiná kresba, nic) nový bod v průsečíku paprsku `screenToRay` s rovinou (`plane.intersectRay`, `toLocal`; rovnoběžný paprsek → klik se ignoruje). Nové id z `ids.next()`.
+  - **Přichycení k mřížce** (M19.2 D4): pořadí je existující bod → počátek → volný bod. Jen volný bod se zaokrouhlí na násobek `grid` v souřadnicích roviny (`Math.round(v / grid) * grid`, `−0` → `0`). `grid === null` = bez mřížky.
+  - Kreslicí nástroje (úsečka, obdélník, kružnice, oblouk) volají `snapAt` s `snapGrid(sketches, mods)` = `gridSnap && !mods.alt ? gridStep() : null` (`common.ts`) při pohybu (náhled) i při kliku. `ClickHandlers.onMove(ctx, session, x, y, mods)` proto dostává i `mods: KeyMods`. Automatické `horizontal` a `vertical` úsečky se počítají z přichycených bodů. Výběrový nástroj (tažení bodu) a nástroj kóty se nepřichytávají.
 - **Náhled:** kreslicí nástroje kreslí rozpracovaný tvar přes `viewport.overlay.set('sketch-tool', …)` ve světových souřadnicích stylem `preview` (kružnice a oblouk lomenou čarou, 64 úseků na kruh); při deaktivaci `overlay.remove('sketch-tool')`.
 - Nástroje bez otevřené session nic nedělají.
 - **Akce** (`createSketchActions`, všechny `modes: ['sketch']`): `sketch.finish` a `sketch.cancel` (skupina `sketch`, bez zkratky, povolené s otevřenou session); `sketch.delete` (`Delete`, `Backspace`; povolená s neprázdným výběrem) → `remove(výběr)`; `sketch.construction` (`Q`; výběr obsahuje křivku) → `toggleConstruction`; pro každý druh z `GEOMETRIC_CONSTRAINT_KINDS` akce `sketch.constraint.<kind>` (skupina `sketch.constraint`, popisek `sketch.constraint.<kind>`, zkratky `H` vodorovná, `V` svislá, `I` shoda, ostatní bez; povolená, když `constraintFor(kind, vybrané entity) !== null`) → `addConstraint({ ...návrh, id: ids.next() })`.
@@ -1003,11 +1058,16 @@ Pravidla vestavěných akcí jsou prezentační logika, proto patří do `intera
 // SELECT_TOOL.label je klíč překladu 'tool.select' (ADR 0014).
 export const ACTION_IDS = {
   undo: 'undo', redo: 'redo', fitAll: 'view.fitAll',
+  viewFront: 'view.front', viewBack: 'view.back', viewRight: 'view.right', viewLeft: 'view.left',   // M19.2 D8
+  viewTop: 'view.top', viewBottom: 'view.bottom', viewIso: 'view.iso',
   featureEdit: 'feature.edit', featureRename: 'feature.rename', featureSuppress: 'feature.suppress',
   featureDelete: 'feature.delete', rollHere: 'timeline.rollHere',
   toStart: 'timeline.toStart', stepBack: 'timeline.stepBack', stepForward: 'timeline.stepForward', toEnd: 'timeline.toEnd',
 } as const;
 export function toolActionId(toolId: string): string;   // 'tool.<id>'
+
+/** M19.2: standardní pohled kamery; stejné hodnoty jako StandardView v render, takže CameraController sedí strukturálně. Jen v builtin-actions.ts, index.ts typ nevyváží. */
+export type StandardViewId = 'front' | 'back' | 'right' | 'left' | 'top' | 'bottom' | 'iso';
 
 /** Stav „zamčeno“: dokument jen pro čtení nebo otevřený dialog. Jediné místo pravidla. */
 export function createEditLock(deps: { readOnly: boolean; editor: FeatureEditor }): Observable<boolean>;
@@ -1016,12 +1076,13 @@ export function createBuiltInActions(deps: {
   registry: ActionRegistry; doc: DocumentReader; ops: OperationDispatcher; undo: UndoManager;
   selection: SelectionModel; featureTree: FeatureTreeModel; tools: ToolManager;
   toolList: readonly ToolDescriptor[]; locked: Observable<boolean>;
-  camera: { fitAll(): void };                         // úzké rozhraní, render interaction nezná
+  camera: { fitAll(): void; setView(view: StandardViewId): void };   // úzké rozhraní, render interaction nezná; setView od M19.2
 }): Disposable;
 ```
 
 - `createBuiltInActions` dostane od M11 i `confirm: (request: ConfirmRequest) => boolean` s `ConfirmRequest = { key: string; params: Readonly<Record<string, string | number>> }` (klíč překladu a hodnoty; `interaction` nezná DOM, dialog dodá `ui` přes `app`). `feature.delete` spočítá `featureTree.dependentsOf(odstraňované)`; je-li jich `n > 0`, zeptá se `confirm({ key: 'feature.delete.confirm', params: { n } })` a při `false` nic nesmaže ani nezmění výběr (jako Fusion: „N featur ztratí referenci“, [[Rozhodnutí noční rychloakce#M11 – Další entity|R16]]). Bez závislých se neptá; maže-li se featura spolu se všemi svými závislými, je `n = 0` (`dependentsOf` počítá jen featury mimo odstraňované) a také se neptá.
 - Skupina `feature` (kontextové menu) v pořadí: `feature.edit` (→ `featureTree.edit`, takže skica se otevře ve skicáři; [[M19.1-opravy-z-revize|M19.1]], dřív `FeatureEditor.edit` a skica dostala obecný dialog), `feature.rename` (→ `featureTree.beginRename`), `feature.suppress`, `timeline.rollHere`, `feature.delete`. Menu v [[Timeline]] je jen vykreslený snapshot akcí této skupiny.
+- **Standardní pohledy** (M19.2, [[M19.2-ux-backlog|D8]]): sedm akcí `view.front`, `view.back`, `view.right`, `view.left`, `view.top`, `view.bottom`, `view.iso` (v tomto pořadí registrace) volá `camera.setView(pohled)`. Dokument nemění, takže jsou jako `view.fitAll` povolené vždy (i jen pro čtení a s otevřeným dialogem), bez zkratek a bez `modes` (všechny režimy). Popisek = id akce (klíč překladu). V liště jsou jen v menu skupiny „Zobrazit“ ([[11-ui#Komponenty]], Toolbar). `session.ts` se nemění: `viewport.camera` závislost splní strukturálně.
 - `ui` id akcí nezná natvrdo: bere je z `AppSession.actionIds` (reexport `ACTION_IDS`).
 
 ## Akce a klávesové zkratky
@@ -1083,6 +1144,7 @@ Akce registruje `createBuiltInActions` volané z `app` (undo, redo, smazat výb�
 - Skicář (M12, `FakeSolver`, `FakeViewport`): `create` (rovina, výchozí XY, neznámá rovina), `edit` (jiný typ → výjimka), první řešení bez zápisu, `addGeometry`/`addConstraint`/`setDimension`/`remove` pro `'ok'`, `'conflict'`, `'failed'`, redundantní vazba, vynechání redundantních automatických vazeb, sériová fronta, tažení (jeden rozpracovaný a jeden čekající cíl přes `hold`/`release`), výsledek po zavření zahozen, kresba a styly (`defined` u plně určené), `finish` = jeden záznam v logu, `cancel` = log beze změny; akce skicáře (povolení podle výběru); nástroje s `FakeViewport` (polyline s uzavřením, automatická vodorovná, snap na bod a na počátek, obdélník, kružnice, oblouk, kóta, tažení ve výběrovém nástroji); `toSketchDrawing`, `artifactDrawing`, `planeDrawing`; `FeatureEditSession.setParams`; `BrowserModel` roviny a skici; `FeatureTreeModel.edit` skici.
 - M13: `FieldState.hidden`, `group`, `heading`, `refText`; `regionRefsOf`/`axisRefOf` (vnitřní v `interaction`: jediné čtení referencí oblastí a os, odmítnou prázdný `sketch` nebo `sketch` s `/`); `activeRefParam` a `focusRefParam` se skrytými parametry; `create` aktivuje první viditelný referenční parametr; `pickFilterFor` pro `region` a `axis`; `refPick` – oblast (přidat, odebrat, `'sketch-edit'` ignorovat), osa počátku, úsečka skici, kružnice ignorovaná; `artifactDrawing` s konstrukčními čarami a oblastmi (díra), `axisDrawing`; `bindSelectionHighlight` s oblastmi dialogu; `BrowserModel` osy a oblasti; `ToolContext.ops` bez `begin` (typově).
 - M15: `HistoryModel` (prázdný log; tři `do` v obráceném pořadí; undo → řádek `undo` s `target` a `do` `undone`; redo; undo + nové `do` → `abandoned`; prázdný log → `older` 0; 250 záznamů → 200 řádků, `total` 250 a `older` 50; nezměněné řádky `===`; log obnovený ze záznamů dá stejné řádky); `createFileActions` s `FakeFileExporter` (zákazy bez těles, se skrytými, s dialogem, v režimu skici; jen viditelná tělesa v pořadí; `running` zakáže obě akce; `idle`, `failed` a `dismiss`; `dispose`); `BrowserModel` barva (řádek, `setColor` a undo, `colors` jen pro tělesa poslední regenerace, zákazy, neplatná barva).
+- M19.2 (vlna 2): `HistoryModel` vynechá `document.rename` (žádný řádek, nezapočítá se, žádná nová emise); každá akce standardního pohledu zavolá `camera.setView` se svou hodnotou a zůstává povolená i s otevřeným dialogem.
 - Architektura: `interaction` projde `tsconfig.domain.json` a nezávisí na `regen`, `kernel`, `render`, `ui` (`npm run check`).
 
 ## Otevřené otázky

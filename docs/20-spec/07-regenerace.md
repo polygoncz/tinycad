@@ -265,7 +265,8 @@ export type FeatureStatus =
 export interface FeatureError {
   readonly code: 'INVALID_PARAMS' | 'UNRESOLVED_REFERENCE' | 'KERNEL' | 'UNKNOWN_TYPE' | 'STALE_VERSION';
   readonly message: string;                      // technický text (log, chyby jádra)
-  readonly issues?: readonly ParamIssue[];       // INVALID_PARAMS: problémy z schema.validate (M10, ADR 0014); UNRESOLVED_REFERENCE: [{ param, code: 'param.unresolvedRef' }] (M11)
+  readonly issues?: readonly ParamIssue[];       // INVALID_PARAMS: problémy z schema.validate (M10, ADR 0014); UNRESOLVED_REFERENCE: [{ param, code: 'param.unresolvedRef' }] (M11);
+                                                 // KERNEL (M19.2): [{ param: '', code: 'kernel.operationFailed' | 'kernel.invalidInput' | 'kernel.internal' }], nebo issues builderu
 }
 ```
 
@@ -276,7 +277,7 @@ Status featury určí `Regenerator` v tomto pořadí:
 3. chybí schéma nebo builder pro `type` → `error` `UNKNOWN_TYPE`,
 4. `feature.typeVersion !== schema.version` → `error` `STALE_VERSION` (pojistka pro data, která obešla migraci, [[04-operace-a-historie#Migrace dat featur]]; `message` nese obě verze), builder se nevolá,
 5. `schema.validate(params)` vrátí problémy → `error` `INVALID_PARAMS` s `issues` (zmrazená kopie) a technickou `message` `'param: code; …'`, builder se nevolá. UI chybu překládá z `issues`, ne z `message` (rozhodnutí 2026-10-13),
-6. builder vrátí `{ ok: false }` → `error` s jeho chybou; výjimka s kódem jádra → `error` `KERNEL`,
+6. builder vrátí `{ ok: false }` → `error` s jeho chybou; výjimka s kódem jádra → `error` `KERNEL` s technickou `message` a od M19.2 ([[M19.2-ux-backlog|D9]]) s `issues: [{ param: '', code }]` podle `kernelErrorCode`: `'operation-failed'` → `kernel.operationFailed`, `'invalid-input'` → `kernel.invalidInput`, jinak `kernel.internal`. UI tak ukáže přeložený text a technickou zprávu jen v „Podrobnostech“ (`TreeRow.detail`, [[10-interakce#Strom featur: `FeatureTreeModel`]]). Builder, který chybu jádra převede sám (fillet, chamfer, `extrude.upToFace`), vrací `{ ok: false }` s vlastními issues, a ta mají přednost,
 7. builder vrátil stav a volal `warn` → `warning`, jinak `ok`.
 
 `pending` Regenerator nevrací, používá ho UI před první regenerací.
@@ -379,7 +380,7 @@ Handle se z vlastněné množiny odeberou ještě před čekáním na `release` 
 - Suppressed featura propustí stav, builder se nezavolá.
 - Status z cache se zachová (`warning` i `error` featury před změnou).
 - `warn` dvakrát → jeden `warning` se zprávami spojenými `'\n'`.
-- Výjimka jádra (`failNext('makeBox', …)`) → `KERNEL`; jiná výjimka → `run` odmítne a handle se přesto uklidí.
+- Výjimka jádra (`failNext('makeBox', …)`) → `KERNEL` (od M19.2 s issue `kernel.operationFailed` a `param: ''`); jiná výjimka → `run` odmítne a handle se přesto uklidí.
 - Builder vytvoří mezivýsledek a vrátí chybu → handle se uvolní.
 - Souběh: dvě rychlé `run`, první vrátí `'superseded'`, cache odpovídá druhé, žádné úniky.
 - Události: pořadí `started`, `featureDone`…, `finished`; `finished` jen pro dokončenou generaci.

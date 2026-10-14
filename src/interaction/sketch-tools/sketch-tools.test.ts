@@ -23,6 +23,7 @@ import { createSketchTools } from '../sketch-tools';
 import { FakeRegenStatus, FakeViewport, aTopoNames } from '../testing';
 import { createToolManager } from '../tool-manager';
 import { createToolRegistry } from '../tools';
+import { snapAt } from './snap';
 import type { ToolContext } from '../tools';
 import type { KeyMods, PickResult, SketchDrawing, ViewPointerEvent } from '../viewport-port';
 
@@ -118,7 +119,8 @@ function curveDistance(c: SketchDrawing['curves'][number], x: number, y: number)
   return Math.hypot(x - (ax + t * (bx - ax)), y - (ay + t * (by - ay)));
 }
 
-function setup() {
+/** gridStep: the step of the grid the editor reads (default: the editor's own, 1). */
+function setup(opts: { gridStep?: () => number } = {}) {
   const schemas = createFeatureSchemaRegistry();
   schemas.register(SKETCH_SCHEMA);
   schemas.register(BOX_SCHEMA);
@@ -139,6 +141,7 @@ function setup() {
     solver,
     viewport,
     resolvePlane,
+    ...(opts.gridStep === undefined ? {} : { gridStep: opts.gridStep }),
   });
   const regen = new FakeRegenStatus();
   // A box with named faces 0 (front), 2 (side) and 5 (top); face 1 has no name (M14).
@@ -180,8 +183,8 @@ async function settle(): Promise<void> {
 }
 
 /** A setup with an open new sketch (with `sketch` written into it) after the first solve. */
-async function sketching(opts: { sketch?: SketchData } = {}) {
-  const ctx = setup();
+async function sketching(opts: { sketch?: SketchData; gridStep?: () => number } = {}) {
+  const ctx = setup(opts.gridStep === undefined ? {} : { gridStep: opts.gridStep });
   ctx.manager.activate('sketch');
   const session = ctx.sketches.current.get();
   if (session === null) throw new Error('no session');
@@ -474,7 +477,9 @@ describe('the line tool', () => {
   });
 
   it('a nearly horizontal or vertical line gets horizontal or vertical', async () => {
-    const { manager, viewport, session } = await sketching();
+    const { manager, viewport, session, sketches } = await sketching();
+    // Off-grid points: the angle (or the place) is the point of the test, not the grid.
+    sketches.setGridSnap(false);
     manager.activate('sketch.line');
 
     // 2.9° off the x axis, 2.9° off the y axis, then 45°.
@@ -495,7 +500,9 @@ describe('the line tool', () => {
   });
 
   it('3.1° off an axis gets no constraint', async () => {
-    const { manager, viewport, session } = await sketching();
+    const { manager, viewport, session, sketches } = await sketching();
+    // Off-grid points: the angle (or the place) is the point of the test, not the grid.
+    sketches.setGridSnap(false);
     manager.activate('sketch.line');
     const t = Math.tan((3.1 * Math.PI) / 180);
 
@@ -562,7 +569,9 @@ describe('the line tool', () => {
   });
 
   it('a pick of another drawing counts as no snap', async () => {
-    const { manager, viewport, session } = await sketching();
+    const { manager, viewport, session, sketches } = await sketching();
+    // Off-grid points: the angle (or the place) is the point of the test, not the grid.
+    sketches.setGridSnap(false);
     viewport.sketches.set('origin/plane:xy', {
       plane: XY,
       curves: [],
@@ -962,5 +971,193 @@ describe('the select tool of the sketch', () => {
   it('the drawing of the edited sketch is what the tools pick', async () => {
     const { viewport } = await sketching({ sketch });
     expect(viewport.sketchDrawings.has(EDIT_SKETCH_DRAWING_ID)).toBe(true);
+  });
+});
+
+describe('snapAt with the grid (M19.2 D4)', () => {
+  const lineSketch = data([
+    { kind: 'point', id: 'p', x: 1.4, y: -2.6 },
+    { kind: 'point', id: 'l1', x: -50, y: 20 },
+    { kind: 'point', id: 'l2', x: 50, y: 20 },
+    { kind: 'line', id: 'l', p1: 'l1', p2: 'l2' },
+  ]);
+
+  async function snapping() {
+    const s = await sketching({ sketch: lineSketch });
+    const ctx: ToolContext = { ...s.ctx, finish: () => undefined };
+    return {
+      ...s,
+      at: (x: number, y: number, grid: number | null) => snapAt(ctx, s.session, x, y, grid),
+    };
+  }
+
+  it('rounds a free point to the multiples of the grid step', async () => {
+    const { at } = await snapping();
+    expect(at(11.4, -12.6, 1)).toEqual({ kind: 'free', at: [11, -13] });
+    expect(at(7, 3, 5)).toEqual({ kind: 'free', at: [5, 5] });
+  });
+
+  it('without the grid (null) the free point stays where the cursor is', async () => {
+    const { at } = await snapping();
+    expect(at(11.4, -12.6, null)).toEqual({ kind: 'free', at: [11.4, -12.6] });
+  });
+
+  it('a rounded −0 is 0', async () => {
+    const { at } = await snapping();
+    const target = at(-1.2, 7, 5);
+    expect(Object.is(target?.at[0], 0)).toBe(true);
+    expect(target?.at[1]).toBe(5);
+  });
+
+  it('a point of the sketch within the tolerance wins over the grid', async () => {
+    const { at } = await snapping();
+    expect(at(1.5, -2.5, 1)).toEqual({ kind: 'point', id: 'p', at: [1.4, -2.6] });
+  });
+
+  it('the origin wins over the grid', async () => {
+    const { at } = await snapping();
+    expect(at(0.3, 0.6, 5)?.kind).toBe('origin');
+  });
+
+  it('a hit of a curve gives a free point, rounded too', async () => {
+    const { at, viewport } = await snapping();
+    expect(viewport.pick(12.3, 20.2, ['sketchEntity'])).toMatchObject({ entity: 'l' });
+    expect(at(12.3, 20.2, 1)).toEqual({ kind: 'free', at: [12, 20] });
+  });
+});
+
+describe('the drawing tools and the grid (M19.2 D4)', () => {
+  it('the line tool snaps new points to the grid of step 1 by default', async () => {
+    const { manager, viewport, session } = await sketching();
+    manager.activate('sketch.line');
+
+    await clicks(viewport, [
+      [10.4, 20.6],
+      [30.3, 40.2],
+    ]);
+
+    expect(pointsOf(session).map((p) => [p.x, p.y])).toEqual([
+      [10, 21],
+      [30, 40],
+    ]);
+  });
+
+  it('with Alt held the points do not snap to the grid', async () => {
+    const { manager, viewport, session } = await sketching();
+    manager.activate('sketch.line');
+
+    click(viewport, 10.4, 20.6, { alt: true });
+    await settle();
+    click(viewport, 30.3, 40.2, { alt: true });
+    await settle();
+
+    expect(pointsOf(session).map((p) => [p.x, p.y])).toEqual([
+      [10.4, 20.6],
+      [30.3, 40.2],
+    ]);
+  });
+
+  it('with setGridSnap(false) the points do not snap to the grid', async () => {
+    const { manager, viewport, session, sketches } = await sketching();
+    sketches.setGridSnap(false);
+    manager.activate('sketch.line');
+
+    await clicks(viewport, [
+      [10.4, 20.6],
+      [30.3, 40.2],
+    ]);
+
+    expect(pointsOf(session).map((p) => [p.x, p.y])).toEqual([
+      [10.4, 20.6],
+      [30.3, 40.2],
+    ]);
+  });
+
+  it('snaps to the step of gridStep, read on every click', async () => {
+    let step = 5;
+    const { manager, viewport, session } = await sketching({ gridStep: () => step });
+    manager.activate('sketch.line');
+
+    await clicks(viewport, [[7, 3]]);
+    step = 2;
+    await clicks(viewport, [[7, 3.2]]);
+
+    expect(pointsOf(session).map((p) => [p.x, p.y])).toEqual([
+      [5, 5],
+      [8, 4],
+    ]);
+  });
+
+  it('the preview shows the snapped point; with Alt the cursor', async () => {
+    const { manager, viewport } = await sketching();
+    manager.activate('sketch.line');
+    click(viewport, 10, 10);
+    await settle();
+
+    viewport.emitPointer(pointer('move', 30.4, 39.6));
+    expect(viewport.overlayShapes.get('sketch-tool')).toEqual([
+      expect.objectContaining({
+        points: [
+          [10, 10, 0],
+          [30, 40, 0],
+        ],
+      }),
+    ]);
+
+    viewport.emitPointer(pointer('move', 30.4, 39.6, { alt: true }));
+    expect(viewport.overlayShapes.get('sketch-tool')).toEqual([
+      expect.objectContaining({
+        points: [
+          [10, 10, 0],
+          [30.4, 39.6, 0],
+        ],
+      }),
+    ]);
+  });
+
+  it('horizontal and vertical of the line follow the snapped points', async () => {
+    const { manager, viewport, session } = await sketching();
+    manager.activate('sketch.line');
+
+    // 3.1° off the x axis under the cursor, 2.9° once snapped to (10, 10) and (30, 9).
+    await clicks(viewport, [
+      [10, 10.49],
+      [30, 9.4],
+    ]);
+
+    expect(kindsOf(session)).toEqual(['horizontal']);
+  });
+
+  it('the rectangle, circle and arc tools snap their points to the grid', async () => {
+    const { manager, viewport, session } = await sketching();
+    manager.activate('sketch.rectangle');
+    await clicks(viewport, [
+      [10.4, 10.4],
+      [30.6, 20.3],
+    ]);
+    manager.activate('sketch.circle');
+    await clicks(viewport, [
+      [50.2, 50.3],
+      [53.4, 54.2],
+    ]);
+    manager.activate('sketch.arc');
+    await clicks(viewport, [
+      [80.3, 80.2],
+      [85.2, 79.8],
+      [80.1, 90],
+    ]);
+
+    expect(pointsOf(session).map((p) => [p.x, p.y])).toEqual([
+      [10, 10],
+      [31, 10],
+      [31, 20],
+      [10, 20],
+      [50, 50],
+      [80, 80],
+      [85, 80],
+      [80, 85],
+    ]);
+    const circle = session.state.get().entities.find((e) => e.kind === 'circle');
+    expect(circle).toMatchObject({ radius: 5 });
   });
 });

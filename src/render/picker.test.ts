@@ -45,7 +45,8 @@ function setup() {
   const pickCenter = (filter?: PickFilter) => pickAt(SIZE / 2 + 30, SIZE / 2 + 70, filter);
   // (9.7, 0): 3 px from the edge x = 10 of the top face of A, inside the edge tolerance.
   const pickNearEdge = (filter?: PickFilter) => pickAt(SIZE / 2 + 97, SIZE / 2, filter);
-  return { views, pickCenter, pickNearEdge, sceneQueries: () => sceneQueries };
+  const isVisible = (point: Vec3) => picker.isVisible(camera, point);
+  return { views, pickCenter, pickNearEdge, isVisible, sceneQueries: () => sceneQueries };
 }
 
 describe('Picker visibility', () => {
@@ -66,6 +67,32 @@ describe('Picker visibility', () => {
     const { views, pickCenter } = setup();
     for (const view of views) view.object.visible = false;
     expect(pickCenter()).toBeNull();
+  });
+});
+
+describe('Picker.isVisible', () => {
+  it('is false for a point behind a body', () => {
+    // Between A (z 10..20) and B (z 0..5), under A seen from above.
+    expect(setup().isVisible([3, -7, 7])).toBe(false);
+  });
+
+  it('is true on the front face and in front of a body', () => {
+    const { isVisible } = setup();
+    expect(isVisible([3, -7, 20])).toBe(true);
+    expect(isVisible([3, -7, 30])).toBe(true);
+  });
+
+  it('ignores a hidden body', () => {
+    const { views, isVisible } = setup();
+    const front = views[0];
+    if (front === undefined) throw new Error('no front view');
+    front.object.visible = false;
+    expect(isVisible([3, -7, 7])).toBe(true);
+  });
+
+  it('is true without bodies', () => {
+    const picker = createPicker({ views: () => [], bounds: () => null });
+    expect(picker.isVisible(topCamera(), [0, 0, -50])).toBe(true);
   });
 });
 

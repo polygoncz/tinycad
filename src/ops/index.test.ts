@@ -10,6 +10,7 @@ describe('ops public API', () => {
       'createOperationDispatcher',
       'createOperationLog',
       'createUndoManager',
+      'isDocumentRename',
       'parseLogEntry',
       'rebuildUndoStacks',
       'replayLog',

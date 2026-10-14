@@ -2,6 +2,7 @@ import { assert, DisposableStore, Emitter } from '@/core';
 import type { Disposable, Subscribable } from '@/core';
 import type { OperationDispatcher } from './dispatcher';
 import type { LogEntry, OperationLogReader } from './log';
+import { isDocumentRename } from './operation';
 
 export interface UndoManager extends Disposable {
   /** The undo stack is not empty and no transaction is running. */
@@ -27,6 +28,10 @@ function step(stacks: Stacks, entry: LogEntry): Stacks {
   const { undo, redo } = stacks;
   switch (entry.kind) {
     case 'do':
+      // The name of the document is metadata outside undo (M19.2, D5): Ctrl+Z does not bring
+      // back the old name and a rename keeps redo. It commutes with every other operation, so
+      // undo of the steps around it stays correct.
+      if (isDocumentRename(entry.op)) return stacks;
       return { undo: [...undo, entry.seq], redo: [] };
     case 'undo': {
       const top = undo[undo.length - 1];

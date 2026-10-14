@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createSequentialIdGenerator } from '@/core';
+import { createSequentialIdGenerator, plane as planeMath } from '@/core';
 import type { Plane } from '@/core';
 import {
   ORIGIN_PLANES,
@@ -319,6 +319,47 @@ describe('SketchEditor.planeOf', () => {
     expect(sketches.planeOf(planeRef(ORIGIN_PLANE_IDS.xz))).toBe(XZ);
     expect(sketches.planeOf(TOP_FACE)).toBe(TOP);
     expect(sketches.planeOf(topoRef('b1/body', 'b1/face:side'))).toBeUndefined();
+  });
+});
+
+describe('SketchEditor.gridSnap (M19.2 D4)', () => {
+  it('is on by default and setGridSnap switches it', () => {
+    const { sketches } = setup();
+    const seen: boolean[] = [];
+    sketches.gridSnap.subscribe(() => seen.push(sketches.gridSnap.get()));
+
+    expect(sketches.gridSnap.get()).toBe(true);
+    sketches.setGridSnap(false);
+    sketches.setGridSnap(false);
+    sketches.setGridSnap(true);
+    expect(seen).toEqual([false, true]);
+  });
+
+  it('gridStep is deps.gridStep, read on every call; 1 without it', () => {
+    expect(setup().sketches.gridStep()).toBe(1);
+    let step = 5;
+    const ctx = setup();
+    const sketches = createSketchEditor({
+      features: ctx.editor,
+      solver: ctx.solver,
+      viewport: ctx.viewport,
+      resolvePlane,
+      gridStep: () => step,
+    });
+    expect(sketches.gridStep()).toBe(5);
+    step = 0.2;
+    expect(sketches.gridStep()).toBe(0.2);
+  });
+
+  it('belongs to the editor: it survives closing and opening a sketch', () => {
+    const { sketches } = setup({ features: [['s1']] });
+    sketches.setGridSnap(false);
+
+    sketches.edit(fid('s1')).cancel();
+    const session = sketches.create(planeRef(ORIGIN_PLANE_IDS.xy));
+    expect(sketches.gridSnap.get()).toBe(false);
+    session.cancel();
+    expect(sketches.gridSnap.get()).toBe(false);
   });
 });
 
@@ -1000,6 +1041,34 @@ describe('SketchSession selection and panel rows', () => {
     expect(Object.isFrozen(after)).toBe(true);
     expect(Object.isFrozen(after.selection)).toBe(true);
     expect(Object.isFrozen(after.constraintRows)).toBe(true);
+  });
+
+  it('lists the dimensions for the viewport in world coordinates of the plane', async () => {
+    const rect = rectangleData();
+    const withDim = data(rect.entities, [
+      ...rect.constraints,
+      { kind: 'distance', id: 'w', a: 'a', b: 'b', value: 10 },
+    ]);
+    const ctx = setup({ features: [['s1', withDim, ORIGIN_PLANE_IDS.xz]] });
+    const session = ctx.sketches.edit(fid('s1'));
+    await settle();
+    const before = session.state.get();
+    expect(before.dimensions).toEqual([
+      {
+        id: 'w',
+        kind: 'distance',
+        value: 10,
+        from: planeMath.toWorld(XZ, [0, 0]),
+        to: planeMath.toWorld(XZ, [10, 0]),
+        n: 1,
+        selected: false,
+      },
+    ]);
+
+    session.select(item('h1'));
+    expect(session.state.get().dimensions).toBe(before.dimensions);
+    session.select(item('w'));
+    expect(session.state.get().dimensions[0]?.selected).toBe(true);
   });
 
   it('shows invalid data as empty', () => {

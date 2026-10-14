@@ -3,10 +3,12 @@
 // "Undo" and "Redo" show as rows of their own and a 'do' says whether it is still in effect.
 // The status comes from rebuildUndoStacks, the same rule as UndoManager, but the model does
 // not depend on UndoManager: the order of the `appended` subscribers would not be certain.
+// M19.2 (D5): document.rename is outside undo, so it is no step of the history either; its
+// entries are left out of the rows and of the counts.
 
 import { ObservableValue } from '@/core';
 import type { Disposable, Observable } from '@/core';
-import { rebuildUndoStacks } from '@/ops';
+import { isDocumentRename, rebuildUndoStacks } from '@/ops';
 import type { LogEntry, OperationLogReader } from '@/ops';
 
 export interface HistoryRow {
@@ -24,7 +26,7 @@ export interface HistoryRow {
 
 export interface HistoryState {
   readonly rows: readonly HistoryRow[];
-  /** The number of all log entries. */
+  /** The number of all log entries except document.rename. */
   readonly total: number;
   /** Entries left out of `rows` (older than the newest HISTORY_LIMIT): total - rows.length. */
   readonly older: number;
@@ -70,8 +72,9 @@ export function createHistoryModel(deps: { log: OperationLogReader }): HistoryMo
   }
 
   function compute(): HistoryState {
-    const entries = log.entries();
-    const stacks = rebuildUndoStacks(entries);
+    const all = log.entries();
+    const stacks = rebuildUndoStacks(all);
+    const entries = all.filter((entry) => !isDocumentRename(entry.op));
     const undone = new Set(stacks.redo);
     const active = new Set(stacks.undo);
     const statusOf = (entry: LogEntry): RowStatus => {

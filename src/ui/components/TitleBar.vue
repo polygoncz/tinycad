@@ -7,12 +7,15 @@
 // the switches of language and theme; in development builds also the switch of the debug panel
 // of topological names (M14, R111). M15: the File menu (the actions of session.fileActionIds)
 // with the state of an export and its warning (M19.1: a document exported without history), and
-// the switch of the history panel (its open state is layout of AppShell). Only bindings.
-import { computed, ref } from 'vue';
+// the switch of the history panel (its open state is layout of AppShell). M19.2 (D5): the name
+// is a button that turns into a text field; Enter or leaving it renames through
+// session.documentName (outside undo), Esc cancels. Only bindings.
+import { computed, nextTick, ref, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
 import { fileMenuItems } from '../file-menu';
+import { finishEdit } from '../inline-rename';
 import { saveDotOf, titleBarNotices } from '../title-bar-status';
 import type { NoticeAction } from '../title-bar-status';
 import ContextMenu from './ContextMenu.vue';
@@ -55,8 +58,39 @@ const notices = computed(() =>
 // The debug switch exists only in development builds (spec 11); production drops it.
 const debugSwitch = import.meta.env.DEV;
 const topoNamesShown = useObservable(session.topoInspector.enabled);
-// No rename of documents in M10, so the name is read once (as in the Browser).
-const documentName = session.doc.meta.name;
+const documentName = useObservable(session.documentName.name);
+const canRename = useObservable(session.documentName.canRename);
+// The running edit of the name (true) and its text; one edit commits at most once.
+const renaming = ref<true | null>(null);
+const nameText = ref('');
+const nameInput = useTemplateRef<HTMLInputElement>('nameInput');
+const nameButton = useTemplateRef<HTMLButtonElement>('nameButton');
+
+async function startRename(): Promise<void> {
+  if (!canRename.value) return;
+  nameText.value = documentName.value;
+  renaming.value = true;
+  await nextTick();
+  nameInput.value?.select();
+}
+
+/** Enter or leaving the field. An empty name is refused: the field closes on the old name. */
+function commitRename(): void {
+  if (finishEdit(renaming) === null) return;
+  session.documentName.rename(nameText.value);
+}
+
+function cancelRename(): void {
+  finishEdit(renaming);
+}
+
+/** Enter or Esc: the focus goes back to the name, not to the page. */
+async function endRenameByKey(commit: boolean): Promise<void> {
+  if (commit) commitRename();
+  else cancelRename();
+  await nextTick();
+  nameButton.value?.focus();
+}
 
 function showDocuments(): void {
   globalThis.location.hash = '';
@@ -131,7 +165,29 @@ function toggleTopoNames(): void {
     </span>
 
     <div class="title">
-      <span class="name">{{ documentName }}</span>
+      <input
+        v-if="renaming !== null"
+        ref="nameInput"
+        v-model="nameText"
+        type="text"
+        class="name-input"
+        :aria-label="t('documents.name')"
+        @keydown.enter.prevent="endRenameByKey(true)"
+        @keydown.esc.prevent="endRenameByKey(false)"
+        @blur="commitRename"
+      />
+      <button
+        v-else
+        ref="nameButton"
+        type="button"
+        class="name"
+        :title="t('titleBar.rename')"
+        :aria-label="t('titleBar.rename')"
+        :disabled="!canRename"
+        @click="startRename"
+      >
+        {{ documentName }}
+      </button>
       <span v-if="session.readOnly" class="read-only" :title="t('titleBar.readOnlyHint')">
         <i class="ti ti-lock" aria-hidden="true" /> {{ t('titleBar.readOnly') }}
       </span>
@@ -256,9 +312,31 @@ function toggleTopoNames(): void {
   font-weight: 600;
 }
 .name {
+  min-width: 0;
+  padding: 2px 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  border: none;
+  border-radius: var(--radius-row);
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+.name:hover:enabled {
+  background: var(--control-hover);
+}
+.name-input {
+  width: min(320px, 100%);
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-row);
+  background: var(--field-bg);
+  color: inherit;
+  font: inherit;
+  text-align: center;
 }
 .save-dot {
   flex: none;

@@ -6,8 +6,15 @@ import { aDocument, aFeature } from '@/document/testing';
 import { boxPlugin } from '@/features/box';
 import { createOpHandlerRegistry } from '@/ops';
 import { createMemoryDocumentStore, exportDocument, loadDocument } from '@/persistence';
+import type { DocumentStore } from '@/persistence';
 import { acquireDocumentLock } from './doc-lock';
-import { createNewDocument, deleteDocument, importDocumentFile, listDocuments } from './documents';
+import {
+  createNewDocument,
+  deleteDocument,
+  importDocumentFile,
+  listDocuments,
+  renameDocument,
+} from './documents';
 import { createPluginRegistries } from './registries';
 import { aFakeLocks, settle } from './testing';
 
@@ -93,6 +100,93 @@ describe('documents', () => {
     await settle();
     await deleteDocument({ store, locks }, id);
     expect(await listDocuments(store)).toEqual([]);
+  });
+});
+
+describe('renameDocument (M19.2, D5)', () => {
+  async function renameSetup() {
+    const env = setup();
+    const id = await createNewDocument(env.store, env.deps);
+    const { locks, held } = aFakeLocks();
+    const deps = { store: env.store, locks, plugins: [boxPlugin], now: () => 5000 };
+    return { ...env, id, locks, held, deps };
+  }
+
+  async function load(store: DocumentStore, id: DocumentId) {
+    const { schemas, handlers } = createPluginRegistries([boxPlugin]);
+    const loaded = await loadDocument(store, id, { schemas, handlers, verify: true });
+    if (!loaded.ok) throw new Error('not loaded');
+    return loaded.value;
+  }
+
+  it('renames the stored document: the list and a reload show the trimmed name', async () => {
+    const { store, id, deps, advance } = await renameSetup();
+    advance(10);
+    await renameDocument(deps, id, '  Držák  ');
+    expect(await listDocuments(store)).toEqual([
+      { meta: { id, name: 'Držák', createdAt: 1000 }, lastSeq: 1, updatedAt: 1010 },
+    ]);
+    const { doc, log } = await load(store, id);
+    expect(doc.meta.name).toBe('Držák');
+    expect(log.entries()).toEqual([
+      {
+        seq: 1,
+        kind: 'do',
+        op: { type: 'document.rename', v: 1, name: 'Držák' },
+        inverse: { type: 'document.rename', v: 1, name: UNTITLED },
+        label: 'document.rename',
+        time: 5000,
+      },
+    ]);
+  });
+
+  it('appends after the stored log, which stays as it was', async () => {
+    const { store, id, deps } = await renameSetup();
+    await renameDocument(deps, id, 'First');
+    await renameDocument(deps, id, 'Second');
+    const { doc, log } = await load(store, id);
+    expect(doc.meta.name).toBe('Second');
+    expect(log.entries().map((e) => [e.seq, e.op])).toEqual([
+      [1, { type: 'document.rename', v: 1, name: 'First' }],
+      [2, { type: 'document.rename', v: 1, name: 'Second' }],
+    ]);
+  });
+
+  it('renames under the lock of the document and releases it after', async () => {
+    const { id, deps, held } = await renameSetup();
+    await renameDocument(deps, id, 'Part');
+    await settle();
+    expect(held.size).toBe(0);
+  });
+
+  it('refuses a document open in another tab and changes nothing', async () => {
+    const { store, id, deps, locks } = await renameSetup();
+    const otherTab = await acquireDocumentLock(locks, id);
+    await expect(renameDocument(deps, id, 'Part')).rejects.toThrow(/another tab/);
+    expect((await listDocuments(store)).map((d) => d.meta.name)).toEqual([UNTITLED]);
+    expect((await load(store, id)).log.lastSeq).toBe(0);
+    otherTab.dispose();
+  });
+
+  it.each([[''], ['   ']])('refuses the empty name %j and changes nothing', async (name) => {
+    const { store, id, deps } = await renameSetup();
+    await expect(renameDocument(deps, id, name)).rejects.toThrow(/empty/);
+    expect((await listDocuments(store)).map((d) => d.meta.name)).toEqual([UNTITLED]);
+    expect((await load(store, id)).log.lastSeq).toBe(0);
+  });
+
+  it('the same name (also with spaces around it) writes nothing and keeps the time', async () => {
+    const { store, id, deps, advance } = await renameSetup();
+    advance(10);
+    await renameDocument(deps, id, `  ${UNTITLED} `);
+    expect(await listDocuments(store)).toEqual([
+      { meta: { id, name: UNTITLED, createdAt: 1000 }, lastSeq: 0, updatedAt: 1000 },
+    ]);
+  });
+
+  it('rejects for a missing document', async () => {
+    const { deps } = await renameSetup();
+    await expect(renameDocument(deps, 'missing' as DocumentId, 'Part')).rejects.toThrow(/missing/);
   });
 });
 

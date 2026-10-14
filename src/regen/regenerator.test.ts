@@ -503,10 +503,46 @@ describe('Regenerator.run', () => {
       kernel.failNext('makeBox', 'operation-failed', 'Box failed');
       const result = await run(aStudio(list));
       expect([...result.statuses]).toEqual([
-        ['f1', { kind: 'error', error: { code: 'KERNEL', message: 'Box failed' } }],
+        [
+          'f1',
+          {
+            kind: 'error',
+            error: {
+              code: 'KERNEL',
+              message: 'Box failed',
+              issues: [{ param: '', code: 'kernel.operationFailed' }],
+            },
+          },
+        ],
         ['f2', OK],
       ]);
       expect(bodyIds(result)).toEqual(['f2/body']);
+    });
+
+    it('a kernel exception gets a translated issue by its kernel code (D9 of M19.2)', async () => {
+      const codeOf = async (kernelCode: 'invalid-input' | 'internal' | 'unknown-handle') => {
+        const { run, kernel } = setup();
+        kernel.failNext('makeBox', kernelCode, 'x');
+        const result = await run(aStudio(features(1)));
+        const status = result.statuses.get(fid('f1'));
+        return status?.kind === 'error' ? status.error.issues : undefined;
+      };
+      expect(await codeOf('invalid-input')).toEqual([{ param: '', code: 'kernel.invalidInput' }]);
+      expect(await codeOf('internal')).toEqual([{ param: '', code: 'kernel.internal' }]);
+      expect(await codeOf('unknown-handle')).toEqual([{ param: '', code: 'kernel.internal' }]);
+    });
+
+    it('a builder that converts the kernel error itself keeps its own error', async () => {
+      const { run, schemas, builders } = setup();
+      const own: FeatureError = {
+        code: 'INVALID_PARAMS',
+        message: 'radius: fillet.failed',
+        issues: [{ param: 'radius', code: 'fillet.failed' }],
+      };
+      schemas.register(aSchema('own'));
+      builders.register(aSpyBuilder('own', () => Promise.resolve({ ok: false, error: own })));
+      const result = await run(aStudio([aFeature({ id: 'a', type: 'own' })]));
+      expect(result.statuses.get(aFeature({ id: 'a' }).id)).toEqual({ kind: 'error', error: own });
     });
 
     it('a non-kernel exception rejects run with that exception', async () => {

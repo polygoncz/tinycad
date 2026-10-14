@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RpcError } from '@/core';
-import { createStoreError, snapshotSeqsToKeep, storeErrorCode } from './store';
+import type { DocumentRenameOp, LogEntry } from '@/ops';
+import { createStoreError, renamedTo, snapshotSeqsToKeep, storeErrorCode } from './store';
 
 describe('storeErrorCode', () => {
   it.each(['not-found', 'already-exists', 'seq-gap', 'snapshot-ahead', 'invalid'] as const)(
@@ -56,5 +57,22 @@ describe('snapshotSeqsToKeep', () => {
 
   it('keeps everything while there are at most 3 besides the base', () => {
     expect(snapshotSeqsToKeep([0, 5, 9, 7]).toSorted((a, b) => a - b)).toEqual([0, 5, 7, 9]);
+  });
+});
+
+describe('renamedTo', () => {
+  function entry(seq: number, op: LogEntry['op']): LogEntry {
+    return { seq, kind: 'do', op, inverse: op, label: op.type, time: 0 };
+  }
+  const rename = (name: string): DocumentRenameOp => ({ type: 'document.rename', v: 1, name });
+  const other: LogEntry['op'] = { type: 'studio.setRollback', v: 1 };
+
+  it('is the name of the last document.rename of the batch', () => {
+    expect(renamedTo([entry(1, rename('A')), entry(2, other), entry(3, rename('B'))])).toBe('B');
+  });
+
+  it('is undefined for a batch without document.rename', () => {
+    expect(renamedTo([entry(1, other)])).toBeUndefined();
+    expect(renamedTo([])).toBeUndefined();
   });
 });

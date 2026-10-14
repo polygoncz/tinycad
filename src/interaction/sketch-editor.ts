@@ -27,22 +27,39 @@ export interface SketchEditor {
   planeOf(ref: PlaneRef | TopoRef): Plane | undefined;
   /** Editing an existing sketch (FeatureEditor.edit). */
   edit(featureId: FeatureId): SketchSession;
+  /**
+   * New points of the drawing tools snap to the grid (M19.2 D4); true by default. The state of
+   * the editor: it survives closing and opening a sketch and is not saved.
+   */
+  readonly gridSnap: Observable<boolean>;
+  setGridSnap(on: boolean): void;
+  /** The current step of the grid in mm (deps.gridStep); the tools read it on every snap. */
+  gridStep(): number;
+}
+
+export interface SketchEditorDeps {
+  readonly features: FeatureEditor;
+  readonly solver: ConstraintSolver;
+  /** The edited sketch is drawn under EDIT_SKETCH_DRAWING_ID; only the drawings are needed. */
+  readonly viewport: Pick<ViewportPort, 'sketches'>;
+  /** app: planeOfRef over the last regeneration state (M14: origin planes and planar faces). */
+  readonly resolvePlane: (ref: PlaneRef | TopoRef) => Plane | undefined;
+  /**
+   * The current step of the grid in mm (M19.2 D4); the tools read it on every move and click, so
+   * the snap follows the grid drawn on the screen. Default () => 1.
+   */
+  readonly gridStep?: () => number;
 }
 
 /** The param of the sketch feature with its plane (spec 12, "Featura skici"). */
 const PLANE_PARAM = 'plane';
 
-export function createSketchEditor(deps: {
-  features: FeatureEditor;
-  solver: ConstraintSolver;
-  /** The edited sketch is drawn under EDIT_SKETCH_DRAWING_ID; only the drawings are needed. */
-  viewport: Pick<ViewportPort, 'sketches'>;
-  /** app: planeOfRef over the last regeneration state (M14: origin planes and planar faces). */
-  resolvePlane: (ref: PlaneRef | TopoRef) => Plane | undefined;
-}): SketchEditor {
+export function createSketchEditor(deps: SketchEditorDeps): SketchEditor {
   const { features, solver, viewport, resolvePlane } = deps;
   const current = new ObservableValue<SketchSession | null>(null);
   const mode = new ObservableValue<Mode>('model');
+  const gridSnap = new ObservableValue(true);
+  const gridStep = deps.gridStep ?? (() => 1);
 
   function checkCanOpen(what: string): void {
     assert(current.get() === null, `${what}: a sketch session is already open`);
@@ -111,6 +128,13 @@ export function createSketchEditor(deps: {
         assert(plane !== undefined, `edit: the plane of sketch '${featureId}' cannot be resolved`);
         return open(edit, plane);
       });
+    },
+    gridSnap: gridSnap.asObservable(),
+    setGridSnap(on) {
+      gridSnap.set(on);
+    },
+    gridStep() {
+      return gridStep();
     },
   };
 }

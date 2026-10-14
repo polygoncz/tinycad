@@ -53,15 +53,25 @@ Typů je záměrně málo a jsou malé: log žije navždy, každá změna tvaru 
 | `body.rename` (M11) | `body: BodyId, name: string` (`''` = smazat jméno) | `body.rename` s aktuálním jménem nebo `''` | `setBodyMeta(body, { ...aktuální, name })` |
 | `body.setVisible` (M11) | `body: BodyId, visible: boolean` | `body.setVisible` s aktuální viditelností (`!hidden`) | `setBodyMeta(body, { ...aktuální, hidden: visible ? undefined : true })` |
 | `body.setColor` (M15) | `body: BodyId, color: string \| null` (`'#rrggbb'` malými písmeny, `null` = výchozí barva) | `body.setColor` s aktuální barvou nebo `null` | `setBodyMeta(body, { ...aktuální, color: color ?? undefined })` |
+| `document.rename` (M19.2) | `name: string` (oříznuté, neprázdné) | `document.rename` s aktuálním jménem | `rename(name)` |
 | `batch` | `ops: readonly Operation[]` | viz [[#Dávka]] | – |
 
-Modul exportuje typy `FeatureAddOp`, `FeatureRemoveOp`, `FeatureSetParamsOp`, `FeatureRenameOp`, `FeatureSuppressOp`, `FeatureMoveOp`, `StudioSetRollbackOp`, `BodyRenameOp`, `BodySetVisibleOp`, `BodySetColorOp` (M15), `BatchOp`. Konstruktory operací nejsou – operace je literál.
+Modul exportuje typy `FeatureAddOp`, `FeatureRemoveOp`, `FeatureSetParamsOp`, `FeatureRenameOp`, `FeatureSuppressOp`, `FeatureMoveOp`, `StudioSetRollbackOp`, `BodyRenameOp`, `BodySetVisibleOp`, `BodySetColorOp` (M15), `DocumentRenameOp` (M19.2), `BatchOp` a typového strážce `isDocumentRename(op): op is DocumentRenameOp` (M19.2; ověří i `name` jako řetězec, protože ho čtou i story nad neověřenými záznamy). Na `'document.rename'` se nikde neporovnává řetězec, používá se strážce (`undo`, `HistoryModel`, story). Konstruktory operací nejsou – operace je literál.
 
 `setParams` nese **celé** parametry, ne patch. Inverze je pak triviální a operace nezávisí na předchozím stavu.
 
 Operace `body.*` (M11) mění [[03-dokument#Metadata těles|metadata těles]]. Mají `v: 1`, nemají `merge` ani `upcast`, existenci tělesa nekontrolují (dokument tělesa nezná) a rollback bar nemění, takže je `applyOperation` neobaluje. Jdou do logu i undo jako každá jiná změna dokumentu ([[Rozhodnutí noční rychloakce#M11 – Další entity|R13]] ⚠).
 
-`feature.rename` přejmenuje **featuru**. Přejmenování dokumentu (`DocumentWriter.rename`) zatím operaci nemá; přibude jako nový typ, až ho bude potřebovat UI.
+`feature.rename` přejmenuje **featuru**.
+
+### Operace dokumentu
+
+`document.rename` (M19.2, [[M19.2-ux-backlog|D5]]) přejmenuje **dokument** (`DocumentWriter.rename`, [[03-dokument]]). Jméno je metadata dokumentu mimo undo: přejmenování není krok modelování a Ctrl+Z nemá vracet jméno souboru (stejně jako Onshape a Fusion). Přesto ho mění jen handler, takže log, přehrání (`replayLog`), snapshoty i export souboru nesou aktuální jméno a jméno přežije reload i import souboru s historií.
+
+- `v: 1`, bez `merge` a `upcast`, rollback bar nemění. Handler je v `handlers/document.ts`.
+- Validace: `name` je řetězec, `name.trim() === name` a `name !== ''`. Log tak nikdy nenese jméno, které by UI odmítlo.
+- `UndoManager` záznam `do` s touto operací přeskočí (viz [[#Undo / redo]]). Operace komutuje se všemi ostatními, takže undo okolních kroků zůstává správné.
+- Oříznutí a odmítnutí prázdného jména dělá před `dispatch` volající (`DocumentNameModel`, `renameDocument`, [[10-interakce]], [[11-ui]]).
 
 Skicář vlastní operace v M12 **nemá**: editace skici je `feature.setParams` s celými vyřešenými daty skici v jedné transakci, takže je v logu jeden záznam ([[Q074 Operace skicáře v logu|Q074]], [[12-skicar#Operace a transakce]]). Kdyby operace pluginu někdy přibyly, registrují se jako featury (`FeaturePlugin.ops`). `validate` operace `feature.add` od M12 odmítne i `FeatureId` `'origin'` (vyhrazený vlastník počáteční geometrie, [[03-dokument#Počáteční geometrie (M12)]]).
 
@@ -84,7 +94,7 @@ export interface OpHandler<O extends Operation = Operation> {
 }
 
 export type OpHandlerRegistry = Registry<OpHandler>;   // klíč = type, viz core
-/** Registr s vestavěnými handlery (feature.*, studio.setRollback, od M11 body.*). register({ type: 'batch' }) vyhodí. Schémata potřebuje migrace dat featur při apply. */
+/** Registr s vestavěnými handlery (feature.*, studio.setRollback, od M11 body.*, od M19.2 document.rename). register({ type: 'batch' }) vyhodí. Schémata potřebuje migrace dat featur při apply. */
 export function createOpHandlerRegistry(deps: { schemas: RegistryReader<FeatureSchema> }): OpHandlerRegistry;
 ```
 
@@ -301,7 +311,7 @@ export function rebuildUndoStacks(entries: readonly LogEntry[]): { undo: number[
 ```
 
 Pravidla (jeden krok `step(stacks, entry)`, sdílený `rebuildUndoStacks` i živým `UndoManager`):
-- `do` → push `seq` na undo, vyprázdní redo,
+- `do` → push `seq` na undo, vyprázdní redo. Výjimka (M19.2): `do`, jehož operace je `document.rename`, zásobníky nemění (není na undo a redo nevymaže). Platí jen pro operaci na nejvyšší úrovni záznamu, ne pro podoperaci dávky,
 - `undo` → vrchol undo musí být `target`; přesune ho na redo,
 - `redo` → vrchol redo musí být `target`; přesune ho na undo,
 - nesedí-li `target` s vrcholem, log je poškozený → `rebuildUndoStacks` vyhodí s `seq` záznamu.
@@ -339,7 +349,7 @@ export function upcastOperation(handlers: OpHandlerRegistry, raw: unknown): Resu
 
 Po obálce (a případném `upcast`) zavolá `handler.validate`, pokud ho handler má ([[Q032 Kontrola payloadu operací při načítání|Q032]]). První nalezený problém → `err` s cestou relativní k operaci (`'featureId'`, `'feature.typeVersion'`; v dávce s prefixem `ops[i].`). `validate` kontroluje jen **tvar**, ne vztah ke stavu dokumentu (existence featury, rozsah indexu). To ohlásí až `apply` výjimkou při přehrání.
 
-Všech deset vestavěných handlerů `validate` má:
+Všech jedenáct vestavěných handlerů `validate` má:
 
 | `type` | Kontrola |
 |---|---|
@@ -353,6 +363,7 @@ Všech deset vestavěných handlerů `validate` má:
 | `body.rename` | `body` ve tvaru id tělesa (`parseBodyId`), `name` řetězec |
 | `body.setVisible` | `body` ve tvaru id tělesa, `visible` boolean |
 | `body.setColor` (M15) | `body` ve tvaru id tělesa, `color` `null` nebo `isBodyColor` (`/^#[0-9a-f]{6}$/`; velká písmena neprojdou, handler nekanonizuje – přehrání je pak deterministické bez převodu) |
+| `document.rename` (M19.2) | `name` neprázdný řetězec bez mezer na krajích |
 
 Hodnoty `params` proti schématu featury se při načítání nekontrolují a nemigrují; migrace běží až při `apply` ([[#Migrace dat featur]]).
 
@@ -384,6 +395,7 @@ export function parseLogEntry(handlers: OpHandlerRegistry, raw: unknown): Result
 - `validate` každého vestavěného handleru: platná operace projde, každé pole z tabulky rozbité zvlášť → `err` se správnou cestou; v dávce s prefixem.
 - `parseLogEntry`: platný záznam každého `kind`, každé pole rozbité zvlášť, `target` u `do`, chyba v `op` i `inverse` s prefixem cesty, upcast staré verze operace uvnitř záznamu.
 - `body.rename`, `body.setVisible` a `body.setColor` (M15): inverze vrátí metadata, `invert` tělesa bez metadat, `validate` s rozbitým `body`.
+- `document.rename` (M19.2): apply, inverze, `validate` (prázdné jméno, mezery na krajích, ne řetězec); po přejmenování je `canUndo` jako předtím, undo vrátí předchozí krok, ne jméno, a redo zásobník přežije.
 - **Replay test** (fast-check, 1000 sekvencí): náhodné operace (od M11 včetně `body.*`, od M15 i `body.setColor`), transakce (commit i abort), undo a redo; pak `replayLog` na prázdný dokument → `toData` se shoduje se živým dokumentem a `rebuildUndoStacks` se shoduje se živými zásobníky.
 
 ## Otevřené otázky

@@ -7,16 +7,25 @@
 // goes through importDocumentText; a stored file opens like a new document. M19.1 (revize U3,
 // U11): the list that fails to load shows its error and Try again instead of an endless
 // "Loading…" (loadDocumentList); the delete button stays in the tab order (hidden by opacity
-// only); one date formatter for the whole list.
-import { computed, onMounted, ref, shallowRef, useTemplateRef } from 'vue';
+// only); one date formatter for the whole list. M19.2 (D5): Rename next to Delete turns the name
+// of the card into a text field; Enter or leaving it renames through app (refused like a delete
+// when the document is open in another tab), Esc cancels; the list loads again.
+import { computed, nextTick, onMounted, ref, shallowRef, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { createNewDocument, deleteDocument, importDocumentFile, listDocuments } from '@/app';
+import {
+  createNewDocument,
+  deleteDocument,
+  importDocumentFile,
+  listDocuments,
+  renameDocument,
+} from '@/app';
 import type { DocumentInfo, OpenAppSessionOptions } from '@/app';
 import type { DocumentId } from '@/document';
 import { importDocumentText } from '../document-import';
 import type { ImportOutcome } from '../document-import';
 import { loadDocumentList, updatedFormatter } from '../document-list';
 import type { DocumentListState } from '../document-list';
+import { finishEdit } from '../inline-rename';
 import { docHash } from '../route';
 import ThemeLocaleToggles from './ThemeLocaleToggles.vue';
 
@@ -34,6 +43,11 @@ const error = ref<string | null>(null);
 const errorDetail = ref<string | null>(null);
 const busy = ref(false);
 const fileInput = useTemplateRef<HTMLInputElement>('fileInput');
+// The card whose name is being edited, and the text of its field.
+const renaming = ref<DocumentId | null>(null);
+const nameText = ref('');
+// A ref inside v-for is an array; only the edited card has the field.
+const nameInputs = useTemplateRef<HTMLInputElement[]>('nameInput');
 
 /** Loads the list again; the cards stay until the new list is there (after a delete). */
 async function load(): Promise<void> {
@@ -76,6 +90,37 @@ async function remove(info: DocumentInfo): Promise<void> {
   } finally {
     busy.value = false;
   }
+}
+
+async function startRename(info: DocumentInfo): Promise<void> {
+  if (busy.value) return;
+  nameText.value = info.meta.name;
+  renaming.value = info.meta.id;
+  await nextTick();
+  nameInputs.value?.[0]?.select();
+}
+
+/**
+ * Enter or leaving the field. The rule of the name is app's (the same name writes nothing and
+ * keeps the card's place); an untouched field does not even ask, so it needs no lock.
+ */
+async function commitRename(info: DocumentInfo): Promise<void> {
+  const id = finishEdit(renaming);
+  if (id === null || nameText.value === info.meta.name || busy.value) return;
+  busy.value = true;
+  clearError();
+  try {
+    await renameDocument(id, nameText.value, { plugins: props.plugins });
+    await load();
+  } catch (e) {
+    error.value = t('documents.error.rename', { error: errorText(e) });
+  } finally {
+    busy.value = false;
+  }
+}
+
+function cancelRename(): void {
+  finishEdit(renaming);
 }
 
 function chooseFile(): void {
@@ -154,23 +199,52 @@ onMounted(() => {
     <p v-else-if="list.documents.length === 0" class="empty">{{ t('documents.empty') }}</p>
     <div v-else class="cards">
       <article v-for="info in list.documents" :key="info.meta.id" class="card">
-        <button type="button" class="open" @click="open(info.meta.id)">
+        <div v-if="renaming === info.meta.id" class="open">
+          <span class="preview"><i class="ti ti-box" aria-hidden="true" /></span>
+          <span class="meta">
+            <input
+              ref="nameInput"
+              v-model="nameText"
+              type="text"
+              class="name-input"
+              :aria-label="t('documents.name')"
+              @keydown.enter.prevent="commitRename(info)"
+              @keydown.esc.prevent="cancelRename"
+              @blur="commitRename(info)"
+            />
+            <span class="date">{{ updatedText(info.updatedAt) }}</span>
+          </span>
+        </div>
+        <button v-else type="button" class="open" @click="open(info.meta.id)">
           <span class="preview"><i class="ti ti-box" aria-hidden="true" /></span>
           <span class="meta">
             <span class="name">{{ info.meta.name }}</span>
             <span class="date">{{ updatedText(info.updatedAt) }}</span>
           </span>
         </button>
-        <button
-          type="button"
-          class="delete"
-          :title="t('documents.delete')"
-          :aria-label="t('documents.delete')"
-          :disabled="busy"
-          @click="remove(info)"
-        >
-          <i class="ti ti-trash" aria-hidden="true" />
-        </button>
+        <div class="card-actions">
+          <!-- Delete first: Tab from the card reaches it as before M19.2. -->
+          <button
+            type="button"
+            class="card-action delete"
+            :title="t('documents.delete')"
+            :aria-label="t('documents.delete')"
+            :disabled="busy"
+            @click="remove(info)"
+          >
+            <i class="ti ti-trash" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            class="card-action"
+            :title="t('documents.rename')"
+            :aria-label="t('documents.rename')"
+            :disabled="busy"
+            @click="startRename(info)"
+          >
+            <i class="ti ti-pencil" aria-hidden="true" />
+          </button>
+        </div>
       </article>
     </div>
   </section>
@@ -305,28 +379,47 @@ onMounted(() => {
   color: var(--text-secondary);
   font-size: var(--font-size-small);
 }
-/* Hidden by opacity, not display: none, so it stays in the tab order and on touch screens. */
-.delete {
+.name-input {
+  min-width: 0;
+  height: 22px;
+  margin: -2px -4px;
+  padding: 0 4px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-row);
+  background: var(--field-bg);
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+}
+.card-actions {
   position: absolute;
   top: 6px;
   right: 6px;
+  display: flex;
+  gap: 4px;
+}
+/* Hidden by opacity, not display: none, so they stay in the tab order and on touch screens. */
+.card-action {
   display: inline-flex;
   opacity: 0;
   padding: 3px;
   border: none;
   border-radius: var(--radius-row);
   background: var(--panel-bg);
-  color: var(--danger);
+  color: var(--text-secondary);
   font-size: 16px;
 }
-.card:hover .delete,
-.card:focus-within .delete,
-.delete:focus-visible {
+.card-action.delete {
+  color: var(--danger);
+}
+.card:hover .card-action,
+.card:focus-within .card-action,
+.card-action:focus-visible {
   opacity: 1;
 }
-/* Without hover (touch) the button is always there. */
+/* Without hover (touch) the buttons are always there. */
 @media (hover: none) {
-  .delete {
+  .card-action {
     opacity: 1;
   }
 }

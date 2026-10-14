@@ -68,11 +68,34 @@ function aBox(id: string, type = 'box'): ReturnType<typeof aFeature<BoxParams>> 
   return aFeature<BoxParams>({ id, name: `Name ${id}`, type, params: { width: 1 } });
 }
 
+interface ExtParams {
+  readonly profile: readonly {
+    readonly kind: 'region';
+    readonly sketch: FeatureId;
+    readonly region: string;
+  }[];
+}
+
+const EXT_PARAMS: ParamSchema = {
+  profile: { kind: 'region', label: 'Profile', min: 1 },
+};
+
+/** A test feature with a required region param, like Extrude (D6 of M19.2). */
+const EXT: FeatureSchema<ExtParams> = {
+  type: 'ext',
+  version: 1,
+  label: 'Ext',
+  params: EXT_PARAMS,
+  defaults: () => ({ profile: [] }),
+  validate: (params) => validateAgainstSchema(EXT_PARAMS, params),
+};
+
 function setup(init: DocumentOptions = {}, sketchEdit?: (id: FeatureId) => void, readOnly = false) {
   const session = anOpsSession(init);
   const schemas = createFeatureSchemaRegistry();
   schemas.register(BOX);
   schemas.register(USE);
+  schemas.register(EXT);
   const regen = new FakeRegenStatus();
   const selection = createSelectionModel({ regen });
   const editor = createFeatureEditor({
@@ -137,6 +160,7 @@ describe('FeatureTreeModel rows', () => {
         issues: null,
         status: 'pending',
         message: null,
+        detail: null,
         selected: false,
         editing: false,
         dependents: 0,
@@ -667,5 +691,126 @@ describe('FeatureTreeModel.edit of a sketch (M12)', () => {
     expect(() => {
       s.tree.edit(fid('s'));
     }).toThrow();
+  });
+});
+
+describe('FeatureTreeModel draft and error count (D6 of M19.2)', () => {
+  const tooFew = { param: 'profile', code: 'param.tooFewRefs', params: { min: 1 } };
+  const missingInput = (): FeatureHealth => ({
+    kind: 'error',
+    message: 'profile: param.tooFewRefs',
+    issues: [tooFew],
+  });
+
+  it('a new feature without its required references is draft, not an error', () => {
+    const s = setup({ features: [aBox('a')] });
+    const session = s.editor.create('ext');
+    s.regen.publish(
+      new Map([
+        [fid('a'), ok],
+        [session.featureId, missingInput()],
+      ]),
+    );
+
+    expect(s.tree.rows.get()[1]).toMatchObject({
+      status: 'draft',
+      message: null,
+      issues: null,
+      detail: null,
+    });
+    expect(s.tree.errorCount.get()).toBe(0);
+  });
+
+  it('after the session ends the same health is an error again', () => {
+    const s = setup();
+    const session = s.editor.create('ext');
+    s.regen.publish(new Map([[session.featureId, missingInput()]]));
+    expect(s.tree.rows.get()[0]?.status).toBe('draft');
+
+    session.commit();
+    expect(s.tree.rows.get()[0]).toMatchObject({ status: 'error', issues: [tooFew] });
+    expect(s.tree.errorCount.get()).toBe(1);
+  });
+
+  it('editing an existing feature with a missing reference is an error, never draft', () => {
+    const s = setup({
+      features: [aFeature<ExtParams>({ id: 'e', name: 'E', type: 'ext', params: { profile: [] } })],
+    });
+    s.tree.edit(fid('e'));
+    s.regen.publish(new Map([[fid('e'), missingInput()]]));
+    expect(s.tree.rows.get()[0]?.status).toBe('error');
+    expect(s.tree.errorCount.get()).toBe(1);
+  });
+
+  it('another error of a new feature stays an error', () => {
+    const s = setup();
+    const session = s.editor.create('ext');
+    const kernel = { param: '', code: 'kernel.operationFailed' };
+    s.regen.publish(
+      new Map([[session.featureId, { kind: 'error', message: 'BRep failed', issues: [kernel] }]]),
+    );
+    expect(s.tree.rows.get()[0]?.status).toBe('error');
+
+    // Not all issues are missing references.
+    s.regen.publish(
+      new Map([
+        [
+          session.featureId,
+          { kind: 'error', message: 'x', issues: [tooFew, { param: 'profile', code: 'other' }] },
+        ],
+      ]),
+    );
+    expect(s.tree.rows.get()[0]?.status).toBe('error');
+
+    // An error without issues.
+    s.regen.publish(new Map([[session.featureId, { kind: 'error', message: 'boom' }]]));
+    expect(s.tree.rows.get()[0]?.status).toBe('error');
+    expect(s.tree.errorCount.get()).toBe(1);
+  });
+
+  it('errorCount counts the error rows only and follows the regeneration', () => {
+    const s = setup({ features: [aBox('a'), aBox('b'), aBox('c')] });
+    expect(s.tree.errorCount.get()).toBe(0);
+    s.regen.publish(
+      new Map<FeatureId, FeatureHealth>([
+        [fid('a'), { kind: 'error', message: 'boom' }],
+        [fid('b'), { kind: 'warning', message: 'thin' }],
+        [fid('c'), { kind: 'error', message: 'boom' }],
+      ]),
+    );
+    expect(s.tree.errorCount.get()).toBe(2);
+    s.regen.publish(
+      new Map([
+        [fid('a'), ok],
+        [fid('b'), ok],
+        [fid('c'), ok],
+      ]),
+    );
+    expect(s.tree.errorCount.get()).toBe(0);
+  });
+});
+
+describe('FeatureTreeModel detail (D9 of M19.2)', () => {
+  it('a row with translated issues keeps the technical message in detail', () => {
+    const s = setup({ features: [aBox('a'), aBox('b'), aBox('c')] });
+    const kernel = { param: '', code: 'kernel.operationFailed' };
+    s.regen.publish(
+      new Map<FeatureId, FeatureHealth>([
+        [fid('a'), { kind: 'error', message: 'BRep_API: command not done', issues: [kernel] }],
+        [fid('b'), { kind: 'error', message: 'boom' }],
+        [fid('c'), { kind: 'warning', message: 'thin wall' }],
+      ]),
+    );
+    expect(s.tree.rows.get().map((r) => [r.status, r.message, r.detail])).toEqual([
+      ['error', null, 'BRep_API: command not done'],
+      ['error', 'boom', null],
+      ['warning', 'thin wall', null],
+    ]);
+  });
+
+  it('an ok, pending, suppressed or rolled back row has no detail', () => {
+    const s = setup({ features: [aBox('a'), aBox('b'), aBox('c')], rollbackIndex: 2 });
+    suppress(s, 'b');
+    expect(s.tree.rows.get().map((r) => r.detail)).toEqual([null, null, null]);
   });
 });

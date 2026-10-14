@@ -1,4 +1,4 @@
-import { createApp } from 'vue';
+import { createApp, watch } from 'vue';
 import type { OpenAppSessionOptions } from '@/app';
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 import './theme/tokens.css';
@@ -17,5 +17,14 @@ export interface StartUiOptions {
 
 export function startUi(selector: string, opts: StartUiOptions): void {
   const i18n = createUiI18n({ cs: {}, en: {} });
+  // <html lang> follows the language of the UI (M19.2 D11): screen readers and hyphenation read
+  // it; index.html has lang="cs" only until the start.
+  watch(
+    i18n.global.locale,
+    (locale) => {
+      document.documentElement.lang = locale;
+    },
+    { immediate: true },
+  );
   createApp(App, { plugins: opts.plugins }).use(i18n).provide(UI_I18N_KEY, i18n).mount(selector);
 }

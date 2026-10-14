@@ -9,7 +9,7 @@ import { SKETCH_FEATURE_TYPE } from '@/sketch';
 import { createActionRegistry } from './actions';
 import type { ActionState } from './actions';
 import { ACTION_IDS, createBuiltInActions, toolActionId } from './builtin-actions';
-import type { ConfirmRequest } from './builtin-actions';
+import type { ConfirmRequest, StandardViewId } from './builtin-actions';
 import { createEditLock } from './edit-lock';
 import { createFeatureEditor } from './feature-editor';
 import { createFeatureTreeModel } from './feature-tree';
@@ -137,6 +137,7 @@ function setup(
     ...(mode === undefined ? {} : { mode, defaultToolIds: { sketch: SKETCH_SELECT_TOOL.id } }),
   });
   let fitAllCount = 0;
+  const views: StandardViewId[] = [];
   const confirms: ConfirmRequest[] = [];
   const answer = opts.confirm ?? (() => true);
   const builtIn = createBuiltInActions({
@@ -153,6 +154,9 @@ function setup(
     camera: {
       fitAll: () => {
         fitAllCount++;
+      },
+      setView: (view) => {
+        views.push(view);
       },
     },
     confirm: (request) => {
@@ -181,6 +185,7 @@ function setup(
     viewport,
     builtIn,
     fitAllCount: () => fitAllCount,
+    views,
     confirms,
     addBox,
     state,
@@ -192,6 +197,16 @@ function setup(
     bar: (): number => doc.studio.rollbackIndex,
   };
 }
+
+const STANDARD_VIEW_ACTIONS = [
+  'view.front',
+  'view.back',
+  'view.right',
+  'view.left',
+  'view.top',
+  'view.bottom',
+  'view.iso',
+] as const;
 
 const key = (k: string, mods: Partial<ViewKeyEvent['mods']> = {}): ViewKeyEvent => ({
   key: k,
@@ -205,6 +220,13 @@ describe('ACTION_IDS and toolActionId', () => {
       undo: 'undo',
       redo: 'redo',
       fitAll: 'view.fitAll',
+      viewFront: 'view.front',
+      viewBack: 'view.back',
+      viewRight: 'view.right',
+      viewLeft: 'view.left',
+      viewTop: 'view.top',
+      viewBottom: 'view.bottom',
+      viewIso: 'view.iso',
       featureEdit: 'feature.edit',
       featureRename: 'feature.rename',
       featureSuppress: 'feature.suppress',
@@ -235,6 +257,13 @@ describe('built-in actions – registration', () => {
       'feature.suppress': 'S',
       'timeline.rollHere': null,
       'view.fitAll': 'F',
+      'view.front': null,
+      'view.back': null,
+      'view.right': null,
+      'view.left': null,
+      'view.top': null,
+      'view.bottom': null,
+      'view.iso': null,
       'timeline.toStart': null,
       'timeline.stepBack': null,
       'timeline.stepForward': null,
@@ -610,6 +639,21 @@ describe('built-in actions – view', () => {
     s.viewport.emitKey(key('f'));
     expect(s.fitAllCount()).toBe(1);
   });
+
+  it('every standard view action sets its view of the camera', () => {
+    const s = setup();
+    const expected: readonly (readonly [string, StandardViewId])[] = [
+      ['view.front', 'front'],
+      ['view.back', 'back'],
+      ['view.right', 'right'],
+      ['view.left', 'left'],
+      ['view.top', 'top'],
+      ['view.bottom', 'bottom'],
+      ['view.iso', 'iso'],
+    ];
+    for (const [id] of expected) s.registry.run(id);
+    expect(s.views).toEqual(expected.map(([, view]) => view));
+  });
 });
 
 describe('built-in actions – locked', () => {
@@ -638,7 +682,14 @@ describe('built-in actions – locked', () => {
     ]) {
       expect(s.enabled(id)).toBe(false);
     }
+    for (const id of STANDARD_VIEW_ACTIONS) expect(s.enabled(id)).toBe(true);
     expect(s.enabled('view.fitAll')).toBe(true);
+  });
+
+  it('the standard views stay enabled while a feature edit session is open', () => {
+    const s = setup();
+    s.editor.create('box');
+    for (const id of STANDARD_VIEW_ACTIONS) expect(s.enabled(id)).toBe(true);
   });
 });
 
@@ -669,7 +720,8 @@ describe('built-in actions – modes', () => {
     ]) {
       expect(modes[id]).toEqual(['model']);
     }
-    for (const id of ['undo', 'redo', 'view.fitAll']) expect(modes[id]).toEqual(ALL_MODES);
+    for (const id of ['undo', 'redo', 'view.fitAll', ...STANDARD_VIEW_ACTIONS])
+      expect(modes[id]).toEqual(ALL_MODES);
   });
 
   it('a tool action has the modes of its tool', () => {

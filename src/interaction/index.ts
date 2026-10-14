@@ -94,6 +94,7 @@ export type {
 export { createSketchEditor } from './sketch-editor';
 export type { SketchEditor } from './sketch-editor';
 export { EDIT_SKETCH_DRAWING_ID } from './sketch-session';
+export type { SketchDimensionView } from './sketch-dimensions';
 export type {
   SketchConstraintRow,
   SketchMessageKey,
@@ -113,5 +114,7 @@ export { createTopoInspector } from './topo-inspector';
 export type { TopoHover, TopoInspector } from './topo-inspector';
 export { HISTORY_LIMIT, createHistoryModel } from './history-model';
 export type { HistoryModel, HistoryRow, HistoryState } from './history-model';
+export { createDocumentNameModel } from './document-name';
+export type { DocumentNameModel } from './document-name';
 export { FILE_ACTION_IDS, createFileActions } from './file-actions';
 export type { FileActions, FileExporter, FileStatus, FileTask } from './file-actions';

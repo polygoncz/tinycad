@@ -12,6 +12,8 @@
 // menu the pure function overflowItems. A group that does not fit stays in the DOM out of the
 // flow and invisible: it keeps its natural width, so it is measured also while hidden, and it is
 // not drawn, focused, clicked nor seen by assistive tech.
+// M19.2 (D8): items with menuOnly (the standard views) are not buttons, only items of the menu of
+// their group and of "…"; fitGroups measures only the drawn buttons, so it needs no change.
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useObservable } from '../composables/use-observable';
@@ -49,6 +51,11 @@ const groups = computed(() =>
 function groupLabel(group: ToolbarGroup): string {
   const key = `toolbar.group.${group.id}`;
   return i18n.te(key) ? t(key) : group.id;
+}
+
+/** The items drawn as buttons; the menus show all items of the group. */
+function buttonsOf(group: ToolbarGroup): readonly ToolbarItem[] {
+  return group.items.filter((item) => !item.menuOnly);
 }
 
 function isActive(item: ToolbarItem): boolean {
@@ -178,7 +185,7 @@ function runMenuItem(id: string): void {
         <div class="group">
           <div class="buttons">
             <button
-              v-for="item in group.items"
+              v-for="item in buttonsOf(group)"
               :key="item.id"
               type="button"
               class="tool"
