@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: doing
 order: 15
 aliases:
   - M15
@@ -26,7 +26,7 @@ specs:
   - "[[13-testovani]]"
 depends_on:
   - "[[M14-topologicke-pojmenovani]]"
-started: 
+started: 2026-10-14
 finished: 
 tags:
   - milnik
