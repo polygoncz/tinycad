@@ -55,7 +55,7 @@ updated: 2026-10-14
 - [x] Ú9 `features/revolve`: plugin Rotace
 - [x] Ú10 `app`, `ui`: registrace pluginů, pole osy, skupiny a skrytá pole v dialogu, úniková cesta pro vlastní dialog, Prohlížeč, lišta, překlady
 - [x] Ú11 `tests`: integrační scénáře (změna kóty, díra v OCCT, rotace v OCCT)
-- [ ] Ú12 `e2e`: akceptační scénář s OCCT a planegcs v prohlížeči
+- [x] Ú12 `e2e`: akceptační scénář s OCCT a planegcs v prohlížeči
 - [ ] Ú13 hlavní sezení: kontrola, vault, `architecture-reviewer`, retrospektiva
 
 ## Akceptační kritéria

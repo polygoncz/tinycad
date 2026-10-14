@@ -1,4 +1,5 @@
-// Value conversions of the param fields, kept out of the components so they run in Node tests.
+// Value conversions and texts of the param fields, kept out of the components so they run in Node
+// tests.
 // The document stores millimetres and radians (spec 01, "Souřadnice a jednotky"); the UI shows
 // millimetres and degrees.
 
@@ -48,4 +49,20 @@ export function radToDeg(rad: number): number {
 
 export function degToRad(deg: number): number {
   return (deg * Math.PI) / 180;
+}
+
+/** The translated text of the button of a RefListField: a key of the ui messages and its params. */
+export interface RefListText {
+  readonly key: 'field.refs.count' | 'field.refs.countPick';
+  readonly params: { readonly n: number };
+}
+
+/**
+ * Text of the button of a RefListField: the count of the selected references, and while the field
+ * is active also the hint to pick in the view (R87), so the user sees the selection grow. A value
+ * that is not a list counts as empty.
+ */
+export function refListText(value: unknown, active: boolean): RefListText {
+  const n = Array.isArray(value) ? value.length : 0;
+  return { key: active ? 'field.refs.countPick' : 'field.refs.count', params: { n } };
 }

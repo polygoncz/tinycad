@@ -60,7 +60,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
 
   // Param fields.
   'field.refs.count': 'Selected: {n}',
-  'field.refs.pick': 'Select in the view',
+  'field.refs.countPick': 'Selected: {n} · select in the view',
   'field.refs.missing': 'Missing body',
   'field.refs.remove': 'Remove {name}',
   // The axis field (M13): RefText keys of interaction and the empty value.

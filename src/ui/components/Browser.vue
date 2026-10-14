@@ -142,7 +142,7 @@ function cancelRename(): void {
           class="node level-2"
           :class="{ selected: row.active, hidden: !row.visible }"
           role="treeitem"
-          :aria-pressed="row.active"
+          :aria-selected="row.active"
           @click="browser.selectAxis(row.axis)"
         >
           <span class="chevron" />
@@ -194,7 +194,7 @@ function cancelRename(): void {
             class="node level-3"
             :class="{ selected: region.selected }"
             role="treeitem"
-            :aria-pressed="region.selected"
+            :aria-selected="region.selected"
             @click="browser.selectRegion(row.feature, region.region)"
           >
             <span class="chevron" />

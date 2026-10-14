@@ -5,6 +5,7 @@ import {
   formatNumber,
   parseNumber,
   radToDeg,
+  refListText,
   withCoordinate,
 } from './field-values';
 
@@ -66,5 +67,22 @@ describe('angles', () => {
     expect(radToDeg(Math.PI)).toBeCloseTo(180);
     expect(degToRad(90)).toBeCloseTo(Math.PI / 2);
     expect(formatNumber(radToDeg(degToRad(30)))).toBe('30');
+  });
+});
+
+describe('refListText', () => {
+  it('shows the count of an inactive field', () => {
+    expect(refListText(['a', 'b'], false)).toEqual({ key: 'field.refs.count', params: { n: 2 } });
+    expect(refListText([], false)).toEqual({ key: 'field.refs.count', params: { n: 0 } });
+  });
+
+  it('shows the count and the hint of the active field (R87)', () => {
+    expect(refListText(['a'], true)).toEqual({ key: 'field.refs.countPick', params: { n: 1 } });
+    expect(refListText([], true)).toEqual({ key: 'field.refs.countPick', params: { n: 0 } });
+  });
+
+  it('counts a value that is not a list as empty', () => {
+    expect(refListText(undefined, false)).toEqual({ key: 'field.refs.count', params: { n: 0 } });
+    expect(refListText('x', true)).toEqual({ key: 'field.refs.countPick', params: { n: 0 } });
   });
 });

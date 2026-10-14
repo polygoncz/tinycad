@@ -61,7 +61,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
 
   // Param fields.
   'field.refs.count': 'Vybráno: {n}',
-  'field.refs.pick': 'Vyberte v pohledu',
+  'field.refs.countPick': 'Vybráno: {n} · vyberte v pohledu',
   'field.refs.missing': 'Chybí těleso',
   'field.refs.remove': 'Odebrat {name}',
   // The axis field (M13): RefText keys of interaction and the empty value.

@@ -5,10 +5,12 @@
 // reports only that the field wants to become active (the dialog calls focusRefParam). A 'bodies'
 // field lists the chosen bodies as chips from FieldState.refs (names from the document,
 // interaction); each chip reports the removal of its item with × (the dialog calls removeRef).
-// 'topo', 'planes' and 'region' show the count only (R77).
+// 'topo', 'planes' and 'region' show the count only (R77). The count stays in the active state too
+// (R87).
 import { computed, useId } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FieldState } from '@/interaction';
+import { refListText } from './field-values';
 import FieldShell from './FieldShell.vue';
 
 const props = defineProps<{ field: FieldState }>();
@@ -17,7 +19,10 @@ const emit = defineEmits<{ update: [value: unknown]; activate: []; remove: [inde
 const { t } = useI18n();
 // The name is the label followed by the own text: "Tělesa 2 vybráno".
 const buttonId = useId();
-const count = computed(() => (Array.isArray(props.field.value) ? props.field.value.length : 0));
+const text = computed(() => {
+  const { key, params } = refListText(props.field.value, props.field.active);
+  return t(key, params);
+});
 const chips = computed(() => props.field.refs ?? []);
 </script>
 
@@ -34,7 +39,7 @@ const chips = computed(() => props.field.refs ?? []);
         :class="{ active: field.active, invalid: field.issue !== null }"
         @click="emit('activate')"
       >
-        {{ field.active ? t('field.refs.pick') : t('field.refs.count', { n: count }) }}
+        {{ text }}
       </button>
       <ul v-if="chips.length > 0" class="chips">
         <li
