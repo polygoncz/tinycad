@@ -59,7 +59,7 @@ updated: 2026-10-14
 - [x] Ú10 `features/fillet`, `features/chamfer`: pluginy Zaoblení a Zkosení
 - [x] Ú11 `features/extrude`: konec „Po plochu“
 - [x] Ú12 `interaction`: skica na ploše, `TopoInspector`
-- [ ] Ú13 `app`, `ui`: registrace, propojení session, ladicí panel, lišta, překlady
+- [x] Ú13 `app`, `ui`: registrace, propojení session, ladicí panel, lišta, překlady
 - [x] Ú14 `tests`: čtyři akceptační scénáře spec 08 s OCCT v Node
 - [ ] Ú15 `e2e`: fillet hrany kvádru přežije změnu rozměru
 - [ ] Ú16 hlavní sezení: kontrola, vault, `architecture-reviewer`, retrospektiva

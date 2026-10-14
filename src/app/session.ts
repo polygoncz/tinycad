@@ -41,6 +41,7 @@ import {
   createSketchTools,
   createToolManager,
   createToolRegistry,
+  createTopoInspector,
   planeDrawing,
   SELECT_TOOL,
   SKETCH_ACTION_IDS,
@@ -57,6 +58,7 @@ import type {
   SketchEditor,
   ToolDescriptor,
   ToolManager,
+  TopoInspector,
   ViewportPort,
 } from '@/interaction';
 import type { GeometryKernel } from '@/kernel';
@@ -77,8 +79,15 @@ import type {
 } from '@/persistence';
 import { registerPlugin } from '@/plugin-api';
 import type { FeaturePlugin, PluginMessages } from '@/plugin-api';
-import { bodiesOf, createBuilderRegistry, createRegenerator, sketchesOf } from '@/regen';
-import type { BuilderRegistry, RegenResult, SketchArtifact } from '@/regen';
+import {
+  bodiesOf,
+  createBuilderRegistry,
+  createRegenerator,
+  EMPTY_STATE,
+  planeOfRef,
+  sketchesOf,
+} from '@/regen';
+import type { BuilderRegistry, RegenResult, RegenState, SketchArtifact } from '@/regen';
 import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
 import type { BodyLayer, CameraController, ScenePalette } from '@/render';
 import type { ConstraintSolver, GeometricConstraintKind } from '@/sketch';
@@ -177,6 +186,8 @@ export interface AppSession extends Disposable {
   readonly sketchActionIds: typeof SKETCH_ACTION_IDS;
   /** M12: id of the action adding a geometric constraint of the kind. */
   sketchConstraintActionId(kind: GeometricConstraintKind): string;
+  /** M14: the name of the face or edge under the cursor, for the debug panel (R111). */
+  readonly topoInspector: TopoInspector;
 
   mountViewport(el: HTMLElement): void;
   /** Q072: app picks the ScenePalette, ui does not know render. */
@@ -253,16 +264,19 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     ids: deps.ids,
     translate: deps.translate,
   });
-  // With the editor, the regions picked in the dialog are filled in the view (M13, spec 10).
-  lifetime.add(bindSelectionHighlight(selection, viewport.highlight, features));
+  // With the editor, the regions, edges, faces and bodies picked in the dialog are highlighted in
+  // the view (M13, M14, spec 10); the port gives the indices of the named edges and faces.
+  lifetime.add(bindSelectionHighlight(selection, viewport.highlight, features, regenStatus));
+  /** The final state of the last regeneration: the planes of sketches on faces (M14). */
+  let lastState: RegenState = EMPTY_STATE;
   // The sketcher (M12, spec 11 "Skicář"): the mode is the open sketch session, nothing else.
   const sketches = createSketchEditor({
     features,
     solver: deps.solver,
     viewport,
-    // Origin planes only until Ú13 wires planeOfRef over the last regeneration (faces, M14).
-    resolvePlane: (ref) =>
-      ref.kind === 'plane' ? ORIGIN_PLANES.find((p) => p.id === ref.plane)?.plane : undefined,
+    // Origin planes and planar faces of the last regeneration (M14); before the first one
+    // EMPTY_STATE still has the origin planes.
+    resolvePlane: (ref) => planeOfRef(lastState, ref),
   });
   const { mode } = sketches;
   const sketchEdit = (id: FeatureId): void => {
@@ -299,6 +313,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     createToolManager({
       registry: toolRegistry,
       ctx: { viewport, selection, doc, ops, ids: deps.ids, features },
+      regen: regenStatus,
       defaultToolId: SELECT_TOOL.id,
       mode,
       defaultToolIds: { sketch: SKETCH_SELECT_TOOL_ID },
@@ -325,6 +340,8 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     }),
   );
   lifetime.add(createSketchActions({ registry: actions, sketches, ids: deps.ids }));
+  // Debugging the names (M14, R111): starts disabled, ui switches it on in development only.
+  const topoInspector = lifetime.add(createTopoInspector({ viewport, regen: regenStatus }));
 
   // 4. Regeneration: doc.changed → scheduler → Regenerator of the current kernel → port, viewport.
   const regenUi = new ObservableValue<RegenUiState>(
@@ -374,6 +391,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       throw e;
     }
     if (result === 'superseded' || disposed) return;
+    lastState = result.finalState;
     regenStatus.publish(result);
     regenSketches = sketchesOf(result.finalState);
     drawSketches();
@@ -536,6 +554,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     mode,
     sketchActionIds: SKETCH_ACTION_IDS,
     sketchConstraintActionId,
+    topoInspector,
     mountViewport(el) {
       viewport.mount(el);
     },

@@ -9,7 +9,7 @@ import { BUILT_IN_PLUGINS, createAppSession } from './index';
 import { aKernelFactory, FakeAppViewport } from './testing';
 
 describe('BUILT_IN_PLUGINS', () => {
-  it('is frozen and has the seven plugins in toolbar order', () => {
+  it('is frozen and has the nine plugins in toolbar order', () => {
     expect(Object.isFrozen(BUILT_IN_PLUGINS)).toBe(true);
     expect(BUILT_IN_PLUGINS.map((p) => p.schema.type)).toEqual([
       'box',
@@ -19,6 +19,8 @@ describe('BUILT_IN_PLUGINS', () => {
       'sketch',
       'extrude',
       'revolve',
+      'fillet',
+      'chamfer',
     ]);
   });
 
@@ -46,6 +48,8 @@ describe('BUILT_IN_PLUGINS', () => {
         'sketch',
         'extrude',
         'revolve',
+        'fillet',
+        'chamfer',
       ]),
     );
     // No two tools of one mode share a shortcut (tools of disjoint modes may: C is the cylinder

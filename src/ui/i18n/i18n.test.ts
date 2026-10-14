@@ -117,6 +117,9 @@ const SWEEP_KEYS = [
   'field.sketchLine',
 ];
 
+// Keys of the debug panel of topological names (M14, R111).
+const DEBUG_KEYS = ['debug.topoNames', 'debug.unnamed', 'debug.face', 'debug.edge'];
+
 const PLUGIN = {
   cs: { 'box.label': 'Kvádr', 'box.width': 'Šířka' },
   en: { 'box.label': 'Box', 'box.width': 'Width' },
@@ -154,6 +157,7 @@ describe('built-in dictionaries', () => {
     ...COMPOSED_KEYS,
     ...SKETCH_KEYS,
     ...SWEEP_KEYS,
+    ...DEBUG_KEYS,
   ])('%s has a text in cs and en', (key) => {
     expect(cs[key]).toBeTruthy();
     expect(en[key]).toBeTruthy();

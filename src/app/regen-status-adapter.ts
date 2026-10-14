@@ -1,11 +1,11 @@
 // Adapter of RegenStatusPort (spec 10, "Port stavu regenerace"): interaction must not know regen,
 // so app turns every RegenResult into a RegenSnapshot – health of the evaluated features, the
-// bodies and the sketches (with region names) of the final state (plane artifacts are not listed: the Browser shows
-// the origin planes from document) and its own generation counter.
+// bodies (with their topological names, M14) and the sketches (with region names) of the final
+// state (plane artifacts are not listed: the Browser shows the origin planes from document) and
+// its own generation counter.
 
 import { ObservableValue } from '@/core';
 import type { FeatureId } from '@/document';
-import { NO_TOPO_NAMES } from '@/interaction';
 import type {
   FeatureHealth,
   RegenBody,
@@ -39,11 +39,12 @@ export function createRegenStatusAdapter(): RegenStatusAdapter {
         const h = toHealth(status);
         if (h !== undefined) health.set(id, h);
       }
-      // The feature of a body is its origin, the one that minted the id (ADR 0015). No names
-      // yet: the real ones (Body.names) come with M14 Ú13.
+      // The feature of a body is its origin, the one that minted the id (ADR 0015). The name
+      // table of the body is its names as they are: regen's NameTable fits the narrow TopoNames
+      // of interaction structurally (M14, spec 11), and it is frozen already.
       const bodies: readonly RegenBody[] = Object.freeze(
         bodiesOf(result.finalState).map((b) =>
-          Object.freeze({ body: b.id, feature: b.origin, names: NO_TOPO_NAMES }),
+          Object.freeze({ body: b.id, feature: b.origin, names: b.names }),
         ),
       );
       // The feature of a sketch is its owner (spec 12); regions in the order of the artifact (M13).

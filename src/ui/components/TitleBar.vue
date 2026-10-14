@@ -2,7 +2,8 @@
 // The title bar (spec 11, "Komponenty"): the way to the document list, the document name with a
 // dot for the save state (green saved, orange pending, red error), the read-only notice (Q038),
 // the kernel notices (restart and crash, Q055; a kernel that did not start, with its error in the
-// tooltip) and the switches of language and theme. Only bindings.
+// tooltip) and the switches of language and theme; in development builds also the switch of the
+// debug panel of topological names (M14, R111). Only bindings.
 import { useI18n } from 'vue-i18n';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
@@ -14,6 +15,9 @@ const { t } = useI18n();
 const persistence = useObservable(session.persistence);
 const kernel = useObservable(session.kernel);
 const kernelError = useObservable(session.kernelError);
+// The debug switch exists only in development builds (spec 11); production drops it.
+const debugSwitch = import.meta.env.DEV;
+const topoNamesShown = useObservable(session.topoInspector.enabled);
 // No rename of documents in M10, so the name is read once (as in the Browser).
 const documentName = session.doc.meta.name;
 
@@ -23,6 +27,10 @@ function showDocuments(): void {
 
 function reload(): void {
   globalThis.location.reload();
+}
+
+function toggleTopoNames(): void {
+  session.topoInspector.setEnabled(!topoNamesShown.value);
 }
 </script>
 
@@ -73,6 +81,18 @@ function reload(): void {
       </button>
     </span>
 
+    <button
+      v-if="debugSwitch"
+      type="button"
+      class="icon-button"
+      :class="{ active: topoNamesShown }"
+      :title="t('debug.topoNames')"
+      :aria-pressed="topoNamesShown"
+      @click="toggleTopoNames"
+    >
+      <i class="ti ti-tag" aria-hidden="true" />
+    </button>
+
     <ThemeLocaleToggles />
   </div>
 </template>
@@ -104,6 +124,9 @@ function reload(): void {
 }
 .icon-button:hover {
   background: var(--control-hover);
+}
+.icon-button.active {
+  color: var(--accent);
 }
 .title {
   flex: 1;

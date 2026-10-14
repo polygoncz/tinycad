@@ -1,27 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import { bodyId, sketchId } from '@/document';
-import type { BodyId, FeatureId } from '@/document';
+import type { BodyId, FeatureId, TopoName } from '@/document';
 import type { ShapeHandle } from '@/kernel';
-import { NO_TOPO_NAMES } from '@/interaction';
 import { EMPTY_NAMES } from '@/regen';
-import type { Artifact, Body, FeatureStatus, RegenResult } from '@/regen';
-import { aSketchArtifact } from '@/regen/testing';
+import type { Artifact, Body, FeatureStatus, NameTable, RegenResult } from '@/regen';
+import { aNameTable, aSketchArtifact } from '@/regen/testing';
 import { createRegenStatusAdapter } from './regen-status-adapter';
 
 // Branded ids are created by a cast at one place in tests; body ids by bodyId (ADR 0015).
 const fid = (s: string): FeatureId => s as FeatureId;
 const bid = (origin: string): BodyId => bodyId(fid(origin));
 const handle = (n: number): ShapeHandle => n as ShapeHandle;
+const tn = (s: string): TopoName => s as TopoName;
 
 /** The body minted by `origin`, last modified by `lastModifiedBy` (by default its origin). */
-function aBody(origin: string, shape: number, lastModifiedBy = origin): Body {
+function aBody(
+  origin: string,
+  shape: number,
+  lastModifiedBy = origin,
+  names: NameTable = EMPTY_NAMES,
+): Body {
   return {
     kind: 'body',
     id: bid(origin),
     origin: fid(origin),
     lastModifiedBy: fid(lastModifiedBy),
     shape: handle(shape),
-    names: EMPTY_NAMES,
+    names,
   };
 }
 
@@ -94,8 +99,8 @@ describe('RegenStatusAdapter', () => {
       ),
     );
     expect(adapter.state.get().bodies).toEqual([
-      { body: bid('b'), feature: fid('b'), names: NO_TOPO_NAMES },
-      { body: bid('a'), feature: fid('a'), names: NO_TOPO_NAMES },
+      { body: bid('b'), feature: fid('b'), names: EMPTY_NAMES },
+      { body: bid('a'), feature: fid('a'), names: EMPTY_NAMES },
     ]);
   });
 
@@ -103,14 +108,18 @@ describe('RegenStatusAdapter', () => {
     const adapter = createRegenStatusAdapter();
     adapter.publish(aResult([['a', { kind: 'ok' }]], [aBody('a', 1, 'm')]));
     expect(adapter.state.get().bodies).toEqual([
-      { body: bid('a'), feature: fid('a'), names: NO_TOPO_NAMES },
+      { body: bid('a'), feature: fid('a'), names: EMPTY_NAMES },
     ]);
   });
 
-  it('publishes the names of each body; no names yet (M14, real ones come with Ú13)', () => {
+  it('publishes the name table of each body as its names (M14)', () => {
     const adapter = createRegenStatusAdapter();
-    adapter.publish(aResult([['a', { kind: 'ok' }]], [aBody('a', 1)]));
-    expect(adapter.state.get().bodies[0]?.names).toBe(NO_TOPO_NAMES);
+    const names = aNameTable({ faces: { 'f/face:top': [5] }, edges: { 'f/edge:a|b': [2] } });
+    adapter.publish(aResult([['a', { kind: 'ok' }]], [aBody('a', 1, 'a', names)]));
+    const published = adapter.state.get().bodies[0]?.names;
+    expect(published).toBe(names);
+    expect(published?.faces(tn('f/face:top'))).toEqual([5]);
+    expect(published?.nameOfEdge(2)).toBe('f/edge:a|b');
   });
 
   it('leaves out artifacts that are not bodies', () => {

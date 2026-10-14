@@ -93,6 +93,12 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'titleBar.themeDark': 'Tmavý režim',
   'titleBar.themeLight': 'Světlý režim',
 
+  // Debug panel of topological names (M14, development only).
+  'debug.topoNames': 'Jména ploch',
+  'debug.unnamed': '(bez jména)',
+  'debug.face': 'Plocha {index}',
+  'debug.edge': 'Hrana {index}',
+
   // Toolbar groups (toolbar.group.<id>; ToolDescriptor.group or history/view).
   'toolbar.group.history': 'Historie',
   'toolbar.group.primitive': 'Vytvořit',

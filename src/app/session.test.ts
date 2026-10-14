@@ -9,12 +9,13 @@ import {
   ORIGIN_PLANES,
   sketchId,
 } from '@/document';
-import type { DocumentId, FeatureId } from '@/document';
+import type { BodyId, DocumentId, FeatureId, TopoName } from '@/document';
 import { boxPlugin } from '@/features/box';
 import { extrudePlugin } from '@/features/extrude';
+import { filletPlugin } from '@/features/fillet';
 import { sketchPlugin } from '@/features/sketch';
 import { axisDrawing, EDIT_SKETCH_DRAWING_ID, planeDrawing } from '@/interaction';
-import type { ConfirmRequest, ViewKeyEvent } from '@/interaction';
+import type { ConfirmRequest, ViewKeyEvent, ViewPointerEvent } from '@/interaction';
 import { createMemoryDocumentStore, createSnapshot } from '@/persistence';
 import type { DocumentStore } from '@/persistence';
 import { createManualScheduler } from '@/persistence/testing';
@@ -899,6 +900,81 @@ function aCountingStore(inner: DocumentStore): { store: DocumentStore; appends: 
     appends: () => appends,
   };
 }
+
+describe('createAppSession – topological names (M14)', () => {
+  /** A session with one regenerated box of height 10; `body` is its body. */
+  async function openWithBox(
+    plugins: readonly FeaturePlugin[],
+  ): Promise<Harness & { readonly box: FeatureId; readonly body: BodyId }> {
+    const harness = await open({ plugins });
+    addBox(harness.session, 10);
+    await settle();
+    const box = harness.session.doc.studio.features[0]?.id ?? fail();
+    return { ...harness, box, body: bodyId(box) };
+  }
+
+  const pointerAt = (type: ViewPointerEvent['type']): ViewPointerEvent => ({
+    type,
+    x: 5,
+    y: 5,
+    button: 'left',
+    mods: { shift: false, alt: false, mod: false },
+  });
+
+  // Test value: the name the box plugin gives its top face (spec 08).
+  const topOf = (box: FeatureId): TopoName => `${box}/face:top` as TopoName;
+
+  it('the port carries the names of the bodies: the top face of the box is face 5', async () => {
+    const { session, viewport, box, body } = await openWithBox([boxPlugin]);
+    // The selection fills names in from the port (spec 10, "Výběr").
+    session.selection.set([{ kind: 'face', body, faceIndex: 5 }]);
+    expect(session.selection.items.get()).toEqual([
+      { kind: 'face', body, faceIndex: 5, name: topOf(box) },
+    ]);
+    // So does the inspector, through the same port.
+    session.topoInspector.setEnabled(true);
+    viewport.setPick({ kind: 'face', body, faceIndex: 5, point: [0, 0, 10], normal: [0, 0, 1] });
+    viewport.emitPointer(pointerAt('move'));
+    expect(session.topoInspector.hovered.get()).toEqual({
+      body,
+      kind: 'face',
+      index: 5,
+      name: topOf(box),
+    });
+  });
+
+  it('a click on an edge in the fillet dialog adds a TopoRef and highlights the edge', async () => {
+    const { session, viewport, box, body } = await openWithBox([boxPlugin, filletPlugin]);
+    const edit = session.features.create('fillet');
+    expect(edit.state.get().activeRefParam).toBe('edges');
+    viewport.setPick({ kind: 'edge', body, edgeIndex: 0, point: [0, 0, 0] });
+    viewport.emitPointer(pointerAt('down'));
+    viewport.emitPointer(pointerAt('up'));
+    const edges = edit.state.get().params['edges'];
+    // Edge 0 of the fake box lies between its bottom and front faces (spec 06, spec 08).
+    const name = `edge:${box}/face:bottom|${box}/face:front`;
+    expect(edges).toEqual([{ kind: 'topo', body, name }]);
+    expect(viewport.selection).toContainEqual({ kind: 'edge', body, edgeIndex: 0 });
+    edit.cancel();
+  });
+
+  it('a sketch on the top face of the box lies on the plane z = height', async () => {
+    const { session, box, body } = await openWithBox([boxPlugin, sketchPlugin]);
+    const sketch = session.sketches.create({ kind: 'topo', body, name: topOf(box) });
+    expect(sketch.plane.normal).toEqual([0, 0, 1]);
+    expect(sketch.plane.origin[2]).toBeCloseTo(10);
+    sketch.cancel();
+  });
+
+  it('the topo inspector belongs to the session and is released with it', async () => {
+    const { session, viewport, body } = await openWithBox([boxPlugin]);
+    session.topoInspector.setEnabled(true);
+    session.dispose();
+    viewport.setPick({ kind: 'face', body, faceIndex: 5, point: [0, 0, 10], normal: [0, 0, 1] });
+    viewport.emitPointer(pointerAt('move'));
+    expect(session.topoInspector.hovered.get()).toBeNull();
+  });
+});
 
 function fail(): never {
   throw new Error('Missing test data');

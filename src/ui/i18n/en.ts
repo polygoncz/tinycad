@@ -92,6 +92,12 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'titleBar.themeDark': 'Dark mode',
   'titleBar.themeLight': 'Light mode',
 
+  // Debug panel of topological names (M14, development only).
+  'debug.topoNames': 'Face names',
+  'debug.unnamed': '(unnamed)',
+  'debug.face': 'Face {index}',
+  'debug.edge': 'Edge {index}',
+
   // Toolbar groups (toolbar.group.<id>; ToolDescriptor.group or history/view).
   'toolbar.group.history': 'History',
   'toolbar.group.primitive': 'Create',

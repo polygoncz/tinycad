@@ -361,7 +361,7 @@ function toHighlightTarget(item: SelectionItem): HighlightTarget[] {
     case 'edge':
       return [{ kind: 'edge', body: item.body, edgeIndex: item.edgeIndex }];
     case 'body':
-      // M14 (R104): the whole body; render draws it from Ú7 on.
+      // M14 (R104): the whole body.
       return [{ kind: 'body', body: item.body }];
     case 'feature':
     case 'plane':
