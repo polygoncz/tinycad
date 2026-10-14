@@ -17,4 +17,31 @@ describe('kernel public API', () => {
     expectTypeOf<kernel.GeometryKernel>().toExtend<kernel.SweepOps>();
     expectTypeOf<Parameters<kernel.SweepOps['revolve']>[1]>().toEqualTypeOf<kernel.Axis>();
   });
+
+  it('ProfileCurve carries the optional entity id and matches Curve2 of sketch (M14)', () => {
+    expectTypeOf<kernel.ProfileCurve['id']>().toEqualTypeOf<string | undefined>();
+    expectTypeOf<Extract<kernel.ProfileCurve, { kind: 'circle' }>>().toEqualTypeOf<{
+      readonly kind: 'circle';
+      readonly center: readonly [number, number];
+      readonly radius: number;
+      readonly id?: string;
+    }>();
+  });
+
+  it('exports the topology types and DressupOps, not yet part of the port (M14 wave 0)', () => {
+    expectTypeOf<kernel.FaceInfo['surface']>().toEqualTypeOf<kernel.SurfaceType>();
+    expectTypeOf<kernel.FaceInfo['plane']>().toEqualTypeOf<kernel.FacePlane | undefined>();
+    expectTypeOf<kernel.TopologySummary['faces']>().toEqualTypeOf<readonly kernel.FaceInfo[]>();
+    expectTypeOf<kernel.TopologySummary['edges']>().toEqualTypeOf<readonly kernel.EdgeInfo[]>();
+    expectTypeOf<kernel.TopologySummary['vertexCount']>().toEqualTypeOf<number>();
+    expectTypeOf<kernel.EdgeInfo['faces']>().toEqualTypeOf<readonly number[]>();
+    expectTypeOf<kernel.EdgeInfo['vertices']>().toEqualTypeOf<readonly number[]>();
+    expectTypeOf<Parameters<kernel.DressupOps['fillet']>>().toEqualTypeOf<
+      [kernel.ShapeHandle, readonly number[], number]
+    >();
+    expectTypeOf<Parameters<kernel.DressupOps['chamfer']>>().toEqualTypeOf<
+      [kernel.ShapeHandle, readonly number[], number]
+    >();
+    expectTypeOf<kernel.GeometryKernel>().not.toHaveProperty('fillet');
+  });
 });

@@ -3,6 +3,9 @@
 
 export type {
   BoundingBox,
+  EdgeInfo,
+  FaceInfo,
+  FacePlane,
   HistoryLink,
   MeshData,
   MeshQuality,
@@ -10,11 +13,14 @@ export type {
   ShapeHistory,
   ShapeResult,
   SubShapeIndex,
+  SurfaceType,
+  TopologySummary,
 } from './types';
 export type {
   Axis,
   BooleanOp,
   BooleanOps,
+  DressupOps,
   GeometryKernel,
   LifecycleOps,
   MeshOps,

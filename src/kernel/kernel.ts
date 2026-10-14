@@ -66,6 +66,17 @@ export interface SweepOps {
   revolve(profile: ShapeHandle, axis: Axis, angle: number): Promise<ShapeResult>;
 }
 
+/**
+ * Dress-up of edges (M14). Not yet part of GeometryKernel: no implementation has it until the
+ * kernel task of M14 adds it to the port.
+ */
+export interface DressupOps {
+  /** Fillet of the edges `edges` (edge indices of `shape`) with the radius `radius`. */
+  fillet(shape: ShapeHandle, edges: readonly number[], radius: number): Promise<ShapeResult>;
+  /** Symmetric chamfer of the edges `edges` by `distance`. */
+  chamfer(shape: ShapeHandle, edges: readonly number[], distance: number): Promise<ShapeResult>;
+}
+
 export interface MeshOps {
   tessellate(shape: ShapeHandle, q: MeshQuality): Promise<MeshData>;
 }

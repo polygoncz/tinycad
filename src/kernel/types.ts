@@ -66,3 +66,37 @@ export interface MeshData {
   /** Triples [edgeIndex, firstPoint, pointCount]. */
   readonly edgeRanges: Uint32Array<ArrayBuffer>;
 }
+
+// Topology of a shape (spec 06, "Stav po M14"): what naming needs to know about faces and edges
+// without the geometry itself. Indices are SubShapeIndex.index of the same handle.
+
+export type SurfaceType = 'plane' | 'cylinder' | 'cone' | 'sphere' | 'torus' | 'other';
+
+/** Plane of a planar face: a point on it and the unit normal pointing out of the solid (face orientation applied). */
+export interface FacePlane {
+  readonly origin: Vec3;
+  readonly normal: Vec3;
+}
+
+export interface FaceInfo {
+  readonly surface: SurfaceType;
+  /** Present exactly when surface is 'plane'. */
+  readonly plane?: FacePlane;
+}
+
+export interface EdgeInfo {
+  /** Adjacent faces, ascending without duplicates (a seam of a lateral face: one). */
+  readonly faces: readonly number[];
+  /** End vertices, ascending without duplicates (closed edge: one, edge without a vertex: none). */
+  readonly vertices: readonly number[];
+  /** Point of the edge at half its parameter range; only to tell edges apart (#k, spec 08). */
+  readonly midpoint: Vec3;
+}
+
+export interface TopologySummary {
+  /** Index = SubShapeIndex of the face. */
+  readonly faces: readonly FaceInfo[];
+  /** Index = SubShapeIndex of the edge. */
+  readonly edges: readonly EdgeInfo[];
+  readonly vertexCount: number;
+}

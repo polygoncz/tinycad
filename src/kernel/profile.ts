@@ -3,17 +3,27 @@ import { err, ok, plane, type Plane, type Result, type Vec2, type Vec3 } from '@
 // Planar profiles for SketchOps.makeFace (spec 06, "Stav po M12") and the one check of a face
 // input shared by every GeometryKernel implementation (contract bullet makeFace).
 
-/** 2D curve in a plane; the same shape as Curve2 from sketch (kernel does not depend on sketch). */
+/**
+ * 2D curve in a plane; the same shape as Curve2 from sketch (kernel does not depend on sketch).
+ * `id` (M14) is the id of the sketch entity, an opaque string for the kernel; makeFace turns it
+ * into the role edge:<id> of the edge made from the curve (spec 06, "Stav po M14").
+ */
 export type ProfileCurve =
-  | { readonly kind: 'line'; readonly from: Vec2; readonly to: Vec2 }
+  | { readonly kind: 'line'; readonly from: Vec2; readonly to: Vec2; readonly id?: string }
   | {
       readonly kind: 'arc';
       readonly center: Vec2;
       readonly from: Vec2;
       readonly to: Vec2;
       readonly ccw: boolean;
+      readonly id?: string;
     }
-  | { readonly kind: 'circle'; readonly center: Vec2; readonly radius: number };
+  | {
+      readonly kind: 'circle';
+      readonly center: Vec2;
+      readonly radius: number;
+      readonly id?: string;
+    };
 
 export type ProfileLoop = readonly ProfileCurve[];
 

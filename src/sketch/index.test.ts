@@ -43,12 +43,13 @@ describe('sketch public API', () => {
     >();
   });
 
-  it('Curve2 has the shape of ProfileCurve (spec 06)', () => {
+  it('Curve2 has the shape of ProfileCurve, with the optional entity id of M14 (spec 06)', () => {
     expectTypeOf<Curve2>().toEqualTypeOf<
       | {
           readonly kind: 'line';
           readonly from: readonly [number, number];
           readonly to: readonly [number, number];
+          readonly id?: string;
         }
       | {
           readonly kind: 'arc';
@@ -56,11 +57,13 @@ describe('sketch public API', () => {
           readonly from: readonly [number, number];
           readonly to: readonly [number, number];
           readonly ccw: boolean;
+          readonly id?: string;
         }
       | {
           readonly kind: 'circle';
           readonly center: readonly [number, number];
           readonly radius: number;
+          readonly id?: string;
         }
     >();
   });

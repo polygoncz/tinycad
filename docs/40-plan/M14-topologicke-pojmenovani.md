@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: doing
 order: 14
 aliases:
   - M14
@@ -27,7 +27,7 @@ specs:
   - "[[12-skicar]]"
 depends_on:
   - "[[M13-extrude-revolve]]"
-started: 
+started: 2026-10-14
 finished: 
 tags:
   - milnik
@@ -46,7 +46,7 @@ updated: 2026-10-14
 
 ## Úkoly
 
-- [ ] Ú0 hlavní sezení: typy portu jádra a `Curve2.id` (vlna 0)
+- [x] Ú0 hlavní sezení: typy portu jádra a `Curve2.id` (vlna 0)
 - [ ] Ú1 `kernel`, `kernel-occt`: `topology`, role, historie u všech operací, `DressupOps.fillet`/`chamfer`
 - [ ] Ú2 `regen`: `NameTable`, `propagateNames` (čistá funkce)
 - [ ] Ú3 `interaction` (+ zástupné místo v `render`, `app`): `TopoNames` v portu, výběr přežije regeneraci, `HighlightTarget` druhu `body`

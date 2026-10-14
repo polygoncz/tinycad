@@ -4,17 +4,26 @@ import type { SketchCurve, SketchData, SketchEntityId, SketchPoint } from './mod
 
 // 2D geometry of sketch curves for regions and the kernel (spec 12 "Geometrie a pomůcky editace").
 
-/** A 2D curve for regions and the kernel. The same shape as ProfileCurve in kernel (structural typing, ADR 0017). */
+/**
+ * A 2D curve for regions and the kernel. The same shape as ProfileCurve in kernel (structural
+ * typing, ADR 0017). `id` (M14) is the id of the sketch entity the curve comes from.
+ */
 export type Curve2 =
-  | { readonly kind: 'line'; readonly from: Vec2; readonly to: Vec2 }
+  | { readonly kind: 'line'; readonly from: Vec2; readonly to: Vec2; readonly id?: string }
   | {
       readonly kind: 'arc';
       readonly center: Vec2;
       readonly from: Vec2;
       readonly to: Vec2;
       readonly ccw: boolean;
+      readonly id?: string;
     }
-  | { readonly kind: 'circle'; readonly center: Vec2; readonly radius: number };
+  | {
+      readonly kind: 'circle';
+      readonly center: Vec2;
+      readonly radius: number;
+      readonly id?: string;
+    };
 
 export function pointsById(data: SketchData): ReadonlyMap<SketchEntityId, SketchPoint> {
   const points = new Map<SketchEntityId, SketchPoint>();
