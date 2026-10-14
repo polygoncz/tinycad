@@ -3,6 +3,7 @@ import type { Vec3 } from '@/core';
 import type { ShapeHandle } from '@/kernel';
 import { applyBodyOperation, unresolvedReference } from '@/regen';
 import type { Body, FeatureBuilder, ModelingKernel, ResolvedRegion } from '@/regen';
+import { flipApplies } from './schema';
 import type { ExtrudeParams } from './schema';
 
 // The behaviour half of the extrude feature (ADR 0004): one prism per region along the normal
@@ -33,8 +34,8 @@ export const extrudeBuilder: FeatureBuilder<ExtrudeParams> = Object.freeze<
     // min 1 is checked by the schema; a hole here would be a bug of the Regenerator.
     if (first === undefined) throw new Error('Extrude without a region');
     const normal = first.sketch.plane.normal;
-    // flip belongs to 'blind' only (hidden for 'symmetric', where a value may stay set).
-    const direction: Vec3 = endType === 'blind' && flip ? vec3.scale(normal, -1) : normal;
+    // flip is hidden for 'symmetric', where its value is not validated, so it must not count.
+    const direction: Vec3 = flip && flipApplies(endType) ? vec3.scale(normal, -1) : normal;
 
     // One prism per region in the order of the regions: a deterministic order of kernel calls.
     // A kernel error propagates and becomes KERNEL.

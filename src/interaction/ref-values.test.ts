@@ -4,9 +4,11 @@ import type { AxisRef, FeatureId, SketchEntityRef } from '@/document';
 import { aDocument, aFeature } from '@/document/testing';
 import { rectangleData } from '@/sketch/testing';
 import {
+  axisRefOf,
   bodyOfRef,
   bodyRefLabel,
   isSketchLine,
+  regionRefsOf,
   toggleAxisRef,
   toggleRegionRef,
 } from './ref-values';
@@ -71,6 +73,72 @@ describe('bodyRefLabel', () => {
     doc.removeFeature(fid('f3'));
     expect(bodyRefLabel(doc, B3)).toBeNull();
     expect(bodyRefLabel(doc, bodyId(fid('nope')))).toBeNull();
+  });
+});
+
+describe('regionRefsOf (M13)', () => {
+  it('reads the region references of the value as frozen copies, in order', () => {
+    const refs = regionRefsOf([
+      { kind: 'region', sketch: 's1', region: 'ab', extra: 1 },
+      { kind: 'region', sketch: 's2', region: 'cd' },
+    ]);
+    expect(refs).toEqual([
+      { kind: 'region', sketch: 's1', region: 'ab' },
+      { kind: 'region', sketch: 's2', region: 'cd' },
+    ]);
+    expect(Object.isFrozen(refs)).toBe(true);
+    expect(Object.isFrozen(refs[0])).toBe(true);
+  });
+
+  it('skips items of another shape (params may hold anything)', () => {
+    expect(
+      regionRefsOf([
+        null,
+        'x',
+        { kind: 'body', body: B1 },
+        { kind: 'region', sketch: 's1' },
+        { kind: 'region', sketch: 1, region: 'ab' },
+        { kind: 'region', sketch: '', region: 'ab' },
+        { kind: 'region', sketch: 'a/b', region: 'ab' },
+        { kind: 'region', sketch: 's1', region: 'ok' },
+      ]),
+    ).toEqual([{ kind: 'region', sketch: 's1', region: 'ok' }]);
+  });
+
+  it('a value that is not an array has no references', () => {
+    for (const junk of [null, undefined, 'x', { kind: 'region', sketch: 's1', region: 'ab' }]) {
+      expect(regionRefsOf(junk)).toEqual([]);
+    }
+  });
+});
+
+describe('axisRefOf (M13)', () => {
+  it('reads an axis or a sketch entity as a frozen copy', () => {
+    const axis = axisRefOf({ kind: 'axis', axis: ORIGIN_AXIS_IDS.z, extra: 1 });
+    expect(axis).toEqual({ kind: 'axis', axis: ORIGIN_AXIS_IDS.z });
+    expect(Object.isFrozen(axis)).toBe(true);
+    expect(axisRefOf({ kind: 'sketchEntity', sketch: 's1', entity: 'ab' })).toEqual({
+      kind: 'sketchEntity',
+      sketch: 's1',
+      entity: 'ab',
+    });
+  });
+
+  it('is null for anything else', () => {
+    for (const junk of [
+      null,
+      undefined,
+      'x',
+      [],
+      { kind: 'axis', axis: 'junk' },
+      { kind: 'axis' },
+      { kind: 'sketchEntity', sketch: 's1', entity: '' },
+      { kind: 'sketchEntity', sketch: '', entity: 'ab' },
+      { kind: 'sketchEntity', sketch: 'a/b', entity: 'ab' },
+      { kind: 'region', sketch: 's1', region: 'ab' },
+    ]) {
+      expect(axisRefOf(junk)).toBeNull();
+    }
   });
 });
 

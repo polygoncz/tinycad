@@ -13,7 +13,7 @@ import type {
   ParamIssue,
   ParamSpec,
 } from '@/document';
-import { ORIGIN_AXES, isParamVisible, parseAxisId } from '@/document';
+import { ORIGIN_AXES, isParamVisible } from '@/document';
 import type {
   FeatureAddOp,
   FeatureSetParamsOp,
@@ -23,7 +23,7 @@ import type {
 } from '@/ops';
 import { OP_VERSION } from '@/ops';
 import { nextFeatureName } from './feature-name';
-import { bodyOfRef, bodyRefLabel } from './ref-values';
+import { axisRefOf, bodyOfRef, bodyRefLabel } from './ref-values';
 
 export interface FeatureEditor {
   /** Creates a new feature of the type at the rollback bar and opens an edit session for it. */
@@ -88,6 +88,11 @@ export interface FieldState {
   readonly hidden: boolean;
   /** spec.group, the translation key of the section heading (M13). */
   readonly group: string | null;
+  /**
+   * The group key at the first visible field of a group other than that of the previous visible
+   * field, null otherwise; fields of kind 'data' (no control) are skipped like hidden ones (M13).
+   */
+  readonly heading: string | null;
   /** The text of the reference of an 'axis' param with a value; null otherwise (M13). */
   readonly refText: RefText | null;
 }
@@ -276,7 +281,8 @@ function createSession(deps: {
 
   /**
    * The text of an 'axis' value (M13): the label of an origin axis, the name of the sketch of an
-   * entity; missing sketch or unknown axis → field.missingRef; null or an invalid value → null.
+   * entity; missing sketch, unknown axis or an invalid value → field.missingRef; null or no value
+   * → null.
    * `prev` is reused when equal.
    */
   function refTextOf(value: unknown, prev: RefText | null): RefText | null {
@@ -285,28 +291,20 @@ function createSession(deps: {
   }
 
   function axisText(value: unknown): RefText | null {
-    if (!isRecord(value)) return null;
-    if (value['kind'] === 'axis') {
-      const axis = parseAxisId(value['axis']);
-      if (axis === undefined) return null;
-      const origin = ORIGIN_AXES.find((a) => a.id === axis);
+    if (value === null || value === undefined) return null;
+    // A value of any other shape can still be cleared, so it shows as a missing reference.
+    const ref = axisRefOf(value);
+    if (ref === null) return MISSING_REF;
+    if (ref.kind === 'axis') {
+      const origin = ORIGIN_AXES.find((a) => a.id === ref.axis);
       return origin === undefined
         ? MISSING_REF
         : Object.freeze({ key: origin.label, params: NO_TEXT_PARAMS });
     }
-    if (value['kind'] === 'sketchEntity') {
-      const { sketch, entity } = value;
-      if (!isNonEmptyString(sketch) || !isNonEmptyString(entity)) return null;
-      // A FeatureId only names a feature to look up here; an unknown one is simply missing.
-      const feature = doc.feature(sketch as FeatureId);
-      return feature === undefined
-        ? MISSING_REF
-        : Object.freeze({
-            key: 'field.sketchLine',
-            params: Object.freeze({ sketch: feature.name }),
-          });
-    }
-    return null;
+    const feature = doc.feature(ref.sketch);
+    return feature === undefined
+      ? MISSING_REF
+      : Object.freeze({ key: 'field.sketchLine', params: Object.freeze({ sketch: feature.name }) });
   }
 
   /** A new snapshot from the document, reusing everything unchanged from `prev`. */
@@ -322,8 +320,16 @@ function createSession(deps: {
       prev !== null && sameIssues(prev.issues, freshIssues)
         ? prev.issues
         : Object.freeze(freshIssues.map(freezeIssue));
+    let lastGroup: string | null = null;
     const fields = Object.entries(schema.params).map(([name, spec], i): FieldState => {
       const old = prev?.fields[i];
+      const hidden = !isParamVisible(spec, params);
+      const group = spec.group ?? null;
+      let heading: string | null = null;
+      if (!hidden && spec.kind !== 'data') {
+        if (group !== lastGroup) heading = group;
+        lastGroup = group;
+      }
       const field: FieldState = {
         name,
         spec,
@@ -331,8 +337,9 @@ function createSession(deps: {
         issue: issues.find((issue) => issue.param === name) ?? null,
         active: name === activeRefParam,
         refs: spec.kind === 'bodies' ? refsOf(params[name], old?.refs ?? null) : null,
-        hidden: !isParamVisible(spec, params),
-        group: spec.group ?? null,
+        hidden,
+        group,
+        heading,
         refText: spec.kind === 'axis' ? refTextOf(params[name], old?.refText ?? null) : null,
       };
       return old !== undefined && sameField(old, field) ? old : Object.freeze(field);
@@ -470,10 +477,6 @@ function firstRefParam(
   return found === undefined ? null : found[0];
 }
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0;
-}
-
 function sameRefText(a: RefText, b: RefText): boolean {
   const keys = Object.keys(a.params);
   return (
@@ -525,6 +528,7 @@ function sameField(a: FieldState, b: FieldState): boolean {
     a.refs === b.refs &&
     a.hidden === b.hidden &&
     a.group === b.group &&
+    a.heading === b.heading &&
     a.refText === b.refText
   );
 }

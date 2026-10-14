@@ -2,8 +2,8 @@
 // ParamSpec kind 'axis' (M13): one reference – an origin axis or a line of a sketch. Like
 // RefListField the button only reports that the field wants to become active (the dialog calls
 // focusRefParam); the axis itself comes from the Browser or the view. The text of the reference is
-// FieldState.refText from interaction ("Osa X", "Úsečka ze skici Skica 1", "Chybí položka"),
-// without a value "Nevybráno"; × reports the empty value.
+// FieldState.refText from interaction ("Osa X", "Úsečka ze skici Skica 1", "Chybí položka", also
+// for a value of an invalid shape), without a value "Nevybráno"; × reports the empty value.
 import { computed, useId } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FieldState } from '@/interaction';
@@ -19,8 +19,8 @@ const text = computed(() => {
   const ref = props.field.refText;
   return ref === null ? t('field.noRef') : t(ref.key, ref.params);
 });
-// A value of any shape can be removed, also one interaction cannot name.
-const hasValue = computed(() => props.field.value !== null && props.field.value !== undefined);
+// interaction gives any value a text, an invalid one included (field.missingRef), so it can be removed.
+const hasValue = computed(() => props.field.refText !== null);
 </script>
 
 <template>

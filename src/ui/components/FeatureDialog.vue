@@ -22,22 +22,9 @@ const icon = computed(() => `ti-${props.edit.schema.icon ?? 'cube'}`);
 // The name of the feature from the session (generated on create, spec 10 "Dialog featury").
 const title = computed(() => state.value.name);
 
-// Hidden fields are not drawn (M13); a group gets its heading before its first visible field –
-// a group other than that of the previous visible field, null = no heading (spec 11, "Skrytá
-// pole a skupiny"). The rule which field is hidden lives in interaction (FieldState.hidden).
-const rows = computed(() => {
-  let group: string | null = null;
-  return (
-    state.value.fields
-      // A field without a component ('data') is skipped like a hidden one.
-      .filter((field) => !field.hidden && paramFieldFor(field.spec.kind) !== undefined)
-      .map((field) => {
-        const heading = field.group !== null && field.group !== group ? field.group : null;
-        group = field.group;
-        return { field, heading };
-      })
-  );
-});
+// Hidden fields are not drawn (M13); the heading of a group comes with the field from interaction
+// (FieldState.heading, spec 11 "Skrytá pole a skupiny"), the dialog only draws it.
+const rows = computed(() => state.value.fields.filter((field) => !field.hidden));
 
 function update(field: FieldState, value: unknown): void {
   props.edit.setParam(field.name, value);
@@ -116,9 +103,9 @@ function onGripUp(): void {
     </header>
 
     <div ref="fields" class="fields">
-      <template v-for="{ field, heading } in rows" :key="field.name">
-        <div v-if="heading !== null" class="group-heading" role="heading" aria-level="3">
-          {{ t(heading) }}
+      <template v-for="field in rows" :key="field.name">
+        <div v-if="field.heading !== null" class="group-heading" role="heading" aria-level="3">
+          {{ t(field.heading) }}
         </div>
         <component
           :is="paramFieldFor(field.spec.kind)"

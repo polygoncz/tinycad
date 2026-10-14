@@ -17,6 +17,14 @@ export interface ExtrudeParams {
   readonly flip: boolean;
 }
 
+/**
+ * Whether the end type leaves room for a direction: a symmetric extrude goes to both sides, so
+ * flip is hidden and the builder ignores it. Takes unchecked values (visibleWhen).
+ */
+export function flipApplies(endType: unknown): boolean {
+  return endType !== 'symmetric';
+}
+
 // Frozen deeply – the schema object, every ParamSpec and the enum options: the schema is shared
 // by the registry, the UI form and the validation, so nobody may change it in place.
 // Labels are translation keys (ADR 0014), the texts are in messages.ts. The predicates get the
@@ -61,7 +69,7 @@ const params: ParamSchema = Object.freeze<ParamSchema>({
     kind: 'boolean',
     label: 'extrude.flip',
     default: false,
-    visibleWhen: (p) => p['endType'] !== 'symmetric',
+    visibleWhen: (p) => flipApplies(p['endType']),
   }),
 });
 

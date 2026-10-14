@@ -120,6 +120,7 @@ describe('FeatureEditor.create', () => {
       refs: null,
       hidden: false,
       group: null,
+      heading: null,
       refText: null,
     });
     expect(state.fields[2]?.refs).toEqual([]);
@@ -982,10 +983,85 @@ describe('FeatureEditSession.refText (M13)', () => {
     });
   });
 
-  it('null, an invalid value and the other kinds have no text', () => {
+  it('an invalid value is a missing reference, so the field can offer to clear it', () => {
+    for (const junk of [
+      { kind: 'axis', axis: 'junk' },
+      { kind: 'sketchEntity', sketch: '', entity: 'ab' },
+      { kind: 'sketchEntity', sketch: 'a/b', entity: 'ab' },
+      { kind: 'region', sketch: 's1', region: 'r1' },
+      'x',
+      [],
+    ]) {
+      expect(fieldOf(withAxis(junk), 'axis')?.refText).toEqual({
+        key: 'field.missingRef',
+        params: {},
+      });
+    }
+  });
+
+  it('null, a missing value and the other kinds have no text', () => {
     expect(fieldOf(withAxis(null), 'axis')?.refText).toBeNull();
-    expect(fieldOf(withAxis({ kind: 'axis', axis: 'junk' }), 'axis')?.refText).toBeNull();
-    expect(fieldOf(withAxis('x'), 'axis')?.refText).toBeNull();
+    expect(fieldOf(withAxis(undefined), 'axis')?.refText).toBeNull();
     expect(fieldOf(withAxis(null), 'regions')?.refText).toBeNull();
+  });
+});
+
+describe('FeatureEditSession headings (M13)', () => {
+  // Groups g1, g2 with hidden fields and a field without a component ('data') in between.
+  const PARAMS: ParamSchema = {
+    plain: { kind: 'length', label: 'plain', default: 1 },
+    data: { kind: 'data', label: 'data', group: 'g1' },
+    a: { kind: 'length', label: 'a', default: 1, group: 'g1' },
+    b: { kind: 'length', label: 'b', default: 1, group: 'g1' },
+    hiddenG2: {
+      kind: 'length',
+      label: 'hiddenG2',
+      default: 1,
+      group: 'g2',
+      visibleWhen: (p) => p['show'] === true,
+    },
+    c: { kind: 'length', label: 'c', default: 1, group: 'g2' },
+    d: { kind: 'length', label: 'd', default: 1, group: 'g1' },
+    none: { kind: 'length', label: 'none', default: 1 },
+    e: { kind: 'length', label: 'e', default: 1, group: 'g1' },
+    show: { kind: 'boolean', label: 'show', default: false },
+  };
+  const SCHEMA: FeatureSchema = {
+    type: 'grouped',
+    version: 1,
+    label: 'grouped',
+    params: PARAMS,
+    defaults: () => ({ plain: 1, a: 1, b: 1, hiddenG2: 1, c: 1, d: 1, none: 1, e: 1, show: false }),
+    validate: (p) => validateAgainstSchema(PARAMS, p),
+  };
+  const headings = (session: { state: { get(): EditState } }) =>
+    Object.fromEntries(session.state.get().fields.map((f) => [f.name, f.heading]));
+
+  it('the first visible field of a new group has the heading; data and hidden fields none', () => {
+    const { editor } = setup({}, null, SCHEMA);
+    const session = editor.create('grouped');
+
+    expect(headings(session)).toEqual({
+      plain: null,
+      data: null,
+      a: 'g1',
+      b: null,
+      hiddenG2: null,
+      c: 'g2',
+      d: 'g1',
+      none: null,
+      e: 'g1',
+      show: null,
+    });
+  });
+
+  it('a field that becomes visible takes the heading over', () => {
+    const { editor } = setup({}, null, SCHEMA);
+    const session = editor.create('grouped');
+
+    session.setParam('show', true);
+
+    expect(fieldOf(session, 'hiddenG2')?.heading).toBe('g2');
+    expect(fieldOf(session, 'c')?.heading).toBeNull();
   });
 });

@@ -21,7 +21,7 @@ import type { Artifact, ArtifactId, Body, BuildOutput, ModelingKernel, RegenStat
 import { aBuildContext, aSketchArtifact } from '@/regen/testing';
 import { extrudeBuilder } from './builder';
 import { extrudeMessages } from './messages';
-import { extrudeSchema } from './schema';
+import { extrudeSchema, flipApplies } from './schema';
 import type { ExtrudeParams } from './schema';
 import { extrudeTool } from './tool';
 import * as extrude from '.';
@@ -357,6 +357,16 @@ describe('extrude param visibility', () => {
   ])('flip for endType %s visible: %s', (endType, visible) => {
     expect(isParamVisible(flip(), { ...anExtrude('x').params, endType })).toBe(visible);
   });
+
+  it.each([
+    ['blind', true],
+    ['symmetric', false],
+  ])(
+    'flipApplies(%s) is %s, the rule of both the predicate and the builder',
+    (endType, applies) => {
+      expect(flipApplies(endType)).toBe(applies);
+    },
+  );
 
   it('other params are always visible', () => {
     for (const key of ['regions', 'operation', 'endType', 'distance']) {

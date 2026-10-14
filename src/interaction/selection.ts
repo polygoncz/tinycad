@@ -9,6 +9,7 @@ import type { Observable, Unsubscribe } from '@/core';
 import type { BodyId, FeatureId, PlaneId } from '@/document';
 import { isParamVisible, sketchId } from '@/document';
 import type { FeatureEditor, FeatureEditSession } from './feature-editor';
+import { regionRefsOf } from './ref-values';
 import type { RegenStatusPort } from './regen-status-port';
 import type { HighlightPort, HighlightTarget } from './viewport-port';
 
@@ -145,18 +146,12 @@ function regionTargetsOf(session: FeatureEditSession): HighlightTarget[] {
 
 /** Region references of an unchecked value; items of another shape are skipped. */
 function regionTargets(value: unknown): HighlightTarget[] {
-  const items: readonly unknown[] = Array.isArray(value) ? value : [];
-  return items.flatMap((item): HighlightTarget[] => {
-    if (typeof item !== 'object' || item === null) return [];
-    const ref: { readonly kind?: unknown; readonly sketch?: unknown; readonly region?: unknown } =
-      item;
-    const { kind, sketch, region } = ref;
-    // sketchId throws for an owner with '/'; such a value is invalid data, not an error.
-    if (kind !== 'region' || typeof sketch !== 'string' || typeof region !== 'string') return [];
-    if (sketch.length === 0 || sketch.includes('/')) return [];
-    // A FeatureId only names the owner of the artifact id here, it is not looked up.
-    return [{ kind: 'sketchRegion', sketch: sketchId(sketch as FeatureId), region }];
-  });
+  // regionRefsOf only lets through owners that sketchId accepts.
+  return regionRefsOf(value).map(({ sketch, region }) => ({
+    kind: 'sketchRegion',
+    sketch: sketchId(sketch),
+    region,
+  }));
 }
 
 function sameItems(a: readonly SelectionItem[], b: readonly SelectionItem[]): boolean {

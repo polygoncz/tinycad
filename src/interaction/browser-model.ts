@@ -16,7 +16,13 @@ import type { AxisId, BodyId, DocumentReader, FeatureId, PlaneId, SketchId } fro
 import type { BodyRenameOp, BodySetVisibleOp, OperationDispatcher } from '@/ops';
 import { OP_VERSION } from '@/ops';
 import type { FeatureEditor, FeatureEditSession } from './feature-editor';
-import { toggleAxisRef, toggleBodyRef, toggleRegionRef } from './ref-values';
+import {
+  axisRefOf,
+  regionRefsOf,
+  toggleAxisRef,
+  toggleBodyRef,
+  toggleRegionRef,
+} from './ref-values';
 import type { RegenStatusPort } from './regen-status-port';
 import type { SelectionCommands } from './selection';
 
@@ -516,23 +522,17 @@ export function createBrowserModel(deps: {
 
 /** The regions of the sketch in a region param value; items of another shape are skipped. */
 function regionsOf(value: unknown, sketch: FeatureId): ReadonlySet<string> {
-  const items: readonly unknown[] = Array.isArray(value) ? value : [];
   return new Set(
-    items.flatMap((item) => {
-      if (!isRecord(item) || item['kind'] !== 'region' || item['sketch'] !== sketch) return [];
-      const region = item['region'];
-      return typeof region === 'string' ? [region] : [];
-    }),
+    regionRefsOf(value)
+      .filter((ref) => ref.sketch === sketch)
+      .map((ref) => ref.region),
   );
 }
 
 /** Whether an axis param value is the reference to this origin axis. */
 function isAxisValue(value: unknown, axis: AxisId): boolean {
-  return isRecord(value) && value['kind'] === 'axis' && value['axis'] === axis;
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  const ref = axisRefOf(value);
+  return ref?.kind === 'axis' && ref.axis === axis;
 }
 
 /** Same length and the same objects at every position. */
