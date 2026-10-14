@@ -82,8 +82,9 @@ export function createRefPick(session: FeatureEditSession, viewport: ViewportPor
     const name = state.activeRefParam;
     if (name === null) return;
     // topo and region need topological naming and sketches (M13/M14). The filter of bodies has
-    // no 'sketchEntity'; the check only narrows the type.
-    if (session.schema.params[name]?.kind !== 'bodies' || hit.kind === 'sketchEntity') return;
+    // no sketch kinds; the check only narrows the type.
+    if (session.schema.params[name]?.kind !== 'bodies') return;
+    if (hit.kind !== 'face' && hit.kind !== 'edge') return;
     session.setParam(name, toggleBodyRef(state.params[name], hit.body));
   }
 

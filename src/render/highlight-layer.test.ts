@@ -139,3 +139,19 @@ describe('HighlightLayer and sketch entities', () => {
     expect(layer.group.children).toHaveLength(1);
   });
 });
+
+describe('HighlightLayer and sketch regions (M13)', () => {
+  it('ignores them for now: the fill of regions comes with Ú5', () => {
+    const layer = createHighlightLayer({
+      views: new Map<BodyId, BodyView>([[A, viewOf(A)]]),
+      requestRender: () => undefined,
+      palette: LIGHT_PALETTE,
+    });
+    layer.setHover({ kind: 'sketchRegion', sketch: 'f1/sketch', region: 'r1' });
+    layer.setSelection([
+      { kind: 'sketchRegion', sketch: 'f1/sketch', region: 'r2' },
+      { kind: 'face', body: A, faceIndex: 0 },
+    ]);
+    expect(layer.group.children).toHaveLength(1);
+  });
+});

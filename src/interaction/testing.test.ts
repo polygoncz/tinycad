@@ -42,6 +42,12 @@ const SKETCH_HIT: PickResult = {
   entity: 'p1',
   point: [1, 1, 0],
 };
+const REGION_HIT: PickResult = {
+  kind: 'sketchRegion',
+  sketch: 'f1/sketch',
+  region: 'r1',
+  point: [1, 1, 0],
+};
 const XY = { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, 0, 1] } as const;
 const DRAWING_A: SketchDrawing = {
   plane: XY,
@@ -88,6 +94,34 @@ describe('FakeViewport', () => {
       expect(view.pick(0, 0)).toBeNull();
       expect(view.pick(0, 0, ['face', 'edge'])).toBeNull();
       expect(view.pick(0, 0, ['sketchEntity'])).toBe(SKETCH_HIT);
+    });
+
+    it('returns a sketch region only with sketchRegion in the filter (M13)', () => {
+      const view = new FakeViewport();
+      view.setPick(REGION_HIT);
+      expect(view.pick(0, 0)).toBeNull();
+      expect(view.pick(0, 0, ['face', 'edge', 'sketchEntity'])).toBeNull();
+      expect(view.pick(0, 0, ['sketchRegion'])).toBe(REGION_HIT);
+    });
+
+    it('records a drawing with regions as it is (M13)', () => {
+      const view = new FakeViewport();
+      const drawing: SketchDrawing = {
+        ...DRAWING_B,
+        regions: [
+          {
+            id: 'r1',
+            outer: [
+              [0, 0],
+              [1, 0],
+              [1, 1],
+            ],
+            holes: [],
+          },
+        ],
+      };
+      view.sketches.set('f1/sketch', drawing);
+      expect(view.sketchDrawings.get('f1/sketch')?.regions).toEqual(drawing.regions);
     });
 
     it('lastFilter is the filter of the last call, undefined without one', () => {
@@ -303,16 +337,26 @@ describe('FakeRegenStatus', () => {
 
   it('publish sets frozen copies of the sketches; without them there are none (M12)', () => {
     const regen = new FakeRegenStatus();
-    const sketches: RegenSketch[] = [{ sketch: sketchId(F1), feature: F1 }];
+    const sketches: RegenSketch[] = [{ sketch: sketchId(F1), feature: F1, regions: [] }];
     regen.publish(new Map(), [], sketches);
     const snapshot = regen.state.get();
-    sketches.push({ sketch: sketchId(F2), feature: F2 });
-    expect(snapshot.sketches).toEqual([{ sketch: sketchId(F1), feature: F1 }]);
+    sketches.push({ sketch: sketchId(F2), feature: F2, regions: [] });
+    expect(snapshot.sketches).toEqual([{ sketch: sketchId(F1), feature: F1, regions: [] }]);
     expect(Object.isFrozen(snapshot.sketches)).toBe(true);
     expect(snapshot.sketches.every((s) => Object.isFrozen(s))).toBe(true);
 
     regen.publish(new Map());
     expect(regen.state.get().sketches).toEqual([]);
+  });
+
+  it('publish copies the region names of each sketch, frozen and in order (M13)', () => {
+    const regen = new FakeRegenStatus();
+    const regions = ['r2', 'r1'];
+    regen.publish(new Map(), [], [{ sketch: sketchId(F1), feature: F1, regions }]);
+    regions.push('r3');
+    const published = regen.state.get().sketches[0]?.regions;
+    expect(published).toEqual(['r2', 'r1']);
+    expect(Object.isFrozen(published)).toBe(true);
   });
 
   it('publish sets frozen copies of the bodies; without them there are none', () => {

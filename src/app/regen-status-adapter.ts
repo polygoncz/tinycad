@@ -1,6 +1,6 @@
 // Adapter of RegenStatusPort (spec 10, "Port stavu regenerace"): interaction must not know regen,
 // so app turns every RegenResult into a RegenSnapshot – health of the evaluated features, the
-// bodies and the sketches of the final state (plane artifacts are not listed: the Browser shows
+// bodies and the sketches (with region names) of the final state (plane artifacts are not listed: the Browser shows
 // the origin planes from document) and its own generation counter.
 
 import { ObservableValue } from '@/core';
@@ -42,9 +42,15 @@ export function createRegenStatusAdapter(): RegenStatusAdapter {
       const bodies: readonly RegenBody[] = Object.freeze(
         bodiesOf(result.finalState).map((b) => Object.freeze({ body: b.id, feature: b.origin })),
       );
-      // The feature of a sketch is its owner (spec 12).
+      // The feature of a sketch is its owner (spec 12); regions in the order of the artifact (M13).
       const sketches: readonly RegenSketch[] = Object.freeze(
-        sketchesOf(result.finalState).map((a) => Object.freeze({ sketch: a.id, feature: a.owner })),
+        sketchesOf(result.finalState).map((a) =>
+          Object.freeze({
+            sketch: a.id,
+            feature: a.owner,
+            regions: Object.freeze([...a.regions.keys()]),
+          }),
+        ),
       );
       // Generation of the port, not of the Regenerator: a restarted kernel brings a new
       // Regenerator that counts from 1 again, the port must keep growing (spec 10).

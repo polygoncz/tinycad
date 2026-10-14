@@ -26,6 +26,12 @@ const SKETCH_HIT: PickResult = {
   entity: 'p1',
   point: [0, 0, 0],
 };
+const REGION_HIT: PickResult = {
+  kind: 'sketchRegion',
+  sketch: 'f2/sketch',
+  region: 'r1',
+  point: [0, 0, 0],
+};
 const FACE: SelectionItem = { kind: 'face', body: BODY, faceIndex: 2 };
 const EDGE: SelectionItem = { kind: 'edge', body: BODY, edgeIndex: 5 };
 
@@ -140,6 +146,24 @@ describe('SELECT_TOOL', () => {
       expect(viewport.hover).toBeNull();
       click(10, 10);
       expect(selection.items.get()).toEqual([]);
+    });
+
+    it('ignores a sketch region hit it never asks for, as if nothing was hit', () => {
+      const { viewport, selection, pointer, click } = setup();
+      // A viewport that does not respect the filter: the tool must still not use the hit.
+      viewport.pick = () => REGION_HIT;
+      selection.set([EDGE]);
+      pointer(ptr('move', 10, 0));
+      expect(viewport.hover).toBeNull();
+      click(10, 10);
+      expect(selection.items.get()).toEqual([]);
+    });
+
+    it('a region hit prepared in the fake never comes back with the default filter', () => {
+      const { viewport, pointer } = setup();
+      viewport.setPick(REGION_HIT);
+      pointer(ptr('move', 10, 0));
+      expect(viewport.hover).toBeNull();
     });
 
     it('leave clears the hover', () => {

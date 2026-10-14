@@ -65,7 +65,7 @@ export function createHighlightLayer(options: HighlightLayerOptions): HighlightL
   const selectionLook = createLook(options.palette.selection);
   /** Geometries of the drawn objects; all replaced on every change. */
   let geometries: THREE.BufferGeometry[] = [];
-  /** Only faces and edges: sketch entities are dropped like invalid targets (M12). */
+  /** Only faces and edges: sketch entities (M12) and regions (M13, Ú5) are dropped like invalid targets. */
   let hover: BodyTarget | null = null;
   let selection: readonly BodyTarget[] = [];
   let disposed = false;

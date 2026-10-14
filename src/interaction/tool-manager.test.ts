@@ -173,6 +173,17 @@ describe('createToolManager', () => {
     expect(typeof toolCtx?.finish).toBe('function');
   });
 
+  it('gives the tool the dispatcher narrowed to dispatch and inTransaction (Q069)', () => {
+    const { manager, rec } = setup();
+    manager.activate('box');
+    const ops = rec.contexts[0]?.ops;
+    expect(ops?.inTransaction).toBe(false);
+    expect(typeof ops?.dispatch).toBe('function');
+    // A tool cannot open its own transaction: begin is not part of ToolContext.ops.
+    // @ts-expect-error begin is not in Pick<OperationDispatcher, 'dispatch' | 'inTransaction'>
+    expect(typeof ops?.begin).toBe('function');
+  });
+
   describe('activate', () => {
     it('deactivates the previous tool, then creates and activates the new one', () => {
       const { manager, rec, emitted } = setup();

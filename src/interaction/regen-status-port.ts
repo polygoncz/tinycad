@@ -27,6 +27,8 @@ export interface RegenBody {
 export interface RegenSketch {
   readonly sketch: SketchId;
   readonly feature: FeatureId;
+  /** Names of the regions in the order of the artifact (M13, the browser). */
+  readonly regions: readonly string[];
 }
 
 export interface RegenSnapshot {

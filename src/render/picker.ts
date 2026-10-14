@@ -38,7 +38,7 @@ export interface PickerOptions {
 export interface Picker {
   /**
    * (x, y) in CSS px relative to a canvas of width × height CSS px. The filter says what can
-   * be hit, default edges and faces; one without them (empty, or only 'sketchEntity') gives
+   * be hit, default edges and faces; one without them (empty, or only sketch kinds) gives
    * null without looking at the scene.
    */
   pick(
@@ -170,8 +170,8 @@ export function createPicker(options: PickerOptions): Picker {
 
   return {
     pick(camera, x, y, width, height, filter = DEFAULT_FILTER) {
-      // Only body kinds look at the scene; 'sketchEntity' alone (M12) hits nothing here, the
-      // sketch drawings are picked by the viewport (spec 09, "Skici").
+      // Only body kinds look at the scene; 'sketchEntity' (M12) or 'sketchRegion' (M13) alone
+      // hits nothing here, the sketch drawings are picked by the viewport (spec 09, "Skici").
       const bodyKinds = filter.includes('edge') || filter.includes('face');
       if (!bodyKinds || width <= 0 || height <= 0) return null;
       // A hidden body (Q071) is neither picked nor hides what is behind it.

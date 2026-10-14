@@ -163,7 +163,7 @@ export class FakeRegenStatus implements RegenStatusPort {
 
   /**
    * A new frozen snapshot with generation + 1 and copies of health, bodies and sketches
-   * (empty when omitted); notifies subscribers.
+   * (with their regions; empty when omitted); notifies subscribers.
    */
   publish(
     health: ReadonlyMap<FeatureId, FeatureHealth>,
@@ -176,7 +176,9 @@ export class FakeRegenStatus implements RegenStatusPort {
         health: new Map(health),
         bodies: Object.freeze(bodies.map(({ body, feature }) => Object.freeze({ body, feature }))),
         sketches: Object.freeze(
-          sketches.map(({ sketch, feature }) => Object.freeze({ sketch, feature })),
+          sketches.map(({ sketch, feature, regions }) =>
+            Object.freeze({ sketch, feature, regions: Object.freeze([...regions]) }),
+          ),
         ),
       }),
     );

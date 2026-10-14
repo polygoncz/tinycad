@@ -14,6 +14,7 @@ export type {
   SketchDrawing,
   SketchDrawingCurve,
   SketchDrawingPoint,
+  SketchDrawingRegion,
   SketchPort,
   SketchStyle,
   ViewKeyEvent,

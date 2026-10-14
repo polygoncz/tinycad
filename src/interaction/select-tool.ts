@@ -1,7 +1,7 @@
 // SelectTool (spec 10, "SelectTool"): the default tool. Hover follows the cursor,
 // a left click selects a face or an edge (Shift toggles), Escape clears the selection.
-// Right and middle buttons drive the camera, so the tool ignores them. Sketch entities are
-// not its business (M12): it never asks for them and ignores such a hit.
+// Right and middle buttons drive the camera, so the tool ignores them. Sketch entities (M12)
+// and sketch regions (M13) are not its business: it never asks for them and ignores such a hit.
 
 import { isPlainEscape } from './key-events';
 import type { SelectionItem } from './selection';
@@ -9,7 +9,7 @@ import type { Tool, ToolContext, ToolDescriptor } from './tools';
 import type { PickResult, ViewKeyEvent, ViewPointerEvent, ViewportPort } from './viewport-port';
 
 /** A hit of a body: what the select tool works with. */
-type BodyHit = Exclude<PickResult, { readonly kind: 'sketchEntity' }>;
+type BodyHit = Extract<PickResult, { readonly kind: 'face' | 'edge' }>;
 
 /** A left up farther than this from its down is a drag, not a click. */
 export const CLICK_TOLERANCE_PX = 4;
@@ -79,12 +79,12 @@ function createSelectTool(): Tool {
 }
 
 /**
- * pick with the default filter (faces and edges). A sketch entity cannot come back from it; if a
- * viewport returns one anyway, it counts as nothing hit.
+ * pick with the default filter (faces and edges). A sketch entity or region cannot come back
+ * from it; if a viewport returns one anyway, it counts as nothing hit.
  */
 function pickBody(viewport: ViewportPort, x: number, y: number): BodyHit | null {
   const hit = viewport.pick(x, y);
-  return hit === null || hit.kind === 'sketchEntity' ? null : hit;
+  return hit !== null && (hit.kind === 'face' || hit.kind === 'edge') ? hit : null;
 }
 
 /** Only the fields of the kind; the selection would drop point and normal anyway. */

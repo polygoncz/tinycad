@@ -18,15 +18,16 @@ export interface ViewportPort {
   readonly highlight: HighlightPort;
   /** Temporary geometry of tools. */
   readonly overlay: OverlayPort;
-  /** Drawings of sketches and planes, pickable as 'sketchEntity' (M12). */
+  /** Drawings of sketches and planes, pickable as 'sketchEntity' (M12) and 'sketchRegion' (M13). */
   readonly sketches: SketchPort;
   readonly events: Subscribable<ViewportEvents>;
 }
 
 /**
- * What pick can hit; 'sketchEntity' since M12 (not in the default filter), M14 adds 'vertex'.
+ * What pick can hit; 'sketchEntity' since M12 and 'sketchRegion' since M13 (neither in the
+ * default filter); 'vertex' is postponed.
  */
-export type PickKind = 'face' | 'edge' | 'sketchEntity';
+export type PickKind = 'face' | 'edge' | 'sketchEntity' | 'sketchRegion';
 
 /** Kinds pick may return, in any order; empty = nothing can be picked. */
 export type PickFilter = readonly PickKind[];
@@ -37,14 +38,21 @@ export interface ViewportEvents {
 }
 
 /**
- * What can be highlighted: a face or an edge of a body, without point and normal (Q065), or an
- * entity of a sketch drawing (M12). HighlightPort ignores the latter for now: the style of the
- * drawing carries its highlight.
+ * What can be highlighted: a face or an edge of a body, without point and normal (Q065), an
+ * entity of a sketch drawing (M12) or a region of a drawing (M13). HighlightPort ignores
+ * sketch entities: the style of the drawing carries their highlight; render fills a region.
  */
 export type HighlightTarget =
   | { readonly kind: 'face'; readonly body: BodyId; readonly faceIndex: number }
   | { readonly kind: 'edge'; readonly body: BodyId; readonly edgeIndex: number }
-  | { readonly kind: 'sketchEntity'; readonly sketch: string; readonly entity: string };
+  | { readonly kind: 'sketchEntity'; readonly sketch: string; readonly entity: string }
+  | {
+      readonly kind: 'sketchRegion';
+      /** Id of the drawing (SketchPort.set). */
+      readonly sketch: string;
+      /** Id of the region in the drawing (the region name). */
+      readonly region: string;
+    };
 
 /**
  * A HighlightTarget plus where it was hit, so it can be passed to setHover as it is.
@@ -71,6 +79,15 @@ export type PickResult =
       readonly sketch: string;
       /** Id of the point or curve in the drawing. */
       readonly entity: string;
+      readonly point: Vec3;
+    }
+  | {
+      /** A region of a drawing under the cursor (M13). */
+      readonly kind: 'sketchRegion';
+      /** Id of the drawing (SketchPort.set). */
+      readonly sketch: string;
+      /** Id of the region in the drawing (the region name). */
+      readonly region: string;
       readonly point: Vec3;
     };
 
@@ -133,11 +150,23 @@ export interface SketchDrawingPoint {
   readonly style: SketchStyle;
 }
 
+/**
+ * A region of a drawing (M13): a closed polygon in the plane (the last point is not the first
+ * one again), holes as further polygons; id = the region name.
+ */
+export interface SketchDrawingRegion {
+  readonly id: string;
+  readonly outer: readonly Vec2[];
+  readonly holes: readonly (readonly Vec2[])[];
+}
+
 /** A sketch or a plane as platform-neutral data: a plane plus 2D shapes with styles. */
 export interface SketchDrawing {
   readonly plane: Plane;
   readonly curves: readonly SketchDrawingCurve[];
   readonly points: readonly SketchDrawingPoint[];
+  /** Closed regions, pickable as 'sketchRegion' (M13); none = no regions. */
+  readonly regions?: readonly SketchDrawingRegion[];
 }
 
 /** A mirror like the overlay, but with entity ids and pickable (render tessellates it). */

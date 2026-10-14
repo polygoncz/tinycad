@@ -55,8 +55,8 @@ const TOPO: FeatureSchema = {
 };
 
 const SKETCHES: readonly RegenSketch[] = [
-  { sketch: sketchId(fid('s1')), feature: fid('s1') },
-  { sketch: sketchId(fid('s2')), feature: fid('s2') },
+  { sketch: sketchId(fid('s1')), feature: fid('s1'), regions: [] },
+  { sketch: sketchId(fid('s2')), feature: fid('s2'), regions: [] },
 ];
 
 function setup(opts: { readOnly?: boolean; sketchEdit?: (feature: FeatureId) => void } = {}) {
@@ -740,7 +740,7 @@ describe('BrowserModel sketches (M12)', () => {
 
   it('leaves out a sketch whose feature is no longer in the document', () => {
     const s = setup();
-    const gone: RegenSketch = { sketch: sketchId(fid('gone')), feature: fid('gone') };
+    const gone: RegenSketch = { sketch: sketchId(fid('gone')), feature: fid('gone'), regions: [] };
     s.regen.publish(new Map(), [], [...SKETCHES, gone]);
     expect(s.browser.sketches.get().map((r) => r.feature)).toEqual(['s1', 's2']);
   });

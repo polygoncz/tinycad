@@ -4,14 +4,15 @@ import type { MeshData } from '@/kernel';
 // Pure logic of HighlightLayer (spec 09, "Vrstvy pro interakci" and point 9 of "Synchronizace s
 // regenerací"): comparing targets, which targets still exist, what is drawn. No three import, so
 // it is tested in Node. Sketch entities (M12) are never valid here: HighlightPort ignores them,
-// the style of the sketch drawing carries their highlight (spec 10, "Port viewportu").
+// the style of the sketch drawing carries their highlight (spec 10, "Port viewportu"). Sketch
+// regions (M13) are not valid here either for now: their fill comes with Ú5 of M13.
 
 /** A face or an edge of a body: what this layer draws. */
-export type BodyTarget = Exclude<HighlightTarget, { readonly kind: 'sketchEntity' }>;
+export type BodyTarget = Extract<HighlightTarget, { readonly kind: 'face' | 'edge' }>;
 
 /**
- * Same face or edge: kind, body and index; same sketch entity: sketch and entity. A
- * PickResult's point and normal do not count.
+ * Same face or edge: kind, body and index; same sketch entity: sketch and entity; same sketch
+ * region: sketch and region. A PickResult's point and normal do not count.
  */
 export function sameTarget(a: HighlightTarget, b: HighlightTarget): boolean {
   if (a.kind === 'face' && b.kind === 'face') {
@@ -22,6 +23,9 @@ export function sameTarget(a: HighlightTarget, b: HighlightTarget): boolean {
   }
   if (a.kind === 'sketchEntity' && b.kind === 'sketchEntity') {
     return a.sketch === b.sketch && a.entity === b.entity;
+  }
+  if (a.kind === 'sketchRegion' && b.kind === 'sketchRegion') {
+    return a.sketch === b.sketch && a.region === b.region;
   }
   return false;
 }
@@ -52,7 +56,8 @@ export function validTarget(
   target: HighlightTarget,
   meshOf: (body: BodyId) => MeshData | undefined,
 ): target is BodyTarget {
-  if (target.kind === 'sketchEntity') return false;
+  // Sketch entities and regions are not drawn by this layer (regions: Ú5 of M13).
+  if (target.kind !== 'face' && target.kind !== 'edge') return false;
   const mesh = meshOf(target.body);
   if (mesh === undefined) return false;
   return target.kind === 'face'

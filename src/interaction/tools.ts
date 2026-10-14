@@ -23,7 +23,11 @@ export interface ToolContext {
   readonly viewport: ViewportPort;
   readonly selection: SelectionCommands;
   readonly doc: DocumentReader;
-  readonly ops: OperationDispatcher;
+  /**
+   * Single operations only (Q069): a transaction is opened by FeatureEditor or SketchEditor
+   * alone, so a tool cannot run one alongside the dialog.
+   */
+  readonly ops: Pick<OperationDispatcher, 'dispatch' | 'inTransaction'>;
   readonly ids: IdGenerator;
   /** Creating/editing a feature through the dialog. */
   readonly features: FeatureEditor;

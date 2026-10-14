@@ -47,6 +47,13 @@ const sketchEntity = (sketch: string, entity: string): HighlightTarget => ({
   entity,
 });
 
+/** M13: a region of a drawing; this layer does not draw it yet (Ú5). */
+const sketchRegion = (sketch: string, region: string): HighlightTarget => ({
+  kind: 'sketchRegion',
+  sketch,
+  region,
+});
+
 /** Face keys 5 and 2 (out of order), edge keys 4 and 1. */
 const MESH: MeshData = {
   positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]),
@@ -76,6 +83,15 @@ describe('sameTarget', () => {
     expect(sameTarget(sketchEntity('s', 'p1'), sketchEntity('s', 'p2'))).toBe(false);
     expect(sameTarget(sketchEntity('s', 'p1'), sketchEntity('t', 'p1'))).toBe(false);
     expect(sameTarget(sketchEntity('s', 'p1'), face(A, 1))).toBe(false);
+  });
+});
+
+describe('sameTarget with sketch regions (M13)', () => {
+  it('compares sketch regions by sketch and region', () => {
+    expect(sameTarget(sketchRegion('s', 'r1'), sketchRegion('s', 'r1'))).toBe(true);
+    expect(sameTarget(sketchRegion('s', 'r1'), sketchRegion('s', 'r2'))).toBe(false);
+    expect(sameTarget(sketchRegion('s', 'r1'), sketchRegion('t', 'r1'))).toBe(false);
+    expect(sameTarget(sketchRegion('s', 'r1'), sketchEntity('s', 'r1'))).toBe(false);
   });
 });
 
@@ -119,6 +135,11 @@ describe('validTarget / validTargets', () => {
   it('drops a sketch entity: the highlight layer ignores it', () => {
     expect(validTarget(sketchEntity('s', 'p1'), meshOf)).toBe(false);
     expect(validTargets([sketchEntity('s', 'p1'), face(A, 5)], meshOf)).toEqual([face(A, 5)]);
+  });
+
+  it('drops a sketch region: its fill comes later (M13 Ú5)', () => {
+    expect(validTarget(sketchRegion('s', 'r1'), meshOf)).toBe(false);
+    expect(validTargets([sketchRegion('s', 'r1'), face(A, 5)], meshOf)).toEqual([face(A, 5)]);
   });
 
   it('filters a list and keeps the order', () => {

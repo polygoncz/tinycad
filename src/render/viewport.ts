@@ -388,6 +388,8 @@ export function createViewport(deps: {
         const hit = sketchLayer.pick(rig.camera, x, y, clientWidth, clientHeight);
         if (hit !== null) return hit;
       }
+      // 'sketchRegion' (M13) is not picked yet: regions come with Ú5, so a filter with only
+      // it gives null through the picker.
       return picker.pick(rig.camera, x, y, clientWidth, clientHeight, filter);
     },
     screenToRay(x: number, y: number): { origin: Vec3; direction: Vec3 } {

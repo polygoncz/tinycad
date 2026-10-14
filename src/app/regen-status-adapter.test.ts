@@ -117,11 +117,19 @@ describe('RegenStatusAdapter', () => {
     );
     const { sketches } = adapter.state.get();
     expect(sketches).toEqual([
-      { sketch: sketchId(fid('s2')), feature: fid('s2') },
-      { sketch: sketchId(fid('s1')), feature: fid('s1') },
+      { sketch: sketchId(fid('s2')), feature: fid('s2'), regions: [] },
+      { sketch: sketchId(fid('s1')), feature: fid('s1'), regions: ['r1'] },
     ]);
     expect(Object.isFrozen(sketches)).toBe(true);
     expect(sketches.every((s) => Object.isFrozen(s))).toBe(true);
+  });
+
+  it('lists the region names of each sketch in the order of the artifact, frozen (M13)', () => {
+    const adapter = createRegenStatusAdapter();
+    adapter.publish(aResult([], [aSketchArtifact('s', [handle(3), handle(4), handle(5)])]));
+    const regions = adapter.state.get().sketches[0]?.regions;
+    expect(regions).toEqual(['r1', 'r2', 'r3']);
+    expect(Object.isFrozen(regions)).toBe(true);
   });
 
   it('grows the generation by one with every published result, whatever the Regenerator counts', () => {
