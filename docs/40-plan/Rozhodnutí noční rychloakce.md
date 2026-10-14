@@ -118,6 +118,9 @@ Plán a kontrakty: [[M13-extrude-revolve#Implementační plán]]. Rozsah (profil
 - **R83 – Díru a rotaci ověřuje integrační test s OCCT v Node (`createInThreadOcctKernel` v `kernel-occt/testing.ts`, počet ploch a objem), e2e jen tok bez chyb a počet těles.** Proč: `FakeKernel` nic neodečítá (R3) a geometrie se v e2e měří špatně; test v Node je deterministický a rychlý ([[M13-extrude-revolve#Ú11 `tests`: integrační scénáře|Ú11]]).
 - **R84 – Extrude směrem ležícím v rovině profilu se v OCCT nekontroluje** (vznikne solid nulové tloušťky). ⚠ k revizi. Proč: směr je v tinycad vždy normála skici, kontrola objemu by stála další volání OCCT bez spotřebitele ([[06-geometricke-jadro]]).
 
+- **R85 – Obecnější text `param.unresolvedRef` („Odkazovaná položka neexistuje“, R82) mění očekávaný text v e2e M11.** Proč: jeden kód chyby pro tělesa, oblasti, skici i osy; e2e test se upravuje, ne překlad.
+- **R86 – Řádky Prohlížeče označují aktivní/vybraný stav přes `aria-selected`, ne `aria-pressed`.** Proč: ARIA definuje u role `treeitem` jen `aria-selected`; `aria-pressed` patří tlačítkům ([[11-ui#Komponenty]]).
+- **R87 – `RefListField` ukazuje počet vybraných položek i v aktivním stavu** („Vybráno: N · vyberte v pohledu“). Proč: uživatel při klikání potřebuje vidět, že výběr přibývá ([[11-ui#Komponenty]]).
 ## M14 – Topologické pojmenování
 
 Plán a kontrakty: [[M14-topologicke-pojmenovani#Implementační plán]], spec [[08-topologicke-pojmenovani]], formát jmen [[0018-format-topologickych-jmen|ADR 0018]]. Rozsah (historie u všech operací, role, `topology`, `propagateNames`, pojmenování v builderech, `resolveTopo`, výběr podle jmen, Fillet/Chamfer, skica na ploše, ladicí panel, akceptační scénáře) zadalo hlavní sezení, podrobnosti rozhodl plánovač milníku. Čísla R84–R90 jsou rezervovaná.

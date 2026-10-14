@@ -5,6 +5,8 @@
 import { booleanPlugin } from '@/features/boolean';
 import { boxPlugin } from '@/features/box';
 import { cylinderPlugin } from '@/features/cylinder';
+import { extrudePlugin } from '@/features/extrude';
+import { revolvePlugin } from '@/features/revolve';
 import { sketchPlugin } from '@/features/sketch';
 import { transformPlugin } from '@/features/transform';
 import type { FeaturePlugin } from '@/plugin-api';
@@ -16,4 +18,6 @@ export const BUILT_IN_PLUGINS: readonly FeaturePlugin[] = Object.freeze([
   transformPlugin,
   booleanPlugin,
   sketchPlugin,
+  extrudePlugin,
+  revolvePlugin,
 ]);

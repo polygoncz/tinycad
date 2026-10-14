@@ -5,8 +5,11 @@
 // renames it; both are stored in the document (Q071) and disabled without BrowserModel.canEdit
 // (R14). Origin (M12): the three planes, click = select, the eye draws the plane – view state
 // only (R48), so it stays enabled. Sketches (M12): click selects the feature, a double click opens
-// the sketcher; sketches have no eye. Only bindings and layout (rule 4): rows, the rename mode
-// and canEdit come from BrowserModel, changes go back through it.
+// the sketcher; sketches have no eye. M13: the three origin axes under the planes (click = into
+// the active axis field of the dialog, the eye draws the axis) and, while the dialog has an active
+// region field, the regions of each sketch under its row (click = add or remove). Only bindings
+// and layout (rule 4): rows, the rename mode and canEdit come from BrowserModel, changes go back
+// through it.
 import { nextTick, ref, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { BrowserBodyRow, BrowserPlaneRow, BrowserSketchRow } from '@/interaction';
@@ -19,6 +22,7 @@ const { t } = useI18n();
 
 const bodies = useObservable(browser.bodies);
 const planes = useObservable(browser.planes);
+const axes = useObservable(browser.axes);
 const sketches = useObservable(browser.sketches);
 const canEdit = useObservable(browser.canEdit);
 const renaming = useObservable(browser.renaming);
@@ -132,6 +136,27 @@ function cancelRename(): void {
             <i class="ti" :class="row.visible ? 'ti-eye' : 'ti-eye-off'" aria-hidden="true" />
           </button>
         </div>
+        <div
+          v-for="row in axes"
+          :key="row.axis"
+          class="node level-2"
+          :class="{ selected: row.active, hidden: !row.visible }"
+          role="treeitem"
+          :aria-pressed="row.active"
+          @click="browser.selectAxis(row.axis)"
+        >
+          <span class="chevron" />
+          <i class="ti ti-line-dashed" aria-hidden="true" />
+          <span class="name">{{ t(row.label) }}</span>
+          <button
+            type="button"
+            class="eye"
+            :title="row.visible ? t('browser.hide') : t('browser.show')"
+            @click.stop="browser.setAxisVisible(row.axis, !row.visible)"
+          >
+            <i class="ti" :class="row.visible ? 'ti-eye' : 'ti-eye-off'" aria-hidden="true" />
+          </button>
+        </div>
       </template>
 
       <div
@@ -150,20 +175,33 @@ function cancelRename(): void {
       </div>
 
       <template v-if="sketchesOpen">
-        <div
-          v-for="row in sketches"
-          :key="row.sketch"
-          class="node level-2"
-          :class="{ selected: row.selected }"
-          role="treeitem"
-          :aria-selected="row.selected"
-          @click="selectSketch(row, $event)"
-          @dblclick="browser.editSketch(row.feature)"
-        >
-          <span class="chevron" />
-          <i class="ti ti-pencil" aria-hidden="true" />
-          <span class="name">{{ row.name }}</span>
-        </div>
+        <template v-for="row in sketches" :key="row.sketch">
+          <div
+            class="node level-2"
+            :class="{ selected: row.selected }"
+            role="treeitem"
+            :aria-selected="row.selected"
+            @click="selectSketch(row, $event)"
+            @dblclick="browser.editSketch(row.feature)"
+          >
+            <span class="chevron" />
+            <i class="ti ti-pencil" aria-hidden="true" />
+            <span class="name">{{ row.name }}</span>
+          </div>
+          <div
+            v-for="region in row.regions"
+            :key="region.region"
+            class="node level-3"
+            :class="{ selected: region.selected }"
+            role="treeitem"
+            :aria-pressed="region.selected"
+            @click="browser.selectRegion(row.feature, region.region)"
+          >
+            <span class="chevron" />
+            <i class="ti ti-shape" aria-hidden="true" />
+            <span class="name">{{ t('browser.region', { n: region.n }) }}</span>
+          </div>
+        </template>
       </template>
 
       <div
@@ -280,6 +318,9 @@ function cancelRename(): void {
 }
 .level-2 {
   padding-left: 36px;
+}
+.level-3 {
+  padding-left: 52px;
 }
 .node.selected {
   background: var(--accent-soft);

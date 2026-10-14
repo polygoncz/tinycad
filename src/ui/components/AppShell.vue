@@ -1,9 +1,9 @@
 <script setup lang="ts">
 // The window of one open document (spec 11, "Rozvržení"): docked title bar and toolbar on top,
 // the Timeline at the bottom, the viewport filling the area between them and the floating
-// Browser and the feature dialog over it – or, while a sketch session is open (M12), the sketch
-// panel instead of the dialog: the sketch is a feature edit session too, but it has its own
-// panel. The panels are DOM siblings of the viewport host, never its children, so pointer and
+// Browser and the feature dialog over it (the generated one or an own one of the type, dialogFor,
+// M13) – or, while a sketch session is open (M12), the sketch panel instead of the dialog: the
+// sketch is a feature edit session too, but it has its own panel. The panels are DOM siblings of the viewport host, never its children, so pointer and
 // wheel events over a panel never reach the view.
 // Also the page-level bindings of a session: the theme (Q072) and the global keyboard.
 import { onMounted, onUnmounted, useTemplateRef, watch } from 'vue';
@@ -13,7 +13,7 @@ import { useObservable } from '../composables/use-observable';
 import { isMacPlatform, toViewKeyEvent } from '../keyboard';
 import { useTheme } from '../theme/use-theme';
 import Browser from './Browser.vue';
-import FeatureDialog from './FeatureDialog.vue';
+import { dialogFor } from './feature-dialogs';
 import SketchPanel from './SketchPanel.vue';
 import Timeline from './Timeline.vue';
 import TitleBar from './TitleBar.vue';
@@ -73,7 +73,8 @@ onUnmounted(() => {
         :key="sketchSession.featureId"
         :sketch="sketchSession"
       />
-      <FeatureDialog
+      <component
+        :is="dialogFor(editSession.schema.type)"
         v-else-if="editSession !== null"
         :key="editSession.featureId"
         :edit="editSession"

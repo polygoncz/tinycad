@@ -15,7 +15,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'param.tooManyRefs': 'Select at most {max}',
   'param.invalidRef': 'Invalid selection item',
   'param.duplicateRef': 'Item {index} is selected twice',
-  'param.unresolvedRef': 'The referenced body does not exist',
+  'param.unresolvedRef': 'The referenced item does not exist',
 
   // Keys handed over by the domain and interaction.
   'document.untitled': 'Untitled',
@@ -63,6 +63,10 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'field.refs.pick': 'Select in the view',
   'field.refs.missing': 'Missing body',
   'field.refs.remove': 'Remove {name}',
+  // The axis field (M13): RefText keys of interaction and the empty value.
+  'field.noRef': 'Not selected',
+  'field.missingRef': 'Missing reference',
+  'field.sketchLine': 'Line of {sketch}',
 
   // App: switching documents.
   'app.opening': 'Opening the document…',
@@ -137,6 +141,12 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'origin.plane.xy': 'Top (XY)',
   'origin.plane.xz': 'Front (XZ)',
   'origin.plane.yz': 'Right (YZ)',
+
+  // Browser: origin axes and sketch regions (M13).
+  'origin.axis.x': 'X axis',
+  'origin.axis.y': 'Y axis',
+  'origin.axis.z': 'Z axis',
+  'browser.region': 'Region {n}',
 
   // Feature dialog.
   'dialog.ok': 'OK',

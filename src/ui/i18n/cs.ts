@@ -16,7 +16,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'param.tooManyRefs': 'Vyberte nejvýš {max}',
   'param.invalidRef': 'Neplatná položka výběru',
   'param.duplicateRef': 'Položka {index} je ve výběru dvakrát',
-  'param.unresolvedRef': 'Odkazované těleso neexistuje',
+  'param.unresolvedRef': 'Odkazovaná položka neexistuje',
 
   // Keys handed over by the domain and interaction.
   'document.untitled': 'Bez názvu',
@@ -64,6 +64,10 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'field.refs.pick': 'Vyberte v pohledu',
   'field.refs.missing': 'Chybí těleso',
   'field.refs.remove': 'Odebrat {name}',
+  // The axis field (M13): RefText keys of interaction and the empty value.
+  'field.noRef': 'Nevybráno',
+  'field.missingRef': 'Chybí položka',
+  'field.sketchLine': 'Úsečka ze skici {sketch}',
 
   // App: switching documents.
   'app.opening': 'Otevírám dokument…',
@@ -138,6 +142,12 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'origin.plane.xy': 'Horní (XY)',
   'origin.plane.xz': 'Přední (XZ)',
   'origin.plane.yz': 'Pravá (YZ)',
+
+  // Browser: origin axes and sketch regions (M13).
+  'origin.axis.x': 'Osa X',
+  'origin.axis.y': 'Osa Y',
+  'origin.axis.z': 'Osa Z',
+  'browser.region': 'Oblast {n}',
 
   // Feature dialog.
   'dialog.ok': 'OK',

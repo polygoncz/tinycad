@@ -97,7 +97,7 @@ test('box, cylinder and a boolean subtract: reload, delete with confirm, undo', 
 
   await expect(page.getByText('Chyby: 1')).toBeVisible();
   const boolean = timelineFeature(page, 'Boolean 1');
-  await expect(boolean).toHaveAccessibleDescription(/Odkazované těleso neexistuje/);
+  await expect(boolean).toHaveAccessibleDescription(/Odkazovaná položka neexistuje/);
   await expect(timelineFeature(page, 'Kvádr 1')).not.toHaveAccessibleDescription(/Chyba/);
   await expect(page.getByText('Tělesa: 1')).toBeVisible();
 

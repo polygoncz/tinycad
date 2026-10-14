@@ -105,6 +105,18 @@ const SKETCH_KEYS = [
   'origin.plane.yz',
 ];
 
+// Keys of Extrude and Revolve in ui (M13): the origin axes of the Browser (ORIGIN_AXES labels),
+// the region rows and the texts of the axis field (RefText keys of interaction).
+const SWEEP_KEYS = [
+  'origin.axis.x',
+  'origin.axis.y',
+  'origin.axis.z',
+  'browser.region',
+  'field.noRef',
+  'field.missingRef',
+  'field.sketchLine',
+];
+
 const PLUGIN = {
   cs: { 'box.label': 'Kvádr', 'box.width': 'Šířka' },
   en: { 'box.label': 'Box', 'box.width': 'Width' },
@@ -135,19 +147,28 @@ describe('built-in dictionaries', () => {
     expect(Object.keys(en).sort()).toEqual(Object.keys(cs).sort());
   });
 
-  it.each([...ISSUE_CODES, ...DOMAIN_KEYS, ...ACTION_KEYS, ...COMPOSED_KEYS, ...SKETCH_KEYS])(
-    '%s has a text in cs and en',
-    (key) => {
-      expect(cs[key]).toBeTruthy();
-      expect(en[key]).toBeTruthy();
-    },
-  );
+  it.each([
+    ...ISSUE_CODES,
+    ...DOMAIN_KEYS,
+    ...ACTION_KEYS,
+    ...COMPOSED_KEYS,
+    ...SKETCH_KEYS,
+    ...SWEEP_KEYS,
+  ])('%s has a text in cs and en', (key) => {
+    expect(cs[key]).toBeTruthy();
+    expect(en[key]).toBeTruthy();
+  });
 
   it('the texts of the built-in plugins do not clash with them (the sketch plugin included)', () => {
     const merged = (lang: 'cs' | 'en'): Record<string, string> =>
       Object.fromEntries(BUILT_IN_PLUGINS.flatMap((p) => Object.entries(p.messages?.[lang] ?? {})));
     const plugins = { cs: merged('cs'), en: merged('en') };
     expect(() => createUiI18n(plugins, { storage: null, language: 'cs' })).not.toThrow();
+  });
+
+  it('the unresolved reference speaks of any item, not only a body (R82)', () => {
+    expect(cs['param.unresolvedRef']).toBe('Odkazovaná položka neexistuje');
+    expect(en['param.unresolvedRef']).toBe('The referenced item does not exist');
   });
 
   it('are frozen', () => {

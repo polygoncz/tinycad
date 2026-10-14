@@ -5,8 +5,14 @@
 
 import { DisposableStore, ObservableValue, RpcError } from '@/core';
 import type { Disposable, IdGenerator, Observable } from '@/core';
-import { createDocument, createFeatureSchemaRegistry, ORIGIN_PLANES } from '@/document';
+import {
+  createDocument,
+  createFeatureSchemaRegistry,
+  ORIGIN_AXES,
+  ORIGIN_PLANES,
+} from '@/document';
 import type {
+  AxisId,
   BodyId,
   DocumentId,
   DocumentMeta,
@@ -19,6 +25,7 @@ import type {
 import {
   ACTION_IDS,
   artifactDrawing,
+  axisDrawing,
   bindSelectionHighlight,
   createActionRegistry,
   createBrowserModel,
@@ -239,7 +246,6 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
 
   const regenStatus = createRegenStatusAdapter();
   const selection = lifetime.add(createSelectionModel({ regen: regenStatus }));
-  lifetime.add(bindSelectionHighlight(selection, viewport.highlight));
   const features = createFeatureEditor({
     doc,
     ops,
@@ -247,6 +253,8 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     ids: deps.ids,
     translate: deps.translate,
   });
+  // With the editor, the regions picked in the dialog are filled in the view (M13, spec 10).
+  lifetime.add(bindSelectionHighlight(selection, viewport.highlight, features));
   // The sketcher (M12, spec 11 "Skicář"): the mode is the open sketch session, nothing else.
   const sketches = createSketchEditor({
     features,
@@ -408,8 +416,9 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     for (const body of browser.hidden.get()) viewport.setBodyVisible(body, false);
   }
 
-  // 6. Sketches and planes (M12): app draws the sketches of the regeneration and the planes
-  // switched on in the browser; the edited sketch is drawn by the SketchEditor.
+  // 6. Sketches, planes and axes (M12, M13): app draws the sketches of the regeneration (with
+  // their regions) and the planes and axes switched on in the browser; the edited sketch is
+  // drawn by the SketchEditor.
   function drawSketches(): void {
     if (disposed) return;
     const edited = sketches.current.get()?.featureId;
@@ -449,6 +458,22 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
         }
       }
       shownPlanes = next;
+    }),
+  );
+
+  // Origin axes (M13): like the planes, a view state of the browser drawn under the axis id.
+  let shownAxes: ReadonlySet<AxisId> = new Set();
+  lifetime.add(
+    browser.visibleAxes.subscribe(() => {
+      const next = browser.visibleAxes.get();
+      for (const origin of ORIGIN_AXES) {
+        if (next.has(origin.id) && !shownAxes.has(origin.id)) {
+          viewport.sketches.set(origin.id, axisDrawing(origin));
+        } else if (!next.has(origin.id) && shownAxes.has(origin.id)) {
+          viewport.sketches.remove(origin.id);
+        }
+      }
+      shownAxes = next;
     }),
   );
 

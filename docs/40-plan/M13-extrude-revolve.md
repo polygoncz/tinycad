@@ -53,7 +53,7 @@ updated: 2026-10-14
 - [x] Ú7 `interaction`: Prohlížeč – osy počátku a oblasti skici
 - [x] Ú8 `features/extrude`: plugin Vysunutí
 - [x] Ú9 `features/revolve`: plugin Rotace
-- [ ] Ú10 `app`, `ui`: registrace pluginů, pole osy, skupiny a skrytá pole v dialogu, úniková cesta pro vlastní dialog, Prohlížeč, lišta, překlady
+- [x] Ú10 `app`, `ui`: registrace pluginů, pole osy, skupiny a skrytá pole v dialogu, úniková cesta pro vlastní dialog, Prohlížeč, lišta, překlady
 - [x] Ú11 `tests`: integrační scénáře (změna kóty, díra v OCCT, rotace v OCCT)
 - [ ] Ú12 `e2e`: akceptační scénář s OCCT a planegcs v prohlížeči
 - [ ] Ú13 hlavní sezení: kontrola, vault, `architecture-reviewer`, retrospektiva

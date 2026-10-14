@@ -9,7 +9,7 @@ import { BUILT_IN_PLUGINS, createAppSession } from './index';
 import { aKernelFactory, FakeAppViewport } from './testing';
 
 describe('BUILT_IN_PLUGINS', () => {
-  it('is frozen and has the five plugins in toolbar order', () => {
+  it('is frozen and has the seven plugins in toolbar order', () => {
     expect(Object.isFrozen(BUILT_IN_PLUGINS)).toBe(true);
     expect(BUILT_IN_PLUGINS.map((p) => p.schema.type)).toEqual([
       'box',
@@ -17,6 +17,8 @@ describe('BUILT_IN_PLUGINS', () => {
       'transform',
       'boolean',
       'sketch',
+      'extrude',
+      'revolve',
     ]);
   });
 
@@ -36,7 +38,15 @@ describe('BUILT_IN_PLUGINS', () => {
       solver: createFakeSolver(),
     });
     expect(session.toolList.map((t) => t.id)).toEqual(
-      expect.arrayContaining(['box', 'cylinder', 'transform', 'boolean', 'sketch']),
+      expect.arrayContaining([
+        'box',
+        'cylinder',
+        'transform',
+        'boolean',
+        'sketch',
+        'extrude',
+        'revolve',
+      ]),
     );
     // No two tools of one mode share a shortcut (tools of disjoint modes may: C is the cylinder
     // in the model and the circle in the sketch, spec 10 "Režim").

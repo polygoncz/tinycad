@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ParamSpec } from '@/document';
+import AxisField from './AxisField.vue';
+import RefListField from './RefListField.vue';
 import { paramFieldFor, PARAM_FIELDS } from './registry';
 
 // Every ParamSpec kind, checked against the type: a new kind fails typecheck here until it is
@@ -19,8 +21,8 @@ const ALL_KINDS = {
   axis: true,
 } as const satisfies Record<ParamSpec['kind'], true>;
 
-// region and axis come with Extrude and Revolve (M13, Ú10); data never has a field (M12).
-const WITHOUT_COMPONENT: readonly ParamSpec['kind'][] = ['region', 'data', 'axis'];
+// data never has a field (M12).
+const WITHOUT_COMPONENT: readonly ParamSpec['kind'][] = ['data'];
 
 const kinds = Object.keys(ALL_KINDS) as ParamSpec['kind'][]; // keys of a literal typed above
 
@@ -35,6 +37,14 @@ describe('ParamField registry', () => {
 
   it('planes uses the reference list field, like bodies (M12)', () => {
     expect(paramFieldFor('planes')).toBe(paramFieldFor('bodies'));
+  });
+
+  it('region uses the reference list field, count only (M13, R77)', () => {
+    expect(paramFieldFor('region')).toBe(RefListField);
+  });
+
+  it('axis uses the axis field (M13)', () => {
+    expect(paramFieldFor('axis')).toBe(AxisField);
   });
 
   it('has no entries beyond the ParamSpec kinds', () => {

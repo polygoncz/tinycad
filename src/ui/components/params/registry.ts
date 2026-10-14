@@ -1,6 +1,7 @@
 import type { Component } from 'vue';
 import type { ParamSpec } from '@/document';
 import AngleField from './AngleField.vue';
+import AxisField from './AxisField.vue';
 import BoolField from './BoolField.vue';
 import EnumField from './EnumField.vue';
 import LengthField from './LengthField.vue';
@@ -12,11 +13,8 @@ import RefListField from './RefListField.vue';
 // component and one line here; a new feature type = nothing in ui. Every field takes
 // `field: FieldState` and reports changes with `update`; it never changes anything itself.
 
-/**
- * 'region' and 'axis' get their components with Extrude and Revolve (M13, Ú10); 'data' never has
- * one, the dialog skips its field (M12).
- */
-export type ParamFieldKind = Exclude<ParamSpec['kind'], 'region' | 'data' | 'axis'>;
+/** 'data' never has a component, the dialog skips its field (M12). */
+export type ParamFieldKind = Exclude<ParamSpec['kind'], 'data'>;
 
 export const PARAM_FIELDS: Readonly<Record<ParamFieldKind, Component>> = Object.freeze({
   length: LengthField,
@@ -29,9 +27,12 @@ export const PARAM_FIELDS: Readonly<Record<ParamFieldKind, Component>> = Object.
   topo: RefListField,
   // The count only, without chips; the plane is picked in the Browser (M12).
   planes: RefListField,
+  // The count only, without chips; the regions are filled in the view (M13, R77).
+  region: RefListField,
+  axis: AxisField,
 });
 
 /** The component of a param kind, undefined for kinds without one yet. */
 export function paramFieldFor(kind: ParamSpec['kind']): Component | undefined {
-  return kind === 'region' || kind === 'data' || kind === 'axis' ? undefined : PARAM_FIELDS[kind];
+  return kind === 'data' ? undefined : PARAM_FIELDS[kind];
 }

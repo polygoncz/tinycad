@@ -93,6 +93,19 @@ describe('toolbarGroups', () => {
     ]);
   });
 
+  it('puts the feature group right after the sketch group (M13)', () => {
+    const tools = [
+      aTool('box', 'primitive', 'B'),
+      aTool('extrude', 'feature', 'E'),
+      aTool('sketch', 'sketch'),
+      aTool('revolve', 'feature'),
+    ];
+    const groups = groupsOf({ tools, actions: ACTIONS });
+    expect(groups.map((g) => g.id)).toEqual(['history', 'sketch', 'feature', 'primitive', 'view']);
+    const feature = groups.find((g) => g.id === 'feature');
+    expect(feature?.items.map((i) => i.id)).toEqual(['extrude', 'revolve']);
+  });
+
   it('leaves out empty groups', () => {
     const groups = groupsOf({ tools: [], actions: [] });
     expect(groups).toEqual([]);

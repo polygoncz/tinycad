@@ -1,9 +1,10 @@
 <script setup lang="ts">
 // The feature dialog (spec 11, "Komponenty"; spec 10, "Dialog featury"): a floating panel on the
 // right, shown while features.current is a session (AppShell mounts one dialog per session).
-// The form is generated from the schema through the ParamField registry; every change goes to
-// the session (setParam, removeRef, focusRefParam, commit, cancel). Movable by its header; the
-// offset is view state of this panel only. Enter is OK and Esc is Cancel while the focus is in
+// The form is generated from the schema through the ParamField registry (hidden fields left out,
+// groups with a heading, M13); every change goes to the session (setParam, removeRef,
+// focusRefParam, commit, cancel). Movable by its header; the offset is view state of this panel
+// only. Enter is OK and Esc is Cancel while the focus is in
 // the dialog. On opening the first field gets the focus (spec 11, "Přístupnost"), so the keys
 // work at once.
 import { computed, onMounted, ref, useTemplateRef } from 'vue';
@@ -20,6 +21,23 @@ const state = useObservable(props.edit.state);
 const icon = computed(() => `ti-${props.edit.schema.icon ?? 'cube'}`);
 // The name of the feature from the session (generated on create, spec 10 "Dialog featury").
 const title = computed(() => state.value.name);
+
+// Hidden fields are not drawn (M13); a group gets its heading before its first visible field –
+// a group other than that of the previous visible field, null = no heading (spec 11, "Skrytá
+// pole a skupiny"). The rule which field is hidden lives in interaction (FieldState.hidden).
+const rows = computed(() => {
+  let group: string | null = null;
+  return (
+    state.value.fields
+      // A field without a component ('data') is skipped like a hidden one.
+      .filter((field) => !field.hidden && paramFieldFor(field.spec.kind) !== undefined)
+      .map((field) => {
+        const heading = field.group !== null && field.group !== group ? field.group : null;
+        group = field.group;
+        return { field, heading };
+      })
+  );
+});
 
 function update(field: FieldState, value: unknown): void {
   props.edit.setParam(field.name, value);
@@ -98,7 +116,10 @@ function onGripUp(): void {
     </header>
 
     <div ref="fields" class="fields">
-      <template v-for="field in state.fields" :key="field.name">
+      <template v-for="{ field, heading } in rows" :key="field.name">
+        <div v-if="heading !== null" class="group-heading" role="heading" aria-level="3">
+          {{ t(heading) }}
+        </div>
         <component
           :is="paramFieldFor(field.spec.kind)"
           v-if="paramFieldFor(field.spec.kind) !== undefined"
@@ -170,6 +191,16 @@ function onGripUp(): void {
 }
 .grip {
   color: var(--text-tertiary);
+}
+.group-heading {
+  margin: 14px 14px 8px;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--panel-border);
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 .buttons {
   display: flex;

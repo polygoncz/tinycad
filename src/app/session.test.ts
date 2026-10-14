@@ -1,10 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
-import { bodyId, createDocument, ORIGIN_PLANE_IDS, ORIGIN_PLANES, sketchId } from '@/document';
+import {
+  bodyId,
+  createDocument,
+  ORIGIN_AXES,
+  ORIGIN_AXIS_IDS,
+  ORIGIN_PLANE_IDS,
+  ORIGIN_PLANES,
+  sketchId,
+} from '@/document';
 import type { DocumentId, FeatureId } from '@/document';
 import { boxPlugin } from '@/features/box';
+import { extrudePlugin } from '@/features/extrude';
 import { sketchPlugin } from '@/features/sketch';
-import { EDIT_SKETCH_DRAWING_ID, planeDrawing } from '@/interaction';
+import { axisDrawing, EDIT_SKETCH_DRAWING_ID, planeDrawing } from '@/interaction';
 import type { ConfirmRequest, ViewKeyEvent } from '@/interaction';
 import { createMemoryDocumentStore, createSnapshot } from '@/persistence';
 import type { DocumentStore } from '@/persistence';
@@ -690,6 +699,47 @@ describe('createAppSession – sketcher', () => {
     expect(viewport.sketchDrawings.get(ORIGIN_PLANE_IDS.xy)).toEqual(planeDrawing(xy.plane));
     session.browser.setPlaneVisible(ORIGIN_PLANE_IDS.xy, false);
     expect(viewport.sketchDrawings.has(ORIGIN_PLANE_IDS.xy)).toBe(false);
+  });
+
+  it('an axis switched on in the browser is drawn under its id, switched off removed', async () => {
+    const { session, viewport } = await openSketcher();
+    const z = ORIGIN_AXES.find((a) => a.id === ORIGIN_AXIS_IDS.z) ?? fail();
+    session.browser.setAxisVisible(ORIGIN_AXIS_IDS.z, true);
+    expect(viewport.sketchDrawings.get(ORIGIN_AXIS_IDS.z)).toEqual(axisDrawing(z));
+    session.browser.setAxisVisible(ORIGIN_AXIS_IDS.z, false);
+    expect(viewport.sketchDrawings.has(ORIGIN_AXIS_IDS.z)).toBe(false);
+  });
+
+  it('the drawing of a regenerated sketch carries its regions', async () => {
+    const { session, viewport } = await openSketcher();
+    enterSketch(session);
+    const feature = currentSketch(session).featureId;
+    await currentSketch(session).addGeometry(rectangleData({ width: 40, height: 20 }));
+    session.actions.run(session.sketchActionIds.finish);
+    await settle();
+    const drawn = viewport.sketchDrawings.get(sketchId(feature)) ?? fail();
+    expect(drawn.regions).toHaveLength(1);
+  });
+
+  it('a region picked in the extrude dialog is highlighted in the viewport', async () => {
+    const { session, viewport } = await open({
+      plugins: [boxPlugin, sketchPlugin, extrudePlugin],
+    });
+    enterSketch(session);
+    const feature = currentSketch(session).featureId;
+    await currentSketch(session).addGeometry(rectangleData({ width: 40, height: 20 }));
+    session.actions.run(session.sketchActionIds.finish);
+    await settle();
+
+    session.features.create('extrude');
+    // The dialog focuses its regions param, so the browser lists the regions of the sketch.
+    const region = session.browser.sketches.get()[0]?.regions[0]?.region ?? fail();
+    session.browser.selectRegion(feature, region);
+    expect(viewport.selection).toContainEqual({
+      kind: 'sketchRegion',
+      sketch: sketchId(feature),
+      region,
+    });
   });
 
   it('a double click on a sketch in the browser opens the sketcher', async () => {
