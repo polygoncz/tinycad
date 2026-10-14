@@ -55,9 +55,9 @@ updated: 2026-10-14
 - [x] Ú6 `regen`: `nameShape`, `resolveTopo`, `resolvePlanes` s plochou, `sketchPlaneOfFace`, `planeOfRef`, jména v `applyBodyOperation`, `DressupOps` v `ModelingKernel`
 - [x] Ú7 `render`: zvýraznění celého tělesa
 - [x] Ú8 `interaction`: `refPick` pro `topo`, zvýraznění referencí `topo` a `bodies` v dialogu
-- [ ] Ú9 `features/box|cylinder|transform|boolean`: pojmenování v builderech
-- [ ] Ú10 `features/fillet`, `features/chamfer`: pluginy Zaoblení a Zkosení
-- [ ] Ú11 `features/extrude`: konec „Po plochu“
+- [x] Ú9 `features/box|cylinder|transform|boolean`: pojmenování v builderech
+- [x] Ú10 `features/fillet`, `features/chamfer`: pluginy Zaoblení a Zkosení
+- [x] Ú11 `features/extrude`: konec „Po plochu“
 - [x] Ú12 `interaction`: skica na ploše, `TopoInspector`
 - [ ] Ú13 `app`, `ui`: registrace, propojení session, ladicí panel, lišta, překlady
 - [ ] Ú14 `tests`: čtyři akceptační scénáře spec 08 s OCCT v Node

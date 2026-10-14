@@ -22,6 +22,7 @@ import {
   bodiesOf,
   createBuilderRegistry,
   createRegenerator,
+  nameShape,
 } from '@/regen';
 import type {
   ArtifactId,
@@ -84,15 +85,22 @@ function aRecordingKernel() {
   return { fake, kernel, calls };
 }
 
-/** A state with one box body per entry, created by the feature named by the key. */
+/** A state with one box body per entry, created and named by the feature named by the key. */
 async function boxesState(
   kernel: ModelingKernel,
   boxes: Readonly<Record<string, { readonly origin: Vec3; readonly size: Vec3 }>>,
 ): Promise<RegenState> {
   const artifacts = new Map<ArtifactId, Body>();
   for (const [feature, box] of Object.entries(boxes)) {
-    const { shape } = await kernel.makeBox(box);
+    const made = await kernel.makeBox(box);
     const id = bodyId(feature as FeatureId);
+    // Named like the box builder names it, so the boolean has names to carry over.
+    const names = await nameShape({
+      kernel,
+      featureId: feature as FeatureId,
+      result: made,
+      inputs: [],
+    });
     artifacts.set(
       id,
       Object.freeze({
@@ -100,8 +108,8 @@ async function boxesState(
         id,
         origin: feature as FeatureId,
         lastModifiedBy: feature as FeatureId,
-        shape,
-        names: EMPTY_NAMES,
+        shape: made.shape,
+        names,
       }),
     );
   }
@@ -135,6 +143,27 @@ async function build(
   const output = await run(feature, state, kernel);
   if (!output.ok) expect.fail(`Unexpected build error: ${output.error.message}`);
   return output.state;
+}
+
+/**
+ * aRecordingKernel whose boolean reports face 0 of input k as the origin of output face k, so
+ * the names of the result show the order of the inputs the builder passed to nameShape.
+ */
+function anInputOrderKernel(): ModelingKernel {
+  const { kernel } = aRecordingKernel();
+  return {
+    ...kernel,
+    async boolean(op, targets, tools) {
+      const result = await kernel.boolean(op, targets, tools);
+      const inputs = [...targets, ...tools];
+      const modified = inputs.map((_, k) => ({
+        input: k,
+        from: { type: 'face' as const, index: 0 },
+        to: [{ type: 'face' as const, index: k }],
+      }));
+      return { ...result, history: { modified, generated: [], deleted: [] } };
+    },
+  };
 }
 
 function bodyOf(state: RegenState, feature: string): Body {
@@ -450,11 +479,58 @@ describe('booleanBuilder', () => {
     const out = await build(aBoolean('s', { op: 'subtract' }), state, kernel);
 
     const body = bodyOf(out, 'a');
-    expect(body).toEqual({ ...first, shape: body.shape, lastModifiedBy: 's' });
-    expect(body.names).toBe(first.names);
+    expect(body).toEqual({ ...first, shape: body.shape, names: body.names, lastModifiedBy: 's' });
+    // nameShape over the history of the fake (the first input is the identity): the same names.
+    expect(body.names).not.toBe(first.names);
+    expect([...body.names.faceEntries]).toEqual([...first.names.faceEntries]);
+    expect([...body.names.edgeEntries]).toEqual([...first.names.edgeEntries]);
     expect(body.shape).not.toBe(first.shape);
     expect(Object.isFrozen(body)).toBe(true);
   });
+
+  it('union names the result with the first target, the other targets and the tools in this order', async () => {
+    const kernel = anInputOrderKernel();
+    const state = await threeBoxes(kernel);
+
+    const out = await build(
+      aBoolean('u', { op: 'union', targets: [ref('b'), ref('a')], tools: [ref('c')] }),
+      state,
+      kernel,
+    );
+
+    const names = bodyOf(out, 'b').names;
+    expect([0, 1, 2].map((i) => names.nameOfFace(i))).toEqual([
+      'b/face:left',
+      'a/face:left',
+      'c/face:left',
+    ]);
+  });
+
+  // The fake intersects the box of all targets with the box of all tools: c alone as a tool
+  // would miss the box of a and b, so intersect takes a and c as tools.
+  it.each([
+    ['subtract', [ref('b'), ref('a')], [ref('c')]],
+    ['intersect', [ref('b')], [ref('a'), ref('c')]],
+  ] as const)(
+    '%s names the result with the targets, then the tools',
+    async (op, targets, tools) => {
+      const kernel = anInputOrderKernel();
+      const state = await threeBoxes(kernel);
+
+      const out = await build(
+        aBoolean('s', { op, targets: [...targets], tools: [...tools] }),
+        state,
+        kernel,
+      );
+
+      const names = bodyOf(out, 'b').names;
+      expect([0, 1, 2].map((i) => names.nameOfFace(i))).toEqual([
+        'b/face:left',
+        'a/face:left',
+        'c/face:left',
+      ]);
+    },
+  );
 
   it('removes the other targets and the tools from the map', async () => {
     const { kernel } = aRecordingKernel();

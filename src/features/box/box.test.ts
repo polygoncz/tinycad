@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ObservableValue, createSequentialIdGenerator } from '@/core';
 import { ORIGIN_AXIS_IDS, ORIGIN_PLANE_IDS, bodyId, createFeatureSchemaRegistry } from '@/document';
-import type { FeatureId, FeatureInstance } from '@/document';
+import type { FeatureId, FeatureInstance, TopoName } from '@/document';
 import { aFeature } from '@/document/testing';
 import {
   SELECT_TOOL,
@@ -39,6 +39,11 @@ const ORIGIN_KEYS: readonly string[] = [
   ORIGIN_AXIS_IDS.y,
   ORIGIN_AXIS_IDS.z,
 ];
+
+function topo(name: string): TopoName {
+  // Test data: the name as propagateNames mints it for the box.
+  return name as TopoName;
+}
 
 function aBox(id: string, params: Partial<BoxParams> = {}): FeatureInstance<BoxParams> {
   return aFeature({ id, type: 'box', params: { ...boxSchema.defaults(), ...params } });
@@ -220,8 +225,27 @@ describe('boxBuilder', () => {
       id: 'b1/body',
       origin: 'b1',
       lastModifiedBy: 'b1',
-      names: EMPTY_NAMES,
     });
+  });
+
+  it('names the faces by their roles and all 12 edges (spec 08, M14)', async () => {
+    const feature = aBox('b1');
+    const state = await build(feature);
+    const body = state.artifacts.get(bodyId(feature.id));
+    if (body?.kind !== 'body') expect.fail('No body');
+    expect(body.names).not.toBe(EMPTY_NAMES);
+    expect([...body.names.faceEntries]).toEqual([
+      ['b1/face:back', [3]],
+      ['b1/face:bottom', [4]],
+      ['b1/face:front', [2]],
+      ['b1/face:left', [0]],
+      ['b1/face:right', [1]],
+      ['b1/face:top', [5]],
+    ]);
+    expect(body.names.faces(topo('b1/face:top'))).toEqual([5]);
+    const named = [...body.names.edgeEntries.values()].flat().sort((a, b) => a - b);
+    expect(named).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(body.names.topology.edges).toHaveLength(12);
   });
 
   it('makes a box spanning origin + size', async () => {

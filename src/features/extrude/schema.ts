@@ -1,5 +1,12 @@
 import { validateAgainstSchema } from '@/document';
-import type { BodyRef, FeatureSchema, ParamSchema, ParamSpec, SketchRegionRef } from '@/document';
+import type {
+  BodyRef,
+  FeatureSchema,
+  ParamSchema,
+  ParamSpec,
+  SketchRegionRef,
+  TopoRef,
+} from '@/document';
 
 // The data half of the extrude feature (ADR 0004): params, defaults and validation.
 
@@ -10,19 +17,34 @@ export interface ExtrudeParams {
   readonly operation: 'new' | 'add' | 'remove' | 'intersect';
   /** Bodies the prisms change; hidden and never read for 'new'. */
   readonly targets: readonly BodyRef[];
-  /** 'blind' goes from the sketch plane, 'symmetric' half the distance to each side. */
-  readonly endType: 'blind' | 'symmetric';
+  /**
+   * 'blind' goes from the sketch plane, 'symmetric' half the distance to each side, 'upToFace'
+   * (M14) up to the planar face upTo parallel to the sketch.
+   */
+  readonly endType: 'blind' | 'symmetric' | 'upToFace';
+  /** Hidden and never read for 'upToFace'. */
   readonly distance: number;
-  /** Extrude against the normal of the sketch; hidden and never read for 'symmetric'. */
+  /** The face to extrude up to; hidden and never read unless 'upToFace' (M14). */
+  readonly upTo: readonly TopoRef[];
+  /** Extrude against the normal of the sketch; hidden and never read unless 'blind'. */
   readonly flip: boolean;
 }
 
 /**
- * Whether the end type leaves room for a direction: a symmetric extrude goes to both sides, so
- * flip is hidden and the builder ignores it. Takes unchecked values (visibleWhen).
+ * Whether the end type leaves room for a direction: a symmetric extrude goes to both sides and
+ * an extrude up to a face goes towards the face, so flip is hidden and the builder ignores it.
+ * Takes unchecked values (visibleWhen).
  */
 export function flipApplies(endType: unknown): boolean {
-  return endType !== 'symmetric';
+  return endType === 'blind';
+}
+
+/**
+ * Whether the end type reads the distance: an extrude up to a face computes it from the face,
+ * so distance is hidden and the builder ignores it. Takes unchecked values (visibleWhen).
+ */
+export function distanceApplies(endType: unknown): boolean {
+  return endType !== 'upToFace';
 }
 
 // Frozen deeply – the schema object, every ParamSpec and the enum options: the schema is shared
@@ -56,6 +78,7 @@ const params: ParamSchema = Object.freeze<ParamSchema>({
     options: Object.freeze([
       Object.freeze({ value: 'blind', label: 'extrude.endType.blind' }),
       Object.freeze({ value: 'symmetric', label: 'extrude.endType.symmetric' }),
+      Object.freeze({ value: 'upToFace', label: 'extrude.endType.upToFace' }),
     ]),
   }),
   distance: Object.freeze<ParamSpec>({
@@ -64,6 +87,16 @@ const params: ParamSchema = Object.freeze<ParamSchema>({
     default: 10,
     min: 0,
     exclusiveMin: true,
+    visibleWhen: (p) => distanceApplies(p['endType']),
+  }),
+  // Hidden unless 'upToFace', so data of version 1 without upTo stay valid without a migration.
+  upTo: Object.freeze<ParamSpec>({
+    kind: 'topo',
+    label: 'extrude.upTo',
+    entity: 'face',
+    min: 1,
+    max: 1,
+    visibleWhen: (p) => p['endType'] === 'upToFace',
   }),
   flip: Object.freeze<ParamSpec>({
     kind: 'boolean',
@@ -88,6 +121,7 @@ export const extrudeSchema: FeatureSchema<ExtrudeParams> = Object.freeze<
       targets: [],
       endType: 'blind',
       distance: 10,
+      upTo: [],
       flip: false,
     };
   },

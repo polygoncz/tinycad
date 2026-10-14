@@ -277,8 +277,21 @@ describe('cylinderBuilder', () => {
       id: 'c1/body',
       origin: 'c1',
       lastModifiedBy: 'c1',
-      names: EMPTY_NAMES,
     });
+  });
+
+  it('names the faces top, bottom and side by their roles (spec 08, M14)', async () => {
+    const feature = aCylinder('c1', { axis: 'z' });
+    const state = await build(feature);
+    const body = state.artifacts.get(bodyId(feature.id));
+    if (body?.kind !== 'body') expect.fail('No body');
+    expect(body.names).not.toBe(EMPTY_NAMES);
+    // The fake models the cylinder as its AABB: along +z bottom is face 4, top face 5.
+    expect([...body.names.faceEntries]).toEqual([
+      ['c1/face:bottom', [4]],
+      ['c1/face:side', [0, 1, 2, 3]],
+      ['c1/face:top', [5]],
+    ]);
   });
 
   // base [1, 2, 3], radius 2, height 4: along the axis base..base+4, across it base ± 2.

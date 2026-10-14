@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ObservableValue, createSequentialIdGenerator } from '@/core';
 import type { Vec3 } from '@/core';
 import { bodyId, createFeatureSchemaRegistry } from '@/document';
-import type { BodyId, BodyRef, FeatureId, FeatureInstance } from '@/document';
+import type { BodyId, BodyRef, FeatureId, FeatureInstance, TopoName } from '@/document';
 import { aFeature } from '@/document/testing';
 import {
   SELECT_TOOL,
@@ -17,8 +17,8 @@ import { createFakeKernel } from '@/kernel/testing';
 import type { FakeKernel } from '@/kernel/testing';
 import { anOpsSession } from '@/ops/testing';
 import { registerPlugin } from '@/plugin-api';
-import { EMPTY_STATE, bodiesOf, createBuilderRegistry, propagateNames } from '@/regen';
-import type { Artifact, Body, NameTable, RegenState } from '@/regen';
+import { EMPTY_STATE, bodiesOf, createBuilderRegistry, nameShape } from '@/regen';
+import type { Artifact, Body, RegenState } from '@/regen';
 import { aBuildContext, aRegenSetup, resized, result } from '@/regen/testing';
 import { transformBuilder } from './builder';
 import { transformSchema } from './schema';
@@ -32,6 +32,11 @@ function ref(body: string): BodyRef {
   return { kind: 'body', body: body as BodyId };
 }
 
+function topo(name: string): TopoName {
+  // Test data: the name as propagateNames mints it for the box.
+  return name as TopoName;
+}
+
 function aTransform(
   id: string,
   params: Partial<TransformParams> = {},
@@ -43,23 +48,17 @@ function aTransform(
   });
 }
 
-/** A name table that is not EMPTY_NAMES by identity, so the test sees the transform keeps it. */
-const SOME_NAMES: NameTable = propagateNames({
-  // Test data: any feature id will do, the table never parses it.
-  featureId: 'names' as FeatureId,
-  inputs: [],
-  topology: { faces: [], edges: [], vertexCount: 0 },
-});
-
-/** A state with one box body per entry, each created by its own feature `<id>`. */
+/** A state with one box body per entry, each created and named by its own feature `<id>`. */
 async function aState(
   kernel: FakeKernel,
   boxes: readonly { readonly id: string; readonly origin: Vec3; readonly size: Vec3 }[],
 ): Promise<RegenState> {
   const artifacts = new Map<BodyId, Artifact>();
   for (const box of boxes) {
-    const { shape } = await kernel.makeBox({ origin: box.origin, size: box.size });
+    const result = await kernel.makeBox({ origin: box.origin, size: box.size });
     const feature = box.id as FeatureId;
+    // Named like the box builder names it, so the transform has names to carry over.
+    const names = await nameShape({ kernel, featureId: feature, result, inputs: [] });
     const id = bodyId(feature);
     artifacts.set(
       id,
@@ -68,8 +67,8 @@ async function aState(
         id,
         origin: feature,
         lastModifiedBy: feature,
-        shape,
-        names: SOME_NAMES,
+        shape: result.shape,
+        names,
       }),
     );
   }
@@ -331,7 +330,11 @@ describe('transformBuilder', () => {
       lastModifiedBy: 't1',
     });
     if (after?.kind !== 'body' || before?.kind !== 'body') expect.fail('No body b1/body');
-    expect(after.names).toBe(SOME_NAMES);
+    // nameShape over the identity history of the transform: the same names on the same faces.
+    expect(after.names).not.toBe(before.names);
+    expect([...after.names.faceEntries]).toEqual([...before.names.faceEntries]);
+    expect([...after.names.edgeEntries]).toEqual([...before.names.edgeEntries]);
+    expect(after.names.faces(topo('b1/face:top'))).toEqual([5]);
     expect(after.shape).not.toBe(before.shape);
     expectBox(await bboxOf(kernel, next, 'b1/body'), { min: [10, 20, 30], max: [12, 24, 36] });
   });

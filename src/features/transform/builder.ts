@@ -1,12 +1,13 @@
 import { mat4 } from '@/core';
 import type { Vec3 } from '@/core';
-import { unresolvedReference } from '@/regen';
+import { nameShape, unresolvedReference } from '@/regen';
 import type { Body, FeatureBuilder } from '@/regen';
 import type { TransformParams } from './schema';
 
 // The behaviour half of the transform feature (ADR 0004): moves the picked bodies by one rigid
-// motion. A transform changes bodies, it does not create them: each keeps its id, origin, names
-// and place in the map, only shape and lastModifiedBy are new (spec 07, identity rule).
+// motion. A transform changes bodies, it does not create them: each keeps its id, origin and
+// place in the map; shape, names (from nameShape) and lastModifiedBy are new (spec 07, identity
+// rule).
 
 const AXIS: Readonly<Record<TransformParams['axis'], Vec3>> = Object.freeze({
   x: Object.freeze<Vec3>([1, 0, 0]),
@@ -29,8 +30,20 @@ export const transformBuilder: FeatureBuilder<TransformParams> = Object.freeze<
     // so every moved body stays where it was in the map.
     const artifacts = new Map(state.artifacts);
     for (const body of resolved.value) {
-      const { shape } = await ctx.kernel.transform(body.shape, m);
-      const moved: Body = Object.freeze({ ...body, shape, lastModifiedBy: feature.id });
+      const result = await ctx.kernel.transform(body.shape, m);
+      // The history of a rigid motion is the identity, so the names stay the same (spec 08).
+      const names = await nameShape({
+        kernel: ctx.kernel,
+        featureId: feature.id,
+        result,
+        inputs: [body.names],
+      });
+      const moved: Body = Object.freeze({
+        ...body,
+        shape: result.shape,
+        names,
+        lastModifiedBy: feature.id,
+      });
       artifacts.set(body.id, moved);
     }
     return { ok: true, state: Object.freeze({ artifacts }) };

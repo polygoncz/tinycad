@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { ObservableValue, createSequentialIdGenerator } from '@/core';
+import { ObservableValue, createSequentialIdGenerator, vec3 } from '@/core';
 import type { Plane, Vec3 } from '@/core';
 import { ORIGIN_PLANES, bodyId, createFeatureSchemaRegistry, isParamVisible } from '@/document';
-import type { BodyRef, FeatureId, FeatureInstance, ParamSpec, SketchRegionRef } from '@/document';
+import type {
+  BodyId,
+  BodyRef,
+  FeatureId,
+  FeatureInstance,
+  ParamSpec,
+  SketchRegionRef,
+  TopoName,
+  TopoRef,
+} from '@/document';
 import { aFeature } from '@/document/testing';
 import {
   SELECT_TOOL,
@@ -12,13 +21,21 @@ import {
 } from '@/interaction';
 import type { FeatureEditor, FeatureEditSession } from '@/interaction';
 import { FakeRegenStatus, FakeViewport } from '@/interaction/testing';
-import type { BooleanOp, ShapeHandle } from '@/kernel';
+import type { BooleanOp, FaceInfo, ShapeHandle } from '@/kernel';
 import { createFakeKernel } from '@/kernel/testing';
 import { anOpsSession } from '@/ops/testing';
 import { registerPlugin } from '@/plugin-api';
 import { EMPTY_NAMES, createBuilderRegistry } from '@/regen';
-import type { Artifact, ArtifactId, Body, BuildOutput, ModelingKernel, RegenState } from '@/regen';
-import { aBuildContext, aSketchArtifact } from '@/regen/testing';
+import type {
+  Artifact,
+  ArtifactId,
+  Body,
+  BuildOutput,
+  ModelingKernel,
+  NameTable,
+  RegenState,
+} from '@/regen';
+import { aBuildContext, aNameTable, aSketchArtifact } from '@/regen/testing';
 import { extrudeBuilder } from './builder';
 import { extrudeMessages } from './messages';
 import { extrudeSchema, flipApplies } from './schema';
@@ -35,6 +52,11 @@ function region(name = 'r1', sketch = 's'): SketchRegionRef {
 
 function bodyRef(id: string): BodyRef {
   return { kind: 'body', body: bodyId(id as FeatureId) };
+}
+
+function topoRef(body: string, name: string): TopoRef {
+  // Test data: hand-written ids and names stand for minted ones.
+  return { kind: 'topo', body: body as BodyId, name: name as TopoName };
 }
 
 function anExtrude(
@@ -115,6 +137,7 @@ async function boxBody(
   feature: string,
   origin: Vec3,
   size: Vec3,
+  names: NameTable = EMPTY_NAMES,
 ): Promise<Body> {
   const { shape } = await kernel.makeBox({ origin, size });
   const owner = feature as FeatureId;
@@ -124,7 +147,7 @@ async function boxBody(
     origin: owner,
     lastModifiedBy: owner,
     shape,
-    names: EMPTY_NAMES,
+    names,
   });
 }
 
@@ -222,6 +245,7 @@ describe('extrudeSchema', () => {
       ['targets', 'extrude.targets'],
       ['endType', 'extrude.endType'],
       ['distance', 'extrude.distance'],
+      ['upTo', 'extrude.upTo'],
       ['flip', 'extrude.flip'],
     ]);
   });
@@ -252,14 +276,22 @@ describe('extrudeSchema', () => {
       options: [
         { value: 'blind', label: 'extrude.endType.blind' },
         { value: 'symmetric', label: 'extrude.endType.symmetric' },
+        { value: 'upToFace', label: 'extrude.endType.upToFace' },
       ],
     });
-    expect(paramOf('distance')).toEqual({
+    expect(paramOf('distance')).toMatchObject({
       kind: 'length',
       label: 'extrude.distance',
       default: 10,
       min: 0,
       exclusiveMin: true,
+    });
+    expect(paramOf('upTo')).toMatchObject({
+      kind: 'topo',
+      label: 'extrude.upTo',
+      entity: 'face',
+      min: 1,
+      max: 1,
     });
     expect(paramOf('flip')).toMatchObject({
       kind: 'boolean',
@@ -287,12 +319,14 @@ describe('extrudeSchema', () => {
       targets: [],
       endType: 'blind',
       distance: 10,
+      upTo: [],
       flip: false,
     });
     const b = extrudeSchema.defaults();
     expect(a).not.toBe(b);
     expect(a.regions).not.toBe(b.regions);
     expect(a.targets).not.toBe(b.targets);
+    expect(a.upTo).not.toBe(b.upTo);
   });
 
   it('defaults with a picked region pass validation, alone they ask for a region', () => {
@@ -335,9 +369,41 @@ describe('extrudeSchema', () => {
     expect(extrudeSchema.validate({ ...valid, distance: 0 })).toEqual([
       { param: 'distance', code: 'param.atOrBelowMin', params: { min: 0 } },
     ]);
-    expect(extrudeSchema.validate({ ...valid, endType: 'upToFace' })).toEqual([
+    expect(extrudeSchema.validate({ ...valid, endType: 'throughAll' })).toEqual([
       { param: 'endType', code: 'param.unknownOption' },
     ]);
+  });
+
+  it('data of version 1 without upTo stay valid (the hidden upTo is not required)', () => {
+    const old = Object.fromEntries(
+      Object.entries(anExtrude('x').params).filter(([key]) => key !== 'upTo'),
+    );
+    expect(extrudeSchema.validate(old)).toEqual([]);
+    expect(extrudeSchema.validate({ ...old, endType: 'symmetric' })).toEqual([]);
+  });
+
+  it('up to face needs exactly one face, the hidden distance and flip are not checked', () => {
+    const valid = anExtrude('x').params;
+    expect(extrudeSchema.validate({ ...valid, endType: 'upToFace' })).toEqual([
+      { param: 'upTo', code: 'param.tooFewRefs', params: { min: 1 } },
+    ]);
+    const face = topoRef('b/body', 'b/face:bottom');
+    expect(
+      extrudeSchema.validate({
+        ...valid,
+        endType: 'upToFace',
+        upTo: [face],
+        distance: -1,
+        flip: 'yes',
+      }),
+    ).toEqual([]);
+    expect(
+      extrudeSchema.validate({
+        ...valid,
+        endType: 'upToFace',
+        upTo: [face, topoRef('b/body', 'b/face:top')],
+      }),
+    ).toEqual([{ param: 'upTo', code: 'param.tooManyRefs', params: { max: 1 } }]);
   });
 });
 
@@ -357,13 +423,33 @@ describe('extrude param visibility', () => {
   it.each([
     ['blind', true],
     ['symmetric', false],
+    ['upToFace', false],
   ])('flip for endType %s visible: %s', (endType, visible) => {
     expect(isParamVisible(flip(), { ...anExtrude('x').params, endType })).toBe(visible);
   });
 
   it.each([
     ['blind', true],
+    ['symmetric', true],
+    ['upToFace', false],
+  ])('distance for endType %s visible: %s', (endType, visible) => {
+    expect(isParamVisible(paramOf('distance'), { ...anExtrude('x').params, endType })).toBe(
+      visible,
+    );
+  });
+
+  it.each([
+    ['blind', false],
     ['symmetric', false],
+    ['upToFace', true],
+  ])('upTo for endType %s visible: %s', (endType, visible) => {
+    expect(isParamVisible(paramOf('upTo'), { ...anExtrude('x').params, endType })).toBe(visible);
+  });
+
+  it.each([
+    ['blind', true],
+    ['symmetric', false],
+    ['upToFace', false],
   ])(
     'flipApplies(%s) is %s, the rule of both the predicate and the builder',
     (endType, applies) => {
@@ -372,7 +458,7 @@ describe('extrude param visibility', () => {
   );
 
   it('other params are always visible', () => {
-    for (const key of ['regions', 'operation', 'endType', 'distance']) {
+    for (const key of ['regions', 'operation', 'endType']) {
       expect(isParamVisible(paramOf(key), {}), key).toBe(true);
     }
   });
@@ -388,6 +474,8 @@ describe('extrudeMessages', () => {
         ...(spec.group === undefined ? [] : [spec.group]),
         ...(spec.kind === 'enum' ? spec.options.map((o) => o.label) : []),
       ]),
+      // The issue code of the builder for an unusable face.
+      'extrude.upToFace',
     ];
   }
 
@@ -412,7 +500,10 @@ describe('extrudeMessages', () => {
       'extrude.endType': 'Konec',
       'extrude.endType.blind': 'Do vzdálenosti',
       'extrude.endType.symmetric': 'Symetricky',
+      'extrude.endType.upToFace': 'Po plochu',
       'extrude.distance': 'Vzdálenost',
+      'extrude.upTo': 'Plocha',
+      'extrude.upToFace': 'Plocha musí být rovinná, rovnoběžná se skicou a ve směru vysunutí',
       'extrude.flip': 'Opačný směr',
     });
     expect(extrudeMessages.en).toEqual({
@@ -428,7 +519,11 @@ describe('extrudeMessages', () => {
       'extrude.endType': 'End type',
       'extrude.endType.blind': 'Blind',
       'extrude.endType.symmetric': 'Symmetric',
+      'extrude.endType.upToFace': 'Up to face',
       'extrude.distance': 'Distance',
+      'extrude.upTo': 'Face',
+      'extrude.upToFace':
+        'The face must be planar, parallel to the sketch and in the extrude direction',
       'extrude.flip': 'Opposite direction',
     });
   });
@@ -659,6 +754,153 @@ describe('extrudeBuilder', () => {
     await expect(run(anExtrude('e'), state, kernel)).rejects.toMatchObject({
       code: 'operation-failed',
     });
+  });
+});
+
+describe('extrudeBuilder up to face', () => {
+  const BOTTOM = 'b/face:bottom';
+  const target = topoRef('b/body', BOTTOM);
+
+  const bottomFace: FaceInfo = {
+    surface: 'plane',
+    plane: { origin: [0, 0, 5], normal: [0, 0, -1] },
+  };
+
+  /** The rectangle state with a box body 'b' z ∈ [5, 15] whose face 0 named BOTTOM is `face`. */
+  async function stateWithTarget(kernel: ModelingKernel, face: FaceInfo): Promise<RegenState> {
+    const sketch = await rectangleState(kernel);
+    const names = aNameTable({
+      faces: { [BOTTOM]: [0] },
+      topology: { faces: [face], edges: [], vertexCount: 0 },
+    });
+    const body = await boxBody(kernel, 'b', [-10, -10, 5], [60, 40, 10], names);
+    return stateOf(...sketch.artifacts.values(), body);
+  }
+
+  function upToFace(params: Partial<ExtrudeParams> = {}): FeatureInstance<ExtrudeParams> {
+    return anExtrude('e', { endType: 'upToFace', upTo: [target], ...params });
+  }
+
+  async function expectUnusableFace(face: FaceInfo): Promise<void> {
+    const { fake, kernel } = aRecordingKernel();
+    const state = await stateWithTarget(kernel, face);
+
+    const output = await run(upToFace(), state, kernel);
+
+    if (output.ok) expect.fail('Expected an error');
+    const { message, ...rest } = output.error;
+    expect(rest).toEqual({
+      code: 'INVALID_PARAMS',
+      issues: [{ param: 'upTo', code: 'extrude.upToFace' }],
+    });
+    expect(message).toContain(BOTTOM);
+    expect(Object.isFrozen(output.error)).toBe(true);
+    expect(fake.callCount('extrude')).toBe(0);
+  }
+
+  it('extrudes a rectangle on XY up to the bottom face z = 5 of a box: z ∈ [0, 5]', async () => {
+    const { fake, kernel } = aRecordingKernel();
+    const state = await stateWithTarget(kernel, bottomFace);
+
+    const out = await build(upToFace(), state, kernel);
+
+    expect(await fake.boundingBox(bodyOf(out, 'e').shape)).toEqual({
+      min: [0, 0, 0],
+      max: [40, 20, 5],
+    });
+    expect(fake.callCount('transform')).toBe(0);
+  });
+
+  it('ignores the hidden distance and flip', async () => {
+    const { fake, kernel } = aRecordingKernel();
+    const state = await stateWithTarget(kernel, bottomFace);
+
+    const out = await build(upToFace({ distance: 99, flip: true }), state, kernel);
+
+    expect(await fake.boundingBox(bodyOf(out, 'e').shape)).toEqual({
+      min: [0, 0, 0],
+      max: [40, 20, 5],
+    });
+  });
+
+  it('a parallel face with the normal along the direction is usable too', async () => {
+    const { fake, kernel } = aRecordingKernel();
+    const top: FaceInfo = { surface: 'plane', plane: { origin: [3, 7, 15], normal: [0, 0, 1] } };
+    const state = await stateWithTarget(kernel, top);
+
+    const out = await build(upToFace(), state, kernel);
+
+    expect(await fake.boundingBox(bodyOf(out, 'e').shape)).toEqual({
+      min: [0, 0, 0],
+      max: [40, 20, 15],
+    });
+  });
+
+  it('measures the distance from the plane of each region', async () => {
+    const { fake, kernel } = aRecordingKernel();
+    // A second sketch 't' parallel to XY at z = 2: its prism is 3 high, not 5.
+    const lifted: Plane = { ...originPlane(XY), origin: [0, 0, 2] };
+    const face = await rectangle(kernel, lifted, [50, 0], [10, 10]);
+    const base = await stateWithTarget(kernel, bottomFace);
+    const state = stateOf(
+      ...base.artifacts.values(),
+      aSketchArtifact('t', [face], { plane: lifted }),
+    );
+
+    const out = await build(
+      upToFace({ regions: [region('r1', 's'), region('r1', 't')] }),
+      state,
+      kernel,
+    );
+
+    expect(await fake.boundingBox(bodyOf(out, 'e').shape)).toEqual({
+      min: [0, 0, 0],
+      max: [60, 20, 5],
+    });
+    expect(fake.callCount('extrude')).toBe(2);
+  });
+
+  it('a face behind the profile gives INVALID_PARAMS at upTo', async () => {
+    await expectUnusableFace({
+      surface: 'plane',
+      plane: { origin: [0, 0, -5], normal: [0, 0, 1] },
+    });
+  });
+
+  it('a face in the plane of the profile gives INVALID_PARAMS at upTo', async () => {
+    await expectUnusableFace({
+      surface: 'plane',
+      plane: { origin: [5, 5, 0], normal: [0, 0, -1] },
+    });
+  });
+
+  it('a slanted face gives INVALID_PARAMS at upTo', async () => {
+    await expectUnusableFace({
+      surface: 'plane',
+      plane: { origin: [0, 0, 5], normal: vec3.normalize([0, 1, -1]) },
+    });
+  });
+
+  it('a non-planar face gives INVALID_PARAMS at upTo', async () => {
+    await expectUnusableFace({ surface: 'cylinder' });
+  });
+
+  it('a missing name gives UNRESOLVED_REFERENCE at upTo without calling the kernel', async () => {
+    const { fake, kernel } = aRecordingKernel();
+    const state = await stateWithTarget(kernel, bottomFace);
+
+    const output = await run(
+      upToFace({ upTo: [topoRef('b/body', 'b/face:nowhere')] }),
+      state,
+      kernel,
+    );
+
+    if (output.ok) expect.fail('Expected an error');
+    expect(output.error).toMatchObject({
+      code: 'UNRESOLVED_REFERENCE',
+      issues: [{ param: 'upTo', code: 'param.unresolvedRef' }],
+    });
+    expect(fake.callCount('extrude')).toBe(0);
   });
 });
 
