@@ -24,6 +24,7 @@ export function createOcctKernelClient(
     fillet: (shape, edges, radius) => rpc.call('fillet', shape, edges, radius),
     chamfer: (shape, edges, distance) => rpc.call('chamfer', shape, edges, distance),
     tessellate: (shape, q) => rpc.call('tessellate', shape, q),
+    exportStep: (shapes) => rpc.call('exportStep', shapes),
     boundingBox: (shape) => rpc.call('boundingBox', shape),
     topology: (shape) => rpc.call('topology', shape),
     release: (handles) => rpc.call('release', handles),

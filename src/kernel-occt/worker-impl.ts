@@ -65,6 +65,11 @@ export function createOcctWorkerImpl(
       // The kernel returns new buffers every call (spec 06), so the worker can give them away.
       return transfer(mesh, meshBuffers(mesh));
     },
+    exportStep: async (shapes) => {
+      const bytes = await onKernel((k) => k.exportStep(shapes));
+      // A new buffer of its own every call (spec 06), so the worker can give it away.
+      return transfer(bytes, [bytes.buffer]);
+    },
     boundingBox: (shape) => onKernel((k) => k.boundingBox(shape)),
     topology: (shape) => onKernel((k) => k.topology(shape)),
     release: (handles) => onKernel((k) => k.release(handles)),

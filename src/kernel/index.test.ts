@@ -47,4 +47,14 @@ describe('kernel public API', () => {
       Promise<kernel.TopologySummary>
     >();
   });
+
+  it('the port includes ExchangeOps with exportStep (M15)', () => {
+    expectTypeOf<kernel.GeometryKernel>().toExtend<kernel.ExchangeOps>();
+    expectTypeOf<Parameters<kernel.ExchangeOps['exportStep']>>().toEqualTypeOf<
+      [readonly kernel.ShapeHandle[]]
+    >();
+    expectTypeOf<ReturnType<kernel.ExchangeOps['exportStep']>>().toEqualTypeOf<
+      Promise<Uint8Array<ArrayBuffer>>
+    >();
+  });
 });

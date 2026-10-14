@@ -418,6 +418,28 @@ function expectCompleteHistory(
 }
 
 /** Kontraktová sada; factory vytvoří pro každý test čerstvé jádro. */
+/**
+ * The bytes of a STEP file as text, one character per byte: enough to check the ASCII frame
+ * (spec 06, exportStep). Without TextDecoder, which the domain build has no type for.
+ */
+function stepText(bytes: Uint8Array): string {
+  let text = '';
+  const chunk = 8192;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    text += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return text;
+}
+
+/** Spec 06: the text, trimmed, starts with ISO-10303-21; and ends with END-ISO-10303-21;. */
+function expectStepFrame(bytes: Uint8Array): void {
+  expect(bytes).toBeInstanceOf(Uint8Array);
+  expect(bytes.length).toBeGreaterThan(0);
+  const text = stepText(bytes).trim();
+  expect(text.startsWith('ISO-10303-21;'), 'starts with ISO-10303-21;').toBe(true);
+  expect(text.endsWith('END-ISO-10303-21;'), 'ends with END-ISO-10303-21;').toBe(true);
+}
+
 export function describeGeometryKernelContract(
   name: string,
   factory: () => Promise<GeometryKernel>,
@@ -458,6 +480,7 @@ export function describeGeometryKernelContract(
         ['fillet', (k: GeometryKernel) => k.fillet(UNKNOWN, [0], 1)],
         ['chamfer', (k: GeometryKernel) => k.chamfer(UNKNOWN, [0], 1)],
         ['topology', (k: GeometryKernel) => k.topology(UNKNOWN)],
+        ['exportStep', (k: GeometryKernel) => k.exportStep([])],
         ['tessellate', (k: GeometryKernel) => k.tessellate(UNKNOWN, QUALITY)],
         ['boundingBox', (k: GeometryKernel) => k.boundingBox(UNKNOWN)],
         ['release', (k: GeometryKernel) => k.release([UNKNOWN])],
@@ -485,6 +508,7 @@ export function describeGeometryKernelContract(
           kernel.fillet(shape, [0], 0.5),
           kernel.chamfer(shape, [0], 0.5),
           kernel.topology(shape),
+          kernel.exportStep([shape]),
           kernel.tessellate(shape, QUALITY),
           kernel.boundingBox(shape),
           kernel.liveHandleCount(),
@@ -1221,6 +1245,67 @@ export function describeGeometryKernelContract(
       });
     });
 
+    describe('exportStep (M15)', () => {
+      it('a box: a STEP text from ISO-10303-21; to END-ISO-10303-21;', async () => {
+        const a = await aBox();
+        expectStepFrame(await kernel.exportStep([a]));
+      });
+
+      it('two boxes in one file', async () => {
+        const a = await aBox();
+        const b = (await kernel.makeBox(SEPARATE)).shape;
+        expectStepFrame(await kernel.exportStep([a, b]));
+      });
+
+      it('the result is a whole buffer of its own, new on every call', async () => {
+        const a = await aBox();
+        const first = await kernel.exportStep([a]);
+        const second = await kernel.exportStep([a]);
+        for (const bytes of [first, second]) {
+          expect(bytes.byteOffset).toBe(0);
+          expect(bytes.byteLength).toBe(bytes.buffer.byteLength);
+        }
+        expect(second.buffer).not.toBe(first.buffer);
+      });
+
+      it('the inputs stay valid and no handle is created', async () => {
+        const a = await aBox();
+        const b = (await kernel.makeBox(SEPARATE)).shape;
+        await kernel.exportStep([a, b]);
+        expect(await kernel.liveHandleCount()).toBe(2);
+        expectEnclosesBox(await kernel.boundingBox(a), ORIGIN, BOX_MAX);
+        await kernel.boundingBox(b);
+      });
+
+      it('an empty list rejects with invalid-input', async () => {
+        await aBox();
+        expect(await rejectionCode(() => kernel.exportStep([]))).toBe('invalid-input');
+        expect(await kernel.liveHandleCount()).toBe(1);
+      });
+
+      it('the same handle twice rejects with invalid-input', async () => {
+        const a = await aBox();
+        const b = (await kernel.makeBox(SEPARATE)).shape;
+        expect(await rejectionCode(() => kernel.exportStep([a, b, a]))).toBe('invalid-input');
+        expect(await kernel.liveHandleCount()).toBe(2);
+      });
+
+      it.each(NEVER_ISSUED)('handle %s, never issued, rejects with unknown-handle', async (h) => {
+        const a = await aBox();
+        expect(await rejectionCode(() => kernel.exportStep([a, h]))).toBe('unknown-handle');
+        expect(await kernel.liveHandleCount()).toBe(1);
+        await kernel.boundingBox(a);
+      });
+
+      it('a released handle rejects with unknown-handle', async () => {
+        const a = await aBox();
+        const b = await aBox();
+        await kernel.release([a]);
+        expect(await rejectionCode(() => kernel.exportStep([b, a]))).toBe('unknown-handle');
+        expect(await kernel.liveHandleCount()).toBe(1);
+      });
+    });
+
     describe('handles', () => {
       it('a handle is never reused, not even after release', async () => {
         const issued: ShapeHandle[] = [];
@@ -1546,6 +1631,15 @@ export function describeGeometryKernelContract(
         expectBoxClose(await kernel.boundingBox(shape), ORIGIN, [4, 2, 9]);
       });
 
+      it('changing the exportStep list right after the call, before await, does not change the call', async () => {
+        const a = await aBox();
+        const list = [a];
+        const exported = callWithoutThrow(() => kernel.exportStep(list));
+        // A duplicate or an unknown handle added now would make the call reject.
+        list.push(a, UNKNOWN);
+        expectStepFrame(await exported);
+      });
+
       it('changing the release list right after the call, before await, does not change what is released', async () => {
         const a = await aBox();
         const b = await aBox();
@@ -1584,6 +1678,10 @@ export function describeGeometryKernelContract(
         [
           'extrude(handle, null, 5)',
           (k: GeometryKernel) => k.extrude(UNKNOWN, null as unknown as Vec3, 5),
+        ],
+        [
+          'exportStep(null)',
+          (k: GeometryKernel) => k.exportStep(null as unknown as readonly ShapeHandle[]),
         ],
         [
           'revolve(handle, null, 2π)',

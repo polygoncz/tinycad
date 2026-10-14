@@ -31,6 +31,7 @@ import {
   type EntryDescription,
   type ShapeEntry,
 } from './shape-entry';
+import { writeStep } from './step';
 import { prismResult, requireFace, revolResult } from './sweep';
 import { tessellateEntry } from './tessellate';
 import { topologyOf } from './topology';
@@ -70,6 +71,8 @@ export class OcctKernelImpl implements GeometryKernel {
   private readonly shapes = new Map<ShapeHandle, ShapeEntry>();
   /** Increasing counter: a handle is never reused within one instance. */
   private lastHandle = 0;
+  /** Increasing counter of the temporary STEP files (spec 06, M15). */
+  private lastExport = 0;
 
   constructor(oc: Occt) {
     this.oc = oc;
@@ -237,6 +240,28 @@ export class OcctKernelImpl implements GeometryKernel {
 
   chamfer(shape: ShapeHandle, edges: readonly number[], distance: number): Promise<ShapeResult> {
     return this.dressup('chamfer', shape, edges, distance);
+  }
+
+  exportStep(shapes: readonly ShapeHandle[]): Promise<Uint8Array<ArrayBuffer>> {
+    return this.run(
+      () => [...shapes],
+      (list) => {
+        if (list.length === 0) {
+          throw createKernelError('invalid-input', 'exportStep: shapes must not be empty');
+        }
+        if (new Set(list).size !== list.length) {
+          throw createKernelError('invalid-input', 'exportStep: the same handle more than once');
+        }
+        const entries = list.map((h) => this.entry(h));
+        this.lastExport++;
+        const path = `/tmp/tinycad-export-${String(this.lastExport)}.step`;
+        return writeStep(
+          this.oc,
+          entries.map((e) => e.shape),
+          path,
+        );
+      },
+    );
   }
 
   tessellate(shape: ShapeHandle, q: MeshQuality): Promise<MeshData> {

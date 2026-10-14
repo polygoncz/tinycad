@@ -151,6 +151,7 @@ describe('OCCT worker implementation', () => {
       topology: (s) => fake.topology(s),
       fillet: (s, e, r) => fake.fillet(s, e, r),
       chamfer: (s, e, d) => fake.chamfer(s, e, d),
+      exportStep: (shapes) => fake.exportStep(shapes),
       release: (h) => fake.release(h),
       liveHandleCount: () => fake.liveHandleCount(),
       tessellate: async (s, q) => {
@@ -176,6 +177,30 @@ describe('OCCT worker implementation', () => {
     for (const field of fields) {
       expect(sent[field].buffer.byteLength, `${field} on the worker side`).toBe(0);
     }
+  });
+
+  it('exportStep forwards the shapes and transfers the bytes: the worker side loses them', async () => {
+    const fake = createFakeKernel();
+    let sent: Uint8Array | undefined;
+    const spying: GeometryKernel = {
+      ...throwingKernel(() => new Error('not used')),
+      makeBox: (p) => fake.makeBox(p),
+      exportStep: async (shapes) => {
+        const bytes = await fake.exportStep(shapes);
+        sent = bytes;
+        return bytes;
+      },
+    };
+    const rpc = connect(Promise.resolve(spying));
+    const a = (await rpc.call('makeBox', BOX)).shape;
+    const b = (await rpc.call('makeBox', { origin: [5, 0, 0], size: [1, 1, 1] })).shape;
+    const bytes = await rpc.call('exportStep', [b, a]);
+
+    const text = new TextDecoder().decode(bytes);
+    expect(text).toContain('#1=FAKE_SOLID((5,0,0),(6,1,1));');
+    expect(text).toContain('#2=FAKE_SOLID((0,0,0),(1,2,3));');
+    if (sent === undefined) expect.fail('exportStep was not called on the kernel');
+    expect(sent.buffer.byteLength, 'the bytes on the worker side').toBe(0);
   });
 
   it('a WASM trap answers the call with an error and reports the crash', async () => {
@@ -244,6 +269,7 @@ function throwingKernel(error: () => Error): GeometryKernel {
     topology: fail,
     fillet: fail,
     chamfer: fail,
+    exportStep: fail,
     release: fail,
     liveHandleCount: fail,
   };

@@ -10,5 +10,5 @@ export { createPersistenceService } from './service';
 export type { PersistenceService, PersistenceStatus, Scheduler } from './service';
 export { loadDocument } from './load';
 export type { LoadDocumentError, LoadedDocument } from './load';
-export { exportDocument, importDocument } from './file';
-export type { TinycadFile } from './file';
+export { exportDocument, exportStoredDocument, importDocument } from './file';
+export type { TinycadFile, TinycadHistory } from './file';

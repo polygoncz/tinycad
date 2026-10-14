@@ -570,4 +570,40 @@ describe('FakeKernel', () => {
       expect(kernel.callCount('topology')).toBe(1);
     });
   });
+  describe('exportStep (M15)', () => {
+    it('a deterministic pseudo-STEP: one FAKE_SOLID line per shape, in the order of shapes', async () => {
+      const kernel = createFakeKernel();
+      const a = (await kernel.makeBox(BOX)).shape;
+      const b = (await kernel.makeBox({ origin: [10, 0, 0], size: [1, 1, 1] })).shape;
+      const text = new TextDecoder().decode(await kernel.exportStep([b, a]));
+      const lines = text.trim().split('\n');
+      expect(lines[0]).toBe('ISO-10303-21;');
+      expect(lines[1]).toBe('HEADER;');
+      expect(lines.at(-1)).toBe('END-ISO-10303-21;');
+      const data = lines.indexOf('DATA;');
+      expect(lines.slice(data + 1)).toEqual([
+        '#1=FAKE_SOLID((10,0,0),(11,1,1));',
+        '#2=FAKE_SOLID((1,-2,3),(3,1,7));',
+        'ENDSEC;',
+        'END-ISO-10303-21;',
+      ]);
+      expect(lines.slice(1, data)).toContain('ENDSEC;');
+      expect(new TextDecoder().decode(await kernel.exportStep([b, a]))).toBe(text);
+    });
+
+    it('failNext and callCount work for exportStep', async () => {
+      const kernel = createFakeKernel();
+      const a = (await kernel.makeBox(BOX)).shape;
+      kernel.failNext('exportStep', 'operation-failed', 'disk full');
+      const e = await rejection(kernel.exportStep([a]));
+      expect(kernelErrorCode(e)).toBe('operation-failed');
+      await kernel.exportStep([a]);
+      expect(kernel.callCount('exportStep')).toBe(2);
+    });
+
+    it('rejects an unknown handle', async () => {
+      const kernel = createFakeKernel();
+      expect(kernelErrorCode(await rejection(kernel.exportStep([UNKNOWN])))).toBe('unknown-handle');
+    });
+  });
 });

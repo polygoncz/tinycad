@@ -50,6 +50,7 @@ export async function createOcctKernel(): Promise<GeometryKernel & Disposable> {
     fillet: (shape, edges, radius) => client.fillet(shape, edges, radius),
     chamfer: (shape, edges, distance) => client.chamfer(shape, edges, distance),
     tessellate: (shape, q) => client.tessellate(shape, q),
+    exportStep: (shapes) => client.exportStep(shapes),
     boundingBox: (shape) => client.boundingBox(shape),
     topology: (shape) => client.topology(shape),
     release: (handles) => client.release(handles),

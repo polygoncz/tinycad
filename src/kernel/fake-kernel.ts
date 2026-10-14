@@ -299,6 +299,22 @@ class FakeKernelImpl implements FakeKernel {
     return this.dressup('chamfer', shape, edges, distance);
   }
 
+  exportStep(shapes: readonly ShapeHandle[]): Promise<Uint8Array<ArrayBuffer>> {
+    return this.call(
+      'exportStep',
+      () => [...shapes],
+      (list) => {
+        if (list.length === 0) {
+          throw createKernelError('invalid-input', 'exportStep: shapes must not be empty');
+        }
+        if (new Set(list).size !== list.length) {
+          throw createKernelError('invalid-input', 'exportStep: the same handle more than once');
+        }
+        return asciiBytes(fakeStep(list.map((h) => this.entry(h))));
+      },
+    );
+  }
+
   tessellate(shape: ShapeHandle, q: MeshQuality): Promise<MeshData> {
     const read = (): MeshQuality => ({
       linearDeflection: q.linearDeflection,
@@ -557,6 +573,36 @@ function boxTopology({ min, max }: AabbEntry): TopologySummary {
     }
   }
   return { faces, edges, vertexCount: BOX_VERTICES };
+}
+
+/**
+ * The pseudo-STEP of the fake (spec 06, FakeKernel, M15): the frame of a STEP file with one
+ * line `#<i>=FAKE_SOLID((min),(max));` per shape, so tests of higher layers see what was
+ * exported. Deterministic: no time in the header.
+ */
+function fakeStep(entries: readonly AabbEntry[]): string {
+  const point = (v: Vec3): string => `(${v.map(String).join(',')})`;
+  return [
+    'ISO-10303-21;',
+    'HEADER;',
+    "FILE_DESCRIPTION(('tinycad FakeKernel'),'2;1');",
+    "FILE_NAME('fake.step','',(''),(''),'','','');",
+    "FILE_SCHEMA(('AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }'));",
+    'ENDSEC;',
+    'DATA;',
+    ...entries.map((e, i) => `#${String(i + 1)}=FAKE_SOLID(${point(e.min)},${point(e.max)});`),
+    'ENDSEC;',
+    'END-ISO-10303-21;',
+    '',
+  ].join('\n');
+}
+
+/**
+ * The bytes of an ASCII text in a new buffer. The same bytes as TextEncoder gives for ASCII;
+ * the domain build (no DOM, no Node types) has no type for TextEncoder.
+ */
+function asciiBytes(text: string): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(text, (c) => c.charCodeAt(0));
 }
 
 function toVec3(v: readonly number[]): Vec3 {

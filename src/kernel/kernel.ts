@@ -81,6 +81,12 @@ export interface DressupOps {
   chamfer(shape: ShapeHandle, edges: readonly number[], distance: number): Promise<ShapeResult>;
 }
 
+/** Exchange formats (M15). Not part of the builders' ModelingKernel: a feature exports nothing. */
+export interface ExchangeOps {
+  /** A STEP file (AP214, mm) with all the shapes `shapes`; the bytes of an ASCII/UTF-8 text. */
+  exportStep(shapes: readonly ShapeHandle[]): Promise<Uint8Array<ArrayBuffer>>;
+}
+
 export interface MeshOps {
   tessellate(shape: ShapeHandle, q: MeshQuality): Promise<MeshData>;
 }
@@ -105,6 +111,7 @@ export interface GeometryKernel
     SketchOps,
     SweepOps,
     DressupOps,
+    ExchangeOps,
     MeshOps,
     QueryOps,
     LifecycleOps {}

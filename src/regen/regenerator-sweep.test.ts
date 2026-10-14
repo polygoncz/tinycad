@@ -118,6 +118,7 @@ function withRelease(
     topology: (shape) => fake.topology(shape),
     fillet: (shape, edges, radius) => fake.fillet(shape, edges, radius),
     chamfer: (shape, edges, distance) => fake.chamfer(shape, edges, distance),
+    exportStep: (shapes) => fake.exportStep(shapes),
     release: (handles) => release(handles, calls++),
     liveHandleCount: () => fake.liveHandleCount(),
   };

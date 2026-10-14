@@ -10,6 +10,7 @@ describe('persistence public API', () => {
       'createSnapshot',
       'createStoreError',
       'exportDocument',
+      'exportStoredDocument',
       'importDocument',
       'loadDocument',
       'snapshotSeqsToKeep',

@@ -56,12 +56,8 @@ export async function loadDocument(
   const log = createOperationLog(entries.value);
 
   if (deps.verify === true) {
-    const base = loadSnapshot(stored.base, id, entries.value.length, schemas, 'base');
+    const base = loadBaseSnapshot(stored.base, id, entries.value.length, schemas);
     if (!base.ok) return base;
-    // The base must be the state before entry 1, otherwise "replay everything" means nothing.
-    if (base.value.atSeq !== 0) {
-      return err(snapshotError('base', [{ path: 'atSeq', message: 'Must be 0' }]));
-    }
     // A handler rejecting an entry is broken data here too, not broken determinism.
     const fromBase = replayEach(base.value.doc, handlers, entries.value);
     if (!fromBase.ok) return fromBase;
@@ -75,10 +71,14 @@ export async function loadDocument(
   return ok({ doc, log });
 }
 
-function parseEntries(
+/** A broken log entry; `seq` is the 1-based position in the log. */
+export type EntryError = Extract<LoadDocumentError, { readonly kind: 'entry' }>;
+
+/** Every entry through parseLogEntry, in order, with seq 1..n and no gaps. Shared with the file. */
+export function parseEntries(
   handlers: OpHandlerRegistry,
   raw: readonly unknown[],
-): Result<readonly LogEntry[], LoadDocumentError> {
+): Result<readonly LogEntry[], EntryError> {
   const entries: LogEntry[] = [];
   for (const [i, rawEntry] of raw.entries()) {
     const seq = i + 1;
@@ -96,8 +96,26 @@ function parseEntries(
   return ok(entries);
 }
 
+/**
+ * The base snapshot checked like the latest one, and it must be the state before entry 1,
+ * otherwise "replay everything" means nothing. Shared with exportStoredDocument.
+ */
+export function loadBaseSnapshot(
+  raw: unknown,
+  id: DocumentId,
+  lastSeq: number,
+  schemas: RegistryReader<FeatureSchema>,
+): Result<{ doc: DocumentWriter; atSeq: number }, LoadDocumentError> {
+  const base = loadSnapshot(raw, id, lastSeq, schemas, 'base');
+  if (!base.ok) return base;
+  if (base.value.atSeq !== 0) {
+    return err(snapshotError('base', [{ path: 'atSeq', message: 'Must be 0' }]));
+  }
+  return base;
+}
+
 /** The snapshot envelope and fromData, plus the check that it belongs to the loaded document. */
-function loadSnapshot(
+export function loadSnapshot(
   raw: unknown,
   id: DocumentId,
   lastSeq: number,
@@ -154,7 +172,7 @@ export function parseSnapshot(
 }
 
 /** Format version 1 is the only known one; a higher one asks for an app update. */
-export function formatVersionIssue(formatVersion: unknown): DocumentLoadIssue | undefined {
+function formatVersionIssue(formatVersion: unknown): DocumentLoadIssue | undefined {
   if (typeof formatVersion === 'number' && Number.isInteger(formatVersion) && formatVersion > 1) {
     return {
       path: 'formatVersion',
@@ -165,11 +183,11 @@ export function formatVersionIssue(formatVersion: unknown): DocumentLoadIssue | 
 }
 
 /** One entry at a time, so a failing handler names the entry. Broken log = broken data. */
-function replayEach(
+export function replayEach(
   doc: DocumentWriter,
   handlers: OpHandlerRegistry,
   entries: readonly LogEntry[],
-): Result<void, LoadDocumentError> {
+): Result<void, EntryError> {
   for (const entry of entries) {
     try {
       replayLog(doc, handlers, [entry]);
@@ -196,7 +214,7 @@ function isRecord(v: unknown): v is Readonly<Record<string, unknown>> {
  * Structural equality of plain JSON data. Not JSON.stringify: key order differs between
  * a feature built by fromData and one inserted by feature.add, the data are still equal.
  */
-function deepEqual(a: unknown, b: unknown): boolean {
+export function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (Array.isArray(a) || Array.isArray(b)) {
     return (

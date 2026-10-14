@@ -61,6 +61,14 @@ describe('OcctKernelClient', () => {
     expect(mesh.faceRanges.length / 3).toBe(6);
   });
 
+  it('a STEP file arrives whole over the channel (M15)', async () => {
+    const { kernel } = connect(Promise.resolve(createFakeKernel()));
+    const { shape } = await kernel.makeBox(BOX);
+    const bytes = await kernel.exportStep([shape]);
+    expect(bytes).toBeInstanceOf(Uint8Array);
+    expect(new TextDecoder().decode(bytes)).toContain('#1=FAKE_SOLID((0,0,0),(1,2,3));');
+  });
+
   it('a kernel error arrives with a code kernelErrorCode reads', async () => {
     const { kernel } = connect(Promise.resolve(new OcctKernelImpl(oc)));
     const e = await kernel.makeBox({ ...BOX, size: [-1, 1, 1] }).then(
@@ -137,6 +145,7 @@ describe('endOnFatal', () => {
       topology: (s) => fake.topology(s),
       fillet: (s, e, r) => fake.fillet(s, e, r),
       chamfer: (s, e, d) => fake.chamfer(s, e, d),
+      exportStep: (shapes) => fake.exportStep(shapes),
       release: (h) => fake.release(h),
       liveHandleCount: () =>
         new Promise((resolve) =>

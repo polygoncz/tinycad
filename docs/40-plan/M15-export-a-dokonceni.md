@@ -45,11 +45,11 @@ updated: 2026-10-14
 
 ## Úkoly
 
-- [ ] Ú1 `kernel`, `kernel-occt`: `ExchangeOps.exportStep`, STEP přes `oc.FS`, zpětné načtení v testu
-- [ ] Ú2 `persistence`: soubor `.tinycad.json` verze 2 s historií, `exportStoredDocument`, import historie
+- [x] Ú1 `kernel`, `kernel-occt`: `ExchangeOps.exportStep`, STEP přes `oc.FS`, zpětné načtení v testu
+- [x] Ú2 `persistence`: soubor `.tinycad.json` verze 2 s historií, `exportStoredDocument`, import historie
 - [ ] Ú3 `interaction`: `HistoryModel` (panel historie) a `createFileActions` (akce exportu, port `FileExporter`)
-- [ ] Ú4 `document`, `ops`: `BodyMeta.color`, operace `body.setColor`
-- [ ] Ú5 `render`: `setBodyColor`
+- [x] Ú4 `document`, `ops`: `BodyMeta.color`, operace `body.setColor`
+- [x] Ú5 `render`: `setBodyColor`
 - [ ] Ú6 `tests`: měření regenerace a tessellace na větším modelu
 - [ ] Ú7 `interaction`: barva tělesa v `BrowserModel`
 - [ ] Ú8 `app`: exportér (STEP, dokument), port `download`, `importDocumentFile`, historie, barvy do viewportu

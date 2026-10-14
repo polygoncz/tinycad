@@ -21,6 +21,7 @@ export type {
   BooleanOp,
   BooleanOps,
   DressupOps,
+  ExchangeOps,
   GeometryKernel,
   LifecycleOps,
   MeshOps,
