@@ -62,7 +62,7 @@ updated: 2026-10-14
 - [x] Ú11 `interaction`, `app`: Prohlížeč (Počátek, Skici), port regenerace se skicami, úprava skici z Timeline
 - [x] Ú12 `interaction`: nástroje skicáře
 - [ ] Ú13 `app`, `ui`: skládání skicáře, lišta podle režimu, panel skici, Prohlížeč, překlady, registrace pluginu
-- [ ] Ú14 `tests`: integrační scénář se skutečným řešičem
+- [x] Ú14 `tests`: integrační scénář se skutečným řešičem
 - [ ] Ú15 `e2e`: akceptační scénář s OCCT a planegcs v prohlížeči
 - [ ] Ú16 hlavní sezení: kontrola, vault, `architecture-reviewer`, retrospektiva
 
