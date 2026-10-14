@@ -411,7 +411,7 @@ export interface TreeRow {
 export interface FeatureTreeModel {
   readonly rows: Observable<readonly TreeRow[]>;
   readonly rollbackIndex: Observable<number>;
-  edit(id: FeatureId): void;                                   // → FeatureEditor.edit
+  edit(id: FeatureId): void;                                   // → FeatureEditor.edit (skica → sketchEdit); při locked nic
   rename(id: FeatureId, name: string): void;                   // → dispatch feature.rename
   moveRollbackBar(index: number): void;                        // → dispatch studio.setRollback
   readonly renaming: Observable<FeatureId | null>;             // featura v režimu přejmenování (inline pole v Timeline)
@@ -428,9 +428,12 @@ export interface FeatureTreeModel {
 export function createFeatureTreeModel(deps: {
   doc: DocumentReader; ops: OperationDispatcher; schemas: RegistryReader<FeatureSchema>;
   regen: RegenStatusPort; editor: Pick<FeatureEditor, 'current' | 'edit'>; selection: SelectionCommands;
+  locked: Observable<boolean>;            // týž objekt jako session.locked z createEditLock (Ú16a)
   sketchEdit?: (id: FeatureId) => void;   // M12: edit featury typu SKETCH_FEATURE_TYPE jde sem místo FeatureEditor.edit
 }): FeatureTreeModel;
 ```
+
+- `edit` při `locked` (otevřený dialog nebo skicář, dokument jen pro čtení) nic neudělá. Zábrana je v presenteru, ne v komponentě (oprava revize M12, Ú16a, [[0010-prezentacni-model|ADR 0010]]).
 
 - `typeLabel` a `message` jsou od [[0014-preklady-vue-i18n-a-klice|ADR 0014]] klíče překladu (případně s parametry), překládá je `ui`. Zprávy z jádra (`KernelError.message`) zůstávají technický text a UI je ukáže pod přeloženým nadpisem chyby.
 - Řádky v pořadí featur dokumentu. Stav: `suppressed` (z dokumentu) > `rolledBack` (index `>= rollbackIndex`) > `health` z portu (`ok`/`warning`/`error`) > `pending` (featura v `health` chybí, např. ještě neproběhla regenerace).
@@ -476,7 +479,7 @@ export interface BrowserModel {
   selectPlane(plane: PlaneId, opts?: { additive?: boolean }): void;  // → selection.set / toggle položky plane
   setPlaneVisible(plane: PlaneId, visible: boolean): void;
   selectSketch(feature: FeatureId, opts?: { additive?: boolean }): void;   // → výběr featury
-  editSketch(feature: FeatureId): void;                            // → deps.sketchEdit
+  editSketch(feature: FeatureId): void;                            // → deps.sketchEdit; bez canEdit nebo v transakci nic (Ú16a)
   // M13
   readonly axes: Observable<readonly BrowserAxisRow[]>;            // ORIGIN_AXES v pořadí
   readonly visibleAxes: Observable<ReadonlySet<AxisId>>;           // stav pohledu, výchozí prázdné; app → axisDrawing
@@ -622,8 +625,7 @@ export interface SketchEditor {
 export function createSketchEditor(deps: {
   features: FeatureEditor;
   solver: ConstraintSolver;
-  viewport: ViewportPort;                                 // kresba 'sketch-edit'
-  ids: IdGenerator;
+  viewport: Pick<ViewportPort, 'sketches'>;               // jen kresba 'sketch-edit' (Ú16a, ADR 0011); ids skicář nepotřebuje
   resolvePlane: (ref: PlaneRef | TopoRef) => Plane | undefined;   // app: planeOfRef nad posledním stavem regenerace (M14), viz spec 07
 }): SketchEditor;
 
@@ -657,6 +659,8 @@ export interface SketchState {
   readonly selection: readonly SketchItemId[];             // v pořadí výběru, jen existující položky
   readonly hover: SketchItemId | null;
   readonly message: { readonly key: SketchMessageKey } | null;
+  readonly statusKey: string;                              // klíč stavového řádku panelu, viz níže (Ú16a)
+  readonly statusParams: Readonly<Record<string, number>>; // parametry statusKey
   readonly constraintRows: readonly SketchConstraintRow[]; // pro panel
   readonly editingDimension: SketchConstraintId | null;    // právě vytvořená kóta (ui dá jejímu poli fokus)
 }
@@ -683,6 +687,8 @@ export const ORIGIN_POINT_ID = '__origin';                 // bod počátku v kr
 - `remove` a `toggleConstruction` z výběru odeberou zmizelé položky; `toggleConstruction` zapíše hned (konstrukce řešení nemění).
 
 **Tažení:** `drag(point, to)` je nejvýš jeden rozpracovaný `solve` s `drag` a jeden čekající cíl (další `drag` čekající cíl přepíše). Výsledek `'ok'` se zapíše jako výše; `'conflict'`/`'failed'` se tiše zahodí. Tažení se řadí do stejné fronty jako ostatní příkazy. `endDrag` se splní, až je fronta tažení prázdná.
+
+**Stavový řádek** (Ú16a; dřív `sketchStatusText` v `ui`): `statusKey` je `'sketch.status.solving'` (status `'solving'`), `'sketch.conflict'`, `'sketch.solverFailed'` (status `'failed'`), u statusu `'ok'` `'sketch.status.defined'` (`fullyDefined`), jinak `'sketch.status.dof'`; `ui` ho jen přeloží. `statusParams` je `{ n: dof }` jen u `'sketch.status.dof'` (`dof` `null` → 0), jinak `{}`; zůstává týž objekt, dokud se klíč a DoF nezmění, aby se snapshot `state` zbytečně neměnil. Session vzniká interní `openSketchSession(deps)` (`sketch-session.ts`, mimo `index.ts`), která dostává také jen `viewport: Pick<ViewportPort, 'sketches'>`.
 
 **Kresba:** při každé změně `state` session pošle `viewport.sketches.set(EDIT_SKETCH_DRAWING_ID, toSketchDrawing(plane, data, styleOf, { origin: true }))`; po zavření `remove`. Styl křivky: vybraná → `selected`, jinak pod kurzorem → `hover`, jinak konstrukční → `construction`, jinak `fullyDefined ? 'defined' : 'normal'`; body stejně bez konstrukce.
 

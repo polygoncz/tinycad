@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 12
 aliases:
   - M12
@@ -31,7 +31,7 @@ specs:
 depends_on:
   - "[[M11-dalsi-entity]]"
 started: 2026-10-14
-finished: 
+finished: 2026-10-14
 tags:
   - milnik
 created: 2026-10-12
@@ -64,7 +64,7 @@ updated: 2026-10-14
 - [x] Ú13 `app`, `ui`: skládání skicáře, lišta podle režimu, panel skici, Prohlížeč, překlady, registrace pluginu
 - [x] Ú14 `tests`: integrační scénář se skutečným řešičem
 - [x] Ú15 `e2e`: akceptační scénář s OCCT a planegcs v prohlížeči
-- [ ] Ú16 hlavní sezení: kontrola, vault, `architecture-reviewer`, retrospektiva
+- [x] Ú16 hlavní sezení: kontrola, vault, `architecture-reviewer`, retrospektiva
 
 ## Akceptační kritéria
 
@@ -78,11 +78,11 @@ updated: 2026-10-14
 
 Nálezy 1, 6 a 9 z [[Revize architektury 2026-10-13]]. Zapracováno do Implementačního plánu (2026-10-14), u každého bodu je, kde se řeší a co se změnilo.
 
-- [ ] **Druhy artefaktů** ([[07-regenerace]]): `Artifact = Body | SketchArtifact | PlaneArtifact`; počáteční roviny jako artefakty vlastníka `origin` seedované do `EMPTY_STATE`; `EntityRef` o `kind: 'plane'`, `SketchParams.plane` je obyčejná reference; `BuildContext.resolvePlanes`. → Ú2, Ú7. **Upraveno:** `SketchArtifact` nese místo `curves: ShapeHandle` vyřešené entity pro kresbu (R34); `AxisArtifact` a osy počátku až s Revolve v M13 (R37); `resolveSketches` přijde s Extrude v M13 (první spotřebitel).
-- [ ] **Port a Prohlížeč** ([[10-interakce]]): Prohlížeč seskupí *Počátek*, *Skici*, *Tělesa*. → Ú11, Ú13. **Upraveno (R38 ⚠):** `RegenSnapshot` dostane `sketches` vedle `bodies` místo přejmenování na `artifacts`; viditelnost rovin je stav pohledu, skici oko nemají (R48 ⚠).
-- [ ] **Kanál do renderu** ([[09-vykreslovani]]): skici a roviny se kreslí. → Ú5, Ú8, Ú13. **Upraveno (R34):** kanál je `ViewportPort.sketches` s platformově nezávislou kresbou z dat (`SketchDrawing`), ne `sync(artifacts)` přes jádro; tělesa zůstávají v `BodyLayer` beze změny; roviny jako obrys čtverce bez výplně.
-- [ ] **Profil jako handle v jádře** (nález 9, [[06-geometricke-jadro]]): builder skici staví plochy oblastí v jádře, jména oblastí v TS. → Ú3, Ú4, Ú10. **Upraveno (R35):** jedna operace `SketchOps.makeFace` na oblast; `makeSketchCurves` a `tessellateCurves` nevznikají (kresba z dat).
-- [ ] **Režimy** (nález 6, [[10-interakce]]): `Mode`, `ToolDescriptor.modes`, akce podle režimu, Toolbar podle režimu, kamera kolmo na rovinu, `PickKind 'sketchEntity'`, picking v `render`. → Ú5, Ú8, Ú9, Ú13. **Upraveno (R45):** `ModeModel` není samostatný model – režim je `SketchEditor.mode` (odvozený od otevřené session); `Action.modes` a pravidlo „stejná zkratka jen v disjunktních režimech“.
+- [x] **Druhy artefaktů** ([[07-regenerace]]): `Artifact = Body | SketchArtifact | PlaneArtifact`; počáteční roviny jako artefakty vlastníka `origin` seedované do `EMPTY_STATE`; `EntityRef` o `kind: 'plane'`, `SketchParams.plane` je obyčejná reference; `BuildContext.resolvePlanes`. → Ú2, Ú7. **Upraveno:** `SketchArtifact` nese místo `curves: ShapeHandle` vyřešené entity pro kresbu (R34); `AxisArtifact` a osy počátku až s Revolve v M13 (R37); `resolveSketches` přijde s Extrude v M13 (první spotřebitel).
+- [x] **Port a Prohlížeč** ([[10-interakce]]): Prohlížeč seskupí *Počátek*, *Skici*, *Tělesa*. → Ú11, Ú13. **Upraveno (R38 ⚠):** `RegenSnapshot` dostane `sketches` vedle `bodies` místo přejmenování na `artifacts`; viditelnost rovin je stav pohledu, skici oko nemají (R48 ⚠).
+- [x] **Kanál do renderu** ([[09-vykreslovani]]): skici a roviny se kreslí. → Ú5, Ú8, Ú13. **Upraveno (R34):** kanál je `ViewportPort.sketches` s platformově nezávislou kresbou z dat (`SketchDrawing`), ne `sync(artifacts)` přes jádro; tělesa zůstávají v `BodyLayer` beze změny; roviny jako obrys čtverce bez výplně.
+- [x] **Profil jako handle v jádře** (nález 9, [[06-geometricke-jadro]]): builder skici staví plochy oblastí v jádře, jména oblastí v TS. → Ú3, Ú4, Ú10. **Upraveno (R35):** jedna operace `SketchOps.makeFace` na oblast; `makeSketchCurves` a `tessellateCurves` nevznikají (kresba z dat).
+- [x] **Režimy** (nález 6, [[10-interakce]]): `Mode`, `ToolDescriptor.modes`, akce podle režimu, Toolbar podle režimu, kamera kolmo na rovinu, `PickKind 'sketchEntity'`, picking v `render`. → Ú5, Ú8, Ú9, Ú13. **Upraveno (R45):** `ModeModel` není samostatný model – režim je `SketchEditor.mode` (odvozený od otevřené session); `Action.modes` a pravidlo „stejná zkratka jen v disjunktních režimech“.
 - Menší nález z revize „`FeaturePlugin` nemá `ops`…, M12 změní tabulku závislostí“: **odpadá** – skicář operace pluginu nepotřebuje ([[Q074 Operace skicáře v logu|Q074]], R36 ⚠).
 
 ## Implementační plán
@@ -297,6 +297,8 @@ Proč nástroje (Ú12) zvlášť od `SketchEditor` (Ú9): Ú9 je velký a nástr
 - Zkontrolovat, že `any` je jen v `src/solver-planegcs/planegcs-module.ts` (okomentované), a že `Curve2` a `ProfileCurve` se shodují bez převodu.
 - `architecture-reviewer` (hlavně: `interaction` neimportuje `features/*`, `sketch` jen `core`, `solver-planegcs` jen `app`), oprava nálezů, retrospektiva, poznatky (kandidáti: planární graf a tečné hrany; souběh asynchronního tažení; kresba z dat vs. přes jádro), `/milnik konec M12`, commit.
 
+- [x] Ú16a Oprava nálezů revize (zábrany editace v presenteru, úzké závislosti skicáře, lišta z akcí, statusKey)
+
 ## Co se naučíš
 
 - Jak se ze soustavy vazeb stane numerický problém (stupně volnosti, redundance, konflikty) a proč se souřadnice ukládají až vyřešené (determinismus logu).
@@ -310,4 +312,18 @@ Proč nástroje (Ú12) zvlášť od `SketchEditor` (Ú9): Ú9 je velký a nástr
 
 ## Retrospektiva
 
-_(vyplnit po dokončení)_
+_Návrh (noční rychloakce), Pavel doplní._
+
+**Co bylo jinak, než se čekalo**
+- Spike planegcs před plánem odhalil, že balíček nemá použitelné typy (`.d.ts`) a že WASM modul má pevnou paměť. Proto adaptér s izolovaným `any` v `planegcs-module.ts` a řešič ve vlastním workeru, aby OOM nepoškodil hlavní vlákno ([[0016-planegcs-resic-vazeb|ADR 0016]]).
+- R36 (žádné operace `sketch.*`, editace skici je `feature.setParams` přes `FeatureEditSession.setParams`) log zjednodušilo: celé skicování je jeden záznam a undo/redo nepotřebovalo nic nového ([[Q074 Operace skicáře v logu|Q074]]).
+- Chybu `ToolManager` s aktivním nástrojem (přepnutí režimu při rozpracovaném nástroji) odhalily až nástroje skicáře – nástroje modelu ji neměly jak vyvolat.
+- Revize našla logiku ve `.vue` (zábrany editace v Timeline a Prohlížeči, text stavu skici v `ui`), široké závislosti (skicář dostával celý `ViewportPort` a `ids`) a opsaný seznam vazeb v liště. Stejný typ nálezů jako po M11, takže kontrola kontraktů proti [[0010-prezentacni-model|ADR 0010]] a [[0011-programovani-proti-rozhranim|ADR 0011]] patří do kontrolního seznamu plánovače ([[Kontrolní seznam plánu proti ADR]]). Opraveno v Ú16a.
+- E2E musel hledat tlačítka v rámci oblasti (lišta, panel), protože přístupná jména kolidovala (např. „Hotovo“, „Zrušit“, názvy vazeb v liště i v panelu).
+
+**Co se osvědčilo**
+- Spike před plánem: rizika knihovny (typy, paměť, výkon) byla známá dřív, než vznikly kontrakty.
+- Paralelní vlny 0 a A–E: 16 úkolů, souběžné úkoly bez konfliktů ([[Paralelní implementace ve vlnách]]).
+- Integrační test se skutečným řešičem v Node: chování planegcs (DoF, redundance, konflikty) ověřené deterministicky bez prohlížeče.
+
+**Zúžení** (⚠ v [[Rozhodnutí noční rychloakce#M12 – Skicář]]): R39–R50 – snap bez vazby na křivku, oblasti bez dělení v průsečících, omezená sada vazeb a kót, kóty jen v panelu, bez undo uvnitř skicáře, skici přes tělesa, tažení jen bodu, rovina jen z Prohlížeče.
