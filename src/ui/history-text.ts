@@ -29,6 +29,15 @@ export function historyRowClass(row: HistoryRow): 'undone' | 'abandoned' | null 
   return row.status === 'undone' || row.status === 'abandoned' ? row.status : null;
 }
 
+/**
+ * The state of an undone or abandoned row in words, for screen readers (the class shows it only
+ * by grey, italic or struck-through text); null for the other rows.
+ */
+export function historyStatusText(row: HistoryRow, t: HistoryTranslate): string | null {
+  const status = historyRowClass(row);
+  return status === null ? null : t(`history.status.${status}`);
+}
+
 /** HH:MM:SS (24 hours) in the language `locale`; one formatter for all rows of the panel. */
 export function historyTimeFormat(locale: string): (time: number) => string {
   const format = new Intl.DateTimeFormat(locale, {

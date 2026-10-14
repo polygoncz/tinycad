@@ -2,14 +2,19 @@
 // The edit history panel (spec 11, "Komponenty", M15, R127, R128): a floating panel on the right
 // with the rows of session.history, newest first – the time, the text of the entry ("Undo: …"
 // and "Redo: …" rows of their own), an undone entry grey and italic, an abandoned one struck
-// through; below a note on the older entries the model leaves out. Read only: going back to an
-// entry would be a branch of the log (Q006). AppShell decides when it is drawn. Only bindings:
-// the texts come from history-text.ts.
+// through, both also read out by a visually hidden text; below a note on the older entries the
+// model leaves out. Read only: going back to an entry would be a branch of the log (Q006).
+// AppShell decides when it is drawn. Only bindings: the texts come from history-text.ts.
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
-import { historyRowClass, historyText, historyTimeFormat } from '../history-text';
+import {
+  historyRowClass,
+  historyStatusText,
+  historyText,
+  historyTimeFormat,
+} from '../history-text';
 
 const session = useSession();
 const i18n = useI18n();
@@ -18,7 +23,6 @@ const te = (key: string): boolean => i18n.te(key);
 
 const history = useObservable(session.history.state);
 const timeText = computed(() => historyTimeFormat(locale.value));
-const older = computed(() => history.value.total - history.value.rows.length);
 </script>
 
 <template>
@@ -34,9 +38,14 @@ const older = computed(() => history.value.total - history.value.rows.length);
       >
         <span class="time">{{ timeText(row.time) }}</span>
         <span class="text">{{ historyText(row, t, te) }}</span>
+        <span v-if="historyStatusText(row, t) !== null" class="status">
+          {{ historyStatusText(row, t) }}
+        </span>
       </li>
     </ol>
-    <div v-if="older > 0" class="older">{{ t('history.older', { n: older }) }}</div>
+    <div v-if="history.older > 0" class="older">
+      {{ t('history.older', { n: history.older }) }}
+    </div>
   </aside>
 </template>
 
@@ -107,6 +116,15 @@ const older = computed(() => history.value.total - history.value.rows.length);
 .row.abandoned .text {
   color: var(--text-tertiary);
   text-decoration: line-through;
+}
+/* Visually hidden, read by screen readers. */
+.status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .older {
   padding: 6px 12px 0;

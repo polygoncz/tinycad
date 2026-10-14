@@ -11,6 +11,7 @@ import { createNewDocument, deleteDocument, importDocumentFile, listDocuments } 
 import type { DocumentInfo, OpenAppSessionOptions } from '@/app';
 import type { DocumentId } from '@/document';
 import { importDocumentText } from '../document-import';
+import type { ImportOutcome } from '../document-import';
 import { docHash } from '../route';
 import ThemeLocaleToggles from './ThemeLocaleToggles.vue';
 
@@ -80,21 +81,18 @@ async function importChosen(e: Event): Promise<void> {
   if (file === undefined || busy.value) return;
   busy.value = true;
   clearError();
-  try {
-    const outcome = await importDocumentText(await file.text(), (raw) =>
-      importDocumentFile(raw, { plugins: props.plugins }),
-    );
-    if (outcome.ok) {
-      open(outcome.id);
-    } else {
-      error.value = t('documents.importError');
-      errorDetail.value = outcome.detail;
-    }
-  } catch (e) {
+  // importDocumentText never rejects; only reading the file can.
+  const outcome = await file.text().then(
+    (text) =>
+      importDocumentText(text, (raw) => importDocumentFile(raw, { plugins: props.plugins })),
+    (e: unknown): ImportOutcome => ({ ok: false, detail: errorText(e) }),
+  );
+  busy.value = false;
+  if (outcome.ok) {
+    open(outcome.id);
+  } else {
     error.value = t('documents.importError');
-    errorDetail.value = errorText(e);
-  } finally {
-    busy.value = false;
+    errorDetail.value = outcome.detail;
   }
 }
 

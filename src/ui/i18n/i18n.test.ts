@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BUILT_IN_PLUGINS } from '@/app';
+import { BUILT_IN_OPERATION_TYPES, BUILT_IN_PLUGINS } from '@/app';
 import type { ParamIssue } from '@/document';
 import { cs } from './cs';
 import { en } from './en';
@@ -131,27 +131,12 @@ const FILE_KEYS = [
   'history.undo',
   'history.redo',
   'history.older',
+  'history.status.undone',
+  'history.status.abandoned',
   'documents.import',
   'documents.importError',
   'browser.color',
   'browser.defaultColor',
-];
-
-// The types of the built-in operations (ops, Operation['type']): the dispatcher writes the type
-// as the label of an entry without one, so the history panel translates it (spec 11, M15). ui
-// may not import ops, so the list is copied here; a new type fails this test until it has a text.
-const OPERATION_TYPES = [
-  'feature.add',
-  'feature.remove',
-  'feature.setParams',
-  'feature.rename',
-  'feature.suppress',
-  'feature.move',
-  'studio.setRollback',
-  'body.rename',
-  'body.setVisible',
-  'body.setColor',
-  'batch',
 ];
 
 const PLUGIN = {
@@ -193,7 +178,10 @@ describe('built-in dictionaries', () => {
     ...SWEEP_KEYS,
     ...DEBUG_KEYS,
     ...FILE_KEYS,
-    ...OPERATION_TYPES,
+    // The types of the built-in operations (OP_VERSION of ops, through app): the dispatcher
+    // writes the type as the label of an entry without one, so the history panel translates it
+    // (spec 11, M15); a new type fails this test until it has a text.
+    ...BUILT_IN_OPERATION_TYPES,
   ])('%s has a text in cs and en', (key) => {
     expect(cs[key]).toBeTruthy();
     expect(en[key]).toBeTruthy();

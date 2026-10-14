@@ -39,6 +39,7 @@ describe('BUILT_IN_PLUGINS', () => {
       readOnly: false,
       solver: createFakeSolver(),
       download: () => undefined,
+      theme: 'light',
     });
     expect(session.toolList.map((t) => t.id)).toEqual(
       expect.arrayContaining([

@@ -3,9 +3,9 @@
 // dot for the save state (green saved, orange pending, red error), the read-only notice (Q038),
 // the kernel notices (restart and crash, Q055; a kernel that did not start, with its error in the
 // tooltip) and the switches of language and theme; in development builds also the switch of the
-// debug panel of topological names (M14, R111). M15: the File menu (the actions of the group
-// 'file') with the state of an export, and the switch of the history panel (its open state is
-// layout of AppShell). Only bindings.
+// debug panel of topological names (M14, R111). M15: the File menu (the actions of
+// session.fileActionIds) with the state of an export, and the switch of the history panel (its
+// open state is layout of AppShell). Only bindings.
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useObservable } from '../composables/use-observable';
@@ -21,7 +21,8 @@ const session = useSession();
 const { t } = useI18n();
 
 const actionStates = useObservable(session.actions.actions);
-const fileItems = computed(() => fileMenuItems(actionStates.value));
+const fileActionIds = Object.values(session.fileActionIds);
+const fileItems = computed(() => fileMenuItems(actionStates.value, fileActionIds));
 const fileStatus = useObservable(session.files.status);
 const fileMenu = ref<{ readonly x: number; readonly y: number } | null>(null);
 

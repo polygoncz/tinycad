@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
 import {
   bodyId,
@@ -83,6 +83,7 @@ async function open(
     readOnly: false,
     solver: createFakeSolver(),
     download: downloads.download,
+    theme: 'light',
     ...overrides,
   });
   await settle();
@@ -149,6 +150,12 @@ const key = (k: string): ViewKeyEvent => ({
 });
 
 describe('createAppSession – opening', () => {
+  it('hands its models without dispose: the session disposes them (ADR 0011)', () => {
+    expectTypeOf<AppSession['topoInspector']>().not.toHaveProperty('dispose');
+    expectTypeOf<AppSession['history']>().not.toHaveProperty('dispose');
+    expectTypeOf<AppSession['files']>().not.toHaveProperty('dispose');
+  });
+
   it('creates a missing document in the store, empty and named by translate', async () => {
     const { session, store } = await open();
     expect(session.doc.meta.id).toBe(DOC);
@@ -1088,7 +1095,7 @@ describe('createAppSession – export, history and colours (M15)', () => {
 
   it('history shows a created feature and its undo, newest first', async () => {
     const { session } = await open();
-    expect(session.history.state.get()).toEqual({ rows: [], total: 0 });
+    expect(session.history.state.get()).toEqual({ rows: [], total: 0, older: 0 });
     addBox(session);
     session.actions.run(session.actionIds.undo);
     const { rows, total } = session.history.state.get();
@@ -1133,6 +1140,11 @@ describe('createAppSession – export, history and colours (M15)', () => {
     expect(session.defaultBodyColor.get()).toBe('#3b6aa6');
     session.setTheme('light');
     expect(session.defaultBodyColor.get()).toBe('#b9c3d1');
+  });
+
+  it('defaultBodyColor starts with the face colour of the theme at the start', async () => {
+    const { session } = await open({ theme: 'dark' });
+    expect(session.defaultBodyColor.get()).toBe('#3b6aa6');
   });
 });
 

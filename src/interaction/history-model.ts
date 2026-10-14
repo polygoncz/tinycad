@@ -26,6 +26,8 @@ export interface HistoryState {
   readonly rows: readonly HistoryRow[];
   /** The number of all log entries. */
   readonly total: number;
+  /** Entries left out of `rows` (older than the newest HISTORY_LIMIT): total - rows.length. */
+  readonly older: number;
 }
 
 /** At most this many rows (a DOM with thousands of rows would be slow). */
@@ -82,7 +84,11 @@ export function createHistoryModel(deps: { log: OperationLogReader }): HistoryMo
       .reverse()
       .map((entry) => rowOf(entry, statusOf(entry)));
     previous = new Map(rows.map((row) => [row.seq, row]));
-    return Object.freeze({ rows: Object.freeze(rows), total: entries.length });
+    return Object.freeze({
+      rows: Object.freeze(rows),
+      total: entries.length,
+      older: entries.length - rows.length,
+    });
   }
 
   function sameState(a: HistoryState, b: HistoryState): boolean {

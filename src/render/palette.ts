@@ -60,6 +60,8 @@ export const DARK_PALETTE: ScenePalette = freezePalette({
 /**
  * '#rrggbb' (lower case, the canonical form of a body colour in the document) → 0xRRGGBB.
  * Anything else is a bug of the caller and throws: the document validates colours already.
+ * The pattern repeats isBodyColor from document on purpose: render may import only types from
+ * document (spec 01), so this is a guard, not a second source of the rule (R136).
  */
 export function parseHexColor(text: string): number {
   if (!/^#[0-9a-f]{6}$/.test(text)) throw new Error(`Invalid colour ${JSON.stringify(text)}`);

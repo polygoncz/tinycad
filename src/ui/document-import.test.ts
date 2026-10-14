@@ -50,6 +50,14 @@ describe('importDocumentText', () => {
     });
   });
 
+  it('a rejected import (storage error) is an error with its message', async () => {
+    const importFile: ImportFile = () => Promise.reject(new Error('Quota exceeded'));
+    expect(await importDocumentText('{}', importFile)).toEqual({
+      ok: false,
+      detail: 'Quota exceeded',
+    });
+  });
+
   it('a refusal without issues has no detail', async () => {
     const importFile: ImportFile = () => Promise.resolve(err({ issues: [] }));
     expect(await importDocumentText('{}', importFile)).toEqual({ ok: false, detail: null });

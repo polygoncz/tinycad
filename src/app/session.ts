@@ -139,6 +139,8 @@ export interface AppSessionDeps {
   readonly solver: ConstraintSolver;
   /** M15: downloads an exported file; tests capture it, the browser hands ui's implementation. */
   readonly download: (file: DownloadFile) => void;
+  /** M15: the theme at the start: the first value of defaultBodyColor; later setTheme. */
+  readonly theme: 'light' | 'dark';
 }
 
 export interface AppSession extends Disposable {
@@ -185,10 +187,13 @@ export interface AppSession extends Disposable {
    * dispose: the inspector belongs to the session, which disposes it (ADR 0011).
    */
   readonly topoInspector: Omit<TopoInspector, 'dispose'>;
-  /** M15: the edit history panel. */
-  readonly history: HistoryModel;
-  /** M15: the state of an export; the actions themselves are in `actions`, group 'file'. */
-  readonly files: FileActions;
+  /** M15: the edit history panel. Without dispose: the session disposes it (ADR 0011). */
+  readonly history: Omit<HistoryModel, 'dispose'>;
+  /**
+   * M15: the state of an export; the actions themselves are in `actions`, group 'file'. Without
+   * dispose: the session disposes it (ADR 0011).
+   */
+  readonly files: Omit<FileActions, 'dispose'>;
   /** M15: the ids of the File actions; ui may not import values of interaction. */
   readonly fileActionIds: typeof FILE_ACTION_IDS;
   /** M15: '#rrggbb' face colour of the current palette (setTheme), for the colour field in ui. */
@@ -523,7 +528,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   // 7. Edit history and export (M15).
   const history = lifetime.add(createHistoryModel({ log }));
   const exporter = createFileExporter({
-    doc,
+    name: () => doc.meta.name,
     regenBusy: scheduler.busy,
     lastState: () => lastState,
     kernel: () => supervisor.kernel(),
@@ -544,7 +549,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       mode,
     }),
   );
-  const defaultBodyColor = new ObservableValue(hexColor(LIGHT_PALETTE.face));
+  const defaultBodyColor = new ObservableValue(hexColor(paletteOf(deps.theme).face));
 
   lifetime.add(
     doc.events.on('changed', () => {
@@ -612,7 +617,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       viewport.mount(el);
     },
     setTheme(theme) {
-      const palette = theme === 'dark' ? DARK_PALETTE : LIGHT_PALETTE;
+      const palette = paletteOf(theme);
       viewport.setPalette(palette);
       defaultBodyColor.set(hexColor(palette.face));
     },
@@ -652,6 +657,10 @@ async function openDocument(
   // The service saves only entries; the store needs the document with its base snapshot first.
   await store.createDocument(meta, createSnapshot(doc, 0));
   return { doc, log: createOperationLog() };
+}
+
+function paletteOf(theme: 'light' | 'dark'): ScenePalette {
+  return theme === 'dark' ? DARK_PALETTE : LIGHT_PALETTE;
 }
 
 /** 0xRRGGBB of a palette → '#rrggbb', the form of a body colour in the document. */

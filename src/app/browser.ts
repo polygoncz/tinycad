@@ -76,6 +76,7 @@ export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSe
       readOnly: !lock.held,
       solver,
       download: opts.download,
+      theme: opts.theme,
       // Replay the whole log on every open while developing (spec 05, "verify").
       verify: import.meta.env.DEV,
     });

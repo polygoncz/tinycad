@@ -11,6 +11,7 @@ export {
 } from './browser';
 export type { OpenAppSessionOptions } from './browser';
 export { BUILT_IN_PLUGINS } from './plugins';
+export { BUILT_IN_OPERATION_TYPES } from './operation-types';
 export type { AppSession, AppSessionDeps, AppViewport, RegenUiState } from './session';
 export type { KernelUiState } from './kernel-supervisor';
 export type { DownloadFile } from './file-exporter';

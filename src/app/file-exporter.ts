@@ -4,9 +4,9 @@
 // implements (app knows no DOM).
 
 import type { Observable } from '@/core';
-import type { BodyId, DocumentId, DocumentReader, FeatureSchemaRegistry } from '@/document';
+import type { BodyId, DocumentId, FeatureSchemaRegistry } from '@/document';
 import type { FileExporter } from '@/interaction';
-import type { GeometryKernel, ShapeHandle } from '@/kernel';
+import type { ExchangeOps, ShapeHandle } from '@/kernel';
 import type { OpHandlerRegistry } from '@/ops';
 import { exportStoredDocument } from '@/persistence';
 import type { DocumentStore } from '@/persistence';
@@ -23,13 +23,14 @@ export interface DownloadFile {
 }
 
 export function createFileExporter(deps: {
-  readonly doc: DocumentReader;
+  /** The current name of the document, for the file name. */
+  readonly name: () => string;
   /** RegenScheduler.busy: a regeneration is running or due. */
   readonly regenBusy: Observable<boolean>;
   /** The final state of the last finished regeneration (the one of the last RegenSnapshot). */
   readonly lastState: () => RegenState;
   /** KernelSupervisor.kernel(): the kernel the handles of lastState belong to. */
-  readonly kernel: () => GeometryKernel | null;
+  readonly kernel: () => ExchangeOps | null;
   /** Writes the queue of the persistence; read-only: nothing. */
   readonly flush: () => Promise<void>;
   readonly store: DocumentStore;
@@ -60,7 +61,7 @@ export function createFileExporter(deps: {
       const shapes = shapesOf(deps.lastState(), bodies);
       if (shapes.length === 0) throw new Error('None of the bodies to export exists');
       const data = await kernel.exportStep(shapes);
-      deps.download({ name: `${safeFileName(deps.doc.meta.name)}.step`, mime: 'model/step', data });
+      deps.download({ name: `${safeFileName(deps.name())}.step`, mime: 'model/step', data });
     },
 
     async exportDocument(): Promise<void> {
@@ -73,7 +74,7 @@ export function createFileExporter(deps: {
         throw new Error(`Cannot export document '${deps.docId}': ${describeLoadError(file.error)}`);
       }
       deps.download({
-        name: `${safeFileName(deps.doc.meta.name)}.tinycad.json`,
+        name: `${safeFileName(deps.name())}.tinycad.json`,
         mime: 'application/json',
         // Indented: diffs of exported files stay readable in git (spec 11).
         data: `${JSON.stringify(file.value, null, 2)}\n`,

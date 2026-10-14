@@ -184,6 +184,8 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'history.undo': 'Undo: {label}',
   'history.redo': 'Redo: {label}',
   'history.older': 'Older entries: {n}',
+  'history.status.undone': 'undone',
+  'history.status.abandoned': 'abandoned',
 
   // Body colour in the Browser (M15).
   'browser.color': 'Color of {name}',

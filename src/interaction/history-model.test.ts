@@ -32,7 +32,7 @@ const brief = (row: HistoryRow) => ({
 describe('createHistoryModel', () => {
   it('is empty for an empty log', () => {
     const { history } = setup();
-    expect(history.state.get()).toEqual({ rows: [], total: 0 });
+    expect(history.state.get()).toEqual({ rows: [], total: 0, older: 0 });
     expect(Object.isFrozen(history.state.get())).toBe(true);
     expect(Object.isFrozen(history.state.get().rows)).toBe(true);
   });
@@ -48,6 +48,7 @@ describe('createHistoryModel', () => {
       { seq: 1, kind: 'do', label: 'a', time: 1, target: null, status: 'active' },
     ]);
     expect(history.state.get().total).toBe(3);
+    expect(history.state.get().older).toBe(0);
     expect(rows().every((row) => Object.isFrozen(row))).toBe(true);
   });
 
@@ -90,12 +91,13 @@ describe('createHistoryModel', () => {
     ]);
   });
 
-  it('keeps at most HISTORY_LIMIT rows, total counts all entries', () => {
+  it('keeps at most HISTORY_LIMIT rows, total counts all entries, older the left out ones', () => {
     const { doOp, rows, history } = setup();
     for (let i = 1; i <= 250; i++) doOp(`op${String(i)}`);
     expect(HISTORY_LIMIT).toBe(200);
     expect(rows()).toHaveLength(200);
     expect(history.state.get().total).toBe(250);
+    expect(history.state.get().older).toBe(50);
     expect(rows()[0]?.seq).toBe(250);
     expect(rows()[199]?.seq).toBe(51);
   });

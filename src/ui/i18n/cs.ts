@@ -185,6 +185,8 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'history.undo': 'Zpět: {label}',
   'history.redo': 'Znovu: {label}',
   'history.older': 'Starší záznamy: {n}',
+  'history.status.undone': 'vráceno',
+  'history.status.abandoned': 'zahozeno',
 
   // Body colour in the Browser (M15).
   'browser.color': 'Barva {name}',

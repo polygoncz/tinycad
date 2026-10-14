@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { HistoryRow } from '@/interaction';
-import { historyRowClass, historyText, historyTimeFormat } from './history-text';
+import { historyRowClass, historyStatusText, historyText, historyTimeFormat } from './history-text';
 
 const MESSAGES: Readonly<Record<string, string>> = {
   'feature.add': 'Přidat featuru',
   'history.undo': 'Zpět: {label}',
   'history.redo': 'Znovu: {label}',
+  'history.status.undone': 'vráceno',
+  'history.status.abandoned': 'zahozeno',
 };
 
 function t(key: string, params?: Record<string, unknown>): string {
@@ -52,6 +54,18 @@ describe('historyRowClass', () => {
     expect(historyRowClass(row({ status: 'undone' }))).toBe('undone');
     expect(historyRowClass(row({ status: 'abandoned' }))).toBe('abandoned');
     expect(historyRowClass(row({ kind: 'undo', status: null }))).toBeNull();
+  });
+});
+
+describe('historyStatusText', () => {
+  it('reads the state of an undone or abandoned row for screen readers', () => {
+    expect(historyStatusText(row({ status: 'undone' }), t)).toBe('vráceno');
+    expect(historyStatusText(row({ status: 'abandoned' }), t)).toBe('zahozeno');
+  });
+
+  it('is null for an active row and for undo and redo rows', () => {
+    expect(historyStatusText(row({ status: 'active' }), t)).toBeNull();
+    expect(historyStatusText(row({ kind: 'undo', target: 1, status: null }), t)).toBeNull();
   });
 });
 

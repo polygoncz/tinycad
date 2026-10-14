@@ -54,12 +54,13 @@ async function setup(opts: { readonly name?: string; readonly stored?: boolean }
   const downloads: DownloadFile[] = [];
   const order: string[] = [];
   const meta = { id: DOC, name: opts.name ?? 'Držák', createdAt: 0 };
+  let name = meta.name;
   const doc = createDocument({ meta });
   const store = createMemoryDocumentStore({ now: () => 0 });
   if (opts.stored ?? true) await store.createDocument(meta, createSnapshot(doc, 0));
   const schemas = createFeatureSchemaRegistry();
   const exporter = createFileExporter({
-    doc,
+    name: () => name,
     regenBusy: busy.asObservable(),
     lastState: () => state,
     kernel: () => live,
@@ -90,6 +91,9 @@ async function setup(opts: { readonly name?: string; readonly stored?: boolean }
     setKernel: (next: GeometryKernel | null) => {
       live = next;
     },
+    rename: (next: string) => {
+      name = next;
+    },
   };
 }
 
@@ -108,6 +112,13 @@ describe('FileExporter – STEP', () => {
     expect(solids).toHaveLength(2);
     expect(solids[0]).toContain('7');
     expect(solids[1]).not.toContain('7');
+  });
+
+  it('reads the document name at the time of the export', async () => {
+    const { exporter, downloads, rename } = await setup();
+    rename('Nový');
+    await exporter.exportStep([A]);
+    expect(downloads[0]?.name).toBe('Nový.step');
   });
 
   it('makes the document name safe for a file name', async () => {

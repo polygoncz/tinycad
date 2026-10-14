@@ -9,6 +9,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
+import type { Vec3 } from '@/core';
 import {
   bodyId,
   createDocument,
@@ -144,17 +145,25 @@ function onlyBody(result: RegenResult): Body {
 }
 
 /**
- * The 4 vertical edges of the plate: the edges between two of its side faces, found from the
- * topology of the body and the names of its faces; the edge names are only stored, never taken
- * apart (ADR 0018).
+ * The 4 vertical edges of the plate: the edges between two planar faces with different normals
+ * perpendicular to Z, found from the topology of the body alone (the holes are cylinders, the top
+ * and bottom face have a normal along Z). The edge names are only stored, never taken apart or
+ * built (ADR 0018).
  */
-function verticalEdges(body: Body, plate: FeatureId): readonly TopoRef[] {
-  const sides = ['front', 'back', 'left', 'right'].map((s) => `${plate}/face:${s}`);
+function verticalEdges(body: Body): readonly TopoRef[] {
+  const { faces, edges } = body.names.topology;
+  /** The normal of a planar face perpendicular to Z, otherwise undefined. */
+  const sideNormal = (face: number): Vec3 | undefined => {
+    const normal = faces[face]?.plane?.normal;
+    return normal !== undefined && Math.abs(normal[2]) < 1e-9 ? normal : undefined;
+  };
   const refs: TopoRef[] = [];
-  for (const [index, edge] of body.names.topology.edges.entries()) {
-    const faces = edge.faces.map((f) => body.names.nameOfFace(f) ?? '');
-    if (faces.length !== 2 || new Set(faces).size !== 2 || !faces.every((f) => sides.includes(f)))
-      continue;
+  for (const [index, edge] of edges.entries()) {
+    const normals = edge.faces.map(sideNormal);
+    const [a, b] = normals;
+    if (normals.length !== 2 || a === undefined || b === undefined) continue;
+    // Two sides of the plate meet at a right angle; coplanar pieces of one side would be parallel.
+    if (Math.abs(a[0] * b[0] + a[1] * b[1]) > 1 - 1e-9) continue;
     const name = body.names.nameOfEdge(index);
     if (name === undefined) expect.fail(`Vertical edge ${String(index)} has no name`);
     if (!refs.some((r) => r.name === name)) refs.push({ kind: 'topo', body: body.id, name });
@@ -232,7 +241,7 @@ describe('performance of regeneration and tessellation (OCCT, plate with 36 hole
       tools: cylinders.map((c) => ({ kind: 'body', body: bodyId(c) })),
     });
     // The edge names exist only after a regeneration of the boolean.
-    const edges = verticalEdges(onlyBody(await s.regenerate()), plate);
+    const edges = verticalEdges(onlyBody(await s.regenerate()));
     expect(edges).toHaveLength(4);
     s.add('fillet', { edges, radius: 5 });
     const featureCount = s.doc.studio.features.length;
