@@ -50,7 +50,7 @@ updated: 2026-10-14
 - [x] Ú3 `interaction`: `HistoryModel` (panel historie) a `createFileActions` (akce exportu, port `FileExporter`)
 - [x] Ú4 `document`, `ops`: `BodyMeta.color`, operace `body.setColor`
 - [x] Ú5 `render`: `setBodyColor`
-- [ ] Ú6 `tests`: měření regenerace a tessellace na větším modelu
+- [x] Ú6 `tests`: měření regenerace a tessellace na větším modelu
 - [x] Ú7 `interaction`: barva tělesa v `BrowserModel`
 - [ ] Ú8 `app`: exportér (STEP, dokument), port `download`, `importDocumentFile`, historie, barvy do viewportu
 - [ ] Ú9 `ui`: menu Soubor, stažení, import v seznamu dokumentů, panel historie, barva v Prohlížeči, překlady
