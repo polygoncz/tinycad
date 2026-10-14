@@ -1,15 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
-import { bodyId, createFeatureSchemaRegistry, toData, validateAgainstSchema } from '@/document';
-import type { FeatureId, FeatureSchema, ParamSchema } from '@/document';
+import {
+  ORIGIN_PLANE_IDS,
+  bodyId,
+  createFeatureSchemaRegistry,
+  sketchId,
+  toData,
+  validateAgainstSchema,
+} from '@/document';
+import type { FeatureId, FeatureSchema, ParamSchema, PlaneId } from '@/document';
 import { aFeature } from '@/document/testing';
-import type { BodyRenameOp, BodySetVisibleOp, Operation } from '@/ops';
+import type { BodyRenameOp, BodySetVisibleOp, FeatureRenameOp, Operation } from '@/ops';
 import { OP_VERSION } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import { createBrowserModel } from './browser-model';
 import { createEditLock } from './edit-lock';
 import { createFeatureEditor } from './feature-editor';
-import type { RegenBody } from './regen-status-port';
+import type { RegenBody, RegenSketch } from './regen-status-port';
 import { createSelectionModel } from './selection';
 import { FakeRegenStatus } from './testing';
 
@@ -47,7 +54,12 @@ const TOPO: FeatureSchema = {
   validate: () => [],
 };
 
-function setup(opts: { readOnly?: boolean } = {}) {
+const SKETCHES: readonly RegenSketch[] = [
+  { sketch: sketchId(fid('s1')), feature: fid('s1') },
+  { sketch: sketchId(fid('s2')), feature: fid('s2') },
+];
+
+function setup(opts: { readOnly?: boolean; sketchEdit?: (feature: FeatureId) => void } = {}) {
   const schemas = createFeatureSchemaRegistry();
   schemas.register(BOOL);
   schemas.register(TOPO);
@@ -57,6 +69,9 @@ function setup(opts: { readOnly?: boolean } = {}) {
       aFeature({ id: 'f1', name: 'Box 1' }),
       aFeature({ id: 'f2', name: 'Cylinder 1' }),
       aFeature({ id: 'f3', name: 'Box 2' }),
+      // The browser reads only the name of a sketch, so the default test type is enough.
+      aFeature({ id: 's1', name: 'Sketch 1' }),
+      aFeature({ id: 's2', name: 'Sketch 2' }),
     ],
   });
   const regen = new FakeRegenStatus();
@@ -75,10 +90,14 @@ function setup(opts: { readOnly?: boolean } = {}) {
     selection,
     editor,
     locked,
+    ...(opts.sketchEdit === undefined ? {} : { sketchEdit: opts.sketchEdit }),
   });
   const order: string[] = [];
   browser.bodies.subscribe(() => order.push('bodies'));
   browser.hidden.subscribe(() => order.push('hidden'));
+  browser.visiblePlanes.subscribe(() => order.push('visiblePlanes'));
+  browser.planes.subscribe(() => order.push('planes'));
+  browser.sketches.subscribe(() => order.push('sketches'));
   const count = (what: string): number => order.filter((o) => o === what).length;
   return {
     ...ops,
@@ -89,6 +108,8 @@ function setup(opts: { readOnly?: boolean } = {}) {
     order,
     bodyEmits: () => count('bodies'),
     hiddenEmits: () => count('hidden'),
+    planeEmits: () => count('planes'),
+    sketchEmits: () => count('sketches'),
   };
 }
 
@@ -549,5 +570,222 @@ describe('BrowserModel and the document data', () => {
       [B1]: { hidden: true },
       [B2]: { name: 'Shaft' },
     });
+  });
+});
+
+describe('BrowserModel planes (M12)', () => {
+  const { xy, xz, yz } = ORIGIN_PLANE_IDS;
+
+  it('lists the three origin planes in order, hidden and not selected, frozen', () => {
+    const s = setup();
+    const rows = s.browser.planes.get();
+    expect(rows).toEqual([
+      { plane: xy, label: 'origin.plane.xy', visible: false, selected: false },
+      { plane: xz, label: 'origin.plane.xz', visible: false, selected: false },
+      { plane: yz, label: 'origin.plane.yz', visible: false, selected: false },
+    ]);
+    expect(Object.isFrozen(rows)).toBe(true);
+    expect(rows.every((r) => Object.isFrozen(r))).toBe(true);
+    expect(s.browser.visiblePlanes.get().size).toBe(0);
+  });
+
+  it('selectPlane replaces the selection; additive toggles it', () => {
+    const s = setup();
+    s.selection.set([{ kind: 'body', body: B1 }]);
+    s.browser.selectPlane(xz);
+    expect(s.selection.items.get()).toEqual([{ kind: 'plane', plane: xz }]);
+    s.browser.selectPlane(yz);
+    expect(s.selection.items.get()).toEqual([{ kind: 'plane', plane: yz }]);
+    s.browser.selectPlane(xy, { additive: true });
+    expect(s.selection.items.get()).toEqual([
+      { kind: 'plane', plane: yz },
+      { kind: 'plane', plane: xy },
+    ]);
+    s.browser.selectPlane(yz, { additive: true });
+    expect(s.selection.items.get()).toEqual([{ kind: 'plane', plane: xy }]);
+  });
+
+  it('marks the selected planes and keeps the other rows as the same objects', () => {
+    const s = setup();
+    const before = s.browser.planes.get();
+    s.browser.selectPlane(xz);
+    const rows = s.browser.planes.get();
+    expect(rows.map((r) => r.selected)).toEqual([false, true, false]);
+    expect(rows[0]).toBe(before[0]);
+    expect(rows[2]).toBe(before[2]);
+  });
+
+  it('setPlaneVisible changes only the view state, not the document or the log', () => {
+    const s = setup();
+    const studio = s.doc.studio;
+    s.browser.setPlaneVisible(xz, true);
+    expect([...s.browser.visiblePlanes.get()]).toEqual([xz]);
+    expect(s.browser.planes.get().map((r) => r.visible)).toEqual([false, true, false]);
+    expect(s.doc.studio).toBe(studio);
+    expect(loggedOps(s)).toEqual([]);
+
+    s.browser.setPlaneVisible(xz, false);
+    expect(s.browser.visiblePlanes.get().size).toBe(0);
+  });
+
+  it('a new visible set is published on each change; the same value emits nothing', () => {
+    const s = setup();
+    s.browser.setPlaneVisible(xy, true);
+    const first = s.browser.visiblePlanes.get();
+    const planes = s.browser.planes.get();
+    const emits = s.order.length;
+    s.browser.setPlaneVisible(xy, true);
+    expect(s.browser.visiblePlanes.get()).toBe(first);
+    expect(s.browser.planes.get()).toBe(planes);
+    expect(s.order.length).toBe(emits);
+
+    s.browser.setPlaneVisible(yz, true);
+    expect(s.browser.visiblePlanes.get()).not.toBe(first);
+    expect([...first]).toEqual([xy]);
+  });
+
+  it('a plane outside the origin planes does nothing', () => {
+    const s = setup();
+    const emits = s.order.length;
+    s.browser.setPlaneVisible('f1/plane:top' as PlaneId, true); // test ids are trusted
+    expect(s.browser.visiblePlanes.get().size).toBe(0);
+    expect(s.order.length).toBe(emits);
+  });
+
+  it('plane visibility is a view state: it works read-only too', () => {
+    const s = setup({ readOnly: true });
+    s.browser.setPlaneVisible(xy, true);
+    expect([...s.browser.visiblePlanes.get()]).toEqual([xy]);
+  });
+
+  it('a regeneration or a document change keeps the plane rows', () => {
+    const s = setup();
+    const rows = s.browser.planes.get();
+    const emits = s.planeEmits();
+    s.regen.publish(new Map(), BODIES, SKETCHES);
+    s.doc.setRollbackIndex(1);
+    expect(s.browser.planes.get()).toBe(rows);
+    expect(s.planeEmits()).toBe(emits);
+  });
+
+  it('a selected plane survives a new regeneration', () => {
+    const s = setup();
+    s.browser.selectPlane(xz);
+    s.regen.publish(new Map(), BODIES);
+    expect(s.selection.items.get()).toEqual([{ kind: 'plane', plane: xz }]);
+    expect(s.browser.planes.get()[1]?.selected).toBe(true);
+  });
+
+  it('emits in the order hidden, visiblePlanes, bodies, planes, sketches', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES, SKETCHES);
+    s.order.length = 0;
+    s.browser.setPlaneVisible(xy, true);
+    expect(s.order).toEqual(['visiblePlanes', 'planes']);
+    s.order.length = 0;
+    s.browser.setVisible(B1, false);
+    expect(s.order).toEqual(['hidden', 'bodies']);
+    s.order.length = 0;
+    s.selection.set([
+      { kind: 'body', body: B2 },
+      { kind: 'plane', plane: xz },
+      { kind: 'feature', feature: fid('s1') },
+    ]);
+    expect(s.order).toEqual(['bodies', 'planes', 'sketches']);
+  });
+});
+
+describe('BrowserModel sketches (M12)', () => {
+  const S1 = sketchId(fid('s1'));
+  const S2 = sketchId(fid('s2'));
+
+  it('lists the sketches of the last regeneration with the feature names, frozen', () => {
+    const s = setup();
+    expect(s.browser.sketches.get()).toEqual([]);
+    s.regen.publish(new Map(), BODIES, SKETCHES);
+    const rows = s.browser.sketches.get();
+    expect(rows).toEqual([
+      { sketch: S1, feature: 's1', name: 'Sketch 1', selected: false },
+      { sketch: S2, feature: 's2', name: 'Sketch 2', selected: false },
+    ]);
+    expect(Object.isFrozen(rows)).toBe(true);
+    expect(rows.every((r) => Object.isFrozen(r))).toBe(true);
+  });
+
+  it('keeps unchanged rows and the snapshot without emitting', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES, SKETCHES);
+    const before = s.browser.sketches.get();
+    const emits = s.sketchEmits();
+    s.regen.publish(new Map(), BODIES, SKETCHES);
+    expect(s.browser.sketches.get()).toBe(before);
+    expect(s.sketchEmits()).toBe(emits);
+  });
+
+  it('the name follows feature.rename', () => {
+    const s = setup();
+    s.regen.publish(new Map(), [], SKETCHES);
+    const before = s.browser.sketches.get();
+    const op: FeatureRenameOp = {
+      type: 'feature.rename',
+      v: OP_VERSION['feature.rename'],
+      featureId: fid('s2'),
+      name: 'Profile',
+    };
+    s.dispatcher.dispatch(op);
+    const rows = s.browser.sketches.get();
+    expect(rows.map((r) => r.name)).toEqual(['Sketch 1', 'Profile']);
+    expect(rows[0]).toBe(before[0]);
+  });
+
+  it('leaves out a sketch whose feature is no longer in the document', () => {
+    const s = setup();
+    const gone: RegenSketch = { sketch: sketchId(fid('gone')), feature: fid('gone') };
+    s.regen.publish(new Map(), [], [...SKETCHES, gone]);
+    expect(s.browser.sketches.get().map((r) => r.feature)).toEqual(['s1', 's2']);
+  });
+
+  it('marks rows selected from feature items of the selection', () => {
+    const s = setup();
+    s.regen.publish(new Map(), [], SKETCHES);
+    s.selection.set([{ kind: 'feature', feature: fid('s2') }]);
+    expect(s.browser.sketches.get().map((r) => r.selected)).toEqual([false, true]);
+  });
+
+  it('selectSketch selects the feature; additive toggles it', () => {
+    const s = setup();
+    s.regen.publish(new Map(), [], SKETCHES);
+    s.browser.selectSketch(fid('s1'));
+    expect(s.selection.items.get()).toEqual([{ kind: 'feature', feature: 's1' }]);
+    s.browser.selectSketch(fid('s2'), { additive: true });
+    expect(s.selection.items.get()).toEqual([
+      { kind: 'feature', feature: 's1' },
+      { kind: 'feature', feature: 's2' },
+    ]);
+    s.browser.selectSketch(fid('s1'), { additive: true });
+    expect(s.selection.items.get()).toEqual([{ kind: 'feature', feature: 's2' }]);
+  });
+
+  it('editSketch calls sketchEdit with the feature', () => {
+    const edited: FeatureId[] = [];
+    const s = setup({ sketchEdit: (feature) => edited.push(feature) });
+    s.regen.publish(new Map(), [], SKETCHES);
+    s.browser.editSketch(fid('s2'));
+    expect(edited).toEqual([fid('s2')]);
+  });
+
+  it('editSketch without sketchEdit does nothing', () => {
+    const s = setup();
+    s.regen.publish(new Map(), [], SKETCHES);
+    s.browser.editSketch(fid('s1'));
+    expect(s.editor.current.get()).toBeNull();
+    expect(loggedOps(s)).toEqual([]);
+  });
+
+  it('dispose stops following the sketches', () => {
+    const s = setup();
+    s.browser.dispose();
+    s.regen.publish(new Map(), [], SKETCHES);
+    expect(s.browser.sketches.get()).toEqual([]);
   });
 });

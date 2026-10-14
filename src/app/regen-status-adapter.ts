@@ -1,11 +1,18 @@
 // Adapter of RegenStatusPort (spec 10, "Port stavu regenerace"): interaction must not know regen,
 // so app turns every RegenResult into a RegenSnapshot – health of the evaluated features, the
-// bodies of the final state (only artifacts of kind body until M12) and its own generation counter.
+// bodies and the sketches of the final state (plane artifacts are not listed: the Browser shows
+// the origin planes from document) and its own generation counter.
 
 import { ObservableValue } from '@/core';
 import type { FeatureId } from '@/document';
-import type { FeatureHealth, RegenBody, RegenSnapshot, RegenStatusPort } from '@/interaction';
-import { bodiesOf } from '@/regen';
+import type {
+  FeatureHealth,
+  RegenBody,
+  RegenSketch,
+  RegenSnapshot,
+  RegenStatusPort,
+} from '@/interaction';
+import { bodiesOf, sketchesOf } from '@/regen';
 import type { FeatureStatus, RegenResult } from '@/regen';
 
 export interface RegenStatusAdapter extends RegenStatusPort {
@@ -17,6 +24,7 @@ const EMPTY: RegenSnapshot = Object.freeze({
   generation: 0,
   health: new Map<FeatureId, FeatureHealth>(),
   bodies: Object.freeze([]),
+  sketches: Object.freeze([]),
 });
 
 export function createRegenStatusAdapter(): RegenStatusAdapter {
@@ -34,9 +42,15 @@ export function createRegenStatusAdapter(): RegenStatusAdapter {
       const bodies: readonly RegenBody[] = Object.freeze(
         bodiesOf(result.finalState).map((b) => Object.freeze({ body: b.id, feature: b.origin })),
       );
+      // The feature of a sketch is its owner (spec 12).
+      const sketches: readonly RegenSketch[] = Object.freeze(
+        sketchesOf(result.finalState).map((a) => Object.freeze({ sketch: a.id, feature: a.owner })),
+      );
       // Generation of the port, not of the Regenerator: a restarted kernel brings a new
       // Regenerator that counts from 1 again, the port must keep growing (spec 10).
-      state.set(Object.freeze({ generation: state.get().generation + 1, health, bodies }));
+      state.set(
+        Object.freeze({ generation: state.get().generation + 1, health, bodies, sketches }),
+      );
     },
   };
 }

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { sketchId } from '@/document';
 import type { FeatureId } from '@/document';
 import type {
   BodyId,
   FeatureHealth,
+  RegenSketch,
   HighlightTarget,
   OverlayShape,
   PickKind,
@@ -295,7 +297,22 @@ describe('FakeRegenStatus', () => {
     expect(snapshot.generation).toBe(0);
     expect(snapshot.health.size).toBe(0);
     expect(snapshot.bodies).toEqual([]);
+    expect(snapshot.sketches).toEqual([]);
     expect(Object.isFrozen(snapshot)).toBe(true);
+  });
+
+  it('publish sets frozen copies of the sketches; without them there are none (M12)', () => {
+    const regen = new FakeRegenStatus();
+    const sketches: RegenSketch[] = [{ sketch: sketchId(F1), feature: F1 }];
+    regen.publish(new Map(), [], sketches);
+    const snapshot = regen.state.get();
+    sketches.push({ sketch: sketchId(F2), feature: F2 });
+    expect(snapshot.sketches).toEqual([{ sketch: sketchId(F1), feature: F1 }]);
+    expect(Object.isFrozen(snapshot.sketches)).toBe(true);
+    expect(snapshot.sketches.every((s) => Object.isFrozen(s))).toBe(true);
+
+    regen.publish(new Map());
+    expect(regen.state.get().sketches).toEqual([]);
   });
 
   it('publish sets frozen copies of the bodies; without them there are none', () => {

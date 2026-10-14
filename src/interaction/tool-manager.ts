@@ -101,7 +101,8 @@ export function createToolManager(deps: {
     current = activation;
     tool.activate(ctx);
     activation.activating = false;
-    active.set(id);
+    // activate may have switched the mode, which already replaced this tool by the default.
+    if (current === activation) active.set(id);
     return activation;
   }
 

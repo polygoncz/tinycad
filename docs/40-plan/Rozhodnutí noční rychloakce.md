@@ -85,6 +85,9 @@ Plán a kontrakty: [[M12-skicar#Implementační plán]], spec [[12-skicar]]. R31
 
 - **R56 – Odmítnutá změna ve skicáři (`conflict`, `failed`, redundantní vazba) mění jen hlášku; `status` a `dof` zůstávají z posledního přijatého řešení.** Proč: skica se nezměnila, takže ani její stav určenosti ([[10-interakce#`SketchEditor` a `SketchSession`]]).
 - **R57 – `toggleConstruction` během rozpracovaného řešení se řadí do fronty za něj**, jinak se zapíše hned. Proč: zápis výsledku řešiče by jinak přepínač přepsal starými daty ([[10-interakce#`SketchEditor` a `SketchSession`]]).
+- **R58 – Degenerované kliky kreslicích nástrojů skicáře se ignorují** (úsečka nulové délky, obdélník se stejnou x nebo y, nulový poloměr, polyline se uzavírá až od dvou úseček); rozpracovaný stav zůstává. Proč: uživatel klikne znovu, žádná chybová hláška není potřeba ([[10-interakce#Nástroje a akce skicáře]]).
+- **R59 – Konec oblouku je vždy nový bod promítnutý na kružnici; Shift+klik do prázdna výběr ve skicáři vyčistí.** ⚠ k revizi (v modelu Shift do prázdna nic nedělá). Proč: snap konce by posunul existující bod; jednotné chování výběru ve skicáři podle spec ([[10-interakce#Nástroje a akce skicáře]]).
+- **R60 – Viditelnost rovin počátku jde měnit i v režimu jen pro čtení a při otevřeném dialogu.** Proč: je to stav pohledu, ne dokument (R48) ([[10-interakce#Prohlížeč: `BrowserModel` a viditelnost těles]]).
 ## M13 – Extrude a Revolve
 
 Plán a kontrakty: [[M13-extrude-revolve#Implementační plán]]. Rozsah (profil jako handle, operace, podmíněné parametry, osy počátku, úniková cesta, Q069) zadalo hlavní sezení, podrobnosti rozhodl plánovač milníku. Čísla R51–R60 patří sekci M12.

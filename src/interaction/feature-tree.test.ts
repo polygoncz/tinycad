@@ -7,6 +7,7 @@ import type { DocumentOptions } from '@/document/testing';
 import type { FeatureAddOp, FeatureSetParamsOp, FeatureSuppressOp } from '@/ops';
 import { OP_VERSION } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
+import { SKETCH_FEATURE_TYPE } from '@/sketch';
 import { createFeatureEditor } from './feature-editor';
 import { createFeatureTreeModel } from './feature-tree';
 import type { FeatureHealth } from './regen-status-port';
@@ -66,7 +67,7 @@ function aBox(id: string, type = 'box'): ReturnType<typeof aFeature<BoxParams>> 
   return aFeature<BoxParams>({ id, name: `Name ${id}`, type, params: { width: 1 } });
 }
 
-function setup(init: DocumentOptions = {}) {
+function setup(init: DocumentOptions = {}, sketchEdit?: (id: FeatureId) => void) {
   const session = anOpsSession(init);
   const schemas = createFeatureSchemaRegistry();
   schemas.register(BOX);
@@ -86,6 +87,7 @@ function setup(init: DocumentOptions = {}) {
     regen,
     editor,
     selection,
+    ...(sketchEdit === undefined ? {} : { sketchEdit }),
   });
   /** Counts emissions of rows. */
   let emits = 0;
@@ -533,5 +535,35 @@ describe('FeatureTreeModel move', () => {
     const s = setup({ features: [aBox('a'), aBox('b')] });
     s.tree.edit(fid('b'));
     expect(() => s.tree.move(fid('a'), 1)).toThrow();
+  });
+});
+
+describe('FeatureTreeModel.edit of a sketch (M12)', () => {
+  /** A sketch feature; the tree routes by type only, so no sketch schema is needed. */
+  const aSketch = (id: string) =>
+    aFeature({ id, name: `Sketch ${id}`, type: SKETCH_FEATURE_TYPE, params: {} });
+
+  it('sends a sketch to sketchEdit and opens no feature dialog', () => {
+    const edited: FeatureId[] = [];
+    const s = setup({ features: [aBox('a'), aSketch('s')] }, (id) => edited.push(id));
+    s.tree.edit(fid('s'));
+    expect(edited).toEqual([fid('s')]);
+    expect(s.editor.current.get()).toBeNull();
+  });
+
+  it('sends other features to FeatureEditor.edit', () => {
+    const edited: FeatureId[] = [];
+    const s = setup({ features: [aBox('a'), aSketch('s')] }, (id) => edited.push(id));
+    s.tree.edit(fid('a'));
+    expect(edited).toEqual([]);
+    expect(s.editor.current.get()?.featureId).toBe(fid('a'));
+  });
+
+  it('without sketchEdit edits a sketch like any feature', () => {
+    const s = setup({ features: [aSketch('s')] });
+    // No sketch schema is registered, so FeatureEditor.edit throws: proof it was called.
+    expect(() => {
+      s.tree.edit(fid('s'));
+    }).toThrow();
   });
 });

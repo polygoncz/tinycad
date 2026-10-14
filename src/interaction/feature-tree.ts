@@ -21,6 +21,7 @@ import type {
   StudioSetRollbackOp,
 } from '@/ops';
 import { OP_VERSION } from '@/ops';
+import { SKETCH_FEATURE_TYPE } from '@/sketch';
 import type { FeatureEditor } from './feature-editor';
 import type { FeatureHealth, RegenStatusPort } from './regen-status-port';
 import type { SelectionCommands } from './selection';
@@ -51,7 +52,7 @@ export interface TreeRow {
 export interface FeatureTreeModel {
   readonly rows: Observable<readonly TreeRow[]>;
   readonly rollbackIndex: Observable<number>;
-  /** → FeatureEditor.edit */
+  /** → FeatureEditor.edit; a sketch → sketchEdit when given (M12). */
   edit(id: FeatureId): void;
   /** → dispatch feature.rename */
   rename(id: FeatureId, name: string): void;
@@ -82,8 +83,10 @@ export function createFeatureTreeModel(deps: {
   regen: RegenStatusPort;
   editor: Pick<FeatureEditor, 'current' | 'edit'>;
   selection: SelectionCommands;
+  /** M12: a feature of type SKETCH_FEATURE_TYPE is edited here instead of FeatureEditor.edit. */
+  sketchEdit?: (id: FeatureId) => void;
 }): FeatureTreeModel {
-  const { doc, ops, schemas, regen, editor, selection } = deps;
+  const { doc, ops, schemas, regen, editor, selection, sketchEdit } = deps;
 
   /** The dependency graph of `graphOf`; recomputed only when the studio changes. */
   let graphOf: PartStudioData | null = null;
@@ -151,6 +154,11 @@ export function createFeatureTreeModel(deps: {
     rows: rows.asObservable(),
     rollbackIndex: rollbackIndex.asObservable(),
     edit(id) {
+      // A sketch has no feature dialog: the sketcher opens it (spec 12, "Skicář").
+      if (sketchEdit !== undefined && doc.feature(id)?.type === SKETCH_FEATURE_TYPE) {
+        sketchEdit(id);
+        return;
+      }
       editor.edit(id);
     },
     rename(id, name) {

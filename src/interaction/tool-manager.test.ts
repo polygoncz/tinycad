@@ -1043,6 +1043,38 @@ describe('createToolManager – modes', () => {
     expect(() => setupModes({ defaultToolIds: { sketch: 'nope' } })).toThrow(/nope/);
   });
 
+  it('a tool that switches the mode in activate leaves the default tool of the new mode active', () => {
+    // The entry tool of the sketcher: it opens a sketch (mode 'sketch') and finishes.
+    let switchMode = (): void => undefined;
+    const { manager, rec, mode, emitted } = setupModes({
+      tools: (r) => [
+        aRecordingTool('sketch.select', r, { modes: ['sketch'] }),
+        aRecordingTool('enter', r, {
+          onActivate: (ctx) => {
+            switchMode();
+            ctx.finish();
+          },
+        }),
+      ],
+    });
+    switchMode = () => {
+      mode.set('sketch');
+    };
+
+    manager.activate('enter');
+
+    expect(manager.active.get()).toBe('sketch.select');
+    expect(emitted).toEqual(['sketch.select']);
+    expect(rec.calls).toEqual([
+      'select.deactivate',
+      'enter.create',
+      'enter.activate',
+      'enter.deactivate',
+      'sketch.select.create',
+      'sketch.select.activate',
+    ]);
+  });
+
   it('dispose stops following the mode', () => {
     const { manager, rec, mode } = setupModes();
     manager.dispose();

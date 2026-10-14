@@ -5,7 +5,7 @@
 // them from the document directly, so they show at once, not after a regeneration.
 
 import type { Observable } from '@/core';
-import type { BodyId, FeatureId, ParamIssue } from '@/document';
+import type { BodyId, FeatureId, ParamIssue, SketchId } from '@/document';
 
 export type FeatureHealth =
   | { readonly kind: 'ok' }
@@ -23,6 +23,12 @@ export interface RegenBody {
   readonly feature: FeatureId;
 }
 
+/** A sketch of the last regeneration and the feature that made it (M12). */
+export interface RegenSketch {
+  readonly sketch: SketchId;
+  readonly feature: FeatureId;
+}
+
 export interface RegenSnapshot {
   /** Grows by 1 with each finished regeneration; 0 = none yet. */
   readonly generation: number;
@@ -30,6 +36,8 @@ export interface RegenSnapshot {
   readonly health: ReadonlyMap<FeatureId, FeatureHealth>;
   /** Bodies of the final state of the last regeneration, in its order (the browser rows). */
   readonly bodies: readonly RegenBody[];
+  /** Sketches of the final state of the last regeneration, in its order (the browser, M12). */
+  readonly sketches: readonly RegenSketch[];
 }
 
 export interface RegenStatusPort {

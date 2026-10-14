@@ -3,10 +3,13 @@
 // body live in the document since M11 (spec 03, "Metadata těles", Q071): changes go through the
 // dispatcher, so they are saved and undoable. Since ADR 0015 a BodyId is a lineage (origin
 // feature), so the metadata never move over to another body after a history change.
+// Since M12 it also lists the origin planes (their visibility is a view state, never saved, R48)
+// and the sketches of the last regeneration (no eye: a sketch is shown unless edited).
 
 import { ObservableValue } from '@/core';
 import type { Observable, Unsubscribe } from '@/core';
-import type { BodyId, DocumentReader, FeatureId } from '@/document';
+import { ORIGIN_PLANES } from '@/document';
+import type { BodyId, DocumentReader, FeatureId, PlaneId, SketchId } from '@/document';
 import type { BodyRenameOp, BodySetVisibleOp, OperationDispatcher } from '@/ops';
 import { OP_VERSION } from '@/ops';
 import type { FeatureEditor } from './feature-editor';
@@ -25,6 +28,27 @@ export interface BrowserBodyRow {
   /** !doc.bodyMeta(body).hidden */
   readonly visible: boolean;
   /** The selection contains { kind: 'body', body }. */
+  readonly selected: boolean;
+}
+
+/** An origin plane (M12). */
+export interface BrowserPlaneRow {
+  readonly plane: PlaneId;
+  /** The translation key of the plane ('origin.plane.xy' …), translated by ui. */
+  readonly label: string;
+  /** In visiblePlanes. */
+  readonly visible: boolean;
+  /** The selection contains { kind: 'plane', plane }. */
+  readonly selected: boolean;
+}
+
+/** A sketch of the last regeneration (M12). */
+export interface BrowserSketchRow {
+  readonly sketch: SketchId;
+  readonly feature: FeatureId;
+  /** The name of the feature in the document. */
+  readonly name: string;
+  /** The selection contains { kind: 'feature', feature }. */
   readonly selected: boolean;
 }
 
@@ -52,10 +76,25 @@ export interface BrowserModel {
    * text did not change (ui compares it with what it filled in): no operation.
    */
   rename(body: BodyId, name: string | null): void;
+  /** ORIGIN_PLANES in order (M12). */
+  readonly planes: Observable<readonly BrowserPlaneRow[]>;
+  /** The shown origin planes: a view state, empty at start, never saved; app → plane drawing. */
+  readonly visiblePlanes: Observable<ReadonlySet<PlaneId>>;
+  /** The sketches of the last regeneration, in its order (M12). */
+  readonly sketches: Observable<readonly BrowserSketchRow[]>;
+  /** → selection.set / toggle of the plane item */
+  selectPlane(plane: PlaneId, opts?: { additive?: boolean }): void;
+  /** Shows or hides an origin plane; another plane id does nothing. */
+  setPlaneVisible(plane: PlaneId, visible: boolean): void;
+  /** → selection.set / toggle of the feature item */
+  selectSketch(feature: FeatureId, opts?: { additive?: boolean }): void;
+  /** → deps.sketchEdit; without it nothing. */
+  editSketch(feature: FeatureId): void;
   dispose(): void;
 }
 
 const EMPTY_ROWS: readonly BrowserBodyRow[] = Object.freeze([]);
+const EMPTY_SKETCHES: readonly BrowserSketchRow[] = Object.freeze([]);
 
 export function createBrowserModel(deps: {
   doc: DocumentReader;
@@ -65,13 +104,18 @@ export function createBrowserModel(deps: {
   editor: Pick<FeatureEditor, 'current'>;
   /** The edit lock (createEditLock): read-only or an open feature dialog. */
   locked: Observable<boolean>;
+  /** M12: opens a sketch in the sketcher (SketchEditor.edit). */
+  sketchEdit?: (feature: FeatureId) => void;
 }): BrowserModel {
-  const { doc, ops, regen, selection, editor, locked } = deps;
+  const { doc, ops, regen, selection, editor, locked, sketchEdit } = deps;
 
   // A Set cannot be frozen; each change publishes a new set that is never mutated again.
   const hidden = new ObservableValue<ReadonlySet<BodyId>>(new Set());
   const rows = new ObservableValue<readonly BrowserBodyRow[]>(EMPTY_ROWS);
   const renaming = new ObservableValue<BodyId | null>(null);
+  const visiblePlanes = new ObservableValue<ReadonlySet<PlaneId>>(new Set());
+  const planeRows = new ObservableValue<readonly BrowserPlaneRow[]>(buildPlaneRows([]));
+  const sketchRows = new ObservableValue<readonly BrowserSketchRow[]>(EMPTY_SKETCHES);
   // Derived from the lock without an own state: it changes exactly when the lock does.
   const canEdit: Observable<boolean> = Object.freeze({
     get: () => !locked.get(),
@@ -105,8 +149,7 @@ export function createBrowserModel(deps: {
         selected: row.selected,
       });
     });
-    const unchanged = prev.length === next.length && next.every((row, i) => row === prev[i]);
-    return unchanged ? prev : Object.freeze(next);
+    return sameItems(prev, next) ? prev : Object.freeze(next);
   }
 
   /** Bodies of the last regeneration hidden in the metadata of the document. */
@@ -118,14 +161,71 @@ export function createBrowserModel(deps: {
     );
   }
 
-  /** hidden first, then bodies (spec 10); each only when it changed. */
-  function refresh(): void {
+  /** The origin plane rows, reusing every unchanged row of `prev`. */
+  function buildPlaneRows(prev: readonly BrowserPlaneRow[]): readonly BrowserPlaneRow[] {
+    const selected = new Set(
+      selection.items.get().flatMap((item) => (item.kind === 'plane' ? [item.plane] : [])),
+    );
+    // visiblePlanes is created before the first build, so it can be read here.
+    const shown = visiblePlanes.get();
+    const next = ORIGIN_PLANES.map(({ id, label }, i): BrowserPlaneRow => {
+      const old = prev[i];
+      const row = { plane: id, label, visible: shown.has(id), selected: selected.has(id) };
+      if (
+        old !== undefined &&
+        old.plane === row.plane &&
+        old.label === row.label &&
+        old.visible === row.visible &&
+        old.selected === row.selected
+      ) {
+        return old;
+      }
+      return Object.freeze(row);
+    });
+    return sameItems(prev, next) ? prev : Object.freeze(next);
+  }
+
+  /**
+   * The sketch rows, reusing every unchanged row of `prev`. A sketch whose feature is gone from
+   * the document (the next regeneration is on its way) has no name to show, so it is left out.
+   */
+  function buildSketchRows(prev: readonly BrowserSketchRow[]): readonly BrowserSketchRow[] {
+    const selected = new Set(
+      selection.items.get().flatMap((item) => (item.kind === 'feature' ? [item.feature] : [])),
+    );
+    const next = regen.state.get().sketches.flatMap(({ sketch, feature }, i) => {
+      const instance = doc.feature(feature);
+      if (instance === undefined) return [];
+      const old = prev[i];
+      const row = { sketch, feature, name: instance.name, selected: selected.has(feature) };
+      if (
+        old !== undefined &&
+        old.sketch === row.sketch &&
+        old.feature === row.feature &&
+        old.name === row.name &&
+        old.selected === row.selected
+      ) {
+        return [old];
+      }
+      return [Object.freeze(row)];
+    });
+    return sameItems(prev, next) ? prev : Object.freeze(next);
+  }
+
+  /**
+   * hidden, visiblePlanes, bodies, planes, sketches in this order (spec 10); each only when it
+   * changed. `shown` is the new set of visible planes (setPlaneVisible), otherwise the current.
+   */
+  function refresh(shown: ReadonlySet<PlaneId> = visiblePlanes.get()): void {
     const next = buildHidden();
     const current = hidden.get();
     if (next.size !== current.size || [...next].some((body) => !current.has(body))) {
       hidden.set(next);
     }
+    visiblePlanes.set(shown);
     rows.set(buildRows(rows.get()));
+    planeRows.set(buildPlaneRows(planeRows.get()));
+    sketchRows.set(buildSketchRows(sketchRows.get()));
   }
 
   /** Editing is allowed, the last regeneration knows the body and no transaction is running. */
@@ -136,9 +236,16 @@ export function createBrowserModel(deps: {
   }
 
   const unsubscribes: readonly Unsubscribe[] = [
-    regen.state.subscribe(refresh),
-    selection.items.subscribe(refresh),
-    doc.events.on('changed', refresh),
+    // Wrapped: refresh takes an optional plane set, not the event of the source.
+    regen.state.subscribe(() => {
+      refresh();
+    }),
+    selection.items.subscribe(() => {
+      refresh();
+    }),
+    doc.events.on('changed', () => {
+      refresh();
+    }),
     // The dialog opening (or the document being read-only) ends the rename without a change.
     locked.subscribe(() => {
       if (!canEdit.get()) renaming.set(null);
@@ -149,6 +256,9 @@ export function createBrowserModel(deps: {
   return {
     bodies: rows.asObservable(),
     hidden: hidden.asObservable(),
+    planes: planeRows.asObservable(),
+    visiblePlanes: visiblePlanes.asObservable(),
+    sketches: sketchRows.asObservable(),
     canEdit,
     renaming: renaming.asObservable(),
     select(body, opts) {
@@ -197,10 +307,39 @@ export function createBrowserModel(deps: {
       };
       ops.dispatch(op);
     },
+    selectPlane(plane, opts) {
+      const item = { kind: 'plane', plane } as const;
+      if (opts?.additive === true) selection.toggle(item);
+      else selection.set([item]);
+    },
+    setPlaneVisible(plane, visible) {
+      // Only the origin planes have a row; the view state never touches the document (R48).
+      if (!ORIGIN_PLANES.some((p) => p.id === plane)) return;
+      const current = visiblePlanes.get();
+      if (current.has(plane) === visible) return;
+      // A Set cannot be frozen; a new set each change, never mutated after.
+      const next = new Set(current);
+      if (visible) next.add(plane);
+      else next.delete(plane);
+      refresh(next);
+    },
+    selectSketch(feature, opts) {
+      const item = { kind: 'feature', feature } as const;
+      if (opts?.additive === true) selection.toggle(item);
+      else selection.set([item]);
+    },
+    editSketch(feature) {
+      sketchEdit?.(feature);
+    },
     dispose() {
       for (const unsubscribe of unsubscribes) unsubscribe();
     },
   };
+}
+
+/** Same length and the same objects at every position. */
+function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
+  return a.length === b.length && b.every((item, i) => item === a[i]);
 }
 
 function sameRow(

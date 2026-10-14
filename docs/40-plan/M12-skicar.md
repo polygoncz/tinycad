@@ -59,8 +59,8 @@ updated: 2026-10-14
 - [x] Ú8 `render`: vrstva skic, picking entit skici, paleta, kamera kolmo na rovinu
 - [x] Ú9 `interaction`: `SketchEditor`, `SketchSession`, akce skicáře, kresba skici, `FeatureEditSession.setParams`, výběr roviny
 - [x] Ú10 `features/sketch`: plugin skici (schéma, builder, slovník)
-- [ ] Ú11 `interaction`, `app`: Prohlížeč (Počátek, Skici), port regenerace se skicami, úprava skici z Timeline
-- [ ] Ú12 `interaction`: nástroje skicáře
+- [x] Ú11 `interaction`, `app`: Prohlížeč (Počátek, Skici), port regenerace se skicami, úprava skici z Timeline
+- [x] Ú12 `interaction`: nástroje skicáře
 - [ ] Ú13 `app`, `ui`: skládání skicáře, lišta podle režimu, panel skici, Prohlížeč, překlady, registrace pluginu
 - [ ] Ú14 `tests`: integrační scénář se skutečným řešičem
 - [ ] Ú15 `e2e`: akceptační scénář s OCCT a planegcs v prohlížeči

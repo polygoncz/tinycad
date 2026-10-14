@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bodyId } from '@/document';
+import { bodyId, sketchId } from '@/document';
 import type { BodyId, FeatureId } from '@/document';
 import type { ShapeHandle } from '@/kernel';
 import { EMPTY_NAMES } from '@/regen';
@@ -43,6 +43,7 @@ describe('RegenStatusAdapter', () => {
     expect(snapshot.generation).toBe(0);
     expect(snapshot.health.size).toBe(0);
     expect(snapshot.bodies).toEqual([]);
+    expect(snapshot.sketches).toEqual([]);
   });
 
   it('maps the statuses of evaluated features to health and leaves the others out', () => {
@@ -107,6 +108,20 @@ describe('RegenStatusAdapter', () => {
     const adapter = createRegenStatusAdapter();
     adapter.publish(aResult([], [aBody('a', 1), aSketchArtifact('s'), aBody('b', 2)]));
     expect(adapter.state.get().bodies.map((b) => b.body)).toEqual([bid('a'), bid('b')]);
+  });
+
+  it('lists the sketches of the final state in its order with their owner feature (M12)', () => {
+    const adapter = createRegenStatusAdapter();
+    adapter.publish(
+      aResult([], [aSketchArtifact('s2'), aBody('a', 1), aSketchArtifact('s1', [handle(3)])]),
+    );
+    const { sketches } = adapter.state.get();
+    expect(sketches).toEqual([
+      { sketch: sketchId(fid('s2')), feature: fid('s2') },
+      { sketch: sketchId(fid('s1')), feature: fid('s1') },
+    ]);
+    expect(Object.isFrozen(sketches)).toBe(true);
+    expect(sketches.every((s) => Object.isFrozen(s))).toBe(true);
   });
 
   it('grows the generation by one with every published result, whatever the Regenerator counts', () => {
