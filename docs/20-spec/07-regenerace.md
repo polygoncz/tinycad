@@ -162,6 +162,14 @@ Pravidla pro builder:
 - **Boolean:** výsledek je **jedno** těleso `{ ...první cíl, shape, names, lastModifiedBy: boolean }` – dědí `id`, `origin` a místo v mapě prvního cíle, `names` z `nameShape` se vstupy v pořadí volání jádra (cíle, pak nástroje; u `union` první cíl, pak ostatní cíle a nástroje). Ostatní cíle a nástroje z mapy zmizí; s `keepTools` nástroje zůstanou beze změny (tentýž objekt). Jádro vrátí jeden handle i pro nesouvislý výsledek (compound více solidů). Rozpad výsledku na více těles `bodyId(cíl.origin, n)` podle rodokmenu z historie jádra (`Generated`/`Modified`, ne pořadí výstupu) byl úkol M14, znovu odložený do [[M15-export-a-dokonceni|M15]] ([[Rozhodnutí noční rychloakce#M11 – Další entity|R8]] ⚠, [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R100]] ⚠).
 - **Fillet a Chamfer** (M14): hrany se seskupí podle tělesa (pořadí prvního výskytu v parametru), na každé těleso jedno volání `fillet`/`chamfer` se všemi jeho hranami; těleso zachová `id`, `origin` a místo v mapě, dostane `shape`, `names` z `nameShape` (`generatedTag` `'fillet'`/`'chamfer'`) a `lastModifiedBy` = featura.
 - Změna parametru featury, ze které těleso pochází, ani nástroje booleanu id výsledku nemění (id je rodokmen, ne pořadí výstupu jádra).
+- **Jedno místo pro pravidlo identity** (M14, oprava revize): buildery, které tělesa mění nebo spotřebovávají (Transform, Boolean, Fillet, Chamfer i `applyBodyOperation`), ho neopisují, ale volají dva pomocníky z `regen` – pluginy se navzájem importovat nesmí, takže sdílený kód patří sem:
+
+```ts
+/** Změněné těleso: id, origin zůstanou, names = nameShape(result, inputs, generatedTag), lastModifiedBy = feature; zmrazené. */
+export function modifyBody(p: { kernel: Pick<QueryOps, 'topology'>; feature: FeatureId; body: Body; result: ShapeResult; inputs: readonly NameTable[]; generatedTag?: string }): Promise<Body>;
+/** Nový stav v pořadí state: tělesa z changed na místě svého id, tělesa z consumed vypadnou (consumed vyhrává), zbytek tentýž objekt; id, které ve state není, se nepřidá; zmrazené. */
+export function replaceBodies(state: RegenState, changed: ReadonlyMap<BodyId, Body>, consumed: ReadonlySet<BodyId>): RegenState;
+```
 - **Vysunutí a Rotace** (M13): podle operace featury, viz [[#Operace tělesa (M13)]].
 
 ### Operace tělesa (M13)
@@ -181,13 +189,33 @@ export function applyBodyOperation(p: {
 ```
 
 - **`new`:** jeden tvar = tvar tělesa, víc tvarů → `boolean('union', [první], ostatní)` (oddělené tvary dají compound jednoho tělesa jako R8 ⚠). Nové těleso `bodyId(feature)`, `origin` i `lastModifiedBy` = featura, na konec mapy.
-- **`add`:** `boolean('union', [cíl₁], [ostatní cíle…, tvary…])`; výsledek dědí `id`, `origin`, `names` a místo v mapě prvního cíle, `lastModifiedBy` = featura; ostatní cíle z mapy zmizí (jako Boolean union).
-- **`remove`** a **`intersect`:** pro **každý** cíl zvlášť `boolean('subtract' | 'intersect', [cíl], tvary)`; každý cíl zachová `id`, `origin`, `names` i místo v mapě, `lastModifiedBy` = featura. Cíle se tak neslijí do jednoho tělesa.
-- **Jména** (M14): každý tvar z `shapes` se pojmenuje `nameShape` (vstupy `[]`, role z jádra), výsledek booleanu `nameShape` se vstupy v pořadí volání jádra; u `new` s jediným tvarem jsou jména tělesa jména hranolu.
+- **`add`:** `boolean('union', [cíl₁], [ostatní cíle…, tvary…])`; výsledek dědí `id`, `origin` a místo v mapě prvního cíle, `names` přepočítané z historie booleanu (M14), `lastModifiedBy` = featura; ostatní cíle z mapy zmizí (jako Boolean union).
+- **`remove`** a **`intersect`:** pro **každý** cíl zvlášť `boolean('subtract' | 'intersect', [cíl], tvary)`; každý cíl zachová `id`, `origin` i místo v mapě, dostane `names` přepočítané z historie booleanu (M14), `lastModifiedBy` = featura. Cíle se tak neslijí do jednoho tělesa. Obě větve přes `modifyBody` a `replaceBodies`.
+- **Jména** (M14): každý tvar z `shapes` se pojmenuje `nameShape` s rolemi z jádra a vstupy `EMPTY_NAMES` za každý vstup, na který jeho historie odkazuje (plocha profilu; prázdný seznam by porušil pravidlo 8 spec 08, [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R120]]), výsledek booleanu `nameShape` se vstupy v pořadí volání jádra; u `new` s jediným tvarem jsou jména tělesa jména hranolu.
 - Prázdný výsledek (odebrání celého cíle, prázdný průnik) je chyba jádra `'operation-failed'` → featura `KERNEL` (Onshape by těleso smazal; R67 ⚠).
 - Mezivýsledky (hranoly) ve stavu nezůstanou, takže je sweep uvolní. Výsledná tělesa i stav jsou zmrazené. `shapes` prázdné nebo chybějící cíle u `add`/`remove`/`intersect` → výjimka (chyba programu; schéma má `min: 1`).
 
-`resolveTopo` a `resolvePlanes` s `TopoRef` hlásí chybějící těleso (`Body '<b>' does not exist`, `'<b>' is not a body`), chybějící jméno (`Face '<jméno>' not found on body '<b>'`, `Edge …`) a nerovinnou plochu (`Face '<jméno>' is not planar`); víc ploch pod jedním jménem → `warn` a u `resolvePlanes` plocha s nejmenším indexem ([[08-topologicke-pojmenovani#Reference ve featurách]]). `resolveRegions` hlásí `Sketch '<f>' not found` (artefakt chybí nebo je jiného druhu) a `Region '<jméno>' of sketch '<f>' not found`. `resolveAxis` hlásí chybějící osu, chybějící skicu nebo entitu, entitu jiného druhu než `line` (`Sketch entity '<id>' is not a line`) a úsečku nulové délky. Builder je převede přes `unresolvedReference(param, e)`.
+**Vysunutí** (`features/extrude`, M13, M14) – parametry v pořadí schématu (`version: 1`):
+
+```ts
+export interface ExtrudeParams {
+  readonly regions: readonly SketchRegionRef[];                    // min 1; směr = normála roviny skici první oblasti
+  readonly operation: 'new' | 'add' | 'remove' | 'intersect';      // viz výše
+  readonly targets: readonly BodyRef[];                            // min 1, viditelné jen pro operation ≠ 'new'
+  readonly endType: 'blind' | 'symmetric' | 'upToFace';            // 'upToFace' od M14 (R109 ⚠)
+  readonly distance: number;                                       // > 0, viditelné jen když distanceApplies(endType) (≠ 'upToFace')
+  readonly upTo: readonly TopoRef[];                               // topo 'face', min 1, max 1, viditelné jen pro 'upToFace' (M14)
+  readonly flip: boolean;                                          // viditelné jen když flipApplies(endType) (= 'blind')
+}
+export function flipApplies(endType: unknown): boolean;            // predikáty pro visibleWhen i builder; berou neověřené hodnoty
+export function distanceApplies(endType: unknown): boolean;
+```
+
+- Jeden hranol na oblast v pořadí oblastí (`extrude(plocha, d̂, délka)`), pak `applyBodyOperation`. Skrytý parametr builder nečte (`flip` jen u `blind`, `distance` ne u `upToFace`), takže stará data bez `upTo` jsou platná bez migrace.
+- **`symmetric`:** plocha oblasti posunutá o `−distance/2 · d̂`, hranol délky `distance`.
+- **`upToFace`** (M14): rovina plochy přes `resolvePlanes(upTo)` (plocha s nejmenším indexem jména, víc ploch → varování `…; the first is used`); chybějící těleso, jméno i **nerovinná plocha** → `unresolvedReference('upTo', e)` = `UNRESOLVED_REFERENCE` (odchylka od plánu Ú11, který čekal `INVALID_PARAMS`; jedna cesta s rovinou skici na ploše). Plocha nerovnoběžná se skicou (`|n̂ · d̂| < 1 − 1e-9`) nebo pro některou oblast ne ve směru vysunutí (délka `(rovina.origin − oblast.origin) · d̂ ≤ 1e-9`) → `INVALID_PARAMS` s `issues [{ param: 'upTo', code: 'extrude.upToFace' }]`. Délka hranolu se počítá pro každou oblast zvlášť.
+
+`resolveTopo` a `resolvePlanes` s `TopoRef` hlásí chybějící těleso (`Body '<b>' does not exist`, `'<b>' is not a body`), chybějící jméno (`Face '<jméno>' not found on body '<b>'`, `Edge …`) a nerovinnou plochu (`Face '<jméno>' is not planar`); víc ploch pod jedním jménem → `warn` – u `resolveTopo` `Reference '<jméno>' matches <n> faces; all are used`, u `resolvePlanes` plocha s nejmenším indexem a `…; the first is used` ([[08-topologicke-pojmenovani#Reference ve featurách]], R120). `resolveRegions` hlásí `Sketch '<f>' not found` (artefakt chybí nebo je jiného druhu) a `Region '<jméno>' of sketch '<f>' not found`. `resolveAxis` hlásí chybějící osu, chybějící skicu nebo entitu, entitu jiného druhu než `line` (`Sketch entity '<id>' is not a line`) a úsečku nulové délky. Builder je převede přes `unresolvedReference(param, e)`.
 
 Příklad:
 

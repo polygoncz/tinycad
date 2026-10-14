@@ -1,6 +1,6 @@
 ---
 type: spec
-status: accepted
+status: implemented
 order: 8
 aliases:
   - Topologické pojmenování
@@ -24,7 +24,7 @@ updated: 2026-10-14
 > **Rozhodnutí:** [[0007-vlastni-topologicke-pojmenovani]], [[0018-format-topologickych-jmen]], [[Q014 Více hran mezi dvěma plochami|Q014]], [[Q015 Rozdělená plocha a reference|Q015]]  
 > **Milník:** [[M14-topologicke-pojmenovani]]
 
-> Stav: kontrakt pro M14 (upřesněno 2026-10-14 v [[M14-topologicke-pojmenovani#Implementační plán]], rozhodnutí R91–R113 v [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování]]). Do M14 existují jen reference na celá tělesa (`BodyRef`), oblasti, roviny a osy.
+> Stav: implementováno v M14 (kontrakt v [[M14-topologicke-pojmenovani#Implementační plán]], rozhodnutí R91–R120 a oprava revize v [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování]]). Do M14 existovaly jen reference na celá tělesa (`BodyRef`), oblasti, roviny a osy.
 
 ## Problém
 
@@ -71,12 +71,12 @@ Hrana se jmenuje podle **dvou sousedních ploch** – hrany se historií nesledu
 
 1. **Základ:** `edge:<A>|<B>`, kde A ≤ B jsou primární jména (`nameOfFace`) sousedních ploch. Hrana s jedinou sousední plochou (šev pláště válce) → `edge:<A>|<A>`. Sousední plocha bez jména → hrana bez jména.
 2. Má-li základ jediná hrana, je to její jméno.
-3. Jinak **kontext:** pro každou hranu skupiny seřazená jména (primární, bez duplicit) všech ploch, které se dotýkají jejích koncových vrcholů, bez A a B; jméno `edge:<A>|<B>[<C>,<D>]` (prázdný kontext `[]`). Plochy kolem vrcholu = sousední plochy všech hran, které vrchol obsahují.
+3. Jinak **kontext:** pro každou hranu skupiny seřazená jména (primární, bez duplicit) všech ploch, které se dotýkají jejích koncových vrcholů, bez A a B; jméno `edge:<A>|<B>[<C>,<D>]` (prázdný kontext `[]`). Plochy kolem vrcholu = sousední plochy všech hran, které vrchol obsahují. Plochy bez jména se do kontextu nepočítají ([[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R115]]).
 4. Jsou-li ani teď jména shodná, dostanou `#1`, `#2`… (`edge:<A>|<B>[…]#2`) v pořadí středu hrany (`EdgeInfo.midpoint`, lexikograficky x, y, z; shoda do 1e-9 → pořadí indexu). Geometrické, a tedy křehké – jen poslední záchrana.
 
 ### Vrcholy
 
-Jméno vrcholu `vertex:<A>|<B>|<C>…` (seřazená primární jména všech ploch kolem vrcholu, bez duplicit) vzniká jen **interně** jako zdroj pro plochy `generated` z vrcholu (rohy zaoblení). `NameTable` vrcholy nevystavuje a výběr vrcholů není ([[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R101]] ⚠): žádná featura M14 na vrchol neodkazuje.
+Jméno vrcholu `vertex:<A>|<B>|<C>…` (seřazená primární jména všech ploch kolem vrcholu, bez duplicit; je-li kolem vrcholu plocha bez jména, vrchol jméno nemá, R115) vzniká jen **interně** jako zdroj pro plochy `generated` z vrcholu (rohy zaoblení). `NameTable` vrcholy nevystavuje a výběr vrcholů není ([[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R101]] ⚠): žádná featura M14 na vrchol neodkazuje.
 
 ### Plocha bez jména
 
@@ -140,9 +140,9 @@ Pravidla `propagateNames`:
 5. **Zanikla** (`deleted`): jméno zmizí.
 6. **Sloučení:** výstupní plocha, která dostala víc jmen, je drží všechna; `nameOfFace` vrátí první podle řazení.
 7. **Hrany** se pojmenují až nakonec z primárních jmen ploch výstupu a `topology` podle pravidel v [[#Hrany]].
-8. Index mimo rozsah výstupu nebo vstupu, neznámý `input` → výjimka (chyba adaptéru, ne uživatele).
+8. Index mimo rozsah výstupu nebo vstupu, neznámý `input` → výjimka (chyba adaptéru, ne uživatele). Index vstupu se kontroluje jen u vstupu s neprázdnou topologií: vstup bez jmen (`EMPTY_NAMES` za plochu profilu) topologii nemá, ale historie tažení na něj odkazuje ([[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R114]]).
 
-Funkce je **čistá** a deterministická (výsledek nezávisí na pořadí položek v historii ani v `roles`), výsledek je zmrazený a testuje se bez jádra na ručně sestavené historii. Adaptér jádra musí v historii vracet **každou plochu každého vstupu právě jednou** – v `modified` (i identitu) nebo v `deleted` –, aby TypeScriptová strana nic neodvozovala; kontraktová sada to ověřuje pro obě jádra ([[06-geometricke-jadro#Kontrakt (platí pro každou implementaci)]]).
+Funkce je **čistá** a deterministická (výsledek nezávisí na pořadí položek v historii ani v `roles`), výsledek je zmrazený (`Object.freeze` tabulky a polí indexů; `faceEntries`/`edgeEntries` jsou uvnitř obyčejné `Map`, zmrazené jen typem `ReadonlyMap` – [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|oprava revize M14]] ⚠) a testuje se bez jádra na ručně sestavené historii. Adaptér jádra musí v historii vracet **každou plochu každého vstupu právě jednou** – v `modified` (i identitu) nebo v `deleted` –, aby TypeScriptová strana nic neodvozovala; kontraktová sada to ověřuje pro obě jádra ([[06-geometricke-jadro#Kontrakt (platí pro každou implementaci)]]).
 
 `Body.names` je tabulka jmen aktuálního tvaru tělesa. Featura, která těleso **mění**, ji přepočítá přes `nameShape` (vstupy = tabulky vstupních tvarů v pořadí, v jakém je předala jádru), nekopíruje ji ([[07-regenerace#Builder featury]], [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R113]]).
 
@@ -163,9 +163,9 @@ Vyhodnocení v `BuildContext.resolveTopo` (v pořadí `refs`, první chyba vyhr�
 | těleso chybí / jiný druh artefaktu | err `Body '<b>' does not exist` / `'<b>' is not a body` |
 | 0 | err `Face '<jméno>' not found on body '<b>'` (`Edge …` u hran) → builder vrátí `unresolvedReference(param, e)` = `UNRESOLVED_REFERENCE` (featura zčervená, uživatel referenci opraví v dialogu) |
 | 1 | OK |
-| > 1 | u ploch: `ctx.warn('Reference '<jméno>' matches <n> faces; all are used')` + použijí se všechny; u hran: použijí se všechny bez varování (obvykle chtěné) |
+| > 1 | u ploch: `ctx.warn('Reference '<jméno>' matches <n> faces; all are used')` + použijí se všechny (u `resolvePlanes` `…; the first is used`, viz níže); u hran: použijí se všechny bez varování (obvykle chtěné) |
 
-Rovina skici na ploše a konec „Po plochu“ potřebují jedinou rovinnou plochu: `resolvePlanes` přijímá i `TopoRef` ([[07-regenerace#Builder featury]]), vezme plochu s nejmenším indexem (víc ploch → varování jako výše) a nerovinná plocha je err `Face '<jméno>' is not planar`. Rámec roviny skici na ploše určuje čistá funkce `sketchPlaneOfFace` ([[12-skicar#Roviny a počátek]], [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R106]]).
+Rovina skici na ploše a konec „Po plochu“ potřebují jedinou rovinnou plochu: `resolvePlanes` přijímá i `TopoRef` ([[07-regenerace#Builder featury]]), vezme plochu s nejmenším indexem (víc ploch → varování `Reference '<jméno>' matches <n> faces; the first is used`) a nerovinná plocha je err `Face '<jméno>' is not planar`. Builder každou chybu `resolvePlanes` převede na `unresolvedReference(param, e)`, takže nerovinná plocha u „Po plochu“ je `UNRESOLVED_REFERENCE` u `upTo` (ne `INVALID_PARAMS` jako v plánu Ú11 ⚠); `INVALID_PARAMS` zbývá jen pro rovinnou plochu, která není rovnoběžná se skicou nebo ve směru vysunutí ([[07-regenerace#Operace tělesa (M13)]]). Rámec roviny skici na ploše určuje čistá funkce `sketchPlaneOfFace` ([[12-skicar#Roviny a počátek]], [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R106]]).
 
 Reference `topo` vytváří závislost jen na vlastníkovi tělesa (`ownerOf` → `originOfBody(ref.body)`), ne na featurách, jejichž jména obsahuje (díra z válce) – jména se nerozebírají ([[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R110]] ⚠).
 

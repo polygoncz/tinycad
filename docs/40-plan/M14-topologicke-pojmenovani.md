@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 14
 aliases:
   - M14
@@ -28,7 +28,7 @@ specs:
 depends_on:
   - "[[M13-extrude-revolve]]"
 started: 2026-10-14
-finished: 
+finished: 2026-10-14
 tags:
   - milnik
 created: 2026-10-12
@@ -62,12 +62,12 @@ updated: 2026-10-14
 - [x] Ú13 `app`, `ui`: registrace, propojení session, ladicí panel, lišta, překlady
 - [x] Ú14 `tests`: čtyři akceptační scénáře spec 08 s OCCT v Node
 - [x] Ú15 `e2e`: fillet hrany kvádru přežije změnu rozměru
-- [ ] Ú16 hlavní sezení: kontrola, vault, `architecture-reviewer`, retrospektiva
+- [x] Ú16 hlavní sezení: kontrola, vault, `architecture-reviewer`, retrospektiva
 
 ## Akceptační kritéria
 
-- **Čtyři scénáře** ze [[08-topologicke-pojmenovani#Scénáře, které musí fungovat (akceptační testy M14)|spec 08]] jako automatické integrační testy s OCCT v Node (Ú14): fillet přežije změnu výšky kvádru; skica na horní ploše a vysunutí přežijí změnu rozměru; fillet na hraně díry přežije posun válce; smazaná reference → čitelná chyba `UNRESOLVED_REFERENCE` u parametru, zbytek modelu v pořádku.
-- **E2E:** kvádr → výběr hrany ve viewportu do dialogu „Zaoblení“ → OK → změna výšky kvádru → zaoblení bez chyby (Ú15).
+- **Čtyři scénáře** ze [[08-topologicke-pojmenovani#Scénáře, které musí fungovat (akceptační testy M14)|spec 08]] jako automatické integrační testy s OCCT v Node (Ú14, `tests/topo-scenarios.test.ts`): fillet přežije změnu výšky kvádru; skica na horní ploše a vysunutí přežijí změnu rozměru; fillet na hraně díry přežije posun válce; smazaná reference → čitelná chyba `UNRESOLVED_REFERENCE` u parametru, zbytek modelu v pořádku.
+- **E2E:** kvádr → výběr hrany ve viewportu do dialogu „Zaoblení“ → OK → změna výšky kvádru → zaoblení bez chyby (Ú15, `e2e/m14.spec.ts`).
 - **Výběr přežije regeneraci:** vybraná hrana zůstane po změně parametru vybraná na „stejné“ hraně (test `SelectionModel`, Ú3).
 - `propagateNames` má testy na ručně sestavených historiích pro každé pravidlo spec 08 (Ú2); kontraktová sada ověřuje úplnost historie pro obě jádra (Ú1).
 - Celý dialog je v logu jeden záznam; undo/redo a reload vrátí model.
@@ -77,24 +77,24 @@ updated: 2026-10-14
 
 Nález 5 z [[Revize architektury 2026-10-13]], druhá část: jména v portu a přemapování výběru. Zapracováno do Implementačního plánu (2026-10-14):
 
-- [ ] **Jména v portu** ([[10-interakce#Port stavu regenerace]]): artefakt tělesa v `RegenSnapshot` nese `names`; `interaction` převádí pick na `TopoRef` bez znalosti `regen`. → Ú3 (`RegenBody.names: TopoNames`, úzké rozhraní v `interaction`, R102), Ú8, Ú13.
-- [ ] **Výběr přežije regeneraci** ([[10-interakce#Výběr]], nahrazuje pravidlo z [[Q064 Výběr po regeneraci|Q064]]). → Ú3. **Upraveno:** jméno doplní `SelectionModel` sám z posledního snapshotu (nástroje nic nemění); jméno na víc ploch → všechny (R102).
-- [ ] **`PickResult` a `HighlightTarget`** o `name?`, `PickKind` o `'vertex'`. **Upraveno:** ani jedno nevzniká – `render` jména nepotřebuje a vrcholy nemají spotřebitele (R101 ⚠).
+- [x] **Jména v portu** ([[10-interakce#Port stavu regenerace]]): artefakt tělesa v `RegenSnapshot` nese `names`; `interaction` převádí pick na `TopoRef` bez znalosti `regen`. → Ú3 (`RegenBody.names: TopoNames`, úzké rozhraní v `interaction`, R102), Ú8, Ú13.
+- [x] **Výběr přežije regeneraci** ([[10-interakce#Výběr]], nahrazuje pravidlo z [[Q064 Výběr po regeneraci|Q064]]). → Ú3. **Upraveno:** jméno doplní `SelectionModel` sám z posledního snapshotu (nástroje nic nemění); jméno na víc ploch → všechny (R102).
+- [ ] **`PickResult` a `HighlightTarget`** o `name?`, `PickKind` o `'vertex'`. **Upraveno:** ani jedno nevzniká – `render` jména nepotřebuje a vrcholy nemají spotřebitele (R101 ⚠). → odloženo R101
 
 ## Úkoly z M11
 
 Odloženo z [[M11-dalsi-entity|M11]] ([[Rozhodnutí noční rychloakce#M11 – Další entity|R8]], R19):
 
-- [ ] **Boolean s více výslednými tělesy** ([[07-regenerace#Builder featury]]). **Znovu odloženo do [[M15-export-a-dokonceni#Úkoly z M14|M15]]** (R100 ⚠): potřebuje nový dotaz jádra (rozklad na solidy s historií), pravidlo číslování `n` z rodokmenu a ošetření kolize id; akceptační scénáře M14 ho nepotřebují.
-- [ ] **Zvýraznění těles vybraných v dialogu** ([[10-interakce#Port viewportu]]): `HighlightTarget` druhu `body`. → Ú3 (typ), Ú7 (`render`), Ú8 (reference `bodies` v dialogu a tělesa ve výběru, R104).
+- [ ] **Boolean s více výslednými tělesy** ([[07-regenerace#Builder featury]]). **Znovu odloženo do [[M15-export-a-dokonceni#Úkoly z M14|M15]]** (R100 ⚠): potřebuje nový dotaz jádra (rozklad na solidy s historií), pravidlo číslování `n` z rodokmenu a ošetření kolize id; akceptační scénáře M14 ho nepotřebují. → odloženo R100
+- [x] **Zvýraznění těles vybraných v dialogu** ([[10-interakce#Port viewportu]]): `HighlightTarget` druhu `body`. → Ú3 (typ), Ú7 (`render`), Ú8 (reference `bodies` v dialogu a tělesa ve výběru, R104).
 
 ## Úkoly z M13
 
 Odloženo z [[M13-extrude-revolve|M13]] ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R64, R66, R68]]):
 
-- [ ] **Role ploch Vysunutí a Rotace** ([[06-geometricke-jadro#Stav po M14]], [[08-topologicke-pojmenovani#Plochy]]). → Ú0, Ú4 (id křivek), Ú1 (role hran profilu u handle, `face:start|end|side:<entita>`), Ú6 (jména přes historii booleanu v `applyBodyOperation`, R98, R99 ⚠).
-- [ ] **Konec „Po plochu“** u Vysunutí. → Ú11 (R109 ⚠: jen rovinná plocha rovnoběžná se skicou).
-- [ ] (Volitelné) **Automatické cíle** „sloučit se vším, čeho se dotkne“. **Odloženo do [[M15-export-a-dokonceni#Úkoly z M14|M15]]** (R109 ⚠): potřebuje dotaz jádra na průnik.
+- [x] **Role ploch Vysunutí a Rotace** ([[06-geometricke-jadro#Stav po M14]], [[08-topologicke-pojmenovani#Plochy]]). → Ú0, Ú4 (id křivek), Ú1 (role hran profilu u handle, `face:start|end|side:<entita>`), Ú6 (jména přes historii booleanu v `applyBodyOperation`, R98, R99 ⚠).
+- [x] **Konec „Po plochu“** u Vysunutí. → Ú11 (R109 ⚠: jen rovinná plocha rovnoběžná se skicou; obecné „Po plochu“ → odloženo R109).
+- [ ] (Volitelné) **Automatické cíle** „sloučit se vším, čeho se dotkne“. **Odloženo do [[M15-export-a-dokonceni#Úkoly z M14|M15]]** (R109 ⚠): potřebuje dotaz jádra na průnik. → odloženo R109
 
 ## Mimo rozsah M14
 
@@ -303,6 +303,7 @@ Největší úkol milníku; implementátor smí postupovat ve dvou TDD fázích 
 - Zkontrolovat kód Ú0–Ú15 proti specifikacím, propsat odchylky (03, 06, 07, 08, 09, 10, 11, 12), převést otázky implementátorů na otázky ve vaultu; spec 08 → `status: implemented`.
 - Ověřit, že `interaction` nezná `regen` (jen `TopoNames`), `render` nezná jména, pluginy se navzájem neimportují a `TopoName` razí jen `propagateNames`.
 - `architecture-reviewer`, oprava nálezů, retrospektiva, poznatky (kandidáti: topologické pojmenování v praxi – co rozhoduje o stabilitě jmen; historie jádra jako kontrakt s invariantem úplnosti; port jako úzké rozhraní místo sdíleného typu), pojem [[Topologické pojmenování]] doplnit o `NameTable`/`nameShape`, `/milnik konec M14`, commit.
+- [x] Ú16a Oprava nálezů revize (Po plochu přes resolvePlanes, readRefOf, modifyBody/replaceBodies, nameOfHit, toggle, perf bez rozebírání jmen)
 
 ## Co se naučíš
 
@@ -317,4 +318,18 @@ Největší úkol milníku; implementátor smí postupovat ve dvou TDD fázích 
 
 ## Retrospektiva
 
-_(vyplnit po dokončení)_
+_Návrh (noční rychloakce), Pavel doplní._
+
+**Co bylo jinak, než se čekalo**
+- Plán M14 vznikl před implementací M12 a M13, takže kontrakty počítaly s jejich tvarem z plánu. Odchylky dostávali implementátoři v zadání úkolu (stejně jako v M13); fungovalo to, jen se víc odchylek propisovalo až v Ú16.
+- OCCT překvapilo třikrát: `BRepBuilderAPI_MakeWire` hrany kopíruje (id se musí brát z `MakeWire.Edge()`), `gp_Pln.Axis()` je u levotočivé soustavy obrácená (`Direct()`) a rotace o 2π nevrací `Generated` pro hranu kolmou na osu (R118, R119). Všechna tři našly unit testy adaptéru, ne až akceptační scénáře.
+- Čtyři akceptační scénáře spec 08 prošly napoprvé: `propagateNames` a jména byla předem otestovaná na ručně sestavených historiích, takže scénáře s OCCT jen potvrdily, že adaptér historii dodává úplnou.
+- Revize našla pravidlo identity tělesa opsané v pěti builderech; pomocníci `modifyBody` a `replaceBodies` vznikli až po revizi (Ú16a). Sdílený pomocník patří rovnou do kontraktu plánu, jinak ho každý implementátor napíše znovu ([[Kontrolní seznam plánu proti ADR]]).
+- E2E klik na hranu přes výpočet bodu z izometrického pohledu je křehký – závisí na `fitAll` a poloze kamery.
+
+**Co se osvědčilo**
+- `propagateNames` jako čistá funkce bez jádra: všechna pravidla spec 08 se dala otestovat na datech a determinismus vůči pořadí historie ověřit přímo ([[Historie jádra místo geometrického párování]]).
+- Role z jádra (`ShapeResult.roles`): jméno plochy plyne ze sémantiky featury, ne z geometrie, a adaptér je jediné místo, které zná konvence OCCT (R93).
+- `NameTable` s topologií (R92): rovina skici na ploše, „Po plochu“ i jména hran se počítají synchronně a `Body` se kvůli tomu neměnilo.
+
+**Zúžení** (⚠ v [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování]]): R95–R113 – `#k` u nerozlišitelných hran, plocha s nejmenším indexem u rozdělené plochy, víc oblastí bez rozlišení jmen, rozpad booleanu do M15, bez vrcholů a čipů referencí `topo`, jen symetrické zkosení a konstantní poloměr, skica na ploše jen z výběru, neopravitelná rovina zaniklé plochy, „Po plochu“ jen rovnoběžná rovinná plocha, závislost `topo` jen na vlastníkovi tělesa; R118 – náhradní hledání boční plochy rotace o 2π; oprava revize – `NameTable` zmrazená jen typem, nerovinná plocha u „Po plochu“ jako `UNRESOLVED_REFERENCE`.
