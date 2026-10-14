@@ -4,7 +4,7 @@ status: answered
 area: "[[05-persistence]]"
 decide_by: "[[M15-export-a-dokonceni]]"
 proposal: "Až bude regenerace pomalá"
-decision: "persistentní cache geometrie nevzniká; render cachuje sítě podle handle, regenerace podle identity; měření M15 v dodatku"
+decision: "persistentní cache geometrie nevzniká; render cachuje sítě podle handle, regenerace podle identity; měření M15: 39 featur ~0,1 s, cache není potřeba"
 tags:
   - otazka
 created: 2026-10-12
@@ -27,4 +27,15 @@ Klíčovaná hashem receptu, při nesouladu se zahodí. Řešit, až bude regene
 2026-10-14 (noční rychloakce, [[Rozhodnutí noční rychloakce#M15 – Export a dokončení|R131]] ⚠): **Persistentní cache geometrie ani nová cache sítí v M15 nevzniká.** Sítě už cachuje `render` podle handle (`MeshCache`, [[09-vykreslovani#Synchronizace s regenerací]]) a nezměněné těleso má po regeneraci tentýž handle (cache regenerace podle identity, [[07-regenerace#Cache podle identity]]), takže se znovu netesseluje. Cache v úložišti by zrychlila jen otevření dokumentu a potřebovala by serializaci BREP, klíč z receptu a zneplatnění – víc kódu než užitku u modelů tinycad. Rozhodnuto **před** měřením; měření v [[M15-export-a-dokonceni#Ú6 `tests`: měření výkonu|M15 Ú6]] zapíše hlavní sezení jako dodatek níže. Pokud by první regenerace modelu z měření (~40 featur) trvala déle než 2 s, rozhodnutí se přehodnotí a nápad dostane čísla v [[M15-export-a-dokonceni#Další nápady (mimo rozsah)|Další nápady]]. Propsáno do [[05-persistence#Co se ukládá]] (beze změny: geometrie se neukládá).
 
 > [!note] Měření M15
-> _(doplní hlavní sezení po Ú6: medián první regenerace, tessellace, plného přepočtu a přepočtu z cache.)_
+> `tests/perf.test.ts` ([[13-testovani#Měření výkonu]]), Node, OCCT ve stejném vlákně (`createInThreadOcctKernel`), model s 39 featurami: deska 200 × 200 × 20, 36 válců r = 4, jeden Boolean „odebrat“, zaoblení 4 svislých hran r = 5. Mediány ze 3 běhů:
+>
+> | Krok | Čas |
+> |---|---|
+> | první regenerace od nuly | ~103 ms |
+> | tessellace výsledného tělesa | ~34 ms |
+> | plný přepočet (změna výšky desky) | ~101 ms |
+> | změna poloměru posledního válce (cache featur před ním) | ~91 ms |
+>
+> Čas dominuje Boolean s 36 nástroji a zaoblení, které se po každé změně přepočítají vždy; cache featur ušetří jen ~10 % (36 válců je levných).
+>
+> **Závěr:** otevření modelu trvá ~0,1 s, daleko pod hranicí 2 s – **cache geometrie zatím není potřeba, R131 platí.**

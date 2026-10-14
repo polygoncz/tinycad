@@ -17,6 +17,23 @@ Postup se oproti [[Roadmapa|roadmapě]] nemění: plán a kontrakty ve vaultu �
 
 Značka **⚠ k revizi** = rozhodnutí, u kterého si nejsem jistý nebo které zužuje rozsah; tam se vyplatí podívat nejdřív.
 
+## Shrnutí pro ranní revizi
+
+Nejdůležitější rozhodnutí ⚠ napříč M11–M15, kterými stojí za to začít (podrobnosti u čísla níže):
+
+- **Rozpad booleanu na víc těles odložen třikrát** – výsledek booleanu (i „odebrat“ ve Vysunutí) je vždy jedno těleso; rozpad potřebuje vlastní milník s ADR o identitě (R8 → R100 → R132, [[#M15 – Export a dokončení]]).
+- **Skrývání a přejmenování těles jdou přes log a undo** (metadata v dokumentu), na rozdíl od Fusion (R13, [[#M11 – Další entity]]).
+- **Skica nemá vlastní operace `sketch.*`** – celá editace je jedna transakce zapsaná jako `feature.setParams` (R36, [[#M12 – Skicář]]).
+- **Uvnitř skicáře nefunguje undo**, „Zrušit skicu“ zahodí vše (R44, [[#M12 – Skicář]]).
+- **Konfliktní nebo redundantní vazba se odmítne**, místo aby se přidala a skica zčervenala jako v Onshape (R42, [[#M12 – Skicář]]).
+- **Cílová tělesa vysunutí vybírá uživatel výslovně**, „Merge with all“ není (R66, [[#M13 – Extrude a Revolve]]).
+- **Víc hran mezi dvěma plochami** se rozliší kontextem ploch u vrcholů a nakonec křehkým geometrickým `#k` (R95, [[#M14 – Topologické pojmenování]]).
+- **Jméno na víc ploch (rozdělená plocha)** použije všechny, rovina skici a „Po plochu“ vezmou plochu s nejmenším indexem (R96, [[#M14 – Topologické pojmenování]]).
+- **Reference `topo` závisí jen na vlastníkovi tělesa**, ne na featurách, jejichž jména obsahuje – smazání válce fillet díry nepotvrdí (R110, [[#M14 – Topologické pojmenování]]).
+- **Export dokumentu z UI je vždy s historií** (z uloženého stavu), bez historie jen přes API (R125, [[#M15 – Export a dokončení]]).
+- **Barva tělesa bez průhlednosti** (R129) a **bez persistentní cache geometrie** – měření dalo ~0,1 s na 39 featur, takže R131 platí ([[Q007 Cache geometrie|Q007]], [[#M15 – Export a dokončení]]).
+- **Kde se odchýlila implementace od plánu:** odrážky „Oprava revize Mxx“ na konci každého milníku – R28 ([[#M11 – Další entity]]), Ú16a ([[#M12 – Skicář]]), Ú13a ([[#M13 – Extrude a Revolve]]), Ú16a ([[#M14 – Topologické pojmenování]]), Ú11a ([[#M15 – Export a dokončení]]); odchylky menšího rozsahu jsou propsané ve specifikacích a v retrospektivách milníků.
+
 ## Obecné
 
 - **R1 – Předpřipravený OCCT build stačí až do M15.** Ověřeno v `replicad_single.d.ts`: je tam `BRepPrimAPI_MakeCylinder`, `BRepAlgoAPI_Fuse/Cut/Common`, `BRepBuilderAPI_Transform`, `BRepPrimAPI_MakePrism/MakeRevol`, `BRepFilletAPI_MakeFillet/MakeChamfer`, `STEPControl_Writer` s `FS`, `BRepBuilderAPI_MakeWire/MakeFace/MakeEdge` a historie `Modified/Generated/IsDeleted` na `BRepBuilderAPI_MakeShape`. [[M16-vlastni-occt-build|M16]] proto zůstává poslední ([[0013-replicad-opencascadejs|ADR 0013]]).

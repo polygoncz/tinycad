@@ -174,7 +174,7 @@ Stav, který UI zobrazuje, vystavují prezentační modely jako `Observable<T>` 
 | `SelectionModel` | `items: Observable<readonly SelectionItem[]>` | `set`, `toggle`, `clear` |
 | `SketchEditor` (M12) | `current: Observable<SketchSession \| null>`, `mode: Observable<Mode>` | `create`, `edit` |
 | `SketchSession` (M12) | `state: Observable<SketchState>` (entity, vazby, stupně volnosti, výběr, řádky vazeb) | `addGeometry`, `addConstraint`, `setDimension`, `remove`, `drag`, `select`, `finish`, `cancel` |
-| `HistoryModel` (M15) | `state: Observable<HistoryState>` (řádky logu, celkový počet) | – (jen čtení) |
+| `HistoryModel` (M15) | `state: Observable<HistoryState>` (řádky logu, celkový počet, počet starších) | – (jen čtení) |
 | `FileActions` (M15) | `status: Observable<FileStatus>` | `dismiss` (akce exportu jsou v `ActionRegistry`) |
 
 Společná pravidla snapshotů:
@@ -510,7 +510,7 @@ export function createBrowserModel(deps: {
 - `select(body)`: je-li otevřená session s `activeRefParam` druhu `bodies`, přidá nebo odebere těleso v tomto parametru (`setParam`, stejné přepínání jako `refPick`) a výběr nemění; jinak `selection.set`/`toggle` (M11, [[Rozhodnutí noční rychloakce#M11 – Další entity|R19]]).
 - Roviny a skici (M12): viditelnost rovin je jen stav pohledu, neukládá se ([[Rozhodnutí noční rychloakce#M12 – Skicář|R48]] ⚠); skici oko nemají. `planes` a `sketches` se přepočítají se stejnými zdroji jako tělesa; nezměněný řádek zůstává týž objekt. Pořadí vyslání: `hidden`, `visiblePlanes`, `bodies`, `planes`, `sketches`.
 - Osy a oblasti (M13, [[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R72, R75]]): viditelnost os je stav pohledu jako u rovin; klik na osu nebo oblast jde jen do aktivního referenčního parametru dialogu (oblast ani osa nejsou položkou `SelectionModel`), jinak nic. Řádky oblastí jsou jen u skic a jen během aktivního parametru `region`, aby Prohlížeč nebyl zahlcený. Model sleduje `editor.current` i `state` otevřené session (aktivní parametr `region`/`axis` a jeho hodnota) a přepočítá se při jejich změně. Hodnoty parametrů čte jen přes `regionRefsOf`/`axisRefOf` z `ref-values`. `ui` označuje stav řádků os (`active`) a oblastí (`selected`) přes `aria-selected` ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R86]]). Pořadí vyslání: `hidden`, `visiblePlanes`, `visibleAxes`, `bodies`, `planes`, `axes`, `sketches`.
-- Barva (M15, [[Q073 Průhlednost a barva těles|Q073]]): `setColor` má stejné zákazy jako `setVisible` (neznámé těleso, otevřená transakce, `canEdit: false`, shodná hodnota → nic); neplatná barva je chyba volajícího (výjimka). `colors` se počítá se stejnými zdroji jako `hidden`, nová mapa jen při změně obsahu. Pořadí vyslání: `hidden`, `colors`, `visiblePlanes`, `visibleAxes`, `bodies`, `planes`, `axes`, `sketches`.
+- Barva (M15, [[Q073 Průhlednost a barva těles|Q073]]): `setColor` má stejné zákazy jako `setVisible` (neznámé těleso, otevřená transakce, `canEdit: false`, shodná hodnota → nic); neplatná barva je chyba volajícího (výjimka) – kontroluje se **před** zákazy, takže vyhodí vždy, i když by se volání jinak zahodilo. `colors` se počítá se stejnými zdroji jako `hidden`, nová mapa jen při změně obsahu. Pořadí vyslání: `hidden`, `colors`, `visiblePlanes`, `visibleAxes`, `bodies`, `planes`, `axes`, `sketches`.
 - Jména čipů v dialogu Prohlížeč nepočítá (od Ú9a, dřív `refLabel`): jsou ve `FieldState.refs` z interní `bodyRefLabel` ([[#Dialog featury: `FeatureEditor`]]).
 
 ## Ladění jmen: `TopoInspector`
@@ -545,14 +545,18 @@ export interface HistoryRow {
   readonly target: number | null;    // u undo/redo seq původního 'do', jinak null
   readonly status: 'active' | 'undone' | 'abandoned' | null;   // jen u 'do': na undo zásobníku / na redo zásobníku / ani jedno; u undo/redo null
 }
-export interface HistoryState { readonly rows: readonly HistoryRow[]; readonly total: number }
+export interface HistoryState {
+  readonly rows: readonly HistoryRow[];
+  readonly total: number;
+  readonly older: number;            // záznamy mimo rows (starší než nejnovějších HISTORY_LIMIT): total - rows.length
+}
 export const HISTORY_LIMIT = 200;
 
 export interface HistoryModel extends Disposable { readonly state: Observable<HistoryState> }
 export function createHistoryModel(deps: { log: OperationLogReader }): HistoryModel;
 ```
 
-- `rows`: nejnovější první, nejvýš `HISTORY_LIMIT` (DOM s tisíci řádky by byl pomalý); `total` = počet všech záznamů logu.
+- `rows`: nejnovější první, nejvýš `HISTORY_LIMIT` (DOM s tisíci řádky by byl pomalý); `total` = počet všech záznamů logu; `older` = `total − rows.length` (ui ho jen ukáže, nepočítá – oprava revize M15).
 - `status` se počítá z `rebuildUndoStacks(log.entries())` (`ops`), stejného pravidla jako `UndoManager`; model na `UndoManager` nezávisí (pořadí odběratelů `appended` by nebylo jisté). Přepočet je O(n) na záznam – pro naše logy zanedbatelné.
 - Přepočet po `log.events.appended`; nový snapshot jen při změně, řádek, jehož hodnoty se nezměnily, je **tentýž objekt** (pravidla snapshotů výše). Zmrazené. `dispose` odhlásí odběr.
 - Klik na řádek nic nedělá: návrat k dřívějšímu záznamu by byl větvení logu ([[Q006 Větvení operačního logu|Q006]], R127 ⚠).
@@ -826,7 +830,7 @@ Akce registruje `createBuiltInActions` volané z `app` (undo, redo, smazat výb�
 - Režimy (M12): `ToolManager` přepne výchozí nástroj při změně režimu, odmítne nástroj mimo režim, `finish`/`Escape` vrací na výchozí nástroj režimu; `ActionRegistry` – stejná zkratka v disjunktních režimech, `handleKey` podle režimu, `enabled` ve snapshotu podle režimu; vestavěné akce nástrojů v obou režimech.
 - Skicář (M12, `FakeSolver`, `FakeViewport`): `create` (rovina, výchozí XY, neznámá rovina), `edit` (jiný typ → výjimka), první řešení bez zápisu, `addGeometry`/`addConstraint`/`setDimension`/`remove` pro `'ok'`, `'conflict'`, `'failed'`, redundantní vazba, vynechání redundantních automatických vazeb, sériová fronta, tažení (jeden rozpracovaný a jeden čekající cíl přes `hold`/`release`), výsledek po zavření zahozen, kresba a styly (`defined` u plně určené), `finish` = jeden záznam v logu, `cancel` = log beze změny; akce skicáře (povolení podle výběru); nástroje s `FakeViewport` (polyline s uzavřením, automatická vodorovná, snap na bod a na počátek, obdélník, kružnice, oblouk, kóta, tažení ve výběrovém nástroji); `toSketchDrawing`, `artifactDrawing`, `planeDrawing`; `FeatureEditSession.setParams`; `BrowserModel` roviny a skici; `FeatureTreeModel.edit` skici.
 - M13: `FieldState.hidden`, `group`, `heading`, `refText`; `regionRefsOf`/`axisRefOf` (vnitřní v `interaction`: jediné čtení referencí oblastí a os, odmítnou prázdný `sketch` nebo `sketch` s `/`); `activeRefParam` a `focusRefParam` se skrytými parametry; `create` aktivuje první viditelný referenční parametr; `pickFilterFor` pro `region` a `axis`; `refPick` – oblast (přidat, odebrat, `'sketch-edit'` ignorovat), osa počátku, úsečka skici, kružnice ignorovaná; `artifactDrawing` s konstrukčními čarami a oblastmi (díra), `axisDrawing`; `bindSelectionHighlight` s oblastmi dialogu; `BrowserModel` osy a oblasti; `ToolContext.ops` bez `begin` (typově).
-- M15: `HistoryModel` (prázdný log; tři `do` v obráceném pořadí; undo → řádek `undo` s `target` a `do` `undone`; redo; undo + nové `do` → `abandoned`; 250 záznamů → 200 řádků a `total` 250; nezměněné řádky `===`; log obnovený ze záznamů dá stejné řádky); `createFileActions` s `FakeFileExporter` (zákazy bez těles, se skrytými, s dialogem, v režimu skici; jen viditelná tělesa v pořadí; `running` zakáže obě akce; `idle`, `failed` a `dismiss`; `dispose`); `BrowserModel` barva (řádek, `setColor` a undo, `colors` jen pro tělesa poslední regenerace, zákazy, neplatná barva).
+- M15: `HistoryModel` (prázdný log; tři `do` v obráceném pořadí; undo → řádek `undo` s `target` a `do` `undone`; redo; undo + nové `do` → `abandoned`; prázdný log → `older` 0; 250 záznamů → 200 řádků, `total` 250 a `older` 50; nezměněné řádky `===`; log obnovený ze záznamů dá stejné řádky); `createFileActions` s `FakeFileExporter` (zákazy bez těles, se skrytými, s dialogem, v režimu skici; jen viditelná tělesa v pořadí; `running` zakáže obě akce; `idle`, `failed` a `dismiss`; `dispose`); `BrowserModel` barva (řádek, `setColor` a undo, `colors` jen pro tělesa poslední regenerace, zákazy, neplatná barva).
 - Architektura: `interaction` projde `tsconfig.domain.json` a nezávisí na `regen`, `kernel`, `render`, `ui` (`npm run check`).
 
 ## Otevřené otázky

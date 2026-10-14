@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 15
 aliases:
   - M15
@@ -27,7 +27,7 @@ specs:
 depends_on:
   - "[[M14-topologicke-pojmenovani]]"
 started: 2026-10-14
-finished: 
+finished: 2026-10-14
 tags:
   - milnik
 created: 2026-10-12
@@ -55,7 +55,7 @@ updated: 2026-10-14
 - [x] Ú8 `app`: exportér (STEP, dokument), port `download`, `importDocumentFile`, historie, barvy do viewportu
 - [x] Ú9 `ui`: menu Soubor, stažení, import v seznamu dokumentů, panel historie, barva v Prohlížeči, překlady
 - [x] Ú10 `e2e`: stažení STEP, export a import dokumentu s historií, panel historie
-- [ ] Ú11 hlavní sezení: kontrola, výsledky měření do Q007, vault, `architecture-reviewer`, retrospektiva první verze
+- [x] Ú11 hlavní sezení: kontrola, výsledky měření do Q007, vault, `architecture-reviewer`, retrospektiva první verze
 
 ## Akceptační kritéria
 
@@ -93,7 +93,7 @@ Každý úkol dělá zvlášť subagent `implementer` (TDD: test nejdřív a ov�
 
 **Paralelní běh:** úkoly jedné vlny mají oddělené soubory a běží souběžně ve vlastních worktree. `index.ts` a `testing.ts` modulu, `src/kernel/kernel.ts`, `src/kernel/fake-kernel.ts`, `src/kernel-occt/occt-kernel-impl.ts`, `src/persistence/file.ts`, `src/document/model.ts`, `src/ops/operation.ts`, `src/interaction/browser-model.ts`, `src/render/viewport.ts`, `.dependency-cruiser.cjs`, `tsconfig*.json`, `package.json`, `src/ui/i18n/{cs,en}.ts`, `src/app/session.ts`, `src/app/browser.ts`, `src/app/testing.ts` a `src/app/index.ts` smí v dané vlně měnit jen úkol, u kterého jsou uvedené.
 
-**Nové závislosti npm:** žádné. Předpřipravený build má vše potřebné (ověřeno v `replicad_single.d.ts`, R1): `STEPControl_Writer` (`Transfer(shape, STEPControl_StepModelType, compgraph, Message_ProgressRange)`, `Write(path)` → `IFSelect_ReturnStatus`), `STEPControl_Reader` (`ReadFile`, `TransferRoots`, `OneShape`), `BRep_Builder.MakeCompound/Add`, `TopoDS_Compound`, `BRepGProp.VolumeProperties` + `GProp_GProps`, Emscripten `oc.FS` (`writeFile`, `readFile`, `unlink`). Ikony `ti-file-export`, `ti-file-import`, `ti-history`, `ti-palette` jsou v `@tabler/icons-webfont` (ověřeno). Tabulka modulů v `.dependency-cruiser.cjs` a ve [[01-architektura|spec 01]] se nemění.
+**Nové závislosti npm:** žádné. Předpřipravený build má vše potřebné (ověřeno v `replicad_single.d.ts`, R1): `STEPControl_Writer` (`Transfer(shape, STEPControl_StepModelType, compgraph, Message_ProgressRange)`, `Write(path)` → `IFSelect_ReturnStatus`), `STEPControl_Reader` (`ReadFile`, `TransferRoots`, `OneShape`), `TopoDS_Builder.MakeCompound/Add` (build váže `TopoDS_Builder`, ne `BRep_Builder` – opraveno po Ú1), `TopoDS_Compound`, `BRepGProp.VolumeProperties` + `GProp_GProps`, Emscripten `oc.FS` (`writeFile`, `readFile`, `unlink`). Ikony `ti-file-export`, `ti-file-import`, `ti-history`, `ti-palette` jsou v `@tabler/icons-webfont` (ověřeno). Tabulka modulů v `.dependency-cruiser.cjs` a ve [[01-architektura|spec 01]] se nemění.
 
 | Vlna | Úkoly (paralelně) | Závisí na |
 |---|---|---|
@@ -119,7 +119,7 @@ Proč takhle: vlna A jsou nezávislé kusy v různých modulech (jádro, persist
   export interface GeometryKernel extends PrimitiveOps, TransformOps, BooleanOps, SketchOps, SweepOps, DressupOps, ExchangeOps, MeshOps, QueryOps, LifecycleOps {}
   ```
   - `shapes` neprázdné a bez duplicit, jinak `'invalid-input'`; neznámý handle → `'unknown-handle'`; selhání `Transfer`/`Write` (status jiný než `IFSelect_RetDone`) → `'operation-failed'`. Vstupy zůstávají platné, žádný nový handle. Výsledek je nový buffer (celý, vlastní `ArrayBuffer`), text po oříznutí začíná `ISO-10303-21;` a končí `END-ISO-10303-21;`.
-  - OCCT: jeden tvar přímo, víc → `TopoDS_Compound` přes `BRep_Builder`; `STEPControl_Writer.Transfer(tvar, STEPControl_AsIs, true, new Message_ProgressRange())`, `Write('/tmp/tinycad-export-<n>.step')` (`n` rostoucí čítač), `oc.FS.readFile` → kopie do nového `Uint8Array`, `oc.FS.unlink` ve `finally` (i po chybě); objekty OCCT přes `using`. Obsah hlavičky (čas, jméno) se nezaručuje.
+  - OCCT: jeden tvar přímo, víc → `TopoDS_Compound` přes `TopoDS_Builder` (`BRep_Builder` build neváže, opraveno po Ú1); `STEPControl_Writer.Transfer(tvar, STEPControl_AsIs, true, new Message_ProgressRange())`, `Write('/tmp/tinycad-export-<n>.step')` (`n` rostoucí čítač), `oc.FS.readFile` → kopie do nového `Uint8Array`, `oc.FS.unlink` ve `finally` (i po chybě); objekty OCCT přes `using`. Obsah hlavičky (čas, jméno) se nezaručuje.
   - Fake: deterministický text `ISO-10303-21;` / `HEADER;` … / `DATA;` / řádek `#<i>=FAKE_SOLID((min),(max));` na každý tvar v pořadí `shapes` (AABB) / `ENDSEC;` / `END-ISO-10303-21;`, kódovaný `TextEncoder`.
 - **Testy:** kontraktová sada (obě jádra): kvádr → začátek a konec textu, neprázdný; dva kvádry; `[]`, duplicitní handle → `'invalid-input'`; neznámý a uvolněný handle → `'unknown-handle'`; vstup zůstane platný a `liveHandleCount` se nezmění; dvě volání vrací různé buffery. OCCT navíc (`occt-step.test.ts`): **akceptační** kvádr 20 × 20 × 10 minus válec r = 3 přes celou výšku → zapsat bajty do `oc.FS`, `STEPControl_Reader.ReadFile` = `IFSelect_RetDone`, `TransferRoots` ≥ 1, `OneShape` má právě 1 solid, objem `BRepGProp.VolumeProperties` = `4000 − 90π` (relativně 1e-4), bbox jako originál (1e-5); dva oddělené kvádry → 2 solidy a součet objemů; dočasný soubor po exportu v `oc.FS` není (i po chybě – vynucená přes neplatný vstup do `Transfer`, pokud jde, jinak ohlásit). Klient a worker přeposílají `exportStep` a worker předá buffer přes `transfer`.
 - **Ověřit a ohlásit:** jednotky v souboru (`mm`, výchozí `write.step.unit`); čas exportu kvádru s dírou v Node.
@@ -267,7 +267,7 @@ Proč takhle: vlna A jsou nezávislé kusy v různých modulech (jádro, persist
   1. Nový dokument → „Kvádr“ → „OK“ → „Soubor“ → „Exportovat STEP“ → stažený soubor `Bez názvu.step`, obsah začíná `ISO-10303-21;`.
   2. „Válec“ → „OK“ → „Historie úprav“ → panel ukazuje dva řádky („Válec“, „Kvádr“) → „Zpět“ → nahoře řádek „Zpět: Válec“, řádek „Válec“ vrácený → „Znovu“.
   3. Barva prvního tělesa v Prohlížeči na `#ff0000` → reload → pole barvy má `#ff0000`.
-  4. „Soubor“ → „Exportovat dokument“ → stažený `Bez názvu.tinycad.json` → „Dokumenty“ → „Importovat“ (`setInputFiles` se staženou cestou) → otevře se nový dokument, Timeline „Kvádr 1“, „Válec 1“ bez chyby → „Zpět“ → „Válec 1“ zmizí.
+  4. „Soubor“ → „Exportovat dokument“ → stažený `Bez názvu.tinycad.json` → „Dokumenty“ → „Importovat“ (`setInputFiles` se staženou cestou) → otevře se nový dokument, Timeline „Kvádr 1“, „Válec 1“ bez chyby → „Zpět“ ×2 (barva, pak Válec 1) → „Válec 1“ zmizí.
   5. Konzole bez chyb.
 - **Hotovo když:** `npm run test:e2e` projde v Chrome i WebKit; `npm run check`, `npm run build` zelené.
 
@@ -278,6 +278,7 @@ Proč takhle: vlna A jsou nezávislé kusy v různých modulech (jádro, persist
 - Čísla z Ú6 zapsat do [[Q007 Cache geometrie|Q007]] (sekce Rozhodnutí, dodatek s měřením); kdyby otevření modelu trvalo > 2 s, R131 přehodnotit a zapsat nápad cache do „Další nápady“ s čísly.
 - Projít `grep -l 'status: open' docs/60-otazky/*` – nové otázky z implementace rozhodnout; `01-inbox/` roztřídit.
 - `architecture-reviewer` (hlavně: `interaction` nezná DOM ani jádro, stažení jen v `ui`, `ExchangeOps` mimo `ModelingKernel`), oprava nálezů, retrospektiva milníku i celé první verze, poznatky (kandidáti: export přes virtuální FS Emscriptenu; historie jako ověřitelná data – import přehráním; měření výkonu bez časových asercí), spec statusy (`05`, `06`, `10`, `11` zůstávají `implemented`, `13` → `accepted`), `/milnik konec M15`, commit.
+- [x] Ú11a Oprava nálezů revize (`history`/`files` v `AppSession` bez `dispose`, `BUILT_IN_OPERATION_TYPES` z `app`, úzké závislosti exportéru, `fileMenuItems` podle `fileActionIds`, `HistoryState.older`, `importDocumentText` bez výjimek, `defaultBodyColor` z počátečního tématu, stav vráceného řádku pro čtečky, perf test hledá hrany z topologie)
 
 ## Co se naučíš
 
@@ -312,4 +313,25 @@ Proč takhle: vlna A jsou nezávislé kusy v různých modulech (jádro, persist
 
 ## Retrospektiva
 
-_(vyplnit po dokončení)_
+_Návrh (noční rychloakce), Pavel doplní._
+
+**Co bylo jinak, než se čekalo**
+- Plán M15 vznikl před implementací M13 a M14 a přesto sedl: kontrakty M15 byly úzké (port `ExchangeOps` jen „tvary dovnitř, bajty ven“, `HistoryModel` jen nad logem, barva jako další pole metadat), takže se jich změny v M13/M14 skoro nedotkly.
+- STEP šel přes `oc.FS` (paměťový souborový systém Emscriptenu) s předpřipraveným buildem – [[M16-vlastni-occt-build|M16]] nebyl potřeba ani pro export. Jediné překvapení buildu: `BRep_Builder` není vázaný, `MakeCompound`/`Add` jsou na `TopoDS_Builder`.
+- Měření ukázalo ~0,1 s na model s 39 featurami (boolean a zaoblení dominují, cache featur ušetří ~10 %), takže persistentní cache geometrie je zbytečná a R131 platí ([[Q007 Cache geometrie|Q007]]).
+- Revize M15 našla nejméně nálezů z M11–M15 (vesměs úzké závislosti a drobnosti přístupnosti, Ú11a); kontrolní seznam ADR v zadání úkolů pomohl ([[Kontrolní seznam plánu proti ADR]]).
+- Fake jádro nesmí `TextEncoder` (doménový tsconfig bez DOM), pseudo-STEP kóduje ASCII ručně; e2e potřeboval dvě „Zpět“, protože poslední záznam logu byla barva.
+
+**Co se osvědčilo**
+- Port + adaptér pro export: `interaction` zná jen pravidla akce, `app` jádro a jméno souboru, `ui` Blob a `<a download>`; každá vrstva se testuje bez té pod ní.
+- Import přes přehrání logu: soubor s historií se ověří stejným invariantem jako `verify` při načtení (přehraný základ = snapshot), takže podvržený nebo poškozený soubor se odmítne, ne uloží.
+- Měření výkonu bez časových asercí: test vypisuje časy a ověřuje jen počty volání jádra a úklid handle ([[Měření, které nemůže selhat]]).
+
+**První verze celkově (M0–M15)**
+- Noční rychloakce: M11–M15 implementovány bez průběžného schvalování, všechna rozhodnutí s ⚠ k revizi jsou v [[Rozhodnutí noční rychloakce]] (shrnutí nahoře). Postup „kontrakt ve vaultu → implementer → kontrola → revize“ fungoval i bez Pavla; odchylky se propisovaly na konci milníku.
+- Předpřipravený OCCT build (R1) vydržel celou první verzi; M16 se nedělá.
+- Opakovaně odkládané: rozpad booleanu na víc těles (R8 → R100 → R132) – potřebuje vlastní milník s ADR o identitě.
+
+**Čísla:** poslední běh `npm run check` 4144 unit testů ve 171 souborech, `npm run test:integration` 33 testů v 7 souborech, `npm run test:e2e` 20 testů (Chrome a WebKit).
+
+**Zúžení** (⚠ v [[Rozhodnutí noční rychloakce#M15 – Export a dokončení]]): R122 export jen všech viditelných těles, R123 STEP bez barev a jmen a bez importu, R125 export vždy s historií, R127 panel historie jen ke čtení, R129 barva bez průhlednosti, R131 bez cache geometrie, R132–R133 zbytek úkolů z M14 do Dalších nápadů.

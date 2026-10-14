@@ -7,7 +7,7 @@ aliases:
 tags:
   - plan
 created: 2026-10-12
-updated: 2026-10-13
+updated: 2026-10-14
 ---
 # Roadmapa
 
@@ -37,6 +37,8 @@ Jediná entita až do M10 je **kvádr (Box)**. Druhá entita v M11 je zkouška r
 | [[M14-topologicke-pojmenovani\|M14]] | Topologické pojmenování | `regen`, `kernel-occt` | fillet, chamfer, skica na ploše, stabilní reference |
 | [[M15-export-a-dokonceni\|M15]] | Export a dokončení | `kernel-occt`, `ui` | STEP export, import/export dokumentu |
 | [[M16-vlastni-occt-build\|M16]] | Vlastní OCCT build | `kernel-occt` | vlastní C++ modul přes Emscripten místo předpřipraveného buildu |
+
+**Noční rychloakce 2026-10-14:** [[M11-dalsi-entity|M11]]–[[M15-export-a-dokonceni|M15]] implementovány bez průběžného schvalování, rozhodnutí v [[Rozhodnutí noční rychloakce]]. M16 se nedělá – předpřipravený build stačil na celou první verzi.
 
 Stav milníků (`todo` / `doing` / `done`) je **jen ve vlastnostech** souborů milníků – tabulka níže se z nich generuje sama:
 
