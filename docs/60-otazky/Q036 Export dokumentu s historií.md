@@ -8,7 +8,7 @@ decision: "V M4 jen stav; export s historií v M15"
 tags:
   - otazka
 created: 2026-10-13
-updated: 2026-10-13
+updated: 2026-10-14
 ---
 # Q036 Export dokumentu s historií
 
@@ -34,3 +34,6 @@ Návrh: **1**. Formát je verzovaný, rozšíření o historii nic nerozbije.
 ## Rozhodnutí
 
 2026-10-13: **Varianta 1.** V M4 nese `.tinycad.json` jen stav (snapshot s `atSeq 0`). Export s historií (`base` + `entries`) se doplní v [[M15-export-a-dokonceni|M15]] jako rozšíření formátu (`formatVersion`). Propsáno do [[05-persistence#Export a import souboru]].
+
+> [!note] Doplnění M15 (2026-10-14, noční rychloakce, [[Rozhodnutí noční rychloakce#M15 – Export a dokončení|R125]] ⚠)
+> Historie se doplňuje podle varianty 2, jen ze strany storu: `.tinycad.json` verze 2 nese volitelné `history: { base, entries }` a `snapshot.atSeq = entries.length`. Export dělá `exportStoredDocument(store, id, …)` z uloženého stavu (základní snapshot má jen store, `app` předtím zavolá `flush()`), takže `LoadedDocument` se nemění. Import historii ověří přehráním `base` + `entries` proti snapshotu (neshoda = chyba dat ze souboru) a uloží základní snapshot, záznamy i stav, undo se tak přenese. UI exportuje vždy s historií; soubor verze 1 se dál načte. Propsáno do [[05-persistence#Export a import souboru]].

@@ -15,6 +15,7 @@ milestones:
   - "[[M12-skicar]]"
   - "[[M13-extrude-revolve]]"
   - "[[M14-topologicke-pojmenovani]]"
+  - "[[M15-export-a-dokonceni]]"
   - "[[M16-vlastni-occt-build]]"
 tags:
   - spec
@@ -222,15 +223,23 @@ export interface GeometryKernel
 - **Historie** (`ShapeResult.history`) u operací se vstupními tvary: `transform` (vstup 0), `boolean` (vstupy = `[...targets, ...tools]` v pořadí volání), `extrude`, `revolve` (vstup 0 = profil), `fillet`, `chamfer` (vstup 0). Primitiva a `makeFace` historii nevrací (`undefined`). Obsah: `modified` a `deleted` jen pro **plochy** vstupů, `generated` = plochy výstupu vzniklé z plochy, hrany nebo vrcholu vstupu. Změny hran a vrcholů se nevrací – jména hran plynou z ploch ([[08-topologicke-pojmenovani#Hrany]], [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R91]]).
 - `topology` je dotaz bez nového handle; síť (`tessellate`) a topologie téhož handle mají stejné indexy ploch a hran.
 
-### Plánované rozšíření
+### Stav po M15
 
-Přidávají se do `GeometryKernel` v milníku, který je potřebuje, a kontraktová sada se o ně rozšíří:
+M15 přidal export do STEP ([[M15-export-a-dokonceni|M15]], [[Rozhodnutí noční rychloakce#M15 – Export a dokončení|R121–R123]]):
 
 ```ts
-export interface ExchangeOps {       // M15
-  exportStep(shapes: readonly ShapeHandle[]): Promise<Uint8Array>;
+export interface ExchangeOps {
+  /** Soubor STEP (AP214, mm) se všemi tvary shapes; bajty textu ASCII/UTF-8. */
+  exportStep(shapes: readonly ShapeHandle[]): Promise<Uint8Array<ArrayBuffer>>;
 }
+
+export interface GeometryKernel
+  extends PrimitiveOps, TransformOps, BooleanOps, SketchOps, SweepOps, DressupOps, ExchangeOps, MeshOps, QueryOps, LifecycleOps {}
 ```
+
+- Port nese jen bajty: jméno souboru a stažení řeší `app` a `ui` ([[11-ui#Kompoziční kořen (app)]]). Barvy a jména těles STEP nenese (`STEPControl_Writer`, ne XCAF, R123 ⚠).
+- `ExchangeOps` **není** v `ModelingKernel` ([[07-regenerace#Builder featury]]): builder featury nic neexportuje.
+- Import STEP do modelu není; `STEPControl_Reader` používá jen test adaptéru (zpětné načtení).
 
 ### Kontrakt (platí pro každou implementaci)
 
@@ -247,6 +256,7 @@ Ověřuje ho kontraktová sada ([[#Testy]]), spuštěná pro `FakeKernel` v M5 a
 - **`roles` a `history`** (M14): podle [[#Stav po M14]]. Indexy v rolích a historii jsou platné indexy podtvarů výstupu (a vstupů), vzestupně bez duplicit. **Úplnost historie:** každá plocha každého vstupu je v `history` právě jednou – buď v `modified` (i nezměněná plocha jako identita na svůj index ve výstupu), nebo v `deleted`. Pořadí položek: podle vstupu, pak druhu (`face`, `edge`, `vertex`), pak indexu.
 - **`topology`** (M14): neznámý handle → `'unknown-handle'`; počty ploch a hran odpovídají síti (`tessellate`); kvádr má 6 rovinných ploch s normálami ±X, ±Y, ±Z ven z tělesa a bodem roviny na příslušné stěně, 12 hran se dvěma různými sousedními plochami a dvěma vrcholy, `vertexCount` 8.
 - **`fillet`, `chamfer`** (M14): neznámý handle → `'unknown-handle'`; `edges` neprázdné, celá čísla v rozsahu hran tvaru, bez duplicit, `radius`/`distance` konečné > 0, jinak `'invalid-input'`. Selhání algoritmu (poloměr větší než sousední plochy, hrana, kterou zaoblit nejde) → `'operation-failed'`, nikdy `'internal'`. Vstup zůstává platný. Bounding box zaobleného nebo zkoseného kvádru (jedna hrana) = bounding box kvádru (tolerance 1e-5).
+- **`exportStep`** (M15): `shapes` neprázdné a bez duplicit, jinak `'invalid-input'`; neznámý handle → `'unknown-handle'`; selhání zápisu → `'operation-failed'`. Vstupy zůstávají platné, nevzniká žádný handle. Výsledek je nový buffer (vlastní `ArrayBuffer`, přenositelný), text po oříznutí bílých znaků začíná `ISO-10303-21;` a končí `END-ISO-10303-21;`. Obsah hlavičky (čas, jméno) se nezaručuje, opakované volání nemusí dát stejné bajty.
 - **`tessellate`:** `linearDeflection` i `angularDeflection` jsou konečná čísla > 0, jinak `'invalid-input'`. Neznámý handle → `'unknown-handle'`. Každé volání vrací **nové** buffery, nesdílené s jiným voláním, s jiným polem téže sítě ani s vnitřním stavem jádra, takže je volající smí přenést jako transferable. Že opakované volání vrátí stejná data, se **nezaručuje** (OCCT může síť zjemnit).
 - **`boundingBox`:** neznámý handle → `'unknown-handle'`. Vrací nový objekt.
 - **`release`:**
@@ -401,6 +411,13 @@ Modulový worker inicializuje OCCT asynchronně. Zpráva, která do workeru dora
 - **Zaoblení a zkosení:** `BRepFilletAPI_MakeFillet(shape)`, `Add(radius, TopoDS.Edge(hrana))` pro každou hranu, `Build()`; `BRepFilletAPI_MakeChamfer(shape)`, `Add(distance, hrana)`. Výjimka OCCT z `Build`/`Shape`, `!IsDone()`, výsledek bez solidu nebo neplatný (`BRepCheck_Analyzer`) → `'operation-failed'` se zprávou (trap WASM zůstává fatální, [[Q055 Pád WASM jádra|Q055]]). Historie přes `collectHistory`. Všechny objekty OCCT přes `using`.
 - Protokol workeru a klient přeposílají `topology`, `fillet` a `chamfer` jako ostatní metody.
 
+### Export STEP v adaptéru (M15)
+
+- Tvar k zápisu: jeden handle přímo jeho tvar, víc → `TopoDS_Compound` (`BRep_Builder.MakeCompound`, `Add` pro každý tvar v pořadí `shapes`).
+- `STEPControl_Writer`: `Transfer(tvar, STEPControl_AsIs, true, new Message_ProgressRange())` a `Write(cesta)`; status jiný než `IFSelect_RetDone` → `'operation-failed'`. Jednotky výchozí (`write.step.unit` = mm, souhlasí s [[01-architektura#Souřadnice a jednotky]]).
+- Writer umí psát jen do souboru, proto přes virtuální souborový systém Emscriptenu (`oc.FS`, paměťový MEMFS): cesta `/tmp/tinycad-export-<n>.step` s rostoucím čítačem instance, `oc.FS.readFile(cesta)` → kopie do nového `Uint8Array` (vlastní buffer), `oc.FS.unlink(cesta)` ve `finally` – soubor nezůstane ani po chybě. Objekty OCCT přes `using`.
+- Worker vrací bajty přes `transfer` (jako síť), klient je jen předá.
+
 ### Volba WASM buildu OCCT (spike v M7)
 
 Rozhodnuto ([[Q012 Volba WASM buildu OCCT|Q012]], [[0013-replicad-opencascadejs|ADR 0013]]): **`replicad-opencascadejs` 1.1.0**. Měření ze spiku (`spikes/m07-occt/`) jsou v ADR.
@@ -434,6 +451,7 @@ export function describeGeometryKernelContract(name: string, factory: () => Prom
 - Záznam tvaru (`AabbEntry`) je AABB. `makeBox` uloží `[origin, origin + size]`. Od M11: `makeCylinder` uloží AABB válce pro libovolnou osu (`â` jednotková osa, v ose `k` rozšíření `radius · sqrt(1 − â_k²)` kolem obou podstav); `transform` AABB osmi rohů vstupního AABB po `mat4.transformPoint`; `boolean('union')` obalový AABB všech vstupů, `'subtract'` obalový AABB cílů (jeden cíl beze změny – fake nic neodečítá), `'intersect'` průnik obalu cílů s obalem nástrojů, prázdný nebo nulové tloušťky → `'operation-failed'`. Od M12 `makeFace` uloží AABB smyčky `outer` v prostoru: koncové body křivek a u oblouků a kružnic body v lokálních úhlech 0, π/2, π, 3π/2, které na křivce leží, převedené `plane.toWorld` (přesné pro roviny s osami rovnoběžnými se souřadnicovými, jinde podhodnocené – fake to nevadí); `tessellate` plochy je kvádr s nulovou tloušťkou. Validace vstupů je stejná jako u OCCT.
 - Od M13 si záznam pamatuje příznak „plocha“ (`makeFace` ano, `transform` ho dědí, ostatní operace ne) pro kontrolu profilu v `extrude`/`revolve`. `extrude` uloží obálku AABB profilu a AABB posunutého o `d̂ · distance`; `revolve` obálku osmi rohů AABB profilu otočených kolem osy o úhly `0`, `angle` a každé `k · π/2` mezi nimi (přesné pro případy kontraktové sady, jinde přibližné – fake to nevadí).
 - Od M14: `topology` každého záznamu je topologie kvádru AABB – 6 rovinných ploch v pořadí sítě (−X, +X, −Y, +Y, −Z, +Z, rovina se středem stěny a normálou ven), 12 hran v pořadí sítě se sousedností a vrcholy odvozenými z rohů, 8 vrcholů, střed hrany = střed úsečky. Role: `makeBox` → `left 0, right 1, front 2, back 3, bottom 4, top 5`; `makeCylinder` → `bottom`/`top` = stěna ve směru −/+ převládající složky osy, `side` = zbylé 4; `extrude` → `start`/`end` = stěna ve směru −/+ převládající složky `d̂` (boční role fake nevrací); `makeFace` a `revolve` role nevrací. Historie: `transform`, `fillet`, `chamfer` identita 6 ploch; `boolean` identita prvního vstupu, ostatní vstupy `deleted`; `extrude`/`revolve` profil `deleted`. `fillet`/`chamfer` vrací AABB beze změny (nový handle) a kontrolují vstup jako OCCT (rozsah hran = 12).
+- Od M15: `exportStep` kontroluje vstup jako OCCT a vrací deterministický pseudo-STEP (`TextEncoder`): `ISO-10303-21;`, `HEADER;` … `ENDSEC;`, `DATA;`, řádek `#<i>=FAKE_SOLID((min),(max));` na každý tvar v pořadí `shapes` (AABB), `ENDSEC;`, `END-ISO-10303-21;`. Testy vyšších vrstev tak ověří, co se exportovalo.
 - `tessellate` vrací AABB jako kvádr: 6 ploch po 2 trojúhelnících (24 vrcholů, normály ploch), pořadí ploch −X, +X, −Y, +Y, −Z, +Z. Dál 12 hran po 2 bodech. Platí pro každý tvar, i válec a výsledek booleanu.
 - Volání `failNext` se týká jen dalšího volání dané metody. Injektovaná chyba nevytvoří handle a nic neuvolní.
 - Výsledky se vrací asynchronně (v mikroúloze), nikdy synchronně, aby testy vyšších vrstev nespoléhaly na pořadí, které by s workerem neplatilo.
@@ -449,6 +467,8 @@ export function describeGeometryKernelContract(name: string, factory: () => Prom
 - **M12** (kontraktová sada): `makeFace` – čtverec v rovině XY, obdélník v rovině XZ posunuté do `origin [0, 5, 0]`, kružnice v rovině YZ, smyčka z úsečky a půlkruhového oblouku („D“, `ccw` true i false), čtverec s kruhovou dírou: bbox s tolerancí 1e-5, síť projde `validateMeshData`; neortonormální rovina, neuzavřená smyčka, kružnice uprostřed víceprvkové smyčky, nulová úsečka, oblouk s nestejným poloměrem, prázdná `outer` → `'invalid-input'` bez handle; izolace vstupu.
 - **M13** (kontraktová sada): `extrude` – čtverec 10 × 10 na XY o 5 ve směru +Z, o 5 ve směru `[0, 0, 3]` (nejednotkový), ve směru −Z, obdélník na XZ ve směru −Y: bbox s tolerancí 1e-5, síť projde `validateMeshData` a leží v bbox; profil zůstává platný; profil po `transform` (posunutý čtverec) funguje; `distance` 0, záporná, `NaN`, nulový směr, profil kvádr → `'invalid-input'` bez handle; neznámý handle; izolace vstupu. `revolve` – obdélník na XZ (`x ∈ [5, 10]`, `z ∈ [0, 10]`) kolem osy Z o 2π → bbox `[−10, 10]² × [0, 10]`, o π/2 → `[0, 10]² × [0, 10]`, o π/2 kolem osy s opačným směrem → `x ∈ [0, 10]`, `y ∈ [−10, 0]`; úhel 0, záporný, > 2π, `NaN`, nulový směr osy, profil kvádr → `'invalid-input'`; síť projde `validateMeshData`.
 - **M14** (kontraktová sada): `topology` kvádru (6 rovinných ploch s normálami ven, 12 hran, každá se dvěma plochami a dvěma vrcholy, 8 vrcholů; počty sedí se sítí; `unknown-handle`); role kvádru (6 klíčů, každý jedna plocha, různé, normála plochy role odpovídá ose podle tabulky) a válce (`top`/`bottom` po jedné rovinné ploše s normálou ±osa, `side` neprázdné, disjunktní); úplnost historie u `transform`, `boolean` (všechny tři operace), `extrude`, `revolve`, `fillet`, `chamfer` (každá plocha vstupu právě jednou v `modified` nebo `deleted`, indexy v rozsahu); `fillet`/`chamfer` jedné hrany kvádru – bbox beze změny, vstup platný, neplatné vstupy (`[]`, duplicita, index mimo rozsah, neceločíselný, poloměr 0, záporný, `NaN`) → `'invalid-input'` bez handle; izolace vstupu `edges`.
+- **M15** (kontraktová sada): `exportStep` kvádru a dvou kvádrů – začátek a konec textu, neprázdný; `[]` a duplicitní handle → `'invalid-input'`; neznámý a uvolněný handle → `'unknown-handle'`; vstup zůstává platný a `liveHandleCount` se nemění; dvě volání vrací různé buffery.
+- `kernel-occt` navíc (M15, akceptace): kvádr 20 × 20 × 10 minus válec r = 3 přes celou výšku → bajty zpět do `oc.FS` → `STEPControl_Reader` (`ReadFile` = `IFSelect_RetDone`, `TransferRoots`, `OneShape`) má právě jeden solid s objemem `4000 − 90π` (`BRepGProp.VolumeProperties`, relativně 1e-4) a stejným bounding boxem (1e-5); dva oddělené kvádry → dva solidy a součet objemů; dočasný soubor po exportu v `oc.FS` není.
 - `kernel-occt` navíc (M14): kvádr minus procházející válec – plocha pláště válce je v `modified` z nástroje, horní a spodní stěna kvádru z cíle, podstavy válce `deleted`, topologie 7 ploch a hrana mezi horní stěnou a pláštěm; zaoblení hrany kvádru – 7 ploch, právě jedna `generated` z dané hrany, dvě sousední stěny `modified`; zkosení – 7 ploch, nová rovinná; poloměr 6 u kvádru 10 → `'operation-failed'`; `makeFace` obdélníku s id čtyř úseček – 4 role `edge:<id>` na různé hrany, po `transform` a `extrude` 4 role `face:side:<id>` + `start` + `end` (6 ploch); rotace o 2π bez `start`/`end`, o π/2 s nimi; kružnice s id → jedna boční plocha; válec `bottom` v `base`.
 - `kernel-occt` navíc (M13): hranol čtverce 10 × 10 × 5 má 6 ploch a objem 500 (1 %); hranol čtverce s kruhovou dírou r = 2 má 7 ploch a objem `(100 − 4π) · 5`; rotace obdélníku (`x ∈ [5, 10]`) o 2π má 4 plochy a objem `750π`, o π/2 6 ploch a čtvrtinu objemu; rotace obdélníku `x ∈ [0, 5]` (osa na hraně) o 2π má objem `250π`.
 - `kernel-occt` navíc (M12): plocha má v síti 1 plochu; obsah (`BRepGProp.SurfaceProperties`) čtverce s dírou = `a² − πr²` (relativně 1e-6), „D“ = obdélník + půlkruh; samoprotínající se smyčka (motýlek) → `'operation-failed'`.

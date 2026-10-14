@@ -12,6 +12,7 @@ milestones:
   - "[[M12-skicar]]"
   - "[[M13-extrude-revolve]]"
   - "[[M14-topologicke-pojmenovani]]"
+  - "[[M15-export-a-dokonceni]]"
 tags:
   - spec
 created: 2026-10-12
@@ -47,6 +48,7 @@ export interface Viewport extends ViewportPort, Disposable {
 
   setPalette(palette: ScenePalette): void;   // přebarví existující materiály, nic nevytváří znovu (Q072)
   setBodyVisible(body: BodyId, visible: boolean): void; // stav pohledu z Prohlížeče (Q071)
+  setBodyColor(body: BodyId, color: string | null): void; // M15: '#rrggbb' z metadat tělesa, null = barva palety
 
   readonly events: Subscribable<{ pointer: ViewPointerEvent; key: ViewKeyEvent }>;
 }
@@ -83,6 +85,7 @@ export const DARK_PALETTE: ScenePalette;
 - `dispose()`: `unmount()`, uvolní všechna tělesa, zvýraznění, overlay, ovládání kamery a odběratele `events`. Další volání čehokoli kromě `dispose` je chyba, i na podobjektech (`bodies`, `camera`, `highlight`, `overlay`, `events.on`).
 - Barvy scény jsou jen v `ScenePalette` ([[Q072 Barvy scény podle režimu|Q072]]): konstanty `FACE_COLOR`, `EDGE_COLOR`, barvy ve `highlight-layer`, `overlay-layer` a `scene-helpers` se nahradí čtením z palety. `setPalette` změní barvy materiálů a pozadí a zavolá `requestRender()`. Paletu vybírá `app` podle režimu, který mu předá `ui` (`AppSession.setTheme`); `ui` typy z `render` nezná.
 - `setBodyVisible` jen skryje nebo ukáže `BodyView` (`visible`); picking skryté těleso ignoruje (ani nezakrývá tělesa za ním), zvýraznění skrytého tělesa se nekreslí a `camera.fitAll` ho vynechá (rozhodnutí 2026-10-13). Obojí jde přes `BodyLayer.bounds()`, který počítá jen viditelná tělesa; z něj bere i picker toleranci zakrytí. Světla scény paleta nemá. Těleso, které po `sync` zmizí, ztratí i stav viditelnosti. Viditelnost se neukládá ([[Q071 Viditelnost těles|Q071]]).
+- `setBodyColor` (M15, [[Q073 Průhlednost a barva těles|Q073]]): těleso s barvou dostane materiál ploch s touto barvou (kopie sdíleného materiálu ploch; materiály podle barvy sdílí tělesa se stejnou barvou, `BodyLayer` je drží s počtem uživatelů a uvolní, když je nikdo nepoužívá), `null` vrátí sdílený materiál palety. Hrany zůstávají v barvě palety. Barva je stav vrstvy podle `BodyId` jako viditelnost: přežije `sync` s novým handle a zmizí s tělesem. `setPalette` mění jen výchozí materiál, obarvená tělesa ne. Stejná hodnota nic nepřekresluje, jinak `requestRender()`. Převod `#rrggbb` → číslo je čistá funkce `parseHexColor` v `palette.ts` (neplatný text → výjimka; platnost hlídá už dokument, [[03-dokument#Metadata těles]]). Uloženou barvu dodá `app` z `BrowserModel.colors` ([[10-interakce#Prohlížeč: `BrowserModel` a viditelnost těles]]).
 - `mount` je odolný proti chybě (např. prohlížeč bez WebGL): uvolní, co už vytvořil, a výjimku pošle dál.
 - Známé omezení: Three.js si na materiálech registruje posluchače `dispose` s odkazem na renderer, takže materiály žijící celý život viewportu mohou po opakovaném `mount`/`unmount` držet staré renderery v paměti CPU až do `dispose`. Opakovaný mount je vzácný, neřešíme.
 - `unmount()` volá `renderer.forceContextLoss()`: prohlížeč dovolí jen několik kontextů WebGL a opakovaný `mount` by je vyčerpal. Po opětovném `mount` zůstane kamera, jak byla, výchozí pohled (`iso` + `fitAll`) se nastaví jen při prvním `mount`.
@@ -203,7 +206,7 @@ Filtr (`PickFilter`, [[10-interakce#Port viewportu]], M10.1): průchod přes hra
 ## Testy
 
 `render` se testuje nejhůř, proto v něm má být co nejméně logiky ([[Q061 Testy render v Node|Q061]]):
-- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor`, od M13 `pickSketchRegion` a `pointInRegion` (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
+- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor`, od M13 `pickSketchRegion` a `pointInRegion`, od M15 `parseHexColor` (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
 - Testy `render` nesmí importovat `@/kernel/testing` (`FakeKernel`): `render` závisí na `kernel` jen typově a `testing.ts` otevírá jen hodnotovým závislostem ([[01-architektura]]). Sítě v testech jsou ruční, malé a záměrně s klíči ploch mimo pořadí.
 - Kód s Three.js (`Viewport`, `BodyView`, vrstvy, picking) se ověřuje ručně na dev stránce `dev/viewport.html`. Smoke test v prohlížeči (Playwright) později.
 

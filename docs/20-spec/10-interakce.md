@@ -12,6 +12,7 @@ milestones:
   - "[[M12-skicar]]"
   - "[[M13-extrude-revolve]]"
   - "[[M14-topologicke-pojmenovani]]"
+  - "[[M15-export-a-dokonceni]]"
 tags:
   - spec
 created: 2026-10-12
@@ -173,6 +174,8 @@ Stav, který UI zobrazuje, vystavují prezentační modely jako `Observable<T>` 
 | `SelectionModel` | `items: Observable<readonly SelectionItem[]>` | `set`, `toggle`, `clear` |
 | `SketchEditor` (M12) | `current: Observable<SketchSession \| null>`, `mode: Observable<Mode>` | `create`, `edit` |
 | `SketchSession` (M12) | `state: Observable<SketchState>` (entity, vazby, stupně volnosti, výběr, řádky vazeb) | `addGeometry`, `addConstraint`, `setDimension`, `remove`, `drag`, `select`, `finish`, `cancel` |
+| `HistoryModel` (M15) | `state: Observable<HistoryState>` (řádky logu, celkový počet) | – (jen čtení) |
+| `FileActions` (M15) | `status: Observable<FileStatus>` | `dismiss` (akce exportu jsou v `ActionRegistry`) |
 
 Společná pravidla snapshotů:
 - Model vystavuje `ObservableValue.asObservable()`, nikdy samotnou `ObservableValue` (přetypováním by šlo zapisovat, revize M9). Závislosti dostává v nejužší potřebné podobě: `RegistryReader` místo registru, `SelectionCommands` místo `SelectionModel`, `Pick<FeatureEditor, …>` místo celého editoru ([[0011-programovani-proti-rozhranim|ADR 0011]]).
@@ -450,6 +453,7 @@ export interface BrowserBodyRow {
   readonly userName: string | null;   // jméno z metadat (body.rename); ui ho má přednostně
   readonly feature: FeatureId;        // featura původu (origin)
   readonly visible: boolean;          // !doc.bodyMeta(body).hidden
+  readonly color: string | null;      // M15: doc.bodyMeta(body).color ?? null
   readonly selected: boolean;         // výběr obsahuje { kind: 'body', body }
 }
 
@@ -459,6 +463,8 @@ export interface BrowserModel {
   select(body: BodyId, opts?: { additive?: boolean }): void;
   readonly canEdit: Observable<boolean>;              // !locked: žádný dialog a dokument není jen pro čtení (R14)
   setVisible(body: BodyId, visible: boolean): void;   // → dispatch body.setVisible
+  readonly colors: Observable<ReadonlyMap<BodyId, string>>;   // M15: tělesa poslední regenerace s barvou v metadatech; app → viewport.setBodyColor
+  setColor(body: BodyId, color: string | null): void; // M15: → dispatch body.setColor; neplatná barva (isBodyColor) → výjimka
   readonly renaming: Observable<BodyId | null>;       // těleso v režimu přejmenování (vložené pole v Prohlížeči)
   beginRename(body: BodyId): void;
   cancelRename(): void;
@@ -500,6 +506,7 @@ export function createBrowserModel(deps: {
 - `select(body)`: je-li otevřená session s `activeRefParam` druhu `bodies`, přidá nebo odebere těleso v tomto parametru (`setParam`, stejné přepínání jako `refPick`) a výběr nemění; jinak `selection.set`/`toggle` (M11, [[Rozhodnutí noční rychloakce#M11 – Další entity|R19]]).
 - Roviny a skici (M12): viditelnost rovin je jen stav pohledu, neukládá se ([[Rozhodnutí noční rychloakce#M12 – Skicář|R48]] ⚠); skici oko nemají. `planes` a `sketches` se přepočítají se stejnými zdroji jako tělesa; nezměněný řádek zůstává týž objekt. Pořadí vyslání: `hidden`, `visiblePlanes`, `bodies`, `planes`, `sketches`.
 - Osy a oblasti (M13, [[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R72, R75]]): viditelnost os je stav pohledu jako u rovin; klik na osu nebo oblast jde jen do aktivního referenčního parametru dialogu (oblast ani osa nejsou položkou `SelectionModel`), jinak nic. Řádky oblastí jsou jen u skic a jen během aktivního parametru `region`, aby Prohlížeč nebyl zahlcený. Model se přepočítá i při změně `editor.current` a `state` otevřené session. Pořadí vyslání: `hidden`, `visiblePlanes`, `visibleAxes`, `bodies`, `planes`, `axes`, `sketches`.
+- Barva (M15, [[Q073 Průhlednost a barva těles|Q073]]): `setColor` má stejné zákazy jako `setVisible` (neznámé těleso, otevřená transakce, `canEdit: false`, shodná hodnota → nic); neplatná barva je chyba volajícího (výjimka). `colors` se počítá se stejnými zdroji jako `hidden`, nová mapa jen při změně obsahu. Pořadí vyslání: `hidden`, `colors`, `visiblePlanes`, `visibleAxes`, `bodies`, `planes`, `axes`, `sketches`.
 - Jména čipů v dialogu Prohlížeč nepočítá (od Ú9a, dřív `refLabel`): jsou ve `FieldState.refs` z interní `bodyRefLabel` ([[#Dialog featury: `FeatureEditor`]]).
 
 ## Ladění jmen: `TopoInspector`
@@ -519,6 +526,66 @@ export function createTopoInspector(deps: { viewport: Pick<ViewportPort, 'pick' 
 
 - Zapnutý: `move` → `viewport.pick(x, y)` s výchozím filtrem; zásah plochy nebo hrany → `TopoHover` se jménem z `RegenBody.names` (bez jména `null`), jinak `null`; `leave` → `null`. Vypnutý: `pick` nevolá a `hovered` je `null`. Nová generace → `hovered` `null` (index už neplatí). Snapshot jen při změně, zmrazený.
 - Je mimo nástroje (vlastní posluchač událostí), aby nic neměnil na výběru ani hoveru; při zapnutí pickuje navíc ke `SelectTool`, proto je výchozí vypnutý.
+
+## Historie úprav: `HistoryModel`
+
+Panel historie (M15, [[Rozhodnutí noční rychloakce#M15 – Export a dokončení|R127, R128]]) ukazuje [[Operační log|operační log]] jako časovou osu, jen ke čtení. Log je append-only a undo připisuje inverzi ([[04-operace-a-historie#Undo / redo]]), takže v panelu je vidět i „Zpět“ a „Znovu“ a změny, které nové `do` po undo zahodilo.
+
+```ts
+export interface HistoryRow {
+  readonly seq: number;
+  readonly kind: 'do' | 'undo' | 'redo';
+  readonly label: string;            // LogEntry.label: klíč překladu nebo typ operace (ADR 0014); ui přeloží
+  readonly time: number;             // ms od epochy
+  readonly target: number | null;    // u undo/redo seq původního 'do', jinak null
+  readonly status: 'active' | 'undone' | 'abandoned' | null;   // jen u 'do': na undo zásobníku / na redo zásobníku / ani jedno; u undo/redo null
+}
+export interface HistoryState { readonly rows: readonly HistoryRow[]; readonly total: number }
+export const HISTORY_LIMIT = 200;
+
+export interface HistoryModel extends Disposable { readonly state: Observable<HistoryState> }
+export function createHistoryModel(deps: { log: OperationLogReader }): HistoryModel;
+```
+
+- `rows`: nejnovější první, nejvýš `HISTORY_LIMIT` (DOM s tisíci řádky by byl pomalý); `total` = počet všech záznamů logu.
+- `status` se počítá z `rebuildUndoStacks(log.entries())` (`ops`), stejného pravidla jako `UndoManager`; model na `UndoManager` nezávisí (pořadí odběratelů `appended` by nebylo jisté). Přepočet je O(n) na záznam – pro naše logy zanedbatelné.
+- Přepočet po `log.events.appended`; nový snapshot jen při změně, řádek, jehož hodnoty se nezměnily, je **tentýž objekt** (pravidla snapshotů výše). Zmrazené. `dispose` odhlásí odběr.
+- Klik na řádek nic nedělá: návrat k dřívějšímu záznamu by byl větvení logu ([[Q006 Větvení operačního logu|Q006]], R127 ⚠).
+
+## Export: akce Soubor
+
+Akce „Exportovat STEP“ a „Exportovat dokument“ (M15, [[Rozhodnutí noční rychloakce#M15 – Export a dokončení|R122, R124]]). Pravidla povolení a stav běhu jsou prezentační logika (`interaction`); co se exportuje a jak se soubor stáhne, dělá `app` za portem `FileExporter` ([[11-ui#Kompoziční kořen (app)]]). `interaction` tak nezná jádro ani DOM.
+
+```ts
+export const FILE_ACTION_IDS = { exportStep: 'file.exportStep', exportDocument: 'file.exportDocument' } as const;
+
+/** Port: app exportuje a soubor stáhne; odmítnutí = export se nepovedl. */
+export interface FileExporter {
+  exportStep(bodies: readonly BodyId[]): Promise<void>;
+  exportDocument(): Promise<void>;
+}
+
+export type FileTask = 'step' | 'document';
+export type FileStatus =
+  | { readonly kind: 'idle' }
+  | { readonly kind: 'running'; readonly task: FileTask }
+  | { readonly kind: 'failed'; readonly task: FileTask; readonly message: string };   // message technická, ui ukáže v tooltipu
+
+export interface FileActions extends Disposable {
+  readonly status: Observable<FileStatus>;
+  dismiss(): void;                    // 'failed' → 'idle', jinak nic
+}
+
+export function createFileActions(deps: {
+  registry: ActionRegistry; exporter: FileExporter; regen: RegenStatusPort;
+  browser: Pick<BrowserModel, 'hidden'>; editor: Pick<FeatureEditor, 'current'>; mode: Observable<Mode>;
+}): FileActions;
+```
+
+- Obě akce: `group: 'file'` (menu Soubor v `TitleBar`), `label` = id (klíč překladu), bez zkratky, režim `model`. Registrují se při vytvoření; `dispose` odhlásí odběry.
+- `exportStep` je povolená, když nic neběží, není otevřený dialog (`editor.current === null`; jinak by šel ven náhled), je režim `model` a poslední `RegenSnapshot` má aspoň jedno těleso, které není v `browser.hidden`. Spustí `exporter.exportStep(tělesa)` s viditelnými tělesy v pořadí snapshotu (pořadí Prohlížeče, R122 ⚠: výběr těles k exportu není). Režim jen pro čtení export nezakazuje.
+- `exportDocument` je povolená, když nic neběží (i s otevřeným dialogem – exportuje se uložený stav, [[05-persistence#Export a import souboru]]).
+- Běh: `status` `running` (obě akce zakázané) → po vyřízení `idle`, po odmítnutí `failed` se zprávou (`Error.message`, jinak `String(e)`). Další spuštění `failed` přepíše.
 
 ## Skicář
 
@@ -751,6 +818,7 @@ Akce registruje `createBuiltInActions` volané z `app` (undo, redo, smazat výb�
 - Režimy (M12): `ToolManager` přepne výchozí nástroj při změně režimu, odmítne nástroj mimo režim, `finish`/`Escape` vrací na výchozí nástroj režimu; `ActionRegistry` – stejná zkratka v disjunktních režimech, `handleKey` podle režimu, `enabled` ve snapshotu podle režimu; vestavěné akce nástrojů v obou režimech.
 - Skicář (M12, `FakeSolver`, `FakeViewport`): `create` (rovina, výchozí XY, neznámá rovina), `edit` (jiný typ → výjimka), první řešení bez zápisu, `addGeometry`/`addConstraint`/`setDimension`/`remove` pro `'ok'`, `'conflict'`, `'failed'`, redundantní vazba, vynechání redundantních automatických vazeb, sériová fronta, tažení (jeden rozpracovaný a jeden čekající cíl přes `hold`/`release`), výsledek po zavření zahozen, kresba a styly (`defined` u plně určené), `finish` = jeden záznam v logu, `cancel` = log beze změny; akce skicáře (povolení podle výběru); nástroje s `FakeViewport` (polyline s uzavřením, automatická vodorovná, snap na bod a na počátek, obdélník, kružnice, oblouk, kóta, tažení ve výběrovém nástroji); `toSketchDrawing`, `artifactDrawing`, `planeDrawing`; `FeatureEditSession.setParams`; `BrowserModel` roviny a skici; `FeatureTreeModel.edit` skici.
 - M13: `FieldState.hidden`, `group`, `refText`; `activeRefParam` a `focusRefParam` se skrytými parametry; `create` aktivuje první viditelný referenční parametr; `pickFilterFor` pro `region` a `axis`; `refPick` – oblast (přidat, odebrat, `'sketch-edit'` ignorovat), osa počátku, úsečka skici, kružnice ignorovaná; `artifactDrawing` s konstrukčními čarami a oblastmi (díra), `axisDrawing`; `bindSelectionHighlight` s oblastmi dialogu; `BrowserModel` osy a oblasti; `ToolContext.ops` bez `begin` (typově).
+- M15: `HistoryModel` (prázdný log; tři `do` v obráceném pořadí; undo → řádek `undo` s `target` a `do` `undone`; redo; undo + nové `do` → `abandoned`; 250 záznamů → 200 řádků a `total` 250; nezměněné řádky `===`; log obnovený ze záznamů dá stejné řádky); `createFileActions` s `FakeFileExporter` (zákazy bez těles, se skrytými, s dialogem, v režimu skici; jen viditelná tělesa v pořadí; `running` zakáže obě akce; `idle`, `failed` a `dismiss`; `dispose`); `BrowserModel` barva (řádek, `setColor` a undo, `colors` jen pro tělesa poslední regenerace, zákazy, neplatná barva).
 - Architektura: `interaction` projde `tsconfig.domain.json` a nezávisí na `regen`, `kernel`, `render`, `ui` (`npm run check`).
 
 ## Otevřené otázky

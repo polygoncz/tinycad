@@ -9,6 +9,7 @@ modules:
   - persistence
 milestones:
   - "[[M04-persistence]]"
+  - "[[M15-export-a-dokonceni]]"
 tags:
   - spec
 created: 2026-10-12
@@ -245,31 +246,47 @@ Dvě záložky se stejným dokumentem by zapisovaly `seq` od stejného `lastSeq`
 
 ## Export a import souboru
 
-Pro zálohu a sdílení mezi počítači (git). Soubor `.tinycad.json`:
+Pro zálohu a sdílení mezi počítači (git). Soubor `.tinycad.json`, od [[M15-export-a-dokonceni|M15]] verze 2 s volitelnou historií ([[Q036 Export dokumentu s historií|Q036]], [[Rozhodnutí noční rychloakce#M15 – Export a dokončení|R125]]):
 
 ```ts
 export interface TinycadFile {
   readonly format: 'tinycad.file';
-  readonly formatVersion: 1;
-  readonly snapshot: DocumentSnapshot;  // atSeq 0
+  readonly formatVersion: 2;                 // M4 psal 1 (bez historie); import čte obě
+  readonly snapshot: DocumentSnapshot;       // stav dokumentu; atSeq = history.entries.length, bez historie 0
+  readonly history?: TinycadHistory;         // M15
 }
 
-/** Čistá funkce: aktuální stav dokumentu, bez historie. */
+export interface TinycadHistory {
+  readonly base: DocumentSnapshot;           // atSeq 0: stav, ze kterého log začíná
+  readonly entries: readonly LogEntry[];     // celý log, seq 1..n bez mezer
+}
+
+/** Čistá funkce: aktuální stav dokumentu, bez historie (formatVersion 2, atSeq 0). */
 export function exportDocument(doc: DocumentReader): TinycadFile;
 
-/** Ověří soubor a vytvoří z něj nový dokument (nové id a createdAt, jméno ze souboru). */
+/** Uložený dokument i s historií: stav jako loadDocument (bez verify), základní snapshot a celý log. */
+export async function exportStoredDocument(
+  store: DocumentStore,
+  id: DocumentId,
+  deps: { schemas: RegistryReader<FeatureSchema>; handlers: OpHandlerRegistry },
+): Promise<Result<TinycadFile, LoadDocumentError>>;
+
+/** Ověří soubor a vytvoří z něj nový dokument (nové id a createdAt, jméno ze souboru), i s historií. */
 export async function importDocument(
   store: DocumentStore,
   raw: unknown,
-  deps: { schemas: RegistryReader<FeatureSchema>; newId: DocumentId; now: number },
+  deps: { schemas: RegistryReader<FeatureSchema>; handlers: OpHandlerRegistry; newId: DocumentId; now: number },
 ): Promise<Result<DocumentMeta, DocumentLoadError>>;
 ```
 
-- `JSON.stringify` a `JSON.parse` a práce se soubory jsou věcí UI (M10/M15). Funkce tady pracují s daty.
-- Import ověří obálku souboru i snapshotu a `fromData` (migrace featur). Uloží snapshot s přepsaným `meta.id` a `createdAt` jako základní snapshot nového dokumentu. Historie se nepřenáší.
-- Vadná obálka souboru (`format`, `formatVersion`) ukončí kontrolu, snapshot se už nekontroluje. Cesty jsou relativní k souboru (`'snapshot.atSeq'`, `'snapshot.document.studio'`). `snapshot.atSeq` musí být 0.
-- Selhání `store.createDocument` (I/O, kolize `newId`) není chyba dat a letí jako odmítnutý `Promise`, stejně jako u `loadDocument`.
-- Export i s logem (undo historie mezi počítači) přijde v M15 jako rozšíření formátu ([[Q036 Export dokumentu s historií|Q036]]).
+- `JSON.stringify` a `JSON.parse` a práce se soubory jsou věcí UI a `app` ([[11-ui#Kompoziční kořen (app)]]). Funkce tady pracují s daty.
+- **Proč export z uloženého stavu:** historie potřebuje základní snapshot, který má jen store (dokument mohl vzniknout importem, [[Q036 Export dokumentu s historií|Q036]]), a stav musí odpovídat logu – živý dokument během otevřeného dialogu obsahuje i nezapsanou transakci. `app` proto před exportem zavolá `flush()`. Dokument otevřený jen pro čtení exportuje, co je uložené (může být novější než zobrazené, R125 ⚠).
+- `exportStoredDocument`: neexistující id → `not-found`; záznamy, snapshot a přehrání jako `loadDocument` (stejné chyby); základní snapshot se zkontroluje jako při `verify` (chyba → `snapshot` s `which: 'base'`). `snapshot` = `createSnapshot(stav, n)`, `history.base` = snapshot základního dokumentu po `fromData` (featury migrované na aktuální verzi), `history.entries` = záznamy po `parseLogEntry` (operace v aktuální verzi). Výsledek je zmrazený a čisté JSON.
+- **Import** ověří obálku (`format`, `formatVersion` 1 nebo 2) a snapshot (`fromData`, migrace featur). Vadná obálka souboru ukončí kontrolu. Cesty jsou relativní k souboru (`'snapshot.atSeq'`, `'snapshot.document.studio'`, `'history.base.atSeq'`, `'history.entries[3].op.featureId'`).
+  - **Bez historie** (verze 1 nebo verze 2 bez `history`): `snapshot.atSeq` musí být 0. Uloží snapshot s přepsaným `meta.id` a `createdAt` jako základní snapshot nového dokumentu (jako v M4).
+  - **S historií:** `history` je objekt, `history.base` snapshot s `atSeq` 0, `history.entries` pole záznamů (`parseLogEntry`, `seq === i + 1`), `snapshot.atSeq === entries.length`. Pak se `base` přehraje záznamy po jednom (výjimka handleru → issue `history.entries[i]` se zprávou), `rebuildUndoStacks` nesmí vyhodit (jinak issue `history.entries`) a `toData` přehraného studia musí být hluboce rovno studiu snapshotu (jinak issue `history`, „Replayed history does not match the snapshot“). Na rozdíl od `verify` při načtení je neshoda **chyba dat** (soubor zvenku mohl někdo upravit), ne chyba programu. Kontrola skončí u první vadné skupiny v pořadí obálka → snapshot → base → záznamy → přehrání.
+  - Uložení: `meta = { ...snapshot.document.meta, id: newId, createdAt: now }` v základním snapshotu i ve stavu; `createDocument(meta, base)`, pak (je-li historie neprázdná) `appendEntries(entries)` a `saveSnapshot(stav s atSeq n)`. Undo historie se tak přenese ([[04-operace-a-historie#Undo / redo|zásobníky]] se spočítají z logu při otevření).
+- Vadný soubor neuloží nic. Selhání storu (I/O, kolize `newId`) není chyba dat a letí jako odmítnutý `Promise`, stejně jako u `loadDocument`; selže-li zápis až po `createDocument`, import zkusí nový dokument smazat (`deleteDocument`, chyba úklidu se zahodí), aby v seznamu nezůstal napůl importovaný.
 
 ## Testy
 
@@ -277,6 +294,7 @@ export async function importDocument(
 - `PersistenceService` s ručním plánovačem (`createManualScheduler` v `testing.ts`): zpoždění bez posouvání, dávka = jeden `appendEntries`, snapshot po N záznamech a jeho obsah, snapshot až po záznamech, stav a jeho události, chyba nezahodí frontu a další flush zapíše vše, retry po `retryMs`, souběžné `flush()`, `dispose`.
 - `loadDocument`: **250 operací → uložení → načtení → stejné `toData`, undo vrátí poslední operaci**; snapshot + zbytek = přehrání od základu (`verify`); každá větev `LoadDocumentError` (chybějící dokument, vadný snapshot, vadný záznam, mezera v `seq`, záznam, který handler odmítne při přehrání).
 - Export → import → stejné `toData` (až na `meta.id`, `createdAt`); vadný soubor → `err`.
+- **M15:** `exportStoredDocument` → `importDocument` → `loadDocument(…, { verify: true })` dá stejné `toData` a stejné undo zásobníky (log s undo, redo a dávkou); soubor projde `JSON.parse(JSON.stringify(…))`; soubor verze 1 z M4 se načte; každá chyba historie zvlášť s cestou (`formatVersion`, `history`, `history.base.atSeq`, mezera v `seq`, vadná operace, záznam odmítnutý handlerem, `snapshot.atSeq`, podvržený snapshot); vadný soubor nic neuloží; selhání `appendEntries` po `createDocument` dokument smaže a odmítne.
 
 ## Otevřené otázky
 

@@ -1,14 +1,14 @@
 ---
 type: question
-status: open
+status: dropped
 area: "[[03-dokument]]"
 decide_by: "[[M15-export-a-dokonceni]]"
 proposal: "Až bude potřeba"
-decision: ""
+decision: "mimo první verzi; barva je u těles (Q073), popis featury v Další nápady M15"
 tags:
   - otazka
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-14
 ---
 # Q004 Popis a barva featury
 
@@ -24,4 +24,4 @@ Až bude potřeba. Přidání volitelného pole do `FeatureInstance` nevyžaduje
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do [[03-dokument]]. Zásadní rozhodnutí → nové ADR.)_
+2026-10-14 (noční rychloakce, [[Rozhodnutí noční rychloakce#M15 – Export a dokončení|R134]]): **Mimo první verzi** → [[M15-export-a-dokonceni#Další nápady (mimo rozsah)|Další nápady]]. Barvu má od M15 **těleso** ([[Q073 Průhlednost a barva těles|Q073]]) – je to vzhled výsledku, ne featury. Popis featury zatím nikdo nepotřebuje; volitelné pole `FeatureInstance.description` půjde přidat bez migrace.

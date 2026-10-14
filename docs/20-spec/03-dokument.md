@@ -12,6 +12,7 @@ milestones:
   - "[[M12-skicar]]"
   - "[[M13-extrude-revolve]]"
   - "[[M14-topologicke-pojmenovani]]"
+  - "[[M15-export-a-dokonceni]]"
 tags:
   - spec
 created: 2026-10-12
@@ -52,6 +53,8 @@ export interface DocumentMeta {
   readonly createdAt: number;
 }
 ```
+
+Dokument má **jedno** Part Studio ([[Q001 Jedno nebo více Part Studií|Q001]]: první verze víc nepotřebuje; víc záložek je v „Další nápady“ M15 a model se kvůli tomu nemění předem).
 
 Všechno je **neměnné**. Změna parametru = nová instance `FeatureInstance` a nové pole `features`. Nezměněné featury zůstávají tytéž objekty – na tom stojí cache regenerace ([[07-regenerace|07]], [[0006-nemenna-data|ADR 0006]]).
 
@@ -184,13 +187,16 @@ export function orderViolations(studio: PartStudioData, deps: ReadonlyMap<Featur
 Jméno a skrytí [[Těleso|tělesa]] patří do dokumentu ([[M11-dalsi-entity|M11]], [[Q071 Viditelnost těles|Q071]]): přežijí reload, jdou přes operace a undo ([[04-operace-a-historie#Sada operací]]). Smí tam až od [[0015-artefakty-a-identita-telesa|ADR 0015]]: `BodyId` je rodokmen (featura původu), takže se metadata po změně historie nepřenesou na jiné těleso.
 
 ```ts
-export interface BodyMeta { readonly name?: string; readonly hidden?: true }
+export interface BodyMeta { readonly name?: string; readonly hidden?: true; readonly color?: string }   // color od M15: '#rrggbb' malými písmeny
+
+/** Platná barva tělesa: /^#[0-9a-f]{6}$/ (M15). Sdílí ji fromData a validate operace body.setColor. */
+export function isBodyColor(v: unknown): v is string;
 ```
 
-- **Kanonický tvar** (determinismus, porovnání `toData` při přehrání logu): `setBodyMeta` uloží `name` jen neprázdné a `hidden` jen jako `true`; prázdná metadata záznam odeberou; prázdná mapa → vlastnost `bodies` ve studiu chybí. Barva a průhlednost přibudou jako další pole ([[Q073 Průhlednost a barva těles|Q073]]).
+- **Kanonický tvar** (determinismus, porovnání `toData` při přehrání logu): `setBodyMeta` uloží `name` jen neprázdné a `hidden` jen jako `true`, `color` (M15) jen jako platnou barvu; prázdná metadata záznam odeberou; prázdná mapa → vlastnost `bodies` ve studiu chybí. Barva je čistě vzhled (STEP ji nenese), průhlednost se nedělá ([[Q073 Průhlednost a barva těles|Q073]], [[Rozhodnutí noční rychloakce#M15 – Export a dokončení|R129]] ⚠).
 - Změna metadat vytvoří nové `studio` se **stejným** polem `features` i `rollbackIndex`, takže cache regenerace podle identity featur zůstane platná. Ostatní mutátory `bodies` zachovají.
 - Dokument tělesa nezná (vznikají regenerací), takže `setBodyMeta` existenci tělesa nekontroluje a záznamy smazaných featur zůstávají: undo smazání vrátí těleso i se jménem a skrytím.
-- `fromData`: `studio.bodies` chybí → bez metadat; jinak objekt s klíči přes `parseBodyId` (jinak issue `studio.bodies['<klíč>']`) a hodnotami jen s `name` (neprázdný řetězec) a `hidden` (boolean, `false` se vypustí); jiná vlastnost v hodnotě je issue (přísnost jako u parametrů, [[Q028 Chybějící a přebytečné parametry|Q028]]). Cesty dalších issue: `bodies`, které není objekt → `studio.bodies`; hodnota, která není objekt → `studio.bodies['<klíč>']`; chyba v hodnotě → `studio.bodies['<klíč>'].name` / `.hidden` / `.<cizí klíč>`. Prázdná hodnota `{}` nebo `{ hidden: false }` je platná a kanonizace ji zahodí. Výsledek je v kanonickém tvaru a zmrazený.
+- `fromData`: `studio.bodies` chybí → bez metadat; jinak objekt s klíči přes `parseBodyId` (jinak issue `studio.bodies['<klíč>']`) a hodnotami jen s `name` (neprázdný řetězec), `hidden` (boolean, `false` se vypustí) a od M15 `color` (`isBodyColor`, jinak issue `studio.bodies['<klíč>'].color`); jiná vlastnost v hodnotě je issue (přísnost jako u parametrů, [[Q028 Chybějící a přebytečné parametry|Q028]]). Cesty dalších issue: `bodies`, které není objekt → `studio.bodies`; hodnota, která není objekt → `studio.bodies['<klíč>']`; chyba v hodnotě → `studio.bodies['<klíč>'].name` / `.hidden` / `.<cizí klíč>`. Prázdná hodnota `{}` nebo `{ hidden: false }` je platná a kanonizace ji zahodí. Výsledek je v kanonickém tvaru a zmrazený.
 
 ## Schéma featury
 
@@ -322,6 +328,7 @@ export function migrateFeatureData(schemas: RegistryReader<FeatureSchema>, data:
 - `fromData` s poškozenými daty vrátí `err` s cestou k problému (duplicitní id, `rollbackIndex` mimo rozsah, chybějící vlastnost).
 - Podmíněné parametry a osy (M13): `isParamVisible`; `validateAgainstSchema` se schématem ve stylu Extrude (skrytý chybějící i neplatný parametr projde, viditelný se kontroluje); druh `axis` (null, osa, entita skici, neplatná položka); `referencesOf` skryté parametry přeskočí; `dependenciesOf` s úsečkou skici a s osou počátku; `parseAxisId`, `parseSketchId`, `ownerOfArtifact`, `ORIGIN_AXES`.
 - M14: `planes` přijme `TopoRef` (validace, duplicita, `referencesOf`, `dependenciesOf` → vlastník tělesa), `topo` s prázdným `name` → `param.invalidRef`.
+- M15: `setBodyMeta` s barvou a bez ní (kanonický tvar, metadata jen s výchozí barvou zmizí), `fromData` s platnou a neplatnou barvou (`#FFF`, `#ABCDEF`, `red`, číslo), `isBodyColor`.
 - Počáteční geometrie a nové druhy parametrů (M12): `parsePlaneId`, `sketchId`, `ORIGIN_PLANES` (rámce ortonormální, id podle tabulky), `planes` v `readRef`/`referencesOf`/`validateAgainstSchema` (tvar, duplicita, min/max), `data` jen `param.missing`, `dependenciesOf` ignoruje `ORIGIN`, `fromData` a `feature.add` odmítnou `FeatureId` `'origin'`.
 - Metadata těles (M11): kanonizace v `setBodyMeta`, žádný `changed` beze změny, `features` zůstává totéž pole, ostatní mutátory metadata zachovají, `fromData` s platnými i poškozenými metadaty; `param.duplicateRef` pro `bodies` a `topo`.
 

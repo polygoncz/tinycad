@@ -10,6 +10,7 @@ modules:
 milestones:
   - "[[M03-operace]]"
   - "[[M12-skicar]]"
+  - "[[M15-export-a-dokonceni]]"
 tags:
   - spec
 created: 2026-10-12
@@ -51,9 +52,10 @@ Typů je záměrně málo a jsou malé: log žije navždy, každá změna tvaru 
 | `studio.setRollback` | `index: number` | `studio.setRollback` na aktuální index | `setRollbackIndex` |
 | `body.rename` (M11) | `body: BodyId, name: string` (`''` = smazat jméno) | `body.rename` s aktuálním jménem nebo `''` | `setBodyMeta(body, { ...aktuální, name })` |
 | `body.setVisible` (M11) | `body: BodyId, visible: boolean` | `body.setVisible` s aktuální viditelností (`!hidden`) | `setBodyMeta(body, { ...aktuální, hidden: visible ? undefined : true })` |
+| `body.setColor` (M15) | `body: BodyId, color: string \| null` (`'#rrggbb'` malými písmeny, `null` = výchozí barva) | `body.setColor` s aktuální barvou nebo `null` | `setBodyMeta(body, { ...aktuální, color: color ?? undefined })` |
 | `batch` | `ops: readonly Operation[]` | viz [[#Dávka]] | – |
 
-Modul exportuje typy `FeatureAddOp`, `FeatureRemoveOp`, `FeatureSetParamsOp`, `FeatureRenameOp`, `FeatureSuppressOp`, `FeatureMoveOp`, `StudioSetRollbackOp`, `BodyRenameOp`, `BodySetVisibleOp`, `BatchOp`. Konstruktory operací nejsou – operace je literál.
+Modul exportuje typy `FeatureAddOp`, `FeatureRemoveOp`, `FeatureSetParamsOp`, `FeatureRenameOp`, `FeatureSuppressOp`, `FeatureMoveOp`, `StudioSetRollbackOp`, `BodyRenameOp`, `BodySetVisibleOp`, `BodySetColorOp` (M15), `BatchOp`. Konstruktory operací nejsou – operace je literál.
 
 `setParams` nese **celé** parametry, ne patch. Inverze je pak triviální a operace nezávisí na předchozím stavu.
 
@@ -264,6 +266,8 @@ export function createOperationLog(entries?: readonly LogEntry[]): OperationLog;
 
 V paměti je celý log (pro naše velikosti dokumentů to stačí). Na disk ho zapisuje `persistence` ([[05-persistence|05]]), která poslouchá `appended`.
 
+**Panel historie** (M15, [[10-interakce#Historie úprav: `HistoryModel`]]) čte log jen přes `OperationLogReader`: řádek = záznam (`label` je klíč překladu nebo typ operace, ADR 0014), stav vrácení se odvodí z `rebuildUndoStacks`. Log se kvůli panelu nemění; s historií se přenáší i v souboru `.tinycad.json` ([[05-persistence#Export a import souboru]]).
+
 ## Undo / redo
 
 Undo nemaže historii – připíše **inverzní operaci** jako nový záznam. Historie úprav tak zůstává kompletní (podobně jako mikroverze v Onshape).
@@ -329,7 +333,7 @@ export function upcastOperation(handlers: OpHandlerRegistry, raw: unknown): Resu
 
 Po obálce (a případném `upcast`) zavolá `handler.validate`, pokud ho handler má ([[Q032 Kontrola payloadu operací při načítání|Q032]]). První nalezený problém → `err` s cestou relativní k operaci (`'featureId'`, `'feature.typeVersion'`; v dávce s prefixem `ops[i].`). `validate` kontroluje jen **tvar**, ne vztah ke stavu dokumentu (existence featury, rozsah indexu). To ohlásí až `apply` výjimkou při přehrání.
 
-Všech devět vestavěných handlerů `validate` má:
+Všech deset vestavěných handlerů `validate` má:
 
 | `type` | Kontrola |
 |---|---|
@@ -342,6 +346,7 @@ Všech devět vestavěných handlerů `validate` má:
 | `studio.setRollback` | `index` celé číslo ≥ 0 |
 | `body.rename` | `body` ve tvaru id tělesa (`parseBodyId`), `name` řetězec |
 | `body.setVisible` | `body` ve tvaru id tělesa, `visible` boolean |
+| `body.setColor` (M15) | `body` ve tvaru id tělesa, `color` `null` nebo `isBodyColor` (`/^#[0-9a-f]{6}$/`; velká písmena neprojdou, handler nekanonizuje – přehrání je pak deterministické bez převodu) |
 
 Hodnoty `params` proti schématu featury se při načítání nekontrolují a nemigrují; migrace běží až při `apply` ([[#Migrace dat featur]]).
 
@@ -372,8 +377,8 @@ export function parseLogEntry(handlers: OpHandlerRegistry, raw: unknown): Result
 - `upcastOperation`: aktuální verze, fiktivní v1 → v2, chybějící `upcast`, novější verze, neznámý typ, rozbitá obálka i uvnitř dávky.
 - `validate` každého vestavěného handleru: platná operace projde, každé pole z tabulky rozbité zvlášť → `err` se správnou cestou; v dávce s prefixem.
 - `parseLogEntry`: platný záznam každého `kind`, každé pole rozbité zvlášť, `target` u `do`, chyba v `op` i `inverse` s prefixem cesty, upcast staré verze operace uvnitř záznamu.
-- `body.rename` a `body.setVisible`: inverze vrátí metadata, `invert` tělesa bez metadat, `validate` s rozbitým `body`.
-- **Replay test** (fast-check, 1000 sekvencí): náhodné operace (od M11 včetně `body.*`), transakce (commit i abort), undo a redo; pak `replayLog` na prázdný dokument → `toData` se shoduje se živým dokumentem a `rebuildUndoStacks` se shoduje se živými zásobníky.
+- `body.rename`, `body.setVisible` a `body.setColor` (M15): inverze vrátí metadata, `invert` tělesa bez metadat, `validate` s rozbitým `body`.
+- **Replay test** (fast-check, 1000 sekvencí): náhodné operace (od M11 včetně `body.*`, od M15 i `body.setColor`), transakce (commit i abort), undo a redo; pak `replayLog` na prázdný dokument → `toData` se shoduje se živým dokumentem a `rebuildUndoStacks` se shoduje se živými zásobníky.
 
 ## Otevřené otázky
 

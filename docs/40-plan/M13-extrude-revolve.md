@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: doing
 order: 13
 aliases:
   - M13
@@ -25,7 +25,7 @@ specs:
   - "[[11-ui]]"
 depends_on:
   - "[[M12-skicar]]"
-started: 
+started: 2026-10-15
 finished: 
 tags:
   - milnik

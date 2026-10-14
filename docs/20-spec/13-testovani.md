@@ -6,11 +6,12 @@ aliases:
   - Testovací strategie
   - Spec 13
 modules: []
-milestones: []
+milestones:
+  - "[[M15-export-a-dokonceni]]"
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-14
 ---
 # 13 – Testovací strategie
 
@@ -26,7 +27,8 @@ Testy jsou součástí návrhu, ne dodatek. Architektura je postavená tak, aby 
 | Kontraktové | stejná sada testů pro všechny implementace portu (`FakeKernel` × `OcctKernelImpl`, `MemoryDocumentStore` × `IdbDocumentStore`) | Vitest | vždy (OCCT verze v integrační sadě) |
 | Integrační | `kernel-occt` s reálným WASM v Node | Vitest, projekt `integration` | `npm run test:integration` |
 | Property-based | replay logu, undo/redo, regenerace bez úniků handle | fast-check | vždy |
-| E2E smoke | otevřít aplikaci, vytvořit kvádr, změnit parametr, undo, reload | Playwright, Chrome (`channel: 'chrome'`) a WebKit (Safari) | od M10, `npm run test:e2e`; test padá na chybě v konzoli nebo nezachycené výjimce na kterékoli stránce kontextu (fixture `e2e/fixtures.ts`). Známé chyby jen v seznamu `IGNORED_CONSOLE_ERRORS` s důvodem a úzkým vzorem. |
+| E2E smoke | otevřít aplikaci, vytvořit kvádr, změnit parametr, undo, reload | Playwright, Chrome (`channel: 'chrome'`) a WebKit (Safari) | od M10, `npm run test:e2e`; test padá na chybě v konzoli nebo nezachycené výjimce na kterékoli stránce kontextu (fixture `e2e/fixtures.ts`). Známé chyby jen v seznamu `IGNORED_CONSOLE_ERRORS` s důvodem a úzkým vzorem. Stažené soubory (M15) přes `page.waitForEvent('download')`, nahrání přes `setInputFiles`. |
+| Měření výkonu | regenerace a tessellace většího modelu s OCCT v Node, [[#Měření výkonu]] | Vitest, projekt `integration` (`tests/perf.test.ts`) | od M15, `npm run test:integration` |
 
 ## Klíčové invarianty (property-based)
 
@@ -35,6 +37,15 @@ Testy jsou součástí návrhu, ne dodatek. Architektura je postavená tak, aby 
 3. **Snapshot:** snapshot k `seq` + zbytek logu = přehrání celého logu.
 4. **Cache regenerace:** výsledek regenerace s cache = výsledek regenerace od nuly (porovnání stavů z `FakeKernel`).
 5. **Úniky:** po libovolné sekvenci změn a regenerací je počet živých handle v jádru roven počtu handle ve stavech cache.
+
+## Měření výkonu
+
+Od [[M15-export-a-dokonceni|M15]] ([[Rozhodnutí noční rychloakce#M15 – Export a dokončení|R130]]). Test **měří a vypisuje, ale na čase nikdy nepadá**: časy závisí na stroji a zatížení, test s časovým limitem by byl buď křehký, nebo tak volný, že nic neprokazuje ([[Měření, které nemůže selhat]]).
+
+- Model: deska s 36 otvory (Boolean „odebrat“) a 4 zaoblenými hranami, ~40 featur, `createInThreadOcctKernel()`.
+- Měří první regeneraci od nuly, tessellaci výsledku, plný přepočet (změna první featury) a přepočet od poslední featury (cache); každé 3×, vypíše medián a počty volání jádra (`console.table`).
+- Ověřuje jen deterministické veličiny: žádná chyba featury, počet těles a ploch, **počty volání jádra** při přepočtu z cache (jádro obalené počítadlem přes `Proxy`) a `liveHandleCount` = živé handle stavu. Že kontrola cache něco hlídá, se ověří jednou úmyslnou chybou (cache vypnutá → test padá).
+- Čísla se zapisují do vaultu ([[Q007 Cache geometrie|Q007]]), ne do testu.
 
 ## Konvence
 

@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[09-vykreslovani]]"
 decide_by: "[[M15-export-a-dokonceni]]"
 proposal: "Barva a průhlednost jako další pole BodyMeta (color, opacity) s operacemi body.setColor/body.setOpacity; render je převezme do materiálu tělesa."
-decision: ""
+decision: "barva v BodyMeta.color a operace body.setColor v M15; průhlednost se nedělá (Další nápady)"
 tags:
   - otazka
 created: 2026-10-14
@@ -33,4 +33,4 @@ Návrh: **1** pro barvu, průhlednost rozhodnout podle potřeby v M15 (export do
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR.)_
+2026-10-14 (noční rychloakce, [[Rozhodnutí noční rychloakce#M15 – Export a dokončení|R129]] ⚠): **Varianta 1 pro barvu, průhlednost se nedělá.** `BodyMeta.color` (`'#rrggbb'` malými písmeny, `isBodyColor`), operace `body.setColor` (v logu i undo jako skrývání, R13), `BrowserModel.colors` a `setColor`, `Viewport.setBodyColor` s materiálem podle barvy, výběr barvy v Prohlížeči. Proč: mechanismus metadat z M11 se jen rozšíří o jedno pole a barva prochází všemi vrstvami (dokument → operace → prezentační model → render) – dobrý závěrečný příklad. Průhlednost potřebuje řazení průhledných objektů a `depthWrite: false` a zatím nemá spotřebitele → [[M15-export-a-dokonceni#Další nápady (mimo rozsah)|Další nápady]]. STEP barvy nenese (R123). Propsáno do [[03-dokument#Metadata těles]], [[04-operace-a-historie#Sada operací]], [[09-vykreslovani#Viewport]], [[10-interakce#Prohlížeč: `BrowserModel` a viditelnost těles]], [[11-ui#Komponenty]].
