@@ -10,6 +10,8 @@ import type {
   FeatureId,
   SketchEntityRef,
   SketchRegionRef,
+  TopoName,
+  TopoRef,
 } from '@/document';
 import { originOfBody, ownerOfArtifact, parseAxisId, parseBodyId, parseSketchId } from '@/document';
 import { parseSketchData } from '@/sketch';
@@ -43,6 +45,33 @@ export function toggleRegionRef(
   if (items.some(isTheRegion)) return Object.freeze(items.filter((item) => !isTheRegion(item)));
   const ref: SketchRegionRef = Object.freeze({ kind: 'region', sketch, region });
   return Object.freeze([...items, ref]);
+}
+
+/**
+ * Adds the reference at the end, or removes it when the same body and name are there already
+ * (M14). Keeps the order of the other topo references; a value that is not an array counts as
+ * empty, items of another shape are dropped (the result holds only topo references).
+ */
+export function toggleTopoRef(value: unknown, ref: TopoRef): readonly TopoRef[] {
+  const items = topoRefsOf(value);
+  const isTheRef = (item: TopoRef): boolean => item.body === ref.body && item.name === ref.name;
+  if (items.some(isTheRef)) return Object.freeze(items.filter((item) => !isTheRef(item)));
+  return Object.freeze([...items, Object.freeze({ kind: 'topo', body: ref.body, name: ref.name })]);
+}
+
+/**
+ * The topo references of a 'topo' param value (M14): frozen copies of the items with a valid
+ * body id and a non-empty name, in order; other items are skipped, a value that is not an array
+ * has none. The one reading of topo values in interaction (highlight, toggling).
+ */
+export function topoRefsOf(value: unknown): readonly TopoRef[] {
+  const items: readonly unknown[] = Array.isArray(value) ? value : [];
+  return Object.freeze(
+    items.flatMap((item) => {
+      const ref = topoRefOf(item);
+      return ref === null ? [] : [ref];
+    }),
+  );
 }
 
 /** The reference, or null when the value already is the same reference (M13, a single 'axis'). */
@@ -147,6 +176,17 @@ function regionRefOf(item: unknown): SketchRegionRef | null {
   return sketch === null || typeof region !== 'string'
     ? null
     : Object.freeze({ kind: 'region', sketch, region });
+}
+
+/** One topo reference of the right shape as a frozen copy, otherwise null (as readRef in document). */
+function topoRefOf(item: unknown): TopoRef | null {
+  if (!isRecord(item) || item['kind'] !== 'topo') return null;
+  const body = parseBodyId(item['body']);
+  const name = item['name'];
+  return body === undefined || typeof name !== 'string' || name.length === 0
+    ? null
+    : // Names are minted by regen only; a stored non-empty string is taken as one (spec 03).
+      Object.freeze({ kind: 'topo', body, name: name as TopoName });
 }
 
 /**

@@ -5,7 +5,14 @@ import {
   sketchId,
   validateAgainstSchema,
 } from '@/document';
-import type { BodyId, FeatureId, FeatureSchema, ParamSchema, ParamSpec } from '@/document';
+import type {
+  BodyId,
+  FeatureId,
+  FeatureSchema,
+  ParamSchema,
+  ParamSpec,
+  TopoName,
+} from '@/document';
 import { aFeature } from '@/document/testing';
 import { anOpsSession } from '@/ops/testing';
 import { rectangleData } from '@/sketch/testing';
@@ -14,7 +21,7 @@ import { createFeatureEditor } from './feature-editor';
 import { createRefPick, pickFilterFor } from './ref-pick-tool';
 import { toggleBodyRef } from './ref-values';
 import { EDIT_SKETCH_DRAWING_ID } from './sketch-session';
-import { FakeViewport } from './testing';
+import { FakeRegenStatus, FakeViewport, aTopoNames } from './testing';
 import type { PickResult, ViewPointerEvent } from './viewport-port';
 
 describe('pickFilterFor', () => {
@@ -267,6 +274,168 @@ describe('refPick – a param without a pick filter', () => {
     click();
 
     expect(picks).toBe(0);
+    expect(viewport.hover).toBeNull();
+    expect(session.state.get()).toBe(before);
+  });
+});
+
+// --- refPick into topo params (M14) ---
+
+const FILLET_PARAMS: ParamSchema = {
+  edges: { kind: 'topo', label: 'Edges', entity: 'edge' },
+  faces: { kind: 'topo', label: 'Faces', entity: 'face' },
+};
+
+const FILLET: FeatureSchema = {
+  type: 'filletish',
+  version: 1,
+  label: 'Filletish',
+  params: FILLET_PARAMS,
+  defaults: () => ({ edges: [], faces: [] }),
+  validate: (params) => validateAgainstSchema(FILLET_PARAMS, params),
+};
+
+const BOX = 'b1/body' as BodyId; // test ids are trusted
+const UNNAMED_BODY = 'b2/body' as BodyId;
+const TOP_FRONT = 'b1/edge:face:front|face:top' as TopoName;
+const TOP = 'b1/face:top' as TopoName;
+
+/** A snapshot with BOX named (edge 3, face 5) and UNNAMED_BODY without names. */
+function setupFillet(options: { readonly withRegen?: boolean } = {}) {
+  const regen = new FakeRegenStatus();
+  regen.publish(new Map(), [
+    {
+      body: BOX,
+      feature: 'b1' as FeatureId,
+      names: aTopoNames({ edges: { [TOP_FRONT]: [3] }, faces: { [TOP]: [5] } }),
+    },
+    { body: UNNAMED_BODY, feature: 'b2' as FeatureId },
+  ]);
+  const schemas = createFeatureSchemaRegistry();
+  schemas.register(FILLET);
+  const ops = anOpsSession({ schemas });
+  const editor = createFeatureEditor({
+    doc: ops.doc,
+    ops: ops.dispatcher,
+    schemas,
+    ids: createSequentialIdGenerator('new'),
+  });
+  const session = editor.create('filletish');
+  const viewport = new FakeViewport();
+  const refPick = createRefPick(
+    session,
+    viewport,
+    ops.doc,
+    options.withRegen === false ? undefined : regen,
+  );
+  const pointer = (type: ViewPointerEvent['type']): ViewPointerEvent => ({
+    type,
+    x: 1,
+    y: 1,
+    button: 'left',
+    mods: { shift: false, alt: false, mod: false },
+  });
+  return {
+    session,
+    viewport,
+    regen,
+    click: (): void => {
+      refPick.onPointer(pointer('down'));
+      refPick.onPointer(pointer('up'));
+    },
+    move: (): void => {
+      refPick.onPointer(pointer('move'));
+    },
+  };
+}
+
+const edgeAt = (body: BodyId, edgeIndex: number): PickResult => ({
+  kind: 'edge',
+  body,
+  edgeIndex,
+  point: [0, 0, 0],
+});
+
+const faceAt = (body: BodyId, faceIndex: number): PickResult => ({
+  kind: 'face',
+  body,
+  faceIndex,
+  point: [0, 0, 0],
+  normal: [0, 0, 1],
+});
+
+describe('refPick – topo param (M14)', () => {
+  it('a click on a named edge adds a TopoRef, a second click removes it', () => {
+    const { session, viewport, click } = setupFillet();
+    expect(session.state.get().activeRefParam).toBe('edges');
+    viewport.setPick(edgeAt(BOX, 3));
+
+    click();
+    expect(viewport.lastFilter).toEqual(['edge']);
+    const value = session.state.get().params['edges'];
+    expect(value).toEqual([{ kind: 'topo', body: BOX, name: TOP_FRONT }]);
+    expect(Object.isFrozen(value)).toBe(true);
+
+    click();
+    expect(session.state.get().params['edges']).toEqual([]);
+  });
+
+  it('a face param picks faces only and takes a named face', () => {
+    const { session, viewport, click } = setupFillet();
+    session.focusRefParam('faces');
+    viewport.setPick(faceAt(BOX, 5));
+
+    click();
+    expect(viewport.lastFilter).toEqual(['face']);
+    expect(session.state.get().params['faces']).toEqual([{ kind: 'topo', body: BOX, name: TOP }]);
+  });
+
+  it('an edge without a name, or of a body without names or not in the snapshot, does nothing', () => {
+    const { session, viewport, click } = setupFillet();
+    const before = session.state.get();
+    for (const hit of [edgeAt(BOX, 4), edgeAt(UNNAMED_BODY, 3), edgeAt('b9/body' as BodyId, 3)]) {
+      viewport.setPick(hit);
+      click();
+    }
+    expect(session.state.get()).toBe(before);
+  });
+
+  it('hovers only hits with a name', () => {
+    const { viewport, move } = setupFillet();
+    viewport.setPick(edgeAt(BOX, 3));
+    move();
+    expect(viewport.hover).toEqual(edgeAt(BOX, 3));
+
+    viewport.setPick(edgeAt(BOX, 4));
+    move();
+    expect(viewport.hover).toBeNull();
+  });
+
+  it('uses the last snapshot: a new generation with other indices names another edge', () => {
+    const { session, viewport, regen, click } = setupFillet();
+    regen.publish(new Map(), [
+      { body: BOX, feature: 'b1' as FeatureId, names: aTopoNames({ edges: { [TOP_FRONT]: [7] } }) },
+    ]);
+    viewport.setPick(edgeAt(BOX, 3));
+    click();
+    expect(session.state.get().params['edges']).toEqual([]);
+
+    viewport.setPick(edgeAt(BOX, 7));
+    click();
+    expect(session.state.get().params['edges']).toEqual([
+      { kind: 'topo', body: BOX, name: TOP_FRONT },
+    ]);
+  });
+
+  it('without regen a hit adds nothing and is not hovered', () => {
+    const { session, viewport, click, move } = setupFillet({ withRegen: false });
+    const before = session.state.get();
+    viewport.setPick(edgeAt(BOX, 3));
+    viewport.highlight.setHover(edgeAt(BOX, 3));
+
+    move();
+    click();
+
     expect(viewport.hover).toBeNull();
     expect(session.state.get()).toBe(before);
   });

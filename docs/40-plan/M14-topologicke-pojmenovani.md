@@ -53,8 +53,8 @@ updated: 2026-10-14
 - [x] Ú4 `sketch`: id křivek v oblastech
 - [x] Ú5 `document`: `planes` přijímá `TopoRef`
 - [ ] Ú6 `regen`: `nameShape`, `resolveTopo`, `resolvePlanes` s plochou, `sketchPlaneOfFace`, `planeOfRef`, jména v `applyBodyOperation`, `DressupOps` v `ModelingKernel`
-- [ ] Ú7 `render`: zvýraznění celého tělesa
-- [ ] Ú8 `interaction`: `refPick` pro `topo`, zvýraznění referencí `topo` a `bodies` v dialogu
+- [x] Ú7 `render`: zvýraznění celého tělesa
+- [x] Ú8 `interaction`: `refPick` pro `topo`, zvýraznění referencí `topo` a `bodies` v dialogu
 - [ ] Ú9 `features/box|cylinder|transform|boolean`: pojmenování v builderech
 - [ ] Ú10 `features/fillet`, `features/chamfer`: pluginy Zaoblení a Zkosení
 - [ ] Ú11 `features/extrude`: konec „Po plochu“

@@ -1,13 +1,13 @@
 import { createSequentialIdGenerator, ObservableValue } from '@/core';
 import { createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
-import type { BodyId, FeatureSchema, ParamSchema } from '@/document';
+import type { BodyId, FeatureId, FeatureSchema, ParamSchema, TopoName } from '@/document';
 import { anOpsSession } from '@/ops/testing';
 import { describe, expect, it } from 'vitest';
 import type { FeatureEditor, FeatureEditSession } from './feature-editor';
 import { createFeatureEditor } from './feature-editor';
 import type { Mode } from './mode';
 import { createSelectionModel } from './selection';
-import { FakeRegenStatus, FakeViewport } from './testing';
+import { FakeRegenStatus, FakeViewport, aTopoNames } from './testing';
 import { createToolManager } from './tool-manager';
 import { createToolRegistry } from './tools';
 import type { Tool, ToolContext, ToolDescriptor, ToolRegistry } from './tools';
@@ -636,7 +636,12 @@ function lastKinds(viewport: FakeViewport): readonly string[] | undefined {
   return viewport.lastFilter === undefined ? undefined : [...viewport.lastFilter].sort();
 }
 
-function setupRefPick(options: { unhandledKey?: (e: ViewKeyEvent) => boolean } = {}) {
+function setupRefPick(
+  options: {
+    unhandledKey?: (e: ViewKeyEvent) => boolean;
+    regen?: FakeRegenStatus;
+  } = {},
+) {
   const rec: Recorder = { calls: [], contexts: [] };
   const registry: ToolRegistry = createToolRegistry();
   registry.register(aRecordingTool('select', rec));
@@ -664,6 +669,7 @@ function setupRefPick(options: { unhandledKey?: (e: ViewKeyEvent) => boolean } =
     ctx,
     defaultToolId: 'select',
     ...(options.unhandledKey === undefined ? {} : { unhandledKey: options.unhandledKey }),
+    ...(options.regen === undefined ? {} : { regen: options.regen }),
   });
   const emitted: string[] = [];
   manager.active.subscribe(() => emitted.push(manager.active.get()));
@@ -820,7 +826,7 @@ describe('createToolManager – refPick', () => {
     expect(session.state.get()).toBe(before);
   });
 
-  it('ignores a click into a topo param (M14)', () => {
+  it('without regen a click into a topo param does nothing (M14)', () => {
     const { viewport, features } = setupRefPick();
     const session = features.create('ref');
     session.focusRefParam('faces');
@@ -828,6 +834,29 @@ describe('createToolManager – refPick', () => {
     viewport.setPick(faceHit('f1/body'));
     click(viewport);
     expect(session.state.get()).toBe(before);
+  });
+
+  it('with regen a click on a named face adds a TopoRef (M14)', () => {
+    const regen = new FakeRegenStatus();
+    const top = 'f1/face:top' as TopoName; // test names are trusted
+    regen.publish(new Map(), [
+      {
+        body: 'f1/body' as BodyId, // test ids are trusted
+        feature: 'f1' as FeatureId,
+        names: aTopoNames({ faces: { [top]: [0] } }),
+      },
+    ]);
+    const { viewport, features } = setupRefPick({ regen });
+    const session = features.create('ref');
+    session.focusRefParam('faces');
+    viewport.setPick(faceHit('f1/body'));
+
+    viewport.emitPointer(at('move', 1, 1));
+    expect(viewport.hover).toEqual(faceHit('f1/body'));
+    click(viewport);
+    expect(session.state.get().params['faces']).toEqual([
+      { kind: 'topo', body: 'f1/body', name: top },
+    ]);
   });
 
   it('Escape drops the focus and the events go back to the active tool', () => {

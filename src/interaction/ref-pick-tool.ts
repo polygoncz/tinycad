@@ -3,12 +3,20 @@
 // the active one. A click fills the param, Escape drops the focus. It is not a
 // registered tool: the manager creates it for the session and drops it again.
 // The focused param decides what can be picked (pickFilterFor), for the click and the hover.
+// A topo param takes a face or an edge by its name from the last regeneration (M14, R103).
 
-import type { AxisRef, DocumentReader, ParamSpec, SketchEntityRef } from '@/document';
+import type { AxisRef, DocumentReader, ParamSpec, SketchEntityRef, TopoRef } from '@/document';
 import { ownerOfArtifact, parseAxisId, parseSketchId } from '@/document';
 import type { FeatureEditSession } from './feature-editor';
 import { isPlainEscape } from './key-events';
-import { isSketchLine, toggleAxisRef, toggleBodyRef, toggleRegionRef } from './ref-values';
+import {
+  isSketchLine,
+  toggleAxisRef,
+  toggleBodyRef,
+  toggleRegionRef,
+  toggleTopoRef,
+} from './ref-values';
+import type { RegenStatusPort } from './regen-status-port';
 import { CLICK_TOLERANCE_PX } from './select-tool';
 import type {
   PickFilter,
@@ -31,7 +39,7 @@ const SKETCH_ENTITIES: PickFilter = Object.freeze(['sketchEntity']);
 const TOPO_FILTERS: Readonly<Record<TopoEntity, PickFilter>> = Object.freeze({
   face: FACES,
   edge: EDGES,
-  // pick returns no vertices until M14.
+  // pick returns no vertices (postponed, R101).
   vertex: NOTHING,
 });
 
@@ -67,6 +75,8 @@ export function createRefPick(
   session: FeatureEditSession,
   viewport: ViewportPort,
   doc: DocumentReader,
+  /** Names of the bodies for topo params (M14); without it a hit into topo adds nothing. */
+  regen?: RegenStatusPort,
 ): RefPick {
   /** Position of the last left down, null = no click in progress. */
   let down: { readonly x: number; readonly y: number } | null = null;
@@ -101,19 +111,38 @@ export function createRefPick(
       : null;
   }
 
+  /**
+   * The hit as a reference of a 'topo' param: the name of the face or edge in the last snapshot
+   * (M14); null without regen, without the body in the snapshot or without a name.
+   */
+  function topoRefOf(hit: PickResult): TopoRef | null {
+    if (hit.kind !== 'face' && hit.kind !== 'edge') return null;
+    const names = regen?.state.get().bodies.find((b) => b.body === hit.body)?.names;
+    const name =
+      hit.kind === 'face' ? names?.nameOfFace(hit.faceIndex) : names?.nameOfEdge(hit.edgeIndex);
+    return name === undefined ? null : Object.freeze({ kind: 'topo', body: hit.body, name });
+  }
+
   /** The spec of the focused param, undefined without one. */
   function focusedSpec(): ParamSpec | undefined {
     const name = session.state.get().activeRefParam;
     return name === null ? undefined : session.schema.params[name];
   }
 
-  /** The hover of a hit: an 'axis' param shows only hits it can take (M13). */
+  /** The hover of a hit: 'axis' (M13) and 'topo' (M14) params show only hits they can take. */
   function hoverOf(hit: PickResult | null): PickResult | null {
-    if (hit === null || focusedSpec()?.kind !== 'axis') return hit;
-    return axisRefOf(hit) === null ? null : hit;
+    if (hit === null) return null;
+    switch (focusedSpec()?.kind) {
+      case 'axis':
+        return axisRefOf(hit) === null ? null : hit;
+      case 'topo':
+        return topoRefOf(hit) === null ? null : hit;
+      default:
+        return hit;
+    }
   }
 
-  /** Converts the hit into a reference of the focused param; topo comes with M14. */
+  /** Converts the hit into a reference of the focused param. */
   function pickInto(hit: PickResult): void {
     const state = session.state.get();
     const name = state.activeRefParam;
@@ -125,6 +154,12 @@ export function createRefPick(
         if (hit.kind !== 'face' && hit.kind !== 'edge') return;
         session.setParam(name, toggleBodyRef(value, hit.body));
         return;
+      case 'topo': {
+        // The filter already allows only the entity of the spec.
+        const ref = topoRefOf(hit);
+        if (ref !== null) session.setParam(name, toggleTopoRef(value, ref));
+        return;
+      }
       case 'region': {
         if (hit.kind !== 'sketchRegion') return;
         // Only a regenerated sketch has regions to reference; the edited one does not.

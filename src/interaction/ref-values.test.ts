@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ORIGIN_AXIS_IDS, bodyId } from '@/document';
-import type { AxisRef, FeatureId, SketchEntityRef } from '@/document';
+import type { AxisRef, FeatureId, SketchEntityRef, TopoName, TopoRef } from '@/document';
 import { aDocument, aFeature } from '@/document/testing';
 import { rectangleData } from '@/sketch/testing';
 import {
@@ -11,6 +11,8 @@ import {
   regionRefsOf,
   toggleAxisRef,
   toggleRegionRef,
+  toggleTopoRef,
+  topoRefsOf,
 } from './ref-values';
 
 const fid = (id: string): FeatureId => id as FeatureId; // test ids are trusted
@@ -209,5 +211,65 @@ describe('isSketchLine (M13)', () => {
     expect(isSketchLine(doc, fid('s1'), 'nope')).toBe(false);
     expect(isSketchLine(doc, fid('gone'), 'ab')).toBe(false);
     expect(isSketchLine(doc, fid('f1'), 'ab')).toBe(false);
+  });
+});
+
+describe('topoRefsOf (M14)', () => {
+  it('frozen copies of the topo references of the right shape, in order', () => {
+    const refs = topoRefsOf([
+      { kind: 'topo', body: B1, name: 'f1/edge:a|b', extra: 1 },
+      { kind: 'body', body: B1 },
+      { kind: 'topo', body: B2, name: '' },
+      { kind: 'topo', body: 'no-slash', name: 'x' },
+      { kind: 'topo', body: B2, name: 7 },
+      'junk',
+      { kind: 'topo', body: B3, name: 'f3/face:top' },
+    ]);
+    expect(refs).toEqual([
+      { kind: 'topo', body: B1, name: 'f1/edge:a|b' },
+      { kind: 'topo', body: B3, name: 'f3/face:top' },
+    ]);
+    expect(Object.isFrozen(refs)).toBe(true);
+    expect(refs.every((ref) => Object.isFrozen(ref))).toBe(true);
+  });
+
+  it('a value that is not an array has none', () => {
+    expect(topoRefsOf(undefined)).toEqual([]);
+    expect(topoRefsOf({ kind: 'topo', body: B1, name: 'x' })).toEqual([]);
+  });
+});
+
+describe('toggleTopoRef (M14)', () => {
+  const name = (n: string): TopoName => n as TopoName; // test names are trusted
+  const topo = (body: typeof B1, n: string): TopoRef => ({ kind: 'topo', body, name: name(n) });
+
+  it('adds the reference at the end as a frozen array', () => {
+    const next = toggleTopoRef([topo(B1, 'f1/edge:a|b')], topo(B1, 'f1/edge:b|c'));
+    expect(next).toEqual([topo(B1, 'f1/edge:a|b'), topo(B1, 'f1/edge:b|c')]);
+    expect(Object.isFrozen(next)).toBe(true);
+  });
+
+  it('removes the same body and name and keeps the order of the rest', () => {
+    const value = [topo(B1, 'a'), topo(B2, 'b'), topo(B1, 'b'), topo(B3, 'c')];
+    expect(toggleTopoRef(value, topo(B1, 'b'))).toEqual([
+      topo(B1, 'a'),
+      topo(B2, 'b'),
+      topo(B3, 'c'),
+    ]);
+  });
+
+  it('the same name on another body is another reference', () => {
+    expect(toggleTopoRef([topo(B1, 'a')], topo(B2, 'a'))).toEqual([topo(B1, 'a'), topo(B2, 'a')]);
+  });
+
+  it('a value that is not an array counts as empty', () => {
+    expect(toggleTopoRef(undefined, topo(B1, 'a'))).toEqual([topo(B1, 'a')]);
+    expect(toggleTopoRef('junk', topo(B1, 'a'))).toEqual([topo(B1, 'a')]);
+  });
+
+  it('drops items that are not topo references', () => {
+    expect(
+      toggleTopoRef([{ kind: 'body', body: B1 }, 'junk', topo(B2, 'b')], topo(B1, 'a')),
+    ).toEqual([topo(B2, 'b'), topo(B1, 'a')]);
   });
 });

@@ -11,6 +11,7 @@ import { isPlainEscape } from './key-events';
 import type { Mode } from './mode';
 import { createRefPick } from './ref-pick-tool';
 import type { RefPick } from './ref-pick-tool';
+import type { RegenStatusPort } from './regen-status-port';
 import { toolModes } from './tools';
 import type { Tool, ToolContext, ToolDescriptor } from './tools';
 import type { ViewKeyEvent, ViewPointerEvent } from './viewport-port';
@@ -47,6 +48,8 @@ export function createToolManager(deps: {
   defaultToolIds?: Partial<Record<Mode, string>>;
   /** Keys from the viewport the tool did not handle (app hooks ActionRegistry.handleKey here). */
   unhandledKey?: (e: ViewKeyEvent) => boolean;
+  /** Names of the bodies for refPick in a topo param (M14); without it a hit into topo adds nothing. */
+  regen?: RegenStatusPort;
 }): ToolManager {
   const { registry } = deps;
   const modeOf = (): Mode => deps.mode?.get() ?? 'model';
@@ -153,7 +156,7 @@ export function createToolManager(deps: {
       refParam = null;
       return;
     }
-    refPick ??= createRefPick(session, deps.ctx.viewport, deps.ctx.doc);
+    refPick ??= createRefPick(session, deps.ctx.viewport, deps.ctx.doc, deps.regen);
     // Another param may allow other targets: the old hover must not stay (spec 10).
     if (refParam !== null && refParam !== next) deps.ctx.viewport.highlight.setHover(null);
     refParam = next;

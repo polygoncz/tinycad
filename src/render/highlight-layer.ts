@@ -1,6 +1,7 @@
 // Hover and selection over the bodies (spec 09, "Vrstvy pro interakci"). A mirror of the state
 // interaction holds (Q058): every call replaces the whole state. Each drawn target is a small own
-// copy of the face's triangles or the edge's segments (spec 09, "Reprezentace tělesa"), so
+// copy of the face's triangles, the edge's segments or all triangles of a whole body (M14; spec 09,
+// "Reprezentace tělesa"), so
 // disposing it never touches the body's buffers. Not part of picking: the picker reads only the
 // meshes of BodyLayer.views. Sketch regions (M13) are not drawn here: their targets are handed
 // over to the sketch layer, which owns the region fills.
@@ -15,6 +16,7 @@ import type { MeshData } from '@/kernel';
 import type { BodyView } from './body-view';
 import {
   type BodyTarget,
+  bodyTriangles,
   drawnTargets,
   sameHover,
   sameSelection,
@@ -69,7 +71,7 @@ export function createHighlightLayer(options: HighlightLayerOptions): HighlightL
   const selectionLook = createLook(options.palette.selection);
   /** Geometries of the drawn objects; all replaced on every change. */
   let geometries: THREE.BufferGeometry[] = [];
-  /** Only faces and edges: sketch entities (M12) are dropped like invalid targets. */
+  /** Only faces, edges and whole bodies: sketch entities (M12) are dropped like invalid targets. */
   let hover: BodyTarget | null = null;
   let selection: readonly BodyTarget[] = [];
   /** Sketch regions (M13), mirrored to options.regions. */
@@ -94,11 +96,15 @@ export function createHighlightLayer(options: HighlightLayerOptions): HighlightL
     // rebuild after showing it draws them again.
     if (view === undefined || !view.object.visible) return;
     let object: THREE.Object3D;
-    if (target.kind === 'face') {
+    if (target.kind === 'face' || target.kind === 'body') {
       const geometry = new THREE.BufferGeometry();
       geometries.push(geometry);
-      // Unlit and transparent: the body's shading shows through the tint, so no normals.
-      const { positions } = faceTriangles(view.mesh, target.faceIndex);
+      // Unlit and transparent: the body's shading shows through the tint, so no normals. A whole
+      // body uses the face look too (spec 09).
+      const { positions } =
+        target.kind === 'face'
+          ? faceTriangles(view.mesh, target.faceIndex)
+          : bodyTriangles(view.mesh);
       geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
       object = new THREE.Mesh(geometry, look.face);
     } else {

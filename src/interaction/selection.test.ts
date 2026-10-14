@@ -560,3 +560,162 @@ describe('topological names (M14)', () => {
     ]);
   });
 });
+
+describe('bindSelectionHighlight with topo and bodies params of the dialog (M14)', () => {
+  const PARAMS: ParamSchema = {
+    mode: {
+      kind: 'enum',
+      label: 'mode',
+      default: 'on',
+      options: [
+        { value: 'on', label: 'on' },
+        { value: 'off', label: 'off' },
+      ],
+    },
+    edges: { kind: 'topo', label: 'edges', entity: 'edge', visibleWhen: (p) => p['mode'] === 'on' },
+    faces: { kind: 'topo', label: 'faces', entity: 'face' },
+    tools: { kind: 'bodies', label: 'tools' },
+    regions: { kind: 'region', label: 'regions' },
+  };
+  const SCHEMA: FeatureSchema = {
+    type: 'dressup',
+    version: 1,
+    label: 'dressup',
+    params: PARAMS,
+    defaults: () => ({ mode: 'on', edges: [], faces: [], tools: [], regions: [] }),
+    validate: (params) => validateAgainstSchema(PARAMS, params),
+  };
+  const E1 = 'f1/edge:face:a|face:b' as TopoName;
+  const E2 = 'f1/edge:face:b|face:c' as TopoName;
+  const topo = (name: TopoName, body: BodyId = BODY) => ({ kind: 'topo', body, name });
+
+  function setupDialog(options: { readonly withRegen?: boolean } = {}) {
+    const { selection, regen } = setup();
+    regen.publish(new Map(), [
+      {
+        body: BODY,
+        feature: FEATURE,
+        names: aTopoNames({ edges: { [E1]: [1], [E2]: [4] }, faces: { [TOP]: [2, 6] } }),
+      },
+      { body: OTHER_BODY, feature: OTHER_FEATURE },
+    ]);
+    const viewport = new FakeViewport();
+    const schemas = createFeatureSchemaRegistry();
+    schemas.register(SCHEMA);
+    const ops = anOpsSession({ schemas });
+    const editor = createFeatureEditor({
+      doc: ops.doc,
+      ops: ops.dispatcher,
+      schemas,
+      ids: createSequentialIdGenerator('new'),
+    });
+    const off = bindSelectionHighlight(
+      selection,
+      viewport.highlight,
+      editor,
+      options.withRegen === false ? undefined : regen,
+    );
+    const session = editor.create('dressup');
+    return { selection, regen, viewport, session, off };
+  }
+
+  it('two edges of a Fillet dialog → two edge targets after the selection', () => {
+    const { selection, viewport, session } = setupDialog();
+    selection.set([FACE]);
+    session.setParam('edges', [topo(E1), topo(E2)]);
+
+    expect(viewport.selection).toEqual([
+      { kind: 'face', body: BODY, faceIndex: 2 },
+      { kind: 'edge', body: BODY, edgeIndex: 1 },
+      { kind: 'edge', body: BODY, edgeIndex: 4 },
+    ]);
+  });
+
+  it('a name on two faces → both, in schema order after the edges, without duplicates', () => {
+    const { selection, viewport, session } = setupDialog();
+    selection.set([{ kind: 'edge', body: BODY, edgeIndex: 4 }]);
+    session.setParams({ faces: [topo(TOP)], edges: [topo(E2), topo(E1)] });
+
+    expect(viewport.selection).toEqual([
+      { kind: 'edge', body: BODY, edgeIndex: 4 },
+      { kind: 'edge', body: BODY, edgeIndex: 1 },
+      { kind: 'face', body: BODY, faceIndex: 2 },
+      { kind: 'face', body: BODY, faceIndex: 6 },
+    ]);
+  });
+
+  it('a new snapshot with other indices gives new targets', () => {
+    const { regen, viewport, session } = setupDialog();
+    session.setParam('edges', [topo(E1)]);
+    expect(viewport.selection).toEqual([{ kind: 'edge', body: BODY, edgeIndex: 1 }]);
+
+    regen.publish(new Map(), [
+      { body: BODY, feature: FEATURE, names: aTopoNames({ edges: { [E1]: [8] } }) },
+    ]);
+
+    expect(viewport.selection).toEqual([{ kind: 'edge', body: BODY, edgeIndex: 8 }]);
+  });
+
+  it('an unresolved reference, an unnamed body and junk give nothing', () => {
+    const { viewport, session } = setupDialog();
+    session.setParam('edges', [
+      topo('f1/edge:gone' as TopoName),
+      topo(E1, OTHER_BODY),
+      topo(E1, 'f9/body' as BodyId),
+      { kind: 'body', body: BODY },
+      'junk',
+    ]);
+    expect(viewport.selection).toEqual([]);
+  });
+
+  it('a hidden param gives nothing', () => {
+    const { viewport, session } = setupDialog();
+    session.setParam('edges', [topo(E1)]);
+    session.setParam('mode', 'off');
+    expect(viewport.selection).toEqual([]);
+  });
+
+  it('bodies of a Boolean dialog → body targets', () => {
+    const { viewport, session } = setupDialog();
+    session.setParam('tools', [
+      { kind: 'body', body: OTHER_BODY },
+      { kind: 'body', body: BODY },
+    ]);
+    expect(viewport.selection).toEqual([
+      { kind: 'body', body: OTHER_BODY },
+      { kind: 'body', body: BODY },
+    ]);
+  });
+
+  it('closing the session leaves the selection only', () => {
+    const { selection, viewport, session } = setupDialog();
+    selection.set([EDGE]);
+    session.setParams({ edges: [topo(E1)], tools: [{ kind: 'body', body: BODY }] });
+    expect(viewport.selection).toHaveLength(3);
+
+    session.cancel();
+    expect(viewport.selection).toEqual([{ kind: 'edge', body: BODY, edgeIndex: 5 }]);
+  });
+
+  it('without regen only regions follow the dialog, as in M13', () => {
+    const { viewport, session } = setupDialog({ withRegen: false });
+    session.setParams({
+      edges: [topo(E1)],
+      tools: [{ kind: 'body', body: BODY }],
+      regions: [{ kind: 'region', sketch: 's1', region: 'k' }],
+    });
+    expect(viewport.selection).toEqual([
+      { kind: 'sketchRegion', sketch: 's1/sketch', region: 'k' },
+    ]);
+  });
+
+  it('stops following regen after unsubscribing', () => {
+    const { regen, viewport, session, off } = setupDialog();
+    session.setParam('edges', [topo(E1)]);
+    off();
+    regen.publish(new Map(), [
+      { body: BODY, feature: FEATURE, names: aTopoNames({ edges: { [E1]: [8] } }) },
+    ]);
+    expect(viewport.selection).toEqual([{ kind: 'edge', body: BODY, edgeIndex: 1 }]);
+  });
+});

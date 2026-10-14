@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { BodyId, HighlightTarget, PickResult } from '@/interaction';
 import type { MeshData } from '@/kernel';
 import {
+  bodyTriangles,
   drawnTargets,
   sameHover,
   sameSelection,
@@ -54,6 +55,9 @@ const sketchRegion = (sketch: string, region: string): HighlightTarget => ({
   region,
 });
 
+/** M14: a whole body. */
+const whole = (b: BodyId): HighlightTarget => ({ kind: 'body', body: b });
+
 /** Face keys 5 and 2 (out of order), edge keys 4 and 1. */
 const MESH: MeshData = {
   positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]),
@@ -92,6 +96,18 @@ describe('sameTarget with sketch regions (M13)', () => {
     expect(sameTarget(sketchRegion('s', 'r1'), sketchRegion('s', 'r2'))).toBe(false);
     expect(sameTarget(sketchRegion('s', 'r1'), sketchRegion('t', 'r1'))).toBe(false);
     expect(sameTarget(sketchRegion('s', 'r1'), sketchEntity('s', 'r1'))).toBe(false);
+  });
+});
+
+describe('sameTarget with whole bodies (M14)', () => {
+  it('compares whole bodies by body', () => {
+    expect(sameTarget(whole(A), whole(A))).toBe(true);
+    expect(sameTarget(whole(A), whole(B))).toBe(false);
+  });
+
+  it('a whole body differs from its faces and edges', () => {
+    expect(sameTarget(whole(A), face(A, 5))).toBe(false);
+    expect(sameTarget(edge(A, 4), whole(A))).toBe(false);
   });
 });
 
@@ -142,10 +158,10 @@ describe('validTarget / validTargets', () => {
     expect(validTargets([sketchRegion('s', 'r1'), face(A, 5)], meshOf)).toEqual([face(A, 5)]);
   });
 
-  it('drops a whole body for now: its highlight comes in M14 Ú7', () => {
-    const whole: HighlightTarget = { kind: 'body', body: A };
-    expect(validTarget(whole, meshOf)).toBe(false);
-    expect(validTargets([whole, face(A, 5)], meshOf)).toEqual([face(A, 5)]);
+  it('keeps a whole body that is shown, drops one that is not (M14)', () => {
+    expect(validTarget(whole(A), meshOf)).toBe(true);
+    expect(validTarget(whole(B), meshOf)).toBe(false);
+    expect(validTargets([whole(B), whole(A), face(A, 5)], meshOf)).toEqual([whole(A), face(A, 5)]);
   });
 
   it('filters a list and keeps the order', () => {
@@ -153,6 +169,30 @@ describe('validTarget / validTargets', () => {
       edge(A, 1),
       face(A, 5),
     ]);
+  });
+});
+
+describe('bodyTriangles (M14)', () => {
+  it('copies the triangles of every face, in the order of faceRanges', () => {
+    const { positions } = bodyTriangles(MESH);
+    // Face 5 = triangle (0, 1, 2), face 2 = triangle (0, 2, 3): 2 triangles, 9 floats each.
+    expect(Array.from(positions)).toEqual([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1]);
+  });
+
+  it('has as many triangles as all face ranges together', () => {
+    const mesh: MeshData = { ...MESH, faceRanges: new Uint32Array([5, 0, 2]) };
+    expect(bodyTriangles(mesh).positions).toHaveLength(2 * 9);
+  });
+
+  it('a mesh without faces gives no triangles', () => {
+    const mesh: MeshData = { ...MESH, faceRanges: new Uint32Array([]) };
+    expect(bodyTriangles(mesh).positions).toHaveLength(0);
+  });
+
+  it('is a copy: changing it leaves the mesh alone', () => {
+    const { positions } = bodyTriangles(MESH);
+    positions[0] = 42;
+    expect(MESH.positions[0]).toBe(0);
   });
 });
 
@@ -167,6 +207,12 @@ describe('drawnTargets', () => {
     const drawn = drawnTargets(face(A, 2), [face(A, 5)]);
     expect(drawn.hover).toEqual(face(A, 2));
     expect(drawn.selection).toEqual([face(A, 5)]);
+  });
+
+  it('a whole body and its face are both drawn; the same body selected twice once', () => {
+    const drawn = drawnTargets(whole(A), [whole(A), face(A, 5), whole(A)]);
+    expect(drawn.hover).toBeNull();
+    expect(drawn.selection).toEqual([whole(A), face(A, 5)]);
   });
 
   it('draws a target selected twice only once', () => {

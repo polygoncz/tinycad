@@ -10,7 +10,7 @@ import type { Observable, Unsubscribe } from '@/core';
 import type { BodyId, FeatureId, PlaneId, TopoName } from '@/document';
 import { isParamVisible, sketchId } from '@/document';
 import type { FeatureEditor, FeatureEditSession } from './feature-editor';
-import { regionRefsOf } from './ref-values';
+import { bodyOfRef, regionRefsOf, topoRefsOf } from './ref-values';
 import type { RegenSnapshot, RegenStatusPort, TopoNames } from './regen-status-port';
 import type { HighlightPort, HighlightTarget } from './viewport-port';
 
@@ -165,22 +165,27 @@ function namesOf(snapshot: RegenSnapshot, body: BodyId): TopoNames | undefined {
 }
 
 /**
- * Mirrors the face/edge/body items of the selection into the highlight (body: M14, R104); returns the unbinding. With
- * `editor` (M13, R76) the regions of the visible region params of the open session follow, in the
- * order of the schema, as { kind: 'sketchRegion', sketch: sketchId(ref.sketch), region }: the
- * drawing of a regenerated sketch has the id of its artifact.
+ * Mirrors the face/edge/body items of the selection into the highlight (body: M14, R104); returns
+ * the unbinding. With `editor` (M13, R76) the references of the visible params of the open session
+ * follow, in the order of the schema: regions as { kind: 'sketchRegion', sketch:
+ * sketchId(ref.sketch), region } (the drawing of a regenerated sketch has the id of its artifact)
+ * and, with `regen` too (M14), topo references as the faces or edges of their name in the last
+ * snapshot and bodies as body targets. Duplicate targets are left out, the first one wins.
  */
 export function bindSelectionHighlight(
   selection: SelectionModel,
   highlight: HighlightPort,
   editor?: Pick<FeatureEditor, 'current'>,
+  regen?: RegenStatusPort,
 ): Unsubscribe {
   const sync = (): void => {
     const session = editor?.current.get() ?? null;
-    highlight.setSelection([
-      ...selection.items.get().flatMap(toHighlightTarget),
-      ...(session === null ? [] : regionTargetsOf(session)),
-    ]);
+    highlight.setSelection(
+      withoutDuplicates([
+        ...selection.items.get().flatMap(toHighlightTarget),
+        ...(session === null ? [] : paramTargetsOf(session, regen?.state.get())),
+      ]),
+    );
   };
 
   let unsubscribeSession: Unsubscribe | null = null;
@@ -193,22 +198,105 @@ export function bindSelectionHighlight(
 
   const unsubscribeItems = selection.items.subscribe(sync);
   const unsubscribeEditor = editor?.current.subscribe(followSession);
+  // Only the dialog reads the snapshot: without an editor a regeneration changes nothing here.
+  const unsubscribeRegen = editor === undefined ? undefined : regen?.state.subscribe(sync);
   followSession();
   return () => {
     unsubscribeItems();
     unsubscribeEditor?.();
+    unsubscribeRegen?.();
     unsubscribeSession?.();
     unsubscribeSession = null;
   };
 }
 
-/** The regions in the values of the visible region params of an open session. */
-function regionTargetsOf(session: FeatureEditSession): HighlightTarget[] {
+/**
+ * The references in the values of the visible params of an open session, in schema order:
+ * regions always, topo and bodies only with a snapshot (M14).
+ */
+function paramTargetsOf(
+  session: FeatureEditSession,
+  snapshot: RegenSnapshot | undefined,
+): HighlightTarget[] {
   const { open, params } = session.state.get();
   if (!open) return [];
-  return Object.entries(session.schema.params).flatMap(([name, spec]) =>
-    spec.kind === 'region' && isParamVisible(spec, params) ? regionTargets(params[name]) : [],
-  );
+  return Object.entries(session.schema.params).flatMap(([name, spec]): HighlightTarget[] => {
+    if (!isParamVisible(spec, params)) return [];
+    const value = params[name];
+    switch (spec.kind) {
+      case 'region':
+        return regionTargets(value);
+      case 'topo':
+        return snapshot === undefined ? [] : topoTargets(value, spec.entity, snapshot);
+      case 'bodies':
+        return snapshot === undefined ? [] : bodyTargets(value);
+      default:
+        return [];
+    }
+  });
+}
+
+/**
+ * Topo references of an unchecked value as the faces or edges of their name in the body of the
+ * last snapshot, ascending; an unresolved reference and vertices (R101) give nothing.
+ */
+function topoTargets(
+  value: unknown,
+  entity: 'face' | 'edge' | 'vertex',
+  snapshot: RegenSnapshot,
+): HighlightTarget[] {
+  return topoRefsOf(value).flatMap(({ body, name }): HighlightTarget[] => {
+    const names = namesOf(snapshot, body);
+    if (names === undefined) return [];
+    switch (entity) {
+      case 'face':
+        return names.faces(name).map((faceIndex) => ({ kind: 'face', body, faceIndex }));
+      case 'edge':
+        return names.edges(name).map((edgeIndex) => ({ kind: 'edge', body, edgeIndex }));
+      case 'vertex':
+        return [];
+      default:
+        return assertNever(entity);
+    }
+  });
+}
+
+/** Body references of an unchecked value as body targets; render drops bodies it does not show. */
+function bodyTargets(value: unknown): HighlightTarget[] {
+  const items: readonly unknown[] = Array.isArray(value) ? value : [];
+  return items.flatMap((item): HighlightTarget[] => {
+    const body = bodyOfRef(item);
+    return body === null ? [] : [{ kind: 'body', body }];
+  });
+}
+
+/** The targets without repeats, in order; the first one wins. */
+function withoutDuplicates(targets: readonly HighlightTarget[]): HighlightTarget[] {
+  const seen = new Set<string>();
+  return targets.filter((target) => {
+    const key = targetKey(target);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** Kind and identifying fields; JSON keeps ids with any characters apart. */
+function targetKey(target: HighlightTarget): string {
+  switch (target.kind) {
+    case 'face':
+      return JSON.stringify([target.kind, target.body, target.faceIndex]);
+    case 'edge':
+      return JSON.stringify([target.kind, target.body, target.edgeIndex]);
+    case 'sketchEntity':
+      return JSON.stringify([target.kind, target.sketch, target.entity]);
+    case 'sketchRegion':
+      return JSON.stringify([target.kind, target.sketch, target.region]);
+    case 'body':
+      return JSON.stringify([target.kind, target.body]);
+    default:
+      return assertNever(target);
+  }
 }
 
 /** Region references of an unchecked value; items of another shape are skipped. */

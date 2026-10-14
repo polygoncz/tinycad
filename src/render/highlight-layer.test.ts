@@ -202,17 +202,72 @@ describe('HighlightLayer and sketch regions (M13)', () => {
 });
 
 describe('HighlightLayer and whole bodies (M14)', () => {
-  it('ignores them in hover and selection until M14 Ú7', () => {
+  const B = 'f2/body' as BodyId;
+
+  function bodySetup() {
+    let renders = 0;
+    const views = new Map<BodyId, BodyView>([[A, viewOf(A)]]);
     const layer = createHighlightLayer({
-      views: new Map<BodyId, BodyView>([[A, viewOf(A)]]),
-      requestRender: () => undefined,
+      views,
+      requestRender: () => {
+        renders++;
+      },
       palette: LIGHT_PALETTE,
     });
+    return { layer, views, renders: () => renders };
+  }
+
+  /** Vertex count of the first drawn object. */
+  function vertexCount(group: THREE.Group): number {
+    const object = group.children[0];
+    if (!(object instanceof THREE.Mesh)) throw new Error('expected a mesh');
+    const geometry: unknown = object.geometry;
+    if (!(geometry instanceof THREE.BufferGeometry)) throw new Error('expected a geometry');
+    const position: unknown = geometry.getAttribute('position');
+    if (!(position instanceof THREE.BufferAttribute)) throw new Error('expected positions');
+    return position.count;
+  }
+
+  it('draws a selected body as one mesh with all its triangles in the face selection look', () => {
+    const { layer } = bodySetup();
+    layer.setSelection([{ kind: 'body', body: A }]);
+    expect(layer.group.children).toHaveLength(1);
+    // A box: 6 faces of 2 triangles, 3 vertices each.
+    expect(vertexCount(layer.group)).toBe(6 * 2 * 3);
+    expect(drawn(layer.group).map(({ color }) => color)).toEqual([LIGHT_PALETTE.selection]);
+    const material = drawn(layer.group)[0]?.material;
+    expect(material).toBeInstanceOf(THREE.MeshBasicMaterial);
+  });
+
+  it('draws a hovered body in the hover look', () => {
+    const { layer } = bodySetup();
     layer.setHover({ kind: 'body', body: A });
+    expect(drawn(layer.group).map(({ color }) => color)).toEqual([LIGHT_PALETTE.hover]);
+  });
+
+  it('drops a body that is not shown', () => {
+    const { layer } = bodySetup();
     layer.setSelection([
-      { kind: 'body', body: A },
+      { kind: 'body', body: B },
       { kind: 'face', body: A, faceIndex: 0 },
     ]);
     expect(layer.group.children).toHaveLength(1);
+    expect(vertexCount(layer.group)).toBe(2 * 3);
+  });
+
+  it('the same body again does not redraw', () => {
+    const { layer, renders } = bodySetup();
+    layer.setSelection([{ kind: 'body', body: A }]);
+    const after = renders();
+    layer.setSelection([{ kind: 'body', body: A }]);
+    expect(renders()).toBe(after);
+  });
+
+  it('rebuild drops a body that disappeared', () => {
+    const { layer, views } = bodySetup();
+    layer.setSelection([{ kind: 'body', body: A }]);
+    views.delete(A);
+    layer.rebuild();
+    expect(layer.group.children).toHaveLength(0);
   });
 });
