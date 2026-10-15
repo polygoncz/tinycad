@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 27
 aliases:
   - M27
@@ -16,7 +16,7 @@ specs:
 depends_on:
   - "[[M26-snapper-a-auto-vazby]]"
 started: 2026-10-15
-finished:
+finished: 2026-10-15
 tags:
   - milnik
 created: 2026-10-15
@@ -49,7 +49,7 @@ Rozhodnutí v sezení 2026-10-15 (brainstorming), Pavel vybral všechny nabídnu
 - [x] 3. Nástroje kružnic (2 body, 3 body, 2 tečny, 3 tečny)
 - [x] 4. Nástroje oblouků (3 body, tečný)
 - [x] 5. Tečný oblouk v polyline
-- [ ] 6. e2e `m27.spec.ts`, propsání do spec 10 a 11
+- [x] 6. e2e `m27.spec.ts`, propsání do spec 10 a 11
 
 ## Implementační plán
 
@@ -124,7 +124,11 @@ _(Souběžná stopa, [[Roadmapa#Souběžné stopy (pokus od M25)|pravidla]]: mí
 - **2026-10-15, úkol 5** (tečný oblouk v polyline): hotovo v izolovaném worktree, sloučeno bez konfliktů. `clickTool` umí volitelný tah (`onDragStart` …), společný kód s Tečným obloukem v `tangent-arc.ts`. A26: oblouk se počítá do podmínky uzavření; oblouk končící na prvním bodu řetěz uzavře a ukončí (doplněno hlavním sezením s testem).
 - **2026-10-15, úkol 6** (e2e, spec 10 a 11): `m27.spec.ts` (dělené tlačítko Kružnice ▾, kružnice 3 body, 3 body na přímce nic, 2 tečny → 2× Tečnost, tečný oblouk v polyline), celé e2e 128/128. **Nalezená chyba:** nástroje bez zkratky (nové varianty) neměly akci a lišta je ve skicáři (zamčená editace) zakazovala; opraveno pravidlem jako u akcí nástrojů, propsáno do spec 10.
 - **2026-10-15, revize** (`architecture-reviewer`): bez závažných porušení. Spec upřesněna (nezáporný skalární součin tečen → úhel 0). Opraveno: výběr variant pro nabídku přesunut z `Toolbar.vue` do čisté funkce v `ui/toolbar-fit.ts`; `lastInFamily` se aktualizuje v odběru `tools.active`, ne jako vedlejší efekt `compute` (ADR 0010).
+- **2026-10-15, uzavření:** `npm run check` zelený (6454 unit, 39 integračních), e2e 128/128 v chrome i webkit (`E2E_PORT=4201`). Natažen `main` b64f69e (jen deník). Commit na větev `claude/stopa-a-m25-m27-f7ea83`.
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+- **Co šlo dobře:** souběh uvnitř milníku – úkoly 1 a 2 (různé moduly) a 3 a 4 (různé nové soubory) běžely ve dvojicích v izolovaných worktree; slučování stálo jen pár sousedních řádků v registraci nástrojů a i18n. Konstrukce jako čisté funkce v `sketch` + „odhad, řešič dořeší“ zjednodušily tečné kružnice na numerickou úlohu bez rozboru Apolloniových případů.
+- **Co drhlo:** dvě chyby, které unit testy s `FakeSolver` nemohly chytit: (1) planegcs zahazoval tečnost ve sdíleném koncovém bodě jako redundantní (platilo už od M26 – automatická tečna úsečky z oblouku tiše mizela); našel to až test adaptéru se skutečným planegcs; (2) nástroje bez zkratky byly ve skicáři zakázané – našlo to až e2e. Kontrakt `tangentCircle` měl matematickou díru (slabý člen posouvá minimum), opravila ji druhá fáze projekce.
+- **Souběh stop:** větev obsahuje `main` 98e8366; M27 mění `interaction/toolbar-model.ts`, `Toolbar.vue` a adaptér planegcs – kdyby se mezitím v `main` měnily (např. M29 úkol 8 přidá nástroje splinu do skupiny `draw`), konflikty budou v registraci nástrojů a i18n. Nástroje splinu mohou dostat `family: 'spline'`.
+- **Kandidáti na poznatky:** (1) každé mapování vazby na řešič ověřit testem proti skutečnému řešiči, ne jen fake – redundance se v Jacobiánu projeví jen u skutečné numeriky (tečnost v maximu vzdálenosti); (2) konstrukce v CAD stačí odhadnout, přesnost je práce řešiče z vazeb gesta.

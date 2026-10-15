@@ -25,7 +25,7 @@ import type { ToolbarGroup, ToolbarItem } from '@/interaction';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
 import { isMacPlatform, shortcutText } from '../keyboard';
-import { fitGroups, menuEntries, overflowItems } from '../toolbar-fit';
+import { familyVariants, fitGroups, menuEntries, overflowItems } from '../toolbar-fit';
 import ContextMenu from './ContextMenu.vue';
 
 const session = useSession();
@@ -141,11 +141,10 @@ const menuItems = computed<readonly ToolbarItem[]>(() => {
   if (open === null) return [];
   const source = open.source;
   if (source.kind === 'more') return menuEntries(overflowItems(groups.value, fitCount.value));
+  if (source.kind === 'variants')
+    return familyVariants(groups.value, source.groupId, source.toolId);
   const group = groups.value.find((g) => g.id === source.groupId);
-  if (group === undefined) return [];
-  if (source.kind === 'group') return menuEntries(group.items);
-  const family = group.items.find((item) => item.variants.some((v) => v.id === source.toolId));
-  return family?.variants ?? [];
+  return group === undefined ? [] : menuEntries(group.items);
 });
 
 // All groups fit again (a wider window) while the menu of "…" is open: it would stay empty.

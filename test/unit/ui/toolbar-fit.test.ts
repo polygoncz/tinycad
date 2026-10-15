@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fitGroups, menuEntries, overflowItems } from '@/ui/toolbar-fit';
+import { familyVariants, fitGroups, menuEntries, overflowItems } from '@/ui/toolbar-fit';
 
 describe('fitGroups', () => {
   const widths = [100, 100, 100];
@@ -86,5 +86,41 @@ describe('menuEntries', () => {
 
   it('no items: none', () => {
     expect(menuEntries([])).toEqual([]);
+  });
+});
+
+describe('familyVariants', () => {
+  interface Item {
+    readonly id: string;
+    readonly variants: readonly Item[];
+  }
+  const plain = (id: string): Item => ({ id, variants: [] });
+  const arc = plain('arc');
+  const tangentArc = plain('tangent-arc');
+  // The family shows the tangent arc (the last used) with both as variants.
+  const arcs: Item = { id: 'tangent-arc', variants: [arc, tangentArc] };
+  const groups = [
+    { id: 'draw', items: [plain('line'), arcs] },
+    { id: 'other', items: [plain('point')] },
+  ];
+
+  it('the variants of the family, found by the shown tool', () => {
+    expect(familyVariants(groups, 'draw', 'tangent-arc')).toEqual([arc, tangentArc]);
+  });
+
+  it('the variants of the family, found by another tool of it (the shown one changed)', () => {
+    expect(familyVariants(groups, 'draw', 'arc')).toEqual([arc, tangentArc]);
+  });
+
+  it('a tool outside any family: none', () => {
+    expect(familyVariants(groups, 'draw', 'line')).toEqual([]);
+  });
+
+  it('the family in another group than asked: none', () => {
+    expect(familyVariants(groups, 'other', 'arc')).toEqual([]);
+  });
+
+  it('an unknown group: none', () => {
+    expect(familyVariants(groups, 'missing', 'arc')).toEqual([]);
   });
 });

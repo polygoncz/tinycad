@@ -324,26 +324,35 @@ export function createToolbarModel(deps: {
   );
   /** The last activated tool of each family; follows ToolManager.active, not stored. */
   const lastInFamily = new Map<string, string>();
-  const compute = (): readonly ToolbarGroup[] => {
+  const rememberActive = (): void => {
     const activeTool = tools.active.get();
     const family = familyOf.get(activeTool);
     if (family !== undefined) lastInFamily.set(family, activeTool);
-    return toolbarGroups({
+  };
+  const compute = (): readonly ToolbarGroup[] =>
+    toolbarGroups({
       tools: deps.toolList,
       actions: actions.actions.get(),
-      activeTool,
+      activeTool: tools.active.get(),
       locked: deps.locked.get(),
       mode: deps.mode.get(),
       contributions: deps.contributions,
       lastInFamily,
     });
-  };
+  rememberActive();
   const groups = new ObservableValue(compute());
   const subscriptions = new DisposableStore();
   const update = (): void => {
     groups.set(compute());
   };
-  for (const source of [actions.actions, tools.active, deps.locked, deps.mode]) {
+  // The active tool is remembered in its family before the groups are computed from it.
+  subscriptions.add(
+    tools.active.subscribe(() => {
+      rememberActive();
+      update();
+    }),
+  );
+  for (const source of [actions.actions, deps.locked, deps.mode]) {
     subscriptions.add(source.subscribe(update));
   }
 
