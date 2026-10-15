@@ -45,7 +45,7 @@ Rozhodnutí v sezení 2026-10-15 (brainstorming), Pavel vybral všechny nabídnu
 
 - [x] 0. Kontrakt ve spec 12 (gesta, vazby, degenerované případy) a implementační plán
 - [x] 1. Konstrukce v `sketch` (`circleFrom2`, `circleFrom3`, `arcFrom3`, `tangentArcFrom`, `tangentCircle`, `endTangent`)
-- [ ] 2. Rodiny nástrojů v liště (`ToolDescriptor.family`, `ToolbarItem.variants`, dělené tlačítko v `Toolbar.vue`)
+- [x] 2. Rodiny nástrojů v liště (`ToolDescriptor.family`, `ToolbarItem.variants`, dělené tlačítko v `Toolbar.vue`)
 - [ ] 3. Nástroje kružnic (2 body, 3 body, 2 tečny, 3 tečny)
 - [ ] 4. Nástroje oblouků (3 body, tečný)
 - [ ] 5. Tečný oblouk v polyline
@@ -116,6 +116,7 @@ _(Souběžná stopa, [[Roadmapa#Souběžné stopy (pokus od M25)|pravidla]]: mí
   - A20: `sketch.arc3p` má pořadí kliků začátek, konec, bod na oblouku (Fusion); oblouk po směru se v datech uloží prohozením konců.
   - A21: tečný oblouk v polyline vzniká stiskem a tahem z posledního bodu (Fusion); uvolnění ho zapíše.
 - **2026-10-15, úkol 1** (konstrukce): hotovo, 36 tabulkových testů. A22: `tangentCircle` má po Levenberg–Marquardtu druhou fázi – projekci na tečné kružnice (Gauss–Newton s nejmenší normou nad rezidui tečnosti); slabý člen ke kurzoru jinak posune minimum o ~λ a tolerance tečnosti by odmítla běžná zadání. Propsáno do spec 12. `endTangent` úsečky/oblouku nulové délky a kružnice → null.
+- **2026-10-15, úkol 2** (rodiny v liště): hotovo souběžně s úkolem 1 v izolovaném worktree (větev sloučená bez konfliktů – úkoly se souborově nepotkaly). Model si naposledy aktivovanou variantu bere z `tools.active` (počítá se i zkratka a nabídka). A23: rodina s jediným nástrojem v režimu a skupině je obyčejné tlačítko; popisek šipky nese název zobrazené varianty. Propsáno do spec 12.
 
 ## Retrospektiva
 

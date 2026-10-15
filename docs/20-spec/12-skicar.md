@@ -476,11 +476,11 @@ V nástroji úsečka s rozpracovaným řetězem: stisk na posledním bodu řetě
 // interaction/tools.ts
 interface ToolDescriptor { …; readonly family?: string }   // nástroje se stejnou rodinou ve skupině = jedno rozbalovací tlačítko
 // interaction/toolbar-model.ts
-interface ToolbarItem { …; readonly variants: readonly ToolbarItem[] }   // [] = obyčejné tlačítko; jinak všechny nástroje rodiny v pořadí registrace
+interface ToolbarItem { …; readonly variants: readonly ToolbarItem[] }   // [] = obyčejné tlačítko (i rodina s jediným nástrojem v režimu a skupině); jinak všechny nástroje rodiny v pořadí registrace
 ```
 
 - Rodina je v liště jedna položka: tlačítko ukazuje **naposledy aktivovaný** nástroj rodiny (stav modelu, neukládá se), na začátku první registrovaný; `active` = některý nástroj rodiny je aktivní. Šipka ▾ vedle otevře nabídku variant (stejná komponenta jako nabídka skupiny); položka nabídky nástroj aktivuje. Nabídka skupiny a „…“ ukazují varianty jako běžné položky.
-- `ui`: `Toolbar.vue` kreslí položku s `variants` jako dělené tlačítko (hlavní část + ▾ s `aria-haspopup="menu"`, `aria-label` „Další způsoby: Kružnice“ / „More: Circle“); šířka pro `toolbar-fit` je šířka obou částí.
+- `ui`: `Toolbar.vue` kreslí položku s `variants` jako dělené tlačítko (hlavní část + ▾ s `aria-haspopup="menu"`, `aria-label` „Další způsoby: {popisek zobrazené varianty}“ / „More: {…}“, klíč `toolbar.variants`); šířka pro `toolbar-fit` je šířka obou částí.
 - Popisky nástrojů i18n `tool.<id bez sketch.>`: `circle2p` „Kružnice 2 body“ / „2-point circle“, `circle3p` „Kružnice 3 body“ / „3-point circle“, `circle2t` „Kružnice 2 tečny“ / „2-tangent circle“, `circle3t` „Kružnice 3 tečny“ / „3-tangent circle“, `arc` „Oblouk středem“ / „Center point arc“, `arc3p` „Oblouk 3 body“ / „3-point arc“, `arcTangent` „Tečný oblouk“ / „Tangent arc“; `circle` zůstane „Kružnice“, rodiny bez vlastního popisku.
 
 **Testy:** konstrukce (kružnice 2 a 3 body, kolineární → null, `arcFrom3` obě orientace, `tangentArcFrom` vlevo/vpravo/přímka, `tangentCircle` – dvě různoběžky: střed na ose úhlu u kurzoru; rovnoběžky: r = polovina vzdálenosti; úsečka + kružnice; tři strany trojúhelníku s hintem uvnitř → vepsaná; nekonvergence → null; `endTangent` úsečky a oblouku na obou koncích); model lišty (rodina = jedna položka, naposledy aktivovaná varianta, `active`, nabídka); nástroje s `FakeViewport` a `FakeSolver` (každý nástroj: vzniklé entity a vazby, degenerovaný vstup nic, Esc, náhled vazeb, `ccw === false` prohodí konce); polyline (tah z posledního bodu → oblouk + tečna, řetěz pokračuje, tah bez předchozí křivky nic); e2e (kružnice 3 body, 2 tečny ke dvěma úsečkám → 2× Tečnost v panelu, tečný oblouk v polyline, dělené tlačítko Kružnice ▾).

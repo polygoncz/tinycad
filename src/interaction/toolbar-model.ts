@@ -189,12 +189,17 @@ interface FamilyMembers {
   readonly items: [ToolbarItem, ...ToolbarItem[]];
 }
 
-/** The item of a family: the shown tool (lastInFamily, else the first one) with all as variants. */
+/**
+ * The item of a family: the shown tool (lastInFamily, else the first one) with all as variants; a
+ * family of one tool is that tool's plain item.
+ */
 function familyItem(
   members: FamilyMembers,
   lastInFamily: ReadonlyMap<string, string>,
 ): ToolbarItem {
   const items = members.items;
+  // A family of one tool (in this mode and group) is a plain button.
+  if (items.length === 1) return items[0];
   const last = lastInFamily.get(members.family);
   const shown = items.find((item) => item.id === last) ?? items[0];
   return Object.freeze({

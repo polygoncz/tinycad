@@ -341,7 +341,7 @@ describe('toolbarGroups: tool families (M27)', () => {
     aFamilyTool('sketch.circle3p', 'circle'),
     aTool('sketch.rectangle', 'draw', 'R', ['sketch']),
     aFamilyTool('sketch.arc3p', 'arc'),
-    // The same family in another group is another button.
+    // The same family in another group is another button (of one tool: a plain one).
     { ...aTool('probe.circle', 'modify', undefined, ['sketch']), family: 'circle' },
   ];
 
@@ -364,7 +364,7 @@ describe('toolbarGroups: tool families (M27)', () => {
       (g) => g.id === 'modify',
     );
     expect(modify?.items.map((i) => [i.id, i.variants.map((v) => v.id)])).toEqual([
-      ['probe.circle', ['probe.circle']],
+      ['probe.circle', []],
     ]);
   });
 
@@ -427,7 +427,7 @@ describe('toolbarGroups: tool families (M27)', () => {
     ]);
     const model = groupsOf({ tools, actions: [] }).find((g) => g.id === 'draw');
     expect(model?.items.map((i) => [i.id, i.variants.map((v) => v.id)])).toEqual([
-      ['model.circle', ['model.circle']],
+      ['model.circle', []],
     ]);
   });
 });
