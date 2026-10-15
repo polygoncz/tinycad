@@ -47,7 +47,7 @@ Rozhodnutí v sezení 2026-10-15 (brainstorming), Pavel vybral všechny nabídnu
 - [x] 1. Konstrukce v `sketch` (`circleFrom2`, `circleFrom3`, `arcFrom3`, `tangentArcFrom`, `tangentCircle`, `endTangent`)
 - [x] 2. Rodiny nástrojů v liště (`ToolDescriptor.family`, `ToolbarItem.variants`, dělené tlačítko v `Toolbar.vue`)
 - [x] 3. Nástroje kružnic (2 body, 3 body, 2 tečny, 3 tečny)
-- [ ] 4. Nástroje oblouků (3 body, tečný)
+- [x] 4. Nástroje oblouků (3 body, tečný)
 - [ ] 5. Tečný oblouk v polyline
 - [ ] 6. e2e `m27.spec.ts`, propsání do spec 10 a 11
 
@@ -118,6 +118,8 @@ _(Souběžná stopa, [[Roadmapa#Souběžné stopy (pokus od M25)|pravidla]]: mí
 - **2026-10-15, úkol 1** (konstrukce): hotovo, 36 tabulkových testů. A22: `tangentCircle` má po Levenberg–Marquardtu druhou fázi – projekci na tečné kružnice (Gauss–Newton s nejmenší normou nad rezidui tečnosti); slabý člen ke kurzoru jinak posune minimum o ~λ a tolerance tečnosti by odmítla běžná zadání. Propsáno do spec 12. `endTangent` úsečky/oblouku nulové délky a kružnice → null.
 - **2026-10-15, úkol 2** (rodiny v liště): hotovo souběžně s úkolem 1 v izolovaném worktree (větev sloučená bez konfliktů – úkoly se souborově nepotkaly). Model si naposledy aktivovanou variantu bere z `tools.active` (počítá se i zkratka a nabídka). A23: rodina s jediným nástrojem v režimu a skupině je obyčejné tlačítko; popisek šipky nese název zobrazené varianty. Propsáno do spec 12.
 - **2026-10-15, úkol 3** (kružnice 2 body, 3 body, 2 a 3 tečny): hotovo, 23 testů. Ověřeno na skutečném planegcs: `tangent_cc`/`tangent_ca` si vnitřní či vnější dotyk bere z výchozí polohy, takže odhad `tangentCircle` ho určí a řešič zachová. A24: vybrané křivky tečných nástrojů jsou výběrem session; klik u konce úsečky vybere úsečku, na střed úsečky také; tatáž křivka dvakrát nic; počátek v okruhu 6 px výběr křivky zastíní (známé omezení). Propsáno do spec 12.
+- **2026-10-15, úkol 4** (oblouk 3 body, tečný oblouk): hotovo souběžně s úkolem 3 v izolovaném worktree; sloučení mělo konflikty jen v registraci nástrojů a i18n (sousední řádky). Esc u nových nástrojů: první zruší rozpracované body, druhý ukončí nástroj. Tečný oblouk nemá `inferRadius` (poloměr určuje tečnost).
+  - **Nález:** planegcs hlásí `tangent_la`/`tangent_aa` mezi křivkami se sdíleným koncem jako redundantní, `addGeometry` ji zahodí – tečný oblouk by tečnost neměl. Platilo už pro tečnu úsečky z konce oblouku v M26 (vazba tiše mizela). A25: adaptér mapuje tečnost ve sdíleném bodě na `angle_via_point` (0 nebo π podle geometrie), jako FreeCAD; propsáno do [[12-skicar#Tečnost ve sdíleném koncovém bodě (adaptér planegcs)]].
 
 ## Retrospektiva
 

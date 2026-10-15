@@ -466,6 +466,10 @@ export function endTangent(curve: SketchCurve, point: SketchEntityId, data: Sket
 - **Náhled** jako u ostatních nástrojů: tvar stylem `preview` v overlay `'sketch-tool'`, náhled vazeb (`setInferencePreview`) z jedné funkce kroku nástroje (`circle2pStep` …), včetně `tangent` a `pointOnCurve`.
 - **Ctrl/Cmd** vypne automatické vazby jako v M26, povinné zůstanou.
 
+### Tečnost ve sdíleném koncovém bodě (adaptér planegcs)
+
+Když dvě křivky vazby `tangent` (úsečka + oblouk, oblouk + oblouk) sdílejí koncový bod, planegcs u `tangent_la`/`tangent_aa` hlásí vazbu jako redundantní (ve sdíleném bodě je tečnost maximum vzdálenosti středu od druhé křivky, gradient je závislý na ostatních vazbách) a `addGeometry` by ji zahodil. Adaptér proto v tom případě mapuje `tangent` jako FreeCAD na **`angle_via_point(křivka a, křivka b, sdílený bod, úhel)`** s úhlem 0, nebo π podle toho, který je blíž úhlu tečen v aktuální geometrii (rozhoduje se při každém řešení; geometrie se mezi řešeními hýbe spojitě). Data se nemění. Týká se i tečny úsečky z konce oblouku z M26 (`inferLine`) a tečného oblouku v polyline. Kružnice koncové body nemá; bez sdíleného bodu zůstává `tangent_*`. Úsečka u konce splinu má vlastní mapování ze stopy M29.
+
 ### Tečný oblouk v polyline
 
 V nástroji úsečka s rozpracovaným řetězem: stisk na posledním bodu řetězu a tah nad `CLICK_TOLERANCE_PX` přepne do tečného oblouku (náhled oblouku `tangentArcFrom(poslední bod, směr předchozí úsečky nebo oblouku řetězu, kurzor)`); uvolnění zapíše oblouk se sdíleným začátkem, `tangent(oblouk, předchozí)` (povinná) a konec ze snapperu; řetěz pokračuje z konce oblouku (`previous` = oblouk – další úsečka dostane tečnu přes `inferLine`, je-li do 3°). Bez předchozí křivky (první bod řetězu) se tah ignoruje. Esc během tahu tah zruší, řetěz zůstane.
