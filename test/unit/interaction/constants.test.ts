@@ -18,6 +18,7 @@ describe('interaction/constants', () => {
     expect(Object.keys(constants).sort()).toEqual(
       [
         'ACTION_IDS',
+        'CLICK_TOLERANCE_PX',
         'FILE_ACTION_IDS',
         'HANDLE_VISIBILITY',
         'MANIPULATOR_GLYPHS',

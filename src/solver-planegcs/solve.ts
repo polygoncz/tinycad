@@ -179,10 +179,97 @@ function constraintPrimitives(
       }
       throw new Error(`radius of a ${curve.kind}`);
     }
+    case 'hDistance':
+    case 'vDistance':
+      return [axisDistancePrimitive(c.id, c.kind === 'hDistance' ? 'x' : 'y', c, entities)];
+    case 'pointLineDistance':
+      return [{ id: c.id, type: 'p2l_distance', p_id: c.point, l_id: c.line, distance: c.value }];
+    case 'angle':
+      return [anglePrimitive(c, entities)];
+    case 'diameter': {
+      const curve = curveOf(entities, c.curve);
+      if (curve.kind === 'circle') {
+        return [{ id: c.id, type: 'circle_diameter', c_id: curve.id, diameter: c.value }];
+      }
+      if (curve.kind === 'arc') {
+        return [{ id: c.id, type: 'arc_diameter', a_id: curve.id, diameter: c.value }];
+      }
+      throw new Error(`diameter of a ${curve.kind}`);
+    }
   }
 }
 
 type Curve = Exclude<SketchEntity, { readonly kind: 'point' }>;
+
+/**
+ * hDistance/vDistance: the model value is unsigned, planegcs `difference` is signed
+ * (param2 − param1 = difference). The order follows the current position, so the solve keeps
+ * the points on their sides: b right of / above a (or level with it) → b − a, else a − b.
+ */
+function axisDistancePrimitive(
+  id: string,
+  axis: 'x' | 'y',
+  c: { readonly a: SketchEntityId; readonly b: SketchEntityId; readonly value: number },
+  entities: ReadonlyMap<SketchEntityId, SketchEntity>,
+): SketchPrimitive {
+  const [from, to] =
+    pointOf(entities, c.b)[axis] >= pointOf(entities, c.a)[axis] ? [c.a, c.b] : [c.b, c.a];
+  return {
+    id,
+    type: 'difference',
+    param1: { o_id: from, prop: axis },
+    param2: { o_id: to, prop: axis },
+    difference: c.value,
+  };
+}
+
+/**
+ * angle: the model value is unsigned in (0, π) between the directions p1→p2 (reversed by the
+ * flags); planegcs l2l_angle_pppp is the oriented angle from the first line to the second. The
+ * lines go in the order in which the current angle is counter-clockwise (positive), so the
+ * solve keeps the angle in the chosen quadrant instead of flipping it over.
+ */
+function anglePrimitive(
+  c: Extract<SketchConstraint, { readonly kind: 'angle' }>,
+  entities: ReadonlyMap<SketchEntityId, SketchEntity>,
+): SketchPrimitive {
+  const [a1, a2] = orientedEnds(entities, c.a, c.reverseA === true);
+  const [b1, b2] = orientedEnds(entities, c.b, c.reverseB === true);
+  const da = direction(entities, a1, a2);
+  const db = direction(entities, b1, b2);
+  const counterClockwise = da.x * db.y - da.y * db.x >= 0;
+  const [l1p1, l1p2, l2p1, l2p2] = counterClockwise ? [a1, a2, b1, b2] : [b1, b2, a1, a2];
+  return {
+    id: c.id,
+    type: 'l2l_angle_pppp',
+    l1p1_id: l1p1,
+    l1p2_id: l1p2,
+    l2p1_id: l2p1,
+    l2p2_id: l2p2,
+    angle: c.value,
+  };
+}
+
+/** The end points of a line, swapped when its direction is reversed. */
+function orientedEnds(
+  entities: ReadonlyMap<SketchEntityId, SketchEntity>,
+  id: SketchEntityId,
+  reverse: boolean,
+): readonly [SketchEntityId, SketchEntityId] {
+  const line = curveOf(entities, id);
+  if (line.kind !== 'line') throw new Error(`${id} is not a line`);
+  return reverse ? [line.p2, line.p1] : [line.p1, line.p2];
+}
+
+function direction(
+  entities: ReadonlyMap<SketchEntityId, SketchEntity>,
+  from: SketchEntityId,
+  to: SketchEntityId,
+): { readonly x: number; readonly y: number } {
+  const p = pointOf(entities, from);
+  const q = pointOf(entities, to);
+  return { x: q.x - p.x, y: q.y - p.y };
+}
 
 function equalPrimitive(id: string, a: Curve, b: Curve): SketchPrimitive {
   if (a.kind === 'line' && b.kind === 'line') {

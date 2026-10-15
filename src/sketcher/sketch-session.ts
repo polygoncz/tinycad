@@ -3,12 +3,22 @@
 // so the whole editing stays one transaction (Q074). Commands run one after another in a queue;
 // each reads the current data from the document when its turn comes.
 
-import { ObservableValue, assert } from '@/core';
+import { ObservableValue, assert, plane as planeMath } from '@/core';
 import type { Observable, Plane, Vec2 } from '@/core';
-import { SKETCH_PARAM, parseSketchData, removeItems, toggleConstruction } from '@/sketch';
+import {
+  SKETCH_PARAM,
+  isDimension,
+  movePlacement,
+  parseSketchData,
+  removeItems,
+  toggleConstruction,
+} from '@/sketch';
 import type {
   ConstraintSolver,
+  DimensionConstraint,
+  DimensionPlacement,
   SketchConstraint,
+  SketchConstraintDraft,
   SketchConstraintId,
   SketchData,
   SketchEntity,
@@ -53,6 +63,20 @@ export interface SketchSession {
   drag(point: SketchEntityId, to: Vec2): void;
   /** Settles once the last drag target is solved. */
   endDrag(): Promise<void>;
+  /**
+   * The dimension hanging on the cursor of the dimension tool (M28), or null for none: shown in
+   * SketchState.dimensions as the view '__preview'; neither solved nor written. Writing a
+   * dimension (addConstraint) clears it.
+   */
+  previewDimension(draft: SketchConstraintDraft | null): void;
+  /**
+   * Dragging the label of a dimension (M28) to px x, y of the view area: the new placement
+   * (movePlacement) is only held in the session (SketchState.constraints and dimensions show it),
+   * without the solver and without writing.
+   */
+  moveDimension(id: SketchConstraintId, x: number, y: number): void;
+  /** Writes the placement of the dragged dimension in one setParams; without a move nothing. */
+  endMoveDimension(): void;
   setHover(id: SketchItemId | null): void;
   /** Without additive = only this one; additive = toggle. */
   select(id: SketchItemId, opts?: { readonly additive?: boolean }): void;
@@ -105,7 +129,7 @@ export interface SketchState {
   readonly constraintRows: readonly SketchConstraintRow[];
   /** The dimension just created (ui focuses its field). */
   readonly editingDimension: SketchConstraintId | null;
-  /** The distance and radius dimensions for the viewport (dimensionViews, M19.2 D4). */
+  /** The dimensions for the viewport, then the preview of the dimension tool (dimensionViews, M28). */
   readonly dimensions: readonly SketchDimensionView[];
   /** The field "Plane" of the panel (M21); null without a visible plane param. */
   readonly planeField: SketchPlaneField | null;
@@ -135,7 +159,7 @@ export interface SketchConstraintRow {
   readonly kind: SketchConstraint['kind'];
   /** Order within its kind from 1 ("Horizontal 2"). */
   readonly n: number;
-  /** Only distance and radius. */
+  /** Only dimensions (DimensionKind); an angle in radians. */
   readonly value: number | null;
   readonly selected: boolean;
 }
@@ -155,11 +179,6 @@ const MESSAGES: { readonly [K in SketchMessageKey]: { readonly key: K } } = Obje
   'sketch.solverFailed': Object.freeze({ key: 'sketch.solverFailed' }),
 });
 
-type DimensionConstraint = Extract<SketchConstraint, { kind: 'distance' | 'radius' }>;
-
-const isDimension = (c: SketchConstraint): c is DimensionConstraint =>
-  c.kind === 'distance' || c.kind === 'radius';
-
 /** Opened only by the SketchEditor, over a feature session of a sketch. */
 export function openSketchSession(deps: {
   edit: FeatureEditSession;
@@ -170,8 +189,11 @@ export function openSketchSession(deps: {
   /** The plane of a reference picked while sketching (app: planeOfRef over the last state). */
   resolvePlane: (ref: PlaneRef | TopoRef) => Plane | undefined;
   solver: ConstraintSolver;
-  /** Only the drawings: the session draws the edited sketch and nothing else. */
-  viewport: Pick<ViewportPort, 'sketches'>;
+  /**
+   * The drawings: the session draws the edited sketch and nothing else; screenToRay: the cursor
+   * of a dragged dimension label (M28).
+   */
+  viewport: Pick<ViewportPort, 'sketches' | 'screenToRay'>;
   onClose: () => void;
 }): SketchSession {
   const { edit, resolvePlane, solver, viewport, onClose } = deps;
@@ -189,6 +211,11 @@ export function openSketchSession(deps: {
   let hover: SketchItemId | null = null;
   let message: SketchState['message'] = null;
   let editingDimension: SketchConstraintId | null = null;
+  /** The dimension of the dimension tool not written yet (previewDimension). */
+  let preview: SketchConstraintDraft | null = null;
+  /** The placement of a dragged dimension label, not written yet (moveDimension). */
+  let moving: { readonly id: SketchConstraintId; readonly placement: DimensionPlacement } | null =
+    null;
   /**
    * Queued or running jobs that may write to the sketch (SketchState.busy while open); a toggle of
    * construction waits for them.
@@ -212,7 +239,7 @@ export function openSketchSession(deps: {
   }
 
   function buildState(prev: SketchState | null): SketchState {
-    const data = readData();
+    const data = withMoving(readData());
     const entities =
       prev !== null && sameList(prev.entities, data.entities) ? prev.entities : data.entities;
     const constraints =
@@ -251,10 +278,23 @@ export function openSketchSession(deps: {
         constraints,
         selection,
         prev?.dimensions ?? [],
+        preview,
       ),
       planeField: planeFieldOf(edit.state.get(), prev?.planeField ?? null),
       planeMissing,
     });
+  }
+
+  /** The data with the placement of the dragged dimension, if any (moveDimension). */
+  function withMoving(data: SketchData): SketchData {
+    const m = moving;
+    if (m === null) return data;
+    return {
+      entities: data.entities,
+      constraints: data.constraints.map((c) =>
+        c.id === m.id && isDimension(c) ? withPlacement(c, m.placement) : c,
+      ),
+    };
   }
 
   /**
@@ -501,6 +541,10 @@ export function openSketchSession(deps: {
     },
     addConstraint(c) {
       checkOpen('addConstraint');
+      if (isDimension(c) && preview !== null) {
+        preview = null;
+        refresh();
+      }
       return change(
         (data) => ({ entities: data.entities, constraints: [...data.constraints, c] }),
         {
@@ -513,8 +557,10 @@ export function openSketchSession(deps: {
     },
     setDimension(id, value) {
       checkOpen('setDimension');
-      const known = readData().constraints.some((c) => c.id === id && isDimension(c));
-      if (!known || !Number.isFinite(value) || value <= 0) return Promise.resolve(false);
+      const dim = readData().constraints.find((c) => c.id === id && isDimension(c));
+      if (dim === undefined || !Number.isFinite(value) || value <= 0) return Promise.resolve(false);
+      // An angle of π or more would make the data invalid (parseSketchData, M28).
+      if (dim.kind === 'angle' && value >= Math.PI) return Promise.resolve(false);
       return change((data) => ({
         entities: data.entities,
         constraints: data.constraints.map((c) =>
@@ -552,6 +598,47 @@ export function openSketchSession(deps: {
     endDrag() {
       checkOpen('endDrag');
       return dragDone;
+    },
+    previewDimension(draft) {
+      checkOpen('previewDimension');
+      if (draft === preview) return;
+      preview = draft === null ? null : Object.freeze(draft);
+      refresh();
+    },
+    moveDimension(id, x, y) {
+      checkOpen('moveDimension');
+      // With the placement dragged so far: a degenerate cursor keeps it (movePlacement).
+      const data = withMoving(readData());
+      const c = data.constraints.find(
+        (k): k is DimensionConstraint => k.id === id && isDimension(k),
+      );
+      if (c === undefined) return;
+      const world = planeMath.intersectRay(plane.get(), viewport.screenToRay(x, y));
+      if (world === null) return;
+      const cursor = planeMath.toLocal(plane.get(), world);
+      moving = Object.freeze({ id, placement: Object.freeze(movePlacement(c, cursor, data)) });
+      refresh();
+    },
+    endMoveDimension() {
+      checkOpen('endMoveDimension');
+      const target = moving;
+      if (target === null) return;
+      const apply = (): void => {
+        // A later move replaced the target: that one is written by its own end.
+        if (moving !== target) return;
+        const next = withMoving(readData());
+        moving = null;
+        write(next);
+        refresh();
+      };
+      // Like toggleConstruction: behind a pending solve it waits its turn, or that solve's write
+      // would undo it (the solve read the data before the move).
+      if (writers === 0) apply();
+      else
+        void enqueueWrite(() => {
+          if (open) apply();
+          return Promise.resolve();
+        });
     },
     setHover(id) {
       checkOpen('setHover');
@@ -601,6 +688,22 @@ export function openSketchSession(deps: {
   function itemExists(id: SketchItemId): boolean {
     const s = state.get();
     return s.entities.some((e) => e.id === id) || s.constraints.some((c) => c.id === id);
+  }
+}
+
+/** The dimension with the placement; a placement of another kind (never from movePlacement) keeps it. */
+function withPlacement(c: DimensionConstraint, p: DimensionPlacement): DimensionConstraint {
+  switch (c.kind) {
+    case 'angle':
+      return p.kind === 'angular' ? { ...c, placement: p } : c;
+    case 'radius':
+    case 'diameter':
+      return p.kind === 'radial' ? { ...c, placement: p } : c;
+    case 'distance':
+    case 'hDistance':
+    case 'vDistance':
+    case 'pointLineDistance':
+      return p.kind === 'linear' ? { ...c, placement: p } : c;
   }
 }
 

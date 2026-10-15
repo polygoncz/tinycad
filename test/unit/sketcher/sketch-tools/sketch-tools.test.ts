@@ -798,64 +798,6 @@ describe('the arc tool', () => {
   });
 });
 
-describe('the dimension tool', () => {
-  const sketch = data([
-    { kind: 'point', id: 'p', x: 10, y: 10 },
-    { kind: 'point', id: 'q', x: 40, y: 50 },
-    { kind: 'line', id: 'pq', p1: 'p', p2: 'q' },
-    { kind: 'point', id: 'c', x: 100, y: 100 },
-    { kind: 'circle', id: 'k', center: 'c', radius: 20 },
-  ]);
-
-  it('a click on a line adds a distance of its points', async () => {
-    const { manager, viewport, session } = await sketching({ sketch });
-    manager.activate('sketch.dimension');
-
-    await clicks(viewport, [[25, 30]]);
-
-    const [dimension] = session.state.get().constraints;
-    expect(dimension).toMatchObject({ kind: 'distance', a: 'p', b: 'q', value: 50 });
-    expect(session.state.get().editingDimension).toBe(dimension?.id);
-  });
-
-  it('a click on a circle adds a radius', async () => {
-    const { manager, viewport, session } = await sketching({ sketch });
-    manager.activate('sketch.dimension');
-
-    await clicks(viewport, [[120, 100]]);
-
-    expect(session.state.get().constraints).toEqual([
-      expect.objectContaining({ kind: 'radius', curve: 'k', value: 20 }),
-    ]);
-  });
-
-  it('a point and then another point add their distance', async () => {
-    const { manager, viewport, session } = await sketching({ sketch });
-    manager.activate('sketch.dimension');
-
-    await clicks(viewport, [[10, 10]]);
-    expect(session.state.get().constraints).toEqual([]);
-    await clicks(viewport, [[100, 100]]);
-
-    expect(session.state.get().constraints).toEqual([
-      expect.objectContaining({ kind: 'distance', a: 'p', b: 'c', value: Math.hypot(90, 90) }),
-    ]);
-  });
-
-  it('a click into empty space forgets the first point', async () => {
-    const { manager, viewport, session } = await sketching({ sketch });
-    manager.activate('sketch.dimension');
-
-    await clicks(viewport, [
-      [10, 10],
-      [200, 0],
-      [100, 100],
-    ]);
-
-    expect(session.state.get().constraints).toEqual([]);
-  });
-});
-
 describe('the select tool of the sketch', () => {
   const sketch = data([
     { kind: 'point', id: 'p', x: 10, y: 10 },

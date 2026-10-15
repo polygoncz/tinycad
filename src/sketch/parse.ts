@@ -1,6 +1,7 @@
 import { err, ok } from '@/core';
 import type { Result } from '@/core';
-import type { SketchData } from './model';
+import { isDimensionKind } from './model';
+import type { DimensionKind, DimensionPlacement, SketchData } from './model';
 
 // Shape and invariant checks of sketch data (spec 12 "Kontrola dat"). The only trusted place
 // where raw params become typed SketchData: ids are branded here, nowhere else.
@@ -43,8 +44,27 @@ const CONSTRAINT_FIELDS: Readonly<Record<string, Readonly<Record<string, Target 
   tangent: { a: 'line', b: 'line' },
   fix: { point: 'point' },
   distance: { a: 'point', b: 'point', value: 'value' },
+  hDistance: { a: 'point', b: 'point', value: 'value' },
+  vDistance: { a: 'point', b: 'point', value: 'value' },
+  pointLineDistance: { point: 'point', line: 'line', value: 'value' },
+  angle: { a: 'line', b: 'line', value: 'value' },
   radius: { curve: 'round', value: 'value' },
+  diameter: { curve: 'round', value: 'value' },
 };
+
+/** The placement kind of each dimension kind (spec 12 "Kóty (M28)"); placement is optional. */
+const PLACEMENT_KIND: Readonly<Record<DimensionKind, DimensionPlacement['kind']>> = {
+  distance: 'linear',
+  hDistance: 'linear',
+  vDistance: 'linear',
+  pointLineDistance: 'linear',
+  angle: 'angular',
+  radius: 'radial',
+  diameter: 'radial',
+};
+
+/** Optional flags of an angle: absent or `true`, like `construction`. */
+const ANGLE_FLAGS = ['reverseA', 'reverseB'];
 
 /** Ok = the same values typed (the trusted place instead of casting ids). Reports every problem. */
 export function parseSketchData(
@@ -155,8 +175,20 @@ function constraintValid(
   const kind = item.kind;
   if (typeof kind !== 'string' || !Object.hasOwn(CONSTRAINT_FIELDS, kind)) return false;
   const fields = CONSTRAINT_FIELDS[kind];
-  if (fields === undefined || !hasExactly(item, ['id', ...Object.keys(fields)], [])) return false;
+  const placementKind = isDimensionKind(kind) ? PLACEMENT_KIND[kind] : undefined;
+  const optional = [
+    ...(placementKind === undefined ? [] : ['placement']),
+    ...(kind === 'angle' ? ANGLE_FLAGS : []),
+  ];
+  if (fields === undefined || !hasExactly(item, ['id', ...Object.keys(fields)], optional)) {
+    return false;
+  }
   if (!idFresh) return false;
+  if (ANGLE_FLAGS.some((flag) => Object.hasOwn(item, flag) && item[flag] !== true)) return false;
+  if (Object.hasOwn(item, 'placement') && !placementValid(item.placement, placementKind)) {
+    return false;
+  }
+  if (kind === 'angle' && !(isFiniteNumber(item.value) && item.value < Math.PI)) return false;
 
   const refKinds: string[] = [];
   const refs: unknown[] = [];
@@ -174,9 +206,47 @@ function constraintValid(
   }
   if (refs.length === 2 && refs[0] === refs[1]) return false;
   if (kind === 'equal' || kind === 'tangent') return pairAllowed(kind, refKinds);
+  if (kind === 'pointLineDistance' && isEndOf(item.point, item.line, targets)) return false;
   return Object.values(fields)
     .filter((need) => need !== 'value')
     .every((need, i) => matches(need, refKinds[i]));
+}
+
+/** A placement of the given kind with finite numbers in range and nothing else. */
+function placementValid(v: unknown, kind: DimensionPlacement['kind'] | undefined): boolean {
+  if (!isRecord(v) || v.kind !== kind) return false;
+  switch (kind) {
+    case 'linear':
+      return (
+        hasExactly(v, ['offset', 'along'], []) &&
+        isFiniteNumber(v.offset) &&
+        isFiniteNumber(v.along)
+      );
+    case 'radial':
+      return (
+        hasExactly(v, ['angle', 'distance'], []) &&
+        isFiniteNumber(v.angle) &&
+        isFiniteNumber(v.distance) &&
+        v.distance > 0
+      );
+    case 'angular':
+      return (
+        hasExactly(v, ['radius', 't'], []) &&
+        isFiniteNumber(v.radius) &&
+        v.radius > 0 &&
+        isFiniteNumber(v.t) &&
+        v.t >= 0 &&
+        v.t <= 1
+      );
+    default:
+      return false;
+  }
+}
+
+/** True when the point is p1 or p2 of the line. */
+function isEndOf(point: unknown, line: unknown, targets: ReadonlyMap<string, Fields>): boolean {
+  const target = typeof line === 'string' ? targets.get(line) : undefined;
+  return target !== undefined && (target.p1 === point || target.p2 === point);
 }
 
 /** equal: two lines or two rounds; tangent: a line and a round (any order) or two rounds. */

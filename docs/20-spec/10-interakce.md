@@ -198,7 +198,7 @@ Stav, který UI zobrazuje, vystavují prezentační modely jako `Observable<T>` 
 | `ActionRegistry` | `actions: Observable<readonly ActionState[]>` | `run` |
 | `SelectionModel` | `items: Observable<readonly SelectionItem[]>` | `set`, `toggle`, `clear` |
 | `SketchEditor` (M12) | `current: Observable<SketchSession \| null>`, `mode: Observable<Mode>` | `create`, `edit` |
-| `SketchSession` (M12) | `state: Observable<SketchState>` (entity, vazby, stupně volnosti, výběr, řádky vazeb) | `addGeometry`, `addConstraint`, `setDimension`, `remove`, `drag`, `select`, `finish`, `cancel` |
+| `SketchSession` (M12) | `state: Observable<SketchState>` (entity, vazby, stupně volnosti, výběr, řádky vazeb) | `addGeometry`, `addConstraint`, `setDimension`, `remove`, `drag`, `select`, `finish`, `cancel`; M28 `previewDimension`, `moveDimension`, `endMoveDimension` |
 | `HistoryModel` (M15) | `state: Observable<HistoryState>` (řádky logu, celkový počet, počet starších) | – (jen čtení) |
 | `FileActions` (M15) | `status: Observable<FileStatus>` | `dismiss` (akce exportu jsou v `ActionRegistry`) |
 | `ToolbarModel` (M20) | `groups: Observable<readonly ToolbarGroup[]>` (nástroje a akce aktuálního režimu po skupinách, povolení, `active`, `menuOnly`) | `run(item)` |
@@ -998,7 +998,7 @@ export interface SketchEditor {
 export function createSketchEditor(deps: {
   features: FeatureEditor;
   solver: ConstraintSolver;
-  viewport: Pick<ViewportPort, 'sketches'>;               // jen kresba 'sketch-edit' (Ú16a, ADR 0011); ids skicář nepotřebuje
+  viewport: Pick<ViewportPort, 'sketches' | 'screenToRay'>; // kresba 'sketch-edit' (Ú16a, ADR 0011); od M28 screenToRay pro tah popisku kóty; ids skicář nepotřebuje
   resolvePlane: (ref: PlaneRef | TopoRef) => Plane | undefined;   // app: planeOfRef nad posledním stavem regenerace (M14), viz spec 07
   planeOfSketch: (featureId: FeatureId) => Plane | undefined;     // M21: SketchArtifact.plane skici z posledního stavu (ADR 0025); edit ji použije před resolvePlane
   gridStep?: () => number;                                 // M19.2: krok mřížky v mm, čte se při každém pohybu a kliku; výchozí () => 1
@@ -1017,6 +1017,9 @@ export interface SketchSession {
   toggleConstruction(ids: readonly SketchItemId[]): void;  // bez řešiče
   drag(point: SketchEntityId, to: Vec2): void;             // tažení bodu (výběrový nástroj)
   endDrag(): Promise<void>;                                // počká na dořešení posledního cíle
+  previewDimension(draft: SketchConstraintDraft | null): void;   // M28: kóta na myši nástroje Kóta (pohled '__preview'), bez řešiče a zápisu
+  moveDimension(id: SketchConstraintId, x: number, y: number): void; // M28: tah popisku, px plochy pohledu → movePlacement; drží se jen v session
+  endMoveDimension(): void;                                // M28: zapíše polohu jedním setParams bez řešiče; bez pohybu nic
   setHover(id: SketchItemId | null): void;
   select(id: SketchItemId, opts?: { additive?: boolean }): void;   // bez additive = jen toto; additive = přepnout
   clearSelection(): void;
@@ -1050,25 +1053,27 @@ export interface SketchConstraintRow {
   readonly id: SketchConstraintId;
   readonly kind: SketchConstraint['kind'];
   readonly n: number;                                      // pořadí v rámci druhu od 1 („Vodorovná 2“)
-  readonly value: number | null;                           // jen distance a radius
+  readonly value: number | null;                           // jen kóty (všech 7 druhů, M28); úhel v radiánech
   readonly selected: boolean;
 }
-export interface SketchDimensionView {                      // M19.2, sketch-dimensions.ts
-  readonly id: SketchConstraintId;
-  readonly kind: 'distance' | 'radius';
+export interface SketchDimensionView {                      // M19.2, M28; sketch-dimensions.ts
+  readonly id: SketchConstraintId;                         // náhled nástroje Kóta: '__preview'
+  readonly kind: DimensionKind;                            // M28: všech 7 druhů
   readonly value: number;                                  // přesná hodnota vazby; zaokrouhluje až ui
-  readonly from: Vec3;                                     // distance: bod a; radius: střed křivky (světové souřadnice)
-  readonly to: Vec3;                                       // distance: bod b; radius: bod na křivce (kružnice pod π/4, oblouk v půlce úhlu)
-  readonly n: number;                                      // pořadí v rámci druhu jako SketchConstraintRow.n
+  readonly placement: DimensionPlacement;                  // M28: uložená, jinak defaultPlacement
+  readonly geometry: DimensionGeometry;                    // M28: světové body kresby (12-skicar, Kóty (M28)); nahradilo from/to
+  readonly preview?: true;                                 // M28: kóta visící na myši
+  readonly n: number;                                      // pořadí v rámci druhu jako SketchConstraintRow.n; náhled 0
   readonly selected: boolean;
 }
 export function dimensionViews(plane: Plane, entities: readonly SketchEntity[], constraints: readonly SketchConstraint[],
-  selection: readonly SketchItemId[], prev: readonly SketchDimensionView[]): readonly SketchDimensionView[];
+  selection: readonly SketchItemId[], prev: readonly SketchDimensionView[],
+  preview?: SketchConstraintDraft | null): readonly SketchDimensionView[];   // M28: náhled na konec seznamu
 export const EDIT_SKETCH_DRAWING_ID = 'sketch-edit';
 export const ORIGIN_POINT_ID = '__origin';                 // bod počátku v kresbě (snap)
 ```
 
-**Kóty pro viewport** (`SketchState.dimensions`, M19.2 D4): `buildState` volá čistou `dimensionViews` (`sketch-dimensions.ts`, z `index.ts` se exportuje jen typ `SketchDimensionView`). Vazby `distance` a `radius` v pořadí vazeb. `n` se počítá jako `SketchConstraintRow.n`: počítá se každá vazba druhu, i vynechaná. Kóta, které chybí entita (nebo poloměr na něčem jiném než kružnici či oblouku), se vynechá. Nezměněná položka zůstává týmž objektem z `prev` a nezměněný výsledek týmž polem (společná pravidla snapshotů výše).
+**Kóty pro viewport** (`SketchState.dimensions`, M19.2 D4): `buildState` volá čistou `dimensionViews` (`sketch-dimensions.ts`, z `index.ts` se exportuje jen typ `SketchDimensionView`). Všechny kóty v pořadí vazeb (od M28 všech 7 druhů, [[12-skicar#Kóty (M28)]]), náhled nástroje Kóta na konci; z `index.ts` se exportuje i typ `DimensionGeometry`. `n` se počítá jako `SketchConstraintRow.n`: počítá se každá vazba druhu, i vynechaná. Kóta, které chybí entita (nebo poloměr na něčem jiném než kružnici či oblouku, úhel rovnoběžných úseček, `pointLineDistance` k úsečce nulové délky), se vynechá. Nezměněná položka zůstává týmž objektem z `prev` a nezměněný výsledek týmž polem (společná pravidla snapshotů výše).
 
 **`create` / `edit`:** předpoklady jako u `FeatureEditor` (žádná otevřená session, dispečer mimo transakci; jinak výjimka a nic se nezmění); `create` s rovinou, kterou `resolvePlane` nezná, → výjimka před vytvořením featury; `edit` featury jiného typu než `SKETCH_FEATURE_TYPE` → výjimka; `edit` čte rovinu z první položky parametru `plane` (`readRefOf(['plane', 'topo'], …)`, tedy i `TopoRef`, M14); skica s nevyřešitelnou rovinou → session featury se zruší a výjimka. Session hned spustí řešení aktuálních dat **bez zápisu** (jen `status` a `dof`; zápis by do logu dostal šum výpočtu). Když se `FeatureEditSession` zavře jinak (dispose session aplikace), `SketchSession` se zavře také.
 
@@ -1089,11 +1094,11 @@ export const ORIGIN_POINT_ID = '__origin';                 // bod počátku v kr
 
 **Tažení:** `drag(point, to)` je nejvýš jeden rozpracovaný `solve` s `drag` a jeden čekající cíl (další `drag` čekající cíl přepíše). Výsledek `'ok'` se zapíše jako výše; `'conflict'`/`'failed'` se tiše zahodí. Tažení se řadí do stejné fronty jako ostatní příkazy. `endDrag` se splní, až je fronta tažení prázdná.
 
-**Stavový řádek** (Ú16a; dřív `sketchStatusText` v `ui`): `statusKey` je `'sketch.status.solving'` (status `'solving'`), `'sketch.conflict'`, `'sketch.solverFailed'` (status `'failed'`), u statusu `'ok'` `'sketch.status.defined'` (`fullyDefined`), jinak `'sketch.status.dof'`; `ui` ho jen přeloží. `statusParams` je `{ n: dof }` jen u `'sketch.status.dof'` (`dof` `null` → 0), jinak `{}`; zůstává týž objekt, dokud se klíč a DoF nezmění, aby se snapshot `state` zbytečně neměnil. Session vzniká interní `openSketchSession(deps)` (`sketch-session.ts`, mimo `index.ts`), která dostává také jen `viewport: Pick<ViewportPort, 'sketches'>`.
+**Stavový řádek** (Ú16a; dřív `sketchStatusText` v `ui`): `statusKey` je `'sketch.status.solving'` (status `'solving'`), `'sketch.conflict'`, `'sketch.solverFailed'` (status `'failed'`), u statusu `'ok'` `'sketch.status.defined'` (`fullyDefined`), jinak `'sketch.status.dof'`; `ui` ho jen přeloží. `statusParams` je `{ n: dof }` jen u `'sketch.status.dof'` (`dof` `null` → 0), jinak `{}`; zůstává týž objekt, dokud se klíč a DoF nezmění, aby se snapshot `state` zbytečně neměnil. Session vzniká interní `openSketchSession(deps)` (`sketch-session.ts`, mimo `index.ts`), která dostává také jen `viewport: Pick<ViewportPort, 'sketches' | 'screenToRay'>` (`screenToRay` od M28 pro `moveDimension`).
 
 **Kresba:** při každé změně `state` session pošle `viewport.sketches.set(EDIT_SKETCH_DRAWING_ID, toSketchDrawing(plane, data, styleOf, { origin: true, editing: true }))`; po zavření `remove`. Styl křivky: vybraná → `selected`, jinak pod kurzorem → `hover`, jinak konstrukční → `construction`, jinak `fullyDefined ? 'defined' : 'normal'`; body stejně bez konstrukce.
 
-**Kóty a výběr:** kóta vytvořená přes `addConstraint` (`distance`, `radius`) a zapsaná nastaví `editingDimension`. `select`/`clearSelection`/`setHover` mění jen stav session (výběr v režimu skicáře je oddělený od `SelectionModel`). Neznámé id u `select` nic.
+**Kóty a výběr:** kóta vytvořená přes `addConstraint` (kterýkoli druh kóty) a zapsaná nastaví `editingDimension`; volání `addConstraint` s kótou zruší náhled (`previewDimension`). `setDimension` odmítne (`false`, bez řešiče) hodnotu ≤ 0, nekonečnou a u úhlu ≥ π (data by neprošla `parseSketchData`). **Tah popisku** (M28): `moveDimension` přepočítá `placement` (`movePlacement`) a drží ho jen v session (`SketchState.constraints` i `dimensions` ho ukazují, řešič se nevolá); `endMoveDimension` ho zapíše jedním `setParams` – běží-li zápis řešiče, zařadí se za něj jako `toggleConstruction`. `select`/`clearSelection`/`setHover` mění jen stav session (výběr v režimu skicáře je oddělený od `SelectionModel`). Neznámé id u `select` nic.
 
 ### Kresba skici
 
@@ -1131,7 +1136,7 @@ export function createSketchActions(deps: { registry: ActionRegistry; sketches: 
 | `sketch.rectangle` | `sketch`, `draw`, `R` | dva rohy → 4 body (rohy ze snapu znovu použité), 4 úsečky, 2× `horizontal`, 2× `vertical`; rohy se stejnou x nebo y nic |
 | `sketch.circle` | `sketch`, `draw`, `C` | střed, bod na obvodu → kružnice (poloměr > 0) |
 | `sketch.arc` | `sketch`, `draw`, `A` | střed, začátek, konec (promítnutý na kružnici) → oblouk proti směru hodinových ručiček |
-| `sketch.dimension` | `sketch`, `constrain`, `D` | klik na úsečku → `distance(p1, p2)`, na kružnici/oblouk → `radius`, na bod a pak druhý bod → `distance`; hodnota změřená (`dimensionFor`), `addConstraint` |
+| `sketch.dimension` | `sketch`, `constrain`, `D` | M28: klik na entitu nebo dvě entity určí cíl (`dimensionTarget`), kóta pak visí na myši a druh i polohu volí kurzor (`placeDimension`, náhled přes `previewDimension`); klik ji zapíše (`addConstraint` s `placement`), Esc náhled zruší. Průběh výběru v [[12-skicar#Kóty (M28)]] |
 
 - **Bod pod kurzorem** (pomocník `snapAt(ctx, session, x, y, grid: number | null)` v `sketch-tools/snap.ts`): `pick(x, y, ['sketchEntity'])`; zásah bodu session → jeho id a souřadnice; zásah `ORIGIN_POINT_ID` → nový bod `[0, 0]` a vazba `fix`; jinak (křivka, jiná kresba, nic) nový bod v průsečíku paprsku `screenToRay` s rovinou (`plane.intersectRay`, `toLocal`; rovnoběžný paprsek → klik se ignoruje). Nové id z `ids.next()`.
   - **Přichycení k mřížce** (M19.2 D4): pořadí je existující bod → počátek → volný bod. Jen volný bod se zaokrouhlí na násobek `grid` v souřadnicích roviny (`Math.round(v / grid) * grid`, `−0` → `0`). `grid === null` = bez mřížky.

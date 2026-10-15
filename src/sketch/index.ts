@@ -3,9 +3,15 @@
 // Public API of sketch. Everything else in this folder is internal.
 
 export { GEOMETRIC_CONSTRAINT_KINDS, SKETCH_FEATURE_TYPE, SKETCH_PARAM } from './model';
+export { DIMENSION_KINDS, isDimension } from './model';
 export type {
+  AngularPlacement,
+  DimensionConstraint,
   DimensionKind,
+  DimensionPlacement,
   GeometricConstraintKind,
+  LinearPlacement,
+  RadialPlacement,
   SketchArc,
   SketchCircle,
   SketchConstraint,
@@ -24,6 +30,13 @@ export type { SketchIssue } from './parse';
 export { curve2, pointsById } from './geometry';
 export type { Curve2 } from './geometry';
 export { constraintFor, dimensionFor, measure, removeItems, toggleConstruction } from './edit';
+export {
+  defaultPlacement,
+  dimensionTarget,
+  movePlacement,
+  placeDimension,
+} from './dimension-placement';
+export type { DimensionTarget } from './dimension-placement';
 export { computeRegions } from './regions';
 export type { RegionsResult, SketchRegion } from './regions';
 export type { ConstraintSolver, SolveInput, SolveResult, SolveStatus } from './solver';
