@@ -7,6 +7,9 @@
 // Only the buttons take the pointer, so the view around them still orbits and picks. Hovering a
 // glyph hovers its constraint (the session highlights its entities), a click selects it like its
 // row in the panel (glyphListeners) and Delete removes it through the sketch actions.
+// The inference preview of a drawing tool (SketchState.inference, M26) is a row of the same icons
+// right and down from its anchor (inferenceLayout), inactive: it never takes the pointer, so the
+// click goes to the tool.
 // The layout is computed already in setup, so the first render has the glyphs, and again on
 // mount, like SketchDimensions, in case the view was mounted only with this component.
 import { onMounted, onScopeDispose, shallowRef, watch } from 'vue';
@@ -16,8 +19,15 @@ import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
 import type { ScreenPoint } from '../manipulator-hud';
 import { GLYPH_ICON_VIEW_BOX, glyphIconPaths, isGlyphDot } from '../sketch-glyph-icons';
-import { GLYPH_LAYOUT, glyphKey, glyphLabel, glyphLayout, glyphListeners } from '../sketch-glyphs';
-import type { GlyphPlacement, GlyphSketch } from '../sketch-glyphs';
+import {
+  GLYPH_LAYOUT,
+  glyphKey,
+  glyphLabel,
+  glyphLayout,
+  glyphListeners,
+  inferenceLayout,
+} from '../sketch-glyphs';
+import type { GlyphPlacement, GlyphSketch, InferencePlacement } from '../sketch-glyphs';
 
 const props = defineProps<{ sketch: GlyphSketch }>();
 
@@ -25,19 +35,33 @@ const session = useSession();
 const { t } = useI18n();
 const state = useObservable(props.sketch.state);
 
+const project = (world: Vec3): ScreenPoint | null => session.view.project(world);
+
 function layout(): readonly GlyphPlacement[] {
-  const project = (world: Vec3): ScreenPoint | null => session.view.project(world);
   return glyphLayout(state.value.glyphs, project);
+}
+
+function previewLayout(): readonly InferencePlacement[] {
+  return inferenceLayout(state.value.inference, project);
 }
 
 /** The glyphs that project onto the view, with their centres. */
 const placed = shallowRef(layout());
+/** The icons of the inference preview, with their centres. */
+const preview = shallowRef(previewLayout());
 
 function place(): void {
   placed.value = layout();
+  preview.value = previewLayout();
 }
 
 watch(() => state.value.glyphs, place);
+watch(
+  () => state.value.inference,
+  () => {
+    preview.value = previewLayout();
+  },
+);
 const offViewChanged = session.view.onViewChanged(place);
 onScopeDispose(offViewChanged);
 onMounted(place);
@@ -67,6 +91,19 @@ const size = `${String(GLYPH_LAYOUT.sizePx)}px`;
         <path v-for="d in glyphIconPaths(glyph.kind)" v-else :key="d" :d="d" />
       </svg>
     </button>
+    <span
+      v-for="({ kind, at }, i) in preview"
+      :key="`${String(i)}/${kind}`"
+      class="glyph preview"
+      :class="{ dot: isGlyphDot(kind) }"
+      aria-hidden="true"
+      :style="{ left: `${String(at[0])}px`, top: `${String(at[1])}px`, width: size, height: size }"
+    >
+      <svg :viewBox="GLYPH_ICON_VIEW_BOX">
+        <circle v-if="isGlyphDot(kind)" cx="8" cy="8" r="3.5" />
+        <path v-for="d in glyphIconPaths(kind)" v-else :key="d" :d="d" />
+      </svg>
+    </span>
   </div>
 </template>
 
@@ -117,6 +154,11 @@ circle {
   border-color: var(--selection);
   background: var(--selection-soft);
   color: var(--selection);
+}
+/* The inference preview: inactive, the pointer goes through to the tool. */
+.glyph.preview {
+  pointer-events: none;
+  opacity: 0.8;
 }
 .glyph.dot:hover,
 .glyph.dot.hover,

@@ -1,7 +1,9 @@
 // Glyphs of the constraints of the open sketch over the view (spec 12, "Glyfy vazeb (M25)";
 // Q083): pure functions of projected points in px relative to the view area, kept out of
 // SketchGlyphs.vue so they run in Node tests. sketcher gives the anchors, the sides and the slots
-// in the world (SketchState.glyphs), ui projects them and stacks the glyphs in pixels.
+// in the world (SketchState.glyphs), ui projects them and stacks the glyphs in pixels. The
+// inference preview of a drawing tool (SketchState.inference, M26) is a row of the same icons at
+// its anchor.
 
 import { vec3 } from '@/core';
 import type { Observable } from '@/core';
@@ -9,9 +11,9 @@ import type { GlyphKind, SketchGlyphView, SketchSession, SketchState } from '@/s
 import { isAdditive } from './item-actions';
 import type { Project, ScreenPoint } from './manipulator-hud';
 
-/** What SketchGlyphs needs of the sketch session: the glyphs, hover and selection. */
+/** What SketchGlyphs needs of the sketch session: the glyphs, the preview, hover and selection. */
 export interface GlyphSketch extends Pick<SketchSession, 'setHover' | 'select'> {
-  readonly state: Observable<Pick<SketchState, 'glyphs'>>;
+  readonly state: Observable<Pick<SketchState, 'glyphs' | 'inference'>>;
 }
 
 export interface GlyphLayoutOptions {
@@ -33,6 +35,12 @@ export const GLYPH_LAYOUT: GlyphLayoutOptions = Object.freeze({
 /** Where one glyph is drawn: its centre in px of the view area. */
 export interface GlyphPlacement {
   readonly glyph: SketchGlyphView;
+  readonly at: ScreenPoint;
+}
+
+/** Where one icon of the inference preview is drawn: its centre in px of the view area. */
+export interface InferencePlacement {
+  readonly kind: GlyphKind;
   readonly at: ScreenPoint;
 }
 
@@ -61,7 +69,7 @@ export function glyphLayout(
 function place(
   glyph: SketchGlyphView,
   project: Project,
-  { sizePx, gapPx, offsetPx }: GlyphLayoutOptions,
+  options: GlyphLayoutOptions,
 ): ScreenPoint | null {
   const anchor = project(glyph.anchor);
   const tip = project(vec3.add(glyph.anchor, glyph.side));
@@ -70,8 +78,38 @@ function place(
   const dy = tip[1] - anchor[1];
   const length = Math.hypot(dx, dy);
   if (length < MIN_SIDE_PX) return null;
-  const distance = offsetPx + glyph.slot * (sizePx + gapPx) + sizePx / 2;
-  return [anchor[0] + (dx / length) * distance, anchor[1] + (dy / length) * distance];
+  return along(anchor, [dx / length, dy / length], glyph.slot, options);
+}
+
+/**
+ * The icons of the inference preview (spec 12, M26): a horizontal row right and down from the
+ * projection of the anchor; the first centre offsetPx + sizePx / 2 right and down, each next one
+ * sizePx + gapPx further right. Nothing without a preview or when the anchor does not project.
+ */
+export function inferenceLayout(
+  inference: SketchState['inference'],
+  project: Project,
+  options: GlyphLayoutOptions = GLYPH_LAYOUT,
+): readonly InferencePlacement[] {
+  const anchor = inference === null ? null : project(inference.anchor);
+  if (inference === null || anchor === null) return [];
+  const { sizePx, gapPx, offsetPx } = options;
+  const first = offsetPx + sizePx / 2;
+  return inference.kinds.map((kind, slot) => ({
+    kind,
+    at: [anchor[0] + first + slot * (sizePx + gapPx), anchor[1] + first],
+  }));
+}
+
+/** The centre of slot `slot` from `anchor` along the unit screen direction `side`. */
+function along(
+  anchor: ScreenPoint,
+  side: ScreenPoint,
+  slot: number,
+  { sizePx, gapPx, offsetPx }: GlyphLayoutOptions,
+): ScreenPoint {
+  const distance = offsetPx + slot * (sizePx + gapPx) + sizePx / 2;
+  return [anchor[0] + side[0] * distance, anchor[1] + side[1] * distance];
 }
 
 /** A key of a glyph unique in SketchState.glyphs: a constraint has at most one glyph per entity. */

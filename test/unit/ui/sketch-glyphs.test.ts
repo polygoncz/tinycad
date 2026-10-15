@@ -8,6 +8,7 @@ import {
   glyphLabel,
   glyphLayout,
   glyphListeners,
+  inferenceLayout,
 } from '@/ui/sketch-glyphs';
 
 // Test ids are trusted.
@@ -128,5 +129,37 @@ describe('glyphListeners', () => {
       on.click({ ...noKeys, [key]: true });
       expect(sketch.select).toHaveBeenLastCalledWith(cid('c1'), { additive: true });
     }
+  });
+});
+
+describe('inferenceLayout (spec 12, M26)', () => {
+  it('lays the kinds out as a horizontal row right and down from the anchor', () => {
+    const placed = inferenceLayout(
+      { anchor: [10, 0, 0], kinds: ['pointOnCurve', 'equal'] },
+      project,
+    );
+    // Anchor (120, 200); the first centre 10 + 8 px right and down, the next 18 px further right.
+    expect(placed).toEqual([
+      { kind: 'pointOnCurve', at: [138, 218] },
+      { kind: 'equal', at: [156, 218] },
+    ]);
+  });
+
+  it('takes the options', () => {
+    const placed = inferenceLayout({ anchor: [0, 0, 0], kinds: ['fix', 'equal'] }, project, {
+      sizePx: 10,
+      gapPx: 4,
+      offsetPx: 6,
+    });
+    // 6 + 5 = 11 px right and down, then 14 px right.
+    expect(placed.map((p) => p.at)).toEqual([
+      [111, 211],
+      [125, 211],
+    ]);
+  });
+
+  it('is empty without a preview or when the anchor does not project', () => {
+    expect(inferenceLayout(null, project)).toEqual([]);
+    expect(inferenceLayout({ anchor: [0, 0, 0], kinds: ['fix'] }, () => null)).toEqual([]);
   });
 });

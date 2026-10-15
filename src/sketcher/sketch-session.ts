@@ -4,7 +4,7 @@
 // each reads the current data from the document when its turn comes.
 
 import { ObservableValue, assert, plane as planeMath } from '@/core';
-import type { Observable, Plane, Vec2 } from '@/core';
+import type { Observable, Plane, Vec2, Vec3 } from '@/core';
 import {
   SKETCH_PARAM,
   constraintTargets,
@@ -26,6 +26,7 @@ import type {
   SketchEntity,
   SketchEntityId,
   SketchItemId,
+  SnapGuide,
   SolveInput,
   SolveResult,
   SolveStatus,
@@ -35,6 +36,7 @@ import type { PlaneRef, TopoRef } from '@/document';
 import type {
   EditState,
   FeatureEditSession,
+  OverlayShape,
   RefText,
   SketchStyle,
   ViewportPort,
@@ -44,7 +46,7 @@ import { constraintNumbers, dimensionViews } from './sketch-dimensions';
 import type { SketchDimensionView } from './sketch-dimensions';
 import { toSketchDrawing } from './sketch-drawing';
 import { glyphViews, isGlyphConstraint } from './sketch-glyphs';
-import type { SketchGlyphView } from './sketch-glyphs';
+import type { GlyphKind, SketchGlyphView } from './sketch-glyphs';
 
 export interface SketchSession {
   readonly featureId: FeatureEditSession['featureId'];
@@ -88,6 +90,12 @@ export interface SketchSession {
   moveDimension(id: SketchConstraintId, x: number, y: number): void;
   /** Writes the placement of the dragged dimension in one setParams; without a move nothing. */
   endMoveDimension(): void;
+  /**
+   * The constraints a click of a drawing tool would add at `at` (M26), or null for none: shown as
+   * SketchState.inference; the guides are drawn into the overlay SKETCH_GUIDES_OVERLAY_ID. Neither
+   * solved nor written.
+   */
+  setInferencePreview(p: InferencePreview | null): void;
   setHover(id: SketchItemId | null): void;
   /** Without additive = only this one; additive = toggle. */
   select(id: SketchItemId, opts?: { readonly additive?: boolean }): void;
@@ -148,6 +156,11 @@ export interface SketchState {
    * them with SketchEditor.showAllConstraints.
    */
   readonly glyphs: readonly SketchGlyphView[];
+  /**
+   * The constraints a click of the drawing tool would add (setInferencePreview, M26): their kinds
+   * and the anchor in world coordinates; null without a preview or when it has no kinds.
+   */
+  readonly inference: { readonly anchor: Vec3; readonly kinds: readonly GlyphKind[] } | null;
   /** The field "Plane" of the panel (M21); null without a visible plane param. */
   readonly planeField: SketchPlaneField | null;
   /**
@@ -155,6 +168,13 @@ export interface SketchState {
    * origin plane XY and the panel asks for a new plane. A picked plane that resolves clears it.
    */
   readonly planeMissing: boolean;
+}
+
+/** The preview of the inferred constraints of a drawing tool (M26): in plane coordinates. */
+export interface InferencePreview {
+  readonly at: Vec2;
+  readonly kinds: readonly GlyphKind[];
+  readonly guides: readonly SnapGuide[];
 }
 
 /** The field "Plane" of the sketch panel (M21, Q076): the plane param of the feature session. */
@@ -183,6 +203,9 @@ export interface SketchConstraintRow {
 
 /** The id of the drawing of the edited sketch in ViewportPort.sketches. */
 export const EDIT_SKETCH_DRAWING_ID = 'sketch-edit';
+
+/** The overlay id of the snap guides of the inference preview (M26). */
+export const SKETCH_GUIDES_OVERLAY_ID = 'sketch-guides';
 
 const EMPTY_DATA: SketchData = Object.freeze({
   entities: Object.freeze([]),
@@ -213,9 +236,9 @@ export function openSketchSession(deps: {
   solver: ConstraintSolver;
   /**
    * The drawings: the session draws the edited sketch and nothing else; screenToRay: the cursor
-   * of a dragged dimension label (M28).
+   * of a dragged dimension label (M28); overlay: the snap guides of the inference preview (M26).
    */
-  viewport: Pick<ViewportPort, 'sketches' | 'screenToRay'>;
+  viewport: Pick<ViewportPort, 'sketches' | 'screenToRay' | 'overlay'>;
   onClose: () => void;
 }): SketchSession {
   const { edit, resolvePlane, showAllConstraints, solver, viewport, onClose } = deps;
@@ -238,6 +261,10 @@ export function openSketchSession(deps: {
   /** The placement of a dragged dimension label, not written yet (moveDimension). */
   let moving: { readonly id: SketchConstraintId; readonly placement: DimensionPlacement } | null =
     null;
+  /** The inference preview of a drawing tool with some kinds (setInferencePreview). */
+  let inference: Pick<InferencePreview, 'at' | 'kinds'> | null = null;
+  /** The guides of the inference preview are in the overlay. */
+  let guidesShown = false;
   /**
    * Queued or running jobs that may write to the sketch (SketchState.busy while open); a toggle of
    * construction waits for them.
@@ -315,6 +342,7 @@ export function openSketchSession(deps: {
         hover,
         prev?.glyphs ?? [],
       ),
+      inference: inferenceOf(plane.get(), open ? inference : null, prev?.inference ?? null),
       planeField: planeFieldOf(edit.state.get(), prev?.planeField ?? null),
       planeMissing,
     });
@@ -334,15 +362,33 @@ export function openSketchSession(deps: {
 
   /**
    * Publishes a new snapshot unless nothing has changed, and redraws the sketch; `redraw` also
-   * when only the plane moved.
+   * when only the plane moved. A change of only the inference preview (every move of a drawing
+   * tool) does not redraw: the drawing does not show it.
    */
   function refresh(redraw = false): void {
     const prev = state.get();
     const next = buildState(prev);
     const keys = Object.keys(next) as (keyof SketchState)[]; // the keys of the snapshot just built
-    const changed = !keys.every((key) => Object.is(next[key], prev[key]));
-    if (changed) state.set(next);
-    if (open && (changed || redraw)) draw();
+    const changed = keys.filter((key) => !Object.is(next[key], prev[key]));
+    if (changed.length > 0) state.set(next);
+    if (open && (changed.some((key) => key !== 'inference') || redraw)) draw();
+  }
+
+  /** The guides as dashed construction lines in the overlay; none removes them. */
+  function drawGuides(guides: readonly SnapGuide[]): void {
+    if (guides.length === 0) {
+      if (guidesShown) viewport.overlay.remove(SKETCH_GUIDES_OVERLAY_ID);
+      guidesShown = false;
+      return;
+    }
+    const p = plane.get();
+    const shape: OverlayShape = {
+      kind: 'lines',
+      points: guides.flatMap((g) => [planeMath.toWorld(p, g.from), planeMath.toWorld(p, g.to)]),
+      style: 'construction',
+    };
+    viewport.overlay.set(SKETCH_GUIDES_OVERLAY_ID, [shape]);
+    guidesShown = true;
   }
 
   /**
@@ -404,10 +450,12 @@ export function openSketchSession(deps: {
     open = false;
     unsubscribeEdit();
     unsubscribeShowAll();
+    inference = null;
     try {
       refresh();
     } finally {
       try {
+        drawGuides([]);
         viewport.sketches.remove(EDIT_SKETCH_DRAWING_ID);
       } finally {
         onClose();
@@ -702,6 +750,15 @@ export function openSketchSession(deps: {
           return Promise.resolve();
         });
     },
+    setInferencePreview(p) {
+      checkOpen('setInferencePreview');
+      drawGuides(p?.guides ?? []);
+      inference =
+        p === null || p.kinds.length === 0
+          ? null
+          : Object.freeze({ at: p.at, kinds: Object.freeze([...p.kinds]) });
+      refresh();
+    },
     setHover(id) {
       checkOpen('setHover');
       if (id !== null && !itemExists(id)) return;
@@ -771,6 +828,25 @@ function retryOf(
   const withoutConflicting = attempt.filter((c) => !conflicting.has(c.id) || kept.includes(c));
   if (tried.length === 1 && fresh(withoutConflicting)) return withoutConflicting;
   return fresh(kept) ? kept : null;
+}
+
+/**
+ * SketchState.inference of the preview on the plane; `prev` while the anchor and the kinds stay
+ * the same, so an unchanged preview does not publish a new state.
+ */
+function inferenceOf(
+  plane: Plane,
+  preview: Pick<InferencePreview, 'at' | 'kinds'> | null,
+  prev: SketchState['inference'],
+): SketchState['inference'] {
+  if (preview === null) return null;
+  const anchor = planeMath.toWorld(plane, preview.at);
+  const same =
+    prev !== null &&
+    anchor.every((v, i) => Object.is(v, prev.anchor[i])) &&
+    prev.kinds.length === preview.kinds.length &&
+    prev.kinds.every((k, i) => k === preview.kinds[i]);
+  return same ? prev : Object.freeze({ anchor, kinds: preview.kinds });
 }
 
 /** The dimension with the placement; a placement of another kind (never from movePlacement) keeps it. */

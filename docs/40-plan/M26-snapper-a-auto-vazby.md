@@ -51,7 +51,7 @@ Rozhodnutí v sezení 2026-10-15 (brainstorming):
 - [x] 1. Nové vazby `pointOnCurve`, `midpoint`, `hAlign`/`vAlign`: model, `parseSketchData`, `constraintFor`, `constraintTargets`, adaptér planegcs, `FakeSolver`, glyfy a akce Střed
 - [x] 2. `snap`, `inferLine`, `inferRadius` v `sketch` (čisté funkce, tabulkové testy)
 - [x] 3. Ověření kandidátů řešičem (`addGeometry` s `required`) a snapper v nástrojích `sketcher`, Ctrl/Cmd
-- [ ] 4. Náhled: vodítka v overlay a náhledové glyfy v `ui`
+- [x] 4. Náhled: vodítka v overlay a náhledové glyfy v `ui`
 - [ ] 5. e2e `m26.spec.ts`, propsání do spec 10 a 11
 
 ## Implementační plán
@@ -117,6 +117,7 @@ _(Souběžná stopa, [[Roadmapa#Souběžné stopy (pokus od M25)|pravidla]]: mí
 - **2026-10-15, úkol 2** (`snap`, `inferLine`, `inferRadius`): hotovo; 2D pomůcky z `regions.ts` přesunuty do interního `sketch/vec2.ts`. A13: `alignBoth` ke stejnému bodu → jen `align` k bližší ose; tečna jen k oblouku navazujícímu koncem (kružnice ze snapperu tečnu nedostane); `exclude` vyřadí entitu ze všech kroků. Propsáno do spec 12.
 - **2026-10-15, úkol 3** (řešič a nástroje): hotovo. `addGeometry(add, { required })` až tři pokusy; `snapAt` přes `snap`, tolerance 6 px v místě kurzoru; řetěz polyline si pamatuje své nezapsané entity, takže první bod jde trefit i před dokončením zápisu. Rozhodnutí A14 (propsáno do spec 12): `fix` a povinné vazby zůstávají ve všech pokusech; úsečka mezi body už spojenými existující úsečkou se nevytvoří (obdélník na hraně ji sdílí); zarovnání s počátkem kreslené úsečky → její `horizontal`/`vertical`; zarovnání rohu obdélníku s jiným jeho rohem se zahodí; osa + tečna zůstávají obě.
 - **2026-10-15, natažení `main`** (a4e0316, sloučené stopy B a C): 23 konfliktů v 17 souborech, vyřešeno ručně – sjednocené exporty `sketch`, větve `constraintFor`/`constraintTargets`/adaptéru vedle kót a splinů, panel s `<details>` i jednotkami kót z M28, e2e `dimensionInput` asynchronní i v novém `m28.spec.ts`, odstavce spec 10 a 11 vedle sebe. Vyčerpávající `switch` ukázal přesně tři místa: `isGlyphConstraint` (nové kóty → bez glyfu), kotva glyfu splinu (zatím `null`, dodá M29 úkol 8) a průmět na spline ve snapperu (spline zatím není kandidát `onCurve`, `pointOnCurve` na spline nemá). Helper e2e `openConstraintSection` nejdřív 1 s počká na samočinné otevření sekce – klik ve chvíli, kdy ji otevírá nová kóta, ji zavřel a vzal fokus poli (padal `m28.spec.ts` v chrome). `npm run check` zelený.
+- **2026-10-15, úkol 4** (náhled): hotovo. Klik i náhled počítá jedna funkce kroku nástroje (`lineStep` …), takže se nerozejdou. A15 (propsáno do spec 12): vodítka kreslí session (viewport skicáře dostane `overlay`); náhled je vodorovná řada vpravo dole od kotvy; přichycení na existující bod v náhledu nic neukáže (vazba nevzniká, Onshape tam ukazuje shodu – kandidát na zlepšení); `leave` náhled smaže.
 
 ## Retrospektiva
 

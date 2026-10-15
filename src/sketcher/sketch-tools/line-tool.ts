@@ -2,8 +2,10 @@
 // starts a chain, each further click adds a line from the last point (one addGeometry); a click on
 // the first point of the chain closes and ends it. Every point goes through the snapper and every
 // line through inferLine (axis, parallel, perpendicular, tangent, equal with the previous line of
-// the chain); Ctrl/Cmd turns the inference off.
+// the chain); Ctrl/Cmd turns the inference off. The click and the preview of a move share one
+// step (lineStep), so the preview shows exactly the constraints the click adds.
 
+import type { Vec2 } from '@/core';
 import { inferLine } from '@/sketch';
 import type {
   LineInference,
@@ -25,11 +27,12 @@ import {
   existingLine,
   newConstraintId,
   newEntityId,
+  previewInference,
   previewPairs,
   snapMode,
 } from './common';
 import { placePoint, sessionData, snapAt } from './snap';
-import type { PlacedPoint } from './snap';
+import type { PlacedPoint, SnapTarget } from './snap';
 
 interface Chain {
   readonly first: PlacedPoint;
@@ -46,6 +49,25 @@ interface Chain {
   readonly entities: readonly SketchEntity[];
 }
 
+/**
+ * What a click at a target does: nothing, start a chain, or add a line to the target (`close` =
+ * back to the first point of the chain). `target` of a line has its inferences without the
+ * alignment with the start of the line, `inferences` the constraints of the line (that axis
+ * included); a line between two points an existing line joins (`existing`) adds nothing.
+ */
+type LineStep =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'start'; readonly target: SnapTarget }
+  | {
+      readonly kind: 'line';
+      readonly target: SnapTarget;
+      readonly close: boolean;
+      readonly existing: SketchEntityId | null;
+      readonly inferences: readonly LineInference[];
+    };
+
+const NO_STEP: LineStep = { kind: 'none' };
+
 export function createLineTool(sketches: SketchEditor): Tool {
   let chain: Chain | null = null;
 
@@ -55,42 +77,28 @@ export function createLineTool(sketches: SketchEditor): Tool {
   }
 
   /**
-   * Adds the line from `from` to `to` of the current chain and moves the chain on to `to`. `axis`
-   * replaces an alignment of `to` with `from` (one constraint of the line, not of its two points).
-   * Two points an existing line already joins get no second line; the chain just moves on.
+   * Adds the line of `step` from the end of the current chain to `to` and moves the chain on to
+   * `to`. An existing line between them is not doubled; the chain just moves on.
    */
   function addLine(
     ctx: ToolContext,
     session: SketchSession,
     current: Chain,
     to: PlacedPoint,
-    opts: { readonly infer: boolean; readonly axis: AxisKind | null },
+    step: Extract<LineStep, { kind: 'line' }>,
   ): void {
     const { last: from, pending } = current;
-    const data = sessionData(session, current.entities);
-    const existing = existingLine(data, from.id, to.id);
-    if (existing !== null) {
-      chain = { ...current, last: to, lines: current.lines + 1, previous: existing };
+    if (step.existing !== null) {
+      chain = { ...current, last: to, lines: current.lines + 1, previous: step.existing };
       return;
     }
     const id = newEntityId(ctx);
     const line: SketchEntity = { kind: 'line', id, p1: from.id, p2: to.id };
-    const inferred = opts.infer
-      ? inferLine({ at: from.at, point: from.id }, to.at, data, {
-          previous: current.previous,
-          angleTolerance: ANGLE_TOLERANCE,
-        })
-      : [];
-    const { axis } = opts;
-    const all: readonly LineInference[] =
-      axis === null || inferred.some((i) => i.kind === axis)
-        ? inferred
-        : [{ kind: axis }, ...inferred];
     const entities = [...(pending?.entities ?? []), ...to.entities, line];
     const constraints = [
       ...(pending?.constraints ?? []),
       ...to.constraints,
-      ...all.map((i) => lineConstraint(ctx, id, i)),
+      ...step.inferences.map((i) => lineConstraint(ctx, id, i)),
     ];
     // The chain moves on before the write, so the next line starts from this point.
     const started: Chain = {
@@ -113,46 +121,47 @@ export function createLineTool(sketches: SketchEditor): Tool {
       chain = null;
     },
     onMove(ctx, session, x, y, mods) {
-      if (chain === null) return;
-      const target = snapAt(ctx, session, x, y, {
-        ...snapMode(sketches, mods),
-        pending: chain.entities,
-      });
+      const mode = snapMode(sketches, mods);
+      const target = snapAt(ctx, session, x, y, { ...mode, pending: chain?.entities ?? [] });
       if (target === null) return;
-      previewPairs(ctx, session, [chain.last.at, target.at]);
+      const step = lineStep(session, chain, target, mode.infer);
+      const inferences = step.kind === 'line' ? step.inferences : [];
+      const inferred = step.kind === 'none' ? [] : step.target.inferred;
+      previewInference(session, target.at, [...inferred, ...inferences], target.guides);
+      if (chain !== null) previewPairs(ctx, session, [chain.last.at, target.at]);
     },
     onClick(ctx, session, x, y, mods) {
       const mode = snapMode(sketches, mods);
       const target = snapAt(ctx, session, x, y, { ...mode, pending: chain?.entities ?? [] });
       if (target === null) return;
-      if (chain === null) {
-        const first = placePoint(ctx, target);
-        chain = {
-          first,
-          last: first,
-          pending: first,
-          lines: 0,
-          previous: null,
-          entities: first.entities,
-        };
-        return;
-      }
       const current = chain;
-      const { first, last } = current;
-      if (target.point === last.id) return;
-      if (target.point === first.id) {
-        // Closing needs two lines already, otherwise it would double the only one.
-        if (current.lines < 2) return;
-        // The first point is in the sketch already (written with the first line).
-        const to = { ...first, entities: [], constraints: [] };
-        addLine(ctx, session, current, to, { infer: mode.infer, axis: null });
-        end(ctx);
-        return;
+      const step = lineStep(session, current, target, mode.infer);
+      switch (step.kind) {
+        case 'none':
+          return;
+        case 'start': {
+          const first = placePoint(ctx, step.target);
+          chain = {
+            first,
+            last: first,
+            pending: first,
+            lines: 0,
+            previous: null,
+            entities: first.entities,
+          };
+          return;
+        }
+        case 'line': {
+          if (current === null) return;
+          // The first point is in the sketch already (written with the first line).
+          const to = step.close
+            ? { ...current.first, entities: [], constraints: [] }
+            : placePoint(ctx, step.target);
+          addLine(ctx, session, current, to, step);
+          if (step.close) end(ctx);
+          return;
+        }
       }
-      if (distance(last.at, target.at) <= MIN_LENGTH) return;
-      const { inferred, axis } = alignmentWith(target.inferred, last.id);
-      const to = placePoint(ctx, { ...target, inferred });
-      addLine(ctx, session, current, to, { infer: mode.infer, axis });
     },
     onKey(ctx, _session, e) {
       if (!isPlainEscape(e) || chain === null) return false;
@@ -160,6 +169,61 @@ export function createLineTool(sketches: SketchEditor): Tool {
       return true;
     },
   });
+}
+
+/**
+ * The step of a click at `target` with the chain `chain` (null = none yet); `infer` = without
+ * Ctrl/Cmd. Pure over the data of the session, so the preview of a move can call it too.
+ */
+function lineStep(
+  session: SketchSession,
+  chain: Chain | null,
+  target: SnapTarget,
+  infer: boolean,
+): LineStep {
+  if (chain === null) return { kind: 'start', target };
+  const { first, last } = chain;
+  if (target.point === last.id) return NO_STEP;
+  if (target.point === first.id) {
+    // Closing needs two lines already, otherwise it would double the only one.
+    if (chain.lines < 2) return NO_STEP;
+    const closing = { ...target, inferred: [] };
+    return lineTo(session, chain, closing, first, { infer, axis: null, close: true });
+  }
+  if (distance(last.at, target.at) <= MIN_LENGTH) return NO_STEP;
+  const { inferred, axis } = alignmentWith(target.inferred, last.id);
+  const to = { id: target.point, at: target.at };
+  return lineTo(session, chain, { ...target, inferred }, to, { infer, axis, close: false });
+}
+
+/**
+ * The line step from the end of the chain to the point `to` (id null = a new point). `axis`
+ * replaces an alignment of `to` with the start of the line (one constraint of the line, not of
+ * its two points).
+ */
+function lineTo(
+  session: SketchSession,
+  chain: Chain,
+  target: SnapTarget,
+  to: { readonly id: SketchEntityId | null; readonly at: Vec2 },
+  opts: { readonly infer: boolean; readonly axis: AxisKind | null; readonly close: boolean },
+): LineStep {
+  const { last: from } = chain;
+  const { axis, close } = opts;
+  const data = sessionData(session, chain.entities);
+  const existing = to.id === null ? null : existingLine(data, from.id, to.id);
+  if (existing !== null) return { kind: 'line', target, close, existing, inferences: [] };
+  const inferred = opts.infer
+    ? inferLine({ at: from.at, point: from.id }, to.at, data, {
+        previous: chain.previous,
+        angleTolerance: ANGLE_TOLERANCE,
+      })
+    : [];
+  const inferences: readonly LineInference[] =
+    axis === null || inferred.some((i) => i.kind === axis)
+      ? inferred
+      : [{ kind: axis }, ...inferred];
+  return { kind: 'line', target, close, existing: null, inferences };
 }
 
 type AxisKind = 'horizontal' | 'vertical';

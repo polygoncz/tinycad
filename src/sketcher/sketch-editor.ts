@@ -54,9 +54,10 @@ export interface SketchEditorDeps {
   readonly solver: ConstraintSolver;
   /**
    * The edited sketch is drawn under EDIT_SKETCH_DRAWING_ID; screenToRay places a dragged
-   * dimension label in the plane (M28).
+   * dimension label in the plane (M28); the overlay shows the snap guides of the drawing tools
+   * (M26).
    */
-  readonly viewport: Pick<ViewportPort, 'sketches' | 'screenToRay'>;
+  readonly viewport: Pick<ViewportPort, 'sketches' | 'screenToRay' | 'overlay'>;
   /** app: planeOfRef over the last regeneration state (M14: origin planes and planar faces). */
   readonly resolvePlane: (ref: PlaneRef | TopoRef) => Plane | undefined;
   /**

@@ -3,8 +3,8 @@
 
 import { plane as planeMath } from '@/core';
 import type { Vec2, Vec3 } from '@/core';
-import type { SketchConstraintId, SketchData, SketchEntityId } from '@/sketch';
-import { CLICK_TOLERANCE_PX } from '@/interaction';
+import type { SketchConstraintId, SketchData, SketchEntityId, SnapGuide } from '@/sketch';
+import { CLICK_TOLERANCE_PX, isPlainEscape } from '@/interaction';
 import type {
   KeyMods,
   OverlayShape,
@@ -14,6 +14,7 @@ import type {
   ViewPointerEvent,
 } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
+import type { GlyphKind } from '../sketch-glyphs';
 import type { SketchSession } from '../sketch-session';
 
 /** The overlay id of the preview of the drawing tools. */
@@ -155,6 +156,24 @@ export function clearPreview(ctx: ToolContext): void {
   ctx.viewport.overlay.remove(PREVIEW_OVERLAY_ID);
 }
 
+/**
+ * The inference preview of a move (spec 12, M26): the kinds of the constraints the click at `at`
+ * would add, and the guides of the snap. The kinds come from the same step the click uses.
+ */
+export function previewInference(
+  session: SketchSession,
+  at: Vec2,
+  inferences: readonly { readonly kind: GlyphKind }[],
+  guides: readonly SnapGuide[],
+): void {
+  session.setInferencePreview({ at, kinds: inferences.map((i) => i.kind), guides });
+}
+
+/** Removes the inference preview of a session that is still open. */
+export function clearInference(session: SketchSession | null): void {
+  if (session?.state.get().open === true) session.setInferencePreview(null);
+}
+
 /** What a drawing tool reacts to; every call has an open session. */
 export interface ClickHandlers {
   /** The cursor moved (preview); the modifiers decide the grid snap (Alt = off, M19.2 D4). */
@@ -169,7 +188,9 @@ export interface ClickHandlers {
 
 /**
  * A tool of clicks over the open session. Without an open session it does nothing; a new session
- * resets the work in progress (it belonged to the old one). Deactivate removes the preview.
+ * resets the work in progress (it belonged to the old one). Deactivate removes the preview; it,
+ * a click, Escape and the pointer leaving the view remove the inference preview too (spec 12,
+ * M26).
  */
 export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool {
   let ctx: ToolContext | null = null;
@@ -180,6 +201,7 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
   function current(): SketchSession | null {
     const session = openSession(sketches);
     if (session !== owner) {
+      clearInference(owner);
       owner = session;
       down = null;
       handlers.reset();
@@ -195,6 +217,7 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
     },
     deactivate() {
       if (ctx !== null) clearPreview(ctx);
+      clearInference(owner);
       handlers.reset();
       ctx = null;
       owner = null;
@@ -210,6 +233,8 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
           handlers.onMove?.(c, session, e.x, e.y, e.mods);
           return;
         case 'leave':
+          // Off the view the click would add nothing: like Escape, the preview goes.
+          clearInference(session);
           return;
         case 'down':
           if (e.button === 'left') down = { x: e.x, y: e.y };
@@ -220,6 +245,8 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
           down = null;
           if (start === null) return;
           if (Math.hypot(e.x - start.x, e.y - start.y) > CLICK_TOLERANCE_PX) return;
+          // The click adds what the preview showed; the next move shows the next one.
+          clearInference(session);
           handlers.onClick(c, session, e.x, e.y, e.mods);
           return;
         }
@@ -230,6 +257,7 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
       if (c === null) return false;
       const session = current();
       if (session === null) return false;
+      if (isPlainEscape(e)) clearInference(session);
       return handlers.onKey?.(c, session, e) ?? false;
     },
   };

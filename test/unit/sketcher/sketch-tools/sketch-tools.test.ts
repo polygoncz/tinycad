@@ -1456,3 +1456,146 @@ describe('the drawing tools infer constraints (M26)', () => {
     ]);
   });
 });
+
+describe('the drawing tools preview the inferred constraints (M26)', () => {
+  /** A horizontal line from (0, 50) to (100, 50), its middle at (50, 50). */
+  const lineSketch = data([
+    { kind: 'point', id: 'l1', x: 0, y: 50 },
+    { kind: 'point', id: 'l2', x: 100, y: 50 },
+    { kind: 'line', id: 'l', p1: 'l1', p2: 'l2' },
+  ]);
+  const inferenceOf = (s: SketchSession) => s.state.get().inference;
+  const move = (viewport: FakeViewport, x: number, y: number, mods: Partial<KeyMods> = {}) => {
+    viewport.emitPointer(pointer('move', x, y, mods));
+  };
+
+  it('a move over a line previews pointOnCurve at the snapped point', async () => {
+    const { manager, viewport, session } = await sketching({ sketch: lineSketch });
+    manager.activate('sketch.line');
+
+    move(viewport, 30, 52);
+
+    expect(inferenceOf(session)).toEqual({ anchor: [30, 50, 0], kinds: ['pointOnCurve'] });
+    expect(viewport.overlayShapes.has('sketch-guides')).toBe(false);
+  });
+
+  it('an alignment previews its constraint and draws its guide as a construction line', async () => {
+    const { manager, viewport, session } = await sketching({ sketch: lineSketch });
+    manager.activate('sketch.line');
+
+    move(viewport, 102, 120);
+
+    expect(inferenceOf(session)).toEqual({ anchor: [100, 120, 0], kinds: ['vAlign'] });
+    const [guide] = viewport.overlayShapes.get('sketch-guides') ?? [];
+    expect(guide).toMatchObject({ kind: 'lines', style: 'construction' });
+    expect(guide?.points).toHaveLength(2);
+    expect(guide?.points).toContainEqual([100, 50, 0]);
+  });
+
+  it('previews what the click adds: an alignment with the start of the line becomes its axis', async () => {
+    const { manager, viewport, session } = await sketching();
+    manager.activate('sketch.line');
+    await clicks(viewport, [[10, 10]]);
+
+    move(viewport, 110, 15);
+
+    expect(inferenceOf(session)).toEqual({ anchor: [110, 10, 0], kinds: ['horizontal'] });
+  });
+
+  it('previews perpendicular of a line nearly perpendicular to the previous one', async () => {
+    const { manager, viewport, session } = await sketching();
+    manager.activate('sketch.line');
+    await clicks(viewport, [
+      [10, 10],
+      [110, 30],
+    ]);
+
+    move(viewport, 94, 110);
+
+    expect(inferenceOf(session)?.kinds).toEqual(['perpendicular']);
+  });
+
+  it('the rectangle previews the inferences of its corners b, c and d', async () => {
+    const { manager, viewport, session } = await sketching({ sketch: lineSketch });
+    manager.activate('sketch.rectangle');
+    await clicks(viewport, [[10, 10]]);
+
+    // The corner c (30, 52) and the computed corner d (10, 52) snap onto the line.
+    move(viewport, 30, 52);
+
+    expect(inferenceOf(session)?.kinds).toEqual(['pointOnCurve', 'pointOnCurve']);
+  });
+
+  it('the circle previews equal with the last circle of nearly the same radius', async () => {
+    const sketch = data([
+      { kind: 'point', id: 'k0', x: 200, y: 200 },
+      { kind: 'circle', id: 'k', center: 'k0', radius: 10 },
+    ]);
+    const { manager, viewport, session } = await sketching({ sketch });
+    manager.activate('sketch.circle');
+    await clicks(viewport, [[130, 150]]);
+
+    // The rim snaps to the grid (step 1): radius 11 is 10 % off, 10.2 within 2 % (Alt: no grid).
+    move(viewport, 141, 150);
+    expect(inferenceOf(session)).toBeNull();
+
+    move(viewport, 140.2, 150, { alt: true });
+    expect(inferenceOf(session)).toEqual({ anchor: [140.2, 150, 0], kinds: ['equal'] });
+  });
+
+  it('a click removes the preview', async () => {
+    const { manager, viewport, session } = await sketching({ sketch: lineSketch });
+    manager.activate('sketch.line');
+
+    click(viewport, 102, 120);
+
+    expect(inferenceOf(session)).toBeNull();
+    expect(viewport.overlayShapes.has('sketch-guides')).toBe(false);
+  });
+
+  it('Escape removes the preview', async () => {
+    const { manager, viewport, session } = await sketching({ sketch: lineSketch });
+    manager.activate('sketch.line');
+    await clicks(viewport, [[10, 10]]);
+    move(viewport, 102, 120);
+
+    escape(viewport);
+
+    expect(inferenceOf(session)).toBeNull();
+    expect(viewport.overlayShapes.has('sketch-guides')).toBe(false);
+  });
+
+  it('the pointer leaving the view removes the preview', async () => {
+    const { manager, viewport, session } = await sketching({ sketch: lineSketch });
+    manager.activate('sketch.line');
+    move(viewport, 102, 120);
+
+    viewport.emitPointer(pointer('leave', 102, 120));
+
+    expect(inferenceOf(session)).toBeNull();
+    expect(viewport.overlayShapes.has('sketch-guides')).toBe(false);
+  });
+
+  it('deactivating the tool removes the preview', async () => {
+    const { manager, viewport, session } = await sketching({ sketch: lineSketch });
+    manager.activate('sketch.circle');
+    move(viewport, 102, 120);
+
+    manager.activate('sketch.select');
+
+    expect(inferenceOf(session)).toBeNull();
+    expect(viewport.overlayShapes.has('sketch-guides')).toBe(false);
+  });
+
+  it('with Ctrl/Cmd nothing is previewed, neither constraints nor guides', async () => {
+    const { manager, viewport, session } = await sketching({ sketch: lineSketch });
+    manager.activate('sketch.line');
+
+    move(viewport, 30, 52, { mod: true });
+    expect(inferenceOf(session)).toBeNull();
+
+    move(viewport, 102, 120, { mod: true });
+    expect(inferenceOf(session)).toBeNull();
+    expect(viewport.overlayShapes.has('sketch-guides')).toBe(false);
+  });
+});

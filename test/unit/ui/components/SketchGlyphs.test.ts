@@ -40,8 +40,14 @@ const view: AppSession['view'] = {
   onViewChanged: () => () => undefined,
 };
 
-async function render(glyphs: readonly SketchGlyphView[]): Promise<string> {
-  const state = new ObservableValue<Pick<SketchState, 'glyphs'>>({ glyphs });
+async function render(
+  glyphs: readonly SketchGlyphView[],
+  inference: SketchState['inference'] = null,
+): Promise<string> {
+  const state = new ObservableValue<Pick<SketchState, 'glyphs' | 'inference'>>({
+    glyphs,
+    inference,
+  });
   const sketch: GlyphSketch = { state, setHover: vi.fn(), select: vi.fn() };
   // typescript-eslint sees a .vue import of a test untyped (the fallback src/env.d.ts is not in the
   // test project); vue-tsc checks it against the real type.
@@ -106,5 +112,18 @@ describe('SketchGlyphs (spec 12, "Glyfy vazeb (M25)")', () => {
 
   it('draws nothing without glyphs', async () => {
     expect(buttons(await render([]))).toEqual([]);
+  });
+
+  it('draws the inference preview as inactive icons right and down from its anchor', async () => {
+    const html = await render([], { anchor: [0, 0, 0], kinds: ['pointOnCurve', 'equal'] });
+    const icons = html.match(/<span[^>]*>/g) ?? [];
+    expect(buttons(html)).toEqual([]);
+    expect(icons).toHaveLength(2);
+    expect(classes(icons[0])).toEqual(['glyph', 'preview']);
+    expect(icons[0]).toContain('aria-hidden="true"');
+    // 18 px right and down from the anchor (100, 200), the next one 18 px further right.
+    expect(icons[0]).toContain('left:118px;top:218px;');
+    expect(icons[1]).toContain('left:136px;top:218px;');
+    expect(html.match(/<path d="M3 6H13"/g)).toHaveLength(1);
   });
 });
