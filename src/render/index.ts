@@ -11,5 +11,7 @@ export type { ManipulatorLayer } from './manipulator-layer';
 export type { CameraController } from './camera-controller';
 export type { StandardView } from './camera-math';
 export type { OrbitMode } from './camera-ops';
+export { DEFAULT_DISPLAY_STYLE, DISPLAY_MODES } from './display-style';
+export type { DisplayMode, DisplayStyle } from './display-style';
 export { DEFAULT_VIEW_CUBE_LABELS } from './view-cube-labels';
 export type { ViewCubeLabelKey, ViewCubeLabels } from './view-cube-labels';

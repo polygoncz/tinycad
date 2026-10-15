@@ -13,5 +13,6 @@ export type { KernelUiState, SupervisedKernel } from './kernel-supervisor';
 export type { DownloadFile } from './file-exporter';
 export type { PluginMessages } from '@/plugin-api';
 export type { DocumentInfo } from '@/persistence';
-export type { OrbitMode, ViewCubeLabels } from '@/render';
+export { DEFAULT_DISPLAY_STYLE, DISPLAY_MODES } from '@/render';
+export type { DisplayMode, DisplayStyle, OrbitMode, ViewCubeLabels } from '@/render';
 export type { HandleUnit, HudField, ManipulatorHud } from '@/interaction';

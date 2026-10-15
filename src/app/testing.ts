@@ -24,7 +24,7 @@ import { FakeViewport } from '@/interaction/testing';
 import type { MeshOps, ShapeHandle } from '@/kernel';
 import { createFakeKernel } from '@/kernel/testing';
 import type { FakeKernel } from '@/kernel/testing';
-import type { OrbitMode, ScenePalette, StandardView, ViewCubeLabels } from '@/render';
+import type { DisplayStyle, OrbitMode, ScenePalette, StandardView, ViewCubeLabels } from '@/render';
 import type { DocumentLocks } from './doc-lock';
 import type { DownloadFile } from './file-exporter';
 import type { SupervisedKernel } from './kernel-supervisor';
@@ -37,7 +37,8 @@ type Ray = ReturnType<FakeViewport['screenToRay']>;
  * An AppViewport for tests: the ViewportPort part of FakeViewport plus recorded mount, body
  * syncs, kernel resets, camera calls (views and view directions), palettes, body visibility,
  * body colours (M15), view cube labels (M17), rotation modes (M17.1) and manipulator views
- * (M18), a prepared projection (M19) and step of the sketch grid (M19.2); emitOrbitModeToggle plays a click on the rotation mode
+ * (M18), a prepared projection (M19), step of the sketch grid (M19.2) and display styles (M22);
+ * emitOrbitModeToggle plays a click on the rotation mode
  * button, emitViewChanged a move of the view (M19). sync settles at once, or while held only on
  * releaseSyncs (M19.1); like BodyLayer, a newer sync or a reset makes a held sync stale, so it
  * settles without showing its bodies (spec 09). syncLayers (M21) records the main bodies in `syncs`
@@ -76,6 +77,8 @@ export class FakeAppViewport implements AppViewport {
   readonly viewCubeLabels: ViewCubeLabels[] = [];
   /** Mode of every setOrbitMode call, oldest first (M17.1). */
   readonly orbitModes: OrbitMode[] = [];
+  /** Style of every setDisplayStyle call, oldest first (M22). */
+  readonly displayStyles: DisplayStyle[] = [];
   private readonly orbitModeToggles = new Emitter<{ toggle: undefined }>();
   /** Bodies of the last sync that settled current, [] after a reset (M19.1). */
   private shownBodies: readonly SyncedBody[] = [];
@@ -174,6 +177,10 @@ export class FakeAppViewport implements AppViewport {
 
   onOrbitModeToggle(listener: () => void): Unsubscribe {
     return this.orbitModeToggles.on('toggle', listener);
+  }
+
+  setDisplayStyle(style: DisplayStyle): void {
+    this.displayStyles.push(style);
   }
 
   /** Plays a click on the rotation mode button of the view cube (M17.1). */

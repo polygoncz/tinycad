@@ -249,6 +249,17 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'viewCube.switchToFree': 'Switch to free rotation',
   'viewCube.switchToTurntable': 'Switch to rotation with Z up',
 
+  // Display style menu at the view cube (M22).
+  'displayStyle.button': 'Display style',
+  'displayStyle.current': 'Display style: {mode}',
+  'displayStyle.mode.shaded': 'Shaded',
+  'displayStyle.mode.hiddenRemoved': 'Hidden lines removed',
+  'displayStyle.mode.hiddenVisible': 'Hidden lines visible',
+  'displayStyle.mode.wireframe': 'Wireframe',
+  'displayStyle.edges': 'Edges',
+  'displayStyle.transparent': 'Transparency',
+  'displayStyle.mesh': 'Triangulation',
+
   // The value field of the manipulator HUD (M19), its aria-label.
   'manipulator.field.label': 'Handle value',
 

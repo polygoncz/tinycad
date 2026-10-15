@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 22
 aliases:
   - M22
@@ -14,8 +14,8 @@ specs:
   - "[[11-ui]]"
 depends_on:
   - "[[M21-vstupni-stav-editovane-featury]]"
-started:
-finished:
+started: 2026-10-15
+finished: 2026-10-15
 tags:
   - milnik
 created: 2026-10-15
@@ -43,14 +43,15 @@ Rozhodnutí v sezení 2026-10-15 (brainstorming):
 
 ## Úkoly
 
-- [ ] 1. `display-style.ts`: typy, výchozí styl, `resolveDisplay`, `samePlan`
-- [ ] 2. Paleta: `hiddenEdge`, `meshLine`
-- [ ] 3. `BodyView` a `BodyLayer`: materiály podle plánu, skryté hrany, triangulace, čárky v pixelech
-- [ ] 4. `Picker` a `HighlightLayer`: režim `xray`
-- [ ] 5. `Viewport.setDisplayStyle` a `ViewSettings.setDisplayStyle` v `app`
-- [ ] 6. `ui`: controller stylu s úložištěm
-- [ ] 7. `ui`: `DisplayStyleMenu` v `AppShell`, i18n, e2e
-- [ ] 8. Ruční ověření v prohlížeči, spec podle skutečnosti
+- [x] 1. `display-style.ts`: typy, výchozí styl, `resolveDisplay`, `samePlan`
+- [x] 2. Paleta: `hiddenEdge`, `meshLine`
+- [x] 3. `BodyView` a `BodyLayer`: materiály podle plánu, skryté hrany, triangulace, čárky v pixelech
+- [x] 4. `Picker` a `HighlightLayer`: režim `xray`
+- [x] 5. `Viewport.setDisplayStyle` a `ViewSettings.setDisplayStyle` v `app`
+- [x] 6. `ui`: controller stylu s úložištěm
+- [x] 7. `ui`: `DisplayStyleMenu` v `AppShell`, i18n, e2e
+- [x] 8. Ruční ověření v prohlížeči, spec podle skutečnosti
+- [x] 9. Silnější hrany B-rep při zapnuté triangulaci
 
 ## Implementační plán
 
@@ -58,7 +59,7 @@ Jeden úkol = jedno spuštění subagenta `implementer`. Kontrakt je v [[09-vykr
 
 ### 1. `display-style.ts`
 
-- **Soubory:** `src/render/display-style.ts` (nový, **bez importu `three`**), export typů a hodnot přes `src/render/index.ts`; `test/unit/render/display-style.test.ts`.
+- **Soubory:** `src/render/display-style.ts` (nový, **bez importu `three`**), ven z modulu přes `src/render/index.ts` jen `DisplayMode`, `DisplayStyle`, `DISPLAY_MODES` a `DEFAULT_DISPLAY_STYLE` (plán a `resolveDisplay` jsou vnitřní věc `render`); `test/unit/render/display-style.test.ts` importuje přímo `@/render/display-style` (`@/render` táhne typy DOM, které projekt testů v Node nemá).
 - **Kontrakt:** [[09-vykreslovani#Styl zobrazení]]: `DisplayMode`, `DISPLAY_MODES`, `DisplayStyle`, `DEFAULT_DISPLAY_STYLE`, `DisplayPlan`, `TRANSPARENT_FACE_OPACITY`, `resolveDisplay`, `samePlan`. Rozhodovací tabulka přesně podle spec.
 - **Testy:** každý řádek tabulky (Shaded s hranami i bez, Shaded průhledný, Hidden lines removed, Hidden lines visible, Wireframe); `mesh` se propisuje ve všech režimech; `edges` a `transparent` mimo Shaded plán nemění; `samePlan` je strukturní rovnost; vrácený plán je zmrazený.
 - **Hotovo když:** testy projdou, `npm run check` je zelený.
@@ -110,13 +111,22 @@ Jeden úkol = jedno spuštění subagenta `implementer`. Kontrakt je v [[09-vykr
 - **Soubory:** vault (spec podle skutečnosti).
 - Hlavní sezení projde režimy v prohlížeči ve světlém i tmavém tématu: obarvené těleso, skrytá tělesa, výběr a hover, skica, manipulátor Transformace, view cube. Rozdíly propíše do spec.
 
+### 9. Silnější hrany při triangulaci
+
+Doplněno po ručním ověření (Pavel 2026-10-15): v triangulaci se hrany B-rep ztrácejí mezi čarami trojúhelníků.
+
+- **Soubory:** `src/render/body-view.ts`, `src/render/body-layer.ts`, `src/render/body-layers.ts`, `src/render/viewport.ts`; testy `body-layer.test.ts`, `body-layers.test.ts`.
+- **Kontrakt:** [[09-vykreslovani#Triangulace]], odstavec *Silnější hrany při triangulaci*.
+- **Testy:** se zapnutou triangulací a hranami jsou viditelné silné hrany (`LineSegments2`, barva hran, 2 px) a tenké `edges` ne; bez triangulace naopak; při `edges: false` nejsou žádné; silné hrany vzniknou až při prvním zapnutí a geometrie se uvolní při vypnutí i `dispose`; `setPalette` je přebarví; `setResolution` nastaví rozlišení materiálu; náhledová vrstva je nedostane.
+- **Hotovo když:** testy projdou, `npm run check` a e2e M22 jsou zelené.
+
 ## Akceptační kritéria
 
 - Menu vlevo od view cube nabízí Shaded, Hidden lines removed, Hidden lines visible a Wireframe a přepínače Hrany, Průhlednost a Triangulace. Hrany a Průhlednost jsou mimo Shaded zašedlé.
 - Každý režim kreslí tělesa podle tabulky v [[09-vykreslovani#Styl zobrazení]], ve světlém i tmavém tématu.
 - Skryté hrany v Hidden lines visible jsou čárkované a délka čárky v pixelech se při zoomu nemění.
 - Ve Wireframe, Hidden lines visible a průhledném Shaded jde vybrat hrana za plochou a její zvýraznění je vidět.
-- Triangulace jde zapnout ve všech režimech, při vypnutí se geometrie uvolní.
+- Triangulace jde zapnout ve všech režimech, při vypnutí se geometrie uvolní. Hrany B-rep jsou při ní silnější (2 px) než čáry trojúhelníků.
 - Zvolený styl přežije obnovení stránky, neplatné uložené hodnoty nic nerozbijí.
 - Skici, manipulátory, mřížka, view cube a náhled editované featury (M21) vypadají ve všech režimech stejně jako dnes.
 - `npm run check` a `npm run test:e2e` jsou zelené.
@@ -134,4 +144,18 @@ Jeden úkol = jedno spuštění subagenta `implementer`. Kontrakt je v [[09-vykr
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+_Návrh Clauda, Pavel doplní nebo upraví._
+
+**Co se osvědčilo**
+- Čistá rozhodovací tabulka (`resolveDisplay` → `DisplayPlan`) se vyplatila. Úkoly 3–5 jen četly plán a o režimech nerozhodovaly. Revize v něm našla jen `samePlan` s ručním výčtem polí.
+- Hloubkový buffer jako nástroj viditelnosti: skryté hrany jsou druhý průchod se stejnou geometrií a `GreaterDepth`, Wireframe jsou plochy s `colorWrite: false`, které dál chytá raycast. Geometrický výpočet viditelnosti nebyl potřeba.
+- Rozdělení na hlavní sezení a subagenta `implementer` fungovalo i u UI úkolu (7). Implementer vracel díry ve spec jako otázky (pole v JSONu, vzhled tlačítka, fokus v menu) a ty šly rovnou do spec 11.
+
+**Co bylo jinak, než se čekalo**
+- Pravidlo „při xray vyhrává nejbližší ke kameře“ ze spec se ukázalo jako špatné UX. Přednější hrana o pár px vedle přebila zadní hranu pod kurzorem. Rozhodnuto v [[Q080 Výběr hrany v režimu xray|Q080]]: nejbližší kurzoru, hloubka jen při překryvu.
+- Ruční ověření přineslo dvě věci, které testy nezachytí. Válec nemá v čárových režimech obrys (siluety nejsou hrany B-rep, zůstává jako známé omezení ve spec 09). A hrany se ztrácely mezi čarami triangulace, proto vznikl úkol 9: hrany 2 px přes `LineSegments2`.
+- Viewport nejde testovat v Node (WebGL, `requestAnimationFrame`), takže „stejný plán nepřekresluje“ a „platí před `mount`“ hlídají jen testy vrstev a e2e. Revize pak našla, že výchozí plán drželi viewport a vrstva nezávisle (opraveno přes `initialPlan`).
+
+**Na příště**
+- U pravidel výběru (picking) myslet hned při návrhu na scénář „mířím přesně, ale vedle je jiný kandidát“. Rozhodnutí podle jedné metriky bývá špatné.
+- Ruční ověření v prohlížeči nechávat jako samostatný úkol, i když e2e prochází. Tady přineslo nový úkol i známé omezení.

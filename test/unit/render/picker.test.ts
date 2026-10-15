@@ -24,7 +24,7 @@ function topCamera(): THREE.OrthographicCamera {
 }
 
 /** Two boxes in a row along the view direction: A in front (z 10..20), B behind (z 0..5). */
-function setup() {
+function setup(xray = false) {
   const materials = createBodyMaterials(LIGHT_PALETTE);
   const view = (id: BodyId, z: number, height: number): BodyView =>
     createBodyView(id, aBoxMesh([-10, -10, z], [10, 10, z + height]), materials);
@@ -37,6 +37,7 @@ function setup() {
       return views;
     },
     bounds: () => unionBounds(views.map((v) => v.bounds)),
+    xray: () => xray,
   });
   const camera = topCamera();
   const pickAt = (x: number, y: number, filter?: PickFilter) =>
@@ -46,7 +47,14 @@ function setup() {
   // (9.7, 0): 3 px from the edge x = 10 of the top face of A, inside the edge tolerance.
   const pickNearEdge = (filter?: PickFilter) => pickAt(SIZE / 2 + 97, SIZE / 2, filter);
   const isVisible = (point: Vec3) => picker.isVisible(camera, point);
-  return { views, pickCenter, pickNearEdge, isVisible, sceneQueries: () => sceneQueries };
+  return {
+    views,
+    materials,
+    pickCenter,
+    pickNearEdge,
+    isVisible,
+    sceneQueries: () => sceneQueries,
+  };
 }
 
 describe('Picker visibility', () => {
@@ -266,7 +274,7 @@ function aFrustumMesh(bottom: number, top: number, height: number): MeshData {
  * the frustum C: apothem 9.5 at z = 0, 10 at z = 10. Its side 0 is the chord x = 9.5 of the
  * bottom rim (hidden under the top cap) and the chord x = 10 of the top rim, for |y| < 4.14.
  */
-function frustumSetup() {
+function frustumSetup(xray: () => boolean = () => false) {
   const materials = createBodyMaterials(LIGHT_PALETTE);
   const views = [
     createBodyView(A, aBoxMesh([-40, -5, 0], [-30, 5, 10]), materials),
@@ -275,6 +283,7 @@ function frustumSetup() {
   const picker = createPicker({
     views: () => views,
     bounds: () => unionBounds(views.map((v) => v.bounds)),
+    xray,
   });
   const camera = topCamera();
   /** Picks at the world point (x, y) under the cursor, in mm. */
@@ -323,4 +332,61 @@ describe('Picker on edges of many segments', () => {
       normal: near([0, 0, 1]),
     });
   });
+});
+
+describe('Picker in x-ray (M22)', () => {
+  it('picks an edge behind a face, which without x-ray gives the face', () => {
+    let xray = false;
+    const pickAt = frustumSetup(() => xray);
+    // 2 px from the bottom rim hidden under the top cap, 7 px from the top rim.
+    expect(pickAt(9.3, 2)).toMatchObject({ kind: 'face', faceIndex: FACE.topCap });
+    // Read per pick: the same picker follows the current plan.
+    xray = true;
+    expect(pickAt(9.3, 2)).toEqual({
+      kind: 'edge',
+      body: C,
+      edgeIndex: EDGE.bottomRim,
+      point: near([9.5, 2, 0]),
+    });
+  });
+
+  it('the edge nearest to the cursor wins, even behind a nearer one (Q080)', () => {
+    const pickAt = frustumSetup(() => true);
+    // 1 px from the bottom rim (z = 0), 4 px from the top rim (z = 10, nearer the camera).
+    expect(pickAt(9.6, 2)).toMatchObject({ kind: 'edge', edgeIndex: EDGE.bottomRim });
+  });
+
+  it('of edges overlapping on screen the one nearest to the camera wins (Q080)', () => {
+    const materials = createBodyMaterials(LIGHT_PALETTE);
+    // Seen head-on, the rims x = 10 of both boxes coincide; the back box is listed first.
+    const views = [
+      createBodyView(B, aBoxMesh([-10, -10, 0], [10, 10, 5]), materials),
+      createBodyView(A, aBoxMesh([-10, -10, 10], [10, 10, 20]), materials),
+    ];
+    const picker = createPicker({
+      views: () => views,
+      bounds: () => unionBounds(views.map((v) => v.bounds)),
+      xray: () => true,
+    });
+    // (9.7, 0): 3 px from the coinciding rims x = 10.
+    expect(picker.pick(topCamera(), SIZE / 2 + 97, SIZE / 2, SIZE, SIZE)).toMatchObject({
+      kind: 'edge',
+      body: A,
+      point: near([10, 0, 20]),
+    });
+  });
+
+  it('isVisible is true behind a body', () => {
+    const { isVisible } = setup(true);
+    expect(isVisible([3, -7, 7])).toBe(true);
+  });
+
+  it.each([false, true])(
+    'faces are picked by the nearest hit, also with an invisible material (x-ray %s)',
+    (xray) => {
+      const { views, materials, pickCenter } = setup(xray);
+      for (const view of views) view.faces.material = materials.facesHidden;
+      expect(pickCenter()).toMatchObject({ kind: 'face', body: A });
+    },
+  );
 });

@@ -9,6 +9,7 @@ import type { BoundingBox, MeshOps, MeshQuality } from '@/kernel';
 import { assertUniqueIds, type ShownBody } from './body-diff';
 import { createBodyLayer, type BodyLayerInternal } from './body-layer';
 import { unionBounds } from './bounds';
+import type { DisplayPlan } from './display-style';
 import { createSharedMeshCache } from './mesh-cache';
 import { parseHexColor, type ScenePalette } from './palette';
 import { createPicker, type Picker } from './picker';
@@ -40,6 +41,12 @@ export interface BodyLayers extends Disposable {
   setBodyColor(body: BodyId, color: string | null): void;
   /** Kernel instance swap (Q060): forgets the shared cache, empties both layers. */
   reset(meshes: MeshOps): void;
+  /** Display plan (M22) of the main layer only: the preview looks the same in every mode. */
+  setDisplayPlan(plan: DisplayPlan): void;
+  /** Dash length of the hidden edges of the main layer only (BodyLayerInternal.setPixelSize). */
+  setPixelSize(worldPerPx: number): void;
+  /** Canvas size for the thick edges of the main layer only (BodyLayerInternal.setResolution). */
+  setResolution(width: number, height: number): void;
 }
 
 export interface BodyLayersOptions {
@@ -52,6 +59,10 @@ export interface BodyLayersOptions {
   readonly afterApply?: () => void;
   /** After setBodyVisible changed a body of the main layer. */
   readonly afterVisibilityChange?: () => void;
+  /** The display plan the main layer starts in (BodyLayerOptions.initialPlan); the preview has none. */
+  readonly initialPlan?: DisplayPlan;
+  /** X-ray of the current display plan (M22), for the picker; none = never. */
+  readonly xray?: () => boolean;
 }
 
 export function createBodyLayers(options: BodyLayersOptions): BodyLayers {
@@ -68,11 +79,13 @@ export function createBodyLayers(options: BodyLayersOptions): BodyLayers {
     ...(options.afterVisibilityChange === undefined
       ? {}
       : { afterVisibilityChange: options.afterVisibilityChange }),
+    ...(options.initialPlan === undefined ? {} : { initialPlan: options.initialPlan }),
   });
   const preview = createBodyLayer({ ...common, cache: cache.client(), style: 'preview' });
   const picker = createPicker({
     views: () => main.views.values(),
     bounds: () => main.bounds(),
+    ...(options.xray === undefined ? {} : { xray: options.xray }),
   });
   let disposed = false;
 
@@ -109,6 +122,15 @@ export function createBodyLayers(options: BodyLayersOptions): BodyLayers {
       if (color !== null) parseHexColor(color);
       main.setBodyColor(body, color);
       preview.setBodyColor(body, color);
+    },
+    setDisplayPlan(plan) {
+      main.setDisplayPlan(plan);
+    },
+    setPixelSize(worldPerPx) {
+      main.setPixelSize(worldPerPx);
+    },
+    setResolution(width, height) {
+      main.setResolution(width, height);
     },
     reset(meshes) {
       cache.reset(meshes);

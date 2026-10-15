@@ -1,6 +1,8 @@
 // Picking (spec 09, "Picking"): what is under the cursor. Edges first, in screen space with a
 // pixel tolerance and an occlusion check; then faces by a raycast against the body meshes.
-// The filter (spec 10, "Port viewportu") turns either pass off; faces still hide edges.
+// The filter (spec 10, "Port viewportu") turns either pass off; faces still hide edges. In x-ray
+// (M22, spec 09, "Picking a zvýraznění") nothing is occluded: the edge nearest to the cursor wins,
+// of edges overlapping it on screen the one nearest to the camera (Q080); isVisible is always true.
 //
 // Cost: every pick projects all edge segments of all bodies and runs one raycast per edge
 // candidate (plus one for the face). Fine for M8 (a box has 12 edges); large models will need a
@@ -25,6 +27,8 @@ import {
 const EDGE_TOLERANCE_PX = 6;
 /** Below this length (px) a projected segment counts as a point: an edge seen end-on. */
 const POINT_SEGMENT_PX = 1e-3;
+/** In x-ray, edge candidates this close (px) to the best one overlap it; the nearer one wins. */
+const XRAY_OVERLAP_PX = 1;
 /** The filter of a pick without one (spec 10, "Port viewportu"). */
 const DEFAULT_FILTER: PickFilter = Object.freeze(['edge', 'face']);
 
@@ -33,6 +37,8 @@ export interface PickerOptions {
   readonly views: () => Iterable<BodyView>;
   /** Union of their bounds, for the occlusion tolerance. */
   readonly bounds: () => BoundingBox | null;
+  /** True = skip every occlusion check (DisplayPlan.xray); read per pick. Default false. */
+  readonly xray?: () => boolean;
 }
 
 export interface Picker {
@@ -53,7 +59,7 @@ export interface Picker {
    * True when no shown body hides the world point from the camera: the ray from the camera to the
    * point hits no face closer than the point minus the occlusion tolerance (the rule of edges,
    * spec 09, "Picking" point 2). The sketch layer uses it for sketch hits (M19.2). Without shown
-   * bodies true.
+   * bodies, and in x-ray (M22), true.
    */
   isVisible(camera: THREE.Camera, point: Vec3): boolean;
 }
@@ -66,6 +72,7 @@ interface SegmentRef {
 }
 
 export function createPicker(options: PickerOptions): Picker {
+  const xray = options.xray ?? (() => false);
   const raycaster = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
   const matrix = new THREE.Matrix4();
@@ -98,23 +105,35 @@ export function createPicker(options: PickerOptions): Picker {
       }
     }
     const screen = concat(parts);
+    const xrayOn = xray();
     const tolerance = occlusionTolerance(options.bounds());
 
-    for (const candidate of closestSegments(screen, x, y, EDGE_TOLERANCE_PX)) {
+    const candidates = closestSegments(screen, x, y, EDGE_TOLERANCE_PX);
+    /** In x-ray only candidates overlapping the nearest one to the cursor (sorted by px) count. */
+    const overlapLimit = (candidates[0]?.distancePx ?? 0) + XRAY_OVERLAP_PX;
+    /** Nearest of them to the camera so far, in x-ray; camera space looks down −Z. */
+    let nearest: {
+      readonly ref: SegmentRef;
+      readonly point: THREE.Vector3;
+      readonly z: number;
+    } | null = null;
+    for (const candidate of candidates) {
+      if (xrayOn && candidate.distancePx > overlapLimit) break;
       const ref = refs[candidate.segment];
       if (ref === undefined) continue;
       // The screen parameter is also the 3D one: the orthographic projection is affine.
       const t = isPoint(screen, candidate.segment) ? nearerEnd(camera, ref) : candidate.t;
       const point = worldPoint(ref, t);
+      if (xrayOn) {
+        // A tie keeps the candidate nearer the cursor (closestSegments sorts by distance).
+        const z = point.clone().applyMatrix4(camera.matrixWorldInverse).z;
+        if (nearest === null || z > nearest.z) nearest = { ref, point, z };
+        continue;
+      }
       if (!visible(camera, meshes, point, tolerance)) continue;
-      return {
-        kind: 'edge',
-        body: ref.view.id,
-        edgeIndex: edgeOfSegment(ref),
-        point: [point.x, point.y, point.z],
-      };
+      return edgeResult(ref, point);
     }
-    return null;
+    return nearest === null ? null : edgeResult(nearest.ref, nearest.point);
   }
 
   /**
@@ -184,6 +203,7 @@ export function createPicker(options: PickerOptions): Picker {
 
   return {
     isVisible(camera, point) {
+      if (xray()) return true;
       const views = shownViews();
       if (views.length === 0) return true;
       camera.updateMatrixWorld();
@@ -214,6 +234,15 @@ export function createPicker(options: PickerOptions): Picker {
       const at = toNdc(x, y, width, height);
       return pickFace(camera, views, meshes, at.x, at.y);
     },
+  };
+}
+
+function edgeResult(ref: SegmentRef, point: THREE.Vector3): PickResult {
+  return {
+    kind: 'edge',
+    body: ref.view.id,
+    edgeIndex: edgeOfSegment(ref),
+    point: [point.x, point.y, point.z],
   };
 }
 

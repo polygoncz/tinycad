@@ -21,6 +21,8 @@ const KEYS = [
   'axes',
   'grid',
   'viewCube',
+  'hiddenEdge',
+  'meshLine',
 ] as const satisfies readonly (keyof ScenePalette)[];
 
 /** Relative luminance of 0xRRGGBB (WCAG 2). */
@@ -162,6 +164,8 @@ describe('palettes', () => {
       axes: [0xff3b30, 0x34c759, 0x0a84ff],
       grid: [0xb4b9c1, 0xd5d8dd],
       viewCube: [0xffffff, 0x374151],
+      hiddenEdge: 0x8b929c,
+      meshLine: 0x8e99a8,
     });
   });
 
@@ -178,6 +182,11 @@ describe('palettes', () => {
       sketch: 0x409cff,
       sketchDefined: 0xf2f2f7,
     });
+  });
+
+  it('hidden edges and triangulation lines by theme (M22)', () => {
+    expect(LIGHT_PALETTE).toMatchObject({ hiddenEdge: 0x8b929c, meshLine: 0x8e99a8 });
+    expect(DARK_PALETTE).toMatchObject({ hiddenEdge: 0x6b7280, meshLine: 0x5a7fb0 });
   });
 
   it('view cube: face and text colour by theme (M17)', () => {

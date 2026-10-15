@@ -29,6 +29,13 @@ import { createBodyLayers } from './body-layers';
 import { unionBounds } from './bounds';
 import { createCameraRig, type CameraController } from './camera-controller';
 import type { OrbitMode } from './camera-ops';
+import {
+  DEFAULT_DISPLAY_STYLE,
+  resolveDisplay,
+  samePlan,
+  type DisplayPlan,
+  type DisplayStyle,
+} from './display-style';
 import { createFrameScheduler } from './frame-scheduler';
 import { createHighlightLayer } from './highlight-layer';
 import {
@@ -131,6 +138,11 @@ export interface Viewport extends ViewportPort, Disposable {
   setOrbitMode(mode: OrbitMode): void;
   /** M17.1: click on the rotation mode button of the view cube; dispose drops the listeners. */
   onOrbitModeToggle(listener: () => void): Unsubscribe;
+  /**
+   * M22: how the bodies are drawn (spec 09, "Styl zobrazení"); the same plan = nothing. Works
+   * before mount too: the plan applies from the first frame. ui owns the style.
+   */
+  setDisplayStyle(style: DisplayStyle): void;
 
   /**
    * viewChanged (M19) after a drawn frame whose camera (target, orientation, halfHeight) or view
@@ -187,6 +199,11 @@ export function createViewport(deps: {
   let viewGeneration = 0;
   /** mm per CSS px of the last drawn frame (sketch grid, M19.2); 0 = no frame yet. */
   let lastWorldPerPx = 0;
+  /**
+   * M22: the plan of the last setDisplayStyle, the single owner of it: the main layer starts in it
+   * (initialPlan), the picker reads its xray.
+   */
+  let displayPlan: DisplayPlan = resolveDisplay(DEFAULT_DISPLAY_STYLE);
 
   const scheduler = lifetime.add(
     createFrameScheduler({
@@ -223,6 +240,9 @@ export function createViewport(deps: {
       afterVisibilityChange: () => {
         highlightLayer.rebuild();
       },
+      initialPlan: displayPlan,
+      // M22: "what you see is what you pick" in the x-ray modes.
+      xray: () => displayPlan.xray,
     }),
   );
   const layer = layers.main;
@@ -320,6 +340,8 @@ export function createViewport(deps: {
     const { clientWidth, clientHeight } = mounted.canvas;
     lastWorldPerPx = worldPerPx(clientHeight);
     sketchLayer.setPixelSize(lastWorldPerPx, rig.target, Math.hypot(clientWidth, clientHeight));
+    // M22: dash length of the hidden edges in px; inside the frame, so it requests no render.
+    layers.setPixelSize(lastWorldPerPx);
     updateClip();
     // Constant size on the screen for the camera of this frame (a gesture or animation moved it).
     manipulatorLayer.beforeRender(
@@ -426,6 +448,7 @@ export function createViewport(deps: {
     mounted.renderer.setSize(width, height, false);
     rig.resize(width, height);
     highlightLayer.setResolution(width, height);
+    layers.setResolution(width, height);
     sketchLayer.setResolution(width, height);
     manipulatorLayer.setResolution(width, height);
     scheduleFrame();
@@ -756,6 +779,16 @@ export function createViewport(deps: {
     onOrbitModeToggle(listener: () => void): Unsubscribe {
       assertAlive();
       return orbitModeToggles.on('toggle', listener);
+    },
+    setDisplayStyle(style: DisplayStyle): void {
+      assertAlive();
+      const plan = resolveDisplay(style);
+      if (samePlan(plan, displayPlan)) return;
+      displayPlan = plan;
+      layers.setDisplayPlan(plan);
+      highlightLayer.setXray(plan.xray);
+      // While unmounted, nothing is drawn; mount draws the first frame with the plan.
+      scheduleFrame();
     },
     events,
     dispose(): void {

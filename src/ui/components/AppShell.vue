@@ -11,16 +11,19 @@
 // drawn only without them; whether it is open is layout state of this window (the TitleBar
 // switch), nothing of the session.
 // Also the page-level bindings of a session: the theme (Q072), the view cube labels of the
-// language (M17), the rotation mode of the camera (M17.1) and the global keyboard.
+// language (M17), the rotation mode of the camera (M17.1), the display style of the bodies (M22,
+// its button left of the view cube) and the global keyboard.
 import { onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { AppSession } from '@/app';
 import { provideSession } from '../composables/use-session';
 import { useObservable } from '../composables/use-observable';
+import { useDisplayStyle } from '../display-style/use-display-style';
 import { isMacPlatform, toViewKeyEvent } from '../keyboard';
 import { useOrbitMode } from '../orbit-mode/use-orbit-mode';
 import { useTheme } from '../theme/use-theme';
 import Browser from './Browser.vue';
+import DisplayStyleMenu from './DisplayStyleMenu.vue';
 import { dialogFor } from './feature-dialogs';
 import HistoryPanel from './HistoryPanel.vue';
 import SketchDimensions from './SketchDimensions.vue';
@@ -75,6 +78,16 @@ const offOrbitModeToggle = session.viewSettings.onOrbitModeToggle(() => {
   orbitMode.toggle();
 });
 
+// The display style belongs to the page too (M22); DisplayStyleMenu changes it in the controller.
+const { style: displayStyle } = useDisplayStyle();
+watch(
+  displayStyle,
+  (value) => {
+    session.viewSettings.setDisplayStyle(value);
+  },
+  { immediate: true },
+);
+
 // Global keyboard (spec 10, "Akce a klávesové zkratky"): window keys → ViewKeyEvent →
 // ActionRegistry.handleKey, which ignores text fields. Keys on the focused canvas are not
 // handled here: render forwards them to the active tool, whose unhandled keys reach
@@ -105,6 +118,7 @@ onUnmounted(() => {
     </header>
     <main class="stage">
       <ViewportHost ref="viewport" />
+      <DisplayStyleMenu />
       <SketchDimensions
         v-if="sketchSession !== null"
         :key="`dimensions-${sketchSession.featureId}`"

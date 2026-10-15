@@ -30,6 +30,10 @@ export interface ScenePalette {
   readonly grid: readonly [center: number, line: number];
   /** View cube (M17): colour of its faces and of the face labels and arrows. */
   readonly viewCube: readonly [face: number, text: number];
+  /** Dashed hidden edges (M22, spec 09 "Styl zobrazení"). */
+  readonly hiddenEdge: number;
+  /** Lines of the triangulation (M22, spec 09 "Styl zobrazení"). */
+  readonly meshLine: number;
 }
 
 function freezePalette(palette: ScenePalette): ScenePalette {
@@ -54,6 +58,8 @@ export const LIGHT_PALETTE: ScenePalette = freezePalette({
   axes: [0xff3b30, 0x34c759, 0x0a84ff],
   grid: [0xb4b9c1, 0xd5d8dd],
   viewCube: [0xffffff, 0x374151],
+  hiddenEdge: 0x8b929c,
+  meshLine: 0x8e99a8,
 });
 
 /** By the M10 mockup (spec 11, "Rozvržení"). */
@@ -73,6 +79,8 @@ export const DARK_PALETTE: ScenePalette = freezePalette({
   // Muted on the dark background.
   grid: [0x3a3c42, 0x2c2e33],
   viewCube: [0x4b4f57, 0xe5e7eb],
+  hiddenEdge: 0x6b7280,
+  meshLine: 0x5a7fb0,
 });
 
 /**

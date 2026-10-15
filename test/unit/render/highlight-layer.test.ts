@@ -271,3 +271,51 @@ describe('HighlightLayer and whole bodies (M14)', () => {
     expect(layer.group.children).toHaveLength(0);
   });
 });
+
+describe('HighlightLayer x-ray (M22)', () => {
+  function depthTests(group: THREE.Group): boolean[] {
+    return drawn(group).map(({ material }) => material.depthTest);
+  }
+
+  function counted() {
+    let renders = 0;
+    const layer = createHighlightLayer({
+      views: new Map<BodyId, BodyView>([[A, viewOf(A)]]),
+      requestRender: () => {
+        renders++;
+      },
+      palette: LIGHT_PALETTE,
+    });
+    return { layer, renders: () => renders };
+  }
+
+  it('turns the depth test of face and edge highlights off and on again', () => {
+    const layer = setup();
+    expect(depthTests(layer.group)).toEqual([true, true, true]);
+    layer.setXray(true);
+    expect(depthTests(layer.group)).toEqual([false, false, false]);
+    layer.setXray(false);
+    expect(depthTests(layer.group)).toEqual([true, true, true]);
+  });
+
+  it('applies to targets drawn after the switch, whole bodies included', () => {
+    const { layer } = counted();
+    layer.setXray(true);
+    layer.setSelection([
+      { kind: 'body', body: A },
+      { kind: 'edge', body: A, edgeIndex: 0 },
+    ]);
+    layer.setHover({ kind: 'face', body: A, faceIndex: 1 });
+    expect(depthTests(layer.group)).toEqual([false, false, false]);
+  });
+
+  it('the same value requests no render', () => {
+    const { layer, renders } = counted();
+    layer.setXray(false);
+    expect(renders()).toBe(0);
+    layer.setXray(true);
+    const after = renders();
+    layer.setXray(true);
+    expect(renders()).toBe(after);
+  });
+});

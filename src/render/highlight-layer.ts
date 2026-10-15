@@ -50,6 +50,12 @@ export interface HighlightLayerInternal extends HighlightPort, Disposable {
   setResolution(width: number, height: number): void;
   /** Recolours hover and selection in place (Q072); the caller requests the render. */
   setPalette(palette: ScenePalette): void;
+  /**
+   * X-ray (M22, DisplayPlan.xray): face, body and edge highlights get depthTest = !on, so a
+   * selected back edge stays visible. Holds for targets drawn later too; the same value does
+   * nothing, a change requests a render.
+   */
+  setXray(on: boolean): void;
 }
 
 export interface HighlightLayerOptions {
@@ -81,6 +87,7 @@ export function createHighlightLayer(options: HighlightLayerOptions): HighlightL
   let regionHover: RegionTarget | null = null;
   let regionSelection: readonly RegionTarget[] = [];
   let disposed = false;
+  let xray = false;
 
   const meshOf = (body: BodyId): MeshData | undefined => views.get(body)?.mesh;
 
@@ -160,6 +167,16 @@ export function createHighlightLayer(options: HighlightLayerOptions): HighlightL
     setPalette(palette: ScenePalette): void {
       recolor(hoverLook, palette.hover);
       recolor(selectionLook, palette.selection);
+    },
+    setXray(on: boolean): void {
+      if (on === xray) return;
+      xray = on;
+      // The materials are shared by every drawn target, so later targets get it as well.
+      for (const look of [hoverLook, selectionLook]) {
+        look.face.depthTest = !on;
+        look.edge.depthTest = !on;
+      }
+      requestRender();
     },
     rebuild(): void {
       if (disposed) return;

@@ -8,6 +8,7 @@ import type { BodyId } from '@/interaction';
 import type { BoundingBox, MeshOps, ShapeHandle } from '@/kernel';
 import { unionBounds } from './bounds';
 import { createBodyMaterials, createBodyView, type BodyStyle, type BodyView } from './body-view';
+import { DEFAULT_DISPLAY_STYLE, resolveDisplay, samePlan, type DisplayPlan } from './display-style';
 import type { MeshCache } from './mesh-cache';
 import { parseHexColor, type ScenePalette } from './palette';
 import { createSceneSync, type PreparedSync, type ScenePlan } from './scene-sync';
@@ -62,8 +63,25 @@ export interface BodyLayerInternal extends Disposable {
    * Colours the faces of a shown body ('#rrggbb', M15); null returns the material of the
    * palette. Same rules as setBodyVisible: an unknown body does nothing, a body that leaves the
    * scene forgets its colour, the same value does not render. An invalid colour throws.
+   * The colour shows only in lit faces; in flat and hidden it waits for the return to lit.
    */
   setBodyColor(body: BodyId, color: string | null): void;
+  /**
+   * How the bodies are drawn (spec 09, "Styl zobrazení", M22). The same plan as the last one
+   * does nothing; otherwise every view switches and a render is requested. Views created later
+   * get the current plan. Starts in BodyLayerOptions.initialPlan.
+   */
+  setDisplayPlan(plan: DisplayPlan): void;
+  /**
+   * World units per screen pixel: the dashes of the hidden edges stay 6 px long with 4 px gaps.
+   * Called inside a frame, so it never requests a render; the same value does nothing.
+   */
+  setPixelSize(worldPerPx: number): void;
+  /**
+   * Size of the canvas in pixels for the thick edges of the triangulation (LineMaterial, M22).
+   * Without a call they use the default resolution of LineMaterial. Never requests a render.
+   */
+  setResolution(width: number, height: number): void;
 }
 
 export interface BodyLayerOptions {
@@ -78,6 +96,27 @@ export interface BodyLayerOptions {
   readonly afterApply?: () => void;
   /** Called after setBodyVisible changed a body: the highlight of a hidden body is not drawn. */
   readonly afterVisibilityChange?: () => void;
+  /**
+   * The display plan the layer starts in (M22); the viewport owns the plan and passes its own.
+   * Default resolveDisplay(DEFAULT_DISPLAY_STYLE).
+   */
+  readonly initialPlan?: DisplayPlan;
+}
+
+/** Length of a dash and of a gap of the hidden edges in screen pixels (spec 09, "Skryté hrany"). */
+const DASH_PX = 6;
+const GAP_PX = 4;
+
+/**
+ * Opacity of lit faces by the plan (spec 09, "Materiály"): translucent faces write no depth, so the
+ * edges behind them show. A switch of `transparent` changes the shader program (needsUpdate).
+ */
+function applyOpacity(material: THREE.MeshStandardMaterial, opacity: number): void {
+  const transparent = opacity < 1;
+  if (material.transparent !== transparent) material.needsUpdate = true;
+  material.transparent = transparent;
+  material.opacity = opacity;
+  material.depthWrite = !transparent;
 }
 
 export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
@@ -94,6 +133,9 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
     string,
     { readonly material: THREE.MeshStandardMaterial; users: number }
   >();
+  let plan = options.initialPlan ?? resolveDisplay(DEFAULT_DISPLAY_STYLE);
+  /** worldPerPx of the last setPixelSize; null before the first one. */
+  let pixelSize: number | null = null;
   let disposed = false;
 
   /** Face material for a colour; a copy of the shared one, so only the colour differs. */
@@ -103,6 +145,7 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
       entry.users++;
       return entry.material;
     }
+    // Clones the current state, so a colour acquired in transparent shaded is translucent too.
     const material = materials.faces.clone();
     material.color.setHex(parseHexColor(color));
     colorMaterials.set(color, { material, users: 1 });
@@ -117,6 +160,34 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
     if (entry.users > 0) return;
     colorMaterials.delete(color);
     entry.material.dispose();
+  }
+
+  /** The face material of a body by the plan; the colour material stays acquired in any case. */
+  function faceMaterial(id: BodyId): THREE.Material {
+    switch (plan.faces) {
+      case 'lit': {
+        const color = colors.get(id);
+        if (color === undefined) return materials.faces;
+        const entry = colorMaterials.get(color);
+        assert(entry !== undefined, `No material for colour ${color}`);
+        return entry.material;
+      }
+      case 'flat':
+        return materials.facesFlat;
+      case 'hidden':
+        return materials.facesHidden;
+    }
+  }
+
+  /** Puts a view into the current plan. */
+  function applyPlan(view: BodyView): void {
+    view.faces.material = faceMaterial(view.id);
+    // Over the triangulation the edges are drawn thick instead (spec 09, "Triangulace").
+    const thick = plan.edges && plan.meshLines;
+    view.edges.visible = plan.edges && !plan.meshLines;
+    view.hiddenEdges.visible = plan.hiddenEdges === 'dashed';
+    view.setMeshLines(plan.meshLines ? materials.meshLines : null);
+    view.setThickEdges(thick ? materials.edgesThick : null);
   }
 
   /**
@@ -143,7 +214,8 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
       view.object.visible = !hidden.has(id);
       // ... and keeps its colour.
       const color = colors.get(id);
-      if (color !== undefined) view.faces.material = acquireColor(color);
+      if (color !== undefined) acquireColor(color);
+      applyPlan(view);
       views.set(id, view);
       group.add(view.object);
     }
@@ -195,11 +267,33 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
       const current = colors.get(body) ?? null;
       if (current === color) return;
       // Acquire before release: a material is never disposed while it is being handed over.
-      view.faces.material = color === null ? materials.faces : acquireColor(color);
-      if (current !== null) releaseColor(current);
+      if (color !== null) acquireColor(color);
       if (color === null) colors.delete(body);
       else colors.set(body, color);
+      view.faces.material = faceMaterial(body);
+      if (current !== null) releaseColor(current);
       requestRender();
+    },
+    setDisplayPlan(next) {
+      if (samePlan(plan, next)) return;
+      const opacityChanged = plan.faceOpacity !== next.faceOpacity;
+      plan = next;
+      if (opacityChanged) {
+        applyOpacity(materials.faces, plan.faceOpacity);
+        for (const { material } of colorMaterials.values())
+          applyOpacity(material, plan.faceOpacity);
+      }
+      for (const view of views.values()) applyPlan(view);
+      requestRender();
+    },
+    setPixelSize(worldPerPx) {
+      if (worldPerPx === pixelSize) return;
+      pixelSize = worldPerPx;
+      materials.hiddenEdges.dashSize = DASH_PX * worldPerPx;
+      materials.hiddenEdges.gapSize = GAP_PX * worldPerPx;
+    },
+    setResolution(width, height) {
+      materials.edgesThick.resolution.set(width, height);
     },
     clear() {
       sceneSync.clear();

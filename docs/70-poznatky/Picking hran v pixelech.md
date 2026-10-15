@@ -34,3 +34,5 @@ updated: 2026-10-13
 ## Zdroje
 
 - three.js: `Raycaster`
+
+Pokračování pro výběr „skrz“ (M22): [[Řazení kandidátů ve dvou stupních]].

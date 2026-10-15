@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
-import type { ViewCubeLabels } from '@/render';
+import type { DisplayStyle, ViewCubeLabels } from '@/render';
 import { createViewSettings } from '@/app/view-settings';
 import { FakeAppViewport } from '@/app/testing';
 
@@ -77,5 +77,20 @@ describe('createViewSettings', () => {
     off();
     viewport.emitOrbitModeToggle();
     expect(toggles).toBe(1);
+  });
+
+  it('setDisplayStyle hands the style to the viewport unchanged (M22)', () => {
+    const { viewport, viewSettings } = setup();
+    const wireframe: DisplayStyle = {
+      mode: 'wireframe',
+      edges: true,
+      transparent: false,
+      mesh: true,
+    };
+    const shaded: DisplayStyle = { mode: 'shaded', edges: false, transparent: true, mesh: false };
+    viewSettings.setDisplayStyle(wireframe);
+    viewSettings.setDisplayStyle(shaded);
+    expect(viewport.displayStyles).toEqual([wireframe, shaded]);
+    expect(viewport.displayStyles[0]).toBe(wireframe);
   });
 });

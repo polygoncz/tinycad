@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { describe, expect, it, vi } from 'vitest';
 import type { BodyId } from '@/interaction';
 import type { MeshData, MeshOps, MeshQuality, ShapeHandle } from '@/kernel';
 import { createBodyLayers } from '@/render/body-layers';
+import { DEFAULT_DISPLAY_STYLE, resolveDisplay } from '@/render/display-style';
 import { DARK_PALETTE, LIGHT_PALETTE } from '@/render/palette';
 import { aBoxMesh, boxMeshes } from '@/render/testing';
 
@@ -189,6 +191,23 @@ describe('BodyLayers', () => {
     expect(layers.picker.isVisible(topCamera(), [2, 2, 5])).toBe(true);
   });
 
+  it('hands the x-ray flag to the picker (M22)', async () => {
+    let xray = false;
+    const layers = createBodyLayers({
+      meshes: boxMeshes(),
+      quality: QUALITY,
+      palette: LIGHT_PALETTE,
+      reportError: () => undefined,
+      requestRender: () => undefined,
+      xray: () => xray,
+    });
+    await layers.main.sync([{ id: A, shape: shape(5) }]);
+    // Under the box A (0..5), hidden by its top face.
+    expect(layers.picker.isVisible(topCamera(), [2, 2, -1])).toBe(false);
+    xray = true;
+    expect(layers.picker.isVisible(topCamera(), [2, 2, -1])).toBe(true);
+  });
+
   it('preview.clear empties the preview and leaves the main layer', async () => {
     const { layers, requestRender } = setup();
     await layers.main.sync([{ id: A, shape: shape(5) }]);
@@ -318,5 +337,85 @@ describe('BodyLayers.syncLayers (M21, D3 of M19.1)', () => {
     await k.release(shape(5));
     await running;
     expect(layers.main.views.has(A)).toBe(true);
+  });
+});
+
+describe('BodyLayers display plan (M22)', () => {
+  const HIDDEN_VISIBLE = resolveDisplay({ ...DEFAULT_DISPLAY_STYLE, mode: 'hiddenVisible' });
+
+  function hiddenEdgesOf(view: { readonly hiddenEdges: THREE.LineSegments } | undefined) {
+    const material = view?.hiddenEdges.material;
+    if (!(material instanceof THREE.LineDashedMaterial)) throw new Error('hidden edges material');
+    return material;
+  }
+
+  it('setDisplayPlan switches the main layer only, the preview stays as it is', async () => {
+    const { layers } = setup();
+    await layers.main.sync([{ id: A, shape: shape(5) }]);
+    await layers.preview.sync([{ id: B, shape: shape(7) }]);
+    const preview = layers.preview.views.get(B);
+    const before = facesOf(preview);
+    layers.setDisplayPlan(HIDDEN_VISIBLE);
+    expect(layers.main.views.get(A)?.faces.material).toBeInstanceOf(THREE.MeshBasicMaterial);
+    expect(layers.main.views.get(A)?.hiddenEdges.visible).toBe(true);
+    expect(facesOf(preview)).toBe(before);
+    expect(before.transparent).toBe(true);
+    expect(preview?.hiddenEdges.visible).toBe(false);
+    // A preview body added later is not switched either.
+    await layers.preview.sync([
+      { id: B, shape: shape(7) },
+      { id: A, shape: shape(8) },
+    ]);
+    expect(facesOf(layers.preview.views.get(A))).toBe(before);
+  });
+
+  it('initialPlan applies to the main layer from the first sync, not to the preview', async () => {
+    const layers = createBodyLayers({
+      meshes: boxMeshes(),
+      quality: QUALITY,
+      palette: LIGHT_PALETTE,
+      reportError: () => undefined,
+      requestRender: () => undefined,
+      initialPlan: HIDDEN_VISIBLE,
+    });
+    await layers.main.sync([{ id: A, shape: shape(5) }]);
+    await layers.preview.sync([{ id: B, shape: shape(7) }]);
+    expect(layers.main.views.get(A)?.faces.material).toBeInstanceOf(THREE.MeshBasicMaterial);
+    expect(layers.main.views.get(A)?.hiddenEdges.visible).toBe(true);
+    expect(facesOf(layers.preview.views.get(B)).transparent).toBe(true);
+    expect(layers.preview.views.get(B)?.hiddenEdges.visible).toBe(false);
+  });
+
+  it('setPixelSize reaches the main layer only', async () => {
+    const { layers } = setup();
+    await layers.main.sync([{ id: A, shape: shape(5) }]);
+    await layers.preview.sync([{ id: B, shape: shape(7) }]);
+    const previewDash = hiddenEdgesOf(layers.preview.views.get(B)).dashSize;
+    layers.setPixelSize(0.5);
+    expect(hiddenEdgesOf(layers.main.views.get(A)).dashSize).toBe(3);
+    expect(hiddenEdgesOf(layers.preview.views.get(B)).dashSize).toBe(previewDash);
+  });
+
+  it('setResolution reaches the main layer only', async () => {
+    const { layers } = setup();
+    await layers.main.sync([{ id: A, shape: shape(5) }]);
+    await layers.preview.sync([{ id: B, shape: shape(7) }]);
+    const mainSpy = vi.spyOn(layers.main, 'setResolution');
+    const previewSpy = vi.spyOn(layers.preview, 'setResolution');
+    layers.setResolution(800, 600);
+    expect(mainSpy).toHaveBeenCalledWith(800, 600);
+    expect(previewSpy).not.toHaveBeenCalled();
+  });
+
+  it('the preview gets no thick edges with triangulation', async () => {
+    const { layers } = setup();
+    await layers.main.sync([{ id: A, shape: shape(5) }]);
+    await layers.preview.sync([{ id: B, shape: shape(7) }]);
+    layers.setDisplayPlan(resolveDisplay({ ...DEFAULT_DISPLAY_STYLE, mesh: true }));
+    const thick = (o: THREE.Object3D | undefined) =>
+      o?.children.some((c) => c instanceof LineSegments2);
+    expect(thick(layers.main.views.get(A)?.object)).toBe(true);
+    expect(thick(layers.preview.views.get(B)?.object)).toBe(false);
+    expect(layers.preview.views.get(B)?.edges.visible).toBe(true);
   });
 });

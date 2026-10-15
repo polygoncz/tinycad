@@ -250,6 +250,17 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'viewCube.switchToFree': 'Přepnout na volné otáčení',
   'viewCube.switchToTurntable': 'Přepnout na otáčení se svislou osou Z',
 
+  // Display style menu at the view cube (M22).
+  'displayStyle.button': 'Styl zobrazení',
+  'displayStyle.current': 'Styl zobrazení: {mode}',
+  'displayStyle.mode.shaded': 'Stínovaný',
+  'displayStyle.mode.hiddenRemoved': 'Bez skrytých hran',
+  'displayStyle.mode.hiddenVisible': 'Se skrytými hranami',
+  'displayStyle.mode.wireframe': 'Drátový model',
+  'displayStyle.edges': 'Hrany',
+  'displayStyle.transparent': 'Průhlednost',
+  'displayStyle.mesh': 'Triangulace',
+
   // The value field of the manipulator HUD (M19), its aria-label.
   'manipulator.field.label': 'Hodnota úchytu',
 

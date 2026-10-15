@@ -30,6 +30,8 @@ updated: 2026-10-13
 
 Zvýraznění hrany v `HighlightLayer` ([[09-vykreslovani#Vrstvy pro interakci]]) má 3 px. Chyba se ukázala až v prohlížeči během [[M08-vykreslovani|M8]].
 
+V [[M22-rezimy-zobrazeni|M22]] se při zapnuté triangulaci kreslí 2 px i hrany těles. Jinak se ztrácely mezi stejně tenkými čarami trojúhelníků, což je stejný případ „čára na čarách“.
+
 ## Zdroje
 
 - MDN: `WebGLRenderingContext.lineWidth()`

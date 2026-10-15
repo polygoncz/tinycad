@@ -383,30 +383,41 @@ Materiály podle barvy (`setBodyColor`, M15) žijí dál bez ohledu na plán, pl
 
 `BodyView.setMeshLines(material | null)`: při prvním zapnutí postaví `WireframeGeometry` z geometrie ploch a přidá `LineSegments` do skupiny tělesa. Při `null` ho odebere a geometrii **uvolní** (velké modely mají statisíce hran trojúhelníků, nedrží se zbytečně). `dispose` pohledu je uvolní také. Čáry triangulace do pickingu nevstupují. Hloubku proti plochám řeší stávající `polygonOffset` ploch.
 
+**Silnější hrany při triangulaci** (Pavel 2026-10-15, po ručním ověření): čáry triangulace mají 1 px jako hrany B-rep, takže se v nich hrany ztrácely. Při `plan.meshLines && plan.edges` se proto hrany B-rep kreslí silněji a tenké `edges` se skryjí:
+
+- `BodyView.setThickEdges(material: LineMaterial | null)`: při prvním zapnutí postaví `LineSegments2` z pozic `edges` (`LineSegmentsGeometry.setPositions`) a přidá ho do skupiny tělesa. `null` ho odebere a geometrii uvolní, `dispose` pohledu také. Do pickingu nevstupuje (picking hran počítá ze sítě, ne z objektů).
+- `BodyMaterials.edgesThick: LineMaterial` v barvě hran (`edgeColor`), `linewidth` `THICK_EDGE_PX = 2` (pixely, `worldUnits: false`). `setPalette` ho přebarví, `dispose` uvolní.
+- `LineMaterial` potřebuje rozlišení: `BodyLayerInternal.setResolution(width, height)` a `BodyLayers.setResolution` (jen `main`). Viewport ho volá vedle `highlightLayer.setResolution`. Funguje i před prvním voláním (výchozí rozlišení `LineMaterial`).
+- `applyPlan`: `edges.visible = plan.edges && !plan.meshLines`, silné hrany podle `plan.edges && plan.meshLines`. Skryté hrany (`hiddenEdges`) zůstávají tenké a čárkované.
+- `renderOrder` silných hran jako u `edges` (`materials.renderOrder`).
+
 ### `BodyLayerInternal`
 
 ```ts
 setDisplayPlan(plan: DisplayPlan): void;   // samePlan s minulým → nic; jinak přepne všechny pohledy a requestRender()
 setPixelSize(worldPerPx: number): void;    // délka čárek skrytých hran (viz výše)
+setResolution(width: number, height: number): void;   // rozlišení silných hran při triangulaci (LineMaterial); nepřekresluje
 ```
 
 Pohled vytvořený v `apply` po přepnutí dostane aktuální plán. Výchozí plán je `resolveDisplay(DEFAULT_DISPLAY_STYLE)`.
 
-**Dvě vrstvy těles (od [[M21-vstupni-stav-editovane-featury|M21]], [[0025-vstupni-stav-editovane-featury|ADR 0025]]):** styl platí jen pro **hlavní vrstvu** (`BodyLayers.main`). Náhledová vrstva (`preview`, průhledná v barvě náhledu) má vlastní vizuální roli jako overlay a skici, takže vypadá ve všech režimech stejně a plán ani `setPixelSize` nedostává. `BodyLayers` proto `setDisplayPlan` a `setPixelSize` jen předá `main`.
+**Dvě vrstvy těles (od [[M21-vstupni-stav-editovane-featury|M21]], [[0025-vstupni-stav-editovane-featury|ADR 0025]]):** styl platí jen pro **hlavní vrstvu** (`BodyLayers.main`). Náhledová vrstva (`preview`, průhledná v barvě náhledu) má vlastní vizuální roli jako overlay a skici, takže vypadá ve všech režimech stejně a plán ani `setPixelSize` nedostává. Rozhraní `BodyLayers` proto má `setDisplayPlan`, `setPixelSize` a `setResolution` a všechny jen předá `main`. Materiály stylu (`facesFlat`, `facesHidden`, `hiddenEdges`, `meshLines`, `edgesThick`) vznikají i pro náhledovou vrstvu, ale náhled je nikdy nepoužije. Je to levné a vrstvy zůstávají stejné.
 
 ### Picking a zvýraznění
 
-- **„Co vidíš, to vybereš“:** `Picker` dostane volbu `xray: () => boolean` (z aktuálního plánu). Při `true` se přeskočí **všechny** kontroly zákrytu (hrany, vrcholy, entity a oblasti skic). Z kandidátů v toleranci vyhrává nejbližší ke kameře, plochy se vybírají dál raycastem (nejbližší zásah). Při `false` beze změny.
-- `HighlightLayerInternal.setXray(on)`: zvýraznění ploch, těles i hran má `depthTest = !on`, takže je vidět i vybraná zadní hrana. Platí i pro cíle vytvořené po přepnutí. Stejná hodnota nic nepřekresluje.
+- **„Co vidíš, to vybereš“:** `Picker` dostane volbu `xray: () => boolean` (z aktuálního plánu). Při `true` se přeskočí **všechny** kontroly zákrytu (hrany těles, entity a oblasti skic; skici přes `Picker.isVisible`, které při `xray` vrací `true`). Pořadí průchodů se nemění: hrana v toleranci vyhrává nad plochou pod kurzorem, i když je plocha blíž ke kameře. Z hran v toleranci vyhrává ta **nejblíž kurzoru** v px. Kandidáti do 1 px od nejlepšího se berou jako překrývající se a mezi nimi vyhraje ten nejblíž ke kameře ([[Q080 Výběr hrany v režimu xray|Q080]]). Entity skic si nechávají své pořadí (bod před křivkou, pak px, `betterSketchHit`), xray jim jen vypne zákryt. Plochy se vybírají dál raycastem (nejbližší zásah). Při `false` beze změny.
+- `HighlightLayerInternal.setXray(on)`: zvýraznění ploch, těles i hran má `depthTest = !on`, takže je vidět i vybraná zadní hrana. Platí i pro cíle vytvořené po přepnutí (materiály vzhledu jsou sdílené). Stejná hodnota nic nepřekresluje, změna zavolá `requestRender()`.
 - Skici, overlay, manipulátory, mřížka, view cube a náhledová vrstva (M21) se stylem nemění.
 
 ### `Viewport.setDisplayStyle(style)`
 
-`resolveDisplay(style)`. Při stejném plánu jako minule nic, jinak `bodies.setDisplayPlan`, `highlight.setXray(plan.xray)`, uložení plánu pro picker a `requestRender()`. Funguje i před `mount` (plán platí od prvního snímku).
+`resolveDisplay(style)`. Při stejném plánu jako minule nic, jinak vnitřní `BodyLayers.setDisplayPlan` (jen `main`; veřejné `Viewport.bodies` tu metodu nemá), `highlight.setXray(plan.xray)`, uložení plánu pro picker a naplánování snímku (`scheduleFrame`, před `mount` prázdné). Funguje i před `mount` (plán platí od prvního snímku). Plán vlastní **viewport**: počáteční plán předá vrstvám těles při jejich vytvoření (`initialPlan`), vrstvy si výchozí plán samy neskládají.
 
 ### Známá omezení
 
 - **Průhlednost** řadí Three.js po objektech (tělesech), ne po trojúhelnících. Vnitřní stěny konkávního tělesa se mohou prolnout v nesprávném pořadí. Order-independent transparency (depth peeling, weighted blended OIT) je mimo rozsah M22.
+- **Siluety zakřivených ploch** se nekreslí. Čárové režimy (`hiddenRemoved`, `hiddenVisible`, `wireframe`) ukazují jen hrany B-rep, takže válec má jen kružnice a šev a jeho boční obrys chybí (ruční ověření M22). Onshape siluety dopočítává podle pohledu. Je to práce navíc mimo rozsah M22 (výpočet podle směru pohledu na síti nebo HLR v jádře).
+- V tmavém tématu mají čárkované skryté hrany (`hiddenEdge` 0x6b7280) nižší kontrast než ve světlém. Jsou čitelné, ale slabé.
 - Ve `hiddenVisible` kryjí plochy skicu stejně jako v `shaded`, ale picking skic zakrytí nekontroluje (`xray`). Je to vědomá nekonzistence, protože skica za tělesem je při editaci vidět slabě (M19.2).
 
 ## Manipulátory
