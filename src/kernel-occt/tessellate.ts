@@ -60,9 +60,10 @@ export function tessellateEntry(oc: Occt, entry: ShapeEntry, q: MeshQuality): Me
 }
 
 /**
- * Appends the triangulation of one face with its own vertices. Nodes are transformed by the
- * face location; a REVERSED face gets two vertices of every triangle swapped, so triangles
- * are counter-clockwise from outside. A face without triangles is left out of faceRanges.
+ * Appends the triangulation of one face with its own vertices. Nodes and normals are
+ * transformed by the face location; a REVERSED face gets two vertices of every triangle
+ * swapped and its normals flipped, so triangles are counter-clockwise from outside and the
+ * normals point out. A face without triangles is left out of faceRanges.
  */
 function appendFace(oc: Occt, shape: TopoDS_Shape, faceIndex: number, out: MeshBuilder): void {
   using face = oc.TopoDS.Face(shape);
@@ -74,62 +75,36 @@ function appendFace(oc: Occt, shape: TopoDS_Shape, faceIndex: number, out: MeshB
   using trsf = location.Transformation();
   const reversed = face.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED;
 
-  const nodeCount = triangulation.NbNodes();
-  const points: Vec3[] = [];
-  for (let i = 1; i <= nodeCount; i++) {
-    using node = triangulation.Node(i);
-    points.push(transformed(trsf, node.X(), node.Y(), node.Z()));
-  }
-
-  // Triangles as 0-based node indices, already in the outward winding.
-  const triangles: (readonly [number, number, number])[] = [];
-  for (let t = 1; t <= triangleCount; t++) {
-    using triangle = triangulation.Triangle(t);
-    const a = triangle.Value(1) - 1;
-    const b = triangle.Value(2) - 1;
-    const c = triangle.Value(3) - 1;
-    triangles.push(reversed ? [a, c, b] : [a, b, c]);
-  }
-
-  const normals = nodeNormals(points, triangles);
-  if (normals === undefined) return;
+  // Normals of the real surface at the UV of every node (GeomLib::NormEstim); where the
+  // surface normal is undefined (a sphere pole) OCCT falls back to the triangle mean. They
+  // are stored in the triangulation, in the frame of the surface without the face location,
+  // and ignore the face orientation. Does nothing if the triangulation already has normals.
+  oc.BRepLib_ToolTriangulatedShape.ComputeNormals(face, triangulation);
+  if (!triangulation.HasNormals()) return;
 
   const base = out.positions.length / 3;
   const firstTriangle = out.indices.length / 3;
-  for (const p of points) out.positions.push(p[0], p[1], p[2]);
-  for (const n of normals) out.normals.push(n[0], n[1], n[2]);
-  for (const [a, b, c] of triangles) out.indices.push(base + a, base + b, base + c);
-  out.faceRanges.push(faceIndex, firstTriangle, triangleCount);
-}
-
-/**
- * Normal per node: the mean of the unit normals of the face triangles at the node,
- * normalised (spec 06; a planar face gets the face normal). The winding is already outward,
- * so the normals point out. A node with no non-degenerate triangle gets the mean normal of
- * the whole face; undefined if even that is zero (only degenerate triangles).
- */
-function nodeNormals(
-  points: readonly Vec3[],
-  triangles: readonly (readonly [number, number, number])[],
-): readonly Vec3[] | undefined {
-  const sums: Vec3[] = points.map(() => [0, 0, 0]);
-  let faceSum: Vec3 = [0, 0, 0];
-  for (const [a, b, c] of triangles) {
-    const pa = points[a];
-    const pb = points[b];
-    const pc = points[c];
-    if (pa === undefined || pb === undefined || pc === undefined) continue;
-    const n = unit(cross(sub(pb, pa), sub(pc, pa)));
-    if (n === undefined) continue;
-    for (const v of [a, b, c]) {
-      const sum = sums[v];
-      if (sum !== undefined) sums[v] = add(sum, n);
-    }
-    faceSum = add(faceSum, n);
+  const nodeCount = triangulation.NbNodes();
+  for (let i = 1; i <= nodeCount; i++) {
+    using node = triangulation.Node(i);
+    const p = transformed(trsf, node.X(), node.Y(), node.Z());
+    out.positions.push(p[0], p[1], p[2]);
+    using normal = triangulation.Normal(i);
+    // gp_Dir::Transform applies only the rotation part of the location.
+    normal.Transform(trsf);
+    const sign = reversed ? -1 : 1;
+    out.normals.push(sign * normal.X(), sign * normal.Y(), sign * normal.Z());
   }
-  const faceNormal = unit(faceSum);
-  if (faceNormal === undefined) return undefined;
-  return sums.map((sum) => unit(sum) ?? faceNormal);
+
+  for (let t = 1; t <= triangleCount; t++) {
+    using triangle = triangulation.Triangle(t);
+    const a = base + triangle.Value(1) - 1;
+    const b = base + triangle.Value(2) - 1;
+    const c = base + triangle.Value(3) - 1;
+    if (reversed) out.indices.push(a, c, b);
+    else out.indices.push(a, b, c);
+  }
+  out.faceRanges.push(faceIndex, firstTriangle, triangleCount);
 }
 
 /**
@@ -172,23 +147,4 @@ function orNull<T>(value: T): T | null {
 function transformed(trsf: gp_Trsf, x: number, y: number, z: number): Vec3 {
   const { theX, theY, theZ } = trsf.Transforms(x, y, z);
   return [theX, theY, theZ];
-}
-
-function sub(a: Vec3, b: Vec3): Vec3 {
-  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-}
-
-function add(a: Vec3, b: Vec3): Vec3 {
-  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-}
-
-function cross(a: Vec3, b: Vec3): Vec3 {
-  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-}
-
-/** The vector scaled to length 1, or undefined for a zero (or non-finite) vector. */
-function unit(v: Vec3): Vec3 | undefined {
-  const length = Math.hypot(v[0], v[1], v[2]);
-  if (!(length > 0 && Number.isFinite(length))) return undefined;
-  return [v[0] / length, v[1] / length, v[2] / length];
 }
