@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: doing
 order: 29
 aliases:
   - M29
@@ -18,8 +18,8 @@ specs:
   - "[[06-geometricke-jadro]]"
   - "[[09-vykreslovani]]"
 depends_on:
-  - "[[M28-koty]]"
-started:
+  - "[[M24-realisticke-zobrazeni]]"
+started: 2026-10-15
 finished:
 tags:
   - milnik
@@ -50,13 +50,13 @@ Kontrakt: [[12-skicar#Spliny (M29)]].
 ## Úkoly
 
 - [x] 0. Rozhodnout [[Q086 Spline přes body v řešiči|Q086]], kontrakt ve spec 12
-- [ ] 1. `sketch`: `bspline.ts` (de Boor, derivace, tessellace) a `interpolateSpline`
-- [ ] 2. `sketch`: entity `bspline` a `fitSpline`, `Curve2`, `parseSketchData`, `removeItems`, `curve2`
-- [ ] 3. `sketch`: `computeRegions` se spliny
-- [ ] 4. `solver-planegcs`: spliny a vazby na ně
-- [ ] 5. `kernel`, `kernel-occt`: `ProfileCurve` `bspline`, `validateFaceInput`, `FakeKernel`, hrana v OCCT
-- [ ] 6. Kresba: `SketchDrawingCurve` `polyline` (`interaction`, `render`), tessellace v `sketcher`
-- [ ] 7. Integrační test skica se splinem → Vysunutí
+- [x] 1. `sketch`: `bspline.ts` (de Boor, derivace, tessellace) a `interpolateSpline`
+- [x] 2. `sketch`: entity `bspline` a `fitSpline`, `Curve2`, `parseSketchData`, `removeItems`, `curve2`
+- [x] 3. `sketch`: `computeRegions` se spliny
+- [x] 4. `solver-planegcs`: spliny a vazby na ně
+- [x] 5. `kernel`, `kernel-occt`: `ProfileCurve` `bspline`, `validateFaceInput`, `FakeKernel`, hrana v OCCT
+- [x] 6. Kresba: `SketchDrawingCurve` `polyline` (`interaction`, `render`), tessellace v `sketcher`
+- [x] 7. Integrační test skica se splinem → Vysunutí
 - [ ] 8. Nástroje splinu (až po sloučení M26), e2e `m29.spec.ts`, propsání do spec 06, 09, 10, 11
 
 ## Implementační plán
@@ -89,7 +89,7 @@ Jeden úkol = jedno spuštění subagenta `implementer`. Kontrakt je v [[12-skic
 
 ### 5. Jádro
 
-- **Soubory:** `src/kernel/profile.ts`, `fake-kernel.ts`, `src/kernel-occt/face.ts` (hrana B-spline; nejdřív ověřit, které konstruktory `Geom2d_BSplineCurve`/`Geom_BSplineCurve` a pole `TColgp_Array1Of…` build skutečně exportuje).
+- **Soubory:** `src/kernel/profile.ts`, `fake-kernel.ts`, `src/features/sketch/builder.ts` (odstranit dočasné `as ProfileLoop` z úkolu 2), `src/kernel-occt/face.ts` (hrana B-spline; nejdřív ověřit, které konstruktory `Geom2d_BSplineCurve`/`Geom_BSplineCurve` a pole `TColgp_Array1Of…` build skutečně exportuje).
 - **Testy:** `test/unit/kernel/profile.test.ts`, kontraktové testy jádra (plocha profilu se splinem ≈ plocha z tessellace v obou implementacích, role `edge:<id>`).
 - **Hotovo když:** testy projdou a `npm run check` je zelený.
 
@@ -106,7 +106,13 @@ Jeden úkol = jedno spuštění subagenta `implementer`. Kontrakt je v [[12-skic
 
 ### 8. Nástroje (po sloučení M26)
 
-- Upřesní se po sloučení stopy A: nástroje `sketch.spline` a `sketch.fitSpline` nad snapperem z M26, glyfy a snapy pro spline (kotvy, bod na splinu).
+- Kontrakt se dopíše po sloučení M26 (stopa A) nad jeho snapperem; spustí ho hlavní sezení zprávou stopě C.
+- **Známé:** nástroje `sketch.spline` (přes řídicí body) a `sketch.fitSpline` (přes body) – klikání bodů se snapperem, dvojklik nebo Enter ukončí, Esc zruší ([[12-skicar#Spliny (M29)]]); `fitSpline` vzniká přes `interpolateSpline` z `core`.
+- **Otevřené body k rozhodnutí při kontraktu:**
+  - kotvy glyfů pro spline (`glyphViews` z M25) a jeho vazby (`tangent` na konci, `coincident` s koncem);
+  - snap „bod na křivce“ pro spline: `pointOnCurve` by v planegcs potřeboval `point_on_bspline` s volným parametrem → další proměnná a znovu korekce `dof` ([[Q087 Spline v řešiči a v jádře – zjištění z implementace|Q087]]); nabídnout, nebo pro spline vynechat;
+  - id splinu v `SolveResult.conflicting` (dnes id entity, ne vazby) – rozšířit kontrakt `SolveResult` po sloučení stopy B;
+  - řídicí lomená čára `bspline` stíní spline při pickingu.
 
 ## Akceptační kritéria
 
@@ -126,6 +132,24 @@ Jeden úkol = jedno spuštění subagenta `implementer`. Kontrakt je v [[12-skic
 ## Průběh stopy
 
 _(Souběžná stopa, [[Roadmapa#Souběžné stopy (pokus od M25)|pravidla]]: místo deníku sem zapisuje průběh; hlavní sezení ho při sloučení přenese do deníku.)_
+
+**2026-10-15**
+- Úkol 1: matematika B-spline (de Boor přes derivace bázových funkcí, Piegl–Tiller A2.1/A2.3/A3.2; adaptivní tessellace po intervalech uzlů; globální interpolace). Spec upřesněna: signatury, `RangeError`, druhá derivace pro křivost, minimální a maximální hloubka půlení.
+- Úkol 2: entity `bspline` a `fitSpline`, kontrola dat, `constraintFor`, `removeItems`, `curve2`. Spec upřesněna: pravidla clamped uzlů, tečnost úsečka–spline jen se sdíleným koncovým bodem (pozná se z id). Dočasné větve `// M29: … (task N)` v regions, adaptéru, kresbě a `as ProfileLoop` v builderu skici.
+- Úkol 4 se zastavil: planegcs `tangent_at_bspline_knot` na krajním uzlu nefunguje a wrapper přidá ke splinu s vazbou 4 nepoužité proměnné (o 4 vyšší `dof`). Založena [[Q087 Spline v řešiči a v jádře – zjištění z implementace|Q087]].
+- Q087 bod 3 – Pavel: matematika B-spline do `core/math` (jmenný prostor `bspline`), kvůli `FakeKernel`. Propsáno do spec 12 a 02.
+- Tolerance tessellace splinu pro oblasti `1e-4 · max(1, |souřadnice|)` (s `tol` 1e-9 by vznikly desítky tisíc úseků).
+- Úkol 3: oblasti se spliny (tessellace nese směr průchodu, obrácená polohrana obrací spline). Otevřený bod: samokřížení splinu → Q087 bod 4.
+- Q087 body 1 a 2 – Pavel: tečnost na konci přes `point_on_line` druhého řídicího bodu, `dof` −4 za spline s vazbou planegcs, `bspline` bez primitivu. Propsáno do spec 12. Bod 4 – Pavel: samokřížení splinu = `crossing`. Q087 rozhodnutá celá.
+- Úkol 4: řešič se spliny podle Q087 (`fitSpline` jako planegcs `bspline` se skrytými řídicími body, `point_on_bspline` na pevných parametrech, tečnost přes `point_on_line_pl`, `dof` −4, hlídací test surového planegcs). Otevřené pro úkol 8: id splinu v `conflicting` není id vazby.
+- Úkol 6: kresba `polyline` (render ji rozloží na úseky s jedním id, picking beze změny), řídicí lomená čára `__poles:<id>` jako `construction`. Pro úkol 8: lomená čára stíní spline při pickingu.
+- Úkol 5: matematika přesunuta do `core/math/bspline.ts`, `ProfileCurve` `bspline`, validace (sevřené uzly, násobnosti – přísněji než původní zadání, aby OCCT nedostal vstup, na kterém konstruktor vyhodí výjimku), `FakeKernel` z tessellace, hrana v OCCT. Propsáno do spec 06.
+- Úkol 7: integrační `sketch-spline.test.ts` (OCCT + planegcs): vysunutí profilu s `bspline` i `fitSpline`, `face:side:<id>`, objem; tažení fit bodu přes `SketchSession` → spline prochází fit body → regenerace; křížení → varování.
+- Pokyn Pavla (Q088 Geometrie skici v TypeScriptu nebo v OCCT, na `main`; wikilink doplní hlavní sezení při sloučení, ve větvi stopy by neprošel `lint:vault`): v `kernel-occt` maximum z OCCT (hrana `Geom_BSplineCurve` + `BRepBuilderAPI_MakeEdge`, kontroly přes BRepCheck/ShapeAnalysis), geometrie skici zůstává v TypeScriptu.
+- Ověřeno v typech buildu OCCT: `Geom_BSplineCurve(NCollection_Array1_gp_Pnt, …_double, …_int, degree)` a `BRepBuilderAPI_MakeEdge(Geom_Curve)`; hrana splinu se staví ve 3D jako ostatní hrany profilu.
+- Architektonická revize úkolů 1–7: bez porušení ADR. Opraveno: spline bez tessellace v oblastech → `assert` místo tichého `?? []`; tolerance tessellace jedna konstanta `SPLINE_TOLERANCE` ze `sketch` pro oblasti i kresbu. Otevřené pro úkol 8 / sloučení: id splinu v `SolveResult.conflicting` je id entity přetypované na `SketchConstraintId` – rozšířit kontrakt `SolveResult` (sdílený se stopou B), proto ne ve stopě. Vědomá výjimka z pravidel stopy: změna spec 02 (B-spline v `core`), schválil Pavel v Q087.
+- **Očekávané konflikty při sloučení:** `src/sketch/parse.ts` (`constraintValid`: `refTargets` a předčasné `return true` pro tečnost úsečka–spline – po stopě B ověřit, že neobchází nové kontroly kót), `src/sketch/model.ts` (komentář u `tangent` uvnitř unie `SketchConstraint`, kterou mění stopa B), `src/sketch/edit.ts` (`withoutConstruction`, `curvePoints` – větve vedle větví stopy A), `src/solver-planegcs/solve.ts` (`dof`, smyčka v `toPrimitives` vedle `constraintPrimitives` stopy B), `src/sketch/index.ts`, `src/interaction/viewport-port.ts` (unie `SketchDrawingCurve`, glyfy stopy A).
+- Stav: úkoly 1–7 hotové, `npm run check` (5893 unit, 39 integračních) zelený. Úkol 8 čeká na sloučení M26.
 
 ## Retrospektiva
 

@@ -3,10 +3,17 @@
 // Public API of sketch. Everything else in this folder is internal.
 
 export { GEOMETRIC_CONSTRAINT_KINDS, SKETCH_FEATURE_TYPE, SKETCH_PARAM } from './model';
+export { DIMENSION_KINDS, isDimension } from './model';
 export type {
+  AngularPlacement,
+  DimensionConstraint,
   DimensionKind,
+  DimensionPlacement,
   GeometricConstraintKind,
+  LinearPlacement,
+  RadialPlacement,
   SketchArc,
+  SketchBSpline,
   SketchCircle,
   SketchConstraint,
   SketchConstraintDraft,
@@ -15,6 +22,7 @@ export type {
   SketchData,
   SketchEntity,
   SketchEntityId,
+  SketchFitSpline,
   SketchItemId,
   SketchLine,
   SketchPoint,
@@ -32,10 +40,17 @@ export {
   removeItems,
   toggleConstruction,
 } from './edit';
-export { computeRegions } from './regions';
 export { ORIGIN_SNAP, snap } from './snap';
 export type { PointInference, SnapGuide, SnapKind, SnapOptions, SnapResult } from './snap';
 export { inferLine, inferRadius } from './infer';
 export type { LineInference } from './infer';
+export {
+  defaultPlacement,
+  dimensionTarget,
+  movePlacement,
+  placeDimension,
+} from './dimension-placement';
+export type { DimensionTarget } from './dimension-placement';
+export { SPLINE_TOLERANCE, computeRegions } from './regions';
 export type { RegionsResult, SketchRegion } from './regions';
 export type { ConstraintSolver, SolveInput, SolveResult, SolveStatus } from './solver';

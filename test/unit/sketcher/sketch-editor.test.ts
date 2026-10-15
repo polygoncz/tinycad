@@ -864,6 +864,25 @@ describe('SketchSession writing changes', () => {
     expect(applied).toEqual([]);
   });
 
+  it('setDimension of an angle needs 0 < value < π, else the data would turn invalid', async () => {
+    const withAngle = data(
+      [
+        ...LINE.entities,
+        { kind: 'point', id: 'r', x: 0, y: 2 },
+        { kind: 'point', id: 's', x: 1, y: 5 },
+        { kind: 'line', id: 'rs', p1: 'r', p2: 's' },
+      ],
+      [{ kind: 'angle', id: 'g', a: 'pq', b: 'rs', value: 1 }],
+    );
+    const { session, solver, applied } = await editing(withAngle);
+
+    expect(await session.setDimension(cid('g'), Math.PI)).toBe(false);
+    expect(await session.setDimension(cid('g'), 4)).toBe(false);
+
+    expect(laterCalls(solver.calls)).toEqual([]);
+    expect(applied).toEqual([]);
+  });
+
   it('data without a change is not written', async () => {
     const { session, applied } = await editing(LINE);
 
@@ -1354,17 +1373,19 @@ describe('SketchSession selection and panel rows', () => {
     const session = ctx.sketches.edit(fid('s1'));
     await settle();
     const before = session.state.get();
-    expect(before.dimensions).toEqual([
-      {
-        id: 'w',
-        kind: 'distance',
-        value: 10,
+    expect(before.dimensions).toHaveLength(1);
+    expect(before.dimensions[0]).toMatchObject({
+      id: 'w',
+      kind: 'distance',
+      value: 10,
+      n: 1,
+      selected: false,
+      geometry: {
+        kind: 'linear',
         from: planeMath.toWorld(XZ, [0, 0]),
         to: planeMath.toWorld(XZ, [10, 0]),
-        n: 1,
-        selected: false,
       },
-    ]);
+    });
 
     session.select(item('h1'));
     expect(session.state.get().dimensions).toBe(before.dimensions);
@@ -1639,12 +1660,12 @@ describe('SketchSession plane (M21)', () => {
   it('the dimensions of the viewport follow the new plane', async () => {
     const sketch = data(LINE.entities, [{ kind: 'distance', id: 'd', a: 'p', b: 'q', value: 4 }]);
     const { session, editor } = await editing(sketch);
-    expect(session.state.get().dimensions[0]?.to).toEqual([4, 1, 0]);
+    expect(session.state.get().dimensions[0]?.geometry).toMatchObject({ to: [4, 1, 0] });
 
     editor.current.get()?.setParam('plane', [planeRef(ORIGIN_PLANE_IDS.xz)]);
 
     // XZ: x stays +X, y of the plane is +Z.
-    expect(session.state.get().dimensions[0]?.to).toEqual([4, 0, 1]);
+    expect(session.state.get().dimensions[0]?.geometry).toMatchObject({ to: [4, 0, 1] });
   });
 
   it('planeField shows the plane param for the panel and follows its value', async () => {

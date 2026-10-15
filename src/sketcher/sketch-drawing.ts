@@ -2,15 +2,17 @@
 // SketchDrawing that render tessellates and picks (ADR 0017). Pure functions; the SketchEditor
 // draws the edited sketch with them and app the sketches of the last regeneration and the planes.
 
-import { assertNever, vec3 } from '@/core';
+import { assert, assertNever, bspline, vec3 } from '@/core';
 import type { Plane, Vec2, Vec3 } from '@/core';
-import { computeRegions, curve2, pointsById } from '@/sketch';
+import { SPLINE_TOLERANCE, computeRegions, curve2, pointsById } from '@/sketch';
 import type {
   Curve2,
   SketchCurve,
   SketchData,
   SketchEntity,
+  SketchEntityId,
   SketchItemId,
+  SketchPoint,
   SketchRegion,
 } from '@/sketch';
 import type {
@@ -23,6 +25,15 @@ import type {
 
 /** The id of the origin point in the drawing of the edited sketch (snap onto the origin). */
 export const ORIGIN_POINT_ID = '__origin';
+
+/**
+ * The id of the control polygon of the bspline `splineId` in the drawing of the edited sketch
+ * (M29). Like ORIGIN_POINT_ID it relies on the ids from the id generator never starting with
+ * '__': it is no entity id, so a pick of it selects nothing.
+ */
+export function controlPolygonId(splineId: string): string {
+  return `__poles:${splineId}`;
+}
 
 /** Default size of the square of a plane drawing, in mm. */
 const PLANE_SIZE = 100;
@@ -39,7 +50,9 @@ const REGION_ARC_STEP = Math.PI / 36;
 const AXIS_Z_LIMIT = 0.9;
 
 /**
- * All curves and points of the data with the style from `styleOf`; `origin` adds the point
+ * All curves and points of the data with the style from `styleOf`, a spline as a polyline (M29);
+ * after a bspline its control polygon (controlPolygonId) in the style 'construction' (the poles
+ * are points of the sketch, the poles of a fitSpline are not drawn); `origin` adds the point
  * ORIGIN_POINT_ID at [0, 0] in the style 'normal' after the points of the sketch; `editing` marks
  * the drawing of the sketch edited in the sketcher (SketchDrawing.editing). Frozen.
  */
@@ -50,9 +63,10 @@ export function toSketchDrawing(
   opts: { readonly origin?: boolean; readonly editing?: boolean } = {},
 ): SketchDrawing {
   const points = pointsById(data);
-  const curves = data.entities
-    .filter(isCurve)
-    .map((c) => drawingCurve(c.id, curve2(c, points), styleOf(c.id)));
+  const curves = data.entities.filter(isCurve).flatMap((c) => {
+    const curve = drawingCurve(c.id, curve2(c, points), styleOf(c.id));
+    return c.kind === 'bspline' ? [curve, controlPolygon(c.id, c.poles, points)] : [curve];
+  });
   const drawn: SketchDrawingPoint[] = data.entities.flatMap((e) =>
     e.kind === 'point'
       ? [Object.freeze({ id: e.id, at: vec2(e.x, e.y), style: styleOf(e.id) })]
@@ -128,6 +142,34 @@ export function axisDrawing(
 
 const isCurve = (e: SketchEntity): e is SketchCurve => e.kind !== 'point';
 
+/** The polyline through the pole points of a bspline, in the style 'construction' (M29). */
+function controlPolygon(
+  splineId: string,
+  poles: readonly SketchEntityId[],
+  points: ReadonlyMap<SketchEntityId, SketchPoint>,
+): SketchDrawingCurve {
+  const at = poles.map((id) => {
+    const p = points.get(id);
+    assert(
+      p !== undefined,
+      `controlPolygon: spline '${splineId}' refers to a missing point '${id}'`,
+    );
+    return vec2(p.x, p.y);
+  });
+  return Object.freeze({
+    kind: 'polyline',
+    id: controlPolygonId(splineId),
+    points: Object.freeze(at),
+    style: 'construction',
+  });
+}
+
+/** The points of a spline at the tolerance of SPLINE_TOLERANCE, frozen. */
+function splinePoints(curve: Extract<Curve2, { kind: 'bspline' }>): Vec2[] {
+  const size = Math.max(1, ...curve.poles.flatMap(([x, y]) => [Math.abs(x), Math.abs(y)]));
+  return bspline.tessellate(curve, SPLINE_TOLERANCE * size).map(([x, y]) => vec2(x, y));
+}
+
 /** A region as polygons: the outer loop counter-clockwise, the holes as computeRegions gives them. */
 function drawingRegion(region: SketchRegion): SketchDrawingRegion {
   return Object.freeze({
@@ -163,6 +205,9 @@ function curvePoints(curve: Curve2): Vec2[] {
       const radius = Math.hypot(curve.from[0] - cx, curve.from[1] - cy);
       return arcPoints(curve.center, radius, a0, sweep);
     }
+    case 'bspline':
+      // The spline runs from → to along the loop, its end starts the next curve.
+      return splinePoints(curve).slice(0, -1);
     default:
       return assertNever(curve);
   }
@@ -188,7 +233,10 @@ function vec2(x: number, y: number): Vec2 {
   return Object.freeze([x, y] as const);
 }
 
-/** A line as it is; a circle as an arc 0 … 2π; an arc counter-clockwise with endAngle > startAngle. */
+/**
+ * A line as it is; a circle as an arc 0 … 2π; an arc counter-clockwise with endAngle > startAngle;
+ * a spline as the polyline of its tessellation (M29).
+ */
 function drawingCurve(id: string, curve: Curve2, style: SketchStyle): SketchDrawingCurve {
   switch (curve.kind) {
     case 'line':
@@ -224,6 +272,13 @@ function drawingCurve(id: string, curve: Curve2, style: SketchStyle): SketchDraw
         style,
       });
     }
+    case 'bspline':
+      return Object.freeze({
+        kind: 'polyline',
+        id,
+        points: Object.freeze(splinePoints(curve)),
+        style,
+      });
     default:
       return assertNever(curve);
   }

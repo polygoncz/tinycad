@@ -74,7 +74,7 @@ export async function openConstraintSection(panel: Locator): Promise<void> {
 }
 
 /**
- * The value field of a dimension in the sketch panel, named by its row ("Vzdálenost 1"). The
+ * The value field of a dimension in the sketch panel, named by its row ("Vodorovná vzdálenost 1"). The
  * section of the constraints is opened first, so the field can be seen and edited.
  */
 export async function dimensionInput(panel: Locator, label: string): Promise<Locator> {
@@ -124,13 +124,17 @@ export async function drawDimensionedRectangle(page: Page, sketch: string): Prom
   await page.keyboard.up('Alt');
   await expect(status).toHaveText('Stupně volnosti: 2');
 
-  // Dimensions of the bottom and the right edge → fully defined.
+  // Dimensions of the bottom and the right edge → fully defined. A click on an edge hangs its
+  // dimension on the cursor, the next click beside the edge places it (M28); the bottom is
+  // horizontal and the right edge vertical, so they get the horizontal and the vertical distance.
   await toolbarButton(page, 'Kóta').click();
   await clickCanvas(page, 60, 0);
+  await clickCanvas(page, 60, 40);
   await clickCanvas(page, 120, -40);
+  await clickCanvas(page, 160, -40);
   await expect(status).toHaveText('Plně určeno');
-  await expect(await dimensionInput(panel, 'Vzdálenost 1')).toBeVisible();
-  await expect(await dimensionInput(panel, 'Vzdálenost 2')).toBeVisible();
+  await expect(await dimensionInput(panel, 'Vodorovná vzdálenost 1')).toBeVisible();
+  await expect(await dimensionInput(panel, 'Svislá vzdálenost 1')).toBeVisible();
   return panel;
 }
 

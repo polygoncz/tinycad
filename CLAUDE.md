@@ -28,6 +28,10 @@ Výuková webová CAD aplikace (Onshape-like Part Studio). Autor: Pavel. Pavel z
 - **Implementace:** každý úkol plánu zvlášť subagent `implementer` (Opus, TDD, `npm run check`). Návrh nerozhoduje, nejasnosti vrací jako otázky.
 - **Po každém úkolu:** hlavní sezení zkontroluje kód proti specifikaci, vysvětlí Pavlovi návrhová místa, otázky implementátora převede na otázky ve vaultu nebo upřesnění spec, zaškrtne úkol. Na konci milníku `architecture-reviewer`.
 
+### Souběžné stopy (od M25)
+
+Sérii milníků s malým průnikem dotčených souborů lze implementovat souběžně: každá stopa je samostatná session ve vlastním git worktree, hlavní sezení předem zafixuje kontrakty sdílených typů, dělá dispečera a slučuje do `main` po jednom. Postup a pravidla: `docs/70-poznatky/Souběžné stopy agentů.md`, pravidla aktuální série v `docs/40-plan/Roadmapa.md`. Stav stop ukazuje panel `/stopy` (mod Claude Code v `.claude/skills/tinycad-stopy/`, načítá se automaticky).
+
 ## Konvence kódu
 
 - **Kód, identifikátory, komentáře v kódu, commit zprávy:** anglicky. **Vault:** česky.
@@ -44,6 +48,7 @@ Výuková webová CAD aplikace (Onshape-like Part Studio). Autor: Pavel. Pavel z
 - Skilly: `/milnik start|konec Mnn`, `/zaznam otazka|adr|pojem|poznatek <název>`, `/denik` (konec sezení). Skill `obsidian-format` (syntaxe vaultu) se načítá automaticky.
 - Subagent `architecture-reviewer` (`.claude/agents/`): revize kódu proti ADR 0008–0011 a spec 01, hlásí jen to, co nechytí `npm run check`. Spouštět na konci milníku před `/milnik konec`.
 - Subagent `implementer` (`.claude/agents/`, model Opus): implementuje jeden úkol z Implementačního plánu milníku podle spec, metodou TDD; vault nemění, necommituje, nejasnosti vrací jako otázky.
+- Mod `tinycad-stopy` (`.claude/skills/tinycad-stopy/`): příkaz `/stopy` otevře panel se stavem souběžných stop (worktree, větve, milníky z vaultu). Kontrola: `claude plugin validate .claude/skills/tinycad-stopy` a `claude plugin test .claude/skills/tinycad-stopy` (Claude Code s API modů, ne starší `claude` v PATH); ESLint ho ignoruje.
 - Hooky: po úpravě poznámky v `docs/` se nastaví `updated` na dnešek a zkontroluje se frontmatter a wikilinky (`scripts/vault-lint.mjs`). Mazání v `docs/` a přepisování `docs/01-inbox/` blokuje `scripts/claude-guard.mjs`. Když hook nahlásí chybu, oprav poznámku a hook neobcházej.
 
 ## Užitečné příkazy

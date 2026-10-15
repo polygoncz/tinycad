@@ -17,12 +17,14 @@
 // default (its state is not saved, it is not even bound: the element keeps it); the switch "Show
 // constraints" above it is SketchEditor.showAllConstraints, next to the grid snap. A new dimension
 // opens the section before its field takes the focus (focusNewDimension).
+// M28: the field of an angle shows and takes degrees (the model keeps radians, ../sketch-dimensions).
 import { computed, nextTick, useId, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { SketchConstraintRow, SketchSession } from '@/sketcher';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
 import { isAdditive } from '../item-actions';
+import { dimensionUnit, fromShownValue, toShownValue } from '../sketch-dimensions';
 import { constraintRowLabel, focusNewDimension, toggleShowAllConstraints } from '../sketch-panel';
 import { formatDimension } from './params/field-values';
 import NumericInput from './params/NumericInput.vue';
@@ -77,8 +79,14 @@ function remove(row: SketchConstraintRow): void {
   void props.sketch.remove([row.id]);
 }
 
+/** The value of a dimension row as the field shows it (M28: an angle in degrees). */
+function shownValue(row: SketchConstraintRow): number | null {
+  return row.value === null ? null : toShownValue(row.kind, row.value);
+}
+
+/** The typed value is in the units of the field: an angle goes to the model in radians. */
 function setDimension(row: SketchConstraintRow, value: number): void {
-  void props.sketch.setDimension(row.id, value);
+  void props.sketch.setDimension(row.id, fromShownValue(row.kind, value));
 }
 
 // A dimension just made by the tool gets the focus of its field (spec 11, "Režim skici"); the
@@ -181,8 +189,8 @@ watch(
           <NumericInput
             v-if="row.value !== null"
             class="value"
-            :value="row.value"
-            unit="mm"
+            :value="shownValue(row)"
+            :unit="dimensionUnit(row.kind)"
             :invalid="false"
             :labelledby="labelId(row)"
             :format="dimensionText"

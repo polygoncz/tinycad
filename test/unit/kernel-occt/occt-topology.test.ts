@@ -153,6 +153,52 @@ describe('OcctKernelImpl roles from entity ids (M14)', () => {
     expect(topology.faces[side ?? -1]?.surface).toBe('cylinder');
   });
 
+  it('a spline with an id (M29): edge:<id> on the spline edge, then face:side:<id>', async () => {
+    const kernel = new OcctKernelImpl(oc);
+    const outer: ProfileLoop = [
+      { kind: 'line', from: [0, 0], to: [4, 0], id: 'l1' },
+      {
+        kind: 'bspline',
+        degree: 2,
+        poles: [
+          [4, 0],
+          [6, 1.5],
+          [4, 3],
+        ],
+        knots: [0, 0, 0, 1, 1, 1],
+        id: 's1',
+      },
+      { kind: 'line', from: [4, 3], to: [0, 3], id: 'l3' },
+      { kind: 'line', from: [0, 3], to: [0, 0], id: 'l4' },
+    ];
+    const face = await kernel.makeFace({ plane: XY, outer, holes: [] });
+    expect(Object.keys(face.roles ?? {}).sort()).toEqual([
+      'edge:l1',
+      'edge:l3',
+      'edge:l4',
+      'edge:s1',
+    ]);
+    const [edge] = singleIndices(face, ['edge:s1']);
+    // The quadratic runs through (5, 1.5) at its middle parameter.
+    const midpoint = (await kernel.topology(face.shape)).edges[edge ?? -1]?.midpoint;
+    expectClose(midpoint, [5, 1.5, 0]);
+
+    const prism = await kernel.extrude(face.shape, [0, 0, 1], 2);
+    const keys = [
+      'face:side:l1',
+      'face:side:s1',
+      'face:side:l3',
+      'face:side:l4',
+      'face:start',
+      'face:end',
+    ];
+    expect(Object.keys(prism.roles ?? {}).sort()).toEqual([...keys].sort());
+    const faces = singleIndices(prism, keys);
+    expect(new Set(faces).size).toBe(6);
+    const topology = await kernel.topology(prism.shape);
+    expect(topology.faces[faces[1] ?? -1]?.surface).toBe('other');
+  });
+
   it('a hole with an id gets its side role too', async () => {
     const kernel = new OcctKernelImpl(oc);
     const face = await kernel.makeFace({

@@ -3,6 +3,7 @@
 // Right and middle buttons drive the camera, so the tool ignores them. Sketch entities (M12)
 // and sketch regions (M13) are not its business: it never asks for them and ignores such a hit.
 
+import { CLICK_TOLERANCE_PX } from './constants';
 import { isPlainEscape } from './key-events';
 import type { SelectionItem } from './selection';
 import type { Tool, ToolContext, ToolDescriptor, ToolViewport } from './tools';
@@ -10,9 +11,6 @@ import type { PickResult, ViewKeyEvent, ViewPointerEvent } from './viewport-port
 
 /** A hit of a body: what the select tool works with. */
 type BodyHit = Extract<PickResult, { readonly kind: 'face' | 'edge' }>;
-
-/** A left up farther than this from its down is a drag, not a click. */
-export const CLICK_TOLERANCE_PX = 4;
 
 export const SELECT_TOOL: ToolDescriptor = Object.freeze({
   id: 'select',

@@ -198,6 +198,9 @@ function project(p: Vec2, c: Curve2): Vec2 | null {
       if (mod2pi(angleOf(sub(p, c.center)) - start) > sweep) return null;
       return onCircle(p, c.center, length(sub(c.from, c.center)));
     }
+    case 'bspline':
+      // No pointOnCurve on a spline yet (spec 12, M26): a spline is no onCurve candidate.
+      return null;
     default:
       return assertNever(c);
   }

@@ -3,6 +3,7 @@ import { pointsById } from './geometry';
 import type {
   DimensionKind,
   GeometricConstraintKind,
+  DimensionConstraint,
   SketchConstraint,
   SketchConstraintDraft,
   SketchCurve,
@@ -21,6 +22,23 @@ const MIN_DIMENSION = 1e-9;
 
 const isRound = (e: SketchEntity): boolean => e.kind === 'circle' || e.kind === 'arc';
 const isCurve = (e: SketchEntity): e is SketchCurve => e.kind !== 'point';
+const isPointOnCurveTarget = (e: SketchCurve): boolean =>
+  e.kind === 'line' || e.kind === 'circle' || e.kind === 'arc';
+
+/** The end points of a spline (first and last pole or fit point), or undefined for other entities. */
+function splineEnds(e: SketchEntity): readonly SketchEntityId[] | undefined {
+  const points = e.kind === 'bspline' ? e.poles : e.kind === 'fitSpline' ? e.fit : undefined;
+  if (points === undefined) return undefined;
+  return points.filter((_, i) => i === 0 || i === points.length - 1);
+}
+
+/** A line and a spline (either order) where the line shares a point with an end of the spline. */
+function lineAtSplineEnd(first: SketchEntity, second: SketchEntity): boolean {
+  const [line, spline] = first.kind === 'line' ? [first, second] : [second, first];
+  if (line.kind !== 'line') return false;
+  const ends = splineEnds(spline);
+  return ends !== undefined && (ends.includes(line.p1) || ends.includes(line.p2));
+}
 
 /**
  * The constraint for the selected entities (in selection order), or null when the selection does
@@ -49,7 +67,8 @@ export function constraintFor(
   switch (kind) {
     case 'coincident':
       if (points === 2) return { kind, a, b };
-      return pointOn(first, second, isCurve, (point, curve) => ({
+      // Splines have no pointOnCurve yet (M29 may add point_on_bspline).
+      return pointOn(first, second, isPointOnCurveTarget, (point, curve) => ({
         kind: 'pointOnCurve',
         point,
         curve,
@@ -64,7 +83,9 @@ export function constraintFor(
     case 'equal':
       return lines === 2 || rounds === 2 ? { kind, a, b } : null;
     case 'tangent':
-      return rounds === 2 || (lines === 1 && rounds === 1) ? { kind, a, b } : null;
+      return rounds === 2 || (lines === 1 && rounds === 1) || lineAtSplineEnd(first, second)
+        ? { kind, a, b }
+        : null;
     case 'midpoint':
       return pointOn(
         first,
@@ -124,14 +145,12 @@ export function dimensionFor(
 }
 
 /** The current value of a dimension measured on the geometry (not the stored value). */
-export function measure(
-  data: SketchData,
-  c: Extract<SketchConstraint, { kind: DimensionKind }>,
-): number {
+export function measure(data: SketchData, c: DimensionConstraint): number {
   return measureDraft(data, c);
 }
 
-function measureDraft(
+/** measure for a draft (no id yet); internal to sketch (dimension-placement). */
+export function measureDraft(
   data: SketchData,
   c: Extract<SketchConstraintDraft, { kind: DimensionKind }>,
 ): number {
@@ -141,17 +160,56 @@ function measureDraft(
     assert(p !== undefined, `measure: missing point '${id}'`);
     return p;
   };
-  if (c.kind === 'distance') {
-    const a = point(c.a);
-    const b = point(c.b);
-    return Math.hypot(b.x - a.x, b.y - a.y);
+  const line = (id: SketchEntityId): readonly [SketchPoint, SketchPoint] => {
+    const l = data.entities.find((e) => e.id === id);
+    assert(l?.kind === 'line', `measure: '${id}' is not a line`);
+    return [point(l.p1), point(l.p2)];
+  };
+  const radius = (id: SketchEntityId): number => {
+    const curve = data.entities.find((e) => e.id === id);
+    assert(curve?.kind === 'circle' || curve?.kind === 'arc', `measure: '${id}' is not round`);
+    if (curve.kind === 'circle') return curve.radius;
+    const center = point(curve.center);
+    const start = point(curve.start);
+    return Math.hypot(start.x - center.x, start.y - center.y);
+  };
+  switch (c.kind) {
+    case 'distance':
+    case 'hDistance':
+    case 'vDistance': {
+      const a = point(c.a);
+      const b = point(c.b);
+      if (c.kind === 'hDistance') return Math.abs(b.x - a.x);
+      if (c.kind === 'vDistance') return Math.abs(b.y - a.y);
+      return Math.hypot(b.x - a.x, b.y - a.y);
+    }
+    case 'pointLineDistance': {
+      // |cross(p − p1, p2 − p1)| / |p2 − p1|: the distance to the infinite line.
+      const p = point(c.point);
+      const [p1, p2] = line(c.line);
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      return Math.abs((p.x - p1.x) * dy - (p.y - p1.y) * dx) / Math.hypot(dx, dy);
+    }
+    case 'angle': {
+      // The angle between the directions p1→p2 (each reversed by its flag), in [0, π].
+      const [a1, a2] = line(c.a);
+      const [b1, b2] = line(c.b);
+      const sa = c.reverseA === true ? -1 : 1;
+      const sb = c.reverseB === true ? -1 : 1;
+      const ax = sa * (a2.x - a1.x);
+      const ay = sa * (a2.y - a1.y);
+      const bx = sb * (b2.x - b1.x);
+      const by = sb * (b2.y - b1.y);
+      return Math.atan2(Math.abs(ax * by - ay * bx), ax * bx + ay * by);
+    }
+    case 'radius':
+      return radius(c.curve);
+    case 'diameter':
+      return 2 * radius(c.curve);
+    default:
+      return assertNever(c);
   }
-  const curve = data.entities.find((e) => e.id === c.curve);
-  assert(curve?.kind === 'circle' || curve?.kind === 'arc', `measure: '${c.curve}' is not round`);
-  if (curve.kind === 'circle') return curve.radius;
-  const center = point(curve.center);
-  const start = point(curve.start);
-  return Math.hypot(start.x - center.x, start.y - center.y);
 }
 
 function withoutConstruction(c: SketchCurve): SketchCurve {
@@ -162,6 +220,18 @@ function withoutConstruction(c: SketchCurve): SketchCurve {
       return { kind: c.kind, id: c.id, center: c.center, radius: c.radius };
     case 'arc':
       return { kind: c.kind, id: c.id, center: c.center, start: c.start, end: c.end };
+    case 'bspline':
+      return { kind: c.kind, id: c.id, degree: c.degree, poles: c.poles, knots: c.knots };
+    case 'fitSpline':
+      return {
+        kind: c.kind,
+        id: c.id,
+        degree: c.degree,
+        fit: c.fit,
+        params: c.params,
+        poles: c.poles,
+        knots: c.knots,
+      };
     default:
       return assertNever(c);
   }
@@ -178,6 +248,10 @@ export function curvePoints(c: SketchCurve): readonly SketchEntityId[] {
       return [c.center];
     case 'arc':
       return [c.center, c.start, c.end];
+    case 'bspline':
+      return c.poles;
+    case 'fitSpline':
+      return c.fit;
     default:
       return assertNever(c);
   }
@@ -198,6 +272,9 @@ export function constraintTargets(c: SketchConstraint): readonly SketchEntityId[
     case 'distance':
     case 'hAlign':
     case 'vAlign':
+    case 'hDistance':
+    case 'vDistance':
+    case 'angle':
       return [c.a, c.b];
     case 'pointOnCurve':
       return [c.point, c.curve];
@@ -208,7 +285,10 @@ export function constraintTargets(c: SketchConstraint): readonly SketchEntityId[
       return [c.line];
     case 'fix':
       return [c.point];
+    case 'pointLineDistance':
+      return [c.point, c.line];
     case 'radius':
+    case 'diameter':
       return [c.curve];
     default:
       return assertNever(c);

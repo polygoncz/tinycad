@@ -119,8 +119,16 @@ function hit(sketch: string, entity: string, x: number, y: number): PickResult {
 
 function curveDistance(c: SketchDrawing['curves'][number], x: number, y: number): number {
   if (c.kind === 'arc') return Math.abs(Math.hypot(x - c.center[0], y - c.center[1]) - c.radius);
-  const [ax, ay] = c.from;
-  const [bx, by] = c.to;
+  if (c.kind === 'polyline') {
+    const segments = c.points.slice(1).map((to, i) => ({ from: c.points[i] ?? to, to }));
+    return Math.min(Infinity, ...segments.map((s) => segmentDistance(s.from, s.to, x, y)));
+  }
+  return segmentDistance(c.from, c.to, x, y);
+}
+
+function segmentDistance(from: Vec2, to: Vec2, x: number, y: number): number {
+  const [ax, ay] = from;
+  const [bx, by] = to;
   const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
   const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2));
   return Math.hypot(x - (ax + t * (bx - ax)), y - (ay + t * (by - ay)));
@@ -796,64 +804,6 @@ describe('the arc tool', () => {
     ]);
 
     expect(session.state.get().entities).toEqual([]);
-  });
-});
-
-describe('the dimension tool', () => {
-  const sketch = data([
-    { kind: 'point', id: 'p', x: 10, y: 10 },
-    { kind: 'point', id: 'q', x: 40, y: 50 },
-    { kind: 'line', id: 'pq', p1: 'p', p2: 'q' },
-    { kind: 'point', id: 'c', x: 100, y: 100 },
-    { kind: 'circle', id: 'k', center: 'c', radius: 20 },
-  ]);
-
-  it('a click on a line adds a distance of its points', async () => {
-    const { manager, viewport, session } = await sketching({ sketch });
-    manager.activate('sketch.dimension');
-
-    await clicks(viewport, [[25, 30]]);
-
-    const [dimension] = session.state.get().constraints;
-    expect(dimension).toMatchObject({ kind: 'distance', a: 'p', b: 'q', value: 50 });
-    expect(session.state.get().editingDimension).toBe(dimension?.id);
-  });
-
-  it('a click on a circle adds a radius', async () => {
-    const { manager, viewport, session } = await sketching({ sketch });
-    manager.activate('sketch.dimension');
-
-    await clicks(viewport, [[120, 100]]);
-
-    expect(session.state.get().constraints).toEqual([
-      expect.objectContaining({ kind: 'radius', curve: 'k', value: 20 }),
-    ]);
-  });
-
-  it('a point and then another point add their distance', async () => {
-    const { manager, viewport, session } = await sketching({ sketch });
-    manager.activate('sketch.dimension');
-
-    await clicks(viewport, [[10, 10]]);
-    expect(session.state.get().constraints).toEqual([]);
-    await clicks(viewport, [[100, 100]]);
-
-    expect(session.state.get().constraints).toEqual([
-      expect.objectContaining({ kind: 'distance', a: 'p', b: 'c', value: Math.hypot(90, 90) }),
-    ]);
-  });
-
-  it('a click into empty space forgets the first point', async () => {
-    const { manager, viewport, session } = await sketching({ sketch });
-    manager.activate('sketch.dimension');
-
-    await clicks(viewport, [
-      [10, 10],
-      [200, 0],
-      [100, 100],
-    ]);
-
-    expect(session.state.get().constraints).toEqual([]);
   });
 });
 

@@ -1,4 +1,4 @@
-import type { Vec2 } from '@/core';
+import { assert, bspline, type Vec2 } from '@/core';
 import { curve2, pointsById } from './geometry';
 import type { Curve2 } from './geometry';
 import type { SketchCurve, SketchData, SketchEntity } from './model';
@@ -6,7 +6,8 @@ import { angleOf, cross, dist, dot, length, lerp, mod2pi, normalize, sub, TWO_PI
 
 // Closed regions (profiles) of a sketch as a planar graph (spec 12 "Oblasti (profily)").
 // Pure 2D geometry, testable without OCCT: curves → nodes → crossing check → pruning of open
-// chains → faces by half-edges → holes → names from curve ids.
+// chains → faces by half-edges → holes → names from curve ids. Splines (M29) are edges between
+// their end poles; crossings, areas and containment use their tessellation (spec 12 "Spliny").
 
 export interface SketchRegion {
   /** Ids of all boundary curves (outer and holes), without duplicates, sorted (string comparison), joined by ','. */
@@ -33,11 +34,28 @@ const ANGLE_TIE = 1e-9;
 const NODE_MATCH_FACTOR = 1e3;
 /** Direction of the containment ray: irrational, so it practically never hits a vertex exactly. */
 const RAY: Vec2 = normalize([Math.SQRT2, Math.PI]);
+/**
+ * Spline tessellation tolerance relative to the sketch scale (spec 12 "Spliny (M29)"); the sketcher
+ * draws splines with the same tolerance.
+ */
+export const SPLINE_TOLERANCE = 1e-4;
 
-/** A line or an arc between two nodes; arcs are counter-clockwise from `from` to `to`. */
-interface Edge {
+/**
+ * A curve of a loop with the tessellation of a spline in the same direction (`poly`, only for
+ * splines): crossings, areas and containment of a spline are computed on it.
+ */
+interface Part {
+  readonly curve: Curve2;
+  readonly poly?: readonly Vec2[];
+}
+
+/**
+ * A line, an arc or a spline between two nodes; arcs are counter-clockwise from `from` to `to`.
+ * A closed spline is a loop at one node (`from === to`).
+ */
+interface Edge extends Part {
   readonly id: string;
-  readonly curve: Extract<Curve2, { kind: 'line' | 'arc' }>;
+  readonly curve: Extract<Curve2, { kind: 'line' | 'arc' | 'bspline' }>;
   readonly from: number;
   readonly to: number;
 }
@@ -45,6 +63,11 @@ interface Edge {
 /** A curve for the crossing check: an edge with its nodes, or a lone circle. */
 type Shape =
   | { readonly kind: 'line'; readonly a: Vec2; readonly b: Vec2; readonly nodes: readonly number[] }
+  | {
+      readonly kind: 'polyline';
+      readonly points: readonly Vec2[];
+      readonly nodes: readonly number[];
+    }
   | {
       readonly kind: 'arc';
       readonly c: Vec2;
@@ -62,17 +85,16 @@ type Shape =
     };
 
 /** One traversal direction of an edge. Half-edge h belongs to edge h >> 1; its twin is h ^ 1. */
-interface HalfEdge {
+interface HalfEdge extends Part {
   readonly origin: number;
   readonly dest: number;
   readonly angle: number;
   readonly curvature: number;
-  readonly curve: Curve2;
 }
 
 /** A closed loop with its curve ids and signed area. */
 interface Loop {
-  readonly curves: readonly Curve2[];
+  readonly parts: readonly Part[];
   readonly ids: readonly string[];
   readonly area: number;
   readonly component: number;
@@ -80,8 +102,9 @@ interface Loop {
 
 export function computeRegions(data: SketchData): RegionsResult {
   const points = pointsById(data);
-  const tol =
-    1e-9 * Math.max(1, ...[...points.values()].flatMap((p) => [Math.abs(p.x), Math.abs(p.y)]));
+  const scale = Math.max(1, ...[...points.values()].flatMap((p) => [Math.abs(p.x), Math.abs(p.y)]));
+  const tol = 1e-9 * scale;
+  const splineTol = SPLINE_TOLERANCE * scale;
 
   // 1. Curves: non-construction only, degenerate ones skipped.
   const nodes: Vec2[] = [];
@@ -99,6 +122,18 @@ export function computeRegions(data: SketchData): RegionsResult {
     const curve = curve2(e, points);
     if (curve.kind === 'circle') {
       circles.push({ id: e.id, curve });
+      continue;
+    }
+    if (curve.kind === 'bspline') {
+      const poly = bspline.tessellate(curve, splineTol);
+      const first = poly[0];
+      const last = poly[poly.length - 1];
+      // A spline of zero length is skipped like a zero-length line.
+      if (first === undefined || last === undefined || poly.every((p) => dist(p, first) <= tol)) {
+        continue;
+      }
+      // 2. Nodes: a spline with both ends in one node is a closed loop at that node.
+      edges.push({ id: e.id, curve, poly, from: nodeAt(first), to: nodeAt(last) });
       continue;
     }
     if (dist(curve.from, curve.to) <= tol) continue;
@@ -119,6 +154,11 @@ export function computeRegions(data: SketchData): RegionsResult {
     })),
   ];
   const nodeTol = NODE_MATCH_FACTOR * tol;
+  for (const shape of shapes) {
+    if (shape.kind === 'polyline' && crossesItself(shape, nodes, tol, nodeTol)) {
+      return { regions: [], crossing: true };
+    }
+  }
   for (let i = 0; i < shapes.length; i++) {
     for (let j = i + 1; j < shapes.length; j++) {
       const a = shapes[i];
@@ -144,9 +184,9 @@ export function computeRegions(data: SketchData): RegionsResult {
   const loops = traceLoops(alive, nodes.length).map((cycle): Loop => {
     const first = cycle[0];
     return {
-      curves: cycle.map((h) => h.curve),
+      parts: cycle,
       ids: cycle.map((h) => h.id),
-      area: cycle.reduce((sum, h) => sum + signedArea(h.curve), 0),
+      area: cycle.reduce((sum, h) => sum + signedArea(h), 0),
       component: first === undefined ? -1 : (component[first.origin] ?? -1),
     };
   });
@@ -155,7 +195,7 @@ export function computeRegions(data: SketchData): RegionsResult {
   // A lone circle is its own component: one bounded face and its outer boundary.
   circles.forEach((c, i) => {
     const area = Math.PI * c.curve.radius ** 2;
-    const loop = { curves: [c.curve], ids: [c.id], component: nodes.length + i };
+    const loop = { parts: [{ curve: c.curve }], ids: [c.id], component: nodes.length + i };
     faces.push({ ...loop, area });
     boundaries.push({ ...loop, area: -area });
   });
@@ -163,11 +203,11 @@ export function computeRegions(data: SketchData): RegionsResult {
   // 6. Holes: each outer boundary goes to the smallest face of another component containing it.
   const holes = new Map<Loop, Loop[]>(faces.map((f) => [f, []]));
   for (const boundary of boundaries) {
-    const sample = samplePoint(boundary.curves);
+    const sample = samplePoint(boundary.parts);
     let best: Loop | undefined;
     for (const face of faces) {
       if (face.component === boundary.component) continue;
-      if (!contains(face.curves, sample)) continue;
+      if (!contains(face.parts, sample)) continue;
       if (best === undefined || face.area < best.area) best = face;
     }
     if (best !== undefined) holes.get(best)?.push(boundary);
@@ -179,8 +219,8 @@ export function computeRegions(data: SketchData): RegionsResult {
     const ids = new Set([face.ids, ...faceHoles.map((h) => h.ids)].flat());
     return Object.freeze({
       name: [...ids].sort(compareStrings).join(','),
-      outer: Object.freeze(face.curves),
-      holes: Object.freeze(faceHoles.map((h) => Object.freeze(h.curves))),
+      outer: curvesOf(face),
+      holes: Object.freeze(faceHoles.map(curvesOf)),
       area: faceHoles.reduce((sum, h) => sum + h.area, face.area),
     });
   });
@@ -192,10 +232,15 @@ function isCurve(e: SketchEntity): e is SketchCurve {
   return e.kind !== 'point';
 }
 
+function curvesOf(loop: Loop): readonly Curve2[] {
+  return Object.freeze(loop.parts.map((p) => p.curve));
+}
+
 function shapeOf(e: Edge): Shape {
   const nodes = [e.from, e.to];
   const { curve } = e;
   if (curve.kind === 'line') return { kind: 'line', a: curve.from, b: curve.to, nodes };
+  if (curve.kind === 'bspline') return { kind: 'polyline', points: polyOf(e), nodes };
   const r = dist(curve.center, curve.from);
   const start = angleOf(sub(curve.from, curve.center));
   const sweep = mod2pi(angleOf(sub(curve.to, curve.center)) - start);
@@ -290,6 +335,7 @@ function compareOutgoing(a: HalfEdge | undefined, b: HalfEdge | undefined): numb
 /** Forward (from → to) and reverse half-edges of an edge, in this order; both keep the entity id (M14). */
 function halfEdges(e: Edge): readonly [HalfEdge, HalfEdge] {
   const { curve } = e;
+  if (curve.kind === 'bspline') return splineHalfEdges(e, curve, polyOf(e));
   if (curve.kind === 'line') {
     const d = sub(curve.to, curve.from);
     return [
@@ -326,15 +372,88 @@ function halfEdges(e: Edge): readonly [HalfEdge, HalfEdge] {
   ];
 }
 
+/**
+ * Half-edges of a spline: the tangent from the first derivative at the end leaving the node (−r'(1)
+ * at the far end), the signed curvature κ = (x'y'' − y'x'') / |r'|³ from the first and second
+ * derivatives; reversing the direction flips the sign of κ.
+ */
+function splineHalfEdges(
+  e: Edge,
+  curve: Extract<Curve2, { kind: 'bspline' }>,
+  poly: readonly Vec2[],
+): readonly [HalfEdge, HalfEdge] {
+  const d0 = bspline.derivative(curve, 0, 1);
+  const d1 = bspline.derivative(curve, 1, 1);
+  const back: Vec2 = [-d1[0], -d1[1]];
+  const reversedPoly = [...poly].reverse();
+  return [
+    {
+      origin: e.from,
+      dest: e.to,
+      angle: direction(tangentOr(d0, poly)),
+      curvature: curvature(d0, bspline.derivative(curve, 0, 2)),
+      curve,
+      poly,
+    },
+    {
+      origin: e.to,
+      dest: e.from,
+      angle: direction(tangentOr(back, reversedPoly)),
+      curvature: -curvature(d1, bspline.derivative(curve, 1, 2)),
+      curve: reverseSpline(curve, e.id),
+      poly: reversedPoly,
+    },
+  ];
+}
+
+/** The derivative, or the first chord of the tessellation where the derivative vanishes. */
+function tangentOr(d: Vec2, poly: readonly Vec2[]): Vec2 {
+  if (d[0] !== 0 || d[1] !== 0) return d;
+  const [a, b] = poly;
+  return a === undefined || b === undefined ? d : sub(b, a);
+}
+
+/** Signed curvature from the first and second derivative; 0 where the first one vanishes. */
+function curvature(d1: Vec2, d2: Vec2): number {
+  const speed = length(d1);
+  return speed === 0 ? 0 : cross(d1, d2) / speed ** 3;
+}
+
+/** The same spline traversed backwards: poles reversed, knots mirrored (k → 1 − k, reversed). */
+function reverseSpline(
+  curve: Extract<Curve2, { kind: 'bspline' }>,
+  id: string,
+): Extract<Curve2, { kind: 'bspline' }> {
+  return {
+    kind: 'bspline',
+    degree: curve.degree,
+    poles: [...curve.poles].reverse(),
+    knots: curve.knots.map((k) => 1 - k).reverse(),
+    id,
+  };
+}
+
 /** Angle in [0, 2π); a value within the tie tolerance of 2π becomes 0, so ties do not split at the wrap. */
 function direction(d: Vec2): number {
   const a = mod2pi(angleOf(d));
   return TWO_PI - a <= ANGLE_TIE ? 0 : a;
 }
 
-/** The shoelace term of a curve plus the circular segment of an arc (+ counter-clockwise, − clockwise). */
-function signedArea(c: Curve2): number {
+/**
+ * The shoelace term of a curve plus the circular segment of an arc (+ counter-clockwise,
+ * − clockwise); a spline sums the shoelace terms of its tessellation.
+ */
+function signedArea({ curve: c, poly }: Part): number {
   if (c.kind === 'circle') return Math.PI * c.radius ** 2;
+  if (c.kind === 'bspline') {
+    let sum = 0;
+    for (let i = 1; i < (poly?.length ?? 0); i++) {
+      const p = poly?.[i - 1];
+      const q = poly?.[i];
+      if (p !== undefined && q !== undefined) sum += cross(p, q);
+    }
+    return sum / 2;
+  }
   const chord = (c.from[0] * c.to[1] - c.to[0] * c.from[1]) / 2;
   if (c.kind === 'line') return chord;
   const r = dist(c.center, c.from);
@@ -345,26 +464,29 @@ function signedArea(c: Curve2): number {
   return chord + (c.ccw ? segment : -segment);
 }
 
-function samplePoint(loop: readonly Curve2[]): Vec2 {
-  const first = loop[0];
+function samplePoint(loop: readonly Part[]): Vec2 {
+  const first = loop[0]?.curve;
   if (first === undefined) return [Number.NaN, Number.NaN];
   if (first.kind === 'circle') return [first.center[0] + first.radius, first.center[1]];
+  if (first.kind === 'bspline') return first.poles[0] ?? [Number.NaN, Number.NaN];
   return first.from;
 }
 
 /** Point in a closed loop by ray casting (the point is never on the loop: crossings are excluded). */
-function contains(loop: readonly Curve2[], p: Vec2): boolean {
+function contains(loop: readonly Part[], p: Vec2): boolean {
   let hits = 0;
-  for (const c of loop) {
+  for (const { curve: c, poly } of loop) {
     if (c.kind === 'circle') return dist(c.center, p) < c.radius;
     if (c.kind === 'line') {
-      const d = sub(c.to, c.from);
-      const denom = cross(RAY, d);
-      if (denom === 0) continue;
-      const w = sub(c.from, p);
-      const t = cross(w, d) / denom;
-      const s = cross(w, RAY) / denom;
-      if (t > 0 && s >= 0 && s < 1) hits++;
+      if (rayHitsSegment(p, c.from, c.to)) hits++;
+      continue;
+    }
+    if (c.kind === 'bspline') {
+      for (let i = 1; i < (poly?.length ?? 0); i++) {
+        const a = poly?.[i - 1];
+        const b = poly?.[i];
+        if (a !== undefined && b !== undefined && rayHitsSegment(p, a, b)) hits++;
+      }
       continue;
     }
     const r = dist(c.center, c.from);
@@ -384,15 +506,88 @@ function contains(loop: readonly Curve2[], p: Vec2): boolean {
   return hits % 2 === 1;
 }
 
+/** The containment ray from p crosses segment a b (half-open at b, so a shared vertex counts once). */
+function rayHitsSegment(p: Vec2, a: Vec2, b: Vec2): boolean {
+  const d = sub(b, a);
+  const denom = cross(RAY, d);
+  if (denom === 0) return false;
+  const w = sub(a, p);
+  const t = cross(w, d) / denom;
+  const s = cross(w, RAY) / denom;
+  return t > 0 && s >= 0 && s < 1;
+}
+
 // --- Intersections for the crossing check ---------------------------------------------------
 
 /** Common points of two shapes, or 'overlap' when they share a piece of positive length. */
 function intersect(a: Shape, b: Shape, tol: number): readonly Vec2[] | 'overlap' {
+  // A spline meets other curves through the segments of its tessellation.
+  if (a.kind === 'polyline') return intersectSegments(segmentsOf(a), b, tol, false);
+  if (b.kind === 'polyline') return intersectSegments(segmentsOf(b), a, tol, true);
   if (a.kind === 'line') {
     return b.kind === 'line' ? lineLine(a.a, a.b, b.a, b.b, tol) : lineRound(a, roundOf(b), tol);
   }
   if (b.kind === 'line') return lineRound(b, roundOf(a), tol);
   return roundRound(roundOf(a), roundOf(b), tol);
+}
+
+function intersectSegments(
+  segments: readonly Extract<Shape, { kind: 'line' }>[],
+  other: Shape,
+  tol: number,
+  swapped: boolean,
+): readonly Vec2[] | 'overlap' {
+  const points: Vec2[] = [];
+  for (const segment of segments) {
+    const contact = swapped ? intersect(other, segment, tol) : intersect(segment, other, tol);
+    if (contact === 'overlap') return contact;
+    points.push(...contact);
+  }
+  return points;
+}
+
+/**
+ * A spline crosses itself (spec 12 "Spliny (M29)", Q087): adjacent tessellation segments may only
+ * share their common point (an overlap is a crossing), non-adjacent ones must not meet at all –
+ * except the first and the last segment of a closed spline, which meet in its node.
+ */
+function crossesItself(
+  s: Extract<Shape, { kind: 'polyline' }>,
+  nodes: readonly Vec2[],
+  tol: number,
+  nodeTol: number,
+): boolean {
+  const segments = segmentsOf(s);
+  const [from, to] = s.nodes;
+  const node = from !== undefined && from === to ? nodes[from] : undefined;
+  const last = segments.length - 1;
+  for (let i = 0; i < segments.length; i++) {
+    for (let j = i + 1; j < segments.length; j++) {
+      const a = segments[i];
+      const b = segments[j];
+      if (a === undefined || b === undefined) continue;
+      const contact = lineLine(a.a, a.b, b.a, b.b, tol);
+      if (contact === 'overlap') return true;
+      if (j === i + 1) continue;
+      const closing = node !== undefined && i === 0 && j === last;
+      if (!contact.every((p) => closing && dist(node, p) <= nodeTol)) return true;
+    }
+  }
+  return false;
+}
+
+/** The tessellation segments of a spline, each with the spline's end nodes. */
+function segmentsOf(s: Extract<Shape, { kind: 'polyline' }>): Extract<Shape, { kind: 'line' }>[] {
+  const segments: Extract<Shape, { kind: 'line' }>[] = [];
+  for (let i = 1; i < s.points.length; i++) {
+    const a = s.points[i - 1];
+    const b = s.points[i];
+    // Coinciding tessellation points would make a zero-length segment without a direction.
+    if (a !== undefined && b !== undefined && dist(a, b) > 0) {
+      segments.push({ kind: 'line', a, b, nodes: s.nodes });
+    }
+  }
+  return segments;
 }
 
 /** A circle or an arc as center, radius and angular range (a circle covers the full turn). */
@@ -405,7 +600,7 @@ interface Round {
   readonly ends: readonly Vec2[];
 }
 
-function roundOf(s: Exclude<Shape, { kind: 'line' }>): Round {
+function roundOf(s: Extract<Shape, { kind: 'arc' | 'circle' }>): Round {
   return s.kind === 'circle'
     ? { c: s.c, r: s.r, start: 0, sweep: TWO_PI, full: true, ends: [] }
     : { c: s.c, r: s.r, start: s.start, sweep: s.sweep, full: false, ends: s.ends };
@@ -520,4 +715,10 @@ function onRound(round: Round, p: Vec2, tol: number): boolean {
 function compareStrings(a: string, b: string): number {
   if (a === b) return 0;
   return a < b ? -1 : 1;
+}
+
+/** The tessellation of a spline part; every spline part carries one (a missing one is a bug). */
+function polyOf(part: Part): readonly Vec2[] {
+  assert(part.poly !== undefined, 'regions: a spline part without its tessellation');
+  return part.poly;
 }

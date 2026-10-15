@@ -108,7 +108,12 @@ export function isGlyphConstraint(c: SketchConstraint): c is GlyphConstraint {
     case 'vAlign':
       return true;
     case 'distance':
+    case 'hDistance':
+    case 'vDistance':
+    case 'pointLineDistance':
+    case 'angle':
     case 'radius':
+    case 'diameter':
       return false;
     default:
       return assertNever(c);
@@ -187,6 +192,10 @@ function anchorOf(byId: ReadonlyMap<string, SketchEntity>, entity: SketchEntity)
       const side: Vec2 = [Math.cos(middle), Math.sin(middle)];
       return { point: [center[0] + radius * side[0], center[1] + radius * side[1]], side };
     }
+    case 'bspline':
+    case 'fitSpline':
+      // The anchor of a spline comes with its tools (M29 task 8, after M26); until then no glyph.
+      return null;
     default:
       return assertNever(entity);
   }

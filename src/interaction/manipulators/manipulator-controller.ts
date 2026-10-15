@@ -34,7 +34,7 @@ import type {
   PointHandle,
 } from './manipulators';
 import type { FeatureAnchors, RegenStatusPort } from '../regen-status-port';
-import { CLICK_TOLERANCE_PX } from '../select-tool';
+import { CLICK_TOLERANCE_PX } from '../constants';
 import type {
   HandleState,
   HandleView,

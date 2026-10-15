@@ -70,3 +70,65 @@ describe('curve2', () => {
     expect(() => curve2(curve(DATA, 'l'), new Map())).toThrow();
   });
 });
+
+describe('curve2 – splines', () => {
+  const data = sketch([
+    { kind: 'point', id: 'a', x: 0, y: 0 },
+    { kind: 'point', id: 'b', x: 1, y: 2 },
+    { kind: 'point', id: 'c', x: 3, y: 2 },
+    {
+      kind: 'bspline',
+      id: 's',
+      degree: 2,
+      poles: ['a', 'b', 'c'],
+      knots: [0, 0, 0, 1, 1, 1],
+    },
+    {
+      kind: 'fitSpline',
+      id: 'f',
+      degree: 2,
+      fit: ['c', 'b', 'a'],
+      params: [0, 0.5, 1],
+      poles: [
+        [3, 2],
+        [1, 3],
+        [0, 0],
+      ],
+      knots: [0, 0, 0, 1, 1, 1],
+      construction: true,
+    },
+  ]);
+  const points = pointsById(data);
+
+  it('turns a control point spline into a bspline with the point coordinates as poles', () => {
+    expect(curve2(curve(data, 's'), points)).toEqual({
+      kind: 'bspline',
+      degree: 2,
+      poles: [
+        [0, 0],
+        [1, 2],
+        [3, 2],
+      ],
+      knots: [0, 0, 0, 1, 1, 1],
+      id: 's',
+    });
+  });
+
+  it('turns a fit point spline into a bspline with its stored poles', () => {
+    expect(curve2(curve(data, 'f'), points)).toEqual({
+      kind: 'bspline',
+      degree: 2,
+      poles: [
+        [3, 2],
+        [1, 3],
+        [0, 0],
+      ],
+      knots: [0, 0, 0, 1, 1, 1],
+      id: 'f',
+    });
+  });
+
+  it('throws when a pole point is missing (a programming error)', () => {
+    expect(() => curve2(curve(data, 's'), new Map())).toThrow();
+  });
+});

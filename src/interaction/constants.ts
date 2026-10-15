@@ -43,6 +43,9 @@ export function toolModes(tool: { readonly modes?: readonly Mode[] }): readonly 
   return tool.modes ?? MODEL_ONLY;
 }
 
+/** A left up farther than this from its down is a drag, not a click. */
+export const CLICK_TOLERANCE_PX = 4;
+
 /** Ids of the File actions (file-actions.ts); ui takes them from here, never as literals. */
 export const FILE_ACTION_IDS = Object.freeze({
   exportStep: 'file.exportStep',

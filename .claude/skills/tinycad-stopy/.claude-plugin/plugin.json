@@ -1,0 +1,6 @@
+{
+  "name": "tinycad-stopy",
+  "version": "0.1.0",
+  "description": "Panel se stavem souběžných stop tinycad: worktree, větve a milníky z vaultu",
+  "types": "./types/index.d.ts"
+}

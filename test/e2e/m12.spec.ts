@@ -25,7 +25,7 @@ test('a fully defined rectangle sketch: dimensions, finish, undo, reload, edit',
   const panel = await drawDimensionedRectangle(page, 'Skica 1');
   await expect(toolbarButton(page, 'Kvádr')).toHaveCount(0);
   const status = panel.getByRole('status');
-  const width = await dimensionInput(panel, 'Vzdálenost 1');
+  const width = await dimensionInput(panel, 'Vodorovná vzdálenost 1');
 
   // 4. A new value of the width is solved again and the sketch stays fully defined.
   const before = await dimensionValue(width);

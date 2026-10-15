@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import type { TopoDS_Shape } from 'replicad-opencascadejs';
+import type { GeomAbs_SurfaceType, TopoDS_Shape } from 'replicad-opencascadejs';
 import type { Vec3 } from '@/core';
 import { validateMeshData, type MeshData, type MeshQuality } from '@/kernel';
 import { loadOcct, type Occt } from '@/kernel-occt/occt';
@@ -94,6 +94,52 @@ function windingNormal(mesh: MeshData, t: number): Vec3 {
   return cross(sub(vertex(mesh, b), pa), sub(vertex(mesh, c), pa));
 }
 
+/** A cylinder of radius r and height h on the Z axis, rotated by angle about the X axis. */
+function aCylinderShape(r: number, h: number, angle = 0): TopoDS_Shape {
+  using maker = new oc.BRepPrimAPI_MakeCylinder(r, h);
+  const cylinder = maker.Shape();
+  if (angle === 0) return cylinder;
+  using origin = new oc.gp_Pnt(0, 0, 0);
+  using xDir = new oc.gp_Dir(1, 0, 0);
+  using axis = new oc.gp_Ax1(origin, xDir);
+  using trsf = new oc.gp_Trsf();
+  trsf.SetRotation(axis, angle);
+  using location = new oc.TopLoc_Location(trsf);
+  using unrotated = cylinder;
+  return unrotated.Moved(location, false);
+}
+
+/** Index of the first face of the entry whose surface has the given type. */
+function faceOfType(entry: ShapeEntry, type: GeomAbs_SurfaceType): number {
+  return entry.faces.findIndex((shape) => {
+    using face = oc.TopoDS.Face(shape);
+    using surface = new oc.BRepAdaptor_Surface(face, true);
+    return surface.GetType() === type;
+  });
+}
+
+/** Distinct vertex indices of the triangles of the face. */
+function faceVertices(mesh: MeshData, face: number): readonly number[] {
+  const result = new Set<number>();
+  for (const t of faceTriangles(mesh, face))
+    for (const v of triangleVertices(mesh, t)) result.add(v);
+  return [...result];
+}
+
+function unitOf(v: Vec3): Vec3 {
+  const length = Math.hypot(v[0], v[1], v[2]);
+  return [v[0] / length, v[1] / length, v[2] / length];
+}
+
+/** Angle between the mesh normal and the expected unit direction, in radians. */
+function angleTo(n: Vec3, expected: Vec3): number {
+  return Math.acos(Math.min(1, Math.max(-1, dot(unitOf(n), expected))));
+}
+
+// Float32 normals of the exact surface normal: well under a thousandth of a radian. A mean of
+// triangle normals is off by about half the angular step at the seam and the face boundary.
+const SURFACE_NORMAL_TOLERANCE = 1e-4;
+
 function keys(ranges: Uint32Array): readonly number[] {
   const result: number[] = [];
   for (let r = 0; r < ranges.length; r += 3) result.push(ranges[r] ?? -1);
@@ -154,6 +200,63 @@ describe('tessellateEntry', () => {
     };
     for (let i = 0; i < mesh.positions.length; i++) inMovedBox(mesh.positions, i);
     for (let i = 0; i < mesh.edgePositions.length; i++) inMovedBox(mesh.edgePositions, i);
+  });
+
+  it('gives the lateral face of a cylinder the surface normal: radial, outward, across the seam', () => {
+    const entry = anEntry(aCylinderShape(2, 5));
+    const lateral = faceOfType(entry, oc.GeomAbs_SurfaceType.GeomAbs_Cylinder);
+    const mesh = tessellateEntry(oc, entry, QUALITY);
+    const vertices = faceVertices(mesh, lateral);
+    expect(vertices.length).toBeGreaterThan(8);
+    for (const v of vertices) {
+      const p = vertex(mesh, v);
+      const radial = unitOf([p[0], p[1], 0]);
+      expect(angleTo(normal(mesh, v), radial)).toBeLessThan(SURFACE_NORMAL_TOLERANCE);
+    }
+  });
+
+  it('gives a sphere the direction from the centre, also at the poles', () => {
+    using center = new oc.gp_Pnt(1, 2, 3);
+    using maker = new oc.BRepPrimAPI_MakeSphere(center, 4);
+    const entry = anEntry(maker.Shape());
+    const mesh = tessellateEntry(oc, entry, QUALITY);
+    const vertexCount = mesh.positions.length / 3;
+    expect(vertexCount).toBeGreaterThan(8);
+    for (let v = 0; v < vertexCount; v++) {
+      const fromCenter = unitOf(sub(vertex(mesh, v), [1, 2, 3]));
+      expect(angleTo(normal(mesh, v), fromCenter)).toBeLessThan(SURFACE_NORMAL_TOLERANCE);
+    }
+  });
+
+  it('turns the normals of a REVERSED curved face inward (surface normal flipped)', () => {
+    using cylinder = aCylinderShape(2, 5);
+    const entry = anEntry(cylinder.Reversed());
+    const lateral = faceOfType(entry, oc.GeomAbs_SurfaceType.GeomAbs_Cylinder);
+    // Precondition: the lateral face of a reversed solid is REVERSED.
+    expect(entry.faces[lateral]?.Orientation()).toBe(oc.TopAbs_Orientation.TopAbs_REVERSED);
+    const mesh = tessellateEntry(oc, entry, QUALITY);
+    for (const v of faceVertices(mesh, lateral)) {
+      const p = vertex(mesh, v);
+      const inward = unitOf([-p[0], -p[1], 0]);
+      expect(angleTo(normal(mesh, v), inward)).toBeLessThan(SURFACE_NORMAL_TOLERANCE);
+    }
+    // The winding still agrees with the normals.
+    for (const t of faceTriangles(mesh, lateral)) {
+      const [a] = triangleVertices(mesh, t);
+      expect(dot(windingNormal(mesh, t), normal(mesh, a))).toBeGreaterThan(0);
+    }
+  });
+
+  it('rotates the normals by the location of the shape', () => {
+    // Rotated by 90° about X: the cylinder axis becomes -Y, the lateral normals lie in XZ.
+    const entry = anEntry(aCylinderShape(2, 5, Math.PI / 2));
+    const lateral = faceOfType(entry, oc.GeomAbs_SurfaceType.GeomAbs_Cylinder);
+    const mesh = tessellateEntry(oc, entry, QUALITY);
+    for (const v of faceVertices(mesh, lateral)) {
+      const p = vertex(mesh, v);
+      const radial = unitOf([p[0], 0, p[2]]);
+      expect(angleTo(normal(mesh, v), radial)).toBeLessThan(SURFACE_NORMAL_TOLERANCE);
+    }
   });
 
   it('returns arrays that each own their whole ArrayBuffer', () => {

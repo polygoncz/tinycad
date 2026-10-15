@@ -48,7 +48,11 @@ function viewLabel(page: Page, text: string): Locator {
   return page.getByRole('button', { name: text, exact: true });
 }
 
-/** A rectangle from (x0, y0) to (x1, y1) px from the canvas centre and a dimension of its bottom. */
+/**
+ * A rectangle from (x0, y0) to (x1, y1) px from the canvas centre and a dimension of its bottom:
+ * the click on the edge hangs the dimension on the cursor, the click below the edge places it
+ * (M28); the edge is horizontal, so the dimension is the horizontal distance.
+ */
 async function rectangleWithWidth(
   page: Page,
   status: Locator,
@@ -62,6 +66,7 @@ async function rectangleWithWidth(
   await expect(status).toHaveText(dofAfter);
   await toolbarButton(page, 'Kóta').click();
   await clickCanvas(page, (x0 + x1) / 2, Math.max(y0, y1));
+  await clickCanvas(page, (x0 + x1) / 2, Math.max(y0, y1) + 40);
 }
 
 test('dimensions in the view: rounded, snapped to the grid, edited in place', async ({ page }) => {
@@ -75,7 +80,7 @@ test('dimensions in the view: rounded, snapped to the grid, edited in place', as
 
   // A rectangle from the origin to a corner off any round number of px: it snaps to the grid.
   await rectangleWithWidth(page, status, [0, 0], [123, -77], 'Stupně volnosti: 2');
-  const width = await dimensionInput(panel, 'Vzdálenost 1');
+  const width = await dimensionInput(panel, 'Vodorovná vzdálenost 1');
   await expect(width).toBeVisible();
   const shown = await width.inputValue();
   expect(shown).toMatch(ROUNDED);
@@ -89,7 +94,7 @@ test('dimensions in the view: rounded, snapped to the grid, edited in place', as
 
   // Double click → a field named like the panel row; 40 + Enter writes it.
   await label.dblclick();
-  const field = page.locator('input[aria-label="Vzdálenost 1"]');
+  const field = page.locator('input[aria-label="Vodorovná vzdálenost 1"]');
   await expect(field).toBeFocused();
   await expect(field).toHaveValue(shown);
   await field.fill('40');
@@ -110,7 +115,7 @@ test('dimensions in the view: rounded, snapped to the grid, edited in place', as
   await snap.click();
   await expect(snap).toHaveAttribute('aria-pressed', 'false');
   await rectangleWithWidth(page, status, [-260, 60], [-137, 137], 'Stupně volnosti: 5');
-  const free = await dimensionInput(panel, 'Vzdálenost 2');
+  const free = await dimensionInput(panel, 'Vodorovná vzdálenost 2');
   await expect(free).toBeVisible();
   const freeValue = await dimensionValue(free);
   expect(snappedToGrid(freeValue, 123)).toBe(false);

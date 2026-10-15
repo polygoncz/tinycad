@@ -7,20 +7,27 @@ describe('sketch public API', () => {
   it('exports exactly the runtime values of spec 12', () => {
     expect(Object.keys(sketch).sort()).toEqual(
       [
+        'DIMENSION_KINDS',
         'GEOMETRIC_CONSTRAINT_KINDS',
         'ORIGIN_SNAP',
         'SKETCH_FEATURE_TYPE',
         'SKETCH_PARAM',
+        'SPLINE_TOLERANCE',
         'computeRegions',
         'constraintFor',
         'constraintTargets',
         'curvePoints',
         'curve2',
+        'defaultPlacement',
         'dimensionFor',
         'inferLine',
         'inferRadius',
+        'dimensionTarget',
+        'isDimension',
         'measure',
+        'movePlacement',
         'parseSketchData',
+        'placeDimension',
         'pointsById',
         'removeItems',
         'snap',
@@ -45,6 +52,21 @@ describe('sketch public API', () => {
     expect(Object.isFrozen(sketch.GEOMETRIC_CONSTRAINT_KINDS)).toBe(true);
   });
 
+  it('tells a dimension by its kind (M28), not by a value field', () => {
+    expect(sketch.DIMENSION_KINDS).toEqual([
+      'distance',
+      'hDistance',
+      'vDistance',
+      'pointLineDistance',
+      'angle',
+      'radius',
+      'diameter',
+    ]);
+    expect(Object.isFrozen(sketch.DIMENSION_KINDS)).toBe(true);
+    expect(sketch.isDimension({ kind: 'angle' })).toBe(true);
+    expect(sketch.isDimension({ kind: 'horizontal', value: 1 })).toBe(false);
+  });
+
   it('names the params of the sketch feature (SKETCH_PARAM)', () => {
     expect(sketch.SKETCH_PARAM).toEqual({
       plane: 'plane',
@@ -65,7 +87,7 @@ describe('sketch public API', () => {
     >();
   });
 
-  it('Curve2 has the shape of ProfileCurve, with the optional entity id of M14 (spec 06)', () => {
+  it('Curve2 has the shape of ProfileCurve, with the optional entity id of M14 and the bspline of M29 (spec 06, 12)', () => {
     expectTypeOf<Curve2>().toEqualTypeOf<
       | {
           readonly kind: 'line';
@@ -85,6 +107,13 @@ describe('sketch public API', () => {
           readonly kind: 'circle';
           readonly center: readonly [number, number];
           readonly radius: number;
+          readonly id?: string;
+        }
+      | {
+          readonly kind: 'bspline';
+          readonly degree: number;
+          readonly poles: readonly (readonly [number, number])[];
+          readonly knots: readonly number[];
           readonly id?: string;
         }
     >();

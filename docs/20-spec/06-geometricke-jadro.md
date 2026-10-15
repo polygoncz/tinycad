@@ -20,7 +20,7 @@ milestones:
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-14
+updated: 2026-10-15
 ---
 # 06 – `kernel` a `kernel-occt`: geometrické jádro
 
@@ -156,6 +156,8 @@ export interface GeometryKernel extends PrimitiveOps, TransformOps, BooleanOps, 
 ```
 
 `Plane` a `Vec2` jsou z `core` ([[02-core]]). Builder skici volá `makeFace` jednou na oblast; křivky skici jako drát (`makeSketchCurves`) a `tessellateCurves` nevznikají – skicu kreslí `render` z dat ([[Rozhodnutí noční rychloakce#M12 – Skicář|R34]]).
+
+**M29 (spliny skici):** `ProfileCurve` (a `Curve2` ve `sketch`) má variantu `{ kind: 'bspline'; degree: number; poles: readonly Vec2[]; knots: readonly number[]; id?: string }` – polynomiální sevřený (clamped) B-spline bez vah ([[12-skicar#Spliny (M29)]]). `validateFaceInput` ověří: `degree` celé 1–25 (25 = `Geom_BSplineCurve::MaxDegree()`), aspoň `degree + 1` konečných řídicích bodů, `knots.length = poles.length + degree + 1`, uzly konečné a sevřené (prvních `degree + 1` stejných, posledních `degree + 1` stejných, první < poslední), vnitřní uzly ostře mezi krajními, neklesající, žádný víc než `degree`krát; jinak `'invalid-input'`. Začátek křivky = první řídicí bod, konec = poslední (napojení smyčky jako u ostatních křivek). Obrácená křivka = řídicí body pozpátku, uzly zrcadlené. Role hrany `edge:<id>` a boční plochy `face:side:<id>` jako u ostatních křivek.
 
 ### Stav po M13
 
@@ -380,7 +382,7 @@ Modulový worker inicializuje OCCT asynchronně. Zpráva, která do workeru dora
 - `BRepMesh_IncrementalMesh(shape, linearDeflection, false, angularDeflection, false)`: absolutní průhyb, bez paralelismu (worker je jednovláknový).
 - Plochy v pořadí mapy podtvarů (`SubShapeIndex` = pozice). Každá plocha má **vlastní vrcholy** (žádné sdílení mezi plochami), aby šly normály ostrých hran a `faceRanges`. Uzly triangulace se transformují `TopLoc_Location` plochy.
 - Plocha s orientací `TopAbs_REVERSED`: prohodí se pořadí dvou vrcholů každého trojúhelníku a otočí normály, aby trojúhelníky byly CCW při pohledu zvenku.
-- Normály: z triangulace, pokud je má; jinak průměr jednotkových normál nedegenerovaných trojúhelníků plochy v uzlu (u rovinné plochy vyjde normála plochy), normalizovaný. Navinutí se otáčí **před** výpočtem normál, takže vyjdou ven samy. Uzel bez nedegenerovaného trojúhelníku dostane průměrnou normálu plochy. Plocha, která má jen degenerované trojúhelníky, se vynechá (jako plocha bez trojúhelníků). Zatím se používá jen druhá cesta i pro válec (M11): síť projde `validateMeshData` a objem sedí, na švu pláště mohou být normály lehce vidět; normály z triangulace se doplní, až to bude vadit ([[Rozhodnutí noční rychloakce#M11 – Další entity|R21]]).
+- Normály z OCCT: `BRepLib_ToolTriangulatedShape.ComputeNormals(face, triangulation)` spočte normálu skutečné plochy v UV bodu každého uzlu (`GeomLib::NormEstim`); kde normála plochy není definovaná (pól koule), OCCT sám vezme průměr normál trojúhelníků v uzlu. Normály uloží do triangulace (`Poly_Triangulation.Normal(i)`) v souřadnicích plochy **bez** lokace a **bez** ohledu na orientaci plochy. Adaptér je proto otočí lokací (`gp_Dir.Transform(trsf)`, jen rotační část) a u plochy `TopAbs_REVERSED` obrátí. Nahrazuje dřívější vlastní průměr normál trojúhelníků (M11, [[Rozhodnutí noční rychloakce#M11 – Další entity|R21]]), který na švu a okraji pláště válce ujížděl o polovinu úhlového kroku; změna podle přání co nejvíc používat OCCT ([[Q088 Geometrie skici v TypeScriptu nebo v OCCT|Q088]]). Plocha, jejíž triangulace normály nedostane (`HasNormals()` je `false`), se vynechá jako plocha bez trojúhelníků.
 - Lokace se aplikují přes `gp_Trsf.Transforms(x, y, z)` (bez nového objektu OCCT na uzel). **Zrcadlící lokace** (`gp_Trsf.IsNegative()`) by otočila navinutí; nevznikne, protože `transform` přijímá jen tuhé pohyby (M11).
 - Hrany v pořadí mapy podtvarů. Polyline z `BRep_Tool.PolygonOnTriangulation(edge, loc)`: OCCT vybere první reprezentaci hrany na triangulaci sousední plochy a vrátí polygon, tu triangulaci a složenou lokaci. Uzly polygonu jsou indexy do vrácené triangulace, transformují se vrácenou lokací. Degenerovaná hrana, hrana bez polygonu nebo s méně než 2 body se do `edgeRanges` nezapíše (jako plocha bez trojúhelníků).
 - Chybějící triangulaci nebo polygon vrací binding jako JS `null`, i když `.d.ts` slibuje objekt; adaptér na `null` testuje explicitně.
@@ -397,6 +399,8 @@ Modulový worker inicializuje OCCT asynchronně. Zpráva, která do workeru dora
 - Rovina `gp_Ax3(gp_Pnt(origin), gp_Dir(normal), gp_Dir(xDir))`, `gp_Pln(ax3)`; bod roviny `(x, y)` → `origin + x·xDir + y·yDir` (`plane.toWorld` z `core`).
 - Hrany: úsečka `BRepBuilderAPI_MakeEdge(gp_Pnt, gp_Pnt)`; oblouk `BRepBuilderAPI_MakeEdge(gp_Circ, P1, P2)` s `gp_Circ(gp_Ax2(střed, normal, xDir), r)` – kružnice v OCCT běží proti směru hodinových ručiček kolem `normal`, takže pro `ccw: false` se body prohodí; kružnice `BRepBuilderAPI_MakeEdge(gp_Circ)`.
 - Smyčka `BRepBuilderAPI_MakeWire` (`Add` po hranách, `IsDone()` jinak `'operation-failed'`); plocha `BRepBuilderAPI_MakeFace(gp_Pln, outerWire, true)`, díry `Add(holeWire)`, pak `ShapeFix_Face(face).FixOrientation()` (srovná orientaci děr; samotné `Perform()` to nestačí, ověřeno v M12) a `BRepCheck_Analyzer(face).IsValid()` jinak `'operation-failed'`. Všechny objekty OCCT přes `using`.
+
+- **B-spline (M29):** `Geom_BSplineCurve(Poles: NCollection_Array1_gp_Pnt, Knots: NCollection_Array1_double, Multiplicities: NCollection_Array1_int, Degree)` ve 3D (řídicí body převedené `plane.toWorld`, pole s dolní mezí 0 – OCCT je přijme), uzly zkomprimované na unikátní hodnoty a násobnosti (build neexportuje `BSplCLib`), hrana `BRepBuilderAPI_MakeEdge(Geom_Curve)`. Adaptér nic nevzorkuje ani neaproximuje; platnost hlídá stávající `BRepCheck_Analyzer` (spline křížící jinou stranu → `'operation-failed'`). Měření plochy v testech potřebuje přesnou variantu `BRepGProp.SurfaceProperties(shape, props, 1e-9, false)` – výchozí se u plochy se splinem plete o ~2e-4 relativně.
 
 ### Tažení v adaptéru (M13)
 
@@ -457,6 +461,7 @@ export function describeGeometryKernelContract(name: string, factory: () => Prom
 - Od M13 si záznam pamatuje příznak „plocha“ (`makeFace` ano, `transform` ho dědí, ostatní operace ne) pro kontrolu profilu v `extrude`/`revolve`. `extrude` uloží obálku AABB profilu a AABB posunutého o `d̂ · distance`; `revolve` obálku osmi rohů AABB profilu otočených kolem osy o úhly `0`, `angle` a každé `k · π/2` mezi nimi (přesné pro případy kontraktové sady, jinde přibližné – fake to nevadí).
 - Od M14: `topology` každého záznamu je topologie kvádru AABB – 6 rovinných ploch v pořadí sítě (−X, +X, −Y, +Y, −Z, +Z, rovina se středem stěny a normálou ven), 12 hran v pořadí sítě se sousedností a vrcholy odvozenými z rohů, 8 vrcholů, střed hrany = střed úsečky. Role: `makeBox` → `left 0, right 1, front 2, back 3, bottom 4, top 5`; `makeCylinder` → `bottom`/`top` = stěna ve směru −/+ převládající složky osy, `side` = zbylé 4; `extrude` → `start`/`end` = stěna ve směru −/+ převládající složky `d̂` (boční role fake nevrací); `makeFace` a `revolve` role nevrací. Historie: `transform`, `fillet`, `chamfer` identita 6 ploch; `boolean` identita prvního vstupu, ostatní vstupy `deleted`; `extrude`/`revolve` profil `deleted`. `fillet`/`chamfer` vrací AABB beze změny (nový handle) a kontrolují vstup jako OCCT (rozsah hran = 12).
 - Od M15: `exportStep` kontroluje vstup jako OCCT a vrací deterministický pseudo-STEP (bajty ASCII kódované ručně `charCodeAt`, protože doménový tsconfig bez DOM a typů Node `TextEncoder` nezná – stejné bajty jako `TextEncoder` pro ASCII): `ISO-10303-21;`, `HEADER;` … `ENDSEC;`, `DATA;`, řádek `#<i>=FAKE_SOLID((min),(max));` na každý tvar v pořadí `shapes` (AABB), `ENDSEC;`, `END-ISO-10303-21;`. Testy vyšších vrstev tak ověří, co se exportovalo.
+- Od M29 `makeFace` se splinem: AABB z bodů `bspline.tessellate` (`core`) s tolerancí `1e-7 · max(1, největší |souřadnice|)`; validace jako u OCCT.
 - `tessellate` vrací AABB jako kvádr: 6 ploch po 2 trojúhelnících (24 vrcholů, normály ploch), pořadí ploch −X, +X, −Y, +Y, −Z, +Z. Dál 12 hran po 2 bodech. Platí pro každý tvar, i válec a výsledek booleanu.
 - Volání `failNext` se týká jen dalšího volání dané metody. Injektovaná chyba nevytvoří handle a nic neuvolní.
 - Výsledky se vrací asynchronně (v mikroúloze), nikdy synchronně, aby testy vyšších vrstev nespoléhaly na pořadí, které by s workerem neplatilo.

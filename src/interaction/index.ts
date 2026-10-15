@@ -103,7 +103,7 @@ export type {
 export type { ToolManager } from './tool-manager';
 export { SELECT_TOOL } from './select-tool';
 // For the tools of the sketcher (ADR 0024): the same click tolerance and Escape test as here.
-export { CLICK_TOLERANCE_PX } from './select-tool';
+export { CLICK_TOLERANCE_PX } from './constants';
 export { isPlainEscape } from './key-events';
 export { createFeatureEditor } from './feature-dialog/feature-editor';
 export type {

@@ -23,6 +23,15 @@ export type ProfileCurve =
       readonly center: Vec2;
       readonly radius: number;
       readonly id?: string;
+    }
+  | {
+      // M29: a clamped polynomial B-spline (BSplineShape of core); it runs from the first pole
+      // to the last one.
+      readonly kind: 'bspline';
+      readonly degree: number;
+      readonly poles: readonly Vec2[];
+      readonly knots: readonly number[];
+      readonly id?: string;
     };
 
 export type ProfileLoop = readonly ProfileCurve[];
@@ -40,6 +49,8 @@ const ORTHONORMAL_TOLERANCE = 1e-9;
 const POINT_TOLERANCE = 1e-7;
 /** Spec 06: the two radii of an arc agree within this, relative. */
 const RADIUS_TOLERANCE = 1e-7;
+/** Geom_BSplineCurve::MaxDegree(): OCCT refuses a higher degree (M29). */
+const MAX_SPLINE_DEGREE = 25;
 /** Spec 06: an arc radius must be larger than this. */
 const MIN_ARC_RADIUS = 1e-9;
 
@@ -103,6 +114,14 @@ function readVec2(x: unknown): Vec2 | undefined {
   return v === undefined ? undefined : [v[0] ?? Number.NaN, v[1] ?? Number.NaN];
 }
 
+/** An array of 2D points, each of 2 finite numbers; undefined otherwise. */
+function readVec2s(x: unknown): readonly Vec2[] | undefined {
+  if (!Array.isArray(x)) return undefined;
+  const items: readonly unknown[] = x;
+  const points = items.map(readVec2);
+  return points.every((v) => v !== undefined) ? points : undefined;
+}
+
 function readPlane(x: unknown, errors: string[]): Plane | undefined {
   if (!isObject(x)) {
     errors.push('plane must be an object');
@@ -123,7 +142,7 @@ function readPlane(x: unknown, errors: string[]): Plane | undefined {
   return read;
 }
 
-/** A loop: a single circle, or line/arc curves joined end to start, closed. */
+/** A loop: a single circle, or line/arc/bspline curves joined end to start, closed. */
 function readLoop(x: unknown, path: string, errors: string[]): ProfileLoop | undefined {
   if (!Array.isArray(x)) {
     errors.push(`${path} must be an array`);
@@ -220,10 +239,90 @@ function readCurve(x: unknown, path: string, errors: string[]): ProfileCurve | u
       }
       return { kind, center, radius, ...id };
     }
+    case 'bspline':
+      return readBSpline(x, path, errors, id);
     default:
       errors.push(`${path}: unknown curve kind ${String(kind)}`);
       return undefined;
   }
+}
+
+/**
+ * A B-spline (M29), checked so that Geom_BSplineCurve never throws on it: integer degree in
+ * 1..MAX_SPLINE_DEGREE, at least degree + 1 finite poles, poles + degree + 1 finite clamped
+ * knots (checkKnots). Its ends are the first and the last pole (readLoop).
+ */
+function readBSpline(
+  x: object,
+  path: string,
+  errors: string[],
+  id: { readonly id?: string },
+): ProfileCurve | undefined {
+  const degree: unknown = Reflect.get(x, 'degree');
+  const polesValue: unknown = Reflect.get(x, 'poles');
+  const knotsValue: unknown = Reflect.get(x, 'knots');
+  if (
+    typeof degree !== 'number' ||
+    !Number.isInteger(degree) ||
+    degree < 1 ||
+    degree > MAX_SPLINE_DEGREE
+  ) {
+    errors.push(`${path}: degree must be an integer from 1 to ${String(MAX_SPLINE_DEGREE)}`);
+    return undefined;
+  }
+  const poles = readVec2s(polesValue);
+  if (poles === undefined) {
+    errors.push(`${path}: poles must be an array of 2 finite numbers each`);
+    return undefined;
+  }
+  if (poles.length < degree + 1) {
+    errors.push(
+      `${path}: a spline of degree ${String(degree)} needs at least ${String(degree + 1)} poles`,
+    );
+    return undefined;
+  }
+  const knots = readNumbers(knotsValue, poles.length + degree + 1);
+  if (knots === undefined) {
+    errors.push(`${path}: knots must be poles + degree + 1 finite numbers`);
+    return undefined;
+  }
+  const problem = knotsProblem(knots, degree);
+  if (problem !== undefined) {
+    errors.push(`${path}: ${problem}`);
+    return undefined;
+  }
+  return { kind: 'bspline', degree, poles, knots: [...knots], ...id };
+}
+
+/**
+ * Why a knot vector of the right length is not clamped, or undefined when it is: the first
+ * degree + 1 knots equal, the last degree + 1 knots equal, first < last, the interior knots
+ * strictly between them, non-decreasing and none repeated more than degree times. The range
+ * need not be [0, 1].
+ */
+function knotsProblem(knots: readonly number[], degree: number): string | undefined {
+  const first = knots[0] ?? Number.NaN;
+  const last = knots[knots.length - 1] ?? Number.NaN;
+  const interior = knots.slice(degree + 1, knots.length - degree - 1);
+  if (!knots.slice(0, degree + 1).every((k) => k === first)) {
+    return `knots must be clamped: the first ${String(degree + 1)} must be equal`;
+  }
+  if (!knots.slice(knots.length - degree - 1).every((k) => k === last)) {
+    return `knots must be clamped: the last ${String(degree + 1)} must be equal`;
+  }
+  if (!(first < last)) return 'the first knot must be smaller than the last one';
+  if (!interior.every((k) => first < k && k < last)) {
+    return 'interior knots must lie strictly between the first and the last knot';
+  }
+  if (interior.some((k, i) => i > 0 && k < (interior[i - 1] ?? k))) {
+    return 'knots must not decrease';
+  }
+  let run = 0;
+  for (let i = 0; i < interior.length; i++) {
+    run = i > 0 && interior[i] === interior[i - 1] ? run + 1 : 1;
+    if (run > degree) return `an interior knot must not repeat more than ${String(degree)} times`;
+  }
+  return undefined;
 }
 
 /**
@@ -238,11 +337,13 @@ function readId(x: unknown, path: string, errors: string[]): { readonly id?: str
 }
 
 function startOf(c: ProfileCurve | undefined): Vec2 | undefined {
-  return c === undefined || c.kind === 'circle' ? undefined : c.from;
+  if (c === undefined || c.kind === 'circle') return undefined;
+  return c.kind === 'bspline' ? c.poles[0] : c.from;
 }
 
 function endOf(c: ProfileCurve | undefined): Vec2 | undefined {
-  return c === undefined || c.kind === 'circle' ? undefined : c.to;
+  if (c === undefined || c.kind === 'circle') return undefined;
+  return c.kind === 'bspline' ? c.poles[c.poles.length - 1] : c.to;
 }
 
 /** Spec 06: coordinates agree within POINT_TOLERANCE · max(1, |coordinate|). */
