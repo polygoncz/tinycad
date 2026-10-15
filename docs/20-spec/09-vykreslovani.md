@@ -15,15 +15,18 @@ milestones:
   - "[[M15-export-a-dokonceni]]"
   - "[[M17-kamera-a-view-cube]]"
   - "[[M17.1-rezim-otaceni]]"
+  - "[[M22-rezimy-zobrazeni]]"
+  - "[[M23-postprocessing-a-ao]]"
+  - "[[M24-realisticke-zobrazeni]]"
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-14
+updated: 2026-10-15
 ---
 # 09 – `render`: vykreslování
 
-> **Pojmy:** [[Viewport]], [[Handle tvaru]], [[Těleso]]  
-> **Milník:** [[M08-vykreslovani]], kamera a view cube [[M17-kamera-a-view-cube]]  
+> **Pojmy:** [[Viewport]], [[Handle tvaru]], [[Těleso]], [[Styl zobrazení]]  
+> **Milník:** [[M08-vykreslovani]], kamera a view cube [[M17-kamera-a-view-cube]], režimy zobrazení [[M22-rezimy-zobrazeni]]  
 > **Rozhodnutí:** [[0019-vlastni-ovladani-kamery|ADR 0019]], [[0020-rezim-otaceni-kamery|ADR 0020]]
 
 Zobrazuje výsledek regenerace pomocí Three.js a odpovídá na otázku „co je pod kurzorem“. O dokumentu ani featurách neví nic – pracuje s tělesy (`BodyId`), handle a sítěmi. Závisí na `core`, typech z `kernel`, typech z `interaction` (port `ViewportPort`, události a `BodyId`, [[0009-platformove-nezavisla-domena|ADR 0009]]) a knihovně `three`.
@@ -57,6 +60,7 @@ export interface Viewport extends ViewportPort, Disposable {
   setViewCubeLabels(labels: ViewCubeLabels): void;       // M17: popisky stěn a šipek view cube (viz View cube)
   setOrbitMode(mode: OrbitMode): void;                    // M17.1: režim otáčení (viz Kamera → Režim otáčení); stejná hodnota = nic
   onOrbitModeToggle(listener: () => void): Unsubscribe;   // M17.1: klik na tlačítko režimu u view cube; dispose odběratele uvolní
+  setDisplayStyle(style: DisplayStyle): void;             // M22: styl zobrazení (viz Styl zobrazení); stejný plán = nic
 
   readonly events: Subscribable<{ pointer: ViewPointerEvent; key: ViewKeyEvent }>;
 }
@@ -88,6 +92,8 @@ export interface ScenePalette {
   readonly axes: readonly [x: number, y: number, z: number];   // obě palety 0xff3b30, 0x34c759, 0x0a84ff (mockup)
   readonly grid: readonly [center: number, line: number];
   readonly viewCube: readonly [face: number, text: number];   // M17: světlá 0xffffff, 0x374151; tmavá 0x4b4f57, 0xe5e7eb
+  readonly hiddenEdge: number;  // M22: čárkované skryté hrany; světlá 0x8b929c, tmavá 0x6b7280
+  readonly meshLine: number;    // M22: čáry triangulace; světlá 0x8e99a8, tmavá 0x5a7fb0
 }
 export const LIGHT_PALETTE: ScenePalette;
 export const DARK_PALETTE: ScenePalette;
@@ -278,6 +284,106 @@ Zvýraznění plochy je **malá vlastní kopie** jejích trojúhelníků: čist�
 - `OverlayLayer implements OverlayPort`: `OverlayShape` → `LineSegments`/`Points` ve vlastní skupině scény, styly `preview` a `construction` jako dva sdílené materiály. `set(id, …)` uvolní předchozí geometrii pod stejným `id`. `lines` s lichým počtem bodů je chyba (assert), pod `id` pak zůstane předchozí stav. `construction` je čárkovaná (`LineDashedMaterial`).
 - Zvýraznění a overlay do pickingu nevstupují. Zvýraznění plochy se kreslí nad plochou tělesa díky `polygonOffset` (u čar a bodů nemá účinek). Hrany zvýraznění a overlay mají `depthTest` zapnutý a vyšší `renderOrder` (zvýraznění 1, overlay 2): na stejné hloubce vyhrají, ale tělesa před nimi je zakryjí.
 
+## Styl zobrazení
+
+> **Pojem:** [[Styl zobrazení]] · **Milníky:** [[M22-rezimy-zobrazeni|M22]] (čárové režimy, průhlednost, triangulace), [[M23-postprocessing-a-ao|M23]] (AO, cíl), [[M24-realisticke-zobrazeni|M24]] (Realistic, cíl)
+
+Jak se kreslí tělesa. Je to předvolba stránky jako režim otáčení: zdroj pravdy je `ui` (uloží ji), `app` ji předá přes `ViewSettings.setDisplayStyle` ([[11-ui#Kompoziční kořen (app)]]) a viewport ji jen použije. Do dokumentu ani logu operací nepatří. Liší se od průhlednosti *tělesa*, kterou [[Q073 Průhlednost a barva těles|Q073]] odložila: tady jde o průhlednost celé scény jako pomůcku pohledu.
+
+### Hodnota a plán (`display-style.ts`, bez `three`)
+
+```ts
+export type DisplayMode = 'shaded' | 'hiddenRemoved' | 'hiddenVisible' | 'wireframe';   // M24: + 'realistic'
+export const DISPLAY_MODES: readonly DisplayMode[];   // pořadí v menu, tak jak je výčet výše
+
+export interface DisplayStyle {
+  readonly mode: DisplayMode;
+  readonly edges: boolean;        // hrany B-rep; platí jen v 'shaded'
+  readonly transparent: boolean;  // platí jen v 'shaded'
+  readonly mesh: boolean;         // čáry triangulace; platí ve všech režimech
+  // M23: readonly ao: boolean;
+}
+export const DEFAULT_DISPLAY_STYLE: DisplayStyle;   // { mode: 'shaded', edges: true, transparent: false, mesh: false }
+export const TRANSPARENT_FACE_OPACITY = 0.35;
+
+/** Plochý plán: jediné, podle čeho se render rozhoduje. Zmrazený. */
+export interface DisplayPlan {
+  readonly faces: 'lit' | 'flat' | 'hidden';   // M24: + 'physical'
+  readonly faceOpacity: number;                // 1, nebo TRANSPARENT_FACE_OPACITY
+  readonly edges: boolean;                     // viditelné hrany B-rep
+  readonly hiddenEdges: 'none' | 'dashed';     // druhý průchod hran za plochami
+  readonly meshLines: boolean;
+  readonly xray: boolean;                      // picking nekontroluje zákryt, zvýraznění bez testu hloubky
+  // M23: readonly ao: boolean;
+}
+export function resolveDisplay(style: DisplayStyle): DisplayPlan;
+export function samePlan(a: DisplayPlan, b: DisplayPlan): boolean;
+```
+
+Pole, které v daném režimu neplatí, se **ignoruje, ale nemaže**: po návratu do Shaded platí, co bylo nastavené. `resolveDisplay` je jediné místo, kde se rozhoduje podle režimu. Zbytek `render` čte jen plán.
+
+### Rozhodovací tabulka
+
+| Režim (`mode`) | `faces` | `faceOpacity` | `edges` | `hiddenEdges` | `xray` | AO (M23) | Milník |
+|---|---|---|---|---|---|---|---|
+| `shaded` | `lit` | 1 | `style.edges` | `none` | ne | volitelně | M22 |
+| `shaded`, `transparent` | `lit` | 0,35 | `style.edges` | `none` | **ano** | ne | M22 |
+| `hiddenRemoved` | `flat` | 1 | ano | `none` | ne | ne | M22 |
+| `hiddenVisible` | `flat` | 1 | ano | `dashed` | **ano** | ne | M22 |
+| `wireframe` | `hidden` | 1 | ano | `none` | **ano** | ne | M22 |
+| `realistic` (cíl) | `physical` | 1 | ne | `none` | ne | volitelně | M24 |
+
+`meshLines = style.mesh` ve všech řádcích. Ve `wireframe` a v průhledném `shaded` plochy hloubku nezapisují, takže hrany za nimi jsou vidět bez druhého průchodu (`hiddenEdges: 'none'`), a proto je tam i `xray`.
+
+### Materiály (`BodyMaterials`, sdílí `BodyLayer`)
+
+- `faces` (`lit`): dnešní `MeshStandardMaterial`. Při `faceOpacity < 1`: `transparent: true`, `opacity`, `depthWrite: false`. Při `1` zpět `transparent: false`, `depthWrite: true`. Změna `transparent` vyžaduje `needsUpdate = true`.
+- `facesFlat` (`flat`): `MeshBasicMaterial` v `palette.background`, zapisuje hloubku, `polygonOffset` 1/1 jako `faces`, aby hrany na ploše vyhrály.
+- `facesHidden` (`hidden`): `MeshBasicMaterial` s `colorWrite: false` a `depthWrite: false`. Objekt **zůstává `visible`**: raycast pickingu ho dál zasahuje (plochy jdou vybrat ve všech režimech) a obálka a ořez kamery se nemění.
+- `hiddenEdges`: `LineDashedMaterial` v `palette.hiddenEdge`, `depthFunc: GreaterDepth`, `depthWrite: false`.
+- `meshLines`: `LineBasicMaterial` v `palette.meshLine`.
+- `setPalette` přebarví i `facesFlat`, `hiddenEdges` a `meshLines`. `dispose` je uvolní.
+
+### Barvy těles
+
+Materiály podle barvy (`setBodyColor`, M15) žijí dál bez ohledu na plán, plán jen rozhoduje, který materiál pohled dostane: `lit` → materiál barvy (nebo `faces`, když těleso barvu nemá), `flat` → `facesFlat`, `hidden` → `facesHidden`. Barva se v `flat` a `hidden` neztrácí, po návratu do `lit` platí. Průhlednost (`opacity`, `transparent`, `depthWrite`) se nastavuje na `faces` **i na všech materiálech barev**, včetně materiálu barvy vytvořeného až po přepnutí (`acquireColor` klonuje z aktuálního `faces`).
+
+### Skryté hrany
+
+`BodyView` má třetí objekt `hiddenEdges: THREE.LineSegments`, který **sdílí geometrii** s `edges` (jeden buffer na GPU, dva způsoby kreslení). `lineDistance` pro čárky se spočítá při vytvoření pohledu (`computeLineDistances`). `renderOrder` 0,5: kreslí se po všech plochách (0), jejichž hloubku porovnává, a před zvýrazněním (1). Viditelný jen při `hiddenEdges: 'dashed'`.
+
+**Čárky v pixelech:** `LineDashedMaterial` měří `dashSize`/`gapSize` ve světových jednotkách, takže by se při zoomu ortografické kamery čárky slévaly nebo rozpadaly. `BodyLayerInternal.setPixelSize(worldPerPx)` je přepočítá na 6 px čárky a 4 px mezery. Viewport ji volá v `draw()` vedle `sketchLayer.setPixelSize`. Stejná hodnota nic nemění, překreslení nevyvolá (volá se uvnitř snímku).
+
+### Triangulace
+
+`BodyView.setMeshLines(material | null)`: při prvním zapnutí postaví `WireframeGeometry` z geometrie ploch a přidá `LineSegments` do skupiny tělesa. Při `null` ho odebere a geometrii **uvolní** (velké modely mají statisíce hran trojúhelníků, nedrží se zbytečně). `dispose` pohledu je uvolní také. Čáry triangulace do pickingu nevstupují. Hloubku proti plochám řeší stávající `polygonOffset` ploch.
+
+### `BodyLayerInternal`
+
+```ts
+setDisplayPlan(plan: DisplayPlan): void;   // samePlan s minulým → nic; jinak přepne všechny pohledy a requestRender()
+setPixelSize(worldPerPx: number): void;    // délka čárek skrytých hran (viz výše)
+```
+
+Pohled vytvořený v `apply` po přepnutí dostane aktuální plán. Výchozí plán je `resolveDisplay(DEFAULT_DISPLAY_STYLE)`.
+
+**Dvě vrstvy těles (od [[M21-vstupni-stav-editovane-featury|M21]], [[0025-vstupni-stav-editovane-featury|ADR 0025]]):** styl platí jen pro **hlavní vrstvu** (`BodyLayers.main`). Náhledová vrstva (`preview`, průhledná v barvě náhledu) má vlastní vizuální roli jako overlay a skici, takže vypadá ve všech režimech stejně a plán ani `setPixelSize` nedostává. `BodyLayers` proto `setDisplayPlan` a `setPixelSize` jen předá `main`.
+
+### Picking a zvýraznění
+
+- **„Co vidíš, to vybereš“:** `Picker` dostane volbu `xray: () => boolean` (z aktuálního plánu). Při `true` se přeskočí **všechny** kontroly zákrytu (hrany, vrcholy, entity a oblasti skic). Z kandidátů v toleranci vyhrává nejbližší ke kameře, plochy se vybírají dál raycastem (nejbližší zásah). Při `false` beze změny.
+- `HighlightLayerInternal.setXray(on)`: zvýraznění ploch, těles i hran má `depthTest = !on`, takže je vidět i vybraná zadní hrana. Platí i pro cíle vytvořené po přepnutí. Stejná hodnota nic nepřekresluje.
+- Skici, overlay, manipulátory, mřížka, view cube a náhledová vrstva (M21) se stylem nemění.
+
+### `Viewport.setDisplayStyle(style)`
+
+`resolveDisplay(style)`. Při stejném plánu jako minule nic, jinak `bodies.setDisplayPlan`, `highlight.setXray(plan.xray)`, uložení plánu pro picker a `requestRender()`. Funguje i před `mount` (plán platí od prvního snímku).
+
+### Známá omezení
+
+- **Průhlednost** řadí Three.js po objektech (tělesech), ne po trojúhelnících. Vnitřní stěny konkávního tělesa se mohou prolnout v nesprávném pořadí. Order-independent transparency (depth peeling, weighted blended OIT) je mimo rozsah M22.
+- Ve `hiddenVisible` kryjí plochy skicu stejně jako v `shaded`, ale picking skic zakrytí nekontroluje (`xray`). Je to vědomá nekonzistence, protože skica za tělesem je při editaci vidět slabě (M19.2).
+
 ## Manipulátory
 
 `ManipulatorLayer` (typ splňuje `ManipulatorPort`; vnitřní vrstva má `pick` s projekcí a port za ni doplní viewport, stejně jako u skic; [[10-interakce#Manipulátory (M18)]], [[0021-manipulatory-kotvy-z-regenerace|ADR 0021]], [[0022-rezimy-a-hud-manipulatoru|ADR 0022]]) kreslí úchyty [[Manipulátor|manipulátorů]] a pickuje je. Text s hodnotou kreslí `ui` (HUD), ne `render`.
@@ -375,7 +481,7 @@ Filtr (`PickFilter`, [[10-interakce#Port viewportu]], M10.1): průchod přes hra
 ## Testy
 
 `render` se testuje nejhůř, proto v něm má být co nejméně logiky ([[Q061 Testy render v Node|Q061]]):
-- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, od M17 operace kamery (`orbit`, `pan`, `zoomAt`, `turn`, `ease`, `interpolate`, `clipRange`, `orientationFor`), `cameraGesture`, `wheelFactor`, `buildViewCube` a `cubeRegionAt`, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor` (od M17 zaniká), od M13 `pickSketchRegion` a `pointInRegion`, od M15 `parseHexColor`, `pickHandle`, `projectHandles`, `handleBounds`, `handleHidden`, `arcPoints` a `viewChangedSince`, od M19.2 `sketchHits`, `sketchGridStep` a `gridLines` (`sketch-grid.ts`) (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
+- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, od M17 operace kamery (`orbit`, `pan`, `zoomAt`, `turn`, `ease`, `interpolate`, `clipRange`, `orientationFor`), `cameraGesture`, `wheelFactor`, `buildViewCube` a `cubeRegionAt`, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor` (od M17 zaniká), od M13 `pickSketchRegion` a `pointInRegion`, od M15 `parseHexColor`, `pickHandle`, `projectHandles`, `handleBounds`, `handleHidden`, `arcPoints` a `viewChangedSince`, od M19.2 `sketchHits`, `sketchGridStep` a `gridLines` (`sketch-grid.ts`), od M22 `resolveDisplay` a `samePlan` (`display-style.ts`) (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
 - Testy `render` nesmí importovat `@/kernel/testing` (`FakeKernel`): `render` závisí na `kernel` jen typově a `testing.ts` otevírá jen hodnotovým závislostem ([[01-architektura]]). Sítě v testech jsou ruční, malé a záměrně s klíči ploch mimo pořadí.
 - Kód s Three.js (`Viewport`, `BodyView`, vrstvy) se ověřuje ručně na dev stránce `dev/viewport.html` a e2e testy (Playwright). Three.js ale běží i v Node, takže část kódu s ním má testy v Node: `Picker` (`picker.test.ts` s ruční sítí; od [[M19.1-opravy-z-revize|M19.1]] i hrany z více segmentů, kontrola zakrytí a `body`, `edgeIndex` a `point` v aserci, od M19.2 `isVisible`), `SketchLayer` a `HighlightLayer`.
 

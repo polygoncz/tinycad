@@ -16,7 +16,7 @@ finished:
 tags:
   - milnik
 created: 2026-10-13
-updated: 2026-10-13
+updated: 2026-10-15
 ---
 # M16 – Vlastní OCCT build
 
@@ -26,7 +26,7 @@ updated: 2026-10-13
 
 **Specifikace:** [[06-geometricke-jadro#Volba WASM buildu OCCT (spike v M7)|06 – volba WASM buildu]], [[0013-replicad-opencascadejs|ADR 0013]]
 
-**Návrat do plánu (Pavel 2026-10-14):** po [[M21-vstupni-stav-editovane-featury|M21]], kvůli zásobníku Emscriptenu (A7).
+**Návrat do plánu (Pavel 2026-10-14):** po [[M21-vstupni-stav-editovane-featury|M21]], kvůli zásobníku Emscriptenu (A7). Od 2026-10-15 až po režimech zobrazení [[M22-rezimy-zobrazeni|M22]]–[[M24-realisticke-zobrazeni|M24]].
 
 **Navazuje na:** [[M07-kernel-occt]]. Technicky stačí hotové M7, v roadmapě je zařazený až za [[M15-export-a-dokonceni|M15]]. Dřív se vyplatí, pokud předpřipravenému buildu bude chybět třída (např. pro [[M14-topologicke-pojmenovani|M14]]) nebo když bude pomalé počítání map podtvarů ([[0013-replicad-opencascadejs#Důsledky|ADR 0013]]).
 
