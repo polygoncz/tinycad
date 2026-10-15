@@ -106,7 +106,13 @@ Jeden úkol = jedno spuštění subagenta `implementer`. Kontrakt je v [[12-skic
 
 ### 8. Nástroje (po sloučení M26)
 
-- Upřesní se po sloučení stopy A: nástroje `sketch.spline` a `sketch.fitSpline` nad snapperem z M26, glyfy a snapy pro spline (kotvy, bod na splinu).
+- Kontrakt se dopíše po sloučení M26 (stopa A) nad jeho snapperem; spustí ho hlavní sezení zprávou stopě C.
+- **Známé:** nástroje `sketch.spline` (přes řídicí body) a `sketch.fitSpline` (přes body) – klikání bodů se snapperem, dvojklik nebo Enter ukončí, Esc zruší ([[12-skicar#Spliny (M29)]]); `fitSpline` vzniká přes `interpolateSpline` z `core`.
+- **Otevřené body k rozhodnutí při kontraktu:**
+  - kotvy glyfů pro spline (`glyphViews` z M25) a jeho vazby (`tangent` na konci, `coincident` s koncem);
+  - snap „bod na křivce“ pro spline: `pointOnCurve` by v planegcs potřeboval `point_on_bspline` s volným parametrem → další proměnná a znovu korekce `dof` ([[Q087 Spline v řešiči a v jádře – zjištění z implementace|Q087]]); nabídnout, nebo pro spline vynechat;
+  - id splinu v `SolveResult.conflicting` (dnes id entity, ne vazby) – rozšířit kontrakt `SolveResult` po sloučení stopy B;
+  - řídicí lomená čára `bspline` stíní spline při pickingu.
 
 ## Akceptační kritéria
 
