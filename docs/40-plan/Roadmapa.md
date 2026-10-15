@@ -48,6 +48,11 @@ Jediná entita až do M10 je **kvádr (Box)**. Druhá entita v M11 je zkouška r
 | [[M22-rezimy-zobrazeni\|M22]] | Režimy zobrazení | `render`, `app`, `ui` | Shaded (hrany, průhlednost), Hidden lines removed/visible, Wireframe, přepínač triangulace; výběr „co vidíš, to vybereš“ ([[Styl zobrazení]]) |
 | [[M23-postprocessing-a-ao\|M23]] | Postprocessing a AO | `render`, `app`, `ui` | víceprůchodové vykreslování, ambient occlusion ([[Q077 Technika AO\|Q077]]) |
 | [[M24-realisticke-zobrazeni\|M24]] | Realistické zobrazení | `document`, `ops`, `persistence`, `interaction`, `render`, `app`, `ui` | režim Realistic: PBR, environment mapa, tone mapping, kontaktní stín; materiál tělesa v dokumentu ([[Q078 Sada materiálů těles\|Q078]]) |
+| [[M25-glyfy-vazeb\|M25]] | Glyfy vazeb | `sketch`, `sketcher`, `interaction`, `render`, `ui` | vazby jako značky u entit ve viewportu, výběr a mazání glyfu; seznam vazeb v panelu sbalený |
+| [[M26-snapper-a-auto-vazby\|M26]] | Snapper a auto-vazby | `sketch`, `solver-planegcs`, `sketcher`, `render` | přichycení ke geometrii a vodítka, automatické vazby při kreslení, nové vazby `pointOnCurve`, `midpoint`, zarovnání |
+| [[M27-oblouky-a-kruznice\|M27]] | Oblouky a kružnice | `sketch`, `sketcher`, `ui` | kružnice 2 body, 3 body, 2 a 3 tečny; oblouk 3 body a tečný; tečný oblouk v polyline |
+| [[M28-koty\|M28]] | Kóty | `sketch`, `solver-planegcs`, `features/*`, `sketcher`, `render`, `ui` | jeden nástroj Kóta s druhem podle polohy myši, nové druhy (vodorovná, svislá, úhel, průměr…), přetahování a uložená poloha |
+| [[M29-spliny\|M29]] | Spliny | `sketch`, `solver-planegcs`, `features/*`, `kernel`, `kernel-occt`, `sketcher`, `render` | kubický B-spline přes řídicí body (NURBS) a přes body, oblasti a vysunutí |
 
 **Noční rychloakce 2026-10-14:** [[M11-dalsi-entity|M11]]–[[M15-export-a-dokonceni|M15]] implementovány bez průběžného schvalování, rozhodnutí v [[Rozhodnutí noční rychloakce]]. M16 se tehdy nedělal – předpřipravený build stačil na celou první verzi. Pavel 2026-10-14 ho vrátil do plánu za M21 kvůli zásobníku Emscriptenu (A7 z [[Revize kódu 2026-10-14|revize kódu]]).
 
@@ -61,7 +66,9 @@ Stav milníků (`todo` / `doing` / `done`) je **jen ve vlastnostech** souborů m
 M0 → M1 → M2 → M3 ─┬─► M4 ────────────────────────┐
                    │                              │
           M1 → M5 ─┴─► M6 ─► M7 ─► M8 ─► M9 ─► M10 ─► M10.1 ─► M11 ─► M12 ─► M13 ─► M14 ─► M15 ─► M16
-                                                                                             └─► M17 ─► M17.1 ─► M18 ─► M19 ─► M19.1 ─► M19.2 ─► M20 ─► M21 ─► M22 ─► M23 ─► M24 ─► M16
+                                                                                             └─► M17 ─► M17.1 ─► M18 ─► M19 ─► M19.1 ─► M19.2 ─► M20 ─► M21 ─► M22 ─► M23 ─► M24 ─┬─► M25 ─► M26 ─► M27 ─┬─► M16
+                                                                                                                                                                                  ├─► M28 ───────────────┤
+                                                                                                                                                                                  └─► M29 (1–7) ─► M29 (8, po M26)
 ```
 
 M4 (persistence) a M5 (port jádra) na sobě nezávisí – pořadí lze prohodit. Persistence je dřív, protože ověří formát logu, dokud je čerstvý.
@@ -69,6 +76,24 @@ M4 (persistence) a M5 (port jádra) na sobě nezávisí – pořadí lze prohodi
 Milník `MNN.X` je neplánovaná úprava mezi dvěma milníky ([[Konvence vaultu#Principy|konvence]]); M10.1 nese opravy z revize architektury po M10.
 
 M16 (vlastní OCCT build) technicky potřebuje jen M7. Dlouho byl na konci, protože předpřipravený build stačí; od 2026-10-14 je zařazený za M21 kvůli zásobníku Emscriptenu a od 2026-10-15 za režimy zobrazení M22–M24 (Pavel chce teď pracovat na zobrazování). Přesune se dřív, pokud mu bude chybět API ([[0013-replicad-opencascadejs|ADR 0013]]).
+
+**Rozšíření skicáře (M25–M29)**, naplánované 2026-10-15 po M24: glyfy vazeb → snapper a auto-vazby → oblouky a kružnice → kóty → spliny. Glyfy jsou první, protože bez nich nejde vidět, co snapper a nové nástroje vytvořily; spliny poslední, protože jako jediné sahají až do jádra. Předpřipravený OCCT build má `Geom2d_BSplineCurve`, takže M29 na M16 nečeká. Přehled v [[12-skicar#Rozšíření skicáře (M25–M29)]].
+
+### Souběžné stopy (pokus od M25)
+
+Pavel 2026-10-15 chtěl zkusit, jestli milníky může dělat víc agentů souběžně. Rozhoduje průnik dotčených souborů, ne pořadí milníků, proto tři stopy, každá ve vlastní session a vlastním git worktree:
+
+| Stopa | Milníky | Poznámka |
+|---|---|---|
+| A – interakce | [[M25-glyfy-vazeb\|M25]] → [[M26-snapper-a-auto-vazby\|M26]] → [[M27-oblouky-a-kruznice\|M27]] | postupně, všechny žijí v `sketch-session.ts`; [[Q084 Inference automatických vazeb\|Q084]] rozhodne stopa s Pavlem při startu M26 |
+| B – kóty | [[M28-koty\|M28]] | souběžně s A |
+| C – spliny | [[M29-spliny\|M29]] úkoly 1–7 | souběžně; úkol 8 (nástroje) až po sloučení M26 |
+
+Pravidla:
+1. Kontrakty sdílených typů jsou zafixované předem ve spec 12; stopa přidává jen své členy unií a větve `switch`.
+2. Ve vaultu stopa mění jen **svůj milník**, **svou sekci spec 12** a své odstavce ve spec 06, 09, 10, 11. Deník nepíše – průběh zapisuje do sekce *Průběh stopy* ve svém milníku; do deníku ho přenese hlavní sezení při sloučení. Nové otázky zakládá s dalším volným číslem po kontrole `ls docs/60-otazky` v `main` a hned je hlásí.
+3. Stopa commituje na svou větev, do `main` neslučuje. Před sloučením si natáhne `main`, vyřeší konflikty a spustí `npm run check` a e2e. Sloučení dělá hlavní sezení, po jednom.
+4. Retrospektiva série zhodnotí, jestli se souběh vyplatil (čas, konflikty, kvalita).
 
 ## Jak pracovat s milníkem
 

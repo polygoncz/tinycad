@@ -15,6 +15,11 @@ milestones:
   - "[[M12-skicar]]"
   - "[[M13-extrude-revolve]]"
   - "[[M14-topologicke-pojmenovani]]"
+  - "[[M25-glyfy-vazeb]]"
+  - "[[M26-snapper-a-auto-vazby]]"
+  - "[[M27-oblouky-a-kruznice]]"
+  - "[[M28-koty]]"
+  - "[[M29-spliny]]"
 tags:
   - spec
 created: 2026-10-12
@@ -253,6 +258,146 @@ Od M19.2 (D2) tělesa skici zakrývají, při kreslení i při pickingu: entita 
 - „Most“ – úsečka spojující vnitřní smyčku s vnější: stěna ji obsahuje tam i zpět, díra nevznikne a `makeFace` nejspíš selže (`'operation-failed'`); uživatel most smaže.
 
 Každá položka je v [[Rozhodnutí noční rychloakce#M12 – Skicář|rozhodnutích R31–R50]]: splines, odsazení (offset), úhlová kóta a vzdálenost bod–přímka, vazba bod na křivce (snap na vnitřek úsečky), dělení křivek v průsečících (trim), značky vazeb ve viewportu (vazby jsou jen v panelu), tažení úseček a kružnic (jen body), undo uvnitř skicáře, skica na ploše tělesa (M14), výplň rovin. Osy počátku a výběr oblasti přidal M13, popisky kót ve viewportu M19.2 ([[11-ui#Komponenty]], Režim skici).
+
+## Rozšíření skicáře (M25–M29)
+
+Naplánováno 2026-10-15, zatím jen rozsah – kontrakt se do sekcí výše dopíše při startu každého milníku. Řeší několik položek z *Mimo rozsah M12* (značky vazeb, splines, úhlová kóta a vzdálenost bod–přímka, bod na křivce).
+
+| Milník | Co přibude | Dopad na data | Otázka |
+|---|---|---|---|
+| [[M25-glyfy-vazeb\|M25]] | glyfy vazeb ve viewportu, výběr a mazání glyfu, seznam vazeb v panelu sbalený | žádný (`SketchDrawing` dostane glyfy) | [[Q083 Rozložení glyfů vazeb\|Q083]] |
+| [[M26-snapper-a-auto-vazby\|M26]] | snapper (čistá funkce v `sketch`), vodítka, automatické vazby ověřené řešičem, potlačení Ctrl/Cmd | nové vazby `pointOnCurve`, `midpoint`, zarovnání bodů (zpětně kompatibilní) | [[Q084 Inference automatických vazeb\|Q084]] |
+| [[M27-oblouky-a-kruznice\|M27]] | kružnice 2 body, 3 body, 2 a 3 tečny; oblouk 3 body a tečný; tečný oblouk v polyline | žádný | – |
+| [[M28-koty\|M28]] | jeden nástroj Kóta (druh podle polohy myši), vodorovná, svislá, bod–přímka, úhel, průměr; přetahování | nové druhy kót, poloha popisku | [[Q085 Poloha kóty v datech\|Q085]] |
+| [[M29-spliny\|M29]] | kubický B-spline přes řídicí body (NURBS) a přes body; oblasti, vysunutí | nová entita, nová varianta `ProfileCurve` v `kernel` | [[Q086 Spline přes body v řešiči\|Q086]] |
+
+**Souběžná práce:** M25–M27 (stopa A), M28 (stopa B) a M29 bez nástrojů (stopa C) se implementují souběžně ve třech worktree ([[Roadmapa#Závislosti milníků]]). Kontrakty sdílených typů jsou proto zafixované níže předem: každá stopa přidá jen své členy unií `SketchEntity`, `SketchConstraint` a `Curve2` a své větve do vyčerpávajících `switch` (`parseSketchData`, adaptér planegcs, `removeItems`, kresba). Nástroje splinu (M29) přijdou až po sloučení M26, protože stojí na snapperu.
+
+## Glyfy vazeb (M25)
+
+Rozhodnuto v [[Q083 Rozložení glyfů vazeb|Q083]]: styl Onshape, glyfy kreslí **vrstva v `ui` nad pohledem** stejně jako kóty z M19.2 (ne `render`). Nový `PickKind` ani změna `render` nevzniká.
+
+```ts
+// sketcher/sketch-glyphs.ts (čistá funkce, sketcher ji volá při každé změně stavu)
+export type GlyphKind = Exclude<SketchConstraint['kind'], DimensionKind>;   // geometrické vazby; každá stopa přidá své
+export interface SketchGlyphView {
+  readonly constraint: SketchConstraintId;
+  readonly kind: GlyphKind;
+  /** Entita, u které glyf leží; vazba dvou entit má dva glyfy (u každé jeden). */
+  readonly entity: SketchEntityId;
+  /** Kotva na entitě ve světových souřadnicích. */
+  readonly anchor: Vec3;
+  /** Jednotkový směr v rovině skici (ve světě), kterým se glyfy u téže kotvy skládají; kolmo od entity. */
+  readonly side: Vec3;
+  /** Pořadí v řadě u téže kotvy (0, 1, …) v pořadí vazeb v datech. */
+  readonly slot: number;
+  /** Vazba je pod kurzorem (hover glyfu) nebo vybraná. */
+  readonly hover: boolean;
+  readonly selected: boolean;
+}
+export function glyphViews(
+  plane: Plane, data: SketchData, visible: 'all' | ReadonlySet<SketchItemId>,
+  selection: readonly SketchItemId[], hover: SketchItemId | null, prev: readonly SketchGlyphView[],
+): readonly SketchGlyphView[];
+```
+
+- **Které vazby:** `visible = 'all'` (přepínač „Zobrazit vazby“) → všechny geometrické vazby; jinak ty, které odkazují na entitu z množiny (vybrané entity, entita pod kurzorem a entity vybrané nebo najeté vazby). Glyf se kreslí u každé jejich entity, nejen u vybrané. Kóty glyf nemají (mají vlastní kresbu).
+- **Kotvy:** bod (`coincident`, `fix`) = bod; úsečka = střed; kružnice = bod nahoře (úhel π/2); oblouk = střed oblouku; `side` = normála úsečky otočená k +y roviny (svislá úsečka → −x), u kružnice a oblouku směr od středu ke kotvě, u bodu +x+y normalizované. `coincident` má jeden glyf u bodu `a` (vykreslí se jako plná tečka, ne ikona). Stopy M26 a M29 doplní kotvy svých vazeb a entit.
+- **Neměnnost:** nezměněná položka zůstane stejným objektem z `prev`, nezměněný výsledek stejným polem (jako `dimensionViews`).
+- **Stav:** `SketchState.glyphs: readonly SketchGlyphView[]`. Přepínač: `SketchEditor.showAllConstraints: Observable<boolean>` a `setShowAllConstraints(on)`, výchozí `false`, přežije zavření skici, neukládá se (jako `gridSnap`).
+- **Hover a výběr vazby** používají stávající `SketchSession.setHover(id)` a `select(id, { additive })` s id vazby; smazání stávající akcí mazání nad výběrem. Najetá nebo vybraná vazba zvýrazní své entity v kresbě (styl `hover`/`selected`), pokud už nejsou vybrané.
+- **`ui`:** `SketchGlyphs.vue` (sourozenec `SketchDimensions`, jen při otevřené skice) a čistá `glyphLayout(glyphs, project, { sizePx: 16, gapPx: 2, offsetPx: 10 })` → střed každého glyfu v px: průmět kotvy + `side` promítnutý do obrazovky a normalizovaný × (`offsetPx` + `slot` · (`sizePx` + `gapPx`) + `sizePx`/2). Nepromítnutá kotva → glyf se nekreslí. Glyf je tlačítko s ikonou druhu (SVG v `ui/sketch-glyph-icons.ts`, `aria-label` = název vazby, `aria-pressed` = vybraná), `pointerenter`/`pointerleave` → `setHover`, klik → `select` (aditivně podle `isAdditive`). Přepočet při změně `glyphs` a při `onViewChanged`.
+- **Panel:** seznam vazeb a kót je sbalitelná sekce (`<details>`), výchozí sbalená, stav se neukládá. Přepínač „Zobrazit vazby“ je v panelu nad ní.
+- **Testy:** `glyphViews` (které vazby pro výběr/hover/`all`, dva glyfy u dvouentitové vazby, `slot` u sdílené kotvy, kotvy a `side` všech druhů, stabilita objektů); `glyphLayout` (skládání, nepromítnutá kotva); `SketchGlyphs.vue` (hover → `setHover`, klik → `select`, `aria-pressed`); session (najetá vazba zvýrazní entity); e2e (výběr úsečky ukáže glyf `horizontal`, klik a Delete vazbu smaže).
+
+## Kóty (M28)
+
+Rozhodnuto v [[Q085 Poloha kóty v datech|Q085]]. Nové druhy kót a volitelná poloha; staré dokumenty jsou platné beze změny, verze schématu skici zůstává 1.
+
+```ts
+export type DimensionKind =
+  | 'distance' | 'hDistance' | 'vDistance' | 'pointLineDistance' | 'angle' | 'radius' | 'diameter';
+
+// nové členy SketchConstraint (všechny mají volitelné placement)
+| { kind: 'distance' | 'hDistance' | 'vDistance'; id; a: SketchEntityId; b: SketchEntityId; value: number; placement?: LinearPlacement }   // dva body
+| { kind: 'pointLineDistance'; id; point: SketchEntityId; line: SketchEntityId; value: number; placement?: LinearPlacement }
+| { kind: 'angle'; id; a: SketchEntityId; b: SketchEntityId; value: number; reverseA?: true; reverseB?: true; placement?: AngularPlacement } // dvě úsečky, 0 < value < π
+| { kind: 'radius' | 'diameter'; id; curve: SketchEntityId; value: number; placement?: RadialPlacement }
+
+/** Lineární kóta: kótovací čára rovnoběžná s měřeným směrem, ve vzdálenosti offset (mm, se znaménkem: kladná = vlevo od směru a→b; u hDistance nahoru, u vDistance doleva), popisek posunutý o along (mm) od středu. */
+export interface LinearPlacement { readonly kind: 'linear'; readonly offset: number; readonly along: number }
+/** Poloměr/průměr: popisek ve směru angle (rad, od osy x roviny) od středu, ve vzdálenosti distance (mm) od středu. */
+export interface RadialPlacement { readonly kind: 'radial'; readonly angle: number; readonly distance: number }
+/** Úhel: oblouk kóty o poloměru radius (mm) kolem průsečíku přímek, popisek v podílu t ∈ [0, 1] oblouku. */
+export interface AngularPlacement { readonly kind: 'angular'; readonly radius: number; readonly t: number }
+```
+
+- **Významy:** `hDistance` = |b.x − a.x|, `vDistance` = |b.y − a.y|, `pointLineDistance` = vzdálenost bodu od přímky úsečky, `angle` = úhel mezi směry `p1→p2` úseček (směr obrácený příznakem `reverseA`/`reverseB`), `diameter` = 2 · poloměr. `value > 0` vždy; u `angle` `0 < value < π`. Úhel se ukládá v radiánech, panel a viewport ho ukazují ve stupních.
+- **Kontrola dat:** `placement` je volitelný; když je, musí mít druh odpovídající kótě a konečná čísla, `radial.distance > 0`, `angular.radius > 0`, `0 ≤ t ≤ 1`. `pointLineDistance`: `point` je bod, `line` úsečka a bod není jejím koncem. `angle`: dvě různé úsečky.
+- **Řešič:** `hDistance`/`vDistance` → `difference` souřadnic se znaménkem podle aktuální polohy (b vpravo/nahoře = +, při shodě +), `pointLineDistance` → `p2l_distance`, `angle` → `l2l_angle_pppp` s body v pořadí podle příznaků, `diameter` → `circle_diameter`/`arc_diameter`. `placement` do řešiče nevstupuje a řešič ho vrací beze změny.
+- **Výběr druhu** (čistá funkce `sketch/dimension-placement.ts`):
+
+  ```ts
+  export type DimensionTarget =
+    | { readonly kind: 'points'; readonly a: SketchEntityId; readonly b: SketchEntityId }  // dva body nebo úsečka (její body)
+    | { readonly kind: 'pointLine'; readonly point: SketchEntityId; readonly line: SketchEntityId }
+    | { readonly kind: 'lines'; readonly a: SketchEntityId; readonly b: SketchEntityId }    // nerovnoběžné úsečky
+    | { readonly kind: 'round'; readonly curve: SketchEntityId };
+  export function dimensionTarget(selected: readonly SketchEntity[]): DimensionTarget | null;
+  /** Druh, hodnota a poloha kóty pro kurzor v rovině skici. null = degenerované (nulová délka, rovnoběžné úsečky). */
+  export function placeDimension(target: DimensionTarget, cursor: Vec2, data: SketchData): SketchConstraintDraft | null;
+  /** Nová poloha existující kóty pro kurzor; druh ani hodnotu nemění. */
+  export function movePlacement(c: DimensionConstraint, cursor: Vec2, data: SketchData): DimensionPlacement;
+  /** Poloha, kterou kóta bez placement používá (dnešní výchozí z M19.2). */
+  export function defaultPlacement(c: DimensionConstraint, data: SketchData): DimensionPlacement;
+  ```
+
+  - `points`: kurzor v pásu kolmém na úsečku AB (jeho průmět leží mezi A a B) → `distance` (zarovnaná); jinak, je-li |Δy kurzoru od středu| > |Δx| → `hDistance` (kurzor nad/pod), jinak `vDistance`. U vodorovné nebo svislé úsečky (do 1e-9) se zarovnaná nenabízí. Nulová měřená hodnota → `null`.
+  - `round`: kurzor uvnitř kružnice → `radius`, vně → `diameter` (jako Fusion).
+  - `lines`: kvadrant podle polohy kurzoru vůči průsečíku přímek → příznaky `reverseA`/`reverseB` a hodnota úhlu v tom kvadrantu.
+  - `placement` u všech = poloha odvozená z kurzoru (offset a along, úhel a vzdálenost, poloměr a t).
+- **Nástroj Kóta** (`sketcher`): klik na entitu nebo dvě entity (jako dnes) určí cíl; pak kóta **visí na myši** (náhled přes `SketchState.dimensions` s příznakem `preview: true`) a každý pohyb volá `placeDimension`. Klik ji zapíše a nastaví `editingDimension` (pole hodnoty dostane fokus). Esc náhled zruší. Druh se volí jen při vytváření.
+- **Přetažení:** popisek kóty v `ui` je tlačítko; tah (posun > `CLICK_TOLERANCE_PX`) volá `SketchSession.moveDimension(id, x, y)` s px plochy pohledu (session převede přes `screenToRay` do roviny a `movePlacement`) a `endMoveDimension()` zapíše `setParams` bez řešiče. Klik bez tahu vybírá jako dnes.
+- **Kresba:** `SketchDimensionView` dostane `kind: DimensionKind`, `placement` (vždy vyplněné, výchozí z `defaultPlacement`), světové body potřebné ke kresbě (`from`, `to`, u úhlu vrchol a směry) a `preview?: true`. `dimensionLayout` v `ui` kreslí z `placement` místo pevného `offsetPx`; úhel obloukem se šipkami, průměr `⌀…`, poloměr `R…`, úhel `…°`.
+- **Testy:** `parseSketchData` pro každý nový druh a `placement`; `measure` všech druhů; `dimensionTarget`; `placeDimension` (pás → zarovnaná, nad → vodorovná, vedle → svislá, uvnitř/vně kružnice, čtyři kvadranty úhlu, degenerované → `null`); `movePlacement` a `defaultPlacement`; adaptér planegcs (každý druh drží hodnotu, `placement` beze změny, úhel ve správném kvadrantu); session (`moveDimension` nezavolá řešič, zápis po `endMoveDimension`); `dimensionLayout` s `placement`; e2e (vytvoření vodorovné kóty myší, přetažení, uložení a načtení polohy, dokument bez `placement`).
+
+## Spliny (M29)
+
+Rozhodnuto v [[Q086 Spline přes body v řešiči|Q086]]: jen polynomiální B-spline (bez vah), dva druhy entit nad stejnou matematikou.
+
+```ts
+/** Spline přes řídicí body (NURBS bez vah). Konce křivky = první a poslední řídicí bod (clamped). */
+export interface SketchBSpline {
+  readonly kind: 'bspline'; readonly id: SketchEntityId;
+  readonly degree: 1 | 2 | 3;                       // = min(3, poles.length − 1)
+  readonly poles: readonly SketchEntityId[];        // body skici, ≥ 2, různé
+  readonly knots: readonly number[];                // clamped, neklesající, délka poles + degree + 1, od 0 do 1
+  readonly construction?: true;
+}
+/** Spline přes body: prochází fit body; řídicí body jsou skryté proměnné řešiče a jejich vyřešené souřadnice jsou v datech. */
+export interface SketchFitSpline {
+  readonly kind: 'fitSpline'; readonly id: SketchEntityId;
+  readonly degree: 1 | 2 | 3;                       // = min(3, fit.length − 1)
+  readonly fit: readonly SketchEntityId[];          // body skici, ≥ 2, různé
+  readonly params: readonly number[];               // parametr každého fit bodu, rostoucí, první 0, poslední 1
+  readonly poles: readonly Vec2[];                  // vyřešené řídicí body, délka = fit.length
+  readonly knots: readonly number[];                // clamped, délka poles + degree + 1
+  readonly construction?: true;
+}
+// Curve2 a ProfileCurve dostanou stejnou variantu:
+| { readonly kind: 'bspline'; readonly degree: number; readonly poles: readonly Vec2[]; readonly knots: readonly number[]; readonly id?: string }
+```
+
+- **Vytvoření fit-splinu:** `params` z délky tětiv (normalizované), `knots` průměrováním (Piegl–Tiller, globální interpolace) a `poles` řešením lineární soustavy – čistá funkce `interpolateSpline(points: readonly Vec2[]): { degree; params; knots; poles }` v `sketch`. Počet řídicích bodů = počet fit bodů, takže systém je **určený bez koncových podmínek**. Planegcs vazbu na druhou derivaci nemá, proto globální interpolace místo přirozených koncových podmínek z Q086; cíl rozhodnutí (spline vždy prochází fit body a „neplave“) zůstává.
+- **Řešič:** `bspline` → planegcs `bspline` s řídicími body jako body skici a koncovými body sdílenými s prvním a posledním řídicím bodem. `fitSpline` → planegcs `bspline` s řídicími body jako vnitřními proměnnými (start z `poles` v datech) a `point_on_bspline` pro každý fit bod na pevném parametru z `params` (id vazby `<id spline>:fit<i>`, převádí se zpět na id splinu). `SolveResult.entities` vrací u `fitSpline` nové `poles`, ostatní pole beze změny. Vazby na spline: `coincident` s koncem (konec = bod skici), `tangent` úsečka–spline na konci (`tangent_at_bspline_knot` na krajním uzlu) – ostatní dvojice s splinem `constraintFor` nenabídne.
+- **Kontrola dat:** odkazy na existující body, délky polí podle vzorců výše, `knots` clamped a neklesající v [0, 1], `params` rostoucí od 0 do 1, souřadnice konečné; `degree` musí odpovídat vzorci.
+- **`removeItems`:** smazání řídicího bodu nebo fit bodu smaže spline (jako smazání bodu úsečky); body používané jen smazaným splinem se smažou také.
+- **Geometrie:** `sketch/bspline.ts`: `evaluate(degree, poles, knots, t): Vec2` (de Boor), `derivative(…, t): Vec2`, `tessellate(curve, tolerance): Vec2[]` (adaptivně podle odchylky tětivy, oba konce přesně).
+- **Oblasti:** spline je hrana mezi svými konci (uzavřený spline se shodnými konci je smyčka s jedním uzlem). Průsečíky a test „bod uvnitř“ se počítají nad tessellací s tolerancí `tol`, úhel tečny v uzlu z derivace na konci, znaménková křivost z první a druhé derivace, plocha z tessellace. Jména oblastí zůstávají z id křivek.
+- **Jádro:** `ProfileCurve` `bspline` → `kernel-occt` postaví `Geom2d_BSplineCurve` (nebo 3D `Geom_BSplineCurve` v rovině, podle toho, co build umí) a hranu; `validateFaceInput` ověří tvar a napojení konců (první a poslední řídicí bod). `FakeKernel` ji aproximuje tessellací (plocha, obálka). Role hrany `edge:<id>` a boční plochy `face:side:<id>` jako u ostatních křivek.
+- **Kresba:** `SketchDrawingCurve` dostane variantu `{ kind: 'polyline'; id; points: readonly Vec2[]; style }`; `sketcher` spline tessellací převede na ni, `render` ji kreslí a pickuje jako řadu úseček s jedním id. Řídicí body `bspline` jsou body skici a kreslí se s tečkovanou řídicí lomenou čarou (styl `construction`); fit body jsou body skici, řídicí body `fitSpline` se nekreslí.
+- **Nástroje** (až po sloučení M26): *Spline přes řídicí body* a *Spline přes body* – klikání bodů se snapperem, dvojklik nebo Enter ukončí, Esc zruší; tažení bodů jako u ostatních entit.
+- **Testy:** `bspline.ts` (hodnoty a derivace proti ručně spočítaným, tessellace v toleranci), `interpolateSpline` (prochází body, 2–3 body → nižší stupeň), `parseSketchData` všech pravidel, `removeItems`, `computeRegions` (obdélník s jednou stranou spline, uzavřený spline, spline křížící úsečku → `crossing`, díra ze splinu), adaptér planegcs (tažený fit bod → spline jím prochází, `dof` fit-splinu = 2 · fit bodů, tečná úsečka na konci), `validateFaceInput` a `FakeKernel`, `kernel-occt` (plocha profilu se splinem ≈ plocha z tessellace), kresba `polyline`, integrační test (skica se splinem → Vysunutí, jméno `face:side:<id>`), e2e po nástrojích.
 
 ## Testy
 

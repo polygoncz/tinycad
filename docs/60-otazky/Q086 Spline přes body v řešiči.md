@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[12-skicar]]"
 decide_by: "[[M29-spliny]]"
 proposal: "Jedna entita bspline s řídicími body jako body skici; fit-point spline navíc uloží fit body a parametry uzlů, v řešiči point_on_bspline na pevných parametrech; řídicí body fit-splinu se neukazují a netáhnou. Bez racionálních vah."
-decision: ""
+decision: "Jedna entita bspline; fit-point spline drží řídicí body jako skryté proměnné řešiče a fit body přes point_on_bspline na pevných parametrech s přirozenými koncovými podmínkami; řídicí body fit-splinu nejsou vidět; bez vah."
 tags:
   - otazka
 created: 2026-10-15
@@ -43,4 +43,4 @@ updated: 2026-10-15
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR.)_
+Pavel 2026-10-15: **návrh a)** – řešič s `point_on_bspline` na pevných parametrech, přirozené koncové podmínky, řídicí body fit-splinu skryté, jen polynomiální B-spline (bez vah). Propsáno do [[12-skicar#Spliny (M29)]].
