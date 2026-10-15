@@ -5,6 +5,9 @@ import type { Mode, ToolDescriptor } from '@/interaction';
 import { SKETCH_SELECT_TOOL_ID } from './constants';
 import type { SketchEditor } from './sketch-editor';
 import { createArcTool } from './sketch-tools/arc-tool';
+import { createCircle2pTool } from './sketch-tools/circle2p-tool';
+import { createCircle3pTool } from './sketch-tools/circle3p-tool';
+import { createCircleTangentTool } from './sketch-tools/circle-tangent-tool';
 import { createCircleTool } from './sketch-tools/circle-tool';
 import { createDimensionTool } from './sketch-tools/dimension-tool';
 import { createEntryTool } from './sketch-tools/entry-tool';
@@ -61,7 +64,44 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       group: 'draw',
       modes: SKETCH,
       shortcut: 'C',
+      family: 'circle',
       create: () => createCircleTool(sketches),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.circle2p',
+      label: 'tool.circle2p',
+      icon: 'circle-number-2',
+      group: 'draw',
+      modes: SKETCH,
+      family: 'circle',
+      create: () => createCircle2pTool(sketches),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.circle3p',
+      label: 'tool.circle3p',
+      icon: 'circle-number-3',
+      group: 'draw',
+      modes: SKETCH,
+      family: 'circle',
+      create: () => createCircle3pTool(sketches),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.circle2t',
+      label: 'tool.circle2t',
+      icon: 'circles-relation',
+      group: 'draw',
+      modes: SKETCH,
+      family: 'circle',
+      create: () => createCircleTangentTool(sketches, 2),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.circle3t',
+      label: 'tool.circle3t',
+      icon: 'circle-letter-t',
+      group: 'draw',
+      modes: SKETCH,
+      family: 'circle',
+      create: () => createCircleTangentTool(sketches, 3),
     }),
     Object.freeze<ToolDescriptor>({
       id: 'sketch.arc',
