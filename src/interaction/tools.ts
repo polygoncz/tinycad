@@ -54,6 +54,11 @@ export interface ToolDescriptor {
   readonly modes?: readonly Mode[];
   /** Information for the UI only; app registers the shortcut as an action. */
   readonly shortcut?: string;
+  /**
+   * Tools of the same family in one toolbar group are one split button with these tools as its
+   * variants (M27, spec 12 "Rodiny nástrojů v liště"); without it a plain button.
+   */
+  readonly family?: string;
   create(): Tool;
 }
 
