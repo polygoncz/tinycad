@@ -56,7 +56,7 @@ Kontrakt: [[12-skicar#Spliny (M29)]].
 - [x] 4. `solver-planegcs`: spliny a vazby na ně
 - [x] 5. `kernel`, `kernel-occt`: `ProfileCurve` `bspline`, `validateFaceInput`, `FakeKernel`, hrana v OCCT
 - [x] 6. Kresba: `SketchDrawingCurve` `polyline` (`interaction`, `render`), tessellace v `sketcher`
-- [ ] 7. Integrační test skica se splinem → Vysunutí
+- [x] 7. Integrační test skica se splinem → Vysunutí
 - [ ] 8. Nástroje splinu (až po sloučení M26), e2e `m29.spec.ts`, propsání do spec 06, 09, 10, 11
 
 ## Implementační plán
@@ -138,6 +138,7 @@ _(Souběžná stopa, [[Roadmapa#Souběžné stopy (pokus od M25)|pravidla]]: mí
 - Úkol 4: řešič se spliny podle Q087 (`fitSpline` jako planegcs `bspline` se skrytými řídicími body, `point_on_bspline` na pevných parametrech, tečnost přes `point_on_line_pl`, `dof` −4, hlídací test surového planegcs). Otevřené pro úkol 8: id splinu v `conflicting` není id vazby.
 - Úkol 6: kresba `polyline` (render ji rozloží na úseky s jedním id, picking beze změny), řídicí lomená čára `__poles:<id>` jako `construction`. Pro úkol 8: lomená čára stíní spline při pickingu.
 - Úkol 5: matematika přesunuta do `core/math/bspline.ts`, `ProfileCurve` `bspline`, validace (sevřené uzly, násobnosti – přísněji než původní zadání, aby OCCT nedostal vstup, na kterém konstruktor vyhodí výjimku), `FakeKernel` z tessellace, hrana v OCCT. Propsáno do spec 06.
+- Úkol 7: integrační `sketch-spline.test.ts` (OCCT + planegcs): vysunutí profilu s `bspline` i `fitSpline`, `face:side:<id>`, objem; tažení fit bodu přes `SketchSession` → spline prochází fit body → regenerace; křížení → varování.
 - Pokyn Pavla (Q088 Geometrie skici v TypeScriptu nebo v OCCT, na `main`; wikilink doplní hlavní sezení při sloučení, ve větvi stopy by neprošel `lint:vault`): v `kernel-occt` maximum z OCCT (hrana `Geom_BSplineCurve` + `BRepBuilderAPI_MakeEdge`, kontroly přes BRepCheck/ShapeAnalysis), geometrie skici zůstává v TypeScriptu.
 - Ověřeno v typech buildu OCCT: `Geom_BSplineCurve(NCollection_Array1_gp_Pnt, …_double, …_int, degree)` a `BRepBuilderAPI_MakeEdge(Geom_Curve)`; hrana splinu se staví ve 3D jako ostatní hrany profilu.
 
