@@ -101,6 +101,8 @@ export function computeRegions(data: SketchData): RegionsResult {
       circles.push({ id: e.id, curve });
       continue;
     }
+    // M29: splines are ignored like construction curves until regions handle them (task 3).
+    if (curve.kind === 'bspline') continue;
     if (dist(curve.from, curve.to) <= tol) continue;
     // 2. Nodes: ends closer than tol are one node.
     const from = nodeAt(curve.from);
@@ -335,6 +337,8 @@ function direction(d: Vec2): number {
 /** The shoelace term of a curve plus the circular segment of an arc (+ counter-clockwise, − clockwise). */
 function signedArea(c: Curve2): number {
   if (c.kind === 'circle') return Math.PI * c.radius ** 2;
+  // M29: no spline reaches a loop yet, see computeRegions (task 3).
+  if (c.kind === 'bspline') return 0;
   const chord = (c.from[0] * c.to[1] - c.to[0] * c.from[1]) / 2;
   if (c.kind === 'line') return chord;
   const r = dist(c.center, c.from);
@@ -349,6 +353,8 @@ function samplePoint(loop: readonly Curve2[]): Vec2 {
   const first = loop[0];
   if (first === undefined) return [Number.NaN, Number.NaN];
   if (first.kind === 'circle') return [first.center[0] + first.radius, first.center[1]];
+  // M29: no spline reaches a loop yet, see computeRegions (task 3).
+  if (first.kind === 'bspline') return [Number.NaN, Number.NaN];
   return first.from;
 }
 
@@ -367,6 +373,8 @@ function contains(loop: readonly Curve2[], p: Vec2): boolean {
       if (t > 0 && s >= 0 && s < 1) hits++;
       continue;
     }
+    // M29: no spline reaches a loop yet, see computeRegions (task 3).
+    if (c.kind === 'bspline') continue;
     const r = dist(c.center, c.from);
     const a0 = angleOf(sub(c.ccw ? c.from : c.to, c.center));
     const a1 = angleOf(sub(c.ccw ? c.to : c.from, c.center));

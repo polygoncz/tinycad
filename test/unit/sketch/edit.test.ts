@@ -265,3 +265,119 @@ describe('toggleConstruction', () => {
     expect(r.constraints).toBe(DATA.constraints satisfies readonly SketchConstraint[]);
   });
 });
+
+/**
+ * Splines next to line pq: s (control points p r u, starts at p), f (fit points u v q, ends
+ * at q), line rv between interior points of both; a circle m; a tangent ps–s and a fix on r.
+ */
+const SPLINES = sketch(
+  [
+    { kind: 'point', id: 'p', x: 0, y: 0 },
+    { kind: 'point', id: 'q', x: 10, y: 0 },
+    { kind: 'point', id: 'r', x: 2, y: 4 },
+    { kind: 'point', id: 'u', x: 5, y: 5 },
+    { kind: 'point', id: 'v', x: 8, y: 4 },
+    { kind: 'line', id: 'pq', p1: 'p', p2: 'q' },
+    { kind: 'line', id: 'rv', p1: 'r', p2: 'v' },
+    { kind: 'bspline', id: 's', degree: 2, poles: ['p', 'r', 'u'], knots: [0, 0, 0, 1, 1, 1] },
+    {
+      kind: 'fitSpline',
+      id: 'f',
+      degree: 2,
+      fit: ['u', 'v', 'q'],
+      params: [0, 0.5, 1],
+      poles: [
+        [5, 5],
+        [8, 5],
+        [10, 0],
+      ],
+      knots: [0, 0, 0, 1, 1, 1],
+    },
+    { kind: 'point', id: 'o', x: 20, y: 0 },
+    { kind: 'circle', id: 'm', center: 'o', radius: 2 },
+  ],
+  [
+    { kind: 'tangent', id: 't1', a: 'pq', b: 's' },
+    { kind: 'fix', id: 'f1', point: 'r' },
+  ],
+);
+
+function se(...xs: string[]): SketchEntity[] {
+  return xs.map((id) => {
+    const found = SPLINES.entities.find((x) => x.id === id);
+    if (found === undefined) throw new Error(`no entity ${id}`);
+    return found;
+  });
+}
+
+const splineIds = (...xs: string[]): readonly SketchItemId[] =>
+  [...SPLINES.entities, ...SPLINES.constraints].map((x) => x.id).filter((id) => xs.includes(id));
+
+describe('splines in editing helpers', () => {
+  it('constraintFor offers tangent line–spline at a spline end, in either order', () => {
+    expect(constraintFor('tangent', se('pq', 's'))).toEqual({ kind: 'tangent', a: 'pq', b: 's' });
+    expect(constraintFor('tangent', se('s', 'pq'))).toEqual({ kind: 'tangent', a: 's', b: 'pq' });
+    expect(constraintFor('tangent', se('f', 'pq'))).toEqual({ kind: 'tangent', a: 'f', b: 'pq' });
+    expect(constraintFor('tangent', se('pq', 'f'))).toEqual({ kind: 'tangent', a: 'pq', b: 'f' });
+  });
+
+  it('constraintFor returns null for tangent away from a spline end', () => {
+    // rv touches r (interior pole of s) and v (interior fit point of f).
+    expect(constraintFor('tangent', se('rv', 's'))).toBeNull();
+    expect(constraintFor('tangent', se('f', 'rv'))).toBeNull();
+  });
+
+  it('constraintFor returns null for every other selection with a spline', () => {
+    expect(constraintFor('tangent', se('s', 'm'))).toBeNull();
+    expect(constraintFor('tangent', se('s', 'f'))).toBeNull();
+    expect(constraintFor('tangent', se('s'))).toBeNull();
+    expect(constraintFor('equal', se('s', 'f'))).toBeNull();
+    expect(constraintFor('equal', se('pq', 's'))).toBeNull();
+    expect(constraintFor('parallel', se('pq', 'f'))).toBeNull();
+    expect(constraintFor('perpendicular', se('s', 'pq'))).toBeNull();
+    expect(constraintFor('horizontal', se('s'))).toBeNull();
+    expect(constraintFor('vertical', se('f'))).toBeNull();
+    expect(constraintFor('coincident', se('p', 's'))).toBeNull();
+    expect(constraintFor('fix', se('f'))).toBeNull();
+  });
+
+  it('dimensionFor returns null for a spline', () => {
+    expect(dimensionFor(se('s'), SPLINES)).toBeNull();
+    expect(dimensionFor(se('f'), SPLINES)).toBeNull();
+    expect(dimensionFor(se('s', 'f'), SPLINES)).toBeNull();
+  });
+
+  it('removing a control point removes the spline, its orphan points and constraints', () => {
+    const r = removeItems(SPLINES, splineIds('r'));
+    // s goes with r; p stays (pq), u stays (f); rv goes with r, v stays (f).
+    expect(entityIds(r)).toEqual(['p', 'q', 'u', 'v', 'pq', 'f', 'o', 'm']);
+    expect(constraintIds(r)).toEqual([]);
+  });
+
+  it('removing a fit point removes the fit spline and its orphan points', () => {
+    const r = removeItems(SPLINES, splineIds('q'));
+    // f and pq go with q; v stays (rv), u stays (s), p stays (s).
+    expect(entityIds(r)).toEqual(['p', 'r', 'u', 'v', 'rv', 's', 'o', 'm']);
+    expect(constraintIds(r)).toEqual(['f1']);
+  });
+
+  it('removing a spline removes the points no other curve uses', () => {
+    const r = removeItems(SPLINES, splineIds('f', 'rv'));
+    // u is still a pole of s; v only belonged to f and rv; q stays (pq).
+    expect(entityIds(r)).toEqual(['p', 'q', 'r', 'u', 'pq', 's', 'o', 'm']);
+    expect(constraintIds(r)).toEqual(['t1', 'f1']);
+    const r2 = removeItems(SPLINES, splineIds('s'));
+    expect(entityIds(r2)).toEqual(['p', 'q', 'r', 'u', 'v', 'pq', 'rv', 'f', 'o', 'm']);
+    expect(constraintIds(r2)).toEqual(['f1']);
+  });
+
+  it('toggleConstruction switches splines like other curves', () => {
+    const once = toggleConstruction(SPLINES, splineIds('s', 'f'));
+    const construction = once.entities
+      .filter((x) => x.kind !== 'point' && x.construction === true)
+      .map((x) => x.id);
+    expect(construction).toEqual(['s', 'f']);
+    const back = toggleConstruction(once, splineIds('s', 'f'));
+    expect(back.entities).toEqual(SPLINES.entities);
+  });
+});

@@ -23,6 +23,14 @@ export type Curve2 =
       readonly center: Vec2;
       readonly radius: number;
       readonly id?: string;
+    }
+  /** M29: a clamped polynomial B-spline (the shape of BSplineShape in bspline.ts). */
+  | {
+      readonly kind: 'bspline';
+      readonly degree: number;
+      readonly poles: readonly Vec2[];
+      readonly knots: readonly number[];
+      readonly id?: string;
     };
 
 export function pointsById(data: SketchData): ReadonlyMap<SketchEntityId, SketchPoint> {
@@ -33,7 +41,8 @@ export function pointsById(data: SketchData): ReadonlyMap<SketchEntityId, Sketch
 
 /**
  * The curve with its point coordinates and the entity id (M14); an arc becomes counter-clockwise.
- * A missing point is a programming error.
+ * A spline becomes a `bspline`: its poles are the coordinates of the pole points (`bspline`) or
+ * the stored solved poles (`fitSpline`). A missing point is a programming error.
  */
 export function curve2(
   curve: SketchCurve,
@@ -56,6 +65,22 @@ export function curve2(
         from: at(curve.start),
         to: at(curve.end),
         ccw: true,
+        id: curve.id,
+      };
+    case 'bspline':
+      return {
+        kind: 'bspline',
+        degree: curve.degree,
+        poles: curve.poles.map(at),
+        knots: curve.knots,
+        id: curve.id,
+      };
+    case 'fitSpline':
+      return {
+        kind: 'bspline',
+        degree: curve.degree,
+        poles: curve.poles,
+        knots: curve.knots,
         id: curve.id,
       };
     default:

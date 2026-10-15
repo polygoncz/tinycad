@@ -1,4 +1,4 @@
-import type { Brand } from '@/core';
+import type { Brand, Vec2 } from '@/core';
 
 // The data model of a sketch (spec 12 "Data"). Plain immutable data stored in the params of a
 // sketch feature; coordinates are already solved, so replaying the log never needs the solver.
@@ -41,7 +41,40 @@ export interface SketchArc {
   readonly construction?: true;
 }
 
-export type SketchCurve = SketchLine | SketchCircle | SketchArc;
+/** A spline through control points (NURBS without weights). Its ends = the first and last pole (clamped). */
+export interface SketchBSpline {
+  readonly kind: 'bspline';
+  readonly id: SketchEntityId;
+  /** = min(3, poles.length − 1). */
+  readonly degree: 1 | 2 | 3;
+  /** Sketch points, ≥ 2, distinct. */
+  readonly poles: readonly SketchEntityId[];
+  /** Clamped, non-decreasing, length poles + degree + 1, from 0 to 1. */
+  readonly knots: readonly number[];
+  readonly construction?: true;
+}
+
+/**
+ * A spline through points: passes through the fit points; its poles are hidden solver variables
+ * and their solved coordinates are stored in the data (regen never calls the solver).
+ */
+export interface SketchFitSpline {
+  readonly kind: 'fitSpline';
+  readonly id: SketchEntityId;
+  /** = min(3, fit.length − 1). */
+  readonly degree: 1 | 2 | 3;
+  /** Sketch points, ≥ 2, distinct. */
+  readonly fit: readonly SketchEntityId[];
+  /** The parameter of each fit point, increasing, first 0, last 1. */
+  readonly params: readonly number[];
+  /** Solved control points, length = fit.length. */
+  readonly poles: readonly Vec2[];
+  /** Clamped, length poles + degree + 1. */
+  readonly knots: readonly number[];
+  readonly construction?: true;
+}
+
+export type SketchCurve = SketchLine | SketchCircle | SketchArc | SketchBSpline | SketchFitSpline;
 export type SketchEntity = SketchPoint | SketchCurve;
 
 export type GeometricConstraintKind =
@@ -95,7 +128,10 @@ export type SketchConstraint =
       readonly a: SketchEntityId;
       readonly b: SketchEntityId;
     }
-  /** A line and a circle/arc (either order), or two circles/arcs. */
+  /**
+   * A line and a circle/arc (either order), or two circles/arcs; or a line and a spline (either
+   * order) when the line shares a point with an end of the spline (M29).
+   */
   | {
       readonly kind: 'tangent';
       readonly id: SketchConstraintId;

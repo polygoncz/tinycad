@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: doing
 order: 29
 aliases:
   - M29
@@ -19,7 +19,7 @@ specs:
   - "[[09-vykreslovani]]"
 depends_on:
   - "[[M28-koty]]"
-started:
+started: 2026-10-15
 finished:
 tags:
   - milnik
@@ -50,8 +50,8 @@ Kontrakt: [[12-skicar#Spliny (M29)]].
 ## Úkoly
 
 - [x] 0. Rozhodnout [[Q086 Spline přes body v řešiči|Q086]], kontrakt ve spec 12
-- [ ] 1. `sketch`: `bspline.ts` (de Boor, derivace, tessellace) a `interpolateSpline`
-- [ ] 2. `sketch`: entity `bspline` a `fitSpline`, `Curve2`, `parseSketchData`, `removeItems`, `curve2`
+- [x] 1. `sketch`: `bspline.ts` (de Boor, derivace, tessellace) a `interpolateSpline`
+- [x] 2. `sketch`: entity `bspline` a `fitSpline`, `Curve2`, `parseSketchData`, `removeItems`, `curve2`
 - [ ] 3. `sketch`: `computeRegions` se spliny
 - [ ] 4. `solver-planegcs`: spliny a vazby na ně
 - [ ] 5. `kernel`, `kernel-occt`: `ProfileCurve` `bspline`, `validateFaceInput`, `FakeKernel`, hrana v OCCT
@@ -89,7 +89,7 @@ Jeden úkol = jedno spuštění subagenta `implementer`. Kontrakt je v [[12-skic
 
 ### 5. Jádro
 
-- **Soubory:** `src/kernel/profile.ts`, `fake-kernel.ts`, `src/kernel-occt/face.ts` (hrana B-spline; nejdřív ověřit, které konstruktory `Geom2d_BSplineCurve`/`Geom_BSplineCurve` a pole `TColgp_Array1Of…` build skutečně exportuje).
+- **Soubory:** `src/kernel/profile.ts`, `fake-kernel.ts`, `src/features/sketch/builder.ts` (odstranit dočasné `as ProfileLoop` z úkolu 2), `src/kernel-occt/face.ts` (hrana B-spline; nejdřív ověřit, které konstruktory `Geom2d_BSplineCurve`/`Geom_BSplineCurve` a pole `TColgp_Array1Of…` build skutečně exportuje).
 - **Testy:** `test/unit/kernel/profile.test.ts`, kontraktové testy jádra (plocha profilu se splinem ≈ plocha z tessellace v obou implementacích, role `edge:<id>`).
 - **Hotovo když:** testy projdou a `npm run check` je zelený.
 

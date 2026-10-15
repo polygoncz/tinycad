@@ -21,6 +21,21 @@ const MIN_DIMENSION = 1e-9;
 
 const isRound = (e: SketchEntity): boolean => e.kind === 'circle' || e.kind === 'arc';
 
+/** The end points of a spline (first and last pole or fit point), or undefined for other entities. */
+function splineEnds(e: SketchEntity): readonly SketchEntityId[] | undefined {
+  const points = e.kind === 'bspline' ? e.poles : e.kind === 'fitSpline' ? e.fit : undefined;
+  if (points === undefined) return undefined;
+  return points.filter((_, i) => i === 0 || i === points.length - 1);
+}
+
+/** A line and a spline (either order) where the line shares a point with an end of the spline. */
+function lineAtSplineEnd(first: SketchEntity, second: SketchEntity): boolean {
+  const [line, spline] = first.kind === 'line' ? [first, second] : [second, first];
+  if (line.kind !== 'line') return false;
+  const ends = splineEnds(spline);
+  return ends !== undefined && (ends.includes(line.p1) || ends.includes(line.p2));
+}
+
 /** The constraint for the selected entities (in selection order), or null when the selection does not fit. */
 export function constraintFor(
   kind: GeometricConstraintKind,
@@ -49,7 +64,9 @@ export function constraintFor(
     case 'equal':
       return lines === 2 || rounds === 2 ? { kind, a, b } : null;
     case 'tangent':
-      return rounds === 2 || (lines === 1 && rounds === 1) ? { kind, a, b } : null;
+      return rounds === 2 || (lines === 1 && rounds === 1) || lineAtSplineEnd(first, second)
+        ? { kind, a, b }
+        : null;
     case 'horizontal':
     case 'vertical':
     case 'fix':
@@ -126,6 +143,18 @@ function withoutConstruction(c: SketchCurve): SketchCurve {
       return { kind: c.kind, id: c.id, center: c.center, radius: c.radius };
     case 'arc':
       return { kind: c.kind, id: c.id, center: c.center, start: c.start, end: c.end };
+    case 'bspline':
+      return { kind: c.kind, id: c.id, degree: c.degree, poles: c.poles, knots: c.knots };
+    case 'fitSpline':
+      return {
+        kind: c.kind,
+        id: c.id,
+        degree: c.degree,
+        fit: c.fit,
+        params: c.params,
+        poles: c.poles,
+        knots: c.knots,
+      };
     default:
       return assertNever(c);
   }
@@ -140,6 +169,10 @@ function curvePoints(c: SketchCurve): readonly SketchEntityId[] {
       return [c.center];
     case 'arc':
       return [c.center, c.start, c.end];
+    case 'bspline':
+      return c.poles;
+    case 'fitSpline':
+      return c.fit;
     default:
       return assertNever(c);
   }

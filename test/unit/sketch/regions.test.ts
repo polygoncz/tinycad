@@ -46,8 +46,9 @@ const ids = (loop: readonly Curve2[]) => loop.map((c) => c.id);
 
 const names = (data: SketchData) => computeRegions(data).regions.map((r) => r.name);
 
-const start = (c: Curve2) => (c.kind === 'circle' ? undefined : c.from);
-const end = (c: Curve2) => (c.kind === 'circle' ? undefined : c.to);
+// M29: splines get their ends with regions (task 3).
+const start = (c: Curve2) => (c.kind === 'circle' || c.kind === 'bspline' ? undefined : c.from);
+const end = (c: Curve2) => (c.kind === 'circle' || c.kind === 'bspline' ? undefined : c.to);
 
 /** Every curve ends where the next one starts (a lone circle is closed by itself). */
 function expectClosed(loop: readonly Curve2[]): void {

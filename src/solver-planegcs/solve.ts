@@ -81,6 +81,10 @@ interface Primitives {
 function toPrimitives(input: SolveInput): Primitives {
   const kinds = new Map<SketchEntityId, SketchEntity>(input.entities.map((e) => [e.id, e]));
   const constraintIds = new Map<string, SketchConstraintId>();
+  // M29: splines are not solved yet (task 4); a sketch with one fails.
+  if (input.entities.some((e) => e.kind === 'bspline' || e.kind === 'fitSpline')) {
+    return { primitives: undefined, constraintIds };
+  }
   const primitives: SketchPrimitive[] = input.entities.flatMap((e) => entityPrimitives(e, kinds));
 
   for (const c of input.constraints) {
@@ -137,6 +141,10 @@ function entityPrimitives(
         { id: `${e.id}:rules`, type: 'arc_rules', a_id: e.id },
       ];
     }
+    case 'bspline':
+    case 'fitSpline':
+      // M29: unreachable, toPrimitives fails a sketch with a spline until task 4.
+      return [];
   }
 }
 

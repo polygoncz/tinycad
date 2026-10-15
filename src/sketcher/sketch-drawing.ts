@@ -126,7 +126,9 @@ export function axisDrawing(
   return freezeDrawing(frame, [line], []);
 }
 
-const isCurve = (e: SketchEntity): e is SketchCurve => e.kind !== 'point';
+// M29: splines are not drawn yet (task 6); this filter keeps them out of the drawing.
+const isCurve = (e: SketchEntity): e is SketchCurve =>
+  e.kind !== 'point' && e.kind !== 'bspline' && e.kind !== 'fitSpline';
 
 /** A region as polygons: the outer loop counter-clockwise, the holes as computeRegions gives them. */
 function drawingRegion(region: SketchRegion): SketchDrawingRegion {
@@ -163,6 +165,9 @@ function curvePoints(curve: Curve2): Vec2[] {
       const radius = Math.hypot(curve.from[0] - cx, curve.from[1] - cy);
       return arcPoints(curve.center, radius, a0, sweep);
     }
+    case 'bspline':
+      // M29: unreachable, regions ignore splines until task 3; drawn by task 6.
+      return [];
     default:
       return assertNever(curve);
   }
@@ -224,6 +229,9 @@ function drawingCurve(id: string, curve: Curve2, style: SketchStyle): SketchDraw
         style,
       });
     }
+    case 'bspline':
+      // M29: unreachable, isCurve keeps splines out of the drawing until task 6.
+      throw new Error(`drawingCurve: spline '${id}' is not drawn yet`);
     default:
       return assertNever(curve);
   }

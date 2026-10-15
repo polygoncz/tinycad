@@ -23,7 +23,15 @@ const ENTITY_FIELDS: Readonly<Record<string, { required: string[]; optional: str
   line: { required: ['id', 'p1', 'p2'], optional: ['construction'] },
   circle: { required: ['id', 'center', 'radius'], optional: ['construction'] },
   arc: { required: ['id', 'center', 'start', 'end'], optional: ['construction'] },
+  bspline: { required: ['id', 'degree', 'poles', 'knots'], optional: ['construction'] },
+  fitSpline: {
+    required: ['id', 'degree', 'fit', 'params', 'poles', 'knots'],
+    optional: ['construction'],
+  },
 };
+
+/** The highest spline degree (cubic); a spline's degree = min(MAX_SPLINE_DEGREE, points − 1). */
+const MAX_SPLINE_DEGREE = 3;
 
 /** Entity kind groups a constraint field may refer to. */
 type Target = 'point' | 'line' | 'round';
@@ -121,6 +129,23 @@ function entityValid(
       if (new Set([item.center, item.start, item.end]).size !== 3) return false;
       return arcRadiiValid(c, s, e);
     }
+    case 'bspline': {
+      const n = splinePointCount(item.poles, point);
+      if (n === undefined) return false;
+      const degree = Math.min(MAX_SPLINE_DEGREE, n - 1);
+      return item.degree === degree && knotsValid(item.knots, n, degree);
+    }
+    case 'fitSpline': {
+      const n = splinePointCount(item.fit, point);
+      if (n === undefined) return false;
+      const degree = Math.min(MAX_SPLINE_DEGREE, n - 1);
+      return (
+        item.degree === degree &&
+        paramsValid(item.params, n) &&
+        polesValid(item.poles, n) &&
+        knotsValid(item.knots, n, degree)
+      );
+    }
     default:
       return false;
   }
@@ -137,6 +162,65 @@ function arcRadiiValid(center: Fields, start: Fields, end: Fields): boolean {
   const rEnd = Math.hypot(e[0] - c[0], e[1] - c[1]);
   return (
     rStart > MIN_ARC_RADIUS && Math.abs(rEnd - rStart) <= ARC_RADIUS_TOLERANCE * Math.max(1, rStart)
+  );
+}
+
+/** The number of spline points when they are ≥ 2 distinct references to points, else undefined. */
+function splinePointCount(
+  refs: unknown,
+  point: (ref: unknown) => Fields | undefined,
+): number | undefined {
+  if (!Array.isArray(refs) || refs.length < 2) return undefined;
+  const items = refs as readonly unknown[];
+  if (!items.every((ref) => point(ref) !== undefined)) return undefined;
+  return new Set(items).size === items.length ? items.length : undefined;
+}
+
+/**
+ * Clamped knots of n poles: length n + degree + 1, the first degree + 1 are 0, the last
+ * degree + 1 are 1, the interior ones lie in (0, 1), do not decrease and none repeats more than
+ * degree times.
+ */
+function knotsValid(knots: unknown, n: number, degree: number): boolean {
+  if (!Array.isArray(knots) || knots.length !== n + degree + 1) return false;
+  const values = knots as readonly unknown[];
+  if (!values.every(isFiniteNumber)) return false;
+  let run = 0;
+  for (const [i, k] of values.entries()) {
+    if (i <= degree) {
+      if (k !== 0) return false;
+    } else if (i >= n) {
+      if (k !== 1) return false;
+    } else {
+      const previous = values[i - 1];
+      if (k <= 0 || k >= 1 || previous === undefined || k < previous) return false;
+      run = k === previous ? run + 1 : 1;
+      if (run > degree) return false;
+    }
+  }
+  return true;
+}
+
+/** n parameters, increasing, first 0, last 1. */
+function paramsValid(params: unknown, n: number): boolean {
+  if (!Array.isArray(params) || params.length !== n) return false;
+  const values = params as readonly unknown[];
+  if (!values.every(isFiniteNumber)) return false;
+  return (
+    values[0] === 0 &&
+    values[n - 1] === 1 &&
+    values.every((t, i) => {
+      const previous = values[i - 1];
+      return i === 0 || (previous !== undefined && t > previous);
+    })
+  );
+}
+
+/** n pairs of finite coordinates. */
+function polesValid(poles: unknown, n: number): boolean {
+  if (!Array.isArray(poles) || poles.length !== n) return false;
+  return (poles as readonly unknown[]).every(
+    (p) => Array.isArray(p) && p.length === 2 && (p as readonly unknown[]).every(isFiniteNumber),
   );
 }
 
@@ -160,6 +244,7 @@ function constraintValid(
 
   const refKinds: string[] = [];
   const refs: unknown[] = [];
+  const refTargets: Fields[] = [];
   for (const [field, need] of Object.entries(fields)) {
     const v = item[field];
     if (need === 'value') {
@@ -171,8 +256,10 @@ function constraintValid(
     if (typeof targetKind !== 'string') return false;
     refKinds.push(targetKind);
     refs.push(v);
+    if (target !== undefined) refTargets.push(target);
   }
   if (refs.length === 2 && refs[0] === refs[1]) return false;
+  if (kind === 'tangent' && lineAtSplineEnd(refTargets)) return true;
   if (kind === 'equal' || kind === 'tangent') return pairAllowed(kind, refKinds);
   return Object.values(fields)
     .filter((need) => need !== 'value')
@@ -185,6 +272,21 @@ function pairAllowed(kind: 'equal' | 'tangent', [a, b]: readonly string[]): bool
   const rounds = [a, b].filter((k) => k !== undefined && ROUND.has(k)).length;
   if (kind === 'equal') return lines === 2 || rounds === 2;
   return rounds === 2 || (lines === 1 && rounds === 1);
+}
+
+/**
+ * tangent (M29): a line and a spline (either order) where the line shares a point with an end of
+ * the spline (the first or last pole of a bspline, fit point of a fitSpline).
+ */
+function lineAtSplineEnd(pair: readonly Fields[]): boolean {
+  const line = pair.find((t) => t.kind === 'line');
+  const spline = pair.find((t) => t.kind === 'bspline' || t.kind === 'fitSpline');
+  if (pair.length !== 2 || line === undefined || spline === undefined) return false;
+  const points = spline.kind === 'bspline' ? spline.poles : spline.fit;
+  // The spline itself is checked as an entity; a malformed one cannot be judged here.
+  if (!Array.isArray(points) || points.length === 0) return false;
+  const ends: readonly unknown[] = [points[0], points[points.length - 1]];
+  return ends.includes(line.p1) || ends.includes(line.p2);
 }
 
 function matches(need: Target | 'value', kind: string | undefined): boolean {

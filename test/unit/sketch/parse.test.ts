@@ -193,3 +193,276 @@ describe('parseSketchData – constraints', () => {
     expect(r.ok ? [] : r.error).toEqual([entityIssue(1), constraintIssue(0)]);
   });
 });
+
+/**
+ * Points of an open polyline a b c d e and two splines on them (both valid): a cubic control
+ * point spline s through poles a b c d, a quadratic fit point spline f through c d e; lines ae,
+ * bc and bd.
+ */
+const SPLINE_ENTITIES: readonly unknown[] = [
+  P('a', 0, 0),
+  P('b', 1, 2),
+  P('c', 3, 2),
+  P('d', 4, 0),
+  P('e', 6, 1),
+  { kind: 'line', id: 'ae', p1: 'a', p2: 'e' },
+  { kind: 'line', id: 'bc', p1: 'b', p2: 'c' },
+  { kind: 'line', id: 'bd', p1: 'b', p2: 'd' },
+  { kind: 'circle', id: 'k', center: 'a', radius: 2 },
+  {
+    kind: 'bspline',
+    id: 's',
+    degree: 3,
+    poles: ['a', 'b', 'c', 'd'],
+    knots: [0, 0, 0, 0, 1, 1, 1, 1],
+  },
+  {
+    kind: 'fitSpline',
+    id: 'f',
+    degree: 2,
+    fit: ['c', 'd', 'e'],
+    params: [0, 0.4, 1],
+    poles: [
+      [3, 2],
+      [4.5, -0.5],
+      [6, 1],
+    ],
+    knots: [0, 0, 0, 1, 1, 1],
+    construction: true,
+  },
+];
+
+const BSPLINE = {
+  kind: 'bspline',
+  id: 'x',
+  degree: 3,
+  poles: ['a', 'b', 'c', 'd', 'e'],
+  knots: [0, 0, 0, 0, 0.5, 1, 1, 1, 1],
+};
+const FIT_SPLINE = {
+  kind: 'fitSpline',
+  id: 'x',
+  degree: 1,
+  fit: ['a', 'e'],
+  params: [0, 1],
+  poles: [
+    [0, 0],
+    [6, 1],
+  ],
+  knots: [0, 0, 1, 1],
+};
+
+/** A copy of the object without the key (a missing property, not one set to undefined). */
+function without(item: Readonly<Record<string, unknown>>, key: string): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(item).filter(([k]) => k !== key));
+}
+
+function splineConstraintIssues(constraints: unknown): readonly SketchIssue[] {
+  const r = parseSketchData(SPLINE_ENTITIES, constraints);
+  return r.ok ? [] : r.error;
+}
+
+describe('parseSketchData – splines', () => {
+  it('accepts a control point spline and a fit point spline', () => {
+    expect(entityIssues(SPLINE_ENTITIES)).toEqual([]);
+    expect(entityIssues([...SPLINE_ENTITIES.slice(0, 5), BSPLINE])).toEqual([]);
+    expect(entityIssues([...SPLINE_ENTITIES.slice(0, 5), FIT_SPLINE])).toEqual([]);
+  });
+
+  it('accepts lower degrees and interior knots repeated up to the degree', () => {
+    expect(
+      entityIssues([
+        ...SPLINE_ENTITIES.slice(0, 5),
+        { kind: 'bspline', id: 'x1', degree: 1, poles: ['a', 'b'], knots: [0, 0, 1, 1] },
+        {
+          kind: 'bspline',
+          id: 'x2',
+          degree: 2,
+          poles: ['a', 'b', 'c'],
+          knots: [0, 0, 0, 1, 1, 1],
+        },
+        {
+          kind: 'bspline',
+          id: 'x3',
+          degree: 3,
+          poles: ['e', 'd', 'c', 'b', 'a'],
+          knots: [0, 0, 0, 0, 0.5, 1, 1, 1, 1],
+        },
+      ]),
+    ).toEqual([]);
+    // Six poles of degree 3 have two interior knots: they may coincide (multiplicity 2 ≤ 3).
+    expect(
+      entityIssues([
+        ...SPLINE_ENTITIES.slice(0, 5),
+        P('g', 7, 3),
+        {
+          kind: 'bspline',
+          id: 'x',
+          degree: 3,
+          poles: ['a', 'b', 'c', 'd', 'e', 'g'],
+          knots: [0, 0, 0, 0, 0.5, 0.5, 1, 1, 1, 1],
+        },
+      ]),
+    ).toEqual([]);
+  });
+
+  it.each([
+    ['missing property', without(BSPLINE, 'knots')],
+    ['extra property', { ...BSPLINE, params: [0, 1] }],
+    ['construction false', { ...BSPLINE, construction: false }],
+    [
+      'degree not matching the poles',
+      { ...BSPLINE, degree: 2, knots: [0, 0, 0, 0.3, 0.6, 1, 1, 1] },
+    ],
+    ['degree not a number', { ...BSPLINE, degree: '3' }],
+    ['poles not an array', { ...BSPLINE, poles: 'abcde' }],
+    ['a single pole', { ...BSPLINE, degree: 0, poles: ['a'], knots: [0, 1] }],
+    ['a pole to a missing point', { ...BSPLINE, poles: ['a', 'b', 'c', 'd', 'zz'] }],
+    ['a pole to a line', { ...BSPLINE, poles: ['a', 'b', 'c', 'd', 'ae'] }],
+    ['a pole not a string', { ...BSPLINE, poles: ['a', 'b', 'c', 'd', 5] }],
+    ['repeated poles', { ...BSPLINE, poles: ['a', 'b', 'c', 'b', 'e'] }],
+    ['knots not an array', { ...BSPLINE, knots: 0 }],
+    ['knots too short', { ...BSPLINE, knots: [0, 0, 0, 0, 1, 1, 1, 1] }],
+    ['knots too long', { ...BSPLINE, knots: [0, 0, 0, 0, 0.3, 0.6, 1, 1, 1, 1] }],
+    ['knots not clamped at 0', { ...BSPLINE, knots: [0, 0, 0, 0.1, 0.5, 1, 1, 1, 1] }],
+    ['knots not clamped at 1', { ...BSPLINE, knots: [0, 0, 0, 0, 0.5, 0.9, 1, 1, 1] }],
+    ['knots not starting at 0', { ...BSPLINE, knots: [-1, -1, -1, -1, 0.5, 1, 1, 1, 1] }],
+    ['knots not ending at 1', { ...BSPLINE, knots: [0, 0, 0, 0, 0.5, 2, 2, 2, 2] }],
+    ['an interior knot at an end', { ...BSPLINE, knots: [0, 0, 0, 0, 1, 1, 1, 1, 1] }],
+    ['a non-finite knot', { ...BSPLINE, knots: [0, 0, 0, 0, Number.NaN, 1, 1, 1, 1] }],
+    ['a knot not a number', { ...BSPLINE, knots: [0, 0, 0, 0, '0.5', 1, 1, 1, 1] }],
+  ])('reports a control point spline with %s at its index', (_name, bad) => {
+    expect(entityIssues([...SPLINE_ENTITIES.slice(0, 5), bad])).toEqual([entityIssue(5)]);
+  });
+
+  it('reports decreasing knots and an interior knot repeated more than the degree', () => {
+    const points = SPLINE_ENTITIES.slice(0, 5);
+    const g = P('g', 7, 3);
+    const six = ['a', 'b', 'c', 'd', 'e', 'g'];
+    expect(
+      entityIssues([
+        ...points,
+        g,
+        { ...BSPLINE, poles: six, knots: [0, 0, 0, 0, 0.6, 0.4, 1, 1, 1, 1] },
+      ]),
+    ).toEqual([entityIssue(6)]);
+    // Eight poles of degree 3 have four interior knots; all four equal is multiplicity 4 > 3.
+    expect(
+      entityIssues([
+        ...points,
+        g,
+        P('h', 8, 0),
+        P('i', 9, 1),
+        {
+          ...BSPLINE,
+          poles: [...six, 'h', 'i'],
+          knots: [0, 0, 0, 0, 0.5, 0.5, 0.5, 0.5, 1, 1, 1, 1],
+        },
+      ]),
+    ).toEqual([entityIssue(8)]);
+  });
+
+  it.each([
+    ['missing property', without(FIT_SPLINE, 'params')],
+    ['extra property', { ...FIT_SPLINE, radius: 1 }],
+    ['construction false', { ...FIT_SPLINE, construction: false }],
+    ['degree not matching the fit points', { ...FIT_SPLINE, degree: 2 }],
+    [
+      'a single fit point',
+      { ...FIT_SPLINE, degree: 0, fit: ['a'], params: [0], poles: [[0, 0]], knots: [0, 1] },
+    ],
+    ['a fit point to a missing point', { ...FIT_SPLINE, fit: ['a', 'zz'] }],
+    ['a fit point to a line', { ...FIT_SPLINE, fit: ['a', 'ae'] }],
+    ['repeated fit points', { ...FIT_SPLINE, fit: ['a', 'a'] }],
+    ['params of a wrong length', { ...FIT_SPLINE, params: [0, 0.5, 1] }],
+    ['params not starting at 0', { ...FIT_SPLINE, params: [0.1, 1] }],
+    ['params not ending at 1', { ...FIT_SPLINE, params: [0, 0.9] }],
+    ['a non-finite param', { ...FIT_SPLINE, params: [0, Infinity] }],
+    [
+      'poles of a wrong length',
+      {
+        ...FIT_SPLINE,
+        poles: [
+          [0, 0],
+          [3, 0],
+          [6, 1],
+        ],
+      },
+    ],
+    ['a pole not a pair', { ...FIT_SPLINE, poles: [[0, 0], [6]] }],
+    [
+      'a pole with three coordinates',
+      {
+        ...FIT_SPLINE,
+        poles: [
+          [0, 0],
+          [6, 1, 0],
+        ],
+      },
+    ],
+    ['a pole not an array', { ...FIT_SPLINE, poles: [[0, 0], 'e'] }],
+    [
+      'a non-finite pole coordinate',
+      {
+        ...FIT_SPLINE,
+        poles: [
+          [0, 0],
+          [Number.NaN, 1],
+        ],
+      },
+    ],
+    ['knots of a wrong length', { ...FIT_SPLINE, knots: [0, 0, 0.5, 1, 1] }],
+    ['knots not clamped', { ...FIT_SPLINE, knots: [0, 0.5, 1, 1] }],
+  ])('reports a fit point spline with %s at its index', (_name, bad) => {
+    expect(entityIssues([...SPLINE_ENTITIES.slice(0, 5), bad])).toEqual([entityIssue(5)]);
+  });
+
+  it('reports params that do not increase', () => {
+    const fit = {
+      kind: 'fitSpline',
+      id: 'x',
+      degree: 2,
+      fit: ['a', 'b', 'c'],
+      poles: [
+        [0, 0],
+        [1, 3],
+        [3, 2],
+      ],
+      knots: [0, 0, 0, 1, 1, 1],
+    };
+    const points = SPLINE_ENTITIES.slice(0, 5);
+    expect(entityIssues([...points, { ...fit, params: [0, 0.5, 1] }])).toEqual([]);
+    expect(entityIssues([...points, { ...fit, params: [0, 0, 1] }])).toEqual([entityIssue(5)]);
+    expect(entityIssues([...points, { ...fit, params: [0, 1, 1] }])).toEqual([entityIssue(5)]);
+    expect(entityIssues([...points, { ...fit, params: [0, 1.2, 1] }])).toEqual([entityIssue(5)]);
+  });
+
+  it('accepts tangent between a line and a spline sharing an end point, in either order', () => {
+    expect(
+      splineConstraintIssues([
+        // ae shares a with the first pole of s, e with the last fit point of f.
+        { kind: 'tangent', id: 't1', a: 'ae', b: 's' },
+        { kind: 'tangent', id: 't2', a: 'f', b: 'ae' },
+        { kind: 'coincident', id: 't3', a: 'a', b: 'd' },
+      ]),
+    ).toEqual([]);
+  });
+
+  it.each([
+    // bc shares b and c with s only at interior poles; bd shares d with f at its middle fit point.
+    ['tangent with a line not at an end', { kind: 'tangent', id: 'x', a: 'bc', b: 's' }],
+    ['tangent with a line at the fit spline middle', { kind: 'tangent', id: 'x', a: 'f', b: 'bd' }],
+    ['tangent spline–circle', { kind: 'tangent', id: 'x', a: 's', b: 'k' }],
+    ['tangent spline–spline', { kind: 'tangent', id: 'x', a: 's', b: 'f' }],
+    ['equal two splines', { kind: 'equal', id: 'x', a: 's', b: 'f' }],
+    ['equal line and spline', { kind: 'equal', id: 'x', a: 'ae', b: 's' }],
+    ['parallel with a spline', { kind: 'parallel', id: 'x', a: 'ae', b: 's' }],
+    ['horizontal on a spline', { kind: 'horizontal', id: 'x', line: 's' }],
+    ['radius on a spline', { kind: 'radius', id: 'x', curve: 'f', value: 1 }],
+    ['coincident with a spline', { kind: 'coincident', id: 'x', a: 'a', b: 's' }],
+  ])('reports %s', (_name, bad) => {
+    expect(splineConstraintIssues([{ kind: 'fix', id: 'g', point: 'a' }, bad])).toEqual([
+      constraintIssue(1),
+    ]);
+  });
+});
