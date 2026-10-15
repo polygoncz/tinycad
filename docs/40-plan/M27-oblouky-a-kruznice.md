@@ -44,7 +44,7 @@ Rozhodnutí v sezení 2026-10-15 (brainstorming), Pavel vybral všechny nabídnu
 ## Úkoly
 
 - [x] 0. Kontrakt ve spec 12 (gesta, vazby, degenerované případy) a implementační plán
-- [ ] 1. Konstrukce v `sketch` (`circleFrom2`, `circleFrom3`, `arcFrom3`, `tangentArcFrom`, `tangentCircle`, `endTangent`)
+- [x] 1. Konstrukce v `sketch` (`circleFrom2`, `circleFrom3`, `arcFrom3`, `tangentArcFrom`, `tangentCircle`, `endTangent`)
 - [ ] 2. Rodiny nástrojů v liště (`ToolDescriptor.family`, `ToolbarItem.variants`, dělené tlačítko v `Toolbar.vue`)
 - [ ] 3. Nástroje kružnic (2 body, 3 body, 2 tečny, 3 tečny)
 - [ ] 4. Nástroje oblouků (3 body, tečný)
@@ -115,6 +115,7 @@ _(Souběžná stopa, [[Roadmapa#Souběžné stopy (pokus od M25)|pravidla]]: mí
   - A19: body kliknuté nástroji 2p/3p nejsou entity (kružnice má jen střed a poloměr); vazbu dostane jen klik přichycený na existující bod (`pointOnCurve`). Vazby, které definují gesto (`tangent`, `pointOnCurve`), jsou povinné (`required`).
   - A20: `sketch.arc3p` má pořadí kliků začátek, konec, bod na oblouku (Fusion); oblouk po směru se v datech uloží prohozením konců.
   - A21: tečný oblouk v polyline vzniká stiskem a tahem z posledního bodu (Fusion); uvolnění ho zapíše.
+- **2026-10-15, úkol 1** (konstrukce): hotovo, 36 tabulkových testů. A22: `tangentCircle` má po Levenberg–Marquardtu druhou fázi – projekci na tečné kružnice (Gauss–Newton s nejmenší normou nad rezidui tečnosti); slabý člen ke kurzoru jinak posune minimum o ~λ a tolerance tečnosti by odmítla běžná zadání. Propsáno do spec 12. `endTangent` úsečky/oblouku nulové délky a kružnice → null.
 
 ## Retrospektiva
 

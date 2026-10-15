@@ -435,7 +435,10 @@ export function tangentArcFrom(start: Vec2, direction: Vec2, end: Vec2): ArcFit 
  * nejbližší k `hint`: numericky (Gauss–Newton / Levenberg–Marquardt nad středem a poloměrem,
  * nejvýš 50 iterací) minimalizuje Σ (d_i(střed) − r)², u dvou křivek navíc slabý člen
  * λ · |střed − hint|² (λ = 1e-3), takže střed leží na množině středů nejblíž kurzoru. d_i je
- * vzdálenost od přímky, u kružnice | |p − c| − R |. Start ve `hint` s r = průměr d_i.
+ * vzdálenost od přímky, u kružnice | |p − c| − R |. Start ve `hint` s r = průměr d_i. Slabý člen
+ * minimum mírně posune mimo tečné kružnice, proto následuje projekce: Gauss–Newton s nejmenší
+ * normou jen nad rezidui tečnosti (obě fáze dohromady nejvýš 50 iterací). Jiný počet křivek než 2
+ * nebo 3, úsečka nulové délky a spline → null.
  * Nekonvergence, r ≤ 1e-9 nebo zbytek tečnosti > 1e-6 · max(1, r) → null.
  */
 export function tangentCircle(curves: readonly Curve2[], hint: Vec2): CircleFit | null;
