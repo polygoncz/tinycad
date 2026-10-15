@@ -259,7 +259,21 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'displayStyle.mode.wireframe': 'Drátový model',
   'displayStyle.edges': 'Hrany',
   'displayStyle.transparent': 'Průhlednost',
+  'displayStyle.ao': 'Ambientní okluze',
+  'displayStyle.aoSettings': 'Nastavení AO…',
   'displayStyle.mesh': 'Triangulace',
+
+  // The panel of the AO settings, opened from the display style menu (M23).
+  'aoSettings.title': 'Ambientní okluze',
+  'aoSettings.close': 'Zavřít',
+  'aoSettings.radiusPx': 'Poloměr (px)',
+  'aoSettings.intensity': 'Síla',
+  'aoSettings.advanced': 'Pokročilé',
+  'aoSettings.thicknessPx': 'Tloušťka (px)',
+  'aoSettings.distanceFallOff': 'Útlum se vzdáleností',
+  'aoSettings.scale': 'Měřítko',
+  'aoSettings.samples': 'Vzorky',
+  'aoSettings.reset': 'Výchozí',
 
   // The value field of the manipulator HUD (M19), its aria-label.
   'manipulator.field.label': 'Hodnota úchytu',

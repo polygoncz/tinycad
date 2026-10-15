@@ -13,5 +13,7 @@ export type { StandardView } from './camera-math';
 export type { OrbitMode } from './camera-ops';
 export { DEFAULT_DISPLAY_STYLE, DISPLAY_MODES } from './display-style';
 export type { DisplayMode, DisplayStyle } from './display-style';
+export { AO_SETTING_RANGES, DEFAULT_AO_SETTINGS, isValidAoSetting } from './ao-parameters';
+export type { AoSettingRange, AoSettings } from './ao-parameters';
 export { DEFAULT_VIEW_CUBE_LABELS } from './view-cube-labels';
 export type { ViewCubeLabelKey, ViewCubeLabels } from './view-cube-labels';

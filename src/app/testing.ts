@@ -24,7 +24,14 @@ import { FakeViewport } from '@/interaction/testing';
 import type { MeshOps, ShapeHandle } from '@/kernel';
 import { createFakeKernel } from '@/kernel/testing';
 import type { FakeKernel } from '@/kernel/testing';
-import type { DisplayStyle, OrbitMode, ScenePalette, StandardView, ViewCubeLabels } from '@/render';
+import type {
+  AoSettings,
+  DisplayStyle,
+  OrbitMode,
+  ScenePalette,
+  StandardView,
+  ViewCubeLabels,
+} from '@/render';
 import type { DocumentLocks } from './doc-lock';
 import type { DownloadFile } from './file-exporter';
 import type { SupervisedKernel } from './kernel-supervisor';
@@ -79,6 +86,8 @@ export class FakeAppViewport implements AppViewport {
   readonly orbitModes: OrbitMode[] = [];
   /** Style of every setDisplayStyle call, oldest first (M22). */
   readonly displayStyles: DisplayStyle[] = [];
+  /** Settings of every setAoSettings call, oldest first (M23). */
+  readonly aoSettings: AoSettings[] = [];
   private readonly orbitModeToggles = new Emitter<{ toggle: undefined }>();
   /** Bodies of the last sync that settled current, [] after a reset (M19.1). */
   private shownBodies: readonly SyncedBody[] = [];
@@ -181,6 +190,10 @@ export class FakeAppViewport implements AppViewport {
 
   setDisplayStyle(style: DisplayStyle): void {
     this.displayStyles.push(style);
+  }
+
+  setAoSettings(settings: AoSettings): void {
+    this.aoSettings.push(settings);
   }
 
   /** Plays a click on the rotation mode button of the view cube (M17.1). */

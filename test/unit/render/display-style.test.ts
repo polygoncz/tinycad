@@ -21,6 +21,7 @@ const PLAN: DisplayPlan = {
   hiddenEdges: 'none',
   meshLines: false,
   xray: false,
+  ao: false,
 };
 
 describe('display style values', () => {
@@ -29,12 +30,13 @@ describe('display style values', () => {
     expect(Object.isFrozen(DISPLAY_MODES)).toBe(true);
   });
 
-  it('defaults to shaded with edges, opaque, without mesh lines, frozen', () => {
+  it('defaults to shaded with edges, opaque, without mesh lines and AO, frozen', () => {
     expect(DEFAULT_DISPLAY_STYLE).toEqual({
       mode: 'shaded',
       edges: true,
       transparent: false,
       mesh: false,
+      ao: false,
     });
     expect(Object.isFrozen(DEFAULT_DISPLAY_STYLE)).toBe(true);
   });
@@ -100,6 +102,32 @@ describe('resolveDisplay', () => {
     },
   );
 
+  it('shaded with AO: the AO pass', () => {
+    expect(resolveDisplay(style({ ao: true }))).toEqual({ ...PLAN, ao: true });
+  });
+
+  it('shaded transparent with AO: no AO pass (the faces write no depth)', () => {
+    expect(resolveDisplay(style({ ao: true, transparent: true })).ao).toBe(false);
+  });
+
+  it.each(DISPLAY_MODES.filter((m) => m !== 'shaded'))('ignores AO in %s', (mode: DisplayMode) => {
+    expect(resolveDisplay(style({ mode, ao: true })).ao).toBe(false);
+  });
+
+  it('AO changes no other field of the plan', () => {
+    for (const mode of DISPLAY_MODES) {
+      for (const transparent of [false, true]) {
+        for (const edges of [false, true]) {
+          for (const mesh of [false, true]) {
+            const without = resolveDisplay(style({ mode, transparent, edges, mesh }));
+            const withAo = resolveDisplay(style({ mode, transparent, edges, mesh, ao: true }));
+            expect({ ...withAo, ao: without.ao }).toEqual(without);
+          }
+        }
+      }
+    }
+  });
+
   it('returns a frozen plan', () => {
     for (const mode of DISPLAY_MODES) {
       expect(Object.isFrozen(resolveDisplay(style({ mode })))).toBe(true);
@@ -120,6 +148,7 @@ describe('samePlan', () => {
     ['hiddenEdges', { hiddenEdges: 'dashed' }],
     ['meshLines', { meshLines: true }],
     ['xray', { xray: true }],
+    ['ao', { ao: true }],
   ];
 
   it.each(changes)('differs on %s', (_field, change) => {

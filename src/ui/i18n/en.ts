@@ -258,7 +258,21 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'displayStyle.mode.wireframe': 'Wireframe',
   'displayStyle.edges': 'Edges',
   'displayStyle.transparent': 'Transparency',
+  'displayStyle.ao': 'Ambient occlusion',
+  'displayStyle.aoSettings': 'AO settings…',
   'displayStyle.mesh': 'Triangulation',
+
+  // The panel of the AO settings, opened from the display style menu (M23).
+  'aoSettings.title': 'Ambient occlusion',
+  'aoSettings.close': 'Close',
+  'aoSettings.radiusPx': 'Radius (px)',
+  'aoSettings.intensity': 'Intensity',
+  'aoSettings.advanced': 'Advanced',
+  'aoSettings.thicknessPx': 'Thickness (px)',
+  'aoSettings.distanceFallOff': 'Distance falloff',
+  'aoSettings.scale': 'Scale',
+  'aoSettings.samples': 'Samples',
+  'aoSettings.reset': 'Defaults',
 
   // The value field of the manipulator HUD (M19), its aria-label.
   'manipulator.field.label': 'Handle value',

@@ -73,9 +73,11 @@ test('the menu lists the modes and the toggles, every one of them works', async 
   await expect(styleButton(page)).toHaveAttribute('aria-haspopup', 'menu');
   await openStyleMenu(page);
   await expect(styleMenu(page).getByRole('menuitemradio')).toHaveText(MODES);
+  // The toggles of M22; Ambientní okluze and Nastavení AO… of M23 are tested in m23.spec.ts.
   await expect(styleMenu(page).getByRole('menuitemcheckbox')).toHaveText([
     'Hrany',
     'Průhlednost',
+    'Ambientní okluze',
     'Triangulace',
   ]);
   await expect(mode(page, 'Stínovaný')).toHaveAttribute('aria-checked', 'true');
@@ -105,7 +107,9 @@ test('the menu lists the modes and the toggles, every one of them works', async 
     await openStyleMenu(page);
     await expect(mode(page, name)).toHaveAttribute('aria-checked', 'true');
     const greyed = name === 'Stínovaný' ? 0 : 2;
-    await expect(styleMenu(page).locator('[aria-disabled="true"]')).toHaveCount(greyed);
+    // Plus Ambientní okluze and Nastavení AO… of M23: greyed out in every pass, as transparency
+    // is on (m23.spec.ts).
+    await expect(styleMenu(page).locator('[aria-disabled="true"]')).toHaveCount(greyed + 2);
     if (greyed > 0) {
       await expect(toggle(page, 'Hrany')).toHaveAttribute('aria-disabled', 'true');
       await expect(toggle(page, 'Průhlednost')).toHaveAttribute('aria-disabled', 'true');

@@ -31,7 +31,7 @@ describe('createDisplayStyleController', () => {
   });
 
   it('loads a valid stored style and stores nothing', () => {
-    const value = { mode: 'wireframe', edges: false, transparent: true, mesh: true };
+    const value = { mode: 'wireframe', edges: false, transparent: true, mesh: true, ao: false };
     const s = aStorage(JSON.stringify(value));
     const c = createDisplayStyleController({ storage: s.storage });
     expect(c.style.value).toEqual(value);
@@ -60,6 +60,7 @@ describe('createDisplayStyleController', () => {
       edges: false,
       transparent: DEFAULT_DISPLAY_STYLE.transparent,
       mesh: true,
+      ao: DEFAULT_DISPLAY_STYLE.ao,
     });
   });
 
@@ -71,6 +72,27 @@ describe('createDisplayStyleController', () => {
       edges: false,
       transparent: DEFAULT_DISPLAY_STYLE.transparent,
       mesh: DEFAULT_DISPLAY_STYLE.mesh,
+      ao: DEFAULT_DISPLAY_STYLE.ao,
+    });
+  });
+
+  it('reads an M22 record without ao as ao false and stores nothing', () => {
+    const value = { mode: 'shaded', edges: true, transparent: false, mesh: true };
+    const s = aStorage(JSON.stringify(value));
+    const c = createDisplayStyleController({ storage: s.storage });
+    expect(c.style.value).toEqual({ ...value, ao: false });
+    expect(s.writes()).toBe(0);
+  });
+
+  it.each(['"yes"', '1', 'null'])('replaces an invalid ao %s with the default', (ao) => {
+    const raw = `{"mode":"hiddenRemoved","edges":false,"transparent":true,"mesh":true,"ao":${ao}}`;
+    const c = createDisplayStyleController({ storage: aStorage(raw).storage });
+    expect(c.style.value).toEqual({
+      mode: 'hiddenRemoved',
+      edges: false,
+      transparent: true,
+      mesh: true,
+      ao: DEFAULT_DISPLAY_STYLE.ao,
     });
   });
 
@@ -104,14 +126,17 @@ describe('createDisplayStyleController', () => {
     expect(c.style.value.transparent).toBe(!DEFAULT_DISPLAY_STYLE.transparent);
     c.toggleMesh();
     expect(c.style.value.mesh).toBe(!DEFAULT_DISPLAY_STYLE.mesh);
+    c.toggleAo();
+    expect(c.style.value.ao).toBe(!DEFAULT_DISPLAY_STYLE.ao);
     expect(Object.isFrozen(c.style.value)).toBe(true);
     expect(stored(s)).toEqual({
       mode: 'wireframe',
       edges: !DEFAULT_DISPLAY_STYLE.edges,
       transparent: !DEFAULT_DISPLAY_STYLE.transparent,
       mesh: !DEFAULT_DISPLAY_STYLE.mesh,
+      ao: !DEFAULT_DISPLAY_STYLE.ao,
     });
-    expect(s.writes()).toBe(4);
+    expect(s.writes()).toBe(5);
   });
 
   it('works without storage', () => {

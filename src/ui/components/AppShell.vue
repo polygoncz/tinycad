@@ -12,16 +12,20 @@
 // switch), nothing of the session.
 // Also the page-level bindings of a session: the theme (Q072), the view cube labels of the
 // language (M17), the rotation mode of the camera (M17.1), the display style of the bodies (M22,
-// its button left of the view cube) and the global keyboard.
+// its button left of the view cube), the AO settings (M23, their panel opened from the display
+// style menu) and the global keyboard.
 import { onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { AppSession } from '@/app';
 import { provideSession } from '../composables/use-session';
 import { useObservable } from '../composables/use-observable';
+import { isAoDrawn } from '../display-style/menu-items';
+import { useAoSettings } from '../display-style/use-ao-settings';
 import { useDisplayStyle } from '../display-style/use-display-style';
 import { isMacPlatform, toViewKeyEvent } from '../keyboard';
 import { useOrbitMode } from '../orbit-mode/use-orbit-mode';
 import { useTheme } from '../theme/use-theme';
+import AoSettingsPanel from './AoSettingsPanel.vue';
 import Browser from './Browser.vue';
 import DisplayStyleMenu from './DisplayStyleMenu.vue';
 import { dialogFor } from './feature-dialogs';
@@ -88,6 +92,31 @@ watch(
   { immediate: true },
 );
 
+// The AO settings are a page preference next to the style (M23, Q081). Whether their panel is
+// open is layout state of this window; it closes by itself when AO stops drawing (mode,
+// transparency, AO off), by × and Esc it gives the focus back to the display style button.
+const { settings: aoSettings } = useAoSettings();
+watch(
+  aoSettings,
+  (value) => {
+    session.viewSettings.setAoSettings(value);
+  },
+  { immediate: true },
+);
+const aoSettingsOpen = ref(false);
+const displayStyleMenu = useTemplateRef<InstanceType<typeof DisplayStyleMenu>>('displayStyleMenu');
+watch(
+  () => isAoDrawn(displayStyle.value),
+  (drawn) => {
+    if (!drawn) aoSettingsOpen.value = false;
+  },
+);
+
+function closeAoSettings(): void {
+  aoSettingsOpen.value = false;
+  displayStyleMenu.value?.focusButton();
+}
+
 // Global keyboard (spec 10, "Akce a klávesové zkratky"): window keys → ViewKeyEvent →
 // ActionRegistry.handleKey, which ignores text fields. Keys on the focused canvas are not
 // handled here: render forwards them to the active tool, whose unhandled keys reach
@@ -118,7 +147,8 @@ onUnmounted(() => {
     </header>
     <main class="stage">
       <ViewportHost ref="viewport" />
-      <DisplayStyleMenu />
+      <DisplayStyleMenu ref="displayStyleMenu" @open-ao-settings="aoSettingsOpen = true" />
+      <AoSettingsPanel v-if="aoSettingsOpen" @close="closeAoSettings" />
       <SketchDimensions
         v-if="sketchSession !== null"
         :key="`dimensions-${sketchSession.featureId}`"

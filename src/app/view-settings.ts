@@ -1,12 +1,19 @@
 // Settings of the view that belong to the page (spec 11, "Kompoziční kořen (app)"; D7 of M20):
-// the theme, the labels of the view cube, the rotation mode, the display style (M22). ui owns them and hands them over
-// through one port; app picks the scene palette of a theme (Q072), so ui knows nothing of
-// render. A new setting is one method here, forwarded to the viewport.
+// the theme, the labels of the view cube, the rotation mode, the display style (M22), the AO
+// settings (M23). ui owns them and hands them over through one port; app picks the scene palette
+// of a theme (Q072), so ui knows nothing of render. A new setting is one method here, forwarded to the viewport.
 
 import { ObservableValue } from '@/core';
 import type { Observable, Unsubscribe } from '@/core';
 import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
-import type { DisplayStyle, OrbitMode, ScenePalette, Viewport, ViewCubeLabels } from '@/render';
+import type {
+  AoSettings,
+  DisplayStyle,
+  OrbitMode,
+  ScenePalette,
+  Viewport,
+  ViewCubeLabels,
+} from '@/render';
 
 /** The port of ui (ADR 0011: app defines what ui may set); createViewSettings implements it. */
 export interface ViewSettings {
@@ -20,12 +27,19 @@ export interface ViewSettings {
   onOrbitModeToggle(listener: () => void): Unsubscribe;
   /** M22: how the bodies are drawn, from ui (a page preference like the rotation mode). */
   setDisplayStyle(style: DisplayStyle): void;
+  /** M23: settings of the AO pass from ui, validated there (a page preference like the style). */
+  setAoSettings(settings: AoSettings): void;
 }
 
 /** What createViewSettings needs of the viewport: its settings, as render's Viewport has them. */
 export type ViewportSettings = Pick<
   Viewport,
-  'setPalette' | 'setViewCubeLabels' | 'setOrbitMode' | 'onOrbitModeToggle' | 'setDisplayStyle'
+  | 'setPalette'
+  | 'setViewCubeLabels'
+  | 'setOrbitMode'
+  | 'onOrbitModeToggle'
+  | 'setDisplayStyle'
+  | 'setAoSettings'
 >;
 
 /**
@@ -60,6 +74,9 @@ export function createViewSettings(
       },
       setDisplayStyle(style) {
         viewport.setDisplayStyle(style);
+      },
+      setAoSettings(settings) {
+        viewport.setAoSettings(settings);
       },
     },
     defaultBodyColor: defaultBodyColor.asObservable(),

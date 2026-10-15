@@ -27,13 +27,13 @@ updated: 2026-10-15
 
 > **Pojmy:** [[Viewport]], [[Handle tvaru]], [[Těleso]], [[Styl zobrazení]]  
 > **Milník:** [[M08-vykreslovani]], kamera a view cube [[M17-kamera-a-view-cube]], režimy zobrazení [[M22-rezimy-zobrazeni]]  
-> **Rozhodnutí:** [[0019-vlastni-ovladani-kamery|ADR 0019]], [[0020-rezim-otaceni-kamery|ADR 0020]]
+> **Rozhodnutí:** [[0019-vlastni-ovladani-kamery|ADR 0019]], [[0020-rezim-otaceni-kamery|ADR 0020]], [[0026-viceprochodove-vykreslovani-ve-viewportu|ADR 0026]]
 
 Zobrazuje výsledek regenerace pomocí Three.js a odpovídá na otázku „co je pod kurzorem“. O dokumentu ani featurách neví nic – pracuje s tělesy (`BodyId`), handle a sítěmi. Závisí na `core`, typech z `kernel`, typech z `interaction` (port `ViewportPort`, události a `BodyId`, [[0009-platformove-nezavisla-domena|ADR 0009]]) a knihovně `three`.
 
 ## Závislost
 
-`three` ~0.186 a `@types/three` ~0.186 (dev). Z `kernel` bere `render` jen typy `MeshData`, `MeshOps`, `MeshQuality`, `ShapeHandle` a `BoundingBox`. Three.js má verze `0.x`, minor vydání může rozbít API, proto `~`. Z `three/addons` (podcesta stejného balíku) jen `LineSegments2`/`LineMaterial`. `OrbitControls` se do [[M17-kamera-a-view-cube|M17]] používaly pro kameru, od M17 je nahradilo vlastní ovládání ([[0019-vlastni-ovladani-kamery|ADR 0019]]). Nové ADR není potřeba, Three.js zvolil [[0001-jadro-v-cistem-ts|ADR 0001]] ([[Q062 Závislost three a OrbitControls|Q062]]).
+`three` ~0.186 a `@types/three` ~0.186 (dev). Z `kernel` bere `render` jen typy `MeshData`, `MeshOps`, `MeshQuality`, `ShapeHandle` a `BoundingBox`. Three.js má verze `0.x`, minor vydání může rozbít API, proto `~`. Z `three/addons` (podcesta stejného balíku) jen `LineSegments2`/`LineMaterial` a od M23 postprocessing `EffectComposer`, `RenderPass`, `GTAOPass`, `OutputPass`, `Pass`/`FullScreenQuad` a `GTAOBlendShader` ([[#Víceprůchodové vykreslování (AO)]]). `OrbitControls` se do [[M17-kamera-a-view-cube|M17]] používaly pro kameru, od M17 je nahradilo vlastní ovládání ([[0019-vlastni-ovladani-kamery|ADR 0019]]). Nové ADR není potřeba, Three.js zvolil [[0001-jadro-v-cistem-ts|ADR 0001]] ([[Q062 Závislost three a OrbitControls|Q062]]).
 
 ## Viewport
 
@@ -63,6 +63,7 @@ export interface Viewport extends ViewportPort, Disposable {
   setOrbitMode(mode: OrbitMode): void;                    // M17.1: režim otáčení (viz Kamera → Režim otáčení); stejná hodnota = nic
   onOrbitModeToggle(listener: () => void): Unsubscribe;   // M17.1: klik na tlačítko režimu u view cube; dispose odběratele uvolní
   setDisplayStyle(style: DisplayStyle): void;             // M22: styl zobrazení (viz Styl zobrazení); stejný plán = nic
+  setAoSettings(settings: AoSettings): void;              // M23: nastavení AO (viz Víceprůchodové vykreslování); stejné hodnoty = nic
 
   readonly events: Subscribable<{ pointer: ViewPointerEvent; key: ViewKeyEvent }>;
 }
@@ -326,9 +327,9 @@ export interface DisplayStyle {
   readonly edges: boolean;        // hrany B-rep; platí jen v 'shaded'
   readonly transparent: boolean;  // platí jen v 'shaded'
   readonly mesh: boolean;         // čáry triangulace; platí ve všech režimech
-  // M23: readonly ao: boolean;
+  readonly ao: boolean;            // M23: ambient occlusion; platí jen v 'shaded' bez průhlednosti (M24: i v 'realistic')
 }
-export const DEFAULT_DISPLAY_STYLE: DisplayStyle;   // { mode: 'shaded', edges: true, transparent: false, mesh: false }
+export const DEFAULT_DISPLAY_STYLE: DisplayStyle;   // { mode: 'shaded', edges: true, transparent: false, mesh: false, ao: false }
 export const TRANSPARENT_FACE_OPACITY = 0.35;
 
 /** Plochý plán: jediné, podle čeho se render rozhoduje. Zmrazený. */
@@ -339,7 +340,7 @@ export interface DisplayPlan {
   readonly hiddenEdges: 'none' | 'dashed';     // druhý průchod hran za plochami
   readonly meshLines: boolean;
   readonly xray: boolean;                      // picking nekontroluje zákryt, zvýraznění bez testu hloubky
-  // M23: readonly ao: boolean;
+  readonly ao: boolean;                        // M23: průchod AO (viz Víceprůchodové vykreslování)
 }
 export function resolveDisplay(style: DisplayStyle): DisplayPlan;
 export function samePlan(a: DisplayPlan, b: DisplayPlan): boolean;
@@ -349,16 +350,16 @@ Pole, které v daném režimu neplatí, se **ignoruje, ale nemaže**: po návrat
 
 ### Rozhodovací tabulka
 
-| Režim (`mode`) | `faces` | `faceOpacity` | `edges` | `hiddenEdges` | `xray` | AO (M23) | Milník |
+| Režim (`mode`) | `faces` | `faceOpacity` | `edges` | `hiddenEdges` | `xray` | `ao` | Milník |
 |---|---|---|---|---|---|---|---|
-| `shaded` | `lit` | 1 | `style.edges` | `none` | ne | volitelně | M22 |
+| `shaded` | `lit` | 1 | `style.edges` | `none` | ne | `style.ao` | M22, `ao` M23 |
 | `shaded`, `transparent` | `lit` | 0,35 | `style.edges` | `none` | **ano** | ne | M22 |
 | `hiddenRemoved` | `flat` | 1 | ano | `none` | ne | ne | M22 |
 | `hiddenVisible` | `flat` | 1 | ano | `dashed` | **ano** | ne | M22 |
 | `wireframe` | `hidden` | 1 | ano | `none` | **ano** | ne | M22 |
-| `realistic` (cíl) | `physical` | 1 | ne | `none` | ne | volitelně | M24 |
+| `realistic` (cíl) | `physical` | 1 | ne | `none` | ne | `style.ao` | M24 |
 
-`meshLines = style.mesh` ve všech řádcích. Ve `wireframe` a v průhledném `shaded` plochy hloubku nezapisují, takže hrany za nimi jsou vidět bez druhého průchodu (`hiddenEdges: 'none'`), a proto je tam i `xray`.
+`meshLines = style.mesh` ve všech řádcích. `ao` je jinde `false`: v průhledném `shaded` plochy hloubku nezapisují a AO z hloubky by kreslilo tmavé skvrny pod nimi, v čárových režimech nejsou osvětlené plochy, které by stínilo. `samePlan` porovnává i `ao`. Ve `wireframe` a v průhledném `shaded` plochy hloubku nezapisují, takže hrany za nimi jsou vidět bez druhého průchodu (`hiddenEdges: 'none'`), a proto je tam i `xray`.
 
 ### Materiály (`BodyMaterials`, sdílí `BodyLayer`)
 
@@ -411,7 +412,7 @@ Pohled vytvořený v `apply` po přepnutí dostane aktuální plán. Výchozí p
 
 ### `Viewport.setDisplayStyle(style)`
 
-`resolveDisplay(style)`. Při stejném plánu jako minule nic, jinak vnitřní `BodyLayers.setDisplayPlan` (jen `main`; veřejné `Viewport.bodies` tu metodu nemá), `highlight.setXray(plan.xray)`, uložení plánu pro picker a naplánování snímku (`scheduleFrame`, před `mount` prázdné). Funguje i před `mount` (plán platí od prvního snímku). Plán vlastní **viewport**: počáteční plán předá vrstvám těles při jejich vytvoření (`initialPlan`), vrstvy si výchozí plán samy neskládají.
+`resolveDisplay(style)`. Při stejném plánu jako minule nic, jinak vnitřní `BodyLayers.setDisplayPlan` (jen `main`; veřejné `Viewport.bodies` tu metodu nemá), `highlight.setXray(plan.xray)`, uložení plánu pro picker a naplánování snímku (`scheduleFrame`, před `mount` prázdné). Funguje i před `mount` (plán platí od prvního snímku). Plán vlastní **viewport**: počáteční plán předá vrstvám těles při jejich vytvoření (`initialPlan`), vrstvy si výchozí plán samy neskládají. Od M23: když nový plán má `ao: false` a pipeline AO existuje, uvolní ji. Parametry AO nastavuje zvlášť `setAoSettings` (viz níže). Zapnutí AO jen naplánuje snímek, pipeline vznikne v `draw()` ([[#Víceprůchodové vykreslování (AO)]]).
 
 ### Známá omezení
 
@@ -419,6 +420,133 @@ Pohled vytvořený v `apply` po přepnutí dostane aktuální plán. Výchozí p
 - **Siluety zakřivených ploch** se nekreslí. Čárové režimy (`hiddenRemoved`, `hiddenVisible`, `wireframe`) ukazují jen hrany B-rep, takže válec má jen kružnice a šev a jeho boční obrys chybí (ruční ověření M22). Onshape siluety dopočítává podle pohledu. Je to práce navíc mimo rozsah M22 (výpočet podle směru pohledu na síti nebo HLR v jádře).
 - V tmavém tématu mají čárkované skryté hrany (`hiddenEdge` 0x6b7280) nižší kontrast než ve světlém. Jsou čitelné, ale slabé.
 - Ve `hiddenVisible` kryjí plochy skicu stejně jako v `shaded`, ale picking skic zakrytí nekontroluje (`xray`). Je to vědomá nekonzistence, protože skica za tělesem je při editaci vidět slabě (M19.2).
+- **AO (M23):** G-buffer normál je bez MSAA, takže okraj AO na obrysu může být mírně zubatý. S AO se scéna kreslí třikrát ([[0026-viceprochodove-vykreslovani-ve-viewportu|ADR 0026]]).
+- **Hrany s AO jsou o něco světlejší a tenčí:** MSAA render targetu průměruje vzorky v lineárním prostoru, MSAA plátna v sRGB. Tmavá jednopixelová čára tak po převodu vyjde světlejší (v testu 105 místo 88). Pavel to při ručním ověření M23 přijal.
+
+### Víceprůchodové vykreslování (AO)
+
+> **Rozhodnutí:** [[0026-viceprochodove-vykreslovani-ve-viewportu|ADR 0026]], [[Q077 Technika AO|Q077]] · **Milník:** [[M23-postprocessing-a-ao|M23]]
+
+Při `plan.ao === false` kreslí `draw()` jako v M22: `renderer.clear()`, jeden `renderer.render(scene, camera)` na plátno s MSAA, pak view cube. Při `plan.ao === true` kreslí místo `renderer.render` **pipeline AO** a view cube zůstává až po ní.
+
+**Průchody** (vše do jednoho render targetu composeru, `HalfFloatType`, `samples: 4`; žádný průchod kromě výstupu nestřídá buffery, `needsSwap = false`):
+
+| # | Průchod | Co kreslí | Skryté skupiny | Mazání |
+|---|---|---|---|---|
+| 1 | model (`RenderPass`) | hlavní vrstva těles | interakce | barva (`palette.background`) i hloubka |
+| 2 | AO (`AoPass`, obal `GTAOPass`) | G-buffer normál a hloubky modelu → AO → odšumění → **násobení** barvy targetu | interakce a `LineSegments2` modelu (jen v G-bufferu) | G-buffer vlastní, target ne |
+| 3 | interakce (`RenderPass`, `clear: false`) | náhled, zvýraznění, overlay, skici, manipulátory, mřížka | model | nic, hloubka modelu zůstává |
+| 4 | výstup (`OutputPass`) | převod do sRGB na plátno | – | – |
+
+**Rozdělení scény** (`scene-partition.ts`, s `three`, testuje se v Node):
+
+```ts
+/** Kořenové skupiny scény podle průchodu. Počítá se v každém snímku AO (pár objektů). */
+export interface ScenePartition {
+  readonly model: readonly THREE.Object3D[];        // [layers.main.group]
+  readonly interaction: readonly THREE.Object3D[];  // ostatní přímí potomci scény
+}
+/** interaction = scene.children bez `model`, bez světel (`isLight`) a bez kamer (`isCamera`). */
+export function partitionScene(scene: THREE.Scene, model: readonly THREE.Object3D[]): ScenePartition;
+
+/** Všechny objekty `isLineSegments2` v podstromech `roots` (GTAOPass je v G-bufferu nekryje). */
+export function aoExcluded(roots: readonly THREE.Object3D[]): THREE.Object3D[];
+
+/**
+ * Po dobu `fn` nastaví `visible = false` všem `objects`, pak vrátí **původní** hodnoty, i když `fn` vyhodí.
+ * Objekt, který už skrytý byl, zůstane skrytý. Duplicity v `objects` nevadí.
+ */
+export function hideDuring<T>(objects: readonly THREE.Object3D[], fn: () => T): T;
+```
+
+- Rozdělení dělá viewport, ne vrstvy: nová vrstva přidaná do scény je automaticky interakce. Světla a kamera s headlightem se kreslí v obou průchodech.
+- Mimo průchod je scéna nezměněná, takže `Raycaster` pickingu, obálka scény ani `visible` nastavené vrstvami (`setBodyVisible`, skrytá skupina) nic nepoznají.
+
+**Nastavení a parametry** (`ao-parameters.ts`, **bez `three`**; uživatelské nastavení podle [[Q081 Uživatelské nastavení AO|Q081]]):
+
+```ts
+/** Uživatelské nastavení AO: předvolba stránky jako styl, ale samostatná (Q081). Zmrazené. */
+export interface AoSettings {
+  readonly radiusPx: number;         // poloměr v CSS px
+  readonly intensity: number;        // síla násobení, 0..1
+  readonly thicknessPx: number;      // tloušťka v CSS px (Pokročilé)
+  readonly distanceFallOff: number;  // 0..1 (Pokročilé)
+  readonly scale: number;            // (Pokročilé)
+  readonly samples: number;          // celé číslo (Pokročilé)
+}
+export const DEFAULT_AO_SETTINGS: AoSettings;   // { radiusPx: 32, intensity: 1, thicknessPx: 16, distanceFallOff: 1, scale: 1, samples: 16 }
+
+export interface AoSettingRange {
+  readonly min: number;
+  readonly max: number;
+  readonly step: number;
+  readonly integer: boolean;   // jen celá čísla (validace, zarovnání v ui, formát hodnoty)
+}
+/** Rozsahy posuvníků i validace; jediné místo, kde jsou. Zmrazené. */
+export const AO_SETTING_RANGES: Readonly<Record<keyof AoSettings, AoSettingRange>>;
+//   radiusPx 4–128 / 1, intensity 0–1 / 0,05, thicknessPx 1–64 / 1,
+//   distanceFallOff 0–1 / 0,05, scale 0–3 / 0,05, samples 4–32 / 1 (integer jen samples)
+
+/** Platná hodnota pole: konečné číslo v rozsahu; při `integer` celé. */
+export function isValidAoSetting(key: keyof AoSettings, value: number): boolean;
+
+/** Parametry GTAO pro jeden snímek (světové jednotky, mm). */
+export interface AoParameters {
+  readonly radius: number;          // mm
+  readonly thickness: number;       // mm
+  readonly distanceFallOff: number;
+  readonly scale: number;
+  readonly samples: number;
+  readonly intensity: number;
+}
+/** radius = radiusPx · worldPerPx, thickness = thicknessPx · worldPerPx, ostatní z nastavení beze změny. */
+export function aoParameters(settings: AoSettings, worldPerPx: number): AoParameters;   // worldPerPx konečné > 0, jinak chyba
+```
+
+- AO se drží v pixelech jako čárky skrytých hran, takže vypadá stejně při každém zoomu a velikosti modelu.
+- Výchozí hodnoty potvrdil Pavel při ručním ověření M23 (2026-10-15) beze změny. Testy hlídají úměrnost a rozsahy, ne konkrétní čísla.
+- Konstanty `AO_RADIUS_PX` a `AO_THICKNESS_PX` z úkolu 2 zanikají, nahrazují je `DEFAULT_AO_SETTINGS`.
+- Celočíselnost pole říká jen `AoSettingRange.integer`. Validace (`isValidAoSetting`), zarovnání v `ui` i formát hodnoty v panelu čtou tenhle příznak, nikdo nepíše `key === 'samples'` (revize M23).
+- Seznam polí se všude odvozuje z `AO_SETTING_RANGES` (`Record` hlídá úplnost), ne z ručně psaného pole.
+- `src/render/index.ts` exportuje `AoSettings`, `AoSettingRange`, `DEFAULT_AO_SETTINGS`, `AO_SETTING_RANGES` a `isValidAoSetting`. `app` je reexportuje pro `ui`. `AoParameters` a `aoParameters` zůstávají vnitřní.
+
+**`Viewport.setAoSettings(settings: AoSettings)`** (od M23, mimo port jako `setDisplayStyle`):
+- Neplatné pole (`isValidAoSetting`) je chyba, protože validaci dělá `ui` při čtení z úložiště.
+- Stejné hodnoty (po polích) nic nedělají. Jinak se nastavení uloží a naplánuje se snímek (`scheduleFrame`), ale jen když plán má `ao`. Bez AO se nastavení projeví až po zapnutí.
+- Funguje i před `mount`. Výchozí je `DEFAULT_AO_SETTINGS`.
+
+**Pipeline** (`ao-pipeline.ts`, s `three`, ověřuje se e2e a ručně):
+
+```ts
+export interface AoPipeline extends Disposable {
+  setSize(width: number, height: number): void;   // CSS px; target a G-buffer násobí poměrem pixelů rendereru
+  render(partition: ScenePartition, params: AoParameters): void;   // průchody 1–4, výstup na plátno
+}
+export function createAoPipeline(deps: {
+  renderer: THREE.WebGLRenderer;
+  scene: THREE.Scene;
+  camera: THREE.Camera;   // OrthographicCamera rigu; GTAOPass si typ kamery čte při vytvoření
+  width: number;          // CSS px
+  height: number;
+}): AoPipeline;
+```
+
+- `AoPass extends Pass` (`needsSwap = false`) vlastní `GTAOPass` s `output = GTAOPass.OUTPUT.Off` (spočítá jen `pdRenderTarget`) a `FullScreenQuad` s materiálem z `GTAOBlendShader`. Blending je násobení jako v `GTAOPass` (`CustomBlending`, `DstColorFactor`/`ZeroFactor`), bez `depthTest` a `depthWrite`. `render` zavolá `hideDuring([...interaction, ...aoExcluded(model)], () => gtao.render(…))` a pak quad do `readBuffer`.
+- Průchody 1 a 3 jsou `RenderPass` obalené `hideDuring` (model skryje interakce, interakce skryjí model). Rozdělení dostanou při každém `render`.
+- Druhý render target composeru se nikdy nepoužije, protože nikdo nestřídá buffery. Three ho na GPU alokuje až při prvním použití, takže nestojí paměť.
+- `dispose`: `GTAOPass`, materiál a quad násobení, `OutputPass` a composer (render targety).
+
+**Vlastnictví a životní cyklus** (viewport):
+
+- Pipeline patří k připojenému rendereru: vzniká líně v `draw()` při prvním snímku s `plan.ao` a s rozměry z `canvas.clientWidth/Height`.
+- Uvolní se, když `setDisplayStyle` přepne na plán s `ao: false`, a při `unmount` (patří do `mounted.resources`). Opětovné zapnutí ji vytvoří znovu.
+- `resize` volá i `ao?.setSize(width, height)`.
+- Poměr pixelů se čte z rendereru při vytvoření. Změnu `devicePixelRatio` za běhu neřeší ani dnešní plátno, takže zůstává mimo rozsah.
+- `draw()` při AO: `ao.render(partitionScene(scene, [layers.main.group]), aoParameters(aoSettings, lastWorldPerPx))`.
+- **Nulová velikost plátna** (skrytý prvek, `clientWidth` nebo `clientHeight` ≤ 0): snímek se nakreslí bez AO (`renderer.render`) a pipeline se nevytváří. Vznikla by jinak s targetem 0×0 a `worldPerPx` by nebylo konečné.
+
+**Barvy:** render target composeru je lineární a `OutputPass` převede do sRGB stejně, jako renderer převádí při kreslení přímo na plátno. Pozadí (`setClearColor`) i barvy ploch tak vypadají stejně s AO i bez něj (e2e).
+- **Nástraha `RenderPass`:** three převádí barvu mazání do barevného prostoru cíle jen v `setClearColor` a `render`. `RenderPass` ale maže po `setRenderTarget` a ještě před `render`, takže by lineární target smazal sRGB hodnotou z plátna a pozadí by s AO bylo světlejší. Průchod modelu (`TargetClearPass`, obal kolem `RenderPass`) proto po `setRenderTarget` nastaví barvu mazání znovu.
 
 ## Manipulátory
 
@@ -517,9 +645,9 @@ Filtr (`PickFilter`, [[10-interakce#Port viewportu]], M10.1): průchod přes hra
 ## Testy
 
 `render` se testuje nejhůř, proto v něm má být co nejméně logiky ([[Q061 Testy render v Node|Q061]]):
-- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, od M17 operace kamery (`orbit`, `pan`, `zoomAt`, `turn`, `ease`, `interpolate`, `clipRange`, `orientationFor`), `cameraGesture`, `wheelFactor`, `buildViewCube` a `cubeRegionAt`, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache`, sdílená cache `createSharedMeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor` (od M17 zaniká), od M13 `pickSketchRegion` a `pointInRegion`, od M15 `parseHexColor`, `pickHandle`, `projectHandles`, `handleBounds`, `handleHidden`, `arcPoints` a `viewChangedSince`, od M19.2 `sketchHits`, `sketchGridStep` a `gridLines` (`sketch-grid.ts`), od M22 `resolveDisplay` a `samePlan` (`display-style.ts`) (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
+- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, od M17 operace kamery (`orbit`, `pan`, `zoomAt`, `turn`, `ease`, `interpolate`, `clipRange`, `orientationFor`), `cameraGesture`, `wheelFactor`, `buildViewCube` a `cubeRegionAt`, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache`, sdílená cache `createSharedMeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor` (od M17 zaniká), od M13 `pickSketchRegion` a `pointInRegion`, od M15 `parseHexColor`, `pickHandle`, `projectHandles`, `handleBounds`, `handleHidden`, `arcPoints` a `viewChangedSince`, od M19.2 `sketchHits`, `sketchGridStep` a `gridLines` (`sketch-grid.ts`), od M22 `resolveDisplay` a `samePlan` (`display-style.ts`), od M23 `aoParameters`, `isValidAoSetting`, `AO_SETTING_RANGES` a `DEFAULT_AO_SETTINGS` (`ao-parameters.ts`) (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
 - Testy `render` nesmí importovat `@/kernel/testing` (`FakeKernel`): `render` závisí na `kernel` jen typově a `testing.ts` otevírá jen hodnotovým závislostem ([[01-architektura]]). Sítě v testech jsou ruční, malé a záměrně s klíči ploch mimo pořadí.
-- Kód s Three.js (`Viewport`, `BodyView`, vrstvy) se ověřuje ručně na dev stránce `dev/viewport.html` a e2e testy (Playwright). Three.js ale běží i v Node, takže část kódu s ním má testy v Node: `Picker` (`picker.test.ts` s ruční sítí; od [[M19.1-opravy-z-revize|M19.1]] i hrany z více segmentů, kontrola zakrytí a `body`, `edgeIndex` a `point` v aserci, od M19.2 `isVisible`), `SketchLayer` a `HighlightLayer`.
+- Kód s Three.js (`Viewport`, `BodyView`, vrstvy) se ověřuje ručně na dev stránce `dev/viewport.html` a e2e testy (Playwright). Three.js ale běží i v Node, takže část kódu s ním má testy v Node: `Picker` (`picker.test.ts` s ruční sítí; od [[M19.1-opravy-z-revize|M19.1]] i hrany z více segmentů, kontrola zakrytí a `body`, `edgeIndex` a `point` v aserci, od M19.2 `isVisible`), `SketchLayer` a `HighlightLayer`, od M23 `partitionScene`, `aoExcluded` a `hideDuring` (`scene-partition.ts`). Pipeline AO (`ao-pipeline.ts`) potřebuje WebGL, ověřuje ji e2e `m23.spec.ts` a ruční kontrola.
 
 ## Otevřené otázky
 

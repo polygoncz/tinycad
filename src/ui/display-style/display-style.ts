@@ -22,6 +22,8 @@ export interface DisplayStyleController {
   /** Kept outside shaded too; only the menu greys it out. */
   toggleTransparent(): void;
   toggleMesh(): void;
+  /** Kept outside opaque shaded too; only the menu greys it out. */
+  toggleAo(): void;
 }
 
 const DISPLAY_STYLE_KEY = 'tinycad.displayStyle';
@@ -56,6 +58,7 @@ function pickDisplayStyle(stored: string | null): DisplayStyle {
     edges: booleanOr(fields.edges, DEFAULT_DISPLAY_STYLE.edges),
     transparent: booleanOr(fields.transparent, DEFAULT_DISPLAY_STYLE.transparent),
     mesh: booleanOr(fields.mesh, DEFAULT_DISPLAY_STYLE.mesh),
+    ao: booleanOr(fields.ao, DEFAULT_DISPLAY_STYLE.ao),
   });
 }
 
@@ -83,6 +86,9 @@ export function createDisplayStyleController(env: DisplayStyleEnv): DisplayStyle
     },
     toggleMesh: () => {
       update({ mesh: !style.value.mesh });
+    },
+    toggleAo: () => {
+      update({ ao: !style.value.ao });
     },
   };
 }

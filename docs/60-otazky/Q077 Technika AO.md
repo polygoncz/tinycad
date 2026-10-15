@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[09-vykreslovani]]"
 decide_by: "[[M23-postprocessing-a-ao]]"
 proposal: "GTAOPass z three/addons za EffectComposer; zvýraznění, skici a manipulátory se kreslí až po AO; jeden přepínač ao, výchozí vypnutý."
-decision: ""
+decision: "GTAOPass za EffectComposer v jednom MSAA render targetu: model, AO na místě, interakce bez mazání hloubky, výstup. Scéna se dělí viditelností skupin. Jeden přepínač ao, výchozí vypnutý (ADR 0026)."
 tags:
   - otazka
 created: 2026-10-15
@@ -44,4 +44,12 @@ updated: 2026-10-15
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR.)_
+Pavel 2026-10-15 schválil návrh 1 + a + i s upřesněním, které vyšlo z API `GTAOPass` ve three 0.186. Podrobnosti a alternativy jsou v [[0026-viceprochodove-vykreslovani-ve-viewportu|ADR 0026]]:
+
+- **Technika:** `GTAOPass` za `EffectComposer` (1).
+- **Oddělení (a), upřesněné:**
+  - Všechno se kreslí uvnitř composeru do jednoho MSAA render targetu: model → AO vynásobené na místě → interakce bez mazání hloubky → `OutputPass`. Dokreslení po composeru na plátno by nemělo hloubku modelu.
+  - Scéna se nedělí přes `Object3D.layers`, ale přepnutím `visible` u kořenových skupin během průchodu. Vrstvy se nedědí a `Raycaster` by o objekty přišel.
+- **Výchozí hodnota (i):** jeden přepínač `ao`, výchozí `false`, platí v Shaded bez průhlednosti a od M24 v Realistic.
+
+Propsáno do [[09-vykreslovani#Víceprůchodové vykreslování (AO)]] a [[11-ui#Komponenty]].

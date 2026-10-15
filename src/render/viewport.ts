@@ -24,6 +24,14 @@ import type {
   ViewportPort,
 } from '@/interaction';
 import type { BoundingBox, MeshOps, MeshQuality, ShapeHandle } from '@/kernel';
+import {
+  AO_SETTING_RANGES,
+  aoParameters,
+  DEFAULT_AO_SETTINGS,
+  isValidAoSetting,
+  type AoSettings,
+} from './ao-parameters';
+import { createAoPipeline, type AoPipeline } from './ao-pipeline';
 import type { BodyLayer } from './body-layer';
 import { createBodyLayers } from './body-layers';
 import { unionBounds } from './bounds';
@@ -48,6 +56,7 @@ import { createOverlayLayer } from './overlay-layer';
 import { LIGHT_PALETTE, type ScenePalette } from './palette';
 import { toNdc } from './pick-math';
 import { createSceneHelpers, GRID_BOUNDS } from './scene-helpers';
+import { partitionScene } from './scene-partition';
 import { sketchGridStep } from './sketch-grid';
 import { createSketchLayer, type SketchLayer } from './sketch-layer';
 import { createViewCube } from './view-cube';
@@ -143,6 +152,12 @@ export interface Viewport extends ViewportPort, Disposable {
    * before mount too: the plan applies from the first frame. ui owns the style.
    */
   setDisplayStyle(style: DisplayStyle): void;
+  /**
+   * M23: settings of AO (spec 09, "Víceprůchodové vykreslování (AO)"); the same values = nothing,
+   * an invalid field throws (ui validates what it reads). Works before mount too; default
+   * DEFAULT_AO_SETTINGS. Takes effect when the plan has AO.
+   */
+  setAoSettings(settings: AoSettings): void;
 
   /**
    * viewChanged (M19) after a drawn frame whose camera (target, orientation, halfHeight) or view
@@ -152,6 +167,13 @@ export interface Viewport extends ViewportPort, Disposable {
 }
 
 export const MESH_QUALITY: MeshQuality = { linearDeflection: 0.1, angularDeflection: 0.5 };
+
+/**
+ * M23: the fields of AoSettings, for the validation and the comparison in setAoSettings. Taken
+ * from AO_SETTING_RANGES, a Record over every key, so a new field cannot be left out.
+ */
+// Object.keys gives string[]; the keys of a Record<keyof AoSettings, …> are exactly keyof AoSettings.
+const AO_SETTING_KEYS = Object.freeze(Object.keys(AO_SETTING_RANGES) as (keyof AoSettings)[]);
 
 /** Requests of the view cube to the owner of the rotation mode. */
 interface OrbitModeEvents {
@@ -164,6 +186,11 @@ interface Mounted {
   readonly renderer: THREE.WebGLRenderer;
   /** Releases everything created by mount, in reverse order. */
   readonly resources: DisposableStore;
+  /**
+   * M23: the AO pipeline of this renderer; created lazily by draw with plan.ao, released when the
+   * plan turns AO off and on unmount (spec 09, "Vlastnictví a životní cyklus").
+   */
+  ao: AoPipeline | null;
 }
 
 export function createViewport(deps: {
@@ -204,6 +231,8 @@ export function createViewport(deps: {
    * (initialPlan), the picker reads its xray.
    */
   let displayPlan: DisplayPlan = resolveDisplay(DEFAULT_DISPLAY_STYLE);
+  /** M23: the settings of the last setAoSettings, read by draw for the AO parameters. */
+  let aoSettings: AoSettings = DEFAULT_AO_SETTINGS;
 
   const scheduler = lifetime.add(
     createFrameScheduler({
@@ -351,7 +380,24 @@ export function createViewport(deps: {
     );
     // autoClear is off because of the view cube drawn over the main scene.
     renderer.clear();
-    renderer.render(scene, rig.camera);
+    // M23: a hidden canvas (zero size) draws without AO: the pipeline would get a 0×0 target and
+    // worldPerPx would not be finite.
+    if (displayPlan.ao && clientWidth > 0 && clientHeight > 0) {
+      // M23: the passes of the AO pipeline instead of one render; the view cube still after it.
+      mounted.ao ??= createAoPipeline({
+        renderer,
+        scene,
+        camera: rig.camera,
+        width: clientWidth,
+        height: clientHeight,
+      });
+      mounted.ao.render(
+        partitionScene(scene, [layer.group]),
+        aoParameters(aoSettings, lastWorldPerPx),
+      );
+    } else {
+      renderer.render(scene, rig.camera);
+    }
     viewCube.draw(renderer, rig.orientation);
     emitViewChanged(mounted.canvas);
     // The scheduler clears its pending frame before draw, so this asks for the next one.
@@ -446,6 +492,7 @@ export function createViewport(deps: {
     if (width <= 0 || height <= 0) return;
     // updateStyle false: the canvas fills the element by CSS, so its size never feeds back.
     mounted.renderer.setSize(width, height, false);
+    mounted.ao?.setSize(width, height);
     rig.resize(width, height);
     highlightLayer.setResolution(width, height);
     layers.setResolution(width, height);
@@ -524,7 +571,13 @@ export function createViewport(deps: {
       renderer.forceContextLoss();
     });
 
-    mounted = { canvas, renderer, resources };
+    const state: Mounted = { canvas, renderer, resources, ao: null };
+    // After the renderer, so the pipeline is released before it. `state`, not `mounted`: unmount
+    // clears `mounted` before it disposes the resources.
+    resources.add(() => {
+      disposeAo(state);
+    });
+    mounted = state;
     resize(el);
 
     rig.attach(canvas);
@@ -573,6 +626,13 @@ export function createViewport(deps: {
     resources.add(() => {
       observer.disconnect();
     });
+  }
+
+  /** M23: releases the AO pipeline of a mounted renderer, if any. */
+  function disposeAo(state: Mounted): void {
+    const ao = state.ao;
+    state.ao = null;
+    ao?.dispose();
   }
 
   function unmount(): void {
@@ -787,8 +847,22 @@ export function createViewport(deps: {
       displayPlan = plan;
       layers.setDisplayPlan(plan);
       highlightLayer.setXray(plan.xray);
+      // M23: AO off releases its pipeline (render targets); AO on creates it in the next draw.
+      if (!plan.ao && mounted !== null) disposeAo(mounted);
       // While unmounted, nothing is drawn; mount draws the first frame with the plan.
       scheduleFrame();
+    },
+    setAoSettings(settings: AoSettings): void {
+      assertAlive();
+      for (const key of AO_SETTING_KEYS) {
+        if (!isValidAoSetting(key, settings[key])) {
+          throw new Error(`Invalid AO setting ${key} = ${String(settings[key])}`);
+        }
+      }
+      if (AO_SETTING_KEYS.every((key) => settings[key] === aoSettings[key])) return;
+      aoSettings = Object.freeze({ ...settings });
+      // Without AO the settings take effect when it is turned on.
+      if (displayPlan.ao) scheduleFrame();
     },
     events,
     dispose(): void {

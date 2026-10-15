@@ -25,6 +25,8 @@ export interface DisplayStyle {
   readonly transparent: boolean;
   /** Lines of the triangulation; applies in every mode. */
   readonly mesh: boolean;
+  /** Ambient occlusion; applies only in opaque 'shaded'. */
+  readonly ao: boolean;
 }
 
 export const DEFAULT_DISPLAY_STYLE: DisplayStyle = Object.freeze({
@@ -32,6 +34,7 @@ export const DEFAULT_DISPLAY_STYLE: DisplayStyle = Object.freeze({
   edges: true,
   transparent: false,
   mesh: false,
+  ao: false,
 });
 
 /** Opacity of the faces in transparent shaded. */
@@ -49,6 +52,8 @@ export interface DisplayPlan {
   readonly meshLines: boolean;
   /** Picking skips the occlusion checks, the highlight is drawn without the depth test. */
   readonly xray: boolean;
+  /** The AO pass (spec 09, "Víceprůchodové vykreslování"). */
+  readonly ao: boolean;
 }
 
 /** The plan of a style by the decision table of spec 09. */
@@ -64,6 +69,8 @@ export function resolveDisplay(style: DisplayStyle): DisplayPlan {
         meshLines,
         // Transparent faces write no depth, so the edges behind them show: pick what you see.
         xray: style.transparent,
+        // Transparent faces write no depth: AO from the depth would draw dark blots under them.
+        ao: style.ao && !style.transparent,
       });
     case 'hiddenRemoved':
       return Object.freeze({
@@ -73,6 +80,7 @@ export function resolveDisplay(style: DisplayStyle): DisplayPlan {
         hiddenEdges: 'none',
         meshLines,
         xray: false,
+        ao: false,
       });
     case 'hiddenVisible':
       return Object.freeze({
@@ -82,6 +90,7 @@ export function resolveDisplay(style: DisplayStyle): DisplayPlan {
         hiddenEdges: 'dashed',
         meshLines,
         xray: true,
+        ao: false,
       });
     case 'wireframe':
       return Object.freeze({
@@ -91,13 +100,14 @@ export function resolveDisplay(style: DisplayStyle): DisplayPlan {
         hiddenEdges: 'none',
         meshLines,
         xray: true,
+        ao: false,
       });
   }
 }
 
 /**
  * Structural equality of two plans. Over the keys of the plan, not a hand-written list, so a
- * field added later (M23) cannot be forgotten here. Every field is a primitive, so === suffices.
+ * field added later cannot be forgotten here. Every field is a primitive, so === suffices.
  */
 export function samePlan(a: DisplayPlan, b: DisplayPlan): boolean {
   // Object.keys gives string[]; the keys of a DisplayPlan are exactly its fields.

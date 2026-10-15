@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
-import type { DisplayStyle, ViewCubeLabels } from '@/render';
+import type { AoSettings, DisplayStyle, ViewCubeLabels } from '@/render';
 import { createViewSettings } from '@/app/view-settings';
 import { FakeAppViewport } from '@/app/testing';
 
@@ -86,11 +86,33 @@ describe('createViewSettings', () => {
       edges: true,
       transparent: false,
       mesh: true,
+      ao: false,
     };
-    const shaded: DisplayStyle = { mode: 'shaded', edges: false, transparent: true, mesh: false };
+    const shaded: DisplayStyle = {
+      mode: 'shaded',
+      edges: false,
+      transparent: true,
+      mesh: false,
+      ao: true,
+    };
     viewSettings.setDisplayStyle(wireframe);
     viewSettings.setDisplayStyle(shaded);
     expect(viewport.displayStyles).toEqual([wireframe, shaded]);
     expect(viewport.displayStyles[0]).toBe(wireframe);
+  });
+
+  it('setAoSettings hands the settings to the viewport unchanged (M23)', () => {
+    const { viewport, viewSettings } = setup();
+    const settings: AoSettings = {
+      radiusPx: 48,
+      intensity: 0.5,
+      thicknessPx: 8,
+      distanceFallOff: 0.5,
+      scale: 1.5,
+      samples: 24,
+    };
+    viewSettings.setAoSettings(settings);
+    expect(viewport.aoSettings).toEqual([settings]);
+    expect(viewport.aoSettings[0]).toBe(settings);
   });
 });

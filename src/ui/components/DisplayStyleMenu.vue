@@ -4,7 +4,9 @@
 // preference held by the display style controller; AppShell hands it to the session, this menu
 // only asks the controller for changes. Its own menu, not ContextMenu (that one shows actions
 // only), but built the same way: teleported to <body>, placed by placeMenu once measured, the
-// focus moved by menuFocusIndex, Esc or a click outside closes it.
+// focus moved by menuFocusIndex, Esc or a click outside closes it. The "AO settings…" item (M23)
+// closes the menu and asks AppShell to open the AO settings panel (openAoSettings); AppShell
+// returns the focus to the button through focusButton when the panel closes.
 import { computed, nextTick, onUnmounted, shallowRef, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
@@ -21,6 +23,8 @@ import type { MenuPlacement } from '../menu-position';
 
 type ModeItem = Extract<DisplayStyleMenuItem, { kind: 'mode' }>;
 
+const emit = defineEmits<{ openAoSettings: [] }>();
+
 const { t } = useI18n();
 const displayStyle = useDisplayStyle();
 const style = displayStyle.style;
@@ -28,7 +32,8 @@ const items = computed(() => displayStyleMenuItems(style.value));
 const modeItems = computed(() =>
   items.value.filter((item): item is ModeItem => item.kind === 'mode'),
 );
-const toggleItems = computed(() => items.value.filter((item) => item.kind === 'toggle'));
+/** The toggles and the AO settings command, in the order of the menu after the separator. */
+const otherItems = computed(() => items.value.filter((item) => item.kind !== 'mode'));
 const buttonLabel = computed(() =>
   t('displayStyle.current', { mode: t(displayModeLabel(style.value.mode)) }),
 );
@@ -98,9 +103,23 @@ function onButtonClick(): void {
   else void openMenu();
 }
 
-/** A mode closes the menu, a toggle keeps it open (chooseDisplayStyleItem). */
+/**
+ * A mode closes the menu, a toggle keeps it open, the AO settings close it and open the panel
+ * (chooseDisplayStyleItem). The menu closes first, so the panel takes the focus from the button.
+ */
 function choose(item: DisplayStyleMenuItem): void {
-  if (chooseDisplayStyleItem(displayStyle, item) === 'close') closeMenu();
+  switch (chooseDisplayStyleItem(displayStyle, item)) {
+    case 'close':
+      closeMenu();
+      break;
+    case 'openAoSettings':
+      closeMenu();
+      emit('openAoSettings');
+      break;
+    case 'keepOpen':
+    case 'ignored':
+      break;
+  }
 }
 
 // A press outside the menu closes it. The button is left to its click, which closes it then
@@ -131,9 +150,12 @@ function onMenuKeyDown(e: KeyboardEvent): void {
   focusItem(menuFocusIndex(enabledFlags(), current === -1 ? null : current, e.key));
 }
 
-function keyOf(item: DisplayStyleMenuItem): string {
-  return item.kind === 'mode' ? item.mode : item.toggle;
+/** For AppShell: the AO settings panel closed by × or Esc gives the focus back here. */
+function focusButton(): void {
+  button.value?.focus();
 }
+
+defineExpose({ focusButton });
 
 onUnmounted(removeListeners);
 </script>
@@ -169,7 +191,7 @@ onUnmounted(removeListeners);
     >
       <button
         v-for="item in modeItems"
-        :key="keyOf(item)"
+        :key="item.key"
         type="button"
         role="menuitemradio"
         class="row"
@@ -181,19 +203,31 @@ onUnmounted(removeListeners);
         <span class="label">{{ t(item.label) }}</span>
       </button>
       <div role="separator" class="separator" />
-      <button
-        v-for="item in toggleItems"
-        :key="keyOf(item)"
-        type="button"
-        role="menuitemcheckbox"
-        class="row"
-        :aria-checked="item.checked"
-        :aria-disabled="item.enabled ? undefined : 'true'"
-        @click="choose(item)"
-      >
-        <i class="ti ti-check check" :class="{ off: !item.checked }" aria-hidden="true" />
-        <span class="label">{{ t(item.label) }}</span>
-      </button>
+      <template v-for="item in otherItems" :key="item.key">
+        <button
+          v-if="item.kind === 'toggle'"
+          type="button"
+          role="menuitemcheckbox"
+          class="row"
+          :aria-checked="item.checked"
+          :aria-disabled="item.enabled ? undefined : 'true'"
+          @click="choose(item)"
+        >
+          <i class="ti ti-check check" :class="{ off: !item.checked }" aria-hidden="true" />
+          <span class="label">{{ t(item.label) }}</span>
+        </button>
+        <button
+          v-else
+          type="button"
+          role="menuitem"
+          class="row"
+          :aria-disabled="item.enabled ? undefined : 'true'"
+          @click="choose(item)"
+        >
+          <i class="ti ti-check check off" aria-hidden="true" />
+          <span class="label">{{ t(item.label) }}</span>
+        </button>
+      </template>
     </div>
   </Teleport>
 </template>
