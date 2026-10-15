@@ -255,7 +255,9 @@ export function toolbarGroups(input: {
       label: tool.label,
       shortcut: tool.shortcut ?? null,
       group: tool.group,
-      enabled: action?.enabled ?? !input.locked,
+      // As the tool actions (builtin-actions): the sketcher is an open feature edit (locked), so
+      // in the mode 'sketch' the lock does not count.
+      enabled: action?.enabled ?? (input.mode === 'sketch' || !input.locked),
       modes,
       icon: tool.icon,
       command: Object.freeze(

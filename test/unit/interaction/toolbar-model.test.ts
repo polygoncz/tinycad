@@ -229,6 +229,12 @@ describe('toolbarGroups', () => {
     expect(locked[0]?.items[0]?.enabled).toBe(false);
   });
 
+  it('a tool without an action is enabled in the sketch mode despite the lock', () => {
+    const tools = [aTool('circle3p', 'draw', undefined, ['sketch'])];
+    const groups = groupsOf({ tools, actions: [], locked: true, mode: 'sketch' });
+    expect(groups.flatMap((g) => g.items).find((i) => i.id === 'circle3p')?.enabled).toBe(true);
+  });
+
   it('only the button of the active tool is active, actions never', () => {
     const tools = [aTool('select', 'select'), aTool('box', 'primitive', 'B')];
     const items = groupsOf({ tools, actions: ACTIONS, activeTool: 'box' }).flatMap((g) => g.items);
