@@ -372,27 +372,73 @@ describe('solveSketch – M27 tangent arcs', () => {
     { name: 'an arc, outside (an S)', curve: 'a', from: 'ae', to: [80, 125] },
   ] as const;
 
+  /** The unit tangent of a solved line (p1 → p2) or arc (counter-clockwise) in its point `at`. */
+  function tangentIn(entities: readonly SketchEntity[] | null, curve: string, at: string): Vec2 {
+    const c = entities?.find((e) => e.id === curve);
+    let t: Vec2;
+    if (c?.kind === 'line') {
+      const p1 = point(entities, c.p1);
+      const p2 = point(entities, c.p2);
+      t = [p2.x - p1.x, p2.y - p1.y];
+    } else if (c?.kind === 'arc') {
+      const center = point(entities, c.center);
+      const p = point(entities, at);
+      t = [-(p.y - center.y), p.x - center.x];
+    } else {
+      throw new Error(`no line or arc ${curve}`);
+    }
+    const length = Math.hypot(t[0], t[1]);
+    return [t[0] / length, t[1] / length];
+  }
+
+  /** The solved arc T is tangent to `curve` in `at`: parallel tangents, end points on the circle. */
+  function expectTangentInEnd(entities: readonly SketchEntity[] | null, curve: string, at: string) {
+    const [ax, ay] = tangentIn(entities, 'T', at);
+    const [bx, by] = tangentIn(entities, curve, at);
+    expect(ax * by - ay * bx).toBeCloseTo(0, 6);
+    const c = point(entities, 'c');
+    const p = point(entities, at);
+    const e = point(entities, 'e');
+    expect(Math.hypot(e.x - c.x, e.y - c.y)).toBeCloseTo(Math.hypot(p.x - c.x, p.y - c.y), 6);
+  }
+
   for (const c of CASES) {
-    it(`an arc tangent to ${c.name} from its end point solves ok`, () => {
+    it(`an arc tangent to ${c.name} from its end point solves ok, the tangent kept`, () => {
       const result = solveSketch(mod, tangentArc(c.curve, c.from, c.to));
 
-      expect(result.status).toBe('ok');
-      expect(result.conflicting).toEqual([]);
+      // line 4 + arc a 5 + arc T 5 − the shared point 2 − the tangent 1
+      expect(result).toMatchObject({ status: 'ok', dof: 11, conflicting: [], redundant: [] });
+      expectTangentInEnd(result.entities, c.curve, c.from);
     });
 
-    // A known hole (reported to the main session): with the shared end point the tangency of
-    // tangent_la / tangent_aa is degenerate (on the curves through the shared point the distance of
-    // the centre from the other curve never exceeds the radius, so the gradient of the tangency is
-    // dependent), planegcs reports it redundant and addGeometry leaves it out, required or not.
-    it.fails(
-      `the tangent of an arc tangent to ${c.name} from its end point is not redundant`,
-      () => {
-        const result = solveSketch(mod, tangentArc(c.curve, c.from, c.to));
+    it(`an arc tangent to ${c.name} stays tangent while its free end is dragged`, () => {
+      const data = tangentArc(c.curve, c.from, c.to);
+      const result = solveSketch(mod, {
+        ...data,
+        drag: { point: idOf(data, 'e'), to: [c.to[0] + 5, c.to[1] - 3] },
+      });
 
-        expect(result.redundant).toEqual([]);
-      },
-    );
+      expect(result).toMatchObject({ status: 'ok', conflicting: [], redundant: [] });
+      expectTangentInEnd(result.entities, c.curve, c.from);
+    });
   }
+
+  it('a line tangent to an arc without a shared point stays tangent_la', () => {
+    // The line y = 10 and the arc a around (100, 100) with r = 10: the solve moves them to touch.
+    const data = sketch(CURVES, [{ kind: 'tangent', id: 't', a: 'l', b: 'a' }]);
+
+    const result = solveSketch(mod, data);
+
+    // line 4 + arc 5 − the tangent 1
+    expect(result).toMatchObject({ status: 'ok', dof: 8, conflicting: [], redundant: [] });
+    const l1 = point(result.entities, 'l1');
+    const l2 = point(result.entities, 'l2');
+    const center = point(result.entities, 'ac');
+    const start = point(result.entities, 'as');
+    const r = Math.hypot(start.x - center.x, start.y - center.y);
+    const cross = (l2.x - l1.x) * (center.y - l1.y) - (l2.y - l1.y) * (center.x - l1.x);
+    expect(Math.abs(cross) / Math.hypot(l2.x - l1.x, l2.y - l1.y)).toBeCloseTo(r, 6);
+  });
 });
 
 describe('solveSketch – conflicts and redundancy', () => {
