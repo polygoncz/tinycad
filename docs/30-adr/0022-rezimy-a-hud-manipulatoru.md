@@ -23,7 +23,7 @@ updated: 2026-10-14
 
 - **Stav:** Přijato (`status: accepted`, Pavel 2026-10-14)
 - **Datum:** 2026-10-14
-- **Souvisí:** [[0021-manipulatory-kotvy-z-regenerace|ADR 0021]] (doplňuje, nenahrazuje), [[10-interakce#Režimy a HUD (M19)]], [[09-vykreslovani#Manipulátory (M18)]], [[11-ui]], [[M19-manipulator-fusion|M19]]
+- **Souvisí:** [[0021-manipulatory-kotvy-z-regenerace|ADR 0021]] (doplňuje, nenahrazuje), [[10-interakce#Režimy a HUD (M19)]], [[09-vykreslovani#Manipulátory]], [[11-ui]], [[M19-manipulator-fusion|M19]]
 
 ## Kontext
 

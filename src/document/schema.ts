@@ -30,55 +30,68 @@ interface ParamCommon {
 // and telling reference params apart for picking in the feature dialog.
 // Every label (of a ParamSpec, an enum option and a FeatureSchema) is a translation key,
 // 'box.width', never a text; the plugin brings the texts in its messages (ADR 0014).
-export type ParamSpec = ParamCommon &
-  (
-    | ({ readonly kind: 'length'; readonly label: string; readonly default: number } & Bounds)
-    | ({ readonly kind: 'angle'; readonly label: string; readonly default: number } & Bounds)
-    | ({
-        readonly kind: 'number';
-        readonly label: string;
-        readonly default: number;
-        readonly integer?: boolean;
-      } & Bounds)
-    | { readonly kind: 'boolean'; readonly label: string; readonly default: boolean }
-    | {
-        readonly kind: 'enum';
-        readonly label: string;
-        readonly default: string;
-        readonly options: readonly { readonly value: string; readonly label: string }[];
-      }
-    | { readonly kind: 'point'; readonly label: string; readonly default: Vec3 }
-    // Reference params hold arrays; min/max count the references and default to 0..∞.
-    | {
-        readonly kind: 'bodies';
-        readonly label: string;
-        readonly min?: number;
-        readonly max?: number;
-      } // BodyRef[]
-    | {
-        readonly kind: 'topo';
-        readonly label: string;
-        readonly entity: 'face' | 'edge' | 'vertex';
-        readonly min?: number;
-        readonly max?: number;
-      } // TopoRef[]
-    | {
-        readonly kind: 'region';
-        readonly label: string;
-        readonly min?: number;
-        readonly max?: number;
-      } // SketchRegionRef[]
-    | {
-        readonly kind: 'planes';
-        readonly label: string;
-        readonly min?: number;
-        readonly max?: number;
-      } // PlaneRef[] (M12)
-    // Any JSON data without a form field; the schema's own validate checks the content (M12, sketch).
-    | { readonly kind: 'data'; readonly label: string }
-    // A single reference, not an array: AxisRef | SketchEntityRef, empty as null (M13, Revolve).
-    | { readonly kind: 'axis'; readonly label: string }
-  );
+// The kinds come in two unions: plain values and references (M20); a new kind goes into one of
+// them, and a new reference kind then needs an entry in the tables of reference kinds.
+type ValueParamVariant =
+  | ({ readonly kind: 'length'; readonly label: string; readonly default: number } & Bounds)
+  | ({ readonly kind: 'angle'; readonly label: string; readonly default: number } & Bounds)
+  | ({
+      readonly kind: 'number';
+      readonly label: string;
+      readonly default: number;
+      readonly integer?: boolean;
+    } & Bounds)
+  | { readonly kind: 'boolean'; readonly label: string; readonly default: boolean }
+  | {
+      readonly kind: 'enum';
+      readonly label: string;
+      readonly default: string;
+      readonly options: readonly { readonly value: string; readonly label: string }[];
+    }
+  | { readonly kind: 'point'; readonly label: string; readonly default: Vec3 }
+  // Any JSON data without a form field; the schema's own validate checks the content (M12, sketch).
+  | { readonly kind: 'data'; readonly label: string };
+
+type RefParamVariant =
+  // Reference params hold arrays; min/max count the references and default to 0..∞.
+  | {
+      readonly kind: 'bodies';
+      readonly label: string;
+      readonly min?: number;
+      readonly max?: number;
+    } // BodyRef[]
+  | {
+      readonly kind: 'topo';
+      readonly label: string;
+      readonly entity: 'face' | 'edge' | 'vertex';
+      readonly min?: number;
+      readonly max?: number;
+    } // TopoRef[]
+  | {
+      readonly kind: 'region';
+      readonly label: string;
+      readonly min?: number;
+      readonly max?: number;
+    } // SketchRegionRef[]
+  | {
+      readonly kind: 'planes';
+      readonly label: string;
+      readonly min?: number;
+      readonly max?: number;
+    } // PlaneRef[] (M12)
+  // A single reference, not an array: AxisRef | SketchEntityRef, empty as null (M13, Revolve).
+  | { readonly kind: 'axis'; readonly label: string };
+
+export type ParamSpec = ParamCommon & (ValueParamVariant | RefParamVariant);
+
+/**
+ * The kinds of ParamSpec that hold references (M20): 'bodies' | 'topo' | 'region' | 'planes' |
+ * 'axis'. The tables of reference kinds (document, interaction) have one entry per kind.
+ */
+export type RefParamKind = Extract<ParamSpec, RefParamVariant>['kind'];
+
+/** A ParamSpec of a reference kind (M20). */
+export type RefParamSpec = Extract<ParamSpec, { readonly kind: RefParamKind }>;
 
 /** Whether the param applies to these params; true without a predicate (M13). */
 export function isParamVisible(
@@ -88,7 +101,17 @@ export function isParamVisible(
   return spec.visibleWhen?.(params) ?? true;
 }
 
+/** The untyped schema of params: registries and readers that do not know the plugin (M20). */
 export type ParamSchema = Readonly<Record<string, ParamSpec>>;
+
+/**
+ * The schema of params tied to their type P (M20): exactly one ParamSpec per key of P, optional
+ * keys too, so a missing or an extra key is a type error. Without known keys (P = unknown, the
+ * default of FeatureSchema) it is the untyped ParamSchema.
+ */
+export type ParamSchemaOf<P> = [keyof P] extends [never]
+  ? ParamSchema
+  : { readonly [K in keyof P]-?: ParamSpec };
 
 export interface ParamIssue {
   /** Key of the param, '' for the params object as a whole. */
@@ -107,7 +130,7 @@ export interface FeatureSchema<P = unknown> {
   readonly label: string;
   /** Tabler icon name, 'box' (Timeline, M10); the UI falls back to a generic icon. */
   readonly icon?: string;
-  readonly params: ParamSchema;
+  readonly params: ParamSchemaOf<P>;
   defaults(): P;
   /** Takes unknown: params come from the document unchecked. Usually validateAgainstSchema + own rules. */
   validate(params: unknown): readonly ParamIssue[];

@@ -133,3 +133,14 @@ export type SketchConstraintDraft = DistributiveOmit<SketchConstraint, 'id'>;
 
 /** The feature type of a sketch: the only link of interaction and regen to the sketch plugin. */
 export const SKETCH_FEATURE_TYPE = 'sketch';
+
+/**
+ * The names of the params of the sketch feature (spec 12, "Featura skici"). The params type itself
+ * lives with the plugin (PlaneRef and TopoRef come from document, ADR 0017); its schema checks by
+ * type that its keys are exactly these names, interaction reads the params only through them.
+ */
+export const SKETCH_PARAM = Object.freeze({
+  plane: 'plane',
+  entities: 'entities',
+  constraints: 'constraints',
+} as const);

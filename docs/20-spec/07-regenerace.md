@@ -91,13 +91,10 @@ Builder mrazí objekt nového stavu i každé nové `Body` (`Object.freeze`), ma
 ## Builder featury
 
 ```ts
-export interface FeatureBuilder<P = unknown> {
-  readonly type: string;
-  build(input: BuildInput<P>, ctx: BuildContext): Promise<BuildOutput>;
-}
-
+// FeatureBuilder<P, A> je u BuildOutput níže (Kotvy manipulátorů).
 export interface BuildInput<P> {
-  readonly feature: FeatureInstance<P>;
+  readonly feature: Omit<FeatureInstance, 'params'>;   // id, typ, verze, jméno; builder čte jen id
+  readonly params: Evaluated<P>;       // z evaluateParams (03-dokument), jediný zdroj hodnot
   readonly state: RegenState;          // stav před touto featurou
 }
 
@@ -136,9 +133,14 @@ export function sketchPlaneOfFace(face: FacePlane): Plane;
 /** Totéž co resolvePlanes pro jednu referenci nad hotovým stavem, bez varování; app ho používá pro rovinu editované skici (M14). */
 export function planeOfRef(state: RegenState, ref: PlaneRef | TopoRef): Plane | undefined;
 
-export type BuildOutput =
-  | { ok: true; state: RegenState; anchors?: FeatureAnchors }   // anchors od M18, viz Kotvy manipulátorů
+export type BuildOutput<A extends FeatureAnchors = FeatureAnchors> =
+  | { ok: true; state: RegenState; anchors: A }   // viz Kotvy manipulátorů
   | { ok: false; error: FeatureError };
+
+export interface FeatureBuilder<P = unknown, A extends FeatureAnchors = FeatureAnchors> {
+  readonly type: string;
+  build(input: BuildInput<P>, ctx: BuildContext): Promise<BuildOutput<A>>;
+}
 
 /** Chyba featury pro nevyřešenou referenci parametru param (Q044); hluboce zmrazená. */
 export function unresolvedReference(param: string, e: RefError): FeatureError;
@@ -154,7 +156,7 @@ Pravidla pro builder:
 - nesmí uvolňovat handle (to dělá `Regenerator`),
 - všechny tvary vytváří přes `ctx.kernel`, ten každý vrácený handle zapíše do množiny vlastněné Regeneratorem – i mezivýsledky a tvary z builderu, který pak selže ([[Q041 Úklid mezivýsledků builderu|Q041]]),
 - očekávanou chybu vrací jako `{ ok: false }` (nevyřešenou referenci přes `unresolvedReference(param, e)` jako `UNRESOLVED_REFERENCE` s `issues`, aby ji UI přeložilo u parametru, [[Q044 RefError a nevyřešené reference|Q044]]), výjimky jádra může nechat proletět – `Regenerator` je převede na chybu featury `KERNEL`. Výjimka, která z jádra nepochází (`kernelErrorCode(e) === undefined`), je chyba programu: `run` po úklidu handle odmítne s touto výjimkou ([[Q043 Výjimka builderu mimo jádro|Q043]]),
-- validaci parametrů neřeší – `Regenerator` před voláním builderu zavolá `schema.validate` a při problému builder vůbec nespustí (status `INVALID_PARAMS`). Builder tedy smí předpokládat platné parametry.
+- validaci parametrů neřeší – `Regenerator` před voláním builderu zavolá `evaluateParams` ([[03-dokument#Vyhodnocení parametrů]]) a při problému builder vůbec nespustí (status `INVALID_PARAMS`). Builder dostane jen vyhodnocené parametry `input.params`; `input.feature` je typově bez `params`, takže surové hodnoty nečte (za běhu je to tentýž objekt featury, hlídá to typ).
 
 **Identita u featur, které tělesa mění** ([[M11-dalsi-entity|M11]], [[0015-artefakty-a-identita-telesa|ADR 0015]]):
 
@@ -183,11 +185,12 @@ export interface Anchor { readonly point: Vec3; readonly direction?: Vec3 }
 export type FeatureAnchors = Readonly<Record<string, Anchor>>;
 ```
 
-- Builder vrací kotvy jen s `{ ok: true }`. Pole je volitelné, featury bez manipulátoru ho nevyplňují. Builder featury **s** manipulátorem ho při úspěchu vrací vždy, klidně prázdné `{}`: controller featuru bez záznamu v `anchors` bere jako „žádné úchyty“ (oprava 2026-10-14: Transformace s pivotem `origin` nebo `point` po revizi M18 kotvy nevracela a manipulátor zmizel). Výjimkou je stav, kdy úchyty záměrně nejsou (Extrude `upToFace`).
+- Každý builder vrací při úspěchu `anchors` (povinné pole). Featura bez manipulátoru vrací `{}`. Typ kotev `A` je společný builderu i deskriptoru úchytů jednoho pluginu (`FeaturePlugin<P, A>`, dodatek k [[0021-manipulatory-kotvy-z-regenerace|ADR 0021]]), takže překlep ve jménu kotvy je chyba typu. Kotvy, které někdy nejsou, jsou v typu nepovinné (`TransformAnchors = { pivot?: Anchor }`, `ExtrudeAnchors = { base?: Anchor }`; Extrude `upToFace` vrací `{}`). Hlídá to typ, ne komentář: dřív bylo pole volitelné a Transformace s pivotem `origin` nebo `point` kotvy nevracela, takže manipulátor zmizel.
+- Typová kontrola shody je úplná pro deskriptor zapsaný přímo v pluginu. Samostatně typovaný deskriptor s jiným typem kotev, který s builderem sdílí aspoň jedno jméno, může překlep v dalším jménu propustit (TypeScript tu nemá invariantní generika bez ztráty registrovatelnosti).
 - **Invariant:** kotva smí záviset jen na vstupech, které úchyty featury netáhnou (pivot Transformace nezávisí na `translate` ani na `rx`, `ry`, `rz`, základna Extrude nezávisí na `distance`). Hlídají ho testy pluginu. Výjimka (M19): úchyty pivotu zapisují `pivot: 'point'`, a tím kotvu `pivot` zruší. Neškodí to, protože pro `'point'` čte `frame()` bod z params, ne z kotvy, a během tahu platí kotvy zmrazené při stisku.
 - **Kotva je co nejmenší** (revize M18): nese jen to, co z params spočítat nejde (vyřešené reference, obálky, roviny skic). Co jde spočítat z params (`flip`, `endType`, `pivotPoint`), počítá až `frame()` z živých params, aby úchyt po změně v dialogu nečekal na regeneraci.
 - `Regenerator` kotvy **hluboce zmrazí** (`Object.freeze` na mapě jmen, každé kotvě a jejích vektorech) a uloží je do záznamu cache featury vedle stavu a statusu. Featura převzatá z cache tak má kotvy z posledního výpočtu bez volání builderu.
-- `RegenResult.anchors` obsahuje kotvy každé featury před rollback barem se statusem `ok` nebo `warning`, jejíž builder kotvy vrátil (z výpočtu i z cache). Chybná, potlačená a `rolledBack` featura v mapě není.
+- `RegenResult.anchors` obsahuje kotvy každé featury před rollback barem se statusem `ok` nebo `warning` (z výpočtu i z cache), featura bez manipulátoru s `{}`. Chybná, potlačená a `rolledBack` featura v mapě není.
 - Kotvy nenesou handle tvaru, jen čísla. Sweep ani úklid handle se jich netýká.
 
 ### Operace tělesa (M13)
@@ -276,7 +279,7 @@ Status featury určí `Regenerator` v tomto pořadí:
 2. `suppressed` → `suppressed`, stav se propustí,
 3. chybí schéma nebo builder pro `type` → `error` `UNKNOWN_TYPE`,
 4. `feature.typeVersion !== schema.version` → `error` `STALE_VERSION` (pojistka pro data, která obešla migraci, [[04-operace-a-historie#Migrace dat featur]]; `message` nese obě verze), builder se nevolá,
-5. `schema.validate(params)` vrátí problémy → `error` `INVALID_PARAMS` s `issues` (zmrazená kopie) a technickou `message` `'param: code; …'`, builder se nevolá. UI chybu překládá z `issues`, ne z `message` (rozhodnutí 2026-10-13),
+5. `evaluateParams(schema, params, NO_VARIABLES)` vrátí problémy → `error` `INVALID_PARAMS` s `issues` (zmrazená kopie) a technickou `message` `'param: code; …'`, builder se nevolá. UI chybu překládá z `issues`, ne z `message` (rozhodnutí 2026-10-13),
 6. builder vrátí `{ ok: false }` → `error` s jeho chybou; výjimka s kódem jádra → `error` `KERNEL` s technickou `message` a od M19.2 ([[M19.2-ux-backlog|D9]]) s `issues: [{ param: '', code }]` podle `kernelErrorCode`: `'operation-failed'` → `kernel.operationFailed`, `'invalid-input'` → `kernel.invalidInput`, jinak `kernel.internal`. UI tak ukáže přeložený text a technickou zprávu jen v „Podrobnostech“ (`TreeRow.detail`, [[10-interakce#Strom featur: `FeatureTreeModel`]]). Builder, který chybu jádra převede sám (fillet, chamfer, `extrude.upToFace`), vrací `{ ok: false }` s vlastními issues, a ta mají přednost,
 7. builder vrátil stav a volal `warn` → `warning`, jinak `ok`.
 
@@ -308,7 +311,7 @@ export interface RegenEvents {      // exportovaný typ, app ho pojmenuje
 }
 
 export function createRegenerator(deps: {
-  kernel: GeometryKernel; builders: RegistryReader<FeatureBuilder>; schemas: RegistryReader<FeatureSchema>;   // jen čtení (ADR 0011)
+  kernel: ModelingKernel & Pick<GeometryKernel, 'release'>; builders: RegistryReader<FeatureBuilder>; schemas: RegistryReader<FeatureSchema>;   // jen čtení (ADR 0011)
   now: () => number;                // hodiny pro durationMs, dodá app (Q046)
 }): Regenerator;
 
@@ -362,7 +365,7 @@ Sweep běží na konci každého `run`, který skončí jako aktuální generace
 
 Handle se z vlastněné množiny odeberou ještě před čekáním na `release` (souběžný sweep novějšího běhu je tak neuvolní podruhé) a při selhání s kódem jádra se vrátí. Sweep proběhne před `finished`, `durationMs` ho zahrnuje. Když během čekání na `release` začne novější běh, vrátí `run` `'superseded'`. Když `run` odmítne kvůli `release`, `finished` se nevyšle. Po výjimce builderu nebo posluchače má původní výjimka přednost před chybou sweepu.
 
-`render` drží handle jen pro dobu tessellace a nikdy ho neuvolňuje. Pokud by tessellace doběhla po uvolnění, jádro odmítne s kódem `'unknown-handle'` (`kernelErrorCode`) a `render` výsledek zahodí (je stejně zastaralý).
+`render` drží handle jen pro dobu tessellace a nikdy ho neuvolňuje. Uvolnění tessellaci předběhnout nemůže: `app` zveřejní a uvolní až po `await viewport.bodies.sync` a worker zprávy zpracuje v pořadí. Kdyby se to přesto stalo, jádro odmítne s kódem `'unknown-handle'` a `SceneSync` chybu tělesa předá `reportError` (výchozí `console.error`), jako každou jinou chybu tessellace; zvláštní zacházení s `unknown-handle` v `render` není.
 
 ## Testy (s `FakeKernel`)
 
@@ -372,7 +375,7 @@ Handle se z vlastněné množiny odeberou ještě před čekáním na `release` 
 - Neplatné parametry → `INVALID_PARAMS`, builder se nezavolá.
 - `unresolvedReference` dá kód, zprávu z `RefError` a `issues` s parametrem, zmrazené do hloubky; sledované jádro zapíše handle z `makeCylinder`, `transform` a `boolean` (M11).
 - Neznámý typ featury (chybí schéma nebo builder) → `UNKNOWN_TYPE`, regenerace pokračuje.
-- Kotvy (M18): builder s kotvami → `RegenResult.anchors` je má pod id featury, hluboce zmrazené; featura z cache (builder se nevolá) je má také; chybná, potlačená a `rolledBack` featura ani featura bez kotev v mapě nejsou; po opravě chybné featury se kotvy vrátí.
+- Kotvy (M18): builder s kotvami → `RegenResult.anchors` je má pod id featury, hluboce zmrazené; featura z cache (builder se nevolá) je má také; chybná, potlačená a `rolledBack` featura v mapě nejsou, featura bez manipulátoru má `{}`; po opravě chybné featury se kotvy vrátí.
 - M12: `EMPTY_STATE` má tři roviny; `resolvePlanes` (existující rovina, chybějící id, id tělesa → err); sledované jádro zapíše handle z `makeFace`; sweep: plochy oblastí skici jsou živé, po smazání skici se uvolní (`liveHandleCount`).
 - M13: `EMPTY_STATE` má za rovinami tři osy; `axesOf`; `resolveRegions` (oblast, chybějící skica, chybějící jméno, id tělesa); `resolveAxis` (osa počátku, úsečka skici na XZ ve světových souřadnicích, konstrukční úsečka, kružnice → err, nulová délka); `applyBodyOperation` pro všechny čtyři operace (identita, pořadí mapy, jedno `union` u více tvarů, cíle zvlášť u `remove`/`intersect`); sledované jádro zapíše handle z `extrude` a `revolve`.
 - M14: `propagateNames` na ručně sestavených historiích ([[08-topologicke-pojmenovani]] – role, identita, rozdělení, sloučení, generated z hrany a vrcholu, zánik, hrany včetně kontextu a `#k`, šev, plocha bez jména, determinismus vůči pořadí, výjimka u indexu mimo rozsah); `nameShape` s `FakeKernel`; `resolveTopo` (plocha, hrana, víc ploch → varování, víc hran bez varování, chybějící jméno, chybějící těleso, artefakt jiného druhu); `resolvePlanes` s `TopoRef` (horní plocha kvádru → rovina `z = h` s rámcem X/Y, nerovinná plocha → err, víc ploch → varování); `sketchPlaneOfFace` pro normály ±X, ±Y, ±Z a šikmou; `planeOfRef`; `applyBodyOperation` s jmény (role hranolu, přenos přes boolean); sledované jádro zapíše handle z `fillet` a `chamfer`.

@@ -28,6 +28,8 @@ updated: 2026-10-13
 - **Spike není výjimka.** Jednorázové měření ve spiku je dojem, dokud neprojde stejnou kontrolou.
 - Když citlivé měření neexistuje (build nevystavuje `mallinfo` ani `sbrk`), je poctivější kritérium přeformulovat a ověřit jinak (revize, struktura kódu) než držet test, který jen předstírá kontrolu.
 
+- **Platí i pro pravidla architektury.** Pravidlo hranic modulů (dependency-cruiser, ESLint), které nikdo neviděl selhat, může mít chybný regex a nehlídat nic. V [[M20-zpevneni-struktury|M20]] se každé nové pravidlo (testy mimo `src/`, datové vstupní body `constants.ts`, `sketcher-ops-only-in-tests`) ověřilo dočasným záměrně chybným importem, a u přesunu testů stejnou sadou před i po změně.
+
 ## Jak to využívá tinycad
 
 V [[M07-kernel-occt|M7]] tvrdil spike „s `.delete()` je halda konstantní“ a paměťový test procházel. Implementátor vložil úmyslný únik a test prošel dál; základní úroveň ukázala, že paměť ztrácí samo OCCT ([[Q053 Citlivost paměťového testu OCCT|Q053]], [[Q054 Únik paměti v OCCT buildu|Q054]], dodatek v [[0013-replicad-opencascadejs|ADR 0013]]). Totéž ověřování úmyslnou chybou se používá pro hranice modulů v [[M00-zaklad-projektu|M0]] a pro hook `claude-guard` (self-test).

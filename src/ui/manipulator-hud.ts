@@ -6,6 +6,7 @@
 import type { HudField, ManipulatorHud } from '@/app';
 import { vec3 } from '@/core';
 import type { Vec3 } from '@/core';
+import { MANIPULATOR_GLYPHS } from '@/interaction/constants';
 import { degToRad, handleValueNumber, parseNumber } from './components/params/field-values';
 
 /** A point in px relative to the top left corner of the view area. */
@@ -16,25 +17,31 @@ export interface ScreenSize {
   readonly height: number;
 }
 
+/** Room between the tip of an arrow and the mode bar, in px. */
+const TOOLBAR_CLEARANCE_PX = 12;
+/** Room between the end of the glyph and the value field, in px. */
+const FIELD_CLEARANCE_PX = 16;
 /**
  * The gap of the mode bar from the projected center, to the right and up (spec 11, rule 8):
- * beyond the glyphs (arrow tip 98 px, arcs 72 px), so the bar covers no handle.
+ * beyond the glyphs (the arrow tip is the farthest, the arcs end sooner), so the bar covers no
+ * handle. The sizes of the glyphs come from interaction (M20).
  */
-const TOOLBAR_GAP_PX = 110;
-/** Where the field goes when the screen direction is unknown: this far to the right. */
-const FALLBACK_OFFSET_PX = 96;
-/** Offset of the field from the projected handle: linear arrow 80 + 16, angular radius 72 + 16. */
+const TOOLBAR_GAP_PX = MANIPULATOR_GLYPHS.arrowTipPx + TOOLBAR_CLEARANCE_PX;
+/** Offset of the field from the projected handle: the shaft of an arrow or the radius of an arc + 16. */
 const FIELD_OFFSET_PX: Readonly<Record<HudField['kind'], number>> = Object.freeze({
-  linear: 96,
-  angular: 88,
+  linear: MANIPULATOR_GLYPHS.arrowShaftPx + FIELD_CLEARANCE_PX,
+  angular: MANIPULATOR_GLYPHS.ringPx + FIELD_CLEARANCE_PX,
 });
+/** Where the field goes when the screen direction is unknown: as far to the right as a linear one. */
+const FALLBACK_OFFSET_PX = FIELD_OFFSET_PX.linear;
 /** Projections closer than this coincide: the handle points at the viewer. */
 const COINCIDE_PX = 1e-6;
 
 /**
  * The center of the value field: `offsetPx` from `a` (the projection of HudField.at) along the
  * screen direction towards `b` (the projection of at + direction). Coinciding projections, or no
- * `b`, put it 96 px to the right of `a`; no `a` → null (the field is hidden).
+ * `b`, put it to the right of `a` at the offset of a linear field (96 px); no `a` → null (the field
+ * is hidden).
  */
 export function fieldPosition(
   a: ScreenPoint | null,

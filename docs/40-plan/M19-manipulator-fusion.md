@@ -30,7 +30,7 @@ updated: 2026-10-14
 
 **Cíl:** manipulátor Transformace jako Move ve Fusion 360. Šipky, čtverce pro posun v rovině, oblouky rotace a středový bod. Lišta režimů (Volný, Posun, Rotace, Nastavit pivot) a editovatelné pole hodnoty jezdí s manipulátorem. Rotace má tři úhly.
 
-**Specifikace:** [[0022-rezimy-a-hud-manipulatoru|ADR 0022]], [[10-interakce#Manipulátory (M18)]] (včetně [[10-interakce#Režimy a HUD (M19)]]), [[09-vykreslovani#Vzhled od M19 (styl Fusion)]], [[11-ui]] (odrážka M19 u Manipulátorů v *Kompoziční kořen* a pravidlo 8), [[07-regenerace#Builder featury]] (Transform v3)
+**Specifikace:** [[0022-rezimy-a-hud-manipulatoru|ADR 0022]], [[10-interakce#Manipulátory (M18)]] (včetně [[10-interakce#Režimy a HUD (M19)]]), [[09-vykreslovani#Glyfy]], [[11-ui]] (odrážka M19 u Manipulátorů v *Kompoziční kořen* a pravidlo 8), [[07-regenerace#Builder featury]] (Transform v3)
 
 **Navazuje na:** [[M18-manipulatory|M18]] (abstrakce kotev a úchytů)
 
@@ -56,7 +56,7 @@ updated: 2026-10-14
 
 ### Společná pravidla (platí pro každý úkol)
 
-- Kontrakt ve spec doslova, čísla ze spec. Mezi ně patří velikosti glyfů v tabulce [[09-vykreslovani#Vzhled od M19 (styl Fusion)]], posun pole (96 a 88 px) a lišty (110 px).
+- Kontrakt ve spec doslova, čísla ze spec. Mezi ně patří velikosti glyfů v tabulce [[09-vykreslovani#Glyfy]], posun pole (96 a 88 px) a lišty (110 px).
 - Vektory přes `vec3`, `mat4` a `quat` z `@/core` ([[0012-gl-matrix-za-fasadou|ADR 0012]]). Čisté soubory `render` patří do pravidla `render-pure-files-without-three`.
 - Neměnná data, žádné `any`, angličtina v kódu, TDD, `npm run check` zelený.
 
@@ -95,7 +95,7 @@ updated: 2026-10-14
 ### 3. `render`: glyfy ve stylu Fusion
 
 - **Soubory:** `src/render/manipulator-pick.ts` (+ test), `src/render/manipulator-layer.ts`, `src/render/viewport.ts` (`project`, `viewChanged` ve `draw`).
-- **Kontrakt:** [[09-vykreslovani#Vzhled od M19 (styl Fusion)]].
+- **Kontrakt:** [[09-vykreslovani#Glyfy]].
 - **Testy (Node, `manipulator-pick`):**
   - `projectHandles`: čtvrtkruh (16 segmentů od `zero` k `axis × zero`), kružnice 64, čtverec (4 rohy 26–46 px), bod (střed, poloměr), šipka 14–98 px.
   - Skrytí čtverce z hrany.

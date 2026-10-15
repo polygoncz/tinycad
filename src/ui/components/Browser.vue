@@ -19,6 +19,7 @@ import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { BodyId } from '@/document';
 import type { BrowserBodyRow, BrowserSketchRow } from '@/interaction';
+import { ACTION_IDS } from '@/interaction/constants';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
 import { finishEdit } from '../inline-rename';
@@ -32,7 +33,9 @@ import type {
 } from '../tree-navigation';
 
 const session = useSession();
-const { browser, actions, actionIds } = session;
+const { browser, actions } = session;
+// The ids of the built-in actions from the data entry point of interaction (M20, D6).
+const actionIds = ACTION_IDS;
 const { t } = useI18n();
 
 const bodies = useObservable(browser.bodies);

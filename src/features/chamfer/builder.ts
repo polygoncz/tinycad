@@ -14,9 +14,9 @@ export const chamferBuilder: FeatureBuilder<ChamferParams> = Object.freeze<
   FeatureBuilder<ChamferParams>
 >({
   type: 'chamfer',
-  async build({ feature, state }, ctx) {
-    // Params are valid here: the Regenerator ran chamferSchema.validate first.
-    const resolved = ctx.resolveTopo(feature.params.edges, 'edge');
+  async build({ feature, params, state }, ctx) {
+    // Params are valid here: evaluateParams ran chamferSchema.validate first.
+    const resolved = ctx.resolveTopo(params.edges, 'edge');
     if (!resolved.ok) return { ok: false, error: unresolvedReference('edges', resolved.error) };
 
     // One call per body lets OCCT solve the corners of its edges together (R105). The kernel
@@ -24,7 +24,7 @@ export const chamferBuilder: FeatureBuilder<ChamferParams> = Object.freeze<
     // (D6); any other kernel error propagates and becomes KERNEL.
     const changed = new Map<BodyId, Body>();
     for (const { body, indices } of groupByBody(resolved.value)) {
-      const result = await chamferOrIssue(ctx.kernel, body.shape, indices, feature.params.distance);
+      const result = await chamferOrIssue(ctx.kernel, body.shape, indices, params.distance);
       if (!result.ok) return { ok: false, error: result.error };
       changed.set(
         body.id,
@@ -39,7 +39,7 @@ export const chamferBuilder: FeatureBuilder<ChamferParams> = Object.freeze<
       );
     }
     // Each result takes the place of its body, everything else stays the same object.
-    return { ok: true, state: replaceBodies(state, changed, new Set()) };
+    return { ok: true, state: replaceBodies(state, changed, new Set()), anchors: {} };
   },
 });
 

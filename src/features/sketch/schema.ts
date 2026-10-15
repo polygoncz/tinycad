@@ -2,12 +2,12 @@ import { ORIGIN_PLANE_IDS, validateAgainstSchema } from '@/document';
 import type {
   FeatureSchema,
   ParamIssue,
-  ParamSchema,
+  ParamSchemaOf,
   ParamSpec,
   PlaneRef,
   TopoRef,
 } from '@/document';
-import { SKETCH_FEATURE_TYPE, parseSketchData } from '@/sketch';
+import { SKETCH_FEATURE_TYPE, SKETCH_PARAM, parseSketchData } from '@/sketch';
 import type { SketchConstraint, SketchEntity } from '@/sketch';
 
 // The data half of the sketch feature (ADR 0004): params, defaults and validation (spec 12,
@@ -24,11 +24,21 @@ export interface SketchParams {
 // Frozen deeply – the schema object and every ParamSpec: the schema is shared by the registry,
 // the UI and the validation. Labels are translation keys (ADR 0014), the texts are in
 // messages.ts. Entities and constraints are 'data' params: no form field, their content is
-// checked by parseSketchData in validate.
-const params: ParamSchema = Object.freeze<ParamSchema>({
-  plane: Object.freeze<ParamSpec>({ kind: 'planes', label: 'sketch.plane', min: 1, max: 1 }),
-  entities: Object.freeze<ParamSpec>({ kind: 'data', label: 'sketch.entities' }),
-  constraints: Object.freeze<ParamSpec>({ kind: 'data', label: 'sketch.constraints' }),
+// checked by parseSketchData in validate. The keys are the names of SKETCH_PARAM and
+// ParamSchemaOf checks they are exactly the keys of SketchParams: a missing or an extra one is a
+// type error.
+const params: ParamSchemaOf<SketchParams> = Object.freeze<ParamSchemaOf<SketchParams>>({
+  [SKETCH_PARAM.plane]: Object.freeze<ParamSpec>({
+    kind: 'planes',
+    label: 'sketch.plane',
+    min: 1,
+    max: 1,
+  }),
+  [SKETCH_PARAM.entities]: Object.freeze<ParamSpec>({ kind: 'data', label: 'sketch.entities' }),
+  [SKETCH_PARAM.constraints]: Object.freeze<ParamSpec>({
+    kind: 'data',
+    label: 'sketch.constraints',
+  }),
 });
 
 export const sketchSchema: FeatureSchema<SketchParams> = Object.freeze<FeatureSchema<SketchParams>>(
@@ -47,8 +57,8 @@ export const sketchSchema: FeatureSchema<SketchParams> = Object.freeze<FeatureSc
     },
     validate(raw: unknown): readonly ParamIssue[] {
       const issues = validateAgainstSchema(params, raw);
-      const entities = field(raw, 'entities');
-      const constraints = field(raw, 'constraints');
+      const entities = field(raw, SKETCH_PARAM.entities);
+      const constraints = field(raw, SKETCH_PARAM.constraints);
       // A missing field is reported by validateAgainstSchema already; parse only a complete pair.
       if (entities === undefined || constraints === undefined) return issues;
       const parsed = parseSketchData(entities, constraints);

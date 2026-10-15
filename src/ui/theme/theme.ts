@@ -6,7 +6,7 @@ import type { KeyValueStorage } from '../storage';
 // the data-theme attribute on <html>. Default from prefers-color-scheme, the user's choice is
 // remembered. The environment is passed in, so the logic runs in Node tests without DOM;
 // use-theme.ts binds it to the browser. The viewport palette follows via
-// AppSession.setTheme (Q072), wired where a session exists.
+// AppSession.viewSettings.setTheme (Q072), wired where a session exists.
 
 export type Theme = 'light' | 'dark';
 

@@ -116,10 +116,7 @@ export function createUndoManager(deps: {
       dispatcher.dispatch(entry.op, { kind: 'redo', target, label: entry.label });
     },
     // Only on/once, not the Emitter itself, so callers cannot emit.
-    events: {
-      on: (type, fn) => emitter.on(type, fn),
-      once: (type, fn) => emitter.once(type, fn),
-    },
+    events: emitter.asSubscribable(),
     dispose: () => {
       subscriptions.dispose();
     },

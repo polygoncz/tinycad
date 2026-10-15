@@ -24,7 +24,7 @@ updated: 2026-10-14
 
 - **Stav:** Přijato (`status: accepted`, Pavel 2026-10-14)
 - **Datum:** 2026-10-14
-- **Souvisí:** [[07-regenerace#Kotvy manipulátorů (M18)]], [[10-interakce#Manipulátory (M18)]], [[09-vykreslovani#Manipulátory (M18)]], [[11-ui#Plugin featury (plugin-api)]], [[M18-manipulatory|M18]]
+- **Souvisí:** [[07-regenerace#Kotvy manipulátorů (M18)]], [[10-interakce#Manipulátory (M18)]], [[09-vykreslovani#Manipulátory]], [[11-ui#Plugin featury (plugin-api)]], [[M18-manipulatory|M18]]
 
 ## Kontext
 
@@ -70,3 +70,12 @@ Je to stejné rozdělení jako ve FeatureScriptu v Onshape: manipulátory vytvá
 - (−) `BuildOutput`, cache `Regeneratoru`, `RegenResult` a `RegenSnapshot` dostávají nové pole. Kotvy putují i přes cache.
 - (−) Kotvy jsou z poslední dokončené regenerace. Úchyt, jehož kotva by závisela na taženém parametru, by se zpožďoval. Invariant to zakazuje, ale hlídá ho jen revize a testy pluginu.
 - (−) Nový druh úchytu (např. rovinný se 2 stupni volnosti) znamená změnu v `interaction` (matematika) i v `render` (glyf, picking).
+
+## Dodatek 2026-10-14: kotvy v typech ([[M20-zpevneni-struktury|M20]])
+
+[[Revize kódu 2026-10-14]] (A6) ukázala, že kontrakt kotev hlídají jen komentáře: jména kotev (`'base'`, `'pivot'`) jsou netypované řetězce mezi builderem a deskriptorem a builder featury s manipulátorem musí vrátit aspoň `{}`. Jednou se to už rozbilo (oprava pivotu Transformace 2026-10-14). Pavel 2026-10-14 rozhodl doplnit toto ADR, ne ho nahradit, protože model kotev z regenerace se nemění:
+
+- Plugin nese typ svých kotev: `FeaturePlugin<P, A>`, kde `A` je záznam jmen kotev. Builder vrací `anchors: A` a deskriptor dostává `handles(params: P, anchors: A)`. Překlep ve jménu kotvy je chyba typu.
+- `ManipulatorController` drží poslední známé kotvy otevřené session. Když tah featuru shodí a regenerace kotvy nevrátí, úchyty zůstanou a tahem jde chybu vrátit.
+
+Přesný tvar typů je v [[07-regenerace]] a [[11-ui#Plugin featury (plugin-api)]] po dokončení M20.

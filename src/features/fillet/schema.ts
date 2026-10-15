@@ -1,5 +1,5 @@
 import { validateAgainstSchema } from '@/document';
-import type { FeatureSchema, ParamIssue, ParamSchema, ParamSpec, TopoRef } from '@/document';
+import type { FeatureSchema, ParamIssue, ParamSchemaOf, ParamSpec, TopoRef } from '@/document';
 
 // The data half of the fillet feature (ADR 0004): params, defaults and validation.
 
@@ -14,7 +14,7 @@ export interface FilletParams {
 // the UI form and the validation, so nobody may change it in place. Labels are translation keys
 // (ADR 0014), the texts are in messages.ts. The radius must be > 0: the exclusive lower bound 0
 // (Q050) covers it, so the fillet needs no rule of its own.
-const params: ParamSchema = Object.freeze<ParamSchema>({
+const params: ParamSchemaOf<FilletParams> = Object.freeze<ParamSchemaOf<FilletParams>>({
   edges: Object.freeze<ParamSpec>({ kind: 'topo', label: 'fillet.edges', entity: 'edge', min: 1 }),
   radius: Object.freeze<ParamSpec>({
     kind: 'length',

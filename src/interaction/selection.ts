@@ -8,9 +8,9 @@
 import { ObservableValue, assertNever } from '@/core';
 import type { Observable, Unsubscribe } from '@/core';
 import type { BodyId, FeatureId, PlaneId, TopoName } from '@/document';
-import { isParamVisible, sketchId } from '@/document';
-import type { FeatureEditor, FeatureEditSession } from './feature-editor';
-import { bodyOfRef, regionRefsOf, topoRefsOf } from './ref-values';
+import { isParamVisible } from '@/document';
+import type { FeatureEditor, FeatureEditSession } from './feature-dialog/feature-editor';
+import { behaviorOf, isRefParamSpec } from './feature-dialog/ref-kinds';
 import { nameOfHit } from './regen-status-port';
 import type { RegenSnapshot, RegenStatusPort, TopoNames } from './regen-status-port';
 import type { HighlightPort, HighlightTarget } from './viewport-port';
@@ -212,8 +212,9 @@ export function bindSelectionHighlight(
 }
 
 /**
- * The references in the values of the visible params of an open session, in schema order:
- * regions always, topo and bodies only with a snapshot (M14).
+ * The references in the values of the visible params of an open session, in schema order, as the
+ * table of reference kinds highlights them (M20): regions always, topo and bodies only with a
+ * snapshot (M14).
  */
 function paramTargetsOf(
   session: FeatureEditSession,
@@ -221,54 +222,11 @@ function paramTargetsOf(
 ): HighlightTarget[] {
   const { open, params } = session.state.get();
   if (!open) return [];
-  return Object.entries(session.schema.params).flatMap(([name, spec]): HighlightTarget[] => {
-    if (!isParamVisible(spec, params)) return [];
-    const value = params[name];
-    switch (spec.kind) {
-      case 'region':
-        return regionTargets(value);
-      case 'topo':
-        return snapshot === undefined ? [] : topoTargets(value, spec.entity, snapshot);
-      case 'bodies':
-        return snapshot === undefined ? [] : bodyTargets(value);
-      default:
-        return [];
-    }
-  });
-}
-
-/**
- * Topo references of an unchecked value as the faces or edges of their name in the body of the
- * last snapshot, ascending; an unresolved reference and vertices (R101) give nothing.
- */
-function topoTargets(
-  value: unknown,
-  entity: 'face' | 'edge' | 'vertex',
-  snapshot: RegenSnapshot,
-): HighlightTarget[] {
-  return topoRefsOf(value).flatMap(({ body, name }): HighlightTarget[] => {
-    const names = namesOf(snapshot, body);
-    if (names === undefined) return [];
-    switch (entity) {
-      case 'face':
-        return names.faces(name).map((faceIndex) => ({ kind: 'face', body, faceIndex }));
-      case 'edge':
-        return names.edges(name).map((edgeIndex) => ({ kind: 'edge', body, edgeIndex }));
-      case 'vertex':
-        return [];
-      default:
-        return assertNever(entity);
-    }
-  });
-}
-
-/** Body references of an unchecked value as body targets; render drops bodies it does not show. */
-function bodyTargets(value: unknown): HighlightTarget[] {
-  const items: readonly unknown[] = Array.isArray(value) ? value : [];
-  return items.flatMap((item): HighlightTarget[] => {
-    const body = bodyOfRef(item);
-    return body === null ? [] : [{ kind: 'body', body }];
-  });
+  return Object.entries(session.schema.params).flatMap(([name, spec]) =>
+    isRefParamSpec(spec) && isParamVisible(spec, params)
+      ? behaviorOf(spec).highlightTargets(params[name], spec, snapshot)
+      : [],
+  );
 }
 
 /** The targets without repeats, in order; the first one wins. */
@@ -298,16 +256,6 @@ function targetKey(target: HighlightTarget): string {
     default:
       return assertNever(target);
   }
-}
-
-/** Region references of an unchecked value; items of another shape are skipped. */
-function regionTargets(value: unknown): HighlightTarget[] {
-  // regionRefsOf only lets through owners that sketchId accepts.
-  return regionRefsOf(value).map(({ sketch, region }) => ({
-    kind: 'sketchRegion',
-    sketch: sketchId(sketch),
-    region,
-  }));
 }
 
 function sameItems(a: readonly SelectionItem[], b: readonly SelectionItem[]): boolean {

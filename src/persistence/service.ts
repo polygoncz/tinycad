@@ -62,10 +62,7 @@ type StatusEvents = { status: { status: PersistenceStatus; error?: unknown } };
 class QueuedPersistenceService implements PersistenceService {
   private readonly emitter = new Emitter<StatusEvents>();
   // Only on/once, not the Emitter itself: a cast back to Emitter must not give emit (Q023).
-  readonly events: Subscribable<StatusEvents> = {
-    on: (type, fn) => this.emitter.on(type, fn),
-    once: (type, fn) => this.emitter.once(type, fn),
-  };
+  readonly events: Subscribable<StatusEvents> = this.emitter.asSubscribable();
   private readonly lastErrorValue = new ObservableValue<string | null>(null);
   readonly lastError: Observable<string | null> = this.lastErrorValue.asObservable();
 

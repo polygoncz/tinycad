@@ -22,7 +22,7 @@ import type {
 } from '@/ops';
 import { OP_VERSION } from '@/ops';
 import { SKETCH_FEATURE_TYPE } from '@/sketch';
-import type { FeatureEditor } from './feature-editor';
+import type { FeatureEditor } from './feature-dialog/feature-editor';
 import type { FeatureHealth, RegenStatusPort } from './regen-status-port';
 import type { SelectionCommands } from './selection';
 

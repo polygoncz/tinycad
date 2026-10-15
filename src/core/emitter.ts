@@ -18,6 +18,14 @@ export interface Subscribable<Events extends EventMap<Events>> {
 
 export class Emitter<Events extends EventMap<Events>> implements Subscribable<Events> {
   private readonly handlers = new Map<keyof Events, Entry<never>[]>();
+  // Subscribe-only view handed out by public interfaces. A separate frozen object, so a
+  // consumer cannot cast it back to Emitter and reach emit (Q023).
+  private readonly view: Subscribable<Events> = Object.freeze({
+    on: <K extends keyof Events>(type: K, fn: (e: Events[K]) => void): Unsubscribe =>
+      this.on(type, fn),
+    once: <K extends keyof Events>(type: K, fn: (e: Events[K]) => void): Unsubscribe =>
+      this.once(type, fn),
+  });
 
   on<K extends keyof Events>(type: K, fn: (e: Events[K]) => void): Unsubscribe {
     const entry: Entry<Events[K]> = { fn, active: true };
@@ -52,6 +60,11 @@ export class Emitter<Events extends EventMap<Events>> implements Subscribable<Ev
       }
     }
     throwCollected(errors, `Several handlers of '${String(type)}' failed`);
+  }
+
+  /** View with only on/once; always the same object. */
+  asSubscribable(): Subscribable<Events> {
+    return this.view;
   }
 
   private list<K extends keyof Events>(type: K): Entry<Events[K]>[] {

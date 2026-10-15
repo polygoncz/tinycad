@@ -11,13 +11,13 @@ export const booleanBuilder: FeatureBuilder<BooleanParams> = Object.freeze<
   FeatureBuilder<BooleanParams>
 >({
   type: 'boolean',
-  async build({ feature, state }, ctx) {
-    // Params are valid here: the Regenerator ran booleanSchema.validate first, so both lists
+  async build({ feature, params, state }, ctx) {
+    // Params are valid here: evaluateParams ran booleanSchema.validate first, so both lists
     // have at least one body and no body is in both.
-    const { op, keepTools } = feature.params;
-    const targets = ctx.resolveBodies(feature.params.targets);
+    const { op, keepTools } = params;
+    const targets = ctx.resolveBodies(params.targets);
     if (!targets.ok) return { ok: false, error: unresolvedReference('targets', targets.error) };
-    const tools = ctx.resolveBodies(feature.params.tools);
+    const tools = ctx.resolveBodies(params.tools);
     if (!tools.ok) return { ok: false, error: unresolvedReference('tools', tools.error) };
 
     const [first, ...otherTargets] = targets.value;
@@ -47,6 +47,10 @@ export const booleanBuilder: FeatureBuilder<BooleanParams> = Object.freeze<
 
     // The result takes the place of the first target, consumed bodies leave, everything else
     // stays the same object.
-    return { ok: true, state: replaceBodies(state, new Map([[first.id, result]]), consumed) };
+    return {
+      ok: true,
+      state: replaceBodies(state, new Map([[first.id, result]]), consumed),
+      anchors: {},
+    };
   },
 });

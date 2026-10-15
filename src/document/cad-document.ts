@@ -77,10 +77,7 @@ function sameMeta(a: BodyMeta | undefined, b: BodyMeta | undefined): boolean {
 class CadDocument implements DocumentWriter {
   private readonly emitter = new Emitter<DocumentEvents>();
   // Only on/once, not the Emitter itself: a cast back to Emitter must not give emit (Q023).
-  readonly events: Subscribable<DocumentEvents> = {
-    on: (type, fn) => this.emitter.on(type, fn),
-    once: (type, fn) => this.emitter.once(type, fn),
-  };
+  readonly events: Subscribable<DocumentEvents> = this.emitter.asSubscribable();
   private _meta: DocumentMeta;
   private _studio: PartStudioData;
 

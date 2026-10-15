@@ -10,8 +10,8 @@ export default mergeConfig(
           extends: true,
           test: {
             name: 'unit',
-            // Unit tests live next to the code (foo.ts + foo.test.ts) and run in Node.
-            include: ['src/**/*.test.ts'],
+            // Unit tests mirror src/ in test/unit/ (ADR 0023) and run in Node.
+            include: ['test/unit/**/*.test.ts'],
             environment: 'node',
           },
         },
@@ -20,7 +20,7 @@ export default mergeConfig(
           test: {
             name: 'integration',
             // Slow tests with real adapters (OCCT WASM, …).
-            include: ['tests/**/*.test.ts'],
+            include: ['test/integration/**/*.test.ts'],
             environment: 'node',
           },
         },

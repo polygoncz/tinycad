@@ -10,7 +10,7 @@
 // survives closing the sketch. The panel starts below the view cube (D8).
 import { nextTick, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { SketchConstraintRow, SketchSession } from '@/interaction';
+import type { SketchConstraintRow, SketchSession } from '@/sketcher';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
 import { isAdditive } from '../item-actions';

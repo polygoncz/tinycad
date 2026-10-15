@@ -1,24 +1,22 @@
 // The document list (Q019) over a DocumentStore: listing, creating, importing (M15), deleting
-// and renaming (M19.2) documents.
+// and renaming (M19.2) documents, and the adapter of the port DocumentCatalog over them (M20).
 // The store and the lock manager come in as parameters, so this runs in Node with
 // MemoryDocumentStore and a fake; browser.ts hands it the IndexedDB store and navigator.locks.
 
 import { ObservableValue, ok } from '@/core';
 import type { IdGenerator, Result } from '@/core';
-import { createDocument } from '@/document';
-import type { DocumentId, DocumentLoadError, DocumentMeta } from '@/document';
+import type { DocumentId, DocumentLoadError } from '@/document';
 import { createDocumentNameModel } from '@/interaction';
+import type { DocumentCatalog } from '@/interaction';
 import { createOperationDispatcher } from '@/ops';
-import { createSnapshot, importDocument, loadDocument } from '@/persistence';
+import { importDocument, loadDocument } from '@/persistence';
 import type { DocumentInfo, DocumentStore } from '@/persistence';
 import type { FeaturePlugin } from '@/plugin-api';
 import { acquireDocumentLock } from './doc-lock';
 import type { DocumentLocks } from './doc-lock';
 import { describeLoadError } from './load-error';
+import { storeNewDocument } from './open-document';
 import { createPluginRegistries } from './registries';
-
-/** The key of the name of a new document (spec 11, "Nový dokument"; ADR 0014). */
-const NAME_OF_NEW_DOCUMENT = 'document.untitled';
 
 /** The lock of renameDocument: no feature dialog and no read-only session over a closed document. */
 const NOT_LOCKED = new ObservableValue(false).asObservable();
@@ -40,14 +38,9 @@ export async function createNewDocument(
     readonly translate: (key: string) => string;
   },
 ): Promise<DocumentId> {
-  const meta: DocumentMeta = {
-    // Brand: a fresh id from the generator is a document id by construction.
-    id: deps.ids.next() as DocumentId,
-    name: deps.translate(NAME_OF_NEW_DOCUMENT),
-    createdAt: deps.now(),
-  };
-  await store.createDocument(meta, createSnapshot(createDocument({ meta }), 0));
-  return meta.id;
+  // Brand: a fresh id from the generator is a document id by construction.
+  const doc = await storeNewDocument(store, deps.ids.next() as DocumentId, deps);
+  return doc.meta.id;
 }
 
 /**
@@ -135,4 +128,31 @@ export async function renameDocument(
   } finally {
     lock.dispose();
   }
+}
+
+/**
+ * The port DocumentCatalog of interaction's DocumentListModel (M20, A3.5) over the functions
+ * above. `withStore` hands every call its store (the browser: an IndexedDB worker per call, a
+ * test: one memory store); deleting and renaming take the lock of the document from `locks`.
+ */
+export function createDocumentCatalog(deps: {
+  readonly withStore: <T>(call: (store: DocumentStore) => Promise<T>) => Promise<T>;
+  readonly locks: DocumentLocks;
+  /** For the registries an imported file is checked and a renamed log replayed with. */
+  readonly plugins: readonly FeaturePlugin[];
+  readonly ids: IdGenerator;
+  readonly now: () => number;
+  /** The name of a new document: translate('document.untitled'). */
+  readonly translate: (key: string) => string;
+}): DocumentCatalog {
+  const { withStore, locks, plugins, ids, now, translate } = deps;
+  return Object.freeze({
+    list: () => withStore((store) => listDocuments(store)),
+    create: () => withStore((store) => createNewDocument(store, { ids, now, translate })),
+    importFile: (raw: unknown) =>
+      withStore((store) => importDocumentFile(store, raw, { plugins, ids, now })),
+    remove: (id: DocumentId) => withStore((store) => deleteDocument({ store, locks }, id)),
+    rename: (id: DocumentId, name: string) =>
+      withStore((store) => renameDocument({ store, locks, plugins, now }, id, name)),
+  });
 }

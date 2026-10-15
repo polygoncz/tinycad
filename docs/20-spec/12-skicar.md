@@ -146,8 +146,8 @@ export interface SketchParams {
 export const sketchPlugin: FeaturePlugin<SketchParams>;
 ```
 
-- Schéma `type: SKETCH_FEATURE_TYPE`, `version: 1`, `label: 'sketch.label'`, `icon: 'pencil'`; parametry v pořadí `plane` (`{ kind: 'planes', label: 'sketch.plane', min: 1, max: 1 }`), `entities` a `constraints` (`{ kind: 'data', label: … }`). `validate` = `validateAgainstSchema` a, když jsou `entities` i `constraints` přítomné, `parseSketchData` převedené na `ParamIssue { param: path, code, params: { index } }`.
-- Plugin **nemá nástroje** ani operace: vstup do skicáře je vestavěný nástroj `sketch` v `interaction` ([[0017-modul-sketch-a-skicar|ADR 0017]]) a editace jde přes `feature.setParams` ([[Q074 Operace skicáře v logu|Q074]]).
+- Schéma `type: SKETCH_FEATURE_TYPE`, `version: 1`, `label: 'sketch.label'`, `icon: 'pencil'`; parametry v pořadí `plane` (`{ kind: 'planes', label: 'sketch.plane', min: 1, max: 1 }`), `entities` a `constraints` (`{ kind: 'data', label: … }`). Jména parametrů jsou v modulu `sketch` jako `SKETCH_PARAM` a schéma ověří typem (`satisfies Record<keyof SketchParams, ParamSpec>`), že sedí na klíče `SketchParams`. Skicář v `interaction` čte a zapisuje parametry skici jen přes `SKETCH_PARAM`, takže jedinou vazbou na plugin zůstává `SKETCH_FEATURE_TYPE` a tato jména ([[0017-modul-sketch-a-skicar|ADR 0017]]). `validate` = `validateAgainstSchema` a, když jsou `entities` i `constraints` přítomné, `parseSketchData` převedené na `ParamIssue { param: path, code, params: { index } }`.
+- Plugin **nemá nástroje** ani operace: vstup do skicáře je vestavěný nástroj `sketch` v modulu `sketcher` ([[0024-modul-sketcher|ADR 0024]]) ([[0017-modul-sketch-a-skicar|ADR 0017]]) a editace jde přes `feature.setParams` ([[Q074 Operace skicáře v logu|Q074]]).
 - **Builder:** (1) `ctx.resolvePlanes(params.plane)`, chyba → `unresolvedReference('plane', e)`; (2) `parseSketchData` (parametry jsou ověřené, `err` je chyba programu → výjimka); (3) `computeRegions(data)`; `crossing` → `ctx.warn('Sketch curves cross each other; no regions')`; (4) pro každou oblast v pořadí `kernel.makeFace({ plane, outer, holes })`; (5) nový artefakt `SketchArtifact { kind: 'sketch', id: sketchId(feature.id), owner: feature.id, plane, entities: data.entities, regions }` (mapa jméno → handle v pořadí oblastí), zmrazený, do nové mapy artefaktů. Chyba jádra proletí (`KERNEL`). Skica bez oblastí je platná (artefakt s prázdnou mapou).
 
 ## Roviny a počátek
@@ -227,7 +227,7 @@ export interface ConstraintSolver {
 
 Editace skici zapisuje **`feature.setParams`** přes `FeatureEditSession.setParams({ entities, constraints })` ([[Q074 Operace skicáře v logu|Q074]]). Vlastní operace `sketch.*` ani `FeaturePlugin.ops` v M12 nevznikají ([[Rozhodnutí noční rychloakce#M12 – Skicář|R36]] ⚠). Celá editace skici (od vstupu do skicáře po „Hotovo“) je jedna transakce: nová skica = jeden záznam `batch[feature.add, feature.setParams]`, úprava = jeden `feature.setParams` (sousední `setParams` téže featury se sloučí). „Zrušit“ transakci zahodí. Undo uvnitř skicáře v M12 není (transakce je otevřená, [[Rozhodnutí noční rychloakce#M12 – Skicář|R44]] ⚠).
 
-## Režim skicáře (interaction)
+## Režim skicáře (sketcher)
 
 Kontrakt v [[10-interakce#Skicář]]. Shrnutí chování:
 

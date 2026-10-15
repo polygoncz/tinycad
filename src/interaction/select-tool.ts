@@ -5,8 +5,8 @@
 
 import { isPlainEscape } from './key-events';
 import type { SelectionItem } from './selection';
-import type { Tool, ToolContext, ToolDescriptor } from './tools';
-import type { PickResult, ViewKeyEvent, ViewPointerEvent, ViewportPort } from './viewport-port';
+import type { Tool, ToolContext, ToolDescriptor, ToolViewport } from './tools';
+import type { PickResult, ViewKeyEvent, ViewPointerEvent } from './viewport-port';
 
 /** A hit of a body: what the select tool works with. */
 type BodyHit = Extract<PickResult, { readonly kind: 'face' | 'edge' }>;
@@ -82,7 +82,7 @@ function createSelectTool(): Tool {
  * pick with the default filter (faces and edges). A sketch entity or region cannot come back
  * from it; if a viewport returns one anyway, it counts as nothing hit.
  */
-function pickBody(viewport: ViewportPort, x: number, y: number): BodyHit | null {
+function pickBody(viewport: ToolViewport, x: number, y: number): BodyHit | null {
   const hit = viewport.pick(x, y);
   return hit !== null && (hit.kind === 'face' || hit.kind === 'edge') ? hit : null;
 }

@@ -1,6 +1,6 @@
 import type { Vec3 } from '@/core';
 import { validateAgainstSchema } from '@/document';
-import type { FeatureSchema, ParamIssue, ParamSchema, ParamSpec } from '@/document';
+import type { FeatureSchema, ParamIssue, ParamSchemaOf, ParamSpec } from '@/document';
 
 // The data half of the box feature (ADR 0004): params, defaults and validation.
 
@@ -19,7 +19,7 @@ export interface BoxParams {
 // by the registry, the UI form and the validation, so nobody may change it in place.
 // Labels are translation keys (ADR 0014), the texts are in messages.ts. Sizes must be > 0:
 // the exclusive lower bound 0 (Q050) covers it, so the box needs no rule of its own.
-const params: ParamSchema = Object.freeze<ParamSchema>({
+const params: ParamSchemaOf<BoxParams> = Object.freeze<ParamSchemaOf<BoxParams>>({
   origin: Object.freeze<ParamSpec>({
     kind: 'point',
     label: 'box.origin',

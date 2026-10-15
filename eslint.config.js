@@ -17,6 +17,7 @@ const platformIndependent = [
   'src/plugin-api/**/*.ts',
   'src/features/**/*.ts',
   'src/interaction/**/*.ts',
+  'src/sketcher/**/*.ts',
 ];
 
 // Second safety net next to the DOM-free tsconfig: these globals exist in
@@ -95,7 +96,7 @@ export default defineConfig(
   },
   {
     files: platformIndependent,
-    ignores: ['src/persistence/idb/**', 'src/**/*.test.ts'],
+    ignores: ['src/persistence/idb/**'],
     rules: {
       'no-restricted-globals': ['error', ...platformGlobals],
     },

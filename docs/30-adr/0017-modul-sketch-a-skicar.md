@@ -57,3 +57,7 @@ Druhá otázka je, jak skicu vykreslit. Revize navrhla křivky jako handle v já
 - (+) Datový model, oblasti i port se testují v Node bez OCCT a bez řešiče.
 - (−) `interaction` a `regen` znají jeden konkrétní druh featury (typ a data skici). Je to vědomá výjimka: skica je v CAD kontextem pro jiné featury, ne jen další featura (Onshape i Fusion ji tak mají).
 - (−) Dvě reprezentace geometrie skici (data pro kresbu, plochy v jádře pro profil); musí dávat stejný tvar – hlídá test oblastí proti OCCT (obsah plochy).
+
+## Dodatek 2026-10-14: skicář ve vlastním modulu
+
+Umístění prezentační logiky skicáře v `interaction` nahrazuje [[0024-modul-sketcher|ADR 0024]]: skicář je modul `sketcher` v prstenci 2, závislý na `interaction`. Zbytek tohoto ADR (doménový modul `sketch`, kresba skici z dat) platí dál.

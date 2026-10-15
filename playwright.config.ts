@@ -8,7 +8,7 @@ const PORT = Number(process.env.E2E_PORT ?? 4173);
 const BASE_URL = `http://localhost:${String(PORT)}`;
 
 export default defineConfig({
-  testDir: 'e2e',
+  testDir: 'test/e2e',
   // The OCCT WASM takes a few seconds to load and compile in every new page.
   timeout: 90_000,
   expect: { timeout: 20_000 },

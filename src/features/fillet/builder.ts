@@ -14,9 +14,9 @@ export const filletBuilder: FeatureBuilder<FilletParams> = Object.freeze<
   FeatureBuilder<FilletParams>
 >({
   type: 'fillet',
-  async build({ feature, state }, ctx) {
-    // Params are valid here: the Regenerator ran filletSchema.validate first.
-    const resolved = ctx.resolveTopo(feature.params.edges, 'edge');
+  async build({ feature, params, state }, ctx) {
+    // Params are valid here: evaluateParams ran filletSchema.validate first.
+    const resolved = ctx.resolveTopo(params.edges, 'edge');
     if (!resolved.ok) return { ok: false, error: unresolvedReference('edges', resolved.error) };
 
     // One call per body lets OCCT solve the corners of its edges together (R105). The kernel
@@ -24,7 +24,7 @@ export const filletBuilder: FeatureBuilder<FilletParams> = Object.freeze<
     // (D6); any other kernel error propagates and becomes KERNEL.
     const changed = new Map<BodyId, Body>();
     for (const { body, indices } of groupByBody(resolved.value)) {
-      const result = await filletOrIssue(ctx.kernel, body.shape, indices, feature.params.radius);
+      const result = await filletOrIssue(ctx.kernel, body.shape, indices, params.radius);
       if (!result.ok) return { ok: false, error: result.error };
       changed.set(
         body.id,
@@ -39,7 +39,7 @@ export const filletBuilder: FeatureBuilder<FilletParams> = Object.freeze<
       );
     }
     // Each result takes the place of its body, everything else stays the same object.
-    return { ok: true, state: replaceBodies(state, changed, new Set()) };
+    return { ok: true, state: replaceBodies(state, changed, new Set()), anchors: {} };
   },
 });
 

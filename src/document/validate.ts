@@ -1,7 +1,6 @@
 import { assertNever } from '@/core';
-import { refKindsOf } from './references';
-import { readRefOf } from './refs';
-import type { EntityRef } from './refs';
+import { isRefParamSpec, rulesOf } from './ref-kinds';
+import type { ParamProblem } from './ref-kinds';
 import { isParamVisible } from './schema';
 import type { ParamIssue, ParamSchema, ParamSpec } from './schema';
 
@@ -9,9 +8,7 @@ import type { ParamIssue, ParamSchema, ParamSpec } from './schema';
 // and adds its own rules. Missing and unexpected params are both issues (Q028).
 // Issues carry codes, not texts (ADR 0014); the list of codes is in spec 03.
 
-/** An issue without the param key; the caller adds it. */
-type Problem = Omit<ParamIssue, 'param'>;
-type Check = (value: unknown) => Problem | undefined;
+type Check = (value: unknown) => ParamProblem | undefined;
 
 /** The numeric bounds of a length/angle/number spec. */
 interface NumberRules {
@@ -22,7 +19,7 @@ interface NumberRules {
   readonly integer?: boolean;
 }
 
-const WRONG_TYPE: Problem = { code: 'param.wrongType' };
+const WRONG_TYPE: ParamProblem = { code: 'param.wrongType' };
 
 export function validateAgainstSchema(schema: ParamSchema, params: unknown): readonly ParamIssue[] {
   if (!isRecord(params)) return [{ param: '', ...WRONG_TYPE }];
@@ -44,6 +41,8 @@ export function validateAgainstSchema(schema: ParamSchema, params: unknown): rea
 }
 
 function checkParam(spec: ParamSpec): Check {
+  // References: the rules of the table of reference kinds (M20, D5).
+  if (isRefParamSpec(spec)) return (v) => rulesOf(spec).check(v, spec);
   switch (spec.kind) {
     case 'length':
     case 'angle':
@@ -57,23 +56,15 @@ function checkParam(spec: ParamSpec): Check {
     case 'point':
       return (v) =>
         Array.isArray(v) && v.length === 3 && v.every(isFiniteNumber) ? undefined : WRONG_TYPE;
-    // Whether a topo name really is a face/edge/vertex is only known after regeneration.
-    case 'bodies':
-    case 'topo':
-    case 'region':
-    case 'planes':
-      return checkRefs(spec.min, spec.max, refKindsOf(spec));
     case 'data':
       // Only required (checked above); the content is up to the schema's own validate (M12).
       return () => undefined;
-    case 'axis':
-      return checkAxis(refKindsOf(spec));
     default:
       return assertNever(spec);
   }
 }
 
-function checkNumber(v: unknown, rules: NumberRules): Problem | undefined {
+function checkNumber(v: unknown, rules: NumberRules): ParamProblem | undefined {
   if (!isFiniteNumber(v)) return WRONG_TYPE;
   if (rules.integer === true && !Number.isInteger(v)) return { code: 'param.notInteger' };
   const { min, max } = rules;
@@ -88,77 +79,6 @@ function checkNumber(v: unknown, rules: NumberRules): Problem | undefined {
     } else if (v > max) return { code: 'param.aboveMax', params: { max } };
   }
   return undefined;
-}
-
-/**
- * A single reference, always required (M13): null is too few, a valid reference of the kinds
- * passes, anything else (an array too) is an invalid reference without an index.
- */
-function checkAxis(kinds: readonly EntityRef['kind'][]): Check {
-  return (v) => {
-    if (v === null) return { code: 'param.tooFewRefs', params: { min: 1 } };
-    // Same shape check as referencesOf, so both agree on what a reference is.
-    return readRefOf(kinds, v) === undefined ? { code: 'param.invalidRef' } : undefined;
-  };
-}
-
-function checkRefs(
-  min: number | undefined,
-  max: number | undefined,
-  kinds: readonly EntityRef['kind'][],
-): Check {
-  return (v) => {
-    if (!Array.isArray(v)) return WRONG_TYPE;
-    // Same shape check as referencesOf, so both agree on what a reference is.
-    const keys: string[] = [];
-    // Array.isArray narrows to any[]; the items are unchecked data.
-    for (const [index, r] of (v as readonly unknown[]).entries()) {
-      const ref = readRefOf(kinds, r);
-      if (ref === undefined) return { code: 'param.invalidRef', params: { index } };
-      keys.push(refKey(ref));
-    }
-    const duplicate = firstDuplicate(keys);
-    if (duplicate !== -1) return { code: 'param.duplicateRef', params: { index: duplicate } };
-    if (min !== undefined && v.length < min) return { code: 'param.tooFewRefs', params: { min } };
-    if (max !== undefined && v.length > max) return { code: 'param.tooManyRefs', params: { max } };
-    return undefined;
-  };
-}
-
-/**
- * What makes two references the same (spec 03): body for body, body + name for topo, sketch +
- * region for region, plane for plane, axis for axis, sketch + entity for a sketch entity (M13;
- * an axis param holds one reference, so it never has duplicates, but the switch stays exhaustive).
- * Extra fields of the raw data are ignored, readRef keeps only these.
- * JSON of a tuple, so no separator character inside a name can make two keys collide.
- */
-function refKey(ref: EntityRef): string {
-  switch (ref.kind) {
-    case 'body':
-      return JSON.stringify([ref.body]);
-    case 'topo':
-      return JSON.stringify([ref.body, ref.name]);
-    case 'region':
-      return JSON.stringify([ref.sketch, ref.region]);
-    case 'plane':
-      return JSON.stringify([ref.plane]);
-    case 'axis':
-      return JSON.stringify([ref.axis]);
-    case 'sketchEntity':
-      return JSON.stringify([ref.sketch, ref.entity]);
-    default:
-      return assertNever(ref);
-  }
-}
-
-/** Index of the first key equal to an earlier one, -1 when all differ. */
-function firstDuplicate(keys: readonly string[]): number {
-  const seen = new Set<string>();
-  return keys.findIndex((key) => {
-    if (seen.has(key)) return true;
-    seen.add(key);
-    return false;
-  });
 }
 
 function isFiniteNumber(v: unknown): v is number {

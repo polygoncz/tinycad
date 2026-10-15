@@ -7,9 +7,9 @@ import type { BoxParams } from './schema';
 
 export const boxBuilder: FeatureBuilder<BoxParams> = Object.freeze<FeatureBuilder<BoxParams>>({
   type: 'box',
-  async build({ feature, state }, { kernel }) {
-    // Params are valid here: the Regenerator ran boxSchema.validate first.
-    const { origin, width, depth, height } = feature.params;
+  async build({ feature, params, state }, { kernel }) {
+    // Params are valid here: evaluateParams ran boxSchema.validate first.
+    const { origin, width, depth, height } = params;
     const result = await kernel.makeBox({ origin, size: [width, depth, height] });
     // Names from the roles of the kernel (spec 08); a new body has no input names.
     const names = await nameShape({ kernel, featureId: feature.id, result, inputs: [] });
@@ -26,6 +26,6 @@ export const boxBuilder: FeatureBuilder<BoxParams> = Object.freeze<FeatureBuilde
     });
     // A new map, the input state stays as it is; the map itself is guarded by its type (Q048).
     const artifacts = new Map(state.artifacts).set(id, body);
-    return { ok: true, state: Object.freeze({ artifacts }) };
+    return { ok: true, state: Object.freeze({ artifacts }), anchors: {} };
   },
 });

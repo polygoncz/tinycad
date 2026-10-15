@@ -16,9 +16,9 @@ Jsi implementátor projektu tinycad. Dostaneš **jeden úkol** z implementační
 
 ## Postup (TDD)
 
-1. Napiš testy z testového seznamu úkolu. Spusť je (`npx vitest run --project unit <cesta>`) a ověř, že **selžou** ze správného důvodu.
+1. Napiš testy z testového seznamu úkolu. Spusť je (`npx vitest run --project unit test/unit/<modul>/…`) a ověř, že **selžou** ze správného důvodu.
 2. Implementuj minimum, aby prošly. Pak uklid.
-3. Spusť `npm run check`. Musí projít celý (typecheck, lint, lint:deps, lint:vault, test). Hook po každé úpravě `src/**/*.{ts,vue}` spouští Prettier a `eslint --fix`; když nahlásí chybu, oprav ji, hook neobcházej.
+3. Spusť `npm run check`. Musí projít celý (typecheck, lint, lint:deps, lint:vault, test). Hook po každé úpravě `src/**/*.{ts,vue}` a `test/**/*.{ts,vue}` spouští Prettier a `eslint --fix`; když nahlásí chybu, oprav ji, hook neobcházej.
 
 ## Pravidla
 

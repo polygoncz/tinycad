@@ -32,7 +32,7 @@ Výuková webová CAD aplikace (Onshape-like Part Studio). Autor: Pavel. Pavel z
 
 - **Kód, identifikátory, komentáře v kódu, commit zprávy:** anglicky. **Vault:** česky.
 - TypeScript `strict`, žádné `any` (výjimka jen v adaptéru OCCT, izolovaná a okomentovaná).
-- Každý modul v `src/` má veřejné API jen přes svůj `index.ts`. Hluboké importy do cizího modulu jsou zakázané. Pomůcky pro testy (buildery `aFeature()`, `aDocument()`…) jsou v `testing.ts` modulu a smí je importovat jen `*.test.ts`.
+- Každý modul v `src/` má veřejné API jen přes svůj `index.ts`. Hluboké importy do cizího modulu jsou zakázané. Pomůcky pro testy (buildery `aFeature()`, `aDocument()`…) jsou v `testing.ts` modulu a smí je importovat jen testy. Testy leží mimo `src/` v `test/unit/<modul>/` se zrcadlovou strukturou (`src/interaction/foo.ts` → `test/unit/interaction/foo.test.ts`), importují přes `@/`; integrační v `test/integration/`, e2e v `test/e2e/` (ADR 0023).
 - Pravidla závislostí mezi moduly jsou v `docs/20-spec/01-architektura.md` a vynucuje je dependency-cruiser (`npm run lint:deps`).
 - Doménová data jsou **neměnná** (immutable). Změna = nový objekt.
 - Dokument mění **jen** handlery operací (`src/ops`). Nikdo jiný nedostane `DocumentWriter`.
@@ -54,7 +54,7 @@ Výuková webová CAD aplikace (Onshape-like Part Studio). Autor: Pavel. Pavel z
 - `npm run dev` – vývojový server Vite (http://localhost:5173), `npm run build` – produkční build.
 - `npm run typecheck` – `vue-tsc -b` nad všemi projekty: `tsconfig.domain.json` (prstence 1 a 2 bez DOM, ADR 0009), `tsconfig.app.json` (prohlížeč), `tsconfig.test.json` (testy v Node), `tsconfig.test-idb.json` (testy adaptéru IndexedDB, s typy DOM), `tsconfig.test-app.json` (testy `app` a `ui`, s typy DOM), `tsconfig.node.json` (konfigurace nástrojů).
 - `npm run lint:deps` – hranice modulů (dependency-cruiser, `.dependency-cruiser.cjs`). Tabulka modulů v něm musí odpovídat tabulce v `docs/20-spec/01-architektura.md`.
-- `npm test` – unit testy (Vitest, projekt `unit`), `npm run test:integration` – integrační testy v `tests/`.
+- `npm test` – unit testy (Vitest, projekt `unit`), `npm run test:integration` – integrační testy v `test/integration/`, `npm run test:e2e` – Playwright v `test/e2e/`.
 - `npm run format` – Prettier + `eslint --fix` nad celým projektem (vault v `docs/` se neformátuje).
 - `npx depcruise src --config .dependency-cruiser.cjs --output-type dot | dot -T svg > deps.svg` – graf závislostí modulů (potřebuje Graphviz).
 - Hook `scripts/code-format.mjs` po každé úpravě `src/**/*.{ts,vue}` spustí Prettier a `eslint --fix`.

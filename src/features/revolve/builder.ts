@@ -13,18 +13,17 @@ export const revolveBuilder: FeatureBuilder<RevolveParams> = Object.freeze<
   FeatureBuilder<RevolveParams>
 >({
   type: 'revolve',
-  async build({ feature, state }, ctx) {
-    // Params are valid here: the Regenerator ran revolveSchema.validate first.
-    const { operation, angle, flip } = feature.params;
-    const regions = ctx.resolveRegions(feature.params.regions);
+  async build({ feature, params, state }, ctx) {
+    // Params are valid here: evaluateParams ran revolveSchema.validate first.
+    const { operation, angle, flip } = params;
+    const regions = ctx.resolveRegions(params.regions);
     if (!regions.ok) return { ok: false, error: unresolvedReference('regions', regions.error) };
     // The schema requires an axis (param.tooFewRefs for null); a null here is a bug.
-    if (feature.params.axis === null) throw new Error('Revolve without an axis');
-    const axis = ctx.resolveAxis(feature.params.axis);
+    if (params.axis === null) throw new Error('Revolve without an axis');
+    const axis = ctx.resolveAxis(params.axis);
     if (!axis.ok) return { ok: false, error: unresolvedReference('axis', axis.error) };
     // A hidden targets (operation 'new') is not read: its value is not validated.
-    const targets =
-      operation === 'new' ? ok<Body[]>([]) : ctx.resolveBodies(feature.params.targets);
+    const targets = operation === 'new' ? ok<Body[]>([]) : ctx.resolveBodies(params.targets);
     if (!targets.ok) return { ok: false, error: unresolvedReference('targets', targets.error) };
 
     // flip is hidden at a full turn, where its value is not validated, so it must not count.
@@ -46,6 +45,6 @@ export const revolveBuilder: FeatureBuilder<RevolveParams> = Object.freeze<
       shapes,
       targets: targets.value,
     });
-    return { ok: true, state: next };
+    return { ok: true, state: next, anchors: {} };
   },
 });

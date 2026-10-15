@@ -35,3 +35,5 @@ Návrh: **1**. Paleta je hodnota, takže se dá snadno testovat i předat. Akcen
 ## Rozhodnutí
 
 2026-10-13 (Pavel): **možnost 1.** `render` má typ `ScenePalette` a výchozí světlou a tmavou paletu, `Viewport.setPalette` přebarví materiály. `ui` předá režim přes `AppSession.setTheme` a `app` vybere paletu (`ui` nesmí importovat `render`). Propsáno do [[09-vykreslovani]] a [[11-ui]].
+
+**Doplněk 2026-10-14 ([[M20-zpevneni-struktury|M20]], D7):** `AppSession.setTheme` se stalo `AppSession.viewSettings.setTheme`. Port `ViewSettings` definuje `app` a paletu podle tématu dál vybírá `app` (`view-settings.ts`).

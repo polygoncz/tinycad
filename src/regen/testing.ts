@@ -6,6 +6,7 @@ import { expect } from 'vitest';
 import type { Plane } from '@/core';
 import { ORIGIN_PLANES, bodyId, createFeatureSchemaRegistry, sketchId } from '@/document';
 import type {
+  Evaluated,
   FeatureId,
   FeatureInstance,
   FeatureSchema,
@@ -14,7 +15,7 @@ import type {
   PartStudioData,
   TopoName,
 } from '@/document';
-import { aFeature } from '@/document/testing';
+import { aFeature, anEvaluated } from '@/document/testing';
 import type { DefaultParams } from '@/document/testing';
 import type { ShapeHandle, TopologySummary } from '@/kernel';
 import type { SketchEntity } from '@/sketch';
@@ -62,9 +63,12 @@ export function aSchema(
  * Default build of the test feature type: one cube of edge `size` named bodyId(feature.id) and
  * created by the feature (ADR 0015), added to the input state through ctx.kernel.
  */
-export const buildCube: FeatureBuilder['build'] = async ({ feature, state }, { kernel }) => {
-  // The Regenerator validated the params with aSchema() before calling the builder.
-  const { size } = feature.params as DefaultParams;
+export const buildCube: FeatureBuilder['build'] = async (
+  { feature, params, state },
+  { kernel },
+) => {
+  // The Regenerator evaluated the params with aSchema() before calling the builder.
+  const { size } = params as Evaluated<DefaultParams>;
   const { shape } = await kernel.makeBox({ origin: [0, 0, 0], size: [size, size, size] });
   const id = bodyId(feature.id);
   // Frozen like the output of a real builder (boxBuilder); the map is guarded by its type (Q048).
@@ -77,7 +81,7 @@ export const buildCube: FeatureBuilder['build'] = async ({ feature, state }, { k
     names: EMPTY_NAMES,
   });
   const artifacts = new Map(state.artifacts).set(id, body);
-  return { ok: true, state: Object.freeze({ artifacts }) };
+  return { ok: true, state: Object.freeze({ artifacts }), anchors: {} };
 };
 
 /**
@@ -121,6 +125,17 @@ export function resized(
 export function result(r: RegenResult | 'superseded'): RegenResult {
   if (r === 'superseded') expect.fail('Unexpected superseded run');
   return r;
+}
+
+/**
+ * The BuildInput the Regenerator gives a builder for `feature` over `state`: the feature and its
+ * params as evaluated (anEvaluated, without validation, so invalid params reach the builder too).
+ */
+export function aBuildInput<P>(
+  feature: FeatureInstance<P>,
+  state: RegenState = EMPTY_STATE,
+): BuildInput<P> {
+  return { feature, params: anEvaluated<P>(feature.params), state };
 }
 
 /**
@@ -294,7 +309,8 @@ export function aGatedBuild(build: FeatureBuilder['build'] = buildCube): {
   /** Makes the build of `feature` wait until the returned deferred resolves. */
   hold(feature: FeatureInstance): Deferred<void>;
 } {
-  const gates = new Map<FeatureInstance, Deferred<void>>();
+  // Keyed by the feature object the Regenerator passes in BuildInput (it keeps its identity).
+  const gates = new Map<BuildInput<unknown>['feature'], Deferred<void>>();
   return {
     build: async (input, ctx) => {
       await gates.get(input.feature)?.promise;

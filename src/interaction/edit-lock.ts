@@ -3,7 +3,7 @@
 // the built-in actions, FeatureTreeModel, BrowserModel and the Toolbar all read it from here.
 
 import type { Observable, Unsubscribe } from '@/core';
-import type { FeatureEditor } from './feature-editor';
+import type { FeatureEditor } from './feature-dialog/feature-editor';
 
 export function createEditLock(deps: {
   readOnly: boolean;

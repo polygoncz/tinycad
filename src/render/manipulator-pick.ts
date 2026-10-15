@@ -4,42 +4,30 @@
 // camera.
 
 import { vec3, type Vec3 } from '@/core';
-import type { HandleView } from '@/interaction';
+import type { HandleView, HandleVisibility, ManipulatorGlyphs } from '@/interaction';
 import type { BoundingBox } from '@/kernel';
 import { closestSegments } from './edge-pick';
 
-/** Where the shaft of an arrow starts, in CSS px from its position (a gap for the centre point). */
-export const HANDLE_ARROW_START_PX = 14;
-/** Where the shaft of an arrow ends and its cone starts, in CSS px from its position. */
-export const HANDLE_ARROW_SHAFT_PX = 80;
-/** Length and radius of the cone at the tip of an arrow, in CSS px. */
-export const HANDLE_ARROW_CONE_PX = 18;
-export const HANDLE_ARROW_CONE_RADIUS_PX = 6;
-/** The tip of an arrow (shaft and cone) in CSS px from its position. */
-export const HANDLE_ARROW_PX = HANDLE_ARROW_SHAFT_PX + HANDLE_ARROW_CONE_PX;
-/** Radius of a ring and a quarter in CSS px. */
-export const HANDLE_RING_PX = 72;
+// The sizes of the glyphs and the limits of their hiding belong to interaction, which decides
+// about manipulators (M20, D6): render may take only types from it, so app passes the values to
+// createViewport and they come here as HandleShape.
+
+/** The sizes of the glyphs and the limits of their hiding, from interaction through app. */
+export interface HandleShape {
+  readonly glyphs: ManipulatorGlyphs;
+  readonly visibility: HandleVisibility;
+}
+
 /** Segments of a full ring, drawn and picked alike. */
 export const HANDLE_RING_SEGMENTS = 64;
 /** Segments of a quarter, drawn and picked alike. */
 export const HANDLE_QUARTER_SEGMENTS = 16;
-/** A square spans from NEAR to FAR CSS px along u and along v from its origin. */
-export const HANDLE_SQUARE_NEAR_PX = 26;
-export const HANDLE_SQUARE_FAR_PX = 46;
-/** Radius of the disc of a point handle in CSS px. */
-export const HANDLE_POINT_PX = 9;
 /** Pick tolerance of an arrow in CSS px. */
 export const HANDLE_PICK_PX = 8;
 /** Pick tolerance of a ring and a quarter in CSS px. */
 export const HANDLE_RING_PICK_PX = 6;
 /** Pick tolerance of a point handle (distance from its projection) in CSS px. */
 export const HANDLE_POINT_PICK_PX = 10;
-/** An arrow with |direction · view direction| above this is neither drawn nor picked. */
-export const HANDLE_HIDE_COS = 0.98;
-/** A ring with |axis · view direction| below this is seen edge-on: neither drawn nor picked. */
-export const HANDLE_RING_HIDE_COS = 0.05;
-/** A square with |(u × v) · view direction| below this is seen edge-on: neither drawn nor picked. */
-export const HANDLE_SQUARE_HIDE_COS = 0.05;
 
 /** CSS px relative to the view area; NaN = not on screen. */
 export type ScreenPoint = readonly [x: number, y: number];
@@ -49,9 +37,9 @@ export type ScreenHandle =
   | {
       readonly kind: 'linear';
       readonly id: string;
-      /** Start of the shaft, HANDLE_ARROW_START_PX along the direction. */
+      /** Start of the shaft, glyphs.arrowStartPx along the direction. */
       readonly from: ScreenPoint;
-      /** The tip, HANDLE_ARROW_PX along the direction. */
+      /** The tip, glyphs.arrowTipPx along the direction. */
       readonly to: ScreenPoint;
     }
   | {
@@ -67,57 +55,70 @@ export type ScreenHandle =
   | {
       readonly kind: 'planar';
       readonly id: string;
-      /** The corners at (NEAR, NEAR), (FAR, NEAR), (FAR, FAR), (NEAR, FAR) along (u, v). */
+      /** The corners at (near, near), (far, near), (far, far), (near, far) along (u, v). */
       readonly corners: readonly [ScreenPoint, ScreenPoint, ScreenPoint, ScreenPoint];
     }
   | {
       readonly kind: 'point';
       readonly id: string;
       readonly center: ScreenPoint;
-      /** Radius of the drawn disc, HANDLE_POINT_PX. */
+      /** Radius of the drawn disc, glyphs.pointPx. */
       readonly radius: number;
     };
 
 /**
  * True when the arrow along `direction` points (nearly) at the viewer or away from them, so it
- * would collapse to a dot (|cos| > HANDLE_HIDE_COS). Both vectors need not be unit.
+ * would collapse to a dot (|cos| > visibility.arrowHideCos). Both vectors need not be unit.
  */
-export function arrowHidden(direction: Vec3, viewDirection: Vec3): boolean {
+export function arrowHidden(
+  direction: Vec3,
+  viewDirection: Vec3,
+  visibility: HandleVisibility,
+): boolean {
   const cos = vec3.dot(vec3.normalize(direction), vec3.normalize(viewDirection));
-  return Math.abs(cos) > HANDLE_HIDE_COS;
+  return Math.abs(cos) > visibility.arrowHideCos;
 }
 
 /**
  * True when the ring around `axis` is seen (nearly) edge-on, so it would collapse to a line
- * (|cos| < HANDLE_RING_HIDE_COS). Both vectors need not be unit.
+ * (|cos| < visibility.ringHideCos). Both vectors need not be unit.
  */
-export function ringHidden(axis: Vec3, viewDirection: Vec3): boolean {
+export function ringHidden(axis: Vec3, viewDirection: Vec3, visibility: HandleVisibility): boolean {
   const cos = vec3.dot(vec3.normalize(axis), vec3.normalize(viewDirection));
-  return Math.abs(cos) < HANDLE_RING_HIDE_COS;
+  return Math.abs(cos) < visibility.ringHideCos;
 }
 
 /**
  * True when the square spanned by `u` and `v` is seen (nearly) edge-on, so it would collapse to
- * a line (|(u × v) · view| < HANDLE_SQUARE_HIDE_COS). The vectors need not be unit.
+ * a line (|(u × v) · view| < visibility.squareHideCos). The vectors need not be unit.
  */
-export function squareHidden(u: Vec3, v: Vec3, viewDirection: Vec3): boolean {
+export function squareHidden(
+  u: Vec3,
+  v: Vec3,
+  viewDirection: Vec3,
+  visibility: HandleVisibility,
+): boolean {
   const normal = vec3.normalize(vec3.cross(u, v));
   const cos = vec3.dot(normal, vec3.normalize(viewDirection));
-  return Math.abs(cos) < HANDLE_SQUARE_HIDE_COS;
+  return Math.abs(cos) < visibility.squareHideCos;
 }
 
 /**
  * True when the glyph of the view is hidden for this view direction (arrowHidden, ringHidden,
  * squareHidden); a point is never hidden.
  */
-export function handleHidden(view: HandleView, viewDirection: Vec3): boolean {
+export function handleHidden(
+  view: HandleView,
+  viewDirection: Vec3,
+  visibility: HandleVisibility,
+): boolean {
   switch (view.kind) {
     case 'linear':
-      return arrowHidden(view.direction, viewDirection);
+      return arrowHidden(view.direction, viewDirection, visibility);
     case 'angular':
-      return ringHidden(view.axis, viewDirection);
+      return ringHidden(view.axis, viewDirection, visibility);
     case 'planar':
-      return squareHidden(view.u, view.v, viewDirection);
+      return squareHidden(view.u, view.v, viewDirection, visibility);
     case 'point':
       return false;
   }
@@ -126,12 +127,13 @@ export function handleHidden(view: HandleView, viewDirection: Vec3): boolean {
 /**
  * Box around every glyph in the world, for near/far (spec 09, "Near a far"). An arrow, a ring
  * and a point: their anchor point (position, center) grown on all sides by the glyph size
- * (HANDLE_ARROW_PX, HANDLE_RING_PX, HANDLE_POINT_PX) × worldPerPx; a square: its four corners.
+ * (glyphs.arrowTipPx, ringPx, pointPx) × worldPerPx; a square: its four corners.
  * Hidden handles count too, so the box does not jump while the camera turns. No handles → null.
  */
 export function handleBounds(
   handles: readonly HandleView[],
   worldPerPx: number,
+  glyphs: ManipulatorGlyphs,
 ): BoundingBox | null {
   const points: Vec3[] = [];
   const grown = (point: Vec3, sizePx: number): void => {
@@ -141,16 +143,16 @@ export function handleBounds(
   for (const handle of handles) {
     switch (handle.kind) {
       case 'linear':
-        grown(handle.position, HANDLE_ARROW_PX);
+        grown(handle.position, glyphs.arrowTipPx);
         break;
       case 'angular':
-        grown(handle.center, HANDLE_RING_PX);
+        grown(handle.center, glyphs.ringPx);
         break;
       case 'planar':
-        points.push(...squareCorners(handle, worldPerPx));
+        points.push(...squareCorners(handle, worldPerPx, glyphs));
         break;
       case 'point':
-        grown(handle.position, HANDLE_POINT_PX);
+        grown(handle.position, glyphs.pointPx);
         break;
     }
   }
@@ -196,11 +198,12 @@ export function arcPoints(
 function squareCorners(
   handle: Extract<HandleView, { readonly kind: 'planar' }>,
   worldPerPx: number,
+  glyphs: ManipulatorGlyphs,
 ): readonly [Vec3, Vec3, Vec3, Vec3] {
   const u = vec3.normalize(handle.u);
   const v = vec3.normalize(handle.v);
-  const near = HANDLE_SQUARE_NEAR_PX * worldPerPx;
-  const far = HANDLE_SQUARE_FAR_PX * worldPerPx;
+  const near = glyphs.squareNearPx * worldPerPx;
+  const far = glyphs.squareFarPx * worldPerPx;
   const at = (a: number, b: number): Vec3 =>
     vec3.add(handle.origin, vec3.add(vec3.scale(u, a), vec3.scale(v, b)));
   return [at(near, near), at(far, near), at(far, far), at(near, far)];
@@ -216,12 +219,13 @@ function squareCorners(
  *   into world lengths.
  * - `viewDirection` = the direction the camera looks in (any length); a glyph hidden by
  *   handleHidden (an arrow end-on, a ring, quarter or square edge-on) is left out.
+ * - `shape` = the sizes of the glyphs and the limits of their hiding.
  *
- * An arrow becomes the segment from HANDLE_ARROW_START_PX to its tip HANDLE_ARROW_PX along
- * `direction`; a full ring HANDLE_RING_SEGMENTS points HANDLE_RING_PX around `center` in the plane
+ * An arrow becomes the segment from glyphs.arrowStartPx to its tip glyphs.arrowTipPx along
+ * `direction`; a full ring HANDLE_RING_SEGMENTS points glyphs.ringPx around `center` in the plane
  * perpendicular to `axis`, starting at `zero`; a quarter the open polyline of
  * HANDLE_QUARTER_SEGMENTS segments from `zero` to axis × zero; a square its four corners; a point
- * its projected position and HANDLE_POINT_PX. The order of `handles` is kept (ties in pickHandle
+ * its projected position and glyphs.pointPx. The order of `handles` is kept (ties in pickHandle
  * go to the earlier one).
  */
 export function projectHandles(
@@ -229,10 +233,12 @@ export function projectHandles(
   project: (p: Vec3) => ScreenPoint,
   worldPerPx: number,
   viewDirection: Vec3,
+  shape: HandleShape,
 ): readonly ScreenHandle[] {
+  const { glyphs, visibility } = shape;
   const result: ScreenHandle[] = [];
   for (const handle of handles) {
-    if (handleHidden(handle, viewDirection)) continue;
+    if (handleHidden(handle, viewDirection, visibility)) continue;
     switch (handle.kind) {
       case 'linear': {
         const direction = vec3.normalize(handle.direction);
@@ -241,8 +247,8 @@ export function projectHandles(
         result.push({
           kind: 'linear',
           id: handle.id,
-          from: project(along(HANDLE_ARROW_START_PX)),
-          to: project(along(HANDLE_ARROW_PX)),
+          from: project(along(glyphs.arrowStartPx)),
+          to: project(along(glyphs.arrowTipPx)),
         });
         break;
       }
@@ -253,7 +259,7 @@ export function projectHandles(
               handle.center,
               handle.axis,
               handle.zero,
-              HANDLE_RING_PX * worldPerPx,
+              glyphs.ringPx * worldPerPx,
               2 * Math.PI,
               HANDLE_RING_SEGMENTS,
               HANDLE_RING_SEGMENTS,
@@ -262,7 +268,7 @@ export function projectHandles(
               handle.center,
               handle.axis,
               handle.zero,
-              HANDLE_RING_PX * worldPerPx,
+              glyphs.ringPx * worldPerPx,
               Math.PI / 2,
               HANDLE_QUARTER_SEGMENTS,
               HANDLE_QUARTER_SEGMENTS + 1,
@@ -271,7 +277,7 @@ export function projectHandles(
         break;
       }
       case 'planar': {
-        const [a, b, c, d] = squareCorners(handle, worldPerPx);
+        const [a, b, c, d] = squareCorners(handle, worldPerPx, glyphs);
         result.push({
           kind: 'planar',
           id: handle.id,
@@ -284,7 +290,7 @@ export function projectHandles(
           kind: 'point',
           id: handle.id,
           center: project(handle.position),
-          radius: HANDLE_POINT_PX,
+          radius: glyphs.pointPx,
         });
         break;
     }

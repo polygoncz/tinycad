@@ -3,7 +3,7 @@ import type {
   AxisRef,
   BodyRef,
   FeatureSchema,
-  ParamSchema,
+  ParamSchemaOf,
   ParamSpec,
   SketchEntityRef,
   SketchRegionRef,
@@ -38,7 +38,7 @@ export function flipApplies(angle: unknown): boolean {
 // Frozen deeply – the schema object, every ParamSpec and the enum options: the schema is shared
 // by the registry, the UI form and the validation, so nobody may change it in place.
 // Labels are translation keys (ADR 0014), the texts are in messages.ts.
-const params: ParamSchema = Object.freeze<ParamSchema>({
+const params: ParamSchemaOf<RevolveParams> = Object.freeze<ParamSchemaOf<RevolveParams>>({
   regions: Object.freeze<ParamSpec>({ kind: 'region', label: 'revolve.regions', min: 1 }),
   axis: Object.freeze<ParamSpec>({ kind: 'axis', label: 'revolve.axis' }),
   operation: Object.freeze<ParamSpec>({

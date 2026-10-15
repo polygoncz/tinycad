@@ -1,5 +1,5 @@
 import { validateAgainstSchema } from '@/document';
-import type { BodyRef, FeatureSchema, ParamIssue, ParamSchema, ParamSpec } from '@/document';
+import type { BodyRef, FeatureSchema, ParamIssue, ParamSchemaOf, ParamSpec } from '@/document';
 
 // The data half of the boolean feature (ADR 0004): params, defaults and validation.
 
@@ -17,7 +17,7 @@ export interface BooleanParams {
 // by the registry, the UI form and the validation, so nobody may change it in place.
 // Labels are translation keys (ADR 0014), the texts are in messages.ts. Two lists for every
 // operation (R9): one schema without conditional params, one identity rule for all three.
-const params: ParamSchema = Object.freeze<ParamSchema>({
+const params: ParamSchemaOf<BooleanParams> = Object.freeze<ParamSchemaOf<BooleanParams>>({
   op: Object.freeze<ParamSpec>({
     kind: 'enum',
     label: 'boolean.op',

@@ -3,9 +3,9 @@ import type { Plane, Result, Vec3 } from '@/core';
 import type { ShapeHandle, ShapeResult } from '@/kernel';
 import { applyBodyOperation, unresolvedReference } from '@/regen';
 import type {
+  Anchor,
   Body,
   BuildContext,
-  FeatureAnchors,
   FeatureBuilder,
   FeatureError,
   ModelingKernel,
@@ -23,21 +23,27 @@ import type { ExtrudeParams } from './schema';
 /** Tolerance of the up-to-face checks (R109): parallel and in front of the profile. */
 const UP_TO_TOLERANCE = 1e-9;
 
-export const extrudeBuilder: FeatureBuilder<ExtrudeParams> = Object.freeze<
-  FeatureBuilder<ExtrudeParams>
+/**
+ * The anchors of the extrude (M20): 'base', the center of the regions in the sketch plane and the
+ * sketch normal, only for 'blind' and 'symmetric'. A type alias, so it fits FeatureAnchors.
+ */
+export type ExtrudeAnchors = { readonly base?: Anchor };
+
+export const extrudeBuilder: FeatureBuilder<ExtrudeParams, ExtrudeAnchors> = Object.freeze<
+  FeatureBuilder<ExtrudeParams, ExtrudeAnchors>
 >({
   type: 'extrude',
-  async build({ feature, state }, ctx) {
-    // Params are valid here: the Regenerator ran extrudeSchema.validate first, so there is at
+  async build({ feature, params, state }, ctx) {
+    // Params are valid here: evaluateParams ran extrudeSchema.validate first, so there is at
     // least one region and, for an operation other than 'new', at least one target.
-    const { operation, endType, distance, flip } = feature.params;
-    const regions = ctx.resolveRegions(feature.params.regions);
+    const { operation, endType, distance, flip } = params;
+    const regions = ctx.resolveRegions(params.regions);
     if (!regions.ok) return { ok: false, error: unresolvedReference('regions', regions.error) };
 
     // A hidden targets param is never read: for 'new' it may hold anything (spec 03).
     let targets: readonly Body[] = [];
     if (operation !== 'new') {
-      const resolved = ctx.resolveBodies(feature.params.targets);
+      const resolved = ctx.resolveBodies(params.targets);
       if (!resolved.ok) {
         return { ok: false, error: unresolvedReference('targets', resolved.error) };
       }
@@ -55,7 +61,7 @@ export const extrudeBuilder: FeatureBuilder<ExtrudeParams> = Object.freeze<
     // read for 'upToFace', the face gives each region its own length (R109).
     let lengths: readonly number[] = regions.value.map(() => distance);
     if (endType === 'upToFace') {
-      const upTo = upToLengths(ctx, feature.params, regions.value, direction);
+      const upTo = upToLengths(ctx, params, regions.value, direction);
       if (!upTo.ok) return { ok: false, error: upTo.error };
       lengths = upTo.value;
     }
@@ -81,8 +87,8 @@ export const extrudeBuilder: FeatureBuilder<ExtrudeParams> = Object.freeze<
     // From the regions and the sketch plane only, so it depends neither on distance nor on flip
     // (anchor invariant). Up to face has no handle, so no anchor. The Regenerator freezes it
     // (spec 07).
-    if (endType === 'upToFace') return { ok: true, state: next };
-    const anchors: FeatureAnchors = {
+    if (endType === 'upToFace') return { ok: true, state: next, anchors: {} };
+    const anchors: ExtrudeAnchors = {
       base: {
         point: await baseOf(ctx.kernel, regions.value, first.sketch.plane),
         direction: normal,

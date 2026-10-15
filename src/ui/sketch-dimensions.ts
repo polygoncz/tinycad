@@ -3,7 +3,7 @@
 // run in Node tests. interaction gives the world points (SketchState.dimensions), ui projects
 // them and lays out the extension lines, the dimension line with its arrows and the label.
 
-import type { SketchDimensionView } from '@/interaction';
+import type { SketchDimensionView } from '@/sketcher';
 import { formatDimension, parseNumber } from './components/params/field-values';
 import type { Project, ScreenPoint } from './manipulator-hud';
 

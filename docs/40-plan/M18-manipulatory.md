@@ -32,7 +32,7 @@ updated: 2026-10-14
 
 **Cíl:** při otevřeném dialogu featury jdou její parametry měnit tažením [[Manipulátor|úchytů]] ve viewportu. Transformace dostane šipky posunu a kružnice rotace s nastavitelným středem otáčení, Extrude šipku vzdálenosti. Abstrakce je obecná: další featura (Revolve) potřebuje jen [[Kotva manipulátoru|kotvu]] z builderu a deklaraci úchytů v pluginu.
 
-**Specifikace:** [[0021-manipulatory-kotvy-z-regenerace|ADR 0021]], [[07-regenerace#Kotvy manipulátorů (M18)]], [[10-interakce#Manipulátory (M18)]], [[09-vykreslovani#Manipulátory (M18)]], [[11-ui#Plugin featury (plugin-api)]], [[11-ui#Kompoziční kořen (app)]]
+**Specifikace:** [[0021-manipulatory-kotvy-z-regenerace|ADR 0021]], [[07-regenerace#Kotvy manipulátorů (M18)]], [[10-interakce#Manipulátory (M18)]], [[09-vykreslovani#Manipulátory]], [[11-ui#Plugin featury (plugin-api)]], [[11-ui#Kompoziční kořen (app)]]
 
 **Navazuje na:** [[M17.1-rezim-otaceni|M17.1]] (kamera a picking), [[M13-extrude-revolve|M13]] (Extrude), [[M11-dalsi-entity|M11]] (Transformace)
 
@@ -120,7 +120,7 @@ updated: 2026-10-14
 ### 5. `ManipulatorLayer` v `render`
 
 - **Soubory:** `src/render/manipulator-pick.ts` (+ test; `projectHandles`, `pickHandle`, konstanty `HANDLE_*`), `src/render/manipulator-layer.ts`, `src/render/viewport.ts` (vrstva, `pick` úchytů s promítnutím z kamery, měřítko v `draw`, `setPointerCapture` při levém stisku, štítek v `mount`/`unmount`), `src/render/index.ts`, `.dependency-cruiser.cjs` (čistý soubor).
-- **Kontrakt:** [[09-vykreslovani#Manipulátory (M18)]], odrážka o zachycení ukazatele v [[09-vykreslovani#Události]].
+- **Kontrakt:** [[09-vykreslovani#Manipulátory]], odrážka o zachycení ukazatele v [[09-vykreslovani#Události]].
 - **Testy (Node, `manipulator-pick`):**
   - `projectHandles` s jednoduchou projekcí (`[x, −y]·k`): šipka má délku 80 px a správný směr, kružnice 64 bodů s poloměrem 60 px, šipka s `|cos| > 0,98` vypadne
   - `pickHandle`: bod na šipce v toleranci 8 px vrátí její id a mimo toleranci `null`; bod na kružnici v toleranci 6 px vrátí její id; při dvou kandidátech vyhraje bližší a při shodě dřívější

@@ -19,6 +19,7 @@ import {
 import { useI18n } from 'vue-i18n';
 import type { FeatureId } from '@/document';
 import type { ActionState, TreeRow } from '@/interaction';
+import { ACTION_IDS } from '@/interaction/constants';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
 import { issueText } from '../i18n/i18n';
@@ -33,7 +34,9 @@ import ContextMenu from './ContextMenu.vue';
 import TimelineItem from './TimelineItem.vue';
 
 const session = useSession();
-const { featureTree, actions, actionIds } = session;
+const { featureTree, actions } = session;
+// The ids of the built-in actions from the data entry point of interaction (M20, D6).
+const actionIds = ACTION_IDS;
 const { t } = useI18n();
 
 const rows = useObservable(featureTree.rows);

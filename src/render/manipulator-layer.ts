@@ -14,20 +14,13 @@ import type { HandleView, ManipulatorPort } from '@/interaction';
 import type { BoundingBox } from '@/kernel';
 import {
   arcPoints,
-  HANDLE_ARROW_CONE_PX,
-  HANDLE_ARROW_CONE_RADIUS_PX,
-  HANDLE_ARROW_SHAFT_PX,
-  HANDLE_ARROW_START_PX,
-  HANDLE_POINT_PX,
   HANDLE_QUARTER_SEGMENTS,
-  HANDLE_RING_PX,
   HANDLE_RING_SEGMENTS,
-  HANDLE_SQUARE_FAR_PX,
-  HANDLE_SQUARE_NEAR_PX,
   handleBounds,
   handleHidden,
   pickHandle,
   projectHandles,
+  type HandleShape,
   type ScreenPoint,
 } from './manipulator-pick';
 import type { ScenePalette } from './palette';
@@ -104,6 +97,8 @@ export interface ManipulatorLayerInternal extends Omit<ManipulatorPort, 'pick'>,
 export interface ManipulatorLayerOptions {
   readonly requestRender: () => void;
   readonly palette: ScenePalette;
+  /** Sizes of the glyphs and limits of their hiding (interaction, through app; M20). */
+  readonly shape: HandleShape;
 }
 
 /** Colour of a glyph: its tint, or the hover colour when hovered or dragged. */
@@ -137,7 +132,8 @@ type Glyph = { readonly root: THREE.Group; view: HandleView } & (
 );
 
 export function createManipulatorLayer(options: ManipulatorLayerOptions): ManipulatorLayerInternal {
-  const { requestRender } = options;
+  const { requestRender, shape } = options;
+  const size = shape.glyphs;
   const group = new THREE.Group();
   const looks: Record<ColorKey, Look> = {
     x: createLook(options.palette.axes[0]),
@@ -155,27 +151,27 @@ export function createManipulatorLayer(options: ManipulatorLayerOptions): Manipu
   const shaftGeometry = new LineSegmentsGeometry().setPositions([
     0,
     0,
-    HANDLE_ARROW_START_PX,
+    size.arrowStartPx,
     0,
     0,
-    HANDLE_ARROW_SHAFT_PX,
+    size.arrowShaftPx,
   ]);
   const coneGeometry = new THREE.ConeGeometry(
-    HANDLE_ARROW_CONE_RADIUS_PX,
-    HANDLE_ARROW_CONE_PX,
+    size.arrowConeRadiusPx,
+    size.arrowConePx,
     CONE_SEGMENTS,
   )
     // The cone points along +Y; turn it to +Z and put its base at the end of the shaft.
     .rotateX(Math.PI / 2)
-    .translate(0, 0, HANDLE_ARROW_SHAFT_PX + HANDLE_ARROW_CONE_PX / 2);
+    .translate(0, 0, size.arrowShaftPx + size.arrowConePx / 2);
   const ringGeometry = new LineSegmentsGeometry().setPositions(
-    segmentPositions(localArc(HANDLE_RING_PX, 2 * Math.PI, HANDLE_RING_SEGMENTS), true),
+    segmentPositions(localArc(size.ringPx, 2 * Math.PI, HANDLE_RING_SEGMENTS), true),
   );
   const quarterGeometry = new LineSegmentsGeometry().setPositions(
-    segmentPositions(localArc(HANDLE_RING_PX, Math.PI / 2, HANDLE_QUARTER_SEGMENTS), false),
+    segmentPositions(localArc(size.ringPx, Math.PI / 2, HANDLE_QUARTER_SEGMENTS), false),
   );
-  const near = HANDLE_SQUARE_NEAR_PX;
-  const far = HANDLE_SQUARE_FAR_PX;
+  const near = size.squareNearPx;
+  const far = size.squareFarPx;
   const squareCorners: readonly Vec3[] = [
     [near, near, 0],
     [far, near, 0],
@@ -188,9 +184,9 @@ export function createManipulatorLayer(options: ManipulatorLayerOptions): Manipu
   const squareOutlineGeometry = new LineSegmentsGeometry().setPositions(
     segmentPositions(squareCorners, true),
   );
-  const pointFillGeometry = new THREE.CircleGeometry(HANDLE_POINT_PX, CIRCLE_SEGMENTS);
+  const pointFillGeometry = new THREE.CircleGeometry(size.pointPx, CIRCLE_SEGMENTS);
   const pointOutlineGeometry = new LineSegmentsGeometry().setPositions(
-    segmentPositions(localArc(HANDLE_POINT_PX, 2 * Math.PI, CIRCLE_SEGMENTS), true),
+    segmentPositions(localArc(size.pointPx, 2 * Math.PI, CIRCLE_SEGMENTS), true),
   );
   const pointDotGeometry = new THREE.CircleGeometry(POINT_DOT_PX, CIRCLE_SEGMENTS);
 
@@ -304,7 +300,7 @@ export function createManipulatorLayer(options: ManipulatorLayerOptions): Manipu
   /** Size of the camera, the hiding of glyphs seen end-on or edge-on, a point facing the camera. */
   function fit(glyph: Glyph): void {
     glyph.root.scale.setScalar(worldPerPx);
-    glyph.root.visible = !handleHidden(glyph.view, viewDirection);
+    glyph.root.visible = !handleHidden(glyph.view, viewDirection, shape.visibility);
     // The camera looks along its local −Z: with its orientation the disc lies in the screen.
     if (glyph.kind === 'point') glyph.root.quaternion.set(...orientation);
   }
@@ -342,6 +338,7 @@ export function createManipulatorLayer(options: ManipulatorLayerOptions): Manipu
         projection.project,
         projection.worldPerPx,
         projection.viewDirection,
+        shape,
       );
       return pickHandle(screen, x, y);
     },
@@ -352,7 +349,7 @@ export function createManipulatorLayer(options: ManipulatorLayerOptions): Manipu
       for (const glyph of glyphs.values()) fit(glyph);
     },
     bounds(cameraWorldPerPx: number): BoundingBox | null {
-      return handleBounds(views, cameraWorldPerPx);
+      return handleBounds(views, cameraWorldPerPx, size);
     },
     setPalette(next: ScenePalette): void {
       const colors: Record<ColorKey, number> = {

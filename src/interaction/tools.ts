@@ -4,11 +4,10 @@
 import { createRegistry } from '@/core';
 import type { IdGenerator, Registry } from '@/core';
 import type { DocumentReader } from '@/document';
-import type { OperationDispatcher } from '@/ops';
-import type { FeatureEditor } from './feature-editor';
+import type { FeatureEditor } from './feature-dialog/feature-editor';
 import type { Mode } from './mode';
 import type { SelectionCommands } from './selection';
-import type { ViewKeyEvent, ViewPointerEvent, ViewportPort } from './viewport-port';
+import type { HighlightPort, ViewKeyEvent, ViewPointerEvent, ViewportPort } from './viewport-port';
 
 export interface Tool {
   activate(ctx: ToolContext): void;
@@ -18,19 +17,28 @@ export interface Tool {
   onKey?(e: ViewKeyEvent): boolean;
 }
 
+/**
+ * The viewport as a tool sees it (ADR 0011): picking, rays, the overlay and the hover. The
+ * selection highlight belongs to bindSelectionHighlight, events come through Tool, manipulators
+ * and sketch drawings are not the business of a tool.
+ */
+export interface ToolViewport extends Pick<ViewportPort, 'pick' | 'screenToRay' | 'overlay'> {
+  readonly highlight: Pick<HighlightPort, 'setHover'>;
+}
+
+/** The FeatureEditor as a tool uses it: it opens the dialog of a new feature. */
+export type ToolFeatures = Pick<FeatureEditor, 'create' | 'current'>;
+
 export interface ToolContext {
-  /** pick, overlay, screenToRay */
-  readonly viewport: ViewportPort;
+  readonly viewport: ToolViewport;
   readonly selection: SelectionCommands;
   readonly doc: DocumentReader;
-  /**
-   * Single operations only (Q069): a transaction is opened by FeatureEditor or SketchEditor
-   * alone, so a tool cannot run one alongside the dialog.
-   */
-  readonly ops: Pick<OperationDispatcher, 'dispatch' | 'inTransaction'>;
   readonly ids: IdGenerator;
-  /** Creating/editing a feature through the dialog. */
-  readonly features: FeatureEditor;
+  /**
+   * Creating a feature through the dialog. No operations of its own: a tool changes the document
+   * only through FeatureEditor or SketchEditor (Q069).
+   */
+  readonly features: ToolFeatures;
   /** The tool is done → ToolManager switches to the default tool. */
   finish(): void;
 }
@@ -47,13 +55,6 @@ export interface ToolDescriptor {
   /** Information for the UI only; app registers the shortcut as an action. */
   readonly shortcut?: string;
   create(): Tool;
-}
-
-const MODEL_ONLY: readonly Mode[] = Object.freeze(['model']);
-
-/** The modes of the tool: its own, or ['model'] when it does not say. */
-export function toolModes(d: ToolDescriptor): readonly Mode[] {
-  return d.modes ?? MODEL_ONLY;
 }
 
 /** Key = id, see core. */

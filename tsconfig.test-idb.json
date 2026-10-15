@@ -7,5 +7,5 @@
     "lib": ["ES2023", "DOM"],
     "types": ["node"]
   },
-  "include": ["src/persistence/idb/**/*.test.ts"]
+  "include": ["test/unit/persistence/idb/**/*.test.ts"]
 }

@@ -1,22 +1,17 @@
 // ToolManager (spec 10, "Nástroje"): exactly one tool is active and gets the viewport
 // events. Every activation gets its own ctx whose finish is bound to that activation,
-// so a stale tool cannot switch tools any more. While the dialog has a focused
-// reference param, the inner refPick covers the active tool (Q066). With a mode (M12) only the
-// tools of the current mode can be active and each mode has its own default tool. Manipulators
-// (M18) are a layer above both: manipulators → refPick → the active tool.
+// so a stale tool cannot switch tools any more. With a mode (M12) only the tools of the current
+// mode can be active and each mode has its own default tool. Layers of input (M20, A4.3) come
+// before the tool in their order; app composes them (manipulators → refPick → the active tool).
 
 import { ObservableValue } from '@/core';
-import type { Observable, RegistryReader, Unsubscribe } from '@/core';
-import type { FeatureEditSession } from './feature-editor';
+import type { Observable, RegistryReader, Subscribable, Unsubscribe } from '@/core';
+import type { InputLayer } from './input-layer';
 import { isPlainEscape } from './key-events';
-import type { ManipulatorController } from './manipulator-controller';
 import type { Mode } from './mode';
-import { createRefPick } from './ref-pick-tool';
-import type { RefPick } from './ref-pick-tool';
-import type { RegenStatusPort } from './regen-status-port';
-import { toolModes } from './tools';
+import { toolModes } from './constants';
 import type { Tool, ToolContext, ToolDescriptor } from './tools';
-import type { ViewKeyEvent, ViewPointerEvent } from './viewport-port';
+import type { ViewKeyEvent, ViewPointerEvent, ViewportEvents } from './viewport-port';
 
 export interface ToolManager {
   /** Id of the active tool. */
@@ -42,6 +37,8 @@ interface Activation {
 export function createToolManager(deps: {
   registry: RegistryReader<ToolDescriptor>;
   ctx: Omit<ToolContext, 'finish'>;
+  /** Pointer and key events of the viewport; the tools get them only through the manager. */
+  viewportEvents: Subscribable<ViewportEvents>;
   /** The default tool of the mode 'model'. */
   defaultToolId: string;
   /** The current mode (M12); without it the mode is always 'model'. */
@@ -50,12 +47,14 @@ export function createToolManager(deps: {
   defaultToolIds?: Partial<Record<Mode, string>>;
   /** Keys from the viewport the tool did not handle (app hooks ActionRegistry.handleKey here). */
   unhandledKey?: (e: ViewKeyEvent) => boolean;
-  /** Names of the bodies for refPick in a topo param (M14); without it a hit into topo adds nothing. */
-  regen?: RegenStatusPort;
-  /** The layer of manipulators above refPick and the tool (M18); without it nothing changes. */
-  manipulators?: ManipulatorController;
+  /**
+   * Layers of input asked in this order before the active tool (M20, A4.3); without them the
+   * tool gets every event.
+   */
+  layers?: readonly InputLayer[];
 }): ToolManager {
   const { registry } = deps;
+  const layers = deps.layers ?? [];
   const modeOf = (): Mode => deps.mode?.get() ?? 'model';
 
   /** The default tool of the mode; 'model' always has defaultToolId. */
@@ -143,74 +142,35 @@ export function createToolManager(deps: {
     start(id);
   }
 
-  // --- refPick: follows editor.current and the state of its session ---
-
-  let session: FeatureEditSession | null = null;
-  let unsubscribeSession: Unsubscribe | null = null;
-  let refPick: RefPick | null = null;
-
-  /** Creates or drops refPick by the focused reference param of the current session. */
-  /** The focused param of the current session; the hover is cleared when it changes. */
-  let refParam: string | null = null;
-
-  function syncRefPick(): void {
-    const next = session?.state.get().activeRefParam ?? null;
-    if (session === null || next === null) {
-      dropRefPick();
-      refParam = null;
-      return;
-    }
-    refPick ??= createRefPick(session, deps.ctx.viewport, deps.ctx.doc, deps.regen);
-    // Another param may allow other targets: the old hover must not stay (spec 10).
-    if (refParam !== null && refParam !== next) deps.ctx.viewport.highlight.setHover(null);
-    refParam = next;
-  }
-
-  function dropRefPick(): void {
-    const last = refPick;
-    refPick = null;
-    last?.dispose();
-  }
-
-  function onSessionChanged(): void {
-    const next = deps.ctx.features.current.get();
-    if (next === session) return;
-    unsubscribeSession?.();
-    unsubscribeSession = null;
-    // refPick belongs to the old session.
-    dropRefPick();
-    session = next;
-    if (next !== null) unsubscribeSession = next.state.subscribe(syncRefPick);
-    syncRefPick();
-  }
-
-  /** The lower layer (refPick or the tool) last got a leave: no synthetic one is due. */
-  let lowerLeft = false;
+  /**
+   * left[i]: level i (layers[i], or the tool for i = layers.length) last got a leave. At the
+   * start no level has got one yet.
+   */
+  const left: boolean[] = Array.from({ length: layers.length + 1 }, () => false);
 
   function onPointer(e: ViewPointerEvent): void {
-    if (deps.manipulators?.onPointer(e) === true) {
-      // A handle took the move: no hover may stay under it in the lower layer (spec 10).
-      if (e.type === 'move' && !lowerLeft) toLowerLayer({ ...e, type: 'leave' });
-      return;
-    }
-    toLowerLayer(e);
+    route(e, 0);
   }
 
-  function toLowerLayer(e: ViewPointerEvent): void {
-    lowerLeft = e.type === 'leave';
-    if (refPick !== null) {
-      refPick.onPointer(e);
+  /** Hands the event to the levels from `from` down, until one handles it. */
+  function route(e: ViewPointerEvent, from: number): void {
+    for (let i = from; i < layers.length; i++) {
+      const layer = layers[i];
+      if (layer === undefined) continue;
+      left[i] = e.type === 'leave';
+      if (!layer.onPointer(e)) continue;
+      // The layer took the move: no hover may stay under it in the levels below (spec 10).
+      if (e.type === 'move' && layer.leaveBelow !== false && left[i + 1] !== true) {
+        route({ ...e, type: 'leave' }, i + 1);
+      }
       return;
     }
+    left[layers.length] = e.type === 'leave';
     current?.tool.onPointer?.(e);
   }
 
   function onKey(e: ViewKeyEvent): void {
-    if (deps.manipulators?.onKey(e) === true) return;
-    if (refPick !== null) {
-      if (!refPick.onKey(e)) deps.unhandledKey?.(e);
-      return;
-    }
+    if (layers.some((layer) => layer.onKey(e))) return;
     const activation = current;
     if (activation === null) return;
     if (activation.tool.onKey?.(e) === true) return;
@@ -232,12 +192,10 @@ export function createToolManager(deps: {
   // Start first: a failing default tool throws out of here with nothing subscribed.
   start(defaultToolId());
   const subscriptions: readonly Unsubscribe[] = [
-    deps.ctx.viewport.events.on('pointer', onPointer),
-    deps.ctx.viewport.events.on('key', onKey),
-    deps.ctx.features.current.subscribe(onSessionChanged),
+    deps.viewportEvents.on('pointer', onPointer),
+    deps.viewportEvents.on('key', onKey),
     ...(deps.mode === undefined ? [] : [deps.mode.subscribe(onModeChanged)]),
   ];
-  onSessionChanged();
 
   return {
     active: active.asObservable(),
@@ -253,10 +211,6 @@ export function createToolManager(deps: {
       if (disposed) return;
       disposed = true;
       for (const unsubscribe of subscriptions) unsubscribe();
-      unsubscribeSession?.();
-      unsubscribeSession = null;
-      session = null;
-      dropRefPick();
       const last = current;
       current = null;
       last?.tool.deactivate();

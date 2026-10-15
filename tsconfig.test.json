@@ -6,8 +6,12 @@
     "lib": ["ES2023", "ESNext.Disposable"],
     "types": ["node"]
   },
-  "include": ["src/**/*.test.ts", "tests/**/*.ts"],
+  "include": ["test/unit/**/*.test.ts", "test/integration/**/*.ts"],
   // Need lib DOM: IndexedDB types (tsconfig.test-idb.json), app and render's viewport
   // (tsconfig.test-app.json).
-  "exclude": ["src/persistence/idb/**/*.test.ts", "src/app/**/*.test.ts", "src/ui/**/*.test.ts"]
+  "exclude": [
+    "test/unit/persistence/idb/**/*.test.ts",
+    "test/unit/app/**/*.test.ts",
+    "test/unit/ui/**/*.test.ts"
+  ]
 }

@@ -1,7 +1,7 @@
 import type { ViewCubeLabels } from '@/app';
 
 // The translated labels of the view cube (spec 11, "Popisky view cube", M17): render knows no
-// i18n, so AppShell builds them here and hands them to AppSession.setViewCubeLabels whenever
+// i18n, so AppShell builds them here and hands them to AppSession.viewSettings.setViewCubeLabels whenever
 // the language changes. Pure, so it is tested without vue-i18n.
 
 /** Face labels and arrow names of the view cube from the viewCube.* keys. */

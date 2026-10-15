@@ -1,10 +1,11 @@
 <script setup lang="ts">
 // The Toolbar (spec 11, "Komponenty"): docked under the title bar, buttons in groups (Historie,
 // Vytvořit, Upravit, Konstrukce, Zobrazit). Which button sits in which group and whether it is
-// enabled is the pure function toolbarGroups; this component only draws it and runs commands.
+// enabled is the ToolbarModel of interaction (M20); this component only draws it and runs
+// commands through it.
 // Icon without a label, a tooltip "name  shortcut", under each group its label opening a menu
 // of the group. In the sketch mode (M12) the bar shows the tools and actions of the sketcher
-// instead (toolbarGroups gets the mode). The tooltip opens under the whole bar, so it never covers
+// instead (the model follows the mode). The tooltip opens under the whole bar, so it never covers
 // the group label under the button.
 // M19.1 (revision C10): groups that do not fit into the bar go into the menu of the button "…"
 // ("Další nástroje"), group by group, as the same items. How many fit is the pure function
@@ -16,12 +17,11 @@
 // their group and of "…"; fitGroups measures only the drawn buttons, so it needs no change.
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import type { ToolbarGroup, ToolbarItem } from '@/interaction';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
 import { isMacPlatform, shortcutText } from '../keyboard';
 import { fitGroups, overflowItems } from '../toolbar-fit';
-import { toolbarGroups } from '../toolbar-groups';
-import type { ToolbarGroup, ToolbarItem } from '../toolbar-groups';
 import ContextMenu from './ContextMenu.vue';
 
 const session = useSession();
@@ -29,24 +29,7 @@ const i18n = useI18n();
 const { t } = i18n;
 const isMac = isMacPlatform(globalThis.navigator.userAgent);
 
-const actionStates = useObservable(session.actions.actions);
-const locked = useObservable(session.locked);
-const activeTool = useObservable(session.tools.active);
-const mode = useObservable(session.mode);
-
-const groups = computed(() =>
-  toolbarGroups({
-    tools: session.toolList,
-    actions: actionStates.value,
-    actionIds: session.actionIds,
-    toolActionId: (id) => session.toolActionId(id),
-    toolModes: (tool) => session.toolModes(tool),
-    locked: locked.value,
-    mode: mode.value,
-    sketchActionIds: session.sketchActionIds,
-    sketchConstraintActionId: (kind) => session.sketchConstraintActionId(kind),
-  }),
-);
+const groups = useObservable(session.toolbar.groups);
 
 function groupLabel(group: ToolbarGroup): string {
   const key = `toolbar.group.${group.id}`;
@@ -58,14 +41,8 @@ function buttonsOf(group: ToolbarGroup): readonly ToolbarItem[] {
   return group.items.filter((item) => !item.menuOnly);
 }
 
-function isActive(item: ToolbarItem): boolean {
-  return session.toolList.some((tool) => tool.id === item.id) && activeTool.value === item.id;
-}
-
 function run(item: ToolbarItem): void {
-  if (!item.enabled) return;
-  if (item.command.kind === 'action') session.actions.run(item.command.id);
-  else session.tools.activate(item.command.id);
+  session.toolbar.run(item);
 }
 
 /** Natural widths in px: of each group with its separator (by id), of the button "…", of the row. */
@@ -189,7 +166,7 @@ function runMenuItem(id: string): void {
               :key="item.id"
               type="button"
               class="tool"
-              :class="{ active: isActive(item) }"
+              :class="{ active: item.active }"
               :disabled="!item.enabled"
               :aria-label="t(item.label)"
               @click="run(item)"

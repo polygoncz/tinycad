@@ -2,7 +2,7 @@
 // ConstraintSolver port (spec 12, ADR 0017). Depends only on core.
 // Public API of sketch. Everything else in this folder is internal.
 
-export { GEOMETRIC_CONSTRAINT_KINDS, SKETCH_FEATURE_TYPE } from './model';
+export { GEOMETRIC_CONSTRAINT_KINDS, SKETCH_FEATURE_TYPE, SKETCH_PARAM } from './model';
 export type {
   DimensionKind,
   GeometricConstraintKind,

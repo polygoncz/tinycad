@@ -5,13 +5,14 @@
 // save that fails or no longer works with Export, the kernel that starts, restarts or does not
 // run with Try again, a regeneration that threw; the technical cause in expandable Details) and
 // the switches of language and theme; in development builds also the switch of the debug panel
-// of topological names (M14, R111). M15: the File menu (the actions of session.fileActionIds)
+// of topological names (M14, R111). M15: the File menu (the actions of FILE_ACTION_IDS)
 // with the state of an export and its warning (M19.1: a document exported without history), and
 // the switch of the history panel (its open state is layout of AppShell). M19.2 (D5): the name
 // is a button that turns into a text field; Enter or leaving it renames through
 // session.documentName (outside undo), Esc cancels. Only bindings.
 import { computed, nextTick, ref, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { FILE_ACTION_IDS } from '@/interaction/constants';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
 import { fileMenuItems } from '../file-menu';
@@ -28,7 +29,7 @@ const session = useSession();
 const { t } = useI18n();
 
 const actionStates = useObservable(session.actions.actions);
-const fileActionIds = Object.values(session.fileActionIds);
+const fileActionIds = Object.values(FILE_ACTION_IDS);
 const fileItems = computed(() => fileMenuItems(actionStates.value, fileActionIds));
 const fileStatus = useObservable(session.files.status);
 const fileMenu = ref<{ readonly x: number; readonly y: number } | null>(null);
@@ -98,7 +99,7 @@ function showDocuments(): void {
 
 function runNotice(action: NoticeAction): void {
   if (action === 'retryKernel') session.retryKernel();
-  else session.actions.run(session.fileActionIds.exportDocument);
+  else session.actions.run(FILE_ACTION_IDS.exportDocument);
 }
 
 function toggleTopoNames(): void {

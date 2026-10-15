@@ -2,7 +2,6 @@ import { mat4, vec3 } from '@/core';
 import type { Mat4, Vec3 } from '@/core';
 import type {
   AngularHandle,
-  FeatureAnchors,
   Handle,
   ManipulatorDescriptor,
   ManipulatorFrame,
@@ -10,6 +9,7 @@ import type {
   Patch,
 } from '@/interaction';
 import { AXIS, inverseRotationOf, rotationOf } from './builder';
+import type { TransformAnchors } from './builder';
 import type { TransformParams } from './schema';
 
 // The manipulator of the transform (M18, ADR 0021; M19 in the style of Fusion, ADR 0022). All
@@ -44,31 +44,34 @@ const PLANES = Object.freeze([
   Object.freeze({ id: 'zx', u: 2, v: 0, tint: 'y' }),
 ] as const);
 
-export const transformManipulators: ManipulatorDescriptor<TransformParams> = Object.freeze<
-  ManipulatorDescriptor<TransformParams>
->({
-  type: 'transform',
-  modes: MODES,
-  frame(params: TransformParams, anchors: FeatureAnchors, mode: string): ManipulatorFrame | null {
-    const p = pivotOf(params, anchors);
-    if (p === undefined) return null;
-    const c: Vec3 = Object.freeze(vec3.add(p, params.translate));
-    const handles = handlesOf(params, p, c, mode);
-    if (handles === null) return null;
-    return Object.freeze({ center: c, handles: Object.freeze(handles) });
-  },
-  pickPoint(
-    params: TransformParams,
-    anchors: FeatureAnchors,
-    mode: string,
-    point: Vec3,
-  ): Patch | null {
-    if (mode !== 'pivot') return null;
-    const p = pivotOf(params, anchors);
-    if (p === undefined) return null;
-    return pivotLens(params, p, point);
-  },
-});
+export const transformManipulators: ManipulatorDescriptor<TransformParams, TransformAnchors> =
+  Object.freeze<ManipulatorDescriptor<TransformParams, TransformAnchors>>({
+    type: 'transform',
+    modes: MODES,
+    frame(
+      params: TransformParams,
+      anchors: TransformAnchors,
+      mode: string,
+    ): ManipulatorFrame | null {
+      const p = pivotOf(params, anchors);
+      if (p === undefined) return null;
+      const c: Vec3 = Object.freeze(vec3.add(p, params.translate));
+      const handles = handlesOf(params, p, c, mode);
+      if (handles === null) return null;
+      return Object.freeze({ center: c, handles: Object.freeze(handles) });
+    },
+    pickPoint(
+      params: TransformParams,
+      anchors: TransformAnchors,
+      mode: string,
+      point: Vec3,
+    ): Patch | null {
+      if (mode !== 'pivot') return null;
+      const p = pivotOf(params, anchors);
+      if (p === undefined) return null;
+      return pivotLens(params, p, point);
+    },
+  });
 
 /** The handles of the mode; null for a mode the transform does not have. */
 function handlesOf(params: TransformParams, p: Vec3, c: Vec3, mode: string): Handle[] | null {
@@ -202,14 +205,14 @@ function rotate(r: Mat4, v: Vec3): Vec3 {
 const ORIGIN: Vec3 = Object.freeze<Vec3>([0, 0, 0]);
 
 /** The pivot p of the builder; undefined for 'bodiesCenter' before the first good build. */
-function pivotOf(params: TransformParams, anchors: FeatureAnchors): Vec3 | undefined {
+function pivotOf(params: TransformParams, anchors: TransformAnchors): Vec3 | undefined {
   switch (params.pivot) {
     case 'origin':
       return ORIGIN;
     case 'point':
       return params.pivotPoint;
     case 'bodiesCenter':
-      return anchors['pivot']?.point;
+      return anchors.pivot?.point;
   }
 }
 

@@ -41,10 +41,7 @@ export function createOperationLog(entries: readonly LogEntry[] = []): Operation
 class InMemoryOperationLog implements OperationLog {
   private readonly emitter = new Emitter<{ appended: LogEntry }>();
   // Only on/once, not the Emitter itself: a cast back to Emitter must not give emit (Q023).
-  readonly events: Subscribable<{ appended: LogEntry }> = {
-    on: (type, fn) => this.emitter.on(type, fn),
-    once: (type, fn) => this.emitter.once(type, fn),
-  };
+  readonly events: Subscribable<{ appended: LogEntry }> = this.emitter.asSubscribable();
   private readonly list: LogEntry[] = [];
 
   constructor(restored: readonly LogEntry[]) {

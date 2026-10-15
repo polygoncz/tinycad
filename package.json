@@ -13,7 +13,7 @@
     "typecheck": "vue-tsc -b",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write . && eslint --fix .",
-    "lint:deps": "depcruise src tests --config .dependency-cruiser.cjs --output-type err-long",
+    "lint:deps": "depcruise src test --config .dependency-cruiser.cjs --output-type err-long",
     "lint:vault": "node scripts/vault-lint.mjs",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration --passWithNoTests",

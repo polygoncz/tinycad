@@ -38,3 +38,5 @@ Proč:
 - Rozšíření rozhraní je později zpětně kompatibilní (stávající nástroje dál fungují), zúžení by rozbilo nástroje, které by `begin` mezitím začaly používat.
 
 Kdyby přišel nástroj, který mění víc featur najednou (přesun featur tažením), dostane úzkou službu v `interaction` (např. `FeatureTreeModel.move`), ne obecné `begin`. Propsáno do [[10-interakce#Nástroje]], úkol Ú3 v [[M13-extrude-revolve#Implementační plán]].
+
+**Doplněk 2026-10-14 ([[M20-zpevneni-struktury|M20]], A5):** `ToolContext` už nemá ani `ops` pro jednotlivé operace. Žádný nástroj je nevolal a dokument mění jen přes `FeatureEditor` nebo `SketchEditor`. Kdyby je nástroj potřeboval, přidat je zpět jde zpětně kompatibilně ([[10-interakce#Nástroje]]).

@@ -64,6 +64,6 @@ Spike na začátku M12 (Node, Vitest, `worker_threads`, modulový Web Worker ve 
 
 - (+) Doména je na knihovně nezávislá; `FakeSolver` z `sketch/testing.ts` stačí testům `interaction`.
 - (+) Řešič se testuje v Node (Vitest) stejně jako OCCT; e2e ověří worker v prohlížeči.
-- (−) Asynchronní tažení: `SketchSession` musí řešit souběh (jeden rozpracovaný požadavek a jeden čekající cíl, [[12-skicar#Režim skicáře (interaction)]]).
+- (−) Asynchronní tažení: `SketchSession` musí řešit souběh (jeden rozpracovaný požadavek a jeden čekající cíl, [[12-skicar#Režim skicáře (sketcher)]]).
 - (−) Další WASM (473 KiB) a další worker; další `optimizeDeps.exclude` ve Vite.
 - (−) Systém se staví při každém řešení znovu; pro skici nad ~500 neznámých bude potřeba přírůstkové API nebo rozdělení skici na nezávislé části (zatím neřešíme).

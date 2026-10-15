@@ -17,9 +17,9 @@ export const cylinderBuilder: FeatureBuilder<CylinderParams> = Object.freeze<
   FeatureBuilder<CylinderParams>
 >({
   type: 'cylinder',
-  async build({ feature, state }, { kernel }) {
-    // Params are valid here: the Regenerator ran cylinderSchema.validate first.
-    const { base, axis, radius, height } = feature.params;
+  async build({ feature, params, state }, { kernel }) {
+    // Params are valid here: evaluateParams ran cylinderSchema.validate first.
+    const { base, axis, radius, height } = params;
     const result = await kernel.makeCylinder({ base, axis: AXIS[axis], radius, height });
     // Names from the roles of the kernel (spec 08); a new body has no input names.
     const names = await nameShape({ kernel, featureId: feature.id, result, inputs: [] });
@@ -36,6 +36,6 @@ export const cylinderBuilder: FeatureBuilder<CylinderParams> = Object.freeze<
     });
     // A new map, the input state stays as it is; the map itself is guarded by its type (Q048).
     const artifacts = new Map(state.artifacts).set(id, body);
-    return { ok: true, state: Object.freeze({ artifacts }) };
+    return { ok: true, state: Object.freeze({ artifacts }), anchors: {} };
   },
 });

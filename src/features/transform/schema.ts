@@ -1,6 +1,6 @@
 import type { Vec3 } from '@/core';
 import { validateAgainstSchema } from '@/document';
-import type { BodyRef, FeatureSchema, ParamIssue, ParamSchema, ParamSpec } from '@/document';
+import type { BodyRef, FeatureSchema, ParamIssue, ParamSchemaOf, ParamSpec } from '@/document';
 
 // The data half of the transform feature (ADR 0004): params, defaults, validation and the
 // migrations (M18: version 2 added the pivot of the rotation; M19: version 3 replaced the axis
@@ -30,7 +30,7 @@ export interface TransformParams {
 // Frozen deeply like the box schema: shared by the registry, the UI form and the validation.
 // Labels are translation keys (ADR 0014), the texts are in messages.ts. Everything the transform
 // needs is covered by validateAgainstSchema, so it has no rule of its own.
-const params: ParamSchema = Object.freeze<ParamSchema>({
+const params: ParamSchemaOf<TransformParams> = Object.freeze<ParamSchemaOf<TransformParams>>({
   bodies: Object.freeze<ParamSpec>({ kind: 'bodies', label: 'transform.bodies', min: 1 }),
   pivot: Object.freeze<ParamSpec>({
     kind: 'enum',

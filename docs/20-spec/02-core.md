@@ -72,12 +72,14 @@ export class Emitter<Events extends EventMap<Events>> implements Subscribable<Ev
   on<K extends keyof Events>(type: K, fn: (e: Events[K]) => void): Unsubscribe;
   once<K extends keyof Events>(type: K, fn: (e: Events[K]) => void): Unsubscribe;
   emit<K extends keyof Events>(type: K, e: Events[K]): void;
+  /** Pohled jen s on/once, zmrazený, pokaždé tentýž objekt. */
+  asSubscribable(): Subscribable<Events>;
 }
 ```
 
 Pravidla:
 
-- Veřejná rozhraní jiných modulů vystavují jen odběr: `readonly events: Subscribable<…>`. `Emitter` si drží implementace soukromě a jen ony volají `emit` ([[Q023 Události jen pro odběr|Q023]]). Stejný vzor jako `Observable` vs. `ObservableValue`.
+- Veřejná rozhraní jiných modulů vystavují jen odběr: `readonly events: Subscribable<…>`. `Emitter` si drží implementace soukromě a jen ony volají `emit` ([[Q023 Události jen pro odběr|Q023]]). Stejný vzor jako `Observable` vs. `ObservableValue`. Implementace vrací `emitter.asSubscribable()`: samostatný zmrazený objekt, takže ho spotřebitel nepřetypuje zpět na `Emitter`.
 - Handlery se volají synchronně v pořadí registrace.
 - Výjimka v jednom handleru neshodí ostatní. `emit` zavolá všechny handlery a teprve potom chybu vyhodí: jednu chybu tak, jak je, více chyb jako `AggregateError`. `core` nic neloguje (nemá `console`), logování je věc volajícího, který zná platformu ([[Q022 Platformové typy v core|Q022]]).
 - Odhlášení během `emit` se projeví hned: odhlášený handler, který na řadu ještě nepřišel, se už nezavolá. Handler přihlášený během `emit` se zavolá až při dalším `emit`.

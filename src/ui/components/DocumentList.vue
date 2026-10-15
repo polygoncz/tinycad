@@ -1,31 +1,23 @@
 <script setup lang="ts">
 // The document list (spec 11, "Komponenty"; Q019): a floating sheet with the cards of the stored
-// documents, newest first. New, open and delete go through app; opening is only a change of the
-// hash (#/d/<id>), App.vue does the rest. Deleting a document open in another tab is refused by
-// app (its lock) and the error is shown here. The header has the same switches of language and
-// theme as the TitleBar. M15: import of a document file (R126) – a hidden file input, the text
-// goes through importDocumentText; a stored file opens like a new document. M19.1 (revize U3,
-// U11): the list that fails to load shows its error and Try again instead of an endless
-// "Loading…" (loadDocumentList); the delete button stays in the tab order (hidden by opacity
-// only); one date formatter for the whole list. M19.2 (D5): Rename next to Delete turns the name
-// of the card into a text field; Enter or leaving it renames through app (refused like a delete
-// when the document is open in another tab), Esc cancels; the list loads again.
-import { computed, nextTick, onMounted, ref, shallowRef, useTemplateRef } from 'vue';
+// documents, newest first. Its logic is DocumentListModel of interaction (M20, A3.5), built by
+// app's createDocumentList over the store; this component only draws its state, reads a chosen
+// file and opens a document by a change of the hash (#/d/<id>), App.vue does the rest. Deleting
+// or renaming a document open in another tab is refused by app (its lock) and the error is shown
+// here. The header has the same switches of language and theme as the TitleBar. M15: import of a
+// document file (R126) – a hidden file input; a stored file opens like a new document. M19.1
+// (revize U3, U11): the list that fails to load shows its error and Try again instead of an
+// endless "Loading…"; the delete button stays in the tab order (hidden by opacity only); one date
+// formatter for the whole list. M19.2 (D5): Rename next to Delete turns the name of the card into
+// a text field; Enter or leaving it renames, Esc cancels; the list loads again.
+import { computed, nextTick, onMounted, ref, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
-import {
-  createNewDocument,
-  deleteDocument,
-  importDocumentFile,
-  listDocuments,
-  renameDocument,
-} from '@/app';
-import type { DocumentInfo, OpenAppSessionOptions } from '@/app';
+import { createDocumentList } from '@/app';
+import type { OpenAppSessionOptions } from '@/app';
 import type { DocumentId } from '@/document';
-import { importDocumentText } from '../document-import';
-import type { ImportOutcome } from '../document-import';
-import { loadDocumentList, updatedFormatter } from '../document-list';
-import type { DocumentListState } from '../document-list';
-import { finishEdit } from '../inline-rename';
+import type { DocumentCatalogEntry } from '@/interaction';
+import { useObservable } from '../composables/use-observable';
+import { updatedFormatter } from '../document-list';
 import { docHash } from '../route';
 import ThemeLocaleToggles from './ThemeLocaleToggles.vue';
 
@@ -34,93 +26,60 @@ const props = defineProps<{ plugins: OpenAppSessionOptions['plugins'] }>();
 
 const { t, locale } = useI18n();
 
-// A frozen state with the frozen list from app, never deep-reactive.
-const list = shallowRef<DocumentListState>({ kind: 'loading' });
+// M20 (A3.5): loading, busy, the error, the confirmation of a delete and the rename are the
+// model's; the component draws them, reads the chosen file and opens the returned ids.
+const model = createDocumentList({
+  plugins: props.plugins,
+  translate: (key) => t(key),
+  // The browser's own dialog (R16), like deleting a feature with dependents.
+  confirm: ({ key, params }) => globalThis.confirm(t(key, params)),
+});
+const list = useObservable(model.list);
+const busy = useObservable(model.busy);
+const actionError = useObservable(model.error);
+const renaming = useObservable(model.renaming);
 const updatedText = computed(() => updatedFormatter(locale.value));
-// The error of an action (create, delete, import); a failed load is a state of the list.
-const error = ref<string | null>(null);
-// The technical detail of a failed import (its first issue), in the tooltip of the error.
-const errorDetail = ref<string | null>(null);
-const busy = ref(false);
+// The error of an action (create, delete, rename, import); a failed load is a state of the list.
+const error = computed(() => {
+  const current = actionError.value;
+  return current === null ? null : t(current.key, current.params);
+});
 const fileInput = useTemplateRef<HTMLInputElement>('fileInput');
-// The card whose name is being edited, and the text of its field.
-const renaming = ref<DocumentId | null>(null);
+// The text of the name field of the card being renamed.
 const nameText = ref('');
 // A ref inside v-for is an array; only the edited card has the field.
 const nameInputs = useTemplateRef<HTMLInputElement[]>('nameInput');
 
-/** Loads the list again; the cards stay until the new list is there (after a delete). */
-async function load(): Promise<void> {
-  list.value = await loadDocumentList(listDocuments);
-}
-
-/** Try again after a failed load: "Loading…" until it settles. */
 function retry(): void {
-  list.value = { kind: 'loading' };
-  void load();
+  void model.retry();
 }
 
-function open(id: DocumentId): void {
-  globalThis.location.hash = docHash(id);
+function open(id: DocumentId | null): void {
+  if (id !== null) globalThis.location.hash = docHash(id);
 }
 
 async function create(): Promise<void> {
-  if (busy.value) return;
-  busy.value = true;
-  clearError();
-  try {
-    open(await createNewDocument({ translate: (key) => t(key) }));
-  } catch (e) {
-    error.value = t('documents.error.create', { error: errorText(e) });
-  } finally {
-    busy.value = false;
-  }
+  open(await model.create());
 }
 
-async function remove(info: DocumentInfo): Promise<void> {
-  if (busy.value) return;
-  if (!globalThis.confirm(t('documents.confirmDelete', { name: info.meta.name }))) return;
-  busy.value = true;
-  clearError();
-  try {
-    await deleteDocument(info.meta.id);
-    await load();
-  } catch (e) {
-    error.value = t('documents.error.delete', { error: errorText(e) });
-  } finally {
-    busy.value = false;
-  }
+async function remove(info: DocumentCatalogEntry): Promise<void> {
+  await model.remove(info);
 }
 
-async function startRename(info: DocumentInfo): Promise<void> {
-  if (busy.value) return;
+async function startRename(info: DocumentCatalogEntry): Promise<void> {
   nameText.value = info.meta.name;
-  renaming.value = info.meta.id;
+  if (!model.beginRename(info.meta.id)) return;
   await nextTick();
   nameInputs.value?.[0]?.select();
 }
 
-/**
- * Enter or leaving the field. The rule of the name is app's (the same name writes nothing and
- * keeps the card's place); an untouched field does not even ask, so it needs no lock.
- */
-async function commitRename(info: DocumentInfo): Promise<void> {
-  const id = finishEdit(renaming);
-  if (id === null || nameText.value === info.meta.name || busy.value) return;
-  busy.value = true;
-  clearError();
-  try {
-    await renameDocument(id, nameText.value, { plugins: props.plugins });
-    await load();
-  } catch (e) {
-    error.value = t('documents.error.rename', { error: errorText(e) });
-  } finally {
-    busy.value = false;
-  }
+/** Enter or leaving the field; the model ends the edit, so a blur after Enter does nothing. */
+async function commitRename(info: DocumentCatalogEntry): Promise<void> {
+  await model.commitRename(info, nameText.value);
 }
 
 function cancelRename(): void {
-  finishEdit(renaming);
+  model.cancelRename();
 }
 
 function chooseFile(): void {
@@ -133,35 +92,12 @@ async function importChosen(e: Event): Promise<void> {
   const file = input?.files?.[0];
   // Choosing the same file again fires change once more.
   if (input !== null) input.value = '';
-  if (file === undefined || busy.value) return;
-  busy.value = true;
-  clearError();
-  // importDocumentText never rejects; only reading the file can.
-  const outcome = await file.text().then(
-    (text) =>
-      importDocumentText(text, (raw) => importDocumentFile(raw, { plugins: props.plugins })),
-    (e: unknown): ImportOutcome => ({ ok: false, detail: errorText(e) }),
-  );
-  busy.value = false;
-  if (outcome.ok) {
-    open(outcome.id);
-  } else {
-    error.value = t('documents.importError');
-    errorDetail.value = outcome.detail;
-  }
-}
-
-function clearError(): void {
-  error.value = null;
-  errorDetail.value = null;
-}
-
-function errorText(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+  if (file === undefined) return;
+  open(await model.importFile(() => file.text()));
 }
 
 onMounted(() => {
-  void load();
+  void model.load();
 });
 </script>
 
@@ -187,7 +123,7 @@ onMounted(() => {
       </button>
     </header>
 
-    <p v-if="error !== null" class="error" role="alert" :title="errorDetail ?? undefined">
+    <p v-if="error !== null" class="error" role="alert" :title="actionError?.detail ?? undefined">
       {{ error }}
     </p>
 

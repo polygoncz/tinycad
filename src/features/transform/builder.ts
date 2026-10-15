@@ -2,7 +2,7 @@ import { mat4, vec3 } from '@/core';
 import type { Mat4, Vec3 } from '@/core';
 import type { BodyId } from '@/document';
 import { modifyBody, replaceBodies, unresolvedReference } from '@/regen';
-import type { Body, FeatureBuilder, ModelingKernel } from '@/regen';
+import type { Anchor, Body, FeatureBuilder, ModelingKernel } from '@/regen';
 import type { TransformParams } from './schema';
 
 // The behaviour half of the transform feature (ADR 0004): moves the picked bodies by one rigid
@@ -37,13 +37,19 @@ export function inverseRotationOf({ rx, ry, rz }: Angles): Mat4 {
   );
 }
 
-export const transformBuilder: FeatureBuilder<TransformParams> = Object.freeze<
-  FeatureBuilder<TransformParams>
+/**
+ * The anchors of the transform (M20): 'pivot', the center of the bodies, only for 'bodiesCenter'.
+ * The manipulator reads them; a type alias, so it fits FeatureAnchors (an index signature).
+ */
+export type TransformAnchors = { readonly pivot?: Anchor };
+
+export const transformBuilder: FeatureBuilder<TransformParams, TransformAnchors> = Object.freeze<
+  FeatureBuilder<TransformParams, TransformAnchors>
 >({
   type: 'transform',
-  async build({ feature, state }, ctx) {
-    // Params are valid here: the Regenerator ran transformSchema.validate first.
-    const { bodies: refs, pivot, pivotPoint, translate } = feature.params;
+  async build({ feature, params, state }, ctx) {
+    // Params are valid here: evaluateParams ran transformSchema.validate first.
+    const { bodies: refs, pivot, pivotPoint, translate } = params;
     const resolved = ctx.resolveBodies(refs);
     if (!resolved.ok) return { ok: false, error: unresolvedReference('bodies', resolved.error) };
     // From the input shapes, so it depends neither on translate nor on the angles (anchor invariant).
@@ -56,7 +62,7 @@ export const transformBuilder: FeatureBuilder<TransformParams> = Object.freeze<
     // Rotate through the pivot first, then translate: T(translate) · T(p) · R · T(−p).
     const rotation = mat4.multiply(
       mat4.translation(p),
-      mat4.multiply(rotationOf(feature.params), mat4.translation(vec3.scale(p, -1))),
+      mat4.multiply(rotationOf(params), mat4.translation(vec3.scale(p, -1))),
     );
     const m = mat4.multiply(mat4.translation(translate), rotation);
     const changed = new Map<BodyId, Body>();
@@ -77,8 +83,7 @@ export const transformBuilder: FeatureBuilder<TransformParams> = Object.freeze<
     // Every moved body stays where it was in the map, the input state stays as it is.
     const next = replaceBodies(state, changed, new Set());
     // The Regenerator freezes the anchors deeply (spec 07). Origin and pivotPoint come from the
-    // params, so only bodiesCenter needs the anchor; the empty anchors still have to be there,
-    // the controller shows no handles for a feature without them.
+    // params, so only bodiesCenter needs the anchor.
     if (pivot !== 'bodiesCenter') return { ok: true, state: next, anchors: {} };
     return { ok: true, state: next, anchors: { pivot: { point: p } } };
   },

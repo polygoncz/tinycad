@@ -9,5 +9,5 @@
     "lib": ["ES2023", "ESNext.Disposable", "DOM"],
     "types": ["node", "vite/client"]
   },
-  "include": ["src/app/**/*.test.ts", "src/ui/**/*.test.ts", "src/ui/**/*.vue"]
+  "include": ["test/unit/app/**/*.test.ts", "test/unit/ui/**/*.test.ts", "src/ui/**/*.vue"]
 }

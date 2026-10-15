@@ -18,12 +18,11 @@
     "src/regen/**/*.ts",
     "src/plugin-api/**/*.ts",
     "src/features/**/*.ts",
-    "src/interaction/**/*.ts"
+    "src/interaction/**/*.ts",
+    "src/sketcher/**/*.ts"
   ],
   "exclude": [
     // Platform adapter living inside a ring-1 module.
-    "src/persistence/idb/**",
-    // Tests run in Node under Vitest; they are checked by tsconfig.test.json.
-    "src/**/*.test.ts"
+    "src/persistence/idb/**"
   ]
 }

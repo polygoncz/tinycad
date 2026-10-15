@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Claude Code PostToolUse hook for application code: after Claude edits
-// src/**/*.{ts,vue} it runs `prettier --write` and `eslint --fix` on that file.
+// src/**/*.{ts,vue} or test/**/*.{ts,vue} it runs `prettier --write` and `eslint --fix` on that file.
 // Problems ESLint cannot fix are reported back to Claude (exit 2) to be fixed.
 //
 // Usage: node scripts/code-format.mjs --hook   (reads the hook JSON from stdin)
@@ -15,7 +15,7 @@ const BIN = join(ROOT, 'node_modules', '.bin');
 
 function isAppCode(filePath) {
   const rel = relative(ROOT, filePath).split(sep).join('/');
-  return rel.startsWith('src/') && /\.(ts|vue)$/.test(rel);
+  return (rel.startsWith('src/') || rel.startsWith('test/')) && /\.(ts|vue)$/.test(rel);
 }
 
 function run(tool, args) {

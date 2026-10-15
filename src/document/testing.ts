@@ -4,6 +4,7 @@
 
 import { createDocument } from './cad-document';
 import type { DocumentWriter } from './document';
+import type { Evaluated } from './evaluate';
 import type { DocumentId, DocumentMeta, FeatureId, FeatureInstance } from './model';
 
 // Default ids depend on call order within a test file. Tests that assert on ids or
@@ -56,4 +57,13 @@ export function aDocument(options: DocumentOptions = {}): DocumentWriter {
     meta: { id: 'doc1' as DocumentId, name: 'Test document', createdAt: 0, ...options.meta },
     studio: { features, rollbackIndex: options.rollbackIndex ?? features.length },
   });
+}
+
+/**
+ * The params as evaluated, without evaluateParams and its validation (M20): for tests of builders
+ * and manipulators that pass params straight in, invalid ones too.
+ */
+export function anEvaluated<P>(params: P): Evaluated<P> {
+  // The brand exists only in types; in production only evaluateParams mints it.
+  return params as Evaluated<P>;
 }

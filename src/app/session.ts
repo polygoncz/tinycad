@@ -3,24 +3,10 @@
 // scheduler come in as deps – so it runs in Node with FakeKernel, MemoryDocumentStore and a fake
 // viewport. openAppSession (browser) builds the real ones and calls this.
 
-import { DisposableStore, ObservableValue, RpcError } from '@/core';
+import { DisposableStore } from '@/core';
 import type { Disposable, IdGenerator, Observable, Unsubscribe, Vec3 } from '@/core';
-import { createDocument, ORIGIN_AXES, ORIGIN_PLANES } from '@/document';
-import type {
-  AxisId,
-  BodyId,
-  DocumentId,
-  DocumentMeta,
-  DocumentReader,
-  DocumentWriter,
-  FeatureId,
-  FeatureSchemaRegistry,
-  PlaneId,
-} from '@/document';
+import type { BodyId, DocumentId, DocumentReader, DocumentWriter, FeatureId } from '@/document';
 import {
-  ACTION_IDS,
-  artifactDrawing,
-  axisDrawing,
   bindSelectionHighlight,
   createActionRegistry,
   createBrowserModel,
@@ -30,21 +16,14 @@ import {
   createFeatureEditor,
   createFileActions,
   createHistoryModel,
-  toolActionId,
-  toolModes,
   createFeatureTreeModel,
   createManipulatorController,
+  createRefPickLayer,
   createSelectionModel,
-  createSketchActions,
-  createSketchEditor,
-  createSketchTools,
   createToolManager,
+  createToolbarModel,
   createTopoInspector,
-  FILE_ACTION_IDS,
-  planeDrawing,
   SELECT_TOOL,
-  SKETCH_ACTION_IDS,
-  sketchConstraintActionId,
 } from '@/interaction';
 import type {
   ActionRegistry,
@@ -58,84 +37,58 @@ import type {
   ManipulatorHud,
   Mode,
   SelectionModel,
-  SketchEditor,
-  ToolDescriptor,
-  ToolManager,
+  ToolbarModel,
   TopoInspector,
+  ViewKeyEvent,
   ViewportPort,
 } from '@/interaction';
-import { createOperationDispatcher, createOperationLog, createUndoManager } from '@/ops';
-import type { OperationDispatcher, OperationLog, OpHandlerRegistry } from '@/ops';
-import {
-  createPersistenceService,
-  createSnapshot,
-  exportDocument,
-  loadDocument,
-} from '@/persistence';
-import type {
-  DocumentStore,
-  PersistenceService,
-  PersistenceStatus,
-  Scheduler,
-} from '@/persistence';
+import { createOperationDispatcher, createUndoManager } from '@/ops';
+import type { OperationLog } from '@/ops';
+import { exportDocument } from '@/persistence';
+import type { DocumentStore, PersistenceStatus, Scheduler } from '@/persistence';
 import type { FeaturePlugin, PluginMessages } from '@/plugin-api';
-import { bodiesOf, createRegenerator, EMPTY_STATE, planeOfRef, sketchesOf } from '@/regen';
-import type { Regenerator, RegenState, SketchArtifact } from '@/regen';
-import { DARK_PALETTE, LIGHT_PALETTE } from '@/render';
-import type {
-  BodyLayer,
-  CameraController,
-  OrbitMode,
-  ScenePalette,
-  ViewCubeLabels,
-} from '@/render';
-import type { ConstraintSolver, GeometricConstraintKind } from '@/sketch';
+import { createRegenerator, planeOfRef } from '@/regen';
+import type { BodyLayer, CameraController } from '@/render';
+import type { ConstraintSolver } from '@/sketch';
+import {
+  createSketchActions,
+  createSketchEditor,
+  createSketchTools,
+  SKETCH_SELECT_TOOL_ID,
+  SKETCH_TOOLBAR,
+} from '@/sketcher';
+import type { SketchEditor } from '@/sketcher';
 import { createFileExporter } from './file-exporter';
 import type { DownloadFile } from './file-exporter';
 import { createKernelSupervisor } from './kernel-supervisor';
 import type { KernelUiState, SupervisedKernel } from './kernel-supervisor';
-import { describeLoadError } from './load-error';
-import { createRegenScheduler } from './regen-scheduler';
+import { openDocument } from './open-document';
+import { createSessionPersistence, refuseChanges } from './read-only';
+import { createRegenPipeline } from './regen-pipeline';
+import type { RegenUiState } from './regen-pipeline';
 import { createRegenStatusAdapter } from './regen-status-adapter';
 import { createPluginRegistries } from './registries';
 import type { PluginRegistries } from './registries';
-
-export type RegenUiState = {
-  /** A regeneration is running or due. */
-  readonly busy: boolean;
-  /** Bodies of the last finished regeneration. */
-  readonly bodyCount: number;
-  /** Duration of the last finished regeneration; null before the first. */
-  readonly lastMs: number | null;
-  /**
-   * M19.1: text of the error of the last regeneration that threw (a bug, not a lost kernel);
-   * null before the first such error and after a successful regeneration.
-   */
-  readonly failed: string | null;
-};
+import { createViewSettings } from './view-settings';
+import type { ViewportSettings, ViewSettings } from './view-settings';
+import { bindBrowserView } from './viewport-mirror';
 
 /**
  * What app needs from the 3D view: the port of interaction plus mounting, the body layer, the
- * camera, the palette, body visibility and body colour (M15). render's Viewport is one; tests
+ * camera, the view settings (palette, view cube labels, rotation mode), body visibility and body
+ * colour (M15). render's Viewport is one; tests
  * use a fake.
  * app hands the kernel to the view through `bodies.reset` whenever a kernel becomes ready
  * (spec 09, "Výměna instance jádra"), so the meshes the view was created with are replaced
  * before the first sync.
  */
-export interface AppViewport extends ViewportPort {
+export interface AppViewport extends ViewportPort, ViewportSettings {
   mount(el: HTMLElement): void;
   readonly bodies: BodyLayer;
   readonly camera: CameraController;
-  setPalette(palette: ScenePalette): void;
   setBodyVisible(body: BodyId, visible: boolean): void;
   /** '#rrggbb', null = the face colour of the palette (spec 09, M15). */
   setBodyColor(body: BodyId, color: string | null): void;
-  /** M17: translated labels of the view cube; the same texts again are ignored (spec 09). */
-  setViewCubeLabels(labels: ViewCubeLabels): void;
-  /** M17.1: the rotation mode of the camera; ui owns it, the viewport only applies it. */
-  setOrbitMode(mode: OrbitMode): void;
-  /** M17.1: click on the rotation mode button of the view cube. */
-  onOrbitModeToggle(listener: () => void): Unsubscribe;
   /** M19.2: the step of the drawn sketch grid in mm; the sketcher snaps to it (D4). */
   sketchGridStep(): number;
 }
@@ -173,7 +126,7 @@ export interface AppSessionDeps {
   readonly solver: ConstraintSolver;
   /** M15: downloads an exported file; tests capture it, the browser hands ui's implementation. */
   readonly download: (file: DownloadFile) => void;
-  /** M15: the theme at the start: the first value of defaultBodyColor; later setTheme. */
+  /** M15: the theme at the start: the first value of defaultBodyColor; later viewSettings.setTheme. */
   readonly theme: 'light' | 'dark';
 }
 
@@ -183,12 +136,6 @@ export interface AppSession extends Disposable {
   readonly readOnly: boolean;
   /** Read-only or an open feature dialog: the one rule, from interaction (createEditLock). */
   readonly locked: Observable<boolean>;
-  /** The ids of the built-in actions; ui may not import values of interaction. */
-  readonly actionIds: typeof ACTION_IDS;
-  /** Id of the action that activates a tool (ui must not build it itself, spec 10). */
-  toolActionId(toolId: string): string;
-  /** The modes of a tool (its own or the default, spec 10 "Režim"); ui may not import toolModes. */
-  toolModes(tool: ToolDescriptor): readonly Mode[];
   readonly regen: Observable<RegenUiState>;
   /** Q055: restart after a kernel crash. */
   readonly kernel: Observable<KernelUiState>;
@@ -214,11 +161,14 @@ export interface AppSession extends Disposable {
   readonly featureTree: FeatureTreeModel;
   /** Browser, visibility of bodies (Q071). */
   readonly browser: BrowserModel;
-  readonly tools: ToolManager;
-  /** Every registered tool, the select tool first. */
-  readonly toolList: readonly ToolDescriptor[];
+  /**
+   * M20: the groups of the Toolbar and what its buttons do. Without dispose: the session
+   * disposes it (ADR 0011).
+   */
+  readonly toolbar: Omit<ToolbarModel, 'dispose'>;
   readonly features: FeatureEditor;
-  readonly actions: ActionRegistry;
+  /** M20: what ui does with the actions: list them, run one, hand it a key. */
+  readonly actions: Pick<ActionRegistry, 'actions' | 'run' | 'handleKey'>;
   /** Dictionaries of the plugins for vue-i18n (ADR 0014). */
   readonly messages: PluginMessages;
   /**
@@ -228,10 +178,6 @@ export interface AppSession extends Disposable {
   readonly sketches: Omit<SketchEditor, 'gridStep'>;
   /** M12: = sketches.mode; the Toolbar and the dialog vs. the sketch panel follow it. */
   readonly mode: Observable<Mode>;
-  /** M12: the ids of the sketcher actions; ui may not import values of interaction. */
-  readonly sketchActionIds: typeof SKETCH_ACTION_IDS;
-  /** M12: id of the action adding a geometric constraint of the kind. */
-  sketchConstraintActionId(kind: GeometricConstraintKind): string;
   /**
    * M14: the name of the face or edge under the cursor, for the debug panel (R111). Without
    * dispose: the inspector belongs to the session, which disposes it (ADR 0011).
@@ -244,9 +190,7 @@ export interface AppSession extends Disposable {
    * dispose: the session disposes it (ADR 0011).
    */
   readonly files: Omit<FileActions, 'dispose'>;
-  /** M15: the ids of the File actions; ui may not import values of interaction. */
-  readonly fileActionIds: typeof FILE_ACTION_IDS;
-  /** M15: '#rrggbb' face colour of the current palette (setTheme), for the colour field in ui. */
+  /** M15: '#rrggbb' face colour of the current palette (viewSettings.setTheme), for the colour field in ui. */
   readonly defaultBodyColor: Observable<string>;
   /**
    * M19.2: the name of the document in the title bar and its rename (document.rename, outside
@@ -280,14 +224,8 @@ export interface AppSession extends Disposable {
   };
 
   mountViewport(el: HTMLElement): void;
-  /** Q072: app picks the ScenePalette, ui does not know render. */
-  setTheme(theme: 'light' | 'dark'): void;
-  /** M17: translated labels of the view cube from ui; render knows no i18n. */
-  setViewCubeLabels(labels: ViewCubeLabels): void;
-  /** M17.1: the rotation mode from ui (a page preference like the theme) → viewport. */
-  setOrbitMode(mode: OrbitMode): void;
-  /** M17.1: request of the rotation mode button of the view cube, forwarded from the viewport. */
-  onOrbitModeToggle(listener: () => void): Unsubscribe;
+  /** D7 of M20: theme, view cube labels and rotation mode from ui (one port, see ViewSettings). */
+  readonly viewSettings: ViewSettings;
   /**
    * Writes the pending queue of the persistence now, without the delay; read-only: nothing.
    * openAppSession calls it on pagehide and visibilitychange to hidden (Q034).
@@ -302,10 +240,6 @@ export interface AppSession extends Disposable {
   dispose(): void;
 }
 
-const NAME_OF_NEW_DOCUMENT = 'document.untitled';
-/** The default tool of the sketch mode (spec 10, "Nástroje a akce skicáře"). */
-const SKETCH_SELECT_TOOL_ID = 'sketch.select';
-
 /**
  * Opens the document `docId` and wires a session over it. Rejects when a plugin is broken, the
  * stored data cannot be loaded, or a read-only document is missing. The kernel starts in the
@@ -316,7 +250,12 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   const registries = createPluginRegistries(deps.plugins);
 
   // 2. The document.
-  const { doc, log } = await openDocument(deps, registries.schemas, registries.handlers);
+  const { doc, log } = await openDocument({
+    ...deps,
+    schemas: registries.schemas,
+    handlers: registries.handlers,
+    verify: deps.verify ?? false,
+  });
 
   // 3.–7. Synchronous wiring. A step that throws releases what the steps before it built; the
   // kernel starts only after the last step, so no worker is left behind (M19.1).
@@ -359,19 +298,14 @@ function wireSession(
   // Not on AppSession: the built-in actions undo and redo are its UI.
   const undo = lifetime.add(createUndoManager({ dispatcher: ops, log }));
 
-  const persistenceStatus = new ObservableValue<PersistenceStatus>('saved');
-  const persistence: PersistenceService | null = readOnly
-    ? null
-    : createPersistenceService({ store: deps.store, log, doc, scheduler: deps.scheduler });
-  if (persistence !== null) {
-    lifetime.add(
-      persistence.events.on('status', ({ status }) => {
-        persistenceStatus.set(status);
-      }),
-    );
-  }
-  const persistenceError =
-    persistence?.lastError ?? new ObservableValue<string | null>(null).asObservable();
+  // Without the lock nothing is written (Q038).
+  const persistence = createSessionPersistence({
+    readOnly,
+    store: deps.store,
+    log,
+    doc,
+    scheduler: deps.scheduler,
+  });
 
   const regenStatus = createRegenStatusAdapter();
   const selection = lifetime.add(createSelectionModel({ regen: regenStatus }));
@@ -387,8 +321,6 @@ function wireSession(
   // With the editor, the regions, edges, faces and bodies picked in the dialog are highlighted in
   // the view (M13, M14, spec 10); the port gives the indices of the named edges and faces.
   lifetime.add(bindSelectionHighlight(selection, viewport.highlight, features, regenStatus));
-  /** The final state of the last regeneration: the planes of sketches on faces (M14). */
-  let lastState: RegenState = EMPTY_STATE;
   // The sketcher (M12, spec 11 "Skicář"): the mode is the open sketch session, nothing else.
   const sketches = createSketchEditor({
     features,
@@ -396,7 +328,7 @@ function wireSession(
     viewport,
     // Origin planes and planar faces of the last regeneration (M14); before the first one
     // EMPTY_STATE still has the origin planes.
-    resolvePlane: (ref) => planeOfRef(lastState, ref),
+    resolvePlane: (ref) => planeOfRef(pipeline.lastState(), ref),
     // M19.2 D4: the tools snap to the step of the grid drawn on the screen.
     gridStep: () => viewport.sketchGridStep(),
   });
@@ -431,8 +363,10 @@ function wireSession(
     }),
   );
   const actions = lifetime.add(createActionRegistry({ mode }));
-  // M18: the layer of manipulators above refPick and the tools. Added before ToolManager, so the
-  // reverse order of release disposes it after ToolManager.
+  const unhandledKey = (e: ViewKeyEvent): boolean => actions.handleKey(e);
+  // The layers of input before the tools (spec 10): the manipulators (M18), then refPick of a
+  // focused reference param in the dialog (Q066). Added before ToolManager, so the reverse order
+  // of release disposes them after ToolManager.
   const manipulators = lifetime.add(
     createManipulatorController({
       features,
@@ -441,16 +375,20 @@ function wireSession(
       viewport,
     }),
   );
+  const refPick = lifetime.add(
+    // Names of the bodies for a topo param (M14).
+    createRefPickLayer({ features, viewport, doc, regen: regenStatus, unhandledKey }),
+  );
   const tools = lifetime.add(
     createToolManager({
       registry: toolRegistry,
-      ctx: { viewport, selection, doc, ops, ids: deps.ids, features },
-      regen: regenStatus,
+      ctx: { viewport, selection, doc, ids: deps.ids, features },
+      viewportEvents: viewport.events,
       defaultToolId: SELECT_TOOL.id,
       mode,
       defaultToolIds: { sketch: SKETCH_SELECT_TOOL_ID },
-      unhandledKey: (e) => actions.handleKey(e),
-      manipulators,
+      unhandledKey,
+      layers: [manipulators, refPick],
     }),
   );
   const toolList = Object.freeze(toolRegistry.all());
@@ -472,224 +410,56 @@ function wireSession(
     }),
   );
   lifetime.add(createSketchActions({ registry: actions, sketches, ids: deps.ids }));
+  const toolbar = lifetime.add(
+    createToolbarModel({
+      tools,
+      toolList,
+      actions,
+      locked,
+      mode,
+      // The sketch mode brings its groups and buttons itself (M20).
+      contributions: [SKETCH_TOOLBAR],
+    }),
+  );
   // Debugging the names (M14, R111): starts disabled, ui switches it on in development only.
   const topoInspector = lifetime.add(createTopoInspector({ viewport, regen: regenStatus }));
 
   // 4. Regeneration: doc.changed → scheduler → Regenerator of the current kernel → viewport,
-  // then the port and the rest of the UI (D3).
-  const regenUi = new ObservableValue<RegenUiState>(
-    Object.freeze({ busy: false, bodyCount: 0, lastMs: null, failed: null }),
-  );
-  const updateRegenUi = (change: Partial<RegenUiState>): void => {
-    regenUi.set(Object.freeze({ ...regenUi.get(), ...change }));
-  };
-
-  const scheduler = createRegenScheduler({ run: regenerate, onError: reportError });
-  lifetime.add(
-    scheduler.busy.subscribe(() => {
-      updateRegenUi({ busy: scheduler.busy.get() });
-    }),
-  );
-
-  // Started by the last step (supervisor.start()), once everything it calls into exists.
+  // then the port and the rest of the UI (D3). Started by the last step (supervisor.start()),
+  // once everything it calls into exists.
   const supervisor = createKernelSupervisor({
     createKernel: deps.createKernel,
     createRegenerator: (kernel) => createRegenerator({ kernel, builders, schemas, now: deps.now }),
     monotonic: deps.monotonic,
     onReady: (kernel) => {
-      try {
-        // A new kernel numbers its handles anew: no handle of the old one may reach it, through
-        // the last state (the STEP export, revize AF13) or the meshes of the view (spec 09).
-        lastState = EMPTY_STATE;
-        viewport.bodies.reset(kernel);
-        scheduler.request();
-      } catch (e) {
-        reportError(e);
-      }
+      pipeline.kernelReady(kernel);
     },
     onError: reportError,
   });
-
-  /** Sketches of the last regeneration; drawn by drawSketches (step 6). */
-  let regenSketches: readonly SketchArtifact[] = [];
-  /** What the viewport shows per sketch id, so an unchanged artifact is not drawn again. */
-  const drawnSketches = new Map<string, SketchArtifact>();
-
-  /** One run of the scheduler: a regeneration with the Regenerator of the live kernel. */
-  async function regenerate(): Promise<void> {
-    const regenerator = supervisor.regenerator();
-    // No kernel (starting, restarting, failed): onReady requests a run once there is one.
-    if (regenerator === null) return;
-    try {
-      await regenerateWith(regenerator);
-    } catch (e) {
-      // Q049: the Regenerator is dead with its kernel; the supervisor starts a new pair.
-      if (e instanceof RpcError && e.code === 'disconnected') {
-        supervisor.lost(regenerator);
-        return;
-      }
-      // M19.1: shown in the UI, so the model does not stay stale silently; reported as well.
-      if (!disposed) updateRegenUi({ failed: errorText(e) });
-      throw e;
-    }
-  }
-
-  /** The session lives and `regenerator` is still the one of the live kernel. */
-  function isCurrent(regenerator: Regenerator): boolean {
-    return !disposed && supervisor.regenerator() === regenerator;
-  }
-
-  /**
-   * D3 (M19.1): the result is published only once the view shows its bodies, so an index picked
-   * in the view and the names in the port belong to the same generation (revize C6). The
-   * scheduler runs one regeneration at a time and this one includes the tessellation, so a stale
-   * result neither publishes a snapshot nor sends a tessellation.
-   */
-  async function regenerateWith(regenerator: Regenerator): Promise<void> {
-    const result = await regenerator.run(doc.studio);
-    // Also when the kernel died after its last call: the next kernel numbers its handles anew, so
-    // these must not reach its view.
-    if (result === 'superseded' || !isCurrent(regenerator)) return;
-    // Only bodies go to the counter and the body layer; sketches have their own channel
-    // (ViewportPort.sketches, ADR 0015).
-    const bodies = bodiesOf(result.finalState).map(({ id, shape }) => ({ id, shape }));
-    // Never rejects; settles once the scene is swapped or the sync is stale (spec 09).
-    await viewport.bodies.sync(bodies);
-    // A restart meanwhile reset the view (onReady): the result belongs to a dead kernel.
-    if (!isCurrent(regenerator)) return;
-
-    lastState = result.finalState;
-    // A subscriber that throws does not stop the step; its error is reported after it.
-    let subscriberError: { readonly error: unknown } | null = null;
-    try {
-      regenStatus.publish(result);
-    } catch (error) {
-      subscriberError = { error };
-    }
-    try {
-      regenSketches = sketchesOf(result.finalState);
-      drawSketches();
-      updateRegenUi({
-        bodyCount: bodies.length,
-        lastMs: result.durationMs,
-        failed: null,
-      });
-      applyHidden();
-      applyColors();
-      fitFirstView(bodies.length);
-    } finally {
-      if (subscriberError !== null) reportError(subscriberError.error);
-    }
-  }
-
-  // First view (spec 11, D7 of M19.2): the first finished regeneration after opening decides. It
-  // fits the camera when the document has bodies; either way later regenerations (new bodies, a
-  // kernel restart) leave the camera where the user put it. A regeneration that throws never
-  // gets here, so the next successful one decides.
-  let fitted = false;
-  function fitFirstView(bodyCount: number): void {
-    if (disposed || fitted) return;
-    fitted = true;
-    if (bodyCount > 0) viewport.camera.fitAll();
-  }
-
-  // 5. Visibility of bodies (Q071): the document holds it, the browser reads it, the viewport
-  // mirrors it.
-  let shownHidden: ReadonlySet<BodyId> = browser.hidden.get();
-  lifetime.add(
-    browser.hidden.subscribe(() => {
-      const next = browser.hidden.get();
-      for (const body of next) if (!shownHidden.has(body)) viewport.setBodyVisible(body, false);
-      for (const body of shownHidden) if (!next.has(body)) viewport.setBodyVisible(body, true);
-      shownHidden = next;
+  const pipeline = lifetime.add(
+    createRegenPipeline({
+      doc,
+      kernel: supervisor,
+      viewport,
+      regenStatus,
+      sketches,
+      afterSync: () => {
+        browserView.reapply();
+      },
+      reportError,
     }),
   );
-  /** After a sync: bodies new to the view (and all after a kernel reset) start visible. */
-  function applyHidden(): void {
-    if (disposed) return;
-    for (const body of browser.hidden.get()) viewport.setBodyVisible(body, false);
-  }
-
-  // Colours of bodies (M15): like visibility; a colour set before the body is shown is dropped by
-  // the view, so it is applied again after every sync.
-  let shownColors: ReadonlyMap<BodyId, string> = browser.colors.get();
-  lifetime.add(
-    browser.colors.subscribe(() => {
-      const next = browser.colors.get();
-      for (const [body, color] of next) {
-        if (shownColors.get(body) !== color) viewport.setBodyColor(body, color);
-      }
-      for (const body of shownColors.keys()) {
-        if (!next.has(body)) viewport.setBodyColor(body, null);
-      }
-      shownColors = next;
-    }),
-  );
-  function applyColors(): void {
-    if (disposed) return;
-    for (const [body, color] of browser.colors.get()) viewport.setBodyColor(body, color);
-  }
-
-  // 6. Sketches, planes and axes (M12, M13): app draws the sketches of the regeneration (with
-  // their regions) and the planes and axes switched on in the browser; the edited sketch is
-  // drawn by the SketchEditor.
-  function drawSketches(): void {
-    if (disposed) return;
-    const edited = sketches.current.get()?.featureId;
-    const shown = new Set<string>();
-    for (const artifact of regenSketches) {
-      if (artifact.owner === edited) continue;
-      shown.add(artifact.id);
-      // The regeneration keeps the artifact of an unchanged feature: no new drawing for it.
-      if (drawnSketches.get(artifact.id) === artifact) continue;
-      drawnSketches.set(artifact.id, artifact);
-      viewport.sketches.set(artifact.id, artifactDrawing(artifact.plane, artifact.entities));
-    }
-    for (const id of [...drawnSketches.keys()]) {
-      if (shown.has(id)) continue;
-      drawnSketches.delete(id);
-      viewport.sketches.remove(id);
-    }
-  }
   lifetime.add(
     sketches.current.subscribe(() => {
       const session = sketches.current.get();
       // Entering a sketch: look at it straight on (spec 11, "Skicář").
       if (session !== null) viewport.camera.setViewDirection(session.plane.normal);
-      drawSketches();
     }),
   );
 
-  let shownPlanes: ReadonlySet<PlaneId> = new Set();
-  lifetime.add(
-    browser.visiblePlanes.subscribe(() => {
-      const next = browser.visiblePlanes.get();
-      for (const origin of ORIGIN_PLANES) {
-        if (next.has(origin.id) && !shownPlanes.has(origin.id)) {
-          viewport.sketches.set(origin.id, planeDrawing(origin.plane));
-        } else if (!next.has(origin.id) && shownPlanes.has(origin.id)) {
-          viewport.sketches.remove(origin.id);
-        }
-      }
-      shownPlanes = next;
-    }),
-  );
-
-  // Origin axes (M13): like the planes, a view state of the browser drawn under the axis id.
-  let shownAxes: ReadonlySet<AxisId> = new Set();
-  lifetime.add(
-    browser.visibleAxes.subscribe(() => {
-      const next = browser.visibleAxes.get();
-      for (const origin of ORIGIN_AXES) {
-        if (next.has(origin.id) && !shownAxes.has(origin.id)) {
-          viewport.sketches.set(origin.id, axisDrawing(origin));
-        } else if (!next.has(origin.id) && shownAxes.has(origin.id)) {
-          viewport.sketches.remove(origin.id);
-        }
-      }
-      shownAxes = next;
-    }),
-  );
+  // 5., 6. Visibility and colours of bodies (Q071, M15), planes and axes (M12, M13): the browser
+  // holds them, the viewport mirrors them.
+  const browserView = lifetime.add(bindBrowserView(browser, viewport));
 
   // 7. Edit history and export (M15).
   const history = lifetime.add(createHistoryModel({ log }));
@@ -698,11 +468,11 @@ function wireSession(
   const documentName = lifetime.add(createDocumentNameModel({ doc, ops, locked }));
   const exporter = createFileExporter({
     name: () => doc.meta.name,
-    regenBusy: scheduler.busy,
-    lastState: () => lastState,
+    regenBusy: pipeline.busy,
+    lastState: () => pipeline.lastState(),
     kernel: () => supervisor.kernel(),
-    flush: () => persistence?.flush() ?? Promise.resolve(),
-    persistenceStatus: () => persistenceStatus.get(),
+    flush: () => persistence.flush(),
+    persistenceStatus: () => persistence.status.get(),
     // The exporter gets the file of the live document, not the document (ADR 0011).
     liveFile: () => exportDocument(doc),
     store: deps.store,
@@ -721,33 +491,30 @@ function wireSession(
       mode,
     }),
   );
-  const defaultBodyColor = new ObservableValue(hexColor(paletteOf(deps.theme).face));
+  // The theme is read here, by the last step of the construction.
+  const { viewSettings, defaultBodyColor } = createViewSettings(viewport, deps.theme);
 
   lifetime.add(
     doc.events.on('changed', () => {
-      scheduler.request();
+      pipeline.request();
     }),
   );
-  // Reverse order of release: these go first, so nothing regenerates into released models.
+  // Reverse order of release: it goes first, so no kernel is left to regenerate with.
   lifetime.add(supervisor);
-  lifetime.add(scheduler);
 
   function dispose(): void {
     if (disposed) return;
     disposed = true;
     lifetime.dispose();
-    if (persistence !== null) {
-      // dispose does not save (spec 05); a flush after it still writes the queue.
-      persistence.dispose();
-      persistence.flush().catch(reportError);
-    }
+    // dispose does not save (spec 05); a flush after it still writes the queue.
+    persistence.release(reportError);
   }
 
   async function close(): Promise<void> {
     if (disposed) return;
     let failure: { readonly error: unknown } | null = null;
     try {
-      await persistence?.flush();
+      await persistence.flush();
     } catch (error) {
       failure = { error };
     }
@@ -773,34 +540,27 @@ function wireSession(
     doc,
     readOnly,
     locked,
-    actionIds: ACTION_IDS,
-    toolActionId,
-    toolModes,
-    regen: regenUi.asObservable(),
+    regen: pipeline.state,
     kernel: supervisor.state,
     kernelError: supervisor.error,
     retryKernel() {
       supervisor.retry();
     },
-    persistence: persistenceStatus.asObservable(),
-    persistenceError,
+    persistence: persistence.status,
+    persistenceError: persistence.error,
     selection,
     featureTree,
     browser,
-    tools,
-    toolList,
+    toolbar,
     features,
     actions,
     messages,
     sketches,
     mode,
-    sketchActionIds: SKETCH_ACTION_IDS,
-    sketchConstraintActionId,
     topoInspector,
     history,
     files,
-    fileActionIds: FILE_ACTION_IDS,
-    defaultBodyColor: defaultBodyColor.asObservable(),
+    defaultBodyColor,
     documentName,
     manipulator: {
       hud: manipulators.hud,
@@ -821,22 +581,9 @@ function wireSession(
     mountViewport(el) {
       viewport.mount(el);
     },
-    setTheme(theme) {
-      const palette = paletteOf(theme);
-      viewport.setPalette(palette);
-      defaultBodyColor.set(hexColor(palette.face));
-    },
-    setViewCubeLabels(labels) {
-      viewport.setViewCubeLabels(labels);
-    },
-    setOrbitMode(mode) {
-      viewport.setOrbitMode(mode);
-    },
-    onOrbitModeToggle(listener) {
-      return viewport.onOrbitModeToggle(listener);
-    },
-    async flush() {
-      await persistence?.flush();
+    viewSettings,
+    flush() {
+      return persistence.flush();
     },
     close() {
       closing ??= close();
@@ -849,63 +596,7 @@ function wireSession(
   return session;
 }
 
-/** Loads the document; a missing one is created, unless read-only. */
-async function openDocument(
-  deps: AppSessionDeps,
-  schemas: FeatureSchemaRegistry,
-  handlers: OpHandlerRegistry,
-): Promise<{ doc: DocumentWriter; log: OperationLog }> {
-  const { store, docId } = deps;
-  const loaded = await loadDocument(store, docId, {
-    schemas,
-    handlers,
-    verify: deps.verify ?? false,
-  });
-  if (loaded.ok) return loaded.value;
-  if (loaded.error.kind !== 'not-found' || deps.readOnly) {
-    throw new Error(`Cannot open document '${docId}': ${describeLoadError(loaded.error)}`);
-  }
-  const meta: DocumentMeta = {
-    id: docId,
-    name: deps.translate(NAME_OF_NEW_DOCUMENT),
-    createdAt: deps.now(),
-  };
-  const doc = createDocument({ meta });
-  // The service saves only entries; the store needs the document with its base snapshot first.
-  await store.createDocument(meta, createSnapshot(doc, 0));
-  return { doc, log: createOperationLog() };
-}
-
-function paletteOf(theme: 'light' | 'dark'): ScenePalette {
-  return theme === 'dark' ? DARK_PALETTE : LIGHT_PALETTE;
-}
-
-/** 0xRRGGBB of a palette → '#rrggbb', the form of a body colour in the document. */
-function hexColor(color: number): string {
-  return `#${color.toString(16).padStart(6, '0')}`;
-}
-
-/** Q038: a dispatcher that refuses every change; reading and its events stay. */
-function refuseChanges(inner: OperationDispatcher): OperationDispatcher {
-  const refuse = (): never => {
-    throw new Error('The document is open read-only (open in another tab)');
-  };
-  return {
-    dispatch: refuse,
-    begin: refuse,
-    get inTransaction() {
-      return inner.inTransaction;
-    },
-    events: inner.events,
-  };
-}
-
 /** Errors with nobody to hand them to (a regeneration bug, a failed save or kernel start). */
 function reportError(error: unknown): void {
   console.error(error);
-}
-
-/** The text of an error for the UI (RegenUiState.failed). */
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

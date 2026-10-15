@@ -13,7 +13,9 @@ import {
 } from '@/core';
 import type {
   BodyId,
+  HandleVisibility,
   HighlightPort,
+  ManipulatorGlyphs,
   OverlayPort,
   PickFilter,
   PickResult,
@@ -133,6 +135,13 @@ export function createViewport(deps: {
   viewCubeLabels?: ViewCubeLabels;
   /** Clock of the camera and view cube animations in ms; default performance.now. */
   now?: () => number;
+  /**
+   * M20: sizes of the glyphs of manipulator handles and limits of their hiding. They belong to
+   * interaction, from which render may take only types, so app passes them (MANIPULATOR_GLYPHS,
+   * HANDLE_VISIBILITY).
+   */
+  manipulatorGlyphs: ManipulatorGlyphs;
+  handleVisibility: HandleVisibility;
 }): Viewport {
   let palette = deps.palette ?? LIGHT_PALETTE;
   const now = deps.now ?? (() => performance.now());
@@ -209,7 +218,11 @@ export function createViewport(deps: {
   scene.add(sketchLayer.group);
   // Order in the scene does not matter: renderOrder 4 draws the handles after the sketches.
   const manipulatorLayer = lifetime.add(
-    createManipulatorLayer({ requestRender: scheduleFrame, palette }),
+    createManipulatorLayer({
+      requestRender: scheduleFrame,
+      palette,
+      shape: { glyphs: deps.manipulatorGlyphs, visibility: deps.handleVisibility },
+    }),
   );
   scene.add(manipulatorLayer.group);
   const rig = lifetime.add(

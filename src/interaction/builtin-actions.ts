@@ -18,35 +18,12 @@ import type {
   UndoManager,
 } from '@/ops';
 import type { ActionRegistry } from './actions';
+import { ACTION_IDS, toolActionId, toolModes } from './constants';
 import type { FeatureTreeModel } from './feature-tree';
 import type { Mode } from './mode';
 import type { SelectionModel } from './selection';
 import type { ToolManager } from './tool-manager';
-import { toolModes } from './tools';
 import type { ToolDescriptor } from './tools';
-
-/** Ids of the built-in actions; ui takes them from AppSession.actionIds, never as literals. */
-export const ACTION_IDS = Object.freeze({
-  undo: 'undo',
-  redo: 'redo',
-  fitAll: 'view.fitAll',
-  viewFront: 'view.front',
-  viewBack: 'view.back',
-  viewRight: 'view.right',
-  viewLeft: 'view.left',
-  viewTop: 'view.top',
-  viewBottom: 'view.bottom',
-  viewIso: 'view.iso',
-  featureEdit: 'feature.edit',
-  featureRename: 'feature.rename',
-  featureSuppress: 'feature.suppress',
-  featureDelete: 'feature.delete',
-  rollHere: 'timeline.rollHere',
-  toStart: 'timeline.toStart',
-  stepBack: 'timeline.stepBack',
-  stepForward: 'timeline.stepForward',
-  toEnd: 'timeline.toEnd',
-} as const);
 
 /**
  * A standard view of the camera. The same values as render's StandardView, so render's
@@ -72,11 +49,6 @@ const STANDARD_VIEWS: readonly (readonly [string, StandardViewId])[] = [
 export interface ConfirmRequest {
   readonly key: string;
   readonly params: Readonly<Record<string, string | number>>;
-}
-
-/** The action that activates a tool with a shortcut. */
-export function toolActionId(toolId: string): string {
-  return `tool.${toolId}`;
 }
 
 /** The group of the feature context menu in the Timeline. */

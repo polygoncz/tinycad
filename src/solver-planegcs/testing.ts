@@ -1,4 +1,4 @@
-// Test-only entry point of solver-planegcs (unit and integration tests in tests/).
+// Test-only entry point of solver-planegcs (unit and integration tests in test/).
 // dependency-cruiser allows importing it only from test code, so it never reaches the bundle.
 
 import type { ConstraintSolver } from '@/sketch';

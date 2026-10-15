@@ -26,6 +26,8 @@ updated: 2026-10-13
 
 **Specifikace:** [[06-geometricke-jadro#Volba WASM buildu OCCT (spike v M7)|06 – volba WASM buildu]], [[0013-replicad-opencascadejs|ADR 0013]]
 
+**Návrat do plánu (Pavel 2026-10-14):** po [[M21-vstupni-stav-editovane-featury|M21]], kvůli zásobníku Emscriptenu (A7).
+
 **Navazuje na:** [[M07-kernel-occt]]. Technicky stačí hotové M7, v roadmapě je zařazený až za [[M15-export-a-dokonceni|M15]]. Dřív se vyplatí, pokud předpřipravenému buildu bude chybět třída (např. pro [[M14-topologicke-pojmenovani|M14]]) nebo když bude pomalé počítání map podtvarů ([[0013-replicad-opencascadejs#Důsledky|ADR 0013]]).
 
 ## Úkoly (orientačně)
@@ -36,6 +38,7 @@ updated: 2026-10-13
 - [ ] Výjimky OCCT → kód chyby jádra (`KernelErrorCode`) v C++.
 - [ ] Adaptér `kernel-occt` přepnout na nový modul, kontraktová sada musí projít beze změny.
 - [ ] Únik paměti ([[Q054 Únik paměti v OCCT buildu|Q054]]): najít příčinu (C++, sanitizer / počítání `Standard_Transient`), opravit nebo obejít, a zavést paměťový test, který únik v adaptéru opravdu odhalí. Pokud únik zůstane: zvážit restart workeru jádra po překročení paměti (regen umí `'disconnected'`, [[Q049 Pád jádra během regenerace|Q049]]).
+- [ ] Exportovat `stackSave` a `stackRestore` a obnovit ukazatel zásobníku po výjimce C++, která doletí do JS (A7 z [[Revize kódu 2026-10-14|revize kódu]], [[Q055 Pád WASM jádra|Q055]]). Dnes každá taková výjimka posune `__stack_pointer` o 32 B a po ~262 000 výjimkách nastane trap.
 - [ ] Porovnání s `replicad-opencascadejs`: velikost WASM, čas startu, čas tessellace na větším modelu.
 - [ ] Nové ADR, které nahradí [[0013-replicad-opencascadejs|ADR 0013]].
 

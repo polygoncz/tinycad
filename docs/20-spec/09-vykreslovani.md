@@ -66,8 +66,10 @@ export function createViewport(deps: {
   quality?: MeshQuality;                              // výchozí MESH_QUALITY
   palette?: ScenePalette;                             // výchozí LIGHT_PALETTE (nahrazuje background)
   reportError?: (body: BodyId, error: unknown) => void;  // výchozí console.error
-  viewCubeLabels?: ViewCubeLabels;                    // M17, výchozí anglické
-  now?: () => number;                                 // M17, hodiny animací, výchozí performance.now
+  viewCubeLabels?: ViewCubeLabels;                    // výchozí anglické
+  now?: () => number;                                 // hodiny animací, výchozí performance.now
+  manipulatorGlyphs: ManipulatorGlyphs;               // z interaction/constants.ts, dodá app (viz Manipulátory)
+  handleVisibility: HandleVisibility;                 // dtto
 }): Viewport;
 
 export const MESH_QUALITY: MeshQuality = { linearDeflection: 0.1, angularDeflection: 0.5 };
@@ -94,7 +96,7 @@ export const DARK_PALETTE: ScenePalette;
 - Typy portu (`ViewportPort`, `PickResult`, `HighlightTarget`, `HighlightPort`, `OverlayPort`, události, `BodyId`) definuje [[10-interakce#Port viewportu]], `render` je importuje jen jako typy z `@/interaction`.
 - `mount`, `bodies` a `camera` nejsou součástí portu: používá je jen `app` (kompoziční kořen). Nástroje vidí jen `ViewportPort`.
 - `dispose()`: `unmount()`, uvolní všechna tělesa, zvýraznění, overlay, ovládání kamery a odběratele `events`. Další volání čehokoli kromě `dispose` je chyba, i na podobjektech (`bodies`, `camera`, `highlight`, `overlay`, `events.on`).
-- Barvy scény jsou jen v `ScenePalette` ([[Q072 Barvy scény podle režimu|Q072]]): konstanty `FACE_COLOR`, `EDGE_COLOR`, barvy ve `highlight-layer`, `overlay-layer` a `scene-helpers` se nahradí čtením z palety. `setPalette` změní barvy materiálů a pozadí a zavolá `requestRender()`. Paletu vybírá `app` podle režimu, který mu předá `ui` (`AppSession.setTheme`); `ui` typy z `render` nezná.
+- Barvy scény jsou jen v `ScenePalette` ([[Q072 Barvy scény podle režimu|Q072]]): konstanty `FACE_COLOR`, `EDGE_COLOR`, barvy ve `highlight-layer`, `overlay-layer` a `scene-helpers` se nahradí čtením z palety. `setPalette` změní barvy materiálů a pozadí a zavolá `requestRender()`. Paletu vybírá `app` podle režimu, který mu předá `ui` (`AppSession.viewSettings.setTheme`, [[11-ui]]); `ui` typy z `render` nezná.
 - `setBodyVisible` jen skryje nebo ukáže `BodyView` (`visible`); picking skryté těleso ignoruje (ani nezakrývá tělesa za ním), zvýraznění skrytého tělesa se nekreslí a `camera.fitAll` ho vynechá (rozhodnutí 2026-10-13). Obojí jde přes `BodyLayer.bounds()`, který počítá jen viditelná tělesa; z něj bere i picker toleranci zakrytí. Světla scény paleta nemá. Těleso, které po `sync` zmizí, ztratí i stav viditelnosti. Viditelnost se neukládá ([[Q071 Viditelnost těles|Q071]]).
 - `setBodyColor` (M15, [[Q073 Průhlednost a barva těles|Q073]]): těleso s barvou dostane materiál ploch s touto barvou (kopie sdíleného materiálu ploch; materiály podle barvy sdílí tělesa se stejnou barvou, `BodyLayer` je drží s počtem uživatelů a uvolní, když je nikdo nepoužívá), `null` vrátí sdílený materiál palety. Hrany zůstávají v barvě palety. Barva je stav vrstvy podle `BodyId` jako viditelnost: přežije `sync` s novým handle a zmizí s tělesem. `setPalette` mění jen výchozí materiál, obarvená tělesa ne. Stejná hodnota nic nepřekresluje, jinak `requestRender()`. Převod `#rrggbb` → číslo je čistá funkce `parseHexColor` v `palette.ts` (neplatný text → výjimka; platnost hlídá už dokument, [[03-dokument#Metadata těles]]). Barva tělesa, které ve vrstvě ještě **není** zobrazené (před dokončením `sync`), se zahodí (neplatný text ale vyhodí vždy – kontrola je před hledáním tělesa). Uloženou barvu dodá `app` z `BrowserModel.colors` ([[10-interakce#Prohlížeč: `BrowserModel` a viditelnost těles]]) a po každém dokončeném `sync` ji použije znovu, stejně jako skrytí ([[11-ui#Kompoziční kořen (app)]]).
 - `mount` je odolný proti chybě (např. prohlížeč bez WebGL): uvolní, co už vytvořil, a výjimku pošle dál.
@@ -276,55 +278,60 @@ Zvýraznění plochy je **malá vlastní kopie** jejích trojúhelníků: čist�
 - `OverlayLayer implements OverlayPort`: `OverlayShape` → `LineSegments`/`Points` ve vlastní skupině scény, styly `preview` a `construction` jako dva sdílené materiály. `set(id, …)` uvolní předchozí geometrii pod stejným `id`. `lines` s lichým počtem bodů je chyba (assert), pod `id` pak zůstane předchozí stav. `construction` je čárkovaná (`LineDashedMaterial`).
 - Zvýraznění a overlay do pickingu nevstupují. Zvýraznění plochy se kreslí nad plochou tělesa díky `polygonOffset` (u čar a bodů nemá účinek). Hrany zvýraznění a overlay mají `depthTest` zapnutý a vyšší `renderOrder` (zvýraznění 1, overlay 2): na stejné hloubce vyhrají, ale tělesa před nimi je zakryjí.
 
-## Manipulátory (M18)
+## Manipulátory
 
-`ManipulatorLayer` (typ splňuje `ManipulatorPort`; vnitřní vrstva má `pick` s projekcí a port za ni doplní viewport, stejně jako u skic; [[10-interakce#Manipulátory (M18)]], [[0021-manipulatory-kotvy-z-regenerace|ADR 0021]]) kreslí úchyty [[Manipulátor|manipulátorů]] a pickuje je (v M18 ukazovala i štítek s hodnotou, od M19 ho nahrazuje HUD v `ui`).
+`ManipulatorLayer` (typ splňuje `ManipulatorPort`; vnitřní vrstva má `pick` s projekcí a port za ni doplní viewport, stejně jako u skic; [[10-interakce#Manipulátory (M18)]], [[0021-manipulatory-kotvy-z-regenerace|ADR 0021]], [[0022-rezimy-a-hud-manipulatoru|ADR 0022]]) kreslí úchyty [[Manipulátor|manipulátorů]] a pickuje je. Text s hodnotou kreslí `ui` (HUD), ne `render`.
 
-- **Glyfy s konstantní velikostí na obrazovce.** (Rozměry a tvary v této odrážce platily v M18, od M19 je nahrazuje tabulka v [[#Vzhled od M19 (styl Fusion)]]; princip škálování platí dál.) Lineární úchyt je šipka: dřík `LineSegments2` (3 px) a kužel (`ConeGeometry`) na konci, celková délka `HANDLE_ARROW_PX = 80` px od `position` ve směru `direction`. Úhlový úchyt je kružnice: `LineSegments2` (3 px), 64 segmentů, poloměr `HANDLE_RING_PX = 60` px kolem `center` v rovině kolmé na `axis`. Měřítko skupiny glyfu = světové jednotky na pixel ortografické kamery (`(top − bottom) / zoom / výška plátna`), přepočítané ve `draw` viewportu před `renderer.render` (kamera se mohla změnit gestem nebo animací).
-- **Barvy:** `tint` `x`/`y`/`z` → `palette.axes[0..2]`, `neutral` → `palette.selection`. Stav `hover` a `active` → `palette.hover`. `setPalette` přebarví. Paleta se nemění.
-- `depthTest: false`, `renderOrder` 4: úchyt je vidět i uvnitř nebo za tělesem, které posouvá (nad skicami, které mají 3).
-- **Skrytí šipky:** lineární úchyt s `|direction · směr pohledu| > HANDLE_HIDE_COS = 0,98` se nekreslí a `pick` ho nevrátí. Táhnout ho stejně nejde (`PARALLEL_LIMIT` ve spec 10).
-- **Skrytí kružnice z hrany:** úhlový úchyt s `|axis · směr pohledu| < HANDLE_RING_HIDE_COS = 0,05` se nekreslí a `pick` ho nevrátí. Ve standardních pohledech jsou tak dvě ze tří kružnic Transformace skryté, protože z nich zbude čára, kterou táhnout nejde. Mez je přísnější než `EDGE_ON_LIMIT` (0,02), takže viditelná kružnice jde táhnout vždy (rozhodnutí 2026-10-14).
-- `set(handles)` nahradí vše. Glyf se stejným `id` a `kind` se znovu použije (jen pozice, orientace, barva), ostatní se uvolní. Stejné pohledy jako minule nic nepřekreslují, jinak `requestRender()`.
-- **Picking** (`pick(x, y)`) je čistá funkce `pickHandle(screenHandles, x, y)` v `manipulator-pick.ts` (bez `three`). Viewport předá úchyty promítnuté do px: šipka jako úsečka od `position` po špičku, kružnice jako uzavřená lomená čára ze 64 bodů. Tolerance je `HANDLE_PICK_PX = 8` px u šipky a 6 px u kružnice. Vyhrává nejmenší vzdálenost, při shodě dřívější úchyt v pořadí `set`. Žádný úchyt → `null`. Nepřipojený viewport → `null`.
-- **Promítnutí** obstará čistá funkce v `manipulator-pick.ts`. Viewport dodá `project` z kamery, takže tvar glyfu (délka, poloměr, skrytí) se počítá na jednom místě pro kreslení i picking:
-  ```ts
-  type ScreenPoint = readonly [x: number, y: number];
-  type ScreenHandle =
-    | { kind: 'linear'; id: string; from: ScreenPoint; to: ScreenPoint }
-    | { kind: 'angular'; id: string; points: readonly ScreenPoint[] };   // HANDLE_RING_SEGMENTS = 64 bodů, uzavřená
-  function projectHandles(handles: readonly HandleView[], project: (p: Vec3) => ScreenPoint, worldPerPx: number, viewDirection: Vec3): readonly ScreenHandle[];
-  // skryté úchyty vynechá (arrowHidden, ringHidden), pořadí zachová; tolerance HANDLE_PICK_PX = 8, HANDLE_RING_PICK_PX = 6
-  ```
-- **Near a far:** obálka zobrazených úchytů (`handleBounds(handles, worldPerPx)`: krychle o poloviční straně délky šipky nebo poloměru kružnice × `worldPerPx` kolem `position`/`center`, i u skrytých úchytů, aby obálka při otáčení neskákala; bez úchytů `null`) patří do obálky všeho viditelného ([[#Near a far]]), aby glyf daleko od těles neořízl hloubkový řez.
-- **Štítek (jen M18, od M19 zrušen):** `setLabel` ukáže nebo skryje jeden absolutně pozicovaný `<div>` nad canvasem (rodič canvasu, `pointer-events: none`, třída `tc-manipulator-label`). Barvy jsou z CSS proměnných `ui` (`--chrome-bg`, `--text-primary`), `render` je jen odkazuje jménem. `unmount` prvek odebere, další `mount` ho vytvoří znovu.
-- `dispose` uvolní geometrie a materiály.
+### Rozměry a prahy
 
-### Vzhled od M19 (styl Fusion)
+Rozměry glyfů a prahy skrytí **nevlastní `render`**. Jsou v datovém vstupním bodě `interaction/constants.ts` (`MANIPULATOR_GLYPHS`, `HANDLE_VISIBILITY`, [[M20-zpevneni-struktury|M20]] A6), protože o manipulátorech rozhoduje `interaction` a stejná čísla potřebuje HUD v `ui`. `render` smí z `interaction` jen typy, proto je dostane od `app` při vytvoření:
 
-M19 nahrazuje glyfy výše ([[0022-rezimy-a-hud-manipulatoru|ADR 0022]]). Velikosti jsou v CSS px, glyf se škáluje stejně jako dosud (světové jednotky na px):
+```ts
+createViewport({ …, manipulatorGlyphs: ManipulatorGlyphs, handleVisibility: HandleVisibility })
+```
 
-| Druh | Glyf | Picking |
+V `render` zůstávají jen věci kreslení a pickingu: počty segmentů (`HANDLE_RING_SEGMENTS = 64`, `HANDLE_QUARTER_SEGMENTS = 16`) a tolerance pickingu (`HANDLE_*PICK_PX`).
+
+### Glyfy
+
+Velikosti jsou v CSS px. Glyf má na obrazovce konstantní velikost: měřítko skupiny = světové jednotky na pixel ortografické kamery (`(top − bottom) / zoom / výška plátna`), přepočítané ve `draw` před `renderer.render`.
+
+| Druh | Glyf (hodnoty `MANIPULATOR_GLYPHS`) | Picking |
 |---|---|---|
-| `linear` | dřík `LineSegments2` 4 px od 14 px do 80 px od `position` + kužel (délka 18 px, poloměr 6 px) na konci | úsečka 14–98 px, tolerance 8 px |
-| `angular` `quarter` | čtvrtkruh `LineSegments2` 4 px, poloměr `HANDLE_RING_PX = 72` px, od `zero` k `axis × zero`, 16 segmentů | lomená čára, tolerance 6 px |
-| `angular` `full` | kružnice 4 px, poloměr 72 px, 64 segmentů | lomená čára, tolerance 6 px |
-| `planar` | čtverec od 26 do 46 px po `u` i `v` od `origin`: výplň (průhlednost 0,35) + obrys 1,5 px | bod uvnitř promítnutého čtyřúhelníku |
-| `point` | kotouček o poloměru 9 px kolem `position` (stále natočený ke kameře), výplň barvou pozadí palety, obrys 2 px | vzdálenost od průmětu ≤ 10 px |
+| `linear` | dřík `LineSegments2` 4 px od `arrowStartPx` (14) do `arrowShaftPx` (80) od `position` + kužel (`arrowConePx` 18, poloměr `arrowConeRadiusPx` 6) na konci; špička `arrowTipPx` = 98 | úsečka 14–98 px, tolerance 8 px |
+| `angular` `quarter` | čtvrtkruh `LineSegments2` 4 px, poloměr `ringPx` (72), od `zero` k `axis × zero`, 16 segmentů | lomená čára, tolerance 6 px |
+| `angular` `full` | kružnice 4 px, poloměr `ringPx`, 64 segmentů | lomená čára, tolerance 6 px |
+| `planar` | čtverec od `squareNearPx` (26) do `squareFarPx` (46) po `u` i `v` od `origin`: výplň (průhlednost 0,35) + obrys 1,5 px | bod uvnitř promítnutého čtyřúhelníku |
+| `point` | kotouček o poloměru `pointPx` (9) kolem `position` (stále natočený ke kameře), výplň barvou pozadí palety, obrys 2 px | vzdálenost od průmětu ≤ 10 px |
 
-- **Priorita pickingu:** `point` vyhrává vždy, když je v toleranci. Pak `planar` (bod uvnitř). Pak nejbližší z `linear` a `angular`, při shodě dřívější v pořadí `set`.
-- **Skrytí:** šipka podle `HANDLE_HIDE_COS` jako dosud; čtvrtkruh i kružnice podle `HANDLE_RING_HIDE_COS`; čtverec, jehož normála `u × v` je téměř kolmá na pohled (`|n · view| < 0,05`), se skryje (je vidět z hrany). Bod se neskrývá.
-- **`dashed`:** čárkovaný dřík šipky a obrys čtverce (`LineMaterial` s `dashed`, čárka 6 px, mezera 5 px). Střed v režimu pivotu kreslí deskriptor jako `point` s `dashed`: obrys místo výplně a tečka uprostřed.
-- **Barvy** jako dosud (`axes` pro x/y/z, `selection` pro neutral, `hover` pro hover a active). Výplň čtverce má barvu podle `tint` čtverce (normála roviny: čtverec XY má barvu Z).
-- **Štítek zaniká:** `setLabel`, `tc-manipulator-label` a jeho DOM prvek se ruší, text kreslí `ui` (HUD).
+- **Skrytí** (hodnoty `HANDLE_VISIBILITY`): šipka s `|direction · směr pohledu| > arrowHideCos` (0,98), čtvrtkruh i kružnice s `|axis · směr pohledu| < ringHideCos` (0,05) a čtverec s `|(u × v) · směr pohledu| < squareHideCos` (0,05) se nekreslí a `pick` je nevrátí. Bod se neskrývá. **Invariant:** každý práh skrytí je přísnější než odpovídající práh tahu v `interaction` (`PARALLEL_LIMIT`, `EDGE_ON_LIMIT`, [[10-interakce]]), takže glyf zmizí dřív, než ho nejde táhnout. Hlídá ho test v `interaction`.
+- **`dashed`:** čárkovaný dřík šipky a obrys čtverce (`LineMaterial` s `dashed`, čárka 6 px, mezera 5 px). Oblouky ho ignorují. Bod s `dashed` (střed v režimu pivotu) má plný obrys 2 px bez výplně a tečku o poloměru 3 px.
+- **Barvy:** `tint` `x`/`y`/`z` → `palette.axes[0..2]`, `neutral` → `palette.selection`, stav `hover` a `active` → `palette.hover`. Výplň čtverce má barvu podle `tint` čtverce (normála roviny: čtverec XY má barvu Z). `setPalette` přebarví.
+- **Pořadí kreslení:** `depthTest: false`, takže úchyt je vidět i uvnitř tělesa, které posouvá. Výplně (čtverec, bod) mají `renderOrder` 4, čáry, kužel a tečka 4,5 (nad skicami, které mají 3).
+- `set(handles)` nahradí vše. Glyf se stejným `id` a `kind` se znovu použije (jen pozice, orientace, barva), ostatní se uvolní. Stejné pohledy jako minule nic nepřekreslují, jinak `requestRender()`. `dispose` uvolní geometrie a materiály.
+
+### Promítnutí a picking
+
+Tvar glyfu (délka, poloměr, skrytí) se počítá na jednom místě pro kreslení i picking, čistými funkcemi v `manipulator-pick.ts` (bez `three`):
+
+```ts
+type ScreenPoint = readonly [x: number, y: number];
+type ScreenHandle =
+  | { kind: 'linear'; id: string; from: ScreenPoint; to: ScreenPoint }                     // 14–98 px
+  | { kind: 'angular'; id: string; points: readonly ScreenPoint[]; closed: boolean }       // closed = celá kružnice
+  | { kind: 'planar'; id: string; corners: readonly ScreenPoint[] }
+  | { kind: 'point'; id: string; center: ScreenPoint; radius: number };
+interface HandleShape { readonly glyphs: ManipulatorGlyphs; readonly visibility: HandleVisibility }
+function projectHandles(handles: readonly HandleView[], project: (p: Vec3) => ScreenPoint, worldPerPx: number, viewDirection: Vec3, shape: HandleShape): readonly ScreenHandle[];
+// skryté úchyty vynechá (handleHidden), pořadí zachová
+function pickHandle(screenHandles: readonly ScreenHandle[], x: number, y: number): string | null;
+function handleBounds(handles: readonly HandleView[], worldPerPx: number, glyphs: ManipulatorGlyphs): Bounds | null;
+```
+
+- **Priorita pickingu:** `point` vyhrává vždy, když je v toleranci. Pak `planar` (bod uvnitř). Pak nejbližší z `linear` a `angular`, při shodě dřívější v pořadí `set`. Žádný úchyt nebo nepřipojený viewport → `null`.
+- **Near a far:** obálka zobrazených úchytů (`handleBounds`) patří do obálky všeho viditelného ([[#Near a far]]), aby glyf daleko od těles neořízl hloubkový řez. Šipka a kružnice: krychle o poloviční straně délky šipky nebo poloměru × `worldPerPx`; čtverec: jeho čtyři rohy; bod: krychle o poloviční straně `pointPx` × `worldPerPx`. Počítá se i ze skrytých úchytů, aby obálka při otáčení neskákala.
 - **`project(world)`** promítne bod kamerou do CSS px vůči ploše pohledu (stejně jako picking), nepřipojený viewport → `null`.
-- **`viewChanged`:** ve `draw` po vykreslení, když se od minulého snímku změnila kamera (`target`, `orientation`, `halfHeight`) nebo velikost plochy; `generation` roste o 1. Animace kamery ho tak posílá každý snímek, klidová scéna nikdy.
-- Čisté funkce v `manipulator-pick.ts` (`projectHandles`, `pickHandle`, `handleBounds`, `handleHidden`, `squareHidden`, `arcPoints`) pokrývají všechny druhy. `ScreenHandle`: `linear` `{ from, to }` (14–98 px), `angular` `{ points, closed }` (`closed` = celá kružnice), `planar` `{ corners }`, `point` `{ center, radius }`.
-- **Upřesnění z implementace (M19):**
-  - `dashed` platí pro dřík šipky a obrys čtverce. Oblouky ho ignorují, bod s `dashed` má plný obrys 2 px bez výplně a tečku o poloměru 3 px.
-  - Výplně (čtverec, bod) mají `renderOrder` 4, čáry, kužel a tečka 4,5, aby obrys neskončil pod výplní.
-  - Obálka (`handleBounds`) čtverce jsou jeho čtyři rohy, bodu krychle o poloviční straně 9 px × `worldPerPx`.
-  - `viewChanged`: změnu pozná čistá funkce `viewChangedSince(previous, next)` v `view-change.ts` (porovnání `target`, `orientation`, `halfHeight`, šířky a výšky po číslech). První snímek po `mount` se hlásí jako změna, aby si HUD spočítal polohy.
+- **`viewChanged`:** ve `draw` po vykreslení, když se od minulého snímku změnila kamera (`target`, `orientation`, `halfHeight`) nebo velikost plochy; `generation` roste o 1. Změnu pozná čistá funkce `viewChangedSince(previous, next)` v `view-change.ts`. Animace kamery ho posílá každý snímek, klidová scéna nikdy. První snímek po `mount` se hlásí jako změna, aby si HUD spočítal polohy.
 
 
 ## Skici
@@ -343,7 +350,7 @@ Kresby skic a rovin ([[12-skicar#Kresba a picking]], [[0017-modul-sketch-a-skica
   - `SketchLayer` kreslí mřížku jen v rovině kresby s `editing`, bez ní žádnou. `LineSegments` 1 px, vedlejší čáry `palette.grid[1]`, hlavní `palette.grid[0]`, `depthTest: true`, `depthWrite: false`, `renderOrder` 1,5 (nad tělesy, pod výplněmi oblastí a čarami skici). Čtverec má `halfExtent` = `worldPerPx` · úhlopříčka / 2 okolo průmětu cíle kamery do roviny;
   - mřížka se staví znovu jen při změně roviny nebo kroku, posunu středu o víc než čtvrtinu `halfExtent` nebo když potřebný `halfExtent` vzroste (oddálení). Jinak zůstává;
   - mřížka patří do `SketchLayer.bounds()` ([[#Near a far]]). Je vidět bez ohledu na přepínač přichycení ve skicáři;
-  - `Viewport.sketchGridStep()` = `sketchGridStep` z velikosti pixelu posledního snímku (před prvním snímkem 1). Podle něj skicář přichytí body ([[12-skicar#Režim skicáře (interaction)]]).
+  - `Viewport.sketchGridStep()` = `sketchGridStep` z velikosti pixelu posledního snímku (před prvním snímkem 1). Podle něj skicář přichytí body ([[12-skicar#Režim skicáře (sketcher)]]).
 - **Picking:** s `'sketchEntity'` ve filtru se nejdřív zkouší skici. `SketchLayerInternal.pick(camera, x, y, width, height, visible: (point: Vec3) => boolean)`: v každé kresbě se vezme první zásah ze `sketchHits`, jehož 3D bod je `visible`; kresba s `editing` kontrolu vynechá (editovaná skica zakrytá není). Mezi kresbami rozhoduje `betterSketchHit`. Viewport předá `visible` = `picker.isVisible(camera, point)` (M19.2 D2). Zásah → `{ kind: 'sketchEntity', sketch: id kresby, entity: id bodu nebo křivky, point }` (`point` = bod na segmentu nebo bod ve 3D). Bez zásahu pokračují hrany a plochy podle filtru. `camera.fitAll` kresby skic nezahrnuje.
 - `HighlightLayer` cíle `sketchEntity` vypouští (zvýraznění skici nese styl kresby).
 - **Oblasti** (M13, [[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R75]]): kresba může nést `regions` (uzavřené polygony v rovině kresby, spočítá je `interaction`). `SketchLayer` z každé oblasti postaví výplň (`ShapeGeometry` z `THREE.Shape` s dírami v souřadnicích roviny, umístěnou rámcem roviny), bez zvýraznění neviditelnou; cíle `sketchRegion` z `HighlightLayer` ji obarví (`hover`, `selection`, průhlednost 0,35, `renderOrder` 2 – pod čarami skici). Výplň má od M19.2 `depthTest: true`, `depthWrite: false` a polygon offset −1/−1 jako čáry (D2, nahrazuje část R75), takže zvýrazněná oblast nepřebarví celé těleso, jen viditelnou část výplně. Picking oblasti je čistá funkce `pickSketchRegion(drawings, ray, accept?: (sketch, point) => boolean)` v `sketch-pick.ts`: průsečík paprsku s rovinou kresby (`plane.intersectRay`), `toLocal`, bod v polygonu (`pointInRegion`, sudo-liché pravidlo přes `outer` i `holes`), z více kreseb nejbližší podél paprsku. Oblast, kterou `accept` odmítne, se přeskočí a hledá se dál (bez `accept` platí každý zásah). Vrstva ji volá z `pickRegion(ray, visible)` s `accept` = kresba s `editing` vždy, jinak `visible(point)`, takže oblast za tělesem se nevybere. Zásah → `{ kind: 'sketchRegion', sketch: id kresby, region: id oblasti, point }`.
@@ -368,7 +375,7 @@ Filtr (`PickFilter`, [[10-interakce#Port viewportu]], M10.1): průchod přes hra
 ## Testy
 
 `render` se testuje nejhůř, proto v něm má být co nejméně logiky ([[Q061 Testy render v Node|Q061]]):
-- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, od M17 operace kamery (`orbit`, `pan`, `zoomAt`, `turn`, `ease`, `interpolate`, `clipRange`, `orientationFor`), `cameraGesture`, `wheelFactor`, `buildViewCube` a `cubeRegionAt`, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor` (od M17 zaniká), od M13 `pickSketchRegion` a `pointInRegion`, od M15 `parseHexColor`, od M18 `pickHandle`, `projectHandles`, `handleBounds`, `arrowHidden` a `ringHidden`, od M19 `squareHidden`, `arcPoints` a `viewChangedSince`, od M19.2 `sketchHits`, `sketchGridStep` a `gridLines` (`sketch-grid.ts`) (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
+- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, od M17 operace kamery (`orbit`, `pan`, `zoomAt`, `turn`, `ease`, `interpolate`, `clipRange`, `orientationFor`), `cameraGesture`, `wheelFactor`, `buildViewCube` a `cubeRegionAt`, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor` (od M17 zaniká), od M13 `pickSketchRegion` a `pointInRegion`, od M15 `parseHexColor`, `pickHandle`, `projectHandles`, `handleBounds`, `handleHidden`, `arcPoints` a `viewChangedSince`, od M19.2 `sketchHits`, `sketchGridStep` a `gridLines` (`sketch-grid.ts`) (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
 - Testy `render` nesmí importovat `@/kernel/testing` (`FakeKernel`): `render` závisí na `kernel` jen typově a `testing.ts` otevírá jen hodnotovým závislostem ([[01-architektura]]). Sítě v testech jsou ruční, malé a záměrně s klíči ploch mimo pořadí.
 - Kód s Three.js (`Viewport`, `BodyView`, vrstvy) se ověřuje ručně na dev stránce `dev/viewport.html` a e2e testy (Playwright). Three.js ale běží i v Node, takže část kódu s ním má testy v Node: `Picker` (`picker.test.ts` s ruční sítí; od [[M19.1-opravy-z-revize|M19.1]] i hrany z více segmentů, kontrola zakrytí a `body`, `edgeIndex` a `point` v aserci, od M19.2 `isVisible`), `SketchLayer` a `HighlightLayer`.
 

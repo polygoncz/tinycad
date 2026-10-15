@@ -43,8 +43,10 @@ Jediná entita až do M10 je **kvádr (Box)**. Druhá entita v M11 je zkouška r
 | [[M19-manipulator-fusion\|M19]] | Manipulátor ve stylu Fusion | `interaction`, `render`, `app`, `ui`, `features/*` | šipky, čtverce, oblouky a střed; lišta režimů (Volný, Posun, Rotace, Nastavit pivot), pole hodnoty; rotace jako tři úhly ([[0022-rezimy-a-hud-manipulatoru\|ADR 0022]]) |
 | [[M19.1-opravy-z-revize\|M19.1]] | Opravy z revize kódu | `core`, `ops`, `document`, `persistence`, `kernel-occt`, `interaction`, `app`, `ui`, `features/*` | ověřené chyby z [[Revize kódu 2026-10-14\|revize kódu]] (menu, rollback bar, validace zápisu, pád jádra, výjimky OCCT) a viditelné chyby v UI |
 | [[M19.2-ux-backlog\|M19.2]] | UX backlog | `render`, `interaction`, `persistence`, `app`, `ui`, `features/*` | barva výběru, skica zakrytá tělesy, kóty ve viewportu, přejmenování dokumentu, klávesnice, kontrast, přetečení timeline |
+| [[M20-zpevneni-struktury\|M20]] | Zpevnění struktury | `document`, `regen`, `plugin-api`, `interaction`, `render`, `app`, `ui`, `features/*` | dluh z [[Revize kódu 2026-10-14\|revize kódu]] A2–A6, A8, A9: úzká rozhraní, kontrakty v typech, tabulka druhů referencí, rozdělení session, modul `sketcher`, `evaluateParams` |
+| [[M21-vstupni-stav-editovane-featury\|M21]] | Vstupní stav editované featury | `regen`, `interaction`, `render`, `app` | výběr a zvýraznění nad vstupem editované featury, náhled zvlášť ([[Q075 Vstupní stav editované featury\|Q075]]) |
 
-**Noční rychloakce 2026-10-14:** [[M11-dalsi-entity|M11]]–[[M15-export-a-dokonceni|M15]] implementovány bez průběžného schvalování, rozhodnutí v [[Rozhodnutí noční rychloakce]]. M16 se nedělá – předpřipravený build stačil na celou první verzi.
+**Noční rychloakce 2026-10-14:** [[M11-dalsi-entity|M11]]–[[M15-export-a-dokonceni|M15]] implementovány bez průběžného schvalování, rozhodnutí v [[Rozhodnutí noční rychloakce]]. M16 se tehdy nedělal – předpřipravený build stačil na celou první verzi. Pavel 2026-10-14 ho vrátil do plánu za M21 kvůli zásobníku Emscriptenu (A7 z [[Revize kódu 2026-10-14|revize kódu]]).
 
 Stav milníků (`todo` / `doing` / `done`) je **jen ve vlastnostech** souborů milníků – tabulka níže se z nich generuje sama:
 
@@ -56,14 +58,14 @@ Stav milníků (`todo` / `doing` / `done`) je **jen ve vlastnostech** souborů m
 M0 → M1 → M2 → M3 ─┬─► M4 ────────────────────────┐
                    │                              │
           M1 → M5 ─┴─► M6 ─► M7 ─► M8 ─► M9 ─► M10 ─► M10.1 ─► M11 ─► M12 ─► M13 ─► M14 ─► M15 ─► M16
-                                                                                             └─► M17 ─► M17.1 ─► M18 ─► M19 ─► M19.1 ─► M19.2
+                                                                                             └─► M17 ─► M17.1 ─► M18 ─► M19 ─► M19.1 ─► M19.2 ─► M20 ─► M21 ─► M16
 ```
 
 M4 (persistence) a M5 (port jádra) na sobě nezávisí – pořadí lze prohodit. Persistence je dřív, protože ověří formát logu, dokud je čerstvý.
 
 Milník `MNN.X` je neplánovaná úprava mezi dvěma milníky ([[Konvence vaultu#Principy|konvence]]); M10.1 nese opravy z revize architektury po M10.
 
-M16 (vlastní OCCT build) technicky potřebuje jen M7. Na konci je proto, že předpřipravený build stačí. Přesune se dřív, pokud mu bude chybět API ([[0013-replicad-opencascadejs|ADR 0013]]).
+M16 (vlastní OCCT build) technicky potřebuje jen M7. Dlouho byl na konci, protože předpřipravený build stačí; od 2026-10-14 je zařazený za M21 kvůli zásobníku Emscriptenu. Přesune se dřív, pokud mu bude chybět API ([[0013-replicad-opencascadejs|ADR 0013]]).
 
 ## Jak pracovat s milníkem
 

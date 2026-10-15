@@ -7,10 +7,17 @@ import type {
   ParamIssue,
   PartStudioData,
 } from '@/document';
+import { NO_VARIABLES, evaluateParams } from '@/document';
 import { kernelErrorCode } from '@/kernel';
 import type { GeometryKernel, KernelErrorCode, ShapeHandle } from '@/kernel';
 import { createBuildSession } from './build-context';
-import type { Anchor, BuildOutput, FeatureAnchors, FeatureBuilder } from './builder';
+import type {
+  Anchor,
+  BuildOutput,
+  FeatureAnchors,
+  FeatureBuilder,
+  ModelingKernel,
+} from './builder';
 import { EMPTY_STATE, bodiesOf, sketchesOf } from './state';
 import type { FeatureError, FeatureStatus, RegenState } from './state';
 
@@ -25,7 +32,7 @@ export interface RegenResult {
   readonly statuses: ReadonlyMap<FeatureId, FeatureStatus>;
   /**
    * Anchors of manipulators (M18): every feature in front of the rollback bar with status ok or
-   * warning whose builder returned anchors, built or cached; deeply frozen.
+   * warning, built or cached ({} for a feature without a manipulator, M20); deeply frozen.
    */
   readonly anchors: ReadonlyMap<FeatureId, FeatureAnchors>;
   readonly durationMs: number;
@@ -50,7 +57,7 @@ export interface Regenerator {
 
 /**
  * Cache entry of one position (Q042): the feature, its output state and its status; since M18
- * the deeply frozen anchors its builder returned (only with ok or warning).
+ * the deeply frozen anchors its builder returned (every entry with ok or warning, none otherwise).
  */
 interface CacheEntry {
   readonly feature: FeatureInstance;
@@ -59,13 +66,19 @@ interface CacheEntry {
   readonly anchors?: FeatureAnchors;
 }
 
+/**
+ * The kernel as the Regenerator uses it (ADR 0011): what builders get, and release for the mark &
+ * sweep of dead handles. Errors are told apart by kernelErrorCode, not by a kernel member.
+ */
+type RegenKernel = ModelingKernel & Pick<GeometryKernel, 'release'>;
+
 // Statuses go to listeners and the UI and stay in the cache, so each one is frozen (spec 07).
 const OK: FeatureStatus = Object.freeze({ kind: 'ok' });
 const SUPPRESSED: FeatureStatus = Object.freeze({ kind: 'suppressed' });
 const ROLLED_BACK: FeatureStatus = Object.freeze({ kind: 'rolledBack' });
 
 export function createRegenerator(deps: {
-  kernel: GeometryKernel;
+  kernel: RegenKernel;
   builders: RegistryReader<FeatureBuilder>;
   schemas: RegistryReader<FeatureSchema>;
   /** Clock for durationMs (Q046); app supplies it, ring 1 does not touch globals (ADR 0009). */
@@ -107,7 +120,7 @@ export function createRegenerator(deps: {
       });
     }
 
-    // A guard for data that missed migration (fromData, apply of ops): the builder and validate
+    // A guard for data that missed migration (fromData, apply of ops): the builder and evaluation
     // expect the params of the current schema version.
     if (feature.typeVersion !== schema.version) {
       return failed({
@@ -118,8 +131,9 @@ export function createRegenerator(deps: {
       });
     }
 
-    const issues = schema.validate(feature.params);
-    if (issues.length > 0) {
+    // Variables do not exist yet (Q003); the builder gets the evaluated params only.
+    const { params, issues } = evaluateParams(schema, feature.params, NO_VARIABLES);
+    if (params === null) {
       return failed({
         code: 'INVALID_PARAMS',
         message: issues.map(formatIssue).join('; '),
@@ -130,7 +144,8 @@ export function createRegenerator(deps: {
     const session = createBuildSession({ kernel, owned, state: input });
     let output: BuildOutput;
     try {
-      output = await builder.build({ feature, state: input }, session.ctx);
+      // The feature object itself: its type has no params (BuildInput), and its identity stays.
+      output = await builder.build({ feature, params, state: input }, session.ctx);
     } catch (e) {
       // Q043: only a kernel error is a feature error; anything else is a bug and rejects run.
       const code = kernelErrorCode(e);
@@ -147,9 +162,7 @@ export function createRegenerator(deps: {
     const warnings = session.warnings();
     const status: FeatureStatus =
       warnings === undefined ? OK : Object.freeze({ kind: 'warning', message: warnings });
-    return output.anchors === undefined
-      ? { feature, state: output.state, status }
-      : { feature, state: output.state, status, anchors: freezeAnchors(output.anchors) };
+    return { feature, state: output.state, status, anchors: freezeAnchors(output.anchors) };
   }
 
   /**
@@ -314,7 +327,7 @@ export function createRegenerator(deps: {
     return result;
   }
 
-  return { run, events: emitter };
+  return { run, events: emitter.asSubscribable() };
 }
 
 /**

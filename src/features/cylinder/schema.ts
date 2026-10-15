@@ -1,6 +1,6 @@
 import type { Vec3 } from '@/core';
 import { validateAgainstSchema } from '@/document';
-import type { FeatureSchema, ParamIssue, ParamSchema, ParamSpec } from '@/document';
+import type { FeatureSchema, ParamIssue, ParamSchemaOf, ParamSpec } from '@/document';
 
 // The data half of the cylinder feature (ADR 0004): params, defaults and validation.
 
@@ -19,7 +19,7 @@ export interface CylinderParams {
 // the schema is shared by the registry, the UI form and the validation, so nobody may change it
 // in place. Labels are translation keys (ADR 0014), the texts are in messages.ts. Radius and
 // height must be > 0: the exclusive lower bound 0 (Q050) covers it, no rule of its own needed.
-const params: ParamSchema = Object.freeze<ParamSchema>({
+const params: ParamSchemaOf<CylinderParams> = Object.freeze<ParamSchemaOf<CylinderParams>>({
   base: Object.freeze<ParamSpec>({
     kind: 'point',
     label: 'cylinder.base',

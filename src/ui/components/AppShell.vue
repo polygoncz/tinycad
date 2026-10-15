@@ -46,7 +46,7 @@ const { theme } = useTheme();
 watch(
   theme,
   (value) => {
-    session.setTheme(value);
+    session.viewSettings.setTheme(value);
   },
   { immediate: true },
 );
@@ -56,7 +56,7 @@ const { t, locale } = useI18n();
 watch(
   locale,
   () => {
-    session.setViewCubeLabels(viewCubeLabels((key) => t(key)));
+    session.viewSettings.setViewCubeLabels(viewCubeLabels((key) => t(key)));
   },
   { immediate: true },
 );
@@ -67,11 +67,11 @@ const orbitMode = useOrbitMode();
 watch(
   orbitMode.mode,
   (value) => {
-    session.setOrbitMode(value);
+    session.viewSettings.setOrbitMode(value);
   },
   { immediate: true },
 );
-const offOrbitModeToggle = session.onOrbitModeToggle(() => {
+const offOrbitModeToggle = session.viewSettings.onOrbitModeToggle(() => {
   orbitMode.toggle();
 });
 

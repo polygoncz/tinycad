@@ -5,7 +5,7 @@
 
 import type { Plane, Subscribable, Vec2, Vec3 } from '@/core';
 import type { BodyId } from '@/document';
-import type { HandleTint } from './manipulators';
+import type { HandleTint } from './manipulators/manipulators';
 
 export interface ViewportPort {
   /**

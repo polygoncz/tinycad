@@ -8,15 +8,10 @@ import type { Disposable, Observable, Unsubscribe } from '@/core';
 import type { BodyId } from '@/document';
 import type { ActionRegistry } from './actions';
 import type { BrowserModel } from './browser-model';
-import type { FeatureEditor } from './feature-editor';
+import { FILE_ACTION_IDS } from './constants';
+import type { FeatureEditor } from './feature-dialog/feature-editor';
 import type { Mode } from './mode';
 import type { RegenStatusPort } from './regen-status-port';
-
-/** Ids of the File actions; ui takes them from AppSession, never as literals. */
-export const FILE_ACTION_IDS = Object.freeze({
-  exportStep: 'file.exportStep',
-  exportDocument: 'file.exportDocument',
-} as const);
 
 /** Port: app exports and downloads the file; a rejection = the export failed. */
 export interface FileExporter {

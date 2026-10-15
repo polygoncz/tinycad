@@ -6,6 +6,5 @@
     "lib": ["ES2023", "ESNext.Disposable", "DOM", "DOM.Iterable", "WebWorker.ImportScripts"],
     "types": ["vite/client"]
   },
-  "include": ["src/**/*.ts", "src/**/*.vue"],
-  "exclude": ["src/**/*.test.ts"]
+  "include": ["src/**/*.ts", "src/**/*.vue"]
 }

@@ -29,8 +29,11 @@ export interface TopoInspector {
   dispose(): void;
 }
 
+/** The viewport as the inspector uses it: its own pointer events and picking. */
+export type TopoInspectorViewport = Pick<ViewportPort, 'pick' | 'events'>;
+
 export function createTopoInspector(deps: {
-  viewport: Pick<ViewportPort, 'pick' | 'events'>;
+  viewport: TopoInspectorViewport;
   regen: RegenStatusPort;
 }): TopoInspector {
   const { viewport, regen } = deps;

@@ -143,10 +143,7 @@ export function createOperationDispatcher(deps: {
       return transaction;
     },
     // Only on/once, not the Emitter itself: a cast back to Emitter must not give emit.
-    events: {
-      on: (type, fn) => emitter.on(type, fn),
-      once: (type, fn) => emitter.once(type, fn),
-    },
+    events: emitter.asSubscribable(),
     dispatch(op, meta = {}) {
       assertNotApplying('dispatch');
       assert(!active, 'dispatch: a transaction is running, use it instead');

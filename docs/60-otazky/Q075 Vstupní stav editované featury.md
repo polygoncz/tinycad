@@ -2,7 +2,7 @@
 type: question
 status: open
 area: "[[10-interakce]]"
-decide_by: "[[M19.1-opravy-z-revize]]"
+decide_by: "[[M21-vstupni-stav-editovane-featury]]"
 proposal: "ADR: dialog a skicář pickují a zvýrazňují nad vstupním stavem editované featury, náhled výsledku je samostatná vrstva"
 decision: ""
 tags:
@@ -12,7 +12,7 @@ updated: 2026-10-14
 ---
 # Q075 Vstupní stav editované featury
 
-**Oblast:** [[10-interakce]] · **Rozhodnout do:** [[M19.1-opravy-z-revize]]
+**Oblast:** [[10-interakce]] · **Rozhodnout do:** [[M21-vstupni-stav-editovane-featury]]
 
 ## Otázka
 
@@ -40,5 +40,7 @@ Týká se to každé featury, která mění tvar, na který sama odkazuje (shell
 Návrh: **A jako nové ADR** před další featurou, která mění vlastní vstup. Rovinu editované skici brát ze `SketchArtifact.plane` jde udělat hned, protože se počítá ze vstupního stavu.
 
 ## Rozhodnutí
+
+**2026-10-14, Pavel – kdy:** až po zpevnění struktury ([[M20-zpevneni-struktury|M20]]), samostatně v [[M21-vstupni-stav-editovane-featury|M21]]. Varianta A, nebo B se rozhodne při startu M21.
 
 _(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR.)_

@@ -1,5 +1,5 @@
 import { validateAgainstSchema } from '@/document';
-import type { FeatureSchema, ParamIssue, ParamSchema, ParamSpec, TopoRef } from '@/document';
+import type { FeatureSchema, ParamIssue, ParamSchemaOf, ParamSpec, TopoRef } from '@/document';
 
 // The data half of the chamfer feature (ADR 0004): params, defaults and validation.
 
@@ -14,7 +14,7 @@ export interface ChamferParams {
 // the UI form and the validation, so nobody may change it in place. Labels are translation keys
 // (ADR 0014), the texts are in messages.ts. The distance must be > 0: the exclusive lower bound 0
 // (Q050) covers it, so the chamfer needs no rule of its own.
-const params: ParamSchema = Object.freeze<ParamSchema>({
+const params: ParamSchemaOf<ChamferParams> = Object.freeze<ParamSchemaOf<ChamferParams>>({
   edges: Object.freeze<ParamSpec>({ kind: 'topo', label: 'chamfer.edges', entity: 'edge', min: 1 }),
   distance: Object.freeze<ParamSpec>({
     kind: 'length',

@@ -3,6 +3,7 @@
 
 import type { FeaturePlugin } from '@/plugin-api';
 import { transformBuilder } from './builder';
+import type { TransformAnchors } from './builder';
 import { transformManipulators } from './manipulators';
 import { transformMessages } from './messages';
 import { transformSchema } from './schema';
@@ -10,9 +11,10 @@ import type { TransformParams } from './schema';
 import { transformTool } from './tool';
 
 export type { TransformParams } from './schema';
+export type { TransformAnchors } from './builder';
 
-export const transformPlugin: FeaturePlugin<TransformParams> = Object.freeze<
-  FeaturePlugin<TransformParams>
+export const transformPlugin: FeaturePlugin<TransformParams, TransformAnchors> = Object.freeze<
+  FeaturePlugin<TransformParams, TransformAnchors>
 >({
   schema: transformSchema,
   builder: transformBuilder,

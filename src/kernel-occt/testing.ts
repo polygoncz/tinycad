@@ -1,4 +1,4 @@
-// Test helpers of kernel-occt; only *.test.ts may import this file (also tests/).
+// Test helpers of kernel-occt; only *.test.ts may import this file (also test/integration/).
 import type { GeometryKernel } from '@/kernel';
 import { loadOcct } from './occt';
 import { OcctKernelImpl } from './occt-kernel-impl';

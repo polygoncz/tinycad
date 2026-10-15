@@ -30,7 +30,6 @@ export type {
 export type { BodyId } from '@/document';
 // Part of the port's vocabulary as well: the names of TopoNames (M14).
 export type { TopoName } from '@/document';
-export { NO_TOPO_NAMES } from './regen-status-port';
 export type {
   Anchor,
   FeatureAnchors,
@@ -54,32 +53,62 @@ export type {
   Patch,
   PlanarHandle,
   PointHandle,
-} from './manipulators';
-export { createManipulatorRegistry } from './manipulators';
-export { createManipulatorController } from './manipulator-controller';
-export type { HudField, ManipulatorController, ManipulatorHud } from './manipulator-controller';
+} from './manipulators/manipulators';
+export { createManipulatorRegistry } from './manipulators/manipulators';
+// Also in the data entry point constants.ts, the one ui takes values from (M20, D6).
+export { ACTION_IDS, FILE_ACTION_IDS, HANDLE_VISIBILITY, MANIPULATOR_GLYPHS } from './constants';
+export type { HandleVisibility, ManipulatorGlyphs } from './constants';
+export { createManipulatorController } from './manipulators/manipulator-controller';
+export type {
+  HudField,
+  ManipulatorController,
+  ManipulatorHud,
+} from './manipulators/manipulator-controller';
 export { bindSelectionHighlight, createSelectionModel, sameSelectionItem } from './selection';
 export type { SelectionCommands, SelectionItem, SelectionModel } from './selection';
 export { ALL_MODES } from './mode';
 export type { Mode } from './mode';
 export { createActionRegistry } from './actions';
 export type { Action, ActionRegistry, ActionState } from './actions';
-export { ACTION_IDS, createBuiltInActions, toolActionId } from './builtin-actions';
+export { createBuiltInActions } from './builtin-actions';
 export type { ConfirmRequest } from './builtin-actions';
 export { createEditLock } from './edit-lock';
-export { createToolRegistry, toolModes } from './tools';
-export type { Tool, ToolContext, ToolDescriptor, ToolRegistry } from './tools';
+export { createToolRegistry } from './tools';
+export type {
+  Tool,
+  ToolContext,
+  ToolDescriptor,
+  ToolFeatures,
+  ToolRegistry,
+  ToolViewport,
+} from './tools';
 export { createToolManager } from './tool-manager';
+export type { InputLayer } from './input-layer';
+export { createRefPickLayer } from './feature-dialog/ref-pick-tool';
+export type { RefPickLayer } from './feature-dialog/ref-pick-tool';
+export { createToolbarModel } from './toolbar-model';
+export type {
+  ToolbarActionButton,
+  ToolbarActionGroup,
+  ToolbarCommand,
+  ToolbarGroup,
+  ToolbarItem,
+  ToolbarModeContribution,
+  ToolbarModel,
+} from './toolbar-model';
 export type { ToolManager } from './tool-manager';
 export { SELECT_TOOL } from './select-tool';
-export { createFeatureEditor } from './feature-editor';
+// For the tools of the sketcher (ADR 0024): the same click tolerance and Escape test as here.
+export { CLICK_TOLERANCE_PX } from './select-tool';
+export { isPlainEscape } from './key-events';
+export { createFeatureEditor } from './feature-dialog/feature-editor';
 export type {
   EditState,
   FeatureEditor,
   FeatureEditSession,
   FieldState,
-  RefText,
-} from './feature-editor';
+} from './feature-dialog/feature-editor';
+export type { RefText } from './feature-dialog/ref-kinds';
 export { createFeatureTreeModel } from './feature-tree';
 export type { FeatureTreeModel, TreeRow, TreeStatus } from './feature-tree';
 export { createBrowserModel } from './browser-model';
@@ -91,30 +120,19 @@ export type {
   BrowserRegionRow,
   BrowserSketchRow,
 } from './browser-model';
-export { createSketchEditor } from './sketch-editor';
-export type { SketchEditor } from './sketch-editor';
-export { EDIT_SKETCH_DRAWING_ID } from './sketch-session';
-export type { SketchDimensionView } from './sketch-dimensions';
-export type {
-  SketchConstraintRow,
-  SketchMessageKey,
-  SketchSession,
-  SketchState,
-} from './sketch-session';
-export {
-  ORIGIN_POINT_ID,
-  artifactDrawing,
-  axisDrawing,
-  planeDrawing,
-  toSketchDrawing,
-} from './sketch-drawing';
-export { SKETCH_ACTION_IDS, createSketchActions, sketchConstraintActionId } from './sketch-actions';
-export { createSketchTools } from './sketch-tools';
 export { createTopoInspector } from './topo-inspector';
 export type { TopoHover, TopoInspector } from './topo-inspector';
 export { HISTORY_LIMIT, createHistoryModel } from './history-model';
 export type { HistoryModel, HistoryRow, HistoryState } from './history-model';
 export { createDocumentNameModel } from './document-name';
+export { createDocumentListModel } from './document-list-model';
+export type {
+  DocumentCatalog,
+  DocumentCatalogEntry,
+  DocumentListError,
+  DocumentListModel,
+  DocumentListState,
+} from './document-list-model';
 export type { DocumentNameModel } from './document-name';
-export { FILE_ACTION_IDS, createFileActions } from './file-actions';
+export { createFileActions } from './file-actions';
 export type { FileActions, FileExporter, FileStatus, FileTask } from './file-actions';

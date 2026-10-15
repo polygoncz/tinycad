@@ -3,6 +3,7 @@ import type { Plane, Registry, Result, Vec3 } from '@/core';
 import type {
   AxisRef,
   BodyRef,
+  Evaluated,
   FeatureInstance,
   PlaneRef,
   SketchEntityRef,
@@ -24,8 +25,14 @@ import type { Body, FeatureError, RegenState, SketchArtifact } from './state';
 // The behaviour half of a feature type (ADR 0004): turns params into geometry.
 // The data half (params, validation) is FeatureSchema in document.
 
+/**
+ * Since M20 (A8) the builder gets the params only evaluated (evaluateParams), never raw: `feature`
+ * is the feature without its params (id, type and metadata).
+ */
 export interface BuildInput<P> {
-  readonly feature: FeatureInstance<P>;
+  readonly feature: Omit<FeatureInstance, 'params'>;
+  /** The params of the feature after evaluateParams: evaluated and valid. */
+  readonly params: Evaluated<P>;
   /** State before this feature. */
   readonly state: RegenState;
 }
@@ -141,9 +148,12 @@ export interface Anchor {
  */
 export type FeatureAnchors = Readonly<Record<string, Anchor>>;
 
-/** `anchors` (M18) only by builders of features with a manipulator. */
-export type BuildOutput =
-  | { readonly ok: true; readonly state: RegenState; readonly anchors?: FeatureAnchors }
+/**
+ * `anchors` (M18, required since M20): the anchors of type A of the plugin; a feature without a
+ * manipulator returns {} (spec 07, Kotvy manipulátorů).
+ */
+export type BuildOutput<A extends FeatureAnchors = FeatureAnchors> =
+  | { readonly ok: true; readonly state: RegenState; readonly anchors: A }
   | { readonly ok: false; readonly error: FeatureError };
 
 /**
@@ -153,12 +163,14 @@ export type BuildOutput =
  * nameShape over the kernel history (M14), a consumed
  * body leaves the map); never release handles; create every shape through ctx.kernel; return
  * expected failures as { ok: false } (an unresolved reference through unresolvedReference).
- * Params are already validated.
+ * Params are already evaluated and validated (input.params, M20). A is the type of the anchors of
+ * the plugin (M20, ADR 0021): the ManipulatorDescriptor of the same plugin reads them, so a name
+ * the builder does not return is a type error there.
  */
-export interface FeatureBuilder<P = unknown> {
+export interface FeatureBuilder<P = unknown, A extends FeatureAnchors = FeatureAnchors> {
   /** Registry key, same as FeatureSchema.type. */
   readonly type: string;
-  build(input: BuildInput<P>, ctx: BuildContext): Promise<BuildOutput>;
+  build(input: BuildInput<P>, ctx: BuildContext): Promise<BuildOutput<A>>;
 }
 
 export type BuilderRegistry = Registry<FeatureBuilder>;

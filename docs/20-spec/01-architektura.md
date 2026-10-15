@@ -48,7 +48,7 @@ updated: 2026-10-14
 
 ## Vrstvy a moduly
 
-Každý modul je složka v `src/` s veřejným API v `index.ts`. Volitelně má druhý vstupní bod `testing.ts` s pomůckami pro testy (buildery, fake implementace), viz pravidla níže.
+Každý modul je složka v `src/` s veřejným API v `index.ts`. Volitelně má druhý vstupní bod `testing.ts` s pomůckami pro testy (buildery, fake implementace), viz pravidla níže. Testy modulu leží mimo `src/`, v `test/unit/<modul>/` ([[0023-testy-mimo-zdrojaky|ADR 0023]]), a pro pravidla závislostí patří k modulu.
 
 ### Tři prstence
 
@@ -57,7 +57,7 @@ Nad vrstvami platí hrubší dělení podle toho, jestli modul smí znát platfo
 | Prstenec | Moduly | Platforma (DOM, Worker, Vue, Three.js, OCCT) |
 |---|---|---|
 | 1. Doména | `core`, `document`, `ops`, `regen`, `kernel`, `sketch` (M12), `persistence` (bez `idb/`), `plugin-api`, `features/*` | ne |
-| 2. Prezentační logika | `interaction` ([[Prezentační model\|prezentační modely]], nástroje, port `ViewportPort`) | ne |
+| 2. Prezentační logika | `interaction` ([[Prezentační model\|prezentační modely]], nástroje, port `ViewportPort`), `sketcher` (režim skicáře, [[0024-modul-sketcher\|ADR 0024]]) | ne |
 | 3. Adaptéry a platforma | `render`, `ui`, `kernel-occt`, `solver-planegcs` (M12), `persistence/idb`, `app` | ano |
 
 Prstence 1 a 2 se typují konfigurací `tsconfig.domain.json` bez knihovny `DOM`, takže použití `window` nebo `KeyboardEvent` shodí `typecheck`. `app` je kompoziční kořen *pro danou platformu*.
@@ -71,9 +71,11 @@ Prstence 1 a 2 se typují konfigurací `tsconfig.domain.json` bez knihovny `DOM`
 │ features/*   │ pluginy featur (box, cylinder, …)             │
 │ plugin-api   │ typ FeaturePlugin                             │
 ├──────────────┴──────────┬────────────────────────────────────┤
-│ interaction             │ render                             │
-│ výběr, nástroje, akce,  │ Three.js viewport, picking         │
-│ prezentační modely,     │ (implementuje ViewportPort)        │
+│ sketcher (→ interaction)│ render                             │
+│ režim skicáře           │ Three.js viewport, picking         │
+│ interaction             │ (implementuje ViewportPort)        │
+│ výběr, nástroje, akce,  │                                    │
+│ prezentační modely,     │                                    │
 │ port ViewportPort       │                                    │
 ├─────────────────────────┴────────────────────────────────────┤
 │ regen         Regenerator, FeatureBuilder, RegenState        │
@@ -107,18 +109,21 @@ Prstence 1 a 2 se typují konfigurací `tsconfig.domain.json` bez knihovny `DOM`
 | `regen` | `core`, `document`, `kernel`, `sketch` | – |
 | `render` | `core`, `kernel` (jen typy: `MeshData`, `MeshOps`, `MeshQuality`, `ShapeHandle`, `BoundingBox`), `interaction` (jen typy: `ViewportPort`, události, `BodyId`, [[Q056 Odkud render bere BodyId\|Q056]]) | `three` (včetně `three/addons`) |
 | `interaction` | `core`, `document`, `ops`, `sketch` | – |
+| `sketcher` | `core`, `document`, `ops` (jen `ops/testing` v testech, pravidlo `sketcher-ops-only-in-tests`), `sketch`, `interaction` | – |
 | `plugin-api` | `core`, `document`, `regen`, `interaction` | – |
 | `features/*` | `core`, `document`, `ops`, `kernel`, `sketch`, `regen`, `interaction`, `plugin-api` | – |
 | `app` | vše kromě `ui` | – |
-| `ui` | `app`, `core`, typy z `document` a `interaction` | `vue`, `vue-i18n`, `@tabler/icons-webfont` ([[0014-preklady-vue-i18n-a-klice\|ADR 0014]], [[11-ui#Styl]]) |
+| `ui` | `app`, `core`, typy z `document`, `interaction` a `sketcher`, hodnoty z `interaction/constants.ts` a `sketcher/constants.ts` | `vue`, `vue-i18n`, `@tabler/icons-webfont` ([[0014-preklady-vue-i18n-a-klice\|ADR 0014]], [[11-ui#Styl]]) |
 
 Důležité zákazy:
 - `features/*` se navzájem neimportují.
-- Nic kromě `app` neimportuje `kernel-occt` ani `solver-planegcs` (konkrétní implementace). `sketch` je doménový model skici a port řešiče, ne plugin; skicář (režim, nástroje) je v `interaction` ([[0017-modul-sketch-a-skicar|ADR 0017]], M12).
+- Nic kromě `app` neimportuje `kernel-occt` ani `solver-planegcs` (konkrétní implementace). `sketch` je doménový model skici a port řešiče, ne plugin; skicář (režim, nástroje) je modul `sketcher` ([[0024-modul-sketcher|ADR 0024]]) ([[0017-modul-sketch-a-skicar|ADR 0017]], M12).
 - `ui` nesahá na `ops`, `regen`, `kernel`, `render` přímo – jen přes `AppSession`.
 - `regen` nezná `ops` (regenerace neví, jak změna vznikla).
+- `interaction/constants.ts` je datový vstupní bod ([[M20-zpevneni-struktury|M20]], D6): jen hodnoty (konstanty, rozměry glyfů, prahy) bez importů kromě `core` a datových souborů modulu bez závislostí (dnes `mode.ts`, seznam `DATA_ENTRY_MODULES` v `.dependency-cruiser.cjs`; pravidlo hlídá i je). Modul, který smí z `interaction` jen typy (`ui`), z něj smí i hodnoty (sloupec `constants` v `.dependency-cruiser.cjs`). Čistotu hlídá pravidlo `interaction-constants-only-data`. Obsah: `ACTION_IDS`, `FILE_ACTION_IDS`, `toolActionId`, `toolModes`, `MANIPULATOR_GLYPHS`, `HANDLE_VISIBILITY`. `render` hodnoty nebere, dostane je od `app` při vytvoření viewportu.
 - `persistence/idb` je samostatný vstupní bod (vlastní `index.ts`), který importuje jen `app`. `persistence/index.ts` ho nereexportuje, jinak by se adaptér přes import dostal do prstence 1.
-- `testing.ts` smí importovat **jen testovací kód** (`*.test.ts` a jiné `testing.ts`), a to jen z modulů, na které jeho modul smí záviset **hodnotově** (sloupec `deps`; typová závislost `types` k `testing.ts` nepouští). Produkční kód ho neimportuje nikdy, ani ve vlastním modulu – buildery se tak nedostanou do produkčního bundlu. Testovací kód smí používat `vitest` (fake s `vi.fn`) a skládat buildery jiných modulů. Pravidla `testing-only-in-tests` a `<modul>-allowed-deps-in-tests` v `.dependency-cruiser.cjs`.
+- `testing.ts` smí importovat **jen testovací kód** (testy v `test/` a jiné `testing.ts`), a to jen z modulů, na které jeho modul smí záviset **hodnotově** (sloupec `deps`; typová závislost `types` k `testing.ts` nepouští). Produkční kód ho neimportuje nikdy, ani ve vlastním modulu – buildery se tak nedostanou do produkčního bundlu. Testovací kód smí používat `vitest` (fake s `vi.fn`) a skládat buildery jiných modulů. Pravidla `testing-only-in-tests` a `<modul>-allowed-deps-in-tests` v `.dependency-cruiser.cjs`.
+- Testy leží v `test/` ([[0023-testy-mimo-zdrojaky|ADR 0023]]). Vše pod `test/unit/<modul>/` je testovací kód modulu `<modul>` a platí pro něj stejná pravidla jako pro jeho `testing.ts`, včetně `no-deep-import` a importů jen typů. Produkční kód v `src/` nesmí importovat nic z `test/` (pravidlo `no-test-in-production`). `test/integration/` a `test/e2e/` nepatří žádnému modulu.
 - Pravidla jsou whitelist: tabulka výše je zkopírovaná v `.dependency-cruiser.cjs` a z ní se generuje jedno pravidlo na modul (vlastní soubory + `index.ts` povolených modulů + povolené npm balíčky). Importy assetů Vite s dotazem (`balík/soubor?url`) dependency-cruiser nevyřeší; místo `not-to-unresolvable` je hlídá pravidlo `<modul>-allowed-npm-assets` proti stejnému seznamu npm balíků ([[06-geometricke-jadro]], M7).
 - `interaction` nezná `render`: viewport zná jen přes port `ViewportPort`, který sám definuje. `render` ho implementuje ([[0009-platformove-nezavisla-domena|ADR 0009]]).
 - Prstence 1 a 2 nepoužívají globální objekty prohlížeče (`window`, `document`, `requestAnimationFrame`, `indexedDB`, DOM typy událostí).
@@ -137,7 +142,7 @@ ui (FeatureDialog)
                 ├─ handler.apply(writer, op)    → PartStudio.features = nové pole
                 └─ emit('applied')
 document emit('changed')
-  └─ app: regenScheduler.request()
+  └─ app (regen-pipeline): regenScheduler.request()
        regen/Regenerator.run(studio)
          ├─ najde první featuru, jejíž instance se změnila (identita objektu)
          ├─ builder.build(...) → kernel.makeBox(...)   ── postMessage ──► worker (OCCT)
@@ -169,7 +174,8 @@ tinycad/
 │  ├─ solver-planegcs/      adaptér řešiče vazeb, worker (M12)
 │  ├─ regen/
 │  ├─ render/
-│  ├─ interaction/
+│  ├─ interaction/          prezentační modely; podsložky manipulators/ a feature-dialog/
+│  ├─ sketcher/             režim skicáře (ADR 0024)
 │  ├─ plugin-api/
 │  ├─ features/
 │  │  ├─ box/
@@ -180,20 +186,23 @@ tinycad/
 │  │  ├─ components/
 │  │  └─ composables/
 │  └─ main.ts               startUi('#app', { plugins: BUILT_IN_PLUGINS }) – seznam pluginů z app, Vue z ui
-├─ tests/                   integrační testy (e2e); testy OCCT jsou vedle kódu v kernel-occt (Q051)
+├─ test/                    testy mimo zdrojáky (ADR 0023)
+│  ├─ unit/                 unit testy, zrcadlová struktura src/ (test/unit/interaction/feature-editor.test.ts); testy OCCT v unit/kernel-occt (Q051)
+│  ├─ integration/          integrační testy se skutečnými adaptéry
+│  └─ e2e/                  Playwright
 ├─ .dependency-cruiser.cjs
 ├─ vite.config.ts
 ├─ tsconfig.json            řešení: odkazy na projekty níže, `vue-tsc -b`
 ├─ tsconfig.base.json       společné přísné volby
 ├─ tsconfig.domain.json     prstence 1 a 2, bez lib DOM a bez @types
 ├─ tsconfig.app.json        kód pro prohlížeč (DOM, vite/client), bez testů
-├─ tsconfig.test.json       testy (*.test.ts, tests/), typy Node, bez DOM
+├─ tsconfig.test.json       testy (test/unit, test/integration), typy Node, bez DOM
 ├─ tsconfig.test-idb.json   testy adaptéru IndexedDB (fake-indexeddb v Node), typy Node + lib DOM
 ├─ tsconfig.test-app.json   testy app a ui v Node (s fake), lib DOM kvůli typům AppSession a render
 └─ tsconfig.node.json       konfigurace Vite a Vitest
 ```
 
-Testy jednotek leží vedle kódu (`foo.ts` + `foo.test.ts`).
+Testy jednotek leží v zrcadlovém stromu: `src/<modul>/foo.ts` → `test/unit/<modul>/foo.test.ts`, importy přes alias `@/` ([[0023-testy-mimo-zdrojaky|ADR 0023]]). Dřív ležely vedle kódu, přesun proběhl v [[M20-zpevneni-struktury|M20]].
 
 ## Kompoziční kořen
 

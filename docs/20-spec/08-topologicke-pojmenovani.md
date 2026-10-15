@@ -175,7 +175,7 @@ Picking vrátí `{ body, faceIndex }` nebo `{ body, edgeIndex }` (index v aktuá
 
 - **Dialog:** `refPick` převede zásah plochy/hrany na `TopoRef` přes `names.nameOfFace(index)` / `nameOfEdge(index)` a přidá ho do parametru `topo` (stejná reference znovu ho odebere); zásah bez jména se ignoruje. Vybrané hrany a plochy aktivního dialogu jsou zvýrazněné ve viewportu ([[10-interakce#Výběr]]).
 - **Výběr přežije regeneraci** (nahrazuje pravidlo z [[Q064 Výběr po regeneraci|Q064]]): `SelectionModel` si k položce `face`/`edge` doplní jméno z posledního snapshotu; po nové generaci položky přemapuje podle jména (jméno na víc ploch → všechny), vypadnou jen ty, jejichž jméno nebo těleso zaniklo.
-- **Skica na ploše:** vybraná rovinná plocha a „Skica“ → `SketchParams.plane = [TopoRef]` ([[12-skicar#Režim skicáře (interaction)]]).
+- **Skica na ploše:** vybraná rovinná plocha a „Skica“ → `SketchParams.plane = [TopoRef]` ([[12-skicar#Režim skicáře (sketcher)]]).
 
 ## Ladění
 

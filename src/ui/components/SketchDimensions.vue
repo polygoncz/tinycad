@@ -13,7 +13,7 @@
 import { nextTick, onMounted, onScopeDispose, ref, shallowRef, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { Vec3 } from '@/core';
-import type { SketchDimensionView, SketchSession } from '@/interaction';
+import type { SketchDimensionView, SketchSession } from '@/sketcher';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
 import type { ScreenPoint } from '../manipulator-hud';

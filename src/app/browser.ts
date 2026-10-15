@@ -5,22 +5,23 @@
 
 import { createRandomIdGenerator, DisposableStore } from '@/core';
 import type { Disposable, IdGenerator } from '@/core';
-import type { Result } from '@/core';
-import type { DocumentId, DocumentLoadError } from '@/document';
-import type { ConfirmRequest } from '@/interaction';
+import type { DocumentId } from '@/document';
+import { createDocumentListModel, HANDLE_VISIBILITY, MANIPULATOR_GLYPHS } from '@/interaction';
+import type { ConfirmRequest, DocumentListModel } from '@/interaction';
 import type { MeshOps } from '@/kernel';
 import { createOcctKernel } from '@/kernel-occt';
-import type { DocumentInfo, DocumentStore, Scheduler } from '@/persistence';
+import type { DocumentStore, Scheduler } from '@/persistence';
 import { createIdbDocumentStore } from '@/persistence/idb';
 import type { FeaturePlugin } from '@/plugin-api';
-import { createViewport, DARK_PALETTE, LIGHT_PALETTE } from '@/render';
+import { createViewport } from '@/render';
 import { createPlanegcsSolver } from '@/solver-planegcs';
 import { acquireDocumentLock } from './doc-lock';
 import { disposeOpenSession } from './dispose-open-session';
-import * as documents from './documents';
+import { createDocumentCatalog } from './documents';
 import type { DownloadFile } from './file-exporter';
 import { flushOnPageHide } from './page-lifecycle';
 import { createAppSession } from './session';
+import { paletteOf } from './view-settings';
 import type { AppSession } from './session';
 
 export interface OpenAppSessionOptions {
@@ -30,7 +31,7 @@ export interface OpenAppSessionOptions {
   readonly translate: (key: string) => string;
   /** Asks the user a yes/no question (feature.delete with dependents). */
   readonly confirm: (request: ConfirmRequest) => boolean;
-  /** The theme at the start, for the palette of the viewport; later AppSession.setTheme. */
+  /** The theme at the start, for the palette of the viewport; later AppSession.viewSettings.setTheme. */
   readonly theme: 'light' | 'dark';
   /** M15: downloads an exported file (ui: a Blob and <a download>). */
   readonly download: (file: DownloadFile) => void;
@@ -59,7 +60,10 @@ export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSe
     const viewport = screen.add(
       createViewport({
         meshes: NO_KERNEL_YET,
-        palette: opts.theme === 'dark' ? DARK_PALETTE : LIGHT_PALETTE,
+        palette: paletteOf(opts.theme),
+        // render may take only types from interaction, so the values come from here (M20).
+        manipulatorGlyphs: MANIPULATOR_GLYPHS,
+        handleVisibility: HANDLE_VISIBILITY,
       }),
     );
     const session = await createAppSession({
@@ -128,66 +132,33 @@ export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSe
   }
 }
 
-/** All documents, newest first (DocumentList, Q019). */
-export function listDocuments(): Promise<readonly DocumentInfo[]> {
-  return withStore((store) => documents.listDocuments(store));
+/** What createDocumentList needs from ui. */
+export interface DocumentListOptions {
+  /** The plugins of the sessions: an imported file is checked and a renamed log replayed with them. */
+  readonly plugins: readonly FeaturePlugin[];
+  /** Translation of keys: the name of a new document (ADR 0014). */
+  readonly translate: (key: string) => string;
+  /** Asks the user a yes/no question (deleting a document); ui shows the dialog. */
+  readonly confirm: (request: ConfirmRequest) => boolean | Promise<boolean>;
 }
 
-/** Stores an empty document named `translate('document.untitled')` and returns its id. */
-export function createNewDocument(opts: {
-  readonly translate: (key: string) => string;
-}): Promise<DocumentId> {
-  return withStore((store) =>
-    documents.createNewDocument(store, {
+/**
+ * The model of the DocumentList (Q019, M20 A3.5) over the IndexedDB store: a store worker per
+ * call of the catalog, the Web Lock of a document for deleting and renaming (refused when the
+ * document is open in another tab). Holds nothing between calls, so it needs no dispose.
+ */
+export function createDocumentList(opts: DocumentListOptions): DocumentListModel {
+  return createDocumentListModel({
+    catalog: createDocumentCatalog({
+      withStore,
+      locks: navigator.locks,
+      plugins: opts.plugins,
       ids: randomIds(),
       now: Date.now,
       translate: opts.translate,
     }),
-  );
-}
-
-/**
- * Stores a parsed document file (M15) as a new document and returns its id; a broken file is an
- * error with issues and stores nothing. The file is checked against the registries of `plugins`.
- */
-export function importDocumentFile(
-  raw: unknown,
-  opts: { readonly plugins: readonly FeaturePlugin[] },
-): Promise<Result<DocumentId, DocumentLoadError>> {
-  return withStore((store) =>
-    documents.importDocumentFile(store, raw, {
-      plugins: opts.plugins,
-      ids: randomIds(),
-      now: Date.now,
-    }),
-  );
-}
-
-/**
- * Deletes the document with its history; a missing id does nothing. Rejects when the document
- * is open in another tab (its lock is held).
- */
-export function deleteDocument(id: DocumentId): Promise<void> {
-  return withStore((store) => documents.deleteDocument({ store, locks: navigator.locks }, id));
-}
-
-/**
- * Renames a stored document from the list (M19.2, D5): the operation document.rename appended to
- * its log, outside undo. Rejects when the document is open in another tab or the trimmed name is
- * empty. The log is replayed with the registries of `plugins`.
- */
-export function renameDocument(
-  id: DocumentId,
-  name: string,
-  opts: { readonly plugins: readonly FeaturePlugin[] },
-): Promise<void> {
-  return withStore((store) =>
-    documents.renameDocument(
-      { store, locks: navigator.locks, plugins: opts.plugins, now: Date.now },
-      id,
-      name,
-    ),
-  );
+    confirm: opts.confirm,
+  });
 }
 
 /** A store worker for one call of the document list, terminated after it. */

@@ -225,12 +225,17 @@ interface Bounds { min?: number; max?: number; exclusiveMin?: boolean; exclusive
 
 export type ParamSchema = Readonly<Record<string, ParamSpec>>;
 
+/** Schéma svázané s typem parametrů: klíč navíc nebo chybějící klíč je chyba typu (M20). */
+export type ParamSchemaOf<P> = [keyof P] extends [never]
+  ? ParamSchema                                   // P neznámé (registry, čtení bez pluginu)
+  : { readonly [K in keyof P]-?: ParamSpec };
+
 export interface FeatureSchema<P = unknown> {
   readonly type: string;
   readonly version: number;
   readonly label: string;               // klíč překladu, 'box.label' (ADR 0014)
   readonly icon?: string;               // název ikony Tabler, 'box' (Timeline, M10)
-  readonly params: ParamSchema;
+  readonly params: ParamSchemaOf<P>;   // jde přiřadit do ParamSchema
   defaults(): P;
   validate(params: unknown): readonly ParamIssue[]; // unknown: parametry z dokumentu jsou neověřené
   migrate?(fromVersion: number, raw: unknown): P;   // povinné, jakmile version > 1 – hlídá registr
@@ -248,10 +253,11 @@ export function createFeatureSchemaRegistry(): FeatureSchemaRegistry;
 
 - `validate` bere `unknown`, ne `P`: validace teprve zjišťuje, jestli data odpovídají `P` (stejně jako `fromData`).
 - `migrate` je v typu volitelná, protože pravidlo „povinné od verze 2“ závisí na hodnotě. Hlídá ho `register()` registru schémat: verze musí být celé číslo ≥ 1 a schéma s `version > 1` bez `migrate` se odmítne výjimkou už při startu.
+- **Tabulka referenčních druhů** ([[M20-zpevneni-struktury|M20]], A2): `ParamSpec` je sjednocení dvou podunií, hodnotových (`length`, `angle`, `number`, `boolean`, `enum`, `point`, `data`) a referenčních (`bodies`, `topo`, `region`, `planes`, `axis`). `RefParamKind = Extract<ParamSpec, RefParamVariant>['kind']`, takže nový druh musí vstoupit do jedné z nich. Pravidla referenčních druhů jsou v jediné tabulce `REF_PARAM_KINDS` (`document/ref-kinds.ts`, vnitřní) typu `{ [K in RefParamKind]: RefParamKindRules }` přes `satisfies`: `refKinds` (které `EntityRef` parametr nese), `items(value)` (položky reference v hodnotě) a `check(value, spec)` (validace). `validateAgainstSchema` a `referencesOf` z ní jen čtou; chybějící druh je chyba typu.
 - Referenční `ParamSpec` (`bodies`, `topo`, `region`, od M12 `planes`) bez `min`/`max` připouští `0..∞` referencí. Povinnost aspoň jedné reference vyjádří schéma přes `min: 1`.
 - Typ entity u `topo` (`face`/`edge`/`vertex`) obecná validace neověřuje – zjistí se až po regeneraci.
 - `axis` (M13) je jednotlivá reference sama o sobě (hodnota není pole): `null` → `param.tooFewRefs` `{ min: 1 }` (osa je vždy povinná), platná `AxisRef` nebo `SketchEntityRef` projde, cokoli jiného → `param.invalidRef` bez `params`. Obecný příznak `single` u ostatních referenčních druhů nevzniká ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R71]] ⚠).
-- `planes` (M12) se validuje jako ostatní referenční druhy: položka `{ kind: 'plane', plane }` s `parsePlaneId`, od M14 i `{ kind: 'topo', body, name }` (skica na rovinné ploše tělesa, [[12-skicar#Roviny a počátek]]; `refKindsOf('planes')` → `['plane', 'topo']`; že je plocha rovinná, zjistí až regenerace), jinak `param.invalidRef`; duplicita podle `plane`, resp. `body` + `name`. `topo` (M14): `name` musí být neprázdný řetězec. `data` (M12) obecná validace jen vyžaduje (`param.missing`); obsah (tvar, invarianty) kontroluje vlastní `validate` schématu (skica: `parseSketchData`, [[12-skicar#Kontrola dat]]). Formulář dialogu pole `data` nekreslí.
+- `planes` (M12) se validuje jako ostatní referenční druhy: položka `{ kind: 'plane', plane }` s `parsePlaneId`, od M14 i `{ kind: 'topo', body, name }` (skica na rovinné ploše tělesa, [[12-skicar#Roviny a počátek]]; `refKinds` druhu `planes` v tabulce `REF_PARAM_KINDS` je `['plane', 'topo']`; že je plocha rovinná, zjistí až regenerace), jinak `param.invalidRef`; duplicita podle `plane`, resp. `body` + `name`. `topo` (M14): `name` musí být neprázdný řetězec. `data` (M12) obecná validace jen vyžaduje (`param.missing`); obsah (tvar, invarianty) kontroluje vlastní `validate` schématu (skica: `parseSketchData`, [[12-skicar#Kontrola dat]]). Formulář dialogu pole `data` nekreslí.
 
 - Všechny `label` (u `ParamSpec`, u možností `enum` a u `FeatureSchema`) jsou **klíče překladu**, ne texty. Texty dodává plugin ve slovníku `messages` a překládá je `ui` ([[0014-preklady-vue-i18n-a-klice|ADR 0014]], [[Q070 Překlady textů UI|Q070]]).
 - `exclusiveMin`/`exclusiveMax` bez `min`/`max` nemají účinek. Kódy chyb z `validateAgainstSchema`: `param.missing`, `param.unexpected`, `param.wrongType`, `param.notInteger`, `param.belowMin`, `param.atOrBelowMin` (ostrá mez), `param.aboveMax`, `param.atOrAboveMax`, `param.unknownOption`, `param.tooFewRefs`, `param.tooManyRefs`, `param.invalidRef` (`{ index }`), `param.duplicateRef` (`{ index }`, M11). `belowMin`/`atOrBelowMin` a `tooFewRefs` nesou `{ min }`, `aboveMax`/`atOrAboveMax` a `tooManyRefs` `{ max }`, ostatní kódy jsou bez `params`. `param.wrongType` pokrývá i parametry, které nejsou objekt (`param: ''`), a NaN/nekonečno.
@@ -277,11 +283,30 @@ export function isParamVisible(spec: ParamSpec, params: Readonly<Record<string, 
 ```
 
 - `visibleWhen` je čistá funkce bez výjimek: parametry jsou neověřené, takže porovnává hodnoty (`p => p.operation !== 'new'`), nepředpokládá typy. Volá se jen s objektem `params`.
+- `visibleWhen` a `isParamVisible` pracují nad **hodnotami**, ne nad `Evaluated<P>`: volají se i uvnitř validace, tedy před vyhodnocením. Kdo má vyhodnocené parametry (editor), předá je; jinak surové.
 - **Skrytý parametr** (`isParamVisible === false`) `validateAgainstSchema` nevyžaduje ani nekontroluje; když v `params` je, není `param.unexpected`. Jeho hodnota v `params` zůstává (přepnutí zpět ji obnoví), builder ji nečte.
 - `referencesOf` skryté parametry přeskočí, takže stará hodnota skrytého parametru nevytváří závislost (`dependenciesOf`) ani neblokuje mazání a přesun.
 - `group` jen seskupuje pole v dialogu pod nadpis (`t(group)`); validace ho ignoruje. Pole téže skupiny mají ve schématu stát za sebou.
 - UI skryté pole nekreslí (`FieldState.hidden`, [[10-interakce#Dialog featury: `FeatureEditor`]]).
 
+
+## Vyhodnocení parametrů
+
+Jediná cesta od surových parametrů featury k hodnotám, se kterými se počítá ([[M20-zpevneni-struktury|M20]], [[Parse, don't validate]]). Bez proměnných zatím hodnoty jen propouští, ale pod vlastním typem, takže kdo ji obejde, dostane chybu typu. Proměnné ([[Q003 Proměnné a výrazy v parametrech|Q003]]) změní jen tělo funkce. Výraz zůstává v datech featury, vyhodnocené hodnoty se nikam neukládají.
+
+```ts
+export type Evaluated<P> = P & { readonly [evaluatedBrand]: true };   // značka jen v typech
+export type ParamVariables = ReadonlyMap<string, number>;
+export const NO_VARIABLES: ParamVariables;                             // prázdná, zmrazená
+export function evaluateParams<P>(schema: FeatureSchema<P>, params: unknown, variables: ParamVariables):
+  { readonly params: Evaluated<P> | null; readonly issues: readonly ParamIssue[] };
+```
+
+- `params` je `null` právě tehdy, když `issues` není prázdné; `issues` jsou ty ze `schema.validate`.
+- `Evaluated<P>` jde použít jako `P`, `P` jako `Evaluated<P>` ne. Vytváří ho jen `evaluateParams` (v testech pomůcka `anEvaluated` z `document/testing.ts`).
+- Čtenáři: `Regenerator` (vstup builderu), `FeatureEditor` (issues, viditelnost polí, fokus referenčního parametru) a `ManipulatorController` (`frame`, `pickPoint`). Kdo čte parametr jen kvůli zápisu nebo pracuje s referencemi a daty skici, čte surovou hodnotu.
+- **Výjimka:** parametry druhu `data` (entity a vazby skici) a referenční parametry čtou editory (`sketcher`), tabulka druhů referencí a `BrowserModel` přímo, protože hodnotu přepínají nebo přepisují a výrazy nenesou. Až výrazy přijdou ([[Q003 Proměnné a výrazy v parametrech|Q003]]), kóty skici s výrazem tuto výjimku zruší.
+- Kdo zná jen `FeatureSchema` bez typu (`Evaluated<unknown>`), přetypuje na `Evaluated<KonkrétníP>` až u pluginu, který typ zná.
 ## Serializace
 
 ```ts

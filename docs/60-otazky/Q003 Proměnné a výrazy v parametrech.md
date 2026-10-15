@@ -28,3 +28,12 @@ Hodnota parametru by byla `number | Expr`. `ParamSpec` s `kind: 'length'` to umo
 
 > [!note] Doplnění z revize architektury (2026-10-14)
 > Výraz v parametru je vstup mimo `FeatureInstance`, takže by ho cache podle identity ([[0006-nemenna-data|ADR 0006]], dodatek) neviděla. Návrh pro rozhodnutí: regenerace dostane `{ features, variables }`; při změně identity `variables` se přes `referencesOf`/`dependenciesOf` ([[03-dokument#Id těles a závislosti]]) najde první featura, jejíž parametr proměnnou používá, a cache se zkrátí před ni. Výraz se vyhodnotí před `schema.validate`, builder dál dostává čísla.
+
+## Doplněk 2026-10-14: příprava v M20
+
+[[M20-zpevneni-struktury|M20]] (A8) zavádí `evaluateParams(schema, params, variables)` v `document` jako jedinou cestu ke čtení parametrů, zatím bez proměnných. Až se otázka vrátí do plánu, zbývá rozhodnout:
+
+- **Viditelnost při chybě:** když výraz nejde vyhodnotit, z čeho počítá `visibleWhen`, jestli pole parametru zmizí? Dnes ze surových hodnot.
+- **Tah manipulátoru nad výrazem:** přepíše výraz číslem, úchyt se skryje, nebo se tah zakáže?
+- **Kde se proměnné vezmou:** `FeatureEditor` i `ManipulatorController` dnes volají `evaluateParams` samy s `NO_VARIABLES`. S proměnnými je potřebují oba, buď jako společnou závislost, nebo vystavit vyhodnocené parametry v `EditState` (změna API).
+- **Data skici:** editory skici a reference čtou parametry přímo, mimo `evaluateParams` (výjimka ve [[03-dokument#Vyhodnocení parametrů]]). Kóty skici s výrazem tu výjimku zruší.

@@ -16,14 +16,16 @@ import { ORIGIN_AXES, ORIGIN_PLANES, isBodyColor } from '@/document';
 import type { AxisId, BodyId, DocumentReader, FeatureId, PlaneId, SketchId } from '@/document';
 import type { BodyRenameOp, BodySetColorOp, BodySetVisibleOp, OperationDispatcher } from '@/ops';
 import { OP_VERSION } from '@/ops';
-import type { FeatureEditor, FeatureEditSession } from './feature-editor';
+import type { FeatureEditor, FeatureEditSession } from './feature-dialog/feature-editor';
+import { refBehaviorOf } from './feature-dialog/ref-kinds';
+import type { BrowserRefTarget } from './feature-dialog/ref-kinds';
 import {
   axisRefOf,
   regionRefsOf,
   toggleAxisRef,
   toggleBodyRef,
   toggleRegionRef,
-} from './ref-values';
+} from './feature-dialog/ref-values';
 import type { RegenStatusPort } from './regen-status-port';
 import type { SelectionCommands } from './selection';
 
@@ -149,11 +151,14 @@ const EMPTY_ROWS: readonly BrowserBodyRow[] = Object.freeze([]);
 const EMPTY_SKETCHES: readonly BrowserSketchRow[] = Object.freeze([]);
 const NO_REGIONS: readonly BrowserRegionRow[] = Object.freeze([]);
 
-/** The active reference param of an open dialog, with its kind and current value. */
+/**
+ * The active reference param of an open dialog, with the rows of the Browser it takes (the table
+ * of reference kinds, M20) and its current value.
+ */
 interface ActiveParam {
   readonly session: FeatureEditSession;
   readonly name: string;
-  readonly kind: string;
+  accepts(target: BrowserRefTarget): boolean;
   readonly value: unknown;
 }
 
@@ -271,7 +276,8 @@ export function createBrowserModel(deps: {
       selection.items.get().flatMap((item) => (item.kind === 'feature' ? [item.feature] : [])),
     );
     const active = activeParam();
-    const regionValue: unknown = active?.kind === 'region' ? active.value : undefined;
+    // Regions are listed only while the active param takes them (M13).
+    const regionParam = active !== null && active.accepts('region') ? active : null;
     const next = regen.state.get().sketches.flatMap(({ sketch, feature, regions }, i) => {
       const instance = doc.feature(feature);
       if (instance === undefined) return [];
@@ -282,13 +288,13 @@ export function createBrowserModel(deps: {
         name: instance.name,
         selected: selected.has(feature),
         regions:
-          active?.kind === 'region'
-            ? buildRegionRows(old?.feature === feature ? old.regions : NO_REGIONS, {
+          regionParam === null
+            ? NO_REGIONS
+            : buildRegionRows(old?.feature === feature ? old.regions : NO_REGIONS, {
                 feature,
                 regions,
-                value: regionValue,
-              })
-            : NO_REGIONS,
+                value: regionParam.value,
+              }),
       };
       if (
         old !== undefined &&
@@ -340,7 +346,7 @@ export function createBrowserModel(deps: {
     // visibleAxes is created before the first build, so it can be read here.
     const shown = visibleAxes.get();
     const active = activeParam();
-    const value: unknown = active?.kind === 'axis' ? active.value : undefined;
+    const value: unknown = active?.accepts('axis') === true ? active.value : undefined;
     const next = ORIGIN_AXES.map(({ id, label }, i): BrowserAxisRow => {
       const old = prev[i];
       const row = { axis: id, label, visible: shown.has(id), active: isAxisValue(value, id) };
@@ -366,8 +372,14 @@ export function createBrowserModel(deps: {
     const name = state.open ? state.activeRefParam : null;
     if (name === null) return null;
     const spec = session.schema.params[name];
-    if (spec === undefined) return null;
-    return { session, name, kind: spec.kind, value: state.params[name] };
+    const behavior = spec === undefined ? null : refBehaviorOf(spec);
+    if (behavior === null) return null;
+    return {
+      session,
+      name,
+      accepts: (target) => behavior.browserAccepts(target),
+      value: state.params[name],
+    };
   }
 
   /**
@@ -450,15 +462,12 @@ export function createBrowserModel(deps: {
     canEdit,
     renaming: renaming.asObservable(),
     select(body, opts) {
-      // An open dialog with a focused bodies param takes the body instead of the selection (R19).
-      const session = editor.current.get();
-      const state = session?.state.get();
-      const name = state?.open === true ? state.activeRefParam : null;
-      if (session !== null && state !== undefined && name !== null) {
-        if (session.schema.params[name]?.kind === 'bodies') {
-          session.setParam(name, toggleBodyRef(state.params[name], body));
-          return;
-        }
+      // An open dialog with a focused param that takes bodies gets the body instead of the
+      // selection (R19).
+      const active = activeParam();
+      if (active?.accepts('body') === true) {
+        active.session.setParam(active.name, toggleBodyRef(active.value, body));
+        return;
       }
       const item = { kind: 'body', body } as const;
       if (opts?.additive === true) selection.toggle(item);
@@ -538,12 +547,12 @@ export function createBrowserModel(deps: {
     },
     selectAxis(axis) {
       const active = activeParam();
-      if (active?.kind !== 'axis') return;
+      if (active?.accepts('axis') !== true) return;
       active.session.setParam(active.name, toggleAxisRef(active.value, { kind: 'axis', axis }));
     },
     selectRegion(feature, region) {
       const active = activeParam();
-      if (active?.kind !== 'region') return;
+      if (active?.accepts('region') !== true) return;
       active.session.setParam(active.name, toggleRegionRef(active.value, feature, region));
     },
     selectSketch(feature, opts) {

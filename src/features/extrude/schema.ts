@@ -2,7 +2,7 @@ import { validateAgainstSchema } from '@/document';
 import type {
   BodyRef,
   FeatureSchema,
-  ParamSchema,
+  ParamSchemaOf,
   ParamSpec,
   SketchRegionRef,
   TopoRef,
@@ -51,7 +51,7 @@ export function distanceApplies(endType: unknown): boolean {
 // by the registry, the UI form and the validation, so nobody may change it in place.
 // Labels are translation keys (ADR 0014), the texts are in messages.ts. The predicates get the
 // unchecked params, so they only compare values (spec 03, Podmíněné a seskupené parametry).
-const params: ParamSchema = Object.freeze<ParamSchema>({
+const params: ParamSchemaOf<ExtrudeParams> = Object.freeze<ParamSchemaOf<ExtrudeParams>>({
   regions: Object.freeze<ParamSpec>({ kind: 'region', label: 'extrude.regions', min: 1 }),
   operation: Object.freeze<ParamSpec>({
     kind: 'enum',

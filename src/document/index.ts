@@ -51,9 +51,14 @@ export type {
   FeatureSchemaRegistry,
   ParamIssue,
   ParamSchema,
+  ParamSchemaOf,
   ParamSpec,
+  RefParamKind,
+  RefParamSpec,
 } from './schema';
 export { validateAgainstSchema } from './validate';
+export { NO_VARIABLES, evaluateParams } from './evaluate';
+export type { Evaluated, ParamVariables } from './evaluate';
 export { isJsonObject, isJsonValue } from './json';
 export { fromData, migrateFeatureData, toData } from './serialize';
 export type { DocumentData, DocumentLoadError, DocumentLoadIssue, FeatureData } from './serialize';
