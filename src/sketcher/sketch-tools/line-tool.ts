@@ -265,7 +265,9 @@ export function createLineTool(sketches: SketchEditor): Tool {
       previous: geometry.arc,
       entities: [...current.entities, ...geometry.entities],
     };
-    chain = started;
+    // An arc onto the first point closes the chain and ends it, like a closing line.
+    const closes = geometry.end.id === current.first.id;
+    chain = closes ? null : started;
     void session
       .addGeometry({ entities, constraints }, { required: geometry.required })
       .then((written) => {

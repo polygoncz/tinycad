@@ -472,7 +472,7 @@ Když dvě křivky vazby `tangent` (úsečka + oblouk, oblouk + oblouk) sdílej�
 
 ### Tečný oblouk v polyline
 
-V nástroji úsečka s rozpracovaným řetězem: stisk na posledním bodu řetězu a tah nad `CLICK_TOLERANCE_PX` přepne do tečného oblouku (náhled oblouku `tangentArcFrom(poslední bod, směr předchozí úsečky nebo oblouku řetězu, kurzor)`); uvolnění zapíše oblouk se sdíleným začátkem, `tangent(oblouk, předchozí)` (povinná) a konec ze snapperu; řetěz pokračuje z konce oblouku (`previous` = oblouk – další úsečka dostane tečnu přes `inferLine`, je-li do 3°). Bez předchozí křivky (první bod řetězu) se tah ignoruje. Esc během tahu tah zruší, řetěz zůstane.
+V nástroji úsečka s rozpracovaným řetězem: stisk na posledním bodu řetězu a tah nad `CLICK_TOLERANCE_PX` přepne do tečného oblouku (náhled oblouku `tangentArcFrom(poslední bod, směr předchozí úsečky nebo oblouku řetězu, kurzor)`); uvolnění zapíše oblouk se sdíleným začátkem, `tangent(oblouk, předchozí)` (povinná) a konec ze snapperu; řetěz pokračuje z konce oblouku (`previous` = oblouk – další úsečka dostane tečnu přes `inferLine`, je-li do 3°). Bez předchozí křivky (první bod řetězu) se tah ignoruje. Esc během tahu tah zruší, řetěz zůstane. Oblouk se počítá do podmínky uzavření (dvě křivky řetězu); konec oblouku na prvním bodu řetězu řetěz uzavře a ukončí jako uzavírací úsečka. Oblouk po směru se v datech uloží prohozením konců a řetěz pokračuje z bodu u kurzoru. Tah obsluhuje `clickTool` (`onDragStart` při prvním pohybu nad toleranci, `onDrag`, `onDragEnd`, Esc → `onDragCancel`); nástroj bez `onDragStart` tah ignoruje jako dřív. Společný kód s nástrojem Tečný oblouk je v `sketch-tools/tangent-arc.ts`.
 
 ### Rodiny nástrojů v liště
 

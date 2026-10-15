@@ -271,6 +271,18 @@ describe('the tangent arc of the polyline', () => {
     ]);
   });
 
+  it('an arc ending on the first point of the chain closes and ends it', async () => {
+    const { viewport, session } = await chained();
+    await clicks(viewport, [[30, 30]]);
+
+    drag(viewport, [30, 30], [[10, 10]]);
+    await settle();
+    expect(theArc(session).end).toBe(pointAt(session, 10, 10));
+    // The chain has ended: the next click only starts a new one.
+    await clicks(viewport, [[50, 50]]);
+    expect(linesOf(session)).toHaveLength(2);
+  });
+
   it('a clockwise arc swaps its ends in the data; the chain goes on from the point at the cursor', async () => {
     const { viewport, session } = await chained();
 

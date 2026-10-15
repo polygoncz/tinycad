@@ -48,7 +48,7 @@ Rozhodnutí v sezení 2026-10-15 (brainstorming), Pavel vybral všechny nabídnu
 - [x] 2. Rodiny nástrojů v liště (`ToolDescriptor.family`, `ToolbarItem.variants`, dělené tlačítko v `Toolbar.vue`)
 - [x] 3. Nástroje kružnic (2 body, 3 body, 2 tečny, 3 tečny)
 - [x] 4. Nástroje oblouků (3 body, tečný)
-- [ ] 5. Tečný oblouk v polyline
+- [x] 5. Tečný oblouk v polyline
 - [ ] 6. e2e `m27.spec.ts`, propsání do spec 10 a 11
 
 ## Implementační plán
@@ -121,6 +121,7 @@ _(Souběžná stopa, [[Roadmapa#Souběžné stopy (pokus od M25)|pravidla]]: mí
 - **2026-10-15, úkol 4** (oblouk 3 body, tečný oblouk): hotovo souběžně s úkolem 3 v izolovaném worktree; sloučení mělo konflikty jen v registraci nástrojů a i18n (sousední řádky). Esc u nových nástrojů: první zruší rozpracované body, druhý ukončí nástroj. Tečný oblouk nemá `inferRadius` (poloměr určuje tečnost).
   - **Nález:** planegcs hlásí `tangent_la`/`tangent_aa` mezi křivkami se sdíleným koncem jako redundantní, `addGeometry` ji zahodí – tečný oblouk by tečnost neměl. Platilo už pro tečnu úsečky z konce oblouku v M26 (vazba tiše mizela). A25: adaptér mapuje tečnost ve sdíleném bodě na `angle_via_point` (0 nebo π podle geometrie), jako FreeCAD; propsáno do [[12-skicar#Tečnost ve sdíleném koncovém bodě (adaptér planegcs)]].
 - **2026-10-15, adaptér** (A25): `angle_via_point` s úhlem číslem (pevný parametr jako `l2l_angle_pppp`); oblouk na úsečku, na oblouk zevnitř i do S dají `ok` bez redundance a tečnost drží i po tažení. Body spojené jen `coincident` (různá id) jdou dál přes `tangent_*` – omezení zapsané ve spec.
+- **2026-10-15, úkol 5** (tečný oblouk v polyline): hotovo v izolovaném worktree, sloučeno bez konfliktů. `clickTool` umí volitelný tah (`onDragStart` …), společný kód s Tečným obloukem v `tangent-arc.ts`. A26: oblouk se počítá do podmínky uzavření; oblouk končící na prvním bodu řetěz uzavře a ukončí (doplněno hlavním sezením s testem).
 
 ## Retrospektiva
 
