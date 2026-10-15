@@ -21,6 +21,8 @@ const CONSTRAINT_ICONS: Readonly<Record<GeometricConstraintKind, string>> = {
   perpendicular: 'angle',
   equal: 'equal',
   tangent: 'circle-dot',
+  // The M mark of the midpoint glyph.
+  midpoint: 'letter-m',
   fix: 'lock',
 };
 /** The icon of an action of the constraint group that is not one of the kinds. */

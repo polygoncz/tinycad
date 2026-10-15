@@ -198,6 +198,132 @@ describe('solveSketch – drag', () => {
   });
 });
 
+/** Line L from p [0, 0] to q [10, 0] with p fixed, plus extra entities and constraints. */
+function withLine(entities: readonly unknown[], constraints: readonly unknown[]): SketchData {
+  return sketch(
+    [
+      { kind: 'point', id: 'p', x: 0, y: 0 },
+      { kind: 'point', id: 'q', x: 10, y: 0 },
+      { kind: 'line', id: 'L', p1: 'p', p2: 'q' },
+      ...entities,
+    ],
+    [{ kind: 'fix', id: 'fp', point: 'p' }, ...constraints],
+  );
+}
+
+/** Circle C (r 5) and arc A (r 5, quarter from a fixed [5, 0] to [0, 5]) around a fixed centre o. */
+function withRounds(entities: readonly unknown[], constraints: readonly unknown[]): SketchData {
+  return sketch(
+    [
+      { kind: 'point', id: 'o', x: 0, y: 0 },
+      { kind: 'circle', id: 'C', center: 'o', radius: 5 },
+      { kind: 'point', id: 'as', x: 5, y: 0 },
+      { kind: 'point', id: 'ae', x: 0, y: 5 },
+      { kind: 'arc', id: 'A', center: 'o', start: 'as', end: 'ae' },
+      ...entities,
+    ],
+    [
+      { kind: 'fix', id: 'fo', point: 'o' },
+      { kind: 'fix', id: 'fs', point: 'as' },
+      { kind: 'radius', id: 'rc', curve: 'C', value: 5 },
+      ...constraints,
+    ],
+  );
+}
+
+/** The signed distance of x from the line through a and b. */
+function offLine(
+  x: { x: number; y: number },
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): number {
+  return ((b.x - a.x) * (x.y - a.y) - (b.y - a.y) * (x.x - a.x)) / Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+describe('solveSketch – M26 constraints', () => {
+  it('a point on a line stays on it when the line is dragged', () => {
+    const data = withLine(
+      [{ kind: 'point', id: 'm', x: 4, y: 0 }],
+      [{ kind: 'pointOnCurve', id: 'on', point: 'm', curve: 'L' }],
+    );
+    const result = solveSketch(mod, { ...data, drag: { point: idOf(data, 'q'), to: [6, 8] } });
+    expect(result.status).toBe('ok');
+    const q = point(result.entities, 'q');
+    expectPoint(q, 6, 8);
+    expect(offLine(point(result.entities, 'm'), { x: 0, y: 0 }, q)).toBeCloseTo(0, 6);
+  });
+
+  it('a point on a line may leave the segment: it stays on the whole carrier line', () => {
+    const data = withLine(
+      [{ kind: 'point', id: 'm', x: 4, y: 0 }],
+      [
+        { kind: 'pointOnCurve', id: 'on', point: 'm', curve: 'L' },
+        { kind: 'fix', id: 'fq', point: 'q' },
+      ],
+    );
+    const result = solveSketch(mod, { ...data, drag: { point: idOf(data, 'm'), to: [20, 3] } });
+    expect(result.status).toBe('ok');
+    expectPoint(point(result.entities, 'm'), 20, 0);
+  });
+
+  it('a midpoint stays in the middle of its line', () => {
+    const data = withLine(
+      [{ kind: 'point', id: 'm', x: 3, y: 2 }],
+      [{ kind: 'midpoint', id: 'mid', point: 'm', line: 'L' }],
+    );
+    const result = solveSketch(mod, { ...data, drag: { point: idOf(data, 'q'), to: [8, 6] } });
+    expect(result.status).toBe('ok');
+    expectPoint(point(result.entities, 'q'), 8, 6);
+    expectPoint(point(result.entities, 'm'), 4, 3);
+  });
+
+  it('hAlign gives two points the same y, vAlign the same x', () => {
+    const data = sketch(
+      [
+        { kind: 'point', id: 'a', x: 0, y: 0 },
+        { kind: 'point', id: 'b', x: 7, y: 3 },
+        { kind: 'point', id: 'c', x: 2, y: 9 },
+      ],
+      [
+        { kind: 'fix', id: 'fa', point: 'a' },
+        { kind: 'hAlign', id: 'h', a: 'a', b: 'b' },
+        { kind: 'vAlign', id: 'v', a: 'c', b: 'a' },
+      ],
+    );
+    const result = solveSketch(mod, data);
+    expect(result.status).toBe('ok');
+    // 6 coordinates − fix 2 − 1 − 1.
+    expect(result.dof).toBe(2);
+    expect(point(result.entities, 'b').y).toBeCloseTo(0, 6);
+    expect(point(result.entities, 'b').x).toBeCloseTo(7, 6);
+    expect(point(result.entities, 'c').x).toBeCloseTo(0, 6);
+    expect(point(result.entities, 'c').y).toBeCloseTo(9, 6);
+  });
+
+  it('a point on a circle lies on it', () => {
+    const data = withRounds(
+      [{ kind: 'point', id: 'm', x: 1, y: 1 }],
+      [{ kind: 'pointOnCurve', id: 'on', point: 'm', curve: 'C' }],
+    );
+    const result = solveSketch(mod, { ...data, drag: { point: idOf(data, 'm'), to: [0, -9] } });
+    expect(result.status).toBe('ok');
+    expectPoint(point(result.entities, 'm'), 0, -5);
+  });
+
+  it('a point on an arc lies on its whole circle, also outside the arc', () => {
+    const data = withRounds(
+      [{ kind: 'point', id: 'm', x: 1, y: 1 }],
+      [{ kind: 'pointOnCurve', id: 'on', point: 'm', curve: 'A' }],
+    );
+    // The arc spans the first quadrant only; [-5, 0] is on its circle, outside its range.
+    const result = solveSketch(mod, { ...data, drag: { point: idOf(data, 'm'), to: [-9, 0] } });
+    expect(result.status).toBe('ok');
+    expectPoint(point(result.entities, 'm'), -5, 0);
+    // The arc itself did not grow to reach the point.
+    expectPoint(point(result.entities, 'ae'), 0, 5);
+  });
+});
+
 describe('solveSketch – conflicts and redundancy', () => {
   it('a third dimension on the diagonal is a conflict with its id', () => {
     const diagonal = { kind: 'distance', id: 'diag', a: 'a', b: 'c', value: 30 };

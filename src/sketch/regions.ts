@@ -2,6 +2,7 @@ import type { Vec2 } from '@/core';
 import { curve2, pointsById } from './geometry';
 import type { Curve2 } from './geometry';
 import type { SketchCurve, SketchData, SketchEntity } from './model';
+import { angleOf, cross, dist, dot, length, lerp, mod2pi, normalize, sub, TWO_PI } from './vec2';
 
 // Closed regions (profiles) of a sketch as a planar graph (spec 12 "Oblasti (profily)").
 // Pure 2D geometry, testable without OCCT: curves → nodes → crossing check → pruning of open
@@ -32,7 +33,6 @@ const ANGLE_TIE = 1e-9;
 const NODE_MATCH_FACTOR = 1e3;
 /** Direction of the containment ray: irrational, so it practically never hits a vertex exactly. */
 const RAY: Vec2 = normalize([Math.SQRT2, Math.PI]);
-const TWO_PI = 2 * Math.PI;
 
 /** A line or an arc between two nodes; arcs are counter-clockwise from `from` to `to`. */
 interface Edge {
@@ -514,46 +514,6 @@ function onRound(round: Round, p: Vec2, tol: number): boolean {
   const eps = tol / round.r;
   const diff = mod2pi(angleOf(sub(p, round.c)) - round.start);
   return diff <= round.sweep + eps || diff >= TWO_PI - eps;
-}
-
-// --- 2D vector helpers -----------------------------------------------------------------------
-
-function sub(a: Vec2, b: Vec2): Vec2 {
-  return [a[0] - b[0], a[1] - b[1]];
-}
-
-function dot(a: Vec2, b: Vec2): number {
-  return a[0] * b[0] + a[1] * b[1];
-}
-
-function cross(a: Vec2, b: Vec2): number {
-  return a[0] * b[1] - a[1] * b[0];
-}
-
-function length(a: Vec2): number {
-  return Math.hypot(a[0], a[1]);
-}
-
-function dist(a: Vec2, b: Vec2): number {
-  return Math.hypot(a[0] - b[0], a[1] - b[1]);
-}
-
-function lerp(origin: Vec2, d: Vec2, t: number): Vec2 {
-  return [origin[0] + d[0] * t, origin[1] + d[1] * t];
-}
-
-function normalize(a: Vec2): Vec2 {
-  const l = length(a);
-  return [a[0] / l, a[1] / l];
-}
-
-function angleOf(d: Vec2): number {
-  return Math.atan2(d[1], d[0]);
-}
-
-function mod2pi(a: number): number {
-  const m = a % TWO_PI;
-  return m < 0 ? m + TWO_PI : m;
 }
 
 /** Plain string comparison by UTF-16 code units (spec 12: names sorted by string comparison). */

@@ -3,7 +3,7 @@
 
 import { plane as planeMath } from '@/core';
 import type { Vec2, Vec3 } from '@/core';
-import type { SketchConstraintId, SketchEntityId } from '@/sketch';
+import type { SketchConstraintId, SketchData, SketchEntityId } from '@/sketch';
 import { CLICK_TOLERANCE_PX } from '@/interaction';
 import type {
   KeyMods,
@@ -44,6 +44,41 @@ export const newConstraintId = (ctx: ToolContext): SketchConstraintId =>
  */
 export function snapGrid(sketches: SketchEditor, mods: KeyMods): number | null {
   return sketches.gridSnap.get() && !mods.alt ? sketches.gridStep() : null;
+}
+
+/**
+ * How a drawing tool snaps (spec 12, M26): the grid of snapGrid and the inference of constraints,
+ * which Ctrl/Cmd turns off. Read on every move and click.
+ */
+export function snapMode(
+  sketches: SketchEditor,
+  mods: KeyMods,
+): { readonly grid: number | null; readonly infer: boolean } {
+  return { grid: snapGrid(sketches, mods), infer: !mods.mod };
+}
+
+/** A new line within this angle of an axis or of a connected line is inferred (spec 12, 3°). */
+export const ANGLE_TOLERANCE = (3 * Math.PI) / 180;
+
+/** The last circle or arc of the data (`previous` of inferRadius, spec 12); null without one. */
+export function lastRound(data: SketchData): SketchEntityId | null {
+  const round = data.entities.findLast((e) => e.kind === 'circle' || e.kind === 'arc');
+  return round?.id ?? null;
+}
+
+/**
+ * The line of the data between the points a and b (either order), or null. A tool does not draw
+ * a second line between two points an existing line already joins.
+ */
+export function existingLine(
+  data: SketchData,
+  a: SketchEntityId,
+  b: SketchEntityId,
+): SketchEntityId | null {
+  const line = data.entities.find(
+    (e) => e.kind === 'line' && ((e.p1 === a && e.p2 === b) || (e.p1 === b && e.p2 === a)),
+  );
+  return line?.id ?? null;
 }
 
 /** The cursor in the coordinates of the plane of the session; null for a ray parallel to it. */

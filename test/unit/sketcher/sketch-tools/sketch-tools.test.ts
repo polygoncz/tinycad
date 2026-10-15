@@ -490,13 +490,14 @@ describe('the line tool', () => {
     sketches.setGridSnap(false);
     manager.activate('sketch.line');
 
-    // 2.9° off the x axis, 2.9° off the y axis, then 45°.
+    // 2.9° off the x axis, 2.9° off the y axis, then 60°; long enough that the ends lie farther
+    // than the 6 px of the alignment snap from the axes of the points before.
     const t = Math.tan((2.9 * Math.PI) / 180);
     await clicks(viewport, [
       [10, 10],
-      [110, 10 + 100 * t],
-      [110 + 100 * t, 110 + 100 * t],
-      [150, 150 + 100 * t + 40],
+      [210, 10 + 200 * t],
+      [210 + 300 * t, 10 + 200 * t + 300],
+      [300, 450],
     ]);
 
     const lines = linesOf(session);
@@ -516,7 +517,7 @@ describe('the line tool', () => {
 
     await clicks(viewport, [
       [10, 10],
-      [110, 10 + 100 * t],
+      [210, 10 + 200 * t],
     ]);
 
     expect(linesOf(session)).toHaveLength(1);
@@ -576,7 +577,7 @@ describe('the line tool', () => {
     ]);
   });
 
-  it('a pick of another drawing counts as no snap', async () => {
+  it('a point of another drawing is not snapped to', async () => {
     const { manager, viewport, session, sketches } = await sketching();
     // Off-grid points: the angle (or the place) is the point of the test, not the grid.
     sketches.setGridSnap(false);
@@ -645,12 +646,12 @@ describe('the line tool', () => {
 
     await clicks(ctx.viewport, [
       [10, 20],
-      [30, 25],
+      [30, 35],
     ]);
 
     const [p, q] = pointsOf(session);
     expect([p?.x, p?.y]).toEqual([10, 20]);
-    expect([q?.x, q?.y]).toEqual([30, 25]);
+    expect([q?.x, q?.y]).toEqual([30, 35]);
   });
 });
 
@@ -982,9 +983,9 @@ describe('the select tool of the sketch', () => {
   });
 });
 
-describe('snapAt with the grid (M19.2 D4)', () => {
+describe('snapAt (M19.2 D4, M26)', () => {
   const lineSketch = data([
-    { kind: 'point', id: 'p', x: 1.4, y: -2.6 },
+    { kind: 'point', id: 'p', x: 31.4, y: -2.6 },
     { kind: 'point', id: 'l1', x: -50, y: 20 },
     { kind: 'point', id: 'l2', x: 50, y: 20 },
     { kind: 'line', id: 'l', p1: 'l1', p2: 'l2' },
@@ -995,19 +996,28 @@ describe('snapAt with the grid (M19.2 D4)', () => {
     const ctx: ToolContext = { ...s.ctx, finish: () => undefined };
     return {
       ...s,
-      at: (x: number, y: number, grid: number | null) => snapAt(ctx, s.session, x, y, grid),
+      at: (x: number, y: number, grid: number | null, infer = true) =>
+        snapAt(ctx, s.session, x, y, { grid, infer }),
     };
   }
 
+  const free = (at: Vec2, kind: 'free' | 'grid') => ({
+    at,
+    kind,
+    point: null,
+    inferred: [],
+    guides: [],
+  });
+
   it('rounds a free point to the multiples of the grid step', async () => {
     const { at } = await snapping();
-    expect(at(11.4, -12.6, 1)).toEqual({ kind: 'free', at: [11, -13] });
-    expect(at(7, 3, 5)).toEqual({ kind: 'free', at: [5, 5] });
+    expect(at(11.4, -12.6, 1)).toEqual(free([11, -13], 'grid'));
+    expect(at(17, 8, 5)).toEqual(free([15, 10], 'grid'));
   });
 
   it('without the grid (null) the free point stays where the cursor is', async () => {
     const { at } = await snapping();
-    expect(at(11.4, -12.6, null)).toEqual({ kind: 'free', at: [11.4, -12.6] });
+    expect(at(11.4, -12.6, null)).toEqual(free([11.4, -12.6], 'free'));
   });
 
   it('a rounded −0 is 0', async () => {
@@ -1017,20 +1027,51 @@ describe('snapAt with the grid (M19.2 D4)', () => {
     expect(target?.at[1]).toBe(5);
   });
 
-  it('a point of the sketch within the tolerance wins over the grid', async () => {
+  it('a point of the sketch within 6 px wins over the grid', async () => {
     const { at } = await snapping();
-    expect(at(1.5, -2.5, 1)).toEqual({ kind: 'point', id: 'p', at: [1.4, -2.6] });
+    expect(at(35, -2.5, 1)).toMatchObject({ kind: 'point', point: 'p', at: [31.4, -2.6] });
+    expect(at(37.5, -2.6, 1)?.kind).not.toBe('point');
   });
 
-  it('the origin wins over the grid', async () => {
-    const { at } = await snapping();
-    expect(at(0.3, 0.6, 5)?.kind).toBe('origin');
-  });
-
-  it('a hit of a curve gives a free point, rounded too', async () => {
+  it('the tolerance is 6 px converted to the plane at the cursor', async () => {
     const { at, viewport } = await snapping();
-    expect(viewport.pick(12.3, 20.2, ['sketchEntity'])).toMatchObject({ entity: 'l' });
-    expect(at(12.3, 20.2, 1)).toEqual({ kind: 'free', at: [12, 20] });
+    // Zoomed out: 1 px = 2 mm, so 6 px = 12 mm.
+    viewport.setScreenToRay((x, y) => ({ origin: [2 * x, 2 * y, 10], direction: [0, 0, -1] }));
+    expect(at(21.5 / 2, -2.6 / 2, null)).toMatchObject({ kind: 'point', point: 'p' });
+    expect(at(19 / 2, -2.6 / 2, null)?.kind).not.toBe('point');
+  });
+
+  it('the origin wins over the grid and gets fix', async () => {
+    const { at } = await snapping();
+    expect(at(0.3, 0.6, 5)).toMatchObject({
+      kind: 'origin',
+      at: [0, 0],
+      inferred: [{ kind: 'fix' }],
+    });
+  });
+
+  it('a point near a curve snaps onto it with pointOnCurve', async () => {
+    const { at } = await snapping();
+    const target = at(12.3, 21.2, 1);
+    expect(target).toMatchObject({
+      kind: 'onCurve',
+      point: null,
+      inferred: [{ kind: 'pointOnCurve', curve: 'l' }],
+    });
+    expect(target?.at[0]).toBeCloseTo(12.3, 9);
+    expect(target?.at[1]).toBe(20);
+  });
+
+  it('without infer (Ctrl/Cmd) a curve is not snapped to, a point still is', async () => {
+    const { at } = await snapping();
+    expect(at(12.3, 21.2, 1, false)).toEqual(free([12, 21], 'grid'));
+    expect(at(35, -2.5, 1, false)).toMatchObject({ kind: 'point', point: 'p' });
+  });
+
+  it('a ray parallel to the plane gives null', async () => {
+    const { at, viewport } = await snapping();
+    viewport.setScreenToRay((x, y) => ({ origin: [x, y, 5], direction: [1, 0, 0] }));
+    expect(at(10, 10, 1)).toBeNull();
   });
 });
 
@@ -1086,13 +1127,13 @@ describe('the drawing tools and the grid (M19.2 D4)', () => {
     const { manager, viewport, session } = await sketching({ gridStep: () => step });
     manager.activate('sketch.line');
 
-    await clicks(viewport, [[7, 3]]);
+    await clicks(viewport, [[17, 13]]);
     step = 2;
-    await clicks(viewport, [[7, 3.2]]);
+    await clicks(viewport, [[27, 3.2]]);
 
     expect(pointsOf(session).map((p) => [p.x, p.y])).toEqual([
-      [5, 5],
-      [8, 4],
+      [15, 15],
+      [28, 4],
     ]);
   });
 
@@ -1127,10 +1168,10 @@ describe('the drawing tools and the grid (M19.2 D4)', () => {
     const { manager, viewport, session } = await sketching();
     manager.activate('sketch.line');
 
-    // 3.1° off the x axis under the cursor, 2.9° once snapped to (10, 10) and (30, 9).
+    // 3.1° off the x axis under the cursor, 3.0° once snapped to (10, 10) and (300, 25).
     await clicks(viewport, [
-      [10, 10.49],
-      [30, 9.4],
+      [10, 9.51],
+      [300, 25.4],
     ]);
 
     expect(kindsOf(session)).toEqual(['horizontal']);
@@ -1167,5 +1208,301 @@ describe('the drawing tools and the grid (M19.2 D4)', () => {
     ]);
     const circle = session.state.get().entities.find((e) => e.kind === 'circle');
     expect(circle).toMatchObject({ radius: 5 });
+  });
+});
+
+describe('the drawing tools infer constraints (M26)', () => {
+  /** A horizontal line from (0, 50) to (100, 50), its middle at (50, 50). */
+  const lineSketch = data([
+    { kind: 'point', id: 'l1', x: 0, y: 50 },
+    { kind: 'point', id: 'l2', x: 100, y: 50 },
+    { kind: 'line', id: 'l', p1: 'l1', p2: 'l2' },
+  ]);
+  const constraintsOf = (s: SketchSession) => s.state.get().constraints;
+
+  it('a point put onto a line gets pointOnCurve', async () => {
+    const { manager, viewport, session } = await sketching({ sketch: lineSketch });
+    manager.activate('sketch.line');
+
+    await clicks(viewport, [
+      [30, 52],
+      [70, 90],
+    ]);
+
+    const [, , first] = pointsOf(session);
+    expect(xyOf(session, first?.id ?? '')).toEqual([30, 50]);
+    expect(constraintsOf(session)).toEqual([
+      expect.objectContaining({ kind: 'pointOnCurve', point: first?.id, curve: 'l' }),
+    ]);
+  });
+
+  it('a point put onto the middle of a line gets midpoint', async () => {
+    const { manager, viewport, session } = await sketching({ sketch: lineSketch });
+    manager.activate('sketch.circle');
+
+    await clicks(viewport, [
+      [51, 52],
+      [61, 70],
+    ]);
+
+    const circle = session.state.get().entities.find((e) => e.kind === 'circle');
+    expect(circle?.kind === 'circle' && xyOf(session, circle.center)).toEqual([50, 50]);
+    expect(constraintsOf(session)).toEqual([
+      expect.objectContaining({ kind: 'midpoint', line: 'l' }),
+    ]);
+  });
+
+  it('a point aligned with another one gets hAlign or vAlign', async () => {
+    const { manager, viewport, session } = await sketching({ sketch: lineSketch });
+    manager.activate('sketch.circle');
+
+    await clicks(viewport, [
+      [102, 120],
+      [130, 140],
+    ]);
+
+    const [center] = pointsOf(session).slice(-1);
+    expect([center?.x, center?.y]).toEqual([100, 120]);
+    expect(constraintsOf(session)).toEqual([
+      expect.objectContaining({ kind: 'vAlign', a: center?.id, b: 'l2' }),
+    ]);
+  });
+
+  it('a line nearly perpendicular to the previous one gets perpendicular', async () => {
+    const { manager, viewport, session } = await sketching();
+    manager.activate('sketch.line');
+
+    // (100, 20) and then (−16, 80): perpendicular; no axis, other length.
+    await clicks(viewport, [
+      [10, 10],
+      [110, 30],
+      [94, 110],
+    ]);
+
+    const [l1, l2] = linesOf(session);
+    expect(constraintsOf(session)).toEqual([
+      expect.objectContaining({ kind: 'perpendicular', a: l2?.id, b: l1?.id }),
+    ]);
+  });
+
+  it('a line from the end of a line nearly along it gets parallel, not also equal', async () => {
+    const { manager, viewport, session } = await sketching();
+    manager.activate('sketch.line');
+
+    // The third line is 0.6° off the second and about as long: one constraint per pair.
+    await clicks(viewport, [
+      [10, 10],
+      [110, 30],
+      [150, 120],
+      [190, 211],
+    ]);
+
+    const [, l2, l3] = linesOf(session);
+    expect(constraintsOf(session)).toEqual([
+      expect.objectContaining({ kind: 'parallel', a: l3?.id, b: l2?.id }),
+    ]);
+  });
+
+  it('a line as long as the previous one of the chain gets equal', async () => {
+    const { manager, viewport, session } = await sketching();
+    manager.activate('sketch.line');
+
+    // 100 long, then 101 long at 60°: within 2 %.
+    await clicks(viewport, [
+      [10, 10],
+      [110, 30],
+      [110 - 61, 30 + 81],
+    ]);
+
+    const [l1, l2] = linesOf(session);
+    expect(constraintsOf(session)).toEqual([
+      expect.objectContaining({ kind: 'equal', a: l2?.id, b: l1?.id }),
+    ]);
+  });
+
+  it('a line from the end of an arc along its tangent gets tangent', async () => {
+    // An arc of radius 50 from 0° to 60°; at its end the tangent runs at 150°.
+    const sketch = data([
+      { kind: 'point', id: 'c', x: 100, y: 100 },
+      { kind: 'point', id: 's', x: 150, y: 100 },
+      { kind: 'point', id: 'e', x: 125, y: 100 + 50 * Math.sin(Math.PI / 3) },
+      { kind: 'arc', id: 'a', center: 'c', start: 's', end: 'e' },
+    ]);
+    const { manager, viewport, session } = await sketching({ sketch });
+    manager.activate('sketch.line');
+
+    // (38, 192) lies 0.8° off the tangent from the end.
+    await clicks(viewport, [
+      [125, 143],
+      [38, 192],
+    ]);
+
+    const [line] = linesOf(session);
+    expect(line?.p1).toBe('e');
+    expect(constraintsOf(session)).toEqual([
+      expect.objectContaining({ kind: 'tangent', a: line?.id, b: 'a' }),
+    ]);
+  });
+
+  it('with Ctrl/Cmd the tools add no inferred constraints, only shared points and fix', async () => {
+    const { manager, viewport, session } = await sketching({ sketch: lineSketch });
+    manager.activate('sketch.line');
+
+    // From the origin onto the line (pointOnCurve) and then horizontal and aligned: all off.
+    for (const [x, y] of [
+      [0.5, 0.5],
+      [30, 52],
+      [130, 53],
+      [101, 51],
+    ] as const) {
+      click(viewport, x, y, { mod: true });
+      await settle();
+    }
+
+    const lines = linesOf(session).slice(1);
+    expect(lines).toHaveLength(3);
+    expect(lines[2]?.p2).toBe('l2');
+    expect(xyOf(session, lines[1]?.p1 ?? '')).toEqual([30, 52]);
+    expect(kindsOf(session)).toEqual(['fix']);
+  });
+
+  it('the first point of the chain closes it before its write has settled', async () => {
+    const { manager, viewport, session, solver } = await sketching();
+    manager.activate('sketch.line');
+    solver.hold();
+
+    for (const [x, y] of [
+      [10, 10],
+      [110, 30],
+      [60, 120],
+      [11, 11],
+    ] as const) {
+      click(viewport, x, y);
+    }
+    solver.release();
+    await settle();
+
+    const points = pointsOf(session);
+    const lines = linesOf(session);
+    expect(points).toHaveLength(3);
+    expect(lines).toHaveLength(3);
+    expect(lines[2]?.p2).toBe(points[0]?.id);
+  });
+
+  it('a rectangle over a whole existing edge shares its points and adds no second line', async () => {
+    // The edge (0, 30)–(40, 30); the rectangle from its start to (40, 60) has it as a side.
+    const edge = data([
+      { kind: 'point', id: 'e1', x: 0, y: 30 },
+      { kind: 'point', id: 'e2', x: 40, y: 30 },
+      { kind: 'line', id: 'e', p1: 'e1', p2: 'e2' },
+    ]);
+    const { manager, viewport, session } = await sketching({ sketch: edge });
+    manager.activate('sketch.rectangle');
+
+    await clicks(viewport, [
+      [1, 31],
+      [40, 60],
+    ]);
+
+    const lines = linesOf(session).slice(1);
+    expect(lines).toHaveLength(3);
+    expect(pointsOf(session)).toHaveLength(4);
+    const [bc, cd, da] = lines;
+    expect(bc?.p1).toBe('e2');
+    expect(da?.p2).toBe('e1');
+    // No alignment of the corner (40, 60) with the corner e2, no axis of the existing side.
+    expect(session.state.get().constraints).toEqual([
+      expect.objectContaining({ kind: 'vertical', line: bc?.id }),
+      expect.objectContaining({ kind: 'horizontal', line: cd?.id }),
+      expect.objectContaining({ kind: 'vertical', line: da?.id }),
+    ]);
+  });
+
+  it('a polyline between two points an existing line joins adds no line and goes on', async () => {
+    const { manager, viewport, session } = await sketching({ sketch: lineSketch });
+    manager.activate('sketch.line');
+
+    await clicks(viewport, [
+      [0, 50],
+      [100, 50],
+      [130, 90],
+    ]);
+
+    const lines = linesOf(session);
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toMatchObject({ p1: 'l2' });
+  });
+
+  it('an alignment with the start of the line becomes horizontal or vertical of the line', async () => {
+    const { manager, viewport, session } = await sketching();
+    manager.activate('sketch.line');
+
+    // (110, 15) is aligned with (10, 10) and 2.9° off the axis: one horizontal, no hAlign.
+    await clicks(viewport, [
+      [10, 10],
+      [110, 15],
+      [113, 60],
+    ]);
+
+    const [l1, l2] = linesOf(session);
+    expect(xyOf(session, l1?.p2 ?? '')).toEqual([110, 10]);
+    expect(session.state.get().constraints).toEqual([
+      expect.objectContaining({ kind: 'horizontal', line: l1?.id }),
+      expect.objectContaining({ kind: 'vertical', line: l2?.id }),
+    ]);
+  });
+
+  it('the horizontals and verticals of the rectangle are required', async () => {
+    const { manager, viewport, session, solver } = await sketching({ sketch: lineSketch });
+    manager.activate('sketch.rectangle');
+    // The corner on the line gets pointOnCurve; the solver finds a conflict in everything.
+    solver.next({ status: 'conflict', entities: null, conflicting: [] });
+
+    await clicks(viewport, [
+      [30, 52],
+      [70, 90],
+    ]);
+
+    expect(kindsOf(session)).toEqual(['horizontal', 'vertical', 'horizontal', 'vertical']);
+  });
+
+  it('a circle with nearly the radius of the last circle or arc gets equal', async () => {
+    const sketch = data([
+      { kind: 'point', id: 'c', x: 100, y: 100 },
+      { kind: 'circle', id: 'k', center: 'c', radius: 20 },
+    ]);
+    const { manager, viewport, session, sketches } = await sketching({ sketch });
+    sketches.setGridSnap(false);
+    manager.activate('sketch.circle');
+
+    await clicks(viewport, [
+      [200, 160],
+      [220.3, 160],
+    ]);
+
+    const circle = session.state.get().entities.findLast((e) => e.kind === 'circle');
+    expect(constraintsOf(session)).toEqual([
+      expect.objectContaining({ kind: 'equal', a: circle?.id, b: 'k' }),
+    ]);
+  });
+
+  it('an arc with nearly the radius of the last circle or arc gets equal', async () => {
+    const sketch = data([
+      { kind: 'point', id: 'c', x: 100, y: 100 },
+      { kind: 'circle', id: 'k', center: 'c', radius: 20 },
+    ]);
+    const { manager, viewport, session } = await sketching({ sketch });
+    manager.activate('sketch.arc');
+
+    await clicks(viewport, [
+      [200, 160],
+      [220, 162],
+      [180, 190],
+    ]);
+
+    const arc = session.state.get().entities.find((e) => e.kind === 'arc');
+    expect(constraintsOf(session)).toEqual([
+      expect.objectContaining({ kind: 'equal', a: arc?.id, b: 'k' }),
+    ]);
   });
 });

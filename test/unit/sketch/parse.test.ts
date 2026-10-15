@@ -75,6 +75,12 @@ describe('parseSketchData – valid data', () => {
         { kind: 'distance', id: 'c12', a: 'a', b: 'c', value: 5 },
         { kind: 'radius', id: 'c13', curve: 'k', value: 3 },
         { kind: 'radius', id: 'c14', curve: 'q', value: 3 },
+        { kind: 'pointOnCurve', id: 'c15', point: 'c', curve: 'ab' },
+        { kind: 'pointOnCurve', id: 'c16', point: 'd', curve: 'k' },
+        { kind: 'pointOnCurve', id: 'c17', point: 'c', curve: 'q' },
+        { kind: 'midpoint', id: 'c18', point: 'c', line: 'ab' },
+        { kind: 'hAlign', id: 'c19', a: 'c', b: 'd' },
+        { kind: 'vAlign', id: 'c20', a: 'd', b: 'a' },
       ]),
     ).toEqual([]);
   });
@@ -173,6 +179,19 @@ describe('parseSketchData – constraints', () => {
     ['distance a = b', { kind: 'distance', id: 'x', a: 'a', b: 'a', value: 1 }],
     ['radius on a line', { kind: 'radius', id: 'x', curve: 'ab', value: 1 }],
     ['radius negative', { kind: 'radius', id: 'x', curve: 'k', value: -1 }],
+    ['pointOnCurve on a point', { kind: 'pointOnCurve', id: 'x', point: 'c', curve: 'd' }],
+    ['pointOnCurve of a line', { kind: 'pointOnCurve', id: 'x', point: 'bc', curve: 'ab' }],
+    ['pointOnCurve of an end', { kind: 'pointOnCurve', id: 'x', point: 'a', curve: 'ab' }],
+    ['pointOnCurve of a centre', { kind: 'pointOnCurve', id: 'x', point: 'a', curve: 'k' }],
+    ['pointOnCurve of an arc end', { kind: 'pointOnCurve', id: 'x', point: 'd', curve: 'q' }],
+    ['pointOnCurve missing curve', { kind: 'pointOnCurve', id: 'x', point: 'c', curve: 'zz' }],
+    ['midpoint on a circle', { kind: 'midpoint', id: 'x', point: 'c', line: 'k' }],
+    ['midpoint of an end', { kind: 'midpoint', id: 'x', point: 'b', line: 'ab' }],
+    ['midpoint of a line', { kind: 'midpoint', id: 'x', point: 'bc', line: 'ab' }],
+    ['hAlign a = b', { kind: 'hAlign', id: 'x', a: 'c', b: 'c' }],
+    ['hAlign with a line', { kind: 'hAlign', id: 'x', a: 'c', b: 'ab' }],
+    ['vAlign with a circle', { kind: 'vAlign', id: 'x', a: 'k', b: 'c' }],
+    ['vAlign extra property', { kind: 'vAlign', id: 'x', a: 'c', b: 'd', line: 'ab' }],
   ])('reports %s at its index', (_name, bad) => {
     expect(constraintIssues([{ kind: 'fix', id: 'f', point: 'a' }, bad])).toEqual([
       constraintIssue(1),

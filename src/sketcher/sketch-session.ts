@@ -49,8 +49,15 @@ export interface SketchSession {
    */
   readonly plane: Observable<Plane>;
   readonly state: Observable<SketchState>;
-  /** New entities and constraints (tools); true = written. */
-  addGeometry(add: SketchData): Promise<boolean>;
+  /**
+   * New entities and constraints (tools); true = written. The constraints are automatic (M26): a
+   * conflict solves again without the conflicting ones, then with only fix and `required`; at most
+   * three solves. Added constraints the solver finds redundant are left out.
+   */
+  addGeometry(
+    add: SketchData,
+    opts?: { readonly required?: ReadonlySet<SketchConstraintId> },
+  ): Promise<boolean>;
   /** Constraint actions, dimensions. */
   addConstraint(c: SketchConstraint): Promise<boolean>;
   setDimension(id: SketchConstraintId, value: number): Promise<boolean>;
@@ -163,6 +170,8 @@ const EMPTY_DATA: SketchData = Object.freeze({
   constraints: Object.freeze([]),
 });
 const NO_ITEMS: readonly SketchItemId[] = Object.freeze([]);
+/** Solves of one addGeometry: all added constraints, without the conflicting, only fix and required. */
+const MAX_ADD_SOLVES = 3;
 const NO_ENTITIES: ReadonlySet<SketchItemId> = new Set<SketchItemId>();
 const NO_PARAMS: Readonly<Record<string, number>> = Object.freeze({});
 const MESSAGES: { readonly [K in SketchMessageKey]: { readonly key: K } } = Object.freeze({
@@ -448,13 +457,12 @@ export function openSketchSession(deps: {
 
   /**
    * Solves `build(current data)` and writes it on 'ok'. `rejectRedundant` = an added constraint
-   * the solver calls redundant is refused; `dropRedundant` = such added constraints are left out.
+   * the solver calls redundant is refused.
    */
   function change(
     build: (data: SketchData) => SketchData,
     opts: {
       readonly rejectRedundant?: SketchConstraintId;
-      readonly dropRedundant?: ReadonlySet<SketchConstraintId>;
       readonly onWritten?: () => void;
     } = {},
   ): Promise<boolean> {
@@ -468,12 +476,7 @@ export function openSketchSession(deps: {
       if (opts.rejectRedundant !== undefined && redundant.has(opts.rejectRedundant)) {
         return reject('sketch.redundant');
       }
-      const drop = opts.dropRedundant;
-      const constraints =
-        drop === undefined
-          ? next.constraints
-          : next.constraints.filter((c) => !(drop.has(c.id) && redundant.has(c.id)));
-      accept(result, { entities: result.entities ?? next.entities, constraints });
+      accept(result, { entities: result.entities ?? next.entities, constraints: next.constraints });
       opts.onWritten?.();
       refresh();
       return true;
@@ -533,16 +536,35 @@ export function openSketchSession(deps: {
     featureId: edit.featureId,
     plane: plane.asObservable(),
     state: state.asObservable(),
-    addGeometry(add) {
+    addGeometry(add, opts = {}) {
       checkOpen('addGeometry');
-      const added = new Set(add.constraints.map((c) => c.id));
-      return change(
-        (data) => ({
-          entities: [...data.entities, ...add.entities],
-          constraints: [...data.constraints, ...add.constraints],
-        }),
-        { dropRedundant: added },
-      );
+      const { required } = opts;
+      const kept = add.constraints.filter((c) => c.kind === 'fix' || required?.has(c.id) === true);
+      return enqueueWrite(async () => {
+        const data = readData();
+        const entities = [...data.entities, ...add.entities];
+        const tried: (readonly SketchConstraint[])[] = [];
+        let attempt: readonly SketchConstraint[] | null = add.constraints;
+        while (attempt !== null) {
+          tried.push(attempt);
+          const next = { entities, constraints: [...data.constraints, ...attempt] };
+          const result = await solve(next);
+          if (!open) return false;
+          if (result === null || result.status === 'failed') return reject('sketch.solverFailed');
+          if (result.status === 'ok') {
+            const redundant = new Set(result.redundant);
+            const own = new Set(attempt.map((c) => c.id));
+            const constraints = next.constraints.filter(
+              (c) => !(own.has(c.id) && redundant.has(c.id)),
+            );
+            accept(result, { entities: result.entities ?? entities, constraints });
+            refresh();
+            return true;
+          }
+          attempt = retryOf(attempt, new Set(result.conflicting), kept, tried);
+        }
+        return reject('sketch.conflict');
+      });
     },
     addConstraint(c) {
       checkOpen('addConstraint');
@@ -647,6 +669,26 @@ export function openSketchSession(deps: {
     const s = state.get();
     return s.entities.some((e) => e.id === id) || s.constraints.some((c) => c.id === id);
   }
+}
+
+/**
+ * The added constraints of the next attempt after a conflict (M26): without the conflicting ones
+ * except `kept` (fix and required, never left out), or when that leaves out nothing new, only
+ * `kept`. null = nothing new to try;
+ * at most three attempts in all.
+ */
+function retryOf(
+  attempt: readonly SketchConstraint[],
+  conflicting: ReadonlySet<SketchConstraintId>,
+  kept: readonly SketchConstraint[],
+  tried: readonly (readonly SketchConstraint[])[],
+): readonly SketchConstraint[] | null {
+  if (tried.length >= MAX_ADD_SOLVES) return null;
+  const fresh = (c: readonly SketchConstraint[]): boolean =>
+    !tried.some((t) => t.length === c.length && t.every((x, i) => x === c[i]));
+  const withoutConflicting = attempt.filter((c) => !conflicting.has(c.id) || kept.includes(c));
+  if (tried.length === 1 && fresh(withoutConflicting)) return withoutConflicting;
+  return fresh(kept) ? kept : null;
 }
 
 /** The promise of the job; a synchronous throw becomes its rejection. */

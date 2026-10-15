@@ -52,6 +52,7 @@ export type GeometricConstraintKind =
   | 'perpendicular'
   | 'equal'
   | 'tangent'
+  | 'midpoint'
   | 'fix';
 
 /** In this order: the order of the constraint actions in the toolbar. */
@@ -63,6 +64,7 @@ export const GEOMETRIC_CONSTRAINT_KINDS: readonly GeometricConstraintKind[] = Ob
   'perpendicular',
   'equal',
   'tangent',
+  'midpoint',
   'fix',
 ]);
 
@@ -98,6 +100,30 @@ export type SketchConstraint =
   /** A line and a circle/arc (either order), or two circles/arcs. */
   | {
       readonly kind: 'tangent';
+      readonly id: SketchConstraintId;
+      readonly a: SketchEntityId;
+      readonly b: SketchEntityId;
+    }
+  /**
+   * A point on the whole carrier line of a line or the whole circle of an arc (M26); the point
+   * is not a defining point of the curve.
+   */
+  | {
+      readonly kind: 'pointOnCurve';
+      readonly id: SketchConstraintId;
+      readonly point: SketchEntityId;
+      readonly curve: SketchEntityId;
+    }
+  /** A point in the middle of a line, not one of its ends (M26). */
+  | {
+      readonly kind: 'midpoint';
+      readonly id: SketchConstraintId;
+      readonly point: SketchEntityId;
+      readonly line: SketchEntityId;
+    }
+  /** Two points with the same y (hAlign) or x (vAlign) (M26). */
+  | {
+      readonly kind: 'hAlign' | 'vAlign';
       readonly id: SketchConstraintId;
       readonly a: SketchEntityId;
       readonly b: SketchEntityId;

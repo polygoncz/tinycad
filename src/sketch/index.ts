@@ -33,5 +33,9 @@ export {
   toggleConstruction,
 } from './edit';
 export { computeRegions } from './regions';
+export { ORIGIN_SNAP, snap } from './snap';
+export type { PointInference, SnapGuide, SnapKind, SnapOptions, SnapResult } from './snap';
+export { inferLine, inferRadius } from './infer';
+export type { LineInference } from './infer';
 export type { RegionsResult, SketchRegion } from './regions';
 export type { ConstraintSolver, SolveInput, SolveResult, SolveStatus } from './solver';

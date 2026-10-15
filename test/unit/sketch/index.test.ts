@@ -8,6 +8,7 @@ describe('sketch public API', () => {
     expect(Object.keys(sketch).sort()).toEqual(
       [
         'GEOMETRIC_CONSTRAINT_KINDS',
+        'ORIGIN_SNAP',
         'SKETCH_FEATURE_TYPE',
         'SKETCH_PARAM',
         'computeRegions',
@@ -16,10 +17,13 @@ describe('sketch public API', () => {
         'curvePoints',
         'curve2',
         'dimensionFor',
+        'inferLine',
+        'inferRadius',
         'measure',
         'parseSketchData',
         'pointsById',
         'removeItems',
+        'snap',
         'toggleConstruction',
       ].sort(),
     );
@@ -35,6 +39,7 @@ describe('sketch public API', () => {
       'perpendicular',
       'equal',
       'tangent',
+      'midpoint',
       'fix',
     ]);
     expect(Object.isFrozen(sketch.GEOMETRIC_CONSTRAINT_KINDS)).toBe(true);

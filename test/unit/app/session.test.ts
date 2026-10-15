@@ -1522,14 +1522,15 @@ describe('createAppSession: view and grid (M19.2)', () => {
     };
     click(7, 3);
     await settle();
-    click(13, 9);
+    // Farther than the 6 px of the alignment snap from the axes of the first point (M26).
+    click(27, 18);
     await settle();
     const points = (session.sketches.current.get()?.state.get().entities ?? []).flatMap((e) =>
       e.kind === 'point' ? [[e.x, e.y]] : [],
     );
     expect(points).toEqual([
       [5, 5],
-      [15, 10],
+      [25, 20],
     ]);
   });
 });

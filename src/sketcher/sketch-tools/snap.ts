@@ -1,22 +1,24 @@
-// The point under the cursor (spec 10, "Bod pod kurzorem"): a point of the session, the origin
-// of the plane, or a free point where the ray of the cursor meets the plane. Locating does not
-// mint ids, so the preview can call it on every move; placePoint mints them for a click.
+// The point under the cursor (spec 12, "Snapper a auto-vazby (M26)"): the snapper of sketch over
+// the data of the session, with the 6 px tolerance converted to mm at the cursor. Locating does
+// not mint ids, so the preview can call it on every move; placePoint mints them for a click.
 
 import type { Vec2 } from '@/core';
-import type { SketchConstraint, SketchEntity, SketchEntityId } from '@/sketch';
+import { snap } from '@/sketch';
+import type {
+  PointInference,
+  SketchConstraint,
+  SketchData,
+  SketchEntity,
+  SketchEntityId,
+  SnapResult,
+} from '@/sketch';
 import type { ToolContext } from '@/interaction';
-import { ORIGIN_POINT_ID } from '../sketch-drawing';
 import type { SketchSession } from '../sketch-session';
 import { EDIT_SKETCH_DRAWING_ID } from '../sketch-session';
-import { cursorAt, newConstraintId, newEntityId } from './common';
+import { cursorAt, distance, newConstraintId, newEntityId } from './common';
 
-export type SnapTarget =
-  /** An existing point of the session: its id is reused. */
-  | { readonly kind: 'point'; readonly id: SketchEntityId; readonly at: Vec2 }
-  /** The origin of the plane: a new point [0, 0] with fix. */
-  | { readonly kind: 'origin'; readonly at: Vec2 }
-  /** A new point on the plane under the cursor. */
-  | { readonly kind: 'free'; readonly at: Vec2 };
+/** Where a click lands: the result of the snapper (an existing point, the origin, a new point…). */
+export type SnapTarget = SnapResult;
 
 /** A snapped point ready for addGeometry: its id and what to add for it (nothing if it exists). */
 export interface PlacedPoint {
@@ -26,71 +28,133 @@ export interface PlacedPoint {
   readonly constraints: readonly SketchConstraint[];
 }
 
-const ORIGIN: Vec2 = Object.freeze([0, 0] as const);
+/** How a tool snaps: the grid step (null = none) and the inference (false = Ctrl/Cmd). */
+export interface SnapMode {
+  readonly grid: number | null;
+  readonly infer: boolean;
+  /** Entities not snapped to (spec 12, SnapOptions.exclude). */
+  readonly exclude?: ReadonlySet<SketchEntityId>;
+  /**
+   * Entities of the tool that may not be in the data yet (a chain of lines in progress): snapped
+   * to like the data until they are written.
+   */
+  readonly pending?: readonly SketchEntity[];
+}
+
+/** The snap tolerance in px of the view (spec 12). */
+const SNAP_TOLERANCE_PX = 6;
 
 /**
- * pick(x, y, ['sketchEntity']) over the drawing of the edited sketch: a point of the session → it;
- * ORIGIN_POINT_ID → the origin; otherwise (a curve, another drawing, nothing) the free point on
- * the plane, rounded to the multiples of `grid` in plane coordinates (M19.2 D4; null = no grid).
- * null when the ray is parallel to the plane (the click is ignored).
+ * The snapper at the cursor: snap(cursorAt(x, y), data, { tolerance, grid, infer, exclude }) with
+ * the tolerance = the distance in the plane between cursorAt(x, y) and cursorAt(x + 6, y). null
+ * when the ray is parallel to the plane (the click is ignored).
  */
 export function snapAt(
   ctx: ToolContext,
   session: SketchSession,
   x: number,
   y: number,
-  grid: number | null,
+  mode: SnapMode,
 ): SnapTarget | null {
-  const hit = editedEntityAt(ctx, x, y);
-  if (hit === ORIGIN_POINT_ID) return { kind: 'origin', at: ORIGIN };
-  const point = hit === null ? undefined : entityOf(session, hit);
-  if (point?.kind === 'point') return { kind: 'point', id: point.id, at: [point.x, point.y] };
+  const cursor = cursorAt(ctx, session, x, y);
+  const tolerance = snapToleranceAt(ctx, session, x, y);
+  if (cursor === null || tolerance === null) return null;
+  return snapPoint(session, cursor, tolerance, mode);
+}
+
+/** 6 px in mm of the plane at the cursor; null for a ray parallel to the plane. */
+export function snapToleranceAt(
+  ctx: ToolContext,
+  session: SketchSession,
+  x: number,
+  y: number,
+): number | null {
   const at = cursorAt(ctx, session, x, y);
-  if (at === null) return null;
-  return { kind: 'free', at: grid === null ? at : [toGrid(at[0], grid), toGrid(at[1], grid)] };
+  const aside = cursorAt(ctx, session, x + SNAP_TOLERANCE_PX, y);
+  return at === null || aside === null ? null : distance(at, aside);
 }
 
-/** The nearest multiple of the step; −0 becomes 0. */
-function toGrid(v: number, step: number): number {
-  return Math.round(v / step) * step + 0;
+/** The snapper at a point of the plane (a corner the rectangle computes). */
+export function snapPoint(
+  session: SketchSession,
+  at: Vec2,
+  tolerance: number,
+  mode: SnapMode,
+): SnapTarget {
+  return snap(at, sessionData(session, mode.pending ?? []), {
+    tolerance,
+    grid: mode.grid,
+    infer: mode.infer,
+    ...(mode.exclude === undefined ? {} : { exclude: mode.exclude }),
+  });
 }
 
-/** The point for the target; new ids from ctx.ids. */
+/** The data of the session with the pending entities that are not in it yet appended. */
+export function sessionData(session: SketchSession, pending: readonly SketchEntity[]): SketchData {
+  const { entities, constraints } = session.state.get();
+  if (pending.length === 0) return { entities, constraints };
+  const present = new Set(entities.map((e) => e.id));
+  const missing = pending.filter((e) => !present.has(e.id));
+  return missing.length === 0
+    ? { entities, constraints }
+    : {
+        entities: [...entities, ...missing],
+        constraints,
+      };
+}
+
+/** A target of a new point at `at` without constraints (a computed corner, an arc end). */
+export function freeTarget(at: Vec2): SnapTarget {
+  return { at, kind: 'free', point: null, inferred: [], guides: [] };
+}
+
+/**
+ * The point for the target: an existing point is reused; otherwise a new point at target.at with
+ * the constraints of target.inferred (pointOnCurve, midpoint, hAlign/vAlign with the new point,
+ * fix at the origin). New ids from ctx.ids.
+ */
 export function placePoint(ctx: ToolContext, target: SnapTarget): PlacedPoint {
-  if (target.kind === 'point') {
-    return { id: target.id, at: target.at, entities: [], constraints: [] };
+  if (target.point !== null) {
+    return { id: target.point, at: target.at, entities: [], constraints: [] };
   }
   const id = newEntityId(ctx);
   const point: SketchEntity = { kind: 'point', id, x: target.at[0], y: target.at[1] };
-  const constraints: readonly SketchConstraint[] =
-    target.kind === 'origin' ? [{ kind: 'fix', id: newConstraintId(ctx), point: id }] : [];
+  const constraints = target.inferred.map((i) => inferredConstraint(ctx, id, i));
   return { id, at: target.at, entities: [point], constraints };
 }
 
-/** Same existing point (two new points are never the same). */
-export function samePoint(a: SnapTarget | PlacedPoint, b: SnapTarget | PlacedPoint): boolean {
-  const idOf = (t: SnapTarget | PlacedPoint): SketchEntityId | null => ('id' in t ? t.id : null);
-  const ia = idOf(a);
-  return ia !== null && ia === idOf(b);
+function inferredConstraint(
+  ctx: ToolContext,
+  point: SketchEntityId,
+  i: PointInference,
+): SketchConstraint {
+  const id = newConstraintId(ctx);
+  switch (i.kind) {
+    case 'fix':
+      return { kind: 'fix', id, point };
+    case 'pointOnCurve':
+      return { kind: 'pointOnCurve', id, point, curve: i.curve };
+    case 'midpoint':
+      return { kind: 'midpoint', id, point, line: i.line };
+    case 'hAlign':
+    case 'vAlign':
+      return { kind: i.kind, id, a: point, b: i.with };
+  }
 }
 
-/** The entity of the session under the cursor; the origin and other drawings are nothing. */
+/** Same existing point (two new points are never the same). */
+export function samePoint(a: SnapTarget, b: SnapTarget): boolean {
+  return a.point !== null && a.point === b.point;
+}
+
+/** The entity of the session under the cursor (render's pick); the origin and other drawings are nothing. */
 export function entityAt(
   ctx: ToolContext,
   session: SketchSession,
   x: number,
   y: number,
 ): SketchEntity | null {
-  const hit = editedEntityAt(ctx, x, y);
-  return hit === null ? null : (entityOf(session, hit) ?? null);
-}
-
-/** The id hit in the drawing of the edited sketch (ORIGIN_POINT_ID included), or null. */
-function editedEntityAt(ctx: ToolContext, x: number, y: number): string | null {
   const hit = ctx.viewport.pick(x, y, ['sketchEntity']);
-  return hit?.kind === 'sketchEntity' && hit.sketch === EDIT_SKETCH_DRAWING_ID ? hit.entity : null;
-}
-
-function entityOf(session: SketchSession, id: string): SketchEntity | undefined {
-  return session.state.get().entities.find((e) => e.id === id);
+  if (hit?.kind !== 'sketchEntity' || hit.sketch !== EDIT_SKETCH_DRAWING_ID) return null;
+  return session.state.get().entities.find((e) => e.id === hit.entity) ?? null;
 }

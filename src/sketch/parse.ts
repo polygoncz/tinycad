@@ -26,12 +26,21 @@ const ENTITY_FIELDS: Readonly<Record<string, { required: string[]; optional: str
 };
 
 /** Entity kind groups a constraint field may refer to. */
-type Target = 'point' | 'line' | 'round';
+type Target = 'point' | 'line' | 'round' | 'curve';
 const ROUND = new Set(['circle', 'arc']);
+const CURVE = new Set(['line', 'circle', 'arc']);
+
+/** The fields of each curve kind that refer to its defining points (curvePoints on raw data). */
+const DEFINING_POINT_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  line: ['p1', 'p2'],
+  circle: ['center'],
+  arc: ['center', 'start', 'end'],
+};
 
 /**
  * Fields of each constraint kind besides `kind` and `id`; a ref field lists the entity kind it
- * needs. Pair kinds (equal, tangent) need an extra rule on the combination, see pairAllowed.
+ * needs. Pair kinds (equal, tangent) need an extra rule on the combination, see pairAllowed;
+ * pointOnCurve and midpoint one on the point, see definesCurve.
  */
 const CONSTRAINT_FIELDS: Readonly<Record<string, Readonly<Record<string, Target | 'value'>>>> = {
   coincident: { a: 'point', b: 'point' },
@@ -41,6 +50,10 @@ const CONSTRAINT_FIELDS: Readonly<Record<string, Readonly<Record<string, Target 
   perpendicular: { a: 'line', b: 'line' },
   equal: { a: 'line', b: 'line' },
   tangent: { a: 'line', b: 'line' },
+  pointOnCurve: { point: 'point', curve: 'curve' },
+  midpoint: { point: 'point', line: 'line' },
+  hAlign: { a: 'point', b: 'point' },
+  vAlign: { a: 'point', b: 'point' },
   fix: { point: 'point' },
   distance: { a: 'point', b: 'point', value: 'value' },
   radius: { curve: 'round', value: 'value' },
@@ -174,9 +187,22 @@ function constraintValid(
   }
   if (refs.length === 2 && refs[0] === refs[1]) return false;
   if (kind === 'equal' || kind === 'tangent') return pairAllowed(kind, refKinds);
-  return Object.values(fields)
+  const kindsMatch = Object.values(fields)
     .filter((need) => need !== 'value')
     .every((need, i) => matches(need, refKinds[i]));
+  if (!kindsMatch) return false;
+  if (kind === 'pointOnCurve' || kind === 'midpoint') {
+    const [point, curve] = refs;
+    const target = typeof curve === 'string' ? targets.get(curve) : undefined;
+    return target !== undefined && !definesCurve(point, target);
+  }
+  return true;
+}
+
+/** Whether the point id is one of the defining points of the (raw) curve. */
+function definesCurve(point: unknown, curve: Fields): boolean {
+  const fields = typeof curve.kind === 'string' ? DEFINING_POINT_FIELDS[curve.kind] : undefined;
+  return (fields ?? []).some((field) => curve[field] === point);
 }
 
 /** equal: two lines or two rounds; tangent: a line and a round (any order) or two rounds. */
@@ -189,7 +215,9 @@ function pairAllowed(kind: 'equal' | 'tangent', [a, b]: readonly string[]): bool
 
 function matches(need: Target | 'value', kind: string | undefined): boolean {
   if (kind === undefined) return false;
-  return need === 'round' ? ROUND.has(kind) : need === kind;
+  if (need === 'round') return ROUND.has(kind);
+  if (need === 'curve') return CURVE.has(kind);
+  return need === kind;
 }
 
 /** True when the id is a non-empty string not used before; remembers it either way. */

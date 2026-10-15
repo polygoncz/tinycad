@@ -984,6 +984,147 @@ describe('SketchSession writing changes', () => {
   });
 });
 
+describe('SketchSession.addGeometry checks its automatic constraints (M26)', () => {
+  // A new line q→r continuing LINE with four automatic constraints; h and f are kept by the
+  // last attempt (h required by the tool, f a fix).
+  const NEW = data(
+    [
+      ...LINE.entities,
+      { kind: 'point', id: 'r', x: 8, y: 1 },
+      { kind: 'line', id: 'qr', p1: 'q', p2: 'r' },
+    ],
+    [
+      { kind: 'horizontal', id: 'h', line: 'qr' },
+      { kind: 'perpendicular', id: 'pp', a: 'pq', b: 'qr' },
+      { kind: 'equal', id: 'eq', a: 'pq', b: 'qr' },
+      { kind: 'fix', id: 'f', point: 'r' },
+    ],
+  );
+  const ADD: SketchData = { entities: NEW.entities.slice(-2), constraints: NEW.constraints };
+  const REQUIRED = { required: new Set([cid('h')]) };
+  const idsOf = (d: SketchData | undefined) => d?.constraints.map((c) => c.id);
+
+  it('a conflict solves again without the conflicting added constraints and writes', async () => {
+    const { session, solver, doc } = await editing(LINE);
+    // An old constraint in the list cannot be left out; only the added ones are.
+    solver.next({ status: 'conflict', entities: null, conflicting: [cid('pp'), cid('old')] });
+
+    expect(await session.addGeometry(ADD, REQUIRED)).toBe(true);
+
+    expect(laterCalls(solver.calls).map(idsOf)).toEqual([
+      ['h', 'pp', 'eq', 'f'],
+      ['h', 'eq', 'f'],
+    ]);
+    expect(idsOf(docData(doc, fid('s1')))).toEqual(['h', 'eq', 'f']);
+    expect(docData(doc, fid('s1')).entities.map((e) => e.id)).toEqual(['p', 'q', 'pq', 'r', 'qr']);
+    expect(session.state.get().message).toBeNull();
+  });
+
+  it('fix and the required constraints stay in the retry even when conflicting', async () => {
+    const { session, solver, doc } = await editing(LINE);
+    solver.next({
+      status: 'conflict',
+      entities: null,
+      conflicting: [cid('h'), cid('pp'), cid('f')],
+    });
+
+    expect(await session.addGeometry(ADD, REQUIRED)).toBe(true);
+
+    expect(laterCalls(solver.calls).map(idsOf)).toEqual([
+      ['h', 'pp', 'eq', 'f'],
+      ['h', 'eq', 'f'],
+    ]);
+    expect(idsOf(docData(doc, fid('s1')))).toEqual(['h', 'eq', 'f']);
+  });
+
+  it('a second conflict keeps only fix and the required constraints', async () => {
+    const { session, solver, doc } = await editing(LINE);
+    solver.next({ status: 'conflict', entities: null, conflicting: [cid('pp')] });
+    solver.next({ status: 'conflict', entities: null, conflicting: [cid('eq')] });
+
+    expect(await session.addGeometry(ADD, REQUIRED)).toBe(true);
+
+    expect(laterCalls(solver.calls).map(idsOf)).toEqual([
+      ['h', 'pp', 'eq', 'f'],
+      ['h', 'eq', 'f'],
+      ['h', 'f'],
+    ]);
+    expect(idsOf(docData(doc, fid('s1')))).toEqual(['h', 'f']);
+  });
+
+  it('solves at most three times: a third conflict writes nothing', async () => {
+    const { session, solver, applied } = await editing(LINE);
+    for (let i = 0; i < 4; i++) {
+      solver.next({ status: 'conflict', entities: null, conflicting: [cid('pp')] });
+    }
+
+    expect(await session.addGeometry(ADD, REQUIRED)).toBe(false);
+
+    expect(laterCalls(solver.calls)).toHaveLength(3);
+    expect(applied).toEqual([]);
+    expect(session.state.get().message).toEqual({ key: 'sketch.conflict' });
+  });
+
+  it('a conflict naming no added constraint goes straight to fix and required', async () => {
+    const { session, solver, doc } = await editing(LINE);
+    solver.next({ status: 'conflict', entities: null, conflicting: [cid('old')] });
+
+    expect(await session.addGeometry(ADD, REQUIRED)).toBe(true);
+
+    expect(laterCalls(solver.calls).map(idsOf)).toEqual([
+      ['h', 'pp', 'eq', 'f'],
+      ['h', 'f'],
+    ]);
+    expect(idsOf(docData(doc, fid('s1')))).toEqual(['h', 'f']);
+  });
+
+  it('without required the last attempt keeps only fix', async () => {
+    const { session, solver, doc } = await editing(LINE);
+    solver.next({ status: 'conflict', entities: null, conflicting: [] });
+
+    expect(await session.addGeometry(ADD)).toBe(true);
+
+    expect(laterCalls(solver.calls).map(idsOf)).toEqual([['h', 'pp', 'eq', 'f'], ['f']]);
+    expect(idsOf(docData(doc, fid('s1')))).toEqual(['f']);
+  });
+
+  it('a conflict that leaving out changes nothing is rejected after one solve', async () => {
+    const { session, solver, applied } = await editing(LINE);
+    const onlyFixed: SketchData = {
+      entities: ADD.entities,
+      constraints: ADD.constraints.filter((c) => c.id === 'h' || c.id === 'f'),
+    };
+    solver.next({ status: 'conflict', entities: null, conflicting: [cid('old')] });
+
+    expect(await session.addGeometry(onlyFixed, REQUIRED)).toBe(false);
+
+    expect(laterCalls(solver.calls)).toHaveLength(1);
+    expect(applied).toEqual([]);
+    expect(session.state.get().message).toEqual({ key: 'sketch.conflict' });
+  });
+
+  it('the added constraints the retry finds redundant are left out', async () => {
+    const { session, solver, doc } = await editing(LINE);
+    solver.next({ status: 'conflict', entities: null, conflicting: [cid('pp')] });
+    solver.next({ redundant: [cid('eq'), cid('h')] });
+
+    expect(await session.addGeometry(ADD, REQUIRED)).toBe(true);
+
+    expect(idsOf(docData(doc, fid('s1')))).toEqual(['f']);
+  });
+
+  it('a failed retry writes nothing and shows solverFailed', async () => {
+    const { session, solver, applied } = await editing(LINE);
+    solver.next({ status: 'conflict', entities: null, conflicting: [cid('pp')] });
+    solver.next({ status: 'failed', entities: null, dof: null });
+
+    expect(await session.addGeometry(ADD, REQUIRED)).toBe(false);
+
+    expect(applied).toEqual([]);
+    expect(session.state.get().message).toEqual({ key: 'sketch.solverFailed' });
+  });
+});
+
 describe('SketchSession dragging', () => {
   it('keeps one solve running and one target waiting; the last target wins', async () => {
     const { session, solver, doc } = await editing(LINE);

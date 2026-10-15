@@ -102,6 +102,10 @@ export function isGlyphConstraint(c: SketchConstraint): c is GlyphConstraint {
     case 'equal':
     case 'tangent':
     case 'fix':
+    case 'pointOnCurve':
+    case 'midpoint':
+    case 'hAlign':
+    case 'vAlign':
       return true;
     case 'distance':
     case 'radius':
@@ -111,9 +115,20 @@ export function isGlyphConstraint(c: SketchConstraint): c is GlyphConstraint {
   }
 }
 
-/** The entities that get a glyph: all of them, except coincident (one dot at point a). */
+/**
+ * The entities that get a glyph: all of them, except coincident (one dot at point a) and
+ * pointOnCurve and midpoint (one glyph at the point).
+ */
 function glyphEntities(c: GlyphConstraint): readonly SketchEntityId[] {
-  return c.kind === 'coincident' ? [c.a] : constraintTargets(c);
+  switch (c.kind) {
+    case 'coincident':
+      return [c.a];
+    case 'pointOnCurve':
+    case 'midpoint':
+      return [c.point];
+    default:
+      return constraintTargets(c);
+  }
 }
 
 /** A row of glyphs at one position: its first anchor and the next free slot. */

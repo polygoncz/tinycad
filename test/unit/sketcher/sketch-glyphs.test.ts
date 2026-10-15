@@ -124,6 +124,32 @@ describe('glyphViews: which constraints', () => {
     ]);
   });
 
+  it('pointOnCurve and midpoint have one glyph at the point, hAlign and vAlign one at each', () => {
+    const sketch = data(
+      [...ENTITIES, { kind: 'point', id: 'p', x: 2, y: 0 }, { kind: 'point', id: 'q', x: 2, y: 5 }],
+      [
+        { kind: 'pointOnCurve', id: 'on', point: 'p', curve: 'k' },
+        { kind: 'midpoint', id: 'mid', point: 'p', line: 'ab' },
+        { kind: 'hAlign', id: 'ha', a: 'q', b: 'f' },
+        { kind: 'vAlign', id: 'va', a: 'p', b: 'q' },
+      ],
+    );
+    const glyphs = views('all', { sketch });
+    expect(glyphs.map((g) => [g.constraint, g.kind, g.entity])).toEqual([
+      ['on', 'pointOnCurve', 'p'],
+      ['mid', 'midpoint', 'p'],
+      ['ha', 'hAlign', 'q'],
+      ['ha', 'hAlign', 'f'],
+      ['va', 'vAlign', 'p'],
+      ['va', 'vAlign', 'q'],
+    ]);
+    // Shown also for the curve; anchored like a point glyph, stacked at the shared point.
+    expect(pairs(views(set('k'), { sketch }))).toEqual([['on', 'p']]);
+    expect(glyph(glyphs, 'mid', 'p')).toMatchObject({ anchor: [2, 0, 0], slot: 1 });
+    expectVec(glyph(glyphs, 'mid', 'p').side, [H, H, 0]);
+    expect(glyph(glyphs, 'va', 'q')).toMatchObject({ anchor: [2, 5, 0], slot: 1 });
+  });
+
   it('an empty set shows nothing', () => {
     expect(views(set())).toEqual([]);
   });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ObservableValue, createSequentialIdGenerator } from '@/core';
 import { ORIGIN_PLANES, ORIGIN_PLANE_IDS } from '@/document';
 import type { FeatureId, PlaneId } from '@/document';
-import { GEOMETRIC_CONSTRAINT_KINDS } from '@/sketch';
+import { GEOMETRIC_CONSTRAINT_KINDS, parseSketchData } from '@/sketch';
 import type { SketchConstraint, SketchItemId } from '@/sketch';
 import { rectangleData } from '@/sketch/testing';
 import { createActionRegistry } from '@/interaction';
@@ -87,7 +87,13 @@ function aFakeSession() {
   const setBusy = (busy: boolean): void => {
     state.set(Object.freeze({ ...state.get(), busy }));
   };
-  return { session, calls, select, setBusy };
+  /** Adds a lone point m in the middle of the rectangle's bottom edge ab (not one of its ends). */
+  const addLonePoint = (): void => {
+    const parsed = parseSketchData([...RECT.entities, { kind: 'point', id: 'm', x: 5, y: 0 }], []);
+    if (!parsed.ok) throw new Error('invalid test data');
+    state.set(Object.freeze({ ...state.get(), entities: parsed.value.entities }));
+  };
+  return { session, calls, select, setBusy, addLonePoint };
 }
 
 function setup() {
@@ -158,6 +164,7 @@ describe('createSketchActions', () => {
       ],
       ['sketch.constraint.equal', 'sketch.constraint.equal', 'sketch.constraint', null],
       ['sketch.constraint.tangent', 'sketch.constraint.tangent', 'sketch.constraint', null],
+      ['sketch.constraint.midpoint', 'sketch.constraint.midpoint', 'sketch.constraint', null],
       ['sketch.constraint.fix', 'sketch.constraint.fix', 'sketch.constraint', null],
     ]);
     expect(SKETCH_ACTION_IDS).toEqual({
@@ -247,7 +254,10 @@ describe('createSketchActions', () => {
     expect(enabled(coincident)).toBe(false);
     select('a', 'c');
     expect(enabled(coincident)).toBe(true);
-    expect(enabled(horizontal)).toBe(false);
+    // Two points: horizontal aligns them (hAlign).
+    expect(enabled(horizontal)).toBe(true);
+    select('a', 'ab');
+    expect(enabled(coincident)).toBe(false);
     // Constraints in the selection are left out: two lines and a constraint are two lines.
     select('ab', 'h1', 'cd');
     expect(enabled(parallel)).toBe(true);
@@ -275,6 +285,38 @@ describe('createSketchActions', () => {
       inTextField: false,
     });
     expect(calls.at(-1)).toEqual(['addConstraint', { kind: 'horizontal', line: 'ab', id: 'c2' }]);
+  });
+
+  it('midpoint is enabled for a point and a line and adds the constraint', () => {
+    const { registry, open, enabled } = setup();
+    const { calls, select, addLonePoint } = open();
+    const midpoint = sketchConstraintActionId('midpoint');
+
+    select('a', 'ab');
+    expect(enabled(midpoint)).toBe(false);
+    addLonePoint();
+    select('ab', 'm');
+    expect(enabled(midpoint)).toBe(true);
+    registry.run(midpoint);
+    expect(calls.at(-1)).toEqual([
+      'addConstraint',
+      { kind: 'midpoint', point: 'm', line: 'ab', id: 'c1' },
+    ]);
+  });
+
+  it('coincident of a point and a line adds pointOnCurve, horizontal of two points hAlign', () => {
+    const { registry, open } = setup();
+    const { calls, select, addLonePoint } = open();
+    addLonePoint();
+
+    select('m', 'cd');
+    registry.run(sketchConstraintActionId('coincident'));
+    select('m', 'c');
+    registry.run(sketchConstraintActionId('horizontal'));
+    expect(calls).toEqual([
+      ['addConstraint', { kind: 'pointOnCurve', point: 'm', curve: 'cd', id: 'c1' }],
+      ['addConstraint', { kind: 'hAlign', a: 'm', b: 'c', id: 'c2' }],
+    ]);
   });
 
   it('follows a newly opened session', () => {

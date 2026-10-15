@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: doing
 order: 26
 aliases:
   - M26
@@ -15,7 +15,7 @@ specs:
   - "[[10-interakce]]"
 depends_on:
   - "[[M25-glyfy-vazeb]]"
-started:
+started: 2026-10-15
 finished:
 tags:
   - milnik
@@ -47,12 +47,45 @@ Rozhodnutí v sezení 2026-10-15 (brainstorming):
 
 ## Úkoly
 
-- [ ] Rozhodnout [[Q084 Inference automatických vazeb|Q084]], upřesnit spec a implementační plán
-- [ ] Nové vazby `pointOnCurve`, `midpoint`, zarovnání bodů: model, `parseSketchData`, `constraintFor`, adaptér planegcs
-- [ ] `snap` a inference v `sketch` (čisté funkce, tabulkové testy)
-- [ ] Ověření kandidátů řešičem a zápis v nástrojích `sketcher`
-- [ ] Kresba vodítek a náhledových glyfů
-- [ ] e2e
+- [x] 0. Rozhodnout [[Q084 Inference automatických vazeb|Q084]], kontrakt ve spec 12 a implementační plán
+- [x] 1. Nové vazby `pointOnCurve`, `midpoint`, `hAlign`/`vAlign`: model, `parseSketchData`, `constraintFor`, `constraintTargets`, adaptér planegcs, `FakeSolver`, glyfy a akce Střed
+- [x] 2. `snap`, `inferLine`, `inferRadius` v `sketch` (čisté funkce, tabulkové testy)
+- [x] 3. Ověření kandidátů řešičem (`addGeometry` s `required`) a snapper v nástrojích `sketcher`, Ctrl/Cmd
+- [ ] 4. Náhled: vodítka v overlay a náhledové glyfy v `ui`
+- [ ] 5. e2e `m26.spec.ts`, propsání do spec 10 a 11
+
+## Implementační plán
+
+Jeden úkol = jedno spuštění subagenta `implementer`. Kontrakt je v [[12-skicar#Snapper a auto-vazby (M26)]].
+
+### 1. Nové vazby
+
+- **Soubory:** `src/sketch/model.ts` (členy unie, `GeometricConstraintKind` + `'midpoint'`), `parse.ts`, `edit.ts` (`constraintFor`, `constraintTargets`), `testing.ts` (`FakeSolver` váhy); `src/solver-planegcs/solve.ts`; `src/sketcher/sketch-glyphs.ts` (`isGlyphConstraint`), `sketch-toolbar.ts` / `sketch-actions.ts` (akce Střed); `src/ui/sketch-glyph-icons.ts` (4 ikony), `ui/i18n/cs.ts`, `en.ts`.
+- **Testy:** `test/unit/sketch/parse.test.ts`, `edit.test.ts`, adaptér planegcs (bod zůstane na úsečce při tažení úsečky, `midpoint`, `hAlign`, `vAlign`, `pointOnCurve` na kružnici a oblouku), glyfy a ikony nových druhů, akce Střed.
+- **Hotovo když:** `npm run check` zelený.
+
+### 2. Snapper a inference
+
+- **Soubory:** nové `src/sketch/snap.ts`, `src/sketch/infer.ts`, export v `index.ts`.
+- **Testy:** `test/unit/sketch/snap.test.ts`, `infer.test.ts` – tabulkově podle seznamu ve spec.
+- **Hotovo když:** `npm run check` zelený.
+
+### 3. Řešič a nástroje
+
+- **Soubory:** `src/sketcher/sketch-session.ts` (`addGeometry(add, { required })`, opakování bez sporných vazeb, nejvýš tři řešení), `sketch-tools/snap.ts` (`snapAt` přes `snap`, `tolerance` z 6 px, `placePoint` z `inferred`), `line-tool.ts`, `rectangle-tool.ts`, `circle-tool.ts`, `arc-tool.ts`.
+- **Testy:** session (`FakeSolver.next` s konfliktem), nástroje s `FakeViewport` (bod na úsečce → `pointOnCurve`, kolmá úsečka → `perpendicular`, Ctrl/Cmd bez vazeb, obdélník na existující hraně sdílí body).
+- **Hotovo když:** `npm run check` zelený.
+
+### 4. Náhled
+
+- **Soubory:** `sketch-session.ts` (`setInferencePreview`, `SketchState.inference`), nástroje (náhled při pohybu, mazání), overlay `'sketch-guides'`; `src/ui/sketch-glyphs.ts` a `SketchGlyphs.vue` (řada náhledových ikon).
+- **Testy:** session a nástroje (náhled, smazání při Esc/kliku/deaktivaci), `glyphLayout` náhledu, `renderToString` komponenty.
+- **Hotovo když:** `npm run check` zelený.
+
+### 5. e2e a spec
+
+- **Soubory:** `test/e2e/m26.spec.ts` (akceptační kritéria), případné úpravy dřívějších e2e, které teď dostanou navíc automatické vazby; [[10-interakce]] (nástroje, `snapAt`, `addGeometry`, `SketchState.inference`) a [[11-ui]] (náhledové glyfy).
+- **Hotovo když:** e2e projdou, `npm run check` zelený, spec odpovídá kódu.
 
 ## Akceptační kritéria
 
@@ -72,6 +105,17 @@ Rozhodnutí v sezení 2026-10-15 (brainstorming):
 ## Průběh stopy
 
 _(Souběžná stopa, [[Roadmapa#Souběžné stopy (pokus od M25)|pravidla]]: místo deníku sem zapisuje průběh; hlavní sezení ho při sloučení přenese do deníku.)_
+
+- **2026-10-15, start:** Pavel rozhodl [[Q084 Inference automatických vazeb|Q084]] (všechny body podle návrhu). Kontrakt v [[12-skicar#Snapper a auto-vazby (M26)]]. Rozhodnutí stopy k revizi:
+  - A7: nové vazby nevznikají novými akcemi lišty, ale konvencí Onshape: Shoda na bod + křivku → `pointOnCurve`, Vodorovná/Svislá na dva body → `hAlign`/`vAlign`; přibude jen akce Střed (`midpoint`).
+  - A8: `pointOnCurve` drží bod na celé nosné přímce/kružnici (jako planegcs, Onshape, FreeCAD), ne jen na úseku.
+  - A9: Ctrl/Cmd vypne všechny automatické vazby včetně dnešní vodorovné/svislé u úsečky; zůstane jen sdílený bod a `fix` počátku. Obdélník má své `horizontal`/`vertical` vždy.
+  - A10: snapper přestává používat picking `render` – přichycení počítá geometricky v rovině s prahem 6 px převedeným na mm v místě kurzoru.
+  - A11: všechny vazby z `addGeometry` jsou automatické; konflikt → nový pokus bez sporných, pak bez všech kromě `fix` a povinných (`required`), nejvýš tři řešení.
+  - A12: stejný poloměr se porovnává s poslední kružnicí/obloukem v datech (to je „navazující“ u kružnic).
+- **2026-10-15, úkol 1** (nové vazby): hotovo. Signatury planegcs sedí; `point_on_arc` drží bod na celé kružnici (A8 potvrzeno testem). Akce Střed má na liště ikonu Tabler `letter-m`. Výčty v obecných sekcích spec 12 (*Kontrola dat*, `constraintFor`) nové druhy neobsahují – podle pravidel stop je autoritativní sekce M26, sjednotit při sloučení.
+- **2026-10-15, úkol 2** (`snap`, `inferLine`, `inferRadius`): hotovo; 2D pomůcky z `regions.ts` přesunuty do interního `sketch/vec2.ts`. A13: `alignBoth` ke stejnému bodu → jen `align` k bližší ose; tečna jen k oblouku navazujícímu koncem (kružnice ze snapperu tečnu nedostane); `exclude` vyřadí entitu ze všech kroků. Propsáno do spec 12.
+- **2026-10-15, úkol 3** (řešič a nástroje): hotovo. `addGeometry(add, { required })` až tři pokusy; `snapAt` přes `snap`, tolerance 6 px v místě kurzoru; řetěz polyline si pamatuje své nezapsané entity, takže první bod jde trefit i před dokončením zápisu. Rozhodnutí A14 (propsáno do spec 12): `fix` a povinné vazby zůstávají ve všech pokusech; úsečka mezi body už spojenými existující úsečkou se nevytvoří (obdélník na hraně ji sdílí); zarovnání s počátkem kreslené úsečky → její `horizontal`/`vertical`; zarovnání rohu obdélníku s jiným jeho rohem se zahodí; osa + tečna zůstávají obě.
 
 ## Retrospektiva
 

@@ -11,6 +11,10 @@ const KINDS: readonly GlyphKind[] = [
   'equal',
   'tangent',
   'fix',
+  'pointOnCurve',
+  'midpoint',
+  'hAlign',
+  'vAlign',
 ];
 
 describe('glyph icons (spec 12, "Glyfy vazeb (M25)")', () => {
