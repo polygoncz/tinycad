@@ -1,17 +1,17 @@
 // The arc tool (spec 10, "Nástroje a akce skicáře"; spec 12, M26): a centre, a start (both
 // snapped, with their inferred constraints) and an end (snapped, then projected onto the circle
-// through the start) → a counter-clockwise arc from start to end, equal to the last circle or arc
+// through the start; always a new point without inferred constraints or guides, which would not
+// hold after the projection) → a counter-clockwise arc from start to end, equal to the last circle or arc
 // of the sketch when the radii differ by at most 2 % (inferRadius); Ctrl/Cmd turns the inference
 // off. The click and the preview of a move share one step (arcStep), so the preview shows exactly
 // the constraints the click adds.
 
 import type { Vec2 } from '@/core';
 import { inferRadius } from '@/sketch';
-import type { SketchConstraint, SketchEntityId } from '@/sketch';
+import type { SketchConstraint, SketchData, SketchEntityId } from '@/sketch';
 import type { Tool } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
 import type { GlyphKind } from '../sketch-glyphs';
-import type { SketchSession } from '../sketch-session';
 import {
   MIN_LENGTH,
   arcPoints,
@@ -27,13 +27,13 @@ import {
   snapMode,
 } from './common';
 import { ccwSweep } from '../sketch-angles';
-import { placePoint, samePoint, sessionData, snapAt } from './snap';
+import { freeTarget, placePoint, samePoint, sessionData, snapAt } from './snap';
 import type { SnapTarget } from './snap';
 
 /**
  * What a click at a target does: nothing, take the centre, take the start, or add the arc to the
- * new end point `end` (projected onto the circle, with its inferences except fix), equal to the
- * circle or arc `equal` (null = none).
+ * new end point `end` (projected onto the circle, without inferences), equal to the circle or
+ * arc `equal` (null = none).
  */
 type ArcStep =
   | { readonly kind: 'none' }
@@ -53,9 +53,11 @@ export function createArcTool(sketches: SketchEditor): Tool {
       const mode = snapMode(sketches, mods);
       const cursor = snapAt(ctx, session, x, y, mode);
       if (cursor === null) return;
-      const step = arcStep(session, { center, start }, cursor, mode.infer);
+      const step = arcStep(sessionData(session, []), { center, start }, cursor, mode.infer);
       const at = step.kind === 'arc' ? step.end.at : cursor.at;
-      previewInference(session, at, stepInferences(step), cursor.guides);
+      // The end gets no guides: they hold at the cursor, not at the projected end.
+      const guides = start === null ? cursor.guides : [];
+      previewInference(session, at, stepInferences(step), guides);
       if (center === null) return;
       if (start === null) {
         previewPairs(ctx, session, [center.at, cursor.at]);
@@ -75,7 +77,7 @@ export function createArcTool(sketches: SketchEditor): Tool {
       const mode = snapMode(sketches, mods);
       const target = snapAt(ctx, session, x, y, mode);
       if (target === null) return;
-      const step = arcStep(session, { center, start }, target, mode.infer);
+      const step = arcStep(sessionData(session, []), { center, start }, target, mode.infer);
       switch (step.kind) {
         case 'none':
           return;
@@ -115,10 +117,10 @@ export function createArcTool(sketches: SketchEditor): Tool {
 
 /**
  * The step of a click at `target` after the centre and the start picked so far (null = not yet).
- * Pure over the data of the session, so the preview of a move can call it too.
+ * Pure over `data`, so the preview of a move can call it too.
  */
 function arcStep(
-  session: SketchSession,
+  data: SketchData,
   picked: { readonly center: SnapTarget | null; readonly start: SnapTarget | null },
   target: SnapTarget,
   infer: boolean,
@@ -135,17 +137,9 @@ function arcStep(
   const at = project(center.at, start.at, target.at);
   if (at === null || distance(at, start.at) <= MIN_LENGTH) return { kind: 'none' };
   const radius = distance(center.at, start.at);
-  const data = sessionData(session, []);
   const equal = infer ? inferRadius(radius, data, lastRound(data)) : null;
-  // The constraints the snap inferred for the end, except fix: the projected end is not at the
-  // origin.
-  const end: SnapTarget = {
-    ...target,
-    at,
-    point: null,
-    inferred: target.inferred.filter((i) => i.kind !== 'fix'),
-  };
-  return { kind: 'arc', end, equal };
+  // No inferences of the snap: they hold at the cursor, not at the projected end (spec 12).
+  return { kind: 'arc', end: freeTarget(at), equal };
 }
 
 /** The inferences the click of the step adds: of the picked point, or of the end and equal. */
@@ -157,7 +151,7 @@ function stepInferences(step: ArcStep): readonly { readonly kind: GlyphKind }[] 
     case 'start':
       return step.target.inferred;
     case 'arc':
-      return step.equal === null ? step.end.inferred : [...step.end.inferred, { kind: 'equal' }];
+      return step.equal === null ? [] : [{ kind: 'equal' }];
   }
 }
 

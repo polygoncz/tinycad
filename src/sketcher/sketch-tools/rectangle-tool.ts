@@ -7,7 +7,13 @@
 // preview shows exactly the inferred constraints the click adds.
 
 import type { Vec2 } from '@/core';
-import type { PointInference, SketchConstraint, SketchEntityId, SketchLine } from '@/sketch';
+import type {
+  PointInference,
+  SketchConstraint,
+  SketchData,
+  SketchEntityId,
+  SketchLine,
+} from '@/sketch';
 import type { Tool, ToolContext } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
 import type { SketchSession } from '../sketch-session';
@@ -49,7 +55,7 @@ export function createRectangleTool(sketches: SketchEditor): Tool {
       const target = snapAt(ctx, session, x, y, mode);
       const tolerance = snapToleranceAt(ctx, session, x, y);
       if (target === null || tolerance === null) return;
-      const step = rectangleStep(session, corner, target, tolerance, mode.infer);
+      const step = rectangleStep(sessionData(session, []), corner, target, tolerance, mode.infer);
       previewInference(session, target.at, stepInferences(step), target.guides);
       if (corner === null) return;
       const [a, b, c, d] = corners(corner.at, target.at);
@@ -60,7 +66,7 @@ export function createRectangleTool(sketches: SketchEditor): Tool {
       const target = snapAt(ctx, session, x, y, mode);
       const tolerance = snapToleranceAt(ctx, session, x, y);
       if (target === null || tolerance === null) return;
-      const step = rectangleStep(session, corner, target, tolerance, mode.infer);
+      const step = rectangleStep(sessionData(session, []), corner, target, tolerance, mode.infer);
       switch (step.kind) {
         case 'none':
           return;
@@ -82,10 +88,10 @@ export function createRectangleTool(sketches: SketchEditor): Tool {
 
 /**
  * The step of a click at `target` after the first corner `start` (null = none yet). Pure over
- * the data of the session, so the preview of a move can call it too.
+ * `data`, so the preview of a move can call it too.
  */
 function rectangleStep(
-  session: SketchSession,
+  data: SketchData,
   start: SnapTarget | null,
   target: SnapTarget,
   tolerance: number,
@@ -104,8 +110,8 @@ function rectangleStep(
   // onto the clicked corners or onto each other, which would collapse a side.
   const clicked = [start.point, target.point].filter((id): id is SketchEntityId => id !== null);
   const computed = { infer, grid: null, exclude: new Set(clicked) };
-  const tb = snapPoint(session, b, tolerance, computed);
-  const td = snapPoint(session, d, tolerance, computed);
+  const tb = snapPoint(data, b, tolerance, computed);
+  const td = snapPoint(data, d, tolerance, computed);
   const tdd = td.point !== null && td.point === tb.point ? freeTarget(d) : td;
   // An alignment of a corner with another corner duplicates an axis of the rectangle.
   const own = new Set([start, tb, target, tdd].flatMap((t) => (t.point === null ? [] : [t.point])));

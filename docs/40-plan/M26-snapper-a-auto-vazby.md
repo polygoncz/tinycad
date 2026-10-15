@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 26
 aliases:
   - M26
@@ -16,7 +16,7 @@ specs:
 depends_on:
   - "[[M25-glyfy-vazeb]]"
 started: 2026-10-15
-finished:
+finished: 2026-10-15
 tags:
   - milnik
 created: 2026-10-15
@@ -52,7 +52,7 @@ Rozhodnutí v sezení 2026-10-15 (brainstorming):
 - [x] 2. `snap`, `inferLine`, `inferRadius` v `sketch` (čisté funkce, tabulkové testy)
 - [x] 3. Ověření kandidátů řešičem (`addGeometry` s `required`) a snapper v nástrojích `sketcher`, Ctrl/Cmd
 - [x] 4. Náhled: vodítka v overlay a náhledové glyfy v `ui`
-- [ ] 5. e2e `m26.spec.ts`, propsání do spec 10 a 11
+- [x] 5. e2e `m26.spec.ts`, propsání do spec 10 a 11
 
 ## Implementační plán
 
@@ -118,7 +118,15 @@ _(Souběžná stopa, [[Roadmapa#Souběžné stopy (pokus od M25)|pravidla]]: mí
 - **2026-10-15, úkol 3** (řešič a nástroje): hotovo. `addGeometry(add, { required })` až tři pokusy; `snapAt` přes `snap`, tolerance 6 px v místě kurzoru; řetěz polyline si pamatuje své nezapsané entity, takže první bod jde trefit i před dokončením zápisu. Rozhodnutí A14 (propsáno do spec 12): `fix` a povinné vazby zůstávají ve všech pokusech; úsečka mezi body už spojenými existující úsečkou se nevytvoří (obdélník na hraně ji sdílí); zarovnání s počátkem kreslené úsečky → její `horizontal`/`vertical`; zarovnání rohu obdélníku s jiným jeho rohem se zahodí; osa + tečna zůstávají obě.
 - **2026-10-15, natažení `main`** (a4e0316, sloučené stopy B a C): 23 konfliktů v 17 souborech, vyřešeno ručně – sjednocené exporty `sketch`, větve `constraintFor`/`constraintTargets`/adaptéru vedle kót a splinů, panel s `<details>` i jednotkami kót z M28, e2e `dimensionInput` asynchronní i v novém `m28.spec.ts`, odstavce spec 10 a 11 vedle sebe. Vyčerpávající `switch` ukázal přesně tři místa: `isGlyphConstraint` (nové kóty → bez glyfu), kotva glyfu splinu (zatím `null`, dodá M29 úkol 8) a průmět na spline ve snapperu (spline zatím není kandidát `onCurve`, `pointOnCurve` na spline nemá). Helper e2e `openConstraintSection` nejdřív 1 s počká na samočinné otevření sekce – klik ve chvíli, kdy ji otevírá nová kóta, ji zavřel a vzal fokus poli (padal `m28.spec.ts` v chrome). `npm run check` zelený.
 - **2026-10-15, úkol 4** (náhled): hotovo. Klik i náhled počítá jedna funkce kroku nástroje (`lineStep` …), takže se nerozejdou. A15 (propsáno do spec 12): vodítka kreslí session (viewport skicáře dostane `overlay`); náhled je vodorovná řada vpravo dole od kotvy; přichycení na existující bod v náhledu nic neukáže (vazba nevzniká, Onshape tam ukazuje shodu – kandidát na zlepšení); `leave` náhled smaže.
+- **2026-10-15, úkol 5** (e2e, spec 10 a 11): `m26.spec.ts` (obdélník na hraně bez redundance, skoro kolmá úsečka → Kolmost, s Ctrl/Cmd nic, bod na křivce zůstane po tažení, náhledový glyf). Starší e2e nové chování snapperu nerozbilo. Spec 10 (nástroje, `snapAt`, `addGeometry`, `SketchState.inference`) a 11 (náhled, viewport s `overlay`) propsané.
+- **2026-10-15, revize** (`architecture-reviewer`): bez vážných porušení. Opraveno: A16 – konec oblouku nedostane žádné `inferred` ani vodítka (vazby pro místo kurzoru po promítnutí na kružnici neplatily; chyba byla v kontraktu, propsáno do spec 12); funkce kroku nástrojů berou `SketchData` místo celé session (ADR 0011). Ponecháno: `setInferencePreview` je ve veřejném `SketchSession`, takže ho vidí i `ui` – stejný vzor jako `previewDimension` z M28; kandidát na otázku při sloučení (užší rozhraní jen pro nástroje).
+- **Mimo M26, k otázce:** Escape s fokusem v panelu (např. na `<summary>` sekce Vazby) nedojde k nástroji – klávesy nástrojů jdou jen přes `keydown` plátna. Starší chování, e2e na něj narazilo.
+- **2026-10-15, uzavření:** `npm run check` zelený, e2e 118/118 v chrome i webkit (`E2E_PORT=4201`). Commit na větev `claude/stopa-a-m25-m27-f7ea83`.
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+- **Co šlo dobře:** snapper a inference jako čisté funkce v `sketch` šly otestovat tabulkově v Node (stovky případů za sekundu); nástroje pak jen skládají výsledky. Jedna funkce kroku nástroje pro klik i náhled vyloučila rozjetí náhledu a zápisu. Vyčerpávající `switch` po natažení `main` přesně ukázal tři místa, kde se M26 potkává s kótami a spliny.
+- **Co drhlo:** kontrakt měl díry, které vyplavaly až při implementaci (zdvojená hrana obdélníku, zarovnání s vlastním počátkem úsečky, konec oblouku) – rozhodnutí A13–A16. Natažení `main` uprostřed milníku stálo 23 ručně řešených konfliktů, většinou sousední řádky v unii vazeb, exportech a e2e helperech.
+- **Souběh stop:** natáhnout `main` hned po sloučení B a C (uprostřed M26) bylo levnější než na konci – konflikty byly ještě malé a e2e ukázalo jediný souběh v helperu. Čekané konflikty při dalším sloučení: žádné, větev obsahuje `main` a4e0316.
+- **Pro M27:** nové nástroje kružnic a oblouků mají stát na `snap` a funkcích kroku stejně jako dnešní; tečný oblouk potřebuje `inferLine`-obdobu pro oblouk (tečna k navazující křivce je jeho definice, ne inference).
+- **Kandidát na poznatek:** inference záměru uživatele je odhad – ať smí ustoupit (řešič zahodí redundantní a sporné automatické vazby), definici tvaru (obdélník, `fix` počátku) ne.

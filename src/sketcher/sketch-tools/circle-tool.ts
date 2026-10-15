@@ -5,11 +5,10 @@
 // step (circleStep), so the preview shows exactly the constraints the click adds.
 
 import { inferRadius } from '@/sketch';
-import type { SketchConstraint, SketchEntityId } from '@/sketch';
+import type { SketchConstraint, SketchData, SketchEntityId } from '@/sketch';
 import type { Tool } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
 import type { GlyphKind } from '../sketch-glyphs';
-import type { SketchSession } from '../sketch-session';
 import {
   MIN_LENGTH,
   circlePoints,
@@ -46,7 +45,7 @@ export function createCircleTool(sketches: SketchEditor): Tool {
       const mode = snapMode(sketches, mods);
       const target = snapAt(ctx, session, x, y, mode);
       if (target === null) return;
-      const step = circleStep(session, center, target, mode.infer);
+      const step = circleStep(sessionData(session, []), center, target, mode.infer);
       previewInference(session, target.at, stepInferences(step), target.guides);
       if (center === null) return;
       previewPolyline(ctx, session, circlePoints(center.at, distance(center.at, target.at)));
@@ -55,7 +54,7 @@ export function createCircleTool(sketches: SketchEditor): Tool {
       const mode = snapMode(sketches, mods);
       const target = snapAt(ctx, session, x, y, mode);
       if (target === null) return;
-      const step = circleStep(session, center, target, mode.infer);
+      const step = circleStep(sessionData(session, []), center, target, mode.infer);
       switch (step.kind) {
         case 'none':
           return;
@@ -84,10 +83,10 @@ export function createCircleTool(sketches: SketchEditor): Tool {
 
 /**
  * The step of a click at `target` after the centre `center` (null = none yet); the rim snaps only
- * for its place. Pure over the data of the session, so the preview of a move can call it too.
+ * for its place. Pure over `data`, so the preview of a move can call it too.
  */
 function circleStep(
-  session: SketchSession,
+  data: SketchData,
   center: SnapTarget | null,
   target: SnapTarget,
   infer: boolean,
@@ -95,7 +94,6 @@ function circleStep(
   if (center === null) return { kind: 'center', target };
   const radius = distance(center.at, target.at);
   if (radius <= MIN_LENGTH) return { kind: 'none' };
-  const data = sessionData(session, []);
   const equal = infer ? inferRadius(radius, data, lastRound(data)) : null;
   return { kind: 'circle', radius, equal };
 }

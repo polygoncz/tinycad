@@ -59,7 +59,7 @@ export function snapAt(
   const cursor = cursorAt(ctx, session, x, y);
   const tolerance = snapToleranceAt(ctx, session, x, y);
   if (cursor === null || tolerance === null) return null;
-  return snapPoint(session, cursor, tolerance, mode);
+  return snapPoint(sessionData(session, mode.pending ?? []), cursor, tolerance, mode);
 }
 
 /** 6 px in mm of the plane at the cursor; null for a ray parallel to the plane. */
@@ -74,14 +74,17 @@ export function snapToleranceAt(
   return at === null || aside === null ? null : distance(at, aside);
 }
 
-/** The snapper at a point of the plane (a corner the rectangle computes). */
+/**
+ * The snapper at a point of the plane (a corner the rectangle computes) over `data`, which
+ * already holds the pending entities of the mode.
+ */
 export function snapPoint(
-  session: SketchSession,
+  data: SketchData,
   at: Vec2,
   tolerance: number,
   mode: SnapMode,
 ): SnapTarget {
-  return snap(at, sessionData(session, mode.pending ?? []), {
+  return snap(at, data, {
     tolerance,
     grid: mode.grid,
     infer: mode.infer,
@@ -90,7 +93,10 @@ export function snapPoint(
 }
 
 /** The data of the session with the pending entities that are not in it yet appended. */
-export function sessionData(session: SketchSession, pending: readonly SketchEntity[]): SketchData {
+export function sessionData(
+  session: Pick<SketchSession, 'state'>,
+  pending: readonly SketchEntity[],
+): SketchData {
   const { entities, constraints } = session.state.get();
   if (pending.length === 0) return { entities, constraints };
   const present = new Set(entities.map((e) => e.id));

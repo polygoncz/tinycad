@@ -1455,6 +1455,23 @@ describe('the drawing tools infer constraints (M26)', () => {
       expect.objectContaining({ kind: 'equal', a: arc?.id, b: 'k' }),
     ]);
   });
+
+  it('the end of an arc is a new point on the circle without inferred constraints', async () => {
+    const { manager, viewport, session } = await sketching({ sketch: lineSketch });
+    manager.activate('sketch.arc');
+
+    // The cursor of the end (200, 52) snaps into hAlign with l2; projected onto the circle it is
+    // at (200, 80), where that alignment would not hold.
+    await clicks(viewport, [
+      [200, 100],
+      [220, 100],
+      [200, 52],
+    ]);
+
+    const arc = session.state.get().entities.find((e) => e.kind === 'arc');
+    expect(arc?.kind === 'arc' && xyOf(session, arc.end)).toEqual([200, 80]);
+    expect(constraintsOf(session)).toEqual([]);
+  });
 });
 
 describe('the drawing tools preview the inferred constraints (M26)', () => {
@@ -1582,6 +1599,20 @@ describe('the drawing tools preview the inferred constraints (M26)', () => {
     move(viewport, 102, 120);
 
     manager.activate('sketch.select');
+
+    expect(inferenceOf(session)).toBeNull();
+    expect(viewport.overlayShapes.has('sketch-guides')).toBe(false);
+  });
+
+  it('the end of an arc previews neither constraints nor guides', async () => {
+    const { manager, viewport, session } = await sketching({ sketch: lineSketch });
+    manager.activate('sketch.arc');
+    await clicks(viewport, [
+      [200, 100],
+      [220, 100],
+    ]);
+
+    move(viewport, 200, 52);
 
     expect(inferenceOf(session)).toBeNull();
     expect(viewport.overlayShapes.has('sketch-guides')).toBe(false);

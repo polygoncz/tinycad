@@ -11,6 +11,7 @@ import type {
   LineInference,
   PointInference,
   SketchConstraint,
+  SketchData,
   SketchEntity,
   SketchEntityId,
 } from '@/sketch';
@@ -122,9 +123,10 @@ export function createLineTool(sketches: SketchEditor): Tool {
     },
     onMove(ctx, session, x, y, mods) {
       const mode = snapMode(sketches, mods);
-      const target = snapAt(ctx, session, x, y, { ...mode, pending: chain?.entities ?? [] });
+      const pending = chain?.entities ?? [];
+      const target = snapAt(ctx, session, x, y, { ...mode, pending });
       if (target === null) return;
-      const step = lineStep(session, chain, target, mode.infer);
+      const step = lineStep(sessionData(session, pending), chain, target, mode.infer);
       const inferences = step.kind === 'line' ? step.inferences : [];
       const inferred = step.kind === 'none' ? [] : step.target.inferred;
       previewInference(session, target.at, [...inferred, ...inferences], target.guides);
@@ -132,10 +134,11 @@ export function createLineTool(sketches: SketchEditor): Tool {
     },
     onClick(ctx, session, x, y, mods) {
       const mode = snapMode(sketches, mods);
-      const target = snapAt(ctx, session, x, y, { ...mode, pending: chain?.entities ?? [] });
-      if (target === null) return;
       const current = chain;
-      const step = lineStep(session, current, target, mode.infer);
+      const pending = current?.entities ?? [];
+      const target = snapAt(ctx, session, x, y, { ...mode, pending });
+      if (target === null) return;
+      const step = lineStep(sessionData(session, pending), current, target, mode.infer);
       switch (step.kind) {
         case 'none':
           return;
@@ -173,10 +176,11 @@ export function createLineTool(sketches: SketchEditor): Tool {
 
 /**
  * The step of a click at `target` with the chain `chain` (null = none yet); `infer` = without
- * Ctrl/Cmd. Pure over the data of the session, so the preview of a move can call it too.
+ * Ctrl/Cmd. Pure over `data` (the session with the entities of the chain), so the preview of a
+ * move can call it too.
  */
 function lineStep(
-  session: SketchSession,
+  data: SketchData,
   chain: Chain | null,
   target: SnapTarget,
   infer: boolean,
@@ -188,12 +192,12 @@ function lineStep(
     // Closing needs two lines already, otherwise it would double the only one.
     if (chain.lines < 2) return NO_STEP;
     const closing = { ...target, inferred: [] };
-    return lineTo(session, chain, closing, first, { infer, axis: null, close: true });
+    return lineTo(data, chain, closing, first, { infer, axis: null, close: true });
   }
   if (distance(last.at, target.at) <= MIN_LENGTH) return NO_STEP;
   const { inferred, axis } = alignmentWith(target.inferred, last.id);
   const to = { id: target.point, at: target.at };
-  return lineTo(session, chain, { ...target, inferred }, to, { infer, axis, close: false });
+  return lineTo(data, chain, { ...target, inferred }, to, { infer, axis, close: false });
 }
 
 /**
@@ -202,7 +206,7 @@ function lineStep(
  * its two points).
  */
 function lineTo(
-  session: SketchSession,
+  data: SketchData,
   chain: Chain,
   target: SnapTarget,
   to: { readonly id: SketchEntityId | null; readonly at: Vec2 },
@@ -210,7 +214,6 @@ function lineTo(
 ): LineStep {
   const { last: from } = chain;
   const { axis, close } = opts;
-  const data = sessionData(session, chain.entities);
   const existing = to.id === null ? null : existingLine(data, from.id, to.id);
   if (existing !== null) return { kind: 'line', target, close, existing, inferences: [] };
   const inferred = opts.infer

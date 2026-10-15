@@ -1001,7 +1001,7 @@ export interface SketchEditor {
 export function createSketchEditor(deps: {
   features: FeatureEditor;
   solver: ConstraintSolver;
-  viewport: Pick<ViewportPort, 'sketches' | 'screenToRay'>; // kresba 'sketch-edit' (Ú16a, ADR 0011); od M28 screenToRay pro tah popisku kóty; ids skicář nepotřebuje
+  viewport: Pick<ViewportPort, 'sketches' | 'screenToRay' | 'overlay'>; // kresba 'sketch-edit' (Ú16a, ADR 0011); od M28 screenToRay pro tah popisku kóty; od M26 overlay pro vodítka snapperu ('sketch-guides'); ids skicář nepotřebuje
   resolvePlane: (ref: PlaneRef | TopoRef) => Plane | undefined;   // app: planeOfRef nad posledním stavem regenerace (M14), viz spec 07
   planeOfSketch: (featureId: FeatureId) => Plane | undefined;     // M21: SketchArtifact.plane skici z posledního stavu (ADR 0025); edit ji použije před resolvePlane
   gridStep?: () => number;                                 // M19.2: krok mřížky v mm, čte se při každém pohybu a kliku; výchozí () => 1
@@ -1013,7 +1013,9 @@ export interface SketchSession {
   pickPlane(): void;                                       // M21: fokus parametru roviny (výběr přes refPick); bez viditelného parametru nic
   cancelPlanePick(): boolean;                              // M21: true = výběr běžel a skončil
   readonly state: Observable<SketchState>;
-  addGeometry(add: SketchData): Promise<boolean>;          // nové entity a vazby (nástroje); true = zapsáno
+  addGeometry(add: SketchData, opts?: { readonly required?: ReadonlySet<SketchConstraintId> }): Promise<boolean>; // nové entity a automatické vazby (nástroje); true = zapsáno; M26: required = vazby, které se při konfliktu nevynechají
+  /** M26: náhled vazeb, které by klik kreslicího nástroje zapsal (SketchState.inference), a vodítka snapperu v overlay 'sketch-guides'; null = smazat. */
+  setInferencePreview(p: { readonly at: Vec2; readonly kinds: readonly GlyphKind[]; readonly guides: readonly SnapGuide[] } | null): void;
   addConstraint(c: SketchConstraint): Promise<boolean>;    // akce vazeb, kóta
   setDimension(id: SketchConstraintId, value: number): Promise<boolean>;
   remove(ids: readonly SketchItemId[]): Promise<boolean>;  // removeItems ze sketch
@@ -1051,6 +1053,7 @@ export interface SketchState {
   readonly busy: boolean;                                  // M19.1 D8: běží nebo čeká job, který může zapsat
   readonly dimensions: readonly SketchDimensionView[];     // M19.2 D4: kóty pro viewport (dimensionViews)
   readonly glyphs: readonly SketchGlyphView[];             // M25: glyfy vazeb pro viewport (glyphViews, spec 12)
+  readonly inference: { readonly anchor: Vec3; readonly kinds: readonly GlyphKind[] } | null; // M26: náhled automatických vazeb (prázdný → null)
 }
 export type SketchMessageKey = 'sketch.conflict' | 'sketch.redundant' | 'sketch.solverFailed';
 export interface SketchConstraintRow {
@@ -1085,7 +1088,7 @@ export const ORIGIN_POINT_ID = '__origin';                 // bod počátku v kr
 
 **Zápis změny** (`addGeometry`, `addConstraint`, `setDimension`, `remove`): příkazy běží **sériově** ve frontě; každý vezme aktuální data z dokumentu, sestaví nová, zavolá `solver.solve` a podle výsledku:
 
-- `'ok'` → `FeatureEditSession.setParams({ entities: result.entities, constraints })`, `status`, `dof`, `message: null`, vrátí `true`. Výjimka: `addConstraint` (a kóta) vazby, která je v `redundant`, → nic, `message 'sketch.redundant'`, `false`. U `addGeometry` se nové vazby, které jsou v `redundant` (automatické vodorovné na snapu…), z dat vynechají a zbytek se zapíše.
+- `'ok'` → `FeatureEditSession.setParams({ entities: result.entities, constraints })`, `status`, `dof`, `message: null`, vrátí `true`. Výjimka: `addConstraint` (a kóta) vazby, která je v `redundant`, → nic, `message 'sketch.redundant'`, `false`. U `addGeometry` se nové vazby, které jsou v `redundant` (automatické vodorovné na snapu…), z dat vynechají a zbytek se zapíše. Od M26 jsou všechny vazby `addGeometry` automatické: při `'conflict'` se zkusí znovu bez sporných přidaných vazeb, pak jen s `fix` a `required`, nejvýš tři řešení na zápis ([[12-skicar#Snapper a auto-vazby (M26)]]).
 - `'conflict'` → nic, `message 'sketch.conflict'`, `false`; `'failed'` nebo odmítnutí řešiče → nic, `message 'sketch.solverFailed'`, `false`.
 - Data beze změny (stejné hodnoty) se nezapisují.
 - Výsledek, který dorazí po zavření session, se zahodí (`false`). Po zavření hodí každý příkaz výjimku hned (ne odmítnutý slib).
@@ -1138,13 +1141,14 @@ export function createSketchActions(deps: { registry: ActionRegistry; sketches: 
 |---|---|---|
 | `sketch` | `model`, `sketch`, `Shift+S` | je-li zavřený dialog i skicář: `sketches.create(rovina)` – rovina z výběru – první položka `plane` (`PlaneRef`), nebo `face` se jménem, pro kterou `planeOf({ kind: 'topo', body, name })` vrátí rovinu (M14, [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R107]] ⚠), jinak `ORIGIN_PLANE_IDS.xy`; skončí |
 | `sketch.select` | `sketch`, `select` | výchozí v režimu skici; `move` → `setHover` z `pick(x, y, ['sketchEntity'])` (jen entity session, ne počátek); klik (do 4 px) → `select` (Shift = `additive`), do prázdna `clearSelection`; stisk na bodu a pohyb nad 4 px → `drag` při každém pohybu, uvolnění → `endDrag`; `Escape` s výběrem → `clearSelection` (`true`) |
-| `sketch.line` | `sketch`, `draw`, `L` | polyline: první klik začne řetěz, každý další přidá úsečku z posledního bodu (`addGeometry`); klik na první bod řetězu ho uzavře a ukončí; úhel do 3° od osy → `horizontal`/`vertical`; `Escape` s rozpracovaným řetězem ho ukončí (`true`), jinak nástroj skončí |
-| `sketch.rectangle` | `sketch`, `draw`, `R` | dva rohy → 4 body (rohy ze snapu znovu použité), 4 úsečky, 2× `horizontal`, 2× `vertical`; rohy se stejnou x nebo y nic |
-| `sketch.circle` | `sketch`, `draw`, `C` | střed, bod na obvodu → kružnice (poloměr > 0) |
-| `sketch.arc` | `sketch`, `draw`, `A` | střed, začátek, konec (promítnutý na kružnici) → oblouk proti směru hodinových ručiček |
+| `sketch.line` | `sketch`, `draw`, `L` | polyline: první klik začne řetěz, každý další přidá úsečku z posledního bodu (`addGeometry`); klik na první bod řetězu ho uzavře a ukončí; M26: body přes snapper, každá úsečka dostane vazby z `inferLine` (osa do 3°, rovnoběžka, kolmice, tečna k navazujícímu oblouku, `equal` s předchozí úsečkou řetězu do 2 %), Ctrl/Cmd je vypne; úsečka mezi body už spojenými existující úsečkou nevznikne; `Escape` s rozpracovaným řetězem ho ukončí (`true`), jinak nástroj skončí |
+| `sketch.rectangle` | `sketch`, `draw`, `R` | dva rohy → 4 body (rohy ze snapu znovu použité, M26 i dopočítané), 4 úsečky, 2× `horizontal`, 2× `vertical` (`required`); strana na existující úsečce se sdílí; rohy se stejnou x nebo y nic |
+| `sketch.circle` | `sketch`, `draw`, `C` | střed, bod na obvodu → kružnice (poloměr > 0); M26: střed přes snapper s vazbami, bod na obvodu jen polohou, `equal` s poslední kružnicí/obloukem do 2 % (`inferRadius`) |
+| `sketch.arc` | `sketch`, `draw`, `A` | střed, začátek, konec (promítnutý na kružnici) → oblouk proti směru hodinových ručiček; M26: body přes snapper (konec vždy nový bod, bez `fix`), `inferRadius` |
 | `sketch.dimension` | `sketch`, `constrain`, `D` | M28: klik na entitu nebo dvě entity určí cíl (`dimensionTarget`), kóta pak visí na myši a druh i polohu volí kurzor (`placeDimension`, náhled přes `previewDimension`); klik ji zapíše (`addConstraint` s `placement`), Esc náhled zruší. Průběh výběru v [[12-skicar#Kóty (M28)]] |
 
-- **Bod pod kurzorem** (pomocník `snapAt(ctx, session, x, y, grid: number | null)` v `sketch-tools/snap.ts`): `pick(x, y, ['sketchEntity'])`; zásah bodu session → jeho id a souřadnice; zásah `ORIGIN_POINT_ID` → nový bod `[0, 0]` a vazba `fix`; jinak (křivka, jiná kresba, nic) nový bod v průsečíku paprsku `screenToRay` s rovinou (`plane.intersectRay`, `toLocal`; rovnoběžný paprsek → klik se ignoruje). Nové id z `ids.next()`.
+- **Bod pod kurzorem od M26** ([[12-skicar#Snapper a auto-vazby (M26)]]): `snapAt` už nepickuje, volá čistou `snap` ze `sketch` nad daty session (i s nezapsanými entitami rozpracovaného řetězu) s prahem 6 px převedeným na mm v místě kurzoru, mřížkou podle `snapGrid` a `infer: !mods.mod`; `placePoint` z `inferred` vytvoří vazby s novými id. Klik i náhled počítá jedna funkce kroku nástroje (`lineStep`, `rectangleStep`, `circleStep`, `arcStep`). Náhled vazeb a vodítek (`setInferencePreview`) smaže klik, Esc, `leave`, deaktivace a zavření session. Odstavce níže popisují stav M12–M19.2.
+- **Bod pod kurzorem do M25** (pomocník `snapAt(ctx, session, x, y, grid: number | null)` v `sketch-tools/snap.ts`): `pick(x, y, ['sketchEntity'])`; zásah bodu session → jeho id a souřadnice; zásah `ORIGIN_POINT_ID` → nový bod `[0, 0]` a vazba `fix`; jinak (křivka, jiná kresba, nic) nový bod v průsečíku paprsku `screenToRay` s rovinou (`plane.intersectRay`, `toLocal`; rovnoběžný paprsek → klik se ignoruje). Nové id z `ids.next()`.
   - **Přichycení k mřížce** (M19.2 D4): pořadí je existující bod → počátek → volný bod. Jen volný bod se zaokrouhlí na násobek `grid` v souřadnicích roviny (`Math.round(v / grid) * grid`, `−0` → `0`). `grid === null` = bez mřížky.
   - Kreslicí nástroje (úsečka, obdélník, kružnice, oblouk) volají `snapAt` s `snapGrid(sketches, mods)` = `gridSnap && !mods.alt ? gridStep() : null` (`common.ts`) při pohybu (náhled) i při kliku. `ClickHandlers.onMove(ctx, session, x, y, mods)` proto dostává i `mods: KeyMods`. Automatické `horizontal` a `vertical` úsečky se počítají z přichycených bodů. Výběrový nástroj (tažení bodu) a nástroj kóty se nepřichytávají.
 - **Náhled:** kreslicí nástroje kreslí rozpracovaný tvar přes `viewport.overlay.set('sketch-tool', …)` ve světových souřadnicích stylem `preview` (kružnice a oblouk lomenou čarou, 64 úseků na kruh); při deaktivaci `overlay.remove('sketch-tool')`.
