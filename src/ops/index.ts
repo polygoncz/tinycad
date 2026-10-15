@@ -5,6 +5,7 @@ export type {
   BatchOp,
   BodyRenameOp,
   BodySetColorOp,
+  BodySetMaterialOp,
   BodySetVisibleOp,
   DocumentRenameOp,
   FeatureAddOp,

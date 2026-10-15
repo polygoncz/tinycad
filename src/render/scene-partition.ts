@@ -30,15 +30,34 @@ export function partitionScene(
   });
 }
 
-/** All `isLineSegments2` objects in the subtrees of `roots` (GTAOPass does not hide them itself). */
+/**
+ * All `isLineSegments2` objects in the subtrees of `roots` (GTAOPass does not hide them itself),
+ * and every mesh with a material of `transmission > 0` (glass, M24): it writes depth and normals
+ * into the G-buffer like an opaque body and the AO would darken what is seen through it.
+ */
 export function aoExcluded(roots: readonly THREE.Object3D[]): THREE.Object3D[] {
   const found: THREE.Object3D[] = [];
   for (const root of roots) {
     root.traverse((object) => {
-      if ('isLineSegments2' in object && object.isLineSegments2 === true) found.push(object);
+      if (isLineSegments2(object) || isTransmissive(object)) found.push(object);
     });
   }
   return found;
+}
+
+/**
+ * Sets `scene.background` to null for the time of `fn`, then restores it, even when `fn` throws
+ * (M24): the background of Realistic belongs to the model pass only, the AO, interaction and
+ * contact shadow passes would draw it over what is already there.
+ */
+export function withoutBackground<T>(scene: THREE.Scene, fn: () => T): T {
+  const background = scene.background;
+  scene.background = null;
+  try {
+    return fn();
+  } finally {
+    scene.background = background;
+  }
 }
 
 /**
@@ -58,6 +77,24 @@ export function hideDuring<T>(objects: readonly THREE.Object3D[], fn: () => T): 
   } finally {
     for (const [object, visible] of original) object.visible = visible;
   }
+}
+
+function isLineSegments2(object: THREE.Object3D): boolean {
+  return 'isLineSegments2' in object && object.isLineSegments2 === true;
+}
+
+function isTransmissive(object: THREE.Object3D): boolean {
+  if (!('isMesh' in object) || object.isMesh !== true || !('material' in object)) return false;
+  const material: unknown = object.material;
+  const materials: readonly unknown[] = Array.isArray(material) ? material : [material];
+  return materials.some(
+    (m) =>
+      typeof m === 'object' &&
+      m !== null &&
+      'transmission' in m &&
+      typeof m.transmission === 'number' &&
+      m.transmission > 0,
+  );
 }
 
 function isLight(object: THREE.Object3D): boolean {

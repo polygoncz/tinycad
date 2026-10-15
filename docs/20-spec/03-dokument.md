@@ -188,16 +188,28 @@ export function orderViolations(studio: PartStudioData, deps: ReadonlyMap<Featur
 Jméno a skrytí [[Těleso|tělesa]] patří do dokumentu ([[M11-dalsi-entity|M11]], [[Q071 Viditelnost těles|Q071]]): přežijí reload, jdou přes operace a undo ([[04-operace-a-historie#Sada operací]]). Smí tam až od [[0015-artefakty-a-identita-telesa|ADR 0015]]: `BodyId` je rodokmen (featura původu), takže se metadata po změně historie nepřenesou na jiné těleso.
 
 ```ts
-export interface BodyMeta { readonly name?: string; readonly hidden?: true; readonly color?: string }   // color od M15: '#rrggbb' malými písmeny
+export interface BodyMeta {
+  readonly name?: string;
+  readonly hidden?: true;
+  readonly color?: string;            // M15: '#rrggbb' malými písmeny
+  readonly material?: BodyMaterial;  // M24: chybí = DEFAULT_BODY_MATERIAL; výchozí se neukládá
+}
+
+/** M24 (Q078, ADR 0027): předvolba materiálu tělesa. Parametry PBR zná jen render. */
+export type BodyMaterial = 'plastic' | 'aluminium' | 'steel' | 'brass' | 'glass' | 'rubber';
+export const BODY_MATERIALS: readonly BodyMaterial[];   // pořadí v UI, tak jak je výčet výše; zmrazené
+export const DEFAULT_BODY_MATERIAL = 'plastic' satisfies BodyMaterial;   // literální typ: render má kopii typovanou `typeof DEFAULT_BODY_MATERIAL` (z interaction jen typ), takže rozdíl chytí typecheck (revize M24)
+export function isBodyMaterial(v: unknown): v is BodyMaterial;
 
 /** Platná barva tělesa: /^#[0-9a-f]{6}$/ (M15). Sdílí ji fromData a validate operace body.setColor. */
 export function isBodyColor(v: unknown): v is string;
 ```
 
-- **Kanonický tvar** (determinismus, porovnání `toData` při přehrání logu): `setBodyMeta` uloží `name` jen neprázdné a `hidden` jen jako `true`, `color` (M15) jen jako platnou barvu; prázdná metadata záznam odeberou; prázdná mapa → vlastnost `bodies` ve studiu chybí. Barva je čistě vzhled (STEP ji nenese), průhlednost se nedělá ([[Q073 Průhlednost a barva těles|Q073]], [[Rozhodnutí noční rychloakce#M15 – Export a dokončení|R129]] ⚠).
+- **Kanonický tvar** (determinismus, porovnání `toData` při přehrání logu): `setBodyMeta` uloží `name` jen neprázdné a `hidden` jen jako `true`, `color` (M15) jen jako platnou barvu, `material` (M24) jen jako platnou předvolbu **různou od `DEFAULT_BODY_MATERIAL`** (plast se neukládá, `material: 'plastic'` je totéž co bez materiálu); prázdná metadata záznam odeberou; prázdná mapa → vlastnost `bodies` ve studiu chybí. Barva je čistě vzhled (STEP ji nenese), průhlednost se nedělá ([[Q073 Průhlednost a barva těles|Q073]], [[Rozhodnutí noční rychloakce#M15 – Export a dokončení|R129]] ⚠).
 - Změna metadat vytvoří nové `studio` se **stejným** polem `features` i `rollbackIndex`, takže cache regenerace podle identity featur zůstane platná. Ostatní mutátory `bodies` zachovají.
 - Dokument tělesa nezná (vznikají regenerací), takže `setBodyMeta` existenci tělesa nekontroluje a záznamy smazaných featur zůstávají: undo smazání vrátí těleso i se jménem a skrytím.
-- `fromData`: `studio.bodies` chybí → bez metadat; jinak objekt s klíči přes `parseBodyId` (jinak issue `studio.bodies['<klíč>']`) a hodnotami jen s `name` (neprázdný řetězec), `hidden` (boolean, `false` se vypustí) a od M15 `color` (`isBodyColor`, jinak issue `studio.bodies['<klíč>'].color`); jiná vlastnost v hodnotě je issue (přísnost jako u parametrů, [[Q028 Chybějící a přebytečné parametry|Q028]]). Cesty dalších issue: `bodies`, které není objekt → `studio.bodies`; hodnota, která není objekt → `studio.bodies['<klíč>']`; chyba v hodnotě → `studio.bodies['<klíč>'].name` / `.hidden` / `.color` / `.<cizí klíč>`. Prázdná hodnota `{}` nebo `{ hidden: false }` je platná a kanonizace ji zahodí. Výsledek je v kanonickém tvaru a zmrazený.
+- `fromData`: `studio.bodies` chybí → bez metadat; jinak objekt s klíči přes `parseBodyId` (jinak issue `studio.bodies['<klíč>']`) a hodnotami jen s `name` (neprázdný řetězec), `hidden` (boolean, `false` se vypustí) od M15 `color` (`isBodyColor`, jinak issue `studio.bodies['<klíč>'].color`) a od M24 `material` (`isBodyMaterial`, jinak issue `studio.bodies['<klíč>'].material`; `'plastic'` je platný a kanonizace ho vypustí); jiná vlastnost v hodnotě je issue (přísnost jako u parametrů, [[Q028 Chybějící a přebytečné parametry|Q028]]). Cesty dalších issue: `bodies`, které není objekt → `studio.bodies`; hodnota, která není objekt → `studio.bodies['<klíč>']`; chyba v hodnotě → `studio.bodies['<klíč>'].name` / `.hidden` / `.color` / `.material` / `.<cizí klíč>`.
+- **M24:** nové volitelné pole nepotřebuje novou verzi formátu souboru ani snímku. Starší aplikace by soubor s materiálem odmítla (cizí klíč), což je u výukové aplikace bez starších nasazených verzí přijatelné ([[0027-material-telesa-a-scena-realistic|ADR 0027]]). Prázdná hodnota `{}` nebo `{ hidden: false }` je platná a kanonizace ji zahodí. Výsledek je v kanonickém tvaru a zmrazený.
 
 ## Schéma featury
 

@@ -32,6 +32,7 @@ const valid: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   'body.rename': { type: 'body.rename', v: 1, body: 'f1/body', name: '' },
   'body.setVisible': { type: 'body.setVisible', v: 1, body: 'f1/body:2', visible: false },
   'body.setColor': { type: 'body.setColor', v: 1, body: 'f1/body', color: '#ff8800' },
+  'body.setMaterial': { type: 'body.setMaterial', v: 1, body: 'f1/body', material: 'steel' },
 };
 
 const withFeature = (patch: Readonly<Record<string, unknown>>) => ({
@@ -114,6 +115,15 @@ const broken: readonly (readonly [string, Readonly<Record<string, unknown>>, str
   ['body.setColor', { ...valid['body.setColor'], color: 'red' }, 'color'],
   ['body.setColor', { ...valid['body.setColor'], color: 0xff8800 }, 'color'],
   ['body.setColor', { ...valid['body.setColor'], color: '' }, 'color'],
+  ['body.setMaterial', { ...valid['body.setMaterial'], body: 'f1' }, 'body'],
+  ['body.setMaterial', without(valid['body.setMaterial'] ?? {}, 'body'), 'body'],
+  ['body.setMaterial', without(valid['body.setMaterial'] ?? {}, 'material'), 'material'],
+  // The default is 'plastic', never null (M24).
+  ['body.setMaterial', { ...valid['body.setMaterial'], material: null }, 'material'],
+  ['body.setMaterial', { ...valid['body.setMaterial'], material: 'Steel' }, 'material'],
+  ['body.setMaterial', { ...valid['body.setMaterial'], material: 'gold' }, 'material'],
+  ['body.setMaterial', { ...valid['body.setMaterial'], material: '' }, 'material'],
+  ['body.setMaterial', { ...valid['body.setMaterial'], material: 1 }, 'material'],
 ];
 
 describe('validate of built-in handlers', () => {
@@ -129,6 +139,11 @@ describe('validate of built-in handlers', () => {
   it('body.setColor: null (the default color) passes', () => {
     const raw = { type: 'body.setColor', v: 1, body: 'f1/body:2', color: null };
     expect(handlers.get('body.setColor').validate?.(raw)).toEqual([]);
+  });
+
+  it('body.setMaterial: the default material plastic passes (M24)', () => {
+    const raw = { type: 'body.setMaterial', v: 1, body: 'f1/body:2', material: 'plastic' };
+    expect(handlers.get('body.setMaterial').validate?.(raw)).toEqual([]);
   });
 
   it.each(broken)('%s: %j fails at %j', (type, raw, path) => {

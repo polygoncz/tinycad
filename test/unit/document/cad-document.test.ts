@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createDocument } from '@/document/cad-document';
 import type { DocumentWriter } from '@/document/document';
 import type {
+  BodyMaterial,
   DocumentId,
   DocumentMeta,
   FeatureId,
@@ -354,6 +355,45 @@ describe('body metadata (M11)', () => {
     expect(count).toBe(0);
     doc.setBodyMeta(a, { color: '#112234' });
     expect(count).toBe(1);
+  });
+
+  it('stores a material other than plastic with the other metadata (M24)', () => {
+    const doc = docWith(['a']);
+    doc.setBodyMeta(a, { name: 'Base', material: 'steel' });
+    expect(doc.bodyMeta(a)).toEqual({ name: 'Base', material: 'steel' });
+    expect(doc.studio.bodies).toEqual({ [a]: { name: 'Base', material: 'steel' } });
+    expect(Object.isFrozen(doc.bodyMeta(a))).toBe(true);
+  });
+
+  it('does not store plastic, the default material (canonical form, M24)', () => {
+    const doc = docWith(['a']);
+    doc.setBodyMeta(a, { material: 'plastic' });
+    expect('bodies' in doc.studio).toBe(false);
+    doc.setBodyMeta(a, { hidden: true, material: 'plastic' });
+    expect(doc.studio.bodies).toEqual({ [a]: { hidden: true } });
+    expect(Object.keys(doc.bodyMeta(a))).toEqual(['hidden']);
+  });
+
+  it('keeps the material only as a valid preset (canonical form, M24)', () => {
+    const doc = docWith(['a']);
+    // material is typed BodyMaterial; a cast must still not store a foreign value.
+    doc.setBodyMeta(a, { name: 'A', material: 'wood' as unknown as BodyMaterial });
+    expect(doc.bodyMeta(a)).toEqual({ name: 'A' });
+  });
+
+  it('compares the material too: plastic equals no material, another one emits (M24)', () => {
+    const doc = docWith(['a']);
+    doc.setBodyMeta(a, { material: 'glass' });
+    let count = 0;
+    doc.events.on('changed', () => count++);
+    doc.setBodyMeta(a, { material: 'glass' });
+    expect(count).toBe(0);
+    doc.setBodyMeta(a, { material: 'brass' });
+    expect(count).toBe(1);
+    doc.setBodyMeta(a, { material: 'plastic' });
+    expect(count).toBe(2);
+    doc.setBodyMeta(a, {});
+    expect(count).toBe(2);
   });
 
   it('removes the entry for empty metadata and the whole map when it is empty', () => {

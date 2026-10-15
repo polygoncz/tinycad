@@ -30,6 +30,10 @@ export type {
 export type { BodyId } from '@/document';
 // Part of the port's vocabulary as well: the names of TopoNames (M14).
 export type { TopoName } from '@/document';
+// The material presets of bodies (M24, spec 10): render takes the type and app the values from
+// here, so neither needs document for them.
+export type { BodyMaterial } from '@/document';
+export { BODY_MATERIALS, DEFAULT_BODY_MATERIAL, isBodyMaterial } from '@/document';
 export type {
   Anchor,
   FeatureAnchors,

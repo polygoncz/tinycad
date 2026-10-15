@@ -38,7 +38,12 @@ const TOP_TANGENT_EDGE_MIDDLE = [5, FILLET_RADIUS, 10] as const;
 /** The middle of the top face. */
 const TOP_FACE_MIDDLE = [5, 5, 10] as const;
 
-/** A row of the Browser, named by its displayed text ("Těleso 1", "Přední (XZ)"). */
+/**
+ * A row of the Browser, named by its displayed text ("Těleso 1", "Přední (XZ)").
+ * A body row is clicked on its name: the click hovers the row, which shows its colour and
+ * material controls (spec 11), and the middle of the row may then fall on them; they keep the
+ * click.
+ */
 function browserRow(page: Page, name: string): Locator {
   return page.getByRole('treeitem').filter({ has: page.getByText(name, { exact: true }) });
 }
@@ -143,7 +148,7 @@ test('a sketch on a face opens after a transform and a boolean that consumes the
   const transform = await openTool(page, 'Transformace', 'Transformace 1');
   const bodies = refField(transform, 'Tělesa');
   await expect(bodies).toHaveAttribute('aria-pressed', 'true');
-  await browserRow(page, 'Těleso 1').click();
+  await browserRow(page, 'Těleso 1').getByText('Těleso 1', { exact: true }).click();
   await expect(
     transform.getByRole('button', { name: 'Odebrat Kvádr 1', exact: true }),
   ).toBeVisible();
@@ -167,10 +172,10 @@ test('a sketch on a face opens after a transform and a boolean that consumes the
   const targets = refField(boolean, 'Cíle');
   const tools = refField(boolean, 'Nástroje');
   await expect(targets).toHaveAttribute('aria-pressed', 'true');
-  await browserRow(page, 'Těleso 2').click();
+  await browserRow(page, 'Těleso 2').getByText('Těleso 2', { exact: true }).click();
   await tools.click();
   await expect(tools).toHaveAttribute('aria-pressed', 'true');
-  await browserRow(page, 'Těleso 1').click();
+  await browserRow(page, 'Těleso 1').getByText('Těleso 1', { exact: true }).click();
   await expect(boolean.getByRole('button', { name: 'Odebrat Válec 1', exact: true })).toBeVisible();
   await expect(boolean.getByRole('button', { name: 'Odebrat Kvádr 1', exact: true })).toBeVisible();
   await boolean

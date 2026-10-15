@@ -61,3 +61,22 @@ describe('SceneHelpers grid', () => {
     close(box.max.toArray(), GRID_BOUNDS.max);
   });
 });
+
+describe('SceneHelpers.setGridVisible (M24)', () => {
+  it('hides and shows the grid, the lights stay', () => {
+    const camera = new THREE.OrthographicCamera();
+    const scene = new THREE.Scene();
+    scene.add(camera);
+    const helpers = createSceneHelpers(scene, camera, LIGHT_PALETTE);
+    const lights = (): boolean[] =>
+      scene.children.filter((child) => child instanceof THREE.Light).map((light) => light.visible);
+    expect(helpers.grid.visible).toBe(true);
+
+    helpers.setGridVisible(false);
+    expect(helpers.grid.visible).toBe(false);
+    expect(lights()).toEqual([true]);
+
+    helpers.setGridVisible(true);
+    expect(helpers.grid.visible).toBe(true);
+  });
+});

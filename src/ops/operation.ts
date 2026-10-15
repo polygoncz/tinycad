@@ -1,4 +1,4 @@
-import type { BodyId, FeatureId, FeatureInstance } from '@/document';
+import type { BodyId, BodyMaterial, FeatureId, FeatureInstance } from '@/document';
 
 // Operations are plain JSON data (spec 04): payload sits directly on the object,
 // there is no constructor function. The log lives forever, so shapes stay small.
@@ -21,6 +21,7 @@ export const OP_VERSION = {
   'body.rename': 1,
   'body.setVisible': 1,
   'body.setColor': 1,
+  'body.setMaterial': 1,
   'document.rename': 1,
   batch: 1,
 } as const;
@@ -95,6 +96,14 @@ export interface BodySetColorOp extends Operation {
   readonly body: BodyId;
   /** '#rrggbb' in lower case (isBodyColor); null = the default color. */
   readonly color: string | null;
+}
+
+/** Material preset of a body in the document's body metadata (M24, spec 03, ADR 0027). */
+export interface BodySetMaterialOp extends Operation {
+  readonly type: 'body.setMaterial';
+  readonly body: BodyId;
+  /** isBodyMaterial; DEFAULT_BODY_MATERIAL ('plastic') is the default, there is no null. */
+  readonly material: BodyMaterial;
 }
 
 /**

@@ -2,9 +2,10 @@ import { assert, Emitter } from '@/core';
 import type { Subscribable } from '@/core';
 import type { DocumentEvents, DocumentWriter } from './document';
 import { deepFreeze } from './freeze';
-import { isBodyColor } from './model';
+import { DEFAULT_BODY_MATERIAL, isBodyColor, isBodyMaterial } from './model';
 import type {
   BodyId,
+  BodyMaterial,
   BodyMeta,
   DocumentMeta,
   FeatureId,
@@ -52,23 +53,38 @@ type Bodies = NonNullable<PartStudioData['bodies']>;
 const NO_META: BodyMeta = Object.freeze({});
 
 /**
- * The canonical form of body metadata (spec 03): name only when non-empty, hidden only as true;
- * undefined when nothing is left. A new frozen object, nothing of `meta` is kept.
+ * The canonical form of body metadata (spec 03): name only when non-empty, hidden only as true,
+ * color only when valid, material only when valid and not the default; undefined when nothing
+ * is left. A new frozen object, nothing of `meta` is kept.
  */
 function canonicalMeta(meta: BodyMeta): BodyMeta | undefined {
   const name = typeof meta.name === 'string' && meta.name !== '' ? meta.name : undefined;
   const hidden = meta.hidden === true;
   const color = isBodyColor(meta.color) ? meta.color : undefined;
-  if (name === undefined && !hidden && color === undefined) return undefined;
+  const material = storedMaterial(meta.material);
+  if (name === undefined && !hidden && color === undefined && material === undefined) {
+    return undefined;
+  }
   return Object.freeze({
     ...(name === undefined ? {} : { name }),
     ...(hidden ? { hidden } : {}),
     ...(color === undefined ? {} : { color }),
+    ...(material === undefined ? {} : { material }),
   });
 }
 
+/** The material as stored: only a valid preset other than the default (M24). */
+function storedMaterial(material: unknown): BodyMaterial | undefined {
+  return isBodyMaterial(material) && material !== DEFAULT_BODY_MATERIAL ? material : undefined;
+}
+
 function sameMeta(a: BodyMeta | undefined, b: BodyMeta | undefined): boolean {
-  return a?.name === b?.name && a?.hidden === b?.hidden && a?.color === b?.color;
+  return (
+    a?.name === b?.name &&
+    a?.hidden === b?.hidden &&
+    a?.color === b?.color &&
+    a?.material === b?.material
+  );
 }
 
 // Every mutator validates first and then commits a whole new studio in one step,

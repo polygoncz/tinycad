@@ -3,6 +3,7 @@
 
 export type { DocumentEvents, DocumentReader, DocumentWriter } from './document';
 export type {
+  BodyMaterial,
   BodyMeta,
   DocumentId,
   DocumentMeta,
@@ -10,7 +11,7 @@ export type {
   FeatureInstance,
   PartStudioData,
 } from './model';
-export { isBodyColor } from './model';
+export { BODY_MATERIALS, DEFAULT_BODY_MATERIAL, isBodyColor, isBodyMaterial } from './model';
 export type {
   AxisId,
   AxisRef,

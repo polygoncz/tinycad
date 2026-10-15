@@ -3,6 +3,7 @@ import {
   DEFAULT_DISPLAY_STYLE,
   DISPLAY_MODES,
   TRANSPARENT_FACE_OPACITY,
+  displayDrawsAo,
   resolveDisplay,
   samePlan,
   type DisplayMode,
@@ -22,11 +23,18 @@ const PLAN: DisplayPlan = {
   meshLines: false,
   xray: false,
   ao: false,
+  scene: 'studio',
 };
 
 describe('display style values', () => {
   it('lists the modes in menu order and is frozen', () => {
-    expect(DISPLAY_MODES).toEqual(['shaded', 'hiddenRemoved', 'hiddenVisible', 'wireframe']);
+    expect(DISPLAY_MODES).toEqual([
+      'shaded',
+      'realistic',
+      'hiddenRemoved',
+      'hiddenVisible',
+      'wireframe',
+    ]);
     expect(Object.isFrozen(DISPLAY_MODES)).toBe(true);
   });
 
@@ -85,6 +93,28 @@ describe('resolveDisplay', () => {
     });
   });
 
+  it('realistic: physical opaque faces, no edges, no xray, the realistic scene', () => {
+    expect(resolveDisplay(style({ mode: 'realistic' }))).toEqual({
+      ...PLAN,
+      faces: 'physical',
+      edges: false,
+      scene: 'realistic',
+    });
+  });
+
+  it('realistic with AO: the AO pass', () => {
+    expect(resolveDisplay(style({ mode: 'realistic', ao: true })).ao).toBe(true);
+  });
+
+  it.each(DISPLAY_MODES.filter((m) => m !== 'realistic'))(
+    'uses the studio scene in %s',
+    (mode: DisplayMode) => {
+      for (const transparent of [false, true]) {
+        expect(resolveDisplay(style({ mode, transparent })).scene).toBe('studio');
+      }
+    },
+  );
+
   it.each(DISPLAY_MODES)('propagates mesh lines in %s', (mode: DisplayMode) => {
     expect(resolveDisplay(style({ mode, mesh: true })).meshLines).toBe(true);
     expect(resolveDisplay(style({ mode, mesh: false })).meshLines).toBe(false);
@@ -110,9 +140,12 @@ describe('resolveDisplay', () => {
     expect(resolveDisplay(style({ ao: true, transparent: true })).ao).toBe(false);
   });
 
-  it.each(DISPLAY_MODES.filter((m) => m !== 'shaded'))('ignores AO in %s', (mode: DisplayMode) => {
-    expect(resolveDisplay(style({ mode, ao: true })).ao).toBe(false);
-  });
+  it.each(DISPLAY_MODES.filter((m) => m !== 'shaded' && m !== 'realistic'))(
+    'ignores AO in %s',
+    (mode: DisplayMode) => {
+      expect(resolveDisplay(style({ mode, ao: true })).ao).toBe(false);
+    },
+  );
 
   it('AO changes no other field of the plan', () => {
     for (const mode of DISPLAY_MODES) {
@@ -149,6 +182,7 @@ describe('samePlan', () => {
     ['meshLines', { meshLines: true }],
     ['xray', { xray: true }],
     ['ao', { ao: true }],
+    ['scene', { scene: 'realistic' }],
   ];
 
   it.each(changes)('differs on %s', (_field, change) => {
@@ -164,6 +198,47 @@ describe('samePlan', () => {
       const changed = { ...plan, [key]: Symbol(key) };
       expect(samePlan(plan, changed), key).toBe(false);
       expect(samePlan(changed, plan), key).toBe(false);
+    }
+  });
+});
+
+describe('displayDrawsAo', () => {
+  const cases: readonly [string, DisplayStyle, boolean][] = [
+    ['opaque shaded with AO on', style({ mode: 'shaded', transparent: false, ao: true }), true],
+    ['opaque shaded with AO off', style({ mode: 'shaded', transparent: false, ao: false }), false],
+    [
+      'transparent shaded with AO on',
+      style({ mode: 'shaded', transparent: true, ao: true }),
+      false,
+    ],
+    ['realistic with AO on', style({ mode: 'realistic', ao: true }), true],
+    [
+      'realistic, transparent, AO on',
+      style({ mode: 'realistic', transparent: true, ao: true }),
+      true,
+    ],
+    ['realistic with AO off', style({ mode: 'realistic', ao: false }), false],
+    ['hiddenRemoved with AO on', style({ mode: 'hiddenRemoved', ao: true }), false],
+    ['hiddenVisible with AO on', style({ mode: 'hiddenVisible', ao: true }), false],
+    ['wireframe with AO on', style({ mode: 'wireframe', ao: true }), false],
+  ];
+
+  it.each(cases)('%s', (_name, value, expected) => {
+    expect(displayDrawsAo(value)).toBe(expected);
+  });
+
+  it('equals the ao of the resolved plan for every combination', () => {
+    for (const mode of DISPLAY_MODES) {
+      for (const transparent of [false, true]) {
+        for (const ao of [false, true]) {
+          for (const edges of [false, true]) {
+            for (const mesh of [false, true]) {
+              const value = style({ mode, transparent, ao, edges, mesh });
+              expect(displayDrawsAo(value)).toBe(resolveDisplay(value).ao);
+            }
+          }
+        }
+      }
     }
   });
 });

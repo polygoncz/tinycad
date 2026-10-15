@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { BodyId, DocumentWriter, FeatureId, FeatureSchema } from '@/document';
+import type { BodyId, BodyMaterial, DocumentWriter, FeatureId, FeatureSchema } from '@/document';
 import { createFeatureSchemaRegistry, toData } from '@/document';
 import { aDocument, aFeature } from '@/document/testing';
 import { createOpHandlerRegistry } from '@/ops/handler';
@@ -8,6 +8,7 @@ import { OP_VERSION } from '@/ops/operation';
 import type {
   BodyRenameOp,
   BodySetColorOp,
+  BodySetMaterialOp,
   BodySetVisibleOp,
   FeatureAddOp,
   FeatureMoveOp,
@@ -29,7 +30,8 @@ type Op =
   | StudioSetRollbackOp
   | BodyRenameOp
   | BodySetVisibleOp
-  | BodySetColorOp;
+  | BodySetColorOp
+  | BodySetMaterialOp;
 
 // No schemas: the 'box' features of aFeature() have an unknown type, nothing is migrated.
 const handlers = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
@@ -108,6 +110,11 @@ const cases: readonly Case[] = [
   {
     name: 'body.setColor',
     op: { type: 'body.setColor', v: 1, body: body('a/body'), color: '#ff8800' },
+    compare: 'toData',
+  },
+  {
+    name: 'body.setMaterial',
+    op: { type: 'body.setMaterial', v: 1, body: body('a/body'), material: 'steel' },
     compare: 'toData',
   },
 ];
@@ -282,6 +289,63 @@ describe('body metadata handlers (M11)', () => {
     handlers.get('body.setColor').apply(doc, setColor('#ff8800'));
     expect(doc.studio).toBe(studio);
     expect(count).toBe(0);
+  });
+
+  const setMaterial = (material: BodyMaterial): BodySetMaterialOp => ({
+    type: 'body.setMaterial',
+    v: 1,
+    body: a,
+    material,
+  });
+
+  it("setMaterial: invert of a body without a material gives 'plastic' (M24)", () => {
+    expect(handlers.get('body.setMaterial').invert(setup(), setMaterial('steel'))).toEqual(
+      setMaterial('plastic'),
+    );
+  });
+
+  it('setMaterial: invert carries the current material (M24)', () => {
+    const doc = setup();
+    doc.setBodyMeta(a, { material: 'brass' });
+    expect(handlers.get('body.setMaterial').invert(doc, setMaterial('plastic'))).toEqual(
+      setMaterial('brass'),
+    );
+  });
+
+  it("setMaterial sets the material; 'plastic' drops it (canonical form, M24)", () => {
+    const doc = setup();
+    handlers.get('body.setMaterial').apply(doc, setMaterial('glass'));
+    expect(doc.bodyMeta(a)).toEqual({ material: 'glass' });
+    handlers.get('body.setMaterial').apply(doc, setMaterial('plastic'));
+    expect(doc.bodyMeta(a)).toEqual({});
+    expect(doc.studio).toEqual(setup().studio);
+  });
+
+  // Every body.* apply spreads the current metadata, so a field added later survives (M24).
+  describe('every body operation changes only its own field (M24)', () => {
+    const full = { name: 'Base', hidden: true, color: '#112233', material: 'steel' } as const;
+    const fieldCases: readonly (readonly [string, Op, Readonly<Record<string, unknown>>])[] = [
+      ['body.rename', rename('Top'), { ...full, name: 'Top' }],
+      ['body.setVisible', setVisible(true), { name: 'Base', color: '#112233', material: 'steel' }],
+      ['body.setColor', setColor('#ff8800'), { ...full, color: '#ff8800' }],
+      ['body.setMaterial', setMaterial('brass'), { ...full, material: 'brass' }],
+    ];
+    for (const [type, op, expected] of fieldCases) {
+      it(type, () => {
+        const doc = setup();
+        doc.setBodyMeta(a, full);
+        handlers.get(type).apply(doc, op);
+        expect(doc.bodyMeta(a)).toEqual(expected);
+      });
+    }
+
+    it('body.setVisible(false) and body.setColor(null) keep the material', () => {
+      const doc = setup();
+      doc.setBodyMeta(a, { color: '#112233', material: 'steel' });
+      handlers.get('body.setVisible').apply(doc, setVisible(false));
+      handlers.get('body.setColor').apply(doc, setColor(null));
+      expect(doc.bodyMeta(a)).toEqual({ hidden: true, material: 'steel' });
+    });
   });
 
   it('a body of a feature that does not exist is no error (the document does not know bodies)', () => {

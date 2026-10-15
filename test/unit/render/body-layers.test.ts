@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { describe, expect, it, vi } from 'vitest';
-import type { BodyId } from '@/interaction';
+import type { BodyId, BodyMaterial } from '@/interaction';
 import type { MeshData, MeshOps, MeshQuality, ShapeHandle } from '@/kernel';
 import { createBodyLayers } from '@/render/body-layers';
 import { DEFAULT_DISPLAY_STYLE, resolveDisplay } from '@/render/display-style';
@@ -417,5 +417,55 @@ describe('BodyLayers display plan (M22)', () => {
     expect(thick(layers.main.views.get(A)?.object)).toBe(true);
     expect(thick(layers.preview.views.get(B)?.object)).toBe(false);
     expect(layers.preview.views.get(B)?.edges.visible).toBe(true);
+  });
+});
+
+describe('BodyLayers materials (M24)', () => {
+  const REALISTIC = resolveDisplay({ ...DEFAULT_DISPLAY_STYLE, mode: 'realistic' });
+
+  it('setBodyMaterial reaches both layers, the preview never gets a physical material', async () => {
+    const { layers } = setup();
+    await layers.main.sync([{ id: A, shape: shape(5) }]);
+    await layers.preview.sync([{ id: A, shape: shape(7) }]);
+    const preview = facesOf(layers.preview.views.get(A));
+    const mainSpy = vi.spyOn(layers.main, 'setBodyMaterial');
+    const previewSpy = vi.spyOn(layers.preview, 'setBodyMaterial');
+    layers.setDisplayPlan(REALISTIC);
+    layers.setBodyMaterial(A, 'brass');
+    expect(mainSpy).toHaveBeenCalledWith(A, 'brass');
+    expect(previewSpy).toHaveBeenCalledWith(A, 'brass');
+    expect(layers.main.views.get(A)?.faces.material).toBeInstanceOf(THREE.MeshPhysicalMaterial);
+    expect(facesOf(layers.preview.views.get(A))).toBe(preview);
+    expect(preview).not.toBeInstanceOf(THREE.MeshPhysicalMaterial);
+    // A preview body added later does not get one either.
+    await layers.preview.sync([
+      { id: A, shape: shape(7) },
+      { id: B, shape: shape(8) },
+    ]);
+    expect(facesOf(layers.preview.views.get(B))).toBe(preview);
+  });
+
+  it('an unknown material throws and changes neither layer', async () => {
+    const { layers } = setup();
+    await layers.main.sync([{ id: A, shape: shape(5) }]);
+    await layers.preview.sync([{ id: A, shape: shape(7) }]);
+    const mainSpy = vi.spyOn(layers.main, 'setBodyMaterial');
+    const previewSpy = vi.spyOn(layers.preview, 'setBodyMaterial');
+    expect(() => {
+      // A value from outside the type, as a corrupt input would bring it.
+      layers.setBodyMaterial(A, 'wood' as BodyMaterial);
+    }).toThrow();
+    expect(mainSpy).not.toHaveBeenCalled();
+    expect(previewSpy).not.toHaveBeenCalled();
+  });
+
+  it('setEnvironment reaches the main layer only', () => {
+    const { layers } = setup();
+    const mainSpy = vi.spyOn(layers.main, 'setEnvironment');
+    const previewSpy = vi.spyOn(layers.preview, 'setEnvironment');
+    const env = new THREE.Texture();
+    layers.setEnvironment(env);
+    expect(mainSpy).toHaveBeenCalledWith(env);
+    expect(previewSpy).not.toHaveBeenCalled();
   });
 });

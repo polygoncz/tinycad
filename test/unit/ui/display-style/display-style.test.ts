@@ -39,6 +39,14 @@ describe('createDisplayStyleController', () => {
     expect(s.writes()).toBe(0);
   });
 
+  it('loads a stored realistic mode (M24)', () => {
+    const value = { mode: 'realistic', edges: true, transparent: false, mesh: false, ao: true };
+    const s = aStorage(JSON.stringify(value));
+    const c = createDisplayStyleController({ storage: s.storage });
+    expect(c.style.value).toEqual(value);
+    expect(s.writes()).toBe(0);
+  });
+
   it.each(['{not json', '"shaded"', '42', 'null', '[1,2]'])(
     'falls back to the default for %s',
     (raw) => {

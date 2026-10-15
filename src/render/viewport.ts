@@ -2,6 +2,7 @@
 // mounted, and turns canvas events into ViewportPort events. Renders on demand only.
 
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import {
   assert,
   DisposableStore,
@@ -13,6 +14,7 @@ import {
 } from '@/core';
 import type {
   BodyId,
+  BodyMaterial,
   HandleVisibility,
   HighlightPort,
   ManipulatorGlyphs,
@@ -36,6 +38,7 @@ import type { BodyLayer } from './body-layer';
 import { createBodyLayers } from './body-layers';
 import { unionBounds } from './bounds';
 import { createCameraRig, type CameraController } from './camera-controller';
+import { createContactShadow, type ContactShadow } from './contact-shadow';
 import type { OrbitMode } from './camera-ops';
 import {
   DEFAULT_DISPLAY_STYLE,
@@ -55,6 +58,7 @@ import type { ScreenPoint } from './manipulator-pick';
 import { createOverlayLayer } from './overlay-layer';
 import { LIGHT_PALETTE, type ScenePalette } from './palette';
 import { toNdc } from './pick-math';
+import { createRealisticBackground, setRealisticBackground } from './realistic-background';
 import { createSceneHelpers, GRID_BOUNDS } from './scene-helpers';
 import { partitionScene } from './scene-partition';
 import { sketchGridStep } from './sketch-grid';
@@ -158,6 +162,12 @@ export interface Viewport extends ViewportPort, Disposable {
    * DEFAULT_AO_SETTINGS. Takes effect when the plan has AO.
    */
   setAoSettings(settings: AoSettings): void;
+  /**
+   * M24: material preset of a body from its metadata (spec 09, "Realistic"); shows in Realistic
+   * only. Same rules as setBodyColor; a material without a preset throws. The preview keeps the
+   * value but never draws physical materials.
+   */
+  setBodyMaterial(body: BodyId, material: BodyMaterial): void;
 
   /**
    * viewChanged (M19) after a drawn frame whose camera (target, orientation, halfHeight) or view
@@ -191,7 +201,22 @@ interface Mounted {
    * plan turns AO off and on unmount (spec 09, "Vlastnictví a životní cyklus").
    */
   ao: AoPipeline | null;
+  /**
+   * M24: the environment and the contact shadow of Realistic for this renderer; created lazily by
+   * draw in the realistic scene, kept until unmount (spec 09, "Scéna Realistic").
+   */
+  realistic: RealisticScene | null;
 }
+
+/** The GPU parts of the Realistic scene that belong to one renderer (M24). */
+interface RealisticScene {
+  /** PMREM of RoomEnvironment; its texture is the envMap of the physical materials. */
+  readonly environment: THREE.WebGLRenderTarget;
+  readonly shadow: ContactShadow;
+}
+
+/** Blur of RoomEnvironment in PMREMGenerator.fromScene (spec 09, "Environment"). */
+const ENVIRONMENT_SIGMA = 0.04;
 
 export function createViewport(deps: {
   meshes: MeshOps;
@@ -265,9 +290,12 @@ export function createViewport(deps: {
       // The highlight is created right below; apply runs only after a sync, reset or dispose.
       afterApply: () => {
         highlightLayer.rebuild();
+        // M24: the bodies of the main layer changed, the contact shadow follows in the next frame.
+        mounted?.realistic?.shadow.invalidate();
       },
       afterVisibilityChange: () => {
         highlightLayer.rebuild();
+        mounted?.realistic?.shadow.invalidate();
       },
       initialPlan: displayPlan,
       // M22: "what you see is what you pick" in the x-ray modes.
@@ -317,6 +345,13 @@ export function createViewport(deps: {
   // In the scene, so the headlight (its child) is part of the scene graph.
   scene.add(rig.camera);
   const helpers = lifetime.add(createSceneHelpers(scene, rig.camera, palette));
+  /** M24: the gradient background of Realistic; scene.background only in the realistic scene. */
+  const realisticBackground = createRealisticBackground(palette);
+  lifetime.add(() => {
+    scene.background = null;
+    realisticBackground.dispose();
+  });
+  applySceneStyle();
   // After the rig, so it is disposed before it.
   const viewCube = lifetime.add(
     createViewCube({
@@ -335,7 +370,8 @@ export function createViewport(deps: {
 
   /**
    * Box of everything visible (spec 09, "Near a far"): bodies and the preview (M21), sketch
-   * drawings, tool overlay, manipulator handles (M18), the grid and the camera target. Never null
+   * drawings, tool overlay, contact shadow (M24), manipulator handles (M18), the grid and the
+   * camera target. Never null
    * thanks to the grid.
    */
   function sceneBounds(): BoundingBox {
@@ -345,6 +381,8 @@ export function createViewport(deps: {
         layers.bounds(),
         sketchLayer.bounds(),
         overlayLayer.bounds(),
+        // M24: the contact shadow plane is wider than the bodies; null outside Realistic.
+        mounted?.realistic?.shadow.bounds() ?? null,
         // The glyph size follows the zoom; drawing and picking run mounted only.
         manipulatorLayer.bounds(worldPerPx(mounted?.canvas.clientHeight ?? 0)),
         GRID_BOUNDS,
@@ -356,6 +394,42 @@ export function createViewport(deps: {
   /** near/far and the camera position enclose the whole scene; before drawing and picking. */
   function updateClip(): void {
     rig.updateClip(sceneBounds());
+  }
+
+  /**
+   * M24: grid, background and contact shadow by displayPlan.scene (spec 09, "Scéna Realistic").
+   * Requests no render; the caller does.
+   */
+  function applySceneStyle(): void {
+    const realistic = displayPlan.scene === 'realistic';
+    helpers.setGridVisible(!realistic);
+    scene.background = realistic ? realisticBackground : null;
+    mounted?.realistic?.shadow.setVisible(realistic);
+  }
+
+  /** M24: environment and contact shadow for a mounted renderer (first frame of Realistic). */
+  function createRealisticScene(renderer: THREE.WebGLRenderer): RealisticScene {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const room = new RoomEnvironment();
+    const environment = pmrem.fromScene(room, ENVIRONMENT_SIGMA);
+    room.dispose();
+    pmrem.dispose();
+    layers.setEnvironment(environment.texture);
+    const shadow = createContactShadow();
+    // A direct child of the scene: in the AO pipeline it is interaction, never in the G-buffer.
+    scene.add(shadow.group);
+    return { environment, shadow };
+  }
+
+  /** M24: releases the Realistic scene of a mounted renderer, if any. */
+  function disposeRealistic(state: Mounted): void {
+    const realistic = state.realistic;
+    state.realistic = null;
+    if (realistic === null) return;
+    scene.remove(realistic.shadow.group);
+    realistic.shadow.dispose();
+    layers.setEnvironment(null);
+    realistic.environment.dispose();
   }
 
   function draw(): void {
@@ -371,6 +445,13 @@ export function createViewport(deps: {
     sketchLayer.setPixelSize(lastWorldPerPx, rig.target, Math.hypot(clientWidth, clientHeight));
     // M22: dash length of the hidden edges in px; inside the frame, so it requests no render.
     layers.setPixelSize(lastWorldPerPx);
+    // M24: before the clear of the frame; the shadow renders into its own targets only after an
+    // invalidate and restores the target and the clear colour. Before updateClip: the plane it
+    // places belongs to the scene bounds.
+    if (displayPlan.scene === 'realistic') {
+      const realistic = (mounted.realistic ??= createRealisticScene(renderer));
+      realistic.shadow.update(renderer, scene, layer.group, layer.bounds());
+    }
     updateClip();
     // Constant size on the screen for the camera of this frame (a gesture or animation moved it).
     manipulatorLayer.beforeRender(
@@ -571,11 +652,12 @@ export function createViewport(deps: {
       renderer.forceContextLoss();
     });
 
-    const state: Mounted = { canvas, renderer, resources, ao: null };
+    const state: Mounted = { canvas, renderer, resources, ao: null, realistic: null };
     // After the renderer, so the pipeline is released before it. `state`, not `mounted`: unmount
     // clears `mounted` before it disposes the resources.
     resources.add(() => {
       disposeAo(state);
+      disposeRealistic(state);
     });
     mounted = state;
     resize(el);
@@ -815,6 +897,7 @@ export function createViewport(deps: {
       manipulatorLayer.setPalette(next);
       helpers.setPalette(next);
       viewCube.setPalette(next);
+      setRealisticBackground(realisticBackground, next);
       // While unmounted, mount takes the background from `palette`.
       mounted?.renderer.setClearColor(next.background);
       scheduleFrame();
@@ -844,9 +927,13 @@ export function createViewport(deps: {
       assertAlive();
       const plan = resolveDisplay(style);
       if (samePlan(plan, displayPlan)) return;
+      const enteringRealistic = plan.scene === 'realistic' && displayPlan.scene !== 'realistic';
       displayPlan = plan;
       layers.setDisplayPlan(plan);
       highlightLayer.setXray(plan.xray);
+      applySceneStyle();
+      // M24: the bodies may have changed while the shadow was not drawn.
+      if (enteringRealistic) mounted?.realistic?.shadow.invalidate();
       // M23: AO off releases its pipeline (render targets); AO on creates it in the next draw.
       if (!plan.ao && mounted !== null) disposeAo(mounted);
       // While unmounted, nothing is drawn; mount draws the first frame with the plan.
@@ -863,6 +950,10 @@ export function createViewport(deps: {
       aoSettings = Object.freeze({ ...settings });
       // Without AO the settings take effect when it is turned on.
       if (displayPlan.ao) scheduleFrame();
+    },
+    setBodyMaterial(body: BodyId, material: BodyMaterial): void {
+      assertAlive();
+      layers.setBodyMaterial(body, material);
     },
     events,
     dispose(): void {

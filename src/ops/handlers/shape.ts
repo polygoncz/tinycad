@@ -1,4 +1,11 @@
-import { isBodyColor, isJsonObject, ORIGIN, parseBodyId } from '@/document';
+import {
+  BODY_MATERIALS,
+  isBodyColor,
+  isBodyMaterial,
+  isJsonObject,
+  ORIGIN,
+  parseBodyId,
+} from '@/document';
 import type { OperationLoadError } from '../load-error';
 
 // Small shape checks for validate of the built-in handlers (Q032). Only the shape of the
@@ -37,6 +44,11 @@ export const bodyIdText = check(
 export const bodyColorOrNull = check(
   (v) => v === null || isBodyColor(v),
   "Must be null or a color '#rrggbb' in lower case",
+);
+/** A body material preset (M24); the default is 'plastic', there is no null. */
+export const bodyMaterial = check(
+  isBodyMaterial,
+  `Must be a body material (${BODY_MATERIALS.join(', ')})`,
 );
 export const string = check((v) => typeof v === 'string', 'Must be a string');
 export const boolean = check((v) => typeof v === 'boolean', 'Must be a boolean');

@@ -9,11 +9,19 @@ import {
   toData,
   validateAgainstSchema,
 } from '@/document';
-import type { AxisId, FeatureId, FeatureSchema, ParamSchema, PlaneId } from '@/document';
+import type {
+  AxisId,
+  BodyMaterial,
+  FeatureId,
+  FeatureSchema,
+  ParamSchema,
+  PlaneId,
+} from '@/document';
 import { aFeature } from '@/document/testing';
 import type {
   BodyRenameOp,
   BodySetColorOp,
+  BodySetMaterialOp,
   BodySetVisibleOp,
   FeatureRenameOp,
   Operation,
@@ -133,6 +141,7 @@ function setup(opts: { readOnly?: boolean; sketchEdit?: (feature: FeatureId) => 
   browser.bodies.subscribe(() => order.push('bodies'));
   browser.hidden.subscribe(() => order.push('hidden'));
   browser.colors.subscribe(() => order.push('colors'));
+  browser.materials.subscribe(() => order.push('materials'));
   browser.visiblePlanes.subscribe(() => order.push('visiblePlanes'));
   browser.planes.subscribe(() => order.push('planes'));
   browser.sketches.subscribe(() => order.push('sketches'));
@@ -149,6 +158,7 @@ function setup(opts: { readOnly?: boolean; sketchEdit?: (feature: FeatureId) => 
     bodyEmits: () => count('bodies'),
     hiddenEmits: () => count('hidden'),
     colorEmits: () => count('colors'),
+    materialEmits: () => count('materials'),
     planeEmits: () => count('planes'),
     sketchEmits: () => count('sketches'),
     axisEmits: () => count('axes'),
@@ -178,6 +188,7 @@ describe('BrowserModel rows', () => {
         feature: 'f1',
         visible: true,
         color: null,
+        material: 'plastic',
         selected: false,
       },
       {
@@ -187,6 +198,7 @@ describe('BrowserModel rows', () => {
         feature: 'f2',
         visible: true,
         color: null,
+        material: 'plastic',
         selected: false,
       },
     ]);
@@ -524,6 +536,157 @@ describe('BrowserModel colors (M15)', () => {
         s.browser.setColor(B1, color);
       }).toThrow();
     }
+    expect(s.log.entries()).toHaveLength(0);
+  });
+});
+
+describe('BrowserModel materials (M24)', () => {
+  it('a row carries the material from the body metadata, plastic by default', () => {
+    const s = setup();
+    s.doc.setBodyMeta(B2, { material: 'brass' });
+    s.regen.publish(new Map(), BODIES);
+    expect(s.browser.bodies.get().map((r) => r.material)).toEqual(['plastic', 'brass']);
+  });
+
+  it('materials holds only the bodies of the last regeneration with a material', () => {
+    const s = setup();
+    s.doc.setBodyMeta(B1, { material: 'steel' });
+    s.doc.setBodyMeta(B3, { material: 'glass' });
+    s.regen.publish(new Map(), BODIES);
+    expect([...s.browser.materials.get()]).toEqual([[B1, 'steel']]);
+
+    s.regen.publish(new Map(), [{ body: B2, feature: fid('f2'), names: NO_TOPO_NAMES }]);
+    expect(s.browser.materials.get().size).toBe(0);
+    // The metadata stay in the document.
+    expect(s.doc.bodyMeta(B1)).toEqual({ material: 'steel' });
+  });
+
+  it('materials include a body that only the pickable input has (M21)', () => {
+    const s = setup();
+    s.doc.setBodyMeta(B3, { material: 'rubber' });
+    s.regen.publish(new Map(), BODIES, [], new Map(), {
+      feature: fid('f2'),
+      bodies: [{ body: B3, feature: fid('f3') }],
+    });
+    expect([...s.browser.materials.get()]).toEqual([[B3, 'rubber']]);
+  });
+
+  it('without a change of the content no new map and no new rows are published', () => {
+    const s = setup();
+    s.doc.setBodyMeta(B1, { material: 'steel' });
+    s.regen.publish(new Map(), BODIES);
+    const materials = s.browser.materials.get();
+    const rows = s.browser.bodies.get();
+    const emits = s.materialEmits();
+    s.regen.publish(new Map(), BODIES);
+    s.browser.setVisible(B2, false);
+    s.browser.setColor(B2, '#00ff00');
+    expect(s.browser.materials.get()).toBe(materials);
+    expect(s.materialEmits()).toBe(emits);
+    expect(s.browser.bodies.get()[0]).toBe(rows[0]);
+  });
+
+  it('setMaterial dispatches body.setMaterial; the row and materials follow the document', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    const before = s.browser.bodies.get();
+    const first = s.browser.materials.get();
+    s.browser.setMaterial(B2, 'aluminium');
+    const op: BodySetMaterialOp = {
+      type: 'body.setMaterial',
+      v: OP_VERSION['body.setMaterial'],
+      body: B2,
+      material: 'aluminium',
+    };
+    expect(loggedOps(s)).toEqual([op]);
+    expect(s.doc.bodyMeta(B2)).toEqual({ material: 'aluminium' });
+    expect([...s.browser.materials.get()]).toEqual([[B2, 'aluminium']]);
+    // The old map is never mutated.
+    expect(first.size).toBe(0);
+    const rows = s.browser.bodies.get();
+    expect(rows.map((r) => r.material)).toEqual(['plastic', 'aluminium']);
+    expect(rows[0]).toBe(before[0]);
+
+    // The default is not a material in the map (it is never stored).
+    s.browser.setMaterial(B2, 'plastic');
+    expect(s.doc.bodyMeta(B2)).toEqual({});
+    expect(s.browser.materials.get().size).toBe(0);
+    expect(s.browser.bodies.get()[1]?.material).toBe('plastic');
+  });
+
+  it('undo brings the material back', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    s.browser.setMaterial(B1, 'steel');
+    s.browser.setMaterial(B1, 'glass');
+    s.undo.undo();
+    expect(s.doc.bodyMeta(B1)).toEqual({ material: 'steel' });
+    expect(s.browser.bodies.get()[0]?.material).toBe('steel');
+    s.undo.undo();
+    expect(s.browser.materials.get().size).toBe(0);
+    expect(s.browser.bodies.get()[0]?.material).toBe('plastic');
+  });
+
+  it('emits in the order hidden, colors, materials, bodies', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    s.order.length = 0;
+    s.browser.setMaterial(B1, 'brass');
+    expect(s.order).toEqual(['materials', 'bodies']);
+    s.order.length = 0;
+    s.doc.setBodyMeta(B2, { hidden: true, color: '#000000', material: 'steel' });
+    expect(s.order).toEqual(['hidden', 'colors', 'materials', 'bodies']);
+  });
+
+  it('the same value does nothing', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    s.browser.setMaterial(B1, 'plastic');
+    expect(s.log.entries()).toHaveLength(0);
+    s.browser.setMaterial(B1, 'steel');
+    s.browser.setMaterial(B1, 'steel');
+    expect(s.log.entries()).toHaveLength(1);
+  });
+
+  it('a body unknown to the last regeneration does nothing', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    s.browser.setMaterial(B3, 'steel');
+    expect(s.log.entries()).toHaveLength(0);
+    expect(s.doc.bodyMeta(B3)).toEqual({});
+  });
+
+  it('does nothing during a transaction', () => {
+    const s = setup();
+    s.regen.publish(new Map(), BODIES);
+    const session = s.editor.create('bool');
+    s.browser.setMaterial(B1, 'steel');
+    expect(s.doc.bodyMeta(B1)).toEqual({});
+    session.cancel();
+    expect(s.log.entries()).toHaveLength(0);
+  });
+
+  it('does nothing read-only', () => {
+    const s = setup({ readOnly: true });
+    s.regen.publish(new Map(), BODIES);
+    s.browser.setMaterial(B1, 'steel');
+    expect(s.log.entries()).toHaveLength(0);
+    expect(s.doc.bodyMeta(B1)).toEqual({});
+  });
+
+  it('an invalid material throws before the guards and dispatches nothing', () => {
+    const s = setup({ readOnly: true });
+    s.regen.publish(new Map(), BODIES);
+    for (const material of ['Steel', 'gold', '', 'plastic ']) {
+      expect(() => {
+        // The invalid values are what a caller outside the type system could pass.
+        s.browser.setMaterial(B1, material as BodyMaterial);
+      }).toThrow();
+    }
+    // Also for a body the last regeneration does not know.
+    expect(() => {
+      s.browser.setMaterial(B3, 'gold' as BodyMaterial); // invalid on purpose, see above
+    }).toThrow();
     expect(s.log.entries()).toHaveLength(0);
   });
 });

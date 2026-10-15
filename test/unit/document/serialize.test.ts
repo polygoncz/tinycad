@@ -92,6 +92,13 @@ describe('toData / fromData round trip', () => {
     const data = toData(doc);
     expect(toData(load(JSON.parse(JSON.stringify(data))))).toEqual(data);
   });
+  it('keeps a body material through JSON (M24)', () => {
+    const doc = sampleDoc();
+    doc.setBodyMeta('a/body' as BodyId, { color: '#ff8800', material: 'rubber' });
+    const data = toData(doc);
+    expect(data.studio.bodies).toEqual({ 'a/body': { color: '#ff8800', material: 'rubber' } });
+    expect(toData(load(JSON.parse(JSON.stringify(data))))).toEqual(data);
+  });
 });
 
 describe('fromData – body metadata (M11)', () => {
@@ -136,6 +143,20 @@ describe('fromData – body metadata (M11)', () => {
     });
   });
 
+  it('loads a valid material and drops plastic (M24)', () => {
+    const doc = load(
+      withBodies({
+        'a/body': { material: 'aluminium' },
+        'b/body': { name: 'B', material: 'plastic' },
+        'c/body': { material: 'plastic' },
+      }),
+    );
+    expect(doc.studio.bodies).toEqual({
+      'a/body': { material: 'aluminium' },
+      'b/body': { name: 'B' },
+    });
+  });
+
   it.each([[null], [[]], ['x'], [3]])('reports bodies %j that is not an object', (bodies) => {
     expect(loadIssues(withBodies(bodies)).map((i) => i.path)).toEqual(['studio.bodies']);
   });
@@ -160,6 +181,9 @@ describe('fromData – body metadata (M11)', () => {
     ['an upper-case color (M15)', { color: '#ABCDEF' }, "studio.bodies['a/body'].color"],
     ['a named color (M15)', { name: 'A', color: 'red' }, "studio.bodies['a/body'].color"],
     ['a color that is a number (M15)', { color: 0xff8800 }, "studio.bodies['a/body'].color"],
+    ['an unknown material (M24)', { material: 'wood' }, "studio.bodies['a/body'].material"],
+    ['an upper-case material (M24)', { material: 'Steel' }, "studio.bodies['a/body'].material"],
+    ['a material that is not a string (M24)', { material: 1 }, "studio.bodies['a/body'].material"],
   ])('reports a value that is %s', (_, value, path) => {
     expect(loadIssues(withBodies({ 'a/body': value })).map((i) => i.path)).toEqual([path]);
   });

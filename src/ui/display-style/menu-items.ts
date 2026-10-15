@@ -1,12 +1,13 @@
-import { DISPLAY_MODES } from '@/app';
+import { DISPLAY_MODES, displayDrawsAo } from '@/app';
 import type { DisplayMode, DisplayStyle } from '@/app';
 import type { DisplayStyleController } from './display-style';
 
 // The items of the display style menu (spec 11, "Styl zobrazení") as a pure function of the
-// style, kept out of DisplayStyleMenu.vue so it runs in Node tests: the four modes as radio
+// style, kept out of DisplayStyleMenu.vue so it runs in Node tests: the five modes as radio
 // items, then the toggles. Edges and transparency belong to shaded only (spec 09), so outside it
-// they are greyed out; their value is kept and still shown. AO additionally needs an opaque
-// shaded (the decision table of spec 09, repeated here because ui does not know render). Under
+// they are greyed out, Realistic included; their value is kept and still shown. Whether AO
+// draws comes from render's decision table (displayDrawsAo, spec 09), not a copy here: the AO
+// toggle is enabled where AO would draw if it were on. Under
 // the AO toggle the "AO settings…" command (M23) opens the panel of the AO settings; it is enabled
 // only where AO really draws.
 
@@ -55,19 +56,20 @@ function isToggleEnabled(toggle: DisplayStyleToggle, style: DisplayStyle): boole
     case 'transparent':
       return style.mode === 'shaded';
     case 'ao':
-      return style.mode === 'shaded' && !style.transparent;
+      return displayDrawsAo({ ...style, ao: true });
     case 'mesh':
       return true;
   }
 }
 
-/** Whether AO really draws in the style: opaque shaded with AO on (spec 09, decision table). */
+/** Whether AO really draws in the style (spec 09, decision table). */
 export function isAoDrawn(style: DisplayStyle): boolean {
-  return isToggleEnabled('ao', style) && style.ao;
+  return displayDrawsAo(style);
 }
 
 const MODE_ICONS: Readonly<Record<DisplayMode, string>> = {
   shaded: 'ti-cube',
+  realistic: 'ti-sparkles',
   hiddenRemoved: 'ti-box',
   hiddenVisible: 'ti-box-seam',
   wireframe: 'ti-cube-3d-sphere',

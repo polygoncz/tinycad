@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ObservableValue } from '@/core';
-import { ORIGIN_AXES, ORIGIN_PLANES } from '@/document';
-import type { AxisId, BodyId, PlaneId } from '@/document';
+import { DEFAULT_BODY_MATERIAL, ORIGIN_AXES, ORIGIN_PLANES } from '@/document';
+import type { AxisId, BodyId, BodyMaterial, PlaneId } from '@/document';
 import { axisDrawing, planeDrawing } from '@/sketcher';
 import { bindBrowserView, mirrorMap, mirrorSet } from '@/app/viewport-mirror';
 import { FakeAppViewport } from '@/app/testing';
@@ -128,6 +128,7 @@ describe('bindBrowserView', () => {
     const browser = {
       hidden: new ObservableValue<ReadonlySet<BodyId>>(new Set()),
       colors: new ObservableValue<ReadonlyMap<BodyId, string>>(new Map()),
+      materials: new ObservableValue<ReadonlyMap<BodyId, BodyMaterial>>(new Map()),
       visiblePlanes: new ObservableValue<ReadonlySet<PlaneId>>(new Set()),
       visibleAxes: new ObservableValue<ReadonlySet<AxisId>>(new Set()),
     };
@@ -156,18 +157,48 @@ describe('bindBrowserView', () => {
     ]);
   });
 
-  it('reapply hides and colours the bodies again (after a sync), planes are not drawn again', () => {
+  it('a material goes to the view, a changed one again, a removed one resets it to the default', () => {
+    const { browser, viewport } = setup();
+    browser.materials.set(new Map([[A, 'steel']]));
+    browser.materials.set(new Map([[A, 'glass']]));
+    browser.materials.set(new Map());
+    expect(viewport.materialCalls).toEqual([
+      { body: A, material: 'steel' },
+      { body: A, material: 'glass' },
+      { body: A, material: DEFAULT_BODY_MATERIAL },
+    ]);
+  });
+
+  it('materials present at binding are applied at once', () => {
+    const viewport = new FakeAppViewport();
+    bindBrowserView(
+      {
+        hidden: new ObservableValue<ReadonlySet<BodyId>>(new Set()),
+        colors: new ObservableValue<ReadonlyMap<BodyId, string>>(new Map()),
+        materials: new ObservableValue<ReadonlyMap<BodyId, BodyMaterial>>(new Map([[B, 'brass']])),
+        visiblePlanes: new ObservableValue<ReadonlySet<PlaneId>>(new Set()),
+        visibleAxes: new ObservableValue<ReadonlySet<AxisId>>(new Set()),
+      },
+      viewport,
+    );
+    expect(viewport.materialCalls).toEqual([{ body: B, material: 'brass' }]);
+  });
+
+  it('reapply hides, colours and sets materials again (after a sync), planes are not drawn again', () => {
     const { browser, viewport, binding } = setup();
     browser.hidden.set(new Set([A]));
     browser.colors.set(new Map([[B, '#00ff00']]));
+    browser.materials.set(new Map([[A, 'rubber']]));
     const plane = ORIGIN_PLANES[0] ?? expect.fail('no origin plane');
     browser.visiblePlanes.set(new Set([plane.id]));
     viewport.visibilityCalls.length = 0;
     viewport.colorCalls.length = 0;
+    viewport.materialCalls.length = 0;
 
     binding.reapply();
     expect(viewport.visibilityCalls).toEqual([{ body: A, visible: false }]);
     expect(viewport.colorCalls).toEqual([{ body: B, color: '#00ff00' }]);
+    expect(viewport.materialCalls).toEqual([{ body: A, material: 'rubber' }]);
   });
 
   it('an origin plane switched on is drawn under its id, switched off removed', () => {
@@ -193,8 +224,10 @@ describe('bindBrowserView', () => {
     binding.dispose();
     browser.hidden.set(new Set([A]));
     browser.colors.set(new Map([[A, '#ff0000']]));
+    browser.materials.set(new Map([[A, 'steel']]));
     binding.reapply();
     expect(viewport.visibilityCalls).toEqual([]);
     expect(viewport.colorCalls).toEqual([]);
+    expect(viewport.materialCalls).toEqual([]);
   });
 });

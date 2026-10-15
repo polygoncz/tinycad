@@ -328,6 +328,13 @@ describe('applyOperation – validation on write (D1)', () => {
     expectRejected(doc, () => applyOperation(doc, handlers, op), /color/);
   });
 
+  it("body.setMaterial with 'gold' throws: only a known preset passes loading (M24)", () => {
+    const doc = setup(3);
+    // Not a BodySetMaterialOp literal: its type would refuse the unknown material.
+    const op = { type: 'body.setMaterial', v: 1, body: 'a/body', material: 'gold' };
+    expectRejected(doc, () => applyOperation(doc, handlers, op), /material/);
+  });
+
   it('lists every problem of the operation in the error', () => {
     const doc = setup(3);
     const op: FeatureAddOp = {

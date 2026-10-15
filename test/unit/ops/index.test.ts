@@ -18,11 +18,12 @@ describe('ops public API', () => {
     ]);
   });
 
-  it('OP_VERSION has the body metadata operations of M11 and M15', () => {
+  it('OP_VERSION has the body metadata operations of M11, M15 and M24', () => {
     expect(ops.OP_VERSION).toMatchObject({
       'body.rename': 1,
       'body.setVisible': 1,
       'body.setColor': 1,
+      'body.setMaterial': 1,
     });
   });
 });

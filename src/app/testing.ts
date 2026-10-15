@@ -3,7 +3,7 @@
 
 import { Emitter, RpcError } from '@/core';
 import type { Subscribable, Unsubscribe, Vec3 } from '@/core';
-import type { BodyId } from '@/document';
+import type { BodyId, BodyMaterial } from '@/document';
 import type {
   HandleView,
   HighlightPort,
@@ -80,6 +80,8 @@ export class FakeAppViewport implements AppViewport {
   readonly visibilityCalls: { readonly body: BodyId; readonly visible: boolean }[] = [];
   /** Every setBodyColor call, oldest first (M15). */
   readonly colorCalls: { readonly body: BodyId; readonly color: string | null }[] = [];
+  /** Every setBodyMaterial call, oldest first (M24). */
+  readonly materialCalls: { readonly body: BodyId; readonly material: BodyMaterial }[] = [];
   /** Labels of every setViewCubeLabels call, oldest first (M17). */
   readonly viewCubeLabels: ViewCubeLabels[] = [];
   /** Mode of every setOrbitMode call, oldest first (M17.1). */
@@ -174,6 +176,10 @@ export class FakeAppViewport implements AppViewport {
 
   setBodyColor(body: BodyId, color: string | null): void {
     this.colorCalls.push({ body, color });
+  }
+
+  setBodyMaterial(body: BodyId, material: BodyMaterial): void {
+    this.materialCalls.push({ body, material });
   }
 
   setViewCubeLabels(labels: ViewCubeLabels): void {

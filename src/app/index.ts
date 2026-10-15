@@ -18,6 +18,7 @@ export {
   DEFAULT_AO_SETTINGS,
   DEFAULT_DISPLAY_STYLE,
   DISPLAY_MODES,
+  displayDrawsAo,
   isValidAoSetting,
 } from '@/render';
 export type {
@@ -29,3 +30,6 @@ export type {
   ViewCubeLabels,
 } from '@/render';
 export type { HandleUnit, HudField, ManipulatorHud } from '@/interaction';
+// M24: the material presets of bodies for the material select of the browser (spec 11).
+export type { BodyMaterial } from '@/interaction';
+export { BODY_MATERIALS, DEFAULT_BODY_MATERIAL } from '@/interaction';

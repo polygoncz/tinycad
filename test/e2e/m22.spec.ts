@@ -23,7 +23,9 @@ const BOX_MAX = [10, 10, 10] as const;
  */
 const TOP_FACE_MIDDLE = [5, 5, 10] as const;
 
+/** The modes of M22; Realistický of M24 stands right after Stínovaný (tested in m24.spec.ts). */
 const MODES = ['Stínovaný', 'Bez skrytých hran', 'Se skrytými hranami', 'Drátový model'];
+const MENU_MODES = ['Stínovaný', 'Realistický', ...MODES.slice(1)];
 
 function styleButton(page: Page): Locator {
   return page.getByRole('button', { name: /^Styl zobrazení: / });
@@ -72,7 +74,7 @@ test('the menu lists the modes and the toggles, every one of them works', async 
   await expect(styleButton(page)).toHaveAccessibleName('Styl zobrazení: Stínovaný');
   await expect(styleButton(page)).toHaveAttribute('aria-haspopup', 'menu');
   await openStyleMenu(page);
-  await expect(styleMenu(page).getByRole('menuitemradio')).toHaveText(MODES);
+  await expect(styleMenu(page).getByRole('menuitemradio')).toHaveText(MENU_MODES);
   // The toggles of M22; Ambientní okluze and Nastavení AO… of M23 are tested in m23.spec.ts.
   await expect(styleMenu(page).getByRole('menuitemcheckbox')).toHaveText([
     'Hrany',
@@ -101,7 +103,7 @@ test('the menu lists the modes and the toggles, every one of them works', async 
   await page.keyboard.press('Escape');
   await expect(styleMenu(page)).toBeHidden();
 
-  // Every mode; outside shaded edges and transparency are greyed out and keep their value.
+  // Every mode of M22; outside shaded edges and transparency are greyed out and keep their value.
   for (const name of [...MODES.slice(1), MODES[0] ?? '']) {
     await chooseMode(page, name);
     await openStyleMenu(page);
@@ -135,6 +137,8 @@ test('the menu works from the keyboard; Esc and a click outside close it', async
   // The first item has the focus; the arrows skip the greyed-out toggles.
   await expect(mode(page, 'Stínovaný')).toBeFocused();
   await page.keyboard.press('ArrowDown');
+  await expect(mode(page, 'Realistický')).toBeFocused();
+  await page.keyboard.press('ArrowDown');
   await expect(mode(page, 'Bez skrytých hran')).toBeFocused();
   await page.keyboard.press('End');
   await expect(toggle(page, 'Triangulace')).toBeFocused();
@@ -151,6 +155,7 @@ test('the menu works from the keyboard; Esc and a click outside close it', async
 
   // Enter chooses a mode, closes the menu and gives the focus back to the button.
   await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   await expect(styleMenu(page)).toBeHidden();

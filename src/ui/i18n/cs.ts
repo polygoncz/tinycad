@@ -234,6 +234,16 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'browser.color': 'Barva {name}',
   'browser.defaultColor': 'Výchozí barva',
 
+  // Body material in the Browser (M24, Q078).
+  'browser.material': 'Materiál {name}',
+  'browser.materialCurrent': 'Materiál {name}: {material}',
+  'bodyMaterial.plastic': 'Plast',
+  'bodyMaterial.aluminium': 'Hliník',
+  'bodyMaterial.steel': 'Ocel',
+  'bodyMaterial.brass': 'Mosaz',
+  'bodyMaterial.glass': 'Sklo',
+  'bodyMaterial.rubber': 'Guma',
+
   // View cube (M17): face labels and the names of the arrows.
   'viewCube.front': 'Přední',
   'viewCube.back': 'Zadní',
@@ -254,6 +264,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'displayStyle.button': 'Styl zobrazení',
   'displayStyle.current': 'Styl zobrazení: {mode}',
   'displayStyle.mode.shaded': 'Stínovaný',
+  'displayStyle.mode.realistic': 'Realistický',
   'displayStyle.mode.hiddenRemoved': 'Bez skrytých hran',
   'displayStyle.mode.hiddenVisible': 'Se skrytými hranami',
   'displayStyle.mode.wireframe': 'Drátový model',
@@ -288,6 +299,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'body.rename': 'Přejmenovat těleso',
   'body.setVisible': 'Viditelnost tělesa',
   'body.setColor': 'Barva tělesa',
+  'body.setMaterial': 'Materiál tělesa',
   'document.rename': 'Přejmenovat dokument',
   batch: 'Více změn',
 });

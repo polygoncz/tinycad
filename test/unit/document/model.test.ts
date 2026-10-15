@@ -1,5 +1,10 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { isBodyColor } from '@/document/model';
+import {
+  BODY_MATERIALS,
+  DEFAULT_BODY_MATERIAL,
+  isBodyColor,
+  isBodyMaterial,
+} from '@/document/model';
 import type { FeatureId, FeatureInstance, PartStudioData } from '@/document/model';
 import type {
   AxisId,
@@ -95,4 +100,23 @@ describe('isBodyColor (M15)', () => {
   ])('rejects %j', (v) => {
     expect(isBodyColor(v)).toBe(false);
   });
+});
+
+describe('BodyMaterial (M24)', () => {
+  it('lists the six presets in UI order, frozen, with plastic as the default', () => {
+    expect(BODY_MATERIALS).toEqual(['plastic', 'aluminium', 'steel', 'brass', 'glass', 'rubber']);
+    expect(Object.isFrozen(BODY_MATERIALS)).toBe(true);
+    expect(DEFAULT_BODY_MATERIAL).toBe('plastic');
+  });
+
+  it.each(['plastic', 'aluminium', 'steel', 'brass', 'glass', 'rubber'])('accepts %j', (v) => {
+    expect(isBodyMaterial(v)).toBe(true);
+  });
+
+  it.each(['wood', 'Plastic', 'STEEL', 'aluminum', '', ' glass', 0, null, undefined, {}])(
+    'rejects %j',
+    (v) => {
+      expect(isBodyMaterial(v)).toBe(false);
+    },
+  );
 });

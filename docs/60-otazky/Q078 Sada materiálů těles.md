@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[03-dokument]]"
 decide_by: "[[M24-realisticke-zobrazeni]]"
 proposal: "Pevná sada předvoleb (plast, hliník, ocel, mosaz, sklo, guma) jako BodyMeta.material; barva tělesa tónuje každou předvolbu; bez vlastních parametrů."
-decision: ""
+decision: "Pevná sada předvoleb plastic, aluminium, steel, brass, glass, rubber jako BodyMeta.material; parametry PBR jen v render; barva tónuje předvolbu; sklo jen v Realistic přes transmission (ADR 0027)."
 tags:
   - otazka
 created: 2026-10-15
@@ -40,4 +40,10 @@ V režimu Realistic ([[Styl zobrazení]]) se [[Těleso|těleso]] kreslí `MeshPh
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR.)_
+Pavel 2026-10-15 schválil návrh **1 + a**:
+
+- Dokument nese jen identifikátor předvolby.
+- Barva tělesa předvolbu tónuje.
+- Sklo je jen v Realistic, a to přes `transmission`. V průchodu AO se skryje ([[Q082 Scéna režimu Realistic|Q082]]).
+
+Zapsáno v [[0027-material-telesa-a-scena-realistic|ADR 0027]] a propsáno do [[03-dokument#Metadata těles]], [[04-operace-a-historie#Sada operací]] a [[09-vykreslovani#Realistic]].

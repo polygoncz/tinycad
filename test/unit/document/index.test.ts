@@ -4,6 +4,7 @@ import type { Plane, Vec3 } from '@/core';
 import type {
   AxisId,
   AxisRef,
+  BodyMaterial,
   BodyMeta,
   EntityRef,
   FeatureId,
@@ -20,6 +21,8 @@ describe('document public API', () => {
   it('exports exactly the runtime values of spec 03', () => {
     expect(Object.keys(document).sort()).toEqual(
       [
+        'BODY_MATERIALS',
+        'DEFAULT_BODY_MATERIAL',
         'NO_VARIABLES',
         'ORIGIN',
         'ORIGIN_AXES',
@@ -34,6 +37,7 @@ describe('document public API', () => {
         'evaluateParams',
         'fromData',
         'isBodyColor',
+        'isBodyMaterial',
         'isJsonObject',
         'isJsonValue',
         'isParamVisible',
@@ -62,7 +66,11 @@ describe('document public API', () => {
       readonly name?: string;
       readonly hidden?: true;
       readonly color?: string;
+      readonly material?: BodyMaterial;
     }>();
+    expectTypeOf<BodyMaterial>().toEqualTypeOf<
+      'plastic' | 'aluminium' | 'steel' | 'brass' | 'glass' | 'rubber'
+    >();
   });
 
   it('exports the plane and sketch types of spec 03 (M12)', () => {

@@ -124,6 +124,7 @@ const body = (id: string): BrowserBodyRow => ({
   feature: 'f1' as FeatureId,
   visible: true,
   color: null,
+  material: 'plastic',
   selected: false,
 });
 

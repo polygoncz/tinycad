@@ -20,7 +20,7 @@ function keyOf(item: DisplayStyleMenuItem): string {
 }
 
 describe('displayStyleMenuItems', () => {
-  it('lists the four modes in DISPLAY_MODES order, then edges, transparency, AO, AO settings and mesh', () => {
+  it('lists the five modes in DISPLAY_MODES order, then edges, transparency, AO, AO settings and mesh', () => {
     const items = displayStyleMenuItems(DEFAULT_DISPLAY_STYLE);
     expect(items.map(keyOf)).toEqual([
       ...DISPLAY_MODES,
@@ -84,6 +84,7 @@ describe('displayStyleMenuItems', () => {
       const enabled = Object.fromEntries(items.map((item) => [keyOf(item), item.enabled]));
       expect(enabled).toEqual({
         shaded: true,
+        realistic: true,
         hiddenRemoved: true,
         hiddenVisible: true,
         wireframe: true,
@@ -91,6 +92,33 @@ describe('displayStyleMenuItems', () => {
         transparent: false,
         ao: false,
         aoSettings: false,
+        mesh: true,
+      });
+    },
+  );
+
+  it('lists Realistic right after Shaded', () => {
+    const modes = displayStyleMenuItems(DEFAULT_DISPLAY_STYLE).flatMap((item) =>
+      item.kind === 'mode' ? [item.mode] : [],
+    );
+    expect(modes).toEqual(['shaded', 'realistic', 'hiddenRemoved', 'hiddenVisible', 'wireframe']);
+  });
+
+  it.each([false, true])(
+    'greys out edges and transparency in realistic, AO stays enabled with transparent %s',
+    (transparent) => {
+      const items = displayStyleMenuItems(styleOf({ mode: 'realistic', transparent, ao: true }));
+      const enabled = Object.fromEntries(items.map((item) => [keyOf(item), item.enabled]));
+      expect(enabled).toEqual({
+        shaded: true,
+        realistic: true,
+        hiddenRemoved: true,
+        hiddenVisible: true,
+        wireframe: true,
+        edges: false,
+        transparent: false,
+        ao: true,
+        aoSettings: true,
         mesh: true,
       });
     },
@@ -115,10 +143,16 @@ describe('displayStyleMenuItems', () => {
     expect(en['displayStyle.ao']).toBe('Ambient occlusion');
     expect(cs['displayStyle.aoSettings']).toBe('Nastavení AO…');
     expect(en['displayStyle.aoSettings']).toBe('AO settings…');
+    expect(cs['displayStyle.mode.realistic']).toBe('Realistický');
+    expect(en['displayStyle.mode.realistic']).toBe('Realistic');
   });
 });
 
 describe('displayModeIcon', () => {
+  it('gives Realistic the sparkles icon', () => {
+    expect(displayModeIcon('realistic')).toBe('ti-sparkles');
+  });
+
   it('gives every mode its own Tabler icon', () => {
     const icons = DISPLAY_MODES.map(displayModeIcon);
     expect(new Set(icons).size).toBe(DISPLAY_MODES.length);
@@ -180,6 +214,8 @@ describe('chooseDisplayStyleItem', () => {
     ['transparent', 'wireframe', styleOf({ mode: 'wireframe' })],
     ['ao', 'wireframe', styleOf({ mode: 'wireframe' })],
     ['ao', 'transparent shaded', styleOf({ mode: 'shaded', transparent: true })],
+    ['edges', 'realistic', styleOf({ mode: 'realistic' })],
+    ['transparent', 'realistic', styleOf({ mode: 'realistic' })],
   ] as const)(
     'a greyed-out %s toggle in %s calls nothing and is ignored',
     (toggle, _where, style) => {
@@ -223,6 +259,9 @@ describe('isAoDrawn', () => {
     ['transparent shaded', styleOf({ mode: 'shaded', transparent: true, ao: true }), false],
     ['hiddenRemoved', styleOf({ mode: 'hiddenRemoved', ao: true }), false],
     ['wireframe', styleOf({ mode: 'wireframe', ao: true }), false],
+    ['realistic with AO on', styleOf({ mode: 'realistic', transparent: false, ao: true }), true],
+    ['transparent realistic', styleOf({ mode: 'realistic', transparent: true, ao: true }), true],
+    ['realistic with AO off', styleOf({ mode: 'realistic', ao: false }), false],
   ] as const)('%s → %s', (_where, style, drawn) => {
     expect(isAoDrawn(style)).toBe(drawn);
   });

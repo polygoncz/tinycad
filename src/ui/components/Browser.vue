@@ -12,7 +12,10 @@
 // to the default colour of the palette. M19.2 (D14): the ARIA pattern tree over one flat list of
 // the visible rows (browserTreeRows) with aria-level, a roving tabindex and the keys of treeKey;
 // Enter, the space bar and Delete (or Backspace) act on the row (rowKeyAction). Ctrl/Cmd adds to
-// the selection (isAdditive), as in the Timeline. Only bindings
+// the selection (isAdditive), as in the Timeline. M24 (Q078): the material button of a body right
+// after its colour field (BodyMaterialMenu, body.setMaterial). The colour, default colour and
+// material controls of a body are shown only on the active row (hovered, focused or selected); the
+// other rows show the colour as a dot after the name – CSS only, the logic is the same. Only bindings
 // and layout (rule 4): rows, the rename mode and canEdit come from BrowserModel, changes go back
 // through it.
 import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
@@ -22,6 +25,7 @@ import type { BrowserBodyRow, BrowserSketchRow } from '@/interaction';
 import { ACTION_IDS } from '@/interaction/constants';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
+import BodyMaterialMenu from './BodyMaterialMenu.vue';
 import { finishEdit } from '../inline-rename';
 import { isAdditive, runOnSelected } from '../item-actions';
 import { browserTreeRows, navItemOf, rowKeyAction, treeKey } from '../tree-navigation';
@@ -323,34 +327,44 @@ function endRenameByKey(index: number, end: () => void): void {
             @keydown.escape.prevent="endRenameByKey(index, cancelRename)"
             @blur="commitRename(row.row)"
           />
-          <span
-            v-else
-            class="name"
-            :title="t('browser.rename')"
-            @dblclick.stop="browser.beginRename(row.row.body)"
-            >{{ displayName(row.row) }}</span
-          >
-          <button
-            v-if="row.row.color !== null"
-            type="button"
-            class="eye"
-            :title="t('browser.defaultColor')"
-            :aria-label="t('browser.defaultColor')"
-            :disabled="!canEdit"
-            @click.stop="browser.setColor(row.row.body, null)"
-          >
-            <i class="ti ti-palette" aria-hidden="true" />
-          </button>
-          <input
-            type="color"
-            class="color"
-            :value="row.row.color ?? defaultBodyColor"
-            :aria-label="t('browser.color', { name: displayName(row.row) })"
-            :title="t('browser.color', { name: displayName(row.row) })"
-            :disabled="!canEdit"
-            @click.stop
-            @change="changeColor(row.row, $event)"
-          />
+          <span v-else class="body-label">
+            <span
+              class="name"
+              :title="t('browser.rename')"
+              @dblclick.stop="browser.beginRename(row.row.body)"
+              >{{ displayName(row.row) }}</span
+            >
+            <span
+              v-if="row.row.color !== null"
+              class="dot"
+              :style="{ background: row.row.color }"
+              aria-hidden="true"
+            />
+          </span>
+          <span class="controls">
+            <button
+              v-if="row.row.color !== null"
+              type="button"
+              class="eye"
+              :title="t('browser.defaultColor')"
+              :aria-label="t('browser.defaultColor')"
+              :disabled="!canEdit"
+              @click.stop="browser.setColor(row.row.body, null)"
+            >
+              <i class="ti ti-palette" aria-hidden="true" />
+            </button>
+            <input
+              type="color"
+              class="color"
+              :value="row.row.color ?? defaultBodyColor"
+              :aria-label="t('browser.color', { name: displayName(row.row) })"
+              :title="t('browser.color', { name: displayName(row.row) })"
+              :disabled="!canEdit"
+              @click.stop
+              @change="changeColor(row.row, $event)"
+            />
+            <BodyMaterialMenu :row="row.row" :name="displayName(row.row)" :disabled="!canEdit" />
+          </span>
           <button
             type="button"
             class="eye"
@@ -505,5 +519,48 @@ function endRenameByKey(index: number, end: () => void): void {
 }
 .node.hidden .eye {
   color: var(--text-tertiary);
+}
+/* The name and the colour dot of a body; the dot stands right after the (ellipsised) name. */
+.body-label {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.body-label .name {
+  flex: 0 1 auto;
+}
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+/*
+ * The controls of a body only on the active row (spec 11, "Ovládání řádku tělesa jen u aktivního
+ * řádku"): otherwise the 230 px panel would cut the name to "T…". A focused row matches
+ * :focus-within too, so Tab from it reaches the controls. While the material menu is open the
+ * focus is in the menu (teleported out of the row), so its open button keeps the controls shown:
+ * the menu stays anchored and Esc or a choice can give the focus back to the button. The dot is
+ * not needed while the colour field shows the colour.
+ */
+.controls {
+  display: none;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+.node:hover .controls,
+.node:focus-within .controls,
+.node[aria-selected='true'] .controls,
+.controls:has([aria-haspopup][aria-expanded='true']) {
+  display: inline-flex;
+}
+.node:hover .dot,
+.node:focus-within .dot,
+.node[aria-selected='true'] .dot,
+.node:has(.controls [aria-haspopup][aria-expanded='true']) .dot {
+  display: none;
 }
 </style>

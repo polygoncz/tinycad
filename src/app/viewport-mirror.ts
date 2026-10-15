@@ -1,11 +1,11 @@
 // Mirrors view state of the browser into the viewport (spec 11, "Kompoziční kořen (app)"): the
-// document holds visibility and colours of bodies (Q071, M15), the browser holds the visible
-// origin planes and axes (M12, M13), and the viewport only applies them. One diff of a map serves
-// all four: each change sends only what was added, changed or removed since the last state.
+// document holds visibility, colours (Q071, M15) and materials (Q078, M24) of bodies, the browser
+// holds the visible origin planes and axes (M12, M13), and the viewport only applies them. One diff
+// of a map serves all five: each change sends only what was added, changed or removed since the last state.
 
 import type { Disposable, Observable } from '@/core';
-import { ORIGIN_AXES, ORIGIN_PLANES } from '@/document';
-import type { AxisId, BodyId, PlaneId } from '@/document';
+import { DEFAULT_BODY_MATERIAL, ORIGIN_AXES, ORIGIN_PLANES } from '@/document';
+import type { AxisId, BodyId, BodyMaterial, PlaneId } from '@/document';
 import type { SketchDrawing, SketchPort } from '@/interaction';
 import { axisDrawing, planeDrawing } from '@/sketcher';
 
@@ -24,7 +24,7 @@ export interface SetTarget<K> {
 export interface ViewportMirror extends Disposable {
   /**
    * Sends the whole current state again, not only the difference: after the target dropped it
-   * (the view drops the colour of a body it does not show yet, spec 09). After dispose nothing.
+   * (the view drops the colour and the material of a body it does not show yet, spec 09). After dispose nothing.
    */
   reapply(): void;
 }
@@ -57,22 +57,24 @@ export function mirrorSet<K>(
 }
 
 /**
- * The view state of the browser in the viewport: hidden bodies, body colours, visible origin
- * planes and axes. reapply applies hiding and colours again, which a sync of new bodies needs;
- * the drawings of planes and axes stay in the view across syncs. The viewport applies hiding and
- * colours by BodyId to the main layer and the preview alike (spec 09, M21), so one reapply after
+ * The view state of the browser in the viewport: hidden bodies, body colours and materials (M24),
+ * visible origin planes and axes. reapply applies hiding, colours and materials again, which a
+ * sync of new bodies needs; the drawings of planes and axes stay in the view across syncs. The
+ * viewport applies hiding, colours and materials by BodyId to the main layer and the preview alike (spec 09, M21), so one reapply after
  * both syncs covers the preview too.
  */
 export function bindBrowserView(
   browser: {
     readonly hidden: Observable<ReadonlySet<BodyId>>;
     readonly colors: Observable<ReadonlyMap<BodyId, string>>;
+    readonly materials: Observable<ReadonlyMap<BodyId, BodyMaterial>>;
     readonly visiblePlanes: Observable<ReadonlySet<PlaneId>>;
     readonly visibleAxes: Observable<ReadonlySet<AxisId>>;
   },
   viewport: {
     setBodyVisible(body: BodyId, visible: boolean): void;
     setBodyColor(body: BodyId, color: string | null): void;
+    setBodyMaterial(body: BodyId, material: BodyMaterial): void;
     readonly sketches: SketchPort;
   },
 ): ViewportMirror {
@@ -92,6 +94,15 @@ export function bindBrowserView(
       viewport.setBodyColor(body, null);
     },
   });
+  // The map holds only materials set in the metadata; a body leaving it is back to the default.
+  const materials = mirrorMap(browser.materials, {
+    set: (body, material) => {
+      viewport.setBodyMaterial(body, material);
+    },
+    remove: (body) => {
+      viewport.setBodyMaterial(body, DEFAULT_BODY_MATERIAL);
+    },
+  });
   // Planes and axes are drawn under their own id; an id that is no origin one is not drawn.
   const planes = mirrorSet(
     browser.visiblePlanes,
@@ -107,11 +118,12 @@ export function bindBrowserView(
       return origin === undefined ? undefined : axisDrawing(origin);
     }),
   );
-  const parts = [hidden, colors, planes, axes];
+  const parts = [hidden, colors, materials, planes, axes];
   return {
     reapply() {
       hidden.reapply();
       colors.reapply();
+      materials.reapply();
     },
     dispose() {
       for (const part of parts) part.dispose();

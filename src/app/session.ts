@@ -5,7 +5,14 @@
 
 import { DisposableStore } from '@/core';
 import type { Disposable, IdGenerator, Observable, Unsubscribe, Vec3 } from '@/core';
-import type { BodyId, DocumentId, DocumentReader, DocumentWriter, FeatureId } from '@/document';
+import type {
+  BodyId,
+  BodyMaterial,
+  DocumentId,
+  DocumentReader,
+  DocumentWriter,
+  FeatureId,
+} from '@/document';
 import {
   bindSelectionHighlight,
   createActionRegistry,
@@ -94,6 +101,8 @@ export interface AppViewport extends ViewportPort, ViewportSettings {
   setBodyVisible(body: BodyId, visible: boolean): void;
   /** '#rrggbb', null = the face colour of the palette (spec 09, M15). */
   setBodyColor(body: BodyId, color: string | null): void;
+  /** M24: the material preset of a body, shown in Realistic only (spec 09). */
+  setBodyMaterial(body: BodyId, material: BodyMaterial): void;
   /** M19.2: the step of the drawn sketch grid in mm; the sketcher snaps to it (D4). */
   sketchGridStep(): number;
 }
@@ -477,7 +486,7 @@ function wireSession(
     }),
   );
 
-  // 5., 6. Visibility and colours of bodies (Q071, M15), planes and axes (M12, M13): the browser
+  // 5., 6. Visibility, colours and materials of bodies (Q071, M15, M24), planes and axes (M12, M13): the browser
   // holds them, the viewport mirrors them.
   const browserView = lifetime.add(bindBrowserView(browser, viewport));
 

@@ -35,15 +35,43 @@ export interface PartStudioData {
 }
 
 /**
- * Name, visibility and color of a body (spec 03, M11, color M15). Canonical form: name only when
- * non-empty, hidden only as true, color only when isBodyColor; the document keeps it so, which
- * makes replayed data compare equal.
+ * Name, visibility, color and material of a body (spec 03, M11, color M15, material M24).
+ * Canonical form: name only when non-empty, hidden only as true, color only when isBodyColor,
+ * material only when isBodyMaterial and not DEFAULT_BODY_MATERIAL; the document keeps it so,
+ * which makes replayed data compare equal.
  */
 export interface BodyMeta {
   readonly name?: string;
   readonly hidden?: true;
   /** '#rrggbb' in lower case (isBodyColor); absent = the default color of the palette. */
   readonly color?: string;
+  /** Absent = DEFAULT_BODY_MATERIAL, which is never stored (M24). */
+  readonly material?: BodyMaterial;
+}
+
+/** A material preset of a body (spec 03, M24, ADR 0027). Only render knows the PBR parameters. */
+export type BodyMaterial = 'plastic' | 'aluminium' | 'steel' | 'brass' | 'glass' | 'rubber';
+
+/** All material presets in UI order (spec 03, M24). */
+export const BODY_MATERIALS: readonly BodyMaterial[] = Object.freeze([
+  'plastic',
+  'aluminium',
+  'steel',
+  'brass',
+  'glass',
+  'rubber',
+]);
+
+/** The material of a body without one; the canonical form does not store it (M24). */
+// The literal type (not BodyMaterial) lets render check its own copy at compile time: render may
+// import interaction (and so this constant) only as a type.
+export const DEFAULT_BODY_MATERIAL = 'plastic' satisfies BodyMaterial;
+
+/** A valid material preset (spec 03, M24); exact lower-case names only. */
+export function isBodyMaterial(v: unknown): v is BodyMaterial {
+  // includes on readonly BodyMaterial[] takes only a BodyMaterial; the widened view takes unknown.
+  const all: readonly unknown[] = BODY_MATERIALS;
+  return all.includes(v);
 }
 
 const BODY_COLOR = /^#[0-9a-f]{6}$/;

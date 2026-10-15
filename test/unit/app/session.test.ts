@@ -1303,6 +1303,19 @@ describe('createAppSession – export, history and colours (M15)', () => {
     expect(viewport.colorCalls[viewport.colorCalls.length - 1]).toEqual({ body, color: null });
   });
 
+  it('a material set in the browser goes to the viewport, again after a sync', async () => {
+    const { session, viewport } = await open();
+    addBox(session);
+    await settle();
+    const body = session.browser.bodies.get()[0]?.body ?? fail();
+    session.browser.setMaterial(body, 'aluminium');
+    expect(viewport.materialCalls).toEqual([{ body, material: 'aluminium' }]);
+    viewport.materialCalls.length = 0;
+    addBox(session);
+    await settle();
+    expect(viewport.materialCalls).toContainEqual({ body, material: 'aluminium' });
+  });
+
   it('a stored colour is shown after a reopen', async () => {
     const { session, store } = await open();
     addBox(session);

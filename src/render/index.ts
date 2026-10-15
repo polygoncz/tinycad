@@ -11,7 +11,7 @@ export type { ManipulatorLayer } from './manipulator-layer';
 export type { CameraController } from './camera-controller';
 export type { StandardView } from './camera-math';
 export type { OrbitMode } from './camera-ops';
-export { DEFAULT_DISPLAY_STYLE, DISPLAY_MODES } from './display-style';
+export { DEFAULT_DISPLAY_STYLE, DISPLAY_MODES, displayDrawsAo } from './display-style';
 export type { DisplayMode, DisplayStyle } from './display-style';
 export { AO_SETTING_RANGES, DEFAULT_AO_SETTINGS, isValidAoSetting } from './ao-parameters';
 export type { AoSettingRange, AoSettings } from './ao-parameters';

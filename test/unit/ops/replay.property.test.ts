@@ -2,7 +2,7 @@ import fc from 'fast-check';
 import { describe, it, expect } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
 import { bodyId, toData } from '@/document';
-import type { BodyId, DocumentData, FeatureId } from '@/document';
+import type { BodyId, BodyMaterial, DocumentData, FeatureId } from '@/document';
 import { aDocument, aFeature } from '@/document/testing';
 import { replayLog } from '@/ops/replay';
 import type { LogEntry } from '@/ops/log';
@@ -11,6 +11,7 @@ import type {
   BatchOp,
   BodyRenameOp,
   BodySetColorOp,
+  BodySetMaterialOp,
   BodySetVisibleOp,
   FeatureAddOp,
   FeatureMoveOp,
@@ -33,6 +34,7 @@ type Operation =
   | BodyRenameOp
   | BodySetVisibleOp
   | BodySetColorOp
+  | BodySetMaterialOp
   | BatchOp;
 
 // Abstract steps: a kind plus plain integers/booleans. They are translated to concrete
@@ -47,7 +49,8 @@ type OpStep =
   | { readonly k: 'rollback'; readonly at: number }
   | { readonly k: 'bodyRename'; readonly b: number; readonly n: number }
   | { readonly k: 'bodyVisible'; readonly b: number; readonly on: boolean }
-  | { readonly k: 'bodyColor'; readonly b: number; readonly c: number };
+  | { readonly k: 'bodyColor'; readonly b: number; readonly c: number }
+  | { readonly k: 'bodyMaterial'; readonly b: number; readonly m: number };
 
 type Step =
   | OpStep
@@ -74,11 +77,15 @@ const opStep: fc.Arbitrary<OpStep> = fc.oneof(
   fc.record({ k: fc.constant('bodyRename' as const), b: int, n: fc.nat(3) }),
   fc.record({ k: fc.constant('bodyVisible' as const), b: int, on: fc.boolean() }),
   fc.record({ k: fc.constant('bodyColor' as const), b: int, c: fc.nat(3) }),
+  fc.record({ k: fc.constant('bodyMaterial' as const), b: int, m: fc.nat(2) }),
 );
 
 // c = 0 resets to the default color; three colors make the same value collide often too.
 const COLORS: readonly string[] = ['#ff0000', '#00ff00', '#0000ff'];
 const colorAt = (c: number): string | null => (c === 0 ? null : (COLORS[c - 1] ?? null));
+// m = 0 is the default 'plastic', which the canonical form drops (M24).
+const MATERIALS: readonly BodyMaterial[] = ['plastic', 'steel', 'glass'];
+const materialAt = (m: number): BodyMaterial => MATERIALS[m] ?? 'plastic';
 
 // Body metadata does not depend on features existing (spec 03), so a small fixed set of bodies,
 // some of them of features that never exist, makes renames and hiding collide often.
@@ -168,6 +175,13 @@ describe('replayLog (property)', () => {
               return { type: 'body.setVisible', v: 1, body: bodyAt(s.b), visible: s.on };
             case 'bodyColor':
               return { type: 'body.setColor', v: 1, body: bodyAt(s.b), color: colorAt(s.c) };
+            case 'bodyMaterial':
+              return {
+                type: 'body.setMaterial',
+                v: 1,
+                body: bodyAt(s.b),
+                material: materialAt(s.m),
+              };
             default: {
               const featureId = featureAt(s.i);
               if (featureId === undefined) return null;

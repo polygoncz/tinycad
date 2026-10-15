@@ -1,7 +1,8 @@
 // The ambient occlusion pipeline of the viewport (spec 09, "Víceprůchodové vykreslování (AO)",
 // ADR 0026). Every pass draws into the one render target of the composer and none swaps buffers
 // (needsSwap = false), so the depth of the model survives up to the interaction pass:
-//   1. model: the scene with the interaction hidden, clears colour and depth;
+//   1. model: the scene with the interaction hidden, clears colour and depth; the only pass that
+//      draws scene.background (the gradient of Realistic, M24);
 //   2. AO: GTAOPass computes the AO texture only, then it is multiplied into the target in place;
 //   3. interaction: the scene with the model hidden, no clear (the depth of the model stays);
 //   4. output: OutputPass converts to sRGB onto the canvas.
@@ -16,7 +17,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOBlendShader } from 'three/addons/shaders/GTAOShader.js';
 import type { Disposable } from '@/core';
 import type { AoParameters } from './ao-parameters';
-import { aoExcluded, hideDuring, type ScenePartition } from './scene-partition';
+import { aoExcluded, hideDuring, withoutBackground, type ScenePartition } from './scene-partition';
 
 export interface AoPipeline extends Disposable {
   /** CSS px; the target and the G-buffer are multiplied by the pixel ratio of the renderer. */
@@ -63,7 +64,7 @@ export function createAoPipeline(deps: {
   composer.setSize(deps.width, deps.height);
 
   const modelPass = new TargetClearPass(new RenderPass(scene, camera));
-  composer.addPass(new HidingPass(modelPass, () => currentFrame().partition.interaction));
+  composer.addPass(new HidingPass(modelPass, () => currentFrame().partition.interaction, null));
 
   const aoPass = new AoPass(
     scene,
@@ -80,7 +81,8 @@ export function createAoPipeline(deps: {
   const interactionPass = new RenderPass(scene, camera);
   // Keeps the colour with AO and the depth of the model: sketches behind a body stay hidden.
   interactionPass.clear = false;
-  composer.addPass(new HidingPass(interactionPass, () => currentFrame().partition.model));
+  // Without the background: it would cover the model drawn already (it ignores the depth).
+  composer.addPass(new HidingPass(interactionPass, () => currentFrame().partition.model, scene));
 
   const outputPass = new OutputPass();
   composer.addPass(outputPass);
@@ -151,15 +153,24 @@ class TargetClearPass extends Pass {
   }
 }
 
-/** Runs `inner` with the objects of `hidden()` invisible (spec 09, passes 1 and 3). */
+/**
+ * Runs `inner` with the objects of `hidden()` invisible (spec 09, passes 1 and 3) and, when
+ * `backgroundOf` is a scene, without its background (M24).
+ */
 class HidingPass extends Pass {
   private readonly inner: Pass;
   private readonly hidden: () => readonly THREE.Object3D[];
+  private readonly backgroundOf: THREE.Scene | null;
 
-  constructor(inner: Pass, hidden: () => readonly THREE.Object3D[]) {
+  constructor(
+    inner: Pass,
+    hidden: () => readonly THREE.Object3D[],
+    backgroundOf: THREE.Scene | null,
+  ) {
     super();
     this.inner = inner;
     this.hidden = hidden;
+    this.backgroundOf = backgroundOf;
     this.needsSwap = inner.needsSwap;
   }
 
@@ -176,9 +187,13 @@ class HidingPass extends Pass {
   ): void {
     // The composer sets renderToScreen on this wrapper, not on the inner pass.
     this.inner.renderToScreen = this.renderToScreen;
-    hideDuring(this.hidden(), () => {
-      this.inner.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
-    });
+    const run = (): void => {
+      hideDuring(this.hidden(), () => {
+        this.inner.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
+      });
+    };
+    if (this.backgroundOf === null) run();
+    else withoutBackground(this.backgroundOf, run);
   }
 
   override dispose(): void {
@@ -195,8 +210,9 @@ interface AoFrame {
 /**
  * GTAOPass computes the AO only (OUTPUT.Off, into its pdRenderTarget); this pass then multiplies it
  * into the colour of readBuffer in place, like the blend of GTAOPass (ADR 0026, point 2). Hides the
- * interaction and the LineSegments2 of the model in the G-buffer: GTAOPass hides only Points,
- * Line and Line2, a LineSegments2 is a Mesh and would draw as a mess of quads.
+ * interaction and aoExcluded of the model in the G-buffer: GTAOPass hides only Points, Line and
+ * Line2, a LineSegments2 is a Mesh and would draw as a mess of quads, and glass would darken what
+ * is seen through it (M24).
  */
 class AoPass extends Pass {
   private readonly gtao: GTAOPass;
@@ -214,6 +230,7 @@ class AoPass extends Pass {
   private appliedDistanceFallOff: number | null = null;
   private appliedSamples: number | null = null;
   private readonly frame: () => AoFrame;
+  private readonly scene: THREE.Scene;
 
   constructor(
     scene: THREE.Scene,
@@ -224,6 +241,7 @@ class AoPass extends Pass {
   ) {
     super();
     this.frame = frame;
+    this.scene = scene;
     // In place: the result stays in readBuffer, together with the depth of the model.
     this.needsSwap = false;
     this.gtao = new GTAOPass(scene, camera, width, height);
@@ -260,8 +278,12 @@ class AoPass extends Pass {
   ): void {
     const { hidden, params } = this.frame();
     this.applyParameters(params);
-    hideDuring(hidden, () => {
-      this.gtao.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
+    // The G-buffer without the background of Realistic (M24): three would draw it into the
+    // normals and the depth like a screen-filling body.
+    withoutBackground(this.scene, () => {
+      hideDuring(hidden, () => {
+        this.gtao.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
+      });
     });
 
     this.blendUniforms.tDiffuse.value = this.gtao.pdRenderTarget.texture;

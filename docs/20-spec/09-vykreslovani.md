@@ -27,7 +27,7 @@ updated: 2026-10-15
 
 > **Pojmy:** [[Viewport]], [[Handle tvaru]], [[Těleso]], [[Styl zobrazení]]  
 > **Milník:** [[M08-vykreslovani]], kamera a view cube [[M17-kamera-a-view-cube]], režimy zobrazení [[M22-rezimy-zobrazeni]]  
-> **Rozhodnutí:** [[0019-vlastni-ovladani-kamery|ADR 0019]], [[0020-rezim-otaceni-kamery|ADR 0020]], [[0026-viceprochodove-vykreslovani-ve-viewportu|ADR 0026]]
+> **Rozhodnutí:** [[0019-vlastni-ovladani-kamery|ADR 0019]], [[0020-rezim-otaceni-kamery|ADR 0020]], [[0026-viceprochodove-vykreslovani-ve-viewportu|ADR 0026]], [[0027-material-telesa-a-scena-realistic|ADR 0027]]
 
 Zobrazuje výsledek regenerace pomocí Three.js a odpovídá na otázku „co je pod kurzorem“. O dokumentu ani featurách neví nic – pracuje s tělesy (`BodyId`), handle a sítěmi. Závisí na `core`, typech z `kernel`, typech z `interaction` (port `ViewportPort`, události a `BodyId`, [[0009-platformove-nezavisla-domena|ADR 0009]]) a knihovně `three`.
 
@@ -64,6 +64,7 @@ export interface Viewport extends ViewportPort, Disposable {
   onOrbitModeToggle(listener: () => void): Unsubscribe;   // M17.1: klik na tlačítko režimu u view cube; dispose odběratele uvolní
   setDisplayStyle(style: DisplayStyle): void;             // M22: styl zobrazení (viz Styl zobrazení); stejný plán = nic
   setAoSettings(settings: AoSettings): void;              // M23: nastavení AO (viz Víceprůchodové vykreslování); stejné hodnoty = nic
+  setBodyMaterial(body: BodyId, material: BodyMaterial): void; // M24: předvolba materiálu tělesa (viz Realistic)
 
   readonly events: Subscribable<{ pointer: ViewPointerEvent; key: ViewKeyEvent }>;
 }
@@ -98,6 +99,7 @@ export interface ScenePalette {
   readonly viewCube: readonly [face: number, text: number];   // M17: světlá 0xffffff, 0x374151; tmavá 0x4b4f57, 0xe5e7eb
   readonly hiddenEdge: number;  // M22: čárkované skryté hrany; světlá 0x8b929c, tmavá 0x6b7280
   readonly meshLine: number;    // M22: čáry triangulace; světlá 0x8e99a8, tmavá 0x5a7fb0
+  readonly realisticBackground: readonly [top: number, bottom: number];   // M24: gradient pozadí Realistic; světlá 0xf4f6f9, 0xd9dee5; tmavá 0x3a3f47, 0x1c1f24
 }
 export const LIGHT_PALETTE: ScenePalette;
 export const DARK_PALETTE: ScenePalette;
@@ -312,38 +314,41 @@ Zvýraznění plochy je **malá vlastní kopie** jejích trojúhelníků: čist�
 
 ## Styl zobrazení
 
-> **Pojem:** [[Styl zobrazení]] · **Milníky:** [[M22-rezimy-zobrazeni|M22]] (čárové režimy, průhlednost, triangulace), [[M23-postprocessing-a-ao|M23]] (AO, cíl), [[M24-realisticke-zobrazeni|M24]] (Realistic, cíl)
+> **Pojem:** [[Styl zobrazení]] · **Milníky:** [[M22-rezimy-zobrazeni|M22]] (čárové režimy, průhlednost, triangulace), [[M23-postprocessing-a-ao|M23]] (AO, cíl), [[M24-realisticke-zobrazeni|M24]] (Realistic)
 
 Jak se kreslí tělesa. Je to předvolba stránky jako režim otáčení: zdroj pravdy je `ui` (uloží ji), `app` ji předá přes `ViewSettings.setDisplayStyle` ([[11-ui#Kompoziční kořen (app)]]) a viewport ji jen použije. Do dokumentu ani logu operací nepatří. Liší se od průhlednosti *tělesa*, kterou [[Q073 Průhlednost a barva těles|Q073]] odložila: tady jde o průhlednost celé scény jako pomůcku pohledu.
 
 ### Hodnota a plán (`display-style.ts`, bez `three`)
 
 ```ts
-export type DisplayMode = 'shaded' | 'hiddenRemoved' | 'hiddenVisible' | 'wireframe';   // M24: + 'realistic'
-export const DISPLAY_MODES: readonly DisplayMode[];   // pořadí v menu, tak jak je výčet výše
+export type DisplayMode = 'shaded' | 'realistic' | 'hiddenRemoved' | 'hiddenVisible' | 'wireframe';   // 'realistic' od M24
+export const DISPLAY_MODES: readonly DisplayMode[];   // pořadí v menu, tak jak je výčet výše (Realistic hned za Stínovaným)
 
 export interface DisplayStyle {
   readonly mode: DisplayMode;
   readonly edges: boolean;        // hrany B-rep; platí jen v 'shaded'
   readonly transparent: boolean;  // platí jen v 'shaded'
   readonly mesh: boolean;         // čáry triangulace; platí ve všech režimech
-  readonly ao: boolean;            // M23: ambient occlusion; platí jen v 'shaded' bez průhlednosti (M24: i v 'realistic')
+  readonly ao: boolean;            // M23: ambient occlusion; platí v 'shaded' bez průhlednosti a od M24 v 'realistic'
 }
 export const DEFAULT_DISPLAY_STYLE: DisplayStyle;   // { mode: 'shaded', edges: true, transparent: false, mesh: false, ao: false }
 export const TRANSPARENT_FACE_OPACITY = 0.35;
 
 /** Plochý plán: jediné, podle čeho se render rozhoduje. Zmrazený. */
 export interface DisplayPlan {
-  readonly faces: 'lit' | 'flat' | 'hidden';   // M24: + 'physical'
+  readonly faces: 'lit' | 'flat' | 'hidden' | 'physical';   // 'physical' od M24 (materiály podle předvolby, viz Realistic)
   readonly faceOpacity: number;                // 1, nebo TRANSPARENT_FACE_OPACITY
   readonly edges: boolean;                     // viditelné hrany B-rep
   readonly hiddenEdges: 'none' | 'dashed';     // druhý průchod hran za plochami
   readonly meshLines: boolean;
   readonly xray: boolean;                      // picking nekontroluje zákryt, zvýraznění bez testu hloubky
   readonly ao: boolean;                        // M23: průchod AO (viz Víceprůchodové vykreslování)
+  readonly scene: 'studio' | 'realistic';      // M24: mřížka a pozadí barvou, nebo prostředí Realistic (viz Realistic)
 }
 export function resolveDisplay(style: DisplayStyle): DisplayPlan;
 export function samePlan(a: DisplayPlan, b: DisplayPlan): boolean;
+/** M24: kreslí styl AO? = resolveDisplay(style).ao. Exportuje index render, app reexportuje pro ui (menu stylu). */
+export function displayDrawsAo(style: DisplayStyle): boolean;
 ```
 
 Pole, které v daném režimu neplatí, se **ignoruje, ale nemaže**: po návratu do Shaded platí, co bylo nastavené. `resolveDisplay` je jediné místo, kde se rozhoduje podle režimu. Zbytek `render` čte jen plán.
@@ -357,9 +362,9 @@ Pole, které v daném režimu neplatí, se **ignoruje, ale nemaže**: po návrat
 | `hiddenRemoved` | `flat` | 1 | ano | `none` | ne | ne | M22 |
 | `hiddenVisible` | `flat` | 1 | ano | `dashed` | **ano** | ne | M22 |
 | `wireframe` | `hidden` | 1 | ano | `none` | **ano** | ne | M22 |
-| `realistic` (cíl) | `physical` | 1 | ne | `none` | ne | `style.ao` | M24 |
+| `realistic` | `physical` | 1 | ne | `none` | ne | `style.ao` | M24 |
 
-`meshLines = style.mesh` ve všech řádcích. `ao` je jinde `false`: v průhledném `shaded` plochy hloubku nezapisují a AO z hloubky by kreslilo tmavé skvrny pod nimi, v čárových režimech nejsou osvětlené plochy, které by stínilo. `samePlan` porovnává i `ao`. Ve `wireframe` a v průhledném `shaded` plochy hloubku nezapisují, takže hrany za nimi jsou vidět bez druhého průchodu (`hiddenEdges: 'none'`), a proto je tam i `xray`.
+`meshLines = style.mesh` ve všech řádcích. `ao` je jinde `false`: v průhledném `shaded` plochy hloubku nezapisují a AO z hloubky by kreslilo tmavé skvrny pod nimi, v čárových režimech nejsou osvětlené plochy, které by stínilo. `samePlan` porovnává i `ao` a `scene`. **M24:** `scene` je `'realistic'` jen v režimu `realistic`, jinde `'studio'`. V `realistic` se `style.edges` a `style.transparent` ignorují (hrany se nekreslí, průhlednost je jen sklo přes materiál). Ve `wireframe` a v průhledném `shaded` plochy hloubku nezapisují, takže hrany za nimi jsou vidět bez druhého průchodu (`hiddenEdges: 'none'`), a proto je tam i `xray`.
 
 ### Materiály (`BodyMaterials`, sdílí `BodyLayer`)
 
@@ -548,6 +553,115 @@ export function createAoPipeline(deps: {
 **Barvy:** render target composeru je lineární a `OutputPass` převede do sRGB stejně, jako renderer převádí při kreslení přímo na plátno. Pozadí (`setClearColor`) i barvy ploch tak vypadají stejně s AO i bez něj (e2e).
 - **Nástraha `RenderPass`:** three převádí barvu mazání do barevného prostoru cíle jen v `setClearColor` a `render`. `RenderPass` ale maže po `setRenderTarget` a ještě před `render`, takže by lineární target smazal sRGB hodnotou z plátna a pozadí by s AO bylo světlejší. Průchod modelu (`TargetClearPass`, obal kolem `RenderPass`) proto po `setRenderTarget` nastaví barvu mazání znovu.
 
+### Realistic
+
+> **Rozhodnutí:** [[0027-material-telesa-a-scena-realistic|ADR 0027]], [[Q078 Sada materiálů těles|Q078]], [[Q082 Scéna režimu Realistic|Q082]] · **Milník:** [[M24-realisticke-zobrazeni|M24]]
+
+Režim `realistic` kreslí tělesa hlavní vrstvy fyzikálními materiály podle jejich předvolby (`BodyMaterial` z `document`, do `render` jako typ přes `interaction`). Kreslí je v osvětlení z environment mapy, s tone mappingem v shaderu a s kontaktním stínem místo mřížky. Interakce, náhled editované featury a view cube se nemění.
+
+**Předvolby** (`material-presets.ts`, **bez `three`**):
+
+```ts
+export interface PhysicalPreset {
+  readonly baseColor: number | null;   // 0xRRGGBB; null = barva ploch z palety (plast)
+  readonly metalness: number;
+  readonly roughness: number;
+  readonly clearcoat: number;
+  readonly clearcoatRoughness: number;
+  readonly transmission: number;       // > 0 jen sklo
+  readonly ior: number;
+  readonly thickness: number;          // mm, pro lom ve skle
+  readonly envMapIntensity: number;
+}
+export const MATERIAL_PRESETS: Readonly<Record<BodyMaterial, PhysicalPreset>>;   // zmrazené
+/** Barva fyzikálního materiálu: barva tělesa tónuje předvolbu (nahradí baseColor), jinak baseColor, jinak paleta. */
+export function physicalColor(preset: PhysicalPreset, bodyColor: number | null, paletteFace: number): number;
+export const REALISTIC_EXPOSURE = 1;
+```
+
+| Předvolba | `baseColor` | `metalness` | `roughness` | `clearcoat` | `transmission` | `ior` |
+|---|---|---|---|---|---|---|
+| `plastic` | paleta | 0 | 0,45 | 0,3 | 0 | 1,5 |
+| `aluminium` | `0xd2d6db` | 1 | 0,35 | 0 | 0 | 1,5 |
+| `steel` | `0xa9afb6` | 1 | 0,25 | 0 | 0 | 1,5 |
+| `brass` | `0xc9a24a` | 1 | 0,3 | 0 | 0 | 1,5 |
+| `glass` | `0xffffff` | 0 | 0,05 | 0 | 1 | 1,5 |
+| `rubber` | `0x2c2e31` | 0 | 0,9 | 0 | 0 | 1,5 |
+
+`clearcoatRoughness` 0,2, `thickness` 2 mm u skla, jinde 0, `envMapIntensity` 1. Hodnoty potvrdil Pavel při ručním ověření M24 (2026-10-15) beze změny. Testy hlídají úplnost tabulky, rozsahy (0..1, `ior` ≥ 1) a `physicalColor`, ne konkrétní čísla.
+
+**Fyzikální materiály** (`physical-materials.ts`, s `three`):
+
+- `createPhysicalMaterial(preset, color, envMap: THREE.Texture | null): THREE.MeshPhysicalMaterial` vytvoří materiál s `polygonOffset` 1/1 jako `faces`, aby hrany a zvýraznění na ploše vyhrály, a sama na něj použije `applyAgxToneMapping`. Fyzikální materiál bez tone mappingu tedy nevznikne.
+- **Tone mapping v shaderu** (ADR 0027, bod 6): `applyAgxToneMapping(material)` nastaví `onBeforeCompile`:
+  - za `#include <common>` vloží `ShaderChunk.tonemapping_pars_fragment`;
+  - `#include <tonemapping_fragment>` nahradí `gl_FragColor.rgb = AgXToneMapping( gl_FragColor.rgb );`;
+  - přidá uniformu `toneMappingExposure` s `REALISTIC_EXPOSURE`;
+  - nastaví `customProgramCacheKey` (`'tinycad-agx'`).
+
+  `renderer.toneMapping` zůstává `NoToneMapping`. Čistá funkce `injectAgxToneMapping(fragmentShader: string): string` dělá textovou náhradu a testuje se v Node. Vyhodí, když v shaderu chybí `#include <tonemapping_fragment>` nebo `#include <common>`.
+- **Kanárek** (Node): `ShaderLib.physical.fragmentShader` obsahuje `#include <tonemapping_fragment>` i `#include <common>`. `ShaderChunk.tonemapping_pars_fragment` obsahuje `AgXToneMapping`.
+
+**Vrstva těles:**
+- `BodyLayerInternal.setBodyMaterial(body, material: BodyMaterial)` (vedle `setBodyColor`, veřejné `BodyLayer` ho nemá):
+  - Stav podle `BodyId` jako barva: přežije `sync`, zmizí s tělesem. Těleso, které ve vrstvě ještě není, se zahodí.
+  - Neznámý materiál (není v `MATERIAL_PRESETS`, interní `materialPreset`) je chyba. Kontroluje se **před** hledáním tělesa, jako u barvy. `BodyLayers` ho ověří ještě před předáním vrstvám.
+  - Stejná hodnota nic nepřekresluje, jinak `requestRender()`.
+  - Výchozí je `'plastic'`.
+- Při `faces: 'physical'` dostane plocha tělesa fyzikální materiál **sdílený podle dvojice (materiál, barva tělesa nebo `null`)** s počtem uživatelů, jako dnes materiály barev. Fyzikální materiály vznikají jen v `physical` a při přepnutí plánu na jiné `faces` se všechny uvolní.
+- `BodyLayerInternal.setEnvironment(envMap: THREE.Texture | null)` nastaví `envMap` všem fyzikálním materiálům, i těm vytvořeným později. Překreslení **nevyžádá**, protože ji viewport volá uvnitř snímku. Stejná textura nic nedělá. `setPalette` přebarví fyzikální materiály s barvou z palety (plast bez barvy tělesa).
+- `BodyLayers.setBodyMaterial` předá hodnotu oběma vrstvám (jako barvu), `setEnvironment` jen `main`.
+- `Viewport.setBodyMaterial(body, material)` (mimo port, jako `setBodyColor`) předá hodnotu vrstvám.
+
+**Scéna Realistic** (viewport; patří k připojenému rendereru jako pipeline AO, uvolní se při `unmount`):
+- **Environment:**
+  - `RoomEnvironment` přes `PMREMGenerator.fromScene(…, 0.04)` vzniká líně v `draw()` při prvním snímku s `scene: 'realistic'` a předá se `layers.setEnvironment`.
+  - Drží se do `unmount`, protože přepínání režimů je pak levné. Po `unmount` se vrstvám předá `null`.
+  - `scene.environment` se **nenastavuje**.
+  - **Natočení:** `RoomEnvironment` má osu Y nahoru, scéna Z. Fyzikální materiály proto mají `envMapRotation` = `Euler(π/2, 0, 0)` (Y → Z, nastavuje `createPhysicalMaterial`), jinak světla místnosti svítí z boku a materiály vycházejí vybledlé (smoke test M24).
+- **Mřížka:** `SceneHelpers.setGridVisible(visible)`. V `realistic` skrytá.
+- **Pozadí:**
+  - `scene.background` = `DataTexture` 1 × 2 z `palette.realisticBackground` (`[top, bottom]`, `SRGBColorSpace`, `LinearFilter`) jen v `realistic`, jinak `null` (platí barva mazání).
+  - `setPalette` přepíše data textury.
+  - V pipeline AO kreslí pozadí jen průchod modelu. Průchod AO, interakcí i stínu ho mají `null` (`withoutBackground(scene, fn)` v `scene-partition.ts`, obnova v `finally`).
+- **Kontaktní stín** (`contact-shadow.ts`, s `three`):
+
+```ts
+export interface ContactShadow extends Disposable {
+  readonly group: THREE.Group;     // rovina stínu; přímý potomek scény, v pipeline AO tedy interakce
+  setVisible(visible: boolean): void;
+  invalidate(): void;              // změna těles: přepočet v příštím update
+  /** Přepočítá jen po invalidate (a poprvé); bounds null → rovina skrytá. */
+  update(renderer: THREE.WebGLRenderer, scene: THREE.Scene, bodies: THREE.Object3D, bounds: BoundingBox | null): void;
+}
+export function createContactShadow(): ContactShadow;
+```
+
+  - **Postup** jako v příkladu three `webgl_shadow_contact`:
+    - Ortografická kamera stojí ve výšce spodku `bounds` a dívá se nahoru (+Z). Pokrývá obálku v XY zvětšenou o `CONTACT_SHADOW_MARGIN` (0,25 velikosti) a do hloubky vidí `CONTACT_SHADOW_HEIGHT` (0,5 výšky obálky).
+    - Do render targetu `CONTACT_SHADOW_RESOLUTION` (512²) vykreslí scénu s `overrideMaterial` (hloubka → tma) a se skrytím všeho kromě `bodies` a `aoExcluded(bodies)` (`hideDuring`, `withoutBackground`).
+    - Výsledek se dvakrát rozmaže (`HorizontalBlurShader`, `VerticalBlurShader`, `FullScreenQuad`, druhý target).
+    - Výsledek je textura průhledné roviny (`MeshBasicMaterial`, `depthWrite: false`, `opacity` `CONTACT_SHADOW_OPACITY` 0,6) těsně pod spodkem obálky (o 0,1 % výšky obálky níž).
+  - **Kdy:**
+    - `update` volá `draw()` jen ve scéně `realistic`, a to **před `updateClip()`**, aby near a far ve stejném snímku počítaly s novou obálkou roviny.
+    - `invalidate` volá viewport po `apply` hlavní vrstvy (sync, reset), po změně viditelnosti těles a při přepnutí do `realistic`. Barva ani materiál stín nemění.
+    - Pohyb kamery stín nepřepočítává.
+  - `bounds` je obálka viditelných těles **hlavní** vrstvy (náhled stín nevrhá).
+  - **Obálka scény:** viditelná rovina stínu patří do `sceneBounds()` ([[#Near a far]]), protože přesahuje obálku těles a jinak by ji near nebo far mohly oříznout. `ContactShadow.bounds(): BoundingBox | null` vrací obálku roviny, nebo `null`, když je skrytá rovina nebo celá skupina (`setVisible(false)` mimo Realistic).
+  - **Chyba při kreslení:** příznak přepočtu se smaže až po úspěšném kreslení. Když kreslení vyhodí, příští `update` to zkusí znovu.
+  - Kamera stínu pokrývá čtverec se stranou `max(dx, dy) · (1 + 2 · CONTACT_SHADOW_MARGIN)` se středem v obálce. Hloubku kreslí vlastní `ShaderMaterial` (černá, alfa = 1 − hloubka). Target se maže průhlednou černou. Obálka s nulovou šířkou nebo výškou skryje rovinu jako `null`.
+  - `dispose` uvolní oba targety, materiály a geometrii.
+- **Průchod AO a sklo:** `aoExcluded` (spec výše) vrací navíc každý `Mesh`, jehož materiál má `transmission > 0`.
+- **Světla:** zůstávají jako ve `studio`. Jas Realistic se ladí přes `envMapIntensity` a `REALISTIC_EXPOSURE`.
+
+**Picking:** beze změny. Hrany se nekreslí, ale vybrat jdou dál (hrana v toleranci vyhrává nad plochou). Zvýraznění vybrané hrany je vidět.
+
+**Známá omezení:**
+- AO násobí už tone-mapované barvy.
+- Sklo (`transmission`) má vnitřní průchod three s neprůhlednými objekty, ve kterém se v jednoprůchodové cestě lámou i interakce, s AO ne.
+- Kolem skla se AO nekreslí.
+- Viz [[0027-material-telesa-a-scena-realistic|ADR 0027]].
+
 ## Manipulátory
 
 `ManipulatorLayer` (typ splňuje `ManipulatorPort`; vnitřní vrstva má `pick` s projekcí a port za ni doplní viewport, stejně jako u skic; [[10-interakce#Manipulátory (M18)]], [[0021-manipulatory-kotvy-z-regenerace|ADR 0021]], [[0022-rezimy-a-hud-manipulatoru|ADR 0022]]) kreslí úchyty [[Manipulátor|manipulátorů]] a pickuje je. Text s hodnotou kreslí `ui` (HUD), ne `render`.
@@ -645,9 +759,9 @@ Filtr (`PickFilter`, [[10-interakce#Port viewportu]], M10.1): průchod přes hra
 ## Testy
 
 `render` se testuje nejhůř, proto v něm má být co nejméně logiky ([[Q061 Testy render v Node|Q061]]):
-- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, od M17 operace kamery (`orbit`, `pan`, `zoomAt`, `turn`, `ease`, `interpolate`, `clipRange`, `orientationFor`), `cameraGesture`, `wheelFactor`, `buildViewCube` a `cubeRegionAt`, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache`, sdílená cache `createSharedMeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor` (od M17 zaniká), od M13 `pickSketchRegion` a `pointInRegion`, od M15 `parseHexColor`, `pickHandle`, `projectHandles`, `handleBounds`, `handleHidden`, `arcPoints` a `viewChangedSince`, od M19.2 `sketchHits`, `sketchGridStep` a `gridLines` (`sketch-grid.ts`), od M22 `resolveDisplay` a `samePlan` (`display-style.ts`), od M23 `aoParameters`, `isValidAoSetting`, `AO_SETTING_RANGES` a `DEFAULT_AO_SETTINGS` (`ao-parameters.ts`) (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
+- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, od M17 operace kamery (`orbit`, `pan`, `zoomAt`, `turn`, `ease`, `interpolate`, `clipRange`, `orientationFor`), `cameraGesture`, `wheelFactor`, `buildViewCube` a `cubeRegionAt`, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache`, sdílená cache `createSharedMeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor` (od M17 zaniká), od M13 `pickSketchRegion` a `pointInRegion`, od M15 `parseHexColor`, `pickHandle`, `projectHandles`, `handleBounds`, `handleHidden`, `arcPoints` a `viewChangedSince`, od M19.2 `sketchHits`, `sketchGridStep` a `gridLines` (`sketch-grid.ts`), od M22 `resolveDisplay` a `samePlan` (`display-style.ts`), od M23 `aoParameters`, `isValidAoSetting`, `AO_SETTING_RANGES` a `DEFAULT_AO_SETTINGS` (`ao-parameters.ts`), od M24 `MATERIAL_PRESETS` a `physicalColor` (`material-presets.ts`) (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
 - Testy `render` nesmí importovat `@/kernel/testing` (`FakeKernel`): `render` závisí na `kernel` jen typově a `testing.ts` otevírá jen hodnotovým závislostem ([[01-architektura]]). Sítě v testech jsou ruční, malé a záměrně s klíči ploch mimo pořadí.
-- Kód s Three.js (`Viewport`, `BodyView`, vrstvy) se ověřuje ručně na dev stránce `dev/viewport.html` a e2e testy (Playwright). Three.js ale běží i v Node, takže část kódu s ním má testy v Node: `Picker` (`picker.test.ts` s ruční sítí; od [[M19.1-opravy-z-revize|M19.1]] i hrany z více segmentů, kontrola zakrytí a `body`, `edgeIndex` a `point` v aserci, od M19.2 `isVisible`), `SketchLayer` a `HighlightLayer`, od M23 `partitionScene`, `aoExcluded` a `hideDuring` (`scene-partition.ts`). Pipeline AO (`ao-pipeline.ts`) potřebuje WebGL, ověřuje ji e2e `m23.spec.ts` a ruční kontrola.
+- Kód s Three.js (`Viewport`, `BodyView`, vrstvy) se ověřuje ručně na dev stránce `dev/viewport.html` a e2e testy (Playwright). Three.js ale běží i v Node, takže část kódu s ním má testy v Node: `Picker` (`picker.test.ts` s ruční sítí; od [[M19.1-opravy-z-revize|M19.1]] i hrany z více segmentů, kontrola zakrytí a `body`, `edgeIndex` a `point` v aserci, od M19.2 `isVisible`), `SketchLayer` a `HighlightLayer`, od M23 `partitionScene`, `aoExcluded` a `hideDuring` (`scene-partition.ts`), od M24 `withoutBackground`, `aoExcluded` se sklem, `injectAgxToneMapping` s kanárkem shader chunků, `BodyLayer` s fyzikálními materiály (sdílení podle dvojice, uvolnění při změně plánu, `setEnvironment`, `setPalette`) a `SceneHelpers.setGridVisible`. Pipeline AO (`ao-pipeline.ts`) potřebuje WebGL, ověřuje ji e2e `m23.spec.ts` a ruční kontrola.
 
 ## Otevřené otázky
 

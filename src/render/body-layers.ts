@@ -4,12 +4,14 @@
 // scene and routes picking and highlight to the main layer only.
 
 import type { Disposable } from '@/core';
-import type { BodyId } from '@/interaction';
+import type * as THREE from 'three';
+import type { BodyId, BodyMaterial } from '@/interaction';
 import type { BoundingBox, MeshOps, MeshQuality } from '@/kernel';
 import { assertUniqueIds, type ShownBody } from './body-diff';
 import { createBodyLayer, type BodyLayerInternal } from './body-layer';
 import { unionBounds } from './bounds';
 import type { DisplayPlan } from './display-style';
+import { materialPreset } from './material-presets';
 import { createSharedMeshCache } from './mesh-cache';
 import { parseHexColor, type ScenePalette } from './palette';
 import { createPicker, type Picker } from './picker';
@@ -39,6 +41,13 @@ export interface BodyLayers extends Disposable {
   setBodyVisible(body: BodyId, visible: boolean): void;
   /** Body colour (M15) for both layers; an invalid colour throws before anything changes. */
   setBodyColor(body: BodyId, color: string | null): void;
+  /**
+   * Body material (M24) for both layers; one without a preset throws before anything changes.
+   * The preview never has physical faces, so it only keeps the value.
+   */
+  setBodyMaterial(body: BodyId, material: BodyMaterial): void;
+  /** Environment map of the physical materials of the main layer only (M24). */
+  setEnvironment(envMap: THREE.Texture | null): void;
   /** Kernel instance swap (Q060): forgets the shared cache, empties both layers. */
   reset(meshes: MeshOps): void;
   /** Display plan (M22) of the main layer only: the preview looks the same in every mode. */
@@ -122,6 +131,15 @@ export function createBodyLayers(options: BodyLayersOptions): BodyLayers {
       if (color !== null) parseHexColor(color);
       main.setBodyColor(body, color);
       preview.setBodyColor(body, color);
+    },
+    setBodyMaterial(body, material) {
+      // Validated here, so an unknown material cannot change one layer and throw in the other.
+      materialPreset(material);
+      main.setBodyMaterial(body, material);
+      preview.setBodyMaterial(body, material);
+    },
+    setEnvironment(envMap) {
+      main.setEnvironment(envMap);
     },
     setDisplayPlan(plan) {
       main.setDisplayPlan(plan);

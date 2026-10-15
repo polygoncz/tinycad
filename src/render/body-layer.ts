@@ -4,13 +4,15 @@
 
 import * as THREE from 'three';
 import { assert, type Disposable } from '@/core';
-import type { BodyId } from '@/interaction';
+import type { BodyId, BodyMaterial, DEFAULT_BODY_MATERIAL } from '@/interaction';
 import type { BoundingBox, MeshOps, ShapeHandle } from '@/kernel';
 import { unionBounds } from './bounds';
 import { createBodyMaterials, createBodyView, type BodyStyle, type BodyView } from './body-view';
 import { DEFAULT_DISPLAY_STYLE, resolveDisplay, samePlan, type DisplayPlan } from './display-style';
+import { materialPreset, physicalColor, type PhysicalPreset } from './material-presets';
 import type { MeshCache } from './mesh-cache';
 import { parseHexColor, type ScenePalette } from './palette';
+import { createPhysicalMaterial } from './physical-materials';
 import { createSceneSync, type PreparedSync, type ScenePlan } from './scene-sync';
 
 export interface BodyLayer {
@@ -39,7 +41,8 @@ export interface BodyLayerInternal extends Disposable {
     bodies: readonly { readonly id: BodyId; readonly shape: ShapeHandle }[],
   ): Promise<PreparedSync>;
   /**
-   * Removes and disposes every shown body, forgets the hidden and coloured ones and invalidates
+   * Removes and disposes every shown body, forgets their visibility, colours and materials and
+   * invalidates
    * a running sync (kernel swap, an emptied preview). Requests a render only when something was
    * shown.
    */
@@ -66,6 +69,18 @@ export interface BodyLayerInternal extends Disposable {
    * The colour shows only in lit faces; in flat and hidden it waits for the return to lit.
    */
   setBodyColor(body: BodyId, color: string | null): void;
+  /**
+   * The material preset of a shown body (M24, spec 09 "Realistic"); default 'plastic'. Same rules
+   * as setBodyColor: an unknown body does nothing, a body that leaves the scene forgets its
+   * material, the same value does not render. A material without a preset throws, also for an
+   * unknown body. The material shows only in physical faces.
+   */
+  setBodyMaterial(body: BodyId, material: BodyMaterial): void;
+  /**
+   * The environment map of every physical material, also of those created later (M24). Never
+   * requests a render: the viewport sets it inside a frame.
+   */
+  setEnvironment(envMap: THREE.Texture | null): void;
   /**
    * How the bodies are drawn (spec 09, "Styl zobrazení", M22). The same plan as the last one
    * does nothing; otherwise every view switches and a render is requested. Views created later
@@ -103,6 +118,12 @@ export interface BodyLayerOptions {
   readonly initialPlan?: DisplayPlan;
 }
 
+/**
+ * The material of a body without setBodyMaterial (spec 09, "Realistic"). A copy of the document's
+ * default, which render may see only as a type: typeof keeps the two equal at compile time.
+ */
+const DEFAULT_MATERIAL: typeof DEFAULT_BODY_MATERIAL = 'plastic';
+
 /** Length of a dash and of a gap of the hidden edges in screen pixels (spec 09, "Skryté hrany"). */
 const DASH_PX = 6;
 const GAP_PX = 4;
@@ -133,6 +154,30 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
     string,
     { readonly material: THREE.MeshStandardMaterial; users: number }
   >();
+  /** Materials of shown bodies other than the default; always a subset of the keys of `views`. */
+  const bodyMaterials = new Map<BodyId, BodyMaterial>();
+  /**
+   * Physical materials by the pair (material, body colour or none), shared by the bodies of that
+   * pair, with their user count. Exist only while the plan has physical faces.
+   */
+  const physicalMaterials = new Map<
+    string,
+    {
+      readonly material: THREE.MeshPhysicalMaterial;
+      readonly preset: PhysicalPreset;
+      readonly bodyColor: number | null;
+      users: number;
+    }
+  >();
+  /**
+   * The key of the physical material each shown body holds. Every shown body while the plan has
+   * physical faces, empty otherwise.
+   */
+  const physicalKeys = new Map<BodyId, string>();
+  /** The palette for physical materials created later (plastic without a body colour). */
+  let palette = options.palette;
+  /** The environment map of setEnvironment, for physical materials created later. */
+  let environment: THREE.Texture | null = null;
   let plan = options.initialPlan ?? resolveDisplay(DEFAULT_DISPLAY_STYLE);
   /** worldPerPx of the last setPixelSize; null before the first one. */
   let pixelSize: number | null = null;
@@ -162,9 +207,65 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
     entry.material.dispose();
   }
 
+  /** The physical material of a body by its pair; the body holds it under physicalKeys. */
+  function acquirePhysical(id: BodyId): void {
+    const material = bodyMaterials.get(id) ?? DEFAULT_MATERIAL;
+    const color = colors.get(id) ?? null;
+    const key = `${material}|${color ?? ''}`;
+    physicalKeys.set(id, key);
+    const entry = physicalMaterials.get(key);
+    if (entry !== undefined) {
+      entry.users++;
+      return;
+    }
+    const preset = materialPreset(material);
+    const bodyColor = color === null ? null : parseHexColor(color);
+    physicalMaterials.set(key, {
+      material: createPhysicalMaterial(
+        preset,
+        physicalColor(preset, bodyColor, palette.face),
+        environment,
+      ),
+      preset,
+      bodyColor,
+      users: 1,
+    });
+  }
+
+  /** The last user of a physical material disposes it. */
+  function releasePhysical(key: string): void {
+    const entry = physicalMaterials.get(key);
+    assert(entry !== undefined, `No physical material for ${key}`);
+    entry.users--;
+    if (entry.users > 0) return;
+    physicalMaterials.delete(key);
+    entry.material.dispose();
+  }
+
+  /**
+   * After a change of the colour or the material of a shown body in physical faces: the body
+   * takes the material of its new pair. Acquire before release, so a material is never disposed
+   * while it is being handed over.
+   */
+  function rebindPhysical(view: BodyView): void {
+    if (plan.faces !== 'physical') return;
+    const old = physicalKeys.get(view.id);
+    assert(old !== undefined, `Body ${view.id} holds no physical material`);
+    acquirePhysical(view.id);
+    view.faces.material = faceMaterial(view.id);
+    releasePhysical(old);
+  }
+
   /** The face material of a body by the plan; the colour material stays acquired in any case. */
   function faceMaterial(id: BodyId): THREE.Material {
     switch (plan.faces) {
+      case 'physical': {
+        const key = physicalKeys.get(id);
+        assert(key !== undefined, `Body ${id} holds no physical material`);
+        const entry = physicalMaterials.get(key);
+        assert(entry !== undefined, `No physical material for ${key}`);
+        return entry.material;
+      }
       case 'lit': {
         const color = colors.get(id);
         if (color === undefined) return materials.faces;
@@ -194,10 +295,11 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
    * Swaps the scene in one synchronous block, so no frame shows half of the old and half of the
    * new model. Also called outside sync: clear (and so dispose) removes every shown body.
    */
-  function apply(plan: ScenePlan): void {
-    /** Colours of removed views, released after the adds (see below). */
+  function apply(scenePlan: ScenePlan): void {
+    /** Colours and physical materials of removed views, released after the adds (see below). */
     const released: string[] = [];
-    for (const id of plan.remove) {
+    const releasedPhysical: string[] = [];
+    for (const id of scenePlan.remove) {
       const view = views.get(id);
       if (view === undefined) continue;
       views.delete(id);
@@ -205,8 +307,13 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
       view.dispose();
       const color = colors.get(id);
       if (color !== undefined) released.push(color);
+      const key = physicalKeys.get(id);
+      if (key !== undefined) {
+        physicalKeys.delete(id);
+        releasedPhysical.push(key);
+      }
     }
-    for (const { id, mesh } of plan.add) {
+    for (const { id, mesh } of scenePlan.add) {
       // SceneSync removes a body before it adds it again; a second view would leak.
       assert(!views.has(id), `Body ${id} is already shown`);
       const view = createBodyView(id, mesh, materials);
@@ -215,6 +322,8 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
       // ... and keeps its colour.
       const color = colors.get(id);
       if (color !== undefined) acquireColor(color);
+      // ... and its material.
+      if (plan.faces === 'physical') acquirePhysical(id);
       applyPlan(view);
       views.set(id, view);
       group.add(view.object);
@@ -222,8 +331,10 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
     // After the adds: a body removed and added again in one plan is still in the scene, and
     // its colour material is reused instead of disposed and created again.
     for (const color of released) releaseColor(color);
+    for (const key of releasedPhysical) releasePhysical(key);
     for (const id of hidden) if (!views.has(id)) hidden.delete(id);
     for (const id of colors.keys()) if (!views.has(id)) colors.delete(id);
+    for (const id of bodyMaterials.keys()) if (!views.has(id)) bodyMaterials.delete(id);
     options.afterApply?.();
     requestRender();
   }
@@ -247,8 +358,13 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
     prepare(bodies) {
       return sceneSync.prepare(bodies);
     },
-    setPalette(palette) {
-      materials.setPalette(palette);
+    setPalette(next) {
+      palette = next;
+      materials.setPalette(next);
+      // Only plastic without a body colour takes its colour from the palette.
+      for (const { material, preset, bodyColor } of physicalMaterials.values()) {
+        if (preset.baseColor === null && bodyColor === null) material.color.setHex(next.face);
+      }
     },
     setBodyVisible(body, visible) {
       const view = views.get(body);
@@ -271,19 +387,52 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
       if (color === null) colors.delete(body);
       else colors.set(body, color);
       view.faces.material = faceMaterial(body);
+      // The physical material follows the new pair; the old colour is still acquired here.
+      rebindPhysical(view);
       if (current !== null) releaseColor(current);
       requestRender();
+    },
+    setBodyMaterial(body, material) {
+      // Validates before anything changes, also for an unknown body.
+      materialPreset(material);
+      const view = views.get(body);
+      if (view === undefined) return;
+      const current = bodyMaterials.get(body) ?? DEFAULT_MATERIAL;
+      if (current === material) return;
+      if (material === DEFAULT_MATERIAL) bodyMaterials.delete(body);
+      else bodyMaterials.set(body, material);
+      rebindPhysical(view);
+      requestRender();
+    },
+    setEnvironment(envMap) {
+      if (envMap === environment) return;
+      // A map appearing or disappearing changes the shader program (needsUpdate).
+      const programChanged = (envMap === null) !== (environment === null);
+      environment = envMap;
+      for (const { material } of physicalMaterials.values()) {
+        material.envMap = envMap;
+        if (programChanged) material.needsUpdate = true;
+      }
     },
     setDisplayPlan(next) {
       if (samePlan(plan, next)) return;
       const opacityChanged = plan.faceOpacity !== next.faceOpacity;
+      const wasPhysical = plan.faces === 'physical';
       plan = next;
+      const isPhysical = plan.faces === 'physical';
+      // Physical materials exist only in physical faces: created on the way in ...
+      if (isPhysical && !wasPhysical) for (const id of views.keys()) acquirePhysical(id);
       if (opacityChanged) {
         applyOpacity(materials.faces, plan.faceOpacity);
         for (const { material } of colorMaterials.values())
           applyOpacity(material, plan.faceOpacity);
       }
       for (const view of views.values()) applyPlan(view);
+      // ... and released on the way out, once no view uses them.
+      if (wasPhysical && !isPhysical) {
+        for (const key of physicalKeys.values()) releasePhysical(key);
+        physicalKeys.clear();
+      }
       requestRender();
     },
     setPixelSize(worldPerPx) {

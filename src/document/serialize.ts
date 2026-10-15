@@ -3,7 +3,7 @@ import type { RegistryReader, Result } from '@/core';
 import { createDocument } from './cad-document';
 import type { DocumentReader, DocumentWriter } from './document';
 import { isJsonObject } from './json';
-import { isBodyColor } from './model';
+import { BODY_MATERIALS, DEFAULT_BODY_MATERIAL, isBodyColor, isBodyMaterial } from './model';
 import type {
   BodyId,
   BodyMeta,
@@ -154,12 +154,12 @@ function readBodyMeta(raw: unknown, path: string, at: At): BodyMeta | undefined 
   }
   let valid = true;
   for (const key of Object.keys(raw)) {
-    if (key !== 'name' && key !== 'hidden' && key !== 'color') {
+    if (key !== 'name' && key !== 'hidden' && key !== 'color' && key !== 'material') {
       at(`${path}.${key}`, 'Unexpected property');
       valid = false;
     }
   }
-  const { name, hidden, color } = raw;
+  const { name, hidden, color, material } = raw;
   if (name !== undefined && !isNonEmptyString(name)) {
     at(`${path}.name`, 'Must be a non-empty string');
     valid = false;
@@ -172,11 +172,16 @@ function readBodyMeta(raw: unknown, path: string, at: At): BodyMeta | undefined 
     at(`${path}.color`, "Must be a color '#rrggbb' in lower case");
     valid = false;
   }
+  if (material !== undefined && !isBodyMaterial(material)) {
+    at(`${path}.material`, `Must be one of ${BODY_MATERIALS.join(', ')}`);
+    valid = false;
+  }
   if (!valid) return undefined;
   const meta: BodyMeta = {
     ...(isNonEmptyString(name) ? { name } : {}),
     ...(hidden === true ? { hidden } : {}),
     ...(isBodyColor(color) ? { color } : {}),
+    ...(isBodyMaterial(material) && material !== DEFAULT_BODY_MATERIAL ? { material } : {}),
   };
   return Object.keys(meta).length === 0 ? undefined : meta;
 }

@@ -20,6 +20,8 @@ export const GRID_BOUNDS: BoundingBox = {
 export interface SceneHelpers extends Disposable {
   /** Recolours the grid in place (Q072); the caller requests the render. */
   setPalette(palette: ScenePalette): void;
+  /** Shows or hides the grid (hidden in Realistic, M24); the caller requests the render. */
+  setGridVisible(visible: boolean): void;
   /** The grid; exposed for tests of its colours. */
   readonly grid: THREE.GridHelper;
 }
@@ -59,6 +61,9 @@ export function createSceneHelpers(
     grid,
     setPalette(next: ScenePalette): void {
       setGridColors(grid, next);
+    },
+    setGridVisible(visible: boolean): void {
+      grid.visible = visible;
     },
     dispose(): void {
       scene.remove(grid, hemisphere);

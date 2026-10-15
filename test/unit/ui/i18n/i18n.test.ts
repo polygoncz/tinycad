@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BUILT_IN_OPERATION_TYPES, BUILT_IN_PLUGINS } from '@/app';
+import { BODY_MATERIALS, BUILT_IN_OPERATION_TYPES, BUILT_IN_PLUGINS } from '@/app';
 import type { ParamIssue } from '@/document';
 import { cs } from '@/ui/i18n/cs';
 import { en } from '@/ui/i18n/en';
@@ -176,6 +176,14 @@ const VIEW_CUBE_KEYS = [
 // The aria-label of the value field of the manipulator HUD (M19, spec 11 rule 8).
 const MANIPULATOR_KEYS = ['manipulator.field.label'];
 
+// The material select of a body row in the Browser (M24, Q078).
+const MATERIAL_KEYS = [
+  'displayStyle.mode.realistic',
+  'browser.material',
+  ...BODY_MATERIALS.map((material) => `bodyMaterial.${material}`),
+  'body.setMaterial',
+];
+
 const PLUGIN = {
   cs: { 'box.label': 'Kvádr', 'box.width': 'Šířka' },
   en: { 'box.label': 'Box', 'box.width': 'Width' },
@@ -217,6 +225,7 @@ describe('built-in dictionaries', () => {
     ...FILE_KEYS,
     ...VIEW_CUBE_KEYS,
     ...MANIPULATOR_KEYS,
+    ...MATERIAL_KEYS,
     // The types of the built-in operations (OP_VERSION of ops, through app): the dispatcher
     // writes the type as the label of an entry without one, so the history panel translates it
     // (spec 11, M15); a new type fails this test until it has a text.
@@ -231,6 +240,17 @@ describe('built-in dictionaries', () => {
       Object.fromEntries(BUILT_IN_PLUGINS.flatMap((p) => Object.entries(p.messages?.[lang] ?? {})));
     const plugins = { cs: merged('cs'), en: merged('en') };
     expect(() => createUiI18n(plugins, { storage: null, language: 'cs' })).not.toThrow();
+  });
+
+  it('names the body materials and their select (M24)', () => {
+    const names = (dict: Readonly<Record<string, string>>) =>
+      BODY_MATERIALS.map((material) => dict[`bodyMaterial.${material}`]);
+    expect(names(cs)).toEqual(['Plast', 'Hliník', 'Ocel', 'Mosaz', 'Sklo', 'Guma']);
+    expect(names(en)).toEqual(['Plastic', 'Aluminium', 'Steel', 'Brass', 'Glass', 'Rubber']);
+    expect(cs['browser.material']).toBe('Materiál {name}');
+    expect(en['browser.material']).toBe('Material of {name}');
+    expect(cs['body.setMaterial']).toBe('Materiál tělesa');
+    expect(en['body.setMaterial']).toBe('Body material');
   });
 
   it('the unresolved reference speaks of any item, not only a body (R82)', () => {

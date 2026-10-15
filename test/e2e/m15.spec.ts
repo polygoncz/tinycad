@@ -36,6 +36,14 @@ async function downloadedText(download: Download): Promise<string> {
   return readFile(await download.path(), 'utf8');
 }
 
+/**
+ * The row of a body in the Browser. Its colour field is shown only on the active row (hovered,
+ * focused or selected; spec 11), so the row is hovered before the field is used.
+ */
+function browserBody(page: Page, name: string): Locator {
+  return page.getByRole('treeitem').filter({ has: page.getByText(name, { exact: true }) });
+}
+
 /** The rows of the history panel, newest first. */
 function historyRows(page: Page): Locator {
   return page.getByRole('complementary', { name: 'Historie úprav' }).getByRole('listitem');
@@ -76,6 +84,7 @@ test('download STEP, history panel, body colour, export and import of the docume
 
   // 3. The colour of the first body in the Browser; it survives a reload.
   const color = page.getByLabel('Barva Těleso 1', { exact: true });
+  await browserBody(page, 'Těleso 1').hover();
   await color.fill('#ff0000');
   await expect(color).toHaveValue('#ff0000');
   await reloadWhenSaved(page);

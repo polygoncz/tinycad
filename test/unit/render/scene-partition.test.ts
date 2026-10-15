@@ -1,7 +1,12 @@
 import * as THREE from 'three';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { describe, expect, it } from 'vitest';
-import { aoExcluded, hideDuring, partitionScene } from '@/render/scene-partition';
+import {
+  aoExcluded,
+  hideDuring,
+  partitionScene,
+  withoutBackground,
+} from '@/render/scene-partition';
 
 describe('partitionScene', () => {
   it('takes the model only from the given groups and the rest of the children as interaction', () => {
@@ -50,6 +55,38 @@ describe('aoExcluded', () => {
     const root = new THREE.Group();
     root.add(new THREE.Mesh(), new THREE.LineSegments());
     expect(aoExcluded([root])).toEqual([]);
+  });
+
+  it('finds meshes with a transmissive material (glass, M24), not opaque physical ones', () => {
+    const root = new THREE.Group();
+    const glass = new THREE.Mesh(
+      new THREE.BufferGeometry(),
+      new THREE.MeshPhysicalMaterial({ transmission: 1 }),
+    );
+    const steel = new THREE.Mesh(
+      new THREE.BufferGeometry(),
+      new THREE.MeshPhysicalMaterial({ transmission: 0, metalness: 1 }),
+    );
+    const inner = new THREE.Group();
+    const deepGlass = new THREE.Mesh(
+      new THREE.BufferGeometry(),
+      new THREE.MeshPhysicalMaterial({ transmission: 0.5 }),
+    );
+    inner.add(deepGlass);
+    root.add(glass, steel, new THREE.Mesh(), inner);
+
+    expect(aoExcluded([root])).toEqual([glass, deepGlass]);
+  });
+
+  it('finds a mesh with a transmissive material among several', () => {
+    const root = new THREE.Group();
+    const multi = new THREE.Mesh(new THREE.BufferGeometry(), [
+      new THREE.MeshStandardMaterial(),
+      new THREE.MeshPhysicalMaterial({ transmission: 1 }),
+    ]);
+    root.add(multi);
+
+    expect(aoExcluded([root])).toEqual([multi]);
   });
 
   it('relies on GTAOPass not hiding LineSegments2 by itself (it has no isLine2)', () => {
@@ -108,5 +145,43 @@ describe('hideDuring', () => {
 
     expect(during).toBe(false);
     expect(a.visible).toBe(true);
+  });
+});
+
+describe('withoutBackground', () => {
+  it('clears the background during fn, restores it and returns the result', () => {
+    const scene = new THREE.Scene();
+    const background = new THREE.Texture();
+    scene.background = background;
+    let during: unknown = undefined;
+
+    const result = withoutBackground(scene, () => {
+      during = scene.background;
+      return 7;
+    });
+
+    expect(during).toBeNull();
+    expect(result).toBe(7);
+    expect(scene.background).toBe(background);
+  });
+
+  it('restores the background when fn throws and passes the error on', () => {
+    const scene = new THREE.Scene();
+    const background = new THREE.Color(0x123456);
+    scene.background = background;
+    const error = new Error('boom');
+
+    expect(() =>
+      withoutBackground(scene, () => {
+        throw error;
+      }),
+    ).toThrow(error);
+    expect(scene.background).toBe(background);
+  });
+
+  it('keeps a scene without a background without one', () => {
+    const scene = new THREE.Scene();
+    withoutBackground(scene, () => undefined);
+    expect(scene.background).toBeNull();
   });
 });

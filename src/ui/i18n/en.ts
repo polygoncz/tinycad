@@ -233,6 +233,16 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'browser.color': 'Color of {name}',
   'browser.defaultColor': 'Default color',
 
+  // Body material in the Browser (M24, Q078).
+  'browser.material': 'Material of {name}',
+  'browser.materialCurrent': 'Material of {name}: {material}',
+  'bodyMaterial.plastic': 'Plastic',
+  'bodyMaterial.aluminium': 'Aluminium',
+  'bodyMaterial.steel': 'Steel',
+  'bodyMaterial.brass': 'Brass',
+  'bodyMaterial.glass': 'Glass',
+  'bodyMaterial.rubber': 'Rubber',
+
   // View cube (M17): face labels and the names of the arrows.
   'viewCube.front': 'Front',
   'viewCube.back': 'Back',
@@ -253,6 +263,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'displayStyle.button': 'Display style',
   'displayStyle.current': 'Display style: {mode}',
   'displayStyle.mode.shaded': 'Shaded',
+  'displayStyle.mode.realistic': 'Realistic',
   'displayStyle.mode.hiddenRemoved': 'Hidden lines removed',
   'displayStyle.mode.hiddenVisible': 'Hidden lines visible',
   'displayStyle.mode.wireframe': 'Wireframe',
@@ -287,6 +298,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'body.rename': 'Rename body',
   'body.setVisible': 'Body visibility',
   'body.setColor': 'Body color',
+  'body.setMaterial': 'Body material',
   'document.rename': 'Rename document',
   batch: 'Several changes',
 });

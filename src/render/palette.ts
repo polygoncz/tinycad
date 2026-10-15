@@ -34,12 +34,15 @@ export interface ScenePalette {
   readonly hiddenEdge: number;
   /** Lines of the triangulation (M22, spec 09 "Styl zobrazení"). */
   readonly meshLine: number;
+  /** Vertical gradient behind the bodies in Realistic (M24, spec 09 "Realistic"). */
+  readonly realisticBackground: readonly [top: number, bottom: number];
 }
 
 function freezePalette(palette: ScenePalette): ScenePalette {
   Object.freeze(palette.axes);
   Object.freeze(palette.grid);
   Object.freeze(palette.viewCube);
+  Object.freeze(palette.realisticBackground);
   return Object.freeze(palette);
 }
 
@@ -60,6 +63,7 @@ export const LIGHT_PALETTE: ScenePalette = freezePalette({
   viewCube: [0xffffff, 0x374151],
   hiddenEdge: 0x8b929c,
   meshLine: 0x8e99a8,
+  realisticBackground: [0xf4f6f9, 0xd9dee5],
 });
 
 /** By the M10 mockup (spec 11, "Rozvržení"). */
@@ -81,6 +85,7 @@ export const DARK_PALETTE: ScenePalette = freezePalette({
   viewCube: [0x4b4f57, 0xe5e7eb],
   hiddenEdge: 0x6b7280,
   meshLine: 0x5a7fb0,
+  realisticBackground: [0x3a3f47, 0x1c1f24],
 });
 
 /**

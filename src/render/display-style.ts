@@ -3,11 +3,12 @@
 // by the mode, tested in Node.
 
 /** How the bodies are drawn. */
-export type DisplayMode = 'shaded' | 'hiddenRemoved' | 'hiddenVisible' | 'wireframe';
+export type DisplayMode = 'shaded' | 'realistic' | 'hiddenRemoved' | 'hiddenVisible' | 'wireframe';
 
 /** The modes in menu order. */
 export const DISPLAY_MODES: readonly DisplayMode[] = Object.freeze([
   'shaded',
+  'realistic',
   'hiddenRemoved',
   'hiddenVisible',
   'wireframe',
@@ -25,7 +26,7 @@ export interface DisplayStyle {
   readonly transparent: boolean;
   /** Lines of the triangulation; applies in every mode. */
   readonly mesh: boolean;
-  /** Ambient occlusion; applies only in opaque 'shaded'. */
+  /** Ambient occlusion; applies in opaque 'shaded' and in 'realistic'. */
   readonly ao: boolean;
 }
 
@@ -42,7 +43,8 @@ export const TRANSPARENT_FACE_OPACITY = 0.35;
 
 /** The flat plan: the only thing render decides by. Frozen. */
 export interface DisplayPlan {
-  readonly faces: 'lit' | 'flat' | 'hidden';
+  /** 'physical': materials by the body material preset (spec 09, "Realistic"). */
+  readonly faces: 'lit' | 'flat' | 'hidden' | 'physical';
   /** 1, or TRANSPARENT_FACE_OPACITY. */
   readonly faceOpacity: number;
   /** Visible B-rep edges. */
@@ -54,6 +56,8 @@ export interface DisplayPlan {
   readonly xray: boolean;
   /** The AO pass (spec 09, "Víceprůchodové vykreslování"). */
   readonly ao: boolean;
+  /** The grid and a background colour, or the environment of Realistic (spec 09, "Realistic"). */
+  readonly scene: 'studio' | 'realistic';
 }
 
 /** The plan of a style by the decision table of spec 09. */
@@ -71,6 +75,20 @@ export function resolveDisplay(style: DisplayStyle): DisplayPlan {
         xray: style.transparent,
         // Transparent faces write no depth: AO from the depth would draw dark blots under them.
         ao: style.ao && !style.transparent,
+        scene: 'studio',
+      });
+    case 'realistic':
+      // No edges, and transparency only as the glass material: style.edges and style.transparent
+      // are ignored here.
+      return Object.freeze({
+        faces: 'physical',
+        faceOpacity: 1,
+        edges: false,
+        hiddenEdges: 'none',
+        meshLines,
+        xray: false,
+        ao: style.ao,
+        scene: 'realistic',
       });
     case 'hiddenRemoved':
       return Object.freeze({
@@ -81,6 +99,7 @@ export function resolveDisplay(style: DisplayStyle): DisplayPlan {
         meshLines,
         xray: false,
         ao: false,
+        scene: 'studio',
       });
     case 'hiddenVisible':
       return Object.freeze({
@@ -91,6 +110,7 @@ export function resolveDisplay(style: DisplayStyle): DisplayPlan {
         meshLines,
         xray: true,
         ao: false,
+        scene: 'studio',
       });
     case 'wireframe':
       return Object.freeze({
@@ -101,8 +121,17 @@ export function resolveDisplay(style: DisplayStyle): DisplayPlan {
         meshLines,
         xray: true,
         ao: false,
+        scene: 'studio',
       });
   }
+}
+
+/**
+ * Whether the AO pass really draws in the style: the ao of its plan. The UI derives from it
+ * whether AO draws and whether the AO toggle means something, without repeating the table.
+ */
+export function displayDrawsAo(style: DisplayStyle): boolean {
+  return resolveDisplay(style).ao;
 }
 
 /**

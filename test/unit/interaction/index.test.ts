@@ -7,6 +7,9 @@ describe('interaction public API', () => {
     expect(Object.keys(interaction).sort()).toEqual(
       [
         'ACTION_IDS',
+        'BODY_MATERIALS',
+        'DEFAULT_BODY_MATERIAL',
+        'isBodyMaterial',
         'ALL_MODES',
         'CLICK_TOLERANCE_PX',
         'isPlainEscape',

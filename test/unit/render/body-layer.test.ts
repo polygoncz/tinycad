@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { describe, expect, it, vi } from 'vitest';
-import type { BodyId } from '@/interaction';
+import type { BodyId, BodyMaterial } from '@/interaction';
 import type { ShapeHandle } from '@/kernel';
 import { createBodyLayer } from '@/render/body-layer';
 import type { BodyStyle } from '@/render/body-view';
@@ -12,6 +12,7 @@ import {
   TRANSPARENT_FACE_OPACITY,
   type DisplayStyle,
 } from '@/render/display-style';
+import { MATERIAL_PRESETS } from '@/render/material-presets';
 import { createSharedMeshCache } from '@/render/mesh-cache';
 import { DARK_PALETTE, LIGHT_PALETTE } from '@/render/palette';
 import { boxMeshes } from '@/render/testing';
@@ -831,5 +832,194 @@ describe('BodyLayer display plan (M22)', () => {
     const spy = vi.spyOn(material, 'dispose');
     layer.dispose();
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('BodyLayer physical materials (M24)', () => {
+  const SHADED = resolveDisplay(DEFAULT_DISPLAY_STYLE);
+  const REALISTIC = resolveDisplay({ ...DEFAULT_DISPLAY_STYLE, mode: 'realistic' });
+
+  function physicalOf(layer: Awaited<ReturnType<typeof setup>>['layer'], id: BodyId) {
+    const material = layer.views.get(id)?.faces.material;
+    if (!(material instanceof THREE.MeshPhysicalMaterial)) throw new Error('physical material');
+    return material;
+  }
+
+  async function realistic() {
+    const context = await setup();
+    context.layer.setDisplayPlan(REALISTIC);
+    context.requestRender.mockClear();
+    return context;
+  }
+
+  it('physical faces give a body a material by its preset and colour', async () => {
+    const { layer } = await realistic();
+    // Plastic by default, in the face colour of the palette.
+    const plastic = physicalOf(layer, A);
+    expect(plastic.metalness).toBe(MATERIAL_PRESETS.plastic.metalness);
+    expect(plastic.roughness).toBe(MATERIAL_PRESETS.plastic.roughness);
+    expect(plastic.color.getHex()).toBe(LIGHT_PALETTE.face);
+    layer.setBodyMaterial(A, 'brass');
+    const brass = physicalOf(layer, A);
+    expect(brass.metalness).toBe(MATERIAL_PRESETS.brass.metalness);
+    expect(brass.color.getHex()).toBe(MATERIAL_PRESETS.brass.baseColor);
+    // The body colour tints the preset.
+    layer.setBodyColor(A, '#ff0000');
+    const red = physicalOf(layer, A);
+    expect(red.metalness).toBe(MATERIAL_PRESETS.brass.metalness);
+    expect(red.color.getHex()).toBe(0xff0000);
+  });
+
+  it('the material set in another plan shows when the plan turns physical', async () => {
+    const { layer } = await setup();
+    layer.setBodyMaterial(A, 'steel');
+    expect(layer.views.get(A)?.faces.material).not.toBeInstanceOf(THREE.MeshPhysicalMaterial);
+    layer.setDisplayPlan(REALISTIC);
+    expect(physicalOf(layer, A).color.getHex()).toBe(MATERIAL_PRESETS.steel.baseColor);
+  });
+
+  it('bodies with the same pair share the material, the last one releases it', async () => {
+    const { layer, b } = await realistic();
+    layer.setBodyMaterial(A, 'steel');
+    layer.setBodyMaterial(B, 'steel');
+    const steel = physicalOf(layer, A);
+    expect(physicalOf(layer, B)).toBe(steel);
+    const dispose = vi.spyOn(steel, 'dispose');
+    await layer.sync([{ id: B, shape: b }]);
+    expect(dispose).not.toHaveBeenCalled();
+    expect(physicalOf(layer, B)).toBe(steel);
+    await layer.sync([]);
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('a different body colour makes a different material', async () => {
+    const { layer } = await realistic();
+    layer.setBodyColor(A, '#ff0000');
+    expect(physicalOf(layer, A)).not.toBe(physicalOf(layer, B));
+  });
+
+  it('switching the plan away from physical releases every physical material', async () => {
+    const { layer, requestRender } = await realistic();
+    layer.setBodyMaterial(A, 'glass');
+    const glass = vi.spyOn(physicalOf(layer, A), 'dispose');
+    const plastic = vi.spyOn(physicalOf(layer, B), 'dispose');
+    requestRender.mockClear();
+    layer.setDisplayPlan(SHADED);
+    expect(glass).toHaveBeenCalledTimes(1);
+    expect(plastic).toHaveBeenCalledTimes(1);
+    expect(materialsOf(layer, A).faces.color.getHex()).toBe(LIGHT_PALETTE.face);
+    expect(layer.views.get(A)?.faces.material).not.toBeInstanceOf(THREE.MeshPhysicalMaterial);
+    expect(requestRender).toHaveBeenCalledTimes(1);
+  });
+
+  it('a kept body keeps its material over a sync with a new handle, a removed one forgets it', async () => {
+    const { layer, box, a, b } = await realistic();
+    layer.setBodyMaterial(A, 'rubber');
+    const rubber = physicalOf(layer, A);
+    await layer.sync([
+      { id: A, shape: box() },
+      { id: B, shape: b },
+    ]);
+    expect(physicalOf(layer, A)).toBe(rubber);
+    await layer.sync([{ id: B, shape: b }]);
+    await layer.sync([
+      { id: A, shape: a },
+      { id: B, shape: b },
+    ]);
+    expect(physicalOf(layer, A)).toBe(physicalOf(layer, B));
+    expect(physicalOf(layer, A).color.getHex()).toBe(LIGHT_PALETTE.face);
+  });
+
+  it('a body that is not in the layer yet is dropped', async () => {
+    const { layer, requestRender, a, b } = await realistic();
+    const unknown = body('nope');
+    layer.setBodyMaterial(unknown, 'brass');
+    expect(requestRender).not.toHaveBeenCalled();
+    await layer.sync([
+      { id: A, shape: a },
+      { id: B, shape: b },
+      { id: unknown, shape: a },
+    ]);
+    expect(physicalOf(layer, unknown)).toBe(physicalOf(layer, A));
+  });
+
+  it('an unknown material throws and changes nothing', async () => {
+    const { layer, requestRender } = await realistic();
+    const before = physicalOf(layer, A);
+    // A value from outside the type, as a corrupt input would bring it.
+    const wood = 'wood' as BodyMaterial;
+    expect(() => {
+      layer.setBodyMaterial(A, wood);
+    }).toThrow();
+    expect(() => {
+      layer.setBodyMaterial(body('nope'), wood);
+    }).toThrow();
+    expect(physicalOf(layer, A)).toBe(before);
+    expect(requestRender).not.toHaveBeenCalled();
+  });
+
+  it('the same value does not render, another one does', async () => {
+    const { layer, requestRender } = await realistic();
+    layer.setBodyMaterial(A, 'plastic');
+    expect(requestRender).not.toHaveBeenCalled();
+    layer.setBodyMaterial(A, 'steel');
+    layer.setBodyMaterial(A, 'steel');
+    expect(requestRender).toHaveBeenCalledTimes(1);
+    // Outside the physical plan the change is remembered and rendered too.
+    layer.setDisplayPlan(SHADED);
+    requestRender.mockClear();
+    layer.setBodyMaterial(A, 'brass');
+    expect(requestRender).toHaveBeenCalledTimes(1);
+  });
+
+  it('switching materials releases the old one', async () => {
+    const { layer } = await realistic();
+    layer.setBodyMaterial(A, 'steel');
+    const steel = vi.spyOn(physicalOf(layer, A), 'dispose');
+    layer.setBodyMaterial(A, 'brass');
+    expect(steel).toHaveBeenCalledTimes(1);
+  });
+
+  it('setEnvironment sets the envMap of the existing and of later physical materials', async () => {
+    const { layer } = await realistic();
+    const env = new THREE.Texture();
+    layer.setEnvironment(env);
+    expect(physicalOf(layer, A).envMap).toBe(env);
+    layer.setBodyMaterial(A, 'aluminium');
+    expect(physicalOf(layer, A).envMap).toBe(env);
+    layer.setDisplayPlan(SHADED);
+    layer.setDisplayPlan(REALISTIC);
+    expect(physicalOf(layer, B).envMap).toBe(env);
+    layer.setEnvironment(null);
+    expect(physicalOf(layer, A).envMap).toBeNull();
+  });
+
+  it('setPalette recolours plastic without a body colour only', async () => {
+    const { layer } = await realistic();
+    layer.setBodyMaterial(A, 'steel');
+    layer.setPalette(DARK_PALETTE);
+    expect(physicalOf(layer, B).color.getHex()).toBe(DARK_PALETTE.face);
+    expect(physicalOf(layer, A).color.getHex()).toBe(MATERIAL_PRESETS.steel.baseColor);
+    layer.setBodyMaterial(A, 'plastic');
+    layer.setBodyColor(A, '#ff0000');
+    layer.setPalette(LIGHT_PALETTE);
+    expect(physicalOf(layer, A).color.getHex()).toBe(0xff0000);
+    expect(physicalOf(layer, B).color.getHex()).toBe(LIGHT_PALETTE.face);
+    // A physical material created after the change takes the current palette.
+    layer.setPalette(DARK_PALETTE);
+    layer.setDisplayPlan(SHADED);
+    layer.setDisplayPlan(REALISTIC);
+    expect(physicalOf(layer, B).color.getHex()).toBe(DARK_PALETTE.face);
+  });
+
+  it('clear and dispose release the physical materials', async () => {
+    const { layer } = await realistic();
+    const cleared = vi.spyOn(physicalOf(layer, A), 'dispose');
+    layer.clear();
+    expect(cleared).toHaveBeenCalledTimes(1);
+    const other = await realistic();
+    const disposed = vi.spyOn(physicalOf(other.layer, A), 'dispose');
+    other.layer.dispose();
+    expect(disposed).toHaveBeenCalledTimes(1);
   });
 });

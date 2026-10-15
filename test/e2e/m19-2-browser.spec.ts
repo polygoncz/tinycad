@@ -57,4 +57,37 @@ test('the tree goes from the keyboard: Tab, arrows, Enter renames a body, Escape
   await expect(field).toHaveCount(0);
   await expect(body).toBeFocused();
   await expect(body).toContainText('Těleso 1');
+
+  // The colour and material controls of a body are shown only on the active row (spec 11): the
+  // focused row shows them and Tab goes from the row into them; without focus, hover or selection
+  // they are hidden.
+  const color = page.getByLabel('Barva Těleso 1', { exact: true });
+  const material = page.getByRole('button', { name: 'Materiál Těleso 1: Plast', exact: true });
+  await expect(color).toBeVisible();
+  await expect(material).toBeVisible();
+  // WebKit leaves <input type="color"> out of the tab order even with Option+Tab, so there Tab
+  // goes from the row straight to the material button.
+  if (browserName !== 'webkit') {
+    await page.keyboard.press('Tab');
+    await expect(color).toBeFocused();
+  }
+  await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+  await expect(material).toBeFocused();
+  // Enter opens the menu with the focus on the checked material, the arrows move it and Esc
+  // closes the menu without a choice, the focus back on the button (spec 11, "Materiál tělesa").
+  await page.keyboard.press('Enter');
+  const menu = page.getByRole('menu', { name: 'Materiál Těleso 1', exact: true });
+  await expect(menu.getByRole('menuitemradio', { name: 'Plast', exact: true })).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(menu.getByRole('menuitemradio', { name: 'Hliník', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await expect(material).toBeFocused();
+  await material.blur();
+  await page.mouse.move(0, 0);
+  await expect(color).toBeHidden();
+  await expect(material).toBeHidden();
+  await body.hover();
+  await expect(color).toBeVisible();
+  await expect(material).toBeVisible();
 });

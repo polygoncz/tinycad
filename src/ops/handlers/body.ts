@@ -1,10 +1,29 @@
+import { DEFAULT_BODY_MATERIAL } from '@/document';
+import type { BodyMeta } from '@/document';
 import type { OpHandler } from '../op-handler';
 import { OP_VERSION } from '../operation';
-import type { BodyRenameOp, BodySetColorOp, BodySetVisibleOp } from '../operation';
-import { bodyColorOrNull, bodyIdText, boolean, string, validateShape } from './shape';
+import type {
+  BodyRenameOp,
+  BodySetColorOp,
+  BodySetMaterialOp,
+  BodySetVisibleOp,
+} from '../operation';
+import { bodyColorOrNull, bodyIdText, bodyMaterial, boolean, string, validateShape } from './shape';
 
 // Body metadata (M11, spec 03). The document does not know bodies, so a body without metadata,
 // even one no feature produces, is no error. The rollback bar never moves here.
+// Every apply spreads the current metadata and overrides only its own field, so a field added
+// later (material in M24) survives; setBodyMeta keeps the canonical form.
+
+/**
+ * The metadata without one field, every other field kept. Dropping the key rather than setting
+ * it to undefined, which exactOptionalPropertyTypes refuses.
+ */
+function omit<K extends keyof BodyMeta>(meta: BodyMeta, key: K): Omit<BodyMeta, K> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the binding only drops the key from rest
+  const { [key]: _dropped, ...rest } = meta;
+  return rest;
+}
 
 const rename: OpHandler<BodyRenameOp> = {
   type: 'body.rename',
@@ -32,12 +51,8 @@ const setVisible: OpHandler<BodySetVisibleOp> = {
     visible: doc.bodyMeta(op.body).hidden !== true,
   }),
   apply: (doc, op) => {
-    const { name, color } = doc.bodyMeta(op.body);
-    doc.setBodyMeta(op.body, {
-      ...(name === undefined ? {} : { name }),
-      ...(op.visible ? {} : { hidden: true }),
-      ...(color === undefined ? {} : { color }),
-    });
+    const rest = omit(doc.bodyMeta(op.body), 'hidden');
+    doc.setBodyMeta(op.body, op.visible ? rest : { ...rest, hidden: true });
   },
   validate: validateShape({ body: bodyIdText, visible: boolean }),
 };
@@ -53,14 +68,26 @@ const setColor: OpHandler<BodySetColorOp> = {
     color: doc.bodyMeta(op.body).color ?? null,
   }),
   apply: (doc, op) => {
-    const { name, hidden } = doc.bodyMeta(op.body);
-    doc.setBodyMeta(op.body, {
-      ...(name === undefined ? {} : { name }),
-      ...(hidden === undefined ? {} : { hidden }),
-      ...(op.color === null ? {} : { color: op.color }),
-    });
+    const rest = omit(doc.bodyMeta(op.body), 'color');
+    doc.setBodyMeta(op.body, op.color === null ? rest : { ...rest, color: op.color });
   },
   validate: validateShape({ body: bodyIdText, color: bodyColorOrNull }),
 };
 
-export const bodyHandlers: readonly OpHandler[] = [rename, setVisible, setColor];
+// The same material is a valid operation too; 'plastic' is dropped by the canonical form.
+const setMaterial: OpHandler<BodySetMaterialOp> = {
+  type: 'body.setMaterial',
+  version: OP_VERSION['body.setMaterial'],
+  invert: (doc, op) => ({
+    type: 'body.setMaterial',
+    v: OP_VERSION['body.setMaterial'],
+    body: op.body,
+    material: doc.bodyMeta(op.body).material ?? DEFAULT_BODY_MATERIAL,
+  }),
+  apply: (doc, op) => {
+    doc.setBodyMeta(op.body, { ...doc.bodyMeta(op.body), material: op.material });
+  },
+  validate: validateShape({ body: bodyIdText, material: bodyMaterial }),
+};
+
+export const bodyHandlers: readonly OpHandler[] = [rename, setVisible, setColor, setMaterial];

@@ -7,7 +7,12 @@ import { createDocument, fillParam, reloadWhenSaved, timelineFeature } from './h
 // cylinder asks first and leaves the boolean with a translated unresolved reference, undo heals
 // it, and a hidden body stays hidden after a reload.
 
-/** The row of a body in the Browser, named by its displayed name. */
+/**
+ * The row of a body in the Browser, named by its displayed name.
+ * A body row is clicked on its name: the click hovers the row, which shows its colour and
+ * material controls (spec 11), and the middle of the row may then fall on them; they keep the
+ * click.
+ */
 function browserBody(page: Page, name: string): Locator {
   return page.getByRole('treeitem').filter({ has: page.getByText(name, { exact: true }) });
 }
@@ -56,10 +61,10 @@ async function addSubtract(page: Page): Promise<void> {
   const targets = dialog.getByRole('button', { name: /^Cíle/ });
   const tools = dialog.getByRole('button', { name: /^Nástroje/ });
   await expect(targets).toHaveAttribute('aria-pressed', 'true');
-  await browserBody(page, 'Těleso 1').click();
+  await browserBody(page, 'Těleso 1').getByText('Těleso 1', { exact: true }).click();
   await tools.click();
   await expect(tools).toHaveAttribute('aria-pressed', 'true');
-  await browserBody(page, 'Těleso 2').click();
+  await browserBody(page, 'Těleso 2').getByText('Těleso 2', { exact: true }).click();
   // The chips name the picked bodies by their features.
   await expect(dialog.getByRole('button', { name: 'Odebrat Kvádr 1', exact: true })).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Odebrat Válec 1', exact: true })).toBeVisible();

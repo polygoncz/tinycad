@@ -23,6 +23,7 @@ const KEYS = [
   'viewCube',
   'hiddenEdge',
   'meshLine',
+  'realisticBackground',
 ] as const satisfies readonly (keyof ScenePalette)[];
 
 /** Relative luminance of 0xRRGGBB (WCAG 2). */
@@ -76,12 +77,15 @@ describe.each([
     expect(Object.isFrozen(palette.axes)).toBe(true);
     expect(Object.isFrozen(palette.grid)).toBe(true);
     expect(Object.isFrozen(palette.viewCube)).toBe(true);
+    expect(Object.isFrozen(palette.realisticBackground)).toBe(true);
   });
 
   it('has a colour for every key and nothing else', () => {
     expect(Object.keys(palette).sort()).toEqual([...KEYS].sort());
     for (const key of KEYS) {
-      if (key === 'axes' || key === 'grid' || key === 'viewCube') continue;
+      if (key === 'axes' || key === 'grid' || key === 'viewCube' || key === 'realisticBackground') {
+        continue;
+      }
       expect(isColor(palette[key]), key).toBe(true);
     }
     expect(palette.axes).toHaveLength(3);
@@ -90,6 +94,8 @@ describe.each([
     expect(palette.grid.every(isColor)).toBe(true);
     expect(palette.viewCube).toHaveLength(2);
     expect(palette.viewCube.every(isColor)).toBe(true);
+    expect(palette.realisticBackground).toHaveLength(2);
+    expect(palette.realisticBackground.every(isColor)).toBe(true);
   });
 
   it('has the axes of the mockup', () => {
@@ -166,6 +172,7 @@ describe('palettes', () => {
       viewCube: [0xffffff, 0x374151],
       hiddenEdge: 0x8b929c,
       meshLine: 0x8e99a8,
+      realisticBackground: [0xf4f6f9, 0xd9dee5],
     });
   });
 
@@ -187,6 +194,15 @@ describe('palettes', () => {
   it('hidden edges and triangulation lines by theme (M22)', () => {
     expect(LIGHT_PALETTE).toMatchObject({ hiddenEdge: 0x8b929c, meshLine: 0x8e99a8 });
     expect(DARK_PALETTE).toMatchObject({ hiddenEdge: 0x6b7280, meshLine: 0x5a7fb0 });
+  });
+
+  it('gradient background of Realistic by theme, top lighter than bottom (M24)', () => {
+    expect(LIGHT_PALETTE.realisticBackground).toEqual([0xf4f6f9, 0xd9dee5]);
+    expect(DARK_PALETTE.realisticBackground).toEqual([0x3a3f47, 0x1c1f24]);
+    for (const palette of [LIGHT_PALETTE, DARK_PALETTE]) {
+      const [top, bottom] = palette.realisticBackground;
+      expect(luminance(top)).toBeGreaterThan(luminance(bottom));
+    }
   });
 
   it('view cube: face and text colour by theme (M17)', () => {

@@ -9,12 +9,33 @@
 // active region param, the regions of each sketch. A click on an axis or a region goes only into
 // the active reference param of the dialog: neither is an item of the selection (R72, R75).
 // Since M15 the color of a body is metadata too (body.setColor, Q073), saved and undoable.
+// Since M24 so is its material preset (body.setMaterial, Q078), in the same way as the color.
 
 import { ObservableValue } from '@/core';
 import type { Observable, Unsubscribe } from '@/core';
-import { ORIGIN_AXES, ORIGIN_PLANES, isBodyColor } from '@/document';
-import type { AxisId, BodyId, DocumentReader, FeatureId, PlaneId, SketchId } from '@/document';
-import type { BodyRenameOp, BodySetColorOp, BodySetVisibleOp, OperationDispatcher } from '@/ops';
+import {
+  DEFAULT_BODY_MATERIAL,
+  ORIGIN_AXES,
+  ORIGIN_PLANES,
+  isBodyColor,
+  isBodyMaterial,
+} from '@/document';
+import type {
+  AxisId,
+  BodyId,
+  BodyMaterial,
+  DocumentReader,
+  FeatureId,
+  PlaneId,
+  SketchId,
+} from '@/document';
+import type {
+  BodyRenameOp,
+  BodySetColorOp,
+  BodySetMaterialOp,
+  BodySetVisibleOp,
+  OperationDispatcher,
+} from '@/ops';
 import { OP_VERSION } from '@/ops';
 import type { FeatureEditor, FeatureEditSession } from './feature-dialog/feature-editor';
 import { refBehaviorOf } from './feature-dialog/ref-kinds';
@@ -42,6 +63,8 @@ export interface BrowserBodyRow {
   readonly visible: boolean;
   /** M15: doc.bodyMeta(body).color ?? null */
   readonly color: string | null;
+  /** M24: doc.bodyMeta(body).material ?? DEFAULT_BODY_MATERIAL */
+  readonly material: BodyMaterial;
   /** The selection contains { kind: 'body', body }. */
   readonly selected: boolean;
 }
@@ -100,8 +123,8 @@ export interface BrowserModel {
   select(body: BodyId, opts?: { additive?: boolean }): void;
   /**
    * Visibility and name may change: no transaction (dialog) is open and the document is not
-   * read-only (the edit lock, R14). Without it setVisible, setColor, beginRename and rename do
-   * nothing.
+   * read-only (the edit lock, R14). Without it setVisible, setColor, setMaterial, beginRename
+   * and rename do nothing.
    */
   readonly canEdit: Observable<boolean>;
   /** → dispatch body.setVisible */
@@ -116,6 +139,16 @@ export interface BrowserModel {
    * An invalid color (not isBodyColor) is an error of the caller: it throws.
    */
   setColor(body: BodyId, color: string | null): void;
+  /**
+   * M24: bodies of the last regeneration (with the pickable input of an open dialog, M21) with a
+   * material in the metadata, so without the default one; app → viewport.setBodyMaterial
+   */
+  readonly materials: Observable<ReadonlyMap<BodyId, BodyMaterial>>;
+  /**
+   * M24: → dispatch body.setMaterial, with the guards of setVisible. An invalid material (not
+   * isBodyMaterial) is an error of the caller: it throws.
+   */
+  setMaterial(body: BodyId, material: BodyMaterial): void;
   /** The body in the rename mode (the inline field of the Browser); null = none. */
   readonly renaming: Observable<BodyId | null>;
   /** Puts a body of the last regeneration into the rename mode. */
@@ -191,6 +224,7 @@ export function createBrowserModel(deps: {
   const hidden = new ObservableValue<ReadonlySet<BodyId>>(new Set());
   // Like hidden: a Map cannot be frozen either, so a new map is published on each change.
   const colors = new ObservableValue<ReadonlyMap<BodyId, string>>(new Map());
+  const materials = new ObservableValue<ReadonlyMap<BodyId, BodyMaterial>>(new Map());
   const rows = new ObservableValue<readonly BrowserBodyRow[]>(EMPTY_ROWS);
   const renaming = new ObservableValue<BodyId | null>(null);
   const visiblePlanes = new ObservableValue<ReadonlySet<PlaneId>>(new Set());
@@ -219,6 +253,7 @@ export function createBrowserModel(deps: {
         userName: meta.name ?? null,
         visible: meta.hidden !== true,
         color: meta.color ?? null,
+        material: meta.material ?? DEFAULT_BODY_MATERIAL,
         selected: selected.has(body),
       };
       // Rows are matched by position, like the feature tree.
@@ -230,6 +265,7 @@ export function createBrowserModel(deps: {
         feature,
         visible: row.visible,
         color: row.color,
+        material: row.material,
         selected: row.selected,
       });
     });
@@ -239,7 +275,7 @@ export function createBrowserModel(deps: {
   /**
    * The bodies shown in the viewport: those of the final state and, while a dialog is open, of
    * the pickable input too (M21, ADR 0025). A body only in the input (consumed by the edited
-   * feature) is on the main layer, so its visibility and color must apply to it as well.
+   * feature) is on the main layer, so its visibility, color and material must apply to it as well.
    */
   function shownBodies(): ReadonlySet<BodyId> {
     const snapshot = regen.state.get();
@@ -257,6 +293,16 @@ export function createBrowserModel(deps: {
       [...shownBodies()].flatMap((body): [BodyId, string][] => {
         const color = doc.bodyMeta(body).color;
         return color === undefined ? [] : [[body, color]];
+      }),
+    );
+  }
+
+  /** Shown bodies (shownBodies) with a material in the metadata (never the default one). */
+  function buildMaterials(): ReadonlyMap<BodyId, BodyMaterial> {
+    return new Map(
+      [...shownBodies()].flatMap((body): [BodyId, BodyMaterial][] => {
+        const material = doc.bodyMeta(body).material;
+        return material === undefined ? [] : [[body, material]];
       }),
     );
   }
@@ -402,7 +448,7 @@ export function createBrowserModel(deps: {
   }
 
   /**
-   * hidden, colors, visiblePlanes, visibleAxes, bodies, planes, axes, sketches in this order
+   * hidden, colors, materials, visiblePlanes, visibleAxes, bodies, planes, axes, sketches in this order
    * (spec 10);
    * each only when it changed. `view` holds a new set of visible planes or axes
    * (setPlaneVisible, setAxisVisible); the missing one stays.
@@ -419,7 +465,9 @@ export function createBrowserModel(deps: {
       hidden.set(next);
     }
     const nextColors = buildColors();
-    if (!sameColors(colors.get(), nextColors)) colors.set(nextColors);
+    if (!sameEntries(colors.get(), nextColors)) colors.set(nextColors);
+    const nextMaterials = buildMaterials();
+    if (!sameEntries(materials.get(), nextMaterials)) materials.set(nextMaterials);
     if (view.planes !== undefined) visiblePlanes.set(view.planes);
     if (view.axes !== undefined) visibleAxes.set(view.axes);
     rows.set(buildRows(rows.get()));
@@ -473,6 +521,7 @@ export function createBrowserModel(deps: {
     bodies: rows.asObservable(),
     hidden: hidden.asObservable(),
     colors: colors.asObservable(),
+    materials: materials.asObservable(),
     planes: planeRows.asObservable(),
     visiblePlanes: visiblePlanes.asObservable(),
     sketches: sketchRows.asObservable(),
@@ -515,6 +564,21 @@ export function createBrowserModel(deps: {
         v: OP_VERSION['body.setColor'],
         body,
         color,
+      };
+      ops.dispatch(op);
+    },
+    setMaterial(body, material) {
+      // Like setColor: a caller error whatever the state, so it is checked before the guards.
+      if (!isBodyMaterial(material)) {
+        throw new Error(`BrowserModel.setMaterial: invalid material ${JSON.stringify(material)}`);
+      }
+      if (!canChange(body)) return;
+      if ((doc.bodyMeta(body).material ?? DEFAULT_BODY_MATERIAL) === material) return;
+      const op: BodySetMaterialOp = {
+        type: 'body.setMaterial',
+        v: OP_VERSION['body.setMaterial'],
+        body,
+        material,
       };
       ops.dispatch(op);
     },
@@ -616,9 +680,9 @@ function isAxisValue(value: unknown, axis: AxisId): boolean {
   return ref?.kind === 'axis' && ref.axis === axis;
 }
 
-/** The same bodies with the same colors. */
-function sameColors(a: ReadonlyMap<BodyId, string>, b: ReadonlyMap<BodyId, string>): boolean {
-  return a.size === b.size && [...b].every(([body, color]) => a.get(body) === color);
+/** The same bodies with the same values (colors, materials), compared with ===. */
+function sameEntries<V>(a: ReadonlyMap<BodyId, V>, b: ReadonlyMap<BodyId, V>): boolean {
+  return a.size === b.size && [...b].every(([body, value]) => a.get(body) === value);
 }
 
 /** Same length and the same objects at every position. */
@@ -635,6 +699,7 @@ function sameRow(
     readonly userName: string | null;
     readonly visible: boolean;
     readonly color: string | null;
+    readonly material: BodyMaterial;
     readonly selected: boolean;
   },
 ): boolean {
@@ -645,6 +710,7 @@ function sameRow(
     a.userName === b.userName &&
     a.visible === b.visible &&
     a.color === b.color &&
+    a.material === b.material &&
     a.selected === b.selected
   );
 }

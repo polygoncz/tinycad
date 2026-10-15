@@ -53,10 +53,13 @@ Typů je záměrně málo a jsou malé: log žije navždy, každá změna tvaru 
 | `body.rename` (M11) | `body: BodyId, name: string` (`''` = smazat jméno) | `body.rename` s aktuálním jménem nebo `''` | `setBodyMeta(body, { ...aktuální, name })` |
 | `body.setVisible` (M11) | `body: BodyId, visible: boolean` | `body.setVisible` s aktuální viditelností (`!hidden`) | `setBodyMeta(body, { ...aktuální, hidden: visible ? undefined : true })` |
 | `body.setColor` (M15) | `body: BodyId, color: string \| null` (`'#rrggbb'` malými písmeny, `null` = výchozí barva) | `body.setColor` s aktuální barvou nebo `null` | `setBodyMeta(body, { ...aktuální, color: color ?? undefined })` |
+| `body.setMaterial` (M24) | `body: BodyId, material: BodyMaterial` (výchozí je `'plastic'`, žádné `null`) | `body.setMaterial` s aktuálním materiálem (`bodyMeta(body).material ?? DEFAULT_BODY_MATERIAL`) | `setBodyMeta(body, { ...aktuální, material })` (kanonizace výchozí vypustí) |
+
+V tabulce znamená `pole: undefined` „pole z metadat vynechat“ (pseudokód). Kód s `exactOptionalPropertyTypes` pole odebere (`without(meta, key)` v `handlers/body.ts`) a nikdy nevypisuje ostatní pole (M24).
 | `document.rename` (M19.2) | `name: string` (oříznuté, neprázdné) | `document.rename` s aktuálním jménem | `rename(name)` |
 | `batch` | `ops: readonly Operation[]` | viz [[#Dávka]] | – |
 
-Modul exportuje typy `FeatureAddOp`, `FeatureRemoveOp`, `FeatureSetParamsOp`, `FeatureRenameOp`, `FeatureSuppressOp`, `FeatureMoveOp`, `StudioSetRollbackOp`, `BodyRenameOp`, `BodySetVisibleOp`, `BodySetColorOp` (M15), `DocumentRenameOp` (M19.2), `BatchOp` a typového strážce `isDocumentRename(op): op is DocumentRenameOp` (M19.2; ověří i `name` jako řetězec, protože ho čtou i story nad neověřenými záznamy). Na `'document.rename'` se nikde neporovnává řetězec, používá se strážce (`undo`, `HistoryModel`, story). Konstruktory operací nejsou – operace je literál.
+Modul exportuje typy `FeatureAddOp`, `FeatureRemoveOp`, `FeatureSetParamsOp`, `FeatureRenameOp`, `FeatureSuppressOp`, `FeatureMoveOp`, `StudioSetRollbackOp`, `BodyRenameOp`, `BodySetVisibleOp`, `BodySetColorOp` (M15), `BodySetMaterialOp` (M24), `DocumentRenameOp` (M19.2), `BatchOp` a typového strážce `isDocumentRename(op): op is DocumentRenameOp` (M19.2; ověří i `name` jako řetězec, protože ho čtou i story nad neověřenými záznamy). Na `'document.rename'` se nikde neporovnává řetězec, používá se strážce (`undo`, `HistoryModel`, story). Konstruktory operací nejsou – operace je literál.
 
 `setParams` nese **celé** parametry, ne patch. Inverze je pak triviální a operace nezávisí na předchozím stavu.
 
@@ -364,6 +367,7 @@ Všech jedenáct vestavěných handlerů `validate` má:
 | `body.rename` | `body` ve tvaru id tělesa (`parseBodyId`), `name` řetězec |
 | `body.setVisible` | `body` ve tvaru id tělesa, `visible` boolean |
 | `body.setColor` (M15) | `body` ve tvaru id tělesa, `color` `null` nebo `isBodyColor` (`/^#[0-9a-f]{6}$/`; velká písmena neprojdou, handler nekanonizuje – přehrání je pak deterministické bez převodu) |
+| `body.setMaterial` (M24) | `body` ve tvaru id tělesa, `material` `isBodyMaterial` |
 | `document.rename` (M19.2) | `name` neprázdný řetězec bez mezer na krajích |
 
 Hodnoty `params` proti schématu featury se při načítání nekontrolují a nemigrují; migrace běží až při `apply` ([[#Migrace dat featur]]).
@@ -395,9 +399,9 @@ export function parseLogEntry(handlers: OpHandlerRegistry, raw: unknown): Result
 - `upcastOperation`: aktuální verze, fiktivní v1 → v2, chybějící `upcast`, novější verze, neznámý typ, rozbitá obálka i uvnitř dávky.
 - `validate` každého vestavěného handleru: platná operace projde, každé pole z tabulky rozbité zvlášť → `err` se správnou cestou; v dávce s prefixem.
 - `parseLogEntry`: platný záznam každého `kind`, každé pole rozbité zvlášť, `target` u `do`, chyba v `op` i `inverse` s prefixem cesty, upcast staré verze operace uvnitř záznamu.
-- `body.rename`, `body.setVisible` a `body.setColor` (M15): inverze vrátí metadata, `invert` tělesa bez metadat, `validate` s rozbitým `body`.
+- `body.rename`, `body.setVisible`, `body.setColor` (M15) a `body.setMaterial` (M24): inverze vrátí metadata, `invert` tělesa bez metadat, `validate` s rozbitým `body`. Každý z nich **zachová ostatní pole metadat**, i ta přidaná později: `apply` skládá metadata z `...aktuální`, ne výčtem polí (M24 opravuje `setVisible` a `setColor`, které pole vypisovaly a `material` by zahodily). Test: těleso se jménem, skrytím, barvou i materiálem, každá operace změní jen své pole.
 - `document.rename` (M19.2): apply, inverze, `validate` (prázdné jméno, mezery na krajích, ne řetězec); po přejmenování je `canUndo` jako předtím, undo vrátí předchozí krok, ne jméno, a redo zásobník přežije.
-- **Replay test** (fast-check, 1000 sekvencí): náhodné operace (od M11 včetně `body.*`, od M15 i `body.setColor`), transakce (commit i abort), undo a redo; pak `replayLog` na prázdný dokument → `toData` se shoduje se živým dokumentem a `rebuildUndoStacks` se shoduje se živými zásobníky.
+- **Replay test** (fast-check, 1000 sekvencí): náhodné operace (od M11 včetně `body.*`, od M15 i `body.setColor`, od M24 i `body.setMaterial`), transakce (commit i abort), undo a redo; pak `replayLog` na prázdný dokument → `toData` se shoduje se živým dokumentem a `rebuildUndoStacks` se shoduje se živými zásobníky.
 
 ## Otevřené otázky
 

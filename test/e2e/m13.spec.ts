@@ -22,7 +22,12 @@ import {
 // with "Odebrat" makes a hole in a box; undo/redo and a reload keep the model; the rectangle
 // revolved about the origin X axis is one more body. Regions and axes are picked in the Browser.
 
-/** A row of the Browser, named by its displayed text ("Těleso 1", "Oblast 1", "Osa X"). */
+/**
+ * A row of the Browser, named by its displayed text ("Těleso 1", "Oblast 1", "Osa X").
+ * A body row is clicked on its name: the click hovers the row, which shows its colour and
+ * material controls (spec 11), and the middle of the row may then fall on them; they keep the
+ * click.
+ */
 function browserRow(page: Page, name: string): Locator {
   return page.getByRole('treeitem').filter({ has: page.getByText(name, { exact: true }) });
 }
@@ -101,7 +106,7 @@ test('extrude a rectangle, edit the sketch, cut a hole, undo, reload, revolve', 
   await expect(targets).toBeVisible();
   await targets.click();
   await expect(targets).toHaveAttribute('aria-pressed', 'true');
-  await browserRow(page, 'Těleso 2').click();
+  await browserRow(page, 'Těleso 2').getByText('Těleso 2', { exact: true }).click();
   await expect(cut.getByRole('button', { name: 'Odebrat Kvádr 1', exact: true })).toBeVisible();
   await confirmDialog(cut);
   await expect(timelineFeature(page, 'Vysunutí 2')).toBeVisible();
