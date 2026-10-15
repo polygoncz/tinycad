@@ -991,6 +991,9 @@ export interface SketchEditor {
   /** M19.2 D4: nové body kreslicích nástrojů se přichytí k mřížce; výchozí true, stav editoru (přežije zavření a otevření skici), neukládá se. */
   readonly gridSnap: Observable<boolean>;
   setGridSnap(on: boolean): void;
+  /** M25: glyfy všech vazeb skici, nejen u vybraných a najetých entit (přepínač „Zobrazit vazby“); výchozí false, stav editoru jako gridSnap, neukládá se. */
+  readonly showAllConstraints: Observable<boolean>;
+  setShowAllConstraints(on: boolean): void;
   /** M19.2: aktuální krok mřížky v mm (deps.gridStep); nástroje ho čtou při každém přichycení. */
   gridStep(): number;
 }
@@ -1044,6 +1047,7 @@ export interface SketchState {
   readonly editingDimension: SketchConstraintId | null;    // právě vytvořená kóta (ui dá jejímu poli fokus)
   readonly busy: boolean;                                  // M19.1 D8: běží nebo čeká job, který může zapsat
   readonly dimensions: readonly SketchDimensionView[];     // M19.2 D4: kóty pro viewport (dimensionViews)
+  readonly glyphs: readonly SketchGlyphView[];             // M25: glyfy vazeb pro viewport (glyphViews, spec 12)
 }
 export type SketchMessageKey = 'sketch.conflict' | 'sketch.redundant' | 'sketch.solverFailed';
 export interface SketchConstraintRow {
@@ -1067,6 +1071,8 @@ export function dimensionViews(plane: Plane, entities: readonly SketchEntity[], 
 export const EDIT_SKETCH_DRAWING_ID = 'sketch-edit';
 export const ORIGIN_POINT_ID = '__origin';                 // bod počátku v kresbě (snap)
 ```
+
+**Glyfy vazeb** (`SketchState.glyphs`, M25): `buildState` volá čistou `glyphViews` (`sketch-glyphs.ts`, z `index.ts` se exportují typy `SketchGlyphView` a `GlyphKind`); množinu viditelnosti skládá session z výběru a hoveru (vybraná nebo najetá křivka přidá své definiční body, vybraná nebo najetá geometrická vazba své entity), při `showAllConstraints` je `'all'`. Najetá nebo vybraná geometrická vazba zvýrazní své entity v kresbě (`hover`/`selected`), výběr entity má přednost. Kontrakt, kotvy a skládání v [[12-skicar#Glyfy vazeb (M25)]].
 
 **Kóty pro viewport** (`SketchState.dimensions`, M19.2 D4): `buildState` volá čistou `dimensionViews` (`sketch-dimensions.ts`, z `index.ts` se exportuje jen typ `SketchDimensionView`). Vazby `distance` a `radius` v pořadí vazeb. `n` se počítá jako `SketchConstraintRow.n`: počítá se každá vazba druhu, i vynechaná. Kóta, které chybí entita (nebo poloměr na něčem jiném než kružnici či oblouku), se vynechá. Nezměněná položka zůstává týmž objektem z `prev` a nezměněný výsledek týmž polem (společná pravidla snapshotů výše).
 

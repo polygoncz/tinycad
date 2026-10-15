@@ -75,7 +75,7 @@ test('dimensions in the view: rounded, snapped to the grid, edited in place', as
 
   // A rectangle from the origin to a corner off any round number of px: it snaps to the grid.
   await rectangleWithWidth(page, status, [0, 0], [123, -77], 'Stupně volnosti: 2');
-  const width = dimensionInput(panel, 'Vzdálenost 1');
+  const width = await dimensionInput(panel, 'Vzdálenost 1');
   await expect(width).toBeVisible();
   const shown = await width.inputValue();
   expect(shown).toMatch(ROUNDED);
@@ -110,7 +110,7 @@ test('dimensions in the view: rounded, snapped to the grid, edited in place', as
   await snap.click();
   await expect(snap).toHaveAttribute('aria-pressed', 'false');
   await rectangleWithWidth(page, status, [-260, 60], [-137, 137], 'Stupně volnosti: 5');
-  const free = dimensionInput(panel, 'Vzdálenost 2');
+  const free = await dimensionInput(panel, 'Vzdálenost 2');
   await expect(free).toBeVisible();
   const freeValue = await dimensionValue(free);
   expect(snappedToGrid(freeValue, 123)).toBe(false);

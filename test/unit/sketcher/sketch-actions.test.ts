@@ -44,6 +44,7 @@ function aFakeSession() {
       constraintRows: [],
       editingDimension: null,
       dimensions: [],
+      glyphs: [],
       planeField: null,
       planeMissing: false,
     }),
@@ -100,6 +101,8 @@ function setup() {
     edit: () => expect.fail('edit is not expected'),
     gridSnap: new ObservableValue(true).asObservable(),
     setGridSnap: () => expect.fail('setGridSnap is not expected'),
+    showAllConstraints: new ObservableValue(false).asObservable(),
+    setShowAllConstraints: () => expect.fail('setShowAllConstraints is not expected'),
     gridStep: () => expect.fail('gridStep is not expected'),
   };
   const registry = createActionRegistry({ mode: mode.asObservable() });

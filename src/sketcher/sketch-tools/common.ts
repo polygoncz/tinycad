@@ -116,14 +116,6 @@ export function arcPoints(center: Vec2, radius: number, from: number, sweep: num
 export const circlePoints = (center: Vec2, radius: number): Vec2[] =>
   arcPoints(center, radius, 0, FULL_TURN);
 
-/** The counter-clockwise sweep from angle a to angle b in (0, 2π]. */
-export function ccwSweep(a: number, b: number): number {
-  let sweep = b - a;
-  while (sweep <= 0) sweep += FULL_TURN;
-  while (sweep > FULL_TURN) sweep -= FULL_TURN;
-  return sweep;
-}
-
 export function clearPreview(ctx: ToolContext): void {
   ctx.viewport.overlay.remove(PREVIEW_OVERLAY_ID);
 }

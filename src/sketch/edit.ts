@@ -131,8 +131,10 @@ function withoutConstruction(c: SketchCurve): SketchCurve {
   }
 }
 
-/** Point ids a curve uses. */
-function curvePoints(c: SketchCurve): readonly SketchEntityId[] {
+/**
+ * Point ids a curve is defined by: line [p1, p2], circle [center], arc [center, start, end].
+ */
+export function curvePoints(c: SketchCurve): readonly SketchEntityId[] {
   switch (c.kind) {
     case 'line':
       return [c.p1, c.p2];
@@ -145,8 +147,11 @@ function curvePoints(c: SketchCurve): readonly SketchEntityId[] {
   }
 }
 
-/** Entity ids a constraint refers to. */
-function constraintTargets(c: SketchConstraint): readonly SketchEntityId[] {
+/**
+ * Entity ids a constraint refers to: [a, b] for the constraints of two entities (coincident
+ * included), [line] for horizontal and vertical, [point] for fix, [curve] for radius.
+ */
+export function constraintTargets(c: SketchConstraint): readonly SketchEntityId[] {
   switch (c.kind) {
     case 'coincident':
     case 'parallel':

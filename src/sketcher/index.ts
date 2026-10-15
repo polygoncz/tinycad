@@ -12,6 +12,7 @@ export type {
   SketchState,
 } from './sketch-session';
 export type { SketchDimensionView } from './sketch-dimensions';
+export type { GlyphKind, SketchGlyphView } from './sketch-glyphs';
 export { artifactDrawing, axisDrawing, planeDrawing } from './sketch-drawing';
 export { createSketchActions } from './sketch-actions';
 // Also in the data entry point constants.ts, the one ui takes values from (M20, D6).

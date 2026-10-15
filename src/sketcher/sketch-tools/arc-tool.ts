@@ -7,7 +7,6 @@ import type { SketchEditor } from '../sketch-editor';
 import {
   MIN_LENGTH,
   arcPoints,
-  ccwSweep,
   clearPreview,
   clickTool,
   snapGrid,
@@ -16,6 +15,7 @@ import {
   previewPairs,
   previewPolyline,
 } from './common';
+import { ccwSweep } from '../sketch-angles';
 import { placePoint, samePoint, snapAt } from './snap';
 import type { SnapTarget } from './snap';
 

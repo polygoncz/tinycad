@@ -135,6 +135,10 @@ export function removeItems(data: SketchData, ids: readonly SketchItemId[]): Ske
 /** Přepne construction u vybraných křivek: všechny konstrukční → všechny normální, jinak všechny konstrukční. Body a vazby ignoruje. */
 export function toggleConstruction(data: SketchData, ids: readonly SketchItemId[]): SketchData;
 export type SketchConstraintDraft = DistributiveOmit<SketchConstraint, 'id'>;
+/** M25: definiční body křivky – line → [p1, p2], circle → [center], arc → [center, start, end]. */
+export function curvePoints(c: SketchCurve): readonly SketchEntityId[];
+/** M25: entity, na které vazba odkazuje, v pořadí vazby – dvě entity → [a, b] (i coincident), horizontal/vertical → [line], fix → [point], radius → [curve]. */
+export function constraintTargets(c: SketchConstraint): readonly SketchEntityId[];
 ```
 
 - `constraintFor`: `horizontal`/`vertical` – právě 1 úsečka; `coincident` – právě 2 body; `fix` – právě 1 bod; `parallel`/`perpendicular` – právě 2 úsečky; `equal` – 2 úsečky nebo 2 z {kružnice, oblouk}; `tangent` – úsečka + kružnice/oblouk (v libovolném pořadí) nebo 2 z {kružnice, oblouk}. Jinak `null`. `a`, `b` v pořadí výběru.
@@ -265,7 +269,7 @@ Naplánováno 2026-10-15, zatím jen rozsah – kontrakt se do sekcí výše dop
 
 | Milník | Co přibude | Dopad na data | Otázka |
 |---|---|---|---|
-| [[M25-glyfy-vazeb\|M25]] | glyfy vazeb ve viewportu, výběr a mazání glyfu, seznam vazeb v panelu sbalený | žádný (`SketchDrawing` dostane glyfy) | [[Q083 Rozložení glyfů vazeb\|Q083]] |
+| [[M25-glyfy-vazeb\|M25]] | glyfy vazeb ve viewportu, výběr a mazání glyfu, seznam vazeb v panelu sbalený | žádný (`SketchState.glyphs`, vrstva v `ui`) | [[Q083 Rozložení glyfů vazeb\|Q083]] |
 | [[M26-snapper-a-auto-vazby\|M26]] | snapper (čistá funkce v `sketch`), vodítka, automatické vazby ověřené řešičem, potlačení Ctrl/Cmd | nové vazby `pointOnCurve`, `midpoint`, zarovnání bodů (zpětně kompatibilní) | [[Q084 Inference automatických vazeb\|Q084]] |
 | [[M27-oblouky-a-kruznice\|M27]] | kružnice 2 body, 3 body, 2 a 3 tečny; oblouk 3 body a tečný; tečný oblouk v polyline | žádný | – |
 | [[M28-koty\|M28]] | jeden nástroj Kóta (druh podle polohy myši), vodorovná, svislá, bod–přímka, úhel, průměr; přetahování | nové druhy kót, poloha popisku | [[Q085 Poloha kóty v datech\|Q085]] |
@@ -301,13 +305,14 @@ export function glyphViews(
 ): readonly SketchGlyphView[];
 ```
 
-- **Které vazby:** `visible = 'all'` (přepínač „Zobrazit vazby“) → všechny geometrické vazby; jinak ty, které odkazují na entitu z množiny (vybrané entity, entita pod kurzorem a entity vybrané nebo najeté vazby). Glyf se kreslí u každé jejich entity, nejen u vybrané. Kóty glyf nemají (mají vlastní kresbu).
+- **Které vazby:** `visible = 'all'` (přepínač „Zobrazit vazby“) → všechny geometrické vazby; jinak ty, které odkazují na entitu z množiny (vybrané entity, entita pod kurzorem a entity vybrané nebo najeté geometrické vazby). Množinu skládá session; vybraná nebo najetá **křivka** do ní přidá i své definiční body (konce úsečky, střed kružnice, střed a konce oblouku), takže výběr úsečky ukáže i `coincident` a `fix` na jejích koncích (jako Onshape). Glyf se kreslí u každé jejich entity, nejen u vybrané. Kóty glyf nemají (mají vlastní kresbu) a vybraná nebo najetá kóta glyfy ani zvýraznění entit nepřidá.
+- **Řada (`slot`):** glyfy se skládají podle **polohy kotvy**, ne podle entity: kotvy, které se v souřadnicích roviny liší nejvýš o 1e-6 mm, tvoří jednu řadu (tečka `coincident` u bodu `a` a `fix` u shodného bodu `b` se tak nepřekryjí). `slot` číslují jen zobrazené glyfy, řada je bez mezer a při změně výběru se může posunout. Úsečka nulové délky má `side` +y.
 - **Kotvy:** bod (`coincident`, `fix`) = bod; úsečka = střed; kružnice = bod nahoře (úhel π/2); oblouk = střed oblouku; `side` = normála úsečky otočená k +y roviny (svislá úsečka → −x), u kružnice a oblouku směr od středu ke kotvě, u bodu +x+y normalizované. `coincident` má jeden glyf u bodu `a` (vykreslí se jako plná tečka, ne ikona). Stopy M26 a M29 doplní kotvy svých vazeb a entit.
 - **Neměnnost:** nezměněná položka zůstane stejným objektem z `prev`, nezměněný výsledek stejným polem (jako `dimensionViews`).
 - **Stav:** `SketchState.glyphs: readonly SketchGlyphView[]`. Přepínač: `SketchEditor.showAllConstraints: Observable<boolean>` a `setShowAllConstraints(on)`, výchozí `false`, přežije zavření skici, neukládá se (jako `gridSnap`).
 - **Hover a výběr vazby** používají stávající `SketchSession.setHover(id)` a `select(id, { additive })` s id vazby; smazání stávající akcí mazání nad výběrem. Najetá nebo vybraná vazba zvýrazní své entity v kresbě (styl `hover`/`selected`), pokud už nejsou vybrané.
-- **`ui`:** `SketchGlyphs.vue` (sourozenec `SketchDimensions`, jen při otevřené skice) a čistá `glyphLayout(glyphs, project, { sizePx: 16, gapPx: 2, offsetPx: 10 })` → střed každého glyfu v px: průmět kotvy + `side` promítnutý do obrazovky a normalizovaný × (`offsetPx` + `slot` · (`sizePx` + `gapPx`) + `sizePx`/2). Nepromítnutá kotva → glyf se nekreslí. Glyf je tlačítko s ikonou druhu (SVG v `ui/sketch-glyph-icons.ts`, `aria-label` = název vazby, `aria-pressed` = vybraná), `pointerenter`/`pointerleave` → `setHover`, klik → `select` (aditivně podle `isAdditive`). Přepočet při změně `glyphs` a při `onViewChanged`.
-- **Panel:** seznam vazeb a kót je sbalitelná sekce (`<details>`), výchozí sbalená, stav se neukládá. Přepínač „Zobrazit vazby“ je v panelu nad ní.
+- **`ui`:** `SketchGlyphs.vue` (sourozenec `SketchDimensions`, jen při otevřené skice) a čistá `glyphLayout(glyphs, project, { sizePx: 16, gapPx: 2, offsetPx: 10 })` → střed každého glyfu v px: průmět kotvy + `side` promítnutý do obrazovky a normalizovaný × (`offsetPx` + `slot` · (`sizePx` + `gapPx`) + `sizePx`/2). Nepromítnutá kotva, nebo `side` promítnutý na nulovou délku (rovina viděná z hrany) → glyf se nekreslí. Glyf je tlačítko s ikonou druhu (SVG v `ui/sketch-glyph-icons.ts`, `aria-label` = název vazby, `aria-pressed` = vybraná), `pointerenter`/`pointerleave` → `setHover`, klik → `select` (aditivně podle `isAdditive`). Přepočet při změně `glyphs` a při `onViewChanged`.
+- **Panel:** seznam vazeb a kót je sbalitelná sekce (`<details>`), výchozí sbalená, stav se neukládá. Když panel dává fokus poli nové kóty, sbalená sekce se nejdřív sama rozbalí. Přepínač „Zobrazit vazby“ je v panelu nad ní (vedle přichycení k mřížce).
 - **Testy:** `glyphViews` (které vazby pro výběr/hover/`all`, dva glyfy u dvouentitové vazby, `slot` u sdílené kotvy, kotvy a `side` všech druhů, stabilita objektů); `glyphLayout` (skládání, nepromítnutá kotva); `SketchGlyphs.vue` (hover → `setHover`, klik → `select`, `aria-pressed`); session (najetá vazba zvýrazní entity); e2e (výběr úsečky ukáže glyf `horizontal`, klik a Delete vazbu smaže).
 
 ## Kóty (M28)

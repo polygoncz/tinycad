@@ -13,13 +13,17 @@
 // Esc on the field cancelPlanePick. A picked plane ends picking too (interaction). A sketch whose
 // plane could not be computed (Q079) opens on XY with SketchState.planeMissing: an alert above
 // the field asks for a new plane.
+// M25 (spec 12, "Glyfy vazeb"): the list of constraints is a <details> section, collapsed by
+// default (its state is not saved, it is not even bound: the element keeps it); the switch "Show
+// constraints" above it is SketchEditor.showAllConstraints, next to the grid snap. A new dimension
+// opens the section before its field takes the focus (focusNewDimension).
 import { computed, nextTick, useId, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { SketchConstraintRow, SketchSession } from '@/sketcher';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
 import { isAdditive } from '../item-actions';
-import { constraintRowLabel } from '../sketch-panel';
+import { constraintRowLabel, focusNewDimension, toggleShowAllConstraints } from '../sketch-panel';
 import { formatDimension } from './params/field-values';
 import NumericInput from './params/NumericInput.vue';
 
@@ -29,6 +33,7 @@ const { t } = useI18n();
 const session = useSession();
 const state = useObservable(props.sketch.state);
 const gridSnap = useObservable(session.sketches.gridSnap);
+const showAllConstraints = useObservable(session.sketches.showAllConstraints);
 const planeLabelId = useId();
 const planeButtonId = useId();
 const planeField = computed(() => state.value.planeField);
@@ -44,6 +49,10 @@ function onPlaneKey(e: KeyboardEvent): void {
 
 function toggleGridSnap(): void {
   session.sketches.setGridSnap(!gridSnap.value);
+}
+
+function toggleShowAll(): void {
+  toggleShowAllConstraints(session.sketches);
 }
 
 /** The text of a dimension field: rounded to two decimals; '' for a non-number. */
@@ -72,18 +81,22 @@ function setDimension(row: SketchConstraintRow, value: number): void {
   void props.sketch.setDimension(row.id, value);
 }
 
-// A dimension just made by the tool gets the focus of its field (spec 11, "Režim skici").
+// A dimension just made by the tool gets the focus of its field (spec 11, "Režim skici"); the
+// collapsed list opens for it first (M25).
+const section = useTemplateRef<HTMLDetailsElement>('section');
 const list = useTemplateRef<HTMLElement>('list');
 watch(
   () => state.value.editingDimension,
   async (id) => {
     if (id === null) return;
-    await nextTick();
-    const input = list.value?.querySelector<HTMLInputElement>(
-      `[data-constraint="${CSS.escape(id)}"] input`,
+    await focusNewDimension(
+      nextTick,
+      () => section.value,
+      () =>
+        list.value?.querySelector<HTMLInputElement>(
+          `[data-constraint="${CSS.escape(id)}"] input`,
+        ) ?? null,
     );
-    input?.focus();
-    input?.select();
     props.sketch.clearEditingDimension();
   },
   { immediate: true },
@@ -133,46 +146,59 @@ watch(
         <i class="ti ti-grid-dots" aria-hidden="true" />
         {{ t('sketchPanel.gridSnap') }}
       </button>
+      <button
+        type="button"
+        class="toggle"
+        :class="{ on: showAllConstraints }"
+        :aria-pressed="showAllConstraints"
+        :title="t('sketchPanel.showConstraintsHint')"
+        @click="toggleShowAll"
+      >
+        <i class="ti ti-link" aria-hidden="true" />
+        {{ t('sketchPanel.showConstraints') }}
+      </button>
     </div>
 
-    <h3 class="section">{{ t('sketchPanel.constraints') }}</h3>
-    <ul ref="list" class="constraints">
-      <li
-        v-for="row in state.constraintRows"
-        :key="row.id"
-        class="row"
-        :class="{ selected: row.selected }"
-        :data-constraint="row.id"
-      >
-        <button
-          :id="labelId(row)"
-          type="button"
-          class="name"
-          :aria-pressed="row.selected"
-          @click="select(row, $event)"
+    <details ref="section">
+      <summary class="section">{{ t('sketchPanel.constraints') }}</summary>
+      <ul ref="list" class="constraints">
+        <li
+          v-for="row in state.constraintRows"
+          :key="row.id"
+          class="row"
+          :class="{ selected: row.selected }"
+          :data-constraint="row.id"
         >
-          {{ label(row) }}
-        </button>
-        <NumericInput
-          v-if="row.value !== null"
-          class="value"
-          :value="row.value"
-          unit="mm"
-          :invalid="false"
-          :labelledby="labelId(row)"
-          :format="dimensionText"
-          @commit="setDimension(row, $event)"
-        />
-        <button
-          type="button"
-          class="remove"
-          :aria-label="t('sketchPanel.remove', { name: label(row) })"
-          @click="remove(row)"
-        >
-          <i class="ti ti-x" aria-hidden="true" />
-        </button>
-      </li>
-    </ul>
+          <button
+            :id="labelId(row)"
+            type="button"
+            class="name"
+            :aria-pressed="row.selected"
+            @click="select(row, $event)"
+          >
+            {{ label(row) }}
+          </button>
+          <NumericInput
+            v-if="row.value !== null"
+            class="value"
+            :value="row.value"
+            unit="mm"
+            :invalid="false"
+            :labelledby="labelId(row)"
+            :format="dimensionText"
+            @commit="setDimension(row, $event)"
+          />
+          <button
+            type="button"
+            class="remove"
+            :aria-label="t('sketchPanel.remove', { name: label(row) })"
+            @click="remove(row)"
+          >
+            <i class="ti ti-x" aria-hidden="true" />
+          </button>
+        </li>
+      </ul>
+    </details>
 
     <footer class="buttons">
       <button type="button" class="button" @click="sketch.cancel()">
@@ -277,6 +303,9 @@ watch(
   border-color: var(--danger);
 }
 .options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
   margin: 4px 14px 6px;
 }
 .toggle {
@@ -300,6 +329,7 @@ watch(
 }
 .section {
   margin: 10px 14px 4px;
+  cursor: default;
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 600;

@@ -10,8 +10,7 @@ import type {
   SketchItemId,
   SketchPoint,
 } from '@/sketch';
-
-const FULL_TURN = 2 * Math.PI;
+import { ccwSweep } from './sketch-angles';
 
 export interface SketchDimensionView {
   readonly id: SketchConstraintId;
@@ -120,17 +119,6 @@ const onCircle = (center: Vec2, radius: number, angle: number): Vec2 => [
   center[0] + radius * Math.cos(angle),
   center[1] + radius * Math.sin(angle),
 ];
-
-/**
- * The counter-clockwise sweep from angle a to angle b in (0, 2π], like the arc of the drawing. A
- * copy of the tools' one: importing sketch-tools/common here would make an import cycle.
- */
-function ccwSweep(a: number, b: number): number {
-  let sweep = b - a;
-  while (sweep <= 0) sweep += FULL_TURN;
-  while (sweep > FULL_TURN) sweep -= FULL_TURN;
-  return sweep;
-}
 
 function sameView(a: SketchDimensionView, b: SketchDimensionView): boolean {
   return (

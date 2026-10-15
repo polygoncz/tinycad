@@ -12,6 +12,8 @@ describe('sketch public API', () => {
         'SKETCH_PARAM',
         'computeRegions',
         'constraintFor',
+        'constraintTargets',
+        'curvePoints',
         'curve2',
         'dimensionFor',
         'measure',

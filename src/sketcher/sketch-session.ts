@@ -5,7 +5,14 @@
 
 import { ObservableValue, assert } from '@/core';
 import type { Observable, Plane, Vec2 } from '@/core';
-import { SKETCH_PARAM, parseSketchData, removeItems, toggleConstruction } from '@/sketch';
+import {
+  SKETCH_PARAM,
+  constraintTargets,
+  curvePoints,
+  parseSketchData,
+  removeItems,
+  toggleConstruction,
+} from '@/sketch';
 import type {
   ConstraintSolver,
   SketchConstraint,
@@ -31,6 +38,8 @@ import { planeRefOf } from './plane-ref';
 import { constraintNumbers, dimensionViews } from './sketch-dimensions';
 import type { SketchDimensionView } from './sketch-dimensions';
 import { toSketchDrawing } from './sketch-drawing';
+import { glyphViews, isGlyphConstraint } from './sketch-glyphs';
+import type { SketchGlyphView } from './sketch-glyphs';
 
 export interface SketchSession {
   readonly featureId: FeatureEditSession['featureId'];
@@ -107,6 +116,12 @@ export interface SketchState {
   readonly editingDimension: SketchConstraintId | null;
   /** The distance and radius dimensions for the viewport (dimensionViews, M19.2 D4). */
   readonly dimensions: readonly SketchDimensionView[];
+  /**
+   * The glyphs of the geometric constraints for the viewport (glyphViews, M25): those of the
+   * selected and hovered entities and of the entities of a selected or hovered constraint; all of
+   * them with SketchEditor.showAllConstraints.
+   */
+  readonly glyphs: readonly SketchGlyphView[];
   /** The field "Plane" of the panel (M21); null without a visible plane param. */
   readonly planeField: SketchPlaneField | null;
   /**
@@ -148,6 +163,7 @@ const EMPTY_DATA: SketchData = Object.freeze({
   constraints: Object.freeze([]),
 });
 const NO_ITEMS: readonly SketchItemId[] = Object.freeze([]);
+const NO_ENTITIES: ReadonlySet<SketchItemId> = new Set<SketchItemId>();
 const NO_PARAMS: Readonly<Record<string, number>> = Object.freeze({});
 const MESSAGES: { readonly [K in SketchMessageKey]: { readonly key: K } } = Object.freeze({
   'sketch.conflict': Object.freeze({ key: 'sketch.conflict' }),
@@ -169,12 +185,14 @@ export function openSketchSession(deps: {
   planeMissing: boolean;
   /** The plane of a reference picked while sketching (app: planeOfRef over the last state). */
   resolvePlane: (ref: PlaneRef | TopoRef) => Plane | undefined;
+  /** SketchEditor.showAllConstraints: the glyphs of all constraints, not only the selected ones (M25). */
+  showAllConstraints: Observable<boolean>;
   solver: ConstraintSolver;
   /** Only the drawings: the session draws the edited sketch and nothing else. */
   viewport: Pick<ViewportPort, 'sketches'>;
   onClose: () => void;
 }): SketchSession {
-  const { edit, resolvePlane, solver, viewport, onClose } = deps;
+  const { edit, resolvePlane, showAllConstraints, solver, viewport, onClose } = deps;
   const plane = new ObservableValue<Plane>(deps.plane);
   /** The plane reference last followed; a change of the param moves the plane (M21). */
   let planeRef = planeRefOf(edit.state.get().params);
@@ -200,6 +218,9 @@ export function openSketchSession(deps: {
   const unsubscribeEdit = edit.state.subscribe(() => {
     if (!edit.state.get().open) close();
     else refresh(followPlane());
+  });
+  const unsubscribeShowAll = showAllConstraints.subscribe(() => {
+    refresh();
   });
 
   // ---- state ----
@@ -252,6 +273,16 @@ export function openSketchSession(deps: {
         selection,
         prev?.dimensions ?? [],
       ),
+      glyphs: glyphViews(
+        plane.get(),
+        { entities, constraints },
+        showAllConstraints.get()
+          ? 'all'
+          : glyphsShownFor({ entities, constraints }, selection, hover),
+        selection,
+        hover,
+        prev?.glyphs ?? [],
+      ),
       planeField: planeFieldOf(edit.state.get(), prev?.planeField ?? null),
       planeMissing,
     });
@@ -288,10 +319,19 @@ export function openSketchSession(deps: {
     return moved;
   }
 
-  function styleOf(id: SketchItemId, construction: boolean): SketchStyle {
+  /**
+   * The style of an item; `selectedVia` and `hoveredVia` are the entities of the selected and the
+   * hovered constraints (M25), drawn like selected and hovered ones.
+   */
+  function styleOf(
+    id: SketchItemId,
+    construction: boolean,
+    selectedVia: ReadonlySet<SketchItemId>,
+    hoveredVia: ReadonlySet<SketchItemId>,
+  ): SketchStyle {
     const s = state.get();
-    if (s.selection.includes(id)) return 'selected';
-    if (s.hover === id) return 'hover';
+    if (s.selection.includes(id) || selectedVia.has(id)) return 'selected';
+    if (s.hover === id || hoveredVia.has(id)) return 'hover';
     if (construction) return 'construction';
     return s.fullyDefined ? 'defined' : 'normal';
   }
@@ -301,12 +341,16 @@ export function openSketchSession(deps: {
     const construction = new Set<string>(
       s.entities.flatMap((e) => (e.kind !== 'point' && e.construction === true ? [e.id] : [])),
     );
+    const selectedVia = entitiesOfConstraints(s.constraints, s.selection);
+    const hoveredVia = entitiesOfConstraints(s.constraints, s.hover === null ? [] : [s.hover]);
     viewport.sketches.set(
       EDIT_SKETCH_DRAWING_ID,
-      toSketchDrawing(plane.get(), s, (id) => styleOf(id, construction.has(id)), {
-        origin: true,
-        editing: true,
-      }),
+      toSketchDrawing(
+        plane.get(),
+        s,
+        (id) => styleOf(id, construction.has(id), selectedVia, hoveredVia),
+        { origin: true, editing: true },
+      ),
     );
   }
 
@@ -315,6 +359,7 @@ export function openSketchSession(deps: {
     if (!open) return;
     open = false;
     unsubscribeEdit();
+    unsubscribeShowAll();
     try {
       refresh();
     } finally {
@@ -664,6 +709,41 @@ function statusParamsOf(
   if (key !== 'sketch.status.dof') return NO_PARAMS;
   const n = dof ?? 0;
   return prev.n === n ? prev : Object.freeze({ n });
+}
+
+/**
+ * The entities whose glyphs are shown without showAllConstraints (spec 12, "Glyfy vazeb"): the
+ * selected and the hovered items with the defining points of those that are curves, and the
+ * entities of the selected and hovered geometric constraints. A constraint id in the set refers to
+ * no entity, so it shows nothing by itself.
+ */
+function glyphsShownFor(
+  data: SketchData,
+  selection: readonly SketchItemId[],
+  hover: SketchItemId | null,
+): ReadonlySet<SketchItemId> {
+  const items = hover === null ? selection : [...selection, hover];
+  const points = data.entities.flatMap((e) =>
+    items.includes(e.id) && e.kind !== 'point' ? curvePoints(e) : [],
+  );
+  return new Set<SketchItemId>([
+    ...items,
+    ...points,
+    ...entitiesOfConstraints(data.constraints, items),
+  ]);
+}
+
+/** The entities of the geometric constraints among `ids`; a dimension highlights nothing (M25). */
+function entitiesOfConstraints(
+  constraints: readonly SketchConstraint[],
+  ids: readonly SketchItemId[],
+): ReadonlySet<SketchItemId> {
+  if (ids.length === 0) return NO_ENTITIES;
+  return new Set<SketchItemId>(
+    constraints.flatMap((c) =>
+      ids.includes(c.id) && isGlyphConstraint(c) ? constraintTargets(c) : [],
+    ),
+  );
 }
 
 /** The rows of the panel; an unchanged row stays the same object. */

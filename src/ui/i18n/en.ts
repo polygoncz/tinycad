@@ -171,6 +171,9 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'sketchPanel.remove': 'Remove {name}',
   'sketchPanel.gridSnap': 'Snap to grid',
   'sketchPanel.gridSnapHint': 'Hold Alt to turn it off for a moment',
+  'sketchPanel.showConstraints': 'Show constraints',
+  'sketchPanel.showConstraintsHint':
+    'Shows the glyphs of all constraints of the sketch, not only of the selected entities',
 
   // Browser: origin and sketches (M12).
   'browser.origin': 'Origin',

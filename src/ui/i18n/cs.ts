@@ -172,6 +172,8 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'sketchPanel.remove': 'Odebrat {name}',
   'sketchPanel.gridSnap': 'Přichytit k mřížce',
   'sketchPanel.gridSnapHint': 'Dočasně vypnete podržením Alt',
+  'sketchPanel.showConstraints': 'Zobrazit vazby',
+  'sketchPanel.showConstraintsHint': 'Ukáže značky všech vazeb skici, nejen u vybraných entit',
 
   // Browser: origin and sketches (M12).
   'browser.origin': 'Počátek',
