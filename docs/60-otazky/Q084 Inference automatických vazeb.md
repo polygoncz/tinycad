@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[12-skicar]]"
 decide_by: "[[M26-snapper-a-auto-vazby]]"
 proposal: "Vzdálenostní prahy v pixelech (snap 6 px jako dnes), úhlové ve stupních (3° jako dnes); pevné pořadí priorit bod > střed > křivka > zarovnání > mřížka; více vazeb najednou dovoleno, jen jedna na dvojici entit."
-decision: ""
+decision: "Prahy v px (snap 6 px) a stupních (3°); pevné pořadí bod > střed úsečky > bod na křivce > průsečík vodítek > vodítko > mřížka, úhlové inference až po poloze bodu; víc vazeb na klik, nejvýš jedna na dvojici entit, ověřené řešičem; stejná délka/poloměr jen s navazující křivkou, tolerance 2 %."
 tags:
   - otazka
 created: 2026-10-15
@@ -32,4 +32,4 @@ Snapper v [[M26-snapper-a-auto-vazby|M26]] má odvodit z polohy kurzoru přichyc
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR.)_
+Pavel 2026-10-15 (stopa A, start [[M26-snapper-a-auto-vazby|M26]]): ve všech čtyřech bodech **návrh** – prahy v pixelech a stupních, pevné pořadí priorit, víc vazeb na klik (nejvýš jedna na dvojici entit, ověřené řešičem), stejná délka a poloměr jen s navazující křivkou s tolerancí 2 %. Propsáno do [[12-skicar#Snapper a auto-vazby (M26)]].

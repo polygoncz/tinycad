@@ -16,7 +16,11 @@ export interface FakeSolver extends ConstraintSolver {
 }
 
 /** Weights of constraints in the naive degrees of freedom (spec 12); the rest weigh 1. */
-const WEIGHTS: Partial<Record<SketchConstraint['kind'], number>> = { coincident: 2, fix: 2 };
+const WEIGHTS: Partial<Record<SketchConstraint['kind'], number>> = {
+  coincident: 2,
+  midpoint: 2,
+  fix: 2,
+};
 
 /**
  * A solver that echoes its input: status 'ok', the entities with the dragged point moved to the

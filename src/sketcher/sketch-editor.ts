@@ -37,6 +37,13 @@ export interface SketchEditor {
    */
   readonly gridSnap: Observable<boolean>;
   setGridSnap(on: boolean): void;
+  /**
+   * The glyphs of all constraints of the sketch, not only of the selected and hovered entities
+   * (M25, the switch "Show constraints" of the panel); false by default. The state of the editor:
+   * it survives closing and opening a sketch and is not saved.
+   */
+  readonly showAllConstraints: Observable<boolean>;
+  setShowAllConstraints(on: boolean): void;
   /** The current step of the grid in mm (deps.gridStep); the tools read it on every snap. */
   gridStep(): number;
 }
@@ -47,9 +54,10 @@ export interface SketchEditorDeps {
   readonly solver: ConstraintSolver;
   /**
    * The edited sketch is drawn under EDIT_SKETCH_DRAWING_ID; screenToRay places a dragged
-   * dimension label in the plane (M28).
+   * dimension label in the plane (M28); the overlay shows the snap guides of the drawing tools
+   * (M26).
    */
-  readonly viewport: Pick<ViewportPort, 'sketches' | 'screenToRay'>;
+  readonly viewport: Pick<ViewportPort, 'sketches' | 'screenToRay' | 'overlay'>;
   /** app: planeOfRef over the last regeneration state (M14: origin planes and planar faces). */
   readonly resolvePlane: (ref: PlaneRef | TopoRef) => Plane | undefined;
   /**
@@ -78,6 +86,7 @@ export function createSketchEditor(deps: SketchEditorDeps): SketchEditor {
   const current = new ObservableValue<SketchSession | null>(null);
   const mode = new ObservableValue<Mode>('model');
   const gridSnap = new ObservableValue(true);
+  const showAllConstraints = new ObservableValue(false);
   const gridStep = deps.gridStep ?? (() => 1);
 
   function checkCanOpen(what: string): void {
@@ -91,6 +100,7 @@ export function createSketchEditor(deps: SketchEditorDeps): SketchEditor {
       plane,
       planeMissing,
       resolvePlane,
+      showAllConstraints: showAllConstraints.asObservable(),
       solver,
       viewport,
       // The mode goes back even if a subscriber of current throws; its error goes on after.
@@ -157,6 +167,10 @@ export function createSketchEditor(deps: SketchEditorDeps): SketchEditor {
     gridSnap: gridSnap.asObservable(),
     setGridSnap(on) {
       gridSnap.set(on);
+    },
+    showAllConstraints: showAllConstraints.asObservable(),
+    setShowAllConstraints(on) {
+      showAllConstraints.set(on);
     },
     gridStep() {
       return gridStep();

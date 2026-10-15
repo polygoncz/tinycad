@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createSequentialIdGenerator } from '@/core';
+import { createSequentialIdGenerator, plane as planeMath } from '@/core';
 import type { Plane } from '@/core';
 import {
   ORIGIN_PLANES,
@@ -24,7 +24,8 @@ import { FakeViewport } from '@/interaction/testing';
 import { createSketchEditor } from '@/sketcher/sketch-editor';
 
 // The session's part of dimensions (spec 12, "Kóty (M28)"): the preview of the dimension tool and
-// dragging a dimension label. The rest of the session is tested in sketch-editor.test.ts.
+// dragging a dimension label; and the inference preview of the drawing tools (M26). The rest of
+// the session is tested in sketch-editor.test.ts.
 
 const SKETCH_PARAMS: ParamSchema = {
   plane: { kind: 'planes', label: 'sketch.plane', min: 1, max: 1 },
@@ -110,7 +111,7 @@ async function editing(plane: Plane = XY) {
   return { ...ops, solver, viewport, session, applied };
 }
 
-const [XY] = ORIGIN_PLANES.map((p) => p.plane) as [Plane, Plane, Plane]; // a fixed table of three
+const [XY, XZ] = ORIGIN_PLANES.map((p) => p.plane) as [Plane, Plane, Plane]; // a fixed table of three
 
 /** Lets the solver answers (microtasks) and the queue settle. */
 async function settle(): Promise<void> {
@@ -277,5 +278,78 @@ describe('SketchSession.moveDimension and endMoveDimension', () => {
       }),
       SKETCH.constraints[1],
     ]);
+  });
+});
+
+describe('SketchSession.setInferencePreview (M26)', () => {
+  const GUIDE = { axis: 'v', from: [10, 0], to: [10, 5] } as const;
+
+  it('shows the kinds at the anchor in the world and draws the guides, neither solved nor written', async () => {
+    const { session, solver, viewport, applied } = await editing(XZ);
+    const calls = solver.calls.length;
+
+    session.setInferencePreview({
+      at: [10, 5],
+      kinds: ['vAlign', 'pointOnCurve'],
+      guides: [GUIDE],
+    });
+
+    expect(session.state.get().inference).toEqual({
+      anchor: planeMath.toWorld(XZ, [10, 5]),
+      kinds: ['vAlign', 'pointOnCurve'],
+    });
+    expect(viewport.overlayShapes.get('sketch-guides')).toEqual([
+      {
+        kind: 'lines',
+        points: [planeMath.toWorld(XZ, [10, 0]), planeMath.toWorld(XZ, [10, 5])],
+        style: 'construction',
+      },
+    ]);
+    expect(solver.calls.length).toBe(calls);
+    expect(applied).toEqual([]);
+  });
+
+  it('null removes the preview and the guides', async () => {
+    const { session, viewport } = await editing();
+    session.setInferencePreview({ at: [10, 5], kinds: ['vAlign'], guides: [GUIDE] });
+
+    session.setInferencePreview(null);
+
+    expect(session.state.get().inference).toBeNull();
+    expect(viewport.overlayShapes.has('sketch-guides')).toBe(false);
+  });
+
+  it('a preview without kinds is no inference, without guides no overlay', async () => {
+    const { session, viewport } = await editing();
+    session.setInferencePreview({ at: [10, 5], kinds: ['fix'], guides: [GUIDE] });
+
+    session.setInferencePreview({ at: [10, 5], kinds: [], guides: [] });
+
+    expect(session.state.get().inference).toBeNull();
+    expect(viewport.overlayShapes.has('sketch-guides')).toBe(false);
+  });
+
+  it('an unchanged preview publishes no new state; a moved one does not redraw the sketch', async () => {
+    const { session, viewport } = await editing();
+    session.setInferencePreview({ at: [10, 5], kinds: ['fix'], guides: [] });
+    const before = session.state.get();
+    const drawing = viewport.sketchDrawings.get('sketch-edit');
+
+    session.setInferencePreview({ at: [10, 5], kinds: ['fix'], guides: [] });
+    expect(session.state.get()).toBe(before);
+
+    session.setInferencePreview({ at: [11, 5], kinds: ['fix'], guides: [] });
+    expect(session.state.get()).not.toBe(before);
+    expect(viewport.sketchDrawings.get('sketch-edit')).toBe(drawing);
+  });
+
+  it('closing the session removes the preview and the guides', async () => {
+    const { session, viewport } = await editing();
+    session.setInferencePreview({ at: [10, 5], kinds: ['vAlign'], guides: [GUIDE] });
+
+    session.cancel();
+
+    expect(session.state.get().inference).toBeNull();
+    expect(viewport.overlayShapes.has('sketch-guides')).toBe(false);
   });
 });

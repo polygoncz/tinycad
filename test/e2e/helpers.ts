@@ -50,8 +50,38 @@ export function sketchPanel(page: Page, name: string): Locator {
   return page.getByRole('region', { name, exact: true });
 }
 
-/** The value field of a dimension in the sketch panel, named by its row ("Vodorovná vzdálenost 1"). */
-export function dimensionInput(panel: Locator, label: string): Locator {
+/**
+ * The collapsible section of the constraints in the sketch panel (a <details>, role group),
+ * collapsed by default (M25).
+ */
+export function constraintSection(panel: Locator): Locator {
+  return panel.getByRole('group');
+}
+
+/**
+ * Opens the section of the constraints in the sketch panel, unless it is open already. A new
+ * dimension opens the section by itself a tick later (focusNewDimension) and focuses its field;
+ * a click in that moment would close the section again and take the focus, so the section gets
+ * a second to open by itself first.
+ */
+export async function openConstraintSection(panel: Locator): Promise<void> {
+  const section = constraintSection(panel);
+  try {
+    await expect(section).toHaveJSProperty('open', true, { timeout: 1000 });
+    return;
+  } catch {
+    // Still collapsed: open it.
+  }
+  await panel.getByText('Vazby', { exact: true }).click();
+  await expect(section).toHaveJSProperty('open', true);
+}
+
+/**
+ * The value field of a dimension in the sketch panel, named by its row ("Vodorovná vzdálenost 1"). The
+ * section of the constraints is opened first, so the field can be seen and edited.
+ */
+export async function dimensionInput(panel: Locator, label: string): Promise<Locator> {
+  await openConstraintSection(panel);
   return panel.getByRole('textbox', { name: label, exact: true });
 }
 
@@ -106,8 +136,8 @@ export async function drawDimensionedRectangle(page: Page, sketch: string): Prom
   await clickCanvas(page, 120, -40);
   await clickCanvas(page, 160, -40);
   await expect(status).toHaveText('Plně určeno');
-  await expect(dimensionInput(panel, 'Vodorovná vzdálenost 1')).toBeVisible();
-  await expect(dimensionInput(panel, 'Svislá vzdálenost 1')).toBeVisible();
+  await expect(await dimensionInput(panel, 'Vodorovná vzdálenost 1')).toBeVisible();
+  await expect(await dimensionInput(panel, 'Svislá vzdálenost 1')).toBeVisible();
   return panel;
 }
 

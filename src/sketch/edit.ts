@@ -21,6 +21,9 @@ import type {
 const MIN_DIMENSION = 1e-9;
 
 const isRound = (e: SketchEntity): boolean => e.kind === 'circle' || e.kind === 'arc';
+const isCurve = (e: SketchEntity): e is SketchCurve => e.kind !== 'point';
+const isPointOnCurveTarget = (e: SketchCurve): boolean =>
+  e.kind === 'line' || e.kind === 'circle' || e.kind === 'arc';
 
 /** The end points of a spline (first and last pole or fit point), or undefined for other entities. */
 function splineEnds(e: SketchEntity): readonly SketchEntityId[] | undefined {
@@ -37,7 +40,11 @@ function lineAtSplineEnd(first: SketchEntity, second: SketchEntity): boolean {
   return ends !== undefined && (ends.includes(line.p1) || ends.includes(line.p2));
 }
 
-/** The constraint for the selected entities (in selection order), or null when the selection does not fit. */
+/**
+ * The constraint for the selected entities (in selection order), or null when the selection does
+ * not fit. Onshape's convention for the M26 kinds: coincident of a point and a curve is
+ * pointOnCurve, horizontal/vertical of two points is hAlign/vAlign.
+ */
 export function constraintFor(
   kind: GeometricConstraintKind,
   selected: readonly SketchEntity[],
@@ -54,11 +61,22 @@ export function constraintFor(
   if (first.id === second.id) return null;
   const a = first.id;
   const b = second.id;
+  const points = selected.filter((e) => e.kind === 'point').length;
   const lines = selected.filter((e) => e.kind === 'line').length;
   const rounds = selected.filter(isRound).length;
   switch (kind) {
     case 'coincident':
-      return first.kind === 'point' && second.kind === 'point' ? { kind, a, b } : null;
+      if (points === 2) return { kind, a, b };
+      // Splines have no pointOnCurve yet (M29 may add point_on_bspline).
+      return pointOn(first, second, isPointOnCurveTarget, (point, curve) => ({
+        kind: 'pointOnCurve',
+        point,
+        curve,
+      }));
+    case 'horizontal':
+      return points === 2 ? { kind: 'hAlign', a, b } : null;
+    case 'vertical':
+      return points === 2 ? { kind: 'vAlign', a, b } : null;
     case 'parallel':
     case 'perpendicular':
       return lines === 2 ? { kind, a, b } : null;
@@ -68,13 +86,34 @@ export function constraintFor(
       return rounds === 2 || (lines === 1 && rounds === 1) || lineAtSplineEnd(first, second)
         ? { kind, a, b }
         : null;
-    case 'horizontal':
-    case 'vertical':
+    case 'midpoint':
+      return pointOn(
+        first,
+        second,
+        (e) => e.kind === 'line',
+        (point, line) => ({ kind, point, line }),
+      );
     case 'fix':
       return null;
     default:
       return assertNever(kind);
   }
+}
+
+/**
+ * A constraint of a point and a curve selected in either order: null unless one is a point and
+ * the other a curve accepted by `accepts`, and the point does not define the curve.
+ */
+function pointOn(
+  first: SketchEntity,
+  second: SketchEntity,
+  accepts: (curve: SketchCurve) => boolean,
+  make: (point: SketchEntityId, curve: SketchEntityId) => SketchConstraintDraft,
+): SketchConstraintDraft | null {
+  const [point, curve] = first.kind === 'point' ? [first, second] : [second, first];
+  if (point.kind !== 'point' || curve.kind === 'point' || !accepts(curve)) return null;
+  if (curvePoints(curve).includes(point.id)) return null;
+  return make(point.id, curve.id);
 }
 
 /**
@@ -198,8 +237,10 @@ function withoutConstruction(c: SketchCurve): SketchCurve {
   }
 }
 
-/** Point ids a curve uses. */
-function curvePoints(c: SketchCurve): readonly SketchEntityId[] {
+/**
+ * Point ids a curve is defined by: line [p1, p2], circle [center], arc [center, start, end].
+ */
+export function curvePoints(c: SketchCurve): readonly SketchEntityId[] {
   switch (c.kind) {
     case 'line':
       return [c.p1, c.p2];
@@ -216,8 +257,12 @@ function curvePoints(c: SketchCurve): readonly SketchEntityId[] {
   }
 }
 
-/** Entity ids a constraint refers to. */
-function constraintTargets(c: SketchConstraint): readonly SketchEntityId[] {
+/**
+ * Entity ids a constraint refers to: [a, b] for the constraints of two entities (coincident,
+ * hAlign and vAlign included), [line] for horizontal and vertical, [point] for fix, [curve] for
+ * radius, [point, curve] for pointOnCurve, [point, line] for midpoint.
+ */
+export function constraintTargets(c: SketchConstraint): readonly SketchEntityId[] {
   switch (c.kind) {
     case 'coincident':
     case 'parallel':
@@ -225,10 +270,16 @@ function constraintTargets(c: SketchConstraint): readonly SketchEntityId[] {
     case 'equal':
     case 'tangent':
     case 'distance':
+    case 'hAlign':
+    case 'vAlign':
     case 'hDistance':
     case 'vDistance':
     case 'angle':
       return [c.a, c.b];
+    case 'pointOnCurve':
+      return [c.point, c.curve];
+    case 'midpoint':
+      return [c.point, c.line];
     case 'horizontal':
     case 'vertical':
       return [c.line];
@@ -243,8 +294,6 @@ function constraintTargets(c: SketchConstraint): readonly SketchEntityId[] {
       return assertNever(c);
   }
 }
-
-const isCurve = (e: SketchEntity): e is SketchCurve => e.kind !== 'point';
 
 /**
  * Removes items with a cascade; the order of the rest does not change. Unknown ids are ignored.

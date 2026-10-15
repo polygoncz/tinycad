@@ -4,9 +4,11 @@
 // each reads the current data from the document when its turn comes.
 
 import { ObservableValue, assert, plane as planeMath } from '@/core';
-import type { Observable, Plane, Vec2 } from '@/core';
+import type { Observable, Plane, Vec2, Vec3 } from '@/core';
 import {
   SKETCH_PARAM,
+  constraintTargets,
+  curvePoints,
   isDimension,
   movePlacement,
   parseSketchData,
@@ -24,6 +26,7 @@ import type {
   SketchEntity,
   SketchEntityId,
   SketchItemId,
+  SnapGuide,
   SolveInput,
   SolveResult,
   SolveStatus,
@@ -33,6 +36,7 @@ import type { PlaneRef, TopoRef } from '@/document';
 import type {
   EditState,
   FeatureEditSession,
+  OverlayShape,
   RefText,
   SketchStyle,
   ViewportPort,
@@ -41,6 +45,8 @@ import { planeRefOf } from './plane-ref';
 import { constraintNumbers, dimensionViews } from './sketch-dimensions';
 import type { SketchDimensionView } from './sketch-dimensions';
 import { toSketchDrawing } from './sketch-drawing';
+import { glyphViews, isGlyphConstraint } from './sketch-glyphs';
+import type { GlyphKind, SketchGlyphView } from './sketch-glyphs';
 
 export interface SketchSession {
   readonly featureId: FeatureEditSession['featureId'];
@@ -50,8 +56,15 @@ export interface SketchSession {
    */
   readonly plane: Observable<Plane>;
   readonly state: Observable<SketchState>;
-  /** New entities and constraints (tools); true = written. */
-  addGeometry(add: SketchData): Promise<boolean>;
+  /**
+   * New entities and constraints (tools); true = written. The constraints are automatic (M26): a
+   * conflict solves again without the conflicting ones, then with only fix and `required`; at most
+   * three solves. Added constraints the solver finds redundant are left out.
+   */
+  addGeometry(
+    add: SketchData,
+    opts?: { readonly required?: ReadonlySet<SketchConstraintId> },
+  ): Promise<boolean>;
   /** Constraint actions, dimensions. */
   addConstraint(c: SketchConstraint): Promise<boolean>;
   setDimension(id: SketchConstraintId, value: number): Promise<boolean>;
@@ -77,6 +90,12 @@ export interface SketchSession {
   moveDimension(id: SketchConstraintId, x: number, y: number): void;
   /** Writes the placement of the dragged dimension in one setParams; without a move nothing. */
   endMoveDimension(): void;
+  /**
+   * The constraints a click of a drawing tool would add at `at` (M26), or null for none: shown as
+   * SketchState.inference; the guides are drawn into the overlay SKETCH_GUIDES_OVERLAY_ID. Neither
+   * solved nor written.
+   */
+  setInferencePreview(p: InferencePreview | null): void;
   setHover(id: SketchItemId | null): void;
   /** Without additive = only this one; additive = toggle. */
   select(id: SketchItemId, opts?: { readonly additive?: boolean }): void;
@@ -131,6 +150,17 @@ export interface SketchState {
   readonly editingDimension: SketchConstraintId | null;
   /** The dimensions for the viewport, then the preview of the dimension tool (dimensionViews, M28). */
   readonly dimensions: readonly SketchDimensionView[];
+  /**
+   * The glyphs of the geometric constraints for the viewport (glyphViews, M25): those of the
+   * selected and hovered entities and of the entities of a selected or hovered constraint; all of
+   * them with SketchEditor.showAllConstraints.
+   */
+  readonly glyphs: readonly SketchGlyphView[];
+  /**
+   * The constraints a click of the drawing tool would add (setInferencePreview, M26): their kinds
+   * and the anchor in world coordinates; null without a preview or when it has no kinds.
+   */
+  readonly inference: { readonly anchor: Vec3; readonly kinds: readonly GlyphKind[] } | null;
   /** The field "Plane" of the panel (M21); null without a visible plane param. */
   readonly planeField: SketchPlaneField | null;
   /**
@@ -138,6 +168,13 @@ export interface SketchState {
    * origin plane XY and the panel asks for a new plane. A picked plane that resolves clears it.
    */
   readonly planeMissing: boolean;
+}
+
+/** The preview of the inferred constraints of a drawing tool (M26): in plane coordinates. */
+export interface InferencePreview {
+  readonly at: Vec2;
+  readonly kinds: readonly GlyphKind[];
+  readonly guides: readonly SnapGuide[];
 }
 
 /** The field "Plane" of the sketch panel (M21, Q076): the plane param of the feature session. */
@@ -167,11 +204,17 @@ export interface SketchConstraintRow {
 /** The id of the drawing of the edited sketch in ViewportPort.sketches. */
 export const EDIT_SKETCH_DRAWING_ID = 'sketch-edit';
 
+/** The overlay id of the snap guides of the inference preview (M26). */
+export const SKETCH_GUIDES_OVERLAY_ID = 'sketch-guides';
+
 const EMPTY_DATA: SketchData = Object.freeze({
   entities: Object.freeze([]),
   constraints: Object.freeze([]),
 });
 const NO_ITEMS: readonly SketchItemId[] = Object.freeze([]);
+/** Solves of one addGeometry: all added constraints, without the conflicting, only fix and required. */
+const MAX_ADD_SOLVES = 3;
+const NO_ENTITIES: ReadonlySet<SketchItemId> = new Set<SketchItemId>();
 const NO_PARAMS: Readonly<Record<string, number>> = Object.freeze({});
 const MESSAGES: { readonly [K in SketchMessageKey]: { readonly key: K } } = Object.freeze({
   'sketch.conflict': Object.freeze({ key: 'sketch.conflict' }),
@@ -188,15 +231,17 @@ export function openSketchSession(deps: {
   planeMissing: boolean;
   /** The plane of a reference picked while sketching (app: planeOfRef over the last state). */
   resolvePlane: (ref: PlaneRef | TopoRef) => Plane | undefined;
+  /** SketchEditor.showAllConstraints: the glyphs of all constraints, not only the selected ones (M25). */
+  showAllConstraints: Observable<boolean>;
   solver: ConstraintSolver;
   /**
    * The drawings: the session draws the edited sketch and nothing else; screenToRay: the cursor
-   * of a dragged dimension label (M28).
+   * of a dragged dimension label (M28); overlay: the snap guides of the inference preview (M26).
    */
-  viewport: Pick<ViewportPort, 'sketches' | 'screenToRay'>;
+  viewport: Pick<ViewportPort, 'sketches' | 'screenToRay' | 'overlay'>;
   onClose: () => void;
 }): SketchSession {
-  const { edit, resolvePlane, solver, viewport, onClose } = deps;
+  const { edit, resolvePlane, showAllConstraints, solver, viewport, onClose } = deps;
   const plane = new ObservableValue<Plane>(deps.plane);
   /** The plane reference last followed; a change of the param moves the plane (M21). */
   let planeRef = planeRefOf(edit.state.get().params);
@@ -216,6 +261,10 @@ export function openSketchSession(deps: {
   /** The placement of a dragged dimension label, not written yet (moveDimension). */
   let moving: { readonly id: SketchConstraintId; readonly placement: DimensionPlacement } | null =
     null;
+  /** The inference preview of a drawing tool with some kinds (setInferencePreview). */
+  let inference: Pick<InferencePreview, 'at' | 'kinds'> | null = null;
+  /** The guides of the inference preview are in the overlay. */
+  let guidesShown = false;
   /**
    * Queued or running jobs that may write to the sketch (SketchState.busy while open); a toggle of
    * construction waits for them.
@@ -227,6 +276,9 @@ export function openSketchSession(deps: {
   const unsubscribeEdit = edit.state.subscribe(() => {
     if (!edit.state.get().open) close();
     else refresh(followPlane());
+  });
+  const unsubscribeShowAll = showAllConstraints.subscribe(() => {
+    refresh();
   });
 
   // ---- state ----
@@ -280,6 +332,17 @@ export function openSketchSession(deps: {
         prev?.dimensions ?? [],
         preview,
       ),
+      glyphs: glyphViews(
+        plane.get(),
+        { entities, constraints },
+        showAllConstraints.get()
+          ? 'all'
+          : glyphsShownFor({ entities, constraints }, selection, hover),
+        selection,
+        hover,
+        prev?.glyphs ?? [],
+      ),
+      inference: inferenceOf(plane.get(), open ? inference : null, prev?.inference ?? null),
       planeField: planeFieldOf(edit.state.get(), prev?.planeField ?? null),
       planeMissing,
     });
@@ -299,15 +362,33 @@ export function openSketchSession(deps: {
 
   /**
    * Publishes a new snapshot unless nothing has changed, and redraws the sketch; `redraw` also
-   * when only the plane moved.
+   * when only the plane moved. A change of only the inference preview (every move of a drawing
+   * tool) does not redraw: the drawing does not show it.
    */
   function refresh(redraw = false): void {
     const prev = state.get();
     const next = buildState(prev);
     const keys = Object.keys(next) as (keyof SketchState)[]; // the keys of the snapshot just built
-    const changed = !keys.every((key) => Object.is(next[key], prev[key]));
-    if (changed) state.set(next);
-    if (open && (changed || redraw)) draw();
+    const changed = keys.filter((key) => !Object.is(next[key], prev[key]));
+    if (changed.length > 0) state.set(next);
+    if (open && (changed.some((key) => key !== 'inference') || redraw)) draw();
+  }
+
+  /** The guides as dashed construction lines in the overlay; none removes them. */
+  function drawGuides(guides: readonly SnapGuide[]): void {
+    if (guides.length === 0) {
+      if (guidesShown) viewport.overlay.remove(SKETCH_GUIDES_OVERLAY_ID);
+      guidesShown = false;
+      return;
+    }
+    const p = plane.get();
+    const shape: OverlayShape = {
+      kind: 'lines',
+      points: guides.flatMap((g) => [planeMath.toWorld(p, g.from), planeMath.toWorld(p, g.to)]),
+      style: 'construction',
+    };
+    viewport.overlay.set(SKETCH_GUIDES_OVERLAY_ID, [shape]);
+    guidesShown = true;
   }
 
   /**
@@ -328,10 +409,19 @@ export function openSketchSession(deps: {
     return moved;
   }
 
-  function styleOf(id: SketchItemId, construction: boolean): SketchStyle {
+  /**
+   * The style of an item; `selectedVia` and `hoveredVia` are the entities of the selected and the
+   * hovered constraints (M25), drawn like selected and hovered ones.
+   */
+  function styleOf(
+    id: SketchItemId,
+    construction: boolean,
+    selectedVia: ReadonlySet<SketchItemId>,
+    hoveredVia: ReadonlySet<SketchItemId>,
+  ): SketchStyle {
     const s = state.get();
-    if (s.selection.includes(id)) return 'selected';
-    if (s.hover === id) return 'hover';
+    if (s.selection.includes(id) || selectedVia.has(id)) return 'selected';
+    if (s.hover === id || hoveredVia.has(id)) return 'hover';
     if (construction) return 'construction';
     return s.fullyDefined ? 'defined' : 'normal';
   }
@@ -341,12 +431,16 @@ export function openSketchSession(deps: {
     const construction = new Set<string>(
       s.entities.flatMap((e) => (e.kind !== 'point' && e.construction === true ? [e.id] : [])),
     );
+    const selectedVia = entitiesOfConstraints(s.constraints, s.selection);
+    const hoveredVia = entitiesOfConstraints(s.constraints, s.hover === null ? [] : [s.hover]);
     viewport.sketches.set(
       EDIT_SKETCH_DRAWING_ID,
-      toSketchDrawing(plane.get(), s, (id) => styleOf(id, construction.has(id)), {
-        origin: true,
-        editing: true,
-      }),
+      toSketchDrawing(
+        plane.get(),
+        s,
+        (id) => styleOf(id, construction.has(id), selectedVia, hoveredVia),
+        { origin: true, editing: true },
+      ),
     );
   }
 
@@ -355,10 +449,13 @@ export function openSketchSession(deps: {
     if (!open) return;
     open = false;
     unsubscribeEdit();
+    unsubscribeShowAll();
+    inference = null;
     try {
       refresh();
     } finally {
       try {
+        drawGuides([]);
         viewport.sketches.remove(EDIT_SKETCH_DRAWING_ID);
       } finally {
         onClose();
@@ -443,13 +540,12 @@ export function openSketchSession(deps: {
 
   /**
    * Solves `build(current data)` and writes it on 'ok'. `rejectRedundant` = an added constraint
-   * the solver calls redundant is refused; `dropRedundant` = such added constraints are left out.
+   * the solver calls redundant is refused.
    */
   function change(
     build: (data: SketchData) => SketchData,
     opts: {
       readonly rejectRedundant?: SketchConstraintId;
-      readonly dropRedundant?: ReadonlySet<SketchConstraintId>;
       readonly onWritten?: () => void;
     } = {},
   ): Promise<boolean> {
@@ -463,12 +559,7 @@ export function openSketchSession(deps: {
       if (opts.rejectRedundant !== undefined && redundant.has(opts.rejectRedundant)) {
         return reject('sketch.redundant');
       }
-      const drop = opts.dropRedundant;
-      const constraints =
-        drop === undefined
-          ? next.constraints
-          : next.constraints.filter((c) => !(drop.has(c.id) && redundant.has(c.id)));
-      accept(result, { entities: result.entities ?? next.entities, constraints });
+      accept(result, { entities: result.entities ?? next.entities, constraints: next.constraints });
       opts.onWritten?.();
       refresh();
       return true;
@@ -528,16 +619,35 @@ export function openSketchSession(deps: {
     featureId: edit.featureId,
     plane: plane.asObservable(),
     state: state.asObservable(),
-    addGeometry(add) {
+    addGeometry(add, opts = {}) {
       checkOpen('addGeometry');
-      const added = new Set(add.constraints.map((c) => c.id));
-      return change(
-        (data) => ({
-          entities: [...data.entities, ...add.entities],
-          constraints: [...data.constraints, ...add.constraints],
-        }),
-        { dropRedundant: added },
-      );
+      const { required } = opts;
+      const kept = add.constraints.filter((c) => c.kind === 'fix' || required?.has(c.id) === true);
+      return enqueueWrite(async () => {
+        const data = readData();
+        const entities = [...data.entities, ...add.entities];
+        const tried: (readonly SketchConstraint[])[] = [];
+        let attempt: readonly SketchConstraint[] | null = add.constraints;
+        while (attempt !== null) {
+          tried.push(attempt);
+          const next = { entities, constraints: [...data.constraints, ...attempt] };
+          const result = await solve(next);
+          if (!open) return false;
+          if (result === null || result.status === 'failed') return reject('sketch.solverFailed');
+          if (result.status === 'ok') {
+            const redundant = new Set(result.redundant);
+            const own = new Set(attempt.map((c) => c.id));
+            const constraints = next.constraints.filter(
+              (c) => !(own.has(c.id) && redundant.has(c.id)),
+            );
+            accept(result, { entities: result.entities ?? entities, constraints });
+            refresh();
+            return true;
+          }
+          attempt = retryOf(attempt, new Set(result.conflicting), kept, tried);
+        }
+        return reject('sketch.conflict');
+      });
     },
     addConstraint(c) {
       checkOpen('addConstraint');
@@ -640,6 +750,15 @@ export function openSketchSession(deps: {
           return Promise.resolve();
         });
     },
+    setInferencePreview(p) {
+      checkOpen('setInferencePreview');
+      drawGuides(p?.guides ?? []);
+      inference =
+        p === null || p.kinds.length === 0
+          ? null
+          : Object.freeze({ at: p.at, kinds: Object.freeze([...p.kinds]) });
+      refresh();
+    },
     setHover(id) {
       checkOpen('setHover');
       if (id !== null && !itemExists(id)) return;
@@ -689,6 +808,45 @@ export function openSketchSession(deps: {
     const s = state.get();
     return s.entities.some((e) => e.id === id) || s.constraints.some((c) => c.id === id);
   }
+}
+
+/**
+ * The added constraints of the next attempt after a conflict (M26): without the conflicting ones
+ * except `kept` (fix and required, never left out), or when that leaves out nothing new, only
+ * `kept`. null = nothing new to try;
+ * at most three attempts in all.
+ */
+function retryOf(
+  attempt: readonly SketchConstraint[],
+  conflicting: ReadonlySet<SketchConstraintId>,
+  kept: readonly SketchConstraint[],
+  tried: readonly (readonly SketchConstraint[])[],
+): readonly SketchConstraint[] | null {
+  if (tried.length >= MAX_ADD_SOLVES) return null;
+  const fresh = (c: readonly SketchConstraint[]): boolean =>
+    !tried.some((t) => t.length === c.length && t.every((x, i) => x === c[i]));
+  const withoutConflicting = attempt.filter((c) => !conflicting.has(c.id) || kept.includes(c));
+  if (tried.length === 1 && fresh(withoutConflicting)) return withoutConflicting;
+  return fresh(kept) ? kept : null;
+}
+
+/**
+ * SketchState.inference of the preview on the plane; `prev` while the anchor and the kinds stay
+ * the same, so an unchanged preview does not publish a new state.
+ */
+function inferenceOf(
+  plane: Plane,
+  preview: Pick<InferencePreview, 'at' | 'kinds'> | null,
+  prev: SketchState['inference'],
+): SketchState['inference'] {
+  if (preview === null) return null;
+  const anchor = planeMath.toWorld(plane, preview.at);
+  const same =
+    prev !== null &&
+    anchor.every((v, i) => Object.is(v, prev.anchor[i])) &&
+    prev.kinds.length === preview.kinds.length &&
+    prev.kinds.every((k, i) => k === preview.kinds[i]);
+  return same ? prev : Object.freeze({ anchor, kinds: preview.kinds });
 }
 
 /** The dimension with the placement; a placement of another kind (never from movePlacement) keeps it. */
@@ -767,6 +925,41 @@ function statusParamsOf(
   if (key !== 'sketch.status.dof') return NO_PARAMS;
   const n = dof ?? 0;
   return prev.n === n ? prev : Object.freeze({ n });
+}
+
+/**
+ * The entities whose glyphs are shown without showAllConstraints (spec 12, "Glyfy vazeb"): the
+ * selected and the hovered items with the defining points of those that are curves, and the
+ * entities of the selected and hovered geometric constraints. A constraint id in the set refers to
+ * no entity, so it shows nothing by itself.
+ */
+function glyphsShownFor(
+  data: SketchData,
+  selection: readonly SketchItemId[],
+  hover: SketchItemId | null,
+): ReadonlySet<SketchItemId> {
+  const items = hover === null ? selection : [...selection, hover];
+  const points = data.entities.flatMap((e) =>
+    items.includes(e.id) && e.kind !== 'point' ? curvePoints(e) : [],
+  );
+  return new Set<SketchItemId>([
+    ...items,
+    ...points,
+    ...entitiesOfConstraints(data.constraints, items),
+  ]);
+}
+
+/** The entities of the geometric constraints among `ids`; a dimension highlights nothing (M25). */
+function entitiesOfConstraints(
+  constraints: readonly SketchConstraint[],
+  ids: readonly SketchItemId[],
+): ReadonlySet<SketchItemId> {
+  if (ids.length === 0) return NO_ENTITIES;
+  return new Set<SketchItemId>(
+    constraints.flatMap((c) =>
+      ids.includes(c.id) && isGlyphConstraint(c) ? constraintTargets(c) : [],
+    ),
+  );
 }
 
 /** The rows of the panel; an unchanged row stays the same object. */

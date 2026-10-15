@@ -35,12 +35,21 @@ const ENTITY_FIELDS: Readonly<Record<string, { required: string[]; optional: str
 const MAX_SPLINE_DEGREE = 3;
 
 /** Entity kind groups a constraint field may refer to. */
-type Target = 'point' | 'line' | 'round';
+type Target = 'point' | 'line' | 'round' | 'curve';
 const ROUND = new Set(['circle', 'arc']);
+const CURVE = new Set(['line', 'circle', 'arc']);
+
+/** The fields of each curve kind that refer to its defining points (curvePoints on raw data). */
+const DEFINING_POINT_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  line: ['p1', 'p2'],
+  circle: ['center'],
+  arc: ['center', 'start', 'end'],
+};
 
 /**
  * Fields of each constraint kind besides `kind` and `id`; a ref field lists the entity kind it
- * needs. Pair kinds (equal, tangent) need an extra rule on the combination, see pairAllowed.
+ * needs. Pair kinds (equal, tangent) need an extra rule on the combination, see pairAllowed;
+ * pointOnCurve and midpoint one on the point, see definesCurve.
  */
 const CONSTRAINT_FIELDS: Readonly<Record<string, Readonly<Record<string, Target | 'value'>>>> = {
   coincident: { a: 'point', b: 'point' },
@@ -50,6 +59,10 @@ const CONSTRAINT_FIELDS: Readonly<Record<string, Readonly<Record<string, Target 
   perpendicular: { a: 'line', b: 'line' },
   equal: { a: 'line', b: 'line' },
   tangent: { a: 'line', b: 'line' },
+  pointOnCurve: { point: 'point', curve: 'curve' },
+  midpoint: { point: 'point', line: 'line' },
+  hAlign: { a: 'point', b: 'point' },
+  vAlign: { a: 'point', b: 'point' },
   fix: { point: 'point' },
   distance: { a: 'point', b: 'point', value: 'value' },
   hDistance: { a: 'point', b: 'point', value: 'value' },
@@ -294,9 +307,22 @@ function constraintValid(
   if (kind === 'tangent' && lineAtSplineEnd(refTargets)) return true;
   if (kind === 'equal' || kind === 'tangent') return pairAllowed(kind, refKinds);
   if (kind === 'pointLineDistance' && isEndOf(item.point, item.line, targets)) return false;
-  return Object.values(fields)
+  const kindsMatch = Object.values(fields)
     .filter((need) => need !== 'value')
     .every((need, i) => matches(need, refKinds[i]));
+  if (!kindsMatch) return false;
+  if (kind === 'pointOnCurve' || kind === 'midpoint') {
+    const [point, curve] = refs;
+    const target = typeof curve === 'string' ? targets.get(curve) : undefined;
+    return target !== undefined && !definesCurve(point, target);
+  }
+  return true;
+}
+
+/** Whether the point id is one of the defining points of the (raw) curve. */
+function definesCurve(point: unknown, curve: Fields): boolean {
+  const fields = typeof curve.kind === 'string' ? DEFINING_POINT_FIELDS[curve.kind] : undefined;
+  return (fields ?? []).some((field) => curve[field] === point);
 }
 
 /** A placement of the given kind with finite numbers in range and nothing else. */
@@ -361,7 +387,9 @@ function lineAtSplineEnd(pair: readonly Fields[]): boolean {
 
 function matches(need: Target | 'value', kind: string | undefined): boolean {
   if (kind === undefined) return false;
-  return need === 'round' ? ROUND.has(kind) : need === kind;
+  if (need === 'round') return ROUND.has(kind);
+  if (need === 'curve') return CURVE.has(kind);
+  return need === kind;
 }
 
 /** True when the id is a non-empty string not used before; remembers it either way. */

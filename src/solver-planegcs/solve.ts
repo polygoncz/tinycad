@@ -246,6 +246,20 @@ function constraintPrimitives(
       return [equalPrimitive(c.id, curveOf(entities, c.a), curveOf(entities, c.b))];
     case 'tangent':
       return [tangentPrimitive(c.id, curveOf(entities, c.a), curveOf(entities, c.b))];
+    case 'pointOnCurve':
+      return [pointOnCurvePrimitive(c.id, c.point, curveOf(entities, c.curve))];
+    case 'midpoint': {
+      // p1 and p2 symmetric about the point: the point is the middle of the line.
+      const line = curveOf(entities, c.line);
+      if (line.kind !== 'line') throw new Error(`midpoint of a ${line.kind}`);
+      return [
+        { id: c.id, type: 'p2p_symmetric_ppp', p1_id: line.p1, p2_id: line.p2, p_id: c.point },
+      ];
+    }
+    case 'hAlign':
+      return [{ id: c.id, type: 'horizontal_pp', p1_id: c.a, p2_id: c.b }];
+    case 'vAlign':
+      return [{ id: c.id, type: 'vertical_pp', p1_id: c.a, p2_id: c.b }];
     case 'fix': {
       // Two equations on the current coordinates instead of `fixed: true` (ADR 0016).
       const p = pointOf(entities, c.point);
@@ -402,6 +416,20 @@ function tangentPrimitive(id: string, a: Curve, b: Curve): SketchPrimitive {
     return { id, type: 'tangent_ca', c_id: second.id, a_id: first.id };
   }
   throw new Error(`tangent between a ${a.kind} and a ${b.kind}`);
+}
+
+/** On the whole carrier line of a line, on the whole circle of a circle or an arc (spec 12). */
+function pointOnCurvePrimitive(id: string, point: SketchEntityId, curve: Curve): SketchPrimitive {
+  switch (curve.kind) {
+    case 'line':
+      return { id, type: 'point_on_line_pl', p_id: point, l_id: curve.id };
+    case 'circle':
+      return { id, type: 'point_on_circle', p_id: point, c_id: curve.id };
+    case 'arc':
+      return { id, type: 'point_on_arc', p_id: point, a_id: curve.id };
+    default:
+      throw new Error(`point on a ${curve.kind}`);
+  }
 }
 
 /**

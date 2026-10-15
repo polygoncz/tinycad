@@ -157,7 +157,11 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'sketch.constraint.perpendicular': 'Perpendicular',
   'sketch.constraint.equal': 'Equal',
   'sketch.constraint.tangent': 'Tangent',
+  'sketch.constraint.midpoint': 'Midpoint',
   'sketch.constraint.fix': 'Fix',
+  'sketch.constraint.pointOnCurve': 'Point on curve',
+  'sketch.constraint.hAlign': 'Align horizontally',
+  'sketch.constraint.vAlign': 'Align vertically',
   'sketch.constraint.distance': 'Distance',
   'sketch.constraint.radius': 'Radius',
   'sketch.constraint.hDistance': 'Horizontal distance',
@@ -176,6 +180,9 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'sketchPanel.remove': 'Remove {name}',
   'sketchPanel.gridSnap': 'Snap to grid',
   'sketchPanel.gridSnapHint': 'Hold Alt to turn it off for a moment',
+  'sketchPanel.showConstraints': 'Show constraints',
+  'sketchPanel.showConstraintsHint':
+    'Shows the glyphs of all constraints of the sketch, not only of the selected entities',
 
   // Browser: origin and sketches (M12).
   'browser.origin': 'Origin',

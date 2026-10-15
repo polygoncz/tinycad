@@ -85,6 +85,28 @@ describe('FakeSolver', () => {
     expect((await createFakeSolver().solve(r.value)).dof).toBe(3);
   });
 
+  it('weights pointOnCurve, hAlign and vAlign by 1, midpoint by 2', async () => {
+    const r = parseSketchData(
+      [
+        { kind: 'point', id: 'a', x: 0, y: 0 },
+        { kind: 'point', id: 'b', x: 10, y: 0 },
+        { kind: 'line', id: 'ab', p1: 'a', p2: 'b' },
+        { kind: 'point', id: 'm', x: 5, y: 0 },
+        { kind: 'point', id: 'p', x: 3, y: 0 },
+        { kind: 'point', id: 'q', x: 3, y: 7 },
+      ],
+      [
+        { kind: 'midpoint', id: 'c1', point: 'm', line: 'ab' },
+        { kind: 'pointOnCurve', id: 'c2', point: 'p', curve: 'ab' },
+        { kind: 'vAlign', id: 'c3', a: 'p', b: 'q' },
+        { kind: 'hAlign', id: 'c4', a: 'q', b: 'a' },
+      ],
+    );
+    if (!r.ok) throw new Error('invalid');
+    // 5·2 − (2 + 1 + 1 + 1) = 5
+    expect((await createFakeSolver().solve(r.value)).dof).toBe(5);
+  });
+
   it('never reports negative degrees of freedom', async () => {
     const data = rectangleData();
     const many = { ...data, constraints: [...data.constraints, ...data.constraints] };

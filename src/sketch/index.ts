@@ -31,7 +31,19 @@ export { parseSketchData } from './parse';
 export type { SketchIssue } from './parse';
 export { curve2, pointsById } from './geometry';
 export type { Curve2 } from './geometry';
-export { constraintFor, dimensionFor, measure, removeItems, toggleConstruction } from './edit';
+export {
+  constraintFor,
+  constraintTargets,
+  curvePoints,
+  dimensionFor,
+  measure,
+  removeItems,
+  toggleConstruction,
+} from './edit';
+export { ORIGIN_SNAP, snap } from './snap';
+export type { PointInference, SnapGuide, SnapKind, SnapOptions, SnapResult } from './snap';
+export { inferLine, inferRadius } from './infer';
+export type { LineInference } from './infer';
 export {
   defaultPlacement,
   dimensionTarget,

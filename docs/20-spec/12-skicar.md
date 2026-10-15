@@ -135,6 +135,10 @@ export function removeItems(data: SketchData, ids: readonly SketchItemId[]): Ske
 /** Přepne construction u vybraných křivek: všechny konstrukční → všechny normální, jinak všechny konstrukční. Body a vazby ignoruje. */
 export function toggleConstruction(data: SketchData, ids: readonly SketchItemId[]): SketchData;
 export type SketchConstraintDraft = DistributiveOmit<SketchConstraint, 'id'>;
+/** M25: definiční body křivky – line → [p1, p2], circle → [center], arc → [center, start, end]. */
+export function curvePoints(c: SketchCurve): readonly SketchEntityId[];
+/** M25: entity, na které vazba odkazuje, v pořadí vazby – dvě entity → [a, b] (i coincident), horizontal/vertical → [line], fix → [point], radius → [curve]. */
+export function constraintTargets(c: SketchConstraint): readonly SketchEntityId[];
 ```
 
 - `constraintFor`: `horizontal`/`vertical` – právě 1 úsečka; `coincident` – právě 2 body; `fix` – právě 1 bod; `parallel`/`perpendicular` – právě 2 úsečky; `equal` – 2 úsečky nebo 2 z {kružnice, oblouk}; `tangent` – úsečka + kružnice/oblouk (v libovolném pořadí) nebo 2 z {kružnice, oblouk}. Jinak `null`. `a`, `b` v pořadí výběru.
@@ -265,8 +269,8 @@ Naplánováno 2026-10-15, zatím jen rozsah – kontrakt se do sekcí výše dop
 
 | Milník | Co přibude | Dopad na data | Otázka |
 |---|---|---|---|
-| [[M25-glyfy-vazeb\|M25]] | glyfy vazeb ve viewportu, výběr a mazání glyfu, seznam vazeb v panelu sbalený | žádný (`SketchDrawing` dostane glyfy) | [[Q083 Rozložení glyfů vazeb\|Q083]] |
-| [[M26-snapper-a-auto-vazby\|M26]] | snapper (čistá funkce v `sketch`), vodítka, automatické vazby ověřené řešičem, potlačení Ctrl/Cmd | nové vazby `pointOnCurve`, `midpoint`, zarovnání bodů (zpětně kompatibilní) | [[Q084 Inference automatických vazeb\|Q084]] |
+| [[M25-glyfy-vazeb\|M25]] | glyfy vazeb ve viewportu, výběr a mazání glyfu, seznam vazeb v panelu sbalený | žádný (`SketchState.glyphs`, vrstva v `ui`) | [[Q083 Rozložení glyfů vazeb\|Q083]] |
+| [[M26-snapper-a-auto-vazby\|M26]] | snapper (čistá funkce v `sketch`), vodítka, automatické vazby ověřené řešičem, potlačení Ctrl/Cmd | nové vazby `pointOnCurve`, `midpoint`, `hAlign`/`vAlign` (zpětně kompatibilní) | [[Q084 Inference automatických vazeb\|Q084]] |
 | [[M27-oblouky-a-kruznice\|M27]] | kružnice 2 body, 3 body, 2 a 3 tečny; oblouk 3 body a tečný; tečný oblouk v polyline | žádný | – |
 | [[M28-koty\|M28]] | jeden nástroj Kóta (druh podle polohy myši), vodorovná, svislá, bod–přímka, úhel, průměr; přetahování | nové druhy kót, poloha popisku | [[Q085 Poloha kóty v datech\|Q085]] |
 | [[M29-spliny\|M29]] | kubický B-spline přes řídicí body (NURBS) a přes body; oblasti, vysunutí | nová entita, nová varianta `ProfileCurve` v `kernel` | [[Q086 Spline přes body v řešiči\|Q086]] |
@@ -301,14 +305,113 @@ export function glyphViews(
 ): readonly SketchGlyphView[];
 ```
 
-- **Které vazby:** `visible = 'all'` (přepínač „Zobrazit vazby“) → všechny geometrické vazby; jinak ty, které odkazují na entitu z množiny (vybrané entity, entita pod kurzorem a entity vybrané nebo najeté vazby). Glyf se kreslí u každé jejich entity, nejen u vybrané. Kóty glyf nemají (mají vlastní kresbu).
+- **Které vazby:** `visible = 'all'` (přepínač „Zobrazit vazby“) → všechny geometrické vazby; jinak ty, které odkazují na entitu z množiny (vybrané entity, entita pod kurzorem a entity vybrané nebo najeté geometrické vazby). Množinu skládá session; vybraná nebo najetá **křivka** do ní přidá i své definiční body (konce úsečky, střed kružnice, střed a konce oblouku), takže výběr úsečky ukáže i `coincident` a `fix` na jejích koncích (jako Onshape). Glyf se kreslí u každé jejich entity, nejen u vybrané. Kóty glyf nemají (mají vlastní kresbu) a vybraná nebo najetá kóta glyfy ani zvýraznění entit nepřidá.
+- **Řada (`slot`):** glyfy se skládají podle **polohy kotvy**, ne podle entity: kotvy, které se v souřadnicích roviny liší nejvýš o 1e-6 mm, tvoří jednu řadu (tečka `coincident` u bodu `a` a `fix` u shodného bodu `b` se tak nepřekryjí). `slot` číslují jen zobrazené glyfy, řada je bez mezer a při změně výběru se může posunout. Úsečka nulové délky má `side` +y.
 - **Kotvy:** bod (`coincident`, `fix`) = bod; úsečka = střed; kružnice = bod nahoře (úhel π/2); oblouk = střed oblouku; `side` = normála úsečky otočená k +y roviny (svislá úsečka → −x), u kružnice a oblouku směr od středu ke kotvě, u bodu +x+y normalizované. `coincident` má jeden glyf u bodu `a` (vykreslí se jako plná tečka, ne ikona). Stopy M26 a M29 doplní kotvy svých vazeb a entit.
 - **Neměnnost:** nezměněná položka zůstane stejným objektem z `prev`, nezměněný výsledek stejným polem (jako `dimensionViews`).
 - **Stav:** `SketchState.glyphs: readonly SketchGlyphView[]`. Přepínač: `SketchEditor.showAllConstraints: Observable<boolean>` a `setShowAllConstraints(on)`, výchozí `false`, přežije zavření skici, neukládá se (jako `gridSnap`).
 - **Hover a výběr vazby** používají stávající `SketchSession.setHover(id)` a `select(id, { additive })` s id vazby; smazání stávající akcí mazání nad výběrem. Najetá nebo vybraná vazba zvýrazní své entity v kresbě (styl `hover`/`selected`), pokud už nejsou vybrané.
-- **`ui`:** `SketchGlyphs.vue` (sourozenec `SketchDimensions`, jen při otevřené skice) a čistá `glyphLayout(glyphs, project, { sizePx: 16, gapPx: 2, offsetPx: 10 })` → střed každého glyfu v px: průmět kotvy + `side` promítnutý do obrazovky a normalizovaný × (`offsetPx` + `slot` · (`sizePx` + `gapPx`) + `sizePx`/2). Nepromítnutá kotva → glyf se nekreslí. Glyf je tlačítko s ikonou druhu (SVG v `ui/sketch-glyph-icons.ts`, `aria-label` = název vazby, `aria-pressed` = vybraná), `pointerenter`/`pointerleave` → `setHover`, klik → `select` (aditivně podle `isAdditive`). Přepočet při změně `glyphs` a při `onViewChanged`.
-- **Panel:** seznam vazeb a kót je sbalitelná sekce (`<details>`), výchozí sbalená, stav se neukládá. Přepínač „Zobrazit vazby“ je v panelu nad ní.
+- **`ui`:** `SketchGlyphs.vue` (sourozenec `SketchDimensions`, jen při otevřené skice) a čistá `glyphLayout(glyphs, project, { sizePx: 16, gapPx: 2, offsetPx: 10 })` → střed každého glyfu v px: průmět kotvy + `side` promítnutý do obrazovky a normalizovaný × (`offsetPx` + `slot` · (`sizePx` + `gapPx`) + `sizePx`/2). Nepromítnutá kotva, nebo `side` promítnutý na nulovou délku (rovina viděná z hrany) → glyf se nekreslí. Glyf je tlačítko s ikonou druhu (SVG v `ui/sketch-glyph-icons.ts`, `aria-label` = název vazby, `aria-pressed` = vybraná), `pointerenter`/`pointerleave` → `setHover`, klik → `select` (aditivně podle `isAdditive`). Přepočet při změně `glyphs` a při `onViewChanged`.
+- **Panel:** seznam vazeb a kót je sbalitelná sekce (`<details>`), výchozí sbalená, stav se neukládá. Když panel dává fokus poli nové kóty, sbalená sekce se nejdřív sama rozbalí. Přepínač „Zobrazit vazby“ je v panelu nad ní (vedle přichycení k mřížce).
 - **Testy:** `glyphViews` (které vazby pro výběr/hover/`all`, dva glyfy u dvouentitové vazby, `slot` u sdílené kotvy, kotvy a `side` všech druhů, stabilita objektů); `glyphLayout` (skládání, nepromítnutá kotva); `SketchGlyphs.vue` (hover → `setHover`, klik → `select`, `aria-pressed`); session (najetá vazba zvýrazní entity); e2e (výběr úsečky ukáže glyf `horizontal`, klik a Delete vazbu smaže).
+
+## Snapper a auto-vazby (M26)
+
+Rozhodnuto v [[Q084 Inference automatických vazeb|Q084]]: prahy v pixelech (6 px) a stupních (3°), pevné pořadí priorit, víc vazeb na klik (nejvýš jedna na dvojici entit), stejná délka a poloměr jen s navazující křivkou s tolerancí 2 %. Snapper je **čistá synchronní funkce v `sketch`**, nástroje v `sketcher` ji jen volají; řešič kandidáty ověří při zápisu.
+
+### Nové vazby
+
+```ts
+// nové členy SketchConstraint (sketch/model.ts)
+| { readonly kind: 'pointOnCurve'; readonly id: SketchConstraintId; readonly point: SketchEntityId; readonly curve: SketchEntityId } // bod + úsečka/kružnice/oblouk
+| { readonly kind: 'midpoint'; readonly id: SketchConstraintId; readonly point: SketchEntityId; readonly line: SketchEntityId }     // bod ve středu úsečky
+| { readonly kind: 'hAlign' | 'vAlign'; readonly id: SketchConstraintId; readonly a: SketchEntityId; readonly b: SketchEntityId } // dva body se stejnou y (hAlign) / x (vAlign)
+// GeometricConstraintKind (akce lišty) dostane 'midpoint' za 'tangent'; pointOnCurve, hAlign a vAlign vznikají akcemi coincident a horizontal/vertical (níže)
+```
+
+- `pointOnCurve` drží bod na **celé** nosné přímce úsečky nebo kružnici oblouku (jako Onshape a FreeCAD), ne jen na úseku. Bod nesmí být definičním bodem té křivky (`curvePoints`), jinak `sketch.invalidConstraint`.
+- `midpoint`: bod nesmí být koncem úsečky. `hAlign`/`vAlign`: `a !== b`, oba body.
+- **`parseSketchData`:** nové tvary a odkazy podle tabulky výše; staré dokumenty zůstávají platné, migrace není.
+- **`constraintFor`** (konvence Onshape, bez nových akcí kromě Středu): `coincident` – 2 body → `coincident`, bod + křivka (libovolné pořadí) → `pointOnCurve`; `horizontal`/`vertical` – 1 úsečka jako dřív, 2 body → `hAlign`/`vAlign`; `midpoint` – bod + úsečka (libovolné pořadí). Bod, který je definičním bodem křivky, → `null`.
+- **`constraintTargets`:** `pointOnCurve` → `[point, curve]`, `midpoint` → `[point, line]`, `hAlign`/`vAlign` → `[a, b]`. `removeItems` kaskádu bere z `constraintTargets` jako dřív.
+- **Adaptér planegcs:** `pointOnCurve` → `point_on_line_pl` / `point_on_circle` / `point_on_arc`; `midpoint` → `p2p_symmetric_ppp(p1, p2, point)`; `hAlign` → `horizontal_pp`, `vAlign` → `vertical_pp`.
+- **`FakeSolver`:** váha `pointOnCurve`, `midpoint` 1 a 2, `hAlign`/`vAlign` 1.
+- **Glyfy** (M25): `pointOnCurve` a `midpoint` mají jeden glyf u bodu (ikony: bod na čáře, `M`-značka středu), `hAlign`/`vAlign` u obou bodů (ikony: tečkovaná vodorovná / svislá čára). Kotvy jako u bodu. Akce lišty Střed: ikona jako glyf, zkratka žádná, i18n `sketch.constraint.midpoint` „Střed“ / „Midpoint“, ostatní nové druhy `sketch.constraint.pointOnCurve` „Bod na křivce“ / „Point on curve“, `hAlign` „Zarovnat vodorovně“ / „Align horizontally“, `vAlign` „Zarovnat svisle“ / „Align vertically“.
+
+### Snapper
+
+```ts
+// sketch/snap.ts (čisté funkce, souřadnice roviny v mm)
+export interface SnapOptions {
+  /** Práh přichycení v mm = 6 px převedené v místě kurzoru (počítá sketcher z pohledu). */
+  readonly tolerance: number;
+  /** Krok mřížky v mm, null = bez mřížky (vypnuto nebo Alt). */
+  readonly grid: number | null;
+  /** false = Ctrl/Cmd: jen poloha na existující bod a počátek a mřížka, žádné jiné přichycení ani vazby. */
+  readonly infer: boolean;
+  /** Entity, které se nepřichytávají (rozpracovaná položka nástroje, není-li ještě v datech). */
+  readonly exclude?: ReadonlySet<SketchEntityId>;
+}
+export type SnapKind = 'point' | 'origin' | 'midpoint' | 'onCurve' | 'alignBoth' | 'align' | 'grid' | 'free';
+/** Vazba k bodu, který teprve vznikne (id dostane v nástroji). */
+export type PointInference =
+  | { readonly kind: 'fix' }                                                    // počátek
+  | { readonly kind: 'pointOnCurve'; readonly curve: SketchEntityId }
+  | { readonly kind: 'midpoint'; readonly line: SketchEntityId }
+  | { readonly kind: 'hAlign' | 'vAlign'; readonly with: SketchEntityId };    // s existujícím bodem
+export interface SnapGuide { readonly axis: 'h' | 'v'; readonly from: Vec2; readonly to: Vec2 } // tečkované vodítko od bodu ke kurzoru
+export interface SnapResult {
+  readonly at: Vec2;
+  readonly kind: SnapKind;
+  /** Existující bod, jehož id se použije (kind 'point'); jinak null. */
+  readonly point: SketchEntityId | null;
+  readonly inferred: readonly PointInference[];
+  readonly guides: readonly SnapGuide[];
+}
+export const ORIGIN_SNAP: Vec2;   // [0, 0]
+export function snap(cursor: Vec2, data: SketchData, opts: SnapOptions): SnapResult;
+```
+
+**Pořadí** (první, které platí; „blízko“ = vzdálenost ≤ `tolerance`):
+1. `point`: nejbližší existující bod (konce, středy kružnic a oblouků, samostatné body) blízko kurzoru; `inferred` prázdné.
+2. `origin`: počátek `[0, 0]` blízko (a žádný bod v datech tam neleží) → `at = [0, 0]`, `inferred = [fix]`.
+3. `midpoint` (jen `infer`): střed úsečky blízko → `[midpoint(line)]`.
+4. `onCurve` (jen `infer`): nejbližší bod nejbližší křivky (úsek úsečky, kružnice, oblouk v jeho rozsahu) blízko → `at` = průmět, `[pointOnCurve(curve)]`.
+5. `alignBoth` (jen `infer`): kurzor je zároveň do `tolerance` od svislice jednoho bodu a vodorovky jiného (nejbližší v každém směru) → `at` = průsečík, `[vAlign(p), hAlign(q)]`, dvě vodítka.
+6. `align` (jen `infer`): jen jedno z nich → `at` = kurzor s přichycenou souřadnicí, jedna vazba a jedno vodítko. Druhá souřadnice se přichytí k mřížce, je-li zapnutá.
+7. `grid`: `grid !== null` → zaokrouhlení na mřížku (jako dnes, −0 → 0).
+8. `free`: kurzor.
+
+„Bod“ je každá entita `point` (konce, středy, samostatné body). `exclude` vyřadí entitu ze všech kroků, body vyřazené křivky ne. Je-li nejbližším bodem ve svislém i vodorovném směru tentýž bod, vznikne jen `align` k bližší ose (shoda → svislá), jinak by nový bod padl na existující. Kandidáti zarovnání jsou jen body (ne středy úseček); oblouk je kandidátem kroku 4 jen v rozsahu svého úhlu; bod přichycení v kroku 1 nikdy nedostane zarovnání (je to existující bod). Při shodě vzdáleností vyhrává dřívější entita v datech. Bez `infer` platí jen kroky 1, 2, 7, 8.
+
+```ts
+// sketch/infer.ts – úhlové a délkové vazby nové úsečky (po poloze bodů)
+export type LineInference =
+  | { readonly kind: 'horizontal' | 'vertical' }
+  | { readonly kind: 'parallel' | 'perpendicular' | 'equal'; readonly line: SketchEntityId }
+  | { readonly kind: 'tangent'; readonly curve: SketchEntityId };
+export function inferLine(
+  from: { readonly at: Vec2; readonly point: SketchEntityId | null },
+  to: Vec2, data: SketchData,
+  opts: { readonly previous: SketchEntityId | null; readonly angleTolerance: number },   // 3° v radiánech
+): readonly LineInference[];
+export function inferRadius(radius: number, data: SketchData, previous: SketchEntityId | null): SketchEntityId | null; // equal s kružnicí/obloukem
+```
+
+- `inferLine`: úhel úsečky do 3° od osy → `horizontal`/`vertical` (jako dnes). Jinak pro **navazující křivky** – křivky dat, které používají bod `from.point` (u nového bodu žádné): úsečka do 3° od rovnoběžky → `parallel`, od kolmice → `perpendicular` (u každé nejvýš jedno, s osou má přednost); oblouk, jehož začátek nebo konec je `from.point` a jehož tečna v něm svírá s úsečkou do 3° → `tangent` (kružnice koncové body nemá, tečnu ze snapperu nedostane). Navazující úsečka je ta, jejíž `p1` nebo `p2` je `from.point`. `equal` jen s `previous` (předchozí úsečka řetězu polyline), když se délky liší nejvýš o 2 % delší z nich. Nejvýš jedna vazba na dvojici entit; pořadí výsledku: osa, `parallel`/`perpendicular`/`tangent` v pořadí dat, `equal`.
+- `inferRadius`: `previous` (poslední kružnice nebo oblouk dat, který nástroj dostane od sketcheru) s poloměrem lišícím se nejvýš o 2 % → jeho id, jinak `null`.
+- S Ctrl/Cmd se `inferLine` ani `inferRadius` nevolají; vodorovná/svislá z dnešního nástroje úsečky tím **také** odpadá (Ctrl/Cmd vypíná všechny automatické vazby kromě sdíleného bodu a `fix` počátku). Obdélník má své `horizontal`/`vertical` vždy (jsou jeho definicí, ne inference).
+
+### Nástroje (`sketcher`)
+
+- `snapAt` v `sketch-tools/snap.ts` místo pickingu volá `snap(cursorAt(...), data, { tolerance, grid, infer: !mods.mod, exclude })`; `tolerance` = vzdálenost v rovině mezi `cursorAt(x, y)` a `cursorAt(x + 6, y)` (rovnoběžný paprsek → klik se ignoruje jako dnes). `SnapTarget` nese `SnapResult`; `placePoint` z `inferred` vytvoří vazby s novými id (`pointOnCurve`, `midpoint`, `hAlign`/`vAlign` s novým bodem, `fix` u počátku).
+- **Které nástroje:** úsečka (každý bod + `inferLine` pro každou novou úsečku, `previous` = předchozí úsečka řetězu), obdélník (rohy; nové rohy dostanou svá `inferred`), kružnice (střed; poloměr přes `snap` jen polohou, + `inferRadius`), oblouk (střed, začátek, konec; `inferRadius`). Tažení bodu a nástroj kóty snapper nepoužívají. Úsečka mezi dvěma existujícími body, které už spojuje existující úsečka, se nevytvoří (obdélník na existující hraně ji sdílí, i bez svých `horizontal`/`vertical` pro tu stranu; polyline se posune dál). Zarovnání nového bodu s počátečním bodem kreslené úsečky se nahradí její `horizontal`/`vertical`. Konec oblouku je vždy nový bod promítnutý na kružnici a **žádné** `inferred` ani vodítka nedostane (vazby spočítané pro místo kurzoru by po promítnutí neplatily); dopočítané rohy obdélníku se přichytávají bez mřížky a bez kliknutých rohů (`exclude`).
+- **Ověření řešičem** (`SketchSession.addGeometry`): všechny vazby přidané `addGeometry` jsou automatické. Řešení s nimi; `'conflict'` → znovu bez přidaných vazeb ze seznamu `conflicting` (kromě `fix` a povinných), a když ani to nepomůže, bez všech přidaných vazeb kromě `fix` a vazeb, které nástroj označí jako povinné (`addGeometry(add, { required?: ReadonlySet<SketchConstraintId> })`, obdélník: své `horizontal`/`vertical`); přidané vazby v `redundant` se po zápisu vynechají (jako dnes). Nejvýš tři řešení na jeden zápis. Skica se kreslením nerozbije: buď se zapíše bez sporných vazeb, nebo (konflikt i bez nich) se geometrie odmítne jako dnes (`sketch.conflict`).
+- **Náhled:** při pohybu nástroj nastaví `SketchSession.setInferencePreview(p: { at: Vec2; kinds: readonly GlyphKind[]; guides: readonly SnapGuide[] } | null)` (vazby, které by klik vytvořil – z `inferred` i `inferLine`/`inferRadius`); `SketchState.inference: { anchor: Vec3; kinds: readonly GlyphKind[] } | null` a vodítka kreslí sketcher do overlay `'sketch-guides'` stylem `'construction'` (bez změny `render`). Konec nástroje, Esc, deaktivace a klik náhled smažou.
+- **`ui`:** `SketchGlyphs.vue` kreslí `SketchState.inference` jako vodorovnou řadu malých neaktivních ikon (`<span aria-hidden>`, `pointer-events: none`, třída `preview`): čistá `inferenceLayout` (`ui/sketch-glyphs.ts`, rozměry `GLYPH_LAYOUT`) dá první ikoně střed (`offsetPx` + `sizePx`/2) px vpravo a dolů od průmětu kotvy, každé další o `sizePx` + `gapPx` vpravo.
+- **Co náhled ukazuje:** druhy vazeb, které by klik zapsal, spočítané **stejnou funkcí kroku nástroje** jako klik (`lineStep`, `rectangleStep`, `circleStep`, `arcStep`), takže se náhled a klik nerozejdou. Vlastní `horizontal`/`vertical` obdélníku a vazby už položeného prvního bodu se neukazují; přichycení na existující bod vazbu nevytváří, náhled je tedy prázdný; `fix` počátku se ukáže i s Ctrl/Cmd. Prázdný náhled → `inference: null`. Změna jen náhledu skicu nepřekresluje. Vodítka kreslí session (viewport skicáře dostane `overlay`). Náhled smaže klik, Esc, opuštění pohledu (`leave`), deaktivace nástroje a zavření session.
+
+**Testy:** `snap` tabulkově (každý krok pořadí, shoda vzdáleností, `exclude`, `infer: false`, mřížka s `align`), `inferLine` (osa, rovnoběžka, kolmice, tečna k oblouku, `equal` 2 % hranice, jen navazující křivky, nejvýš jedna na dvojici), `inferRadius`; `parseSketchData` a `constraintFor` nových vazeb, `removeItems` kaskáda; adaptér planegcs (bod zůstane na úsečce při tažení úsečky, `midpoint`, `hAlign`); session (`conflict` → zápis bez sporných vazeb, `required` zůstanou, nejvýš tři řešení); nástroje s `FakeViewport` (Ctrl/Cmd bez vazeb, bod na úsečce dostane `pointOnCurve`, kolmá úsečka `perpendicular`, náhled a jeho smazání); e2e (akceptační kritéria M26).
 
 ## Kóty (M28)
 

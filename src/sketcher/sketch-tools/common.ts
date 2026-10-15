@@ -3,8 +3,8 @@
 
 import { plane as planeMath } from '@/core';
 import type { Vec2, Vec3 } from '@/core';
-import type { SketchConstraintId, SketchEntityId } from '@/sketch';
-import { CLICK_TOLERANCE_PX } from '@/interaction';
+import type { SketchConstraintId, SketchData, SketchEntityId, SnapGuide } from '@/sketch';
+import { CLICK_TOLERANCE_PX, isPlainEscape } from '@/interaction';
 import type {
   KeyMods,
   OverlayShape,
@@ -14,6 +14,7 @@ import type {
   ViewPointerEvent,
 } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
+import type { GlyphKind } from '../sketch-glyphs';
 import type { SketchSession } from '../sketch-session';
 
 /** The overlay id of the preview of the drawing tools. */
@@ -44,6 +45,41 @@ export const newConstraintId = (ctx: ToolContext): SketchConstraintId =>
  */
 export function snapGrid(sketches: SketchEditor, mods: KeyMods): number | null {
   return sketches.gridSnap.get() && !mods.alt ? sketches.gridStep() : null;
+}
+
+/**
+ * How a drawing tool snaps (spec 12, M26): the grid of snapGrid and the inference of constraints,
+ * which Ctrl/Cmd turns off. Read on every move and click.
+ */
+export function snapMode(
+  sketches: SketchEditor,
+  mods: KeyMods,
+): { readonly grid: number | null; readonly infer: boolean } {
+  return { grid: snapGrid(sketches, mods), infer: !mods.mod };
+}
+
+/** A new line within this angle of an axis or of a connected line is inferred (spec 12, 3°). */
+export const ANGLE_TOLERANCE = (3 * Math.PI) / 180;
+
+/** The last circle or arc of the data (`previous` of inferRadius, spec 12); null without one. */
+export function lastRound(data: SketchData): SketchEntityId | null {
+  const round = data.entities.findLast((e) => e.kind === 'circle' || e.kind === 'arc');
+  return round?.id ?? null;
+}
+
+/**
+ * The line of the data between the points a and b (either order), or null. A tool does not draw
+ * a second line between two points an existing line already joins.
+ */
+export function existingLine(
+  data: SketchData,
+  a: SketchEntityId,
+  b: SketchEntityId,
+): SketchEntityId | null {
+  const line = data.entities.find(
+    (e) => e.kind === 'line' && ((e.p1 === a && e.p2 === b) || (e.p1 === b && e.p2 === a)),
+  );
+  return line?.id ?? null;
 }
 
 /** The cursor in the coordinates of the plane of the session; null for a ray parallel to it. */
@@ -116,16 +152,26 @@ export function arcPoints(center: Vec2, radius: number, from: number, sweep: num
 export const circlePoints = (center: Vec2, radius: number): Vec2[] =>
   arcPoints(center, radius, 0, FULL_TURN);
 
-/** The counter-clockwise sweep from angle a to angle b in (0, 2π]. */
-export function ccwSweep(a: number, b: number): number {
-  let sweep = b - a;
-  while (sweep <= 0) sweep += FULL_TURN;
-  while (sweep > FULL_TURN) sweep -= FULL_TURN;
-  return sweep;
-}
-
 export function clearPreview(ctx: ToolContext): void {
   ctx.viewport.overlay.remove(PREVIEW_OVERLAY_ID);
+}
+
+/**
+ * The inference preview of a move (spec 12, M26): the kinds of the constraints the click at `at`
+ * would add, and the guides of the snap. The kinds come from the same step the click uses.
+ */
+export function previewInference(
+  session: SketchSession,
+  at: Vec2,
+  inferences: readonly { readonly kind: GlyphKind }[],
+  guides: readonly SnapGuide[],
+): void {
+  session.setInferencePreview({ at, kinds: inferences.map((i) => i.kind), guides });
+}
+
+/** Removes the inference preview of a session that is still open. */
+export function clearInference(session: SketchSession | null): void {
+  if (session?.state.get().open === true) session.setInferencePreview(null);
 }
 
 /** What a drawing tool reacts to; every call has an open session. */
@@ -142,7 +188,9 @@ export interface ClickHandlers {
 
 /**
  * A tool of clicks over the open session. Without an open session it does nothing; a new session
- * resets the work in progress (it belonged to the old one). Deactivate removes the preview.
+ * resets the work in progress (it belonged to the old one). Deactivate removes the preview; it,
+ * a click, Escape and the pointer leaving the view remove the inference preview too (spec 12,
+ * M26).
  */
 export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool {
   let ctx: ToolContext | null = null;
@@ -153,6 +201,7 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
   function current(): SketchSession | null {
     const session = openSession(sketches);
     if (session !== owner) {
+      clearInference(owner);
       owner = session;
       down = null;
       handlers.reset();
@@ -168,6 +217,7 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
     },
     deactivate() {
       if (ctx !== null) clearPreview(ctx);
+      clearInference(owner);
       handlers.reset();
       ctx = null;
       owner = null;
@@ -183,6 +233,8 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
           handlers.onMove?.(c, session, e.x, e.y, e.mods);
           return;
         case 'leave':
+          // Off the view the click would add nothing: like Escape, the preview goes.
+          clearInference(session);
           return;
         case 'down':
           if (e.button === 'left') down = { x: e.x, y: e.y };
@@ -193,6 +245,8 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
           down = null;
           if (start === null) return;
           if (Math.hypot(e.x - start.x, e.y - start.y) > CLICK_TOLERANCE_PX) return;
+          // The click adds what the preview showed; the next move shows the next one.
+          clearInference(session);
           handlers.onClick(c, session, e.x, e.y, e.mods);
           return;
         }
@@ -203,6 +257,7 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
       if (c === null) return false;
       const session = current();
       if (session === null) return false;
+      if (isPlainEscape(e)) clearInference(session);
       return handlers.onKey?.(c, session, e) ?? false;
     },
   };

@@ -158,7 +158,11 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'sketch.constraint.perpendicular': 'Kolmost',
   'sketch.constraint.equal': 'Shodná velikost',
   'sketch.constraint.tangent': 'Tečnost',
+  'sketch.constraint.midpoint': 'Střed',
   'sketch.constraint.fix': 'Ukotvení',
+  'sketch.constraint.pointOnCurve': 'Bod na křivce',
+  'sketch.constraint.hAlign': 'Zarovnat vodorovně',
+  'sketch.constraint.vAlign': 'Zarovnat svisle',
   'sketch.constraint.distance': 'Vzdálenost',
   'sketch.constraint.radius': 'Poloměr',
   'sketch.constraint.hDistance': 'Vodorovná vzdálenost',
@@ -177,6 +181,8 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'sketchPanel.remove': 'Odebrat {name}',
   'sketchPanel.gridSnap': 'Přichytit k mřížce',
   'sketchPanel.gridSnapHint': 'Dočasně vypnete podržením Alt',
+  'sketchPanel.showConstraints': 'Zobrazit vazby',
+  'sketchPanel.showConstraintsHint': 'Ukáže značky všech vazeb skici, nejen u vybraných entit',
 
   // Browser: origin and sketches (M12).
   'browser.origin': 'Počátek',

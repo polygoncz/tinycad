@@ -9,14 +9,19 @@ describe('sketch public API', () => {
       [
         'DIMENSION_KINDS',
         'GEOMETRIC_CONSTRAINT_KINDS',
+        'ORIGIN_SNAP',
         'SKETCH_FEATURE_TYPE',
         'SKETCH_PARAM',
         'SPLINE_TOLERANCE',
         'computeRegions',
         'constraintFor',
+        'constraintTargets',
+        'curvePoints',
         'curve2',
         'defaultPlacement',
         'dimensionFor',
+        'inferLine',
+        'inferRadius',
         'dimensionTarget',
         'isDimension',
         'measure',
@@ -25,6 +30,7 @@ describe('sketch public API', () => {
         'placeDimension',
         'pointsById',
         'removeItems',
+        'snap',
         'toggleConstruction',
       ].sort(),
     );
@@ -40,6 +46,7 @@ describe('sketch public API', () => {
       'perpendicular',
       'equal',
       'tangent',
+      'midpoint',
       'fix',
     ]);
     expect(Object.isFrozen(sketch.GEOMETRIC_CONSTRAINT_KINDS)).toBe(true);

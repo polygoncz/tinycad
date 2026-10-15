@@ -367,6 +367,32 @@ describe('SketchEditor.gridSnap (M19.2 D4)', () => {
   });
 });
 
+describe('SketchEditor.showAllConstraints (M25)', () => {
+  it('is off by default and setShowAllConstraints switches it', () => {
+    const { sketches } = setup();
+    const seen: boolean[] = [];
+    sketches.showAllConstraints.subscribe(() => seen.push(sketches.showAllConstraints.get()));
+
+    expect(sketches.showAllConstraints.get()).toBe(false);
+    sketches.setShowAllConstraints(true);
+    sketches.setShowAllConstraints(true);
+    sketches.setShowAllConstraints(false);
+    expect(seen).toEqual([true, false]);
+  });
+
+  it('belongs to the editor: it survives closing and opening a sketch', () => {
+    const { sketches } = setup({ features: [['s1']] });
+    sketches.setShowAllConstraints(true);
+
+    sketches.create(planeRef(ORIGIN_PLANE_IDS.xy)).cancel();
+    const session = sketches.edit(fid('s1'));
+    expect(sketches.showAllConstraints.get()).toBe(true);
+    expect(session.state.get().glyphs).toHaveLength(4);
+    session.cancel();
+    expect(sketches.showAllConstraints.get()).toBe(true);
+  });
+});
+
 describe('SketchEditor.edit', () => {
   it('opens an existing sketch with its data and plane', () => {
     const rect = rectangleData();
@@ -977,6 +1003,147 @@ describe('SketchSession writing changes', () => {
   });
 });
 
+describe('SketchSession.addGeometry checks its automatic constraints (M26)', () => {
+  // A new line q→r continuing LINE with four automatic constraints; h and f are kept by the
+  // last attempt (h required by the tool, f a fix).
+  const NEW = data(
+    [
+      ...LINE.entities,
+      { kind: 'point', id: 'r', x: 8, y: 1 },
+      { kind: 'line', id: 'qr', p1: 'q', p2: 'r' },
+    ],
+    [
+      { kind: 'horizontal', id: 'h', line: 'qr' },
+      { kind: 'perpendicular', id: 'pp', a: 'pq', b: 'qr' },
+      { kind: 'equal', id: 'eq', a: 'pq', b: 'qr' },
+      { kind: 'fix', id: 'f', point: 'r' },
+    ],
+  );
+  const ADD: SketchData = { entities: NEW.entities.slice(-2), constraints: NEW.constraints };
+  const REQUIRED = { required: new Set([cid('h')]) };
+  const idsOf = (d: SketchData | undefined) => d?.constraints.map((c) => c.id);
+
+  it('a conflict solves again without the conflicting added constraints and writes', async () => {
+    const { session, solver, doc } = await editing(LINE);
+    // An old constraint in the list cannot be left out; only the added ones are.
+    solver.next({ status: 'conflict', entities: null, conflicting: [cid('pp'), cid('old')] });
+
+    expect(await session.addGeometry(ADD, REQUIRED)).toBe(true);
+
+    expect(laterCalls(solver.calls).map(idsOf)).toEqual([
+      ['h', 'pp', 'eq', 'f'],
+      ['h', 'eq', 'f'],
+    ]);
+    expect(idsOf(docData(doc, fid('s1')))).toEqual(['h', 'eq', 'f']);
+    expect(docData(doc, fid('s1')).entities.map((e) => e.id)).toEqual(['p', 'q', 'pq', 'r', 'qr']);
+    expect(session.state.get().message).toBeNull();
+  });
+
+  it('fix and the required constraints stay in the retry even when conflicting', async () => {
+    const { session, solver, doc } = await editing(LINE);
+    solver.next({
+      status: 'conflict',
+      entities: null,
+      conflicting: [cid('h'), cid('pp'), cid('f')],
+    });
+
+    expect(await session.addGeometry(ADD, REQUIRED)).toBe(true);
+
+    expect(laterCalls(solver.calls).map(idsOf)).toEqual([
+      ['h', 'pp', 'eq', 'f'],
+      ['h', 'eq', 'f'],
+    ]);
+    expect(idsOf(docData(doc, fid('s1')))).toEqual(['h', 'eq', 'f']);
+  });
+
+  it('a second conflict keeps only fix and the required constraints', async () => {
+    const { session, solver, doc } = await editing(LINE);
+    solver.next({ status: 'conflict', entities: null, conflicting: [cid('pp')] });
+    solver.next({ status: 'conflict', entities: null, conflicting: [cid('eq')] });
+
+    expect(await session.addGeometry(ADD, REQUIRED)).toBe(true);
+
+    expect(laterCalls(solver.calls).map(idsOf)).toEqual([
+      ['h', 'pp', 'eq', 'f'],
+      ['h', 'eq', 'f'],
+      ['h', 'f'],
+    ]);
+    expect(idsOf(docData(doc, fid('s1')))).toEqual(['h', 'f']);
+  });
+
+  it('solves at most three times: a third conflict writes nothing', async () => {
+    const { session, solver, applied } = await editing(LINE);
+    for (let i = 0; i < 4; i++) {
+      solver.next({ status: 'conflict', entities: null, conflicting: [cid('pp')] });
+    }
+
+    expect(await session.addGeometry(ADD, REQUIRED)).toBe(false);
+
+    expect(laterCalls(solver.calls)).toHaveLength(3);
+    expect(applied).toEqual([]);
+    expect(session.state.get().message).toEqual({ key: 'sketch.conflict' });
+  });
+
+  it('a conflict naming no added constraint goes straight to fix and required', async () => {
+    const { session, solver, doc } = await editing(LINE);
+    solver.next({ status: 'conflict', entities: null, conflicting: [cid('old')] });
+
+    expect(await session.addGeometry(ADD, REQUIRED)).toBe(true);
+
+    expect(laterCalls(solver.calls).map(idsOf)).toEqual([
+      ['h', 'pp', 'eq', 'f'],
+      ['h', 'f'],
+    ]);
+    expect(idsOf(docData(doc, fid('s1')))).toEqual(['h', 'f']);
+  });
+
+  it('without required the last attempt keeps only fix', async () => {
+    const { session, solver, doc } = await editing(LINE);
+    solver.next({ status: 'conflict', entities: null, conflicting: [] });
+
+    expect(await session.addGeometry(ADD)).toBe(true);
+
+    expect(laterCalls(solver.calls).map(idsOf)).toEqual([['h', 'pp', 'eq', 'f'], ['f']]);
+    expect(idsOf(docData(doc, fid('s1')))).toEqual(['f']);
+  });
+
+  it('a conflict that leaving out changes nothing is rejected after one solve', async () => {
+    const { session, solver, applied } = await editing(LINE);
+    const onlyFixed: SketchData = {
+      entities: ADD.entities,
+      constraints: ADD.constraints.filter((c) => c.id === 'h' || c.id === 'f'),
+    };
+    solver.next({ status: 'conflict', entities: null, conflicting: [cid('old')] });
+
+    expect(await session.addGeometry(onlyFixed, REQUIRED)).toBe(false);
+
+    expect(laterCalls(solver.calls)).toHaveLength(1);
+    expect(applied).toEqual([]);
+    expect(session.state.get().message).toEqual({ key: 'sketch.conflict' });
+  });
+
+  it('the added constraints the retry finds redundant are left out', async () => {
+    const { session, solver, doc } = await editing(LINE);
+    solver.next({ status: 'conflict', entities: null, conflicting: [cid('pp')] });
+    solver.next({ redundant: [cid('eq'), cid('h')] });
+
+    expect(await session.addGeometry(ADD, REQUIRED)).toBe(true);
+
+    expect(idsOf(docData(doc, fid('s1')))).toEqual(['f']);
+  });
+
+  it('a failed retry writes nothing and shows solverFailed', async () => {
+    const { session, solver, applied } = await editing(LINE);
+    solver.next({ status: 'conflict', entities: null, conflicting: [cid('pp')] });
+    solver.next({ status: 'failed', entities: null, dof: null });
+
+    expect(await session.addGeometry(ADD, REQUIRED)).toBe(false);
+
+    expect(applied).toEqual([]);
+    expect(session.state.get().message).toEqual({ key: 'sketch.solverFailed' });
+  });
+});
+
 describe('SketchSession dragging', () => {
   it('keeps one solve running and one target waiting; the last target wins', async () => {
     const { session, solver, doc } = await editing(LINE);
@@ -1236,6 +1403,150 @@ describe('SketchSession selection and panel rows', () => {
   });
 });
 
+describe('SketchState.glyphs (M25)', () => {
+  /** The rectangle with a perpendicular of ab and bc and a distance of a and b. */
+  const SKETCH = (() => {
+    const rect = rectangleData();
+    return data(rect.entities, [
+      ...rect.constraints,
+      { kind: 'perpendicular', id: 'perp', a: 'ab', b: 'bc' },
+      { kind: 'distance', id: 'w', a: 'a', b: 'b', value: 10 },
+    ]);
+  })();
+
+  const pairs = (session: SketchSession) =>
+    session.state.get().glyphs.map((g) => [g.constraint, g.entity]);
+
+  it('without a selection or a hover there are none', async () => {
+    const { session } = await editing(SKETCH);
+
+    expect(session.state.get().glyphs).toEqual([]);
+  });
+
+  it('a selected entity shows the glyphs of its constraints, at all their entities', async () => {
+    const { session } = await editing(SKETCH);
+
+    session.select(item('ab'));
+
+    expect(pairs(session)).toEqual([
+      ['h1', 'ab'],
+      ['perp', 'ab'],
+      ['perp', 'bc'],
+    ]);
+    const [h1] = session.state.get().glyphs;
+    expect(h1).toMatchObject({ kind: 'horizontal', anchor: [5, 0, 0], slot: 0 });
+  });
+
+  it('a hovered entity shows its glyphs too', async () => {
+    const { session } = await editing(SKETCH);
+
+    session.select(item('ab'));
+    session.setHover(item('cd'));
+
+    expect(pairs(session)).toEqual([
+      ['h1', 'ab'],
+      ['h2', 'cd'],
+      ['perp', 'ab'],
+      ['perp', 'bc'],
+    ]);
+  });
+
+  it('a selected or hovered constraint shows the glyphs at its entities and is marked', async () => {
+    const { session } = await editing(SKETCH);
+
+    session.select(item('perp'));
+    expect(pairs(session)).toEqual([
+      ['h1', 'ab'],
+      ['v1', 'bc'],
+      ['perp', 'ab'],
+      ['perp', 'bc'],
+    ]);
+    expect(
+      session.state
+        .get()
+        .glyphs.filter((g) => g.selected)
+        .map((g) => g.entity),
+    ).toEqual(['ab', 'bc']);
+
+    session.clearSelection();
+    session.setHover(item('v2'));
+    expect(pairs(session)).toEqual([['v2', 'da']]);
+    expect(session.state.get().glyphs[0]?.hover).toBe(true);
+  });
+
+  it('a selected or hovered curve shows the glyphs at its defining points too', async () => {
+    const sketch = data(
+      [
+        { kind: 'point', id: 'p', x: 0, y: 0 },
+        { kind: 'point', id: 'q', x: 4, y: 0 },
+        { kind: 'point', id: 'r', x: 4, y: 0 },
+        { kind: 'line', id: 'pq', p1: 'p', p2: 'q' },
+        { kind: 'point', id: 'o', x: 9, y: 9 },
+        { kind: 'circle', id: 'k', center: 'o', radius: 1 },
+      ],
+      [
+        { kind: 'fix', id: 'fx', point: 'p' },
+        { kind: 'coincident', id: 'co', a: 'q', b: 'r' },
+        { kind: 'fix', id: 'fo', point: 'o' },
+      ],
+    );
+    const { session } = await editing(sketch);
+
+    session.select(item('pq'));
+    expect(pairs(session)).toEqual([
+      ['fx', 'p'],
+      ['co', 'q'],
+    ]);
+    session.clearSelection();
+    session.setHover(item('k'));
+    expect(pairs(session)).toEqual([['fo', 'o']]);
+  });
+
+  it('a selected dimension shows no glyphs', async () => {
+    const { session } = await editing(SKETCH);
+
+    session.select(item('w'));
+
+    expect(session.state.get().glyphs).toEqual([]);
+  });
+
+  it('showAllConstraints shows the glyphs of every geometric constraint at once', async () => {
+    const { session, sketches } = await editing(SKETCH);
+
+    sketches.setShowAllConstraints(true);
+    expect(pairs(session)).toEqual([
+      ['h1', 'ab'],
+      ['v1', 'bc'],
+      ['h2', 'cd'],
+      ['v2', 'da'],
+      ['perp', 'ab'],
+      ['perp', 'bc'],
+    ]);
+    sketches.setShowAllConstraints(false);
+    expect(session.state.get().glyphs).toEqual([]);
+  });
+
+  it('keeps the array while nothing about the glyphs changes', async () => {
+    const { session } = await editing(SKETCH);
+    session.select(item('ab'));
+    const before = session.state.get().glyphs;
+
+    session.select(item('w'), { additive: true });
+
+    expect(session.state.get().glyphs).toBe(before);
+  });
+
+  it('a closed session stops following the switch', async () => {
+    const { session, sketches } = await editing(SKETCH);
+    session.cancel();
+    const after = session.state.get();
+
+    sketches.setShowAllConstraints(true);
+
+    expect(session.state.get()).toBe(after);
+  });
+});
+
 describe('SketchSession drawing', () => {
   it('draws the sketch with the origin point under sketch-edit', async () => {
     const { session, viewport } = await editing(LINE);
@@ -1287,6 +1598,33 @@ describe('SketchSession drawing', () => {
     session.select(item('pq'));
     const selected = ctx.viewport.sketchDrawings.get(EDIT_SKETCH_DRAWING_ID);
     expect(selected?.curves[0]?.style).toBe('selected');
+  });
+
+  it('a hovered constraint highlights its entities unless they are selected (M25)', async () => {
+    const sketch = rectangleData();
+    const ctx = setup({ features: [['s1', sketch]] });
+    const session = ctx.sketches.edit(fid('s1'));
+    await settle();
+    const styles = () =>
+      Object.fromEntries(
+        ctx.viewport.sketchDrawings
+          .get(EDIT_SKETCH_DRAWING_ID)
+          ?.curves.map((c) => [c.id, c.style]) ?? [],
+      );
+
+    session.select(item('ab'));
+    session.setHover(item('h1'));
+    expect(styles()).toEqual({ ab: 'selected', bc: 'normal', cd: 'normal', da: 'normal' });
+
+    session.setHover(item('v1'));
+    expect(styles()).toEqual({ ab: 'selected', bc: 'hover', cd: 'normal', da: 'normal' });
+
+    session.select(item('h2'));
+    session.setHover(null);
+    expect(styles()).toEqual({ ab: 'normal', bc: 'normal', cd: 'selected', da: 'normal' });
+
+    session.setHover(item('h2'));
+    expect(styles()).toEqual({ ab: 'normal', bc: 'normal', cd: 'selected', da: 'normal' });
   });
 
   it('removes the drawing after closing', async () => {

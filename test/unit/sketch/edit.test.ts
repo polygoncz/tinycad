@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   constraintFor,
+  constraintTargets,
   dimensionFor,
   measure,
   removeItems,
@@ -117,6 +118,78 @@ describe('constraintFor', () => {
     expect(constraintFor('tangent', e('ab', 'cd'))).toBeNull();
     expect(constraintFor('tangent', e('k'))).toBeNull();
     expect(constraintFor('tangent', e('a', 'k'))).toBeNull();
+  });
+
+  it('coincident of a point and a curve (either order) is pointOnCurve', () => {
+    expect(constraintFor('coincident', e('z', 'ab'))).toEqual({
+      kind: 'pointOnCurve',
+      point: 'z',
+      curve: 'ab',
+    });
+    expect(constraintFor('coincident', e('k', 'z'))).toEqual({
+      kind: 'pointOnCurve',
+      point: 'z',
+      curve: 'k',
+    });
+    expect(constraintFor('coincident', e('a', 'q'))).toEqual({
+      kind: 'pointOnCurve',
+      point: 'a',
+      curve: 'q',
+    });
+    expect(constraintFor('coincident', e('ab', 'cd'))).toBeNull();
+    expect(constraintFor('coincident', e('z'))).toBeNull();
+  });
+
+  it('pointOnCurve is null for a point that defines the curve', () => {
+    expect(constraintFor('coincident', e('a', 'ab'))).toBeNull();
+    expect(constraintFor('coincident', e('ab', 'b'))).toBeNull();
+    expect(constraintFor('coincident', e('o', 'k'))).toBeNull();
+    expect(constraintFor('coincident', e('q', 'o'))).toBeNull();
+    expect(constraintFor('coincident', e('s', 'q'))).toBeNull();
+    expect(constraintFor('coincident', e('t', 'q'))).toBeNull();
+  });
+
+  it('horizontal and vertical of two points align them, in selection order', () => {
+    expect(constraintFor('horizontal', e('z', 'a'))).toEqual({ kind: 'hAlign', a: 'z', b: 'a' });
+    expect(constraintFor('vertical', e('a', 'z'))).toEqual({ kind: 'vAlign', a: 'a', b: 'z' });
+    expect(constraintFor('horizontal', e('a', 'a'))).toBeNull();
+    expect(constraintFor('vertical', e('a', 'ab'))).toBeNull();
+    expect(constraintFor('horizontal', e('a', 'b', 'z'))).toBeNull();
+  });
+
+  it('midpoint takes a point and a line in either order', () => {
+    expect(constraintFor('midpoint', e('z', 'ab'))).toEqual({
+      kind: 'midpoint',
+      point: 'z',
+      line: 'ab',
+    });
+    expect(constraintFor('midpoint', e('cd', 'a'))).toEqual({
+      kind: 'midpoint',
+      point: 'a',
+      line: 'cd',
+    });
+    expect(constraintFor('midpoint', e('a', 'ab'))).toBeNull();
+    expect(constraintFor('midpoint', e('z', 'k'))).toBeNull();
+    expect(constraintFor('midpoint', e('z', 'a'))).toBeNull();
+    expect(constraintFor('midpoint', e('z'))).toBeNull();
+    expect(constraintFor('midpoint', e('ab'))).toBeNull();
+  });
+});
+
+describe('constraintTargets', () => {
+  it('lists the entities of the new constraints in their order', () => {
+    const data = sketch(DATA.entities, [
+      { kind: 'pointOnCurve', id: 'p1', point: 'z', curve: 'k' },
+      { kind: 'midpoint', id: 'm1', point: 'z', line: 'ab' },
+      { kind: 'hAlign', id: 'ha', a: 'z', b: 'a' },
+      { kind: 'vAlign', id: 'va', a: 'c', b: 'z' },
+    ]);
+    expect(data.constraints.map(constraintTargets)).toEqual([
+      ['z', 'k'],
+      ['z', 'ab'],
+      ['z', 'a'],
+      ['c', 'z'],
+    ]);
   });
 });
 
@@ -311,6 +384,18 @@ describe('removeItems', () => {
     const r = removeItems(DATA, [...ids('z'), ...ids('nope')]);
     expect(entityIds(r)).toEqual(entityIds(DATA).filter((x) => x !== 'z'));
     expect(removeItems(DATA, []).entities).toEqual(DATA.entities);
+  });
+
+  it('removes the new constraints with their entities', () => {
+    const data = sketch(DATA.entities, [
+      { kind: 'pointOnCurve', id: 'p1', point: 'z', curve: 'k' },
+      { kind: 'midpoint', id: 'm1', point: 'z', line: 'ab' },
+      { kind: 'hAlign', id: 'ha', a: 'z', b: 'a' },
+      { kind: 'vAlign', id: 'va', a: 'c', b: 'd' },
+    ]);
+    expect(constraintIds(removeItems(data, ids('z')))).toEqual(['va']);
+    expect(constraintIds(removeItems(data, ids('k')))).toEqual(['m1', 'ha', 'va']);
+    expect(constraintIds(removeItems(data, ids('ab')))).toEqual(['p1', 'ha', 'va']);
   });
 
   it('does not change the input', () => {

@@ -87,7 +87,7 @@ test('a horizontal dimension placed with the mouse, dragged, kept after a reload
   // 1. Above the line, off the band across it: the horizontal distance; its field gets the focus
   // and the label stands in the view.
   await dimensionLineAt(page, ABOVE);
-  const horizontal = dimensionInput(panel, 'Vodorovná vzdálenost 1');
+  const horizontal = await dimensionInput(panel, 'Vodorovná vzdálenost 1');
   await expect(horizontal).toBeFocused();
   const shown = await horizontal.inputValue();
   const label = viewLabel(page, shown);
@@ -96,7 +96,7 @@ test('a horizontal dimension placed with the mouse, dragged, kept after a reload
   // Beside the line: the vertical distance of the same line. The line runs 200 px across and
   // 80 px up, so Δx / Δy = 2.5 tells the horizontal distance measures Δx.
   await dimensionLineAt(page, BESIDE);
-  const vertical = dimensionInput(panel, 'Svislá vzdálenost 1');
+  const vertical = await dimensionInput(panel, 'Svislá vzdálenost 1');
   await expect(vertical).toBeFocused();
   const dx = await dimensionValue(horizontal);
   const dy = await dimensionValue(vertical);
@@ -125,7 +125,7 @@ test('a horizontal dimension placed with the mouse, dragged, kept after a reload
   await reloadWhenSaved(page);
   await timelineFeature(page, 'Skica 1').dblclick();
   const reopened = sketchPanel(page, 'Skica 1');
-  await expect(dimensionInput(reopened, 'Vodorovná vzdálenost 1')).toHaveValue(shown);
+  await expect(await dimensionInput(reopened, 'Vodorovná vzdálenost 1')).toHaveValue(shown);
   const reloaded = viewLabel(page, shown);
   await expect(reloaded).toBeVisible();
   await expect.poll(async () => apart(await centre(reloaded), dragged)).toBeLessThan(PX_TOLERANCE);
@@ -136,7 +136,7 @@ test('a document from before M28: dimensions without placement are drawn', async
 }, testInfo) => {
   const panel = await sketchWithSlopingLine(page);
   await dimensionLineAt(page, ABOVE);
-  const shown = await dimensionInput(panel, 'Vodorovná vzdálenost 1').inputValue();
+  const shown = await (await dimensionInput(panel, 'Vodorovná vzdálenost 1')).inputValue();
   await panel.getByRole('button', { name: 'Hotovo', exact: true }).click();
   await expect(panel).toHaveCount(0);
 
@@ -168,7 +168,7 @@ test('a document from before M28: dimensions without placement are drawn', async
 
   await timelineFeature(page, 'Skica 1').dblclick();
   const opened = sketchPanel(page, 'Skica 1');
-  await expect(dimensionInput(opened, 'Vodorovná vzdálenost 1')).toHaveValue(shown);
+  await expect(await dimensionInput(opened, 'Vodorovná vzdálenost 1')).toHaveValue(shown);
   await expect(viewLabel(page, shown)).toBeVisible();
   await expect(opened.getByRole('alert')).toHaveCount(0);
 });

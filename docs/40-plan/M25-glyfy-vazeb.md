@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 25
 aliases:
   - M25
@@ -16,8 +16,8 @@ specs:
   - "[[11-ui]]"
 depends_on:
   - "[[M24-realisticke-zobrazeni]]"
-started:
-finished:
+started: 2026-10-15
+finished: 2026-10-15
 tags:
   - milnik
 created: 2026-10-15
@@ -47,10 +47,10 @@ Kontrakt: [[12-skicar#Glyfy vazeb (M25)]].
 ## Úkoly
 
 - [x] 0. Rozhodnout [[Q083 Rozložení glyfů vazeb|Q083]], kontrakt ve spec 12
-- [ ] 1. `sketcher`: `glyphViews`, `SketchState.glyphs`, přepínač `showAllConstraints`, zvýraznění entit najeté/vybrané vazby
-- [ ] 2. `ui`: `glyphLayout`, ikony, `SketchGlyphs.vue` v `AppShell`
-- [ ] 3. `ui`: sbalitelná sekce vazeb a přepínač v `SketchPanel`, i18n
-- [ ] 4. e2e `m25.spec.ts`, propsání do spec 10 a 11
+- [x] 1. `sketcher`: `glyphViews`, `SketchState.glyphs`, přepínač `showAllConstraints`, zvýraznění entit najeté/vybrané vazby
+- [x] 2. `ui`: `glyphLayout`, ikony, `SketchGlyphs.vue` v `AppShell`
+- [x] 3. `ui`: sbalitelná sekce vazeb a přepínač v `SketchPanel`, i18n
+- [x] 4. e2e `m25.spec.ts`, propsání do spec 10 a 11
 
 ## Implementační plán
 
@@ -98,6 +98,23 @@ Jeden úkol = jedno spuštění subagenta `implementer`. Kontrakt je v [[12-skic
 
 _(Souběžná stopa, [[Roadmapa#Souběžné stopy (pokus od M25)|pravidla]]: místo deníku sem zapisuje průběh; hlavní sezení ho při sloučení přenese do deníku.)_
 
+- **2026-10-15, úkol 1** (`glyphViews`, `SketchState.glyphs`, `showAllConstraints`): hotovo. Rozhodnutí stopy k revizi (propsáno do [[12-skicar#Glyfy vazeb (M25)]]):
+  - A1: řada glyfů (`slot`) se skládá podle **polohy kotvy** (shoda do 1e-6 mm), ne podle entity – jinak by se tečka `coincident` a `fix` na shodných bodech překrývaly (akceptační kritérium).
+  - A2: vybraná nebo najetá křivka přidá do množiny viditelnosti své definiční body, takže výběr úsečky ukáže i `coincident`/`fix` na jejích koncích (jako Onshape).
+  - A3: kóta glyf nemá a vybraná/najetá kóta nic nezvýrazní; `slot` čísluje jen zobrazené glyfy; úsečka nulové délky má `side` +y.
+- **2026-10-15, úkol 2** (`glyphLayout`, ikony, `SketchGlyphs.vue`): hotovo. Obsluha událostí je čistá `glyphListeners` (ADR 0010), komponenta se testuje přes `renderToString`.
+  - A4: navázání událostí a přepočet po změně pohledu ověří e2e (úkol 4) – projekt nemá DOM prostředí pro testy komponent a přidávat ho kvůli M25 nestojí za novou knihovnu.
+  - A5: glyf, jehož `side` se na obrazovku nepromítne (rovina z hrany), se nekreslí, stejně jako nepromítnutá kotva.
+- **2026-10-15, úkol 3** (panel): hotovo. Stav `open` drží sám element `<details>`, Vue ho nepřepisuje.
+  - A6: když panel dává fokus poli nové kóty, sbalená sekce se sama rozbalí (jinak by fokus nešel); propsáno do spec 12.
+- **2026-10-15, úkol 4** (e2e, spec 10 a 11): `m25.spec.ts` hotový, celé e2e 106/106 (chrome + webkit, `E2E_PORT=4201`). Helper `dimensionInput` sekci vazeb nejdřív rozbalí; m12, m13 a m19-2-dimensions upravené. Delete po kliku na glyf funguje bez přesunu fokusu (zkratky blokuje jen textové pole).
+- **2026-10-15, revize** (`architecture-reviewer`): bez vážných porušení. Opraveno: `constraintEntities` a `definingPoints` v `sketcher` duplikovaly `constraintTargets` a `curvePoints` ze `sketch` – `sketch` je teď exportuje (znalost modelu na jednom místě, stopy M26–M29 doplňují nové druhy jen tam); třetí kopie `ccwSweep` sjednocena do `sketcher/sketch-angles.ts`; ve spec 12 opravena buňka M25 v tabulce rozšíření (glyfy nejsou v `SketchDrawing`) a doplněno pravidlo „`side` promítnutý na nulovou délku“.
+- **2026-10-15, uzavření:** `npm run check` zelený (5783 unit, 35 integračních), e2e 106/106 v chrome i webkit. Commit na větev `claude/stopa-a-m25-m27-f7ea83`.
+
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+- **Co šlo dobře:** kontrakt ve spec 12 byl dost přesný, čtyři úkoly proběhly bez návrhových zastavení; implementátor vrátil jen výkladové otázky (skládání kotev, definiční body křivek), které se vyřešily upřesněním spec (A1–A6). Vzor `dimensionViews` / `SketchDimensions` z M19.2 šel převzít skoro jedna k jedné.
+- **Co drhlo:** sbalená sekce v panelu rozbila e2e, které čtou pole kót; v helperu vznikl souběh mezi automatickým rozbalením po `nextTick` a klikem testu (řešeno `toPass()`). Projekt pořád nemá DOM prostředí pro testy komponent – navázání událostí glyfů ověřuje jen e2e.
+- **Souběh stop:** stopa A měnila `sketch/index.ts` (export `constraintTargets`, `curvePoints`) a spec 10/11/12 jen ve svých odstavcích; konflikty při sloučení se čekají nanejvýš v `sketch/index.ts` (exporty, které přidávají i B a C) a v `AppShell.vue` (stopa B tam může sahat kvůli kótám). Vlastní port `E2E_PORT` na worktree se osvědčil.
+- **Kandidát na poznatek** (do `70-poznatky/` při sloučení, stopa poznatky nezakládá): malé množství interaktivních značek nad WebGL pohledem je jednodušší jako HTML vrstva s čistou funkcí rozložení než jako sprity ve scéně – události, přístupnost a klávesové zkratky jsou zdarma, picking netřeba rozšiřovat.
+- **Pro M26:** glyfy nových vazeb (`pointOnCurve`, `midpoint`, zarovnání) = nový člen `GlyphKind`, kotva v `glyphViews`, ikona v `GLYPH_ICONS` – typecheck všechna místa ukáže.
