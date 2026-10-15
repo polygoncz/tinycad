@@ -1,4 +1,4 @@
-import { bspline, type Vec2 } from '@/core';
+import { assert, bspline, type Vec2 } from '@/core';
 import { curve2, pointsById } from './geometry';
 import type { Curve2 } from './geometry';
 import type { SketchCurve, SketchData, SketchEntity } from './model';
@@ -34,8 +34,11 @@ const NODE_MATCH_FACTOR = 1e3;
 /** Direction of the containment ray: irrational, so it practically never hits a vertex exactly. */
 const RAY: Vec2 = normalize([Math.SQRT2, Math.PI]);
 const TWO_PI = 2 * Math.PI;
-/** Spline tessellation tolerance relative to the sketch scale (spec 12 "Spliny (M29)"). */
-const SPLINE_TOL = 1e-4;
+/**
+ * Spline tessellation tolerance relative to the sketch scale (spec 12 "Spliny (M29)"); the sketcher
+ * draws splines with the same tolerance.
+ */
+export const SPLINE_TOLERANCE = 1e-4;
 
 /**
  * A curve of a loop with the tessellation of a spline in the same direction (`poly`, only for
@@ -101,7 +104,7 @@ export function computeRegions(data: SketchData): RegionsResult {
   const points = pointsById(data);
   const scale = Math.max(1, ...[...points.values()].flatMap((p) => [Math.abs(p.x), Math.abs(p.y)]));
   const tol = 1e-9 * scale;
-  const splineTol = SPLINE_TOL * scale;
+  const splineTol = SPLINE_TOLERANCE * scale;
 
   // 1. Curves: non-construction only, degenerate ones skipped.
   const nodes: Vec2[] = [];
@@ -237,7 +240,7 @@ function shapeOf(e: Edge): Shape {
   const nodes = [e.from, e.to];
   const { curve } = e;
   if (curve.kind === 'line') return { kind: 'line', a: curve.from, b: curve.to, nodes };
-  if (curve.kind === 'bspline') return { kind: 'polyline', points: e.poly ?? [], nodes };
+  if (curve.kind === 'bspline') return { kind: 'polyline', points: polyOf(e), nodes };
   const r = dist(curve.center, curve.from);
   const start = angleOf(sub(curve.from, curve.center));
   const sweep = mod2pi(angleOf(sub(curve.to, curve.center)) - start);
@@ -332,7 +335,7 @@ function compareOutgoing(a: HalfEdge | undefined, b: HalfEdge | undefined): numb
 /** Forward (from → to) and reverse half-edges of an edge, in this order; both keep the entity id (M14). */
 function halfEdges(e: Edge): readonly [HalfEdge, HalfEdge] {
   const { curve } = e;
-  if (curve.kind === 'bspline') return splineHalfEdges(e, curve, e.poly ?? []);
+  if (curve.kind === 'bspline') return splineHalfEdges(e, curve, polyOf(e));
   if (curve.kind === 'line') {
     const d = sub(curve.to, curve.from);
     return [
@@ -752,4 +755,10 @@ function mod2pi(a: number): number {
 function compareStrings(a: string, b: string): number {
   if (a === b) return 0;
   return a < b ? -1 : 1;
+}
+
+/** The tessellation of a spline part; every spline part carries one (a missing one is a bug). */
+function polyOf(part: Part): readonly Vec2[] {
+  assert(part.poly !== undefined, 'regions: a spline part without its tessellation');
+  return part.poly;
 }

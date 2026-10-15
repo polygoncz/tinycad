@@ -4,7 +4,7 @@
 
 import { assert, assertNever, bspline, vec3 } from '@/core';
 import type { Plane, Vec2, Vec3 } from '@/core';
-import { computeRegions, curve2, pointsById } from '@/sketch';
+import { SPLINE_TOLERANCE, computeRegions, curve2, pointsById } from '@/sketch';
 import type {
   Curve2,
   SketchCurve,
@@ -34,12 +34,6 @@ export const ORIGIN_POINT_ID = '__origin';
 export function controlPolygonId(splineId: string): string {
   return `__poles:${splineId}`;
 }
-
-/**
- * The relative tolerance of the tessellation of a spline (M29), as for regions (spec 12, "Spliny
- * (M29)"): times max(1, the largest |coordinate| of the poles).
- */
-const SPLINE_TOLERANCE = 1e-4;
 
 /** Default size of the square of a plane drawing, in mm. */
 const PLANE_SIZE = 100;

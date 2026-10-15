@@ -10,6 +10,7 @@ describe('sketch public API', () => {
         'GEOMETRIC_CONSTRAINT_KINDS',
         'SKETCH_FEATURE_TYPE',
         'SKETCH_PARAM',
+        'SPLINE_TOLERANCE',
         'computeRegions',
         'constraintFor',
         'curve2',
