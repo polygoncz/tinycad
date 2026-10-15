@@ -723,3 +723,50 @@ describe('bindSelectionHighlight with topo and bodies params of the dialog (M14)
     expect(viewport.selection).toEqual([{ kind: 'edge', body: BODY, edgeIndex: 1 }]);
   });
 });
+
+describe('pickable bodies (M21, ADR 0025)', () => {
+  const EDITED = 'f3' as FeatureId;
+
+  /** The final state names face 2 SIDE and edge 5 nothing; the input of EDITED names TOP and RIM. */
+  function publishInput(regen: FakeRegenStatus, input: Record<string, number[]> = { [TOP]: [2] }) {
+    regen.publish(
+      new Map(),
+      [{ body: BODY, feature: FEATURE, names: aTopoNames({ faces: { [SIDE]: [2] } }) }],
+      [],
+      new Map(),
+      {
+        feature: EDITED,
+        bodies: [
+          {
+            body: BODY,
+            feature: FEATURE,
+            names: aTopoNames({ faces: input, edges: { [RIM]: [5] } }),
+          },
+        ],
+      },
+    );
+  }
+
+  it('set and toggle take the name from snapshot.pick', () => {
+    const { regen, selection } = setup();
+    publishInput(regen);
+
+    selection.set([FACE]);
+    selection.toggle(EDGE);
+
+    expect(selection.items.get()).toEqual([
+      { ...FACE, name: TOP },
+      { ...EDGE, name: RIM },
+    ]);
+  });
+
+  it('a new regeneration remaps by snapshot.pick', () => {
+    const { regen, selection } = setup();
+    publishInput(regen);
+    selection.set([FACE]);
+
+    publishInput(regen, { [TOP]: [4] });
+
+    expect(selection.items.get()).toEqual([{ kind: 'face', body: BODY, faceIndex: 4, name: TOP }]);
+  });
+});

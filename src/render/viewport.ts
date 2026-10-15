@@ -23,8 +23,9 @@ import type {
   ViewportEvents,
   ViewportPort,
 } from '@/interaction';
-import type { BoundingBox, MeshOps, MeshQuality } from '@/kernel';
-import { createBodyLayer, type BodyLayer } from './body-layer';
+import type { BoundingBox, MeshOps, MeshQuality, ShapeHandle } from '@/kernel';
+import type { BodyLayer } from './body-layer';
+import { createBodyLayers } from './body-layers';
 import { unionBounds } from './bounds';
 import { createCameraRig, type CameraController } from './camera-controller';
 import type { OrbitMode } from './camera-ops';
@@ -39,7 +40,6 @@ import type { ScreenPoint } from './manipulator-pick';
 import { createOverlayLayer } from './overlay-layer';
 import { LIGHT_PALETTE, type ScenePalette } from './palette';
 import { toNdc } from './pick-math';
-import { createPicker } from './picker';
 import { createSceneHelpers, GRID_BOUNDS } from './scene-helpers';
 import { sketchGridStep } from './sketch-grid';
 import { createSketchLayer, type SketchLayer } from './sketch-layer';
@@ -52,6 +52,18 @@ import { toViewKeyEvent, toViewPointerEvent } from './view-events';
 export type HighlightLayer = HighlightPort;
 /** Temporary geometry of tools (spec 09, "Vrstvy pro interakci"). */
 export type OverlayLayer = OverlayPort;
+
+/**
+ * The result of the edited feature as a transparent preview (M21, ADR 0025). A second set of
+ * bodies with its own map by BodyId; never picked or highlighted. setBodyVisible and
+ * setBodyColor apply to it too.
+ */
+export interface PreviewLayer {
+  /** Same contract as BodyLayer.sync. */
+  sync(bodies: readonly { readonly id: BodyId; readonly shape: ShapeHandle }[]): Promise<void>;
+  /** Removes and disposes every preview body, invalidates a running sync. */
+  clear(): void;
+}
 
 export interface Viewport extends ViewportPort, Disposable {
   /** Creates canvas, renderer, ResizeObserver and camera input; twice without unmount = error. */
@@ -66,8 +78,21 @@ export interface Viewport extends ViewportPort, Disposable {
   /** Unmounted → error. */
   screenToRay(x: number, y: number): { origin: Vec3; direction: Vec3 };
 
-  /** Bodies from regeneration. */
+  /** Bodies from regeneration; reset swaps the kernel for the preview too. */
   readonly bodies: BodyLayer;
+  /** Result of the edited feature (M21); not picked, not highlighted. */
+  readonly preview: PreviewLayer;
+  /**
+   * M21 (D3 of M19.1): the bodies and the preview at once. Prepares the meshes of both and swaps
+   * both in one synchronous block, so no frame and no published result sees one layer new and
+   * the other old. Settles once both are swapped or the call is stale (a newer sync, syncLayers,
+   * preview.clear or reset makes it swap neither); never rejects. A duplicate BodyId in either
+   * list throws synchronously, before anything changes. An empty `preview` empties the preview.
+   */
+  syncLayers(next: {
+    readonly main: readonly { readonly id: BodyId; readonly shape: ShapeHandle }[];
+    readonly preview: readonly { readonly id: BodyId; readonly shape: ShapeHandle }[];
+  }): Promise<void>;
   /** Hover and selection (implements HighlightPort). */
   readonly highlight: HighlightLayer;
   /** Temporary geometry of tools (implements OverlayPort). */
@@ -86,11 +111,15 @@ export interface Viewport extends ViewportPort, Disposable {
 
   /** Recolours the existing materials and the background, creates nothing anew (Q072). */
   setPalette(palette: ScenePalette): void;
-  /** View state from the browser (Q071): a hidden body is not drawn and not picked. */
+  /**
+   * View state from the browser (Q071): a hidden body is not drawn and not picked. Applies to
+   * the bodies and the preview.
+   */
   setBodyVisible(body: BodyId, visible: boolean): void;
   /**
    * Body colour from its metadata (M15, Q073): '#rrggbb' colours the faces, null returns the
-   * palette's. Survives a sync while the body stays; setPalette leaves it alone.
+   * palette's. Survives a sync while the body stays; setPalette leaves it alone. Applies to the
+   * bodies and the preview (whose faces stay transparent).
    */
   setBodyColor(body: BodyId, color: string | null): void;
   /** M17: face labels and arrow aria-labels of the view cube; the same values = nothing. */
@@ -176,8 +205,8 @@ export function createViewport(deps: {
 
   const scene = new THREE.Scene();
   // Before the camera rig, whose fitAll reads the bounds of the shown bodies.
-  const layer = lifetime.add(
-    createBodyLayer({
+  const layers = lifetime.add(
+    createBodyLayers({
       meshes: deps.meshes,
       quality: deps.quality ?? MESH_QUALITY,
       reportError:
@@ -196,8 +225,10 @@ export function createViewport(deps: {
       },
     }),
   );
-  scene.add(layer.group);
-  // After the body layer, so they are disposed before it; rebuild after dispose is a no-op.
+  const layer = layers.main;
+  scene.add(layer.group, layers.preview.group);
+  // After the body layers, so they are disposed before them; rebuild after dispose is a no-op.
+  // The main layer only: the preview is not highlighted (M21).
   const highlightLayer = lifetime.add(
     createHighlightLayer({
       views: layer.views,
@@ -227,7 +258,8 @@ export function createViewport(deps: {
   scene.add(manipulatorLayer.group);
   const rig = lifetime.add(
     createCameraRig({
-      getBounds: () => layer.bounds(),
+      // The preview too: fitAll shows the result of the edited feature (M21).
+      getBounds: () => layers.bounds(),
       requestRender: scheduleFrame,
       now,
       isMac,
@@ -249,20 +281,19 @@ export function createViewport(deps: {
       },
     }),
   );
-  const picker = createPicker({
-    views: () => layer.views.values(),
-    bounds: () => layer.bounds(),
-  });
+  // The main layer only: the preview is neither picked nor hides anything (M21).
+  const picker = layers.picker;
 
   /**
-   * Box of everything visible (spec 09, "Near a far"): bodies, sketch drawings, tool overlay,
-   * manipulator handles (M18), the grid and the camera target. Never null thanks to the grid.
+   * Box of everything visible (spec 09, "Near a far"): bodies and the preview (M21), sketch
+   * drawings, tool overlay, manipulator handles (M18), the grid and the camera target. Never null
+   * thanks to the grid.
    */
   function sceneBounds(): BoundingBox {
     const target = rig.target;
     return (
       unionBounds([
-        layer.bounds(),
+        layers.bounds(),
         sketchLayer.bounds(),
         overlayLayer.bounds(),
         // The glyph size follows the zoom; drawing and picking run mounted only.
@@ -549,7 +580,19 @@ export function createViewport(deps: {
     },
     reset(meshes) {
       assertAlive();
-      layer.reset(meshes);
+      // The preview shares the mesh cache and holds handles of the old kernel as well.
+      layers.reset(meshes);
+    },
+  };
+
+  const preview: PreviewLayer = {
+    sync(next) {
+      assertAlive();
+      return layers.preview.sync(next);
+    },
+    clear() {
+      assertAlive();
+      layers.preview.clear();
     },
   };
 
@@ -665,6 +708,11 @@ export function createViewport(deps: {
       return rayAt(x, y, width, height);
     },
     bodies,
+    preview,
+    syncLayers(next) {
+      assertAlive();
+      return layers.syncLayers(next);
+    },
     highlight,
     overlay,
     sketches,
@@ -677,7 +725,7 @@ export function createViewport(deps: {
     setPalette(next: ScenePalette): void {
       assertAlive();
       palette = next;
-      layer.setPalette(next);
+      layers.setPalette(next);
       highlightLayer.setPalette(next);
       overlayLayer.setPalette(next);
       sketchLayer.setPalette(next);
@@ -690,11 +738,11 @@ export function createViewport(deps: {
     },
     setBodyVisible(body: BodyId, visible: boolean): void {
       assertAlive();
-      layer.setBodyVisible(body, visible);
+      layers.setBodyVisible(body, visible);
     },
     setBodyColor(body: BodyId, color: string | null): void {
       assertAlive();
-      layer.setBodyColor(body, color);
+      layers.setBodyColor(body, color);
     },
     setViewCubeLabels(labels: ViewCubeLabels): void {
       assertAlive();
@@ -720,14 +768,15 @@ export function createViewport(deps: {
       scene.remove(
         rig.camera,
         layer.group,
+        layers.preview.group,
         highlightLayer.group,
         overlayLayer.group,
         sketchLayer.group,
         manipulatorLayer.group,
       );
-      // In reverse order: view cube, helpers, camera rig, manipulators, sketches, overlay, highlight, then the body
-      // layer, which disposes every BodyView and its shared materials and makes a running sync
-      // stale.
+      // In reverse order: view cube, helpers, camera rig, manipulators, sketches, overlay,
+      // highlight, then the body layers (preview and main), which dispose every BodyView and
+      // their shared materials and make a running sync stale.
       lifetime.dispose();
     },
   };

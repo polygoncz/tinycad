@@ -16,7 +16,7 @@ milestones:
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-14
+updated: 2026-10-15
 ---
 # 10 – `interaction`: výběr, nástroje, akce
 
@@ -161,6 +161,11 @@ export interface RegenSnapshot {
   readonly sketches: readonly RegenSketch[];
   /** Kotvy manipulátorů featur poslední regenerace (M18, RegenResult.anchors). */
   readonly anchors: ReadonlyMap<FeatureId, FeatureAnchors>;
+  /**
+   * Pickovatelná tělesa (ADR 0025): při otevřené session dialogu vstup její featury (feature = její id),
+   * jinak koncový stav (feature = null, bodies === this.bodies). Index z pickingu patří k nim.
+   */
+  readonly pick: { readonly feature: FeatureId | null; readonly bodies: readonly RegenBody[] };
 }
 
 /** Kotva manipulátoru (M18); strukturálně shodná s Anchor z regen, app ji předá beze změny. */
@@ -177,7 +182,8 @@ export interface RegenStatusPort {
 - `health` je `ReadonlyMap`, ale `Map` zmrazit nejde: adaptér v `app` posílá v každém snapshotu **novou** mapu a už ji nemění. `interaction` ji jen čte.
 - Potlačení a pozice za barem port nenese: `interaction` je čte přímo z dokumentu, takže se projeví hned, ne až po regeneraci.
 - `anchors` (M18): stejně jako `health` nová mapa v každém snapshotu. Typy `Anchor` a `FeatureAnchors` jsou veřejné API `interaction`, pluginy je potřebují pro podpis `ManipulatorDescriptor.frame`. `FakeRegenStatus.publish` dostane volitelný čtvrtý argument `anchors` (chybějící = prázdná mapa).
-- V testech port nahrazuje `FakeRegenStatus` (`testing.ts`) s metodou `publish(health, bodies?, sketches?)`, která zvýší `generation` (chybějící seznamy prázdné; těleso bez `names` dostane `NO_TOPO_NAMES`, M14). `aTopoNames({ faces?: Record<string, number[]>, edges?: … })` v `testing.ts` sestaví `TopoNames` z ručně zadaných jmen. Port nese `sketches` vedle `bodies` místo sjednocení `artifacts` z revize – stejná informace s menší změnou ([[Rozhodnutí noční rychloakce#M12 – Skicář|R38]] ⚠). `RegenBody` se exportuje, potřebuje ho adaptér v `app`.
+- **Kdo čte `pick` a kdo `bodies`:** (výjimka: skrytí a barvy pro viewport v `BrowserModel` jdou přes sjednocení `bodies` a `pick.bodies`, aby skryté těleso spotřebované editovanou featurou zůstalo skryté i ve vstupu, Q071)  všechno, co převádí index na jméno nebo jméno na indexy, čte `pick.bodies`: `nameOfHit` (`refPick`, `SelectionModel.set`/`toggle`, `TopoInspector`), `highlightTargets` u `topo` (`bindSelectionHighlight`) a přemapování výběru po regeneraci. `bodies` čtou jen Prohlížeč a export.
+- V testech port nahrazuje `FakeRegenStatus` (`testing.ts`) s metodou `publish(health, bodies?, sketches?, anchors?, pick?)` (bez `pick` platí `{ feature: null, bodies }`), která zvýší `generation` (chybějící seznamy prázdné; těleso bez `names` dostane `NO_TOPO_NAMES`, M14). `aTopoNames({ faces?: Record<string, number[]>, edges?: … })` v `testing.ts` sestaví `TopoNames` z ručně zadaných jmen. Port nese `sketches` vedle `bodies` místo sjednocení `artifacts` z revize – stejná informace s menší změnou ([[Rozhodnutí noční rychloakce#M12 – Skicář|R38]] ⚠). `RegenBody` se exportuje, potřebuje ho adaptér v `app`.
 
 ## Prezentační modely a `Observable`
 
@@ -344,7 +350,7 @@ export const SELECT_TOOL: ToolDescriptor;   // id 'select', group 'select'
 - Výjimka z `descriptor.create()` nebo `tool.activate()`: manager nástroj zahodí (bez `deactivate`), aktivuje výchozí nástroj a výjimku pošle dál; `active` pak ukazuje výchozí. Selže-li sám výchozí nástroj, manager zůstane bez aktivního nástroje (události zahazuje) a výjimka letí dál – chyba programátora; selhal-li předtím jiný nástroj, letí `AggregateError` s oběma chybami. `createToolManager` spouští výchozí nástroj před přihlášením k událostem, takže při jeho selhání nic nezůstane přihlášené.
 - Po `dispose` hodí `activate` výjimku, druhé `dispose` nic nedělá.
 - `ToolManager` přeposílá `pointer` a `key` z `ViewportPort.events` aktivnímu nástroji. Klávesa: nejdřív `tool.onKey`; když vrátí `false` nebo ho nemá, `Escape` bez modifikátorů mimo textové pole ukončí nevýchozí nástroj (návrat k výchozímu). Ostatní nezpracované klávesy jdou do `unhandledKey`.
-- **Referenční parametr dialogu** ([[Q066 Klik do referenčního parametru|Q066]]): vrstva `refPick` (`createRefPickLayer`) sama sleduje `features.current` a `state` aktuální session. Dokud má session `activeRefParam !== null`, bere všechny události (vrací `true`) a aktivní nástroj je nedostane (ten zůstává aktivní, `active` se nemění, jen je dočasně „zakrytý“; nedostane `deactivate` a jeho hover obnoví až další `move`). `refPick` není `Tool` z registru. Chování podle druhu parametru bere z tabulky druhů (níže): `move` → hover, když `hovers(hit)`; levý klik → `fromHit(hit, value)` a nová hodnota přes `setParam` (zásah, který druh nepřevede, se ignoruje); `Escape` → `focusRefParam(null)`. Filtr pickingu se odvozuje při každé události z `pickFilter(spec)` aktivního parametru a platí i pro hover; při změně `activeRefParam` `refPick` zruší hover (`setHover(null)`). Převod zásahu plochy nebo hrany na jméno (`topo`) dělá jediné místo `nameOfHit(snapshot, body, kind, index)` v `regen-status-port.ts`, sdílené se `SelectionModel` a `TopoInspector`; zásah bez jména se ignoruje ([[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R103]]).
+- **Referenční parametr dialogu** ([[Q066 Klik do referenčního parametru|Q066]]): vrstva `refPick` (`createRefPickLayer`) sama sleduje `features.current` a `state` aktuální session. Dokud má session `activeRefParam !== null`, bere všechny události (vrací `true`) a aktivní nástroj je nedostane (ten zůstává aktivní, `active` se nemění, jen je dočasně „zakrytý“; nedostane `deactivate` a jeho hover obnoví až další `move`). `refPick` není `Tool` z registru. Chování podle druhu parametru bere z tabulky druhů (níže): `move` → hover, když `hovers(hit)`; levý klik → `fromHit(hit, value)` a nová hodnota přes `setParam` (zásah, který druh nepřevede, se ignoruje); `Escape` → `focusRefParam(null)`. Filtr pickingu se odvozuje při každé události z `pickFilter(spec)` aktivního parametru a platí i pro hover; při změně `activeRefParam` `refPick` zruší hover (`setHover(null)`). **Mezistav:** při otevřené session `refPick` zásahy ignoruje (nepickuje, zruší hover, klik nic nezapíše), dokud `snapshot.pick.feature !== session.featureId`, tedy dokud regenerace s posunutou lištou nezveřejní vstup editované featury ([[0025-vstupni-stav-editovane-featury|ADR 0025]]). Featura otevřené session stojí vždy před lištou, takže vstup existuje. Bez portu regenerace (`regen` v `createRefPick` je volitelné, jen testy) mezistav neplatí. Převod zásahu plochy nebo hrany na jméno (`topo`) dělá jediné místo `nameOfHit(snapshot, body, kind, index)` v `regen-status-port.ts` nad `snapshot.pick.bodies`, sdílené se `SelectionModel` a `TopoInspector`; zásah bez jména se ignoruje ([[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R103]]).
 - **Tabulka druhů referencí** ([[M20-zpevneni-struktury|M20]], A2): `REF_KIND_BEHAVIOR` v `interaction/ref-kinds.ts` (vnitřní) má pro každý `RefParamKind` z [[03-dokument]] jeden záznam `RefKindBehavior` a chybějící druh je chyba typu (`satisfies`). `refPick`, `bindSelectionHighlight`, `FeatureEditor` a `BrowserModel` z ní jen čtou:
 
   ```ts
@@ -368,9 +374,9 @@ export const SELECT_TOOL: ToolDescriptor;   // id 'select', group 'select'
   | `topo` | plocha nebo hrana podle `entity` (vrchol `[]`, R101) | přidat/odebrat `TopoRef` přes jméno | ne |
   | `region` | oblast skici (ne `'sketch-edit'`) | přidat/odebrat `SketchRegionRef` | oblast |
   | `axis` | entita skici (osa počátku, úsečka) | nastavit, stejná znovu = vymazat | osa |
-  | `planes` | `[]` | – | ne |
+  | `planes` | plocha, entita kresby (rovina počátku) | nahradit jedinou položku: kresba s id roviny (`parsePlaneId`) → `PlaneRef`, plocha se jménem v `pick` → `TopoRef`; stejná rovina nic | rovina |
 
-  Známé mezery jsou v tabulce výslovně s komentářem: `planes` je `focusable`, ale nic nepickuje a Prohlížeč ho nebere; Prohlížeč nebere `topo` ([[Q076 Rovina a hrany z Prohlížeče do referenčního parametru|Q076]]).
+  `planes` je `focusable`, ale ne `autoFocus`, a má `pickEndsFocus: true`: zásah, který druh převede, fokus zruší i bez změny hodnoty (`refPick` i `BrowserModel.selectPlane`), takže výběr roviny skončí i klikem na tutéž rovinu. `planes` (skicář se nemá otevřít ve výběru roviny); text čipu je popisek roviny počátku, u plochy `field.planeFace` se jménem tělesa ([[Q076 Rovina a hrany z Prohlížeče do referenčního parametru|Q076]], [[M21-vstupni-stav-editovane-featury|M21]]). `highlightTargets` u `planes` je prázdné. Prohlížeč nebere `topo` (nemá řádky hran a ploch).
 
 ### `SelectTool`
 
@@ -805,7 +811,7 @@ export interface BrowserModel {
   readonly planes: Observable<readonly BrowserPlaneRow[]>;        // ORIGIN_PLANES v pořadí
   readonly visiblePlanes: Observable<ReadonlySet<PlaneId>>;        // stav pohledu, výchozí prázdné; app → kresba roviny
   readonly sketches: Observable<readonly BrowserSketchRow[]>;     // skici poslední regenerace
-  selectPlane(plane: PlaneId, opts?: { additive?: boolean }): void;  // → selection.set / toggle položky plane
+  selectPlane(plane: PlaneId, opts?: { additive?: boolean }): void;  // → selection.set / toggle položky plane; s aktivním parametrem, který bere 'plane' (planes), nahradí rovinu v parametru (M21)
   setPlaneVisible(plane: PlaneId, visible: boolean): void;
   selectSketch(feature: FeatureId, opts?: { additive?: boolean }): void;   // → výběr featury
   editSketch(feature: FeatureId): void;                            // → deps.sketchEdit; bez canEdit nebo v transakci nic (Ú16a)
@@ -990,12 +996,15 @@ export function createSketchEditor(deps: {
   solver: ConstraintSolver;
   viewport: Pick<ViewportPort, 'sketches'>;               // jen kresba 'sketch-edit' (Ú16a, ADR 0011); ids skicář nepotřebuje
   resolvePlane: (ref: PlaneRef | TopoRef) => Plane | undefined;   // app: planeOfRef nad posledním stavem regenerace (M14), viz spec 07
+  planeOfSketch: (featureId: FeatureId) => Plane | undefined;     // M21: SketchArtifact.plane skici z posledního stavu (ADR 0025); edit ji použije před resolvePlane
   gridStep?: () => number;                                 // M19.2: krok mřížky v mm, čte se při každém pohybu a kliku; výchozí () => 1
 }): SketchEditor;
 
 export interface SketchSession {
   readonly featureId: FeatureId;
-  readonly plane: Plane;
+  readonly plane: Observable<Plane>;                       // M21: mění se se změnou parametru plane (pole Rovina)
+  pickPlane(): void;                                       // M21: fokus parametru roviny (výběr přes refPick); bez viditelného parametru nic
+  cancelPlanePick(): boolean;                              // M21: true = výběr běžel a skončil
   readonly state: Observable<SketchState>;
   addGeometry(add: SketchData): Promise<boolean>;          // nové entity a vazby (nástroje); true = zapsáno
   addConstraint(c: SketchConstraint): Promise<boolean>;    // akce vazeb, kóta
@@ -1014,6 +1023,8 @@ export interface SketchSession {
 
 export interface SketchState {
   readonly open: boolean;
+  readonly planeMissing: boolean;                          // M21 (Q079): rovinu nešlo spočítat, skica je otevřená na XY a čeká na výběr roviny
+  readonly planeField: SketchPlaneField | null;            // M21: pole Rovina pro panel (label, text, active, invalid)
   readonly name: string;                                   // jméno featury
   readonly entities: readonly SketchEntity[];              // z parametrů featury (parseSketchData; neplatná data → [])
   readonly constraints: readonly SketchConstraint[];

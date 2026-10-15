@@ -87,6 +87,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'field.noRef': 'Nevybráno',
   'field.missingRef': 'Chybí položka',
   'field.sketchLine': 'Úsečka ze skici {sketch}',
+  'field.planeFace': 'Plocha tělesa {body}',
 
   // App: switching documents.
   'app.opening': 'Otevírám dokument…',
@@ -166,6 +167,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'sketch.conflict': 'Vazba je v rozporu s ostatními',
   'sketch.redundant': 'Vazba už platí',
   'sketch.solverFailed': 'Skicu se nepodařilo vyřešit',
+  'sketch.planeMissing': 'Rovina skici chybí, vyberte novou',
   'sketchPanel.constraints': 'Vazby',
   'sketchPanel.remove': 'Odebrat {name}',
   'sketchPanel.gridSnap': 'Přichytit k mřížce',

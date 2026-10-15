@@ -288,15 +288,15 @@ describe('FeatureEditor initial reference param (R19)', () => {
     expect(editor.create('sketchLike').state.get().activeRefParam).toBeNull();
   });
 
-  it('focusRefParam accepts a planes param, not a data param (M12)', () => {
+  it('focusRefParam accepts a planes param (M21) but not a data param', () => {
     const { editor } = setup({}, EN, SKETCH_LIKE);
     const session = editor.create('sketchLike');
     session.focusRefParam('plane');
     expect(session.state.get().activeRefParam).toBe('plane');
-    expect(session.state.get().fields.map((f) => f.active)).toEqual([true, false]);
     expect(() => {
       session.focusRefParam('sketch');
     }).toThrow();
+    expect(session.state.get().activeRefParam).toBe('plane');
   });
 
   it('edit starts with null', () => {

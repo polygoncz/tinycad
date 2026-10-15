@@ -34,7 +34,9 @@ export {
   parseBodyId,
   parsePlaneId,
   parseSketchId,
+  readPlaneRef,
   readRefOf,
+  samePlaneRef,
   sketchId,
 } from './refs';
 export { ORIGIN, ORIGIN_AXES, ORIGIN_AXIS_IDS, ORIGIN_PLANE_IDS, ORIGIN_PLANES } from './origin';

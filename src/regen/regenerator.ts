@@ -35,6 +35,13 @@ export interface RegenResult {
    * warning, built or cached ({} for a feature without a manipulator, M20); deeply frozen.
    */
   readonly anchors: ReadonlyMap<FeatureId, FeatureAnchors>;
+  /**
+   * Input of the feature `inputOf` (ADR 0025): the state in front of it – the output of the
+   * previous feature, or EMPTY_STATE – when the feature is in front of the rollback bar, even
+   * suppressed or in error; null otherwise and without `inputOf`. A reference into the cache, so
+   * its handles live as long as the state stays in the cache (mark & sweep keeps every cached state).
+   */
+  readonly input: { readonly feature: FeatureId; readonly state: RegenState } | null;
   readonly durationMs: number;
 }
 
@@ -51,7 +58,14 @@ export interface RegenEvents {
 
 export interface Regenerator {
   /** Regenerates the studio. A call during a running regeneration replaces it (the old result is dropped). */
-  run(studio: PartStudioData): Promise<RegenResult | 'superseded'>;
+  /**
+   * `opts.inputOf`: the feature whose input the result carries in `input` (the feature of an
+   * open dialog, ADR 0025).
+   */
+  run(
+    studio: PartStudioData,
+    opts?: { readonly inputOf?: FeatureId },
+  ): Promise<RegenResult | 'superseded'>;
   readonly events: Subscribable<RegenEvents>;
 }
 
@@ -220,6 +234,7 @@ export function createRegenerator(deps: {
   async function regenerate(
     studio: PartStudioData,
     current: number,
+    inputOf: FeatureId | undefined,
   ): Promise<Omit<RegenResult, 'durationMs'> | 'superseded'> {
     const { features, rollbackIndex } = studio;
     const done = (featureId: FeatureId, status: FeatureStatus): void => {
@@ -268,6 +283,7 @@ export function createRegenerator(deps: {
       finalState: entries[rollbackIndex - 1]?.state ?? EMPTY_STATE,
       statuses,
       anchors,
+      input: inputAt(features, rollbackIndex, entries, inputOf),
     };
   }
 
@@ -288,13 +304,16 @@ export function createRegenerator(deps: {
    * `finished`) and every later run rejects at once, without calling the kernel. They all reject
    * with the RpcError of the first loss.
    */
-  async function run(studio: PartStudioData): Promise<RegenResult | 'superseded'> {
+  async function run(
+    studio: PartStudioData,
+    opts: { readonly inputOf?: FeatureId } = {},
+  ): Promise<RegenResult | 'superseded'> {
     assertKernelAlive();
     const start = now();
     const current = ++generation;
     let outcome: Omit<RegenResult, 'durationMs'> | 'superseded';
     try {
-      outcome = await regenerate(studio, current);
+      outcome = await regenerate(studio, current, opts.inputOf);
     } catch (e) {
       if (isDisconnected(e)) {
         // Q049: the kernel is gone with all its handles, for every generation – nothing owned or
@@ -328,6 +347,22 @@ export function createRegenerator(deps: {
   }
 
   return { run, events: emitter.asSubscribable() };
+}
+
+/**
+ * The input of the feature `inputOf` (ADR 0025): the output state of the entry in front of it,
+ * when the feature is in front of the rollback bar; null otherwise. Frozen, it goes to the UI.
+ */
+function inputAt(
+  features: readonly FeatureInstance[],
+  rollbackIndex: number,
+  entries: readonly CacheEntry[],
+  inputOf: FeatureId | undefined,
+): RegenResult['input'] {
+  if (inputOf === undefined) return null;
+  const i = features.findIndex((f) => f.id === inputOf);
+  if (i < 0 || i >= rollbackIndex) return null;
+  return Object.freeze({ feature: inputOf, state: entries[i - 1]?.state ?? EMPTY_STATE });
 }
 
 /**

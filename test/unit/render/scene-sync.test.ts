@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyId } from '@/interaction';
 import type { MeshData, MeshOps, MeshQuality, ShapeHandle } from '@/kernel';
+import { createSharedMeshCache, type SharedMeshCache } from '@/render/mesh-cache';
 import { createSceneSync } from '@/render/scene-sync';
 import type { ScenePlan } from '@/render/scene-sync';
 
@@ -48,16 +49,15 @@ function manualMeshes() {
   return { meshes, calls, callFor };
 }
 
-function setup(meshes: MeshOps) {
+function setup(meshes: MeshOps, shared: SharedMeshCache = createSharedMeshCache(meshes, QUALITY)) {
   const plans: ScenePlan[] = [];
   const errors: { body: BodyId; error: unknown }[] = [];
   const sync = createSceneSync({
-    meshes,
-    quality: QUALITY,
+    cache: shared.client(),
     reportError: (b, error) => errors.push({ body: b, error }),
     apply: (plan) => plans.push(plan),
   });
-  return { sync, plans, errors };
+  return { sync, plans, errors, shared };
 }
 
 describe('createSceneSync', () => {
@@ -128,27 +128,28 @@ describe('createSceneSync', () => {
     expect(plans).toEqual([{ remove: [], add: [{ id: A, shape: shape(2), mesh: m2 }] }]);
   });
 
-  it('drops the result of a sync running during reset', async () => {
+  it('drops the result of a sync running during clear', async () => {
     const k = manualMeshes();
     const { sync, plans } = setup(k.meshes);
     const running = sync.sync([{ id: A, shape: shape(1) }]);
-    const k2 = manualMeshes();
-    sync.reset(k2.meshes);
+    sync.clear();
     k.callFor(shape(1)).resolve(aMesh(1));
     await running;
-    // Nothing was shown, so reset had nothing to remove either.
+    // Nothing was shown, so clear had nothing to remove either.
     expect(plans).toEqual([]);
   });
 
-  it('reset removes every shown body and tessellates with the new MeshOps', async () => {
+  it('clear removes every shown body; after a kernel swap the cache tessellates anew', async () => {
     const k = manualMeshes();
-    const { sync, plans } = setup(k.meshes);
+    const { sync, plans, shared } = setup(k.meshes);
     const first = sync.sync([{ id: A, shape: shape(1) }]);
     k.callFor(shape(1)).resolve(aMesh(1));
     await first;
 
+    // Kernel swap (Q060): the owner of the shared cache resets it, then clears every sync.
     const k2 = manualMeshes();
-    sync.reset(k2.meshes);
+    shared.reset(k2.meshes);
+    sync.clear();
     expect(plans[1]).toEqual({ remove: [A], add: [] });
 
     // The new kernel numbers handles again: the same handle is tessellated anew and added.
@@ -280,5 +281,58 @@ describe('createSceneSync', () => {
     k.callFor(shape(1)).resolve(aMesh(1));
     await running;
     expect(plans).toHaveLength(1);
+  });
+
+  it('clear with nothing shown does not apply', () => {
+    const k = manualMeshes();
+    const { sync, plans } = setup(k.meshes);
+    sync.clear();
+    expect(plans).toEqual([]);
+  });
+});
+
+describe('two SceneSyncs on one shared cache (body layer and preview, M21)', () => {
+  it('a handle shown by one is not tessellated again by the other', async () => {
+    const k = manualMeshes();
+    const main = setup(k.meshes);
+    const preview = setup(k.meshes, main.shared);
+    const first = main.sync.sync([{ id: A, shape: shape(1) }]);
+    k.callFor(shape(1)).resolve(aMesh(1));
+    await first;
+    await preview.sync.sync([{ id: A, shape: shape(1) }]);
+    expect(k.calls).toHaveLength(1);
+    expect(preview.plans).toHaveLength(1);
+  });
+
+  it('the retain of one keeps the meshes the other shows', async () => {
+    const k = manualMeshes();
+    const main = setup(k.meshes);
+    const preview = setup(k.meshes, main.shared);
+    const first = preview.sync.sync([{ id: A, shape: shape(1) }]);
+    k.callFor(shape(1)).resolve(aMesh(1));
+    await first;
+    // The body layer moves on to handle 2; handle 1 is still shown by the preview.
+    const second = main.sync.sync([{ id: A, shape: shape(2) }]);
+    k.callFor(shape(2)).resolve(aMesh(2));
+    await second;
+    await main.sync.sync([{ id: A, shape: shape(1) }]);
+    expect(k.calls.map((c) => c.shape)).toEqual([shape(1), shape(2)]);
+    // Once the preview no longer shows it and the body layer moved on, handle 1 is forgotten.
+    preview.sync.clear();
+    await main.sync.sync([]);
+    void main.sync.sync([{ id: A, shape: shape(1) }]);
+    expect(k.calls.map((c) => c.shape)).toEqual([shape(1), shape(2), shape(1)]);
+  });
+
+  it('keeps separate maps by BodyId', async () => {
+    const k = manualMeshes();
+    const main = setup(k.meshes);
+    const preview = setup(k.meshes, main.shared);
+    const first = main.sync.sync([{ id: A, shape: shape(1) }]);
+    k.callFor(shape(1)).resolve(aMesh(1));
+    await first;
+    preview.sync.clear();
+    expect(preview.plans).toEqual([]);
+    expect(main.plans).toHaveLength(1);
   });
 });

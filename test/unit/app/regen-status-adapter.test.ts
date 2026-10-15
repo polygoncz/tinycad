@@ -39,6 +39,7 @@ function aResult(
     finalState: { artifacts: new Map(artifacts.map((a) => [a.id, a])) },
     statuses: new Map(statuses.map(([id, s]) => [fid(id), s])),
     anchors: new Map(),
+    input: null,
     durationMs: 3,
   };
 }
@@ -52,6 +53,41 @@ describe('RegenStatusAdapter', () => {
     expect(snapshot.bodies).toEqual([]);
     expect(snapshot.sketches).toEqual([]);
     expect(snapshot.anchors.size).toBe(0);
+    expect(snapshot.pick).toEqual({ feature: null, bodies: [] });
+  });
+
+  it('without the input of a feature the final state is pickable (pick.feature null)', () => {
+    const adapter = createRegenStatusAdapter();
+    adapter.publish(aResult([['a', { kind: 'ok' }]], [aBody('a', 1)]));
+    const snapshot = adapter.state.get();
+    expect(snapshot.pick.feature).toBeNull();
+    expect(snapshot.pick.bodies).toBe(snapshot.bodies);
+    expect(Object.isFrozen(snapshot.pick)).toBe(true);
+  });
+
+  it('with the input of a feature its bodies are pickable, bodies stay the final state (M21)', () => {
+    const adapter = createRegenStatusAdapter();
+    const before = aBody('a', 1, 'a', aNameTable({ edges: { [tn('e1')]: [0] } }));
+    const after = aBody('a', 2, 'f', aNameTable({ edges: { [tn('e2')]: [0] } }));
+    adapter.publish({
+      ...aResult(
+        [
+          ['a', { kind: 'ok' }],
+          ['f', { kind: 'ok' }],
+        ],
+        [after],
+      ),
+      input: { feature: fid('f'), state: { artifacts: new Map([[before.id, before]]) } },
+    });
+    const snapshot = adapter.state.get();
+    expect(snapshot.bodies).toEqual([{ body: bid('a'), feature: fid('a'), names: after.names }]);
+    expect(snapshot.pick).toEqual({
+      feature: fid('f'),
+      bodies: [{ body: bid('a'), feature: fid('a'), names: before.names }],
+    });
+    expect(Object.isFrozen(snapshot.pick)).toBe(true);
+    expect(Object.isFrozen(snapshot.pick.bodies)).toBe(true);
+    expect(Object.isFrozen(snapshot.pick.bodies[0])).toBe(true);
   });
 
   it('maps the statuses of evaluated features to health and leaves the others out', () => {

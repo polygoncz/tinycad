@@ -198,6 +198,20 @@ const NO_BODIES: readonly RegenBody[] = Object.freeze([]);
 const NO_SKETCHES: readonly RegenSketch[] = Object.freeze([]);
 const NO_ANCHORS: ReadonlyMap<FeatureId, FeatureAnchors> = new Map();
 
+/** The pickable bodies for FakeRegenStatus.publish (M21): the input of `feature`. */
+interface PublishedPick {
+  readonly feature: FeatureId | null;
+  readonly bodies: readonly PublishedBody[];
+}
+
+function publishedBodies(bodies: readonly PublishedBody[]): readonly RegenBody[] {
+  return Object.freeze(
+    bodies.map(({ body, feature, names }) =>
+      Object.freeze({ body, feature, names: names ?? NO_TOPO_NAMES }),
+    ),
+  );
+}
+
 /**
  * A RegenStatusPort for tests: starts with no regeneration (generation 0, no health, no
  * bodies, no sketches, no anchors); each publish stands for one finished regeneration.
@@ -210,6 +224,7 @@ export class FakeRegenStatus implements RegenStatusPort {
       bodies: NO_BODIES,
       sketches: NO_SKETCHES,
       anchors: new Map(),
+      pick: Object.freeze({ feature: null, bodies: NO_BODIES }),
     }),
   );
   readonly state: Observable<RegenSnapshot> = this.value.asObservable();
@@ -217,23 +232,22 @@ export class FakeRegenStatus implements RegenStatusPort {
   /**
    * A new frozen snapshot with generation + 1 and copies of health, bodies (a body without
    * names gets NO_TOPO_NAMES, M14), sketches (with their regions) and anchors (M18; each empty
-   * when omitted); notifies subscribers.
+   * when omitted) and the pickable bodies (M21; omitted = the final state, `pick.bodies` is then
+   * the same array as `bodies`); notifies subscribers.
    */
   publish(
     health: ReadonlyMap<FeatureId, FeatureHealth>,
     bodies: readonly PublishedBody[] = NO_BODIES,
     sketches: readonly RegenSketch[] = NO_SKETCHES,
     anchors: ReadonlyMap<FeatureId, FeatureAnchors> = NO_ANCHORS,
+    pick?: PublishedPick,
   ): void {
+    const finalBodies = publishedBodies(bodies);
     this.value.set(
       Object.freeze({
         generation: this.value.get().generation + 1,
         health: new Map(health),
-        bodies: Object.freeze(
-          bodies.map(({ body, feature, names }) =>
-            Object.freeze({ body, feature, names: names ?? NO_TOPO_NAMES }),
-          ),
-        ),
+        bodies: finalBodies,
         sketches: Object.freeze(
           sketches.map(({ sketch, feature, regions }) =>
             Object.freeze({ sketch, feature, regions: Object.freeze([...regions]) }),
@@ -241,6 +255,11 @@ export class FakeRegenStatus implements RegenStatusPort {
         ),
         // A new map, like health; the anchors themselves are passed on as they are.
         anchors: new Map(anchors),
+        pick: Object.freeze(
+          pick === undefined
+            ? { feature: null, bodies: finalBodies }
+            : { feature: pick.feature, bodies: publishedBodies(pick.bodies) },
+        ),
       }),
     );
   }

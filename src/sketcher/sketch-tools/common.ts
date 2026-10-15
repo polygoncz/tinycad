@@ -53,12 +53,13 @@ export function cursorAt(
   x: number,
   y: number,
 ): Vec2 | null {
-  const world = planeMath.intersectRay(session.plane, ctx.viewport.screenToRay(x, y));
-  return world === null ? null : planeMath.toLocal(session.plane, world);
+  const plane = session.plane.get();
+  const world = planeMath.intersectRay(plane, ctx.viewport.screenToRay(x, y));
+  return world === null ? null : planeMath.toLocal(plane, world);
 }
 
 export const toWorld = (session: SketchSession, v: Vec2): Vec3 =>
-  planeMath.toWorld(session.plane, v);
+  planeMath.toWorld(session.plane.get(), v);
 
 export function distance(a: Vec2, b: Vec2): number {
   return Math.hypot(b[0] - a[0], b[1] - a[1]);

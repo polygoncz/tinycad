@@ -103,6 +103,7 @@ const SKETCH_KEYS = [
   'sketch.constraint.fix',
   'sketch.constraint.distance',
   'sketch.constraint.radius',
+  'sketch.planeMissing',
   'sketch.status.defined',
   'sketch.status.dof',
   'sketch.status.solving',
@@ -128,6 +129,8 @@ const SWEEP_KEYS = [
   'field.noRef',
   'field.missingRef',
   'field.sketchLine',
+  // M21: the text of a face as the plane of a sketch (field "Plane" of the sketch panel).
+  'field.planeFace',
 ];
 
 // Keys of the debug panel of topological names (M14, R111).
@@ -233,6 +236,11 @@ describe('built-in dictionaries', () => {
   it('the unresolved reference speaks of any item, not only a body (R82)', () => {
     expect(cs['param.unresolvedRef']).toBe('Odkazovaná položka neexistuje');
     expect(en['param.unresolvedRef']).toBe('The referenced item does not exist');
+  });
+
+  it('a sketch without a plane asks for a new one (Q079)', () => {
+    expect(cs['sketch.planeMissing']).toBe('Rovina skici chybí, vyberte novou');
+    expect(en['sketch.planeMissing']).toBe('The sketch plane is missing, pick a new one');
   });
 
   it('are frozen', () => {

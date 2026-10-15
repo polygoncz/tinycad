@@ -78,6 +78,17 @@ export interface RegenSnapshot {
   readonly sketches: readonly RegenSketch[];
   /** Anchors of the manipulators of the last regeneration's features (M18, RegenResult.anchors). */
   readonly anchors: ReadonlyMap<FeatureId, FeatureAnchors>;
+  /**
+   * The pickable bodies (M21, ADR 0025): what the main layer of the viewport shows, so every turn
+   * of a pick index into a name and back reads these, not `bodies`. While a feature dialog is
+   * open they are the bodies of the input of its feature; otherwise the final state and
+   * `pick.bodies === bodies`. app chooses them, interaction only reads them.
+   */
+  readonly pick: {
+    /** The feature whose input `bodies` are; null = the final state. */
+    readonly feature: FeatureId | null;
+    readonly bodies: readonly RegenBody[];
+  };
 }
 
 export interface RegenStatusPort {
@@ -85,9 +96,10 @@ export interface RegenStatusPort {
 }
 
 /**
- * The name of the face or edge `index` of `body` in `snapshot` (M14), undefined when the body is
- * not in the snapshot or the face or edge has no name. The one lookup of the name of a hit in
- * interaction: the reference pick, the selection and the TopoInspector.
+ * The name of the face or edge `index` of `body` in the pickable bodies of `snapshot` (M14; M21:
+ * `pick`, the index of a hit belongs to them), undefined when the body is not there or the face
+ * or edge has no name. The one lookup of the name of a hit in interaction: the reference pick,
+ * the selection and the TopoInspector.
  */
 export function nameOfHit(
   snapshot: RegenSnapshot,
@@ -95,6 +107,6 @@ export function nameOfHit(
   kind: 'face' | 'edge',
   index: number,
 ): TopoName | undefined {
-  const names = snapshot.bodies.find((b) => b.body === body)?.names;
+  const names = snapshot.pick.bodies.find((b) => b.body === body)?.names;
   return kind === 'face' ? names?.nameOfFace(index) : names?.nameOfEdge(index);
 }

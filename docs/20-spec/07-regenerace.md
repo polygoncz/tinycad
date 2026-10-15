@@ -16,7 +16,7 @@ milestones:
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-14
+updated: 2026-10-15
 ---
 # 07 – `regen`: regenerace historie
 
@@ -299,7 +299,7 @@ Když `run` odmítne kvůli výjimce mimo jádro ([[Q043 Výjimka builderu mimo 
 export interface Regenerator {
 
   /** Přepočítá studio. Volání během běžící regenerace ji nahradí (starý výsledek se zahodí). */
-  run(studio: PartStudioData): Promise<RegenResult | 'superseded'>;
+  run(studio: PartStudioData, opts?: { readonly inputOf?: FeatureId }): Promise<RegenResult | 'superseded'>;
 
   readonly events: Subscribable<RegenEvents>;
 }
@@ -319,10 +319,14 @@ export interface RegenResult {
   readonly generation: number;
   readonly finalState: RegenState;                 // stav na rollback baru
   readonly statuses: ReadonlyMap<FeatureId, FeatureStatus>;
-  readonly anchors: ReadonlyMap<FeatureId, FeatureAnchors>;   // M18, viz Kotvy manipulátorů
+  readonly anchors: ReadonlyMap<FeatureId, FeatureAnchors>;   // viz Kotvy manipulátorů
+  /** Vstup featury opts.inputOf (stav před ní), null bez inputOf nebo když featura před lištou není (ADR 0025). */
+  readonly input: { readonly feature: FeatureId; readonly state: RegenState } | null;
   readonly durationMs: number;
 }
 ```
+
+- **Vstup editované featury** ([[0025-vstupni-stav-editovane-featury|ADR 0025]]): `input.state` je `entries[i-1]?.state ?? EMPTY_STATE` featury `inputOf` na pozici `i < rollbackIndex`, i když je potlačená, v chybě nebo vzatá z cache. Je to tentýž objekt, který dostal její builder, nic se nepočítá navíc. Handle vstupu jsou živé, protože mark & sweep drží všechny stavy cache. `app` ho předává při otevřené session dialogu featury.
 
 ### Cache podle identity
 

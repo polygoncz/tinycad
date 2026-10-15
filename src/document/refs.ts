@@ -184,6 +184,27 @@ export function readRefOf<K extends EntityRef['kind']>(
   return undefined;
 }
 
+/**
+ * The plane of a 'planes' param value (M21): its first item as a PlaneRef or a TopoRef (a planar
+ * face, M14), undefined when it is neither or the value is not an array. The one reading of the
+ * plane of a sketch outside document (sketcher, interaction).
+ */
+export function readPlaneRef(value: unknown): PlaneRef | TopoRef | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const items: readonly unknown[] = value;
+  return readRefOf(['plane', 'topo'], items[0]);
+}
+
+/**
+ * Two plane references name the same plane (M21): the same origin plane, or the same face of the
+ * same body. By value, never by identity. The one comparison of plane references outside
+ * document (sketcher, interaction).
+ */
+export function samePlaneRef(a: PlaneRef | TopoRef, b: PlaneRef | TopoRef): boolean {
+  if (a.kind === 'plane') return b.kind === 'plane' && a.plane === b.plane;
+  return b.kind === 'topo' && a.body === b.body && a.name === b.name;
+}
+
 /** readRef(kind, …) gives a reference of that kind; the guard tells it the type system. */
 function isOfKind<K extends EntityRef['kind']>(
   ref: EntityRef,

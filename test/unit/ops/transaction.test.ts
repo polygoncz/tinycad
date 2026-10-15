@@ -464,3 +464,86 @@ describe('applyTransient', () => {
     }).toThrow();
   });
 });
+
+describe('merging steps on apply (ADR 0025)', () => {
+  /** Records `applied` events emitted from now on. */
+  function recordApplied(dispatcher: ReturnType<typeof setup>['dispatcher']) {
+    const applied: Operation[] = [];
+    dispatcher.events.on('applied', (e) => applied.push(e.op));
+    return applied;
+  }
+
+  it('1000 setParams of one feature leave one step: abort applies one inverse', () => {
+    const { doc, log, dispatcher } = setup();
+    const before = toData(doc);
+    const tx = dispatcher.begin('Drag');
+    for (let i = 1; i <= 1000; i++) tx.apply(setParams('a', i));
+    const applied = recordApplied(dispatcher);
+    tx.abort();
+    expect(applied).toEqual([setParams('a', 0)]);
+    expect(toData(doc)).toEqual(before);
+    expect(log.lastSeq).toBe(0);
+  });
+
+  it('emits applied for every op as before', () => {
+    const { dispatcher } = setup();
+    const applied = recordApplied(dispatcher);
+    const tx = dispatcher.begin('Drag');
+    for (let i = 1; i <= 3; i++) tx.apply(setParams('a', i));
+    expect(applied).toEqual([setParams('a', 1), setParams('a', 2), setParams('a', 3)]);
+  });
+
+  it('does not merge steps of different features', () => {
+    const { doc, dispatcher } = setup();
+    const before = toData(doc);
+    const tx = dispatcher.begin('x');
+    tx.apply(setParams('a', 1));
+    tx.apply(setParams('b', 2));
+    tx.apply(setParams('b', 3));
+    const applied = recordApplied(dispatcher);
+    tx.abort();
+    expect(applied).toEqual([setParams('b', 0), setParams('a', 0)]);
+    expect(toData(doc)).toEqual(before);
+  });
+
+  it('does not merge steps of different types', () => {
+    const { doc, dispatcher } = setup();
+    const before = toData(doc);
+    const remove: FeatureRemoveOp = { type: 'feature.remove', v: 1, featureId: id('b') };
+    const tx = dispatcher.begin('x');
+    tx.apply(setParams('a', 1));
+    tx.apply(remove);
+    tx.apply(setParams('a', 2));
+    const applied = recordApplied(dispatcher);
+    tx.abort();
+    expect(applied).toHaveLength(3);
+    expect(applied[0]).toEqual(setParams('a', 1));
+    expect(applied[2]).toEqual(setParams('a', 0));
+    expect(toData(doc)).toEqual(before);
+  });
+
+  it('a transient step in between interrupts merging', () => {
+    const { doc, dispatcher } = setup();
+    const before = toData(doc);
+    const tx = dispatcher.begin('x');
+    tx.apply(setParams('a', 1));
+    tx.applyTransient(setRollback(1));
+    tx.apply(setParams('a', 2));
+    tx.apply(setParams('a', 3));
+    const applied = recordApplied(dispatcher);
+    tx.abort();
+    expect(applied).toEqual([setParams('a', 1), setRollback(2), setParams('a', 0)]);
+    expect(toData(doc)).toEqual(before);
+  });
+
+  it('commit still merges logged steps around a transient one into one entry', () => {
+    const { log, dispatcher } = setup();
+    const tx = dispatcher.begin('x');
+    tx.apply(setParams('a', 1));
+    tx.applyTransient(setRollback(1));
+    tx.apply(setParams('a', 2));
+    const entry = tx.commit();
+    expect(log.lastSeq).toBe(1);
+    expect(entry).toMatchObject({ op: setParams('a', 2), inverse: setParams('a', 0) });
+  });
+});

@@ -46,7 +46,9 @@ export interface Viewport extends ViewportPort, Disposable {
   pick(x: number, y: number, filter?: PickFilter): PickResult | null;   // px vůči canvasu (CSS px); nepřipojený viewport → null; filtr viz spec 10
   screenToRay(x: number, y: number): { origin: Vec3; direction: Vec3 };  // nepřipojený → chyba
 
-  readonly bodies: BodyLayer;          // tělesa z regenerace
+  readonly bodies: BodyLayer;          // tělesa z regenerace; reset(meshes) vyprázdní i náhled
+  readonly preview: PreviewLayer;      // M21: náhled editované featury (viz Náhled)
+  syncLayers(next: { main: readonly ShownBody[]; preview: readonly ShownBody[] }): Promise<void>;   // M21: obě vrstvy atomicky (viz Náhled)
   readonly highlight: HighlightLayer;  // hover a výběr (implementuje HighlightPort)
   readonly overlay: OverlayLayer;      // dočasná geometrie nástrojů (implementuje OverlayPort)
   readonly sketches: SketchLayer;      // kresby skic a rovin (implementuje SketchPort, M12)
@@ -85,7 +87,8 @@ export interface ScenePalette {
   readonly edge: number;
   readonly hover: number;       // světlejší odstín výběru: světlá 0xfb923c, tmavá 0xffc266
   readonly selection: number;   // oranžová (M19.2 D1): světlá 0xea580c, tmavá 0xff9f0a; ne --accent v CSS
-  readonly preview: number;     // overlay nástrojů
+  readonly preview: number;     // overlay nástrojů (gumové čáry skicáře, modré jako skica)
+  readonly bodyPreview: number; // M21: náhled editované featury, jantarová: světlá #b07d0a (kontrast 3,3 : 1), tmavá #ffd60a
   readonly construction: number;
   readonly sketch: number;          // nedourčená skica (M12): světlá 0x0a84ff, tmavá 0x409cff
   readonly sketchDefined: number;   // plně určená skica (M12): světlá 0x1c1c1e, tmavá 0xf2f2f7
@@ -260,6 +263,28 @@ Implementace `SceneSync`:
 7. **Výměna instance jádra** (restart workeru, [[Q060 Výměna jádra a cache sítí v render|Q060]], [[Q037 Pád workeru a čekající RPC volání|Q037]]): `app` zavolá `reset(newMeshes)` a vynutí plnou regeneraci. Handle jsou jedinečné jen v rámci instance a nové jádro čísluje znovu. Napojení v [[M10-ui|M10]].
 8. Logika bodů 1–7 je oddělená od Three.js (`SceneSync`, `scene-sync.ts`): výsledkem je plán `{ remove, add }`, který `BodyLayer` provede synchronně ve funkci `apply`. Plán, který nic nemění, se neprovádí (žádné zbytečné překreslení). `reset` provede plán, který odebere všechna zobrazená tělesa, takže `apply` musí snést volání i mimo `sync`.
 9. Po výměně scény `HighlightLayer` přestaví zvýraznění z nových sítí. Cíle, jejichž těleso zmizelo nebo index je mimo rozsah, tiše vypustí. Jestli index po regeneraci ukazuje na „stejnou“ plochu, řeší [[08-topologicke-pojmenovani|topologické pojmenování]] v `interaction` (M14): výběr se přemapuje podle jména a `interaction` pošle nové cíle; `render` jména nezná.
+
+**Sdílená cache a výměna jádra** ([[M21-vstupni-stav-editovane-featury|M21]]): sítě drží jedna sdílená cache `createSharedMeshCache(meshes, quality)` a každá vrstva těles (hlavní a náhled) je její klient. `retain` jedné vrstvy drží sjednocení toho, co potřebují všechny vrstvy, a handle běžícího `sync` zůstává v cache až do dalšího `retain` téže vrstvy. Stejný handle se tak tesseluje jednou, i když je v obou vrstvách. `SceneSync` dostává cache zvenku a místo `reset(meshes)` má `clear()`. Výměnu jádra dělá vlastník cache (`BodyLayers`): `reset` cache, pak `clear()` obou vrstev. `Viewport.bodies.reset(meshes)` proto vyprázdní i náhled.
+
+## Náhled
+
+[[0025-vstupni-stav-editovane-featury|ADR 0025]]: během editace featury hlavní vrstva ukazuje vstup editované featury a výsledek je přes něj jako průhledný náhled.
+
+```ts
+export interface PreviewLayer {
+  sync(bodies: readonly { readonly id: BodyId; readonly shape: ShapeHandle }[]): Promise<void>;
+  clear(): void;                                 // odebere a uvolní náhled
+}
+Viewport.preview: PreviewLayer                   // po dispose viewportu vyhodí jako bodies
+```
+
+- Druhá vrstva těles (`BodyLayers` drží `main` a `preview`) s vlastní mapou podle `BodyId`, takže vstup i výsledek mohou mít totéž `BodyId`. Které těleso do náhledu patří, vybírá `app` ([[11-ui]]), `render` dostane tělesa už vybraná.
+- **Materiály** (`BodyStyle 'preview'`): plochy `MeshStandardMaterial` v barvě `palette.bodyPreview`, `transparent`, `opacity` 0,35, `depthWrite: false`, `polygonOffset` **ke kameře** (factor −1, units −4): změněné těleso sdílí většinu ploch se vstupem a dvě triangulace téže roviny by se jinak přetahovaly o hloubku (z-fighting, nalezeno ručním ověřením M21); hrany neprůhledné v barvě `palette.bodyPreview`; `renderOrder` 0,5 (nad tělesy, pod zvýrazněním). `setPalette` přebarví. Těleso s vlastní barvou dostane průhlednou kopii materiálu.
+- **Nepickuje se a nezvýrazňuje:** picker a `HighlightLayer` čtou jen hlavní vrstvu. Náhled blíž ke kameře těleso pod sebou nezakryje.
+- **Skrytí a barvy** podle `BodyId` (`setBodyVisible`, `setBodyColor`) platí pro obě vrstvy. Těleso, které v náhledu ještě není, se ignoruje a skrytí a barvu mu doplní `ViewportMirror.reapply()` po dalším `sync`.
+- **Barva** `bodyPreview` je jantarová, odlišná od modrých těles (`face`), od oranžové výběru a hoveru i od modrých gumových čar nástrojů (`preview`), s kontrastem aspoň 3 : 1 vůči pozadí (test palety). Přes modré těleso dává olivový nádech; co featura odebere, zůstane vidět modře.
+- **Obálka** pro near/far a `fitAll` zahrnuje viditelná tělesa obou vrstev.
+- **Atomická výměna obou vrstev** (`syncLayers`, revize M21): `SceneSync` má dvě fáze, `prepare(bodies): Promise<PreparedSync>` (sítě se vyžádají synchronně) a `commit()` (výměna scény; zastaralý nebo už provedený commit nic nedělá). `syncLayers({ main, preview })` zkontroluje duplicity v obou vrstvách, připraví obě a teprve když jsou obě aktuální, provede v jednom synchronním bloku `main.commit()` a `preview.commit()`. Viewport tak nikdy neukazuje novou hlavní vrstvu se starým snapshotem (index a jméno ze stejné generace, D3 z [[M19.1-opravy-z-revize|M19.1]]). Zastaralým ho udělá novější `sync`, `syncLayers`, `preview.clear` nebo `reset` kterékoli vrstvy; pak se nevymění ani jedna. Nikdy neodmítne. Prázdný `preview` náhled vyprázdní v témže `commit`, takže se při zavření dialogu sítě výsledku nezahodí ze sdílené cache a neproblikne to.
 
 **Vlastnictví GPU zdrojů:** `MeshCache` drží jen `MeshData` (data na CPU). GPU zdroje (`BufferGeometry`, materiály) vlastní výhradně `BodyView`, který je vytvoří a v `dispose()` uvolní. Jeden vlastník, žádné počítání referencí. Sdílené materiály (stejné pro všechna tělesa) vlastní `BodyLayer` a uvolní je ve vlastním `dispose`.
 
@@ -481,7 +506,7 @@ Filtr (`PickFilter`, [[10-interakce#Port viewportu]], M10.1): průchod přes hra
 ## Testy
 
 `render` se testuje nejhůř, proto v něm má být co nejméně logiky ([[Q061 Testy render v Node|Q061]]):
-- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, od M17 operace kamery (`orbit`, `pan`, `zoomAt`, `turn`, `ease`, `interpolate`, `clipRange`, `orientationFor`), `cameraGesture`, `wheelFactor`, `buildViewCube` a `cubeRegionAt`, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor` (od M17 zaniká), od M13 `pickSketchRegion` a `pointInRegion`, od M15 `parseHexColor`, `pickHandle`, `projectHandles`, `handleBounds`, `handleHidden`, `arcPoints` a `viewChangedSince`, od M19.2 `sketchHits`, `sketchGridStep` a `gridLines` (`sketch-grid.ts`), od M22 `resolveDisplay` a `samePlan` (`display-style.ts`) (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
+- Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, od M17 operace kamery (`orbit`, `pan`, `zoomAt`, `turn`, `ease`, `interpolate`, `clipRange`, `orientationFor`), `cameraGesture`, `wheelFactor`, `buildViewCube` a `cubeRegionAt`, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache`, sdílená cache `createSharedMeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor` (od M17 zaniká), od M13 `pickSketchRegion` a `pointInRegion`, od M15 `parseHexColor`, `pickHandle`, `projectHandles`, `handleBounds`, `handleHidden`, `arcPoints` a `viewChangedSince`, od M19.2 `sketchHits`, `sketchGridStep` a `gridLines` (`sketch-grid.ts`), od M22 `resolveDisplay` a `samePlan` (`display-style.ts`) (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
 - Testy `render` nesmí importovat `@/kernel/testing` (`FakeKernel`): `render` závisí na `kernel` jen typově a `testing.ts` otevírá jen hodnotovým závislostem ([[01-architektura]]). Sítě v testech jsou ruční, malé a záměrně s klíči ploch mimo pořadí.
 - Kód s Three.js (`Viewport`, `BodyView`, vrstvy) se ověřuje ručně na dev stránce `dev/viewport.html` a e2e testy (Playwright). Three.js ale běží i v Node, takže část kódu s ním má testy v Node: `Picker` (`picker.test.ts` s ruční sítí; od [[M19.1-opravy-z-revize|M19.1]] i hrany z více segmentů, kontrola zakrytí a `body`, `edgeIndex` a `point` v aserci, od M19.2 `isVisible`), `SketchLayer` a `HighlightLayer`.
 

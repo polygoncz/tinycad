@@ -14,7 +14,7 @@ export interface TopoHover {
   readonly body: BodyId;
   readonly kind: 'face' | 'edge';
   readonly index: number;
-  /** The name in RegenBody.names of the last snapshot; null = the face or edge has none. */
+  /** The name in the pickable bodies of the last snapshot (M21: pick); null = none. */
   readonly name: TopoName | null;
 }
 

@@ -2,17 +2,18 @@
 // of the result. One run regenerates the studio with the Regenerator of the live kernel, waits
 // until the view shows the new bodies and only then publishes the result (D3 of M19.1), draws the
 // sketches of the regeneration, updates RegenUiState, applies the view state of the bodies again
-// and decides the first view (D7 of M19.2).
+// and decides the first view (D7 of M19.2). While a feature dialog is open (M21, ADR 0025) the
+// view shows the input of the edited feature and its result as a transparent preview.
 
 import { ObservableValue, RpcError } from '@/core';
 import type { Disposable, Observable } from '@/core';
-import type { FeatureId, PartStudioData } from '@/document';
+import type { BodyId, FeatureId, PartStudioData } from '@/document';
 import type { SketchPort } from '@/interaction';
-import type { MeshOps } from '@/kernel';
+import type { MeshOps, ShapeHandle } from '@/kernel';
 import { bodiesOf, EMPTY_STATE, sketchesOf } from '@/regen';
 import type { Regenerator, RegenState, SketchArtifact } from '@/regen';
 import { artifactDrawing } from '@/sketcher';
-import type { BodyLayer, CameraController } from '@/render';
+import type { BodyLayer, CameraController, Viewport } from '@/render';
 import type { KernelSupervisor } from './kernel-supervisor';
 import { createRegenScheduler } from './regen-scheduler';
 import type { RegenStatusAdapter } from './regen-status-adapter';
@@ -37,12 +38,19 @@ export interface RegenPipelineDeps {
   /** The Regenerator of the live kernel and the report of its loss (KernelSupervisor). */
   readonly kernel: Pick<KernelSupervisor, 'regenerator' | 'lost'>;
   readonly viewport: {
-    readonly bodies: Pick<BodyLayer, 'sync' | 'reset'>;
+    readonly bodies: Pick<BodyLayer, 'reset'>;
+    /** M21: the pickable bodies and the result of the edited feature over them, in one swap. */
+    readonly syncLayers: Viewport['syncLayers'];
     readonly camera: Pick<CameraController, 'fitAll'>;
     readonly sketches: SketchPort;
   };
   /** The port of interaction; gets the result once the view shows its bodies. */
   readonly regenStatus: Pick<RegenStatusAdapter, 'publish'>;
+  /**
+   * The open feature dialog (M21, ADR 0025): with one the run asks for the input of its feature,
+   * which the view and the picking show; opening and closing it requests a run.
+   */
+  readonly features: { readonly current: Observable<{ readonly featureId: FeatureId } | null> };
   /** The open sketch session: its sketch is drawn by the sketcher, not by the regeneration. */
   readonly sketches: { readonly current: Observable<{ readonly featureId: FeatureId } | null> };
   /**
@@ -58,7 +66,10 @@ export interface RegenPipeline extends Disposable {
   readonly state: Observable<RegenUiState>;
   /** The scheduler is running or due (the STEP export waits for false). */
   readonly busy: Observable<boolean>;
-  /** The final state of the last published regeneration; EMPTY_STATE before it and after kernelReady. */
+  /**
+   * The final state of the last published regeneration, also with a dialog open (not its input);
+   * EMPTY_STATE before it and after kernelReady.
+   */
   lastState(): RegenState;
   /** The document changed: a run starts, or one more after the running one. */
   request(): void;
@@ -94,6 +105,11 @@ export function createRegenPipeline(deps: RegenPipelineDeps): RegenPipeline {
   const offEdited = deps.sketches.current.subscribe(() => {
     if (!disposed) sketchDrawings.draw(edited());
   });
+  // M21: the layers switch between the input and the final state even when the document does not
+  // change. Opening an edit also moves the bar; the scheduler then runs once more at most.
+  const offDialog = deps.features.current.subscribe(() => {
+    scheduler.request();
+  });
 
   /** One run of the scheduler: a regeneration with the Regenerator of the live kernel. */
   async function regenerate(): Promise<void> {
@@ -126,15 +142,28 @@ export function createRegenPipeline(deps: RegenPipelineDeps): RegenPipeline {
    * result neither publishes a snapshot nor sends a tessellation.
    */
   async function regenerateWith(regenerator: Regenerator): Promise<void> {
-    const result = await regenerator.run(doc.studio);
+    const inputOf = deps.features.current.get()?.featureId;
+    const result = await regenerator.run(
+      doc.studio,
+      inputOf === undefined ? undefined : { inputOf },
+    );
     // Also when the kernel died after its last call: the next kernel numbers its handles anew, so
     // these must not reach its view.
     if (result === 'superseded' || !isCurrent(regenerator)) return;
-    // Only bodies go to the counter and the body layer; sketches have their own channel
+    // Only bodies go to the counter and the body layers; sketches have their own channel
     // (ViewportPort.sketches, ADR 0015).
-    const bodies = bodiesOf(result.finalState).map(({ id, shape }) => ({ id, shape }));
-    // Never rejects; settles once the scene is swapped or the sync is stale (spec 09).
-    await viewport.bodies.sync(bodies);
+    const bodies = shownBodies(result.finalState);
+    // ADR 0025: with the input of the edited feature the main layer shows the input and the
+    // preview what the feature made or changed; otherwise the final state and no preview. Both
+    // layers swap together (D3 of M19.1), so no index of a new mesh is read with the names of the
+    // old snapshot, and closing the dialog moves the previewed meshes to the main layer without
+    // tessellating them again. Never rejects; settles once swapped or stale (spec 09).
+    if (result.input === null) {
+      await viewport.syncLayers({ main: bodies, preview: [] });
+    } else {
+      const input = shownBodies(result.input.state);
+      await viewport.syncLayers({ main: input, preview: previewBodies(bodies, input) });
+    }
     // A restart meanwhile reset the view (kernelReady): the result belongs to a dead kernel.
     if (!isCurrent(regenerator)) return;
 
@@ -190,8 +219,30 @@ export function createRegenPipeline(deps: RegenPipelineDeps): RegenPipeline {
       scheduler.dispose();
       offBusy();
       offEdited();
+      offDialog();
     },
   };
+}
+
+/** A body as the body layers take it. */
+export type ShownBody = { readonly id: BodyId; readonly shape: ShapeHandle };
+
+/** The bodies of a state as the body layers take them. */
+function shownBodies(state: RegenState): ShownBody[] {
+  return bodiesOf(state).map(({ id, shape }) => ({ id, shape }));
+}
+
+/**
+ * The preview of an edited feature (ADR 0025): the bodies of the result that the input does not
+ * have with the same id and handle, that is what the feature made or changed, in the order of the
+ * result. A body the feature consumed is not in the result, so it is not previewed.
+ */
+export function previewBodies(
+  result: readonly ShownBody[],
+  input: readonly ShownBody[],
+): ShownBody[] {
+  const inInput = new Map(input.map((b) => [b.id, b.shape]));
+  return result.filter((b) => inInput.get(b.id) !== b.shape);
 }
 
 /**

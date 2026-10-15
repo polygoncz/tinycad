@@ -3,11 +3,12 @@ import { ObservableValue, RpcError } from '@/core';
 import { bodyId, sketchId } from '@/document';
 import type { BodyId, FeatureId, PartStudioData } from '@/document';
 import type { RegenSnapshot } from '@/interaction';
+import type { ShapeHandle } from '@/kernel';
 import { createFakeKernel } from '@/kernel/testing';
 import type { FeatureBuilder, Regenerator } from '@/regen';
 import { EMPTY_STATE } from '@/regen';
 import { aRegenSetup, aSketchArtifact, aStudio, buildCube, features } from '@/regen/testing';
-import { createRegenPipeline } from '@/app/regen-pipeline';
+import { createRegenPipeline, previewBodies } from '@/app/regen-pipeline';
 import type { RegenPipeline } from '@/app/regen-pipeline';
 import { createRegenStatusAdapter } from '@/app/regen-status-adapter';
 import type { RegenStatusAdapter } from '@/app/regen-status-adapter';
@@ -38,6 +39,8 @@ interface Harness {
   /** Snapshots the port published, oldest first. */
   readonly published: RegenSnapshot[];
   readonly edited: ObservableValue<{ readonly featureId: FeatureId } | null>;
+  /** The open feature dialog (M21). */
+  readonly dialog: ObservableValue<{ readonly featureId: FeatureId } | null>;
   /** Calls of afterSync. */
   readonly afterSync: { count: number };
 }
@@ -47,6 +50,7 @@ function setup(opts: { build?: FeatureBuilder['build'] } = {}): Harness {
   const viewport = new FakeAppViewport();
   const regenStatus = createRegenStatusAdapter();
   const edited = new ObservableValue<{ readonly featureId: FeatureId } | null>(null);
+  const dialog = new ObservableValue<{ readonly featureId: FeatureId } | null>(null);
   const afterSync = { count: 0 };
   const harness: Omit<Harness, 'pipeline'> = {
     viewport,
@@ -58,6 +62,7 @@ function setup(opts: { build?: FeatureBuilder['build'] } = {}): Harness {
     regenStatus,
     published: [],
     edited,
+    dialog,
     afterSync,
   };
   regenStatus.state.subscribe(() => harness.published.push(regenStatus.state.get()));
@@ -73,6 +78,7 @@ function setup(opts: { build?: FeatureBuilder['build'] } = {}): Harness {
     },
     viewport,
     regenStatus,
+    features: { current: dialog },
     sketches: { current: edited },
     afterSync: () => {
       afterSync.count++;
@@ -370,5 +376,174 @@ describe('createRegenPipeline – sketch drawings', () => {
     expect(h.viewport.sketchDrawings.has(sketchId(f1.id))).toBe(true);
     expect(h.viewport.sketchDrawings.has(sketchId(f2.id))).toBe(false);
     expect(set).not.toHaveBeenCalled();
+  });
+});
+
+describe('createRegenPipeline – open feature dialog (M21, ADR 0025)', () => {
+  /** Two boxes, the dialog of the second open: its input is the first box. */
+  async function editingSecond(): Promise<{ h: Harness; f1: FeatureId; f2: FeatureId }> {
+    const h = setup();
+    const [a, b] = features(2);
+    if (a === undefined || b === undefined) expect.fail();
+    h.studio = aStudio([a, b]);
+    h.dialog.set({ featureId: b.id });
+    await settle();
+    return { h, f1: a.id, f2: b.id };
+  }
+
+  it('the main layer shows the input of the edited feature, the preview what it made', async () => {
+    const { h, f1, f2 } = await editingSecond();
+    expect(idsOf(h.viewport.shown)).toEqual([bodyId(f1)]);
+    expect(idsOf(h.viewport.previewShown)).toEqual([bodyId(f2)]);
+    const snapshot = h.published.at(-1);
+    // bodies stay the final state (Browser, export); the input is what can be picked.
+    expect(bodiesOf(snapshot)).toEqual([bodyId(f1), bodyId(f2)]);
+    expect(snapshot?.pick.feature).toBe(f2);
+    expect(snapshot?.pick.bodies.map((b) => b.body)).toEqual([bodyId(f1)]);
+    // The counter and lastState stay the final state.
+    expect(h.pipeline.state.get().bodyCount).toBe(2);
+    expect(h.pipeline.lastState().artifacts.has(bodyId(f2))).toBe(true);
+  });
+
+  it('opening a dialog requests a regeneration without a change of the document', async () => {
+    const h = setup();
+    h.studio = aStudio(features(2));
+    h.pipeline.request();
+    await settle();
+    expect(h.published).toHaveLength(1);
+    h.dialog.set({ featureId: features(2)[1]?.id ?? expect.fail() });
+    await settle();
+    expect(h.published).toHaveLength(2);
+    expect(h.published.at(-1)?.pick.feature).toBe(features(2)[1]?.id);
+  });
+
+  it('closing the dialog empties the preview and shows the final state again', async () => {
+    const { h, f1, f2 } = await editingSecond();
+    h.dialog.set(null);
+    await settle();
+    expect(idsOf(h.viewport.shown)).toEqual([bodyId(f1), bodyId(f2)]);
+    expect(h.viewport.previewShown).toEqual([]);
+    const snapshot = h.published.at(-1);
+    expect(snapshot?.pick.feature).toBeNull();
+    expect(snapshot?.pick.bodies).toBe(snapshot?.bodies);
+  });
+
+  it('both layers swap together, before the result is published (D3)', async () => {
+    const h = setup();
+    const [a, b] = features(2);
+    if (a === undefined || b === undefined) expect.fail();
+    h.studio = aStudio([a, b]);
+    const atPublish: { shown: BodyId[]; preview: BodyId[] }[] = [];
+    h.regenStatus.state.subscribe(() => {
+      atPublish.push({
+        shown: idsOf(h.viewport.shown),
+        preview: idsOf(h.viewport.previewShown),
+      });
+    });
+    h.viewport.holdSyncs();
+    h.dialog.set({ featureId: b.id });
+    await settle();
+    // The swap of both layers waits: neither shows its new bodies, nothing is published yet.
+    expect(h.viewport.heldSyncs).toBe(1);
+    expect(h.viewport.previewShown).toEqual([]);
+    expect(h.published).toEqual([]);
+    h.viewport.releaseSyncs();
+    await settle();
+    expect(atPublish).toEqual([{ shown: [bodyId(a.id)], preview: [bodyId(b.id)] }]);
+  });
+
+  it('closing the dialog empties the preview in the same swap that shows the result', async () => {
+    const { h, f1, f2 } = await editingSecond();
+    h.viewport.holdSyncs();
+    h.dialog.set(null);
+    await settle();
+    // The preview keeps the result until the main layer has its meshes (shared cache).
+    expect(idsOf(h.viewport.previewShown)).toEqual([bodyId(f2)]);
+    h.viewport.releaseSyncs();
+    await settle();
+    expect(idsOf(h.viewport.shown)).toEqual([bodyId(f1), bodyId(f2)]);
+    expect(h.viewport.previewShown).toEqual([]);
+  });
+
+  it('a feature behind the bar has no input: the final state and no preview', async () => {
+    const h = setup();
+    const [a, b] = features(2);
+    if (a === undefined || b === undefined) expect.fail();
+    h.studio = aStudio([a, b], 1);
+    h.dialog.set({ featureId: b.id });
+    await settle();
+    expect(idsOf(h.viewport.shown)).toEqual([bodyId(a.id)]);
+    expect(h.viewport.previewSyncs).toEqual([[]]);
+    expect(h.viewport.previewShown).toEqual([]);
+    expect(h.published.at(-1)?.pick.feature).toBeNull();
+  });
+
+  it('a stale regeneration publishes nothing and syncs no preview', async () => {
+    const h = setup();
+    const [a, b] = features(2);
+    if (a === undefined || b === undefined) expect.fail();
+    h.studio = aStudio([a, b]);
+    h.viewport.holdSyncs();
+    h.dialog.set({ featureId: b.id });
+    await settle();
+    h.regenerator = aRegenSetup().regenerator;
+    h.viewport.releaseSyncs();
+    await settle();
+    expect(h.published).toEqual([]);
+  });
+
+  it('after dispose the dialog requests nothing', async () => {
+    const h = setup();
+    h.studio = aStudio(features(2));
+    h.pipeline.dispose();
+    h.dialog.set({ featureId: features(2)[1]?.id ?? expect.fail() });
+    await settle();
+    expect(h.viewport.syncs).toEqual([]);
+  });
+});
+
+describe('previewBodies', () => {
+  const handle = (n: number): ShapeHandle => n as ShapeHandle;
+  const [a, b, c] = features(3).map((f) => bodyId(f.id));
+  if (a === undefined || b === undefined || c === undefined) expect.fail();
+
+  it('takes the bodies of the result that the input does not have', () => {
+    expect(
+      previewBodies(
+        [
+          { id: a, shape: handle(1) },
+          { id: b, shape: handle(2) },
+        ],
+        [{ id: a, shape: handle(1) }],
+      ),
+    ).toEqual([{ id: b, shape: handle(2) }]);
+  });
+
+  it('takes a body the feature changed: the same id with another handle', () => {
+    expect(previewBodies([{ id: a, shape: handle(5) }], [{ id: a, shape: handle(1) }])).toEqual([
+      { id: a, shape: handle(5) },
+    ]);
+  });
+
+  it('leaves out a body the feature consumed and keeps the order of the result', () => {
+    expect(
+      previewBodies(
+        [
+          { id: c, shape: handle(3) },
+          { id: b, shape: handle(2) },
+        ],
+        [
+          { id: a, shape: handle(1) },
+          { id: b, shape: handle(9) },
+        ],
+      ),
+    ).toEqual([
+      { id: c, shape: handle(3) },
+      { id: b, shape: handle(2) },
+    ]);
+  });
+
+  it('nothing changed: an empty preview', () => {
+    expect(previewBodies([{ id: a, shape: handle(1) }], [{ id: a, shape: handle(1) }])).toEqual([]);
   });
 });

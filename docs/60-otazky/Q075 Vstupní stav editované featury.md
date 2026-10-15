@@ -1,14 +1,14 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[10-interakce]]"
 decide_by: "[[M21-vstupni-stav-editovane-featury]]"
 proposal: "ADR: dialog a skicář pickují a zvýrazňují nad vstupním stavem editované featury, náhled výsledku je samostatná vrstva"
-decision: ""
+decision: "Varianta A: výběr a zvýraznění referencí nad vstupním stavem editované featury, výsledek jako náhledová vrstva (Pavel 2026-10-15)"
 tags:
   - otazka
 created: 2026-10-14
-updated: 2026-10-14
+updated: 2026-10-15
 ---
 # Q075 Vstupní stav editované featury
 
@@ -42,5 +42,7 @@ Návrh: **A jako nové ADR** před další featurou, která mění vlastní vstu
 ## Rozhodnutí
 
 **2026-10-14, Pavel – kdy:** až po zpevnění struktury ([[M20-zpevneni-struktury|M20]]), samostatně v [[M21-vstupni-stav-editovane-featury|M21]]. Varianta A, nebo B se rozhodne při startu M21.
+
+**2026-10-15, Pavel – jak:** **varianta A.** Dialog a skicář vybírají a zvýrazňují nad stavem před editovanou featurou, výsledek featury se kreslí jako náhledová vrstva (jako Onshape a Fusion). Zapíše se jako nové ADR v [[M21-vstupni-stav-editovane-featury|M21]].
 
 _(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR.)_

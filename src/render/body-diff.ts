@@ -27,14 +27,20 @@ export function diffBodies(
   shown: ReadonlyMap<BodyId, ShapeHandle>,
   next: readonly ShownBody[],
 ): BodyDiff {
-  const nextShapes = new Map<BodyId, ShapeHandle>();
-  for (const { id, shape } of next) {
-    assert(!nextShapes.has(id), `diffBodies: duplicate BodyId ${id}`);
-    nextShapes.set(id, shape);
-  }
+  assertUniqueIds(next);
+  const nextShapes = new Map<BodyId, ShapeHandle>(next.map(({ id, shape }) => [id, shape]));
 
   const add = next.filter(({ id, shape }) => shown.get(id) !== shape);
   const keep = next.filter(({ id, shape }) => shown.get(id) === shape).map(({ id }) => id);
   const remove = [...shown].filter(([id, shape]) => nextShapes.get(id) !== shape).map(([id]) => id);
   return { add, remove, keep };
+}
+
+/** A duplicate BodyId among bodies to show is a bug (assert). */
+export function assertUniqueIds(bodies: readonly ShownBody[]): void {
+  const ids = new Set<BodyId>();
+  for (const { id } of bodies) {
+    assert(!ids.has(id), `diffBodies: duplicate BodyId ${id}`);
+    ids.add(id);
+  }
 }

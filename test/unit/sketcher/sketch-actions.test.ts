@@ -44,6 +44,8 @@ function aFakeSession() {
       constraintRows: [],
       editingDimension: null,
       dimensions: [],
+      planeField: null,
+      planeMissing: false,
     }),
   );
   const record =
@@ -54,7 +56,7 @@ function aFakeSession() {
     };
   const session: SketchSession = {
     featureId: 's1' as FeatureId, // a test id
-    plane: originPlane(ORIGIN_PLANE_IDS.xy),
+    plane: new ObservableValue(originPlane(ORIGIN_PLANE_IDS.xy)).asObservable(),
     state: state.asObservable(),
     addGeometry: record('addGeometry'),
     addConstraint: record('addConstraint'),
@@ -69,6 +71,8 @@ function aFakeSession() {
     select: () => undefined,
     clearSelection: () => undefined,
     clearEditingDimension: () => undefined,
+    pickPlane: () => undefined,
+    cancelPlanePick: () => false,
     finish: () => {
       calls.push(['finish', undefined]);
     },

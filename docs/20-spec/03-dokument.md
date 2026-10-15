@@ -16,7 +16,7 @@ milestones:
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-14
+updated: 2026-10-15
 ---
 # 03 – `document`: doménový model
 
@@ -109,7 +109,7 @@ export function createDocument(init: CreateDocumentInit): DocumentWriter;
 
 ## Reference na jiné entity
 
-Parametry featur mohou odkazovat na výsledky jiných featur. Reference jsou vždy **jména**, nikdy indexy nebo handle. Tvar id se kontroluje na datové hranici: `FeatureId` nesmí být prázdné, obsahovat `/` ani být vyhrazené `'origin'` (M12, vlastník počáteční geometrie; `fromData`, `validate` u `feature.add`), `BodyId` v referenci musí mít tvar `<vlastník>/body[:<n>]` (`readRef`); asserty v `bodyId` a `originOfBody` jsou pak jen pojistka proti chybě programu. Značkovaná id (`FeatureId`, `BodyId`…) vznikají přetypováním jen na důvěryhodných místech: při generování id v `interaction` (`FeatureEditor`), v `fromData` po kontrole tvaru dat, v `bodyId` (ražba `BodyId`, [[0015-artefakty-a-identita-telesa|ADR 0015]]), v `parseBodyId` (kontrola tvaru id tělesa z dat zvenku, M11: klíče metadat v `fromData`, `validate` operací `body.*`) v `parsePlaneId` a `sketchId` (M12), v konstantách `ORIGIN` a `ORIGIN_PLANE_IDS` v `document/origin.ts` (M12), v `parseAxisId`, `parseSketchId` a `ORIGIN_AXIS_IDS` (M13), `TopoName` jen v `propagateNames` v `regen` (M14, [[08-topologicke-pojmenovani#Jména]]; z dat je `readRef` převezme jako neprázdný řetězec) a v interní kontrole tvaru reference `readRef`, kterou sdílí `validateAgainstSchema` a `referencesOf`. Mimo `document` se reference z neověřených hodnot čtou jen přes veřejné `readRefOf(kinds, r)` (M14: `interaction` – `topo` v dialogu, rovina skici), takže `TopoName` z dat vzniká na jediném místě; `readRef` zůstává interní.
+Parametry featur mohou odkazovat na výsledky jiných featur. Reference jsou vždy **jména**, nikdy indexy nebo handle. Tvar id se kontroluje na datové hranici: `FeatureId` nesmí být prázdné, obsahovat `/` ani být vyhrazené `'origin'` (M12, vlastník počáteční geometrie; `fromData`, `validate` u `feature.add`), `BodyId` v referenci musí mít tvar `<vlastník>/body[:<n>]` (`readRef`); asserty v `bodyId` a `originOfBody` jsou pak jen pojistka proti chybě programu. Značkovaná id (`FeatureId`, `BodyId`…) vznikají přetypováním jen na důvěryhodných místech: při generování id v `interaction` (`FeatureEditor`), v `fromData` po kontrole tvaru dat, v `bodyId` (ražba `BodyId`, [[0015-artefakty-a-identita-telesa|ADR 0015]]), v `parseBodyId` (kontrola tvaru id tělesa z dat zvenku, M11: klíče metadat v `fromData`, `validate` operací `body.*`) v `parsePlaneId` a `sketchId` (M12), v konstantách `ORIGIN` a `ORIGIN_PLANE_IDS` v `document/origin.ts` (M12), v `parseAxisId`, `parseSketchId` a `ORIGIN_AXIS_IDS` (M13), `TopoName` jen v `propagateNames` v `regen` (M14, [[08-topologicke-pojmenovani#Jména]]; z dat je `readRef` převezme jako neprázdný řetězec) a v interní kontrole tvaru reference `readRef`, kterou sdílí `validateAgainstSchema` a `referencesOf`. Mimo `document` se reference z neověřených hodnot čtou jen přes veřejné `readRefOf(kinds, r)` (M14: `interaction` – `topo` v dialogu, rovina skici), takže `TopoName` z dat vzniká na jediném místě; `readRef` zůstává interní. Rovinu skici (`PlaneRef | TopoRef`, první položka parametru `planes`) čte jediná veřejná `readPlaneRef(value)` a porovnává `samePlaneRef(a, b)` (M21), které sdílí skicář i tabulka druhů referencí.
 
 ```ts
 export type BodyId = Brand<string, 'BodyId'>;   // '<featureId>/body' nebo '<featureId>/body:<n>'

@@ -18,7 +18,7 @@ import type { HighlightPort, HighlightTarget } from './viewport-port';
 export type SelectionItem =
   | { readonly kind: 'feature'; readonly feature: FeatureId }
   | { readonly kind: 'body'; readonly body: BodyId }
-  /** name: filled in by the model from RegenBody.names (M14); the caller's one is ignored. */
+  /** name: filled in by the model from snapshot.pick (M14, M21); the caller's one is ignored. */
   | {
       readonly kind: 'face';
       readonly body: BodyId;
@@ -161,8 +161,9 @@ function remapped(current: readonly SelectionItem[], snapshot: RegenSnapshot): S
   return next;
 }
 
+/** The names of a pickable body (M21: snapshot.pick, the bodies the indices of items are of). */
 function namesOf(snapshot: RegenSnapshot, body: BodyId): TopoNames | undefined {
-  return snapshot.bodies.find((b) => b.body === body)?.names;
+  return snapshot.pick.bodies.find((b) => b.body === body)?.names;
 }
 
 /**

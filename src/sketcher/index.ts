@@ -7,6 +7,7 @@ export type { SketchEditor } from './sketch-editor';
 export type {
   SketchConstraintRow,
   SketchMessageKey,
+  SketchPlaneField,
   SketchSession,
   SketchState,
 } from './sketch-session';

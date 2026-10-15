@@ -212,3 +212,26 @@ describe('createTopoInspector', () => {
     expect(inspector.hovered.get()).toMatchObject({ kind: 'face', index: 5 });
   });
 });
+
+describe('createTopoInspector – pickable bodies (M21, ADR 0025)', () => {
+  it('names the hovered face by snapshot.pick, not by the final bodies', () => {
+    const { viewport, regen, inspector } = setup();
+    regen.publish(
+      new Map(),
+      [{ body: BODY, feature: FEATURE, names: aTopoNames({ faces: { 'b1/face:round': [5] } }) }],
+      [],
+      new Map(),
+      {
+        feature: 'f9' as FeatureId,
+        bodies: [
+          { body: BODY, feature: FEATURE, names: aTopoNames({ faces: { 'b1/face:top': [5] } }) },
+        ],
+      },
+    );
+    inspector.setEnabled(true);
+
+    viewport.emitPointer(pointer('move'));
+
+    expect(inspector.hovered.get()?.name).toBe('b1/face:top');
+  });
+});

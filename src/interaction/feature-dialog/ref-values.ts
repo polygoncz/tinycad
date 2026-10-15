@@ -8,6 +8,7 @@ import type {
   BodyRef,
   DocumentReader,
   FeatureId,
+  PlaneRef,
   SketchEntityRef,
   SketchRegionRef,
   TopoRef,
@@ -18,6 +19,8 @@ import {
   parseAxisId,
   parseBodyId,
   parseSketchId,
+  readPlaneRef,
+  samePlaneRef,
   readRefOf,
 } from '@/document';
 import { SKETCH_PARAM, parseSketchData } from '@/sketch';
@@ -86,6 +89,33 @@ export function toggleAxisRef(
   ref: AxisRef | SketchEntityRef,
 ): AxisRef | SketchEntityRef | null {
   return sameAxisRef(value, ref) ? null : ref;
+}
+
+/**
+ * The plane of a 'planes' param value (M21): a frozen copy of its first item when it is a plane
+ * or a face reference (M14), otherwise null; a value that is not an array has none. The one
+ * reading of plane values in interaction (refText, replacing).
+ */
+export function planeRefOf(value: unknown): PlaneRef | TopoRef | null {
+  return readPlaneRef(value) ?? null;
+}
+
+/**
+ * The value with the plane as its only item (M21: a sketch has exactly one plane), or null when
+ * the value already is exactly that plane.
+ */
+export function replacePlaneRef(
+  value: unknown,
+  ref: PlaneRef | TopoRef,
+): readonly (PlaneRef | TopoRef)[] | null {
+  const items: readonly unknown[] = Array.isArray(value) ? value : [];
+  const current = planeRefOf(value);
+  if (items.length === 1 && current !== null && samePlaneRef(current, ref)) return null;
+  const copy: PlaneRef | TopoRef =
+    ref.kind === 'plane'
+      ? Object.freeze({ kind: 'plane', plane: ref.plane })
+      : Object.freeze({ kind: 'topo', body: ref.body, name: ref.name });
+  return Object.freeze([copy]);
 }
 
 /**

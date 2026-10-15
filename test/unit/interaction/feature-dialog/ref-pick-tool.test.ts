@@ -1,6 +1,7 @@
 import { createSequentialIdGenerator } from '@/core';
 import {
   ORIGIN_AXIS_IDS,
+  ORIGIN_PLANE_IDS,
   createFeatureSchemaRegistry,
   sketchId,
   validateAgainstSchema,
@@ -215,24 +216,59 @@ describe('refPick – axis param (M13)', () => {
   });
 });
 
-describe('refPick – a param without a pick filter', () => {
-  it('a planes param does not ask the viewport and hovers nothing', () => {
-    const { session, viewport, click, move } = setupProfile();
-    session.focusRefParam('plane');
-    const before = session.state.get();
-    let picks = 0;
-    viewport.setPick(() => {
-      picks++;
-      return regionHit(S1_DRAWING, 'k');
-    });
-    viewport.highlight.setHover(regionHit(S1_DRAWING, 'k'));
+describe('refPick into a planes param (M21)', () => {
+  function focusedOnPlane() {
+    const setup = setupProfile();
+    setup.session.focusRefParam('plane');
+    return setup;
+  }
 
-    move();
+  it('a click on an origin plane drawing sets the plane, a second plane replaces it', () => {
+    const { session, viewport, click } = focusedOnPlane();
+    viewport.setPick(entityHit(ORIGIN_PLANE_IDS.xz, 'l1'));
     click();
+    expect(viewport.lastFilter).toEqual(['face', 'sketchEntity']);
+    expect(session.state.get().params['plane']).toEqual([
+      { kind: 'plane', plane: ORIGIN_PLANE_IDS.xz },
+    ]);
+    // The pick ended the focus; the field focuses the param again.
+    session.focusRefParam('plane');
+    viewport.setPick(entityHit(ORIGIN_PLANE_IDS.yz, 'l2'));
+    click();
+    expect(session.state.get().params['plane']).toEqual([
+      { kind: 'plane', plane: ORIGIN_PLANE_IDS.yz },
+    ]);
+  });
 
-    expect(picks).toBe(0);
+  it('a picked plane ends the focus, also the plane already in the value (spec 11)', () => {
+    const { session, viewport, click } = focusedOnPlane();
+    viewport.setPick(entityHit(ORIGIN_PLANE_IDS.xz, 'l1'));
+    click();
+    expect(session.state.get().activeRefParam).toBeNull();
+    const value = session.state.get().params['plane'];
+    session.focusRefParam('plane');
+    click();
+    expect(session.state.get().params['plane']).toBe(value);
+    expect(session.state.get().activeRefParam).toBeNull();
+  });
+
+  it('a hit that is no plane keeps the focus', () => {
+    const { session, viewport, click } = focusedOnPlane();
+    viewport.setPick(entityHit(S1_DRAWING, 'ab'));
+    click();
+    expect(session.state.get().activeRefParam).toBe('plane');
+  });
+
+  it('hovers a plane drawing, not a line of a sketch, which a click does not take either', () => {
+    const { session, viewport, click, move } = focusedOnPlane();
+    viewport.setPick(entityHit(ORIGIN_PLANE_IDS.xy, 'l1'));
+    move();
+    expect(viewport.hover).toEqual(entityHit(ORIGIN_PLANE_IDS.xy, 'l1'));
+    viewport.setPick(entityHit(S1_DRAWING, 'ab'));
+    move();
     expect(viewport.hover).toBeNull();
-    expect(session.state.get()).toBe(before);
+    click();
+    expect(session.state.get().params['plane']).toEqual([]);
   });
 });
 
@@ -257,17 +293,13 @@ const UNNAMED_BODY = 'b2/body' as BodyId;
 const TOP_FRONT = 'b1/edge:face:front|face:top' as TopoName;
 const TOP = 'b1/face:top' as TopoName;
 
-/** A snapshot with BOX named (edge 3, face 5) and UNNAMED_BODY without names. */
+/**
+ * A snapshot with BOX named (edge 3, face 5) and UNNAMED_BODY without names, published as the
+ * input of the session's feature (M21: past the in-between state); publishInputOfSession
+ * publishes another such snapshot.
+ */
 function setupFillet(options: { readonly withRegen?: boolean } = {}) {
   const regen = new FakeRegenStatus();
-  regen.publish(new Map(), [
-    {
-      body: BOX,
-      feature: 'b1' as FeatureId,
-      names: aTopoNames({ edges: { [TOP_FRONT]: [3] }, faces: { [TOP]: [5] } }),
-    },
-    { body: UNNAMED_BODY, feature: 'b2' as FeatureId },
-  ]);
   const schemas = createFeatureSchemaRegistry();
   schemas.register(FILLET);
   const ops = anOpsSession({ schemas });
@@ -278,6 +310,20 @@ function setupFillet(options: { readonly withRegen?: boolean } = {}) {
     ids: createSequentialIdGenerator('new'),
   });
   const session = editor.create('filletish');
+  const publishInputOfSession = (bodies: Parameters<FakeRegenStatus['publish']>[1]): void => {
+    regen.publish(new Map(), bodies, [], new Map(), {
+      feature: session.featureId,
+      bodies: bodies ?? [],
+    });
+  };
+  publishInputOfSession([
+    {
+      body: BOX,
+      feature: 'b1' as FeatureId,
+      names: aTopoNames({ edges: { [TOP_FRONT]: [3] }, faces: { [TOP]: [5] } }),
+    },
+    { body: UNNAMED_BODY, feature: 'b2' as FeatureId },
+  ]);
   const viewport = new FakeViewport();
   const refPick = createRefPick(
     session,
@@ -296,6 +342,7 @@ function setupFillet(options: { readonly withRegen?: boolean } = {}) {
     session,
     viewport,
     regen,
+    publishInputOfSession,
     click: (): void => {
       refPick.onPointer(pointer('down'));
       refPick.onPointer(pointer('up'));
@@ -369,8 +416,8 @@ describe('refPick – topo param (M14)', () => {
   });
 
   it('uses the last snapshot: a new generation with other indices names another edge', () => {
-    const { session, viewport, regen, click } = setupFillet();
-    regen.publish(new Map(), [
+    const { session, viewport, publishInputOfSession, click } = setupFillet();
+    publishInputOfSession([
       { body: BOX, feature: 'b1' as FeatureId, names: aTopoNames({ edges: { [TOP_FRONT]: [7] } }) },
     ]);
     viewport.setPick(edgeAt(BOX, 3));
@@ -395,6 +442,102 @@ describe('refPick – topo param (M14)', () => {
 
     expect(viewport.hover).toBeNull();
     expect(session.state.get()).toBe(before);
+  });
+});
+
+// --- refPick against the pickable bodies (M21, ADR 0025) ---
+
+describe('refPick – the input of the edited feature (M21)', () => {
+  const ROUND_EDGE = 'b1/edge:face:round|face:top' as TopoName;
+
+  /**
+   * Publishes the final state naming edge 3 ROUND_EDGE and edge 8 likewise, and the input of
+   * `feature` naming edge 3 TOP_FRONT.
+   */
+  function publishInput(regen: FakeRegenStatus, feature: FeatureId | null): void {
+    regen.publish(
+      new Map(),
+      [
+        {
+          body: BOX,
+          feature: 'b1' as FeatureId,
+          names: aTopoNames({ edges: { [ROUND_EDGE]: [3, 8] } }),
+        },
+      ],
+      [],
+      new Map(),
+      {
+        feature,
+        bodies: [
+          {
+            body: BOX,
+            feature: 'b1' as FeatureId,
+            names: aTopoNames({ edges: { [TOP_FRONT]: [3] } }),
+          },
+        ],
+      },
+    );
+  }
+
+  it('a hit on an edge named only in the input takes the name of the input', () => {
+    const { session, viewport, regen, click } = setupFillet();
+    publishInput(regen, session.featureId);
+    viewport.setPick(edgeAt(BOX, 3));
+
+    click();
+
+    expect(session.state.get().params['edges']).toEqual([
+      { kind: 'topo', body: BOX, name: TOP_FRONT },
+    ]);
+  });
+
+  it('a name only in the final state is not taken and not hovered', () => {
+    const { session, viewport, regen, click, move } = setupFillet();
+    publishInput(regen, session.featureId);
+    const before = session.state.get();
+    viewport.setPick(edgeAt(BOX, 8));
+
+    move();
+    click();
+
+    expect(viewport.hover).toBeNull();
+    expect(session.state.get()).toBe(before);
+  });
+
+  it('ignores hits while the pickable bodies are the input of another feature', () => {
+    const { session, viewport, regen, click, move } = setupFillet();
+    publishInput(regen, 'other' as FeatureId);
+    const before = session.state.get();
+    let picks = 0;
+    viewport.setPick(() => {
+      picks += 1;
+      return edgeAt(BOX, 3);
+    });
+    viewport.highlight.setHover(edgeAt(BOX, 3));
+
+    move();
+    click();
+
+    expect(picks).toBe(0);
+    expect(viewport.hover).toBeNull();
+    expect(session.state.get()).toBe(before);
+
+    // The regeneration with the input of the session's own feature ends the in-between state.
+    publishInput(regen, session.featureId);
+    move();
+    expect(viewport.hover).toEqual(edgeAt(BOX, 3));
+  });
+
+  it('ignores hits while the pickable bodies are the final state (pick.feature null)', () => {
+    const { session, viewport, regen, click, move } = setupFillet();
+    publishInput(regen, null);
+    viewport.setPick(edgeAt(BOX, 3));
+
+    move();
+    click();
+
+    expect(viewport.hover).toBeNull();
+    expect(session.state.get().params['edges']).toEqual([]);
   });
 });
 

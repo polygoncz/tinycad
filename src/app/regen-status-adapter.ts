@@ -2,7 +2,8 @@
 // so app turns every RegenResult into a RegenSnapshot – health of the evaluated features, the
 // bodies (with their topological names, M14) and the sketches (with region names) of the final
 // state (plane artifacts are not listed: the Browser shows the origin planes from document), the
-// anchors of the manipulators (M18) and its own generation counter.
+// anchors of the manipulators (M18), the pickable bodies (M21: the input of the edited feature
+// when the result carries one, ADR 0025) and its own generation counter.
 
 import { ObservableValue } from '@/core';
 import type { FeatureId } from '@/document';
@@ -15,7 +16,7 @@ import type {
   RegenStatusPort,
 } from '@/interaction';
 import { bodiesOf, sketchesOf } from '@/regen';
-import type { FeatureStatus, RegenResult } from '@/regen';
+import type { FeatureStatus, RegenResult, RegenState } from '@/regen';
 
 export interface RegenStatusAdapter extends RegenStatusPort {
   /** A finished regeneration: a new snapshot with generation + 1. */
@@ -28,6 +29,7 @@ const EMPTY: RegenSnapshot = Object.freeze({
   bodies: Object.freeze([]),
   sketches: Object.freeze([]),
   anchors: new Map<FeatureId, FeatureAnchors>(),
+  pick: Object.freeze({ feature: null, bodies: Object.freeze([]) }),
 });
 
 export function createRegenStatusAdapter(): RegenStatusAdapter {
@@ -41,14 +43,7 @@ export function createRegenStatusAdapter(): RegenStatusAdapter {
         const h = toHealth(status);
         if (h !== undefined) health.set(id, h);
       }
-      // The feature of a body is its origin, the one that minted the id (ADR 0015). The name
-      // table of the body is its names as they are: regen's NameTable fits the narrow TopoNames
-      // of interaction structurally (M14, spec 11), and it is frozen already.
-      const bodies: readonly RegenBody[] = Object.freeze(
-        bodiesOf(result.finalState).map((b) =>
-          Object.freeze({ body: b.id, feature: b.origin, names: b.names }),
-        ),
-      );
+      const bodies = regenBodiesOf(result.finalState);
       // The feature of a sketch is its owner (spec 12); regions in the order of the artifact (M13).
       const sketches: readonly RegenSketch[] = Object.freeze(
         sketchesOf(result.finalState).map((a) =>
@@ -71,10 +66,30 @@ export function createRegenStatusAdapter(): RegenStatusAdapter {
           bodies,
           sketches,
           anchors,
+          // M21: the pipeline asks for the input of the feature of an open dialog; the result
+          // carries it only then, so the input is what can be picked (ADR 0025).
+          pick:
+            result.input === null
+              ? Object.freeze({ feature: null, bodies })
+              : Object.freeze({
+                  feature: result.input.feature,
+                  bodies: regenBodiesOf(result.input.state),
+                }),
         }),
       );
     },
   };
+}
+
+/**
+ * The bodies of a state for the port. The feature of a body is its origin, the one that minted
+ * the id (ADR 0015). The name table of the body is its names as they are: regen's NameTable fits
+ * the narrow TopoNames of interaction structurally (M14, spec 11), and it is frozen already.
+ */
+function regenBodiesOf(state: RegenState): readonly RegenBody[] {
+  return Object.freeze(
+    bodiesOf(state).map((b) => Object.freeze({ body: b.id, feature: b.origin, names: b.names })),
+  );
 }
 
 /** Health of an evaluated feature; suppressed, rolled back and pending ones have none. */

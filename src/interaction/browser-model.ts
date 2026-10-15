@@ -22,6 +22,7 @@ import type { BrowserRefTarget } from './feature-dialog/ref-kinds';
 import {
   axisRefOf,
   regionRefsOf,
+  replacePlaneRef,
   toggleAxisRef,
   toggleBodyRef,
   toggleRegionRef,
@@ -90,7 +91,10 @@ export interface BrowserSketchRow {
 
 export interface BrowserModel {
   readonly bodies: Observable<readonly BrowserBodyRow[]>;
-  /** Bodies of the last regeneration hidden in the metadata; app → viewport.setBodyVisible */
+  /**
+   * Bodies of the last regeneration (with the pickable input of an open dialog, M21) hidden in
+   * the metadata; app → viewport.setBodyVisible
+   */
   readonly hidden: Observable<ReadonlySet<BodyId>>;
   /** Into the active bodies param of the dialog, otherwise → selection.set / toggle */
   select(body: BodyId, opts?: { additive?: boolean }): void;
@@ -102,7 +106,10 @@ export interface BrowserModel {
   readonly canEdit: Observable<boolean>;
   /** → dispatch body.setVisible */
   setVisible(body: BodyId, visible: boolean): void;
-  /** M15: bodies of the last regeneration with a color in the metadata; app → viewport.setBodyColor */
+  /**
+   * M15: bodies of the last regeneration (with the pickable input of an open dialog, M21) with a
+   * color in the metadata; app → viewport.setBodyColor
+   */
   readonly colors: Observable<ReadonlyMap<BodyId, string>>;
   /**
    * M15: → dispatch body.setColor (null = the default color), with the guards of setVisible.
@@ -126,7 +133,10 @@ export interface BrowserModel {
   readonly visiblePlanes: Observable<ReadonlySet<PlaneId>>;
   /** The sketches of the last regeneration, in its order (M12). */
   readonly sketches: Observable<readonly BrowserSketchRow[]>;
-  /** → selection.set / toggle of the plane item */
+  /**
+   * Active param that takes planes ('planes', M21) → setParam(the plane as its only item) and
+   * the focus ends (pickEndsFocus); otherwise selection.set / toggle of the plane item.
+   */
   selectPlane(plane: PlaneId, opts?: { additive?: boolean }): void;
   /** Shows or hides an origin plane; another plane id does nothing. */
   setPlaneVisible(plane: PlaneId, visible: boolean): void;
@@ -159,6 +169,8 @@ interface ActiveParam {
   readonly session: FeatureEditSession;
   readonly name: string;
   accepts(target: BrowserRefTarget): boolean;
+  /** RefKindBehavior.pickEndsFocus of the kind of the param. */
+  readonly pickEndsFocus: boolean;
   readonly value: unknown;
 }
 
@@ -224,19 +236,25 @@ export function createBrowserModel(deps: {
     return sameItems(prev, next) ? prev : Object.freeze(next);
   }
 
-  /** Bodies of the last regeneration hidden in the metadata of the document. */
-  function buildHidden(): ReadonlySet<BodyId> {
-    return new Set(
-      regen.state
-        .get()
-        .bodies.flatMap(({ body }) => (doc.bodyMeta(body).hidden === true ? [body] : [])),
-    );
+  /**
+   * The bodies shown in the viewport: those of the final state and, while a dialog is open, of
+   * the pickable input too (M21, ADR 0025). A body only in the input (consumed by the edited
+   * feature) is on the main layer, so its visibility and color must apply to it as well.
+   */
+  function shownBodies(): ReadonlySet<BodyId> {
+    const snapshot = regen.state.get();
+    return new Set([...snapshot.bodies, ...snapshot.pick.bodies].map(({ body }) => body));
   }
 
-  /** Bodies of the last regeneration with a color in the metadata of the document. */
+  /** Shown bodies (shownBodies) hidden in the metadata of the document. */
+  function buildHidden(): ReadonlySet<BodyId> {
+    return new Set([...shownBodies()].filter((body) => doc.bodyMeta(body).hidden === true));
+  }
+
+  /** Shown bodies (shownBodies) with a color in the metadata of the document. */
   function buildColors(): ReadonlyMap<BodyId, string> {
     return new Map(
-      regen.state.get().bodies.flatMap(({ body }): [BodyId, string][] => {
+      [...shownBodies()].flatMap((body): [BodyId, string][] => {
         const color = doc.bodyMeta(body).color;
         return color === undefined ? [] : [[body, color]];
       }),
@@ -378,6 +396,7 @@ export function createBrowserModel(deps: {
       session,
       name,
       accepts: (target) => behavior.browserAccepts(target),
+      pickEndsFocus: behavior.pickEndsFocus,
       value: state.params[name],
     };
   }
@@ -520,6 +539,15 @@ export function createBrowserModel(deps: {
       ops.dispatch(op);
     },
     selectPlane(plane, opts) {
+      // A focused param that takes planes gets the plane instead of the selection (M21, Q076).
+      const active = activeParam();
+      if (active?.accepts('plane') === true) {
+        const next = replacePlaneRef(active.value, { kind: 'plane', plane });
+        if (next !== null) active.session.setParam(active.name, next);
+        // Also the plane already in the value ends picking (spec 11, "Pole Rovina").
+        if (active.pickEndsFocus) active.session.focusRefParam(null);
+        return;
+      }
       const item = { kind: 'plane', plane } as const;
       if (opts?.additive === true) selection.toggle(item);
       else selection.set([item]);

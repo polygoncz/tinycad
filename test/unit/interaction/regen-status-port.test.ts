@@ -44,3 +44,32 @@ describe('nameOfHit', () => {
     expect(nameOfHit(snapshot, 'f3/body' as BodyId, 'face', 5)).toBeUndefined();
   });
 });
+
+describe('nameOfHit – pickable bodies (M21, ADR 0025)', () => {
+  it('reads the names of snapshot.pick, not of the final bodies', () => {
+    const regen = new FakeRegenStatus();
+    regen.publish(
+      new Map(),
+      [{ body: B1, feature: F1, names: aTopoNames({ edges: { 'f1/edge:result': [3] } }) }],
+      [],
+      new Map(),
+      {
+        feature: F2,
+        bodies: [{ body: B1, feature: F1, names: aTopoNames({ edges: { 'f1/edge:input': [3] } }) }],
+      },
+    );
+    expect(nameOfHit(regen.state.get(), B1, 'edge', 3)).toBe('f1/edge:input');
+  });
+
+  it('a body only in the final bodies has no name', () => {
+    const regen = new FakeRegenStatus();
+    regen.publish(
+      new Map(),
+      [{ body: B1, feature: F1, names: aTopoNames({ faces: { 'f1/face:top': [5] } }) }],
+      [],
+      new Map(),
+      { feature: F2, bodies: [] },
+    );
+    expect(nameOfHit(regen.state.get(), B1, 'face', 5)).toBeUndefined();
+  });
+});

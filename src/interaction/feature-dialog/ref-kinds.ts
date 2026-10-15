@@ -5,9 +5,8 @@
 // FeatureEditor and BrowserModel only read it, so a new reference kind is one entry here (and one
 // in the table of document), and a missing entry is a type error. Internal to interaction.
 //
-// Known gaps are written into the entries on purpose, each with a comment; whether to close them
-// is a UX question outside M20: 'planes' is focusable, yet picks nothing in the view and the
-// Browser does not take its rows ('topo' neither).
+// Known gaps are written into the entries on purpose, each with a comment: the Browser does not
+// take rows into 'topo'.
 
 import type {
   BodyId,
@@ -17,14 +16,24 @@ import type {
   RefParamSpec,
   SketchRegionRef,
 } from '@/document';
-import { ORIGIN_AXES, ownerOfArtifact, parseAxisId, parseSketchId, sketchId } from '@/document';
-import type { AxisRef, SketchEntityRef, TopoRef } from '@/document';
+import {
+  ORIGIN_AXES,
+  ORIGIN_PLANES,
+  ownerOfArtifact,
+  parseAxisId,
+  parsePlaneId,
+  parseSketchId,
+  sketchId,
+} from '@/document';
+import type { AxisRef, PlaneRef, SketchEntityRef, TopoRef } from '@/document';
 import {
   axisRefOf,
   bodyOfRef,
   bodyRefLabel,
   isSketchLine,
+  planeRefOf,
   regionRefsOf,
+  replacePlaneRef,
   toggleAxisRef,
   toggleBodyRef,
   toggleRegionRef,
@@ -94,6 +103,12 @@ export interface RefKindBehavior<S extends RefParamSpec = RefParamSpec> {
   readonly focusable: boolean;
   /** create focuses the first visible such param (spec 10, R19). */
   readonly autoFocus: boolean;
+  /**
+   * A reference of the kind picked in the view or the Browser ends the focus, also when the value
+   * does not change (it is already that reference): a param with one replaced item (M21, 'planes',
+   * spec 11 "Pole Rovina"). Otherwise the focus stays for more items.
+   */
+  readonly pickEndsFocus: boolean;
   /** What a click into the view (and the hover) can pick for the param (spec 10). */
   pickFilter(spec: S): PickFilter;
   /** Whether refPick hovers the hit, which the filter already let through. */
@@ -127,6 +142,8 @@ const EDGES: PickFilter = Object.freeze(['edge']);
 const SKETCH_REGIONS: PickFilter = Object.freeze(['sketchRegion']);
 /** An axis drawing or a line of a sketch drawing (M13). */
 const SKETCH_ENTITIES: PickFilter = Object.freeze(['sketchEntity']);
+/** A planar face of a body or a line of a plane drawing (M21). */
+const FACES_AND_SKETCH_ENTITIES: PickFilter = Object.freeze(['face', 'sketchEntity']);
 const TOPO_FILTERS: Readonly<Record<TopoSpec['entity'], PickFilter>> = Object.freeze({
   face: FACES,
   edge: EDGES,
@@ -161,6 +178,7 @@ const accepts =
 const BODIES = Object.freeze<RefKindBehavior<RefParamSpecOf<'bodies'>>>({
   focusable: true,
   autoFocus: true,
+  pickEndsFocus: false,
   pickFilter: () => FACES_AND_EDGES,
   // The filter lets through faces and edges only, and each of them is a body.
   hovers: always,
@@ -178,6 +196,7 @@ const BODIES = Object.freeze<RefKindBehavior<RefParamSpecOf<'bodies'>>>({
 const TOPO = Object.freeze<RefKindBehavior<RefParamSpecOf<'topo'>>>({
   focusable: true,
   autoFocus: true,
+  pickEndsFocus: false,
   pickFilter: (spec) => TOPO_FILTERS[spec.entity],
   // Only hits with a name in the last snapshot (M14, R103).
   hovers: (hit, ctx) => topoRefOfHit(hit, ctx) !== null,
@@ -198,6 +217,7 @@ const TOPO = Object.freeze<RefKindBehavior<RefParamSpecOf<'topo'>>>({
 const REGION = Object.freeze<RefKindBehavior<RefParamSpecOf<'region'>>>({
   focusable: true,
   autoFocus: true,
+  pickEndsFocus: false,
   pickFilter: () => SKETCH_REGIONS,
   // Every region is hovered, also one of the edited sketch that a click does not take.
   hovers: always,
@@ -224,25 +244,32 @@ const REGION = Object.freeze<RefKindBehavior<RefParamSpecOf<'region'>>>({
 });
 
 const PLANES = Object.freeze<RefKindBehavior<RefParamSpecOf<'planes'>>>({
-  // Known gap (M20): focusable, yet it picks nothing in the view and the Browser does not take
-  // its rows; a plane comes from the selection when the sketch is created (M12).
+  // The field "Plane" of the sketch panel focuses it (M21, Q076).
   focusable: true,
   // Not focused on create, otherwise the sketcher would start with refPick instead of its own
   // tools (M12).
   autoFocus: false,
-  pickFilter: () => NOTHING,
-  hovers: always,
-  fromHit: () => null,
+  // One plane: a picked plane ends picking and the sketcher draws again (spec 11).
+  pickEndsFocus: true,
+  pickFilter: () => FACES_AND_SKETCH_ENTITIES,
+  // Only hits that can be a plane: an origin plane drawing, a named face (M21).
+  hovers: (hit, ctx) => planeRefOfHit(hit, ctx) !== null,
+  fromHit: (hit, value, ctx) => {
+    const ref = planeRefOfHit(hit, ctx);
+    const next = ref === null ? null : replacePlaneRef(value, ref);
+    return next === null ? null : { value: next };
+  },
   highlightTargets: () => NO_TARGETS,
-  browserAccepts: () => false,
+  browserAccepts: accepts('plane'),
   chips: noChips,
-  refText: noText,
+  refText: (value, doc) => planeText(value, doc),
   preselect: noPreselect,
 });
 
 const AXIS = Object.freeze<RefKindBehavior<RefParamSpecOf<'axis'>>>({
   focusable: true,
   autoFocus: true,
+  pickEndsFocus: false,
   pickFilter: () => SKETCH_ENTITIES,
   // Only hits that can be an axis (M13).
   hovers: (hit, ctx) => axisRefOfHit(hit, ctx.doc) !== null,
@@ -301,8 +328,22 @@ function axisRefOfHit(hit: PickResult, doc: DocumentReader): AxisRef | SketchEnt
 }
 
 /**
- * The hit as a reference of a 'topo' param: the name of the face or edge in the last snapshot
- * (M14); null without a snapshot, without the body in it or without a name.
+ * The hit as the plane of a 'planes' param (M21), or null when it cannot be one: the drawing of
+ * a plane (its id is a plane id, spec 10 "Id kresby je kontrakt") or a face with a name in the
+ * pickable bodies. Whether the face is planar is checked by the regeneration.
+ */
+function planeRefOfHit(hit: PickResult, ctx: RefHitContext): PlaneRef | TopoRef | null {
+  if (hit.kind === 'sketchEntity') {
+    const plane = parsePlaneId(hit.sketch);
+    return plane === undefined ? null : Object.freeze({ kind: 'plane', plane });
+  }
+  return topoRefOfHit(hit, ctx);
+}
+
+/**
+ * The hit as a reference of a 'topo' param: the name of the face or edge in the pickable bodies
+ * of the last snapshot (M14; M21 snapshot.pick); null without a snapshot, without the body in it
+ * or without a name.
  */
 function topoRefOfHit(hit: PickResult, ctx: RefHitContext): TopoRef | null {
   if (hit.kind !== 'face' && hit.kind !== 'edge') return null;
@@ -312,13 +353,15 @@ function topoRefOfHit(hit: PickResult, ctx: RefHitContext): TopoRef | null {
   return name === undefined ? null : Object.freeze({ kind: 'topo', body: hit.body, name });
 }
 
+/** The names of a pickable body (M21: snapshot.pick, the bodies the highlight indices are of). */
 function namesOf(snapshot: RegenSnapshot, body: BodyId): TopoNames | undefined {
-  return snapshot.bodies.find((b) => b.body === body)?.names;
+  return snapshot.pick.bodies.find((b) => b.body === body)?.names;
 }
 
 /**
- * Topo references of an unchecked value as the faces or edges of their name in the body of the
- * last snapshot, ascending; an unresolved reference and vertices (R101) give nothing.
+ * Topo references of an unchecked value as the faces or edges of their name in the pickable body
+ * of the last snapshot (M21: snapshot.pick), ascending; an unresolved reference and vertices
+ * (R101) give nothing.
  */
 function topoTargets(
   value: unknown,
@@ -394,6 +437,28 @@ function topoChips(value: unknown, entity: TopoSpec['entity']): readonly FieldRe
       });
     }),
   );
+}
+
+/**
+ * The text of a 'planes' value (M21): the label of an origin plane, the name of the body of a
+ * face; an unknown plane, a missing body or an invalid first item → field.missingRef; no item →
+ * null.
+ */
+function planeText(value: unknown, doc: DocumentReader): RefText | null {
+  const items: readonly unknown[] = Array.isArray(value) ? value : [];
+  if (items.length === 0) return null;
+  const ref = planeRefOf(value);
+  if (ref === null) return MISSING_REF;
+  if (ref.kind === 'plane') {
+    const origin = ORIGIN_PLANES.find((p) => p.id === ref.plane);
+    return origin === undefined
+      ? MISSING_REF
+      : Object.freeze({ key: origin.label, params: NO_TEXT_PARAMS });
+  }
+  const body = bodyRefLabel(doc, ref.body);
+  return body === null
+    ? MISSING_REF
+    : Object.freeze({ key: 'field.planeFace', params: Object.freeze({ body }) });
 }
 
 /**

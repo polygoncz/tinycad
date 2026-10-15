@@ -9,31 +9,58 @@ import { meshBounds } from './bounds';
 import { polylinesToSegments } from './mesh-index';
 import type { ScenePalette } from './palette';
 
+/**
+ * How a body layer draws its bodies: 'body' solid in the face and edge colours, 'preview' the
+ * result of an edited feature (M21, ADR 0025), transparent in the body preview colour (palette.bodyPreview).
+ */
+export type BodyStyle = 'body' | 'preview';
+
+/** Opacity of the preview faces (M21). */
+const PREVIEW_OPACITY = 0.35;
+/**
+ * Above the bodies (0), so the preview edges win at equal depth, and below the highlight (1).
+ * Also sorts the transparent preview faces after the opaque bodies.
+ */
+const PREVIEW_RENDER_ORDER = 0.5;
+
 /** Materials shared by every BodyView; created and disposed by BodyLayer. */
 export interface BodyMaterials extends Disposable {
   readonly faces: THREE.MeshStandardMaterial;
   readonly edges: THREE.LineBasicMaterial;
+  /** renderOrder of the faces and edges of every BodyView. */
+  readonly renderOrder: number;
   /** Recolours both materials in place (Q072); every BodyView follows. */
   setPalette(palette: ScenePalette): void;
 }
 
-export function createBodyMaterials(palette: ScenePalette): BodyMaterials {
+export function createBodyMaterials(
+  palette: ScenePalette,
+  style: BodyStyle = 'body',
+): BodyMaterials {
+  const preview = style === 'preview';
+  const faceColor = (p: ScenePalette): number => (preview ? p.bodyPreview : p.face);
+  const edgeColor = (p: ScenePalette): number => (preview ? p.bodyPreview : p.edge);
   const faces = new THREE.MeshStandardMaterial({
-    color: palette.face,
+    color: faceColor(palette),
     metalness: 0,
     roughness: 0.6,
-    // Pushes faces slightly back in depth, so the edges on them win (spec 09).
+    // Bodies: faces slightly back in depth, so the edges on them win (spec 09). Preview: faces
+    // towards the camera, so they win over the coplanar faces of the input body below; two
+    // tessellations of one plane would otherwise fight for depth (z-fighting, M21).
     polygonOffset: true,
-    polygonOffsetFactor: 1,
-    polygonOffsetUnits: 1,
+    polygonOffsetFactor: preview ? -1 : 1,
+    polygonOffsetUnits: preview ? -4 : 1,
+    // The preview hides nothing behind it: the bodies of the input stay visible and pickable.
+    ...(preview ? { transparent: true, opacity: PREVIEW_OPACITY, depthWrite: false } : {}),
   });
-  const edges = new THREE.LineBasicMaterial({ color: palette.edge });
+  const edges = new THREE.LineBasicMaterial({ color: edgeColor(palette) });
   return {
     faces,
     edges,
+    renderOrder: preview ? PREVIEW_RENDER_ORDER : 0,
     setPalette(next: ScenePalette): void {
-      faces.color.setHex(next.face);
-      edges.color.setHex(next.edge);
+      faces.color.setHex(faceColor(next));
+      edges.color.setHex(edgeColor(next));
     },
     dispose(): void {
       faces.dispose();
@@ -73,6 +100,8 @@ export function createBodyView(id: BodyId, mesh: MeshData, materials: BodyMateri
   const edgeGeometry = new THREE.BufferGeometry();
   edgeGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   const edges = new THREE.LineSegments(edgeGeometry, materials.edges);
+  faces.renderOrder = materials.renderOrder;
+  edges.renderOrder = materials.renderOrder;
 
   const object = new THREE.Group();
   object.add(faces, edges);

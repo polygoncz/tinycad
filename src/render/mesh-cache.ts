@@ -47,3 +47,56 @@ export function createMeshCache(meshes: MeshOps, quality: MeshQuality): MeshCach
     },
   };
 }
+
+/**
+ * One MeshCache shared by several SceneSyncs (the body layer and the preview, M21): the same
+ * handle is tessellated once whichever layer shows it. Each SceneSync gets its own client.
+ */
+export interface SharedMeshCache {
+  /**
+   * A view of the shared entries for one SceneSync. Its `retain` sets the shapes this client
+   * needs; the cache keeps the union over all clients, so one layer never drops the meshes of
+   * another. A handle requested by `get` stays until the client's next `retain` or `clear`.
+   * `clear` forgets only what this client needs.
+   */
+  client(): MeshCache;
+  /** Kernel instance swap (Q060): forgets everything and tessellates through `meshes` now. */
+  reset(meshes: MeshOps): void;
+}
+
+export function createSharedMeshCache(meshes: MeshOps, quality: MeshQuality): SharedMeshCache {
+  let inner = createMeshCache(meshes, quality);
+  /** Per client: the shapes of its last retain plus those requested since then. */
+  const needs = new Set<Set<ShapeHandle>>();
+
+  function retainAll(): void {
+    inner.retain([...needs].flatMap((need) => [...need]));
+  }
+
+  return {
+    client(): MeshCache {
+      const need = new Set<ShapeHandle>();
+      needs.add(need);
+      return {
+        get(shape: ShapeHandle): Promise<MeshData> {
+          need.add(shape);
+          return inner.get(shape);
+        },
+        retain(shapes: readonly ShapeHandle[]): void {
+          need.clear();
+          for (const shape of shapes) need.add(shape);
+          retainAll();
+        },
+        clear(): void {
+          need.clear();
+          retainAll();
+        },
+      };
+    },
+    reset(next: MeshOps): void {
+      inner.clear();
+      inner = createMeshCache(next, quality);
+      for (const need of needs) need.clear();
+    },
+  };
+}

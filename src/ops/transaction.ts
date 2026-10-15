@@ -105,10 +105,29 @@ export function createTransaction(deps: TransactionDeps): Transaction {
     return out;
   }
 
+  /**
+   * Merges the step into the directly preceding one when both are logged, of one type and the
+   * handler can merge them (ADR 0025): abort then reverts a long drag with one inverse.
+   * A transient step in between interrupts merging, so the inverses keep their order.
+   */
+  function remember(step: Step): void {
+    const last = steps[steps.length - 1];
+    const merged =
+      last !== undefined && !last.transient && !step.transient && last.op.type === step.op.type
+        ? (handlers.find(step.op.type)?.merge?.(last.op, step.op) ?? null)
+        : null;
+    if (last !== undefined && merged !== null) {
+      // The merged op keeps the inverse of the first one.
+      steps[steps.length - 1] = { op: merged, inverse: last.inverse, transient: false };
+    } else {
+      steps.push(step);
+    }
+  }
+
   function applyStep(op: Operation, transient: boolean): void {
     // A failing handler throws here: the transaction stays open and unchanged.
     const { inverse, deferred } = deps.apply(op);
-    steps.push({ op, inverse, transient });
+    remember({ op, inverse, transient });
     const errors = [...deferred];
     collect(errors, () => {
       deps.emitApplied(null, op);

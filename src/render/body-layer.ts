@@ -5,11 +5,12 @@
 import * as THREE from 'three';
 import { assert, type Disposable } from '@/core';
 import type { BodyId } from '@/interaction';
-import type { BoundingBox, MeshOps, MeshQuality, ShapeHandle } from '@/kernel';
+import type { BoundingBox, MeshOps, ShapeHandle } from '@/kernel';
 import { unionBounds } from './bounds';
-import { createBodyMaterials, createBodyView, type BodyView } from './body-view';
+import { createBodyMaterials, createBodyView, type BodyStyle, type BodyView } from './body-view';
+import type { MeshCache } from './mesh-cache';
 import { parseHexColor, type ScenePalette } from './palette';
-import { createSceneSync, type ScenePlan } from './scene-sync';
+import { createSceneSync, type PreparedSync, type ScenePlan } from './scene-sync';
 
 export interface BodyLayer {
   /**
@@ -21,8 +22,27 @@ export interface BodyLayer {
   reset(meshes: MeshOps): void;
 }
 
-/** What the viewport (and later picking and highlight) needs on top of BodyLayer; internal. */
-export interface BodyLayerInternal extends BodyLayer, Disposable {
+/**
+ * A layer of bodies inside the viewport; internal. The viewport has two (M21): the body layer
+ * (picking, highlight) and the preview. Both share one mesh cache, so the kernel swap of
+ * BodyLayer.reset is done by the viewport: it resets the shared cache and clears both layers.
+ */
+export interface BodyLayerInternal extends Disposable {
+  /** Same contract as BodyLayer.sync. */
+  sync(bodies: readonly { readonly id: BodyId; readonly shape: ShapeHandle }[]): Promise<void>;
+  /**
+   * The first half of sync (SceneSync.prepare): the meshes are requested now, the scene swaps
+   * only with commit. BodyLayers commits both layers together (M21).
+   */
+  prepare(
+    bodies: readonly { readonly id: BodyId; readonly shape: ShapeHandle }[],
+  ): Promise<PreparedSync>;
+  /**
+   * Removes and disposes every shown body, forgets the hidden and coloured ones and invalidates
+   * a running sync (kernel swap, an emptied preview). Requests a render only when something was
+   * shown.
+   */
+  clear(): void;
   /** Parent of every BodyView object; the viewport puts it into the scene. */
   readonly group: THREE.Group;
   readonly views: ReadonlyMap<BodyId, BodyView>;
@@ -47,8 +67,10 @@ export interface BodyLayerInternal extends BodyLayer, Disposable {
 }
 
 export interface BodyLayerOptions {
-  readonly meshes: MeshOps;
-  readonly quality: MeshQuality;
+  /** A client of the viewport's SharedMeshCache. */
+  readonly cache: MeshCache;
+  /** Default 'body'. */
+  readonly style?: BodyStyle;
   readonly reportError: (body: BodyId, error: unknown) => void;
   readonly requestRender: () => void;
   readonly palette: ScenePalette;
@@ -61,7 +83,7 @@ export interface BodyLayerOptions {
 export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
   const { requestRender } = options;
   const group = new THREE.Group();
-  const materials = createBodyMaterials(options.palette);
+  const materials = createBodyMaterials(options.palette, options.style);
   const views = new Map<BodyId, BodyView>();
   /** Hidden bodies; always a subset of the keys of `views`. */
   const hidden = new Set<BodyId>();
@@ -72,7 +94,6 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
     string,
     { readonly material: THREE.MeshStandardMaterial; users: number }
   >();
-  let meshes = options.meshes;
   let disposed = false;
 
   /** Face material for a colour; a copy of the shared one, so only the colour differs. */
@@ -100,7 +121,7 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
 
   /**
    * Swaps the scene in one synchronous block, so no frame shows half of the old and half of the
-   * new model. Also called outside sync: reset (and so dispose) removes every shown body.
+   * new model. Also called outside sync: clear (and so dispose) removes every shown body.
    */
   function apply(plan: ScenePlan): void {
     /** Colours of removed views, released after the adds (see below). */
@@ -136,8 +157,7 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
   }
 
   const sceneSync = createSceneSync({
-    meshes,
-    quality: options.quality,
+    cache: options.cache,
     reportError: options.reportError,
     apply,
   });
@@ -151,6 +171,9 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
     },
     sync(bodies) {
       return sceneSync.sync(bodies);
+    },
+    prepare(bodies) {
+      return sceneSync.prepare(bodies);
     },
     setPalette(palette) {
       materials.setPalette(palette);
@@ -178,16 +201,15 @@ export function createBodyLayer(options: BodyLayerOptions): BodyLayerInternal {
       else colors.set(body, color);
       requestRender();
     },
-    reset(next) {
-      meshes = next;
-      sceneSync.reset(next);
+    clear() {
+      sceneSync.clear();
     },
     dispose(): void {
       if (disposed) return;
       disposed = true;
       // Disposes every BodyView through apply and makes a running sync stale, so it never
       // applies (and never creates views) after this.
-      sceneSync.reset(meshes);
+      sceneSync.clear();
       materials.dispose();
     },
   };

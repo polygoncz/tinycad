@@ -19,7 +19,7 @@ import type {
   TopoRef,
 } from '@/document';
 import { aFeature } from '@/document/testing';
-import type { BatchOp, Operation } from '@/ops';
+import type { BatchOp, FeatureSetParamsOp, Operation } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE, parseSketchData } from '@/sketch';
 import type {
@@ -143,6 +143,8 @@ function setup(
     features?: Parameters<typeof aSketch>[];
     others?: readonly FeatureInstance[];
     solver?: ConstraintSolver;
+    /** app: the plane of the sketch artifact in the last state (M21); none by default. */
+    planeOfSketch?: (featureId: FeatureId) => Plane | undefined;
   } = {},
 ) {
   const schemas = createFeatureSchemaRegistry();
@@ -167,6 +169,7 @@ function setup(
     solver: opts.solver ?? fake,
     viewport,
     resolvePlane,
+    planeOfSketch: opts.planeOfSketch ?? (() => undefined),
   });
   const applied: Operation[] = [];
   ops.dispatcher.events.on('applied', ({ op }) => applied.push(op));
@@ -228,7 +231,7 @@ describe('SketchEditor.create', () => {
     expect(sketches.current.get()).toBe(session);
     expect(sketches.mode.get()).toBe('sketch');
     expect(modes).toEqual(['sketch']);
-    expect(session.plane).toBe(XY);
+    expect(session.plane.get()).toBe(XY);
     expect(doc.feature(session.featureId)?.type).toBe(SKETCH_FEATURE_TYPE);
     expect(editor.current.get()?.featureId).toBe(session.featureId);
     expect(session.state.get()).toMatchObject({
@@ -252,7 +255,7 @@ describe('SketchEditor.create', () => {
 
     const session = sketches.create(planeRef(ORIGIN_PLANE_IDS.xz));
 
-    expect(session.plane).toBe(XZ);
+    expect(session.plane.get()).toBe(XZ);
     expect(doc.feature(session.featureId)?.params).toMatchObject({
       plane: [{ kind: 'plane', plane: ORIGIN_PLANE_IDS.xz }],
     });
@@ -274,7 +277,7 @@ describe('SketchEditor.create', () => {
 
     const session = sketches.create(TOP_FACE);
 
-    expect(session.plane).toBe(TOP);
+    expect(session.plane.get()).toBe(TOP);
     expect(doc.feature(session.featureId)?.params).toMatchObject({
       plane: [{ kind: 'topo', body: 'b1/body', name: 'b1/face:top' }],
     });
@@ -344,6 +347,7 @@ describe('SketchEditor.gridSnap (M19.2 D4)', () => {
       solver: ctx.solver,
       viewport: ctx.viewport,
       resolvePlane,
+      planeOfSketch: () => undefined,
       gridStep: () => step,
     });
     expect(sketches.gridStep()).toBe(5);
@@ -371,7 +375,7 @@ describe('SketchEditor.edit', () => {
     const session = sketches.edit(fid('s1'));
 
     expect(session.featureId).toBe('s1');
-    expect(session.plane).toBe(XZ);
+    expect(session.plane.get()).toBe(XZ);
     expect(session.state.get()).toMatchObject({ name: 'Sketch s1' });
     expect(session.state.get().entities).toEqual(rect.entities);
     expect(session.state.get().constraints).toEqual(rect.constraints);
@@ -399,25 +403,30 @@ describe('SketchEditor.edit', () => {
     });
     const { sketches } = setup({ others: [sketch] });
 
-    expect(sketches.edit(fid('s2')).plane).toBe(TOP);
+    expect(sketches.edit(fid('s2')).plane.get()).toBe(TOP);
   });
 
   it.each([
     ['a face reference with an empty name', { kind: 'topo', body: 'b1/body', name: '' }],
     ['a face reference with a body id of a wrong shape', { ...TOP_FACE, body: 'b1' }],
     ['a reference of another kind', { kind: 'body', body: 'b1/body' }],
-  ])('throws for a sketch whose plane is %s (one reading with document)', (_, plane) => {
-    const sketch = aFeature<Record<string, unknown>>({
-      id: 's2',
-      name: 'Sketch s2',
-      type: SKETCH_FEATURE_TYPE,
-      params: { plane: [plane], entities: [], constraints: [] },
-    });
-    const { sketches } = setup({ others: [sketch] });
+  ])(
+    'opens a sketch whose plane is %s on XY without a plane (one reading with document, Q079)',
+    (_, plane) => {
+      const sketch = aFeature<Record<string, unknown>>({
+        id: 's2',
+        name: 'Sketch s2',
+        type: SKETCH_FEATURE_TYPE,
+        params: { plane: [plane], entities: [], constraints: [] },
+      });
+      const { sketches } = setup({ others: [sketch] });
 
-    expect(() => sketches.edit(fid('s2'))).toThrow();
-    expect(sketches.current.get()).toBeNull();
-  });
+      const session = sketches.edit(fid('s2'));
+
+      expect(session.plane.get()).toBe(XY);
+      expect(session.state.get().planeMissing).toBe(true);
+    },
+  );
 
   it('throws for an unknown feature', () => {
     const { sketches } = setup();
@@ -425,17 +434,142 @@ describe('SketchEditor.edit', () => {
     expect(sketches.current.get()).toBeNull();
   });
 
-  it('throws for a sketch whose plane cannot be resolved and cancels the feature session', () => {
-    const { editor, sketches, log } = setup({
-      features: [['s1', rectangleData(), 'origin/plane:ab']],
+  it('opens on the plane of the artifact, also when the reference no longer resolves (M21)', () => {
+    // A sketch on the top face of a box that a later Boolean consumed: the face is gone from the
+    // final state, the artifact keeps the plane the builder computed from the input (R108).
+    const gone = topoRef('b9/body', 'b9/face:top');
+    const sketch = aFeature<Record<string, unknown>>({
+      id: 's2',
+      name: 'Sketch s2',
+      type: SKETCH_FEATURE_TYPE,
+      params: { plane: [gone], entities: [], constraints: [] },
     });
+    const asked: FeatureId[] = [];
+    const { sketches } = setup({
+      others: [sketch],
+      planeOfSketch: (id) => {
+        asked.push(id);
+        return TOP;
+      },
+    });
+    expect(resolvePlane(gone)).toBeUndefined();
 
-    expect(() => sketches.edit(fid('s1'))).toThrow();
+    const session = sketches.edit(fid('s2'));
 
-    expect(editor.current.get()).toBeNull();
-    expect(sketches.current.get()).toBeNull();
-    expect(sketches.mode.get()).toBe('model');
+    expect(session.plane.get()).toBe(TOP);
+    expect(asked).toEqual(['s2']);
+  });
+
+  it('prefers the plane of the artifact to the plane of the reference (M21)', () => {
+    const { sketches } = setup({
+      features: [['s1', rectangleData(), ORIGIN_PLANE_IDS.xz]],
+      planeOfSketch: () => TOP,
+    });
+    expect(sketches.edit(fid('s1')).plane.get()).toBe(TOP);
+  });
+
+  it('opens an ordinary sketch with planeMissing false and without picking the plane', () => {
+    const { sketches, editor } = setup({ features: [['s1']] });
+    const session = sketches.edit(fid('s1'));
+    expect(session.state.get().planeMissing).toBe(false);
+    expect(editor.current.get()?.state.get().activeRefParam).toBeNull();
+  });
+});
+
+describe('SketchEditor.edit without a plane (Q079, variant A)', () => {
+  /** A sketch on the top face of a body that is gone: no artifact, the reference does not resolve. */
+  const GONE = topoRef('b9/body', 'b9/face:top');
+
+  function lostPlane() {
+    const sketch = aFeature<Record<string, unknown>>({
+      id: 's2',
+      name: 'Sketch s2',
+      type: SKETCH_FEATURE_TYPE,
+      params: { plane: [GONE], entities: LINE.entities, constraints: LINE.constraints },
+    });
+    const ctx = setup({ others: [sketch] });
+    const session = ctx.sketches.edit(fid('s2'));
+    return { ...ctx, session };
+  }
+
+  it('does not throw: opens on the origin plane XY with planeMissing', () => {
+    const { session, sketches, viewport, log } = lostPlane();
+
+    expect(sketches.current.get()).toBe(session);
+    expect(sketches.mode.get()).toBe('sketch');
+    expect(session.plane.get()).toBe(XY);
+    expect(session.state.get().planeMissing).toBe(true);
+    expect(session.state.get().entities).toEqual(LINE.entities);
+    expect(viewport.sketchDrawings.get(EDIT_SKETCH_DRAWING_ID)?.plane).toBe(XY);
     expect(log.entries()).toEqual([]);
+  });
+
+  it('picks the plane at once', () => {
+    const { session, editor } = lostPlane();
+    expect(editor.current.get()?.state.get().activeRefParam).toBe('plane');
+    expect(session.state.get().planeField?.active).toBe(true);
+  });
+
+  it('a picked plane clears planeMissing and moves the plane', () => {
+    const { session, editor } = lostPlane();
+
+    editor.current.get()?.setParam('plane', [planeRef(ORIGIN_PLANE_IDS.xz)]);
+
+    expect(session.plane.get()).toBe(XZ);
+    expect(session.state.get().planeMissing).toBe(false);
+  });
+
+  it('picking XY clears planeMissing although the plane stays the same', () => {
+    const { session, editor } = lostPlane();
+
+    editor.current.get()?.setParam('plane', [planeRef(ORIGIN_PLANE_IDS.xy)]);
+
+    expect(session.plane.get()).toBe(XY);
+    expect(session.state.get().planeMissing).toBe(false);
+  });
+
+  it('a picked face clears planeMissing', () => {
+    const { session, editor } = lostPlane();
+    editor.current.get()?.setParam('plane', [TOP_FACE]);
+    expect(session.plane.get()).toBe(TOP);
+    expect(session.state.get().planeMissing).toBe(false);
+  });
+
+  it('a reference that does not resolve keeps planeMissing', () => {
+    const { session, editor } = lostPlane();
+    editor.current.get()?.setParam('plane', [topoRef('b1/body', 'b1/face:round')]);
+    expect(session.plane.get()).toBe(XY);
+    expect(session.state.get().planeMissing).toBe(true);
+  });
+
+  it('cancelling the pick keeps the sketch open on XY with planeMissing', () => {
+    const { session, sketches } = lostPlane();
+
+    expect(session.cancelPlanePick()).toBe(true);
+
+    expect(sketches.current.get()).toBe(session);
+    expect(session.plane.get()).toBe(XY);
+    expect(session.state.get().planeMissing).toBe(true);
+    expect(session.state.get().planeField?.active).toBe(false);
+  });
+
+  it('finish without a picked plane writes the entities and constraints, not the plane', async () => {
+    const { session, doc, log } = lostPlane();
+    await settle();
+    session.cancelPlanePick();
+    await session.remove([item('pq')]);
+
+    session.finish();
+
+    const entries = log.entries();
+    expect(entries.map((e) => e.op.type)).toEqual(['feature.setParams']);
+    // The whole params: the entities changed, the plane is the lost reference as before.
+    const params = (entries[0]?.op as FeatureSetParamsOp).params as Record<string, unknown>; // a sketch feature
+    expect(params.plane).toEqual([GONE]);
+    expect(params.entities).toEqual(docData(doc, fid('s2')).entities);
+    expect(docData(doc, fid('s2')).entities).not.toEqual(LINE.entities);
+    const saved = doc.feature(fid('s2'))?.params as Record<string, unknown> | undefined; // a sketch feature
+    expect(saved?.plane).toEqual([GONE]);
   });
 });
 
@@ -1087,7 +1221,7 @@ describe('SketchSession drawing', () => {
 
     const drawing = viewport.sketchDrawings.get(EDIT_SKETCH_DRAWING_ID);
 
-    expect(drawing?.plane).toBe(session.plane);
+    expect(drawing?.plane).toBe(session.plane.get());
     expect(drawing?.curves.map((c) => [c.id, c.style])).toEqual([['pq', 'normal']]);
     expect(drawing?.points.map((p) => [p.id, p.style])).toEqual([
       ['p', 'normal'],
@@ -1140,6 +1274,88 @@ describe('SketchSession drawing', () => {
     session.finish();
 
     expect(viewport.sketchDrawings.has(EDIT_SKETCH_DRAWING_ID)).toBe(false);
+  });
+});
+
+describe('SketchSession plane (M21)', () => {
+  it('a new plane reference moves the plane, redraws and keeps the 2D entities', async () => {
+    const { session, editor, viewport } = await editing(LINE);
+    const planes: Plane[] = [];
+    session.plane.subscribe(() => planes.push(session.plane.get()));
+    const before = session.state.get().entities;
+
+    editor.current.get()?.setParam('plane', [planeRef(ORIGIN_PLANE_IDS.xz)]);
+
+    expect(session.plane.get()).toBe(XZ);
+    expect(planes).toEqual([XZ]);
+    expect(viewport.sketchDrawings.get(EDIT_SKETCH_DRAWING_ID)?.plane).toBe(XZ);
+    expect(session.state.get().entities).toBe(before);
+  });
+
+  it('a face reference moves the plane to the face', async () => {
+    const { session, editor } = await editing(LINE);
+    editor.current.get()?.setParam('plane', [TOP_FACE]);
+    expect(session.plane.get()).toBe(TOP);
+  });
+
+  it('the dimensions of the viewport follow the new plane', async () => {
+    const sketch = data(LINE.entities, [{ kind: 'distance', id: 'd', a: 'p', b: 'q', value: 4 }]);
+    const { session, editor } = await editing(sketch);
+    expect(session.state.get().dimensions[0]?.to).toEqual([4, 1, 0]);
+
+    editor.current.get()?.setParam('plane', [planeRef(ORIGIN_PLANE_IDS.xz)]);
+
+    // XZ: x stays +X, y of the plane is +Z.
+    expect(session.state.get().dimensions[0]?.to).toEqual([4, 0, 1]);
+  });
+
+  it('planeField shows the plane param for the panel and follows its value', async () => {
+    const { session, editor } = await editing(LINE);
+    expect(session.state.get().planeField).toEqual({
+      label: 'sketch.plane',
+      text: { key: 'origin.plane.xy', params: {} },
+      active: false,
+      invalid: false,
+    });
+    const before = session.state.get().planeField;
+    await session.remove([item('pq')]);
+    // Unchanged field, same object.
+    expect(session.state.get().planeField).toBe(before);
+
+    editor.current.get()?.setParam('plane', [planeRef(ORIGIN_PLANE_IDS.xz)]);
+    expect(session.state.get().planeField?.text).toEqual({ key: 'origin.plane.xz', params: {} });
+  });
+
+  it('planeField without a plane: no text and invalid', async () => {
+    const { session, editor } = await editing(LINE);
+    editor.current.get()?.setParam('plane', []);
+    expect(session.state.get().planeField).toMatchObject({ text: null, invalid: true });
+  });
+
+  it('pickPlane focuses the plane param; cancelPlanePick ends it once', async () => {
+    const { session, editor } = await editing(LINE);
+    session.pickPlane();
+    expect(editor.current.get()?.state.get().activeRefParam).toBe('plane');
+    expect(session.state.get().planeField?.active).toBe(true);
+
+    expect(session.cancelPlanePick()).toBe(true);
+    expect(editor.current.get()?.state.get().activeRefParam).toBeNull();
+    expect(session.state.get().planeField?.active).toBe(false);
+    // Not picking: nothing to end, the caller leaves the key alone.
+    expect(session.cancelPlanePick()).toBe(false);
+  });
+
+  it('a reference that does not resolve keeps the plane; other changes do not touch it', async () => {
+    const { session, editor, viewport } = await editing(LINE);
+    const planes: Plane[] = [];
+    session.plane.subscribe(() => planes.push(session.plane.get()));
+
+    editor.current.get()?.setParam('plane', [topoRef('b1/body', 'b1/face:round')]);
+    await session.remove([item('pq')]);
+
+    expect(session.plane.get()).toBe(XY);
+    expect(planes).toEqual([]);
+    expect(viewport.sketchDrawings.get(EDIT_SKETCH_DRAWING_ID)?.plane).toBe(XY);
   });
 });
 

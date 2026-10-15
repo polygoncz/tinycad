@@ -100,7 +100,10 @@ export interface FieldState {
    * field, null otherwise; fields of kind 'data' (no control) are skipped like hidden ones (M13).
    */
   readonly heading: string | null;
-  /** The text of the reference of an 'axis' param with a value; null otherwise (M13). */
+  /**
+   * The text of the reference of an 'axis' (M13) or a 'planes' (M21) param with a value; null
+   * otherwise.
+   */
   readonly refText: RefText | null;
 }
 

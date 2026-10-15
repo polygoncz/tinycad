@@ -148,6 +148,7 @@ function setup(opts: { gridStep?: () => number } = {}) {
     solver,
     viewport,
     resolvePlane,
+    planeOfSketch: () => undefined,
     ...(opts.gridStep === undefined ? {} : { gridStep: opts.gridStep }),
   });
   const regen = new FakeRegenStatus();
@@ -349,7 +350,7 @@ describe('the entry tool sketch', () => {
     manager.activate('sketch');
 
     const session = sketches.current.get();
-    expect(session?.plane).toBe(XY);
+    expect(session?.plane.get()).toBe(XY);
     expect(sketches.mode.get()).toBe('sketch');
     expect(manager.active.get()).toBe('sketch.select');
     expect(active.at(-1)).toBe('sketch.select');
@@ -365,7 +366,7 @@ describe('the entry tool sketch', () => {
 
     manager.activate('sketch');
 
-    expect(sketches.current.get()?.plane).toBe(XZ);
+    expect(sketches.current.get()?.plane.get()).toBe(XZ);
   });
 
   it('creates the sketch on a selected named planar face (M14)', () => {
@@ -375,7 +376,7 @@ describe('the entry tool sketch', () => {
     manager.activate('sketch');
 
     const session = sketches.current.get();
-    expect(session?.plane).toBe(TOP);
+    expect(session?.plane.get()).toBe(TOP);
     expect(doc.feature(session?.featureId ?? ('' as FeatureId))?.params).toMatchObject({
       plane: [{ kind: 'topo', body: BODY, name: 'b1/face:top' }],
     });
@@ -387,7 +388,7 @@ describe('the entry tool sketch', () => {
 
     manager.activate('sketch');
 
-    expect(sketches.current.get()?.plane).toBe(XY);
+    expect(sketches.current.get()?.plane.get()).toBe(XY);
   });
 
   it('skips a face without a plane (not planar) and falls back to XY (M14)', () => {
@@ -396,7 +397,7 @@ describe('the entry tool sketch', () => {
 
     manager.activate('sketch');
 
-    expect(sketches.current.get()?.plane).toBe(XY);
+    expect(sketches.current.get()?.plane.get()).toBe(XY);
   });
 
   it('takes the first face with a plane after faces without one (M14)', () => {
@@ -409,7 +410,7 @@ describe('the entry tool sketch', () => {
 
     manager.activate('sketch');
 
-    expect(sketches.current.get()?.plane).toBe(TOP);
+    expect(sketches.current.get()?.plane.get()).toBe(TOP);
   });
 
   it('prefers a plane from the Browser to a selected face (M14)', () => {
@@ -421,7 +422,7 @@ describe('the entry tool sketch', () => {
 
     manager.activate('sketch');
 
-    expect(sketches.current.get()?.plane).toBe(YZ);
+    expect(sketches.current.get()?.plane.get()).toBe(YZ);
   });
 
   it('with an open feature dialog only finishes', () => {

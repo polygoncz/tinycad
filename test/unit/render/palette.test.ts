@@ -14,6 +14,7 @@ const KEYS = [
   'hover',
   'selection',
   'preview',
+  'bodyPreview',
   'construction',
   'sketch',
   'sketchDefined',
@@ -21,6 +22,45 @@ const KEYS = [
   'grid',
   'viewCube',
 ] as const satisfies readonly (keyof ScenePalette)[];
+
+/** Relative luminance of 0xRRGGBB (WCAG 2). */
+function luminance(color: number): number {
+  const channel = (c: number): number => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return (
+    0.2126 * channel((color >> 16) & 0xff) +
+    0.7152 * channel((color >> 8) & 0xff) +
+    0.0722 * channel(color & 0xff)
+  );
+}
+
+/** WCAG 2 contrast ratio of two colours, 1 to 21. */
+function contrast(a: number, b: number): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number]; // two values
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** Euclidean distance of two colours in RGB, 0 to 441. */
+function distance(a: number, b: number): number {
+  const d = (shift: number): number => ((a >> shift) & 0xff) - ((b >> shift) & 0xff);
+  return Math.hypot(d(16), d(8), d(0));
+}
+
+/** Hue in degrees, 0 to 360. */
+function hue(color: number): number {
+  const [r, g, b] = [16, 8, 0].map((shift) => ((color >> shift) & 0xff) / 255) as [
+    number,
+    number,
+    number,
+  ]; // three channels
+  const max = Math.max(r, g, b);
+  const c = max - Math.min(r, g, b);
+  if (c === 0) return 0;
+  const h = max === r ? ((g - b) / c + 6) % 6 : max === g ? (b - r) / c + 2 : (r - g) / c + 4;
+  return h * 60;
+}
 
 const isColor = (value: unknown): boolean =>
   typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 0xffffff;
@@ -65,6 +105,21 @@ describe.each([
     }
     expect(palette.hover).not.toBe(palette.selection);
   });
+
+  // M21 Ú8: the preview of the edited feature is amber, so it reads as "the result, not yet the
+  // model" next to the bodies, the selection and the hover; the tool overlay keeps `preview`.
+  it('draws the body preview in amber, apart from the bodies, the selection, the hover and the tools', () => {
+    const amber = palette.bodyPreview;
+    expect(hue(amber)).toBeGreaterThanOrEqual(35);
+    expect(hue(amber)).toBeLessThanOrEqual(55);
+    for (const key of ['face', 'selection', 'hover', 'preview'] as const) {
+      expect(distance(amber, palette[key]), key).toBeGreaterThanOrEqual(50);
+    }
+  });
+
+  it('gives the body preview a contrast of at least 3:1 to the background (WCAG non-text)', () => {
+    expect(contrast(palette.bodyPreview, palette.background)).toBeGreaterThanOrEqual(3);
+  });
 });
 
 describe('parseHexColor', () => {
@@ -100,6 +155,7 @@ describe('palettes', () => {
       hover: 0xfb923c,
       selection: 0xea580c,
       preview: 0x2563eb,
+      bodyPreview: 0xb07d0a,
       construction: 0x6b7280,
       sketch: 0x0a84ff,
       sketchDefined: 0x1c1c1e,
@@ -117,6 +173,7 @@ describe('palettes', () => {
       selection: 0xff9f0a,
       hover: 0xffc266,
       preview: 0x0a84ff,
+      bodyPreview: 0xffd60a,
       construction: 0x6b7280,
       sketch: 0x409cff,
       sketchDefined: 0xf2f2f7,

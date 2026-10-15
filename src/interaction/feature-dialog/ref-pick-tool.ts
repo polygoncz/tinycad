@@ -4,7 +4,8 @@
 // registered tool: the layer creates it for the session and drops it again (M20, A4.3).
 // The focused param decides what can be picked, what is hovered and what a click writes: the
 // table of reference kinds (ref-kinds.ts, M20). A topo param takes a face or an edge by its name
-// from the last regeneration (M14, R103).
+// from the last regeneration (M14, R103), in its pickable bodies (M21, ADR 0025: the input of the
+// edited feature, so the index of a hit and its name belong to the same state).
 
 import type { Disposable, Unsubscribe } from '@/core';
 import type { DocumentReader, RefParamSpec } from '@/document';
@@ -58,8 +59,12 @@ export function createRefPick(
     if (hit !== null) pickInto(hit);
   }
 
-  /** pick with the filter of the focused param; an empty filter does not ask the viewport. */
+  /**
+   * pick with the filter of the focused param; an empty filter does not ask the viewport, and
+   * neither does the in-between state (inputPending): a hit there is ignored, hover and click.
+   */
   function pickAt(x: number, y: number): PickResult | null {
+    if (inputPending()) return null;
     const focused = focusedParam();
     const filter = focused === null ? NOTHING : focused.behavior.pickFilter(focused.spec);
     return filter.length === 0 ? null : viewport.pick(x, y, filter);
@@ -76,6 +81,16 @@ export function createRefPick(
     // focusRefParam takes reference params only; the check narrows the type.
     if (name === null || spec === undefined || !isRefParamSpec(spec)) return null;
     return { name, spec, behavior: behaviorOf(spec) };
+  }
+
+  /**
+   * The in-between state of ADR 0025 (point 4): the pickable bodies are not the input of the
+   * session's feature (the final state, or the input of another feature) until the regeneration
+   * with the moved bar publishes it, so the index of a hit may not match the name. Without a port
+   * there is no snapshot and no names, so nothing to wait for.
+   */
+  function inputPending(): boolean {
+    return regen !== undefined && regen.state.get().pick.feature !== session.featureId;
   }
 
   /** What turning a hit into a reference reads, as it is now (the last snapshot). */
@@ -96,8 +111,13 @@ export function createRefPick(
     if (focused === null) return;
     const value = session.state.get().params[focused.name];
     // The filters already allow only the kinds the param takes.
-    const change = focused.behavior.fromHit(hit, value, hitContext());
+    const ctx = hitContext();
+    const change = focused.behavior.fromHit(hit, value, ctx);
     if (change !== null) session.setParam(focused.name, change.value);
+    // hovers = the hit is a reference of the kind, also one already in the value.
+    if (focused.behavior.pickEndsFocus && focused.behavior.hovers(hit, ctx)) {
+      session.focusRefParam(null);
+    }
   }
 
   return {

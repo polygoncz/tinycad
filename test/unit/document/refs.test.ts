@@ -9,6 +9,8 @@ import {
   parseBodyId,
   parsePlaneId,
   parseSketchId,
+  readPlaneRef,
+  samePlaneRef,
   readRefOf,
   sketchId,
 } from '@/document/refs';
@@ -254,5 +256,44 @@ describe('readRefOf (M14, one reading of references outside document)', () => {
     expect(topo).toEqual({ kind: 'topo', body: 'b/body', name: 'n' });
     expect(readRefOf(['plane', 'topo'], { kind: 'body', body: 'b/body' })).toBeUndefined();
     expectTypeOf(plane).toEqualTypeOf<PlaneRef | TopoRef | undefined>();
+  });
+});
+
+describe('readPlaneRef (M21, the plane of a planes param value)', () => {
+  it('reads the first item as a plane or a topo reference', () => {
+    const xy = { kind: 'plane', plane: 'origin/plane:xy' };
+    const face = { kind: 'topo', body: 'b/body', name: 'b/face:top' };
+    expect(readPlaneRef([xy, face])).toEqual(xy);
+    expect(readPlaneRef([face])).toEqual(face);
+    expectTypeOf(readPlaneRef([xy])).toEqualTypeOf<PlaneRef | TopoRef | undefined>();
+  });
+
+  it.each([
+    ['an empty value', []],
+    ['a value that is not an array', { kind: 'plane', plane: 'origin/plane:xy' }],
+    ['a first item of another kind', [{ kind: 'body', body: 'b/body' }]],
+    ['undefined', undefined],
+  ])('gives undefined for %s', (_, value) => {
+    expect(readPlaneRef(value)).toBeUndefined();
+  });
+});
+
+describe('samePlaneRef (M21, one comparison of plane references)', () => {
+  // Test ids are trusted.
+  const xy: PlaneRef = { kind: 'plane', plane: 'origin/plane:xy' as PlaneId };
+  const xz: PlaneRef = { kind: 'plane', plane: 'origin/plane:xz' as PlaneId };
+  const top: TopoRef = { kind: 'topo', body: bid('b/body'), name: 'b/face:top' as TopoName };
+
+  it('compares by value, not by identity', () => {
+    expect(samePlaneRef(xy, { ...xy })).toBe(true);
+    expect(samePlaneRef(top, { ...top })).toBe(true);
+  });
+
+  it('tells apart other planes, other faces, other bodies and other kinds', () => {
+    expect(samePlaneRef(xy, xz)).toBe(false);
+    expect(samePlaneRef(top, { ...top, name: 'b/face:bottom' as TopoName })).toBe(false);
+    expect(samePlaneRef(top, { ...top, body: bid('c/body') })).toBe(false);
+    expect(samePlaneRef(xy, top)).toBe(false);
+    expect(samePlaneRef(top, xy)).toBe(false);
   });
 });

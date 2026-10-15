@@ -8,7 +8,12 @@
 // M19.2 D4: the values of the dimensions are shown rounded (formatDimension, the model stays
 // exact) and the switch of snapping to the grid belongs to the sketcher (session.sketches), so it
 // survives closing the sketch. The panel starts below the view cube (D8).
-import { nextTick, useTemplateRef, watch } from 'vue';
+// M21 (Q076): the field "Plane" shows SketchState.planeField; a click is SketchSession.pickPlane
+// (refPick covers the tools of the sketcher and a plane is picked in the view or the Browser),
+// Esc on the field cancelPlanePick. A picked plane ends picking too (interaction). A sketch whose
+// plane could not be computed (Q079) opens on XY with SketchState.planeMissing: an alert above
+// the field asks for a new plane.
+import { computed, nextTick, useId, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { SketchConstraintRow, SketchSession } from '@/sketcher';
 import { useObservable } from '../composables/use-observable';
@@ -24,6 +29,18 @@ const { t } = useI18n();
 const session = useSession();
 const state = useObservable(props.sketch.state);
 const gridSnap = useObservable(session.sketches.gridSnap);
+const planeLabelId = useId();
+const planeButtonId = useId();
+const planeField = computed(() => state.value.planeField);
+const planeText = computed(() => {
+  const text = planeField.value?.text ?? null;
+  return text === null ? t('field.noRef') : t(text.key, text.params);
+});
+
+/** Esc on the field while picking ends picking (in the view refPick takes Esc itself). */
+function onPlaneKey(e: KeyboardEvent): void {
+  if (e.key === 'Escape' && props.sketch.cancelPlanePick()) e.preventDefault();
+}
 
 function toggleGridSnap(): void {
   session.sketches.setGridSnap(!gridSnap.value);
@@ -84,6 +101,25 @@ watch(
       {{ t(state.statusKey, state.statusParams) }}
     </p>
     <p v-if="state.message !== null" class="message" role="alert">{{ t(state.message.key) }}</p>
+
+    <p v-if="state.planeMissing" class="message" role="alert">
+      {{ t('sketch.planeMissing') }}
+    </p>
+    <div v-if="planeField !== null" class="plane">
+      <span :id="planeLabelId" class="plane-label">{{ t(planeField.label) }}</span>
+      <button
+        :id="planeButtonId"
+        type="button"
+        class="plane-ref"
+        :class="{ active: planeField.active, invalid: planeField.invalid }"
+        :aria-labelledby="`${planeLabelId} ${planeButtonId}`"
+        :aria-pressed="planeField.active"
+        @click="sketch.pickPlane()"
+        @keydown="onPlaneKey"
+      >
+        {{ planeText }}
+      </button>
+    </div>
 
     <div class="options">
       <button
@@ -207,6 +243,38 @@ watch(
 .message {
   color: var(--danger);
   font-size: var(--font-size-small);
+}
+.plane {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 14px 6px;
+}
+.plane-label {
+  color: var(--text-secondary);
+}
+.plane-ref {
+  flex: 1;
+  min-width: 0;
+  height: var(--field-height);
+  padding: 0 8px;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: var(--radius-control);
+  background: var(--field-bg);
+  border: 0.5px solid var(--field-border);
+  color: var(--text-primary);
+  font: inherit;
+}
+.plane-ref.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  color: var(--accent);
+}
+.plane-ref.invalid {
+  border-color: var(--danger);
 }
 .options {
   margin: 4px 14px 6px;

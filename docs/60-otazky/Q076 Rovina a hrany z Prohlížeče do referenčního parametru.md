@@ -1,14 +1,14 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[10-interakce]]"
 decide_by: "[[M21-vstupni-stav-editovane-featury]]"
 proposal: "planes přestane být focusable, dokud ho nic nebere; topo z Prohlížeče nebrat (Prohlížeč hrany a plochy nemá)"
-decision: ""
+decision: "Hned planes není focusable; plná volba roviny skici (roviny počátku, rovinné plochy, Prohlížeč) v M21 nad vstupním stavem; topo z Prohlížeče ne (Pavel 2026-10-15)"
 tags:
   - otazka
 created: 2026-10-14
-updated: 2026-10-14
+updated: 2026-10-15
 ---
 # Q076 Rovina a hrany z Prohlížeče do referenčního parametru
 
@@ -33,5 +33,7 @@ Je tu i teoretický případ: hover nad oblastí editované skici ji zvýrazní,
 Návrh: A hned (jedna hodnota v tabulce), B případně v [[M21-vstupni-stav-editovane-featury|M21]] spolu s Q075, protože rovinu je potřeba brát ze vstupního stavu. `topo` z Prohlížeče nebrat.
 
 ## Rozhodnutí
+
+**2026-10-15, Pavel:** varianta A hned (`planes` přestane být `focusable`), varianta B (pickování roviny skici z rovin počátku, rovinných ploch a Prohlížeče) v [[M21-vstupni-stav-editovane-featury|M21]] nad vstupním stavem spolu s [[Q075 Vstupní stav editované featury|Q075]]. `topo` z Prohlížeče nebrat.
 
 _(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR.)_

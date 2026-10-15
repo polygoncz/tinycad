@@ -75,6 +75,20 @@ const REV: FeatureSchema = {
   validate: () => [],
 };
 
+// The plane of a sketch (M21): one plane, the Browser rows of the origin planes go into it.
+const PLANE_PARAMS: ParamSchema = {
+  plane: { kind: 'planes', label: 'plane', min: 1, max: 1 },
+  regions: { kind: 'region', label: 'regions' },
+};
+const PLN: FeatureSchema = {
+  type: 'pln',
+  version: 1,
+  label: 'pln.label',
+  params: PLANE_PARAMS,
+  defaults: () => ({ plane: [{ kind: 'plane', plane: ORIGIN_PLANE_IDS.xy }], regions: [] }),
+  validate: () => [],
+};
+
 const SKETCHES: readonly RegenSketch[] = [
   { sketch: sketchId(fid('s1')), feature: fid('s1'), regions: [] },
   { sketch: sketchId(fid('s2')), feature: fid('s2'), regions: [] },
@@ -85,6 +99,7 @@ function setup(opts: { readOnly?: boolean; sketchEdit?: (feature: FeatureId) => 
   schemas.register(BOOL);
   schemas.register(TOPO);
   schemas.register(REV);
+  schemas.register(PLN);
   const ops = anOpsSession({
     schemas,
     features: [
@@ -265,6 +280,18 @@ describe('BrowserModel.hidden', () => {
     expect(s.doc.bodyMeta(B1)).toEqual({ hidden: true });
   });
 
+  it('includes a hidden body that only the pickable input has (M21, consumed by the feature)', () => {
+    const s = setup();
+    s.doc.setBodyMeta(B3, { hidden: true });
+    s.regen.publish(new Map(), BODIES, [], new Map(), {
+      feature: fid('f2'),
+      bodies: [...BODIES, { body: B3, feature: fid('f3') }],
+    });
+    expect(new Set(s.browser.hidden.get())).toEqual(new Set([B3]));
+    // The rows stay on the final state.
+    expect(s.browser.bodies.get().map((r) => r.body)).toEqual([B1, B2]);
+  });
+
   it('emits hidden before bodies', () => {
     const s = setup();
     s.regen.publish(new Map(), BODIES);
@@ -377,6 +404,16 @@ describe('BrowserModel colors (M15)', () => {
     expect(s.browser.colors.get().size).toBe(0);
     // The metadata stay in the document.
     expect(s.doc.bodyMeta(B1)).toEqual({ color: '#112233' });
+  });
+
+  it('colors include a body that only the pickable input has (M21)', () => {
+    const s = setup();
+    s.doc.setBodyMeta(B3, { color: '#445566' });
+    s.regen.publish(new Map(), BODIES, [], new Map(), {
+      feature: fid('f2'),
+      bodies: [{ body: B3, feature: fid('f3') }],
+    });
+    expect([...s.browser.colors.get()]).toEqual([[B3, '#445566']]);
   });
 
   it('without a change of the content no new map and no new rows are published', () => {
@@ -772,6 +809,33 @@ describe('BrowserModel planes (M12)', () => {
     ]);
     s.browser.selectPlane(yz, { additive: true });
     expect(s.selection.items.get()).toEqual([{ kind: 'plane', plane: xy }]);
+  });
+
+  it('selectPlane with an active planes param replaces the plane, not the selection (M21)', () => {
+    const s = setup();
+    s.selection.set([{ kind: 'body', body: B1 }]);
+    const session = s.editor.create('pln');
+    session.focusRefParam('plane');
+    s.browser.selectPlane(xz);
+    expect(session.state.get().params['plane']).toEqual([{ kind: 'plane', plane: xz }]);
+    // A picked plane ends the focus (spec 11, "Pole Rovina").
+    expect(session.state.get().activeRefParam).toBeNull();
+    const value = session.state.get().params['plane'];
+    // The same plane again changes nothing but ends the focus too.
+    session.focusRefParam('plane');
+    s.browser.selectPlane(xz, { additive: true });
+    expect(session.state.get().params['plane']).toBe(value);
+    expect(session.state.get().activeRefParam).toBeNull();
+    expect(s.selection.items.get()).toEqual([{ kind: 'body', body: B1 }]);
+  });
+
+  it('selectPlane with an active param of another kind goes to the selection', () => {
+    const s = setup();
+    const session = s.editor.create('pln');
+    session.focusRefParam('regions');
+    s.browser.selectPlane(xz);
+    expect(s.selection.items.get()).toEqual([{ kind: 'plane', plane: xz }]);
+    expect(session.state.get().params['plane']).toEqual([{ kind: 'plane', plane: xy }]);
   });
 
   it('marks the selected planes and keeps the other rows as the same objects', () => {

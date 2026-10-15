@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ORIGIN_AXIS_IDS, parseSketchId, sketchId } from '@/document';
+import { ORIGIN_AXIS_IDS, ORIGIN_PLANE_IDS, parseSketchId, sketchId } from '@/document';
 import type {
   BodyId,
   FeatureId,
@@ -174,8 +174,8 @@ describe('pickFilter (spec 10, "Referenční parametr dialogu")', () => {
     expect(behaviorOf(AXIS).pickFilter(AXIS)).toEqual(['sketchEntity']);
   });
 
-  it('planes: nothing, a known gap (M12, M20)', () => {
-    expect(behaviorOf(PLANES).pickFilter(PLANES)).toEqual([]);
+  it('planes: faces and sketch entities, the planar faces and plane drawings (M21, Q076)', () => {
+    expect([...behaviorOf(PLANES).pickFilter(PLANES)].sort()).toEqual(['face', 'sketchEntity']);
   });
 });
 
@@ -229,8 +229,34 @@ describe('fromHit', () => {
     expect(behaviorOf(AXIS).fromHit(entityHit(NON_ARTIFACT_DRAWING, 'ab'), null, ctx)).toBeNull();
   });
 
-  it('planes: takes nothing', () => {
-    expect(behaviorOf(PLANES).fromHit(faceAt(BOX, 5), [], context())).toBeNull();
+  it('planes: an origin plane drawing is a PlaneRef that replaces the only item (M21)', () => {
+    const ctx = context();
+    const xy = [{ kind: 'plane', plane: ORIGIN_PLANE_IDS.xy }];
+    expect(behaviorOf(PLANES).fromHit(entityHit(ORIGIN_PLANE_IDS.xz, 'l1'), xy, ctx)).toEqual({
+      value: [{ kind: 'plane', plane: ORIGIN_PLANE_IDS.xz }],
+    });
+    // The same plane again changes nothing.
+    expect(behaviorOf(PLANES).fromHit(entityHit(ORIGIN_PLANE_IDS.xy, 'l1'), xy, ctx)).toBeNull();
+  });
+
+  it('planes: a named face is a TopoRef that replaces the only item (M21)', () => {
+    const ctx = context();
+    const xy = [{ kind: 'plane', plane: ORIGIN_PLANE_IDS.xy }];
+    const change = behaviorOf(PLANES).fromHit(faceAt(BOX, 6), xy, ctx);
+    expect(change).toEqual({ value: [{ kind: 'topo', body: BOX, name: TOP }] });
+    expect(Object.isFrozen(change?.value)).toBe(true);
+    expect(behaviorOf(PLANES).fromHit(faceAt(BOX, 5), change?.value, ctx)).toBeNull();
+  });
+
+  it('planes: a face without a name, a sketch, an axis or the edited sketch are not taken', () => {
+    const ctx = context();
+    expect(behaviorOf(PLANES).fromHit(faceAt(BOX, 9), [], ctx)).toBeNull();
+    expect(
+      behaviorOf(PLANES).fromHit(faceAt(BOX, 5), [], { ...ctx, snapshot: undefined }),
+    ).toBeNull();
+    expect(behaviorOf(PLANES).fromHit(entityHit(S1_DRAWING, 'ab'), [], ctx)).toBeNull();
+    expect(behaviorOf(PLANES).fromHit(entityHit(ORIGIN_AXIS_IDS.z, 'axis'), [], ctx)).toBeNull();
+    expect(behaviorOf(PLANES).fromHit(entityHit(NON_ARTIFACT_DRAWING, 'ab'), [], ctx)).toBeNull();
   });
 });
 
@@ -244,6 +270,15 @@ describe('hovers', () => {
     expect(behaviorOf(BODIES).hovers(edgeAt(OTHER, 9), ctx)).toBe(true);
     // Not taken by a click, yet hovered as before M20.
     expect(behaviorOf(REGIONS).hovers(regionHit(NON_ARTIFACT_DRAWING, 'r1'), ctx)).toBe(true);
+  });
+
+  it('planes hovers only planes and named faces (M21)', () => {
+    const ctx = context();
+    expect(behaviorOf(PLANES).hovers(entityHit(ORIGIN_PLANE_IDS.yz, 'l1'), ctx)).toBe(true);
+    expect(behaviorOf(PLANES).hovers(faceAt(BOX, 5), ctx)).toBe(true);
+    expect(behaviorOf(PLANES).hovers(faceAt(BOX, 9), ctx)).toBe(false);
+    expect(behaviorOf(PLANES).hovers(entityHit(S1_DRAWING, 'ab'), ctx)).toBe(false);
+    expect(behaviorOf(PLANES).hovers(entityHit(NON_ARTIFACT_DRAWING, 'ab'), ctx)).toBe(false);
   });
 });
 
@@ -300,19 +335,25 @@ describe('browserAccepts, focusable, autoFocus', () => {
 
   it.each([
     [BODIES, ['body']],
-    // Known gap (M20): the Browser takes nothing into topo and planes.
+    // Known gap (M20): the Browser takes nothing into topo.
     [EDGES, []],
     [REGIONS, ['region']],
-    [PLANES, []],
+    [PLANES, ['plane']],
     [AXIS, ['axis']],
   ] as const)('%o takes the rows %j', (spec, rows) => {
     expect(accepted(spec)).toEqual(rows);
   });
 
-  it('every kind is focusable; all but planes are focused on create (M12)', () => {
+  it('every kind is focusable; every kind but planes is focused on create (M12, M21)', () => {
     for (const spec of [BODIES, EDGES, REGIONS, PLANES, AXIS]) {
       expect(behaviorOf(spec).focusable).toBe(true);
       expect(behaviorOf(spec).autoFocus).toBe(spec.kind !== 'planes');
+    }
+  });
+
+  it('only a picked plane ends the focus (M21, spec 11)', () => {
+    for (const spec of [BODIES, EDGES, REGIONS, PLANES, AXIS]) {
+      expect(behaviorOf(spec).pickEndsFocus).toBe(spec.kind === 'planes');
     }
   });
 });
@@ -345,16 +386,44 @@ describe('chips, refText, preselect', () => {
     }
   });
 
-  it('only axis has a text', () => {
+  it('only axis and planes have a text', () => {
     const { doc } = context();
     expect(behaviorOf(AXIS).refText({ kind: 'axis', axis: ORIGIN_AXIS_IDS.z }, doc)).toEqual({
       key: 'origin.axis.z',
       params: {},
     });
     expect(behaviorOf(AXIS).refText(null, doc)).toBeNull();
-    for (const spec of [BODIES, EDGES, REGIONS, PLANES]) {
+    for (const spec of [BODIES, EDGES, REGIONS]) {
       expect(behaviorOf(spec).refText([], doc)).toBeNull();
     }
+  });
+
+  it('planes: the label of an origin plane, the face of a body, a missing reference (M21)', () => {
+    const rect = rectangleData();
+    const box = aFeature({ id: 'b1', type: 'box', name: 'Box 1' });
+    const { doc } = anOpsSession({
+      features: [box, aFeature({ id: 's1', type: 'sketch', params: rect })],
+    });
+    const text = (value: unknown) => behaviorOf(PLANES).refText(value, doc);
+    expect(text([{ kind: 'plane', plane: ORIGIN_PLANE_IDS.xz }])).toEqual({
+      key: 'origin.plane.xz',
+      params: {},
+    });
+    expect(text([{ kind: 'topo', body: BOX, name: TOP }])).toEqual({
+      key: 'field.planeFace',
+      params: { body: 'Box 1' },
+    });
+    expect(text([{ kind: 'topo', body: OTHER, name: TOP }])).toEqual({
+      key: 'field.missingRef',
+      params: {},
+    });
+    expect(text([{ kind: 'plane', plane: 'f1/plane:p' }])).toEqual({
+      key: 'field.missingRef',
+      params: {},
+    });
+    expect(text([{ kind: 'x' }])).toEqual({ key: 'field.missingRef', params: {} });
+    expect(text([])).toBeNull();
+    expect(text(undefined)).toBeNull();
   });
 
   it('region preselects the only region of the last sketch; the other kinds nothing', () => {
@@ -369,5 +438,64 @@ describe('chips, refText, preselect', () => {
     }
     regen.publish(new Map(), [], [{ sketch: S1_DRAWING, feature: S1, regions: ['r1', 'r2'] }]);
     expect(behaviorOf(REGIONS).preselect(regen.state.get())).toBeNull();
+  });
+});
+
+// --- the pickable bodies (M21, ADR 0025): names of hits and highlights come from snapshot.pick ---
+
+describe('topo against the pickable bodies (M21)', () => {
+  const FILLET = 'f9' as FeatureId;
+  const ROUND = 'b1/face:round' as TopoName;
+
+  /** The final state names edge 3 by ROUND's edge; the input of FILLET names it TOP_FRONT. */
+  function inputContext(): RefHitContext {
+    const { doc } = context();
+    const regen = new FakeRegenStatus();
+    regen.publish(
+      new Map(),
+      [
+        {
+          body: BOX,
+          feature: 'b1' as FeatureId,
+          names: aTopoNames({ edges: { [`${ROUND}|edge`]: [3, 8] } }),
+        },
+      ],
+      [],
+      new Map(),
+      {
+        feature: FILLET,
+        bodies: [
+          {
+            body: BOX,
+            feature: 'b1' as FeatureId,
+            names: aTopoNames({ edges: { [TOP_FRONT]: [3] } }),
+          },
+        ],
+      },
+    );
+    return { doc, snapshot: regen.state.get() };
+  }
+
+  it('a hit on an edge takes the name of the input', () => {
+    const ctx = inputContext();
+    expect(behaviorOf(EDGES).fromHit(edgeAt(BOX, 3), [], ctx)).toEqual({
+      value: [{ kind: 'topo', body: BOX, name: TOP_FRONT }],
+    });
+  });
+
+  it('an edge named only in the final state is neither taken nor hovered', () => {
+    const ctx = inputContext();
+    expect(behaviorOf(EDGES).fromHit(edgeAt(BOX, 8), [], ctx)).toBeNull();
+    expect(behaviorOf(EDGES).hovers(edgeAt(BOX, 8), ctx)).toBe(false);
+  });
+
+  it('highlights a selected edge by the input, also one the final state does not have', () => {
+    const { snapshot } = inputContext();
+    const edges = [{ kind: 'topo', body: BOX, name: TOP_FRONT }];
+    expect(behaviorOf(EDGES).highlightTargets(edges, EDGES, snapshot)).toEqual([
+      { kind: 'edge', body: BOX, edgeIndex: 3 },
+    ]);
+    const final = [{ kind: 'topo', body: BOX, name: `${ROUND}|edge` }];
+    expect(behaviorOf(EDGES).highlightTargets(final, EDGES, snapshot)).toEqual([]);
   });
 });

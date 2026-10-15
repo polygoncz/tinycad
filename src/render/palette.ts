@@ -13,8 +13,13 @@ export interface ScenePalette {
    * CSS: the scene selection and the accent of the controls are two different roles.
    */
   readonly selection: number;
-  /** Overlay of tools. */
+  /** Overlay of tools (the rubber band of the sketch tools: blue like the sketch). */
   readonly preview: number;
+  /**
+   * The preview of the edited feature (M21, spec 09 "Náhled"): amber, apart from the bodies, the
+   * selection, the hover and the tool overlay, with a contrast of at least 3:1 to the background.
+   */
+  readonly bodyPreview: number;
   readonly construction: number;
   /** Under-defined sketch (M12). */
   readonly sketch: number;
@@ -41,6 +46,8 @@ export const LIGHT_PALETTE: ScenePalette = freezePalette({
   hover: 0xfb923c,
   selection: 0xea580c,
   preview: 0x2563eb,
+  // A dark amber: a light amber (#ffcc00) has a contrast of 1.5:1 to the light background.
+  bodyPreview: 0xb07d0a,
   construction: 0x6b7280,
   sketch: 0x0a84ff,
   sketchDefined: 0x1c1c1e,
@@ -57,6 +64,8 @@ export const DARK_PALETTE: ScenePalette = freezePalette({
   hover: 0xffc266,
   selection: 0xff9f0a,
   preview: 0x0a84ff,
+  // The system yellow of the mockup's colour set; yellower than the orange selection and hover.
+  bodyPreview: 0xffd60a,
   construction: 0x6b7280,
   sketch: 0x409cff,
   sketchDefined: 0xf2f2f7,

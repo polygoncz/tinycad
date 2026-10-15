@@ -4,11 +4,12 @@
 
 import { ObservableValue, assert } from '@/core';
 import type { Observable, Plane } from '@/core';
-import { readRefOf } from '@/document';
+import { ORIGIN_PLANES, ORIGIN_PLANE_IDS, samePlaneRef } from '@/document';
 import type { FeatureId, PlaneRef, TopoRef } from '@/document';
 import { SKETCH_FEATURE_TYPE, SKETCH_PARAM } from '@/sketch';
 import type { ConstraintSolver } from '@/sketch';
 import type { FeatureEditSession, FeatureEditor, Mode, ViewportPort } from '@/interaction';
+import { frozenRef, planeRefOf } from './plane-ref';
 import { openSketchSession } from './sketch-session';
 import type { SketchSession } from './sketch-session';
 
@@ -23,7 +24,12 @@ export interface SketchEditor {
   create(plane: PlaneRef | TopoRef): SketchSession;
   /** The plane of the reference (deps.resolvePlane); the entry tool asks it about a selected face (M14). */
   planeOf(ref: PlaneRef | TopoRef): Plane | undefined;
-  /** Editing an existing sketch (FeatureEditor.edit). */
+  /**
+   * Editing an existing sketch (FeatureEditor.edit) on the plane of its artifact
+   * (deps.planeOfSketch); only without one on the plane of its reference (M21, ADR 0025). Neither
+   * (a face gone from the input of the sketch, Q079): on the origin plane XY with
+   * SketchState.planeMissing and picking the plane at once (pickPlane).
+   */
   edit(featureId: FeatureId): SketchSession;
   /**
    * New points of the drawing tools snap to the grid (M19.2 D4); true by default. The state of
@@ -44,14 +50,28 @@ export interface SketchEditorDeps {
   /** app: planeOfRef over the last regeneration state (M14: origin planes and planar faces). */
   readonly resolvePlane: (ref: PlaneRef | TopoRef) => Plane | undefined;
   /**
+   * The plane of the sketch artifact of the feature in the last state (M21, ADR 0025): the plane
+   * the builder computed from the input of the sketch, so a sketch on a face opens also after a
+   * later Transform or a Boolean that consumes the body (R108). undefined without an artifact (a
+   * sketch in error); edit then resolves the reference.
+   */
+  readonly planeOfSketch: (featureId: FeatureId) => Plane | undefined;
+  /**
    * The current step of the grid in mm (M19.2 D4); the tools read it on every move and click, so
    * the snap follows the grid drawn on the screen. Default () => 1.
    */
   readonly gridStep?: () => number;
 }
 
+/** The plane a sketch without a plane opens on (Q079): the origin plane XY. */
+const ORIGIN_XY: Plane = (() => {
+  const xy = ORIGIN_PLANES.find((p) => p.id === ORIGIN_PLANE_IDS.xy);
+  assert(xy !== undefined, 'ORIGIN_PLANES has no XY plane');
+  return xy.plane;
+})();
+
 export function createSketchEditor(deps: SketchEditorDeps): SketchEditor {
-  const { features, solver, viewport, resolvePlane } = deps;
+  const { features, solver, viewport, resolvePlane, planeOfSketch } = deps;
   const current = new ObservableValue<SketchSession | null>(null);
   const mode = new ObservableValue<Mode>('model');
   const gridSnap = new ObservableValue(true);
@@ -62,10 +82,12 @@ export function createSketchEditor(deps: SketchEditorDeps): SketchEditor {
   }
 
   /** Opens the session over the feature session; current first, then the mode. */
-  function open(edit: FeatureEditSession, plane: Plane): SketchSession {
+  function open(edit: FeatureEditSession, plane: Plane, planeMissing: boolean): SketchSession {
     const session = openSketchSession({
       edit,
       plane,
+      planeMissing,
+      resolvePlane,
       solver,
       viewport,
       // The mode goes back even if a subscriber of current throws; its error goes on after.
@@ -102,10 +124,10 @@ export function createSketchEditor(deps: SketchEditorDeps): SketchEditor {
       const edit = features.create(SKETCH_FEATURE_TYPE);
       return orCancel(edit, () => {
         const current = planeRefOf(edit.state.get().params);
-        if (current === undefined || !sameRef(current, ref)) {
+        if (current === undefined || !samePlaneRef(current, ref)) {
           edit.setParam(SKETCH_PARAM.plane, Object.freeze([frozenRef(ref)]));
         }
-        return open(edit, plane);
+        return open(edit, plane, false);
       });
     },
     planeOf(ref) {
@@ -120,9 +142,13 @@ export function createSketchEditor(deps: SketchEditorDeps): SketchEditor {
           `edit: feature '${featureId}' is a '${edit.schema.type}', not a sketch`,
         );
         const ref = planeRefOf(edit.state.get().params);
-        const plane = ref === undefined ? undefined : resolvePlane(ref);
-        assert(plane !== undefined, `edit: the plane of sketch '${featureId}' cannot be resolved`);
-        return open(edit, plane);
+        const plane =
+          planeOfSketch(featureId) ?? (ref === undefined ? undefined : resolvePlane(ref));
+        if (plane !== undefined) return open(edit, plane, false);
+        // Q079 A: the sketch opens on XY, so its entities can be moved to a new plane.
+        const session = open(edit, ORIGIN_XY, true);
+        session.pickPlane();
+        return session;
       });
     },
     gridSnap: gridSnap.asObservable(),
@@ -133,27 +159,4 @@ export function createSketchEditor(deps: SketchEditorDeps): SketchEditor {
       return gridStep();
     },
   };
-}
-
-/**
- * The first item of the param SKETCH_PARAM.plane as a PlaneRef or a TopoRef (M14), or undefined
- * when it is neither.
- */
-function planeRefOf(params: Readonly<Record<string, unknown>>): PlaneRef | TopoRef | undefined {
-  const value = params[SKETCH_PARAM.plane];
-  if (!Array.isArray(value)) return undefined;
-  const items: readonly unknown[] = value;
-  return readRefOf(['plane', 'topo'], items[0]);
-}
-
-function sameRef(a: PlaneRef | TopoRef, b: PlaneRef | TopoRef): boolean {
-  if (a.kind === 'plane') return b.kind === 'plane' && a.plane === b.plane;
-  return b.kind === 'topo' && a.body === b.body && a.name === b.name;
-}
-
-/** A frozen copy with only the fields of its kind, never shared with the caller. */
-function frozenRef(ref: PlaneRef | TopoRef): PlaneRef | TopoRef {
-  return ref.kind === 'plane'
-    ? Object.freeze({ kind: 'plane', plane: ref.plane })
-    : Object.freeze({ kind: 'topo', body: ref.body, name: ref.name });
 }

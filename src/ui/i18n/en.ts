@@ -86,6 +86,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'field.noRef': 'Not selected',
   'field.missingRef': 'Missing reference',
   'field.sketchLine': 'Line of {sketch}',
+  'field.planeFace': 'Face of {body}',
 
   // App: switching documents.
   'app.opening': 'Opening the document…',
@@ -165,6 +166,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'sketch.conflict': 'The constraint conflicts with others',
   'sketch.redundant': 'The constraint is redundant',
   'sketch.solverFailed': 'The sketch could not be solved',
+  'sketch.planeMissing': 'The sketch plane is missing, pick a new one',
   'sketchPanel.constraints': 'Constraints',
   'sketchPanel.remove': 'Remove {name}',
   'sketchPanel.gridSnap': 'Snap to grid',

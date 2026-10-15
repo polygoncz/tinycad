@@ -59,7 +59,9 @@ export function mirrorSet<K>(
 /**
  * The view state of the browser in the viewport: hidden bodies, body colours, visible origin
  * planes and axes. reapply applies hiding and colours again, which a sync of new bodies needs;
- * the drawings of planes and axes stay in the view across syncs.
+ * the drawings of planes and axes stay in the view across syncs. The viewport applies hiding and
+ * colours by BodyId to the main layer and the preview alike (spec 09, M21), so one reapply after
+ * both syncs covers the preview too.
  */
 export function bindBrowserView(
   browser: {

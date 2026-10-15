@@ -18,7 +18,7 @@ milestones:
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-14
+updated: 2026-10-15
 ---
 # 12 – Skicář
 
@@ -162,7 +162,7 @@ Počáteční roviny jsou [[Artefakt|artefakty]] vyhrazeného vlastníka `origin
 
 Osa y roviny = `normal × xDir` vyjde u všech tří +Y, +Z, +Z – skica na přední a pravé rovině má „nahoru“ osu Z jako v Onshape. Osy počátku `origin/axis:x|y|z` přibyly s Revolve v M13 jako artefakty téhož vlastníka ([[03-dokument#Počáteční geometrie (M12)]], [[07-regenerace#Princip]]).
 
-**Skica na rovinné ploše tělesa** (M14, [[08-topologicke-pojmenovani#Reference ve featurách]], [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R106]]): `plane` může být `TopoRef` na plochu (`<box>/face:top`). `BuildContext.resolvePlanes` najde plochu podle jména (víc ploch → první a varování, nerovinná → `UNRESOLVED_REFERENCE`) a rámec spočítá čistá funkce `sketchPlaneOfFace({ origin, normal })` z `regen`: `normal` = normála plochy ven z tělesa, počátek = průmět počátku světa do roviny plochy, `xDir` = jednotkový průmět +X do roviny, a když `|normal · X| ≥ 0,9`, průmět +Y. Pro plochy rovnoběžné s počátečními rovinami tak vyjde stejný rámec jako u nich (horní stěna kvádru = XY posunutá do výšky stěny, přední = XZ…), nezávisle na parametrizaci plochy v OCCT. Skica se s plochou stěhuje: vyšší kvádr → rovina skici výš, entity skici v rovině zůstávají. Zanikne-li plocha, skica je červená a k úpravě ji otevřít nejde (výjimka v `SketchEditor.edit` jako u neznámé roviny, [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R108]] ⚠).
+**Skica na rovinné ploše tělesa** (M14, [[08-topologicke-pojmenovani#Reference ve featurách]], [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R106]]): `plane` může být `TopoRef` na plochu (`<box>/face:top`). `BuildContext.resolvePlanes` najde plochu podle jména (víc ploch → první a varování, nerovinná → `UNRESOLVED_REFERENCE`) a rámec spočítá čistá funkce `sketchPlaneOfFace({ origin, normal })` z `regen`: `normal` = normála plochy ven z tělesa, počátek = průmět počátku světa do roviny plochy, `xDir` = jednotkový průmět +X do roviny, a když `|normal · X| ≥ 0,9`, průmět +Y. Pro plochy rovnoběžné s počátečními rovinami tak vyjde stejný rámec jako u nich (horní stěna kvádru = XY posunutá do výšky stěny, přední = XZ…), nezávisle na parametrizaci plochy v OCCT. Skica se s plochou stěhuje: vyšší kvádr → rovina skici výš, entity skici v rovině zůstávají. Zanikne-li plocha, skica je červená a skicář ji otevře na rovině XY s hláškou „Rovina skici chybí, vyberte novou“ (`SketchState.planeMissing`) a s aktivním výběrem roviny, aby šla přepojit ([[Q079 Skica se zaniklou rovinou|Q079]], [[M21-vstupni-stav-editovane-featury|M21]]). Totéž platí pro referenci, kterou nejde přečíst. Příznak zmizí, jakmile se parametr `plane` změní na spočitatelnou rovinu (i na XY). Zrušení výběru nechá skicu na XY s hláškou; „Hotovo“ uloží entity a vazby a ztracenou referenci roviny ponechá (skica zůstane v chybě).
 
 ## Oblasti (profily)
 
@@ -228,6 +228,8 @@ export interface ConstraintSolver {
 Editace skici zapisuje **`feature.setParams`** přes `FeatureEditSession.setParams({ entities, constraints })` ([[Q074 Operace skicáře v logu|Q074]]). Vlastní operace `sketch.*` ani `FeaturePlugin.ops` v M12 nevznikají ([[Rozhodnutí noční rychloakce#M12 – Skicář|R36]] ⚠). Celá editace skici (od vstupu do skicáře po „Hotovo“) je jedna transakce: nová skica = jeden záznam `batch[feature.add, feature.setParams]`, úprava = jeden `feature.setParams` (sousední `setParams` téže featury se sloučí). „Zrušit“ transakci zahodí. Undo uvnitř skicáře v M12 není (transakce je otevřená, [[Rozhodnutí noční rychloakce#M12 – Skicář|R44]] ⚠).
 
 ## Režim skicáře (sketcher)
+
+**Rovina** ([[0025-vstupni-stav-editovane-featury|ADR 0025]], [[M21-vstupni-stav-editovane-featury|M21]]): editovaná skica bere rovinu z vlastního artefaktu (`planeOfSketch` = `SketchArtifact.plane`, kterou builder spočítal ze vstupu skici), až bez artefaktu (skica v chybě) z reference přes `resolvePlane`. Pozdější Transformace ani Boolean ji tak neposune ani nezruší ([[Rozhodnutí noční rychloakce|R108]]). Rovinu jde změnit polem Rovina v panelu ([[11-ui#Komponenty]]): `SketchSession.plane` je `Observable<Plane>`, po změně parametru `plane` se přepočítá a překreslí kresba i kóty; fokus parametru po výběru roviny ruší `interaction` (`pickEndsFocus`). Panel ovládá výběr příkazy `pickPlane()` a `cancelPlanePick()` a čte `SketchState.planeField`. Rovina, kterou nejde spočítat (nerovinná plocha), se nepřevezme a chybu ukáže regenerace. Entity zůstávají ve 2D souřadnicích nové roviny.
 
 Kontrakt v [[10-interakce#Skicář]]. Shrnutí chování:
 

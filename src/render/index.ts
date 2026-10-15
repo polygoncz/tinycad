@@ -4,7 +4,7 @@
 export { createViewport, MESH_QUALITY } from './viewport';
 export { DARK_PALETTE, LIGHT_PALETTE } from './palette';
 export type { ScenePalette } from './palette';
-export type { HighlightLayer, OverlayLayer, Viewport } from './viewport';
+export type { HighlightLayer, OverlayLayer, PreviewLayer, Viewport } from './viewport';
 export type { BodyLayer } from './body-layer';
 export type { SketchLayer } from './sketch-layer';
 export type { ManipulatorLayer } from './manipulator-layer';

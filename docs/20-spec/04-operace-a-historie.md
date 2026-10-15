@@ -14,7 +14,7 @@ milestones:
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-14
+updated: 2026-10-15
 ---
 # 04 – `ops`: operace, log a undo/redo
 
@@ -233,6 +233,7 @@ export interface Transaction {
   - Transakce jen s přechodnými kroky je při commitu prázdná: nic nezapíše a vrátí `null`.
   - Selže-li při `commit` handler inverze přechodného kroku (chyba programátora, jako u `abort`), zbylé inverze se přeskočí, záznam se přesto zapíše, transakce se ukončí a výjimka letí na konci se sesbíranými. Dokument pak nesedí s logem.
   - Uvnitř transakce jsou přechodné kroky pro kompresi neviditelné: logované kroky kolem nich se můžou sloučit, jako by sousedily.
+- **Slučování už při `apply`** ([[0025-vstupni-stav-editovane-featury|ADR 0025]], [[M21-vstupni-stav-editovane-featury|M21]]): nový krok se sloučí s bezprostředně předchozím, když oba nejsou přechodné, mají stejný typ a `handler.merge` vrátí operaci. Sloučený krok si nechá inverzi **prvního**. Přechodný krok mezi nimi slučování přeruší, aby `abort` vracel inverze ve správném pořadí. `applied` se vyšle pro každou operaci. Dlouhé tažení (manipulátor, skicář) tak drží v transakci jeden krok a `abort` přehraje jednu inverzi.
 - `commit` operace zkomprimuje: **sousední** operace téhož typu, jejichž handler má `merge`, se zleva doprava zkusí sloučit (výsledek sloučení se zkouší slučovat s další). Sloučená operace si nechá inverzi té **první**. Pak:
   - 0 operací → nic nezapíše, vrátí `null`,
   - 1 operace → záznam s touto operací a její inverzí,

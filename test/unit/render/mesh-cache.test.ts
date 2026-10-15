@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MeshData, MeshOps, MeshQuality, ShapeHandle } from '@/kernel';
-import { createMeshCache } from '@/render/mesh-cache';
+import { createMeshCache, createSharedMeshCache } from '@/render/mesh-cache';
 
 // Branded ids are created by a cast in tests only.
 const shape = (n: number): ShapeHandle => n as ShapeHandle;
@@ -93,5 +93,85 @@ describe('createMeshCache', () => {
     await expect(old).rejects.toThrow('stale');
     void cache.get(shape(1));
     expect(calls).toHaveLength(2);
+  });
+});
+
+describe('createSharedMeshCache', () => {
+  it('two clients share one tessellate call per handle', async () => {
+    const { meshes, calls } = manualMeshes();
+    const shared = createSharedMeshCache(meshes, QUALITY);
+    const a = shared.client();
+    const b = shared.client();
+    const first = a.get(shape(1));
+    const second = b.get(shape(1));
+    expect(calls).toHaveLength(1);
+    const mesh = aMesh();
+    calls[0]?.resolve(mesh);
+    expect(await first).toBe(mesh);
+    expect(await second).toBe(mesh);
+  });
+
+  it('retain of one client keeps the shapes the other one retained', () => {
+    const { meshes, calls } = manualMeshes();
+    const shared = createSharedMeshCache(meshes, QUALITY);
+    const a = shared.client();
+    const b = shared.client();
+    void a.get(shape(1));
+    void b.get(shape(2));
+    a.retain([shape(1)]);
+    b.retain([shape(2)]);
+    a.retain([]);
+    void b.get(shape(2));
+    expect(calls).toHaveLength(2);
+    void a.get(shape(1));
+    expect(calls).toHaveLength(3);
+  });
+
+  it('keeps a shape requested by a client until its next retain', () => {
+    const { meshes, calls } = manualMeshes();
+    const shared = createSharedMeshCache(meshes, QUALITY);
+    const a = shared.client();
+    const b = shared.client();
+    // a is waiting for shape 1 (a running sync); b's retain must not drop it.
+    void a.get(shape(1));
+    b.retain([]);
+    void b.get(shape(1));
+    expect(calls).toHaveLength(1);
+    a.retain([]);
+    b.retain([]);
+    void a.get(shape(1));
+    expect(calls).toHaveLength(2);
+  });
+
+  it('clear of a client forgets only its own shapes', () => {
+    const { meshes, calls } = manualMeshes();
+    const shared = createSharedMeshCache(meshes, QUALITY);
+    const a = shared.client();
+    const b = shared.client();
+    a.retain([shape(1)]);
+    void a.get(shape(1));
+    void b.get(shape(1));
+    b.retain([shape(1)]);
+    a.clear();
+    void a.get(shape(1));
+    expect(calls).toHaveLength(1);
+    b.clear();
+    a.clear();
+    void a.get(shape(1));
+    expect(calls).toHaveLength(2);
+  });
+
+  it('reset forgets everything and tessellates through the new MeshOps', () => {
+    const k1 = manualMeshes();
+    const k2 = manualMeshes();
+    const shared = createSharedMeshCache(k1.meshes, QUALITY);
+    const a = shared.client();
+    void a.get(shape(1));
+    a.retain([shape(1)]);
+    shared.reset(k2.meshes);
+    void a.get(shape(1));
+    expect(k1.calls).toHaveLength(1);
+    expect(k2.calls).toHaveLength(1);
+    expect(k2.calls[0]?.quality).toBe(QUALITY);
   });
 });

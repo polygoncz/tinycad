@@ -47,8 +47,8 @@ import type { OperationLog } from '@/ops';
 import { exportDocument } from '@/persistence';
 import type { DocumentStore, PersistenceStatus, Scheduler } from '@/persistence';
 import type { FeaturePlugin, PluginMessages } from '@/plugin-api';
-import { createRegenerator, planeOfRef } from '@/regen';
-import type { BodyLayer, CameraController } from '@/render';
+import { createRegenerator, planeOfRef, sketchesOf } from '@/regen';
+import type { BodyLayer, CameraController, Viewport } from '@/render';
 import type { ConstraintSolver } from '@/sketch';
 import {
   createSketchActions,
@@ -85,6 +85,11 @@ import { bindBrowserView } from './viewport-mirror';
 export interface AppViewport extends ViewportPort, ViewportSettings {
   mount(el: HTMLElement): void;
   readonly bodies: BodyLayer;
+  /**
+   * M21: the pickable bodies and the preview of the edited feature's result in one swap
+   * (ADR 0025, D3 of M19.1).
+   */
+  readonly syncLayers: Viewport['syncLayers'];
   readonly camera: CameraController;
   setBodyVisible(body: BodyId, visible: boolean): void;
   /** '#rrggbb', null = the face colour of the palette (spec 09, M15). */
@@ -329,6 +334,9 @@ function wireSession(
     // Origin planes and planar faces of the last regeneration (M14); before the first one
     // EMPTY_STATE still has the origin planes.
     resolvePlane: (ref) => planeOfRef(pipeline.lastState(), ref),
+    // M21 (ADR 0025): an edited sketch opens on the plane its builder computed from its input,
+    // also after a later Transform or a Boolean that consumes the body of its face.
+    planeOfSketch: (id) => sketchesOf(pipeline.lastState()).find((s) => s.owner === id)?.plane,
     // M19.2 D4: the tools snap to the step of the grid drawn on the screen.
     gridStep: () => viewport.sketchGridStep(),
   });
@@ -442,6 +450,7 @@ function wireSession(
       kernel: supervisor,
       viewport,
       regenStatus,
+      features,
       sketches,
       afterSync: () => {
         browserView.reapply();
@@ -449,11 +458,22 @@ function wireSession(
       reportError,
     }),
   );
+  // Entering a sketch and moving its plane (M21): look at it straight on (spec 11, "Skicář").
+  let offSketchPlane: Unsubscribe | null = null;
+  lifetime.add(() => {
+    offSketchPlane?.();
+  });
   lifetime.add(
     sketches.current.subscribe(() => {
+      offSketchPlane?.();
+      offSketchPlane = null;
       const session = sketches.current.get();
-      // Entering a sketch: look at it straight on (spec 11, "Skicář").
-      if (session !== null) viewport.camera.setViewDirection(session.plane.normal);
+      if (session === null) return;
+      const look = (): void => {
+        viewport.camera.setViewDirection(session.plane.get().normal);
+      };
+      offSketchPlane = session.plane.subscribe(look);
+      look();
     }),
   );
 

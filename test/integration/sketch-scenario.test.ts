@@ -78,6 +78,8 @@ function setup() {
     solver: createInThreadPlanegcsSolver(),
     viewport,
     resolvePlane: (ref) => (ref.kind === 'plane' ? planes.get(ref.plane) : undefined),
+    // Only origin planes here: the reference is the plane of the artifact.
+    planeOfSketch: () => undefined,
   });
 
   /** Regenerates the document; the sketch artifacts of the final state. */

@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
-import { bodyId, sketchId } from '@/document';
+import { ORIGIN_PLANE_IDS, bodyId, sketchId } from '@/document';
 import type { BodyId, DocumentId, FeatureId, TopoName } from '@/document';
 import { boxPlugin } from '@/features/box';
 import { extrudePlugin } from '@/features/extrude';
@@ -286,13 +286,13 @@ describe('createAppSession – changes', () => {
     const { session, viewport, kernels } = await open();
     addBox(session);
     await settle();
+    const edit = session.features.edit(session.doc.studio.features[0]?.id ?? fail());
+    // Opening the dialog regenerates by itself (M21: the view switches to the input).
+    await settle();
     const syncsBefore = viewport.syncs.length;
     const boxesBefore = kernels.last.fake.callCount('makeBox');
 
-    const edit = session.features.edit(session.doc.studio.features[0]?.id ?? fail());
     for (let h = 11; h <= 20; h++) edit.setParam('height', h);
-    await settle();
-    edit.commit();
     await settle();
 
     // At least one run, so no run at all (or only a stale one) does not pass (revize, testy T3).
@@ -303,9 +303,28 @@ describe('createAppSession – changes', () => {
     expect(boxes).toBeGreaterThanOrEqual(1);
     expect(boxes).toBeLessThanOrEqual(2);
     expect(session.regen.get().busy).toBe(false);
+    edit.commit();
+    await settle();
     const shown = viewport.shown[0]?.shape ?? fail();
     const { min, max } = await kernels.last.fake.boundingBox(shown);
     expect(max[2] - min[2]).toBe(20);
+  });
+
+  it('an open dialog shows the input of its feature and the result as a preview (M21)', async () => {
+    const { session, viewport } = await open();
+    addBox(session);
+    await settle();
+    const box = session.doc.studio.features[0]?.id ?? fail();
+    const edit = session.features.edit(box);
+    await settle();
+    // The input of the first feature is the empty state; the box is only previewed.
+    expect(viewport.shown).toEqual([]);
+    expect(viewport.previewShown.map((b) => b.id)).toEqual([bodyId(box)]);
+
+    edit.cancel();
+    await settle();
+    expect(viewport.shown.map((b) => b.id)).toEqual([bodyId(box)]);
+    expect(viewport.previewShown).toEqual([]);
   });
 
   it('busy is true while a regeneration runs', async () => {
@@ -895,6 +914,25 @@ describe('createAppSession – sketcher', () => {
     });
   });
 
+  it('picking another plane in the browser moves the sketch and looks at it (M21)', async () => {
+    const { session, viewport } = await openSketcher();
+    enterSketch(session);
+    const sketch = currentSketch(session);
+    const edit = session.features.current.get() ?? fail();
+    edit.focusRefParam('plane');
+
+    session.browser.selectPlane(ORIGIN_PLANE_IDS.xz);
+
+    expect(edit.state.get().params['plane']).toEqual([
+      { kind: 'plane', plane: ORIGIN_PLANE_IDS.xz },
+    ]);
+    expect(sketch.plane.get().normal).toEqual([0, -1, 0]);
+    expect(viewport.viewDirections.at(-1)).toEqual([0, -1, 0]);
+    // Picking is over: the tools of the sketcher take the view again.
+    expect(edit.state.get().activeRefParam).toBeNull();
+    sketch.cancel();
+  });
+
   it('a double click on a sketch in the browser opens the sketcher', async () => {
     const { session } = await openSketcher();
     enterSketch(session);
@@ -1092,6 +1130,8 @@ describe('createAppSession – topological names (M14)', () => {
     const { session, viewport, box, body } = await openWithBox([boxPlugin, filletPlugin]);
     const edit = session.features.create('fillet');
     expect(edit.state.get().activeRefParam).toBe('edges');
+    // M21: the regeneration with the dialog open publishes the input of the fillet.
+    await settle();
     viewport.setPick({ kind: 'edge', body, edgeIndex: 0, point: [0, 0, 0] });
     viewport.emitPointer(pointerAt('down'));
     viewport.emitPointer(pointerAt('up'));
@@ -1106,9 +1146,26 @@ describe('createAppSession – topological names (M14)', () => {
   it('a sketch on the top face of the box lies on the plane z = height', async () => {
     const { session, box, body } = await openWithBox([boxPlugin, sketchPlugin]);
     const sketch = session.sketches.create({ kind: 'topo', body, name: topOf(box) });
-    expect(sketch.plane.normal).toEqual([0, 0, 1]);
-    expect(sketch.plane.origin[2]).toBeCloseTo(10);
+    expect(sketch.plane.get().normal).toEqual([0, 0, 1]);
+    expect(sketch.plane.get().origin[2]).toBeCloseTo(10);
     sketch.cancel();
+  });
+
+  it('a sketch on the top face opens on its own plane after a later Transform (M21, R108)', async () => {
+    const { session, box, body } = await openWithBox([boxPlugin, sketchPlugin, transformPlugin]);
+    const created = session.sketches.create({ kind: 'topo', body, name: topOf(box) });
+    const sketch = created.featureId;
+    created.finish();
+    const move = session.features.create('transform');
+    move.setParams({ bodies: [{ kind: 'body', body }], translate: [0, 0, 50] });
+    move.commit();
+    await settle();
+
+    const opened = session.sketches.edit(sketch);
+
+    // The plane the builder of the sketch computed from its input, not the moved face.
+    expect(opened.plane.get().origin[2]).toBeCloseTo(10);
+    opened.cancel();
   });
 
   it('the topo inspector belongs to the session and is released with it', async () => {

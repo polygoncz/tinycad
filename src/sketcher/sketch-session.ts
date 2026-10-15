@@ -18,14 +18,27 @@ import type {
   SolveResult,
   SolveStatus,
 } from '@/sketch';
-import type { FeatureEditSession, SketchStyle, ViewportPort } from '@/interaction';
+import { samePlaneRef } from '@/document';
+import type { PlaneRef, TopoRef } from '@/document';
+import type {
+  EditState,
+  FeatureEditSession,
+  RefText,
+  SketchStyle,
+  ViewportPort,
+} from '@/interaction';
+import { planeRefOf } from './plane-ref';
 import { constraintNumbers, dimensionViews } from './sketch-dimensions';
 import type { SketchDimensionView } from './sketch-dimensions';
 import { toSketchDrawing } from './sketch-drawing';
 
 export interface SketchSession {
   readonly featureId: FeatureEditSession['featureId'];
-  readonly plane: Plane;
+  /**
+   * The plane of the sketch (M21): follows the param SKETCH_PARAM.plane while the session is
+   * open; the entities keep their 2D coordinates on the new plane.
+   */
+  readonly plane: Observable<Plane>;
   readonly state: Observable<SketchState>;
   /** New entities and constraints (tools); true = written. */
   addGeometry(add: SketchData): Promise<boolean>;
@@ -45,6 +58,14 @@ export interface SketchSession {
   select(id: SketchItemId, opts?: { readonly additive?: boolean }): void;
   clearSelection(): void;
   clearEditingDimension(): void;
+  /**
+   * The field "Plane" of the panel (M21, Q076): focuses the plane param, so refPick covers the
+   * tools of the sketcher and a plane is picked in the view or the Browser; a picked plane ends
+   * it (interaction). Without a visible plane param nothing.
+   */
+  pickPlane(): void;
+  /** Ends picking the plane (Esc on the field); true = it was picking, false = nothing to end. */
+  cancelPlanePick(): boolean;
   /** FeatureEditSession.commit → one log entry. */
   finish(): void;
   /** FeatureEditSession.cancel → nothing. */
@@ -86,6 +107,25 @@ export interface SketchState {
   readonly editingDimension: SketchConstraintId | null;
   /** The distance and radius dimensions for the viewport (dimensionViews, M19.2 D4). */
   readonly dimensions: readonly SketchDimensionView[];
+  /** The field "Plane" of the panel (M21); null without a visible plane param. */
+  readonly planeField: SketchPlaneField | null;
+  /**
+   * The plane of the sketch could not be computed on opening (Q079): the sketch is open on the
+   * origin plane XY and the panel asks for a new plane. A picked plane that resolves clears it.
+   */
+  readonly planeMissing: boolean;
+}
+
+/** The field "Plane" of the sketch panel (M21, Q076): the plane param of the feature session. */
+export interface SketchPlaneField {
+  /** The translation key of the label (the schema of the sketch). */
+  readonly label: string;
+  /** The text of the plane from interaction (FieldState.refText); null = nothing selected. */
+  readonly text: RefText | null;
+  /** Picking the plane: refPick covers the tools of the sketcher. */
+  readonly active: boolean;
+  /** The param has an issue. */
+  readonly invalid: boolean;
 }
 
 export type SketchMessageKey = 'sketch.conflict' | 'sketch.redundant' | 'sketch.solverFailed';
@@ -123,13 +163,23 @@ const isDimension = (c: SketchConstraint): c is DimensionConstraint =>
 /** Opened only by the SketchEditor, over a feature session of a sketch. */
 export function openSketchSession(deps: {
   edit: FeatureEditSession;
+  /** The plane on opening (the artifact of the sketch, or its resolved reference). */
   plane: Plane;
+  /** Neither could be computed (Q079): `plane` is the origin plane XY in its place. */
+  planeMissing: boolean;
+  /** The plane of a reference picked while sketching (app: planeOfRef over the last state). */
+  resolvePlane: (ref: PlaneRef | TopoRef) => Plane | undefined;
   solver: ConstraintSolver;
   /** Only the drawings: the session draws the edited sketch and nothing else. */
   viewport: Pick<ViewportPort, 'sketches'>;
   onClose: () => void;
 }): SketchSession {
-  const { edit, plane, solver, viewport, onClose } = deps;
+  const { edit, resolvePlane, solver, viewport, onClose } = deps;
+  const plane = new ObservableValue<Plane>(deps.plane);
+  /** The plane reference last followed; a change of the param moves the plane (M21). */
+  let planeRef = planeRefOf(edit.state.get().params);
+  /** SketchState.planeMissing; cleared by the first picked plane that resolves (Q079). */
+  let planeMissing = deps.planeMissing;
 
   // The session's own state; the rest of SketchState comes from the feature session.
   let open = true;
@@ -149,7 +199,7 @@ export function openSketchSession(deps: {
   draw();
   const unsubscribeEdit = edit.state.subscribe(() => {
     if (!edit.state.get().open) close();
-    else refresh();
+    else refresh(followPlane());
   });
 
   // ---- state ----
@@ -195,18 +245,47 @@ export function openSketchSession(deps: {
       message,
       constraintRows: rows,
       editingDimension,
-      dimensions: dimensionViews(plane, entities, constraints, selection, prev?.dimensions ?? []),
+      dimensions: dimensionViews(
+        plane.get(),
+        entities,
+        constraints,
+        selection,
+        prev?.dimensions ?? [],
+      ),
+      planeField: planeFieldOf(edit.state.get(), prev?.planeField ?? null),
+      planeMissing,
     });
   }
 
-  /** Publishes a new snapshot unless nothing has changed, and redraws the sketch. */
-  function refresh(): void {
+  /**
+   * Publishes a new snapshot unless nothing has changed, and redraws the sketch; `redraw` also
+   * when only the plane moved.
+   */
+  function refresh(redraw = false): void {
     const prev = state.get();
     const next = buildState(prev);
     const keys = Object.keys(next) as (keyof SketchState)[]; // the keys of the snapshot just built
-    if (keys.every((key) => Object.is(next[key], prev[key]))) return;
-    state.set(next);
-    if (open) draw();
+    const changed = !keys.every((key) => Object.is(next[key], prev[key]));
+    if (changed) state.set(next);
+    if (open && (changed || redraw)) draw();
+  }
+
+  /**
+   * Follows a change of the param SKETCH_PARAM.plane (M21): the plane of the new reference. A
+   * reference that does not resolve (a face that is not planar) keeps the plane; the regeneration
+   * reports it. Picking the plane is ended by interaction (pickEndsFocus of 'planes'), also when
+   * the picked plane is the current one. A plane that resolves clears planeMissing (Q079), also
+   * when it is XY the sketch is already on. true = the plane moved.
+   */
+  function followPlane(): boolean {
+    const ref = planeRefOf(edit.state.get().params);
+    if (ref === undefined || (planeRef !== undefined && samePlaneRef(planeRef, ref))) return false;
+    planeRef = ref;
+    const next = resolvePlane(ref);
+    if (next !== undefined) planeMissing = false;
+    const moved = next !== undefined && next !== plane.get();
+    if (moved) plane.set(next);
+    return moved;
   }
 
   function styleOf(id: SketchItemId, construction: boolean): SketchStyle {
@@ -224,7 +303,7 @@ export function openSketchSession(deps: {
     );
     viewport.sketches.set(
       EDIT_SKETCH_DRAWING_ID,
-      toSketchDrawing(plane, s, (id) => styleOf(id, construction.has(id)), {
+      toSketchDrawing(plane.get(), s, (id) => styleOf(id, construction.has(id)), {
         origin: true,
         editing: true,
       }),
@@ -407,7 +486,7 @@ export function openSketchSession(deps: {
 
   return {
     featureId: edit.featureId,
-    plane,
+    plane: plane.asObservable(),
     state: state.asObservable(),
     addGeometry(add) {
       checkOpen('addGeometry');
@@ -498,6 +577,17 @@ export function openSketchSession(deps: {
       editingDimension = null;
       refresh();
     },
+    pickPlane() {
+      checkOpen('pickPlane');
+      if (state.get().planeField === null) return;
+      edit.focusRefParam(SKETCH_PARAM.plane);
+    },
+    cancelPlanePick() {
+      checkOpen('cancelPlanePick');
+      if (edit.state.get().activeRefParam !== SKETCH_PARAM.plane) return false;
+      edit.focusRefParam(null);
+      return true;
+    },
     finish() {
       checkOpen('finish');
       edit.commit();
@@ -522,6 +612,33 @@ function promiseOf<T>(job: () => Promise<T>): Promise<T> {
     // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- rejects with exactly what the job threw, like an async job
     return Promise.reject(e);
   }
+}
+
+/**
+ * The field "Plane" from the visible plane param of the feature session; `prev` while it stays
+ * the same, so an unchanged field does not publish a new state.
+ */
+function planeFieldOf(state: EditState, prev: SketchPlaneField | null): SketchPlaneField | null {
+  const field = state.fields.find((f) => f.name === SKETCH_PARAM.plane && !f.hidden);
+  if (field === undefined) return null;
+  const next: SketchPlaneField = {
+    label: field.spec.label,
+    text: field.refText,
+    active: field.active,
+    invalid: field.issue !== null,
+  };
+  const same =
+    prev !== null &&
+    prev.label === next.label &&
+    prev.active === next.active &&
+    prev.invalid === next.invalid &&
+    sameRefText(prev.text, next.text);
+  return same ? prev : Object.freeze(next);
+}
+
+function sameRefText(a: RefText | null, b: RefText | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.key === b.key && sameFlat(a.params, b.params);
 }
 
 /** The translation key of the status line (spec 11, "Skicář"). */

@@ -40,7 +40,9 @@ type Ray = ReturnType<FakeViewport['screenToRay']>;
  * (M18), a prepared projection (M19) and step of the sketch grid (M19.2); emitOrbitModeToggle plays a click on the rotation mode
  * button, emitViewChanged a move of the view (M19). sync settles at once, or while held only on
  * releaseSyncs (M19.1); like BodyLayer, a newer sync or a reset makes a held sync stale, so it
- * settles without showing its bodies (spec 09).
+ * settles without showing its bodies (spec 09). syncLayers (M21) records the main bodies in `syncs`
+ * and the preview ones in `previewSyncs` and is held like sync; a held pair shows both layers
+ * together on release, a reset empties the preview like the view.
  * It wraps a FakeViewport instead of extending it: a class of another module is no base
  * class (ADR 0011), so its members are passed on one by one.
  */
@@ -56,6 +58,8 @@ export class FakeAppViewport implements AppViewport {
   mountedOn: HTMLElement | null = null;
   /** Bodies of every sync call, oldest first. */
   readonly syncs: (readonly SyncedBody[])[] = [];
+  /** Preview bodies of every syncLayers call, oldest first (M21). */
+  readonly previewSyncs: (readonly SyncedBody[])[] = [];
   /** MeshOps of every reset call, oldest first. */
   readonly resets: MeshOps[] = [];
   fitAllCount = 0;
@@ -75,10 +79,18 @@ export class FakeAppViewport implements AppViewport {
   private readonly orbitModeToggles = new Emitter<{ toggle: undefined }>();
   /** Bodies of the last sync that settled current, [] after a reset (M19.1). */
   private shownBodies: readonly SyncedBody[] = [];
-  /** Syncs waiting for releaseSyncs (M19.1); at most one, a newer sync makes the held one stale. */
-  private readonly held: { readonly bodies: readonly SyncedBody[]; readonly settle: () => void }[] =
-    [];
+  /**
+   * Syncs waiting for releaseSyncs (M19.1); at most one, a newer sync makes the held one stale.
+   * `preview` is set for a held syncLayers (M21), which shows both layers on release.
+   */
+  private readonly held: {
+    readonly bodies: readonly SyncedBody[];
+    readonly preview?: readonly SyncedBody[];
+    readonly settle: () => void;
+  }[] = [];
   private holding = false;
+  /** Bodies of the preview: of the last syncLayers that settled current, [] after a reset (M21). */
+  private previewBodies: readonly SyncedBody[] = [];
   private gridStep = 1;
 
   readonly bodies = {
@@ -97,9 +109,32 @@ export class FakeAppViewport implements AppViewport {
     reset: (meshes: MeshOps): void => {
       this.resets.push(meshes);
       this.shownBodies = [];
+      // The preview shares the meshes of the kernel (spec 09).
+      this.previewBodies = [];
       this.dropHeld();
     },
   };
+
+  syncLayers(next: {
+    readonly main: readonly SyncedBody[];
+    readonly preview: readonly SyncedBody[];
+  }): Promise<void> {
+    const copy = (bodies: readonly SyncedBody[]): SyncedBody[] =>
+      bodies.map(({ id, shape }) => ({ id, shape }));
+    const main = copy(next.main);
+    const preview = copy(next.preview);
+    this.syncs.push(main);
+    this.previewSyncs.push(preview);
+    this.dropHeld();
+    if (!this.holding) {
+      this.shownBodies = main;
+      this.previewBodies = preview;
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      this.held.push({ bodies: main, preview, settle: resolve });
+    });
+  }
 
   readonly camera = {
     fitAll: (): void => {
@@ -235,6 +270,11 @@ export class FakeAppViewport implements AppViewport {
     return this.shownBodies;
   }
 
+  /** Bodies the preview shows (M21): those of the last current syncLayers, [] after a reset. */
+  get previewShown(): readonly SyncedBody[] {
+    return this.previewBodies;
+  }
+
   /** Number of syncs held back now (M19.1). */
   get heldSyncs(): number {
     return this.held.length;
@@ -248,8 +288,9 @@ export class FakeAppViewport implements AppViewport {
   /** Settles the held sync and shows its bodies; later syncs settle at once again. */
   releaseSyncs(): void {
     this.holding = false;
-    for (const { bodies, settle } of this.held.splice(0)) {
+    for (const { bodies, preview, settle } of this.held.splice(0)) {
       this.shownBodies = bodies;
+      if (preview !== undefined) this.previewBodies = preview;
       settle();
     }
   }

@@ -868,15 +868,17 @@ describe('createToolManager – the refPick layer', () => {
   it('with regen a click on a named face adds a TopoRef (M14)', () => {
     const regen = new FakeRegenStatus();
     const top = 'f1/face:top' as TopoName; // test names are trusted
-    regen.publish(new Map(), [
+    const { viewport, features } = setupRefPick({ regen });
+    const session = features.create('ref');
+    const bodies = [
       {
         body: 'f1/body' as BodyId, // test ids are trusted
         feature: 'f1' as FeatureId,
         names: aTopoNames({ faces: { [top]: [0] } }),
       },
-    ]);
-    const { viewport, features } = setupRefPick({ regen });
-    const session = features.create('ref');
+    ];
+    // The input of the session's feature is pickable (M21, ADR 0025).
+    regen.publish(new Map(), bodies, [], new Map(), { feature: session.featureId, bodies });
     session.focusRefParam('faces');
     viewport.setPick(faceHit('f1/body'));
 

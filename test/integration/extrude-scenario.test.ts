@@ -75,6 +75,8 @@ function setup(kernel: GeometryKernel) {
     solver: createInThreadPlanegcsSolver(),
     viewport: new FakeViewport(),
     resolvePlane: (ref) => (ref.kind === 'plane' ? planes.get(ref.plane) : undefined),
+    // Only origin planes here: the reference is the plane of the artifact.
+    planeOfSketch: () => undefined,
   });
 
   /** Creates a feature of the type through the dialog with the given params, OK. */

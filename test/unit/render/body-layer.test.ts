@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { BodyId } from '@/interaction';
 import type { ShapeHandle } from '@/kernel';
 import { createBodyLayer } from '@/render/body-layer';
+import type { BodyStyle } from '@/render/body-view';
+import { createSharedMeshCache } from '@/render/mesh-cache';
 import { DARK_PALETTE, LIGHT_PALETTE } from '@/render/palette';
 import { boxMeshes } from '@/render/testing';
 
@@ -13,13 +15,16 @@ const B = body('f2/body');
 // boxMeshes: the handle is the box size; distinct handles = distinct shapes.
 const shape = (n: number): ShapeHandle => n as ShapeHandle;
 
-async function setup() {
+async function setup(style: BodyStyle = 'body') {
   const requestRender = vi.fn();
   const afterVisibilityChange = vi.fn();
   const layer = createBodyLayer({
     afterVisibilityChange,
-    meshes: boxMeshes(),
-    quality: { linearDeflection: 0.1, angularDeflection: 0.5 },
+    cache: createSharedMeshCache(boxMeshes(), {
+      linearDeflection: 0.1,
+      angularDeflection: 0.5,
+    }).client(),
+    style,
     reportError: () => undefined,
     requestRender,
     palette: LIGHT_PALETTE,
@@ -149,10 +154,10 @@ describe('BodyLayer visibility', () => {
     expect(layer.views.get(A)?.object.visible).toBe(false);
   });
 
-  it('reset forgets every hidden body', async () => {
+  it('clear forgets every hidden body', async () => {
     const { layer } = await setup();
     layer.setBodyVisible(A, false);
-    layer.reset(boxMeshes());
+    layer.clear();
     await layer.sync([{ id: A, shape: shape(5) }]);
     expect(layer.views.get(A)?.object.visible).toBe(true);
   });
@@ -308,11 +313,11 @@ describe('BodyLayer colour', () => {
     expect(materialsOf(layer, A).faces.color.getHex()).toBe(DARK_PALETTE.face);
   });
 
-  it('reset forgets every colour and releases the materials', async () => {
+  it('clear forgets every colour and releases the materials', async () => {
     const { layer } = await setup();
     layer.setBodyColor(A, RED);
     const dispose = vi.spyOn(materialsOf(layer, A).faces, 'dispose');
-    layer.reset(boxMeshes());
+    layer.clear();
     expect(dispose).toHaveBeenCalledTimes(1);
     await layer.sync([{ id: A, shape: shape(5) }]);
     expect(materialsOf(layer, A).faces.color.getHex()).toBe(LIGHT_PALETTE.face);
@@ -324,5 +329,81 @@ describe('BodyLayer colour', () => {
     const dispose = vi.spyOn(materialsOf(layer, A).faces, 'dispose');
     layer.dispose();
     expect(dispose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('BodyLayer clear', () => {
+  it('removes and disposes every view and requests a render', async () => {
+    const { layer, requestRender } = await setup();
+    const view = layer.views.get(A);
+    if (view === undefined) throw new Error('A is not shown');
+    const dispose = vi.spyOn(view, 'dispose');
+    layer.clear();
+    expect(layer.views.size).toBe(0);
+    expect(layer.group.children).toHaveLength(0);
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(requestRender).toHaveBeenCalledTimes(1);
+  });
+
+  it('with nothing shown does not render', async () => {
+    const { layer, requestRender } = await setup();
+    layer.clear();
+    requestRender.mockClear();
+    layer.clear();
+    expect(requestRender).not.toHaveBeenCalled();
+  });
+});
+
+describe('BodyLayer preview style (M21)', () => {
+  it('draws transparent faces and edges in the body preview colour, not the tool overlay one', async () => {
+    const { layer } = await setup('preview');
+    const { faces, edges } = materialsOf(layer, A);
+    expect(faces.color.getHex()).toBe(LIGHT_PALETTE.bodyPreview);
+    expect(faces.transparent).toBe(true);
+    expect(faces.opacity).toBe(0.35);
+    expect(faces.depthWrite).toBe(false);
+    expect(edges.color.getHex()).toBe(LIGHT_PALETTE.bodyPreview);
+  });
+
+  it('pulls its faces towards the camera, so they win over the coplanar faces of the input', async () => {
+    // A changed body shares most faces with the input body; two tessellations of one plane would
+    // otherwise fight for depth pixel by pixel (z-fighting, found by hand in M21).
+    const { faces } = materialsOf((await setup('preview')).layer, A);
+    const body = materialsOf((await setup('body')).layer, A).faces;
+    expect(faces.polygonOffset).toBe(true);
+    expect(faces.polygonOffsetFactor).toBeLessThan(0);
+    expect(faces.polygonOffsetUnits).toBeLessThan(0);
+    expect(faces.polygonOffsetFactor).toBeLessThan(body.polygonOffsetFactor);
+  });
+
+  it('draws above the bodies and below the highlight', async () => {
+    const preview = (await setup('preview')).layer.views.get(A);
+    const body = (await setup()).layer.views.get(A);
+    if (preview === undefined || body === undefined) throw new Error('A is not shown');
+    expect(body.faces.renderOrder).toBe(0);
+    expect(body.edges.renderOrder).toBe(0);
+    for (const object of [preview.faces, preview.edges]) {
+      expect(object.renderOrder).toBeGreaterThan(0);
+      // HighlightLayer draws with renderOrder 1 (spec 09, "Vrstvy pro interakci").
+      expect(object.renderOrder).toBeLessThan(1);
+    }
+  });
+
+  it('setPalette recolours the preview materials', async () => {
+    const { layer } = await setup('preview');
+    layer.setPalette(DARK_PALETTE);
+    const { faces, edges } = materialsOf(layer, A);
+    expect(faces.color.getHex()).toBe(DARK_PALETTE.bodyPreview);
+    expect(edges.color.getHex()).toBe(DARK_PALETTE.bodyPreview);
+  });
+
+  it('a coloured preview body stays transparent', async () => {
+    const { layer } = await setup('preview');
+    layer.setBodyColor(A, '#ff0000');
+    const { faces } = materialsOf(layer, A);
+    expect(faces.color.getHex()).toBe(0xff0000);
+    expect(faces.transparent).toBe(true);
+    expect(faces.opacity).toBe(0.35);
+    expect(faces.depthWrite).toBe(false);
   });
 });
