@@ -319,6 +319,22 @@ describe('createSketchTools', () => {
         shortcut: 'A',
       },
       {
+        id: 'sketch.arc3p',
+        label: 'tool.arc3p',
+        icon: 'chart-arcs-3',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+      },
+      {
+        id: 'sketch.arcTangent',
+        label: 'tool.arcTangent',
+        icon: 'ease-out',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+      },
+      {
         id: 'sketch.dimension',
         label: 'tool.dimension',
         icon: 'ruler-measure',
@@ -328,6 +344,15 @@ describe('createSketchTools', () => {
       },
     ]);
     expect(Object.isFrozen(tools)).toBe(true);
+  });
+
+  it('the arc tools are one family in the order arc, arc3p, arcTangent (M27)', () => {
+    const { tools } = setup();
+    expect(tools.filter((t) => t.family === 'arc').map((t) => t.id)).toEqual([
+      'sketch.arc',
+      'sketch.arc3p',
+      'sketch.arcTangent',
+    ]);
   });
 
   it('tools without an open session do nothing', () => {

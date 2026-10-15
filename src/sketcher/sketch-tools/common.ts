@@ -14,6 +14,7 @@ import type {
   ViewPointerEvent,
 } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
+import { ccwSweep } from '../sketch-angles';
 import type { GlyphKind } from '../sketch-glyphs';
 import type { SketchSession } from '../sketch-session';
 
@@ -151,6 +152,25 @@ export function arcPoints(center: Vec2, radius: number, from: number, sweep: num
 
 export const circlePoints = (center: Vec2, radius: number): Vec2[] =>
   arcPoints(center, radius, 0, FULL_TURN);
+
+/**
+ * Sets the preview: the arc around `fit.center` of `fit.radius` from a to b, counter-clockwise
+ * when `fit.ccw`, otherwise clockwise (M27, the fits of arcFrom3 and tangentArcFrom).
+ */
+export function previewArcFit(
+  ctx: ToolContext,
+  session: SketchSession,
+  fit: { readonly center: Vec2; readonly radius: number; readonly ccw: boolean },
+  a: Vec2,
+  b: Vec2,
+): void {
+  const [from, to] = fit.ccw ? [a, b] : [b, a];
+  const begin = angleAt(fit.center, from);
+  const sweep = ccwSweep(begin, angleAt(fit.center, to));
+  previewPolyline(ctx, session, arcPoints(fit.center, fit.radius, begin, sweep));
+}
+
+const angleAt = (center: Vec2, p: Vec2): number => Math.atan2(p[1] - center[1], p[0] - center[0]);
 
 export function clearPreview(ctx: ToolContext): void {
   ctx.viewport.overlay.remove(PREVIEW_OVERLAY_ID);

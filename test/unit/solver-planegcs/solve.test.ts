@@ -2,7 +2,9 @@ import { DebugMode, GcsWrapper, type SketchPrimitive } from '@salusoft89/planegc
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { bspline, type BSplineShape, type Vec2 } from '@/core';
 import {
+  endTangent,
   measure,
+  tangentArcFrom,
   parseSketchData,
   type DimensionConstraint,
   type SketchData,
@@ -326,6 +328,71 @@ describe('solveSketch – M26 constraints', () => {
     // The arc itself did not grow to reach the point.
     expectPoint(point(result.entities, 'ae'), 0, 5);
   });
+});
+
+describe('solveSketch – M27 tangent arcs', () => {
+  // What sketch.arcTangent writes (spec 12, "Oblouky a kružnice (M27)"): an arc from the end point
+  // of a line or an arc, placed by tangentArcFrom, sharing that point, with tangent(arc, curve).
+
+  /** The line l (10, 10)–(30, 10) and the ccw quarter arc a around (100, 100), (110, 100)–(100, 110). */
+  const CURVES = [
+    { kind: 'point', id: 'l1', x: 10, y: 10 },
+    { kind: 'point', id: 'l2', x: 30, y: 10 },
+    { kind: 'line', id: 'l', p1: 'l1', p2: 'l2' },
+    { kind: 'point', id: 'ac', x: 100, y: 100 },
+    { kind: 'point', id: 'as', x: 110, y: 100 },
+    { kind: 'point', id: 'ae', x: 100, y: 110 },
+    { kind: 'arc', id: 'a', center: 'ac', start: 'as', end: 'ae' },
+  ];
+
+  /** The tangent arc from the end point `from` of `curve` to `to`, as the tool writes it. */
+  function tangentArc(curve: 'l' | 'a', from: 'l2' | 'ae', to: Vec2): SketchData {
+    const base = sketch(CURVES, []);
+    const c = base.entities.find((e) => e.id === curve);
+    const at = point(base.entities, from);
+    const direction =
+      c?.kind === 'line' || c?.kind === 'arc' ? endTangent(c, idOf(base, from), base) : null;
+    const fit = direction === null ? null : tangentArcFrom([at.x, at.y], direction, to);
+    if (fit === null) throw new Error('no tangent arc');
+    const [start, end] = fit.ccw ? [from, 'e'] : ['e', from];
+    return sketch(
+      [
+        ...CURVES,
+        { kind: 'point', id: 'c', x: fit.center[0], y: fit.center[1] },
+        { kind: 'point', id: 'e', x: to[0], y: to[1] },
+        { kind: 'arc', id: 'T', center: 'c', start, end },
+      ],
+      [{ kind: 'tangent', id: 't', a: 'T', b: curve }],
+    );
+  }
+
+  const CASES = [
+    { name: 'a line', curve: 'l', from: 'l2', to: [40, 20] },
+    { name: 'an arc, inside (same sense)', curve: 'a', from: 'ae', to: [80, 90] },
+    { name: 'an arc, outside (an S)', curve: 'a', from: 'ae', to: [80, 125] },
+  ] as const;
+
+  for (const c of CASES) {
+    it(`an arc tangent to ${c.name} from its end point solves ok`, () => {
+      const result = solveSketch(mod, tangentArc(c.curve, c.from, c.to));
+
+      expect(result.status).toBe('ok');
+      expect(result.conflicting).toEqual([]);
+    });
+
+    // A known hole (reported to the main session): with the shared end point the tangency of
+    // tangent_la / tangent_aa is degenerate (on the curves through the shared point the distance of
+    // the centre from the other curve never exceeds the radius, so the gradient of the tangency is
+    // dependent), planegcs reports it redundant and addGeometry leaves it out, required or not.
+    it.fails(
+      `the tangent of an arc tangent to ${c.name} from its end point is not redundant`,
+      () => {
+        const result = solveSketch(mod, tangentArc(c.curve, c.from, c.to));
+
+        expect(result.redundant).toEqual([]);
+      },
+    );
+  }
 });
 
 describe('solveSketch – conflicts and redundancy', () => {

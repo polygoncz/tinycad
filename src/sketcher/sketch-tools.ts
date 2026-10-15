@@ -4,7 +4,9 @@
 import type { Mode, ToolDescriptor } from '@/interaction';
 import { SKETCH_SELECT_TOOL_ID } from './constants';
 import type { SketchEditor } from './sketch-editor';
+import { createArcTangentTool } from './sketch-tools/arc-tangent-tool';
 import { createArcTool } from './sketch-tools/arc-tool';
+import { createArc3pTool } from './sketch-tools/arc3p-tool';
 import { createCircleTool } from './sketch-tools/circle-tool';
 import { createDimensionTool } from './sketch-tools/dimension-tool';
 import { createEntryTool } from './sketch-tools/entry-tool';
@@ -69,8 +71,27 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       icon: 'chart-arcs',
       group: 'draw',
       modes: SKETCH,
+      family: 'arc',
       shortcut: 'A',
       create: () => createArcTool(sketches),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.arc3p',
+      label: 'tool.arc3p',
+      icon: 'chart-arcs-3',
+      group: 'draw',
+      modes: SKETCH,
+      family: 'arc',
+      create: () => createArc3pTool(sketches),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.arcTangent',
+      label: 'tool.arcTangent',
+      icon: 'ease-out',
+      group: 'draw',
+      modes: SKETCH,
+      family: 'arc',
+      create: () => createArcTangentTool(sketches),
     }),
     Object.freeze<ToolDescriptor>({
       id: 'sketch.dimension',
