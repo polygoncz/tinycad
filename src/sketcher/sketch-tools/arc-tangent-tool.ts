@@ -7,33 +7,18 @@
 // turns the automatic constraints off. The click and the preview of a move share one step
 // (arcTangentStep).
 
-import type { Vec2 } from '@/core';
-import { endTangent, tangentArcFrom } from '@/sketch';
-import type { ArcFit, SketchConstraint, SketchCurve, SketchData, SketchEntityId } from '@/sketch';
+import { endTangent } from '@/sketch';
+import type { SketchCurve, SketchData } from '@/sketch';
 import type { Tool, ToolContext } from '@/interaction';
 import { isPlainEscape } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
 import type { GlyphKind } from '../sketch-glyphs';
 import type { SketchSession } from '../sketch-session';
-import {
-  clearPreview,
-  clickTool,
-  newConstraintId,
-  newEntityId,
-  previewArcFit,
-  previewInference,
-  snapMode,
-} from './common';
-import { freeTarget, placePoint, sessionData, snapAt } from './snap';
+import { clearPreview, clickTool, previewArcFit, previewInference, snapMode } from './common';
+import { sessionData, snapAt } from './snap';
 import type { SnapTarget } from './snap';
-
-/** The end point the arc starts at, the curve it continues and the direction it goes on in. */
-interface TangentStart {
-  readonly point: SketchEntityId;
-  readonly at: Vec2;
-  readonly curve: SketchEntityId;
-  readonly direction: Vec2;
-}
+import { tangentArcGeometry, tangentArcInferences, tangentArcTo } from './tangent-arc';
+import type { TangentArc, TangentStart } from './tangent-arc';
 
 /**
  * What a click at a target does: nothing, take the start, or add the arc `fit` from the start to
@@ -42,7 +27,7 @@ interface TangentStart {
 type ArcTangentStep =
   | { readonly kind: 'none' }
   | { readonly kind: 'start'; readonly start: TangentStart }
-  | { readonly kind: 'arc'; readonly fit: ArcFit; readonly end: SnapTarget };
+  | ({ readonly kind: 'arc' } & TangentArc);
 
 export function createArcTangentTool(sketches: SketchEditor): Tool {
   let start: TangentStart | null = null;
@@ -111,9 +96,8 @@ function arcTangentStep(
     const picked = tangentStart(data, target);
     return picked === null ? { kind: 'none' } : { kind: 'start', start: picked };
   }
-  if (target.point === start.point) return { kind: 'none' };
-  const fit = tangentArcFrom(start.at, start.direction, target.at);
-  return fit === null ? { kind: 'none' } : { kind: 'arc', fit, end: target };
+  const arc = tangentArcTo(start, target);
+  return arc === null ? { kind: 'none' } : { kind: 'arc', ...arc };
 }
 
 /**
@@ -140,40 +124,17 @@ function stepInferences(step: ArcTangentStep): readonly { readonly kind: GlyphKi
     case 'start':
       return [];
     case 'arc':
-      return [...step.end.inferred, { kind: 'tangent' }];
+      return tangentArcInferences(step);
   }
 }
 
-/**
- * Adds the arc around a new centre from the shared start to the end (swapped for a clockwise
- * fit) with tangent(arc, curve), which is required.
- */
+/** Adds the arc of the step with tangent(arc, curve), which is required. */
 function addArc(
   ctx: ToolContext,
   session: SketchSession,
   start: TangentStart,
   step: Extract<ArcTangentStep, { kind: 'arc' }>,
 ): void {
-  const { fit } = step;
-  const c = placePoint(ctx, freeTarget(fit.center));
-  const e = placePoint(ctx, step.end);
-  const id: SketchEntityId = newEntityId(ctx);
-  const [from, to] = fit.ccw ? [start.point, e.id] : [e.id, start.point];
-  const tangent: SketchConstraint = {
-    kind: 'tangent',
-    id: newConstraintId(ctx),
-    a: id,
-    b: start.curve,
-  };
-  void session.addGeometry(
-    {
-      entities: [
-        ...c.entities,
-        ...e.entities,
-        { kind: 'arc', id, center: c.id, start: from, end: to },
-      ],
-      constraints: [...e.constraints, tangent],
-    },
-    { required: new Set([tangent.id]) },
-  );
+  const { entities, constraints, required } = tangentArcGeometry(ctx, start, step);
+  void session.addGeometry({ entities, constraints }, { required });
 }
