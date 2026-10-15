@@ -24,6 +24,37 @@ const D = (ccw: boolean): ProfileLoop => [
   { kind: 'arc', center: [0, 0], from: [0, 1], to: [0, -1], ccw },
 ];
 
+/** Quadratic spline from (4, 3) over (2, 5) to (0, 3): the top of SPLINE_LOOP. */
+const SPLINE = {
+  kind: 'bspline',
+  degree: 2,
+  poles: [
+    [4, 3],
+    [2, 5],
+    [0, 3],
+  ],
+  knots: [0, 0, 0, 1, 1, 1],
+} as const satisfies ProfileCurve;
+
+/** A rectangle [0, 4]×[0, 3] whose top side is SPLINE, with the spline replaced by `spline`. */
+function splineLoop(spline: Record<string, unknown> = SPLINE): unknown[] {
+  return [line([0, 0], [4, 0]), line([4, 0], [4, 3]), spline, line([0, 3], [0, 0])];
+}
+
+/** A cubic spline side from (4, 3) to (0, 3) with 7 poles (3 interior knots) and the given knots. */
+function cubicSide(knots: readonly number[]): Record<string, unknown> {
+  const poles: Vec2[] = [
+    [4, 3],
+    [3.5, 4],
+    [3, 2],
+    [2, 4],
+    [1, 2],
+    [0.5, 4],
+    [0, 3],
+  ];
+  return { kind: 'bspline', degree: 3, poles, knots };
+}
+
 function face(change: Record<string, unknown> = {}): Record<string, unknown> {
   return { plane: XY, outer: SQUARE, holes: [], ...change };
 }
@@ -59,6 +90,54 @@ describe('validateFaceInput', () => {
       face({
         plane: { origin: [1, 2, 3], xDir: [Math.SQRT1_2, Math.SQRT1_2, 0], normal: [0, 0, 1] },
       }),
+    ],
+    ['a rectangle with a spline side (M29)', face({ outer: splineLoop() })],
+    [
+      'a cubic spline side with an interior knot (M29)',
+      face({
+        outer: splineLoop({
+          kind: 'bspline',
+          degree: 3,
+          poles: [
+            [4, 3],
+            [3, 4],
+            [2, 2],
+            [1, 4],
+            [0, 3],
+          ],
+          knots: [0, 0, 0, 0, 0.4, 1, 1, 1, 1],
+        }),
+      }),
+    ],
+    [
+      'a closed spline alone (M29)',
+      face({
+        outer: [
+          {
+            kind: 'bspline',
+            degree: 2,
+            poles: [
+              [0, 0],
+              [4, 0],
+              [4, 4],
+              [0, 0],
+            ],
+            knots: [0, 0, 0, 0.5, 1, 1, 1],
+          },
+        ],
+      }),
+    ],
+    [
+      'a spline hole (M29)',
+      face({ outer: polygon([-1, -1], [5, -1], [5, 6], [-1, 6]), holes: [splineLoop()] }),
+    ],
+    [
+      'knots clamped on [2, 7] with a double interior knot (M29)',
+      face({ outer: splineLoop(cubicSide([2, 2, 2, 2, 3, 3, 5, 7, 7, 7, 7])) }),
+    ],
+    [
+      'an interior knot repeated degree times (M29)',
+      face({ outer: splineLoop(cubicSide([0, 0, 0, 0, 0.5, 0.5, 0.5, 1, 1, 1, 1])) }),
     ],
   ])('%s is valid', (_, p) => {
     expect(validateFaceInput(p)).toEqual([]);
@@ -158,8 +237,161 @@ describe('validateFaceInput', () => {
       }),
     ],
     ['an invalid hole', face({ holes: [[{ kind: 'circle', center: [2, 2], radius: 0 }]] })],
+    ['a spline of degree 0', face({ outer: splineLoop({ ...SPLINE, degree: 0 }) })],
+    ['a spline of degree 1.5', face({ outer: splineLoop({ ...SPLINE, degree: 1.5 }) })],
+    ['a spline of degree NaN', face({ outer: splineLoop({ ...SPLINE, degree: Number.NaN }) })],
+    ['a spline of degree "2"', face({ outer: splineLoop({ ...SPLINE, degree: '2' }) })],
+    ['a spline without poles', face({ outer: splineLoop({ ...SPLINE, poles: undefined }) })],
+    [
+      'a spline with too few poles for its degree',
+      face({
+        outer: splineLoop({
+          ...SPLINE,
+          poles: [
+            [4, 3],
+            [0, 3],
+          ],
+          knots: [0, 0, 0, 1, 1],
+        }),
+      }),
+    ],
+    [
+      'a spline pole of 3 numbers',
+      face({
+        outer: splineLoop({
+          ...SPLINE,
+          poles: [
+            [4, 3],
+            [2, 5, 0],
+            [0, 3],
+          ],
+        }),
+      }),
+    ],
+    [
+      'a spline pole Infinity',
+      face({
+        outer: splineLoop({
+          ...SPLINE,
+          poles: [
+            [4, 3],
+            [2, Infinity],
+            [0, 3],
+          ],
+        }),
+      }),
+    ],
+    [
+      'spline knots of the wrong length',
+      face({ outer: splineLoop({ ...SPLINE, knots: [0, 0, 0, 1, 1] }) }),
+    ],
+    [
+      'a spline knot NaN',
+      face({ outer: splineLoop({ ...SPLINE, knots: [0, 0, 0, Number.NaN, 1, 1] }) }),
+    ],
+    ['spline knots not an array', face({ outer: splineLoop({ ...SPLINE, knots: 'clamped' }) })],
+    [
+      'decreasing spline knots',
+      face({ outer: splineLoop({ ...SPLINE, knots: [0, 0, 0, 1, 0.5, 1] }) }),
+    ],
+    [
+      'a spline whose first pole is off the end of the previous curve',
+      face({
+        outer: splineLoop({
+          ...SPLINE,
+          poles: [
+            [4, 3.1],
+            [2, 5],
+            [0, 3],
+          ],
+        }),
+      }),
+    ],
+    [
+      'a spline whose last pole is off the start of the next curve',
+      face({
+        outer: splineLoop({
+          ...SPLINE,
+          poles: [
+            [4, 3],
+            [2, 5],
+            [0.1, 3],
+          ],
+        }),
+      }),
+    ],
+    ['an open spline alone', face({ outer: [{ ...SPLINE }] })],
+    [
+      'a spline of degree 26',
+      face({
+        outer: splineLoop({
+          ...SPLINE,
+          degree: 26,
+          poles: Array.from({ length: 27 }, (_, i): Vec2 => [
+            4 - (4 * i) / 26,
+            i === 0 || i === 26 ? 3 : 4,
+          ]),
+          knots: [...Array<number>(27).fill(0), ...Array<number>(27).fill(1)],
+        }),
+      }),
+    ],
+    [
+      'knots not clamped at the start',
+      face({ outer: splineLoop(cubicSide([0, 0, 0, 0.1, 0.3, 0.5, 0.7, 1, 1, 1, 1])) }),
+    ],
+    [
+      'knots not clamped at the end',
+      face({ outer: splineLoop(cubicSide([0, 0, 0, 0, 0.3, 0.5, 0.7, 0.9, 1, 1, 1])) }),
+    ],
+    ['all knots equal', face({ outer: splineLoop(cubicSide([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])) })],
+    [
+      'the first knot larger than the last',
+      face({ outer: splineLoop(cubicSide([1, 1, 1, 1, 0.7, 0.5, 0.3, 0, 0, 0, 0])) }),
+    ],
+    [
+      'an interior knot equal to the first',
+      face({ outer: splineLoop(cubicSide([0, 0, 0, 0, 0, 0.5, 0.7, 1, 1, 1, 1])) }),
+    ],
+    [
+      'an interior knot equal to the last',
+      face({ outer: splineLoop(cubicSide([0, 0, 0, 0, 0.3, 0.5, 1, 1, 1, 1, 1])) }),
+    ],
+    [
+      'an interior knot outside the range',
+      face({ outer: splineLoop(cubicSide([0, 0, 0, 0, 0.3, 1.5, 0.7, 1, 1, 1, 1])) }),
+    ],
+    [
+      'decreasing interior knots',
+      face({ outer: splineLoop(cubicSide([0, 0, 0, 0, 0.7, 0.5, 0.3, 1, 1, 1, 1])) }),
+    ],
+    [
+      'an interior knot repeated more than degree times',
+      face({
+        outer: splineLoop({
+          ...cubicSide([]),
+          poles: [
+            [4, 3],
+            [3.5, 4],
+            [3, 2],
+            [2, 4],
+            [1.5, 2],
+            [1, 2],
+            [0.5, 4],
+            [0, 3],
+          ],
+          knots: [0, 0, 0, 0, 0.5, 0.5, 0.5, 0.5, 1, 1, 1, 1],
+        }),
+      }),
+    ],
   ])('%s is invalid', (_, p) => {
     expect(validateFaceInput(p)).not.toEqual([]);
+  });
+
+  it('names the knot problem of a spline (M29)', () => {
+    const errors = validateFaceInput(
+      face({ outer: splineLoop(cubicSide([0, 0, 0, 0, 0.7, 0.5, 0.3, 1, 1, 1, 1])) }),
+    );
+    expect(errors.join('\n')).toContain('outer[2]: knots must not decrease');
   });
 
   it('names where the problem is', () => {
@@ -194,6 +426,21 @@ describe('parseFaceInput: entity ids of the curves (M14)', () => {
     const parsed = parseFaceInput(face({ outer, holes: [hole] }));
     expect(parsed.ok && parsed.value.outer.map((c) => c.id)).toEqual(['l1', 'a1']);
     expect(parsed.ok && parsed.value.holes[0]?.[0]?.id).toBe('c1');
+  });
+
+  it('keeps the id of a spline and copies its arrays (M29)', () => {
+    const spline = {
+      ...SPLINE,
+      poles: SPLINE.poles.map((v): number[] => [...v]),
+      knots: [...SPLINE.knots] as number[], // widened from the literal types: the test mutates it
+      id: 's1',
+    };
+    const parsed = parseFaceInput(face({ outer: splineLoop(spline) }));
+    const copy = parsed.ok ? parsed.value.outer[2] : undefined;
+    expect(copy).toEqual({ ...SPLINE, id: 's1' });
+    spline.poles[1] = [9, 9];
+    spline.knots[3] = 0.5;
+    expect(copy).toEqual({ ...SPLINE, id: 's1' });
   });
 
   it('a curve without an id has no id property in the copy', () => {

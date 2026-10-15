@@ -2,7 +2,7 @@
 // → world segments, points → world points, each with the id and the style of its entity, so the
 // sketch layer can colour them and the picker can map a hit back to the entity. Pure, no three.
 
-import { assert, plane as planeMath, type Vec2, type Vec3 } from '@/core';
+import { assert, assertNever, plane as planeMath, type Vec2, type Vec3 } from '@/core';
 import type { SketchDrawing, SketchDrawingCurve, SketchStyle } from '@/interaction';
 
 /** Default maximum angle step of an arc segment: 5°. */
@@ -27,7 +27,8 @@ export interface SketchTessellation {
 
 /**
  * A line gives one segment; an arc max(2, ⌈(endAngle − startAngle) / maxStep⌉) segments of equal
- * angle, as a polyline from startAngle to endAngle. Points go through plane.toWorld.
+ * angle, as a polyline from startAngle to endAngle; a polyline (M29) its consecutive pairs of
+ * points. Points go through plane.toWorld.
  */
 export function tessellateSketch(
   drawing: SketchDrawing,
@@ -66,7 +67,22 @@ export function tessellateSketch(
 
 /** Points of the curve in plane coordinates, consecutive pairs are its segments. */
 function curvePolyline(curve: SketchDrawingCurve, maxStep: number): readonly Vec2[] {
-  if (curve.kind === 'line') return [curve.from, curve.to];
+  switch (curve.kind) {
+    case 'line':
+      return [curve.from, curve.to];
+    case 'arc':
+      return arcPolyline(curve, maxStep);
+    case 'polyline':
+      return curve.points;
+    default:
+      return assertNever(curve);
+  }
+}
+
+function arcPolyline(
+  curve: Extract<SketchDrawingCurve, { kind: 'arc' }>,
+  maxStep: number,
+): readonly Vec2[] {
   const span = curve.endAngle - curve.startAngle;
   const count = Math.max(2, Math.ceil(span / maxStep - STEP_SLACK));
   const result: Vec2[] = [];

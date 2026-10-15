@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { plane, vec3 } from '@/core';
+import { bspline, plane, vec3 } from '@/core';
 import type { Vec2, Vec3 } from '@/core';
 import { ORIGIN_AXES, ORIGIN_PLANES, ORIGIN_PLANE_IDS } from '@/document';
 import type { PlaneId } from '@/document';
+import type { SketchDrawingCurve } from '@/interaction';
 import { parseSketchData } from '@/sketch';
 import type { SketchData, SketchItemId } from '@/sketch';
 import { rectangleData } from '@/sketch/testing';
 import {
   ORIGIN_POINT_ID,
   artifactDrawing,
+  controlPolygonId,
   axisDrawing,
   planeDrawing,
   toSketchDrawing,
@@ -142,6 +144,164 @@ function polygonArea(points: readonly Vec2[]): number {
       return sum + x * ny - nx * y;
     }, 0) / 2
   );
+}
+
+/** Pole points p0 … p3 of the cubic bspline 'b' and fit points f0 … f2 of the fitSpline 'f'. */
+const POLES: readonly Vec2[] = [
+  [0, 0],
+  [10, 20],
+  [20, -20],
+  [30, 0],
+];
+const FIT: readonly Vec2[] = [
+  [0, 40],
+  [15, 50],
+  [30, 40],
+];
+const FITTED = bspline.interpolate(FIT);
+const SPLINES = data([
+  ...POLES.map(([x, y], i) => ({ kind: 'point', id: `p${String(i)}`, x, y })),
+  ...FIT.map(([x, y], i) => ({ kind: 'point', id: `f${String(i)}`, x, y })),
+  {
+    kind: 'bspline',
+    id: 'b',
+    degree: 3,
+    poles: ['p0', 'p1', 'p2', 'p3'],
+    knots: [0, 0, 0, 0, 1, 1, 1, 1],
+  },
+  {
+    kind: 'fitSpline',
+    id: 'f',
+    degree: FITTED.degree,
+    fit: ['f0', 'f1', 'f2'],
+    params: FITTED.params,
+    poles: FITTED.poles,
+    knots: FITTED.knots,
+  },
+]);
+
+/** The polyline of the drawing under the id. */
+function polylineOf(curves: readonly SketchDrawingCurve[], id: string): readonly Vec2[] {
+  for (const c of curves) if (c.kind === 'polyline' && c.id === id) return c.points;
+  throw new Error(`no polyline ${id}`);
+}
+
+describe('splines (M29)', () => {
+  it('draws a bspline as a polyline on the curve, then its control polygon as construction', () => {
+    const drawing = toSketchDrawing(XY, SPLINES, normal);
+
+    expect(drawing.curves.map((c) => [c.kind, c.id, c.style])).toEqual([
+      ['polyline', 'b', 'normal'],
+      ['polyline', controlPolygonId('b'), 'construction'],
+      ['polyline', 'f', 'normal'],
+    ]);
+    const curve = polylineOf(drawing.curves, 'b');
+    expect(curve.length).toBeGreaterThan(4);
+    expect(curve[0]).toEqual([0, 0]);
+    expect(curve[curve.length - 1]).toEqual([30, 0]);
+    // The middle of the cubic Bézier with these poles: (0 + 3·10 + 3·20 + 30) / 8, (3·20 − 3·20) / 8.
+    const shape = { degree: 3, poles: POLES, knots: [0, 0, 0, 0, 1, 1, 1, 1] };
+    expect(bspline.evaluate(shape, 0.5)).toEqual([15, 0]);
+    expect(curve).toContainEqual([15, 0]);
+    expect(polylineOf(drawing.curves, controlPolygonId('b'))).toEqual(POLES);
+  });
+
+  it('draws the pole points of a bspline and the fit points of a fitSpline as points', () => {
+    const drawing = toSketchDrawing(XY, SPLINES, normal);
+
+    expect(drawing.points.map((p) => p.id)).toEqual(['p0', 'p1', 'p2', 'p3', 'f0', 'f1', 'f2']);
+  });
+
+  it('draws a fitSpline through its fit points, without its poles', () => {
+    const drawing = toSketchDrawing(XY, SPLINES, normal);
+
+    const curve = polylineOf(drawing.curves, 'f');
+    expect(curve[0]).toEqual([0, 40]);
+    expect(curve[curve.length - 1]).toEqual([30, 40]);
+    const middle = curve.reduce((best, p) =>
+      Math.abs(p[0] - 15) < Math.abs(best[0] - 15) ? p : best,
+    );
+    expect(middle[1]).toBeCloseTo(50, 0);
+    expect(drawing.curves.some((c) => c.id === controlPolygonId('f'))).toBe(false);
+  });
+
+  it('keeps the tessellation within 1e-4 · max(1, largest |pole coordinate|) of the curve', () => {
+    const drawing = toSketchDrawing(XY, SPLINES, normal);
+    const curve = polylineOf(drawing.curves, 'b');
+    const shape = { degree: 3, poles: POLES, knots: [0, 0, 0, 0, 1, 1, 1, 1] };
+    const tolerance = 1e-4 * 30;
+    // Densely sampled curve points lie near the polyline.
+    for (let i = 0; i <= 200; i++) {
+      const p = bspline.evaluate(shape, i / 200);
+      expect(distanceToPolyline(p, curve)).toBeLessThanOrEqual(tolerance * 1.5);
+    }
+  });
+
+  it('gives a spline the style of styleOf, its control polygon always construction', () => {
+    const styleOf = (id: SketchItemId) => (id === 'b' ? 'selected' : 'construction');
+    const drawing = toSketchDrawing(XY, SPLINES, styleOf);
+
+    expect(drawing.curves.map((c) => [c.id, c.style])).toEqual([
+      ['b', 'selected'],
+      [controlPolygonId('b'), 'construction'],
+      ['f', 'construction'],
+    ]);
+  });
+
+  it('gives a control polygon id that is no entity id', () => {
+    expect(SPLINES.entities.some((e) => e.id === controlPolygonId('b'))).toBe(false);
+    expect(controlPolygonId('b')).not.toBe(controlPolygonId('f'));
+    expect(controlPolygonId('b').startsWith('__')).toBe(true);
+  });
+
+  it('is frozen down to the points of a polyline', () => {
+    const drawing = toSketchDrawing(XY, SPLINES, normal);
+
+    expect(drawing.curves.every(Object.isFrozen)).toBe(true);
+    for (const id of ['b', controlPolygonId('b'), 'f']) {
+      const points = polylineOf(drawing.curves, id);
+      expect(Object.isFrozen(points)).toBe(true);
+      expect(points.every(Object.isFrozen)).toBe(true);
+    }
+  });
+
+  it('a regenerated sketch: splines without control polygons, construction ones in the style construction', () => {
+    const construction = data([
+      ...SPLINES.entities.filter((e) => e.kind === 'point'),
+      ...SPLINES.entities
+        .filter((e) => e.kind !== 'point')
+        .map((e) => (e.id === 'b' ? { ...e, construction: true } : e)),
+    ]);
+
+    const drawing = artifactDrawing(XY, construction.entities);
+
+    expect(drawing.curves.map((c) => [c.kind, c.id, c.style])).toEqual([
+      ['polyline', 'b', 'construction'],
+      ['polyline', 'f', 'normal'],
+    ]);
+    expect(drawing.points).toEqual([]);
+  });
+});
+
+function distanceToPolyline(p: Vec2, polyline: readonly Vec2[]): number {
+  let best = Infinity;
+  for (let i = 1; i < polyline.length; i++) {
+    const a = polyline[i - 1] ?? p;
+    const b = polyline[i] ?? p;
+    const len2 = (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2;
+    const t =
+      len2 === 0
+        ? 0
+        : Math.max(
+            0,
+            Math.min(1, ((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / len2),
+          );
+    best = Math.min(
+      best,
+      Math.hypot(p[0] - a[0] - t * (b[0] - a[0]), p[1] - a[1] - t * (b[1] - a[1])),
+    );
+  }
+  return best;
 }
 
 describe('artifactDrawing', () => {

@@ -26,6 +26,8 @@ export { quat } from './math/quat';
 export type { Quat } from './math/quat';
 export { plane } from './math/plane';
 export type { Plane, Vec2 } from './math/plane';
+export { bspline } from './math/bspline';
+export type { BSplineShape } from './math/bspline';
 
 export { createRpcClient } from './rpc/client';
 export type { RpcClient } from './rpc/client';

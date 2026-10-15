@@ -13,6 +13,7 @@ describe('core public API', () => {
         'RpcError',
         'assert',
         'assertNever',
+        'bspline',
         'createRandomIdGenerator',
         'createRegistry',
         'createRpcClient',

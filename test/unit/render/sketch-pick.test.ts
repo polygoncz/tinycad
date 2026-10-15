@@ -9,6 +9,7 @@ import {
   sketchHits,
   type SketchHit,
 } from '@/render/sketch-pick';
+import { tessellateSketch } from '@/render/sketch-drawing';
 
 const f = (...values: number[]): Float32Array => new Float32Array(values);
 
@@ -225,5 +226,55 @@ describe('pickSketchRegion', () => {
       ['empty', drawingOn(XY, [])],
     ]);
     expect(pickSketchRegion(drawings, downAt(1, 1))).toBeNull();
+  });
+});
+
+describe('picking a polyline (M29)', () => {
+  const XY: Plane = { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, 0, 1] };
+  // A zigzag of a spline next to a line; on XY the world x, y serve as px.
+  const zigzag: SketchDrawing = {
+    plane: XY,
+    curves: [
+      { kind: 'line', id: 'l1', from: [0, 50], to: [100, 50], style: 'normal' },
+      {
+        kind: 'polyline',
+        id: 's1',
+        points: [
+          [0, 0],
+          [20, 20],
+          [40, 0],
+          [60, 20],
+        ],
+        style: 'normal',
+      },
+    ],
+    points: [],
+  };
+
+  /** The id of the curve picked at (x, y), via the tessellation like the sketch layer. */
+  function pickedId(x: number, y: number): string | null {
+    const t = tessellateSketch(zigzag);
+    const screen = new Float32Array((t.segments.length / 6) * 4);
+    for (let s = 0; s < t.segments.length / 6; s++) {
+      screen[4 * s] = t.segments[6 * s] ?? NaN;
+      screen[4 * s + 1] = t.segments[6 * s + 1] ?? NaN;
+      screen[4 * s + 2] = t.segments[6 * s + 3] ?? NaN;
+      screen[4 * s + 3] = t.segments[6 * s + 4] ?? NaN;
+    }
+    const hit = pickSketch(screen, f(), x, y);
+    return hit?.kind === 'segment' ? (t.segmentCurves[hit.index] ?? null) : null;
+  }
+
+  it('gives the id of the spline on a segment', () => {
+    expect(pickedId(30, 11)).toBe('s1');
+  });
+
+  it('gives the id of the spline at a point between two segments', () => {
+    expect(pickedId(20, 22)).toBe('s1');
+    expect(pickedId(40, -2)).toBe('s1');
+  });
+
+  it('gives nothing away from the polyline', () => {
+    expect(pickedId(20, 35)).toBeNull();
   });
 });

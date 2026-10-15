@@ -10,6 +10,7 @@ describe('sketch public API', () => {
         'GEOMETRIC_CONSTRAINT_KINDS',
         'SKETCH_FEATURE_TYPE',
         'SKETCH_PARAM',
+        'SPLINE_TOLERANCE',
         'computeRegions',
         'constraintFor',
         'curve2',
@@ -58,7 +59,7 @@ describe('sketch public API', () => {
     >();
   });
 
-  it('Curve2 has the shape of ProfileCurve, with the optional entity id of M14 (spec 06)', () => {
+  it('Curve2 has the shape of ProfileCurve, with the optional entity id of M14 and the bspline of M29 (spec 06, 12)', () => {
     expectTypeOf<Curve2>().toEqualTypeOf<
       | {
           readonly kind: 'line';
@@ -78,6 +79,13 @@ describe('sketch public API', () => {
           readonly kind: 'circle';
           readonly center: readonly [number, number];
           readonly radius: number;
+          readonly id?: string;
+        }
+      | {
+          readonly kind: 'bspline';
+          readonly degree: number;
+          readonly poles: readonly (readonly [number, number])[];
+          readonly knots: readonly number[];
           readonly id?: string;
         }
     >();

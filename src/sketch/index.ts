@@ -7,6 +7,7 @@ export type {
   DimensionKind,
   GeometricConstraintKind,
   SketchArc,
+  SketchBSpline,
   SketchCircle,
   SketchConstraint,
   SketchConstraintDraft,
@@ -15,6 +16,7 @@ export type {
   SketchData,
   SketchEntity,
   SketchEntityId,
+  SketchFitSpline,
   SketchItemId,
   SketchLine,
   SketchPoint,
@@ -24,6 +26,6 @@ export type { SketchIssue } from './parse';
 export { curve2, pointsById } from './geometry';
 export type { Curve2 } from './geometry';
 export { constraintFor, dimensionFor, measure, removeItems, toggleConstruction } from './edit';
-export { computeRegions } from './regions';
+export { SPLINE_TOLERANCE, computeRegions } from './regions';
 export type { RegionsResult, SketchRegion } from './regions';
 export type { ConstraintSolver, SolveInput, SolveResult, SolveStatus } from './solver';

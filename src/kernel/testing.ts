@@ -273,6 +273,25 @@ const D_LOOP = (ccw: boolean): ProfileLoop => [
   line([0, -1], [0, 1]),
   { kind: 'arc', center: [0, 0], from: [0, 1], to: [0, -1], ccw },
 ];
+/**
+ * M29: rectangle [0, 4]×[0, 3] whose right side is a quadratic spline over (6, 1.5): it bulges
+ * to x = 5 at its middle, so the bounding box is [0, 0]..[5, 3].
+ */
+const SPLINE_LOOP: ProfileLoop = [
+  line([0, 0], [4, 0]),
+  {
+    kind: 'bspline',
+    degree: 2,
+    poles: [
+      [4, 0],
+      [6, 1.5],
+      [4, 3],
+    ],
+    knots: [0, 0, 0, 1, 1, 1],
+  },
+  line([4, 3], [0, 3]),
+  line([0, 3], [0, 0]),
+];
 type FaceParams = Parameters<GeometryKernel['makeFace']>[0];
 const FACE: FaceParams = { plane: PLANE_XY, outer: SQUARE, holes: [] };
 
@@ -796,6 +815,12 @@ export function describeGeometryKernelContract(
           [1, 2, 0],
           [4, 5, 0],
         ],
+        [
+          'a rectangle with a spline side (M29)',
+          { plane: PLANE_XY, outer: SPLINE_LOOP, holes: [] },
+          [0, 0, 0],
+          [5, 3, 0],
+        ],
       ] satisfies [string, FaceParams, Vec3, Vec3][])(
         '%s: a new handle with the bounding box of the outer loop and a valid mesh',
         async (_, p, min, max) => {
@@ -842,6 +867,15 @@ export function describeGeometryKernelContract(
           },
         ],
         ['an empty outer loop', { ...FACE, outer: [] }],
+        [
+          'a spline with too few knots (M29)',
+          {
+            ...FACE,
+            outer: SPLINE_LOOP.map((c) =>
+              c.kind === 'bspline' ? { ...c, knots: c.knots.slice(1) } : c,
+            ),
+          },
+        ],
       ] satisfies [string, FaceParams][])(
         '%s rejects with invalid-input and creates no handle',
         async (_, p) => {

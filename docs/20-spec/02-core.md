@@ -216,6 +216,8 @@ export const plane = {
 };
 ```
 
+**B-spline (M29, spliny skici):** `src/core/math/bspline.ts`, bez gl-matrix. Polynomiální (bez vah) sevřený (clamped) B-spline ve 2D: vyhodnocení (de Boor), 1. a 2. derivace, adaptivní tessellace a globální interpolace bodů (Piegl–Tiller). Jmenný prostor `bspline` s typem `BSplineShape { degree; poles: Vec2[]; knots }`; kontrakt a chování v [[12-skicar#Spliny (M29)]]. V `core` je proto, že ji kromě `sketch` (oblasti, kresba, nástroje) potřebuje i `FakeKernel` a `kernel` smí jen na `core` ([[Q087 Spline v řešiči a v jádře – zjištění z implementace|Q087]]).
+
 Rozsah roste podle potřeby, nic „do zásoby“.
 
 ### RPC pro workery
