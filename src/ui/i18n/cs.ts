@@ -136,6 +136,8 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'toolbar.group.feature': 'Featury',
   // The button of the groups that do not fit into the bar (M19.1).
   'toolbar.more': 'Další nástroje',
+  // The arrow of a split button of a tool family (M27); name = the label of the shown tool.
+  'toolbar.variants': 'Další způsoby: {name}',
 
   // Sketcher (M12): tools, toolbar groups, actions, constraints, the sketch panel.
   'tool.sketch': 'Skica',

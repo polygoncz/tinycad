@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fitGroups, overflowItems } from '@/ui/toolbar-fit';
+import { fitGroups, menuEntries, overflowItems } from '@/ui/toolbar-fit';
 
 describe('fitGroups', () => {
   const widths = [100, 100, 100];
@@ -60,5 +60,31 @@ describe('overflowItems', () => {
 
   it('is frozen', () => {
     expect(Object.isFrozen(overflowItems(groups, 1))).toBe(true);
+  });
+});
+
+describe('menuEntries', () => {
+  interface Item {
+    readonly id: string;
+    readonly variants: readonly Item[];
+  }
+  const plain = (id: string): Item => ({ id, variants: [] });
+
+  it('puts the variants of a family in place of its item, the other items stay', () => {
+    const items: Item[] = [
+      plain('line'),
+      { id: 'circle3p', variants: [plain('circle'), plain('circle3p')] },
+      plain('rectangle'),
+    ];
+    expect(menuEntries(items).map((i) => i.id)).toEqual([
+      'line',
+      'circle',
+      'circle3p',
+      'rectangle',
+    ]);
+  });
+
+  it('no items: none', () => {
+    expect(menuEntries([])).toEqual([]);
   });
 });
