@@ -81,7 +81,7 @@ M16 (vlastní OCCT build) technicky potřebuje jen M7. Dlouho byl na konci, prot
 
 ### Souběžné stopy (pokus od M25)
 
-Pavel 2026-10-15 chtěl zkusit, jestli milníky může dělat víc agentů souběžně. Rozhoduje průnik dotčených souborů, ne pořadí milníků, proto tři stopy, každá ve vlastní session a vlastním git worktree:
+Pavel 2026-10-15 chtěl zkusit, jestli milníky může dělat víc agentů souběžně. Obecný postup je v metodice [[Souběžné stopy agentů]]; níže jsou pravidla této série. Rozhoduje průnik dotčených souborů, ne pořadí milníků, proto tři stopy, každá ve vlastní session a vlastním git worktree:
 
 | Stopa | Milníky | Poznámka |
 |---|---|---|

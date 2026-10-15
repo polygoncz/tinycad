@@ -18,7 +18,7 @@ specs:
   - "[[06-geometricke-jadro]]"
   - "[[09-vykreslovani]]"
 depends_on:
-  - "[[M28-koty]]"
+  - "[[M24-realisticke-zobrazeni]]"
 started: 2026-10-15
 finished:
 tags:

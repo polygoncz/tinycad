@@ -28,6 +28,10 @@ Výuková webová CAD aplikace (Onshape-like Part Studio). Autor: Pavel. Pavel z
 - **Implementace:** každý úkol plánu zvlášť subagent `implementer` (Opus, TDD, `npm run check`). Návrh nerozhoduje, nejasnosti vrací jako otázky.
 - **Po každém úkolu:** hlavní sezení zkontroluje kód proti specifikaci, vysvětlí Pavlovi návrhová místa, otázky implementátora převede na otázky ve vaultu nebo upřesnění spec, zaškrtne úkol. Na konci milníku `architecture-reviewer`.
 
+### Souběžné stopy (od M25)
+
+Sérii milníků s malým průnikem dotčených souborů lze implementovat souběžně: každá stopa je samostatná session ve vlastním git worktree, hlavní sezení předem zafixuje kontrakty sdílených typů, dělá dispečera a slučuje do `main` po jednom. Postup a pravidla: `docs/70-poznatky/Souběžné stopy agentů.md`, pravidla aktuální série v `docs/40-plan/Roadmapa.md`. Stav stop ukazuje panel `/stopy` (mod Claude Code `tinycad-stopy`).
+
 ## Konvence kódu
 
 - **Kód, identifikátory, komentáře v kódu, commit zprávy:** anglicky. **Vault:** česky.

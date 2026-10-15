@@ -18,7 +18,7 @@ specs:
   - "[[10-interakce]]"
   - "[[11-ui]]"
 depends_on:
-  - "[[M27-oblouky-a-kruznice]]"
+  - "[[M24-realisticke-zobrazeni]]"
 started:
 finished:
 tags:
