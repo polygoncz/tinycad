@@ -60,17 +60,20 @@ export function constraintSection(panel: Locator): Locator {
 
 /**
  * Opens the section of the constraints in the sketch panel, unless it is open already. A new
- * dimension opens the section by itself (focusNewDimension), maybe just after the check here, and
- * the click would then close it again; so the check and the click are retried until it stays open.
+ * dimension opens the section by itself a tick later (focusNewDimension) and focuses its field;
+ * a click in that moment would close the section again and take the focus, so the section gets
+ * a second to open by itself first.
  */
 export async function openConstraintSection(panel: Locator): Promise<void> {
   const section = constraintSection(panel);
-  await expect(async () => {
-    if ((await section.getAttribute('open')) === null) {
-      await panel.getByText('Vazby', { exact: true }).click();
-    }
+  try {
     await expect(section).toHaveJSProperty('open', true, { timeout: 1000 });
-  }).toPass();
+    return;
+  } catch {
+    // Still collapsed: open it.
+  }
+  await panel.getByText('Vazby', { exact: true }).click();
+  await expect(section).toHaveJSProperty('open', true);
 }
 
 /**
