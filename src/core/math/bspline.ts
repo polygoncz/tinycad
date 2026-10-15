@@ -1,10 +1,11 @@
-import { assert } from '@/core';
-import type { Vec2 } from '@/core';
+import { assert } from '../assert';
+import type { Vec2 } from './plane';
 
-// Polynomial B-spline math for sketch splines (spec 12 "Spliny (M29)", Q086): evaluation,
-// derivatives, tessellation and global interpolation (Piegl–Tiller, The NURBS Book).
+// Polynomial B-spline math (spec 02-core, spec 12 "Spliny (M29)", Q086, Q087): evaluation,
+// derivatives, tessellation and global interpolation (Piegl–Tiller, The NURBS Book). In core
+// because sketch and the FakeKernel need it both. No gl-matrix here.
 
-/** A clamped polynomial B-spline. Structurally a subset of the Curve2 `bspline` variant. */
+/** A clamped polynomial B-spline. Structurally a subset of the Curve2 and ProfileCurve `bspline` variants. */
 export interface BSplineShape {
   readonly degree: number;
   readonly poles: readonly Vec2[];
@@ -12,12 +13,12 @@ export interface BSplineShape {
 }
 
 /** The point on the curve (de Boor); t is clamped to [knots[degree], knots[poles.length]]. */
-export function evaluate(curve: BSplineShape, t: number): Vec2 {
+function evaluate(curve: BSplineShape, t: number): Vec2 {
   return at(derivatives(curve, t, 0), 0);
 }
 
 /** The order-th derivative with respect to t (order 1 or 2; a zero vector when degree < order). */
-export function derivative(curve: BSplineShape, t: number, order: 1 | 2 = 1): Vec2 {
+function derivative(curve: BSplineShape, t: number, order: 1 | 2 = 1): Vec2 {
   if (curve.degree < order) return [0, 0];
   return at(derivatives(curve, t, order), order);
 }
@@ -32,12 +33,12 @@ const MIN_DEPTH = 2;
  * chord by more than the tolerance; both ends exactly (= the end poles). Each span between distinct
  * knots is halved separately, so a short arc is not skipped.
  */
-export function tessellate(curve: BSplineShape, tolerance: number): Vec2[] {
+function tessellate(curve: BSplineShape, tolerance: number): Vec2[] {
   checkShape(curve);
   const { degree, poles, knots } = curve;
   const first = poles[0];
   const last = poles[poles.length - 1];
-  assert(first !== undefined && last !== undefined, 'tessellate: a spline needs poles');
+  assert(first !== undefined && last !== undefined, 'bspline.tessellate: a spline needs poles');
   const minDepth = degree > 1 ? MIN_DEPTH : 0;
   const out: Vec2[] = [first];
 
@@ -71,17 +72,17 @@ export function tessellate(curve: BSplineShape, tolerance: number): Vec2[] {
  * knots by averaging. Throws RangeError for fewer than 2 points, a non-finite coordinate or two
  * consecutive equal points.
  */
-export function interpolateSpline(points: readonly Vec2[]): {
+function interpolate(points: readonly Vec2[]): {
   degree: 1 | 2 | 3;
   params: number[];
   knots: number[];
   poles: Vec2[];
 } {
   const n = points.length;
-  if (n < 2) throw new RangeError(`interpolateSpline: needs at least 2 points, got ${String(n)}`);
+  if (n < 2) throw new RangeError(`bspline.interpolate: needs at least 2 points, got ${String(n)}`);
   for (const [x, y] of points) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
-      throw new RangeError(`interpolateSpline: non-finite point [${String(x)}, ${String(y)}]`);
+      throw new RangeError(`bspline.interpolate: non-finite point [${String(x)}, ${String(y)}]`);
     }
   }
   const degree: 1 | 2 | 3 = n === 2 ? 1 : n === 3 ? 2 : 3;
@@ -94,7 +95,9 @@ export function interpolateSpline(points: readonly Vec2[]): {
       at(points, i)[1] - at(points, i - 1)[1],
     );
     if (d === 0)
-      throw new RangeError(`interpolateSpline: points ${String(i - 1)} and ${String(i)} are equal`);
+      throw new RangeError(
+        `bspline.interpolate: points ${String(i - 1)} and ${String(i)} are equal`,
+      );
     chords.push(d);
   }
   const total = chords.reduce((s, d) => s + d, 0);
@@ -126,6 +129,8 @@ export function interpolateSpline(points: readonly Vec2[]): {
   const poles = solve(matrix, points);
   return { degree, params, knots, poles };
 }
+
+export const bspline = { evaluate, derivative, tessellate, interpolate };
 
 /** Points and its derivatives up to `order` at t (Piegl–Tiller A3.2). */
 function derivatives(curve: BSplineShape, t: number, order: number): Vec2[] {
@@ -249,7 +254,7 @@ function solve(matrix: readonly (readonly number[])[], rhs: readonly Vec2[]): Ve
     for (let r = col + 1; r < n; r++) {
       if (Math.abs(getAt(a, r, col)) > Math.abs(getAt(a, pivot, col))) pivot = r;
     }
-    assert(getAt(a, pivot, col) !== 0, 'interpolateSpline: singular collocation matrix');
+    assert(getAt(a, pivot, col) !== 0, 'bspline.interpolate: singular collocation matrix');
     [a[col], a[pivot]] = [at(a, pivot), at(a, col)];
     [b[col], b[pivot]] = [at(b, pivot), at(b, col)];
     for (let r = col + 1; r < n; r++) {

@@ -24,7 +24,7 @@ export type Curve2 =
       readonly radius: number;
       readonly id?: string;
     }
-  /** M29: a clamped polynomial B-spline (the shape of BSplineShape in bspline.ts). */
+  /** M29: a clamped polynomial B-spline (the shape of BSplineShape in core/math/bspline.ts). */
   | {
       readonly kind: 'bspline';
       readonly degree: number;

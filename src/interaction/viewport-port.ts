@@ -151,6 +151,13 @@ export type SketchDrawingCurve =
       readonly startAngle: number;
       readonly endAngle: number;
       readonly style: SketchStyle;
+    }
+  /** M29: an open polyline (a tessellated spline), drawn and picked as segments with one id. */
+  | {
+      readonly kind: 'polyline';
+      readonly id: string;
+      readonly points: readonly Vec2[];
+      readonly style: SketchStyle;
     };
 
 export interface SketchDrawingPoint {

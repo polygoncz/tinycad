@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { bspline as splineMath, type Vec2 } from '@/core';
 import type { Curve2 } from '@/sketch/geometry';
 import type { SketchData } from '@/sketch/model';
 import { parseSketchData } from '@/sketch/parse';
@@ -46,9 +47,58 @@ const ids = (loop: readonly Curve2[]) => loop.map((c) => c.id);
 
 const names = (data: SketchData) => computeRegions(data).regions.map((r) => r.name);
 
-// M29: splines get their ends with regions (task 3).
-const start = (c: Curve2) => (c.kind === 'circle' || c.kind === 'bspline' ? undefined : c.from);
-const end = (c: Curve2) => (c.kind === 'circle' || c.kind === 'bspline' ? undefined : c.to);
+const bspline = (id: string, poles: readonly string[], degree = 3, construction?: true) => ({
+  kind: 'bspline',
+  id,
+  degree,
+  poles,
+  knots: clamped(poles.length, degree),
+  ...(construction === undefined ? {} : { construction }),
+});
+/** A clamped knot vector with uniform inner knots for `count` poles. */
+function clamped(count: number, degree: number): number[] {
+  const inner = count - degree - 1;
+  return [
+    ...Array<number>(degree + 1).fill(0),
+    ...Array.from({ length: inner }, (_, i) => (i + 1) / (inner + 1)),
+    ...Array<number>(degree + 1).fill(1),
+  ];
+}
+/** A fit spline through named points given with their coordinates. */
+const fitSpline = (id: string, fit: readonly (readonly [string, number, number])[]) => {
+  const { degree, params, knots, poles } = splineMath.interpolate(
+    fit.map(([, x, y]): Vec2 => [x, y]),
+  );
+  return { kind: 'fitSpline', id, degree, fit: fit.map(([name]) => name), params, poles, knots };
+};
+
+const start = (c: Curve2): Vec2 | undefined => {
+  if (c.kind === 'circle') return undefined;
+  return c.kind === 'bspline' ? c.poles[0] : c.from;
+};
+const end = (c: Curve2): Vec2 | undefined => {
+  if (c.kind === 'circle') return undefined;
+  return c.kind === 'bspline' ? c.poles[c.poles.length - 1] : c.to;
+};
+
+/** Shoelace of a closed polygon. */
+function polygonArea(points: readonly Vec2[]): number {
+  let sum = 0;
+  points.forEach((p, i) => {
+    const q = points[(i + 1) % points.length] ?? p;
+    sum += p[0] * q[1] - q[0] * p[1];
+  });
+  return sum / 2;
+}
+
+/** A fine tessellation of a spline from its first point, without the last one (for polygons). */
+function fine(c: Curve2 | undefined): Vec2[] {
+  if (c?.kind !== 'bspline') throw new Error(`not a spline: ${JSON.stringify(c)}`);
+  return splineMath.tessellate(c, 1e-6).slice(0, -1);
+}
+
+/** The outer curve with the given id. */
+const curveOf = (loop: readonly Curve2[] | undefined, id: string) => loop?.find((c) => c.id === id);
 
 /** Every curve ends where the next one starts (a lone circle is closed by itself). */
 function expectClosed(loop: readonly Curve2[]): void {
@@ -394,5 +444,304 @@ describe('computeRegions', () => {
       ...rectangleData({ prefix: 'A', x: 20 }).entities,
     ]);
     expect(names(data)).toEqual(['Aab,Abc,Acd,Ada', 'Bab,Bbc,Bcd,Bda']);
+  });
+});
+
+describe('computeRegions with splines (M29)', () => {
+  /**
+   * Areas come from a tessellation with tolerance 1e-4 · scale (here 1e-3 to 2e-3): the area
+   * between the chords and the curve is up to about 2/3 · tolerance · length (here up to 40).
+   */
+  const AREA_TOL = 5e-2;
+
+  /** Rectangle 10 × 5 whose right side bc is a cubic spline bulging to x = 13. */
+  const SPLINE_RECT = [
+    pt('a', 0, 0),
+    pt('b', 10, 0),
+    pt('s1', 13, 1),
+    pt('s2', 13, 4),
+    pt('c', 10, 5),
+    pt('d', 0, 5),
+    ln('ab', 'a', 'b'),
+    bspline('bc', ['b', 's1', 's2', 'c']),
+    ln('cd', 'c', 'd'),
+    ln('da', 'd', 'a'),
+  ];
+
+  it('a rectangle with a bspline side is one region carrying the exact spline', () => {
+    const { regions, crossing } = computeRegions(sketch(SPLINE_RECT));
+    expect(crossing).toBe(false);
+    expect(regions.map((r) => r.name)).toEqual(['ab,bc,cd,da']);
+    const [r] = regions;
+    expect(r?.outer).toHaveLength(4);
+    expectClosed(r?.outer ?? []);
+    const spline = curveOf(r?.outer, 'bc');
+    // Traversed counter-clockwise, the spline runs forward (b → c).
+    expect(spline).toEqual({
+      kind: 'bspline',
+      degree: 3,
+      poles: [
+        [10, 0],
+        [13, 1],
+        [13, 4],
+        [10, 5],
+      ],
+      knots: [0, 0, 0, 0, 1, 1, 1, 1],
+      id: 'bc',
+    });
+    const expected = polygonArea([[0, 0], ...fine(spline), [10, 5], [0, 5]]);
+    expect(expected).toBeGreaterThan(50);
+    expect(Math.abs((r?.area ?? 0) - expected)).toBeLessThan(AREA_TOL);
+  });
+
+  it('a rectangle with a fit spline side is one region', () => {
+    const data = sketch([
+      pt('a', 0, 0),
+      pt('b', 10, 0),
+      pt('m', 12, 2.5),
+      pt('c', 10, 5),
+      pt('d', 0, 5),
+      ln('ab', 'a', 'b'),
+      fitSpline('bc', [
+        ['b', 10, 0],
+        ['m', 12, 2.5],
+        ['c', 10, 5],
+      ]),
+      ln('cd', 'c', 'd'),
+      ln('da', 'd', 'a'),
+    ]);
+    const { regions } = computeRegions(data);
+    expect(regions.map((r) => r.name)).toEqual(['ab,bc,cd,da']);
+    const outer = regions[0]?.outer ?? [];
+    expectClosed(outer);
+    const spline = curveOf(outer, 'bc');
+    expect(spline?.kind).toBe('bspline');
+    const expected = polygonArea([[0, 0], ...fine(spline), [10, 5], [0, 5]]);
+    expect(Math.abs((regions[0]?.area ?? 0) - expected)).toBeLessThan(AREA_TOL);
+  });
+
+  /** A closed cubic spline around the square 10 × 10, from p0 back to p4 at the same place. */
+  const closedSpline = (
+    order: readonly string[],
+    constraints: readonly unknown[],
+    knots = [0, 0, 0, 0, 0.5, 1, 1, 1, 1],
+  ) =>
+    sketch(
+      [
+        pt('p0', 0, 0),
+        pt('p1', 10, 0),
+        pt('p2', 10, 10),
+        pt('p3', 0, 10),
+        pt('p4', 0, 0),
+        { kind: 'bspline', id: 'sp', degree: 3, poles: order, knots },
+      ],
+      constraints,
+    );
+
+  it.each([
+    ['joined by coincident', [{ kind: 'coincident', id: 'k', a: 'p0', b: 'p4' }]],
+    ['at the same place', []],
+  ])('a closed spline with ends %s is a loop with one node', (_name, constraints) => {
+    const data = closedSpline(['p0', 'p1', 'p2', 'p3', 'p4'], constraints);
+    const { regions, crossing } = computeRegions(data);
+    expect(crossing).toBe(false);
+    expect(regions.map((r) => r.name)).toEqual(['sp']);
+    const [r] = regions;
+    expect(r?.holes).toEqual([]);
+    expect(r?.outer).toHaveLength(1);
+    expectClosed(r?.outer ?? []);
+    const expected = polygonArea(fine(r?.outer[0]));
+    expect(expected).toBeGreaterThan(0);
+    expect(Math.abs((r?.area ?? 0) - expected)).toBeLessThan(AREA_TOL);
+  });
+
+  it('a clockwise closed spline is reversed in the counter-clockwise outer loop', () => {
+    const data = closedSpline(['p0', 'p3', 'p2', 'p1', 'p4'], [], [0, 0, 0, 0, 0.25, 1, 1, 1, 1]);
+    const { regions } = computeRegions(data);
+    expect(regions.map((r) => r.name)).toEqual(['sp']);
+    // Reversed: poles in the opposite order, knots mirrored (k → 1 − k, reversed).
+    expect(regions[0]?.outer).toEqual([
+      {
+        kind: 'bspline',
+        degree: 3,
+        poles: [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+        knots: [0, 0, 0, 0, 0.75, 1, 1, 1, 1],
+        id: 'sp',
+      },
+    ]);
+    expect(regions[0]?.area).toBeGreaterThan(0);
+  });
+
+  it('a closed spline inside a rectangle is a clockwise hole and a region of its own', () => {
+    const data = sketch(
+      [
+        pt('A', 0, 0),
+        pt('B', 20, 0),
+        pt('C', 20, 20),
+        pt('D', 0, 20),
+        ln('AB', 'A', 'B'),
+        ln('BC', 'B', 'C'),
+        ln('CD', 'C', 'D'),
+        ln('DA', 'D', 'A'),
+        pt('p0', 5, 5),
+        pt('p1', 15, 5),
+        pt('p2', 15, 15),
+        pt('p3', 5, 15),
+        pt('p4', 5, 5),
+        bspline('sp', ['p0', 'p1', 'p2', 'p3', 'p4']),
+      ],
+      [{ kind: 'coincident', id: 'k', a: 'p0', b: 'p4' }],
+    );
+    const { regions, crossing } = computeRegions(data);
+    expect(crossing).toBe(false);
+    expect(regions.map((r) => r.name)).toEqual(['AB,BC,CD,DA,sp', 'sp']);
+    const [outer, disc] = regions;
+    const splineArea = polygonArea(fine(disc?.outer[0]));
+    expect(Math.abs((disc?.area ?? 0) - splineArea)).toBeLessThan(AREA_TOL);
+    expect(outer?.holes.map(ids)).toEqual([['sp']]);
+    expect(polygonArea(fine(outer?.holes[0]?.[0]))).toBeCloseTo(-splineArea, 9);
+    expect(Math.abs((outer?.area ?? 0) - (400 - splineArea))).toBeLessThan(AREA_TOL);
+  });
+
+  it.each([
+    [
+      'a spline across a rectangle',
+      [
+        ...RECT,
+        pt('s1', 5, -3),
+        pt('s2', 6, 2),
+        pt('s3', 7, 8),
+        bspline('sp', ['s1', 's2', 's3'], 2),
+      ],
+    ],
+    [
+      'a spline end touching the inside of a line',
+      [
+        ...RECT,
+        pt('s1', 5, 0),
+        pt('s2', 7, -2),
+        pt('s3', 5, -5),
+        bspline('sp', ['s1', 's2', 's3'], 2),
+      ],
+    ],
+    [
+      'a spline through a circle',
+      [
+        pt('o', 0, 0),
+        circle('k', 'o', 2),
+        pt('s1', -5, 0),
+        pt('s2', 0, 1),
+        pt('s3', 5, 0),
+        bspline('sp', ['s1', 's2', 's3'], 2),
+      ],
+    ],
+    [
+      'two crossing splines',
+      [
+        pt('s1', 0, 0),
+        pt('s2', 5, 10),
+        pt('s3', 10, 0),
+        pt('t1', 0, 5),
+        pt('t2', 5, -5),
+        pt('t3', 10, 5),
+        bspline('sp', ['s1', 's2', 's3'], 2),
+        bspline('tq', ['t1', 't2', 't3'], 2),
+      ],
+    ],
+    [
+      'a closed cubic figure eight',
+      [
+        pt('o', 10, 5),
+        pt('s1', 20, 10),
+        pt('s2', 20, 0),
+        pt('s3', 0, 10),
+        pt('s4', 0, 0),
+        pt('o2', 10, 5),
+        bspline('sp', ['o', 's1', 's2', 's3', 's4', 'o2']),
+      ],
+    ],
+    [
+      // The degree follows the pole count (min(3, n − 1)), so a b a is quadratic: a straight
+      // there-and-back curve whose tessellation overlaps itself.
+      'a closed spline a b a running back over itself',
+      [pt('a', 0, 0), pt('b', 10, 0), pt('a2', 0, 0), bspline('sp', ['a', 'b', 'a2'], 2)],
+    ],
+    [
+      'an open spline turning back onto itself',
+      [pt('a', 0, 0), pt('b', 10, 0), pt('c', 5, 0), bspline('sp', ['a', 'b', 'c'], 2)],
+    ],
+  ])('%s cross: no regions', (_name, entities) => {
+    expect(computeRegions(sketch(entities))).toEqual({ regions: [], crossing: true });
+  });
+
+  it('keeps the name when coordinates and entity order change', () => {
+    const moved = sketch(
+      [
+        pt('a', -3, -4),
+        pt('b', 30, -4),
+        pt('s1', 40, 2),
+        pt('s2', 35, 9),
+        pt('c', 30, 12),
+        pt('d', -3, 12),
+        ...SPLINE_RECT.slice(6),
+      ].reverse(),
+    );
+    expect(names(sketch(SPLINE_RECT))).toEqual(['ab,bc,cd,da']);
+    expect(names(moved)).toEqual(['ab,bc,cd,da']);
+  });
+
+  it('ignores construction splines', () => {
+    const data = sketch([
+      ...RECT,
+      pt('s1', 5, -3),
+      pt('s2', 6, 2),
+      pt('s3', 7, 8),
+      bspline('sp', ['s1', 's2', 's3'], 2, true),
+    ]);
+    expect(computeRegions(data)).toMatchObject({ crossing: false });
+    expect(names(data)).toEqual(['ab,bc,cd,da']);
+  });
+
+  it('orders a line and a spline leaving a node in the same direction by curvature', () => {
+    // At a, line ab and spline q both leave along +x; q turns left, so it is further
+    // counter-clockwise. The quadratic spline a p c cuts 2/3 of triangle a p c (25/3) off
+    // triangle a b c (25); triangle a e b below makes a the third edge's node.
+    const data = sketch([
+      pt('a', 0, 0),
+      pt('b', 10, 0),
+      pt('c', 5, 5),
+      pt('p', 5, 0),
+      pt('e', 0, -5),
+      ln('ab', 'a', 'b'),
+      ln('bc', 'b', 'c'),
+      bspline('q', ['a', 'p', 'c'], 2),
+      ln('ae', 'a', 'e'),
+      ln('eb', 'e', 'b'),
+    ]);
+    const { regions, crossing } = computeRegions(data);
+    expect(crossing).toBe(false);
+    expect(regions.map((r) => r.name)).toEqual(['ab,ae,eb', 'ab,bc,q']);
+    expect(regions[0]?.area).toBeCloseTo(25, 9);
+    expect(regions[1]?.area).toBeCloseTo(50 / 3, 2);
+    const outer = regions[1]?.outer ?? [];
+    expectClosed(outer);
+    // Traversed counter-clockwise, the spline runs backwards (c → a).
+    expect(curveOf(outer, 'q')).toEqual({
+      kind: 'bspline',
+      degree: 2,
+      poles: [
+        [5, 5],
+        [5, 0],
+        [0, 0],
+      ],
+      knots: [0, 0, 0, 1, 1, 1],
+      id: 'q',
+    });
   });
 });

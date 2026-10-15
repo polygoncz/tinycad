@@ -119,8 +119,16 @@ function hit(sketch: string, entity: string, x: number, y: number): PickResult {
 
 function curveDistance(c: SketchDrawing['curves'][number], x: number, y: number): number {
   if (c.kind === 'arc') return Math.abs(Math.hypot(x - c.center[0], y - c.center[1]) - c.radius);
-  const [ax, ay] = c.from;
-  const [bx, by] = c.to;
+  if (c.kind === 'polyline') {
+    const segments = c.points.slice(1).map((to, i) => ({ from: c.points[i] ?? to, to }));
+    return Math.min(Infinity, ...segments.map((s) => segmentDistance(s.from, s.to, x, y)));
+  }
+  return segmentDistance(c.from, c.to, x, y);
+}
+
+function segmentDistance(from: Vec2, to: Vec2, x: number, y: number): number {
+  const [ax, ay] = from;
+  const [bx, by] = to;
   const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
   const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2));
   return Math.hypot(x - (ax + t * (bx - ax)), y - (ay + t * (by - ay)));

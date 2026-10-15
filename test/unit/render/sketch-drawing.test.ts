@@ -168,6 +168,42 @@ describe('tessellateSketch', () => {
     expect(t.segmentStyles).toEqual(['hover', 'selected', 'selected', 'normal']);
   });
 
+  it('turns a polyline (M29) into its segments with one id and style', () => {
+    const t = tessellateSketch(
+      drawing({
+        plane: XZ,
+        curves: [
+          {
+            kind: 'polyline',
+            id: 's1',
+            points: [
+              [0, 0],
+              [1, 1],
+              [3, 1],
+              [4, 0],
+            ],
+            style: 'construction',
+          },
+        ],
+      }),
+    );
+    expect(t.segments).toHaveLength(3 * 6);
+    expect(t.segmentCurves).toEqual(['s1', 's1', 's1']);
+    expect(t.segmentStyles).toEqual(['construction', 'construction', 'construction']);
+    expectClose(segmentEnds(t.segments, 0)[0], [0, 0, 0]);
+    expectClose(segmentEnds(t.segments, 0)[1], [1, 0, 1]);
+    expectClose(segmentEnds(t.segments, 1)[1], [3, 0, 1]);
+    expectClose(segmentEnds(t.segments, 2)[1], [4, 0, 0]);
+  });
+
+  it('gives no segment for a polyline of fewer than two points', () => {
+    const t = tessellateSketch(
+      drawing({ curves: [{ kind: 'polyline', id: 's1', points: [[1, 1]], style: 'normal' }] }),
+    );
+    expect(t.segments).toHaveLength(0);
+    expect(t.segmentCurves).toEqual([]);
+  });
+
   it('rejects a non-positive step', () => {
     expect(() => tessellateSketch(drawing({}), 0)).toThrow();
   });

@@ -2,11 +2,15 @@
 // solver-planegcs: hides the snake_case API and the mutable sketch_index behind a pure function.
 
 import { DebugMode, GcsWrapper, SolveStatus, type SketchPrimitive } from '@salusoft89/planegcs';
+import type { Vec2 } from '@/core';
 import type {
+  SketchBSpline,
   SketchConstraint,
   SketchConstraintId,
   SketchEntity,
   SketchEntityId,
+  SketchFitSpline,
+  SketchLine,
   SolveInput,
   SolveResult,
 } from '@/sketch';
@@ -58,7 +62,7 @@ function solveWith(w: GcsWrapper, input: SolveInput): SolveResult {
   const conflicting = backToIds(w.get_gcs_conflicting_constraints(), constraintIds);
   const redundant = backToIds(w.get_gcs_redundant_constraints(), constraintIds);
   // Temporary drag constraints do not count, so this is the dof without the drag.
-  const dof = w.gcs.dof();
+  const dof = w.gcs.dof() - unusedSplineParams(primitives);
 
   if (conflicting.length > 0) {
     return { status: 'conflict', entities: null, dof, conflicting, redundant };
@@ -81,11 +85,16 @@ interface Primitives {
 function toPrimitives(input: SolveInput): Primitives {
   const kinds = new Map<SketchEntityId, SketchEntity>(input.entities.map((e) => [e.id, e]));
   const constraintIds = new Map<string, SketchConstraintId>();
-  // M29: splines are not solved yet (task 4); a sketch with one fails.
-  if (input.entities.some((e) => e.kind === 'bspline' || e.kind === 'fitSpline')) {
-    return { primitives: undefined, constraintIds };
-  }
   const primitives: SketchPrimitive[] = input.entities.flatMap((e) => entityPrimitives(e, kinds));
+
+  // After all entities: the fit points may come after their spline.
+  for (const e of input.entities) {
+    if (e.kind !== 'fitSpline') continue;
+    for (const p of fitPrimitives(e)) {
+      constraintIds.set(p.id, splineAsConstraintId(e.id));
+      primitives.push(p);
+    }
+  }
 
   for (const c of input.constraints) {
     for (const p of constraintPrimitives(c, kinds)) {
@@ -142,10 +151,80 @@ function entityPrimitives(
       ];
     }
     case 'bspline':
-    case 'fitSpline':
-      // M29: unreachable, toPrimitives fails a sketch with a spline until task 4.
+      // Not in planegcs (Q087): its control points are sketch points and no planegcs constraint
+      // refers to the curve itself, so the primitive would not change the solution.
       return [];
+    case 'fitSpline': {
+      // The control points are hidden planegcs points, started from the poles in the data.
+      const poles = e.poles.map(([x, y], i): SketchPrimitive => ({
+        id: poleId(e, i),
+        type: 'point',
+        x,
+        y,
+        fixed: false,
+      }));
+      const knots = [...new Set(e.knots)];
+      return [
+        ...poles,
+        {
+          id: e.id,
+          type: 'bspline',
+          pole_ids: poles.map((p) => p.id),
+          weights: poles.map(() => 1),
+          knots,
+          mult: knots.map((k) => e.knots.filter((x) => x === k).length),
+          degree: e.degree,
+          periodic: false,
+        },
+      ];
+    }
   }
+}
+
+/** The hidden control point `i` of a fitSpline in planegcs. */
+function poleId(spline: SketchFitSpline, i: number): string {
+  return `${spline.id}:pole${String(i)}`;
+}
+
+/** Every fit point on the curve at its fixed parameter (a number: no degree of freedom). */
+function fitPrimitives(spline: SketchFitSpline): SketchPrimitive[] {
+  return spline.params.map((t, i) => {
+    const p = spline.fit[i];
+    if (p === undefined) throw new Error(`${spline.id} has no fit point ${String(i)}`);
+    return {
+      id: `${spline.id}:fit${String(i)}`,
+      type: 'point_on_bspline',
+      p_id: p,
+      b_id: spline.id,
+      pointparam: t,
+    };
+  });
+}
+
+/**
+ * A fitSpline reports its fit point constraints under its own id (spec 12, Spliny): the user
+ * sees the spline, the hidden equations have no constraint of their own.
+ */
+function splineAsConstraintId(id: SketchEntityId): SketchConstraintId {
+  // Both brands are strings; the spec wants the entity id in conflicting/redundant, whose type
+  // only knows constraint ids, hence the cast through string.
+  return id as string as SketchConstraintId;
+}
+
+/**
+ * The degrees of freedom planegcs counts but the sketch does not have (Q087). For every bspline
+ * a constraint refers to, the wrapper creates 4 free parameters for the start and end of the
+ * curve – copies of the end control points, not shared variables – and no equation uses them.
+ * A test guards that planegcs still does so.
+ */
+function unusedSplineParams(primitives: readonly SketchPrimitive[]): number {
+  const referenced = new Set<string>();
+  for (const p of primitives) {
+    if (p.type === 'point_on_bspline' || p.type === 'tangent_at_bspline_knot') {
+      referenced.add(p.b_id);
+    }
+  }
+  return 4 * referenced.size;
 }
 
 function constraintPrimitives(
@@ -214,6 +293,9 @@ function equalPrimitive(id: string, a: Curve, b: Curve): SketchPrimitive {
 function tangentPrimitive(id: string, a: Curve, b: Curve): SketchPrimitive {
   // The line always first.
   const [first, second] = b.kind === 'line' ? [b, a] : [a, b];
+  if (first.kind === 'line' && (second.kind === 'bspline' || second.kind === 'fitSpline')) {
+    return { id, type: 'point_on_line_pl', p_id: nextToEnd(first, second), l_id: first.id };
+  }
   if (first.kind === 'line' && second.kind === 'circle') {
     return { id, type: 'tangent_lc', l_id: first.id, c_id: second.id };
   }
@@ -233,6 +315,23 @@ function tangentPrimitive(id: string, a: Curve, b: Curve): SketchPrimitive {
     return { id, type: 'tangent_ca', c_id: second.id, a_id: first.id };
   }
   throw new Error(`tangent between a ${a.kind} and a ${b.kind}`);
+}
+
+/**
+ * The control point next to the end the line shares (Q087): a clamped spline starts in P0 with
+ * its tangent along P1 − P0, so the line through P0 is tangent when P1 lies on it (at the last
+ * end the second-to-last control point). tangent_at_bspline_knot fails at an end knot.
+ */
+function nextToEnd(line: SketchLine, spline: SketchBSpline | SketchFitSpline): string {
+  const ends = spline.kind === 'bspline' ? spline.poles : spline.fit;
+  const n = ends.length;
+  const shares = (p: SketchEntityId | undefined) => p === line.p1 || p === line.p2;
+  const i = shares(ends[0]) ? 1 : shares(ends[n - 1]) ? n - 2 : undefined;
+  if (i === undefined) throw new Error(`${line.id} does not share an end of ${spline.id}`);
+  if (spline.kind === 'fitSpline') return poleId(spline, i);
+  const pole = spline.poles[i];
+  if (pole === undefined) throw new Error(`${spline.id} has no control point ${String(i)}`);
+  return pole;
 }
 
 function pointOf(
@@ -271,6 +370,13 @@ function readEntities(w: GcsWrapper, input: readonly SketchEntity[]): SketchEnti
       const { x, y } = w.sketch_index.get_sketch_point(e.id);
       if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined;
       out.push({ ...e, x, y });
+    } else if (e.kind === 'fitSpline') {
+      const poles = e.poles.map((_, i): Vec2 => {
+        const { x, y } = w.sketch_index.get_sketch_point(poleId(e, i));
+        return [x, y];
+      });
+      if (!poles.every(([x, y]) => Number.isFinite(x) && Number.isFinite(y))) return undefined;
+      out.push({ ...e, poles });
     } else if (e.kind === 'circle') {
       const { radius } = w.sketch_index.get_sketch_circle(e.id);
       if (!Number.isFinite(radius)) return undefined;

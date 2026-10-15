@@ -1,4 +1,4 @@
-import { mat4, plane, type Mat4, type Plane, type Vec2, type Vec3 } from '@/core';
+import { bspline, mat4, plane, type Mat4, type Plane, type Vec2, type Vec3 } from '@/core';
 import { createKernelError } from './errors';
 import type { KernelErrorCode } from './errors';
 import type { Axis, BooleanOp, GeometryKernel } from './kernel';
@@ -613,8 +613,15 @@ function toVec3(v: readonly number[]): Vec3 {
 const CARDINAL_ANGLES = [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2];
 
 /**
+ * Chord deviation of the B-spline tessellation for its AABB (M29), relative to
+ * max(1, largest |pole coordinate|): well below the 1e-5 of the contract suite.
+ */
+const SPLINE_TOLERANCE = 1e-7;
+
+/**
  * Points of the curve whose AABB is the AABB of the curve in plane coordinates (spec 06,
- * FakeKernel): the end points, and for arcs and circles the cardinal points lying on them.
+ * FakeKernel): the end points, for arcs and circles the cardinal points lying on them, for a
+ * B-spline the points of its tessellation (M29).
  */
 function extremePoints(c: ProfileCurve): Vec2[] {
   const at = (center: Vec2, r: number, angle: number): Vec2 => [
@@ -636,6 +643,10 @@ function extremePoints(c: ProfileCurve): Vec2[] {
       const sweep = normalizeAngle(end - start);
       const inside = CARDINAL_ANGLES.filter((a) => normalizeAngle(a - start) <= sweep);
       return [c.from, c.to, ...inside.map((a) => at(c.center, r, a))];
+    }
+    case 'bspline': {
+      const scale = Math.max(1, ...c.poles.flatMap(([x, y]) => [Math.abs(x), Math.abs(y)]));
+      return bspline.tessellate(c, SPLINE_TOLERANCE * scale);
     }
   }
 }

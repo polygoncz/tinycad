@@ -40,6 +40,14 @@ export function copyFaceInput(p: FaceInput): FaceInput {
       }
       case 'circle':
         return { kind: 'circle', center: vec(c.center), radius: c.radius, ...idOf(c) };
+      case 'bspline':
+        return {
+          kind: 'bspline',
+          degree: c.degree,
+          poles: c.poles.map(vec),
+          knots: [...c.knots],
+          ...idOf(c),
+        };
     }
   };
   const loop = (l: ProfileLoop): ProfileLoop => l.map(curve);
@@ -203,7 +211,48 @@ function edge(oc: Occt, plane: Plane, c: ProfileCurve): TopoDS_Edge {
       using maker = new oc.BRepBuilderAPI_MakeEdge(circle);
       return done(maker).Edge();
     }
+    case 'bspline': {
+      using curve = bsplineOf(oc, plane, c);
+      using maker = new oc.BRepBuilderAPI_MakeEdge(curve);
+      return done(maker).Edge();
+    }
   }
+}
+
+/**
+ * New non-rational Geom_BSplineCurve in space (M29): the poles mapped into the plane, the knot
+ * vector compressed to distinct knots with their multiplicities (the OCCT form). The arrays
+ * have lower bound 0; the constructor copies them.
+ */
+function bsplineOf(oc: Occt, plane: Plane, c: Extract<ProfileCurve, { kind: 'bspline' }>) {
+  const { knots, multiplicities } = compressKnots(c.knots);
+  using poles = new oc.NCollection_Array1_gp_Pnt(c.poles.length);
+  c.poles.forEach((v, i) => {
+    using p = point(oc, plane, v);
+    poles.SetValue(i, p);
+  });
+  using knotArray = new oc.NCollection_Array1_double(knots.length);
+  using multArray = new oc.NCollection_Array1_int(knots.length);
+  knots.forEach((k, i) => {
+    knotArray.SetValue(i, k);
+    multArray.SetValue(i, multiplicities[i] ?? 0);
+  });
+  return new oc.Geom_BSplineCurve(poles, knotArray, multArray, c.degree, false);
+}
+
+/** The distinct knots of a non-decreasing knot vector and how often each repeats. */
+function compressKnots(flat: readonly number[]): { knots: number[]; multiplicities: number[] } {
+  const knots: number[] = [];
+  const multiplicities: number[] = [];
+  for (const k of flat) {
+    const last = knots.length - 1;
+    if (last >= 0 && knots[last] === k) multiplicities[last] = (multiplicities[last] ?? 0) + 1;
+    else {
+      knots.push(k);
+      multiplicities.push(1);
+    }
+  }
+  return { knots, multiplicities };
 }
 
 function done<M extends { IsDone(): boolean }>(maker: M): M {

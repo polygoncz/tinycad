@@ -1,5 +1,5 @@
 import { sketchId } from '@/document';
-import type { ProfileLoop, ShapeHandle } from '@/kernel';
+import type { ShapeHandle } from '@/kernel';
 import { unresolvedReference } from '@/regen';
 import type { FeatureBuilder, SketchArtifact } from '@/regen';
 import { SKETCH_FEATURE_TYPE, computeRegions, parseSketchData } from '@/sketch';
@@ -32,10 +32,8 @@ export const sketchBuilder: FeatureBuilder<SketchParams> = Object.freeze<
     for (const region of regions) {
       const { shape } = await ctx.kernel.makeFace({
         plane,
-        // M29: Curve2 has the bspline variant, ProfileCurve gets it in task 5; until then the
-        // regions contain no splines (task 3), so the loops are ProfileLoops.
-        outer: region.outer as ProfileLoop,
-        holes: region.holes as readonly ProfileLoop[],
+        outer: region.outer,
+        holes: region.holes,
       });
       faces.set(region.name, shape);
     }

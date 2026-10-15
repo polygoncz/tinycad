@@ -52,10 +52,10 @@ Kontrakt: [[12-skicar#Spliny (M29)]].
 - [x] 0. Rozhodnout [[Q086 Spline přes body v řešiči|Q086]], kontrakt ve spec 12
 - [x] 1. `sketch`: `bspline.ts` (de Boor, derivace, tessellace) a `interpolateSpline`
 - [x] 2. `sketch`: entity `bspline` a `fitSpline`, `Curve2`, `parseSketchData`, `removeItems`, `curve2`
-- [ ] 3. `sketch`: `computeRegions` se spliny
-- [ ] 4. `solver-planegcs`: spliny a vazby na ně
-- [ ] 5. `kernel`, `kernel-occt`: `ProfileCurve` `bspline`, `validateFaceInput`, `FakeKernel`, hrana v OCCT
-- [ ] 6. Kresba: `SketchDrawingCurve` `polyline` (`interaction`, `render`), tessellace v `sketcher`
+- [x] 3. `sketch`: `computeRegions` se spliny
+- [x] 4. `solver-planegcs`: spliny a vazby na ně
+- [x] 5. `kernel`, `kernel-occt`: `ProfileCurve` `bspline`, `validateFaceInput`, `FakeKernel`, hrana v OCCT
+- [x] 6. Kresba: `SketchDrawingCurve` `polyline` (`interaction`, `render`), tessellace v `sketcher`
 - [ ] 7. Integrační test skica se splinem → Vysunutí
 - [ ] 8. Nástroje splinu (až po sloučení M26), e2e `m29.spec.ts`, propsání do spec 06, 09, 10, 11
 
@@ -126,6 +126,20 @@ Jeden úkol = jedno spuštění subagenta `implementer`. Kontrakt je v [[12-skic
 ## Průběh stopy
 
 _(Souběžná stopa, [[Roadmapa#Souběžné stopy (pokus od M25)|pravidla]]: místo deníku sem zapisuje průběh; hlavní sezení ho při sloučení přenese do deníku.)_
+
+**2026-10-15**
+- Úkol 1: matematika B-spline (de Boor přes derivace bázových funkcí, Piegl–Tiller A2.1/A2.3/A3.2; adaptivní tessellace po intervalech uzlů; globální interpolace). Spec upřesněna: signatury, `RangeError`, druhá derivace pro křivost, minimální a maximální hloubka půlení.
+- Úkol 2: entity `bspline` a `fitSpline`, kontrola dat, `constraintFor`, `removeItems`, `curve2`. Spec upřesněna: pravidla clamped uzlů, tečnost úsečka–spline jen se sdíleným koncovým bodem (pozná se z id). Dočasné větve `// M29: … (task N)` v regions, adaptéru, kresbě a `as ProfileLoop` v builderu skici.
+- Úkol 4 se zastavil: planegcs `tangent_at_bspline_knot` na krajním uzlu nefunguje a wrapper přidá ke splinu s vazbou 4 nepoužité proměnné (o 4 vyšší `dof`). Založena [[Q087 Spline v řešiči a v jádře – zjištění z implementace|Q087]].
+- Q087 bod 3 – Pavel: matematika B-spline do `core/math` (jmenný prostor `bspline`), kvůli `FakeKernel`. Propsáno do spec 12 a 02.
+- Tolerance tessellace splinu pro oblasti `1e-4 · max(1, |souřadnice|)` (s `tol` 1e-9 by vznikly desítky tisíc úseků).
+- Úkol 3: oblasti se spliny (tessellace nese směr průchodu, obrácená polohrana obrací spline). Otevřený bod: samokřížení splinu → Q087 bod 4.
+- Q087 body 1 a 2 – Pavel: tečnost na konci přes `point_on_line` druhého řídicího bodu, `dof` −4 za spline s vazbou planegcs, `bspline` bez primitivu. Propsáno do spec 12. Bod 4 – Pavel: samokřížení splinu = `crossing`. Q087 rozhodnutá celá.
+- Úkol 4: řešič se spliny podle Q087 (`fitSpline` jako planegcs `bspline` se skrytými řídicími body, `point_on_bspline` na pevných parametrech, tečnost přes `point_on_line_pl`, `dof` −4, hlídací test surového planegcs). Otevřené pro úkol 8: id splinu v `conflicting` není id vazby.
+- Úkol 6: kresba `polyline` (render ji rozloží na úseky s jedním id, picking beze změny), řídicí lomená čára `__poles:<id>` jako `construction`. Pro úkol 8: lomená čára stíní spline při pickingu.
+- Úkol 5: matematika přesunuta do `core/math/bspline.ts`, `ProfileCurve` `bspline`, validace (sevřené uzly, násobnosti – přísněji než původní zadání, aby OCCT nedostal vstup, na kterém konstruktor vyhodí výjimku), `FakeKernel` z tessellace, hrana v OCCT. Propsáno do spec 06.
+- Pokyn Pavla (Q088 Geometrie skici v TypeScriptu nebo v OCCT, na `main`; wikilink doplní hlavní sezení při sloučení, ve větvi stopy by neprošel `lint:vault`): v `kernel-occt` maximum z OCCT (hrana `Geom_BSplineCurve` + `BRepBuilderAPI_MakeEdge`, kontroly přes BRepCheck/ShapeAnalysis), geometrie skici zůstává v TypeScriptu.
+- Ověřeno v typech buildu OCCT: `Geom_BSplineCurve(NCollection_Array1_gp_Pnt, …_double, …_int, degree)` a `BRepBuilderAPI_MakeEdge(Geom_Curve)`; hrana splinu se staví ve 3D jako ostatní hrany profilu.
 
 ## Retrospektiva
 

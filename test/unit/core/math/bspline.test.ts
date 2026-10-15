@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Vec2 } from '@/core';
-import { derivative, evaluate, interpolateSpline, tessellate } from '@/sketch/bspline';
-import type { BSplineShape } from '@/sketch/bspline';
+import { bspline, type BSplineShape, type Vec2 } from '@/core';
 
 function expectVec(actual: Vec2, expected: Vec2, digits = 12): void {
   expect(actual[0]).toBeCloseTo(expected[0], digits);
@@ -55,86 +53,86 @@ const CUBIC_SPLIT: BSplineShape = {
   knots: [0, 0, 0, 0, 0.5, 1, 1, 1, 1],
 };
 
-describe('evaluate', () => {
+describe('bspline.evaluate', () => {
   it('evaluates a linear spline piecewise', () => {
-    expectVec(evaluate(LINEAR, 0.25), [1, 0]);
-    expectVec(evaluate(LINEAR, 0.5), [2, 0]);
-    expectVec(evaluate(LINEAR, 0.75), [2, 2]);
+    expectVec(bspline.evaluate(LINEAR, 0.25), [1, 0]);
+    expectVec(bspline.evaluate(LINEAR, 0.5), [2, 0]);
+    expectVec(bspline.evaluate(LINEAR, 0.75), [2, 2]);
   });
 
   it('evaluates a quadratic Bézier', () => {
-    expectVec(evaluate(QUADRATIC, 0.5), [1, 1]);
+    expectVec(bspline.evaluate(QUADRATIC, 0.5), [1, 1]);
   });
 
   it('evaluates a cubic Bézier', () => {
-    expectVec(evaluate(CUBIC, 0.5), [2, 2.25]);
-    expectVec(evaluate(CUBIC, 0.25), [0.90625, 1.6875]);
+    expectVec(bspline.evaluate(CUBIC, 0.5), [2, 2.25]);
+    expectVec(bspline.evaluate(CUBIC, 0.25), [0.90625, 1.6875]);
   });
 
   it('evaluates a cubic with an interior knot like the Bézier it was split from', () => {
-    expectVec(evaluate(CUBIC_SPLIT, 0.5), [2, 2.25]);
-    expectVec(evaluate(CUBIC_SPLIT, 0.25), [0.90625, 1.6875]);
+    expectVec(bspline.evaluate(CUBIC_SPLIT, 0.5), [2, 2.25]);
+    expectVec(bspline.evaluate(CUBIC_SPLIT, 0.25), [0.90625, 1.6875]);
     for (const t of [0.1, 0.3, 0.49, 0.51, 0.7, 0.9]) {
-      expectVec(evaluate(CUBIC_SPLIT, t), evaluate(CUBIC, t));
+      expectVec(bspline.evaluate(CUBIC_SPLIT, t), bspline.evaluate(CUBIC, t));
     }
   });
 
   it('returns exactly the end poles at the ends', () => {
     for (const c of [LINEAR, QUADRATIC, CUBIC, CUBIC_SPLIT]) {
-      expect(evaluate(c, 0)).toEqual(c.poles[0]);
-      expect(evaluate(c, 1)).toEqual(c.poles[c.poles.length - 1]);
+      expect(bspline.evaluate(c, 0)).toEqual(c.poles[0]);
+      expect(bspline.evaluate(c, 1)).toEqual(c.poles[c.poles.length - 1]);
     }
   });
 
   it('clamps t to the parameter range', () => {
-    expect(evaluate(CUBIC_SPLIT, -1)).toEqual([0, 0]);
-    expect(evaluate(CUBIC_SPLIT, 2)).toEqual([4, 0]);
+    expect(bspline.evaluate(CUBIC_SPLIT, -1)).toEqual([0, 0]);
+    expect(bspline.evaluate(CUBIC_SPLIT, 2)).toEqual([4, 0]);
   });
 });
 
-describe('derivative', () => {
+describe('bspline.derivative', () => {
   it('gives the first derivative of a linear spline per segment and zero second derivative', () => {
-    expectVec(derivative(LINEAR, 0.25), [4, 0]);
-    expectVec(derivative(LINEAR, 0.75), [0, 8]);
-    expect(derivative(LINEAR, 0.25, 2)).toEqual([0, 0]);
+    expectVec(bspline.derivative(LINEAR, 0.25), [4, 0]);
+    expectVec(bspline.derivative(LINEAR, 0.75), [0, 8]);
+    expect(bspline.derivative(LINEAR, 0.25, 2)).toEqual([0, 0]);
   });
 
   it('gives the derivatives of a quadratic Bézier', () => {
-    expectVec(derivative(QUADRATIC, 0), [2, 4]);
-    expectVec(derivative(QUADRATIC, 0.5), [2, 0]);
-    expectVec(derivative(QUADRATIC, 1), [2, -4]);
-    expectVec(derivative(QUADRATIC, 0.3, 2), [0, -8]);
+    expectVec(bspline.derivative(QUADRATIC, 0), [2, 4]);
+    expectVec(bspline.derivative(QUADRATIC, 0.5), [2, 0]);
+    expectVec(bspline.derivative(QUADRATIC, 1), [2, -4]);
+    expectVec(bspline.derivative(QUADRATIC, 0.3, 2), [0, -8]);
   });
 
   it('gives the derivatives of a cubic Bézier', () => {
-    expectVec(derivative(CUBIC, 0), [3, 9]);
-    expectVec(derivative(CUBIC, 1), [3, -9]);
-    expectVec(derivative(CUBIC, 0.25), [4.125, 4.5]);
-    expectVec(derivative(CUBIC, 0, 2), [6, -18]);
-    expectVec(derivative(CUBIC, 0.25, 2), [3, -18]);
-    expectVec(derivative(CUBIC, 0.5, 2), [0, -18]);
+    expectVec(bspline.derivative(CUBIC, 0), [3, 9]);
+    expectVec(bspline.derivative(CUBIC, 1), [3, -9]);
+    expectVec(bspline.derivative(CUBIC, 0.25), [4.125, 4.5]);
+    expectVec(bspline.derivative(CUBIC, 0, 2), [6, -18]);
+    expectVec(bspline.derivative(CUBIC, 0.25, 2), [3, -18]);
+    expectVec(bspline.derivative(CUBIC, 0.5, 2), [0, -18]);
   });
 
   it('gives the derivatives of a cubic with an interior knot like the Bézier', () => {
-    expectVec(derivative(CUBIC_SPLIT, 0), [3, 9]);
-    expectVec(derivative(CUBIC_SPLIT, 1), [3, -9]);
-    expectVec(derivative(CUBIC_SPLIT, 0.25), [4.125, 4.5]);
-    expectVec(derivative(CUBIC_SPLIT, 0.25, 2), [3, -18]);
+    expectVec(bspline.derivative(CUBIC_SPLIT, 0), [3, 9]);
+    expectVec(bspline.derivative(CUBIC_SPLIT, 1), [3, -9]);
+    expectVec(bspline.derivative(CUBIC_SPLIT, 0.25), [4.125, 4.5]);
+    expectVec(bspline.derivative(CUBIC_SPLIT, 0.25, 2), [3, -18]);
     for (const t of [0.1, 0.5, 0.7, 0.9]) {
-      expectVec(derivative(CUBIC_SPLIT, t), derivative(CUBIC, t), 10);
-      expectVec(derivative(CUBIC_SPLIT, t, 2), derivative(CUBIC, t, 2), 10);
+      expectVec(bspline.derivative(CUBIC_SPLIT, t), bspline.derivative(CUBIC, t), 10);
+      expectVec(bspline.derivative(CUBIC_SPLIT, t, 2), bspline.derivative(CUBIC, t, 2), 10);
     }
   });
 
   it('is degree · (P1 − P0) at the start and degree · (Pn − Pn−1) at the end of a Bézier', () => {
-    expectVec(derivative(QUADRATIC, 0), [2 * 1, 2 * 2]);
-    expectVec(derivative(QUADRATIC, 1), [2 * 1, 2 * -2]);
-    expectVec(derivative(CUBIC, 0), [3 * 1, 3 * 3]);
-    expectVec(derivative(CUBIC, 1), [3 * 1, 3 * -3]);
+    expectVec(bspline.derivative(QUADRATIC, 0), [2 * 1, 2 * 2]);
+    expectVec(bspline.derivative(QUADRATIC, 1), [2 * 1, 2 * -2]);
+    expectVec(bspline.derivative(CUBIC, 0), [3 * 1, 3 * 3]);
+    expectVec(bspline.derivative(CUBIC, 1), [3 * 1, 3 * -3]);
   });
 
   it('is zero when the degree is lower than the order', () => {
-    expect(derivative(LINEAR, 0.6, 2)).toEqual([0, 0]);
+    expect(bspline.derivative(LINEAR, 0.6, 2)).toEqual([0, 0]);
   });
 });
 
@@ -161,30 +159,30 @@ function distanceToSegment(p: Vec2, a: Vec2, b: Vec2): number {
   return Math.hypot(p[0] - a[0] - s * dx, p[1] - a[1] - s * dy);
 }
 
-describe('tessellate', () => {
+describe('bspline.tessellate', () => {
   it('has all points on the curve and every segment within the tolerance of the curve', () => {
     const tolerance = 1e-3;
-    const pts = tessellate(GRAPH, tolerance);
+    const pts = bspline.tessellate(GRAPH, tolerance);
     expect(pts.length).toBeGreaterThan(4);
-    for (const p of pts) expect(p[1]).toBeCloseTo(evaluate(GRAPH, p[0])[1], 12);
+    for (const p of pts) expect(p[1]).toBeCloseTo(bspline.evaluate(GRAPH, p[0])[1], 12);
     for (const [a, b] of pts.slice(1).map((b, i): [Vec2, Vec2] => [pts[i] ?? b, b])) {
       expect(b[0]).toBeGreaterThan(a[0]);
-      expect(distanceToSegment(evaluate(GRAPH, (a[0] + b[0]) / 2), a, b)).toBeLessThanOrEqual(
-        tolerance,
-      );
+      expect(
+        distanceToSegment(bspline.evaluate(GRAPH, (a[0] + b[0]) / 2), a, b),
+      ).toBeLessThanOrEqual(tolerance);
     }
   });
 
   it('starts and ends exactly at the end poles', () => {
     for (const c of [LINEAR, QUADRATIC, CUBIC, CUBIC_SPLIT, GRAPH]) {
-      const pts = tessellate(c, 1e-2);
+      const pts = bspline.tessellate(c, 1e-2);
       expect(pts[0]).toEqual(c.poles[0]);
       expect(pts[pts.length - 1]).toEqual(c.poles[c.poles.length - 1]);
     }
   });
 
   it('keeps the interior knots of a linear spline and adds nothing else', () => {
-    expect(tessellate(LINEAR, 1e-3)).toEqual([
+    expect(bspline.tessellate(LINEAR, 1e-3)).toEqual([
       [0, 0],
       [2, 0],
       [2, 4],
@@ -192,23 +190,25 @@ describe('tessellate', () => {
   });
 
   it('refines more for a smaller tolerance', () => {
-    expect(tessellate(CUBIC, 1e-4).length).toBeGreaterThan(tessellate(CUBIC, 1e-1).length);
+    expect(bspline.tessellate(CUBIC, 1e-4).length).toBeGreaterThan(
+      bspline.tessellate(CUBIC, 1e-1).length,
+    );
   });
 });
 
-describe('interpolateSpline', () => {
+describe('bspline.interpolate', () => {
   function expectThrough(points: readonly Vec2[]): void {
-    const r = interpolateSpline(points);
+    const r = bspline.interpolate(points);
     expect(r.params).toHaveLength(points.length);
     expect(r.poles).toHaveLength(points.length);
     expect(r.knots).toHaveLength(points.length + r.degree + 1);
     points.forEach((p, i) => {
-      expectVec(evaluate(r, r.params[i] ?? Number.NaN), p, 9);
+      expectVec(bspline.evaluate(r, r.params[i] ?? Number.NaN), p, 9);
     });
   }
 
   it('uses degree 1 for two points: the poles are the points', () => {
-    const r = interpolateSpline([
+    const r = bspline.interpolate([
       [1, 1],
       [4, 5],
     ]);
@@ -224,7 +224,7 @@ describe('interpolateSpline', () => {
   });
 
   it('uses degree 2 for three points with chord-length params', () => {
-    const r = interpolateSpline([
+    const r = bspline.interpolate([
       [0, 0],
       [3, 4],
       [3, 10],
@@ -238,7 +238,7 @@ describe('interpolateSpline', () => {
 
   it('uses degree 3 for four or more points with averaged knots', () => {
     expect(
-      interpolateSpline([
+      bspline.interpolate([
         [0, 0],
         [1, 1],
         [2, 0],
@@ -246,7 +246,7 @@ describe('interpolateSpline', () => {
       ]).degree,
     ).toBe(3);
     const pts: Vec2[] = [0, 1, 2, 3, 4, 5, 6].map((i): Vec2 => [i, 0]);
-    const r = interpolateSpline(pts);
+    const r = bspline.interpolate(pts);
     expect(r.degree).toBe(3);
     const expected = [0, 0, 0, 0, 1 / 3, 1 / 2, 2 / 3, 1, 1, 1, 1];
     r.knots.forEach((k, i) => {
@@ -292,19 +292,19 @@ describe('interpolateSpline', () => {
   });
 
   it('rejects fewer than two points', () => {
-    expect(() => interpolateSpline([])).toThrow(RangeError);
-    expect(() => interpolateSpline([[1, 2]])).toThrow(RangeError);
+    expect(() => bspline.interpolate([])).toThrow(RangeError);
+    expect(() => bspline.interpolate([[1, 2]])).toThrow(RangeError);
   });
 
   it('rejects non-finite coordinates', () => {
     expect(() =>
-      interpolateSpline([
+      bspline.interpolate([
         [0, 0],
         [Infinity, 1],
       ]),
     ).toThrow(RangeError);
     expect(() =>
-      interpolateSpline([
+      bspline.interpolate([
         [0, Number.NaN],
         [1, 1],
       ]),
@@ -313,7 +313,7 @@ describe('interpolateSpline', () => {
 
   it('rejects two consecutive equal points', () => {
     expect(() =>
-      interpolateSpline([
+      bspline.interpolate([
         [0, 0],
         [1, 1],
         [1, 1],
