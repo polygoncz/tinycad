@@ -6,7 +6,8 @@ import type {
   FeatureEditor,
   FeatureEditSession,
 } from '@/interaction/feature-dialog/feature-editor';
-import { CLICK_TOLERANCE_PX, SELECT_TOOL } from '@/interaction/select-tool';
+import { CLICK_TOLERANCE_PX } from '@/interaction/constants';
+import { SELECT_TOOL } from '@/interaction/select-tool';
 import { createSelectionModel } from '@/interaction/selection';
 import { FakeRegenStatus, FakeViewport } from '@/interaction/testing';
 import type { Tool } from '@/interaction/tools';

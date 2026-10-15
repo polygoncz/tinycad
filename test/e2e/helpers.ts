@@ -50,7 +50,7 @@ export function sketchPanel(page: Page, name: string): Locator {
   return page.getByRole('region', { name, exact: true });
 }
 
-/** The value field of a dimension in the sketch panel, named by its row ("Vzdálenost 1"). */
+/** The value field of a dimension in the sketch panel, named by its row ("Vodorovná vzdálenost 1"). */
 export function dimensionInput(panel: Locator, label: string): Locator {
   return panel.getByRole('textbox', { name: label, exact: true });
 }
@@ -97,13 +97,17 @@ export async function drawDimensionedRectangle(page: Page, sketch: string): Prom
   await page.keyboard.up('Alt');
   await expect(status).toHaveText('Stupně volnosti: 2');
 
-  // Dimensions of the bottom and the right edge → fully defined.
+  // Dimensions of the bottom and the right edge → fully defined. A click on an edge hangs its
+  // dimension on the cursor, the next click beside the edge places it (M28); the bottom is
+  // horizontal and the right edge vertical, so they get the horizontal and the vertical distance.
   await toolbarButton(page, 'Kóta').click();
   await clickCanvas(page, 60, 0);
+  await clickCanvas(page, 60, 40);
   await clickCanvas(page, 120, -40);
+  await clickCanvas(page, 160, -40);
   await expect(status).toHaveText('Plně určeno');
-  await expect(dimensionInput(panel, 'Vzdálenost 1')).toBeVisible();
-  await expect(dimensionInput(panel, 'Vzdálenost 2')).toBeVisible();
+  await expect(dimensionInput(panel, 'Vodorovná vzdálenost 1')).toBeVisible();
+  await expect(dimensionInput(panel, 'Svislá vzdálenost 1')).toBeVisible();
   return panel;
 }
 

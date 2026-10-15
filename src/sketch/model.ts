@@ -99,7 +99,59 @@ export const GEOMETRIC_CONSTRAINT_KINDS: readonly GeometricConstraintKind[] = Ob
   'fix',
 ]);
 
-export type DimensionKind = 'distance' | 'radius';
+export type DimensionKind =
+  'distance' | 'hDistance' | 'vDistance' | 'pointLineDistance' | 'angle' | 'radius' | 'diameter';
+export const DIMENSION_KINDS: readonly DimensionKind[] = Object.freeze([
+  'distance',
+  'hDistance',
+  'vDistance',
+  'pointLineDistance',
+  'angle',
+  'radius',
+  'diameter',
+]);
+
+export function isDimensionKind(kind: string): kind is DimensionKind {
+  return (DIMENSION_KINDS as readonly string[]).includes(kind);
+}
+
+/**
+ * A dimension (a constraint or a draft with a value) by its kind, not by its shape: a later
+ * constraint with a `value` field is not a dimension by accident.
+ */
+export function isDimension<C extends { readonly kind: string }>(
+  c: C,
+): c is Extract<C, { readonly kind: DimensionKind }> {
+  return isDimensionKind(c.kind);
+}
+
+/**
+ * Linear dimension: the dimension line parallel to the measured direction at `offset` (mm, signed:
+ * positive = left of the direction a→b; for hDistance up, for vDistance left), the label moved by
+ * `along` (mm) from the middle.
+ */
+export interface LinearPlacement {
+  readonly kind: 'linear';
+  readonly offset: number;
+  readonly along: number;
+}
+
+/** Radius/diameter: the label in direction `angle` (rad, from the plane x axis) from the centre, `distance` (mm) away. */
+export interface RadialPlacement {
+  readonly kind: 'radial';
+  readonly angle: number;
+  readonly distance: number;
+}
+
+/** Angle: the dimension arc of `radius` (mm) around the intersection of the lines, the label at fraction t ∈ [0, 1] of the arc. */
+export interface AngularPlacement {
+  readonly kind: 'angular';
+  readonly radius: number;
+  readonly t: number;
+}
+
+/** Where a dimension is drawn (spec 12 "Kóty (M28)"); only display data, the solver ignores it. */
+export type DimensionPlacement = LinearPlacement | RadialPlacement | AngularPlacement;
 
 export type SketchConstraint =
   /** Two points. */
@@ -140,21 +192,49 @@ export type SketchConstraint =
     }
   /** The point stays at its coordinates. */
   | { readonly kind: 'fix'; readonly id: SketchConstraintId; readonly point: SketchEntityId }
-  /** Two points, value > 0. */
+  /** Two points, value > 0: aligned, |b.x − a.x| or |b.y − a.y|. */
   | {
-      readonly kind: 'distance';
+      readonly kind: 'distance' | 'hDistance' | 'vDistance';
       readonly id: SketchConstraintId;
       readonly a: SketchEntityId;
       readonly b: SketchEntityId;
       readonly value: number;
+      readonly placement?: LinearPlacement;
     }
-  /** A circle or an arc, value > 0. */
+  /** A point and a line it is not an end of: the distance to the infinite line, value > 0. */
   | {
-      readonly kind: 'radius';
+      readonly kind: 'pointLineDistance';
+      readonly id: SketchConstraintId;
+      readonly point: SketchEntityId;
+      readonly line: SketchEntityId;
+      readonly value: number;
+      readonly placement?: LinearPlacement;
+    }
+  /**
+   * Two different lines, 0 < value < π (rad): the angle between their directions p1→p2, each
+   * reversed by its flag.
+   */
+  | {
+      readonly kind: 'angle';
+      readonly id: SketchConstraintId;
+      readonly a: SketchEntityId;
+      readonly b: SketchEntityId;
+      readonly value: number;
+      readonly reverseA?: true;
+      readonly reverseB?: true;
+      readonly placement?: AngularPlacement;
+    }
+  /** A circle or an arc, value > 0 (the radius, or the diameter = 2 · radius). */
+  | {
+      readonly kind: 'radius' | 'diameter';
       readonly id: SketchConstraintId;
       readonly curve: SketchEntityId;
       readonly value: number;
+      readonly placement?: RadialPlacement;
     };
+
+/** A dimension: a constraint with a value. */
+export type DimensionConstraint = Extract<SketchConstraint, { kind: DimensionKind }>;
 
 export interface SketchData {
   readonly entities: readonly SketchEntity[];

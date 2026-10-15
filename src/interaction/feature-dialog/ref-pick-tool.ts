@@ -15,7 +15,7 @@ import type { FeatureEditor, FeatureEditSession } from './feature-editor';
 import { behaviorOf, isRefParamSpec } from './ref-kinds';
 import type { RefHitContext, RefKindBehavior } from './ref-kinds';
 import type { RegenStatusPort } from '../regen-status-port';
-import { CLICK_TOLERANCE_PX } from '../select-tool';
+import { CLICK_TOLERANCE_PX } from '../constants';
 import type {
   HighlightPort,
   PickFilter,

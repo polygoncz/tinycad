@@ -45,8 +45,11 @@ export interface SketchEditorDeps {
   /** Only opening the feature session: a new sketch or an existing one. */
   readonly features: Pick<FeatureEditor, 'create' | 'edit'>;
   readonly solver: ConstraintSolver;
-  /** The edited sketch is drawn under EDIT_SKETCH_DRAWING_ID; only the drawings are needed. */
-  readonly viewport: Pick<ViewportPort, 'sketches'>;
+  /**
+   * The edited sketch is drawn under EDIT_SKETCH_DRAWING_ID; screenToRay places a dragged
+   * dimension label in the plane (M28).
+   */
+  readonly viewport: Pick<ViewportPort, 'sketches' | 'screenToRay'>;
   /** app: planeOfRef over the last regeneration state (M14: origin planes and planar faces). */
   readonly resolvePlane: (ref: PlaneRef | TopoRef) => Plane | undefined;
   /**

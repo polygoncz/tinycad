@@ -181,6 +181,97 @@ describe('measure', () => {
   });
 });
 
+describe('measure – kinds of M28', () => {
+  /**
+   * Points p (1, 2) and r (4, -2); line ab along +x from (0, 0) to (10, 0); line ce from (2, 1)
+   * to (2 + 3, 1 + 3), at 45° to ab; circle k (r 3) around o; arc q around o from s (r 5).
+   */
+  const data = sketch(
+    [
+      { kind: 'point', id: 'p', x: 1, y: 2 },
+      { kind: 'point', id: 'r', x: 4, y: -2 },
+      { kind: 'point', id: 'a', x: 0, y: 0 },
+      { kind: 'point', id: 'b', x: 10, y: 0 },
+      { kind: 'line', id: 'ab', p1: 'a', p2: 'b' },
+      { kind: 'point', id: 'c', x: 2, y: 1 },
+      { kind: 'point', id: 'e', x: 5, y: 4 },
+      { kind: 'line', id: 'ce', p1: 'c', p2: 'e' },
+      { kind: 'point', id: 'o', x: 20, y: 0 },
+      { kind: 'circle', id: 'k', center: 'o', radius: 3 },
+      { kind: 'point', id: 's', x: 23, y: 4 },
+      { kind: 'point', id: 't', x: 15, y: 0 },
+      { kind: 'arc', id: 'q', center: 'o', start: 's', end: 't' },
+    ],
+    [
+      { kind: 'hDistance', id: 'h', a: 'p', b: 'r', value: 1 },
+      { kind: 'hDistance', id: 'h2', a: 'r', b: 'p', value: 1 },
+      { kind: 'vDistance', id: 'v', a: 'p', b: 'r', value: 1 },
+      { kind: 'pointLineDistance', id: 'pl', point: 'p', line: 'ab', value: 1 },
+      // Beyond the end of the segment: the infinite line counts.
+      { kind: 'pointLineDistance', id: 'pl2', point: 'e', line: 'ab', value: 1 },
+      { kind: 'pointLineDistance', id: 'pl3', point: 'a', line: 'ce', value: 1 },
+      { kind: 'angle', id: 'g', a: 'ab', b: 'ce', value: 1 },
+      { kind: 'angle', id: 'gA', a: 'ab', b: 'ce', value: 1, reverseA: true },
+      { kind: 'angle', id: 'gB', a: 'ab', b: 'ce', value: 1, reverseB: true },
+      { kind: 'angle', id: 'gAB', a: 'ab', b: 'ce', value: 1, reverseA: true, reverseB: true },
+      { kind: 'diameter', id: 'dk', curve: 'k', value: 1 },
+      { kind: 'diameter', id: 'dq', curve: 'q', value: 1 },
+      { kind: 'distance', id: 'd', a: 'p', b: 'r', value: 1 },
+      { kind: 'radius', id: 'rq', curve: 'q', value: 1 },
+    ],
+  );
+  const dimension = (id: string) => {
+    const c = data.constraints.find((x) => x.id === id);
+    if (c === undefined || !('value' in c)) throw new Error(`no dimension ${id}`);
+    return c;
+  };
+
+  it.each([
+    ['distance', 'd', 5],
+    ['hDistance', 'h', 3],
+    ['hDistance with swapped points', 'h2', 3],
+    ['vDistance', 'v', 4],
+    ['pointLineDistance', 'pl', 2],
+    ['pointLineDistance beyond the segment', 'pl2', 4],
+    ['pointLineDistance to a slanted line', 'pl3', Math.SQRT1_2],
+    ['angle', 'g', Math.PI / 4],
+    ['angle reverseA', 'gA', (3 * Math.PI) / 4],
+    ['angle reverseB', 'gB', (3 * Math.PI) / 4],
+    ['angle reverseA and reverseB', 'gAB', Math.PI / 4],
+    ['diameter of a circle', 'dk', 6],
+    ['diameter of an arc', 'dq', 10],
+    ['radius of an arc', 'rq', 5],
+  ])('measures %s', (_name, id, expected) => {
+    expect(measure(data, dimension(id))).toBeCloseTo(expected, 12);
+  });
+
+  it('removeItems drops the dimensions on a removed entity', () => {
+    const removable = (id: string) => data.entities.filter((x) => x.id === id).map((x) => x.id);
+    // With ab also its orphaned points a and b go, so pl3 (from a) goes too.
+    expect(constraintIds(removeItems(data, removable('ab')))).toEqual([
+      'h',
+      'h2',
+      'v',
+      'dk',
+      'dq',
+      'd',
+      'rq',
+    ]);
+    expect(constraintIds(removeItems(data, removable('k')))).not.toContain('dk');
+    expect(constraintIds(removeItems(data, removable('p')))).toEqual([
+      'pl2',
+      'pl3',
+      'g',
+      'gA',
+      'gB',
+      'gAB',
+      'dk',
+      'dq',
+      'rq',
+    ]);
+  });
+});
+
 describe('removeItems', () => {
   it('removes selected constraints only', () => {
     const r = removeItems(DATA, ids('h1', 'r1'));

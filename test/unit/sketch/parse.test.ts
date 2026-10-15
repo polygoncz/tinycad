@@ -78,6 +78,58 @@ describe('parseSketchData – valid data', () => {
       ]),
     ).toEqual([]);
   });
+
+  it('accepts every dimension kind of M28 without placement', () => {
+    expect(
+      constraintIssues([
+        { kind: 'hDistance', id: 'd1', a: 'a', b: 'c', value: 10 },
+        { kind: 'vDistance', id: 'd2', a: 'a', b: 'c', value: 10 },
+        { kind: 'pointLineDistance', id: 'd3', point: 'c', line: 'ab', value: 10 },
+        { kind: 'angle', id: 'd4', a: 'ab', b: 'bc', value: Math.PI / 2 },
+        { kind: 'angle', id: 'd5', a: 'ab', b: 'bc', value: 1, reverseA: true, reverseB: true },
+        { kind: 'diameter', id: 'd6', curve: 'k', value: 4 },
+        { kind: 'diameter', id: 'd7', curve: 'q', value: 20 },
+      ]),
+    ).toEqual([]);
+  });
+
+  it('accepts a placement of the matching kind on every dimension', () => {
+    const linear = { kind: 'linear', offset: -3, along: 2.5 };
+    const radial = { kind: 'radial', angle: -1, distance: 7 };
+    expect(
+      constraintIssues([
+        { kind: 'distance', id: 'd1', a: 'a', b: 'c', value: 5, placement: linear },
+        { kind: 'hDistance', id: 'd2', a: 'a', b: 'c', value: 10, placement: linear },
+        { kind: 'vDistance', id: 'd3', a: 'a', b: 'c', value: 10, placement: linear },
+        {
+          kind: 'pointLineDistance',
+          id: 'd4',
+          point: 'c',
+          line: 'ab',
+          value: 10,
+          placement: linear,
+        },
+        {
+          kind: 'angle',
+          id: 'd5',
+          a: 'ab',
+          b: 'bc',
+          value: 1,
+          placement: { kind: 'angular', radius: 4, t: 0 },
+        },
+        {
+          kind: 'angle',
+          id: 'd6',
+          a: 'ab',
+          b: 'bc',
+          value: 1,
+          placement: { kind: 'angular', radius: 4, t: 1 },
+        },
+        { kind: 'radius', id: 'd7', curve: 'k', value: 2, placement: radial },
+        { kind: 'diameter', id: 'd8', curve: 'q', value: 20, placement: radial },
+      ]),
+    ).toEqual([]);
+  });
 });
 
 describe('parseSketchData – entities', () => {
@@ -173,6 +225,106 @@ describe('parseSketchData – constraints', () => {
     ['distance a = b', { kind: 'distance', id: 'x', a: 'a', b: 'a', value: 1 }],
     ['radius on a line', { kind: 'radius', id: 'x', curve: 'ab', value: 1 }],
     ['radius negative', { kind: 'radius', id: 'x', curve: 'k', value: -1 }],
+    ['hDistance between lines', { kind: 'hDistance', id: 'x', a: 'ab', b: 'bc', value: 1 }],
+    ['vDistance zero', { kind: 'vDistance', id: 'x', a: 'a', b: 'b', value: 0 }],
+    ['vDistance a = b', { kind: 'vDistance', id: 'x', a: 'a', b: 'a', value: 1 }],
+    [
+      'pointLineDistance to a point',
+      { kind: 'pointLineDistance', id: 'x', point: 'c', line: 'a', value: 1 },
+    ],
+    [
+      'pointLineDistance from a line',
+      { kind: 'pointLineDistance', id: 'x', point: 'bc', line: 'ab', value: 1 },
+    ],
+    [
+      'pointLineDistance from an end',
+      { kind: 'pointLineDistance', id: 'x', point: 'b', line: 'ab', value: 1 },
+    ],
+    [
+      'pointLineDistance negative',
+      { kind: 'pointLineDistance', id: 'x', point: 'c', line: 'ab', value: -1 },
+    ],
+    ['angle a = b', { kind: 'angle', id: 'x', a: 'ab', b: 'ab', value: 1 }],
+    ['angle with a circle', { kind: 'angle', id: 'x', a: 'ab', b: 'k', value: 1 }],
+    ['angle zero', { kind: 'angle', id: 'x', a: 'ab', b: 'bc', value: 0 }],
+    ['angle π', { kind: 'angle', id: 'x', a: 'ab', b: 'bc', value: Math.PI }],
+    ['angle over π', { kind: 'angle', id: 'x', a: 'ab', b: 'bc', value: 4 }],
+    [
+      'angle reverseA false',
+      { kind: 'angle', id: 'x', a: 'ab', b: 'bc', value: 1, reverseA: false },
+    ],
+    [
+      'angle reverseB not true',
+      { kind: 'angle', id: 'x', a: 'ab', b: 'bc', value: 1, reverseB: 1 },
+    ],
+    [
+      'reverseA on a distance',
+      { kind: 'distance', id: 'x', a: 'a', b: 'c', value: 1, reverseA: true },
+    ],
+    ['diameter on a point', { kind: 'diameter', id: 'x', curve: 'a', value: 1 }],
+    ['diameter infinite', { kind: 'diameter', id: 'x', curve: 'k', value: Infinity }],
+  ])('reports %s at its index', (_name, bad) => {
+    expect(constraintIssues([{ kind: 'fix', id: 'f', point: 'a' }, bad])).toEqual([
+      constraintIssue(1),
+    ]);
+  });
+
+  const LINEAR = { kind: 'linear', offset: 1, along: 0 };
+  const RADIAL = { kind: 'radial', angle: 0, distance: 1 };
+  const ANGULAR = { kind: 'angular', radius: 1, t: 0.5 };
+  const dist = (placement: unknown) => ({
+    kind: 'distance',
+    id: 'x',
+    a: 'a',
+    b: 'c',
+    value: 1,
+    placement,
+  });
+  const rad = (placement: unknown) => ({
+    kind: 'radius',
+    id: 'x',
+    curve: 'k',
+    value: 1,
+    placement,
+  });
+  const ang = (placement: unknown) => ({
+    kind: 'angle',
+    id: 'x',
+    a: 'ab',
+    b: 'bc',
+    value: 1,
+    placement,
+  });
+  it.each([
+    ['placement not an object', dist('linear')],
+    ['placement null', dist(null)],
+    ['placement undefined', dist(undefined)],
+    ['radial on a distance', dist(RADIAL)],
+    ['angular on a distance', dist(ANGULAR)],
+    ['linear on a radius', rad(LINEAR)],
+    ['angular on a diameter', { ...rad(ANGULAR), kind: 'diameter' }],
+    ['linear on an angle', ang(LINEAR)],
+    [
+      'linear on a pointLineDistance',
+      { kind: 'pointLineDistance', id: 'x', point: 'c', line: 'ab', value: 1, placement: RADIAL },
+    ],
+    ['unknown placement kind', dist({ kind: 'polar', offset: 1, along: 0 })],
+    ['placement with a missing property', dist({ kind: 'linear', offset: 1 })],
+    ['placement with an extra property', dist({ ...LINEAR, side: 1 })],
+    ['linear offset NaN', dist({ ...LINEAR, offset: Number.NaN })],
+    ['linear along infinite', dist({ ...LINEAR, along: -Infinity })],
+    ['linear offset not a number', dist({ ...LINEAR, offset: '1' })],
+    ['radial angle infinite', rad({ ...RADIAL, angle: Infinity })],
+    ['radial distance zero', rad({ ...RADIAL, distance: 0 })],
+    ['radial distance negative', rad({ ...RADIAL, distance: -1 })],
+    ['angular radius zero', ang({ ...ANGULAR, radius: 0 })],
+    ['angular radius NaN', ang({ ...ANGULAR, radius: Number.NaN })],
+    ['angular t below 0', ang({ ...ANGULAR, t: -0.01 })],
+    ['angular t above 1', ang({ ...ANGULAR, t: 1.01 })],
+    [
+      'placement on a geometric constraint',
+      { kind: 'fix', id: 'x', point: 'a', placement: LINEAR },
+    ],
   ])('reports %s at its index', (_name, bad) => {
     expect(constraintIssues([{ kind: 'fix', id: 'f', point: 'a' }, bad])).toEqual([
       constraintIssue(1),

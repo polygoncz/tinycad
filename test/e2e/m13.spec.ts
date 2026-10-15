@@ -62,7 +62,7 @@ test('extrude a rectangle, edit the sketch, cut a hole, undo, reload, revolve', 
   await timelineFeature(page, 'Skica 1').dblclick();
   const edited = sketchPanel(page, 'Skica 1');
   await expect(edited.getByRole('status')).toHaveText('Plně určeno');
-  const width = dimensionInput(edited, 'Vzdálenost 1');
+  const width = dimensionInput(edited, 'Vodorovná vzdálenost 1');
   const before = await dimensionValue(width);
   await width.fill(String(before * 2));
   await width.press('Enter');

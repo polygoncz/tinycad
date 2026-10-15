@@ -7,6 +7,7 @@ describe('sketch public API', () => {
   it('exports exactly the runtime values of spec 12', () => {
     expect(Object.keys(sketch).sort()).toEqual(
       [
+        'DIMENSION_KINDS',
         'GEOMETRIC_CONSTRAINT_KINDS',
         'SKETCH_FEATURE_TYPE',
         'SKETCH_PARAM',
@@ -14,9 +15,14 @@ describe('sketch public API', () => {
         'computeRegions',
         'constraintFor',
         'curve2',
+        'defaultPlacement',
         'dimensionFor',
+        'dimensionTarget',
+        'isDimension',
         'measure',
+        'movePlacement',
         'parseSketchData',
+        'placeDimension',
         'pointsById',
         'removeItems',
         'toggleConstruction',
@@ -37,6 +43,21 @@ describe('sketch public API', () => {
       'fix',
     ]);
     expect(Object.isFrozen(sketch.GEOMETRIC_CONSTRAINT_KINDS)).toBe(true);
+  });
+
+  it('tells a dimension by its kind (M28), not by a value field', () => {
+    expect(sketch.DIMENSION_KINDS).toEqual([
+      'distance',
+      'hDistance',
+      'vDistance',
+      'pointLineDistance',
+      'angle',
+      'radius',
+      'diameter',
+    ]);
+    expect(Object.isFrozen(sketch.DIMENSION_KINDS)).toBe(true);
+    expect(sketch.isDimension({ kind: 'angle' })).toBe(true);
+    expect(sketch.isDimension({ kind: 'horizontal', value: 1 })).toBe(false);
   });
 
   it('names the params of the sketch feature (SKETCH_PARAM)', () => {
