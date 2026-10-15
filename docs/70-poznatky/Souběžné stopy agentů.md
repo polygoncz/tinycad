@@ -48,7 +48,7 @@ updated: 2026-10-15
    - v každé odpovědi shrne **úplný stav** rozhodnutí, protože zprávy se můžou zkřížit (stopa se zeptá znovu dřív, než jí dorazí odpověď);
    - slučuje po jednom: zkontroluje diff proti kontraktu, spustí `npm run check` a e2e, průběh stopy přenese do deníku a doplní wikilinky;
    - stopu, která čeká na jinou (např. nástroje nad snapperem), pozdrží a pustí ji až po sloučení té druhé.
-6. **Přehled pro člověka:** stav se bere z gitu a z vaultu, ne z paměti agenta. V tinycad to dělá panel `/stopy` (mod Claude Code `tinycad-stopy`): worktree, commity navíc, rozpracované soubory, milníky podle `status`, zaškrtnuté úkoly a `depends_on`.
+6. **Přehled pro člověka:** stav se bere z gitu a z vaultu, ne z paměti agenta. V tinycad to dělá panel `/stopy` (mod Claude Code v `.claude/skills/tinycad-stopy/`): worktree, commity navíc, rozpracované soubory, milníky podle `status`, zaškrtnuté úkoly a `depends_on`.
 
 ### Co se zatím ukázalo (série M25–M29, 2026-10-15)
 

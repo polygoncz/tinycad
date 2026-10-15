@@ -52,6 +52,8 @@ export default defineConfig(
       'spikes/',
       'node_modules/',
       '.claude/worktrees/',
+      // Claude Code mods: typed against the engine API, checked with `claude plugin validate`.
+      '.claude/skills/',
     ],
   },
 

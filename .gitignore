@@ -22,3 +22,5 @@ docs/.obsidian/cache
 # Claude Code agent worktrees
 .claude/worktrees/
 node_modules
+# Types the Claude Code engine lays beside a mod at load.
+.claude/skills/*/.claude-plugin/types/
