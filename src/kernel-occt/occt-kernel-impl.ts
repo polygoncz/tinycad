@@ -14,6 +14,7 @@ import {
   type MeshData,
   type MeshQuality,
   type ProfileLoop,
+  type ProfileRegions,
   type ShapeHandle,
   type ShapeResult,
   type SubShapeIndex,
@@ -179,6 +180,13 @@ export class OcctKernelImpl implements GeometryKernel {
         throw createKernelError('invalid-input', `makeFace: ${errors.join('; ')}`);
       }
       return faceResult(this.oc, input, this.adder);
+    });
+  }
+
+  profileRegions(): Promise<ProfileRegions> {
+    // M30 task 1: the port is in place, the OCCT regions follow in task 2 (the input unread).
+    return this.run(noInput, () => {
+      throw createKernelError('operation-failed', 'profileRegions: not implemented');
     });
   }
 

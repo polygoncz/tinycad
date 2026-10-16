@@ -142,6 +142,7 @@ describe('endOnFatal', () => {
       transform: (s, m) => fake.transform(s, m),
       boolean: (op, targets, tools) => fake.boolean(op, targets, tools),
       makeFace: (p) => fake.makeFace(p),
+      profileRegions: (p) => fake.profileRegions(p),
       extrude: (s, d, l) => fake.extrude(s, d, l),
       revolve: (s, a, angle) => fake.revolve(s, a, angle),
       tessellate: (s, q) => fake.tessellate(s, q),
@@ -197,6 +198,9 @@ describe('endOnFatal', () => {
   });
 });
 
-describeGeometryKernelContract('OcctKernelClient over MessageChannel', () =>
-  Promise.resolve(connect(Promise.resolve(new OcctKernelImpl(oc))).kernel),
+describeGeometryKernelContract(
+  'OcctKernelClient over MessageChannel',
+  () => Promise.resolve(connect(Promise.resolve(new OcctKernelImpl(oc))).kernel),
+  // Until task 2 of M30: the OCCT regions are not implemented yet.
+  { skipProfileRegions: true },
 );

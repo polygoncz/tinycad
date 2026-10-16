@@ -1,5 +1,5 @@
 import type { Mat4, Plane, Vec3 } from '@/core';
-import type { ProfileLoop } from './profile';
+import type { ProfileCurve, ProfileLoop, ProfileRegions } from './profile';
 import type {
   BoundingBox,
   MeshData,
@@ -52,6 +52,11 @@ export interface SketchOps {
     readonly outer: ProfileLoop;
     readonly holes: readonly ProfileLoop[];
   }): Promise<ShapeResult>;
+  /**
+   * M30: regions bounded by the curves (spec 06 "Stav po M30", spec 12 "Oblasti (profily)").
+   * Every curve has a unique id; order and orientation are arbitrary. No handle, no side effects.
+   */
+  profileRegions(p: { readonly curves: readonly ProfileCurve[] }): Promise<ProfileRegions>;
 }
 
 /** An axis: a point and a direction (need not be unit length). */

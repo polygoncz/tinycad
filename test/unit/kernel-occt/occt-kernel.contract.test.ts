@@ -12,4 +12,7 @@ beforeAll(async () => {
   oc = await loadOcct();
 });
 
-describeGeometryKernelContract('OcctKernelImpl', () => Promise.resolve(new OcctKernelImpl(oc)));
+describeGeometryKernelContract('OcctKernelImpl', () => Promise.resolve(new OcctKernelImpl(oc)), {
+  // Until task 2 of M30: the OCCT regions are not implemented yet.
+  skipProfileRegions: true,
+});

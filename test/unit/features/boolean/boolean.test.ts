@@ -76,6 +76,7 @@ function aRecordingKernel() {
       return fake.boolean(op, targets, tools);
     },
     makeFace: (p) => fake.makeFace(p),
+    profileRegions: (p) => fake.profileRegions(p),
     extrude: (profile, direction, distance) => fake.extrude(profile, direction, distance),
     revolve: (profile, axis, angle) => fake.revolve(profile, axis, angle),
     fillet: (shape, edges, radius) => fake.fillet(shape, edges, radius),

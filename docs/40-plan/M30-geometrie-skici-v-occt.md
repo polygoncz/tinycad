@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: doing
 order: 30
 aliases:
   - M30
@@ -21,7 +21,7 @@ specs:
   - "[[10-interakce]]"
 depends_on:
   - "[[M29-spliny]]"
-started:
+started: 2026-10-16
 finished:
 tags:
   - milnik
@@ -50,7 +50,7 @@ Rozhodnutí v sezení 2026-10-16 ([[Q092 Hranice geometrie skici v TS a v OCCT|Q
 ## Úkoly
 
 - [x] Rozhodnout [[Q092 Hranice geometrie skici v TS a v OCCT|Q092]] a dopsat kontrakt do spec 06 a 12.
-- [ ] Port `profileRegions`, typy a `FakeKernel` s přesunutým algoritmem.
+- [x] Port `profileRegions`, typy a `FakeKernel` s přesunutým algoritmem.
 - [ ] `kernel-occt`: oblasti v OCCT (po prototypu).
 - [ ] `regionCurves`, builder skici a artefakt s obrysy.
 - [ ] Kresba oblastí z artefaktu a port `SketchGeometry`.
@@ -109,5 +109,12 @@ Jak přesunout výpočet za port bez změny chování (kontraktové testy jako z
 ## Průběh stopy
 
 _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hlavní sezení to při sloučení přenese do deníku.)_
+
+**2026-10-16 – prototyp OCCT cesty (úkol 2).** 16 případů z kontraktové sady + měření výkonu, obě cesty.
+- Build váže `BRepAlgoAPI_Splitter` (s historií), `Geom2dAPI_InterCurveCurve` (body průsečíků, **bez parametrů**; i samoprůsečíky jedné křivky), 2D křivky přes `GC_MakeSegment2d`, `GC_MakeArcOfCircle2d`, `Geom2d_BSplineCurve`. Neváže `BOPAlgo_*`, `IntAna2d`, `GCE2d`, klasifikátory bodu v ploše (`BRepClass_FaceClassifier`, `BRepTopAdaptor_FClass2d`), `ShapeAnalysis_*`, `BRepTools_WireExplorer`. Přetížení konstruktorů bez sufixů `_1`.
+- **a) Splitter:** nepozná spline křížící sám sebe (vznikne nesmyslná plocha), visící hranu nechá v ploše jako INTERNAL, trojúhelník dotýkající se obdélníku jen rohem udělá dírou (TS: 0 děr). Jména z historie a ruční řetězení drátů.
+- **b) `InterCurveCurve` + vlastní polohrany:** všech 16 případů jako TS (jména, díry, křížení vč. samoprůsečíku splinu). Plocha znaménkovou Greenovou větou (Gauss nad `EvalD1`) – `MakeFace` + `BRepGProp` dává u sevřené smyčky špatný obsah (104 místo 96). Bod v oblasti paritou paprsku přes `InterCurveCurve`. S předfiltrem obálek rychlejší než TS (1860 křivek: 25 ms vs. TS 392 ms, Splitter 100 ms).
+- **Návrh:** cesta b. Splitter se hodí až pro [[Q093 Oblasti z křížících se křivek|Q093]] (dělení křivek v průsečících a jména kusů z historie).
+- **Pavel 2026-10-16:** „Souhlasím s cestou b (Geom2dAPI_InterCurveCurve + vlastní polohrany, plocha Greenovou větou).“
 
 ## Retrospektiva
