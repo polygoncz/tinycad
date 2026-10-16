@@ -44,7 +44,7 @@ Upřesnění v sezení 2026-10-16:
 ## Úkoly
 
 - [x] Nekonečná přímka v datech, řešiči a geometrii.
-- [ ] Konstrukce obdélníků a drážek.
+- [x] Konstrukce obdélníků a drážek.
 - [ ] Nástroje obdélník středem a třemi body, bod, přímka.
 - [ ] Nástroje drážek.
 - [ ] Režim konstrukce.
@@ -112,6 +112,7 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **B2 (odchylka od plánu, Pavel schválil):** oblouková drážka bez `equal` koncových oblouků a bez konstrukčního oblouku osy – obojí plyne z tečností, řešič by to hlásil jako redundantní (vnitřní vazbu oblouku osy nejde vynechat, zahodila by se tečnost a soustava by byla degenerovaná).
 - **B3 (Pavel):** první strana obdélníku 3 body, osa přímé drážky a konstrukční přímka dostanou `horizontal`/`vertical` z `inferLine` do 3° (automatické, Ctrl/Cmd vypne).
 - **Úkol 1 hotový:** pravidlo „přímka jako nosná přímka ano, délka ne“ platí i pro `dimensionTarget` a kresbu kót (dopsáno do spec). Nástroj kóty zatím přímku nepřijme v `retarget` → přidáno do úkolu 6. Přímka jako osa Revolve je mimo M31 (kandidát na pozdější milník). `npm run check` zelený (6545 unit testů).
+- **Úkol 2 hotový:** konstrukce v `sketch/construct.ts`; planegcs potvrdil `dof` z tabulky tvarů a žádnou redundanci (B2 tím ověřené). Doplněno do spec: pojmenované typy id bodů, `arcSlotFrom` s koncem ve středu → `null`, pořadí id a vazeb.
 - **B4 (Pavel, jako Onshape):** režim konstrukce = rozšířená akce `sketch.construction` (`Q`): s křivkami ve výběru je přepne, bez nich přepne režim; tlačítko v liště svítí (`Action.checked`). Id `sketch.constructionMode` nevzniká (`Q` už patří `sketch.construction`, registr nedovolí dvě akce se stejnou zkratkou). Nové křivky označí pomůcka nástrojů `addDrawn`, ne `addGeometry`, aby režim nezasáhl úpravy jiných stop (trim, zrcadlení).
 
 ## Retrospektiva

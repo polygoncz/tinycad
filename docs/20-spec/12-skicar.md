@@ -774,7 +774,7 @@ export function slotFromEnds(e1: Vec2, e2: Vec2, width: Vec2): SlotFit | null;
 /** Oblouková drážka: osa = oblouk kolem center proti směru od start do end (end promítnutý na kružnici |start − center|), w = polovina šířky. */
 export interface ArcSlotFit { readonly center: Vec2; readonly start: Vec2; readonly end: Vec2; readonly radius: number; readonly half: number;
   readonly innerStart: Vec2; readonly innerEnd: Vec2; readonly outerStart: Vec2; readonly outerEnd: Vec2 }
-/** w = | |width − center| − R |. R ≤ 1e-9, end ve směru start (úhel ≤ 1e-9), w ≤ 1e-9 nebo w ≥ R − 1e-9 → null. */
+/** w = | |width − center| − R |. R ≤ 1e-9, end ve středu (|end − center| ≤ 1e-9), end ve směru start (úhel ≤ 1e-9), w ≤ 1e-9 nebo w ≥ R − 1e-9 → null. */
 export function arcSlotFrom(center: Vec2, start: Vec2, end: Vec2, width: Vec2): ArcSlotFit | null;
 
 /** Nová id pro topologii (nástroj je bere z ToolContext.ids). */
@@ -782,11 +782,13 @@ export interface ShapeIds { entity(): SketchEntityId; constraint(): SketchConstr
 /** Křivky a vazby tvaru; body (s vazbami ze snapperu) dodá nástroj. `required` = vazby, které tvar definují. */
 export interface ShapeDraft { readonly curves: readonly SketchCurve[]; readonly constraints: readonly SketchConstraint[]; readonly required: readonly SketchConstraintId[] }
 
-export function rectangleCenterShape(corners: readonly [SketchEntityId, SketchEntityId, SketchEntityId, SketchEntityId], center: SketchEntityId, ids: ShapeIds): ShapeDraft;
-export function rectangle3Shape(corners: readonly [SketchEntityId, SketchEntityId, SketchEntityId, SketchEntityId], ids: ShapeIds): ShapeDraft;
-export function slotShape(p: { c1; c2; l1; l2; r2; r1: SketchEntityId }, ids: ShapeIds): ShapeDraft;
-export function slotOverallShape(p: { e1; e2; c1; c2; l1; l2; r2; r1: SketchEntityId }, ids: ShapeIds): ShapeDraft;
-export function arcSlotShape(p: { center; start; end; innerStart; innerEnd; outerStart; outerEnd: SketchEntityId }, ids: ShapeIds): ShapeDraft;
+export type RectCornerIds = readonly [SketchEntityId, SketchEntityId, SketchEntityId, SketchEntityId];
+// SlotPointIds { c1; c2; l1; l2; r2; r1 }, SlotOverallPointIds extends SlotPointIds { e1; e2 }, ArcSlotPointIds { center; start; end; innerStart; innerEnd; outerStart; outerEnd } – readonly SketchEntityId
+export function rectangleCenterShape(corners: RectCornerIds, center: SketchEntityId, ids: ShapeIds): ShapeDraft;
+export function rectangle3Shape(corners: RectCornerIds, ids: ShapeIds): ShapeDraft;
+export function slotShape(p: SlotPointIds, ids: ShapeIds): ShapeDraft;
+export function slotOverallShape(p: SlotOverallPointIds, ids: ShapeIds): ShapeDraft;
+export function arcSlotShape(p: ArcSlotPointIds, ids: ShapeIds): ShapeDraft;
 ```
 
 **Vazby tvarů** (všechny `required`, pořadí křivek v datech jako v tabulce):
@@ -801,6 +803,7 @@ export function arcSlotShape(p: { center; start; end; innerStart; innerEnd; oute
 
 - Oblouky jsou v datech vždy proti směru hodinových ručiček; začátky a konce v tabulce to splňují (koncový oblouk se vyklene ven z drážky).
 - **Oblouková drážka bez `equal` koncových oblouků a bez konstrukční osy:** z tečností plyne, že start i end jsou středy úseček mezi vnitřním a vnějším obloukem, takže leží na téže kružnici o poloměru (R_vnitřní + R_vnější)/2 a oba koncové oblouky mají poloměr (R_vnější − R_vnitřní)/2. `equal` by tedy byla redundantní a konstrukční oblouk osy přes start a end také (jeho vnitřní vazbu |start − c| = |end − c| nejde vynechat, planegcs by zahodil některou tečnost a řešil by degenerovanou soustavu). Odchylka od plánu; poloměr osy jde kótovat vzdáleností center–start. U přímé drážky `equal` nutná je (bez ní by šly oblouky různých poloměrů s tečnými úsečkami).
+- Pořadí: id křivek se berou v pořadí křivek z tabulky, pak id vazeb; tečnosti v pořadí sdílených bodů (l1, l2, r2, r1), `a` = úsečka (u obloukové drážky koncový oblouk); `equal(oblouk c2, oblouk c1)`; `pointOnCurve` drážky celkovou délkou za `equal`. Ověřeno s planegcs (`test/unit/solver-planegcs/shapes.test.ts`): `dof` přesně podle tabulky, žádná redundance, kóta sníží `dof` o 1 a tvar drží.
 - Tečnost ve sdíleném bodě mapuje adaptér na `angle_via_point` ([[#Tečnost ve sdíleném koncovém bodě (adaptér planegcs)]]); tvar tedy nepotřebuje nic nového v řešiči.
 
 ### Nástroje
