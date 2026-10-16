@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 30
 aliases:
   - M30
@@ -22,7 +22,7 @@ specs:
 depends_on:
   - "[[M29-spliny]]"
 started: 2026-10-16
-finished:
+finished: 2026-10-16
 tags:
   - milnik
 created: 2026-10-16
@@ -136,3 +136,20 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **Pro hlavní sezení (návrh, neděláno):** 2D vektorové pomůcky jsou třikrát (`sketch/vec2.ts`, kopie `kernel/vec2.ts`, `dist` v `kernel-occt/regions.ts`). Revize navrhuje `core/math/vec2.ts` (jmenný prostor `vec2` vedle `vec3`); to je nový veřejný export `core` a změna spec 02, mimo vlastnictví stopy A – vhodné po sloučení všech stop.
 
 ## Retrospektiva
+
+_(Návrh stopy, Pavel doplní nebo upraví.)_
+
+**Splnění kritérií:** testy oblastí běží jako kontraktová sada proti fake i OCCT (52 případů, přímo i přes worker); regresní test na literálech změřených před M30 (jména oblastí, díry, 7 jmen ploch beze změny); e2e 136/136 včetně skici se splinem a vysunutím; `npm run check` a `npm run test:integration` zelené.
+
+**Co bylo jinak, než se čekalo:**
+- Plán počítal s `BOPAlgo`/`Splitter`. Prototyp ukázal, že build `BOPAlgo` neváže a Splitter se ve třech krajních případech liší od kontraktu (samoprůsečík splinu, visící hrana, dotyk rohem). Zvítězil algoritmus kontraktu s geometrií z OCCT – a je ~4× rychlejší než TS díky předfiltru obálek.
+- `BRepGProp` nad plochou z `MakeFace` dává u sevřené smyčky špatný obsah; Greenova věta přímo nad křivkami je přesná a dá i orientaci.
+- Úkoly 2 a 3 se daly implementovat souběžně, ale ne samostatně ověřit: integrační testy (součást `check`) potřebují oba. Slučovat se musely spolu.
+- Tolerance plochy splinu v kontraktové sadě musela povolit (1e-3): fake tessellací nesplní 1e-4. Obsah oblastí se splinem je po M30 přesnější než dřív.
+
+**Co se osvědčilo:**
+- Prototyp před implementací (16 případů kontraktové sady + měření) – rozhodnutí měl Pavel na stole s čísly, implementace pak proběhla bez překvapení.
+- Kontraktová sada jako záchranná síť přesunu: stejné případy proti fake i OCCT, takže „chování beze změny“ je ověřené, ne slíbené.
+- Regresní literály změřené na commitu před milníkem (dočasný worktree), ne spočítané stejným kódem.
+- Vyčerpávající `switch` místo typového predikátu v `regionCurves` – přidání entity stopou B nebo C typecheck nepustí bez rozhodnutí.
+
