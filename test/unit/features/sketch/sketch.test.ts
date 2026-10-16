@@ -15,7 +15,7 @@ import { registerPlugin } from '@/plugin-api';
 import { EMPTY_STATE, createBuilderRegistry, sketchesOf } from '@/regen';
 import type { BuildContext, RegenState, SketchArtifact } from '@/regen';
 import { aBuildContext, aBuildInput, aRegenSetup, resized, result } from '@/regen/testing';
-import { SKETCH_FEATURE_TYPE, SKETCH_PARAM, parseSketchData } from '@/sketch';
+import { SKETCH_FEATURE_TYPE, SKETCH_PARAM, parseSketchData, regionCurves } from '@/sketch';
 import type { SketchData, SketchEntity, SketchEntityId } from '@/sketch';
 import { rectangleData } from '@/sketch/testing';
 import { sketchBuilder } from '@/features/sketch/builder';
@@ -60,6 +60,15 @@ function rectangleWithCircle(): SketchData {
       { kind: 'point', id: 'o', x: 5, y: 2.5 },
       { kind: 'circle', id: 'k', center: 'o', radius: 2 },
     ],
+    rect.constraints,
+  );
+}
+
+/** The default rectangle with a construction diagonal, which bounds no region. */
+function rectangleWithConstructionLine(): SketchData {
+  const rect = rectangleData();
+  return sketchData(
+    [...rect.entities, { kind: 'line', id: 'ac', p1: 'a', p2: 'c', construction: true }],
     rect.constraints,
   );
 }
@@ -353,6 +362,53 @@ describe('sketchBuilder', () => {
     ]);
   });
 
+  it('asks the kernel for the regions once, with the region curves of the sketch', async () => {
+    const kernel = createFakeKernel();
+    const calls: unknown[] = [];
+    const ctx: BuildContext = {
+      ...aBuildContext(kernel),
+      kernel: {
+        ...aBuildContext(kernel).kernel,
+        profileRegions: (p) => {
+          calls.push(p);
+          return kernel.profileRegions(p);
+        },
+      },
+    };
+    const data = rectangleWithConstructionLine();
+    await sketchBuilder.build(aBuildInput(aSketch('s1', data), EMPTY_STATE), ctx);
+    expect(kernel.callCount('profileRegions')).toBe(1);
+    expect(calls).toEqual([{ curves: regionCurves(data) }]);
+  });
+
+  it('carries the outlines of the kernel in the order and with the names of the regions', async () => {
+    const kernel = createFakeKernel();
+    const data = rectangleWithCircle();
+    const artifact = await build(aSketch('s1', data), kernel);
+    const expected = await createFakeKernel().profileRegions({ curves: regionCurves(data) });
+    expect(artifact.outlines).toEqual(expected.regions);
+    expect(artifact.outlines.map((r) => r.name)).toEqual([...artifact.regions.keys()]);
+    expect(kernel.callCount('profileRegions')).toBe(1);
+  });
+
+  it('freezes the outlines deeply, also when the kernel returns them mutable (worker)', async () => {
+    const kernel = createFakeKernel();
+    const data = rectangleWithCircle();
+    // Like a structured clone through postMessage: the same data, nothing frozen.
+    const cloned = structuredClone(await kernel.profileRegions({ curves: regionCurves(data) }));
+    const ctx: BuildContext = {
+      ...aBuildContext(kernel),
+      kernel: { ...aBuildContext(kernel).kernel, profileRegions: () => Promise.resolve(cloned) },
+    };
+    const result = await sketchBuilder.build(aBuildInput(aSketch('s1', data), EMPTY_STATE), ctx);
+    if (!result.ok) throw new Error('build failed');
+    const artifact = sketchesOf(result.state)[0];
+    const hole = artifact?.outlines.find((r) => r.holes.length > 0)?.holes[0]?.[0];
+    expect(Object.isFrozen(artifact?.outlines)).toBe(true);
+    expect(Object.isFrozen(artifact?.outlines[0]?.outer)).toBe(true);
+    expect(Object.isFrozen(hole)).toBe(true);
+  });
+
   it('a rectangle with a circle inside gives two faces in the order of the regions', async () => {
     const kernel = createFakeKernel();
     const artifact = await build(aSketch('s1', rectangleWithCircle()), kernel);
@@ -369,10 +425,12 @@ describe('sketchBuilder', () => {
     );
     if (!output.ok) expect.fail(output.error.message);
     expect(warnings).toEqual(['Sketch curves cross each other; no regions']);
+    expect(kernel.callCount('profileRegions')).toBe(1);
     expect(kernel.callCount('makeFace')).toBe(0);
     const artifact = output.state.artifacts.get(sketchId(aSketch('s1').id));
     if (artifact?.kind !== 'sketch') expect.fail('No sketch artifact');
     expect(artifact.regions.size).toBe(0);
+    expect(artifact.outlines).toEqual([]);
   });
 
   it('an empty sketch is valid: an artifact with no regions and no warning', async () => {
@@ -421,6 +479,15 @@ describe('sketchBuilder', () => {
     await expect(
       sketchBuilder.build(aBuildInput(feature, EMPTY_STATE), aBuildContext(createFakeKernel())),
     ).rejects.toThrow();
+  });
+
+  it('lets a kernel error of profileRegions fly and makes no face', async () => {
+    const kernel = createFakeKernel();
+    kernel.failNext('profileRegions', 'invalid-input');
+    await expect(
+      sketchBuilder.build(aBuildInput(aSketch('s1'), EMPTY_STATE), aBuildContext(kernel)),
+    ).rejects.toMatchObject({ code: 'invalid-input' });
+    expect(kernel.callCount('makeFace')).toBe(0);
   });
 
   it('lets a kernel error fly', async () => {

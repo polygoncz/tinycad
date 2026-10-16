@@ -1118,7 +1118,7 @@ export const ORIGIN_POINT_ID = '__origin';                 // bod počátku v kr
 // sketcher/sketch-drawing.ts (čisté funkce, export z index.ts – používá je i app)
 export function toSketchDrawing(plane: Plane, data: SketchData, styleOf: (id: SketchItemId) => SketchStyle,
   opts?: { readonly origin?: boolean; readonly editing?: boolean }): SketchDrawing;   // všechny křivky a body; origin → bod ORIGIN_POINT_ID v [0, 0] stylu 'normal'; editing → SketchDrawing.editing (M19.2)
-export function artifactDrawing(plane: Plane, entities: readonly SketchEntity[]): SketchDrawing;   // křivky (nekonstrukční 'normal', od M13 konstrukční 'construction'), bez bodů; od M13 regions z computeRegions
+export function artifactDrawing(plane: Plane, entities: readonly SketchEntity[], regions: readonly SketchRegion[]): SketchDrawing;   // křivky (nekonstrukční 'normal', od M13 konstrukční 'construction'), bez bodů; od M13 oblasti, od M30 z argumentu (SketchArtifact.outlines)
 export function planeDrawing(plane: Plane, size?: number): SketchDrawing;   // čtverec size × size (výchozí 100) se středem v počátku roviny, 4 úsečky stylem 'plane'
 export function axisDrawing(axis: { readonly origin: Vec3; readonly direction: Vec3 }, size?: number): SketchDrawing;   // M13: úsečka 'axis' délky size (výchozí 100) se středem v origin, stylem 'plane'
 ```
@@ -1127,7 +1127,7 @@ Oblouk → `startAngle = atan2(start − center)`, `endAngle = atan2(end − cen
 
 Spline (M29) → `polyline` z `bspline.tessellate` s tolerancí `SPLINE_TOLERANCE · max(1, největší |souřadnice| řídicích bodů)`; u `bspline` za ním řídicí lomená čára id `__poles:<id>` stylem `construction` (jen `toSketchDrawing`, ne `artifactDrawing`). Pick lomené čáry skicář přeloží na id splinu (`entityAt` v `sketch-tools/snap.ts`). Polygon oblasti obsahuje body tessellace splinu ([[12-skicar#Spliny (M29)]]).
 
-- `artifactDrawing` (M13): konstrukční křivky se kreslí (stylem `construction`), aby šla konstrukční úsečka vybrat jako osa Rotace ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R74]] ⚠); `regions` = `computeRegions({ entities, constraints: [] })` ze `sketch`, `id` = jméno oblasti (shodné s klíči `SketchArtifact.regions`), oblouky a kružnice lomenou čarou s krokem nejvýš π/36.
+- `artifactDrawing` (M13): konstrukční křivky se kreslí (stylem `construction`), aby šla konstrukční úsečka vybrat jako osa Rotace ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R74]] ⚠); `regions` kresby = oblasti z argumentu ve stejném pořadí (od M30 `SketchArtifact.outlines` z jádra, předá je `app/regen-pipeline.ts`; do M29 `computeRegions` z entit), `id` = jméno oblasti (shodné s klíči `SketchArtifact.regions`), oblouky a kružnice lomenou čarou s krokem nejvýš π/36.
 - `axisDrawing` (M13): rovina kresby s `xDir = d̂`, `normal = unit(d̂ × (|d̂_z| < 0.9 ? +Z : +X))` a počátkem `axis.origin`, jedna úsečka id `'axis'` od `−size/2` do `size/2`; bez bodů a oblastí. Id kresby je id osy, takže zásah osy ve viewportu převede `refPick` na `AxisRef`.
 
 ### Nástroje a akce skicáře

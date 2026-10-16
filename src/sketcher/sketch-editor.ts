@@ -7,7 +7,7 @@ import type { Observable, Plane } from '@/core';
 import { ORIGIN_PLANES, ORIGIN_PLANE_IDS, samePlaneRef } from '@/document';
 import type { FeatureId, PlaneRef, TopoRef } from '@/document';
 import { SKETCH_FEATURE_TYPE, SKETCH_PARAM } from '@/sketch';
-import type { ConstraintSolver } from '@/sketch';
+import type { ConstraintSolver, SketchGeometry } from '@/sketch';
 import type { FeatureEditSession, FeatureEditor, Mode, ViewportPort } from '@/interaction';
 import { frozenRef, planeRefOf } from './plane-ref';
 import { openSketchSession } from './sketch-session';
@@ -52,6 +52,8 @@ export interface SketchEditorDeps {
   /** Only opening the feature session: a new sketch or an existing one. */
   readonly features: Pick<FeatureEditor, 'create' | 'edit'>;
   readonly solver: ConstraintSolver;
+  /** M30: handed to every SketchSession (spec 12 "Geometrie skici v jádře"). */
+  readonly geometry: SketchGeometry;
   /**
    * The edited sketch is drawn under EDIT_SKETCH_DRAWING_ID; screenToRay places a dragged
    * dimension label in the plane (M28); the overlay shows the snap guides of the drawing tools
@@ -102,6 +104,7 @@ export function createSketchEditor(deps: SketchEditorDeps): SketchEditor {
       resolvePlane,
       showAllConstraints: showAllConstraints.asObservable(),
       solver,
+      geometry: deps.geometry,
       viewport,
       // The mode goes back even if a subscriber of current throws; its error goes on after.
       onClose: () => {

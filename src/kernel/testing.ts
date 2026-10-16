@@ -8,11 +8,11 @@
 // as an RpcError carrying the same code.
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { mat4, type Mat4, type Plane, type Vec2, type Vec3 } from '@/core';
+import { bspline, mat4, type Mat4, type Plane, type Vec2, type Vec3 } from '@/core';
 import { kernelErrorCode } from './errors';
 import type { KernelErrorCode } from './errors';
 import type { Axis, BooleanOp, GeometryKernel } from './kernel';
-import type { ProfileCurve, ProfileLoop } from './profile';
+import type { ProfileCurve, ProfileLoop, ProfileRegions } from './profile';
 import { validateMeshData } from './mesh';
 import type {
   BoundingBox,
@@ -883,6 +883,10 @@ export function describeGeometryKernelContract(
           expect(await kernel.liveHandleCount()).toBe(0);
         },
       );
+    });
+
+    describe('profileRegions (M30)', () => {
+      describeProfileRegions(() => kernel);
     });
 
     describe('extrude', () => {
@@ -1791,4 +1795,839 @@ export function describeGeometryKernelContract(
       });
     });
   });
+}
+
+// --- profileRegions (M30) ------------------------------------------------------------------
+// The cases of the sketcher's region tests of M12–M29 (sketch/regions.test.ts), with the input
+// as regionCurves gives it: the non-construction curves of a sketch, each with its entity id.
+// Compared as spec 06 says: name, crossing, the number and names of holes exactly, the area
+// relatively (REGION_AREA_TOLERANCE, splines SPLINE_AREA_TOLERANCE) and the points of the loops
+// within POINT_TOLERANCE · max(1, |coordinate|). The start of a loop is not part of the contract,
+// so curves are found by their id.
+
+/** Spec 06: the area of a region agrees relatively within this… */
+const REGION_AREA_TOLERANCE = 1e-6;
+/** …and within this when a spline bounds it (FakeKernel tessellates splines, spec 06). */
+const SPLINE_AREA_TOLERANCE = 1e-3;
+/** Spec 06: a point of a loop agrees within this · max(1, |coordinate|). */
+const LOOP_POINT_TOLERANCE = 1e-7;
+
+type RegionsParams = Parameters<GeometryKernel['profileRegions']>[0];
+type Spline = Extract<ProfileCurve, { kind: 'bspline' }>;
+
+const seg = (id: string, from: Vec2, to: Vec2): ProfileCurve => ({ kind: 'line', from, to, id });
+const ccwArc = (id: string, center: Vec2, from: Vec2, to: Vec2): ProfileCurve => ({
+  kind: 'arc',
+  center,
+  from,
+  to,
+  ccw: true,
+  id,
+});
+const ring = (id: string, center: Vec2, radius: number): ProfileCurve => ({
+  kind: 'circle',
+  center,
+  radius,
+  id,
+});
+const spline = (id: string, poles: readonly Vec2[], degree = 3): Spline => ({
+  kind: 'bspline',
+  degree,
+  poles,
+  knots: clampedKnots(poles.length, degree),
+  id,
+});
+
+/** A clamped knot vector with uniform inner knots for `count` poles. */
+function clampedKnots(count: number, degree: number): number[] {
+  const inner = count - degree - 1;
+  return [
+    ...Array<number>(degree + 1).fill(0),
+    ...Array.from({ length: inner }, (_, i) => (i + 1) / (inner + 1)),
+    ...Array<number>(degree + 1).fill(1),
+  ];
+}
+
+/**
+ * A counter-clockwise rectangle with corners a b c d from (x, y), lines ab bc cd da with the id
+ * prefix (rectangleData of sketch/testing.ts).
+ */
+function rectangle(prefix = '', x = 0, y = 0, width = 10, height = 5): ProfileCurve[] {
+  const a: Vec2 = [x, y];
+  const b: Vec2 = [x + width, y];
+  const c: Vec2 = [x + width, y + height];
+  const d: Vec2 = [x, y + height];
+  return [
+    seg(`${prefix}ab`, a, b),
+    seg(`${prefix}bc`, b, c),
+    seg(`${prefix}cd`, c, d),
+    seg(`${prefix}da`, d, a),
+  ];
+}
+
+/** Rectangle 10 × 5: a (0, 0), b (10, 0), c (10, 5), d (0, 5). */
+const RECT = rectangle();
+/** Triangle p (2, 1), q (4, 1), r (4, 3) inside RECT. */
+const TRIANGLE = [seg('pq', [2, 1], [4, 1]), seg('qr', [4, 1], [4, 3]), seg('rp', [4, 3], [2, 1])];
+/** Slot of lines l1 l2 and tangent arcs a1 a2 around [0, 10]×[0, 10]. */
+const SLOT = [
+  seg('l1', [0, 0], [10, 0]),
+  ccwArc('a1', [10, 5], [10, 0], [10, 10]),
+  seg('l2', [10, 10], [0, 10]),
+  ccwArc('a2', [0, 5], [0, 10], [0, 0]),
+];
+/** The right side of SPLINE_RECT: a cubic spline from b (10, 0) to c (10, 5) bulging to x = 13. */
+const SPLINE_BC = spline('bc', [
+  [10, 0],
+  [13, 1],
+  [13, 4],
+  [10, 5],
+]);
+/** Rectangle 10 × 5 whose right side bc is a cubic spline. */
+const SPLINE_RECT = [
+  seg('ab', [0, 0], [10, 0]),
+  SPLINE_BC,
+  seg('cd', [10, 5], [0, 5]),
+  seg('da', [0, 5], [0, 0]),
+];
+/** A closed cubic spline around the square [0, 10]², from (0, 0) back to (0, 0). */
+const closedSpline = (poles: readonly Vec2[], knots = [0, 0, 0, 0, 0.5, 1, 1, 1, 1]): Spline => ({
+  kind: 'bspline',
+  degree: 3,
+  poles,
+  knots,
+  id: 'sp',
+});
+const SQUARE_POLES: readonly Vec2[] = [
+  [0, 0],
+  [10, 0],
+  [10, 10],
+  [0, 10],
+  [0, 0],
+];
+
+function startPoint(c: ProfileCurve): Vec2 | undefined {
+  if (c.kind === 'circle') return undefined;
+  return c.kind === 'bspline' ? c.poles[0] : c.from;
+}
+
+function endPoint(c: ProfileCurve): Vec2 | undefined {
+  if (c.kind === 'circle') return undefined;
+  return c.kind === 'bspline' ? c.poles[c.poles.length - 1] : c.to;
+}
+
+function nearCoordinate(a: number, b: number): boolean {
+  return Math.abs(a - b) <= LOOP_POINT_TOLERANCE * Math.max(1, Math.abs(a), Math.abs(b));
+}
+
+function expectPoint2Close(
+  actual: Vec2 | undefined,
+  expected: Vec2 | undefined,
+  what: string,
+): void {
+  const ok =
+    actual !== undefined &&
+    expected !== undefined &&
+    nearCoordinate(actual[0], expected[0]) &&
+    nearCoordinate(actual[1], expected[1]);
+  if (!ok) {
+    expect.fail(`${what}: ${JSON.stringify(actual)} differs from ${JSON.stringify(expected)}`);
+  }
+}
+
+function expectNumbersClose(
+  actual: readonly number[],
+  expected: readonly number[],
+  what: string,
+): void {
+  expect(actual.length, `${what}: count`).toBe(expected.length);
+  expected.forEach((e, i) => {
+    const a = actual[i] ?? Number.NaN;
+    if (!nearCoordinate(a, e))
+      expect.fail(`${what}[${String(i)}]: ${String(a)} differs from ${String(e)}`);
+  });
+}
+
+/** The same curve within the contract tolerance: kind, id, orientation and every point. */
+function expectCurveClose(actual: ProfileCurve | undefined, expected: ProfileCurve): void {
+  const what = `curve ${expected.id ?? '?'}`;
+  expect(actual?.kind, `${what}: kind`).toBe(expected.kind);
+  expect(actual?.id, `${what}: id`).toBe(expected.id);
+  if (actual === undefined) return;
+  if (expected.kind === 'circle' && actual.kind === 'circle') {
+    expectPoint2Close(actual.center, expected.center, `${what}: center`);
+    expectNumbersClose([actual.radius], [expected.radius], `${what}: radius`);
+  } else if (expected.kind === 'line' && actual.kind === 'line') {
+    expectPoint2Close(actual.from, expected.from, `${what}: from`);
+    expectPoint2Close(actual.to, expected.to, `${what}: to`);
+  } else if (expected.kind === 'arc' && actual.kind === 'arc') {
+    expect(actual.ccw, `${what}: ccw`).toBe(expected.ccw);
+    expectPoint2Close(actual.center, expected.center, `${what}: center`);
+    expectPoint2Close(actual.from, expected.from, `${what}: from`);
+    expectPoint2Close(actual.to, expected.to, `${what}: to`);
+  } else if (expected.kind === 'bspline' && actual.kind === 'bspline') {
+    expect(actual.degree, `${what}: degree`).toBe(expected.degree);
+    expect(actual.poles.length, `${what}: pole count`).toBe(expected.poles.length);
+    expected.poles.forEach((p, i) => {
+      expectPoint2Close(actual.poles[i], p, `${what}: pole ${String(i)}`);
+    });
+    expectNumbersClose(actual.knots, expected.knots, `${what}: knots`);
+  }
+}
+
+/** The loop has exactly the expected curves (found by id, in any order and from any start). */
+function expectLoopCurves(loop: ProfileLoop | undefined, expected: readonly ProfileCurve[]): void {
+  expect(idsOf(loop ?? []).sort(compareText)).toEqual(idsOf(expected).sort(compareText));
+  for (const e of expected)
+    expectCurveClose(
+      loop?.find((c) => c.id === e.id),
+      e,
+    );
+}
+
+function idsOf(loop: ProfileLoop): string[] {
+  return loop.map((c) => c.id ?? '');
+}
+
+/** Plain string comparison by UTF-16 code units, as spec 12 sorts names. */
+function compareText(a: string, b: string): number {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
+/** Every curve ends where the next one starts (a lone circle is closed by itself). */
+function expectLoopClosed(loop: ProfileLoop): void {
+  if (loop.length === 1 && loop[0]?.kind === 'circle') return;
+  expect(loop.length).toBeGreaterThan(0);
+  loop.forEach((c, i) => {
+    const next = loop[(i + 1) % loop.length];
+    expectPoint2Close(
+      endPoint(c),
+      next === undefined ? undefined : startPoint(next),
+      `end of ${String(i)}`,
+    );
+  });
+}
+
+/**
+ * Signed area of a closed loop: shoelace plus circular segments of arcs, a spline by a fine
+ * tessellation (1e-6), a circle +πr² (a lone circle has no orientation).
+ */
+function loopArea(loop: ProfileLoop): number {
+  let sum = 0;
+  for (const c of loop) {
+    if (c.kind === 'circle') return Math.PI * c.radius ** 2;
+    const points = c.kind === 'bspline' ? bspline.tessellate(c, 1e-6) : [c.from, c.to];
+    for (let i = 1; i < points.length; i++) {
+      const p = points[i - 1] ?? [0, 0];
+      const q = points[i] ?? [0, 0];
+      sum += (p[0] * q[1] - q[0] * p[1]) / 2;
+    }
+    if (c.kind === 'arc') {
+      const r = Math.hypot(c.from[0] - c.center[0], c.from[1] - c.center[1]);
+      const a0 = Math.atan2(c.from[1] - c.center[1], c.from[0] - c.center[0]);
+      const a1 = Math.atan2(c.to[1] - c.center[1], c.to[0] - c.center[0]);
+      const turn = (x: number) => ((x % TURN) + TURN) % TURN;
+      const sweep = c.ccw ? turn(a1 - a0) : turn(a0 - a1);
+      const segment = (r * r * (sweep - Math.sin(sweep))) / 2;
+      sum += c.ccw ? segment : -segment;
+    }
+  }
+  return sum;
+}
+
+/** What a region is compared by (spec 06): name, hole names and area. */
+interface ExpectedRegion {
+  readonly name: string;
+  /** Names of the holes (their curve ids sorted, joined by ','), in any order. */
+  readonly holes?: readonly string[];
+  readonly area: number;
+  /** Relative tolerance of the area; REGION_AREA_TOLERANCE when absent. */
+  readonly areaTolerance?: number;
+}
+
+function holeName(loop: ProfileLoop): string {
+  return [...new Set(idsOf(loop))].sort(compareText).join(',');
+}
+
+function expectAreaClose(
+  actual: number | undefined,
+  expected: number,
+  tolerance: number,
+  what: string,
+): void {
+  const a = actual ?? Number.NaN;
+  if (!(Math.abs(a - expected) <= tolerance * Math.abs(expected))) {
+    expect.fail(
+      `${what}: area ${String(a)} differs from ${String(expected)} by more than ${String(tolerance)} relatively`,
+    );
+  }
+}
+
+/**
+ * The regions are exactly the expected ones in this order, without a crossing; every outer loop
+ * is closed and counter-clockwise, every hole closed and clockwise (a circle has no orientation).
+ */
+function expectRegions(actual: ProfileRegions, expected: readonly ExpectedRegion[]): void {
+  expect(actual.crossing).toBe(false);
+  expect(actual.regions.map((r) => r.name)).toEqual(expected.map((r) => r.name));
+  actual.regions.forEach((r, i) => {
+    const e = expected[i];
+    if (e === undefined) return;
+    expect(r.holes.map(holeName).sort(compareText), `holes of ${r.name}`).toEqual(
+      [...(e.holes ?? [])].sort(compareText),
+    );
+    expectAreaClose(r.area, e.area, e.areaTolerance ?? REGION_AREA_TOLERANCE, r.name);
+    expectLoopClosed(r.outer);
+    expect(loopArea(r.outer), `outer of ${r.name} counter-clockwise`).toBeGreaterThan(0);
+    for (const hole of r.holes) {
+      expectLoopClosed(hole);
+      if (hole.length > 1 || hole[0]?.kind !== 'circle') {
+        expect(loopArea(hole), `hole ${holeName(hole)} clockwise`).toBeLessThan(0);
+      }
+    }
+  });
+}
+
+/** Area of a closed polygon of points and splines, the splines finely tessellated. */
+function areaWith(...parts: readonly (Vec2 | Spline)[]): number {
+  const points = parts.flatMap((p) =>
+    'kind' in p ? bspline.tessellate(p, 1e-6).slice(0, -1) : [p],
+  );
+  let sum = 0;
+  points.forEach((p, i) => {
+    const q = points[(i + 1) % points.length] ?? p;
+    sum += p[0] * q[1] - q[0] * p[1];
+  });
+  return sum / 2;
+}
+
+const NO_REGIONS: ProfileRegions = { regions: [], crossing: false };
+const CROSSING: ProfileRegions = { regions: [], crossing: true };
+
+function describeProfileRegions(kernelOf: () => GeometryKernel): void {
+  const regionsOf = (curves: readonly ProfileCurve[]): Promise<ProfileRegions> =>
+    callWithoutThrow(() => kernelOf().profileRegions({ curves }));
+  const namesOf = async (curves: readonly ProfileCurve[]): Promise<string[]> =>
+    (await regionsOf(curves)).regions.map((r) => r.name);
+
+  describe('regions (spec 12 Oblasti)', () => {
+    it('a rectangle is one counter-clockwise region named after its four lines', async () => {
+      const result = await regionsOf(RECT);
+      expectRegions(result, [{ name: 'ab,bc,cd,da', area: 50 }]);
+      const [r] = result.regions;
+      expect(r?.outer).toHaveLength(4);
+      expectLoopCurves(r?.outer, RECT);
+    });
+
+    it('two rectangles sharing an edge are two regions', async () => {
+      const curves = [
+        ...RECT,
+        seg('be', [10, 0], [20, 0]),
+        seg('ef', [20, 0], [20, 5]),
+        seg('fc', [20, 5], [10, 5]),
+      ];
+      expectRegions(await regionsOf(curves), [
+        { name: 'ab,bc,cd,da', area: 50 },
+        { name: 'bc,be,ef,fc', area: 50 },
+      ]);
+    });
+
+    it('a circle inside a rectangle is a hole and a region of its own', async () => {
+      const k = ring('k', [5, 2.5], 2);
+      const { regions } = await regionsOf([...RECT, k]);
+      expectRegions({ regions, crossing: false }, [
+        { name: 'ab,bc,cd,da,k', holes: ['k'], area: 50 - 4 * Math.PI },
+        { name: 'k', area: 4 * Math.PI },
+      ]);
+      const [outer, disc] = regions;
+      expectLoopCurves(outer?.holes[0], [k]);
+      expectLoopCurves(disc?.outer, [k]);
+    });
+
+    it('a polygon hole is clockwise', async () => {
+      const { regions } = await regionsOf([...RECT, ...TRIANGLE]);
+      expectRegions({ regions, crossing: false }, [
+        { name: 'ab,bc,cd,da,pq,qr,rp', holes: ['pq,qr,rp'], area: 48 },
+        { name: 'pq,qr,rp', area: 2 },
+      ]);
+      expect(loopArea(regions[0]?.holes[0] ?? [])).toBeCloseTo(-2, 9);
+    });
+
+    it('circle in circle in circle: each ring has the next circle as its hole', async () => {
+      const curves = [ring('k1', [1, 1], 10), ring('k2', [1, 1], 5), ring('k3', [1, 1], 2)];
+      expectRegions(await regionsOf(curves), [
+        { name: 'k1,k2', holes: ['k2'], area: 75 * Math.PI },
+        { name: 'k2,k3', holes: ['k3'], area: 21 * Math.PI },
+        { name: 'k3', area: 4 * Math.PI },
+      ]);
+    });
+
+    it('a slot of lines and tangent arcs is one region', async () => {
+      const result = await regionsOf(SLOT);
+      expectRegions(result, [{ name: 'a1,a2,l1,l2', area: 100 + 25 * Math.PI }]);
+      expectLoopCurves(result.regions[0]?.outer, SLOT);
+    });
+
+    it('orders a line and a tangent arc leaving a node in the same direction by curvature', async () => {
+      // At a, line ab and arc q both leave along +x; q turns left, so it is further
+      // counter-clockwise. The upper region is triangle a b c minus the arc's circular segment;
+      // triangle a e b below makes a the third edge's node, so the order matters.
+      const curves = [
+        seg('ab', [0, 0], [10, 0]),
+        seg('bc', [10, 0], [5, 5]),
+        ccwArc('q', [0, 5], [0, 0], [5, 5]),
+        seg('ae', [0, 0], [0, -5]),
+        seg('eb', [0, -5], [10, 0]),
+      ];
+      const result = await regionsOf(curves);
+      expectRegions(result, [
+        { name: 'ab,ae,eb', area: 25 },
+        { name: 'ab,bc,q', area: 25 - 12.5 * (Math.PI / 2 - 1) },
+      ]);
+      // Traversed counter-clockwise, the arc runs backwards (clockwise).
+      expectCurveClose(
+        result.regions[1]?.outer.find((c) => c.id === 'q'),
+        { kind: 'arc', center: [0, 5], from: [5, 5], to: [0, 0], ccw: false, id: 'q' },
+      );
+    });
+
+    it('an open polyline bounds nothing', async () => {
+      const curves = [seg('ab', [0, 0], [10, 0]), seg('bc', [10, 0], [10, 5])];
+      expect(await regionsOf(curves)).toEqual(NO_REGIONS);
+    });
+
+    it('no curves: no regions', async () => {
+      expect(await regionsOf([])).toEqual(NO_REGIONS);
+    });
+
+    it('prunes a dangling tail', async () => {
+      const curves = [...RECT, seg('t', [10, 5], [15, 8]), seg('u', [15, 8], [20, 8])];
+      expectRegions(await regionsOf(curves), [{ name: 'ab,bc,cd,da', area: 50 }]);
+    });
+
+    it.each([
+      ['crossing lines', [seg('pq', [0, 0], [10, 10]), seg('rs', [0, 10], [10, 0])]],
+      ['a line across a rectangle', [...RECT, seg('pq', [-5, 2], [15, 2])]],
+      ['an end touching the inside of a line', [...RECT, seg('pq', [5, 0], [5, -5])]],
+      ['overlapping collinear lines', [...RECT, seg('pq', [2, 0], [6, 0])]],
+      ['a circle through a rectangle edge', [...RECT, ring('k', [10, 2.5], 1)]],
+      ['a circle touching a rectangle edge', [...RECT, ring('k', [5, 4], 1)]],
+      ['two overlapping circles', [ring('k1', [0, 0], 2), ring('k2', [1, 0], 2)]],
+      ['equal concentric circles', [ring('k1', [0, 0], 2), ring('k2', [0, 0], 2)]],
+    ])('%s cross: no regions', async (_name, curves) => {
+      expect(await regionsOf(curves)).toEqual(CROSSING);
+    });
+
+    it('curves whose ends lie at the same coordinates share a node', async () => {
+      // In the sketch: separate points joined by coincident (regionCurves gives their coordinates).
+      const curves = [
+        seg('ab', [0, 0], [10, 0]),
+        seg('bc', [10, 0], [10, 5]),
+        seg('ca', [10, 5], [0, 0]),
+      ];
+      expectRegions(await regionsOf(curves), [{ name: 'ab,bc,ca', area: 25 }]);
+    });
+
+    it('keeps the name when coordinates, curve order and orientation change', async () => {
+      const a: Vec2 = [3, -4];
+      const b: Vec2 = [47, -4];
+      const c: Vec2 = [47, 12];
+      const d: Vec2 = [3, 12];
+      const moved = [seg('cd', d, c), seg('ab', a, b), seg('da', d, a), seg('bc', c, b)];
+      expectRegions(await regionsOf(moved), [{ name: 'ab,bc,cd,da', area: 44 * 16 }]);
+    });
+
+    it('a clockwise arc in the input is the same arc (orientation is arbitrary)', async () => {
+      const reversed = SLOT.map((c) =>
+        c.kind === 'arc' && c.id === 'a1' ? { ...c, from: c.to, to: c.from, ccw: false } : c,
+      );
+      const result = await regionsOf(reversed);
+      expectRegions(result, [{ name: 'a1,a2,l1,l2', area: 100 + 25 * Math.PI }]);
+      expectLoopCurves(result.regions[0]?.outer, SLOT);
+    });
+
+    it('every outer curve of a rectangle carries the id of its line (M14)', async () => {
+      const [r] = (await regionsOf(RECT)).regions;
+      expect(idsOf(r?.outer ?? []).sort(compareText)).toEqual(['ab', 'bc', 'cd', 'da']);
+    });
+
+    it('a clockwise polygon hole carries the ids of its lines (M14)', async () => {
+      const [outer, inner] = (await regionsOf([...RECT, ...TRIANGLE])).regions;
+      expect(outer?.holes.map((h) => idsOf(h).sort(compareText))).toEqual([['pq', 'qr', 'rp']]);
+      expect(idsOf(inner?.outer ?? []).sort(compareText)).toEqual(['pq', 'qr', 'rp']);
+    });
+
+    it('a slot as a hole is clockwise, so its arcs are reversed (M14)', async () => {
+      const big = rectangle('', -20, -20, 50, 50).map(upperId);
+      const result = await regionsOf([...SLOT, ...big]);
+      expectRegions(result, [
+        {
+          name: 'AB,BC,CD,DA,a1,a2,l1,l2',
+          holes: ['a1,a2,l1,l2'],
+          area: 2500 - 100 - 25 * Math.PI,
+        },
+        { name: 'a1,a2,l1,l2', area: 100 + 25 * Math.PI },
+      ]);
+      const hole = result.regions[0]?.holes[0] ?? [];
+      expectLoopCurves(hole, [
+        seg('l1', [10, 0], [0, 0]),
+        { kind: 'arc', center: [10, 5], from: [10, 10], to: [10, 0], ccw: false, id: 'a1' },
+        seg('l2', [0, 10], [10, 10]),
+        { kind: 'arc', center: [0, 5], from: [0, 0], to: [0, 10], ccw: false, id: 'a2' },
+      ]);
+    });
+
+    it('sorts names by string comparison', async () => {
+      const curves = [...rectangle('B'), ...rectangle('A', 20)];
+      expect(await namesOf(curves)).toEqual(['Aab,Abc,Acd,Ada', 'Bab,Bbc,Bcd,Bda']);
+    });
+  });
+
+  describe('regions with splines (M29)', () => {
+    const SPLINE_RECT_AREA = areaWith([0, 0], SPLINE_BC, [10, 5], [0, 5]);
+
+    it('a rectangle with a bspline side is one region carrying the exact spline', async () => {
+      expect(SPLINE_RECT_AREA).toBeGreaterThan(50);
+      const result = await regionsOf(SPLINE_RECT);
+      expectRegions(result, [
+        { name: 'ab,bc,cd,da', area: SPLINE_RECT_AREA, areaTolerance: SPLINE_AREA_TOLERANCE },
+      ]);
+      expect(result.regions[0]?.outer).toHaveLength(4);
+      // Traversed counter-clockwise, the spline runs forward (b → c).
+      expectLoopCurves(result.regions[0]?.outer, SPLINE_RECT);
+    });
+
+    it('a rectangle with a fit spline side is one region', async () => {
+      const { degree, poles, knots } = bspline.interpolate([
+        [10, 0],
+        [12, 2.5],
+        [10, 5],
+      ]);
+      const side: Spline = { kind: 'bspline', degree, poles, knots, id: 'bc' };
+      const curves = [
+        seg('ab', [0, 0], [10, 0]),
+        side,
+        seg('cd', [10, 5], [0, 5]),
+        seg('da', [0, 5], [0, 0]),
+      ];
+      const result = await regionsOf(curves);
+      expectRegions(result, [
+        {
+          name: 'ab,bc,cd,da',
+          area: areaWith([0, 0], side, [10, 5], [0, 5]),
+          areaTolerance: SPLINE_AREA_TOLERANCE,
+        },
+      ]);
+      expectLoopCurves(result.regions[0]?.outer, curves);
+    });
+
+    it('a closed spline is a loop with one node', async () => {
+      const sp = closedSpline(SQUARE_POLES);
+      const result = await regionsOf([sp]);
+      expectRegions(result, [
+        { name: 'sp', area: areaWith(sp), areaTolerance: SPLINE_AREA_TOLERANCE },
+      ]);
+      expect(result.regions[0]?.outer).toHaveLength(1);
+      expectLoopCurves(result.regions[0]?.outer, [sp]);
+    });
+
+    it('a clockwise closed spline is reversed in the counter-clockwise outer loop', async () => {
+      const sp = closedSpline([...SQUARE_POLES].reverse(), [0, 0, 0, 0, 0.25, 1, 1, 1, 1]);
+      const result = await regionsOf([sp]);
+      expect(result.regions.map((r) => r.name)).toEqual(['sp']);
+      // Reversed: poles in the opposite order, knots mirrored (k → 1 − k, reversed).
+      expectLoopCurves(result.regions[0]?.outer, [
+        closedSpline(SQUARE_POLES, [0, 0, 0, 0, 0.75, 1, 1, 1, 1]),
+      ]);
+      expectAreaClose(result.regions[0]?.area, -areaWith(sp), SPLINE_AREA_TOLERANCE, 'sp');
+    });
+
+    it('a closed spline inside a rectangle is a clockwise hole and a region of its own', async () => {
+      const sp = spline('sp', [
+        [5, 5],
+        [15, 5],
+        [15, 15],
+        [5, 15],
+        [5, 5],
+      ]);
+      const splineArea = areaWith(sp);
+      const result = await regionsOf([...rectangle('', 0, 0, 20, 20).map(upperId), sp]);
+      expectRegions(result, [
+        {
+          name: 'AB,BC,CD,DA,sp',
+          holes: ['sp'],
+          area: 400 - splineArea,
+          areaTolerance: SPLINE_AREA_TOLERANCE,
+        },
+        { name: 'sp', area: splineArea, areaTolerance: SPLINE_AREA_TOLERANCE },
+      ]);
+    });
+
+    it.each([
+      [
+        'a spline across a rectangle',
+        [
+          ...RECT,
+          spline(
+            'sp',
+            [
+              [5, -3],
+              [6, 2],
+              [7, 8],
+            ],
+            2,
+          ),
+        ],
+      ],
+      [
+        'a spline end touching the inside of a line',
+        [
+          ...RECT,
+          spline(
+            'sp',
+            [
+              [5, 0],
+              [7, -2],
+              [5, -5],
+            ],
+            2,
+          ),
+        ],
+      ],
+      [
+        'a spline through a circle',
+        [
+          ring('k', [0, 0], 2),
+          spline(
+            'sp',
+            [
+              [-5, 0],
+              [0, 1],
+              [5, 0],
+            ],
+            2,
+          ),
+        ],
+      ],
+      [
+        'two crossing splines',
+        [
+          spline(
+            'sp',
+            [
+              [0, 0],
+              [5, 10],
+              [10, 0],
+            ],
+            2,
+          ),
+          spline(
+            'tq',
+            [
+              [0, 5],
+              [5, -5],
+              [10, 5],
+            ],
+            2,
+          ),
+        ],
+      ],
+      [
+        'a closed cubic figure eight',
+        [
+          spline('sp', [
+            [10, 5],
+            [20, 10],
+            [20, 0],
+            [0, 10],
+            [0, 0],
+            [10, 5],
+          ]),
+        ],
+      ],
+      [
+        // A quadratic a b a: a straight there-and-back curve whose tessellation overlaps itself.
+        'a closed spline a b a running back over itself',
+        [
+          spline(
+            'sp',
+            [
+              [0, 0],
+              [10, 0],
+              [0, 0],
+            ],
+            2,
+          ),
+        ],
+      ],
+      [
+        'an open spline turning back onto itself',
+        [
+          spline(
+            'sp',
+            [
+              [0, 0],
+              [10, 0],
+              [5, 0],
+            ],
+            2,
+          ),
+        ],
+      ],
+    ])('%s cross: no regions', async (_name, curves) => {
+      expect(await regionsOf(curves)).toEqual(CROSSING);
+    });
+
+    it('keeps the name when coordinates and curve order change', async () => {
+      const moved = [
+        seg('da', [-3, 12], [-3, -4]),
+        seg('cd', [30, 12], [-3, 12]),
+        spline('bc', [
+          [30, -4],
+          [40, 2],
+          [35, 9],
+          [30, 12],
+        ]),
+        seg('ab', [-3, -4], [30, -4]),
+      ];
+      expect(await namesOf(SPLINE_RECT)).toEqual(['ab,bc,cd,da']);
+      expect(await namesOf(moved)).toEqual(['ab,bc,cd,da']);
+    });
+
+    it('orders a line and a spline leaving a node in the same direction by curvature', async () => {
+      // At a, line ab and spline q both leave along +x; q turns left, so it is further
+      // counter-clockwise. The quadratic spline a p c cuts 2/3 of triangle a p c (25/3) off
+      // triangle a b c (25); triangle a e b below makes a the third edge's node.
+      const q = spline(
+        'q',
+        [
+          [0, 0],
+          [5, 0],
+          [5, 5],
+        ],
+        2,
+      );
+      const curves = [
+        seg('ab', [0, 0], [10, 0]),
+        seg('bc', [10, 0], [5, 5]),
+        q,
+        seg('ae', [0, 0], [0, -5]),
+        seg('eb', [0, -5], [10, 0]),
+      ];
+      const result = await regionsOf(curves);
+      expectRegions(result, [
+        { name: 'ab,ae,eb', area: 25 },
+        { name: 'ab,bc,q', area: 50 / 3, areaTolerance: SPLINE_AREA_TOLERANCE },
+      ]);
+      // Traversed counter-clockwise, the spline runs backwards (c → a).
+      expectCurveClose(
+        result.regions[1]?.outer.find((c) => c.id === 'q'),
+        spline(
+          'q',
+          [
+            [5, 5],
+            [5, 0],
+            [0, 0],
+          ],
+          2,
+        ),
+      );
+    });
+  });
+
+  describe('input (spec 06 profileRegions)', () => {
+    it.each([
+      ['a curve without id', [...RECT, { kind: 'line', from: [0, 0], to: [1, 1] }]],
+      ['an empty id', [...RECT, seg('', [20, 0], [21, 1])]],
+      ['a duplicate id', [...RECT, seg('ab', [20, 0], [21, 1])]],
+      ['a duplicate id of a zero-length line', [...RECT, seg('ab', [20, 0], [20, 0])]],
+      ['an infinite coordinate', [...RECT, seg('x', [20, 0], [Number.POSITIVE_INFINITY, 1])]],
+      ['a NaN radius', [...RECT, ring('k', [5, 2], Number.NaN)]],
+      ['a zero radius', [...RECT, ring('k', [5, 2], 0)]],
+      ['an arc with unequal radii', [...RECT, ccwArc('q', [20, 0], [21, 0], [20, 2])]],
+      [
+        'a spline with unclamped knots',
+        [
+          ...RECT,
+          {
+            ...spline(
+              'sp',
+              [
+                [20, 0],
+                [21, 1],
+                [22, 0],
+              ],
+              2,
+            ),
+            knots: [0, 0.5, 0.5, 0.5, 1, 1],
+          },
+        ],
+      ],
+      ['an unknown curve kind', [...RECT, { kind: 'ellipse', id: 'e' }]],
+    ])('%s rejects with invalid-input', async (_name, curves) => {
+      // Some curves break the types on purpose; the cast through unknown lets them in.
+      const params = { curves } as unknown as RegionsParams;
+      expect(await rejectionCode(() => kernelOf().profileRegions(params))).toBe('invalid-input');
+    });
+
+    it('curves that are not an array reject', async () => {
+      // Outside the types on purpose.
+      const params = { curves: 42 } as unknown as RegionsParams;
+      expect(await rejectionCode(() => kernelOf().profileRegions(params))).toBe('invalid-input');
+    });
+
+    it('profileRegions(null) rejects instead of throwing', async () => {
+      // Outside the types on purpose.
+      expect(
+        await rejectionCode(() => kernelOf().profileRegions(null as unknown as RegionsParams)),
+      ).toBeDefined();
+    });
+
+    it.each([
+      ['line', seg('z', [10, 5], [10, 5])],
+      ['arc', ccwArc('z', [8, 5], [10, 5], [10, 5])],
+      [
+        'spline',
+        spline(
+          'z',
+          [
+            [10, 5],
+            [10, 5],
+            [10, 5],
+          ],
+          2,
+        ),
+      ],
+    ])('a %s of zero length is left out', async (_name, zero) => {
+      expectRegions(await regionsOf([...RECT, zero]), [{ name: 'ab,bc,cd,da', area: 50 }]);
+    });
+
+    it('creates no handle', async () => {
+      await regionsOf([...RECT, ring('k', [5, 2.5], 2)]);
+      expect(await kernelOf().liveHandleCount()).toBe(0);
+    });
+
+    it('changing the curves right after the call, before await, does not change the regions', async () => {
+      const corner: Vec2 = [10, 5];
+      const curves: ProfileCurve[] = [
+        seg('ab', [0, 0], [10, 0]),
+        seg('bc', [10, 0], corner),
+        seg('cd', corner, [0, 5]),
+        seg('da', [0, 5], [0, 0]),
+      ];
+      const params = { curves };
+      const found = callWithoutThrow(() => kernelOf().profileRegions(params));
+      // The inputs are readonly; the test writes into them on purpose.
+      Reflect.set(corner, 0, 40);
+      curves.push(seg('x', [-5, 2], [15, 2]));
+      Reflect.set(params, 'curves', []);
+      expectRegions(await found, [{ name: 'ab,bc,cd,da', area: 50 }]);
+    });
+  });
+}
+
+/** A curve with its id in upper case (rectangles with ids AB BC CD DA). */
+function upperId(c: ProfileCurve): ProfileCurve {
+  return c.id === undefined ? c : { ...c, id: c.id.toUpperCase() };
 }

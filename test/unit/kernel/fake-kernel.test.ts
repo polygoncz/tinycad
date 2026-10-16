@@ -607,3 +607,40 @@ describe('FakeKernel', () => {
     });
   });
 });
+
+describe('FakeKernel profileRegions (M30)', () => {
+  const CIRCLE = { kind: 'circle', center: [0, 0], radius: 1, id: 'k' } as const;
+
+  it('counts the call and an injected failure wins, then the regions come back', async () => {
+    const kernel = createFakeKernel();
+    kernel.failNext('profileRegions', 'operation-failed');
+    const e = await rejection(kernel.profileRegions({ curves: [CIRCLE] }));
+    expect(kernelErrorCode(e)).toBe('operation-failed');
+    const { regions } = await kernel.profileRegions({ curves: [CIRCLE] });
+    expect(regions.map((r) => r.name)).toEqual(['k']);
+    expect(kernel.callCount('profileRegions')).toBe(2);
+  });
+
+  it('mirrors spline knots in their own range when reversing (not only [0, 1])', async () => {
+    const kernel = createFakeKernel();
+    // A clockwise closed cubic spline with knots in [2, 6]: the outer loop runs it backwards.
+    const sp = {
+      kind: 'bspline',
+      degree: 3,
+      poles: [
+        [0, 0],
+        [0, 10],
+        [10, 10],
+        [10, 0],
+        [0, 0],
+      ],
+      knots: [2, 2, 2, 2, 3, 6, 6, 6, 6],
+      id: 'sp',
+    } as const;
+    const { regions } = await kernel.profileRegions({ curves: [sp] });
+    expect(regions[0]?.outer).toEqual([
+      { ...sp, poles: [...sp.poles].reverse(), knots: [2, 2, 2, 2, 5, 6, 6, 6, 6] },
+    ]);
+    expect(regions[0]?.area).toBeGreaterThan(0);
+  });
+});

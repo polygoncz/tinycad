@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 30
 aliases:
   - M30
@@ -21,8 +21,8 @@ specs:
   - "[[10-interakce]]"
 depends_on:
   - "[[M29-spliny]]"
-started:
-finished:
+started: 2026-10-16
+finished: 2026-10-16
 tags:
   - milnik
 created: 2026-10-16
@@ -50,11 +50,11 @@ Rozhodnutí v sezení 2026-10-16 ([[Q092 Hranice geometrie skici v TS a v OCCT|Q
 ## Úkoly
 
 - [x] Rozhodnout [[Q092 Hranice geometrie skici v TS a v OCCT|Q092]] a dopsat kontrakt do spec 06 a 12.
-- [ ] Port `profileRegions`, typy a `FakeKernel` s přesunutým algoritmem.
-- [ ] `kernel-occt`: oblasti v OCCT (po prototypu).
-- [ ] `regionCurves`, builder skici a artefakt s obrysy.
-- [ ] Kresba oblastí z artefaktu a port `SketchGeometry`.
-- [ ] Spec podle skutečnosti, dodatek k [[0017-modul-sketch-a-skicar|ADR 0017]], regresní testy.
+- [x] Port `profileRegions`, typy a `FakeKernel` s přesunutým algoritmem.
+- [x] `kernel-occt`: oblasti v OCCT (po prototypu).
+- [x] `regionCurves`, builder skici a artefakt s obrysy.
+- [x] Kresba oblastí z artefaktu a port `SketchGeometry`.
+- [x] Spec podle skutečnosti, dodatek k [[0017-modul-sketch-a-skicar|ADR 0017]], regresní testy.
 
 ## Implementační plán
 
@@ -110,4 +110,46 @@ Jak přesunout výpočet za port bez změny chování (kontraktové testy jako z
 
 _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hlavní sezení to při sloučení přenese do deníku.)_
 
+**2026-10-16 – prototyp OCCT cesty (úkol 2).** 16 případů z kontraktové sady + měření výkonu, obě cesty.
+- Build váže `BRepAlgoAPI_Splitter` (s historií), `Geom2dAPI_InterCurveCurve` (body průsečíků, **bez parametrů**; i samoprůsečíky jedné křivky), 2D křivky přes `GC_MakeSegment2d`, `GC_MakeArcOfCircle2d`, `Geom2d_BSplineCurve`. Neváže `BOPAlgo_*`, `IntAna2d`, `GCE2d`, klasifikátory bodu v ploše (`BRepClass_FaceClassifier`, `BRepTopAdaptor_FClass2d`), `ShapeAnalysis_*`, `BRepTools_WireExplorer`. Přetížení konstruktorů bez sufixů `_1`.
+- **a) Splitter:** nepozná spline křížící sám sebe (vznikne nesmyslná plocha), visící hranu nechá v ploše jako INTERNAL, trojúhelník dotýkající se obdélníku jen rohem udělá dírou (TS: 0 děr). Jména z historie a ruční řetězení drátů.
+- **b) `InterCurveCurve` + vlastní polohrany:** všech 16 případů jako TS (jména, díry, křížení vč. samoprůsečíku splinu). Plocha znaménkovou Greenovou větou (Gauss nad `EvalD1`) – `MakeFace` + `BRepGProp` dává u sevřené smyčky špatný obsah (104 místo 96). Bod v oblasti paritou paprsku přes `InterCurveCurve`. S předfiltrem obálek rychlejší než TS (1860 křivek: 25 ms vs. TS 392 ms, Splitter 100 ms).
+- **Návrh:** cesta b. Splitter se hodí až pro [[Q093 Oblasti z křížících se křivek|Q093]] (dělení křivek v průsečících a jména kusů z historie).
+- **Pavel 2026-10-16:** „Souhlasím s cestou b (Geom2dAPI_InterCurveCurve + vlastní polohrany, plocha Greenovou větou).“
+
+**2026-10-16 – úkol 1 hotový** (commit `dc55727`). Upřesnění spec 06 z implementace:
+- Tolerance plochy splinu v kontraktové sadě 1e-3 místo 1e-4: fake spline tessellací s tolerancí `1e-4 · měřítko` a chyba plochy vychází až 3·10⁻⁴. Kontrakt výsledku se nemění, jen přísnost porovnání.
+- Kontrolu vstupu sdílí obě implementace přes `parseProfileRegionsInput` z `kernel` (vzor `validateFaceInput`); spline nulové délky = všechny póly v jednom bodě; `profileRegions(null)` → `'invalid-input'`; obrácení splinu obecně `a + b − k`.
+- Oblouk ze skici s nestejnými poloměry teď `profileRegions` odmítne (dřív až `makeFace`) → featura skici chybná jako dřív, jen o krok dřív. Řešič drží poloměry s přesností mnohem lepší než `1e-7`, prakticky nenastane.
+- `kernel/vec2.ts` je kopie 2D pomůcek ze `sketch/vec2.ts` (kernel nesmí importovat sketch); kandidát na přesun do `core/math` – nechávám na revizi.
+
+**2026-10-16 – úkoly 2 a 3 hotové** (souběžně v izolovaných worktree, sloučené jedním commitem).
+- Úkol 2: `kernel-occt/regions.ts` cestou b. Křížení přes `Geom2dAPI_InterCurveCurve` jen pro dvojice s překrytými obálkami (řazení podle x), samoprůsečík splinu zvlášť; plocha Greenovou větou (5bodový Gauss–Legendre nad `D1`); bod v oblasti paritou paprsku pod iracionálním úhlem, při průchodu uzlem nebo tečném dotyku další směr (zlatý úhel, nejvýš 8 pokusů); smyčky výsledku ze vstupních křivek, ne z OCCT. Tolerance `1e-7 · max(1, |souřadnice|)` (fake slučuje uzly při `1e-9`; kontrakt hranu tolerance nezkouší). Mřížka 840 úseček 49 ms, 1860 úseček 110 ms. Kontraktová sada projde s fake i OCCT (přímo i přes worker).
+- Úkol 3: `regionCurves` filtruje vyčerpávajícím `switch` (ne „vše kromě bodu“), aby nová entita stopy B nebo C musela rozhodnout, jestli ohraničuje oblasti – typový predikát typecheck nekontroluje. Plán tvrdil, že úkol 3 je na úkolu 2 nezávislý; ve skutečnosti integrační testy (součást `npm run check`) bez OCCT `profileRegions` padají, proto sloučení až po obou.
+
+**2026-10-16 – úkol 4 hotový.** `artifactDrawing` bere oblasti z `artifact.outlines`, `sketch/regions.ts` a jeho testy smazané (`computeRegions` v `src/` nikde). `SPLINE_TOLERANCE` přešla do `sketch/geometry.ts`. Port `SketchGeometry` je prázdné rozhraní; `app/sketch-geometry.ts` ho zatím vyrábí bez parametrů (klient jádra by v M30 byl nepoužitý argument) – M33 přidá parametr a metody. Port se předává `createSketchEditor` → `openSketchSession` vedle `solver`.
+
+**2026-10-16 – úkol 5 a architektonická revize.**
+- Regresní test `test/integration/sketch-regions-regression.test.ts` (obdélník se splinem jako stranou a kruhovou dírou, vysunutí). Literály změřené na commitu před M30 (`929fa1a`): jména oblastí, díry a všech 7 jmen ploch tělesa beze změny. Obsah oblasti se splinem je po M30 **přesnější** (851,0602 místo 851,0192, ověřeno nezávislou integrací) – dřív se počítal z tessellace; test porovnává relativně 1e-4.
+- Spec 06 (nová sekce *Oblasti skici v adaptéru (M30)*), 07 (`SketchArtifact.outlines`), 08 (zdroj `id` křivek), 10 (`artifactDrawing` s oblastmi z argumentu), 12 (builder, *Oblasti (profily)*, testy, skutečnost M30), dodatek ADR 0017, doplněk ADR 0028.
+- Revize `architecture-reviewer`: bez porušení ADR 0008–0011. Opraveno: obrysy v artefaktu se hluboce zmrazí v builderu (přes worker přijdou po `postMessage` měnitelné; nový test), zastaralé zmínky `computeRegions` ve spec 08, 10 a komentáři `sketch`.
+- **Pro hlavní sezení (návrh, neděláno):** 2D vektorové pomůcky jsou třikrát (`sketch/vec2.ts`, kopie `kernel/vec2.ts`, `dist` v `kernel-occt/regions.ts`). Revize navrhuje `core/math/vec2.ts` (jmenný prostor `vec2` vedle `vec3`); to je nový veřejný export `core` a změna spec 02, mimo vlastnictví stopy A – vhodné po sloučení všech stop.
+
 ## Retrospektiva
+
+_(Návrh stopy, Pavel doplní nebo upraví.)_
+
+**Splnění kritérií:** testy oblastí běží jako kontraktová sada proti fake i OCCT (52 případů, přímo i přes worker); regresní test na literálech změřených před M30 (jména oblastí, díry, 7 jmen ploch beze změny); e2e 136/136 včetně skici se splinem a vysunutím; `npm run check` a `npm run test:integration` zelené.
+
+**Co bylo jinak, než se čekalo:**
+- Plán počítal s `BOPAlgo`/`Splitter`. Prototyp ukázal, že build `BOPAlgo` neváže a Splitter se ve třech krajních případech liší od kontraktu (samoprůsečík splinu, visící hrana, dotyk rohem). Zvítězil algoritmus kontraktu s geometrií z OCCT – a je ~4× rychlejší než TS díky předfiltru obálek.
+- `BRepGProp` nad plochou z `MakeFace` dává u sevřené smyčky špatný obsah; Greenova věta přímo nad křivkami je přesná a dá i orientaci.
+- Úkoly 2 a 3 se daly implementovat souběžně, ale ne samostatně ověřit: integrační testy (součást `check`) potřebují oba. Slučovat se musely spolu.
+- Tolerance plochy splinu v kontraktové sadě musela povolit (1e-3): fake tessellací nesplní 1e-4. Obsah oblastí se splinem je po M30 přesnější než dřív.
+
+**Co se osvědčilo:**
+- Prototyp před implementací (16 případů kontraktové sady + měření) – rozhodnutí měl Pavel na stole s čísly, implementace pak proběhla bez překvapení.
+- Kontraktová sada jako záchranná síť přesunu: stejné případy proti fake i OCCT, takže „chování beze změny“ je ověřené, ne slíbené.
+- Regresní literály změřené na commitu před milníkem (dočasný worktree), ne spočítané stejným kódem.
+- Vyčerpávající `switch` místo typového predikátu v `regionCurves` – přidání entity stopou B nebo C typecheck nepustí bez rozhodnutí.
+

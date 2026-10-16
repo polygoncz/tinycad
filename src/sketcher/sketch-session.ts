@@ -25,6 +25,7 @@ import type {
   SketchData,
   SketchEntity,
   SketchEntityId,
+  SketchGeometry,
   SketchItemId,
   SnapGuide,
   SolveInput,
@@ -246,6 +247,8 @@ export function openSketchSession(deps: {
   /** SketchEditor.showAllConstraints: the glyphs of all constraints, not only the selected ones (M25). */
   showAllConstraints: Observable<boolean>;
   solver: ConstraintSolver;
+  /** M30: the geometry of the sketch in the kernel (SketchGeometry); no method yet, M33 and M35 add them. */
+  geometry: SketchGeometry;
   /**
    * The drawings: the session draws the edited sketch and nothing else; screenToRay: the cursor
    * of a dragged dimension label (M28); overlay: the snap guides of the inference preview (M26).

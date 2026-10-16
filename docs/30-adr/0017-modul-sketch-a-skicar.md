@@ -61,3 +61,7 @@ Druhá otázka je, jak skicu vykreslit. Revize navrhla křivky jako handle v já
 ## Dodatek 2026-10-14: skicář ve vlastním modulu
 
 Umístění prezentační logiky skicáře v `interaction` nahrazuje [[0024-modul-sketcher|ADR 0024]]: skicář je modul `sketcher` v prstenci 2, závislý na `interaction`. Zbytek tohoto ADR (doménový modul `sketch`, kresba skici z dat) platí dál.
+
+## Dodatek 2026-10-16: oblasti v jádře (M30)
+
+Bod 4 (oblasti počítá skicář v TypeScriptu) a důsledek „dvě reprezentace geometrie skici“ nahrazuje [[0028-geometrie-skici-v-jadre|ADR 0028]]: od [[M30-geometrie-skici-v-occt|M30]] oblasti počítá jádro (`SketchOps.profileRegions`), původní algoritmus je implementací `FakeKernel` a kresba skic z regenerace bere obrysy z artefaktu. Zbytek tohoto ADR platí dál.

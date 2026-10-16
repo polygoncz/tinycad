@@ -31,7 +31,7 @@ import type {
   SketchItemId,
   SolveInput,
 } from '@/sketch';
-import { createFakeSolver, rectangleData } from '@/sketch/testing';
+import { createFakeSketchGeometry, createFakeSolver, rectangleData } from '@/sketch/testing';
 import { createActionRegistry, createFeatureEditor } from '@/interaction';
 import { ORIGIN_POINT_ID } from '@/sketcher/sketch-drawing';
 import { SKETCH_ACTION_IDS } from '@/sketcher/constants';
@@ -167,6 +167,7 @@ function setup(
   const sketches = createSketchEditor({
     features: editor,
     solver: opts.solver ?? fake,
+    geometry: createFakeSketchGeometry(),
     viewport,
     resolvePlane,
     planeOfSketch: opts.planeOfSketch ?? (() => undefined),
@@ -345,6 +346,7 @@ describe('SketchEditor.gridSnap (M19.2 D4)', () => {
     const sketches = createSketchEditor({
       features: ctx.editor,
       solver: ctx.solver,
+      geometry: createFakeSketchGeometry(),
       viewport: ctx.viewport,
       resolvePlane,
       planeOfSketch: () => undefined,

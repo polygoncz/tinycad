@@ -2,7 +2,14 @@ import { bspline, mat4, plane, type Mat4, type Plane, type Vec2, type Vec3 } fro
 import { createKernelError } from './errors';
 import type { KernelErrorCode } from './errors';
 import type { Axis, BooleanOp, GeometryKernel } from './kernel';
-import { parseFaceInput, type ProfileCurve, type ProfileLoop } from './profile';
+import { computeProfileRegions } from './fake-regions';
+import {
+  parseFaceInput,
+  parseProfileRegionsInput,
+  type ProfileCurve,
+  type ProfileLoop,
+  type ProfileRegions,
+} from './profile';
 import { isRigidMotion } from './transform';
 import type {
   BoundingBox,
@@ -232,6 +239,21 @@ class FakeKernelImpl implements FakeKernel {
         const { plane: frame, outer } = parsed.value;
         const local = outer.flatMap(extremePoints);
         return this.add(enclosing(local.map((v) => plane.toWorld(frame, v))), true);
+      },
+    );
+  }
+
+  profileRegions(p: { readonly curves: readonly ProfileCurve[] }): Promise<ProfileRegions> {
+    // parseProfileRegionsInput reads the input synchronously into a fresh copy and never throws;
+    // the regions are the sketcher's algorithm of M12–M29 (spec 06 "FakeKernel").
+    return this.call(
+      'profileRegions',
+      () => parseProfileRegionsInput(p),
+      (parsed) => {
+        if (!parsed.ok) {
+          throw createKernelError('invalid-input', `profileRegions: ${parsed.error.join('; ')}`);
+        }
+        return computeProfileRegions(parsed.value);
       },
     );
   }

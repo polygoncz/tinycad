@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import * as sketch from '@/sketch';
-import type { Curve2, SketchConstraint, SketchConstraintDraft } from '@/sketch';
+import type { Curve2, SketchConstraint, SketchConstraintDraft, SketchGeometry } from '@/sketch';
 
 // Guards the public API: a value export removed or added by accident shows up here.
 describe('sketch public API', () => {
@@ -19,7 +19,6 @@ describe('sketch public API', () => {
         'arcSlotShape',
         'circleFrom2',
         'circleFrom3',
-        'computeRegions',
         'constraintFor',
         'constraintTargets',
         'curvePoints',
@@ -41,6 +40,7 @@ describe('sketch public API', () => {
         'rectangleCenterShape',
         'rectangleFrom3',
         'rectangleFromCenter',
+        'regionCurves',
         'removeItems',
         'slotFromCenters',
         'slotFromEnds',
@@ -135,5 +135,13 @@ describe('sketch public API', () => {
           readonly id?: string;
         }
     >();
+  });
+
+  it('SketchGeometry is the empty port of M30 (spec 12 "Geometrie skici v jádře")', () => {
+    expectTypeOf<keyof SketchGeometry>().toEqualTypeOf<never>();
+  });
+
+  it('keeps SPLINE_TOLERANCE for the drawing and the snapper (M30)', () => {
+    expect(sketch.SPLINE_TOLERANCE).toBe(1e-4);
   });
 });

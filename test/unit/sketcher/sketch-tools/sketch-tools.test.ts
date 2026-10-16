@@ -11,7 +11,7 @@ import type { BodyId, FeatureId, FeatureSchema, ParamSchema, PlaneRef, TopoRef }
 import { anOpsSession } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE, parseSketchData } from '@/sketch';
 import type { SketchConstraint, SketchData, SketchEntity } from '@/sketch';
-import { createFakeSolver } from '@/sketch/testing';
+import { createFakeSketchGeometry, createFakeSolver } from '@/sketch/testing';
 import {
   createFeatureEditor,
   createSelectionModel,
@@ -154,6 +154,7 @@ function setup(opts: { gridStep?: () => number } = {}) {
   const sketches = createSketchEditor({
     features: editor,
     solver,
+    geometry: createFakeSketchGeometry(),
     viewport,
     resolvePlane,
     planeOfSketch: () => undefined,

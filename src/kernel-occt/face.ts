@@ -240,8 +240,14 @@ function bsplineOf(oc: Occt, plane: Plane, c: Extract<ProfileCurve, { kind: 'bsp
   return new oc.Geom_BSplineCurve(poles, knotArray, multArray, c.degree, false);
 }
 
-/** The distinct knots of a non-decreasing knot vector and how often each repeats. */
-function compressKnots(flat: readonly number[]): { knots: number[]; multiplicities: number[] } {
+/**
+ * The distinct knots of a non-decreasing knot vector and how often each repeats; also the 2D
+ * splines of the regions (regions.ts).
+ */
+export function compressKnots(flat: readonly number[]): {
+  knots: number[];
+  multiplicities: number[];
+} {
   const knots: number[] = [];
   const multiplicities: number[] = [];
   for (const k of flat) {

@@ -68,6 +68,7 @@ import type { SketchEditor } from '@/sketcher';
 import { createFileExporter } from './file-exporter';
 import type { DownloadFile } from './file-exporter';
 import { createKernelSupervisor } from './kernel-supervisor';
+import { createSketchGeometry } from './sketch-geometry';
 import type { KernelUiState, SupervisedKernel } from './kernel-supervisor';
 import { openDocument } from './open-document';
 import { createSessionPersistence, refuseChanges } from './read-only';
@@ -339,6 +340,8 @@ function wireSession(
   const sketches = createSketchEditor({
     features,
     solver: deps.solver,
+    // M30: the geometry of the sketch in the kernel; empty until M33.
+    geometry: createSketchGeometry(),
     viewport,
     // Origin planes and planar faces of the last regeneration (M14); before the first one
     // EMPTY_STATE still has the origin planes.

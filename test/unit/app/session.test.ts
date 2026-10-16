@@ -881,6 +881,9 @@ describe('createAppSession – sketcher', () => {
     await settle();
     const drawn = viewport.sketchDrawings.get(sketchId(feature)) ?? fail();
     expect(drawn.regions).toHaveLength(1);
+    // M30: the outline of the kernel (FakeKernel.profileRegions), named by the four lines.
+    expect(drawn.regions?.[0]?.id).toBe('ab,bc,cd,da');
+    expect(drawn.regions?.[0]?.outer).toHaveLength(4);
   });
 
   it('the region preselected in the extrude dialog is highlighted, a pick toggles it', async () => {
