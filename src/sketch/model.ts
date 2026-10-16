@@ -209,6 +209,15 @@ export function isPattern(e: SketchEntity): e is SketchPattern {
   return e.kind === 'mirror' || e.kind === 'linearPattern' || e.kind === 'circularPattern';
 }
 
+/**
+ * A curve entity of the data: not a point, not a pattern (M36 – a recipe whose copies are no
+ * entities, so the modify tools never cut, trim or join them; Q089) and not a text (M37 – a recipe
+ * whose letter curves are no entities either).
+ */
+export function isCurveEntity(e: SketchEntity): e is SketchCurve {
+  return e.kind !== 'point' && !isPattern(e) && e.kind !== 'text';
+}
+
 /** A possible source of a mirror or pattern: a point or a curve, never a pattern or a text (spec 12). */
 export function isPatternSource(e: SketchEntity): e is SketchPoint | SketchCurve {
   switch (e.kind) {

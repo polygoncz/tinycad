@@ -8,7 +8,7 @@ import {
   SPLINE_TOLERANCE,
   curve2,
   derivedOwner,
-  isPattern,
+  isCurveEntity,
   patternCopies,
   patternOfCopy,
   pointsById,
@@ -98,7 +98,7 @@ export function toSketchDrawing(
     return derivedStyle(pattern, e.kind !== 'point' && e.construction === true);
   };
   const entities = [...data.entities.filter(isGeometry), ...copies];
-  const curves = entities.filter(isCurve).flatMap((c) => {
+  const curves = entities.filter(isCurveEntity).flatMap((c) => {
     const curve = drawingCurve(c.id, curve2(c, points), style(c));
     return c.kind === 'bspline' ? [curve, controlPolygon(c.id, c.poles, points)] : [curve];
   });
@@ -131,7 +131,7 @@ export function artifactDrawing(
   const copies = patternCopies(data);
   const points = pointsById({ entities: [...entities, ...copies], constraints: [] });
   const curves = [...entities, ...copies]
-    .filter(isCurve)
+    .filter(isCurveEntity)
     .map((c) =>
       drawingCurve(c.id, curve2(c, points), c.construction === true ? 'construction' : 'normal'),
     );
@@ -184,15 +184,12 @@ export function axisDrawing(
   return freezeDrawing(frame, [line], []);
 }
 
-const isCurve = (e: SketchEntity): e is SketchCurve =>
-  e.kind !== 'point' && e.kind !== 'text' && !isPattern(e);
-
 /**
  * A point or a curve: what a drawing shows of the data as it is (a pattern shows through its
  * copies, a text through its letter curves).
  */
 const isGeometry = (e: SketchEntity): e is SketchPoint | SketchCurve =>
-  e.kind !== 'text' && !isPattern(e);
+  e.kind === 'point' || isCurveEntity(e);
 
 /**
  * The letter curves of the texts of the data (textCurves, M37) under their derived ids, each in

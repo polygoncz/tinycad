@@ -3,7 +3,7 @@
 // not change while the kernel answered.
 
 import type { Vec2 } from '@/core';
-import { curve2, nearestParam, pointsById } from '@/sketch';
+import { curve2, isCurveEntity, nearestParam, pointsById } from '@/sketch';
 import type { Curve2, IdSource, SketchCurve, SketchData, SketchEntity } from '@/sketch';
 import type { ToolContext } from '@/interaction';
 import type { SketchSession } from '../sketch-session';
@@ -29,21 +29,24 @@ export function curveAt(
 ): PickedCurve | null {
   const entity = entityAt(ctx, session, x, y);
   const cursor = cursorAt(ctx, session, x, y);
-  if (entity === null || cursor === null || !isCurve(entity)) return null;
+  if (entity === null || cursor === null || !isModifiable(entity)) return null;
   const { entities, constraints } = session.state.get();
   const data: SketchData = { entities, constraints };
   const curve = curve2(entity, pointsById(data));
   return { entity, curve, cursor, t: nearestParam(curve, cursor), data };
 }
 
-/** A curve the modify tools work on: not a point, not an infinite line (M31, it has no ends). */
-function isCurve(e: SketchEntity): e is SketchCurve {
-  return e.kind !== 'point' && e.kind !== 'xline';
-}
-
 /** The ids of an edit, minted from the generator of the tool context like the drawing tools. */
 export function idSource(ctx: ToolContext): IdSource {
   return { entity: () => newEntityId(ctx), constraint: () => newConstraintId(ctx) };
+}
+
+/**
+ * A curve the modify tools work on: a curve entity (no point, no pattern copy, no text letter –
+ * entityAt answers those with their owner) and not an infinite line (M31, it has no ends).
+ */
+function isModifiable(e: SketchEntity): e is SketchCurve {
+  return isCurveEntity(e) && e.kind !== 'xline';
 }
 
 /** Whether the session is open and its entities are still the ones of `data` (after awaiting the kernel). */

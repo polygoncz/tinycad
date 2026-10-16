@@ -464,6 +464,73 @@ describe('the split tool', () => {
   });
 });
 
+describe('the modify tools on derived curves (a text letter, a pattern copy)', () => {
+  /**
+   * The line s (0,10)–(40,10) mirrored across the vertical line a x = 60 (copy (80,10)–(120,10)),
+   * and the text t 'I' on the baseline b (0,-20)–(30,-20): its letter a triangle
+   * with the side (10,-20)–(10,0).
+   */
+  const DERIVED = data([
+    { kind: 'point', id: 's1', x: 0, y: 10 },
+    { kind: 'point', id: 's2', x: 40, y: 10 },
+    { kind: 'line', id: 's', p1: 's1', p2: 's2' },
+    { kind: 'point', id: 'a1', x: 60, y: 0 },
+    { kind: 'point', id: 'a2', x: 60, y: 80 },
+    { kind: 'line', id: 'a', p1: 'a1', p2: 'a2' },
+    { kind: 'mirror', id: 'm', sources: ['s'], axis: 'a' },
+    { kind: 'point', id: 'b1', x: 0, y: -20 },
+    { kind: 'point', id: 'b2', x: 30, y: -20 },
+    { kind: 'line', id: 'b', p1: 'b1', p2: 'b2' },
+    {
+      kind: 'text',
+      id: 't',
+      text: 'I',
+      font: 'sans',
+      height: 20,
+      baseline: 'b',
+      contours: [
+        {
+          char: 0,
+          code: 73,
+          segments: [
+            [
+              [10, 0],
+              [10, 20],
+            ],
+            [
+              [10, 20],
+              [14, 0],
+            ],
+            [
+              [14, 0],
+              [10, 0],
+            ],
+          ],
+        },
+      ],
+    },
+  ]);
+  const ON_COPY: Vec2 = [100, 10];
+  const ON_LETTER: Vec2 = [10, -10];
+
+  it.each([
+    ['sketch.trim', 'copy', ON_COPY],
+    ['sketch.trim', 'letter', ON_LETTER],
+    ['sketch.extend', 'copy', ON_COPY],
+    ['sketch.extend', 'letter', ON_LETTER],
+    ['sketch.split', 'copy', ON_COPY],
+    ['sketch.split', 'letter', ON_LETTER],
+  ])('%s on a %s does nothing', async (tool, _target, at) => {
+    const { viewport, session, rewrite } = await editing(DERIVED, tool);
+    const before = session.state.get().entities;
+    await click(viewport, at);
+
+    expect(viewport.overlayShapes.has(PREVIEW)).toBe(false);
+    expect(rewrite).not.toHaveBeenCalled();
+    expect(session.state.get().entities).toBe(before);
+  });
+});
+
 /**
  * A cubic Bézier spline z through the poles a b c d (one span), crossed by the vertical line x
  * at t = 0.5 in (40, 30).

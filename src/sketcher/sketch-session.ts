@@ -133,7 +133,7 @@ export interface SketchSession {
    * toggleConstruction. An invalid value, an id that is no text or an outliner that fails → false
    * and nothing written.
    */
-  setTextParams(id: SketchEntityId, params: TextParams): Promise<boolean>;
+  setTextParams(id: SketchEntityId, params: Partial<TextParams>): Promise<boolean>;
   /**
    * The constraints a click of a drawing tool would add at `at` (M26), or null for none: shown as
    * SketchState.inference; the guides are drawn into the overlay SKETCH_GUIDES_OVERLAY_ID. Neither
@@ -166,11 +166,11 @@ export interface SketchSession {
   cancel(): void;
 }
 
-/** What setTextParams may change of a text (M37); a missing field keeps its value. */
+/** The string, font and height of a text (M37); setTextParams takes a part, a missing field keeps its value. */
 export interface TextParams {
-  readonly text?: string;
-  readonly font?: TextFontId;
-  readonly height?: number;
+  readonly text: string;
+  readonly font: TextFontId;
+  readonly height: number;
 }
 
 export interface SketchState {
@@ -1182,7 +1182,7 @@ function textOf(data: SketchData, id: SketchEntityId): SketchText | undefined {
 /** The string, font and height of the text with the given ones in their place. */
 function withTextParams(
   text: SketchText,
-  params: TextParams,
+  params: Partial<TextParams>,
 ): Pick<SketchText, 'text' | 'font' | 'height'> {
   return {
     text: params.text ?? text.text,
@@ -1265,9 +1265,7 @@ function glyphsShownFor(
 ): ReadonlySet<SketchItemId> {
   const items = hover === null ? selection : [...selection, hover];
   const points = data.entities.flatMap((e) =>
-    items.includes(e.id) && e.kind !== 'point' && e.kind !== 'text' && !isPattern(e)
-      ? curvePoints(e)
-      : [],
+    items.includes(e.id) && isCurveEntity(e) ? curvePoints(e) : [],
   );
   return new Set<SketchItemId>([
     ...items,

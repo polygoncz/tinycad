@@ -3,7 +3,7 @@
 
 import { DebugMode, GcsWrapper, SolveStatus, type SketchPrimitive } from '@salusoft89/planegcs';
 import { bspline, type BSplineShape, type Vec2 } from '@/core';
-import { isPattern } from '@/sketch';
+import { isCurveEntity } from '@/sketch';
 import type {
   SketchBSpline,
   SketchConstraint,
@@ -724,8 +724,7 @@ function pointOf(
 
 function curveOf(entities: ReadonlyMap<SketchEntityId, SketchEntity>, id: SketchEntityId): Curve {
   const e = entities.get(id);
-  if (e === undefined || e.kind === 'point' || e.kind === 'text' || isPattern(e))
-    throw new Error(`${id} is not a curve`);
+  if (e === undefined || !isCurveEntity(e)) throw new Error(`${id} is not a curve`);
   return e;
 }
 

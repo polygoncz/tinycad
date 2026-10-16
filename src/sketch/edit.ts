@@ -1,6 +1,6 @@
 import { assert, assertNever } from '@/core';
 import { pointsById } from './points';
-import { isLineCarrier, isPattern } from './model';
+import { isCurveEntity, isLineCarrier, isPattern } from './model';
 import type {
   DimensionKind,
   GeometricConstraintKind,
@@ -25,8 +25,6 @@ import type {
 const MIN_DIMENSION = 1e-9;
 
 const isRound = (e: SketchEntity): boolean => e.kind === 'circle' || e.kind === 'arc';
-const isCurve = (e: SketchEntity): e is SketchCurve =>
-  e.kind !== 'point' && e.kind !== 'text' && !isPattern(e);
 /** A pattern (M36) or a text (M37): a recipe no constraint or dimension may refer to. */
 const isRecipe = (e: SketchEntity): boolean => isPattern(e) || e.kind === 'text';
 
@@ -138,7 +136,7 @@ function pointOn(
   make: (point: SketchEntityId, curve: SketchEntityId) => SketchConstraintDraft,
 ): SketchConstraintDraft | null {
   const [point, curve] = first.kind === 'point' ? [first, second] : [second, first];
-  if (point.kind !== 'point' || !isCurve(curve) || !accepts(curve)) return null;
+  if (point.kind !== 'point' || !isCurveEntity(curve) || !accepts(curve)) return null;
   if (curvePoints(curve).includes(point.id)) return null;
   return make(point.id, curve.id);
 }
@@ -245,7 +243,7 @@ export function measureDraft(
 type TogglableCurve = Exclude<SketchCurve, SketchXLine> | SketchText;
 
 const isTogglable = (e: SketchEntity): e is TogglableCurve =>
-  (isCurve(e) && e.kind !== 'xline') || e.kind === 'text';
+  (isCurveEntity(e) && e.kind !== 'xline') || e.kind === 'text';
 
 function withoutConstruction(c: TogglableCurve): TogglableCurve {
   switch (c.kind) {
@@ -357,7 +355,7 @@ export function removeItems(data: SketchData, ids: readonly SketchItemId[]): Ske
   const selected = new Set<string>(ids);
   const removed = new Set<string>();
   for (const e of data.entities) if (selected.has(e.id)) removed.add(e.id);
-  const curves = data.entities.filter(isCurve);
+  const curves = data.entities.filter(isCurveEntity);
   const patterns = data.entities.filter(isPattern);
   const texts = data.entities.filter((e) => e.kind === 'text');
   let before = -1;

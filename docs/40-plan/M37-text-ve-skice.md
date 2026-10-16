@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 37
 aliases:
   - M37
@@ -17,7 +17,7 @@ depends_on:
   - "[[M30-geometrie-skici-v-occt]]"
   - "[[M36-zrcadleni-a-pole]]"
 started: 2026-10-16
-finished:
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-16
@@ -109,5 +109,13 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **Úkol 3 hotový:** panel textu (sekce Text nad vazbami, fokus nového textu). 7415 unit; e2e 165/166 – jednou spadl `m19-2-rename` ve WebKitu, samostatně prošel (nestabilní, nesouvisí).
 - **Natažení `main` s M33:** 7 sčítacích konfliktů; text vynechán z `isCurveEntity` (trim/extend/split, průsečíky `requestHits`). 7674 unit zelených.
 - **Úkol 4 hotový:** integrační `sketch-text-regions.test.ts` nad OCCT („oaB“: 7 oblastí, díry 1/1/2, vnitřní okénka jsou samostatné oblasti; „oaB“ → „oxB“ zachová jména ploch „o“ a „B“; konstrukční text bez oblastí), e2e `m37.spec.ts` (nástroj Text a panel, gravírování „tinycad“ do kvádru 1 mm, HUD nápověda). Check 7674 unit + 44 integračních, e2e 177/178 (nestabilní `m19-2-rename` WebKit). Postřehy: výběr nástroje z menu rodiny nevrací fokus pohledu (Esc pak nástroj nevypne – existující chování, i M36); Odebrat mimo těleso nic nehlásí.
+- **Revize architektury:** 1 skutečná chyba ze sloučení M33 – `curve-pick.ts` měl vlastní predikát křivky, klik na písmeno nebo kopii pole v ořezání/prodloužení/rozdělení spadl na `assertNever`; opraveno a 6 regresních testů. Dál: jediný predikát `isCurveEntity` (přesunutý do `model.ts`) všude, `derivedOwner` zkouší písmeno první, panel nevaliduje doménová pravidla, `TextParams` s povinnými poli a `Partial` v `setTextParams`.
 
 ## Retrospektiva
+
+_Návrh k doplnění Pavlem:_
+- **Uložit obrysy do dat se vyplatilo:** builder skici, regenerace ani Node testy builderu font nepotřebují; opentype.js žije jen v adaptéru a v kompozičním kořeni. Rozhodnutí v Q091 zjednodušilo celý milník víc, než se čekalo.
+- **Odvozená id podruhé:** stejný vzor jako u polí (M36) – recept v datech, křivky s id `<entita>:<přípona>`, `derivedOwner` v picku. Druhý výskyt ukázal, že gramatiky id je třeba navrhnout spolu (písmeno je podmnožinou kopie).
+- **Co bylo jinak:** milník přerušila HUD nápověda nástrojů (Pavlův požadavek po zkoušce polí) a tři natažení `main` (M31, M32, M33). Nejdražší byla chyba ze sloučení M33: duplicitní predikát „co je křivka“ v nové stopě – typový predikát kompilátor nekontroluje.
+- **Kandidát na poznatek:** „Jediný predikát druhu entity, ideálně vyčerpávající `switch`“ – u souběžných stop nový druh entity jinak projde typecheckem a spadne za běhu.
+

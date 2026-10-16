@@ -63,13 +63,18 @@ export function textCurves(data: SketchData): readonly Curve2[] {
 }
 
 /**
- * The id of the entity a derived curve comes from: the pattern of a copy (M36) or the text of a
- * letter curve (M37), else null. The letter grammar is a subset of the copy grammar
- * ('<id>:<i>-<j>.<rest>'); both name the owner by the prefix before the colon.
+ * The id of the entity a derived curve comes from: the text of a letter curve (M37) or the pattern
+ * of a copy (M36), else null. Both name the owner by the prefix before the colon. The letter
+ * grammar '<char>-<code>.<loop>.<segment>' also matches the copy grammar ('<i>-<j>.<source>'),
+ * so it is tested first; a real copy never matches it, its source is a base62 id without a dot
+ * (Q002).
  */
 export function derivedOwner(id: string): SketchEntityId | null {
-  const pattern = patternOfCopy(id);
-  if (pattern !== null) return pattern;
+  return letterOwner(id) ?? patternOfCopy(id);
+}
+
+/** The text of a letter curve id '<text>:<char>-<code>.<loop>.<segment>', else null. */
+function letterOwner(id: string): SketchEntityId | null {
   const colon = id.indexOf(':');
   if (colon <= 0) return null;
   const owner = id.slice(0, colon);

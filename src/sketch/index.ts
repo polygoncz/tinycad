@@ -9,6 +9,7 @@ export { MAX_TEXT_LENGTH, TEXT_FONTS, textParamsValid } from './model';
 export {
   MAX_PATTERN_COUNT,
   circularStep,
+  isCurveEntity,
   isPattern,
   isPatternSource,
   patternParamsValid,
@@ -107,15 +108,7 @@ export { SPLINE_TOLERANCE } from './geometry';
 export type { ConstraintSolver, SolveInput, SolveResult, SolveStatus } from './solver';
 export type { CurveHit, SketchGeometry } from './geometry-port';
 export { nearestParam, paramRange, piecePolyline, pointAt, samePoint } from './curve-param';
-export {
-  crossingPoints,
-  cutsOf,
-  extendEdit,
-  isCurveEntity,
-  pieceAt,
-  splitEdit,
-  trimEdit,
-} from './trim';
+export { crossingPoints, cutsOf, extendEdit, pieceAt, splitEdit, trimEdit } from './trim';
 export type {
   CurveCut,
   CurvePiece,

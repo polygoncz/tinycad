@@ -72,7 +72,7 @@ describe('textFontLabel', () => {
   });
 });
 
-describe('textCommit (only the changed field, invalid input not committed)', () => {
+describe('textCommit (only the changed field, unparsable input not committed)', () => {
   const text = aText('t1', { text: 'Text', font: 'sans', height: 10 });
 
   it('commits a changed string as it is typed', () => {
@@ -80,9 +80,12 @@ describe('textCommit (only the changed field, invalid input not committed)', () 
     expect(textCommit('text', ' a ', text)).toEqual({ text: ' a ' });
   });
 
-  it('does not commit an empty or unchanged string', () => {
-    expect(textCommit('text', '', text)).toBeNull();
+  it('does not commit an unchanged string', () => {
     expect(textCommit('text', 'Text', text)).toBeNull();
+  });
+
+  it('commits an empty string, the session decides it is invalid', () => {
+    expect(textCommit('text', '', text)).toEqual({ text: '' });
   });
 
   it('commits a font of the list other than the current one', () => {
@@ -96,13 +99,16 @@ describe('textCommit (only the changed field, invalid input not committed)', () 
     expect(textCommit('height', ' 2,5 ', text)).toEqual({ height: 2.5 });
   });
 
-  it('does not commit a height that is not a positive number or did not change', () => {
+  it('does not commit a height that is not a number or did not change', () => {
     expect(textCommit('height', '', text)).toBeNull();
     expect(textCommit('height', 'abc', text)).toBeNull();
-    expect(textCommit('height', '0', text)).toBeNull();
-    expect(textCommit('height', '-3', text)).toBeNull();
     expect(textCommit('height', 'Infinity', text)).toBeNull();
     expect(textCommit('height', '10', text)).toBeNull();
+  });
+
+  it('commits a height that is a number but not > 0, the session decides it is invalid', () => {
+    expect(textCommit('height', '0', text)).toEqual({ height: 0 });
+    expect(textCommit('height', '-3', text)).toEqual({ height: -3 });
   });
 
   it('does not commit the rounded text of an unchanged height', () => {

@@ -6,7 +6,7 @@ import { curve2 } from './geometry';
 import { pointsById } from './points';
 import type { Curve2 } from './geometry';
 import type { CurveHit } from './geometry-port';
-import { isPattern } from './model';
+import { isCurveEntity } from './model';
 import type {
   SketchConstraint,
   SketchConstraintId,
@@ -633,12 +633,4 @@ function splineDegree(n: number): 1 | 2 | 3 {
   const degree = Math.min(3, n - 1);
   if (degree === 1 || degree === 2 || degree === 3) return degree;
   throw new Error(`trim: a spline piece needs at least 2 poles, got ${String(n)}`);
-}
-
-/**
- * A curve entity of the data: not a point and not a pattern (M36 – a recipe whose copies are no
- * entities, so the modify tools never cut, trim or join them; Q089).
- */
-export function isCurveEntity(e: SketchEntity): e is SketchCurve {
-  return e.kind !== 'point' && !isPattern(e) && e.kind !== 'text';
 }

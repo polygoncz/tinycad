@@ -3,6 +3,7 @@ import { bspline } from '@/core';
 import type { Vec2 } from '@/core';
 import type { Curve2 } from '@/sketch/geometry';
 import type { TextContour } from '@/sketch/model';
+import { patternOfCopy } from '@/sketch/patterns';
 import { derivedOwner, textCurves } from '@/sketch/text';
 import { textData } from '@/sketch/testing';
 
@@ -203,9 +204,15 @@ describe('derivedOwner', () => {
     expect(derivedOwner('Ab3:12-353.2.17')).toBe('Ab3');
   });
 
-  it('accepts the letter grammar, a subset of the copy grammar', () => {
+  it('reads a letter id as a letter even though the copy grammar accepts it too', () => {
     // '<id>:<i>-<j>.<rest>' is also a copy of a two-direction pattern; the owner is the same prefix.
+    expect(patternOfCopy('t:0-97.0.0')).toBe('t');
+    expect(derivedOwner('t:0-97.0.0')).toBe('t');
     expect(derivedOwner('t:0-97.0')).toBe('t');
+  });
+
+  it('returns the pattern of a grid copy whose source id is all digits', () => {
+    expect(derivedOwner('lp:1-2.345')).toBe('lp');
   });
 
   it('returns the pattern of a copy', () => {

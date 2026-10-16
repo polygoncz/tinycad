@@ -3,9 +3,10 @@ import { SKETCH_TEXT_FONTS } from '@/sketcher/constants';
 import { formatDimension, parseNumber } from './components/params/field-values';
 
 // The section "Text" of the SketchPanel (spec 12, "Text ve skice (M37)", Úprava): when exactly
-// one text is selected, its string, font and height are fields; a changed valid value goes to
-// SketchSession.setTextParams (only that field), anything else is not committed and the field
-// shows the value of the text again. A text the Text tool has just written and selected gets the
+// one text is selected, its string, font and height are fields; a changed value goes to
+// SketchSession.setTextParams (only that field), which decides its validity; an unchanged or
+// unparsable input is not committed and, like a refused one, the field shows the value of the
+// text again. A text the Text tool has just written and selected gets the
 // focus of its string field (Nástroj Text). Pure functions, so they run in Node tests; the
 // component only binds them. ui may not import sketch, so the text is the member of
 // SketchState.entities.
@@ -14,7 +15,7 @@ import { formatDimension, parseNumber } from './components/params/field-values';
 export type PanelText = Extract<SketchState['entities'][number], { readonly kind: 'text' }>;
 
 /** A font of a text (one of SKETCH_TEXT_FONTS). */
-export type PanelTextFont = NonNullable<TextParams['font']>;
+export type PanelTextFont = TextParams['font'];
 
 /** The fields of the section. */
 export type TextField = 'text' | 'font' | 'height';
@@ -45,14 +46,18 @@ export function textFontLabel(t: (key: string) => string, font: PanelTextFont): 
 
 /**
  * The params of setTextParams for the input of a field, or null when there is nothing to commit:
- * an unchanged value (the height also as its shown rounded text), an empty string, a font out of
- * the list, a height that is not a finite number > 0. The rest of the rule (length, control
- * characters) is checked by the session, which answers false.
+ * an unchanged value (the height also as its shown rounded text) or an input that is no value of
+ * the field (a font out of the list, a height that is not a number). Whether a value is valid
+ * (empty string, length, control characters, height > 0) decides the session, which answers false.
  */
-export function textCommit(field: TextField, input: string, text: PanelText): TextParams | null {
+export function textCommit(
+  field: TextField,
+  input: string,
+  text: PanelText,
+): Partial<TextParams> | null {
   switch (field) {
     case 'text':
-      return input === '' || input === text.text ? null : { text: input };
+      return input === text.text ? null : { text: input };
     case 'font': {
       const font = SKETCH_TEXT_FONTS.find((f) => f === input);
       return font === undefined || font === text.font ? null : { font };
@@ -60,7 +65,7 @@ export function textCommit(field: TextField, input: string, text: PanelText): Te
     case 'height': {
       if (input.trim() === textFieldText('height', text)) return null;
       const height = parseNumber(input);
-      return height === null || height <= 0 || height === text.height ? null : { height };
+      return height === null || height === text.height ? null : { height };
     }
   }
 }
