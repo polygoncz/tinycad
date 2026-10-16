@@ -752,7 +752,7 @@ export interface SketchGeometry {}
 
 ## Nové kreslicí nástroje (M31)
 
-Kontrakt stopy B ([[M31-nove-kreslici-nastroje#Implementační plán]]). Datový model přibírá jen nekonečnou přímku ([[#Nekonečná přímka (M31, stopa B)]]); obdélníky a drážky jsou dnešní entity držené **vazbami**, ne novým typem – po změně kóty zůstanou tvarem díky řešiči, ne díky datům.
+Kontrakt stopy B ([[M31-nove-kreslici-nastroje#Implementační plán]]), stav po implementaci M31. Datový model přibírá jen nekonečnou přímku ([[#Nekonečná přímka (M31, stopa B)]]); obdélníky a drážky jsou dnešní entity držené **vazbami**, ne novým typem – po změně kóty zůstanou tvarem díky řešiči, ne díky datům.
 
 ### Konstrukce (`sketch/construct.ts`, čisté funkce)
 
