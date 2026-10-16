@@ -806,7 +806,32 @@ export function patternOfCopy(id: string): SketchEntityId | null;
 - **Kresba, výběr, snapper:** kresba editované i regenerované skici přidá `patternCopies(data)` stylem zdroje (konstrukční čárkovaně), kopie bodů jako body. Najetí a klik na kopii se přeloží `patternOfCopy` na id pole (vzor `__poles:` z M29), takže klik na kopii vybere celé pole a Delete ho smaže. Tah za kopii nic nepohne. Snapper bere kopie jako geometrii bez identity: přichytí se polohou (konec, střed, na křivce), ale nevznikne automatická vazba a bod se nesloučí s kopií. Glyfy vazeb kopie nemají.
   - Kresba editované skici: body dat, body kopií, bod počátku; kopie zkopírovaného `bspline` má i kontrolní polygon `__poles:<id kopie>` (překlad řetězově: polygon → kopie → pole). Styl kopie: když je pole vybrané nebo pod kurzorem, mají ten styl všechny jeho kopie; jinak konstrukční podle zdroje, nebo styl pole. Kresba z regenerace přidá kopie křivek stylem `normal`/`construction`.
   - Snapper (`snap()` si kopie spočítá sám z dat, API beze změny): bod kopie → `kind: 'point'` s `point: null` (poloha bez znovupoužití bodu, takže ani `fix` v počátku); střed a „na křivce“ kopie bez automatické vazby; k bodům kopií se **nezarovnává** (zarovnání je vazba). Při shodě vzdáleností vyhraje entita dat.
-- **Vynesené kóty pole** (vzor *Kóty (M28)*): u **vybraného** pole a během nástroje ukazuje viewport popisky parametrů: u lineárního pole pro každý směr počet `n×` u poslední instance, rozteč `… mm` mezi originálem a první instancí a úhel `…°` u originálu; u kruhového počet `n×` a celkový úhel `…°` na oblouku kolem středu; zrcadlení popisky nemá. Kotva = střed obálky definičních bodů zdrojů. Klik na popisek otevře pole hodnoty a potvrzení zapíše nový parametr jedním `setParams` (bez řešiče – pole do něj nevstupuje); neplatná hodnota (počet mimo rozsah, rozteč ≤ 0) se nezapíše. Přesný tvar pohledu (`SketchState`) a API session dopíše úkol 4.
+- **Vynesené kóty pole** (vzor *Kóty (M28)*): u **vybraného** pole a během nástroje ukazuje viewport popisky parametrů: u lineárního pole pro každý směr počet `n×` u poslední instance, rozteč `… mm` mezi originálem a první instancí a úhel `…°` u originálu; u kruhového počet `n×` a celkový úhel `…°` na oblouku kolem středu; zrcadlení popisky nemá. Kotva = střed obálky definičních bodů zdrojů. Klik na popisek otevře pole hodnoty a potvrzení zapíše nový parametr jedním `setParams` (bez řešiče – pole do něj nevstupuje); neplatná hodnota (počet mimo rozsah, rozteč ≤ 0) se nezapíše. U lineárního pole se popisek počtu směru 2 ukazuje vždy, i bez směru 2 jako `1×` (kolmo na směr 1 ve vzdálenosti rozteče 1): přepsání na ≥ 2 vytvoří `direction2` s úhlem `angle1 + π/2` a roztečí `spacing1`, přepsání na 1 ho odebere (Pavel 2026-10-16, žádné další UI).
+
+  ```ts
+  // sketcher
+  export type PatternParam = 'count1' | 'spacing1' | 'angle1' | 'count2' | 'spacing2' | 'angle2' | 'count' | 'angle';
+  export interface SketchPatternDimensionView {
+    readonly pattern: SketchEntityId;
+    readonly param: PatternParam;
+    readonly format: 'count' | 'length' | 'angle';   // ui: „n×“, „… mm“, „…°“
+    readonly value: number;                          // úhel v radiánech; count2 bez směru 2 = 1
+    readonly label: Vec3;                            // střed popisku ve světě
+    readonly guide: readonly Vec3[];                 // lomená čára kóty (rozteč: úsečka, úhel: navzorkovaný oblouk), může být prázdná
+  }
+  // SketchState
+  readonly patternDimensions: readonly SketchPatternDimensionView[];   // vybraná pole v pořadí výběru
+  // SketchSession
+  /** Nový parametr pole jedním setParams bez řešiče (fronta jako toggleConstruction); neplatná hodnota → false a nic. */
+  setPatternParam(pattern: SketchEntityId, param: PatternParam, value: number): boolean;
+  ```
+
+  - **Poloha popisků** (kotva A, jednotkový směr `u = (cos α, sin α)`): rozteč – úsečka A → A + s·u, popisek v jejím středu; počet – u A + (n − 1)·s·u; úhel – oblouk kolem A o poloměru s/2 od osy x roviny k `u`, popisek uprostřed; směr 2 bez `direction2` – počet `1×` u A + s₁·(−u₁.y, u₁.x). Kruhové pole (střed C, `r = |A − C|`, při r ≈ 0 r = 10 mm): úhel – oblouk kolem C o poloměru r od A o celkový úhel, popisek uprostřed; počet – u obrazu A v poslední instanci.
+  - **Platné hodnoty:** počet celé číslo 2 … `MAX_PATTERN_COUNT` (u `count2` i 1), rozteč > 0, úhel konečný (lineární libovolný, kruhový 0 < |úhel| ≤ 2π); `ui` zadává úhel ve stupních a převádí.
+- **Nástroje** (`sketcher`, skupina lišty `modify`; `sketch.mirror` a rodina `pattern` s `sketch.linearPattern`, `sketch.circularPattern`; Pavel 2026-10-16): **zdroje → Enter → osa nebo střed.**
+  - Zdroje = předvýběr bodů a křivek při aktivaci, nebo klikání (klik přepíná zdroj, výběr ukazuje zdroje); pole, kopie a jiné položky se do zdrojů nedostanou. Enter bez zdrojů nic.
+  - Zrcadlení: po Enter klik na úsečku (ne zdroj) zapíše `mirror`. Kruhové pole: po Enter klik na bod skici (ne zdroj; počátek není entita) zapíše `circularPattern` s `count = 4`, `angle = 2π`. Lineární pole: Enter rovnou zapíše `linearPattern` s `direction1 = { angle: 0, count: 3, spacing }`, kde `spacing = 1,5 ×` šířka obálky definičních bodů zdrojů ve směru x (kružnice ± poloměr), nebo 10 mm při šířce ≤ 1e-9.
+  - Zápis = `addGeometry` s jedinou novou entitou (id z generátoru, bez vazeb); nové pole je pak vybrané (jeho vynesené kóty se ukážou) a nástroj začne znovu. Esc v kroku osy nebo středu vrátí ke zdrojům, ve zdrojích zruší výběr zdrojů, pak deaktivuje nástroj jako ostatní.
 - **Oblasti** (úkol 5, po sloučení M30): `regionCurves` přidá nekonstrukční kopie křivek z `patternCopies` jako `Curve2` s odvozeným id; jména ploch pak `face:side:<pole>:<index>.<zdroj>`.
 
 
