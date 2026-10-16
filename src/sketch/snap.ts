@@ -2,6 +2,7 @@ import type { Vec2 } from '@/core';
 import { assertNever, bspline } from '@/core';
 import { curve2, pointsById } from './geometry';
 import type { Curve2 } from './geometry';
+import { isPattern } from './model';
 import type { SketchCurve, SketchData, SketchEntity, SketchEntityId, SketchPoint } from './model';
 import { SPLINE_TOLERANCE } from './regions';
 import { angleOf, dist, dot, length, lerp, mod2pi, sub } from './vec2';
@@ -263,5 +264,5 @@ function isPoint(e: SketchEntity): e is SketchPoint {
 }
 
 function isCurve(e: SketchEntity): e is SketchCurve {
-  return e.kind !== 'point';
+  return e.kind !== 'point' && !isPattern(e);
 }

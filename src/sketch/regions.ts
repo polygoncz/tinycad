@@ -1,6 +1,7 @@
 import { assert, bspline, type Vec2 } from '@/core';
 import { curve2, pointsById } from './geometry';
 import type { Curve2 } from './geometry';
+import { isPattern } from './model';
 import type { SketchCurve, SketchData, SketchEntity } from './model';
 import { angleOf, cross, dist, dot, length, lerp, mod2pi, normalize, sub, TWO_PI } from './vec2';
 
@@ -229,7 +230,7 @@ export function computeRegions(data: SketchData): RegionsResult {
 }
 
 function isCurve(e: SketchEntity): e is SketchCurve {
-  return e.kind !== 'point';
+  return e.kind !== 'point' && !isPattern(e);
 }
 
 function curvesOf(loop: Loop): readonly Curve2[] {

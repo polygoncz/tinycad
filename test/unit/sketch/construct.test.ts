@@ -10,6 +10,7 @@ import {
 } from '@/sketch/construct';
 import type { CircleFit } from '@/sketch/construct';
 import type { Curve2 } from '@/sketch/geometry';
+import { isPattern } from '@/sketch/model';
 import type { SketchCurve, SketchData, SketchEntityId } from '@/sketch/model';
 import { parseSketchData } from '@/sketch/parse';
 
@@ -238,7 +239,7 @@ describe('endTangent', () => {
   ]);
   const curve = (cid: string): SketchCurve => {
     const e = data.entities.find((x) => x.id === cid);
-    if (e === undefined || e.kind === 'point') throw new Error(`no curve ${cid}`);
+    if (e === undefined || e.kind === 'point' || isPattern(e)) throw new Error(`no curve ${cid}`);
     return e;
   };
 

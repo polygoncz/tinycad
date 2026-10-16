@@ -113,5 +113,6 @@ const EXPECTED_ICONS: Readonly<Record<string, string>> = {
   equal: 'equal',
   tangent: 'circle-dot',
   midpoint: 'letter-m',
+  symmetric: 'flip-vertical',
   fix: 'lock',
 };

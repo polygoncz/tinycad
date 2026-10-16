@@ -9,6 +9,7 @@ describe('sketch public API', () => {
       [
         'DIMENSION_KINDS',
         'GEOMETRIC_CONSTRAINT_KINDS',
+        'MAX_PATTERN_COUNT',
         'ORIGIN_SNAP',
         'SKETCH_FEATURE_TYPE',
         'SKETCH_PARAM',
@@ -28,9 +29,12 @@ describe('sketch public API', () => {
         'inferRadius',
         'dimensionTarget',
         'isDimension',
+        'isPattern',
         'measure',
         'movePlacement',
         'parseSketchData',
+        'patternCopies',
+        'patternOfCopy',
         'placeDimension',
         'pointsById',
         'removeItems',
@@ -53,9 +57,29 @@ describe('sketch public API', () => {
       'equal',
       'tangent',
       'midpoint',
+      'symmetric',
       'fix',
     ]);
     expect(Object.isFrozen(sketch.GEOMETRIC_CONSTRAINT_KINDS)).toBe(true);
+  });
+
+  it('has the pattern constants of M36', () => {
+    expect(sketch.MAX_PATTERN_COUNT).toBe(100);
+    const parsed = sketch.parseSketchData(
+      [
+        { kind: 'point', id: 'a', x: 0, y: 0 },
+        { kind: 'point', id: 'b', x: 0, y: 1 },
+        { kind: 'line', id: 'l', p1: 'a', p2: 'b' },
+        { kind: 'mirror', id: 'm', sources: ['a'], axis: 'l' },
+      ],
+      [],
+    );
+    expect(parsed.ok && parsed.value.entities.map(sketch.isPattern)).toEqual([
+      false,
+      false,
+      false,
+      true,
+    ]);
   });
 
   it('tells a dimension by its kind (M28), not by a value field', () => {

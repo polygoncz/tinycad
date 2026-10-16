@@ -10,6 +10,7 @@ import {
   constraintTargets,
   curvePoints,
   isDimension,
+  isPattern,
   movePlacement,
   parseSketchData,
   removeItems,
@@ -429,7 +430,9 @@ export function openSketchSession(deps: {
   function draw(): void {
     const s = state.get();
     const construction = new Set<string>(
-      s.entities.flatMap((e) => (e.kind !== 'point' && e.construction === true ? [e.id] : [])),
+      s.entities.flatMap((e) =>
+        e.kind !== 'point' && !isPattern(e) && e.construction === true ? [e.id] : [],
+      ),
     );
     const selectedVia = entitiesOfConstraints(s.constraints, s.selection);
     const hoveredVia = entitiesOfConstraints(s.constraints, s.hover === null ? [] : [s.hover]);
@@ -940,7 +943,7 @@ function glyphsShownFor(
 ): ReadonlySet<SketchItemId> {
   const items = hover === null ? selection : [...selection, hover];
   const points = data.entities.flatMap((e) =>
-    items.includes(e.id) && e.kind !== 'point' ? curvePoints(e) : [],
+    items.includes(e.id) && e.kind !== 'point' && !isPattern(e) ? curvePoints(e) : [],
   );
   return new Set<SketchItemId>([
     ...items,

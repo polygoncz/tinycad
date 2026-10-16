@@ -4,7 +4,7 @@
 
 import { assert, assertNever, bspline, vec3 } from '@/core';
 import type { Plane, Vec2, Vec3 } from '@/core';
-import { SPLINE_TOLERANCE, computeRegions, curve2, pointsById } from '@/sketch';
+import { SPLINE_TOLERANCE, computeRegions, curve2, isPattern, pointsById } from '@/sketch';
 import type {
   Curve2,
   SketchCurve,
@@ -148,7 +148,7 @@ export function axisDrawing(
   return freezeDrawing(frame, [line], []);
 }
 
-const isCurve = (e: SketchEntity): e is SketchCurve => e.kind !== 'point';
+const isCurve = (e: SketchEntity): e is SketchCurve => e.kind !== 'point' && !isPattern(e);
 
 /** The polyline through the pole points of a bspline, in the style 'construction' (M29). */
 function controlPolygon(

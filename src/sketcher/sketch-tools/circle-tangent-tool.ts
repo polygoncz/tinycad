@@ -10,7 +10,7 @@
 // step (circleTangentStep), so the preview shows exactly the constraints the click adds.
 
 import type { Vec2 } from '@/core';
-import { curve2, pointsById, tangentCircle } from '@/sketch';
+import { curve2, isPattern, pointsById, tangentCircle } from '@/sketch';
 import type {
   CircleFit,
   SketchConstraint,
@@ -171,7 +171,7 @@ function fitTangent(
   const points = pointsById(data);
   const shapes = curves.map((id) => {
     const e = data.entities.find((c) => c.id === id);
-    return e === undefined || e.kind === 'point' ? null : curve2(e, points);
+    return e === undefined || e.kind === 'point' || isPattern(e) ? null : curve2(e, points);
   });
   if (shapes.some((s) => s === null)) return null;
   const fit = tangentCircle(

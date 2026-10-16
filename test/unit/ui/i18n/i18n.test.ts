@@ -103,6 +103,7 @@ const SKETCH_KEYS = [
   'sketch.constraint.equal',
   'sketch.constraint.tangent',
   'sketch.constraint.midpoint',
+  'sketch.constraint.symmetric',
   'sketch.constraint.fix',
   'sketch.constraint.pointOnCurve',
   'sketch.constraint.hAlign',

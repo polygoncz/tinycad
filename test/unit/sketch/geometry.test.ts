@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { curve2, pointsById } from '@/sketch/geometry';
+import { isPattern } from '@/sketch/model';
 import type { SketchCurve, SketchData } from '@/sketch/model';
 import { parseSketchData } from '@/sketch/parse';
 
@@ -11,7 +12,7 @@ function sketch(entities: readonly unknown[]): SketchData {
 
 function curve(data: SketchData, id: string): SketchCurve {
   const c = data.entities.find((e) => e.id === id);
-  if (c === undefined || c.kind === 'point') throw new Error(`no curve ${id}`);
+  if (c === undefined || c.kind === 'point' || isPattern(c)) throw new Error(`no curve ${id}`);
   return c;
 }
 

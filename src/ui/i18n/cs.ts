@@ -169,6 +169,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'sketch.constraint.equal': 'Shodná velikost',
   'sketch.constraint.tangent': 'Tečnost',
   'sketch.constraint.midpoint': 'Střed',
+  'sketch.constraint.symmetric': 'Symetrie',
   'sketch.constraint.fix': 'Ukotvení',
   'sketch.constraint.pointOnCurve': 'Bod na křivce',
   'sketch.constraint.hAlign': 'Zarovnat vodorovně',

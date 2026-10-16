@@ -168,6 +168,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'sketch.constraint.equal': 'Equal',
   'sketch.constraint.tangent': 'Tangent',
   'sketch.constraint.midpoint': 'Midpoint',
+  'sketch.constraint.symmetric': 'Symmetric',
   'sketch.constraint.fix': 'Fix',
   'sketch.constraint.pointOnCurve': 'Point on curve',
   'sketch.constraint.hAlign': 'Align horizontally',

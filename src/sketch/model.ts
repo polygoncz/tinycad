@@ -75,7 +75,60 @@ export interface SketchFitSpline {
 }
 
 export type SketchCurve = SketchLine | SketchCircle | SketchArc | SketchBSpline | SketchFitSpline;
-export type SketchEntity = SketchPoint | SketchCurve;
+
+/**
+ * Mirror of the sources across the axis (a line). One copy with index 1 (spec 12 "Zrcadlení a
+ * pole (M36)"). Like every pattern, a recipe: the copies are derived (patternCopies).
+ */
+export interface SketchMirror {
+  readonly kind: 'mirror';
+  readonly id: SketchEntityId;
+  readonly sources: readonly SketchEntityId[];
+  readonly axis: SketchEntityId;
+}
+
+/** One direction of a linear pattern: count ≥ 2 instances (with the original) spacing apart in direction angle. */
+export interface PatternDirection {
+  /** Rad from the plane x axis, any finite number. */
+  readonly angle: number;
+  /** An integer, 2 ≤ count ≤ MAX_PATTERN_COUNT. */
+  readonly count: number;
+  /** Mm, > 0, the distance of neighbouring instances. */
+  readonly spacing: number;
+}
+
+/** Linear pattern: direction 1 required, direction 2 optional (a grid, like Onshape). */
+export interface SketchLinearPattern {
+  readonly kind: 'linearPattern';
+  readonly id: SketchEntityId;
+  readonly sources: readonly SketchEntityId[];
+  readonly direction1: PatternDirection;
+  readonly direction2?: PatternDirection;
+}
+
+/** Circular pattern around a sketch point: count instances (with the original) within the total angle. */
+export interface SketchCircularPattern {
+  readonly kind: 'circularPattern';
+  readonly id: SketchEntityId;
+  readonly sources: readonly SketchEntityId[];
+  /** A sketch point. */
+  readonly center: SketchEntityId;
+  /** An integer, 2 ≤ count ≤ MAX_PATTERN_COUNT. */
+  readonly count: number;
+  /** Rad, 0 < |angle| ≤ 2π; positive = counter-clockwise. */
+  readonly angle: number;
+}
+
+/** A mirror or a pattern: a member of SketchEntity, not of SketchCurve (it carries a recipe). */
+export type SketchPattern = SketchMirror | SketchLinearPattern | SketchCircularPattern;
+export type SketchEntity = SketchPoint | SketchCurve | SketchPattern;
+
+/** The largest number of instances in one direction of a pattern. */
+export const MAX_PATTERN_COUNT = 100;
+
+export function isPattern(e: SketchEntity): e is SketchPattern {
+  return e.kind === 'mirror' || e.kind === 'linearPattern' || e.kind === 'circularPattern';
+}
 
 export type GeometricConstraintKind =
   | 'coincident'
@@ -86,6 +139,7 @@ export type GeometricConstraintKind =
   | 'equal'
   | 'tangent'
   | 'midpoint'
+  | 'symmetric'
   | 'fix';
 
 /** In this order: the order of the constraint actions in the toolbar. */
@@ -98,6 +152,7 @@ export const GEOMETRIC_CONSTRAINT_KINDS: readonly GeometricConstraintKind[] = Ob
   'equal',
   'tangent',
   'midpoint',
+  'symmetric',
   'fix',
 ]);
 
@@ -215,6 +270,14 @@ export type SketchConstraint =
       readonly id: SketchConstraintId;
       readonly a: SketchEntityId;
       readonly b: SketchEntityId;
+    }
+  /** Points a, b symmetric across the axis (a line): the middle of ab on the axis, ab perpendicular to it (M36). */
+  | {
+      readonly kind: 'symmetric';
+      readonly id: SketchConstraintId;
+      readonly a: SketchEntityId;
+      readonly b: SketchEntityId;
+      readonly axis: SketchEntityId;
     }
   /** The point stays at its coordinates. */
   | { readonly kind: 'fix'; readonly id: SketchConstraintId; readonly point: SketchEntityId }

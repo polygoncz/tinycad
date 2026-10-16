@@ -4,7 +4,7 @@
 
 import { DisposableStore, ObservableValue } from '@/core';
 import type { Disposable, IdGenerator, Observable } from '@/core';
-import { GEOMETRIC_CONSTRAINT_KINDS, constraintFor } from '@/sketch';
+import { GEOMETRIC_CONSTRAINT_KINDS, constraintFor, isPattern } from '@/sketch';
 import type {
   GeometricConstraintKind,
   SketchConstraint,
@@ -124,7 +124,9 @@ export function createSketchActions(deps: {
     label: SKETCH_ACTION_IDS.construction,
     shortcut: 'Q',
     modes: SKETCH_ONLY,
-    enabled: enabledWhen((state) => selectedEntities(state).some((e) => e.kind !== 'point')),
+    enabled: enabledWhen((state) =>
+      selectedEntities(state).some((e) => e.kind !== 'point' && !isPattern(e)),
+    ),
     run: () => {
       const s = session();
       if (s !== null) s.toggleConstruction(s.state.get().selection);
