@@ -120,6 +120,19 @@ export function axisConstraint(
 }
 
 /**
+ * The draft with the constraints of the locked fields of the numeric input (M32) appended, all of
+ * them required (the entered dimensions are exact).
+ */
+export function withTyped(draft: ShapeDraft, typed: readonly SketchConstraint[]): ShapeDraft {
+  if (typed.length === 0) return draft;
+  return {
+    ...draft,
+    constraints: [...draft.constraints, ...typed],
+    required: [...draft.required, ...typed.map((c) => c.id)],
+  };
+}
+
+/**
  * Writes a shape: the new points with their inferred constraints, the curves and constraints of
  * the draft (its `required` required) and the `automatic` constraints, in one addDrawn (construction mode, M31).
  */

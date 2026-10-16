@@ -5,24 +5,39 @@
 // never onto the clicked corners. The first side gets horizontal or vertical from inferLine
 // within 3° (automatic, B3); Ctrl/Cmd turns it off. A degenerate rectangle makes nothing. The
 // click and the preview of a move share one step (rectangle3pStep).
+//
+// The numeric input (spec 12, M32): the first corner has the fields x and y, the second length and
+// angle from the first, the third the height (to the side of the cursor). A locked length becomes
+// a required distance of ab, a locked height of bc; a locked angle replaces the automatic axis of
+// the side: 0/180° → a required horizontal, 90/270° → vertical, another angle none.
 
 import type { Vec2 } from '@/core';
 import { rectangle3Shape, rectangleFrom3 } from '@/sketch';
-import type { SketchData } from '@/sketch';
+import type { SketchConstraint, SketchData, SketchEntityId } from '@/sketch';
 import { isPlainEscape } from '@/interaction';
-import type { Tool } from '@/interaction';
+import type { Tool, ToolContext } from '@/interaction';
+import type { InputField } from '../numeric-input';
 import type { SketchEditor } from '../sketch-editor';
 import type { GlyphKind } from '../sketch-glyphs';
 import {
   MIN_LENGTH,
+  POLAR_FIELDS,
+  XY_FIELDS,
+  axisOfAngle,
   clearPreview,
   clickTool,
+  constrainPolar,
+  constrainXY,
   distance,
+  inputValues,
+  measurePolar,
+  measureXY,
   previewInference,
   previewPairs,
   previewPolyline,
   snapMode,
 } from './common';
+import { distanceDimension } from './rectangle-input';
 import { placePoint, samePoint, sessionData, snapAt, snapToleranceAt } from './snap';
 import type { SnapTarget } from './snap';
 import {
@@ -32,15 +47,26 @@ import {
   sideAxis,
   snapComputed,
   withoutOwnAlignment,
+  withTyped,
 } from './shape';
 import type { AxisKind } from './shape';
 
-/** The first side a → b with the axis it gets (null = none). */
+/**
+ * The first side a → b with the axis it gets (null = none); `typed` = the axis is of a locked
+ * angle (M32): required, not automatic. `length` = the locked length of the side (M32), or null.
+ */
 interface Side {
   readonly a: SnapTarget;
   readonly b: SnapTarget;
   readonly axis: AxisKind | null;
+  readonly typed: boolean;
+  readonly length: number | null;
 }
+
+/** The field of the third point (M32): the height of the rectangle. */
+const HEIGHT_FIELDS: readonly InputField[] = Object.freeze([
+  Object.freeze({ id: 'height', kind: 'length' }),
+]);
 
 /**
  * What a click at a target does: nothing (degenerate), take the first corner, take the second
@@ -68,13 +94,28 @@ export function createRectangle3pTool(sketches: SketchEditor): Tool {
     reset() {
       progress = null;
     },
+    inputFields() {
+      if (progress === null) return XY_FIELDS;
+      return progress.kind === 'first' ? POLAR_FIELDS : HEIGHT_FIELDS;
+    },
+    constrain(_session, cursor, values) {
+      if (progress === null) return constrainXY(cursor, values);
+      if (progress.kind === 'first') return constrainPolar(progress.a.at, cursor, values);
+      return constrainHeight(progress.side, cursor, values);
+    },
+    measure(_session, at) {
+      if (progress === null) return measureXY(at);
+      if (progress.kind === 'first') return measurePolar(progress.a.at, at);
+      return measureHeight(progress.side, at);
+    },
     onMove(ctx, session, x, y, mods) {
       const mode = snapMode(sketches, mods);
       const target = snapAt(ctx, session, x, y, mode);
       const tolerance = snapToleranceAt(ctx, session, x, y);
       if (target === null || tolerance === null) return;
       const data = sessionData(session, []);
-      const step = rectangle3pStep(data, progress, target, tolerance, mode.infer);
+      const values = inputValues(mods);
+      const step = rectangle3pStep(data, progress, target, tolerance, mode.infer, values);
       previewInference(session, target.at, stepInferences(step), target.guides);
       if (progress === null) return;
       // A degenerate side or rectangle is not drawn.
@@ -97,7 +138,8 @@ export function createRectangle3pTool(sketches: SketchEditor): Tool {
       const tolerance = snapToleranceAt(ctx, session, x, y);
       if (target === null || tolerance === null) return;
       const data = sessionData(session, []);
-      const step = rectangle3pStep(data, progress, target, tolerance, mode.infer);
+      const values = inputValues(mods);
+      const step = rectangle3pStep(data, progress, target, tolerance, mode.infer, values);
       switch (step.kind) {
         case 'none':
           return;
@@ -120,7 +162,9 @@ export function createRectangle3pTool(sketches: SketchEditor): Tool {
           const [pa, pb, pc, pd] = placed;
           const draft = rectangle3Shape([pa.id, pb.id, pc.id, pd.id], shapeIds(ctx));
           const axis = axisConstraint(ctx, step.side.axis, draft.axis);
-          addShape(session, placed, draft, axis);
+          const typed = typedConstraints(ctx, [pa.id, pb.id, pc.id], step.side, values);
+          if (step.side.typed) addShape(session, placed, withTyped(draft, [...axis, ...typed]));
+          else addShape(session, placed, withTyped(draft, typed), axis);
           return;
         }
       }
@@ -135,8 +179,9 @@ export function createRectangle3pTool(sketches: SketchEditor): Tool {
 }
 
 /**
- * The step of a click at `target` with the work in progress `progress` (null = none yet). Pure
- * over `data`, so the preview of a move can call it too.
+ * The step of a click at `target` with the work in progress `progress` (null = none yet) and the
+ * entered values (M32): a locked angle of the side replaces its automatic axis, a locked length is
+ * kept for the dimension. Pure over `data`, so the preview of a move can call it too.
  */
 function rectangle3pStep(
   data: SketchData,
@@ -144,13 +189,19 @@ function rectangle3pStep(
   target: SnapTarget,
   tolerance: number,
   infer: boolean,
+  values: ReadonlyMap<string, number>,
 ): Rectangle3pStep {
   if (progress === null) return { kind: 'first', target };
   if (progress.kind === 'first') {
     const { a } = progress;
     if (samePoint(a, target) || distance(a.at, target.at) <= MIN_LENGTH) return { kind: 'none' };
     const { target: b, axis } = sideAxis(data, a, target, infer);
-    return { kind: 'side', side: { a, b, axis } };
+    const length = values.get('length') ?? null;
+    const angle = values.get('angle');
+    if (angle !== undefined) {
+      return { kind: 'side', side: { a, b, axis: axisOfAngle(angle), typed: true, length } };
+    }
+    return { kind: 'side', side: { a, b, axis, typed: false, length } };
   }
   const { side } = progress;
   const corners = rectangleFrom3(side.a.at, side.b.at, target.at);
@@ -180,4 +231,50 @@ function stepInferences(step: Rectangle3pStep): readonly { readonly kind: GlyphK
     case 'rectangle':
       return step.corners.slice(2).flatMap((t) => t.inferred);
   }
+}
+
+/** The unit left normal of the side a → b; null for a degenerate side. */
+function normalOf(side: Side): Vec2 | null {
+  const length = distance(side.a.at, side.b.at);
+  if (length <= MIN_LENGTH) return null;
+  return [-(side.b.at[1] - side.a.at[1]) / length, (side.b.at[0] - side.a.at[0]) / length];
+}
+
+/** The signed offset of `at` from the side along its left normal n. */
+const offsetOf = (side: Side, n: Vec2, at: Vec2): number =>
+  (at[0] - side.b.at[0]) * n[0] + (at[1] - side.b.at[1]) * n[1];
+
+/**
+ * The third point for the cursor and the entered `height` (spec 12, M32): the corner c at that
+ * distance from b perpendicular to the side, on the side of the cursor (a cursor on the side
+ * counts as the left one).
+ */
+function constrainHeight(side: Side, cursor: Vec2, values: ReadonlyMap<string, number>): Vec2 {
+  const height = values.get('height');
+  const n = normalOf(side);
+  if (height === undefined || n === null) return cursor;
+  const h = offsetOf(side, n, cursor) < 0 ? -height : height;
+  return [side.b.at[0] + h * n[0], side.b.at[1] + h * n[1]];
+}
+
+/** The `height` of the rectangle with the third point `at`: its distance from the side. */
+function measureHeight(side: Side, at: Vec2): ReadonlyMap<string, number> {
+  const n = normalOf(side);
+  return new Map([['height', n === null ? 0 : Math.abs(offsetOf(side, n, at))]]);
+}
+
+/**
+ * The required dimensions of the locked fields (spec 12, M32): the length of the side →
+ * distance(a, b), the `height` of the click → distance(b, c).
+ */
+function typedConstraints(
+  ctx: ToolContext,
+  [a, b, c]: readonly [SketchEntityId, SketchEntityId, SketchEntityId],
+  side: Side,
+  values: ReadonlyMap<string, number>,
+): readonly SketchConstraint[] {
+  return [
+    ...distanceDimension(ctx, a, b, side.length),
+    ...distanceDimension(ctx, b, c, values.get('height')),
+  ];
 }

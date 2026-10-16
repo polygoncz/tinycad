@@ -5,6 +5,10 @@
 // rectangle); the inferred constraints of the corners are automatic. Corners with the same x or y
 // make nothing. The click and the preview of a move share one step (rectangleStep), so the
 // preview shows exactly the inferred constraints the click adds.
+//
+// The numeric input (spec 12, M32): the first corner has the fields x and y, the second width and
+// height (the sign from the quadrant of the cursor); a locked width becomes a required distance of
+// the side ab, a locked height of the side bc.
 
 import type { Vec2 } from '@/core';
 import type {
@@ -21,14 +25,19 @@ import {
   addDrawn,
   clearPreview,
   clickTool,
+  constrainXY,
   existingLine,
+  inputValues,
+  measureXY,
   MIN_LENGTH,
   newConstraintId,
   newEntityId,
   previewInference,
   previewPolyline,
   snapMode,
+  XY_FIELDS,
 } from './common';
+import { constrainSize, measureSize, SIZE_FIELDS, sizeDimensions } from './rectangle-input';
 import { freeTarget, placePoint, sessionData, snapAt, snapPoint, snapToleranceAt } from './snap';
 import type { PlacedPoint, SnapTarget } from './snap';
 
@@ -50,6 +59,17 @@ export function createRectangleTool(sketches: SketchEditor): Tool {
   return clickTool(sketches, {
     reset() {
       corner = null;
+    },
+    inputFields() {
+      return corner === null ? XY_FIELDS : SIZE_FIELDS;
+    },
+    constrain(_session, cursor, values) {
+      return corner === null
+        ? constrainXY(cursor, values)
+        : constrainSize(corner.at, cursor, values, false);
+    },
+    measure(_session, at) {
+      return corner === null ? measureXY(at) : measureSize(corner.at, at, false);
     },
     onMove(ctx, session, x, y, mods) {
       const mode = snapMode(sketches, mods);
@@ -79,7 +99,7 @@ export function createRectangleTool(sketches: SketchEditor): Tool {
           clearPreview(ctx);
           const [a, b, c, d] = step.corners;
           const place = (t: SnapTarget): PlacedPoint => placePoint(ctx, t);
-          addRectangle(ctx, session, [place(a), place(b), place(c), place(d)]);
+          addRectangle(ctx, session, [place(a), place(b), place(c), place(d)], inputValues(mods));
           return;
         }
       }
@@ -143,12 +163,14 @@ function stepInferences(step: RectangleStep): readonly PointInference[] {
 
 /**
  * Lines a→b→c→d→a with horizontal, vertical, horizontal, vertical (required). A side whose points
- * an existing line already joins gets no line and no axis (the existing edge is that side).
+ * an existing line already joins gets no line and no axis (the existing edge is that side). The
+ * locked width and height (`values`, M32) add their required distances of ab and bc.
  */
 function addRectangle(
   ctx: ToolContext,
   session: SketchSession,
   points: readonly [PlacedPoint, PlacedPoint, PlacedPoint, PlacedPoint],
+  values: ReadonlyMap<string, number>,
 ): void {
   const [pa, pb, pc, pd] = points;
   const data = sessionData(session, []);
@@ -170,13 +192,14 @@ function addRectangle(
     line: line.id,
   }));
   if (lines.length === 0 && points.every((p) => p.entities.length === 0)) return;
+  const typed = sizeDimensions(ctx, [pa.id, pb.id, pc.id], values);
   void addDrawn(
     session,
     {
       entities: [...points.flatMap((p) => p.entities), ...lines.map((l) => l.line)],
-      constraints: [...points.flatMap((p) => p.constraints), ...axes],
+      constraints: [...points.flatMap((p) => p.constraints), ...axes, ...typed],
     },
-    { required: new Set(axes.map((c) => c.id)) },
+    { required: new Set([...axes, ...typed].map((c) => c.id)) },
   );
 }
 

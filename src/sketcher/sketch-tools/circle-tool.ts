@@ -3,10 +3,15 @@
 // radius > 0, equal to the last circle or arc of the sketch when the radii differ by at most 2 %
 // (inferRadius); Ctrl/Cmd turns the inference off. The click and the preview of a move share one
 // step (circleStep), so the preview shows exactly the constraints the click adds.
+//
+// The numeric input (spec 12, M32): the centre has the fields x and y, the rim the diameter (the
+// rim in the direction of the cursor). A locked diameter becomes a required diameter dimension of
+// the circle and replaces the automatic equal.
 
 import { inferRadius } from '@/sketch';
 import type { SketchConstraint, SketchData, SketchEntityId } from '@/sketch';
 import type { Tool } from '@/interaction';
+import type { InputField } from '../numeric-input';
 import type { SketchEditor } from '../sketch-editor';
 import type { GlyphKind } from '../sketch-glyphs';
 import {
@@ -14,14 +19,19 @@ import {
   circlePoints,
   clearPreview,
   clickTool,
+  constrainPolar,
+  constrainXY,
   distance,
+  inputValues,
   lastRound,
+  measureXY,
   MIN_LENGTH,
   newConstraintId,
   newEntityId,
   previewInference,
   previewPolyline,
   snapMode,
+  XY_FIELDS,
 } from './common';
 import { placePoint, sessionData, snapAt } from './snap';
 import type { SnapTarget } from './snap';
@@ -35,6 +45,11 @@ type CircleStep =
   | { readonly kind: 'center'; readonly target: SnapTarget }
   | { readonly kind: 'circle'; readonly radius: number; readonly equal: SketchEntityId | null };
 
+/** The field of the rim (M32): the diameter of the circle. */
+const DIAMETER_FIELDS: readonly InputField[] = Object.freeze([
+  Object.freeze({ id: 'diameter', kind: 'length' }),
+]);
+
 export function createCircleTool(sketches: SketchEditor): Tool {
   let center: SnapTarget | null = null;
 
@@ -42,11 +57,25 @@ export function createCircleTool(sketches: SketchEditor): Tool {
     reset() {
       center = null;
     },
+    inputFields() {
+      return center === null ? XY_FIELDS : DIAMETER_FIELDS;
+    },
+    constrain(_session, cursor, values) {
+      if (center === null) return constrainXY(cursor, values);
+      const diameter = values.get('diameter');
+      if (diameter === undefined) return cursor;
+      return constrainPolar(center.at, cursor, new Map([['length', diameter / 2]]));
+    },
+    measure(_session, at) {
+      if (center === null) return measureXY(at);
+      return new Map([['diameter', 2 * distance(center.at, at)]]);
+    },
     onMove(ctx, session, x, y, mods) {
       const mode = snapMode(sketches, mods);
       const target = snapAt(ctx, session, x, y, mode);
       if (target === null) return;
-      const step = circleStep(sessionData(session, []), center, target, mode.infer);
+      const diameter = inputValues(mods).get('diameter') ?? null;
+      const step = circleStep(sessionData(session, []), center, target, mode.infer, diameter);
       previewInference(session, target.at, stepInferences(step), target.guides);
       if (center === null) return;
       previewPolyline(ctx, session, circlePoints(center.at, distance(center.at, target.at)));
@@ -55,7 +84,8 @@ export function createCircleTool(sketches: SketchEditor): Tool {
       const mode = snapMode(sketches, mods);
       const target = snapAt(ctx, session, x, y, mode);
       if (target === null) return;
-      const step = circleStep(sessionData(session, []), center, target, mode.infer);
+      const diameter = inputValues(mods).get('diameter') ?? null;
+      const step = circleStep(sessionData(session, []), center, target, mode.infer, diameter);
       switch (step.kind) {
         case 'none':
           return;
@@ -71,10 +101,18 @@ export function createCircleTool(sketches: SketchEditor): Tool {
           const id: SketchEntityId = newEntityId(ctx);
           const constraints: readonly SketchConstraint[] =
             equal === null ? [] : [{ kind: 'equal', id: newConstraintId(ctx), a: id, b: equal }];
-          void addDrawn(session, {
-            entities: [...c.entities, { kind: 'circle', id, center: c.id, radius }],
-            constraints: [...c.constraints, ...constraints],
-          });
+          const typed: readonly SketchConstraint[] =
+            diameter === null
+              ? []
+              : [{ kind: 'diameter', id: newConstraintId(ctx), curve: id, value: diameter }];
+          void addDrawn(
+            session,
+            {
+              entities: [...c.entities, { kind: 'circle', id, center: c.id, radius }],
+              constraints: [...c.constraints, ...constraints, ...typed],
+            },
+            { required: new Set(typed.map((t) => t.id)) },
+          );
           return;
         }
       }
@@ -84,18 +122,22 @@ export function createCircleTool(sketches: SketchEditor): Tool {
 
 /**
  * The step of a click at `target` after the centre `center` (null = none yet); the rim snaps only
- * for its place. Pure over `data`, so the preview of a move can call it too.
+ * for its place. The entered `diameter` (M32, null = none) sets the radius exactly and replaces
+ * the automatic equal (a locked size, like withoutLocked). Pure over `data`, so the preview of a
+ * move can call it too.
  */
 function circleStep(
   data: SketchData,
   center: SnapTarget | null,
   target: SnapTarget,
   infer: boolean,
+  diameter: number | null,
 ): CircleStep {
   if (center === null) return { kind: 'center', target };
-  const radius = distance(center.at, target.at);
-  if (radius <= MIN_LENGTH) return { kind: 'none' };
-  const equal = infer ? inferRadius(radius, data, lastRound(data)) : null;
+  const radius = diameter === null ? distance(center.at, target.at) : diameter / 2;
+  // A rim on the centre has no direction, even with an entered diameter.
+  if (distance(center.at, target.at) <= MIN_LENGTH) return { kind: 'none' };
+  const equal = infer && diameter === null ? inferRadius(radius, data, lastRound(data)) : null;
   return { kind: 'circle', radius, equal };
 }
 
