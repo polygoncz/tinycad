@@ -37,13 +37,19 @@ const MAX_SPLINE_DEGREE = 3;
 /** Entity kind groups a constraint field may refer to. */
 type Target = 'point' | 'line' | 'round' | 'curve';
 const ROUND = new Set(['circle', 'arc']);
-const CURVE = new Set(['line', 'circle', 'arc']);
+/** pointOnCurve may lie on any curve, a spline too (M29). */
+const CURVE = new Set(['line', 'circle', 'arc', 'bspline', 'fitSpline']);
 
-/** The fields of each curve kind that refer to its defining points (curvePoints on raw data). */
+/**
+ * The fields of each curve kind that refer to its defining points (curvePoints on raw data); a
+ * spline field is a list of point ids (the poles of a fitSpline are coordinates, its points `fit`).
+ */
 const DEFINING_POINT_FIELDS: Readonly<Record<string, readonly string[]>> = {
   line: ['p1', 'p2'],
   circle: ['center'],
   arc: ['center', 'start', 'end'],
+  bspline: ['poles'],
+  fitSpline: ['fit'],
 };
 
 /**
@@ -322,7 +328,10 @@ function constraintValid(
 /** Whether the point id is one of the defining points of the (raw) curve. */
 function definesCurve(point: unknown, curve: Fields): boolean {
   const fields = typeof curve.kind === 'string' ? DEFINING_POINT_FIELDS[curve.kind] : undefined;
-  return (fields ?? []).some((field) => curve[field] === point);
+  return (fields ?? []).some((field) => {
+    const v = curve[field];
+    return Array.isArray(v) ? v.includes(point) : v === point;
+  });
 }
 
 /** A placement of the given kind with finite numbers in range and nothing else. */

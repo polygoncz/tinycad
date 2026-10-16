@@ -57,7 +57,11 @@ Kontrakt: [[12-skicar#Spliny (M29)]].
 - [x] 5. `kernel`, `kernel-occt`: `ProfileCurve` `bspline`, `validateFaceInput`, `FakeKernel`, hrana v OCCT
 - [x] 6. Kresba: `SketchDrawingCurve` `polyline` (`interaction`, `render`), tessellace v `sketcher`
 - [x] 7. Integrační test skica se splinem → Vysunutí
-- [ ] 8. Nástroje splinu (až po sloučení M26), e2e `m29.spec.ts`, propsání do spec 06, 09, 10, 11
+- [ ] 8. Nástroje splinu a bod na splinu (po sloučení M26)
+  - [x] 8a. `sketch`: `pointOnCurve` se splinem (`parseSketchData`, `constraintFor`, snapper `onCurve`), kotva glyfu splinu
+  - [x] 8b. `solver-planegcs`: `pointOnCurve` na spline (`point_on_bspline` s volným parametrem), interní id mimo `conflicting`/`redundant`
+  - [x] 8c. `sketcher`: nástroje `sketch.spline` a `sketch.fitSpline`, lišta, i18n, picking řídicí lomené čáry
+  - [ ] 8d. e2e `m29.spec.ts`, propsání do spec 06, 09, 10, 11
 
 ## Implementační plán
 
@@ -106,13 +110,13 @@ Jeden úkol = jedno spuštění subagenta `implementer`. Kontrakt je v [[12-skic
 
 ### 8. Nástroje (po sloučení M26)
 
-- Kontrakt se dopíše po sloučení M26 (stopa A) nad jeho snapperem; spustí ho hlavní sezení zprávou stopě C.
-- **Známé:** nástroje `sketch.spline` (přes řídicí body) a `sketch.fitSpline` (přes body) – klikání bodů se snapperem, dvojklik nebo Enter ukončí, Esc zruší ([[12-skicar#Spliny (M29)]]); `fitSpline` vzniká přes `interpolateSpline` z `core`.
-- **Otevřené body k rozhodnutí při kontraktu:**
-  - kotvy glyfů pro spline (`glyphViews` z M25) a jeho vazby (`tangent` na konci, `coincident` s koncem);
-  - snap „bod na křivce“ pro spline: `pointOnCurve` by v planegcs potřeboval `point_on_bspline` s volným parametrem → další proměnná a znovu korekce `dof` ([[Q087 Spline v řešiči a v jádře – zjištění z implementace|Q087]]); nabídnout, nebo pro spline vynechat;
-  - id splinu v `SolveResult.conflicting` (dnes id entity, ne vazby) – rozšířit kontrakt `SolveResult` po sloučení stopy B;
-  - řídicí lomená čára `bspline` stíní spline při pickingu.
+Kontrakt dopsán s Pavlem 2026-10-15 v [[12-skicar#Spliny (M29)]] (odrážky *Bod na splinu*, *Kotva glyfu splinu*, *Nástroje*, *Interní vazby splinu v seznamech*, *Picking lomené čáry*). Pavel: bod na splinu už v M29; interní id vynechat ze seznamů; klik na lomenou čáru vybere spline; rovnoměrné uzly a uzavření klikem na první bod. 8a, 8b a 8c běží souběžně (různé soubory), 8d po nich.
+
+- **8a – soubory:** `src/sketch/parse.ts`, `edit.ts`, `snap.ts`, `src/sketcher/sketch-glyphs.ts`. **Testy:** `parse.test.ts` (pointOnCurve se splinem platné, bod splinu neplatný), `edit.test.ts` (`constraintFor('coincident')` bod + spline obou druhů, bod splinu → null), `snap.test.ts` (onCurve na spline, průmět na tessellaci, pořadí kroků zachované), `sketch-glyphs.test.ts` (kotva a `side` splinu, tečnost úsečka–spline dva glyfy).
+- **8b – soubory:** `src/solver-planegcs/solve.ts`. **Testy:** `solve.test.ts` (bod na `bspline` i `fitSpline` zůstane na křivce při tažení bodu i splinu, `dof` bodu na splinu, tažení bodu za konec splinu – parametr v [0, 1], interní id ve sporu se nevrací a stav je `'conflict'`). Pokud planegcs neumí volný parametr nebo parametr uteče z rozsahu, vrátit otázku.
+- **8c – soubory:** nový `src/sketcher/sketch-tools/spline-tool.ts`, `sketch-tools.ts` (registrace), lišta (`sketch-toolbar.ts`), i18n, ikony v `ui`, mapování `__poles:<id>` v pickingu skicáře. **Testy:** nástroj s `FakeViewport` a `FakeSolver` (bspline rovnoměrné uzly, fitSpline přes `interpolate`, Enter / klik na poslední bod ukončí, uzavření na první bod s `coincident`, Esc zruší, méně než 2 body nic, Ctrl/Cmd bez inference, náhled a jeho smazání), picking lomené čáry vybere spline.
+- **8d – soubory:** `test/e2e/m29.spec.ts` (akceptační kritéria nástroji: nakreslit profil z úseček a splinu, vysunout, `face:side:<id>`; spline přes body po tažení bodu prochází body; bod na splinu), vault: spec 06, 09, 10, 11.
+- **Hotovo když:** testy projdou, `npm run check` a `npm run test:e2e` jsou zelené.
 
 ## Akceptační kritéria
 
@@ -150,6 +154,7 @@ _(Souběžná stopa, [[Roadmapa#Souběžné stopy (pokus od M25)|pravidla]]: mí
 - Architektonická revize úkolů 1–7: bez porušení ADR. Opraveno: spline bez tessellace v oblastech → `assert` místo tichého `?? []`; tolerance tessellace jedna konstanta `SPLINE_TOLERANCE` ze `sketch` pro oblasti i kresbu. Otevřené pro úkol 8 / sloučení: id splinu v `SolveResult.conflicting` je id entity přetypované na `SketchConstraintId` – rozšířit kontrakt `SolveResult` (sdílený se stopou B), proto ne ve stopě. Vědomá výjimka z pravidel stopy: změna spec 02 (B-spline v `core`), schválil Pavel v Q087.
 - **Očekávané konflikty při sloučení:** `src/sketch/parse.ts` (`constraintValid`: `refTargets` a předčasné `return true` pro tečnost úsečka–spline – po stopě B ověřit, že neobchází nové kontroly kót), `src/sketch/model.ts` (komentář u `tangent` uvnitř unie `SketchConstraint`, kterou mění stopa B), `src/sketch/edit.ts` (`withoutConstruction`, `curvePoints` – větve vedle větví stopy A), `src/solver-planegcs/solve.ts` (`dof`, smyčka v `toPrimitives` vedle `constraintPrimitives` stopy B), `src/sketch/index.ts`, `src/interaction/viewport-port.ts` (unie `SketchDrawingCurve`, glyfy stopy A).
 - Stav: úkoly 1–7 hotové, `npm run check` (5893 unit, 39 integračních) zelený. Úkol 8 čeká na sloučení M26.
+- **2026-10-15/16 – úkol 8:** natažen `main` (M25–M28). Pavel rozhodl kontrakt: bod na splinu už v M29, interní id z `conflicting` vynechat, klik na řídicí lomenou čáru vybere spline, sevřené rovnoměrné uzly a uzavření klikem na první bod. 8a (bod na splinu v datech a snapperu, kotva glyfu `t = 0,5`), 8c (nástroje `sketch.spline`/`sketch.fitSpline`, ikony Tabler `vector-bezier`/`vector-spline`, Enter přes `onKey`, picking `__poles:<id>`). 8b: planegcs nechá volný parametr utéct z [0, 1] → Pavel: druhé řešení s pevným parametrem na konci.
 
 ## Retrospektiva
 

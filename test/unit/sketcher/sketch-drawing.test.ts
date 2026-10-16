@@ -13,6 +13,7 @@ import {
   controlPolygonId,
   axisDrawing,
   planeDrawing,
+  splineOfControlPolygon,
   toSketchDrawing,
 } from '@/sketcher/sketch-drawing';
 
@@ -252,6 +253,12 @@ describe('splines (M29)', () => {
     expect(SPLINES.entities.some((e) => e.id === controlPolygonId('b'))).toBe(false);
     expect(controlPolygonId('b')).not.toBe(controlPolygonId('f'));
     expect(controlPolygonId('b').startsWith('__')).toBe(true);
+  });
+
+  it('translates a control polygon id back to its spline, any other id to null (M29)', () => {
+    expect(splineOfControlPolygon(controlPolygonId('b'))).toBe('b');
+    expect(splineOfControlPolygon('b')).toBeNull();
+    expect(splineOfControlPolygon(ORIGIN_POINT_ID)).toBeNull();
   });
 
   it('is frozen down to the points of a polyline', () => {

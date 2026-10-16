@@ -142,6 +142,8 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'tool.rectangle': 'Rectangle',
   'tool.circle': 'Circle',
   'tool.arc': 'Arc',
+  'tool.spline': 'Control point spline',
+  'tool.fitSpline': 'Spline',
   'tool.dimension': 'Dimension',
   'toolbar.group.draw': 'Draw',
   'toolbar.group.constrain': 'Constrain',

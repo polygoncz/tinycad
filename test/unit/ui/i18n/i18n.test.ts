@@ -83,6 +83,8 @@ const SKETCH_KEYS = [
   'tool.rectangle',
   'tool.circle',
   'tool.arc',
+  'tool.spline',
+  'tool.fitSpline',
   'tool.dimension',
   'toolbar.group.sketch',
   'toolbar.group.select',

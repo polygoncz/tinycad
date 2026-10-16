@@ -2,7 +2,7 @@
 // (M25)"; Q083): a small mark of the kind of a geometric constraint next to each of its entities,
 // in world coordinates. ui projects the anchors and lays the glyphs out in pixels.
 
-import { assertNever, plane as planeMath, vec3 } from '@/core';
+import { assertNever, bspline, plane as planeMath, vec3 } from '@/core';
 import type { Plane, Vec2, Vec3 } from '@/core';
 import type {
   DimensionKind,
@@ -43,6 +43,9 @@ const SAME_ANCHOR = 1e-6;
 
 /** Below this |n_y| / |n| the normal of a line counts as horizontal: the line is vertical (→ −x). */
 const VERTICAL_TOLERANCE = 1e-9;
+
+/** The parameter of the anchor of a spline: the middle of its range (spec 12 "Spliny (M29)"). */
+const SPLINE_ANCHOR_T = 0.5;
 
 /** The side of a point glyph: +x+y of the plane, normalised. */
 const POINT_SIDE: Vec2 = [Math.SQRT1_2, Math.SQRT1_2];
@@ -161,8 +164,9 @@ interface Anchor {
 /**
  * The anchor of the glyphs of an entity in plane coordinates: a point = the point (side +x+y); a
  * line = its middle (side its normal turned to +y, a vertical line −x); a circle = its top (side
- * +y); an arc = the middle of the arc (side from the centre outwards). null when a point of the
- * entity is missing.
+ * +y); an arc = the middle of the arc (side from the centre outwards); a spline = its point at
+ * t = 0.5 (side the normal of its tangent there turned to +y, like a line). null when a point of
+ * the entity is missing.
  */
 function anchorOf(byId: ReadonlyMap<string, SketchEntity>, entity: SketchEntity): Anchor | null {
   switch (entity.kind) {
@@ -193,9 +197,16 @@ function anchorOf(byId: ReadonlyMap<string, SketchEntity>, entity: SketchEntity)
       return { point: [center[0] + radius * side[0], center[1] + radius * side[1]], side };
     }
     case 'bspline':
-    case 'fitSpline':
-      // The anchor of a spline comes with its tools (M29 task 8, after M26); until then no glyph.
-      return null;
+    case 'fitSpline': {
+      const poles =
+        entity.kind === 'bspline' ? entity.poles.map((id) => pointOf(byId, id)) : entity.poles;
+      if (!poles.every((p): p is Vec2 => p !== null)) return null;
+      const shape = { degree: entity.degree, poles, knots: entity.knots };
+      const point = bspline.evaluate(shape, SPLINE_ANCHOR_T);
+      const d = bspline.derivative(shape, SPLINE_ANCHOR_T);
+      // The side of the tangent as a line through the anchor; a zero derivative → +y.
+      return { point, side: lineSide(point, [point[0] + d[0], point[1] + d[1]]) };
+    }
     default:
       return assertNever(entity);
   }

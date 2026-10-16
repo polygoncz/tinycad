@@ -619,6 +619,29 @@ describe('parseSketchData – splines', () => {
     ).toEqual([]);
   });
 
+  it('accepts pointOnCurve of a point that is not a point of the spline', () => {
+    expect(
+      splineConstraintIssues([
+        { kind: 'pointOnCurve', id: 'o1', point: 'e', curve: 's' },
+        { kind: 'pointOnCurve', id: 'o2', point: 'a', curve: 'f' },
+      ]),
+    ).toEqual([]);
+  });
+
+  it.each([
+    ['pointOnCurve of an end pole', { kind: 'pointOnCurve', id: 'x', point: 'a', curve: 's' }],
+    ['pointOnCurve of an interior pole', { kind: 'pointOnCurve', id: 'x', point: 'b', curve: 's' }],
+    ['pointOnCurve of a fit point', { kind: 'pointOnCurve', id: 'x', point: 'd', curve: 'f' }],
+    [
+      'pointOnCurve of a spline on a spline',
+      { kind: 'pointOnCurve', id: 'x', point: 'f', curve: 's' },
+    ],
+  ])('reports %s', (_name, bad) => {
+    expect(splineConstraintIssues([{ kind: 'fix', id: 'g', point: 'a' }, bad])).toEqual([
+      constraintIssue(1),
+    ]);
+  });
+
   it.each([
     // bc shares b and c with s only at interior poles; bd shares d with f at its middle fit point.
     ['tangent with a line not at an end', { kind: 'tangent', id: 'x', a: 'bc', b: 's' }],

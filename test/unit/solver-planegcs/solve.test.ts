@@ -604,7 +604,7 @@ describe('solveSketch – splines', () => {
     expect(y).toBeCloseTo(9, 6);
   });
 
-  it('the fit point constraints come back as the id of the spline', () => {
+  it('a conflict with the fit point constraints is a conflict without internal ids', () => {
     // Fixed fit points determine the curve; a tangent through a fixed point contradicts it.
     const data = sketch(
       [...fitSpline(), { kind: 'point', id: 'q', x: -3, y: 1 }, line('L', 'q', 'f0')],
@@ -615,9 +615,28 @@ describe('solveSketch – splines', () => {
     );
     const result = solveSketch(mod, data);
     expect(result.status).toBe('conflict');
-    expect(result.conflicting).toContain('F');
-    for (const id of [...result.conflicting, ...result.redundant]) expect(id).not.toContain(':');
+    const constraintIds: readonly string[] = data.constraints.map((c) => c.id);
+    for (const id of [...result.conflicting, ...result.redundant]) {
+      expect(constraintIds).toContain(id);
+    }
     expect(new Set(result.conflicting).size).toBe(result.conflicting.length);
+  });
+
+  it('a redundancy with the fit point constraints lists only sketch constraints', () => {
+    // Fixed fit points determine the curve; a tangent line along the end tangent agrees with it.
+    const [d0, d1] = bspline.derivative(bspline.interpolate(FIT), 0);
+    const data = sketch(
+      [...fitSpline(), { kind: 'point', id: 'q', x: -d0, y: -d1 }, line('L', 'q', 'f0')],
+      [
+        ...['f0', 'f1', 'f2', 'f3', 'q'].map((p) => ({ kind: 'fix', id: `fix-${p}`, point: p })),
+        { kind: 'tangent', id: 't', a: 'L', b: 'F' },
+      ],
+    );
+    const result = solveSketch(mod, data);
+    expect(result.status).toBe('ok');
+    expect(result.redundant.length).toBeGreaterThan(0);
+    const constraintIds: readonly string[] = data.constraints.map((c) => c.id);
+    for (const id of result.redundant) expect(constraintIds).toContain(id);
   });
 
   it('prints nothing while solving splines', () => {
@@ -630,6 +649,141 @@ describe('solveSketch – splines', () => {
     ];
     solveSketch(mod, sketch([...controlSpline(), ...fitSpline()], []));
     for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+/** Fine tessellation of a solved spline, to measure the distance of a point from the curve. */
+function distanceToCurve(entities: readonly SketchEntity[] | null, id: string, p: Vec2): number {
+  const polyline = bspline.tessellate(curveOf(entities, id), 1e-7);
+  let best = Infinity;
+  for (let i = 1; i < polyline.length; i++) {
+    const a = polyline[i - 1];
+    const b = polyline[i];
+    if (a === undefined || b === undefined) continue;
+    const d: Vec2 = [b[0] - a[0], b[1] - a[1]];
+    const len2 = d[0] * d[0] + d[1] * d[1];
+    const u = len2 === 0 ? 0 : ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1]) / len2;
+    const k = Math.min(1, Math.max(0, u));
+    best = Math.min(best, Math.hypot(p[0] - a[0] - k * d[0], p[1] - a[1] - k * d[1]));
+  }
+  return best;
+}
+
+/** The solved point `id` as a Vec2. */
+function at(entities: readonly SketchEntity[] | null, id: string): Vec2 {
+  const { x, y } = point(entities, id);
+  return [x, y];
+}
+
+/** A point 'q' on the spline `id` (at its middle) with a pointOnCurve, plus extra constraints. */
+function onSpline(
+  spline: readonly unknown[],
+  id: string,
+  ...extra: readonly unknown[]
+): SketchData {
+  const entities = sketch(spline, []).entities;
+  const [x, y] = bspline.evaluate(curveOf(entities, id), 0.5);
+  return sketch(
+    [...spline, { kind: 'point', id: 'q', x, y }],
+    [{ kind: 'pointOnCurve', id: 'on', point: 'q', curve: id }, ...extra],
+  );
+}
+
+/** fix constraints for the given points. */
+function fixes(...ids: readonly string[]): unknown[] {
+  return ids.map((p) => ({ kind: 'fix', id: `fix-${p}`, point: p }));
+}
+
+const SPLINES = [
+  { name: 'bspline', id: 'S', spline: controlSpline, pts: ['p0', 'p1', 'p2', 'p3'] },
+  { name: 'fitSpline', id: 'F', spline: () => fitSpline(), pts: ['f0', 'f1', 'f2', 'f3'] },
+] as const;
+
+describe('solveSketch – point on a spline', () => {
+  for (const { name, id, spline, pts } of SPLINES) {
+    describe(name, () => {
+      it('takes 1 degree of freedom off the point', () => {
+        expect(solveSketch(mod, onSpline(spline(), id))).toMatchObject({ status: 'ok', dof: 9 });
+        const fixed = onSpline(spline(), id, ...fixes(...pts));
+        expect(solveSketch(mod, fixed)).toMatchObject({ status: 'ok', dof: 1 });
+      });
+
+      it('stays on the curve when the point is dragged', () => {
+        const data = onSpline(spline(), id, ...fixes(...pts));
+        const result = solveSketch(mod, { ...data, drag: { point: idOf(data, 'q'), to: [2, 1] } });
+        expect(result).toMatchObject({ status: 'ok', dof: 1 });
+        const q = at(result.entities, 'q');
+        expect(distanceToCurve(result.entities, id, q)).toBeLessThan(1e-6);
+        expect(q).not.toEqual(at(data.entities, 'q'));
+      });
+
+      it('stays on the curve when a point of the spline is dragged', () => {
+        const [first, second, ...rest] = pts;
+        const data = onSpline(spline(), id, ...fixes(first, ...rest));
+        const drag = { point: idOf(data, second), to: [1.5, 3] as Vec2 };
+        const result = solveSketch(mod, { ...data, drag });
+        expect(result).toMatchObject({ status: 'ok', dof: 3 });
+        expectPoint(point(result.entities, second), 1.5, 3);
+        const q = at(result.entities, 'q');
+        expect(distanceToCurve(result.entities, id, q)).toBeLessThan(1e-6);
+      });
+
+      it('dragged past an end it stops at the end of the curve', () => {
+        const data = onSpline(spline(), id, ...fixes(...pts));
+        const curve = curveOf(data.entities, id);
+        for (const [to, t] of [
+          [[10, 10], 1],
+          [[-3, -2], 0],
+        ] as const) {
+          const result = solveSketch(mod, { ...data, drag: { point: idOf(data, 'q'), to } });
+          expect(result).toMatchObject({ status: 'ok', dof: 1 });
+          const [x, y] = bspline.evaluate(curve, t);
+          expectPoint(point(result.entities, 'q'), x, y);
+        }
+      });
+    });
+  }
+
+  it('a bspline nothing refers to is not in planegcs, one a point refers to is', () => {
+    // The dof correction holds for it: 4 control points + the point − 1.
+    const data = onSpline(controlSpline(), 'S');
+    expect(solveSketch(mod, data)).toMatchObject({ status: 'ok', dof: 9 });
+  });
+
+  it('planegcs counts a free parameter and 4 unused ones for a bspline of sketch points', () => {
+    // Raw planegcs, without the adapter: the free parameter of a point on a spline (a sketch
+    // param pushed unfixed) and the dof correction of Q087 for a bspline of sketch points.
+    const primitives: SketchPrimitive[] = [
+      ...FIT.map(([x, y], i): SketchPrimitive => ({
+        id: `p${String(i)}`,
+        type: 'point',
+        x,
+        y,
+        fixed: false,
+      })),
+      { id: 'q', type: 'point', x: 2, y: 0.625, fixed: false },
+      {
+        id: 'S',
+        type: 'bspline',
+        pole_ids: ['p0', 'p1', 'p2', 'p3'],
+        weights: [1, 1, 1, 1],
+        knots: [0, 1],
+        mult: [4, 4],
+        degree: 3,
+        periodic: false,
+      },
+      { id: 'on', type: 'point_on_bspline', p_id: 'q', b_id: 'S', pointparam: 'on:t' },
+    ];
+    const w = new GcsWrapper(new mod.GcsSystem(), mod);
+    try {
+      w.debug_mode = DebugMode.NoDebug;
+      w.push_sketch_param('on:t', 0.5, false);
+      w.push_primitives_and_params(primitives);
+      w.solve();
+      expect(w.gcs.dof()).toBe(2 * FIT.length + 2 + 1 - 2 + 4);
+    } finally {
+      w.destroy_gcs_module();
+    }
   });
 });
 

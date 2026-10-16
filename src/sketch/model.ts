@@ -193,8 +193,8 @@ export type SketchConstraint =
       readonly b: SketchEntityId;
     }
   /**
-   * A point on the whole carrier line of a line or the whole circle of an arc (M26); the point
-   * is not a defining point of the curve.
+   * A point on the whole carrier line of a line or the whole circle of an arc (M26), or on a
+   * spline within its ends (M29); the point is not a defining point of the curve.
    */
   | {
       readonly kind: 'pointOnCurve';

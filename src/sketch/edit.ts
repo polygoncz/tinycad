@@ -22,8 +22,6 @@ const MIN_DIMENSION = 1e-9;
 
 const isRound = (e: SketchEntity): boolean => e.kind === 'circle' || e.kind === 'arc';
 const isCurve = (e: SketchEntity): e is SketchCurve => e.kind !== 'point';
-const isPointOnCurveTarget = (e: SketchCurve): boolean =>
-  e.kind === 'line' || e.kind === 'circle' || e.kind === 'arc';
 
 /** The end points of a spline (first and last pole or fit point), or undefined for other entities. */
 function splineEnds(e: SketchEntity): readonly SketchEntityId[] | undefined {
@@ -67,12 +65,17 @@ export function constraintFor(
   switch (kind) {
     case 'coincident':
       if (points === 2) return { kind, a, b };
-      // Splines have no pointOnCurve yet (M29 may add point_on_bspline).
-      return pointOn(first, second, isPointOnCurveTarget, (point, curve) => ({
-        kind: 'pointOnCurve',
-        point,
-        curve,
-      }));
+      // Any curve, a spline too (M29); not a point of the curve itself.
+      return pointOn(
+        first,
+        second,
+        () => true,
+        (point, curve) => ({
+          kind: 'pointOnCurve',
+          point,
+          curve,
+        }),
+      );
     case 'horizontal':
       return points === 2 ? { kind: 'hAlign', a, b } : null;
     case 'vertical':

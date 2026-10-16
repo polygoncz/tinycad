@@ -14,6 +14,7 @@ import type {
 } from '@/sketch';
 import type { ToolContext } from '@/interaction';
 import type { SketchSession } from '../sketch-session';
+import { splineOfControlPolygon } from '../sketch-drawing';
 import { EDIT_SKETCH_DRAWING_ID } from '../sketch-session';
 import { cursorAt, distance, newConstraintId, newEntityId } from './common';
 
@@ -153,7 +154,10 @@ export function samePoint(a: SnapTarget, b: SnapTarget): boolean {
   return a.point !== null && a.point === b.point;
 }
 
-/** The entity of the session under the cursor (render's pick); the origin and other drawings are nothing. */
+/**
+ * The entity of the session under the cursor (render's pick); the origin and other drawings are
+ * nothing. The control polygon of a bspline stands for the spline (spec 12, M29).
+ */
 export function entityAt(
   ctx: ToolContext,
   session: SketchSession,
@@ -162,5 +166,6 @@ export function entityAt(
 ): SketchEntity | null {
   const hit = ctx.viewport.pick(x, y, ['sketchEntity']);
   if (hit?.kind !== 'sketchEntity' || hit.sketch !== EDIT_SKETCH_DRAWING_ID) return null;
-  return session.state.get().entities.find((e) => e.id === hit.entity) ?? null;
+  const id = splineOfControlPolygon(hit.entity) ?? hit.entity;
+  return session.state.get().entities.find((e) => e.id === id) ?? null;
 }

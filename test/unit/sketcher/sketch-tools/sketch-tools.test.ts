@@ -319,6 +319,22 @@ describe('createSketchTools', () => {
         shortcut: 'A',
       },
       {
+        id: 'sketch.spline',
+        label: 'tool.spline',
+        icon: 'vector-bezier',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+      },
+      {
+        id: 'sketch.fitSpline',
+        label: 'tool.fitSpline',
+        icon: 'vector-spline',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+      },
+      {
         id: 'sketch.dimension',
         label: 'tool.dimension',
         icon: 'ruler-measure',
@@ -843,6 +859,24 @@ describe('the select tool of the sketch', () => {
     expect(session.state.get().selection).toEqual(['pq']);
     click(viewport, 200, 200);
     expect(session.state.get().selection).toEqual([]);
+  });
+
+  it('the control polygon of a bspline hovers and selects the spline (M29)', async () => {
+    // The polygon (0,100)–(50,200)–(100,100) of a quadratic: (25,150) lies on it, not on the
+    // curve, which passes (25,137.5) at t = 0.25.
+    const spline = data([
+      { kind: 'point', id: 'a', x: 0, y: 100 },
+      { kind: 'point', id: 'b', x: 50, y: 200 },
+      { kind: 'point', id: 'c', x: 100, y: 100 },
+      { kind: 'bspline', id: 'sp', degree: 2, poles: ['a', 'b', 'c'], knots: [0, 0, 0, 1, 1, 1] },
+    ]);
+    const { viewport, session } = await sketching({ sketch: spline });
+    expect(viewport.pick(25, 150, ['sketchEntity'])).toMatchObject({ entity: '__poles:sp' });
+
+    viewport.emitPointer(pointer('move', 25, 150));
+    expect(session.state.get().hover).toBe('sp');
+    click(viewport, 25, 150);
+    expect(session.state.get().selection).toEqual(['sp']);
   });
 
   it('Escape with a selection clears it', async () => {

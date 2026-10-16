@@ -26,13 +26,21 @@ import type {
 /** The id of the origin point in the drawing of the edited sketch (snap onto the origin). */
 export const ORIGIN_POINT_ID = '__origin';
 
+const CONTROL_POLYGON_PREFIX = '__poles:';
+
 /**
  * The id of the control polygon of the bspline `splineId` in the drawing of the edited sketch
  * (M29). Like ORIGIN_POINT_ID it relies on the ids from the id generator never starting with
- * '__': it is no entity id, so a pick of it selects nothing.
+ * '__': it is no entity id; the tools translate a pick of it to the spline
+ * (splineOfControlPolygon).
  */
 export function controlPolygonId(splineId: string): string {
-  return `__poles:${splineId}`;
+  return `${CONTROL_POLYGON_PREFIX}${splineId}`;
+}
+
+/** The id of the spline whose control polygon has the drawing id `id`; null for any other id. */
+export function splineOfControlPolygon(id: string): string | null {
+  return id.startsWith(CONTROL_POLYGON_PREFIX) ? id.slice(CONTROL_POLYGON_PREFIX.length) : null;
 }
 
 /** Default size of the square of a plane drawing, in mm. */

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { bspline } from '@/core';
 import type { Vec2 } from '@/core';
 import type { SketchData, SketchEntityId } from '@/sketch/model';
 import { parseSketchData } from '@/sketch/parse';
+import { SPLINE_TOLERANCE } from '@/sketch/regions';
 import { ORIGIN_SNAP, snap } from '@/sketch/snap';
 import type { SnapOptions, SnapResult } from '@/sketch/snap';
 
@@ -320,5 +322,104 @@ describe('snap: infer false (Ctrl/Cmd)', () => {
   it('the grid still applies', () => {
     const r = snap([20.3, 10.4], DATA, { ...off, grid: 5 });
     expect(r).toEqual({ at: [20, 10], kind: 'grid', point: null, inferred: [], guides: [] });
+  });
+});
+
+/**
+ * A quadratic control point spline sp through poles c1 (100,0), c2 (110,20), c3 (120,0):
+ * x = 100 + 20t, y = 40t(1 − t), the top (110,10) at t = 0.5. A linear fit point spline fs
+ * through f1 (200,0) and f2 (220,0) with its stored poles.
+ */
+const SPLINE_DATA = sketch([
+  { kind: 'point', id: 'c1', x: 100, y: 0 },
+  { kind: 'point', id: 'c2', x: 110, y: 20 },
+  { kind: 'point', id: 'c3', x: 120, y: 0 },
+  { kind: 'bspline', id: 'sp', degree: 2, poles: ['c1', 'c2', 'c3'], knots: [0, 0, 0, 1, 1, 1] },
+  { kind: 'point', id: 'f1', x: 200, y: 0 },
+  { kind: 'point', id: 'f2', x: 220, y: 0 },
+  {
+    kind: 'fitSpline',
+    id: 'fs',
+    degree: 1,
+    fit: ['f1', 'f2'],
+    params: [0, 1],
+    poles: [
+      [200, 0],
+      [220, 0],
+    ],
+    knots: [0, 0, 1, 1],
+  },
+]);
+
+/** The tessellation of sp the snapper projects on (tolerance SPLINE_TOLERANCE · the sketch scale). */
+const SP_POLYLINE = bspline.tessellate(
+  {
+    degree: 2,
+    poles: [
+      [100, 0],
+      [110, 20],
+      [120, 0],
+    ],
+    knots: [0, 0, 0, 1, 1, 1],
+  },
+  SPLINE_TOLERANCE * 220,
+);
+
+/** The distance of p from the polyline. */
+function distanceToPolyline(p: Vec2, poly: readonly Vec2[]): number {
+  let best = Infinity;
+  for (let i = 1; i < poly.length; i++) {
+    const a = poly[i - 1];
+    const b = poly[i];
+    if (a === undefined || b === undefined) continue;
+    const d: Vec2 = [b[0] - a[0], b[1] - a[1]];
+    const len2 = d[0] * d[0] + d[1] * d[1];
+    const t = Math.min(1, Math.max(0, ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1]) / len2));
+    best = Math.min(best, Math.hypot(p[0] - a[0] - t * d[0], p[1] - a[1] - t * d[1]));
+  }
+  return best;
+}
+
+describe('snap: splines (M29)', () => {
+  it('a control point spline is an onCurve candidate with pointOnCurve', () => {
+    // x = 110 also aligns with c2, but a curve comes before alignment.
+    const r = snap([110, 10.5], SPLINE_DATA, OPTS);
+    expect(r.kind).toBe('onCurve');
+    expect(r.point).toBeNull();
+    expect(r.inferred).toEqual([{ kind: 'pointOnCurve', curve: 'sp' }]);
+    expect(r.guides).toEqual([]);
+    expect(Math.hypot(r.at[0] - 110, r.at[1] - 10)).toBeLessThan(0.05);
+  });
+
+  it('projects onto the tessellation of the spline, a segment as a line', () => {
+    // Off a tessellation vertex: the projection lies on a segment, not on the exact curve.
+    const r = snap([104.3, 7.7], SPLINE_DATA, OPTS);
+    expect(r.kind).toBe('onCurve');
+    expect(distanceToPolyline(r.at, SP_POLYLINE)).toBeLessThan(1e-9);
+    expect(SP_POLYLINE.length).toBeGreaterThan(3);
+  });
+
+  it('a fit point spline projects onto its stored poles', () => {
+    const r = snap([210, 0.5], SPLINE_DATA, OPTS);
+    expect(r.kind).toBe('onCurve');
+    expect(r.inferred).toEqual([{ kind: 'pointOnCurve', curve: 'fs' }]);
+    expectAt(r, [210, 0]);
+  });
+
+  it('an existing point of the spline comes before the spline', () => {
+    const r = snap([100.3, 0.4], SPLINE_DATA, OPTS);
+    expect(r.kind).toBe('point');
+    expect(r.point).toBe('c1');
+  });
+
+  it('a spline beyond the tolerance is no candidate', () => {
+    expect(snap([104, 20], SPLINE_DATA, OPTS).kind).not.toBe('onCurve');
+  });
+
+  it('an excluded spline and infer false give no projection', () => {
+    expect(snap([210, 0.5], SPLINE_DATA, { ...OPTS, exclude: new Set([id('fs')]) }).kind).toBe(
+      'align',
+    );
+    expect(snap([210, 0.5], SPLINE_DATA, { ...OPTS, infer: false }).kind).toBe('free');
   });
 });

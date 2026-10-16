@@ -143,6 +143,8 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'tool.rectangle': 'Obdélník',
   'tool.circle': 'Kružnice',
   'tool.arc': 'Oblouk',
+  'tool.spline': 'Spline přes řídicí body',
+  'tool.fitSpline': 'Spline přes body',
   'tool.dimension': 'Kóta',
   'toolbar.group.draw': 'Kreslit',
   'toolbar.group.constrain': 'Vazby',
