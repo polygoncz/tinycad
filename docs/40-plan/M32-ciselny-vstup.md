@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: doing
 order: 32
 aliases:
   - M32
@@ -16,7 +16,7 @@ specs:
   - "[[11-ui]]"
 depends_on:
   - "[[M31-nove-kreslici-nastroje]]"
-started:
+started: 2026-10-16
 finished:
 tags:
   - milnik
@@ -26,9 +26,9 @@ updated: 2026-10-16
 # M32 – Číselný vstup
 **Cíl:** při kreslení jde zadat délku, úhel, poloměr nebo souřadnice z klávesnice místo kliknutí; zadaná hodnota se stane kótou.
 
-> Hrubý plán – před zahájením rozhodnout [[Q090 Číselný vstup při kreslení|Q090]] a upřesnit. Sdílené typy jsou zafixované v [[12-skicar#Sdílené kontrakty série II]].
+> Upřesněno 2026-10-16 po rozhodnutí [[Q090 Číselný vstup při kreslení|Q090]]; kontrakt v [[12-skicar#Číselný vstup (M32)]].
 
-**Specifikace:** [[12-skicar#Režim skicáře (sketcher)]], [[10-interakce]], [[11-ui#Komponenty]]
+**Specifikace:** [[12-skicar#Číselný vstup (M32)]], [[12-skicar#Režim skicáře (sketcher)]], [[10-interakce]], [[11-ui#Komponenty]]
 
 **Navazuje na:** [[M31-nove-kreslici-nastroje|M31]] (stejné nástroje, stopa B). Milník série *Rozšíření skicáře II* (M30–M37), viz [[12-skicar#Rozšíření skicáře II (M30–M37)]] a [[Roadmapa#Rozšíření skicáře II (M30–M37)]].
 
@@ -38,17 +38,51 @@ Pavel 2026-10-16: „Chtěl bych ještě dodělat do Sketch následující featu
 
 Část „možnost zadat bod“, kterou Pavel upřesnil jako nástroj Bod **i** číselný vstup.
 
-## Úkoly (orientačně)
+## Úkoly
 
-- [ ] Rozhodnout [[Q090 Číselný vstup při kreslení|Q090]] (styl Fusion, nebo Onshape; souřadnice; vznik kót).
-- [ ] Společný model vstupu v `sketcher` (pole, Tab, zamčení hodnoty) a vrstva v `ui` u kurzoru.
-- [ ] Napojení na nástroje: úsečka, obdélníky, kružnice, oblouky, drážky, bod.
-- [ ] Zadaná hodnota → kóta z [[M28-koty|M28]].
-- [ ] E2e: úsečka 50 mm pod 30° jen z klávesnice.
+- [x] Rozhodnout [[Q090 Číselný vstup při kreslení|Q090]] (styl Fusion, nebo Onshape; souřadnice; vznik kót).
+- [ ] Model vstupu a Tab na plátně.
+- [ ] Vstup v `clickTool`, vrstva v `ui`, úsečka, bod a přímka.
+- [ ] Obdélníky, kružnice a oblouk.
+- [ ] Drážky.
+- [ ] E2e a spec.
+
+## Implementační plán
+
+Jeden úkol = jedno spuštění subagenta `implementer`. Kontrakt: [[12-skicar#Číselný vstup (M32)]]. Úkoly 3 a 4 na sobě nezávisí (stojí na 2), sahají do různých souborů nástrojů – souběžně v izolovaných worktree.
+
+### 1. Model vstupu a Tab na plátně
+
+- **Soubory:** `src/sketcher/numeric-input.ts` (`InputField`, `NumericInput`, `emptyInput`, `inputKey`, `lockedValues`, `previewValues`), `src/interaction/viewport-port.ts` (`ViewKeyEvent.consume?`), `tool-manager.ts` (volá `consume` u zpracované klávesy), `src/render/viewport.ts` (`consume` = `preventDefault`).
+- **Testy:** `numeric-input.test.ts` tabulkově podle spec; `tool-manager` (consume u vrstvy, nástroje, `unhandledKey`; nezpracovaná bez consume).
+- **Hotovo když:** testy projdou a `npm run check` je zelený.
+
+### 2. Vstup v `clickTool`, vrstva v `ui`, úsečka, bod a přímka
+
+- **Soubory:** `src/sketcher/sketch-tools/common.ts` (`ClickHandlers.inputFields`, `constrain`, `measure`; vstup v `clickTool`), `sketch-session.ts` (`SketchState.numericInput`, nastavování jako náhled vazeb), `line-tool.ts`, `point-tool.ts`, `xline-tool.ts` (pole `x`/`y`, `length`/`angle`, kóty), `src/ui/sketch-input.ts` (`inputLayout`), `src/ui/components/SketchInput.vue`, `AppShell.vue`, i18n `sketch.input.*`.
+- **Testy:** `clickTool` (pořadí kláves, omezený bod bez snapperu, náhled vs. klik, Enter, nový krok); úsečka (50 mm pod 30° → `distance` 50; 0° → `horizontal`; úhel k předchozí úsečce → `angle`), bod a přímka z X/Y; `inputLayout`; `SketchInput.vue`.
+- **Hotovo když:** testy projdou a `npm run check` je zelený.
+
+### 3. Obdélníky, kružnice a oblouk
+
+- **Soubory:** `rectangle-tool.ts`, `rectangle-center-tool.ts`, `rectangle3p-tool.ts`, `circle-tool.ts`, `arc-tool.ts`.
+- **Testy:** pole každého kroku, `constrain`, kóty v datech a `required` (obdélník 40 × 20, kružnice ⌀ 30, oblouk R 10 s úhly).
+- **Hotovo když:** testy projdou a `npm run check` je zelený.
+
+### 4. Drážky
+
+- **Soubory:** `slot-tool.ts` (případně `shape.ts`).
+- **Testy:** pole každého kroku pro tři druhy, kóty (`distance`, `diameter`), `required`.
+- **Hotovo když:** testy projdou a `npm run check` je zelený.
+
+### 5. E2e a spec
+
+- **Soubory:** `test/e2e/m32.spec.ts` (úsečka 50 mm pod 30° jen z klávesnice, délka z klávesnice a směr myší, obdélník 40 × 20, kružnice ⌀ 30, první bod z X/Y), spec 10 (`ViewKeyEvent.consume`, `ClickHandlers`) a 11 (`SketchInput.vue`).
+- **Hotovo když:** e2e projdou, `npm run check` je zelený, spec odpovídá kódu.
 
 ## Akceptační kritéria
 
-- Entita nakreslená z klávesnice má přesně zadané rozměry a kóty v seznamu vazeb.
+- Entita nakreslená z klávesnice má přesně zadané rozměry a kóty v seznamu vazeb (úhly podle pravidla ve spec).
 - Myš a klávesnice jdou kombinovat (délka z klávesnice, směr myší).
 
 ## Co se naučíš
@@ -62,5 +96,10 @@ Návrh stavového modelu vstupu nezávislého na konkrétním nástroji a jak od
 ## Průběh stopy
 
 _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hlavní sezení to při sloučení přenese do deníku.)_
+
+- **B5 (2026-10-16, Pavel):** [[Q090 Číselný vstup při kreslení|Q090]] – Fusion, kóta z každé zadané hodnoty, X/Y jen prvního bodu bez kót, hlavní nástroje, jen čísla.
+- **B6 (Pavel):** psaná hodnota je jen náhled, zamkne ji `Tab` nebo `Enter` (jako Fusion); klik myší bere jen zamčené hodnoty.
+- **B7 (Pavel):** úhel = směr od osy x; 0/180° → `horizontal`, 90/270° → `vertical`; u úsečky řetězu s předchozí úsečkou kóta `angle` mezi nimi; jinak a úhly oblouku bez kóty (vazba úhlu k ose roviny v datech není).
+- **B8 (návrh stopy):** pole jsou štítky u kurzoru, ne `<input>` – fokus zůstává v pohledu; Tab na plátně drží `ViewKeyEvent.consume` (`preventDefault`).
 
 ## Retrospektiva

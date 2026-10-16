@@ -21,6 +21,7 @@ milestones:
   - "[[M28-koty]]"
   - "[[M29-spliny]]"
   - "[[M31-nove-kreslici-nastroje]]"
+  - "[[M32-ciselny-vstup]]"
 tags:
   - spec
 created: 2026-10-12
@@ -854,6 +855,73 @@ interface ActionState { …; readonly checked: boolean | null }   // null = akce
 - Režim se neukládá a přežije přepnutí nástroje; zavřením session zanikne.
 
 **Testy:** konstrukce (poloha každého tvaru, degenerované vstupy, orientace oblouků proti směru, topologie: křivky, vazby a `required`); s planegcs (`solver-planegcs/shapes.test.ts`): každý tvar má `dof` z tabulky, změna jedné kóty (šířka, poloměr) drží tvar; nástroje s `FakeViewport` a `FakeSolver`; snapper a `inferLine` s přímkou; nástroj kóty s přímkou; e2e `m31.spec.ts` (obdélník středem a 3 body, drážka, bod, přímka s rovnoběžnou úsečkou, režim konstrukce přes `Q`).
+
+## Číselný vstup (M32)
+
+Rozhodnuto v [[Q090 Číselný vstup při kreslení|Q090]] (Pavel 2026-10-16): **jako Fusion** – u kurzoru pole podle kroku nástroje, psaní čísla jde do aktivního pole, Tab přepíná pole, Enter potvrdí bod; každá zadaná délka nebo poloměr se stane kótou. Kontrakt stopy B ([[M32-ciselny-vstup#Implementační plán]]).
+
+### Model vstupu (`sketcher/numeric-input.ts`, čisté funkce, bez DOM)
+
+```ts
+export type InputFieldKind = 'length' | 'angle' | 'x' | 'y';
+/** Pole kroku nástroje; label = klíč i18n `sketch.input.<id>`. */
+export interface InputField { readonly id: string; readonly kind: InputFieldKind }
+/** Text pole: null = volné (ukazuje se hodnota z kurzoru); locked = zamčené Tabem nebo Enterem. */
+export interface NumericInput { readonly fields: readonly InputField[]; readonly texts: readonly (string | null)[]; readonly locked: readonly boolean[]; readonly active: number }
+export function emptyInput(fields: readonly InputField[]): NumericInput;
+/** Klávesa nad vstupem: null = klávesa nepatří vstupu (nástroj nebo akce ji zpracují dál). */
+export function inputKey(input: NumericInput, e: ViewKeyEvent): { readonly input: NumericInput; readonly commit: boolean } | null;
+/** Platné hodnoty zamčených polí podle id: length v mm (> 0), angle v radiánech (ze stupňů), x a y v mm. Platí pro klik. */
+export function lockedValues(input: NumericInput): ReadonlyMap<string, number>;
+/** lockedValues + platná psaná hodnota aktivního pole (ještě nezamčená). Platí pro náhled. */
+export function previewValues(input: NumericInput): ReadonlyMap<string, number>;
+```
+
+- **Jako Fusion** (Pavel 2026-10-16): psaná hodnota je jen **náhled**, zamkne ji `Tab` nebo `Enter`.
+- **Klávesy** (jen bez Ctrl/Cmd a Alt a mimo textové pole): číslice a `.` (i `,` jako desetinná čárka) připíšou znak do aktivního pole (volné pole začne prázdným textem, zamčené aktivní pole se psaním odemkne a začne znovu); `-` jen na začátku textu (záporná délka je neplatná, záporný úhel a souřadnice platné). Druh pole: `width`, `height`, `diameter`, `radius` jsou `length`, `sweep` je `angle`. `Backspace` ubere znak (zamčené pole se tím odemkne), prázdný text → `null` (pole je volné). `Tab` / `Shift+Tab` zamkne aktivní pole s platným textem a přepne na další / předchozí (cyklicky; bez textu jen přepne). `Enter` zamkne aktivní pole s platným textem a vrátí `commit: true` (i bez hodnot: potvrdí bod jako klik na kurzoru). `Escape` s psaným nebo zamčeným polem vyčistí vstup (`emptyInput`, klávesa spotřebovaná); bez nich `null` – Esc pak zpracuje nástroj jako dřív. Ostatní klávesy `null` (písmena dál přepínají nástroje a vazby).
+- **Platnost:** text, který není konečné číslo (`-`, `.`, `1.2.3`) nebo délka ≤ 0, je neplatný – geometrii neomezuje, nezamkne se, pole se ukáže jako chybné; `Enter` s neplatným aktivním polem nic neudělá (spotřebovaný).
+- **Náhled** (pohyb) bere `previewValues`, **klik** jen `lockedValues` – psaná nezamčená hodnota se klikem myší zahodí. Pohyb myši mění jen volná pole.
+
+### Napojení na nástroje (`clickTool`)
+
+```ts
+interface ClickHandlers {
+  …
+  /** M32: pole aktuálního kroku; null/[] = krok bez vstupu. Volá se po každém kroku nástroje. */
+  inputFields?(session: SketchSession): readonly InputField[] | null;
+  /** M32: bod roviny pro kurzor `cursor` a zadané hodnoty – kurzor promítnutý tak, aby splnil zadané hodnoty. */
+  constrain?(session: SketchSession, cursor: Vec2, values: ReadonlyMap<string, number>): Vec2;
+  /** M32: hodnoty polí pro bod `at` (co by pole ukazovala, kdyby nebyla zadaná). */
+  measure?(session: SketchSession, at: Vec2): ReadonlyMap<string, number>;
+}
+```
+
+- `clickTool` drží `NumericInput` aktuálního kroku: po každém kroku nástroje (klik, Esc, reset) se pole znovu zeptá `inputFields` a vstup vyprázdní. Klávesu nabídne nejdřív `inputKey`, až pak `onKey` nástroje.
+- **S hodnotami** (`previewValues` při pohybu, `lockedValues` při kliku a `Enter`) dostane nástroj bod `constrain(cursor, values)` jako **volný bod bez snapperu a bez mřížky** (`freeTarget`); bez zadané hodnoty se chová jako dřív. `Enter` = klik na posledním bodu kurzoru (se zamčenými hodnotami). Automatické vazby osy (`inferLine`, B3) se z výsledné geometrie počítají dál.
+- **Kóty:** nástroj při zápisu přidá ke geometrii kóty zamčených polí (tabulka), jako **povinné** (`required`); konflikt tak zahodí nejdřív automatické vazby. Hodnota kóty = zadaná hodnota.
+- **Náhled:** `SketchState.numericInput: { anchor: Vec3; fields: readonly { id; kind; text: string; typed: boolean; locked: boolean; valid: boolean; active: boolean }[] } | null` – `text` je psaný nebo zamčený text, nebo hodnota z `measure` zaokrouhlená na 2 desetinná místa (úhel ve stupních); `anchor` = bod kurzoru (po omezení) ve světě. `null` = krok bez polí nebo kurzor mimo pohled.
+- **`ui`:** `SketchInput.vue` (sourozenec `SketchGlyphs`) kreslí pole jako řadu malých štítků vlevo nahoře od průmětu kotvy (čistá `inputLayout` v `ui/sketch-input.ts`); aktivní pole zvýrazněné, zamčené s ikonou zámku, neplatné chybovou barvou; `aria-live="polite"`. Štítky nejsou `<input>` – fokus zůstává v pohledu (myš a klávesnice dohromady).
+- **Klávesa Tab na plátně:** `ViewKeyEvent.consume?(): void` – `render` ho vyplní (`preventDefault`), `ToolManager` ho zavolá, když klávesu zpracovala vrstva, nástroj nebo `unhandledKey`; bez toho by Tab přesunul fokus z plátna.
+
+### Pole a kóty podle nástrojů
+
+| Nástroj | Krok | Pole | Kóty zamčených polí |
+|---|---|---|---|
+| každý níže | první bod | `x`, `y` (souřadnice v rovině) | žádné (Q090: bod se jen umístí) |
+| úsečka (polyline), přímka | další bod | `length`, `angle` | délka → `distance(p1, p2)` nové úsečky (u přímky žádná); úhel viz níže |
+| obdélník rohy, středem | druhý bod | `width`, `height` | `distance` strany ab (šířka), bc (výška) |
+| obdélník 3 body | druhý bod / třetí bod | `length`, `angle` / `height` | `distance(a, b)`, úhel viz níže / `distance(b, c)` |
+| kružnice středem | bod obvodu | `diameter` | `diameter` kružnice |
+| oblouk středem | začátek / konec | `radius`, `angle` / `sweep` | `radius` oblouku; úhly bez kóty |
+| drážka středy, celková | druhý bod / šířka | `length`, `angle` / `width` | `distance(c1, c2)` resp. `distance(e1, e2)`, úhel viz níže / `diameter` oblouku c1 |
+| oblouková drážka | začátek / konec / šířka | `radius`, `angle` / `sweep` / `width` | `distance(center, start)` / – / `diameter` koncového oblouku u startu |
+| bod | – | `x`, `y` | žádné |
+
+- **Úhel** (Pavel 2026-10-16) je směr od kladné osy x roviny proti směru hodinových ručiček ve stupních (`angle` u oblouku = úhel začátku, `sweep` = úhel oblouku od začátku ke konci, > 0). Kóta úhlu: zadaný úhel 0/180° → `horizontal`, 90/270° → `vertical` (místo automatické osy); u úsečky řetězu s předchozí úsečkou jiný úhel → kóta `angle` mezi předchozí a novou úsečkou se změřenou hodnotou (jako z nástroje kóty); jinak (první úsečka, přímka, obdélník 3 body, drážka) **bez kóty** – vazba úhlu k ose roviny v datech neexistuje.
+- `constrain`: délka = bod ve směru kurzoru ve vzdálenosti `length`; úhel = průmět kurzoru na paprsek pod úhlem (záporný průmět → délka 0, krok degenerovaný); obojí = pevný bod. Šířka/výška obdélníku: znaménko podle kvadrantu kurzoru. Průměr/poloměr: bod ve směru kurzoru. `sweep` = konec pod úhlem `angle + sweep`. Šířka drážky = 2 · poloměr.
+- Nástroje bez vstupu (Q090): spliny, kružnice 2 a 3 body a tečné, oblouk 3 body a tečný, kóta.
+
+**Testy:** `numeric-input` tabulkově (klávesy, platnost, Tab zamkne a přepne cyklicky, psaní do zamčeného pole ho odemkne, `previewValues` × `lockedValues`, Esc s hodnotou / bez ní, čárka); `clickTool` (klávesa jde nejdřív vstupu, omezený bod bez snapperu, náhled s psanou hodnotou, klik jen se zamčenými, Enter = klik, nový krok vyprázdní vstup); každý nástroj s `FakeViewport` (pole kroku, `constrain`, kóty v datech, `required`); `inputLayout`; `SketchInput.vue`; `ToolManager` volá `consume`; e2e: úsečka 50 mm pod 30° jen z klávesnice, délka z klávesnice a směr myší, obdélník 40 × 20, kružnice ⌀ 30, první bod z X/Y.
 
 ## Testy
 
