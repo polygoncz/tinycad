@@ -198,7 +198,8 @@ describe('createAppSession – opening', () => {
   });
 
   it('hands ui the toolbar, not the tools, and the actions without register (M20)', () => {
-    expectTypeOf<AppSession>().not.toHaveProperty('tools');
+    // M37: of the tools only their hint (spec 11, rule 8a), not the manager.
+    expectTypeOf<keyof AppSession['tools']>().toEqualTypeOf<'hint'>();
     expectTypeOf<AppSession>().not.toHaveProperty('toolList');
     expectTypeOf<AppSession['actions']>().not.toHaveProperty('register');
   });
@@ -815,6 +816,19 @@ describe('createAppSession – sketcher', () => {
     expect(session.mode.get()).toBe('sketch');
     expect(viewport.viewDirections.at(-1)).toEqual([0, 0, 1]);
     expect(activeTool(session)).toBe('sketch.select');
+  });
+
+  it('tools.hint is the hint of the active tool (M37, spec 11 rule 8a)', async () => {
+    const { session } = await openSketcher();
+    expect(session.tools.hint.get()).toBeNull();
+    enterSketch(session);
+    const items = session.toolbar.groups
+      .get()
+      .flatMap((g) => [...g.items, ...g.items.flatMap((i) => i.variants)]);
+    session.toolbar.run(items.find((i) => i.id === 'sketch.mirror') ?? fail());
+    expect(session.tools.hint.get()).toEqual({ key: 'hint.mirror.sources' });
+    session.toolbar.run(toolbarItem(session, 'sketch.select'));
+    expect(session.tools.hint.get()).toBeNull();
   });
 
   it('sketch.finish goes back to the model mode with one entry in the log', async () => {

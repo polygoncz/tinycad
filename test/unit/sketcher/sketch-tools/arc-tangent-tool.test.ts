@@ -115,7 +115,7 @@ async function sketching(opts: { sketch?: SketchData } = {}) {
   const registry = createToolRegistry();
   registry.register(SELECT_TOOL);
   for (const tool of createSketchTools({ sketches })) registry.register(tool);
-  const ctx: Omit<ToolContext, 'finish'> = {
+  const ctx: Omit<ToolContext, 'finish' | 'setHint'> = {
     viewport,
     selection: createSelectionModel({ regen: new FakeRegenStatus() }),
     doc: ops.doc,

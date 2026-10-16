@@ -3,10 +3,11 @@
 // toolbar; the session mounts its viewport (canvas) into it. The floating panels are siblings of
 // this element, so nothing of the UI ends up inside the viewport's DOM. The HUD of the manipulator
 // (M19, spec 11 rule 8) is a sibling too: it lies over the host in the same frame, so its px
-// match the view area of project.
+// match the view area of project. The hint of the active tool (M37, rule 8a) lies over the top edge.
 import { onMounted, useTemplateRef } from 'vue';
 import { useSession } from '../composables/use-session';
 import ManipulatorHud from './ManipulatorHud.vue';
+import ToolHintHud from './ToolHintHud.vue';
 
 const session = useSession();
 const host = useTemplateRef<HTMLElement>('host');
@@ -27,6 +28,7 @@ defineExpose({ contains });
   <div class="viewport-frame">
     <div ref="host" class="viewport-host" />
     <ManipulatorHud />
+    <ToolHintHud />
   </div>
 </template>
 

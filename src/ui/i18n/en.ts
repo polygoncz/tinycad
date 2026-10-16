@@ -324,6 +324,17 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   // The value field of the manipulator HUD (M19), its aria-label.
   'manipulator.field.label': 'Handle value',
 
+  // The hint HUD of the tools (M37, spec 11 rule 8a): one sentence per tool step.
+  'hint.mirror.sources': 'Select points and curves to mirror, Enter continues',
+  'hint.mirror.axis': 'Click the mirror axis (a line or a construction line), Esc goes back',
+  'hint.mirror.done': 'Mirrored. Select more points and curves, or Esc',
+  'hint.linearPattern.sources':
+    'Select points and curves for the pattern, Enter creates the pattern',
+  'hint.circularPattern.sources': 'Select points and curves for the pattern, Enter continues',
+  'hint.circularPattern.center': 'Click the center point of the pattern, Esc goes back',
+  'hint.pattern.edit':
+    'Click a pattern dimension to change the count, spacing or angle, or select more sources',
+
   // Labels of the built-in operations in the history panel: the dispatcher writes the op type
   // as the label of an entry without one. feature.rename and feature.suppress are above (actions).
   'feature.add': 'Add feature',

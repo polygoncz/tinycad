@@ -176,7 +176,7 @@ function setup(opts: { gridStep?: () => number } = {}) {
   registry.register(SELECT_TOOL);
   const tools = createSketchTools({ sketches });
   for (const tool of tools) registry.register(tool);
-  const ctx: Omit<ToolContext, 'finish'> = {
+  const ctx: Omit<ToolContext, 'finish' | 'setHint'> = {
     viewport,
     selection,
     doc: ops.doc,
@@ -537,7 +537,7 @@ describe('createSketchTools', () => {
     const { tools, ctx, viewport, sketches, doc } = setup();
     for (const descriptor of tools.filter((t) => t.id !== 'sketch')) {
       const tool = descriptor.create();
-      tool.activate({ ...ctx, finish: () => undefined });
+      tool.activate({ ...ctx, finish: () => undefined, setHint: () => undefined });
       tool.onPointer?.(pointer('move', 1, 1));
       tool.onPointer?.(pointer('down', 1, 1));
       tool.onPointer?.(pointer('up', 1, 1));
@@ -1314,7 +1314,7 @@ describe('snapAt (M19.2 D4, M26)', () => {
 
   async function snapping() {
     const s = await sketching({ sketch: lineSketch });
-    const ctx: ToolContext = { ...s.ctx, finish: () => undefined };
+    const ctx: ToolContext = { ...s.ctx, finish: () => undefined, setHint: () => undefined };
     return {
       ...s,
       at: (x: number, y: number, grid: number | null, infer = true) =>

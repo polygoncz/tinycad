@@ -25,7 +25,14 @@ import { createSelectionModel } from '@/interaction/selection';
 import { FakeRegenStatus, FakeViewport, aTopoNames } from '@/interaction/testing';
 import { createToolManager } from '@/interaction/tool-manager';
 import { createToolRegistry } from '@/interaction/tools';
-import type { Tool, ToolContext, ToolDescriptor, ToolRegistry } from '@/interaction/tools';
+import type { ToolManager } from '@/interaction/tool-manager';
+import type {
+  Tool,
+  ToolContext,
+  ToolDescriptor,
+  ToolHint,
+  ToolRegistry,
+} from '@/interaction/tools';
 import type {
   KeyMods,
   PickResult,
@@ -316,6 +323,166 @@ describe('createToolManager', () => {
       expect(manager.active.get()).toBe('select');
       expect(rec.calls).toEqual([]);
       expect(emitted).toEqual([]);
+    });
+  });
+
+  describe('hint (M37)', () => {
+    function hints(manager: ToolManager): (ToolHint | null)[] {
+      const seen: (ToolHint | null)[] = [];
+      manager.hint.subscribe(() => seen.push(manager.hint.get()));
+      return seen;
+    }
+
+    it('starts without a hint', () => {
+      const { manager } = setup();
+      expect(manager.hint.get()).toBeNull();
+    });
+
+    it('is the hint set by the active activation', () => {
+      const { manager, rec } = setup();
+      manager.activate('box');
+      const seen = hints(manager);
+      rec.contexts[0]?.setHint({ key: 'hint.box.corner', params: { n: 1 } });
+      expect(manager.hint.get()).toEqual({ key: 'hint.box.corner', params: { n: 1 } });
+      rec.contexts[0]?.setHint(null);
+      expect(manager.hint.get()).toBeNull();
+      expect(seen).toEqual([{ key: 'hint.box.corner', params: { n: 1 } }, null]);
+    });
+
+    it('may be set inside activate', () => {
+      const { manager } = setup({
+        tools: (r) => [
+          aRecordingTool('box', r, {
+            onActivate: (ctx) => {
+              ctx.setHint({ key: 'hint.box.start' });
+            },
+          }),
+        ],
+      });
+      manager.activate('box');
+      expect(manager.hint.get()).toEqual({ key: 'hint.box.start' });
+    });
+
+    it('is reset when another tool is activated; the new tool starts without one', () => {
+      const { manager, rec } = setup({
+        tools: (r) => [aRecordingTool('box', r), aRecordingTool('line', r)],
+      });
+      manager.activate('box');
+      rec.contexts[0]?.setHint({ key: 'hint.box.start' });
+      manager.activate('line');
+      expect(manager.hint.get()).toBeNull();
+    });
+
+    it('is reset by finish and by Escape', () => {
+      const { manager, rec, viewport } = setup();
+      manager.activate('box');
+      rec.contexts[0]?.setHint({ key: 'hint.box.start' });
+      rec.contexts[0]?.finish();
+      expect(manager.hint.get()).toBeNull();
+      manager.activate('box');
+      rec.contexts[2]?.setHint({ key: 'hint.box.start' });
+      viewport.emitKey(key('Escape'));
+      expect(manager.hint.get()).toBeNull();
+    });
+
+    it('is reset by dispose', () => {
+      const { manager, rec } = setup();
+      manager.activate('box');
+      rec.contexts[0]?.setHint({ key: 'hint.box.start' });
+      manager.dispose();
+      expect(manager.hint.get()).toBeNull();
+    });
+
+    it('set during deactivate does not survive the switch', () => {
+      let boxCtx: ToolContext | null = null;
+      const registry = createToolRegistry();
+      const rec: Recorder = { calls: [], contexts: [] };
+      registry.register(aRecordingTool('select', rec));
+      registry.register({
+        id: 'box',
+        label: 'box',
+        icon: 'box',
+        group: 'primitive',
+        create: () => ({
+          activate(ctx) {
+            boxCtx = ctx;
+          },
+          deactivate() {
+            boxCtx?.setHint({ key: 'hint.box.bye' });
+          },
+        }),
+      });
+      const viewport = new FakeViewport();
+      const manager = createToolManager({
+        registry,
+        viewportEvents: viewport.events,
+        ctx: {
+          viewport,
+          selection: createSelectionModel({ regen: new FakeRegenStatus() }),
+          doc: anOpsSession().doc,
+          ids: createSequentialIdGenerator(),
+          features: aFeatureEditorStub(),
+        },
+        defaultToolId: 'select',
+      });
+      manager.activate('box');
+      manager.activate('select');
+      expect(manager.hint.get()).toBeNull();
+    });
+
+    it('of an old activation is ignored', () => {
+      const { manager, rec } = setup({
+        tools: (r) => [aRecordingTool('box', r), aRecordingTool('line', r)],
+      });
+      manager.activate('box');
+      const boxCtx = rec.contexts[0];
+      manager.activate('line');
+      rec.contexts[1]?.setHint({ key: 'hint.line.start' });
+      const seen = hints(manager);
+      boxCtx?.setHint({ key: 'hint.box.start' });
+      expect(manager.hint.get()).toEqual({ key: 'hint.line.start' });
+      expect(seen).toEqual([]);
+    });
+
+    it('of an earlier activation of the same tool is ignored', () => {
+      const { manager, rec } = setup();
+      manager.activate('box');
+      const first = rec.contexts[0];
+      manager.activate('select');
+      manager.activate('box');
+      first?.setHint({ key: 'hint.box.start' });
+      expect(manager.hint.get()).toBeNull();
+    });
+
+    it('an equal hint (same key and params) is not emitted again', () => {
+      const { manager, rec } = setup();
+      manager.activate('box');
+      const ctx = rec.contexts[0];
+      const seen = hints(manager);
+      ctx?.setHint({ key: 'hint.box.n', params: { n: 1, s: 'a' } });
+      ctx?.setHint({ key: 'hint.box.n', params: { s: 'a', n: 1 } });
+      ctx?.setHint({ key: 'hint.box.n', params: { n: 2, s: 'a' } });
+      ctx?.setHint({ key: 'hint.box.n', params: { n: 2 } });
+      ctx?.setHint({ key: 'hint.box.n' });
+      ctx?.setHint({ key: 'hint.box.n', params: {} });
+      ctx?.setHint({ key: 'hint.box.m' });
+      ctx?.setHint(null);
+      ctx?.setHint(null);
+      expect(seen.map((h) => h?.key ?? null)).toEqual([
+        'hint.box.n',
+        'hint.box.n',
+        'hint.box.n',
+        'hint.box.n',
+        'hint.box.m',
+        null,
+      ]);
+    });
+
+    it('is not reset (re-emitted) when the default tool is activated again', () => {
+      const { manager } = setup();
+      const seen = hints(manager);
+      manager.activate('select');
+      expect(seen).toEqual([]);
     });
   });
 

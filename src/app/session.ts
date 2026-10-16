@@ -45,6 +45,7 @@ import type {
   Mode,
   SelectionModel,
   ToolbarModel,
+  ToolHint,
   TopoInspector,
   ViewKeyEvent,
   ViewportPort,
@@ -225,6 +226,11 @@ export interface AppSession extends Disposable {
     project(world: Vec3): readonly [x: number, y: number] | null;
     /** The view moved (camera, resize): positions of the HUD are stale; every frame of an animation. */
     onViewChanged(listener: () => void): Unsubscribe;
+  };
+  /** M37: the tools as ui sees them: the hint HUD of the active tool (spec 11, rule 8a). */
+  readonly tools: {
+    /** The hint of the active tool's current step; null = none. */
+    readonly hint: Observable<ToolHint | null>;
   };
   /**
    * M19.2: projection of world points onto the view and its moves, forwarded from the viewport
@@ -594,6 +600,7 @@ function wireSession(
     files,
     defaultBodyColor,
     documentName,
+    tools: { hint: tools.hint },
     manipulator: {
       hud: manipulators.hud,
       setMode(id) {

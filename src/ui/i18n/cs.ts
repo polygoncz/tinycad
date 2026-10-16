@@ -324,6 +324,16 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   // The value field of the manipulator HUD (M19), its aria-label.
   'manipulator.field.label': 'Hodnota úchytu',
 
+  // The hint HUD of the tools (M37, spec 11 rule 8a): one sentence per tool step.
+  'hint.mirror.sources': 'Vyber body a křivky ke zrcadlení, Enter pokračuje',
+  'hint.mirror.axis': 'Klikni na osu zrcadlení (úsečka nebo přímka), Esc zpět',
+  'hint.mirror.done': 'Zrcadleno. Vyber další body a křivky, nebo Esc',
+  'hint.linearPattern.sources': 'Vyber body a křivky pro pole, Enter vytvoří pole',
+  'hint.circularPattern.sources': 'Vyber body a křivky pro pole, Enter pokračuje',
+  'hint.circularPattern.center': 'Klikni na bod středu pole, Esc zpět',
+  'hint.pattern.edit':
+    'Klikni na kótu pole a změň počet, rozteč nebo úhel, nebo vyber další zdroje',
+
   // Labels of the built-in operations in the history panel: the dispatcher writes the op type
   // as the label of an entry without one. feature.rename and feature.suppress are above (actions).
   'feature.add': 'Přidat featuru',
