@@ -108,6 +108,7 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **Úkol 5 hotový:** e2e `m32.spec.ts` (5 scénářů × 2 prohlížeče: úsečka 50 mm pod 30° jen klávesnicí, délka + směr myší, obdélník 40 × 20, kružnice ⌀ 30, bod na 12,5; 7 s mřížkou); celé e2e 158/158. **B10 (rozhodnutí stopy):** délka/průměr s kurzorem přesně v předchozím bodě má výchozí směr +x (jako Fusion) místo tichého degenerovaného kroku.
 - **Architektonická revize:** bez porušení ADR; 6 nálezů (duplicity mezi nástroji: kóta vzdálenosti, `withTyped`, `sweep`/poloměr, pole kroků a normála; `equal` přes `withoutLocked`; nevyužitý parametr `session` háčků) – opraveno, sdílené pomůcky v `common.ts` (propsáno do spec 12), `SketchInput` ve stromu komponent spec 11. `npm run check` zelený (7037 testů), e2e m31 + m32 22/22.
 - **Natažení `main`:** jen deník a tabulka id ve spec 12, bez konfliktů. `npm run check` zelený (7037 unit, 41 integračních), celé e2e 158/158.
+- **Natažení `main` s M36:** jediný konflikt ve spec 12 (sekce M32 a M36 vedle sebe). Bod je od sloučení M36 v rodině `line` → e2e `m32` vybírá bod přes `pickVariant('Úsečka', 'Bod')`. `npm run check` zelený (7217 unit, 42 integračních), e2e 164/166 před opravou (obě selhání = výběr bodu), `m32.spec.ts` po opravě 10/10.
 
 ## Retrospektiva
 

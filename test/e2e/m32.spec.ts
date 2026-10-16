@@ -6,6 +6,7 @@ import {
   createDocument,
   dimensionInput,
   dimensionValue,
+  pickVariant,
   sketchPanel,
   toolbarButton,
 } from './helpers';
@@ -270,7 +271,7 @@ test('the first point from X and Y: a point at 12,5; 7 off the grid, no dimensio
   page,
 }) => {
   const panel = await openSketch(page);
-  await toolbarButton(page, 'Bod').click();
+  await pickVariant(page, 'Úsečka', 'Bod');
   await hoverWithFocus(page, 80, -50);
   // The comma is the Czech decimal mark; the grid snap is on and the typed point ignores it.
   await typeValue(page, '12,5', 'Tab');
