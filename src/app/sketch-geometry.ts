@@ -5,9 +5,12 @@
 import type { SketchGeometry } from '@/sketch';
 
 /**
- * Empty in M30: the port has no methods yet. M33 (intersections) and M35 (offset) add them here
- * over the live kernel of the supervisor; the composition root already hands the port on.
+ * Not implemented yet: M33 added the methods to the port, the implementation over
+ * SketchOps.curveIntersections and curveSegment of the kernel follows in task 3 of M33. Until
+ * then every call rejects, so the sketcher only gets no intersections (its error path).
  */
 export function createSketchGeometry(): SketchGeometry {
-  return Object.freeze({});
+  const notImplemented = (): Promise<never> =>
+    Promise.reject(new Error('SketchGeometry: not implemented'));
+  return Object.freeze({ intersections: notImplemented, segment: notImplemented });
 }

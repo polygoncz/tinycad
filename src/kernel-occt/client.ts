@@ -20,6 +20,8 @@ export function createOcctKernelClient(
     boolean: (op, targets, tools) => rpc.call('boolean', op, targets, tools),
     makeFace: (p) => rpc.call('makeFace', p),
     profileRegions: (p) => rpc.call('profileRegions', p),
+    curveIntersections: (p) => rpc.call('curveIntersections', p),
+    curveSegment: (p) => rpc.call('curveSegment', p),
     extrude: (profile, direction, distance) => rpc.call('extrude', profile, direction, distance),
     revolve: (profile, axis, angle) => rpc.call('revolve', profile, axis, angle),
     fillet: (shape, edges, radius) => rpc.call('fillet', shape, edges, radius),

@@ -140,6 +140,8 @@ describe('createTrackingKernel', () => {
       'boolean',
       'boundingBox',
       'chamfer',
+      'curveIntersections',
+      'curveSegment',
       'extrude',
       'fillet',
       'makeBox',
@@ -159,6 +161,22 @@ describe('createTrackingKernel', () => {
     expect(result).toEqual(await real.profileRegions({ curves }));
     expect(result.regions.map((r) => r.name)).toEqual(['k']);
     expect(real.callCount('profileRegions')).toBe(2);
+    expect(owned.size).toBe(0);
+  });
+
+  it('passes curveIntersections and curveSegment through and owns nothing (M33)', async () => {
+    const { real, owned, kernel } = setup();
+    const curves = [
+      { kind: 'line', from: [0, 0], to: [10, 0], id: 'p' },
+      { kind: 'line', from: [4, -2], to: [4, 8], id: 'q' },
+    ] as const;
+    expect(await kernel.curveIntersections({ curves })).toEqual(
+      await real.curveIntersections({ curves }),
+    );
+    const segment = { curve: curves[0], from: 0.2, to: 0.7 };
+    expect(await kernel.curveSegment(segment)).toEqual(await real.curveSegment(segment));
+    expect(real.callCount('curveIntersections')).toBe(2);
+    expect(real.callCount('curveSegment')).toBe(2);
     expect(owned.size).toBe(0);
   });
 

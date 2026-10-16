@@ -1,6 +1,12 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import * as sketch from '@/sketch';
-import type { Curve2, SketchConstraint, SketchConstraintDraft, SketchGeometry } from '@/sketch';
+import type {
+  Curve2,
+  CurveHit,
+  SketchConstraint,
+  SketchConstraintDraft,
+  SketchGeometry,
+} from '@/sketch';
 
 // Guards the public API: a value export removed or added by accident shows up here.
 describe('sketch public API', () => {
@@ -20,9 +26,17 @@ describe('sketch public API', () => {
         'constraintTargets',
         'curvePoints',
         'curve2',
+        'cutsOf',
         'defaultPlacement',
         'dimensionFor',
         'endTangent',
+        'extendEdit',
+        'nearestParam',
+        'pieceAt',
+        'piecePolyline',
+        'pointAt',
+        'splitEdit',
+        'trimEdit',
         'inferLine',
         'inferRadius',
         'dimensionTarget',
@@ -125,8 +139,22 @@ describe('sketch public API', () => {
     >();
   });
 
-  it('SketchGeometry is the empty port of M30 (spec 12 "Geometrie skici v jádře")', () => {
-    expectTypeOf<keyof SketchGeometry>().toEqualTypeOf<never>();
+  it('SketchGeometry has the intersections and pieces of M33 (spec 12 "Port a parametr křivky")', () => {
+    expectTypeOf<keyof SketchGeometry>().toEqualTypeOf<'intersections' | 'segment'>();
+    expectTypeOf<SketchGeometry['intersections']>().toEqualTypeOf<
+      (curves: readonly Curve2[]) => Promise<readonly CurveHit[]>
+    >();
+    expectTypeOf<SketchGeometry['segment']>().toEqualTypeOf<
+      (curve: Curve2, from: number, to: number) => Promise<Curve2>
+    >();
+    expectTypeOf<CurveHit>().toEqualTypeOf<{
+      readonly a: string;
+      readonly b: string;
+      readonly point: readonly [number, number];
+      readonly ta: number;
+      readonly tb: number;
+      readonly overlap?: true;
+    }>();
   });
 
   it('keeps SPLINE_TOLERANCE for the drawing and the snapper (M30)', () => {

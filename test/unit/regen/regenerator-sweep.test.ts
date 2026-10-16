@@ -119,6 +119,8 @@ function withRelease(
     boolean: (op, targets, tools) => fake.boolean(op, targets, tools),
     makeFace: (p) => fake.makeFace(p),
     profileRegions: (p) => fake.profileRegions(p),
+    curveIntersections: (p) => fake.curveIntersections(p),
+    curveSegment: (p) => fake.curveSegment(p),
     extrude: (profile, direction, distance) => fake.extrude(profile, direction, distance),
     revolve: (profile, axis, angle) => fake.revolve(profile, axis, angle),
     tessellate: (shape, q) => fake.tessellate(shape, q),

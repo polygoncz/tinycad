@@ -1,5 +1,5 @@
 import type { Mat4, Plane, Vec3 } from '@/core';
-import type { ProfileCurve, ProfileLoop, ProfileRegions } from './profile';
+import type { CurveIntersection, ProfileCurve, ProfileLoop, ProfileRegions } from './profile';
 import type {
   BoundingBox,
   MeshData,
@@ -57,6 +57,23 @@ export interface SketchOps {
    * Every curve has a unique id; order and orientation are arbitrary. No handle, no side effects.
    */
   profileRegions(p: { readonly curves: readonly ProfileCurve[] }): Promise<ProfileRegions>;
+  /**
+   * M33: every common point of each pair of curves (a before b in the input order) and of each
+   * spline with itself, ordered by a, b, ta (spec 06 "Stav po M33"). Ids as in profileRegions.
+   * No handle, no side effects.
+   */
+  curveIntersections(p: {
+    readonly curves: readonly ProfileCurve[];
+  }): Promise<readonly CurveIntersection[]>;
+  /**
+   * M33: the piece of `curve` between the parameters from < to (t of spec 12), of the same kind
+   * (a circle gives an arc), with the id of the input. No handle, no side effects.
+   */
+  curveSegment(p: {
+    readonly curve: ProfileCurve;
+    readonly from: number;
+    readonly to: number;
+  }): Promise<ProfileCurve>;
 }
 
 /** An axis: a point and a direction (need not be unit length). */

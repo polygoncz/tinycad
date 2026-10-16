@@ -814,14 +814,29 @@ Klik na křivku ji rozdělí v bodě: přichytí se k řezu do tolerance kliknut
 // sketch/trim.ts (čisté funkce; kusy splinu dodá volající z geometry.segment)
 export interface CurveCut { readonly t: number; readonly point: Vec2; readonly by: SketchEntityId; readonly at: SketchEntityId | null }
 export function cutsOf(data: SketchData, curve: SketchEntityId, hits: readonly CurveHit[]): readonly CurveCut[];
-export function trimEdit(data: SketchData, req: TrimRequest, ids: IdSource): SketchEdit | null;
+export function trimEdit(data: SketchData, req: TrimRequest, ids: IdSource): SketchEdit | null;   // null = nic k zápisu
 export function extendEdit(data: SketchData, req: ExtendRequest, ids: IdSource): SketchEdit | null;
 export function splitEdit(data: SketchData, req: SplitRequest, ids: IdSource): SketchEdit | null;
 /** Nová data a id přidaných vazeb (pro rewrite). */
 export interface SketchEdit { readonly data: SketchData; readonly added: ReadonlySet<SketchConstraintId> }
 ```
 
-Přesný tvar `TrimRequest`/`ExtendRequest`/`SplitRequest` (křivka, kus nebo bod, kusy splinu z jádra) a `IdSource` určí implementační plán M33.
+Upřesnění z implementace (úkol 2 M33, schváleno hlavním sezením stopy A):
+
+```ts
+export interface IdSource { entity(): SketchEntityId; constraint(): SketchConstraintId }   // nástroj ho staví z ctx.ids
+export interface CurvePiece { readonly from: number; readonly to: number; readonly start: CurveCut | null; readonly end: CurveCut | null }
+export function pieceAt(curve: Curve2, cuts: readonly CurveCut[], t: number): CurvePiece;   // kus pod kurzorem (náhled i rozsahy segment)
+export interface TrimRequest { readonly curve: SketchEntityId; readonly piece: CurvePiece; readonly pieces?: readonly Curve2[] }   // pieces: ponechané kusy splinu ze segment, podle t
+export interface ExtendRequest { readonly curve: SketchEntityId; readonly end: 'start' | 'end'; readonly point: Vec2; readonly by: SketchEntityId }   // at si dopočítá extendEdit
+export interface SplitRequest { readonly curve: SketchEntityId; readonly where: number | CurveCut; readonly pieces?: readonly [Curve2, Curve2] }
+```
+
+- Řezy se sloučí, když se body shodují do tolerance a do tolerance padne i bod křivky v polovině mezi nimi (oba parametry samoprůsečíku splinu kolem smyčky tak zůstanou dva řezy); u kružnice cyklicky. `at` může dát kterákoli sloučená křivka, která v bodě končí.
+- Řezy se stejným bodem v jedné úpravě dávají **jeden** bod (trim smyčky splinu v jeho samoprůsečíku: oba kusy sdílí nový bod, bez `pointOnCurve`).
+- Split kružnice: id drží oblouk s menším počátečním parametrem (mod 2π).
+- Kusy přebírají `construction` křivky. Vazby, které by po úpravě neprošly `parseSketchData` (bod se stal definičním bodem kusu u `pointOnCurve`, `midpoint`, `pointLineDistance`), zmizí; `tangent` úsečky a splinu přejde ke kusu, který drží sdílený konec, jinak zmizí.
+- Extend, jehož nový konec padne na druhý konec křivky, nic neudělá (`null`).
 
 **Lišta:** rodina `trim` (`sketch.trim`, `sketch.extend`, `sketch.split`) ve skupině `modify` ([[#Id nástrojů, akcí a rodin]]); popisky `tool.trim`, `tool.extend`, `tool.split`.
 
