@@ -165,6 +165,37 @@ export function cutsOf(
 }
 
 /**
+ * The crossing points (spec 12, "Průsečíky v session a body křížení", Q093): the hits of two
+ * non-construction curves (or a self-intersection of a spline) that are not in an end point
+ * shared by both curves, and the ends of overlaps (always); in plane coordinates. Hits of curves
+ * not in the data are skipped. Frozen.
+ */
+export function crossingPoints(data: SketchData, hits: readonly CurveHit[]): readonly Vec2[] {
+  const curves = new Map<string, SketchCurve>();
+  for (const e of data.entities) if (e.kind !== 'point') curves.set(e.id, e);
+  const points = pointsById(data);
+  const endsOf = (c: SketchCurve): readonly Vec2[] =>
+    endIds(c).map((id) => coordinatesOf(points, id));
+  return Object.freeze(
+    hits.flatMap((hit) => {
+      const a = curves.get(hit.a);
+      const b = curves.get(hit.b);
+      if (a === undefined || b === undefined) return [];
+      if (a.construction === true || b.construction === true) return [];
+      if (hit.overlap === true) return [hit.point];
+      const at = (end: Vec2): boolean => samePoint(end, hit.point);
+      const endsA = endsOf(a);
+      // A self-intersection in both ends of the spline is a closed spline meeting itself.
+      const shared =
+        hit.a === hit.b
+          ? endsA.length === 2 && endsA.every(at)
+          : endsA.some(at) && endsOf(b).some(at);
+      return shared ? [] : [hit.point];
+    }),
+  );
+}
+
+/**
  * The piece of the curve around the parameter t: between the neighbouring cuts, at the ends of
  * the curve up to the end point; on a circle cyclically (without cuts the whole turn, with one
  * cut from it round to it).
@@ -361,8 +392,9 @@ function withSplines(
 
 /**
  * The data with the curve replaced by its pieces (pieces[0] keeps the id, the others get new
- * ids), the new points after the first piece, the original defining points no entity uses any
- * more removed, and the constraints carried over by rule 3 of spec 12.
+ * ids), the new points before the pieces (the planegcs solver needs the points of a line or
+ * an arc before it), the original defining points no entity uses any more removed, and the
+ * constraints carried over by rule 3 of spec 12.
  */
 function rebuild(
   data: SketchData,
@@ -387,7 +419,7 @@ function rebuild(
   const [first, ...rest] = entities;
   assert(first !== undefined, 'rebuild: no piece');
   const replaced = data.entities.flatMap((e): SketchEntity[] =>
-    e.id === curve.id ? [first, ...made.points, ...interior, ...rest] : [e],
+    e.id === curve.id ? [...made.points, ...interior, first, ...rest] : [e],
   );
   const used = new Set(replaced.flatMap((e) => (e.kind === 'point' ? [] : curvePoints(e))));
   const dropped = new Set<string>(curvePoints(curve).filter((p) => !used.has(p)));

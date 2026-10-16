@@ -770,12 +770,14 @@ export interface SketchGeometry {
 // sketch/curve-param.ts (M33, čisté funkce, pro náhled a picking)
 export function pointAt(c: Curve2, t: number): Vec2;
 export function nearestParam(c: Curve2, p: Vec2): number;          // úsečka, oblouk, kružnice přesně; spline vzorkování + Newton (core bspline)
+export function paramRange(c: Curve2): readonly [number, number];   // definiční obor t (kružnice [0, 2π))
+export function samePoint(a: Vec2, b: Vec2): boolean;              // shoda do 1e-7 · max(1, |souřadnice|)
 export function piecePolyline(c: Curve2, from: number, to: number): readonly Vec2[];   // náhled kusu (spline SPLINE_TOLERANCE)
 ```
 
 **Implementace v `app`** (`app/sketch-geometry.ts`): `createSketchGeometry(kernel: () => GeometryKernel | null)` přeposílá na `curveIntersections`/`curveSegment` bez převodu (stejný tvar dat hlídá `satisfies`); jádro bere při každém volání (po restartu nové), bez běžícího jádra volání odmítne – session to bere jako chybu portu (`hits() = null`).
 
-**Parametr `t`** (stejný v jádře i v TS): úsečka `[0, 1]` od `from` k `to`; oblouk úhel od `from` ve směru oblouku (`ccw`), `[0, sweep]`; kružnice úhel `atan2(p − center)` v `[0, 2π)`, u `segment` smí `to` přesáhnout `2π` (nejvýš `from + 2π`); spline parametr uzlového vektoru (u dat skici `[0, 1]`). Body se shodují do `1e-7 · max(1, |souřadnice|)`.
+**Parametr `t`** (stejný v jádře i v TS): úsečka `[0, 1]` od `from` k `to`; oblouk úhel od `from` ve směru oblouku (`ccw`), `[0, sweep]`; kružnice úhel `atan2(p − center)` v `[0, 2π)`, u `segment` smí `to` přesáhnout `2π` (méně než `from + 2π`; celá otáčka by byl oblouk nulové délky); spline parametr uzlového vektoru (u dat skici `[0, 1]`). Body se shodují do `1e-7 · max(1, |souřadnice|)`.
 
 ### Průsečíky v session a body křížení
 
@@ -810,12 +812,13 @@ Klik na křivku ji rozdělí v bodě: přichytí se k řezu do tolerance kliknut
 1. **Id:** kus se **začátkem** křivky (`t` nejmenší; u kružnice oblouk) si nechá id křivky, druhý kus dostane nové id. Jména oblastí a `face:side:<id>` tak u kusu se začátkem zůstanou.
 2. **Body:** konec kusu, který je původním koncem křivky, je původní bod. Konec v řezu je `at`, nebo nový bod s vazbou `pointOnCurve(nový bod, by)` (u splinu jako `by` v rozsahu splinu, M29). Vnitřní póly kusů splinu jsou nové body. Původní bod, který kusům nezůstal: smaže se jen, když ho nepoužívá jiná entita (s ním zmizí jeho vazby); jinak zůstane. Extend: nový konec stejně jako konec v řezu (`at`, nebo nový bod s `pointOnCurve` k cílové křivce); původní koncový bod podle stejného pravidla.
 3. **Vazby křivky** (odkazují id křivky) zůstanou u kusu s id, kromě: `equal` dvou úseček a `midpoint` (délka se změnila) – smažou se; `pointOnCurve` na splinu přejde ke kusu, na kterém bod leží (`nearestParam` v rozsahu kusu), jinak se smaže; vazby, které odkazují smazaný bod, zmizí s ním. Kus s novým id dostane jen vazby z bodu 2 (a `parallel` u splitu úsečky). Kóty `radius`/`diameter` a `tangent` u kružnice → oblouk zůstanou.
-4. Výsledek projde `parseSketchData` (invariant testů) a session ho zapíše přes `rewrite(next, added)`: vyřeší, při konfliktu zkusí znovu bez vazeb `added` (nové `pointOnCurve`/`parallel`), jako auto-vazby nástrojů (M26). Jeden zápis = jeden `setParams`.
+4. Nové body jsou v poli entit **před** křivkami, které je používají (adaptér planegcs jinak selže – zjištěno v e2e úkolu 5; `parseSketchData` pořadí nehlídá). Výsledek projde `parseSketchData` (invariant testů) a session ho zapíše přes `rewrite(next, added)`: vyřeší, při konfliktu zkusí znovu bez vazeb `added` (nové `pointOnCurve`/`parallel`), jako auto-vazby nástrojů (M26). Jeden zápis = jeden `setParams`.
 
 ```ts
 // sketch/trim.ts (čisté funkce; kusy splinu dodá volající z geometry.segment)
 export interface CurveCut { readonly t: number; readonly point: Vec2; readonly by: SketchEntityId; readonly at: SketchEntityId | null }
 export function cutsOf(data: SketchData, curve: SketchEntityId, hits: readonly CurveHit[]): readonly CurveCut[];
+export function crossingPoints(data: SketchData, hits: readonly CurveHit[]): readonly Vec2[];   // body křížení (Q093), session je jen kreslí
 export function trimEdit(data: SketchData, req: TrimRequest, ids: IdSource): SketchEdit | null;   // null = nic k zápisu
 export function extendEdit(data: SketchData, req: ExtendRequest, ids: IdSource): SketchEdit | null;
 export function splitEdit(data: SketchData, req: SplitRequest, ids: IdSource): SketchEdit | null;
@@ -840,7 +843,7 @@ export interface SplitRequest { readonly curve: SketchEntityId; readonly where: 
 - Kusy přebírají `construction` křivky. Vazby, které by po úpravě neprošly `parseSketchData` (bod se stal definičním bodem kusu u `pointOnCurve`, `midpoint`, `pointLineDistance`), zmizí; `tangent` úsečky a splinu přejde ke kusu, který drží sdílený konec, jinak zmizí.
 - Extend, jehož nový konec padne na druhý konec křivky, nic neudělá (`null`).
 
-**Lišta:** rodina `trim` (`sketch.trim`, `sketch.extend`, `sketch.split`) ve skupině `modify` ([[#Id nástrojů, akcí a rodin]]); popisky `tool.trim`, `tool.extend`, `tool.split`.
+**Lišta:** rodina `trim` (`sketch.trim` – ikona `scissors`, klávesa `T`; `sketch.extend` – `arrow-bar-to-right`; `sketch.split` – `separator`) ve skupině `modify` ([[#Id nástrojů, akcí a rodin]]); v liště skicáře je `modify` mezi `draw` a `constrain` (`groupOrder` v `sketch-toolbar.ts`); popisky `tool.trim`, `tool.extend`, `tool.split` (Ořezat, Prodloužit, Rozdělit). Nástroje berou port z `SketchSession.geometry`. Bez `hits()`: trim nic nenabízí, split dělí v bodě kurzoru bez přichycení, extend `hits()` nepotřebuje (počítá vlastní průsečíky s `__extend`, výsledek drží pro dvojici křivka–konec a verzi entit). Po odpovědi jádra (`segment`, `intersections`) nástroj ověří, že se data mezitím nezměnila, jinak nic nezapíše. `XLINE_EXTENT` je do sloučení stopy B lokální konstanta nástroje Extend.
 
 **Testy:** jádro – kontraktová sada `curveIntersections` (úsečka×úsečka, úsečka×oblouk ve dvou bodech, tečná kružnice, překryv úseček, spline×úsečka, samoprůsečík splinu, parametry podle definice) a `curveSegment` (všechny druhy, kružnice → oblouk přes `2π`, spline: body kusu leží na původním splinu); `sketch` – `pointAt`/`nearestParam` (inverze), `cutsOf` (vlastní konce vynechané, sloučení, `at`), `trimEdit`/`extendEdit`/`splitEdit` pro každý řádek tabulky a každé pravidlo dat (id, body, vazby; výsledek projde `parseSketchData`); `sketcher` – cache průsečíků (poslední vyhrává), body křížení, nástroje s `FakeSketchGeometry`; e2e – oříznout křížící se úsečky obdélníku → oblast a vysunutí, prodloužit úsečku ke kružnici, rozdělit úsečku.
 

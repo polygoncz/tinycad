@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec2 } from '@/core';
-import { nearestParam, piecePolyline, pointAt } from '@/sketch/curve-param';
+import { nearestParam, paramRange, piecePolyline, pointAt, samePoint } from '@/sketch/curve-param';
 import type { Curve2 } from '@/sketch/geometry';
 
 const LINE: Curve2 = { kind: 'line', from: [1, 1], to: [5, 4] };
@@ -116,5 +116,25 @@ describe('piecePolyline', () => {
       expect(Math.hypot(q[0] - p[0], q[1] - p[1])).toBeLessThan(1e-9);
     }
     expect(Object.isFrozen(points)).toBe(true);
+  });
+});
+
+describe('paramRange', () => {
+  it('a line [0, 1], an arc [0, sweep], a circle [0, 2π], a spline its knot range', () => {
+    expect(paramRange(LINE)).toEqual([0, 1]);
+    const [lo, sweep] = paramRange(CW_ARC);
+    expect(lo).toBe(0);
+    expect(sweep).toBeCloseTo(Math.PI / 2, 12);
+    expect(paramRange(CIRCLE)).toEqual([0, 2 * Math.PI]);
+    expect(paramRange(SPLINE)).toEqual([0, 1]);
+  });
+});
+
+describe('samePoint', () => {
+  it('equal within 1e-7 · max(1, |coordinate|)', () => {
+    expect(samePoint([0, 0], [0, 0.9e-7])).toBe(true);
+    expect(samePoint([0, 0], [0, 1.1e-7])).toBe(false);
+    expect(samePoint([1000, 0], [1000, 0.9e-4])).toBe(true);
+    expect(samePoint([1000, 0], [1000, 1.1e-4])).toBe(false);
   });
 });

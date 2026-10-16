@@ -1,7 +1,7 @@
 // The sketcher's part of the Toolbar (spec 11, "Komponenty"; M20): in the sketch mode the groups
-// Historie, Výběr, Kreslit, Vazby, Dokončit, Zobrazit, cancel and finish of a sketch as buttons of
-// the group 'finish', and the constraint actions as buttons of the group 'constrain' after the
-// dimension tool. app passes it to createToolbarModel; interaction knows nothing of it.
+// Historie, Výběr, Kreslit, Upravit (M33), Vazby, Dokončit, Zobrazit, cancel and finish of a
+// sketch as buttons of the group 'finish', and the constraint actions as buttons of the group
+// 'constrain' after the dimension tool. app passes it to createToolbarModel; interaction knows nothing of it.
 
 import type { ToolbarModeContribution } from '@/interaction';
 import { GEOMETRIC_CONSTRAINT_KINDS } from '@/sketch';
@@ -38,7 +38,7 @@ const ICON_BY_ACTION: ReadonlyMap<string, string> = new Map(
 /** The contribution of the sketch mode to the Toolbar. Frozen. */
 export const SKETCH_TOOLBAR: ToolbarModeContribution = Object.freeze({
   mode: 'sketch',
-  groupOrder: Object.freeze(['history', 'select', 'draw', 'constrain', 'finish', 'view']),
+  groupOrder: Object.freeze(['history', 'select', 'draw', 'modify', 'constrain', 'finish', 'view']),
   actionButtons: Object.freeze({
     finish: Object.freeze([
       Object.freeze({ id: SKETCH_ACTION_IDS.cancel, icon: 'x' }),

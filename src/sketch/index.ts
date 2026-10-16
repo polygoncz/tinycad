@@ -64,8 +64,8 @@ export type { DimensionTarget } from './dimension-placement';
 export { SPLINE_TOLERANCE } from './geometry';
 export type { ConstraintSolver, SolveInput, SolveResult, SolveStatus } from './solver';
 export type { CurveHit, SketchGeometry } from './geometry-port';
-export { nearestParam, piecePolyline, pointAt } from './curve-param';
-export { cutsOf, extendEdit, pieceAt, splitEdit, trimEdit } from './trim';
+export { nearestParam, paramRange, piecePolyline, pointAt, samePoint } from './curve-param';
+export { crossingPoints, cutsOf, extendEdit, pieceAt, splitEdit, trimEdit } from './trim';
 export type {
   CurveCut,
   CurvePiece,

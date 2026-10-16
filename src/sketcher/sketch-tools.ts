@@ -17,6 +17,9 @@ import { createLineTool } from './sketch-tools/line-tool';
 import { createRectangleTool } from './sketch-tools/rectangle-tool';
 import { createSketchSelectTool } from './sketch-tools/select-tool';
 import { createSplineTool } from './sketch-tools/spline-tool';
+import { createSplitTool } from './sketch-tools/split-tool';
+import { createExtendTool } from './sketch-tools/extend-tool';
+import { createTrimTool } from './sketch-tools/trim-tool';
 
 const MODEL: readonly Mode[] = Object.freeze(['model']);
 const SKETCH: readonly Mode[] = Object.freeze(['sketch']);
@@ -153,6 +156,35 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       modes: SKETCH,
       family: 'spline',
       create: () => createSplineTool(sketches, 'fitSpline'),
+    }),
+    // Trim, extend and split (M33) in the group 'modify', one family; only trim has a shortcut.
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.trim',
+      label: 'tool.trim',
+      icon: 'scissors',
+      group: 'modify',
+      modes: SKETCH,
+      shortcut: 'T',
+      family: 'trim',
+      create: () => createTrimTool(sketches),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.extend',
+      label: 'tool.extend',
+      icon: 'arrow-bar-to-right',
+      group: 'modify',
+      modes: SKETCH,
+      family: 'trim',
+      create: () => createExtendTool(sketches),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.split',
+      label: 'tool.split',
+      icon: 'separator',
+      group: 'modify',
+      modes: SKETCH,
+      family: 'trim',
+      create: () => createSplitTool(sketches),
     }),
     Object.freeze<ToolDescriptor>({
       id: 'sketch.dimension',

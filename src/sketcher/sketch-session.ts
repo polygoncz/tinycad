@@ -8,6 +8,7 @@ import type { Observable, Plane, Vec2, Vec3 } from '@/core';
 import {
   SKETCH_PARAM,
   constraintTargets,
+  crossingPoints,
   curve2,
   curvePoints,
   isDimension,
@@ -19,7 +20,6 @@ import {
 } from '@/sketch';
 import type {
   ConstraintSolver,
-  Curve2,
   CurveHit,
   DimensionConstraint,
   DimensionPlacement,
@@ -86,6 +86,11 @@ export interface SketchSession {
    * construction ones too; null = not computed for the current data yet, or the port failed.
    */
   hits(): readonly CurveHit[] | null;
+  /**
+   * The geometry port of the session (M33): the trim, extend and split tools ask it for the
+   * pieces of splines and the intersections of an extension.
+   */
+  readonly geometry: SketchGeometry;
   /** Without the solver: construction does not change the solution. */
   toggleConstruction(ids: readonly SketchItemId[]): void;
   /** Dragging a point (the select tool). */
@@ -425,26 +430,21 @@ export function openSketchSession(deps: {
   /**
    * Asks for the intersections of all curves of the entities (M33); the last request wins, an
    * older answer is dropped. An answer draws the crossing points; a failure of the port leaves
-   * hits() null, warns in the console and removes them.
+   * hits() null and removes them, without a warning (ring 2 has no console, ADR 0009).
    */
   function requestHits(entities: readonly SketchEntity[]): void {
     const version = ++hitsVersion;
-    const points = pointsById({ entities, constraints: EMPTY_DATA.constraints });
-    const curves = new Map<string, { readonly curve: Curve2; readonly construction: boolean }>();
-    for (const e of entities) {
-      if (e.kind !== 'point') {
-        curves.set(e.id, { curve: curve2(e, points), construction: e.construction === true });
-      }
-    }
-    promiseOf(() => geometry.intersections([...curves.values()].map(({ curve }) => curve))).then(
+    const data: SketchData = { entities, constraints: EMPTY_DATA.constraints };
+    const points = pointsById(data);
+    const curves = entities.flatMap((e) => (e.kind === 'point' ? [] : [curve2(e, points)]));
+    promiseOf(() => geometry.intersections(curves)).then(
       (hits) => {
         if (!open || version !== hitsVersion) return;
         hitsAnswer = Object.freeze({ version, hits });
-        drawCrossings(crossingPointsOf(hits, curves));
+        drawCrossings(crossingPoints(data, hits));
       },
       () => {
-        // Spec 12 asks for a warning in the console here; ring 2 has no console (ADR 0009),
-        // open question of M33 task 4.
+        // A failure of the port: hits() stays null and the crossing points go.
         if (!open || version !== hitsVersion) return;
         drawCrossings([]);
       },
@@ -698,6 +698,7 @@ export function openSketchSession(deps: {
     featureId: edit.featureId,
     plane: plane.asObservable(),
     state: state.asObservable(),
+    geometry,
     addGeometry(add, opts = {}) {
       checkOpen('addGeometry');
       const { required } = opts;
@@ -937,59 +938,6 @@ function retryOf(
   const withoutConflicting = attempt.filter((c) => !conflicting.has(c.id) || kept.includes(c));
   if (tried.length === 1 && fresh(withoutConflicting)) return withoutConflicting;
   return fresh(kept) ? kept : null;
-}
-
-/**
- * The crossing points (spec 12, "Průsečíky v session a body křížení", Q093): the hits of two
- * non-construction curves (or a self-intersection of a spline) that are not in an end point
- * shared by both curves, and the ends of overlaps; in plane coordinates. Hits of curves not in
- * `curves` are skipped.
- */
-function crossingPointsOf(
-  hits: readonly CurveHit[],
-  curves: ReadonlyMap<string, { readonly curve: Curve2; readonly construction: boolean }>,
-): readonly Vec2[] {
-  return hits.flatMap((hit) => {
-    const a = curves.get(hit.a);
-    const b = curves.get(hit.b);
-    if (a === undefined || b === undefined || a.construction || b.construction) return [];
-    if (hit.overlap === true) return [hit.point];
-    return atSharedEnd(a.curve, b.curve, hit.a === hit.b, hit.point) ? [] : [hit.point];
-  });
-}
-
-/**
- * The point is an end point of both curves; for a self-intersection (`self`) both ends of the
- * spline are in it (a closed spline meeting itself in its ends).
- */
-function atSharedEnd(a: Curve2, b: Curve2, self: boolean, point: Vec2): boolean {
-  const endsA = curveEnds(a);
-  if (self) return endsA.length === 2 && endsA.every((end) => samePoint(end, point));
-  return (
-    endsA.some((end) => samePoint(end, point)) && curveEnds(b).some((end) => samePoint(end, point))
-  );
-}
-
-/** The end points of a curve; a circle has none, a clamped spline ends in its first and last pole. */
-function curveEnds(c: Curve2): readonly Vec2[] {
-  switch (c.kind) {
-    case 'line':
-    case 'arc':
-      return [c.from, c.to];
-    case 'circle':
-      return [];
-    case 'bspline': {
-      const first = c.poles[0];
-      const last = c.poles.at(-1);
-      return first === undefined || last === undefined ? [] : [first, last];
-    }
-  }
-}
-
-/** Equal points within the tolerance of spec 12: 1e-7 · max(1, |coordinate|). */
-function samePoint(a: Vec2, b: Vec2): boolean {
-  const tolerance = 1e-7 * Math.max(1, ...[...a, ...b].map(Math.abs));
-  return Math.hypot(a[0] - b[0], a[1] - b[1]) <= tolerance;
 }
 
 /**

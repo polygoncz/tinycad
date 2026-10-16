@@ -48,8 +48,8 @@ Pavel 2026-10-16: „Chtěl bych ještě dodělat do Sketch následující featu
 - [x] `sketch`: port `SketchGeometry`, parametr křivky, `cutsOf`, `trimEdit`/`extendEdit`/`splitEdit`.
 - [x] `app`: `SketchGeometry` nad jádrem.
 - [x] Session: cache průsečíků, body křížení, `rewrite`.
-- [ ] Nástroje Trim, Extend, Split v liště.
-- [ ] Spec podle skutečnosti, e2e.
+- [x] Nástroje Trim, Extend, Split v liště.
+- [x] Spec podle skutečnosti, e2e.
 
 ## Implementační plán
 
@@ -116,5 +116,9 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - Úkol 3: `createSketchGeometry(() => supervisor.kernel())` – jádro se bere při každém volání, bez jádra odmítne.
 - Úkol 4: session drží průsečíky k verzi pole entit (poslední vyhrává), body křížení v overlayi `sketch-crossings` stylem `'warning'`, `rewrite(next, added)`. Spec chtěla varování v konzoli při chybě portu – `sketcher` (prstenec 2) `console` nemá, varování vypuštěno ze spec. Barva `'warning'` zatím `palette.axes[0]`; vlastní klíč `ScenePalette` (spec 09) je návrh pro hlavní sezení.
 - `npm run check`: 6895 unit, 41 integračních.
+
+**2026-10-16 – úkol 5.** Nástroje `trim-tool.ts`, `extend-tool.ts`, `split-tool.ts` + sdílené `curve-pick.ts`; session vystavuje port `geometry`. E2e `test/e2e/m33.spec.ts` (ořezat přesah → oblast a vysunutí, prodloužit ke kružnici, rozdělit úsečku): 142/142.
+- **Nalezená chyba z úkolu 2:** `trimEdit` dával nové body za křivku, která je používá; `parseSketchData` to přijme, ale planegcs vrátí `failed`. Opraveno (body před křivkami) a doplněno jako pravidlo dat 4 ve spec 12. Unit testy s `FakeSolver` to chytit nemohly – zachytilo to až e2e se skutečným řešičem.
+- **Pro hlavní sezení:** skupina `modify` je v liště skicáře mezi `draw` a `constrain` – spec 11 (pořadí skupin Toolbaru) to zatím neuvádí, stopa A ji nemění. Robustnější by byl adaptér planegcs nezávislý na pořadí entit (u splinů už je) – případná otázka mimo M33.
 
 ## Retrospektiva

@@ -4,7 +4,7 @@ import { ORIGIN_PLANES, ORIGIN_PLANE_IDS } from '@/document';
 import type { FeatureId, PlaneId } from '@/document';
 import { GEOMETRIC_CONSTRAINT_KINDS, parseSketchData } from '@/sketch';
 import type { SketchConstraint, SketchItemId } from '@/sketch';
-import { rectangleData } from '@/sketch/testing';
+import { createFakeSketchGeometry, rectangleData } from '@/sketch/testing';
 import { createActionRegistry } from '@/interaction';
 import type { Mode } from '@/interaction';
 import { SKETCH_ACTION_IDS, sketchConstraintActionId } from '@/sketcher/constants';
@@ -66,6 +66,7 @@ function aFakeSession() {
     remove: record('remove'),
     rewrite: record('rewrite'),
     hits: () => null,
+    geometry: createFakeSketchGeometry(),
     toggleConstruction: (ids) => {
       calls.push(['toggleConstruction', ids]);
     },

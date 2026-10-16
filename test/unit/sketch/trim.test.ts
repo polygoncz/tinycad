@@ -14,7 +14,7 @@ import type {
 } from '@/sketch/model';
 import { parseSketchData } from '@/sketch/parse';
 import { createFakeSketchGeometry } from '@/sketch/testing';
-import { cutsOf, extendEdit, pieceAt, splitEdit, trimEdit } from '@/sketch/trim';
+import { crossingPoints, cutsOf, extendEdit, pieceAt, splitEdit, trimEdit } from '@/sketch/trim';
 import type { CurveCut, IdSource, SketchEdit } from '@/sketch/trim';
 
 // Test-only branding of literals: the ids of test data were parsed, these name them.
@@ -206,6 +206,75 @@ describe('cutsOf', () => {
       [0.3, 'z', null],
       [0.7, 'z', null],
     ]);
+  });
+});
+
+describe('crossingPoints (Q093)', () => {
+  function hit(a: string, b: string, point: Vec2, extra: Partial<CurveHit> = {}): CurveHit {
+    return { a, b, point, ta: 0, tb: 0, ...extra };
+  }
+
+  /**
+   * The line ab (0,0)–(10,0), the line cd (5,−5)–(5,5) crossing it in (5,0), the line be from
+   * the end b of ab to (10,5) and the construction line fg (2,−1)–(2,1) crossing ab in (2,0).
+   */
+  const CROSSED = sketch([
+    { kind: 'point', id: 'a', x: 0, y: 0 },
+    { kind: 'point', id: 'b', x: 10, y: 0 },
+    { kind: 'line', id: 'ab', p1: 'a', p2: 'b' },
+    { kind: 'point', id: 'c', x: 5, y: -5 },
+    { kind: 'point', id: 'd', x: 5, y: 5 },
+    { kind: 'line', id: 'cd', p1: 'c', p2: 'd' },
+    { kind: 'point', id: 'e', x: 10, y: 5 },
+    { kind: 'line', id: 'be', p1: 'b', p2: 'e' },
+    { kind: 'point', id: 'f', x: 2, y: -1 },
+    { kind: 'point', id: 'g', x: 2, y: 1 },
+    { kind: 'line', id: 'fg', p1: 'f', p2: 'g', construction: true },
+  ]);
+
+  it('the crossings of non-construction curves, not their shared end points', async () => {
+    const points = crossingPoints(CROSSED, await hitsOf(CROSSED));
+    expect(points).toHaveLength(1);
+    expectPoint(points[0] ?? [NaN, NaN], [5, 0]);
+    expect(Object.isFrozen(points)).toBe(true);
+  });
+
+  it('an end point of one curve on the inside of another (T) is a crossing', () => {
+    // cd passes through the end b of ab, which is no end of cd.
+    const hits = [hit('ab', 'be', [10, 0]), hit('ab', 'cd', [10, 0])];
+    expect(crossingPoints(CROSSED, hits)).toEqual([[10, 0]]);
+  });
+
+  it('the ends of overlaps, also in a shared end point', () => {
+    const hits = [hit('ab', 'be', [10, 0], { overlap: true })];
+    expect(crossingPoints(CROSSED, hits)).toEqual([[10, 0]]);
+  });
+
+  it('skips hits with a construction curve and of curves not in the data', () => {
+    const hits = [hit('ab', 'fg', [2, 0]), hit('ab', '__extend', [3, 0])];
+    expect(crossingPoints(CROSSED, hits)).toEqual([]);
+  });
+
+  const spline = (last: Vec2): SketchData =>
+    sketch([
+      { kind: 'point', id: 'p0', x: 0, y: 0 },
+      { kind: 'point', id: 'p1', x: 10, y: 10 },
+      { kind: 'point', id: 'p2', x: 10, y: 0 },
+      { kind: 'point', id: 'p3', x: last[0], y: last[1] },
+      {
+        kind: 'bspline',
+        id: 's',
+        degree: 3,
+        poles: ['p0', 'p1', 'p2', 'p3'],
+        knots: [0, 0, 0, 0, 1, 1, 1, 1],
+      },
+    ]);
+
+  it('a self-intersection of a spline, not where a closed spline meets itself in its ends', () => {
+    expect(crossingPoints(spline([0, 10]), [hit('s', 's', [5, 4], { ta: 0.3, tb: 0.7 })])).toEqual([
+      [5, 4],
+    ]);
+    expect(crossingPoints(spline([0, 0]), [hit('s', 's', [0, 0], { ta: 0, tb: 1 })])).toEqual([]);
   });
 });
 
@@ -840,6 +909,13 @@ describe('splitEdit', () => {
     expect(constraint(edit.data, 'eq')).toBeUndefined();
     expect(constraint(edit.data, 'hh')).toBeDefined();
     expect(constraint(edit.data, 'fq')).toBeDefined();
+  });
+
+  it('puts the new points before the pieces that use them (the solver needs them first)', () => {
+    const edit = valid(splitEdit(CROSS, { curve: id('h'), where: 0.2 }, idSource()));
+    const ids = edit.data.entities.map((e) => e.id);
+    expect(ids.indexOf(id('n1'))).toBeLessThan(ids.indexOf(id('h')));
+    expect(ids.indexOf(id('h'))).toBeLessThan(ids.indexOf(id('n2')));
   });
 
   it('splits at a cut: a new point on the cutter, or the existing end of the cutter', async () => {
