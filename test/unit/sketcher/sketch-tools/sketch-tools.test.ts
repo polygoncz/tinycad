@@ -489,6 +489,33 @@ describe('createSketchTools', () => {
         family: 'trim',
       },
       {
+        id: 'sketch.fillet',
+        label: 'tool.fillet',
+        icon: 'border-radius',
+        group: 'modify',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'fillet',
+      },
+      {
+        id: 'sketch.chamfer',
+        label: 'tool.chamfer',
+        icon: 'join-bevel',
+        group: 'modify',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'fillet',
+      },
+      {
+        id: 'sketch.chamferAngle',
+        label: 'tool.chamferAngle',
+        icon: 'angle',
+        group: 'modify',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'fillet',
+      },
+      {
         id: 'sketch.dimension',
         label: 'tool.dimension',
         icon: 'ruler-measure',
@@ -516,6 +543,15 @@ describe('createSketchTools', () => {
       'sketch.arc',
       'sketch.arc3p',
       'sketch.arcTangent',
+    ]);
+  });
+
+  it('fillet and the chamfers are one family in the order fillet, chamfer, chamferAngle (M34)', () => {
+    const { tools } = setup();
+    expect(tools.filter((t) => t.family === 'fillet').map((t) => t.id)).toEqual([
+      'sketch.fillet',
+      'sketch.chamfer',
+      'sketch.chamferAngle',
     ]);
   });
 

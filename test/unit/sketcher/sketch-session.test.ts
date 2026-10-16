@@ -665,6 +665,35 @@ describe('SketchSession.rewrite (M33)', () => {
     expect(session.state.get().message).toEqual({ key: 'sketch.solverFailed' });
   });
 
+  it('opts.edit opens the dimension once written (M34)', async () => {
+    const { session } = await editing();
+    const withRadius = data(
+      [...NEXT.entities],
+      [...NEXT.constraints, { kind: 'radius', id: 'r', curve: 'k', value: 2 }],
+    );
+
+    expect(await session.rewrite(withRadius, ADDED, { edit: cid('r') })).toBe(true);
+
+    expect(session.state.get().editingDimension).toBe('r');
+  });
+
+  it('opts.edit of a rewrite that is not written opens nothing (M34)', async () => {
+    const { session, solver } = await editing();
+    solver.next({ status: 'failed' });
+
+    expect(await session.rewrite(NEXT, ADDED, { edit: cid('d') })).toBe(false);
+
+    expect(session.state.get().editingDimension).toBeNull();
+  });
+
+  it('without opts.edit the dimension being edited stays as it was (M34)', async () => {
+    const { session } = await editing();
+
+    expect(await session.rewrite(NEXT, ADDED)).toBe(true);
+
+    expect(session.state.get().editingDimension).toBeNull();
+  });
+
   it('is busy until written', async () => {
     const { session } = await editing();
 

@@ -68,7 +68,7 @@ describe('SKETCH_TOOLBAR', () => {
           SKETCH_ACTION_IDS.construction,
         ],
       ],
-      ['modify', ['sketch.trim']],
+      ['modify', ['sketch.trim', 'sketch.fillet']],
       [
         'constrain',
         ['sketch.dimension', ...GEOMETRIC_CONSTRAINT_KINDS.map(sketchConstraintActionId)],
