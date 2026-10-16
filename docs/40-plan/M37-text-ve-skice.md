@@ -107,5 +107,6 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **Úkol 3, část skicář hotová:** kresba a pick písmen (`derivedOwner`), nástroj Text v rodině `line` za bodem (`addDrawn`, bez vazeb), `setTextParams`, `SketchEditor.text`, `fontUrl` + `createOpentypeOutliner` v `app/browser.ts` (fonty v `dist/assets`), osa zrcadlení / symetrie a kotva textu i `xline`. 7226 unit, e2e 156/156.
 - **Natažení `main` s M32** bez konfliktů, jen dva nové testy potřebovaly `setHint` a `text`.
 - **Úkol 3 hotový:** panel textu (sekce Text nad vazbami, fokus nového textu). 7415 unit; e2e 165/166 – jednou spadl `m19-2-rename` ve WebKitu, samostatně prošel (nestabilní, nesouvisí).
+- **Natažení `main` s M33:** 7 sčítacích konfliktů; text vynechán z `isCurveEntity` (trim/extend/split, průsečíky `requestHits`). 7674 unit zelených.
 
 ## Retrospektiva
