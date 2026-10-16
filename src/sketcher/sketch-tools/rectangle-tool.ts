@@ -18,10 +18,11 @@ import type { Tool, ToolContext } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
 import type { SketchSession } from '../sketch-session';
 import {
-  MIN_LENGTH,
-  existingLine,
+  addDrawn,
   clearPreview,
   clickTool,
+  existingLine,
+  MIN_LENGTH,
   newConstraintId,
   newEntityId,
   previewInference,
@@ -169,7 +170,8 @@ function addRectangle(
     line: line.id,
   }));
   if (lines.length === 0 && points.every((p) => p.entities.length === 0)) return;
-  void session.addGeometry(
+  void addDrawn(
+    session,
     {
       entities: [...points.flatMap((p) => p.entities), ...lines.map((l) => l.line)],
       constraints: [...points.flatMap((p) => p.constraints), ...axes],

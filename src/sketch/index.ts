@@ -4,7 +4,7 @@
 // Public API of sketch. Everything else in this folder is internal.
 
 export { GEOMETRIC_CONSTRAINT_KINDS, SKETCH_FEATURE_TYPE, SKETCH_PARAM } from './model';
-export { DIMENSION_KINDS, isDimension } from './model';
+export { DIMENSION_KINDS, isDimension, isLineCarrier } from './model';
 export type {
   AngularPlacement,
   DimensionConstraint,
@@ -27,10 +27,11 @@ export type {
   SketchItemId,
   SketchLine,
   SketchPoint,
+  SketchXLine,
 } from './model';
 export { parseSketchData } from './parse';
 export type { SketchIssue } from './parse';
-export { curve2, pointsById, regionCurves } from './geometry';
+export { XLINE_EXTENT, curve2, pointsById, regionCurves } from './geometry';
 export type { Curve2, SketchRegion } from './geometry';
 export {
   constraintFor,
@@ -46,13 +47,35 @@ export type { PointInference, SnapGuide, SnapKind, SnapOptions, SnapResult } fro
 export { inferLine, inferRadius } from './infer';
 export {
   arcFrom3,
+  arcSlotFrom,
+  arcSlotShape,
   circleFrom2,
   circleFrom3,
   endTangent,
+  rectangle3Shape,
+  rectangleCenterShape,
+  rectangleFrom3,
+  rectangleFromCenter,
+  slotFromCenters,
+  slotFromEnds,
+  slotOverallShape,
+  slotShape,
   tangentArcFrom,
   tangentCircle,
 } from './construct';
-export type { ArcFit, CircleFit } from './construct';
+export type {
+  ArcFit,
+  ArcSlotFit,
+  ArcSlotPointIds,
+  CircleFit,
+  RectCornerIds,
+  RectCorners,
+  ShapeDraft,
+  ShapeIds,
+  SlotFit,
+  SlotOverallPointIds,
+  SlotPointIds,
+} from './construct';
 export type { LineInference } from './infer';
 export {
   defaultPlacement,

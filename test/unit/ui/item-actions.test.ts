@@ -30,6 +30,7 @@ describe('runOnSelected', () => {
       group: 'feature',
       enabled,
       modes: ['model'],
+      checked: false,
     };
   }
 

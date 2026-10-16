@@ -11,6 +11,7 @@ import type {
   SketchEntityId,
   SketchFitSpline,
   SketchLine,
+  SketchXLine,
   SolveInput,
   SolveResult,
 } from '@/sketch';
@@ -139,10 +140,11 @@ interface Primitives {
 }
 
 function toPrimitives(input: SolveInput, ends: Ends): Primitives {
-  const kinds = new Map<SketchEntityId, SketchEntity>(input.entities.map((e) => [e.id, e]));
+  const entities = input.entities.map(asLine);
+  const kinds = new Map<SketchEntityId, SolverEntity>(entities.map((e) => [e.id, e]));
   const constraintIds = new Map<string, SketchConstraintId>();
   const params: FreeParam[] = [];
-  const primitives: SketchPrimitive[] = input.entities.flatMap((e) => entityPrimitives(e, kinds));
+  const primitives: SketchPrimitive[] = entities.flatMap((e) => entityPrimitives(e, kinds));
 
   // A bspline only when a point lies on it (Q087): nothing else in planegcs refers to the curve.
   const onBSpline = new Set<SketchEntityId>();
@@ -152,7 +154,7 @@ function toPrimitives(input: SolveInput, ends: Ends): Primitives {
 
   // After all entities: the control and fit points may come after their spline. The fit point
   // constraints are internal, not reported back (spec 12, Spliny).
-  for (const e of input.entities) {
+  for (const e of entities) {
     if (e.kind === 'fitSpline') primitives.push(...fitPrimitives(e));
     if (e.kind === 'bspline' && onBSpline.has(e.id)) {
       primitives.push(bsplinePrimitive(e.id, e.poles, e.knots, e.degree));
@@ -188,8 +190,23 @@ function toPrimitives(input: SolveInput, ends: Ends): Primitives {
   return { primitives, params, constraintIds };
 }
 
+/** An entity as planegcs sees it: an xline is a line (M31). */
+type SolverEntity = Exclude<SketchEntity, SketchXLine>;
+
+/**
+ * An xline as a line through p1 and p2 (M31): planegcs constraints on a line already work with
+ * its infinite carrier line, and the constraints a line has but an xline must not (equal,
+ * midpoint, tangent to a spline) never reach the solver (parseSketchData). Only for building the
+ * primitives; the result keeps the input entities.
+ */
+function asLine(e: SketchEntity): SolverEntity {
+  return e.kind === 'xline'
+    ? { kind: 'line', id: e.id, p1: e.p1, p2: e.p2, construction: true }
+    : e;
+}
+
 function entityPrimitives(
-  e: SketchEntity,
+  e: SolverEntity,
   entities: ReadonlyMap<SketchEntityId, SketchEntity>,
 ): SketchPrimitive[] {
   switch (e.kind) {

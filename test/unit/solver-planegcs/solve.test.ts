@@ -1157,3 +1157,60 @@ function manyRectangles(n: number): SketchData {
     constraints: parts.flatMap((p) => p.constraints),
   };
 }
+
+describe('solveSketch – infinite line (xline, M31)', () => {
+  /** xline X through p (0,0) and q (10,0), both fixed; a line ab from (0,5) to (10,7) with a fixed. */
+  function withXLine(extra: readonly unknown[], constraints: readonly unknown[]): SketchData {
+    return sketch(
+      [
+        { kind: 'point', id: 'p', x: 0, y: 0 },
+        { kind: 'point', id: 'q', x: 10, y: 0 },
+        { kind: 'xline', id: 'X', p1: 'p', p2: 'q', construction: true },
+        { kind: 'point', id: 'a', x: 0, y: 5 },
+        { kind: 'point', id: 'b', x: 10, y: 7 },
+        { kind: 'line', id: 'ab', p1: 'a', p2: 'b' },
+        ...extra,
+      ],
+      [
+        { kind: 'fix', id: 'fp', point: 'p' },
+        { kind: 'fix', id: 'fq', point: 'q' },
+        { kind: 'fix', id: 'fa', point: 'a' },
+        ...constraints,
+      ],
+    );
+  }
+
+  it('a point on an xline stays on it outside the segment p1p2', () => {
+    const data = withXLine(
+      [{ kind: 'point', id: 'm', x: 4, y: 0 }],
+      [{ kind: 'pointOnCurve', id: 'on', point: 'm', curve: 'X' }],
+    );
+    const result = solveSketch(mod, { ...data, drag: { point: idOf(data, 'm'), to: [50, 3] } });
+    expect(result.status).toBe('ok');
+    expectPoint(point(result.entities, 'm'), 50, 0);
+  });
+
+  it('a line parallel to an xline gets its direction', () => {
+    const result = solveSketch(
+      mod,
+      withXLine([], [{ kind: 'parallel', id: 'pa', a: 'ab', b: 'X' }]),
+    );
+    expect(result.status).toBe('ok');
+    expect(point(result.entities, 'b').y).toBeCloseTo(5, 6);
+    expect(result.entities?.find((e) => e.id === 'X')).toMatchObject({
+      kind: 'xline',
+      p1: 'p',
+      p2: 'q',
+      construction: true,
+    });
+  });
+
+  it('a line perpendicular to an xline is perpendicular to it', () => {
+    const result = solveSketch(
+      mod,
+      withXLine([], [{ kind: 'perpendicular', id: 'pe', a: 'X', b: 'ab' }]),
+    );
+    expect(result.status).toBe('ok');
+    expect(point(result.entities, 'b').x).toBeCloseTo(0, 6);
+  });
+});

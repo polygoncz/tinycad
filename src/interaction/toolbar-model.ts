@@ -37,8 +37,8 @@ export interface ToolbarItem extends ActionState {
   /** Only in the menu of the group and of "…", not drawn as a button (the standard views). */
   readonly menuOnly: boolean;
   /**
-   * The button of the active tool (ToolManager.active); never an action. Of a family: any of its
-   * tools is active.
+   * The button of the active tool (ToolManager.active), or of a checked action (ActionState.checked,
+   * M31). Of a family: any of its tools is active.
    */
   readonly active: boolean;
   /**
@@ -175,7 +175,8 @@ function actionItem(
     icon,
     command: Object.freeze({ kind: 'action', id: action.id }),
     menuOnly,
-    active: false,
+    active: action.checked === true,
+    checked: action.checked,
     variants: NO_VARIANTS,
   });
 }
@@ -265,6 +266,8 @@ export function toolbarGroups(input: {
       ),
       menuOnly: false,
       active: input.activeTool === tool.id,
+      // A tool is no toggle; its state is `active`.
+      checked: null,
       variants: NO_VARIANTS,
     });
     if (tool.family === undefined) {

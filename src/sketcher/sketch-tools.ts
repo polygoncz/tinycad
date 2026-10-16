@@ -14,9 +14,14 @@ import { createCircleTool } from './sketch-tools/circle-tool';
 import { createDimensionTool } from './sketch-tools/dimension-tool';
 import { createEntryTool } from './sketch-tools/entry-tool';
 import { createLineTool } from './sketch-tools/line-tool';
+import { createPointTool } from './sketch-tools/point-tool';
+import { createRectangleCenterTool } from './sketch-tools/rectangle-center-tool';
 import { createRectangleTool } from './sketch-tools/rectangle-tool';
+import { createRectangle3pTool } from './sketch-tools/rectangle3p-tool';
 import { createSketchSelectTool } from './sketch-tools/select-tool';
+import { createSlotTool } from './sketch-tools/slot-tool';
 import { createSplineTool } from './sketch-tools/spline-tool';
+import { createXLineTool } from './sketch-tools/xline-tool';
 
 const MODEL: readonly Mode[] = Object.freeze(['model']);
 const SKETCH: readonly Mode[] = Object.freeze(['sketch']);
@@ -49,7 +54,18 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       group: 'draw',
       modes: SKETCH,
       shortcut: 'L',
+      family: 'line',
       create: () => createLineTool(sketches),
+    }),
+    // The infinite construction line (M31) is a variant of the line.
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.xline',
+      label: 'tool.xline',
+      icon: 'arrows-horizontal',
+      group: 'draw',
+      modes: SKETCH,
+      family: 'line',
+      create: () => createXLineTool(sketches),
     }),
     Object.freeze<ToolDescriptor>({
       id: 'sketch.rectangle',
@@ -58,7 +74,27 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       group: 'draw',
       modes: SKETCH,
       shortcut: 'R',
+      family: 'rectangle',
       create: () => createRectangleTool(sketches),
+    }),
+    // The rectangles of M31: a Tabler square with its centre and a rotated one.
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.rectangleCenter',
+      label: 'tool.rectangleCenter',
+      icon: 'square-dot',
+      group: 'draw',
+      modes: SKETCH,
+      family: 'rectangle',
+      create: () => createRectangleCenterTool(sketches),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.rectangle3p',
+      label: 'tool.rectangle3p',
+      icon: 'square-rotated',
+      group: 'draw',
+      modes: SKETCH,
+      family: 'rectangle',
+      create: () => createRectangle3pTool(sketches),
     }),
     Object.freeze<ToolDescriptor>({
       id: 'sketch.circle',
@@ -153,6 +189,45 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       modes: SKETCH,
       family: 'spline',
       create: () => createSplineTool(sketches, 'fitSpline'),
+    }),
+    // The slots (M31) have no shortcut; Tabler icons of a capsule, of an overall width and of an
+    // arc band.
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.slot',
+      label: 'tool.slot',
+      icon: 'capsule-horizontal',
+      group: 'draw',
+      modes: SKETCH,
+      family: 'slot',
+      create: () => createSlotTool(sketches, 'centers'),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.slotOverall',
+      label: 'tool.slotOverall',
+      icon: 'arrow-autofit-width',
+      group: 'draw',
+      modes: SKETCH,
+      family: 'slot',
+      create: () => createSlotTool(sketches, 'overall'),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.slotArc',
+      label: 'tool.slotArc',
+      icon: 'rainbow',
+      group: 'draw',
+      modes: SKETCH,
+      family: 'slot',
+      create: () => createSlotTool(sketches, 'arc'),
+    }),
+    // The lone point (M31) belongs to no family.
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.point',
+      label: 'tool.point',
+      icon: 'point',
+      group: 'draw',
+      modes: SKETCH,
+      shortcut: 'P',
+      create: () => createPointTool(sketches),
     }),
     Object.freeze<ToolDescriptor>({
       id: 'sketch.dimension',

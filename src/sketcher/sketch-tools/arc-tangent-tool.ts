@@ -14,7 +14,14 @@ import { isPlainEscape } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
 import type { GlyphKind } from '../sketch-glyphs';
 import type { SketchSession } from '../sketch-session';
-import { clearPreview, clickTool, previewArcFit, previewInference, snapMode } from './common';
+import {
+  addDrawn,
+  clearPreview,
+  clickTool,
+  previewArcFit,
+  previewInference,
+  snapMode,
+} from './common';
 import { sessionData, snapAt } from './snap';
 import type { SnapTarget } from './snap';
 import { tangentArcGeometry, tangentArcInferences, tangentArcTo } from './tangent-arc';
@@ -136,5 +143,5 @@ function addArc(
   step: Extract<ArcTangentStep, { kind: 'arc' }>,
 ): void {
   const { entities, constraints, required } = tangentArcGeometry(ctx, start, step);
-  void session.addGeometry({ entities, constraints }, { required });
+  void addDrawn(session, { entities, constraints }, { required });
 }

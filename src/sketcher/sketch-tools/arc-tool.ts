@@ -13,12 +13,13 @@ import type { Tool } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
 import type { GlyphKind } from '../sketch-glyphs';
 import {
-  MIN_LENGTH,
+  addDrawn,
   arcPoints,
   clearPreview,
   clickTool,
   distance,
   lastRound,
+  MIN_LENGTH,
   newConstraintId,
   newEntityId,
   previewInference,
@@ -99,7 +100,7 @@ export function createArcTool(sketches: SketchEditor): Tool {
           const id: SketchEntityId = newEntityId(ctx);
           const constraints: readonly SketchConstraint[] =
             equal === null ? [] : [{ kind: 'equal', id: newConstraintId(ctx), a: id, b: equal }];
-          void session.addGeometry({
+          void addDrawn(session, {
             entities: [
               ...c.entities,
               ...s.entities,

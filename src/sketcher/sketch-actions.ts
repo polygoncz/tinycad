@@ -1,6 +1,9 @@
 // Actions of the sketcher (spec 10, "Nástroje a akce skicáře"): finish, cancel, delete,
 // construction and one action per geometric constraint over the selection of the sketch. They
 // exist only in the mode 'sketch'; app registers them next to the built-in actions.
+// M31 (spec 12, "Režim konstrukce"): construction toggles the selected curves, or without a
+// togglable curve in the selection (an xline is always construction) the construction mode of the
+// session; it is checked while the mode is on.
 
 import { DisposableStore, ObservableValue } from '@/core';
 import type { Disposable, IdGenerator, Observable } from '@/core';
@@ -15,6 +18,7 @@ import type { ActionRegistry, Mode } from '@/interaction';
 import {
   SKETCH_ACTION_IDS,
   SKETCH_CONSTRAINT_ACTION_GROUP,
+  SKETCH_DRAW_ACTION_GROUP,
   sketchConstraintActionId,
 } from './constants';
 import type { SketchEditor } from './sketch-editor';
@@ -27,6 +31,9 @@ const CONSTRAINT_SHORTCUTS: Partial<Record<GeometricConstraintKind, string>> = {
   vertical: 'V',
   coincident: 'I',
 };
+
+/** A curve whose construction flag the action toggles: every curve but an xline (always construction). */
+const isTogglable = (e: SketchEntity): boolean => e.kind !== 'point' && e.kind !== 'xline';
 
 /**
  * Registers the sketcher actions into `deps.registry`. The returned Disposable unsubscribes the
@@ -56,10 +63,14 @@ export function createSketchActions(deps: {
 
   /** enabled of an action: false without an open session, otherwise `test` of its state. */
   function enabledWhen(test: (state: SketchState) => boolean): Observable<boolean> {
-    const compute = (): boolean => {
+    return followed(() => {
       const state = stateOf();
       return state !== null && state.open && test(state);
-    };
+    });
+  }
+
+  /** A value of the open session and its state, recomputed when either changes. */
+  function followed(compute: () => boolean): Observable<boolean> {
     const value = new ObservableValue(compute());
     recomputes.push(() => {
       value.set(compute());
@@ -122,12 +133,18 @@ export function createSketchActions(deps: {
   registry.register({
     id: SKETCH_ACTION_IDS.construction,
     label: SKETCH_ACTION_IDS.construction,
+    // The button of the toolbar group 'draw' after the tools (SKETCH_TOOLBAR).
+    group: SKETCH_DRAW_ACTION_GROUP,
     shortcut: 'Q',
     modes: SKETCH_ONLY,
-    enabled: enabledWhen((state) => selectedEntities(state).some((e) => e.kind !== 'point')),
+    enabled: whileOpen,
+    checked: followed(() => stateOf()?.constructionMode ?? false),
     run: () => {
       const s = session();
-      if (s !== null) s.toggleConstruction(s.state.get().selection);
+      if (s === null) return;
+      const state = s.state.get();
+      if (selectedEntities(state).some(isTogglable)) s.toggleConstruction(state.selection);
+      else s.setConstructionMode(!state.constructionMode);
     },
   });
 

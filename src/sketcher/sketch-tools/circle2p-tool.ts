@@ -20,11 +20,12 @@ import type { SketchEditor } from '../sketch-editor';
 import type { GlyphKind } from '../sketch-glyphs';
 import type { SketchSession } from '../sketch-session';
 import {
-  MIN_LENGTH,
+  addDrawn,
   circlePoints,
   clearPreview,
   clickTool,
   lastRound,
+  MIN_LENGTH,
   newConstraintId,
   newEntityId,
   previewInference,
@@ -165,5 +166,5 @@ export function addRimCircle(
   const automatic: readonly SketchConstraint[] =
     equal === null ? [] : [{ kind: 'equal', id: newConstraintId(ctx), a: id, b: equal }];
   const required: ReadonlySet<SketchConstraintId> = new Set(onCurve.map((c) => c.id));
-  void session.addGeometry({ entities, constraints: [...onCurve, ...automatic] }, { required });
+  void addDrawn(session, { entities, constraints: [...onCurve, ...automatic] }, { required });
 }
