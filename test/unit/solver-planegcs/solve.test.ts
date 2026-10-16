@@ -1139,6 +1139,153 @@ describe('solveSketch – M28 dimensions', () => {
   });
 });
 
+/**
+ * Points a [3, 4] and b [5, −1] (not yet symmetric) and the axis L from p [0, 0] to q [10, 10];
+ * both axis points fixed unless `freeAxis`, a fixed with `fixA`, plus extra entities.
+ */
+function withAxis(
+  options: {
+    readonly freeAxis?: boolean;
+    readonly symmetric?: boolean;
+    readonly fixA?: boolean;
+  } = {},
+  ...entities: readonly unknown[]
+): SketchData {
+  const fixes = [
+    { kind: 'fix', id: 'fp', point: 'p' },
+    { kind: 'fix', id: 'fq', point: 'q' },
+  ];
+  return sketch(
+    [
+      { kind: 'point', id: 'p', x: 0, y: 0 },
+      { kind: 'point', id: 'q', x: 10, y: 10 },
+      { kind: 'line', id: 'L', p1: 'p', p2: 'q' },
+      { kind: 'point', id: 'a', x: 3, y: 4 },
+      { kind: 'point', id: 'b', x: 5, y: -1 },
+      ...entities,
+    ],
+    [
+      ...(options.freeAxis === true ? [] : fixes),
+      ...(options.fixA === true ? [{ kind: 'fix', id: 'fa', point: 'a' }] : []),
+      ...(options.symmetric === false
+        ? []
+        : [{ kind: 'symmetric', id: 's', a: 'a', b: 'b', axis: 'L' }]),
+    ],
+  );
+}
+
+/** a and b are symmetric about the line pq: the middle of ab on it, ab perpendicular to it. */
+function expectSymmetric(entities: readonly SketchEntity[] | null): void {
+  const a = point(entities, 'a');
+  const b = point(entities, 'b');
+  const p = point(entities, 'p');
+  const q = point(entities, 'q');
+  const middle = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  expect(offLine(middle, p, q)).toBeCloseTo(0, 6);
+  const along = (b.x - a.x) * (q.x - p.x) + (b.y - a.y) * (q.y - p.y);
+  expect(along / Math.hypot(q.x - p.x, q.y - p.y)).toBeCloseTo(0, 6);
+}
+
+describe('solveSketch – M36 symmetric', () => {
+  it('makes two points symmetric about a fixed axis', () => {
+    const result = solveSketch(mod, withAxis());
+    expect(result.status).toBe('ok');
+    expectSymmetric(result.entities);
+    expectPoint(point(result.entities, 'p'), 0, 0);
+    expectPoint(point(result.entities, 'q'), 10, 10);
+  });
+
+  it('dragging a keeps b its mirror image', () => {
+    const data = withAxis();
+    const result = solveSketch(mod, { ...data, drag: { point: idOf(data, 'a'), to: [1, 7] } });
+    expect(result.status).toBe('ok');
+    expectPoint(point(result.entities, 'a'), 1, 7);
+    // The mirror of [1, 7] across y = x.
+    expectPoint(point(result.entities, 'b'), 7, 1);
+  });
+
+  it('removes 2 degrees of freedom', () => {
+    // Two free points (4) about a fixed axis (0).
+    expect(solveSketch(mod, withAxis({ symmetric: false })).dof).toBe(4);
+    expect(solveSketch(mod, withAxis()).dof).toBe(2);
+    // Free axis points too: 8 − 2.
+    expect(solveSketch(mod, withAxis({ freeAxis: true })).dof).toBe(6);
+  });
+
+  it('holds with a free axis while a point is dragged', () => {
+    const data = withAxis({ freeAxis: true });
+    const result = solveSketch(mod, { ...data, drag: { point: idOf(data, 'a'), to: [-2, 6] } });
+    expect(result.status).toBe('ok');
+    expectPoint(point(result.entities, 'a'), -2, 6);
+    expectSymmetric(result.entities);
+  });
+});
+
+describe('solveSketch – M36 mirror and patterns', () => {
+  const PATTERNS = [
+    { kind: 'point', id: 'c', x: 20, y: 0 },
+    { kind: 'line', id: 'ab', p1: 'a', p2: 'b' },
+    { kind: 'mirror', id: 'm', sources: ['ab'], axis: 'L' },
+    {
+      kind: 'linearPattern',
+      id: 'lp',
+      sources: ['a', 'ab'],
+      direction1: { angle: 0, count: 3, spacing: 5 },
+      direction2: { angle: Math.PI / 2, count: 2, spacing: 4 },
+    },
+    { kind: 'circularPattern', id: 'cp', sources: ['ab'], center: 'c', count: 4, angle: Math.PI },
+  ];
+
+  /** The same sketch without the pattern entities. */
+  function without(data: SketchData): SketchData {
+    return sketch(
+      data.entities.filter((e) => !['m', 'lp', 'cp'].includes(e.id)),
+      data.constraints,
+    );
+  }
+
+  /** Every point of `plain` is in `entities` at the same place (up to rounding). */
+  function expectSamePoints(
+    entities: readonly SketchEntity[] | null,
+    plain: readonly SketchEntity[] | null,
+  ): void {
+    const points = (plain ?? []).filter((e) => e.kind === 'point');
+    expect(points).toHaveLength(5);
+    for (const p of points) expectPoint(point(entities, p.id), p.x, p.y);
+  }
+
+  it('the pattern entities do not enter the solve: same positions and dof', () => {
+    // a fixed: the solution is unique (an under-defined one may differ between solves).
+    const data = withAxis({ fixA: true }, ...PATTERNS);
+    const result = solveSketch(mod, data);
+    const plain = solveSketch(mod, without(data));
+    expect(result.status).toBe('ok');
+    expect(result.dof).toBe(plain.dof);
+    expectSamePoints(result.entities, plain.entities);
+    expectPoint(point(result.entities, 'b'), 4, 3);
+  });
+
+  it('a drag with them holds the constraints and counts the same dof', () => {
+    const data = withAxis({ freeAxis: true }, ...PATTERNS);
+    const drag = { point: idOf(data, 'a'), to: [-2, 6] as const };
+    const result = solveSketch(mod, { ...data, drag });
+    expect(result.status).toBe('ok');
+    expect(result.dof).toBe(solveSketch(mod, { ...without(data), drag }).dof);
+    expectPoint(point(result.entities, 'a'), -2, 6);
+    expectSymmetric(result.entities);
+  });
+
+  it('returns the pattern entities unchanged, in their place', () => {
+    const data = withAxis({}, ...PATTERNS);
+    const result = solveSketch(mod, data);
+    expect(result.entities?.map((e) => e.id)).toEqual(data.entities.map((e) => e.id));
+    for (const id of ['m', 'lp', 'cp']) {
+      const i = data.entities.findIndex((e) => e.id === id);
+      expect(result.entities?.[i]).toEqual(data.entities[i]);
+    }
+  });
+});
+
 /** `n` fully defined rectangles side by side: far more unknowns than the WASM memory holds. */
 function manyRectangles(n: number): SketchData {
   const parts = Array.from({ length: n }, (_, i) => {

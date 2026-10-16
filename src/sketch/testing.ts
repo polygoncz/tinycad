@@ -19,6 +19,7 @@ export interface FakeSolver extends ConstraintSolver {
 const WEIGHTS: Partial<Record<SketchConstraint['kind'], number>> = {
   coincident: 2,
   midpoint: 2,
+  symmetric: 2,
   fix: 2,
 };
 

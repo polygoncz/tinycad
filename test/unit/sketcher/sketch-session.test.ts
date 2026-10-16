@@ -11,7 +11,7 @@ import type { FeatureId, FeatureSchema, ParamSchema } from '@/document';
 import { aFeature } from '@/document/testing';
 import type { Operation } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
-import { SKETCH_FEATURE_TYPE, parseSketchData } from '@/sketch';
+import { SKETCH_FEATURE_TYPE, parseSketchData, patternCopies } from '@/sketch';
 import type {
   SketchConstraintDraft,
   SketchConstraintId,
@@ -24,8 +24,8 @@ import { FakeViewport } from '@/interaction/testing';
 import { createSketchEditor } from '@/sketcher/sketch-editor';
 
 // The session's part of dimensions (spec 12, "Kóty (M28)"): the preview of the dimension tool and
-// dragging a dimension label; and the inference preview of the drawing tools (M26). The rest of
-// the session is tested in sketch-editor.test.ts.
+// dragging a dimension label; the inference preview of the drawing tools (M26); and the pattern
+// copies after a solve (M36). The rest of the session is tested in sketch-editor.test.ts.
 
 const SKETCH_PARAMS: ParamSchema = {
   plane: { kind: 'planes', label: 'sketch.plane', min: 1, max: 1 },
@@ -74,7 +74,7 @@ const SKETCH = data(
 );
 
 /** An open session on the sketch 's1' (on `plane`), after the first solve. */
-async function editing(plane: Plane = XY) {
+async function editing(plane: Plane = XY, sketch: SketchData = SKETCH) {
   const schemas = createFeatureSchemaRegistry();
   schemas.register(SKETCH_SCHEMA);
   const feature = aFeature<Record<string, unknown>>({
@@ -83,8 +83,8 @@ async function editing(plane: Plane = XY) {
     type: SKETCH_FEATURE_TYPE,
     params: {
       plane: [{ kind: 'plane', plane: ORIGIN_PLANE_IDS.xy }],
-      entities: SKETCH.entities,
-      constraints: SKETCH.constraints,
+      entities: sketch.entities,
+      constraints: sketch.constraints,
     },
   });
   const ops = anOpsSession({ schemas, features: [feature] });
@@ -351,5 +351,43 @@ describe('SketchSession.setInferencePreview (M26)', () => {
 
     expect(session.state.get().inference).toBeNull();
     expect(viewport.overlayShapes.has('sketch-guides')).toBe(false);
+  });
+});
+
+/** The line pq of SKETCH (without its constraints) with a linear pattern: 2 instances, 5 mm up. */
+const PATTERNED = data([
+  { kind: 'point', id: 'p', x: 0, y: 0 },
+  { kind: 'point', id: 'q', x: 10, y: 0 },
+  { kind: 'line', id: 'pq', p1: 'p', p2: 'q' },
+  {
+    kind: 'linearPattern',
+    id: 'lp',
+    sources: ['pq'],
+    direction1: { angle: Math.PI / 2, count: 2, spacing: 5 },
+  },
+]);
+
+describe('SketchSession pattern copies (M36)', () => {
+  /** The copy of a point in the pattern copies of `entities`. */
+  function copy(entities: SketchData['entities'], id: string): unknown {
+    return patternCopies({ entities, constraints: [] }).find((e) => e.id === id);
+  }
+
+  it('the copies follow a dragged source point in the state and in the document', async () => {
+    const { session, doc } = await editing(XY, PATTERNED);
+    expect(copy(session.state.get().entities, 'lp:1.q')).toMatchObject({ x: 10, y: 5 });
+
+    session.drag(eid('q'), [8, 2]);
+    await settle();
+    expect(copy(session.state.get().entities, 'lp:1.q')).toMatchObject({ x: 8, y: 7 });
+    // The pattern itself went through the solve unchanged.
+    expect(session.state.get().entities.find((e) => e.id === 'lp')).toEqual(
+      PATTERNED.entities.find((e) => e.id === 'lp'),
+    );
+
+    await session.endDrag();
+    const params = doc.feature(fid('s1'))?.params as Record<string, unknown> | undefined; // a sketch feature
+    const written = data((params?.entities as readonly unknown[] | undefined) ?? []);
+    expect(copy(written.entities, 'lp:1.q')).toMatchObject({ x: 8, y: 7 });
   });
 });

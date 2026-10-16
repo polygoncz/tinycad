@@ -684,7 +684,7 @@ export type SketchCurve = SketchLine | SketchCircle | SketchArc | SketchBSpline 
 | { readonly kind: 'symmetric'; readonly id: SketchConstraintId; readonly a: SketchEntityId; readonly b: SketchEntityId; readonly axis: SketchEntityId }
 ```
 
-- `a !== b`, oba body; `axis` úsečka nebo `xline`; žádný z bodů není bodem osy. Planegcs: `symmetric_ppl`. `GEOMETRIC_CONSTRAINT_KINDS` ji přidá **před `fix`** (na konec geometrických vazeb, `fix` zůstane poslední) – pořadí akcí v liště upraví stopa C.
+- `a !== b`, oba body; `axis` úsečka nebo `xline`; žádný z bodů není bodem osy. Planegcs: `p2p_symmetric_ppl`. `GEOMETRIC_CONSTRAINT_KINDS` ji přidá **před `fix`** (na konec geometrických vazeb, `fix` zůstane poslední) – pořadí akcí v liště upraví stopa C.
 - Stopa B ji **nepoužívá**: obdélník středem drží střed vazbou `midpoint` na konstrukční úhlopříčce.
 
 #### Křivky pro oblasti a odvozená id (M30 zavede, stopa C rozšíří)
@@ -802,7 +802,7 @@ export function patternOfCopy(id: string): SketchEntityId | null;
 - **Mazání** (`removeItems`): (2a) smazání zdroje ho vyřadí ze `sources` všech polí, pole s prázdnými zdroji se smaže; (2b) smazání osy nebo středu smaže pole; smazání pole zdroje ani osu nemaže. V kroku (3) se bod, který používá zbylé pole jako `center`, počítá jako použitý. Kaskáda běží do ustálení (smazaná křivka → vyřazený zdroj → smazané pole).
 - **Pomůcky editace:** `constraintFor` a `dimensionFor` s polem ve výběru → `null`; `toggleConstruction` pole přeskočí; `constraintFor('symmetric', [a, b, osa])` – dva body a úsečka (po M31 i xline) v tomto pořadí, body nejsou body osy.
 - **Glyf symetrie:** vazba `symmetric` má glyf (dva zrcadlené trojúhelníky kolem čárkované osy, Tabler `flip-vertical` v liště) u bodu `a`, u bodu `b` a u osy.
-- **Řešič:** entity polí do řešiče nevstupují (adaptér je přeskočí); osa a střed jsou běžné entity. Vazba `symmetric` → `symmetric_ppl` (sekce *Vazba symetrie* výše).
+- **Řešič:** entity polí do řešiče nevstupují (adaptér je přeskočí); osa a střed jsou běžné entity. Vazba `symmetric` → `p2p_symmetric_ppl` (sekce *Vazba symetrie* výše).
 - **Kresba, výběr, snapper:** kresba editované i regenerované skici přidá `patternCopies(data)` stylem zdroje (konstrukční čárkovaně), kopie bodů jako body. Najetí a klik na kopii se přeloží `patternOfCopy` na id pole (vzor `__poles:` z M29), takže klik na kopii vybere celé pole a Delete ho smaže. Tah za kopii nic nepohne. Snapper bere kopie jako geometrii bez identity: přichytí se polohou (konec, střed, na křivce), ale nevznikne automatická vazba a bod se nesloučí s kopií. Glyfy vazeb kopie nemají.
 - **Vynesené kóty pole** (vzor *Kóty (M28)*): u **vybraného** pole a během nástroje ukazuje viewport popisky parametrů: u lineárního pole pro každý směr počet `n×` u poslední instance, rozteč `… mm` mezi originálem a první instancí a úhel `…°` u originálu; u kruhového počet `n×` a celkový úhel `…°` na oblouku kolem středu; zrcadlení popisky nemá. Kotva = střed obálky definičních bodů zdrojů. Klik na popisek otevře pole hodnoty a potvrzení zapíše nový parametr jedním `setParams` (bez řešiče – pole do něj nevstupuje); neplatná hodnota (počet mimo rozsah, rozteč ≤ 0) se nezapíše. Přesný tvar pohledu (`SketchState`) a API session dopíše úkol 4.
 - **Oblasti** (úkol 5, po sloučení M30): `regionCurves` přidá nekonstrukční kopie křivek z `patternCopies` jako `Curve2` s odvozeným id; jména ploch pak `face:side:<pole>:<index>.<zdroj>`.
