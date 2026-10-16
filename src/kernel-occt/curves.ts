@@ -195,7 +195,12 @@ function pairHits(oc: Occt, a: Entry, b: Entry, tol: number): readonly Hit[] {
  * piece too, but their gap grows quadratically to the tolerance at its ends (a quarter of it at
  * the quarter points).
  */
-function sharesPiece(oc: Occt, piece: Geom2d_Curve, other: Geom2d_Curve, tol: number): boolean {
+export function sharesPiece(
+  oc: Occt,
+  piece: Geom2d_Curve,
+  other: Geom2d_Curve,
+  tol: number,
+): boolean {
   const first = piece.FirstParameter();
   const last = piece.LastParameter();
   return [0.25, 0.5, 0.75].every((s) => {
@@ -210,7 +215,7 @@ function sharesPiece(oc: Occt, piece: Geom2d_Curve, other: Geom2d_Curve, tol: nu
  * piece). A piece split at the seam of a circle ends at the touching point in both halves, so
  * both give the same point.
  */
-function touchingPoint(oc: Occt, piece: Geom2d_Curve, other: Geom2d_Curve): Vec2 {
+export function touchingPoint(oc: Occt, piece: Geom2d_Curve, other: Geom2d_Curve): Vec2 {
   const gap = (u: number): number => {
     using p = piece.Value(u);
     using projection = new oc.Geom2dAPI_ProjectPointOnCurve(p, other);

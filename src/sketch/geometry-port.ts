@@ -20,6 +20,20 @@ export interface CurveHit {
   readonly overlap?: true;
 }
 
+/**
+ * The centre and the points of contact of a fillet arc of radius r between two curves (M34): the
+ * centre lies r away from the carriers of both (a line as the infinite line, an arc as the whole
+ * circle); pointA, pointB are its projections on the carriers, ta, tb their parameters t (on a
+ * line also outside [0, 1]). The shape of FilletArc in kernel (structural typing, ADR 0017).
+ */
+export interface FilletArc {
+  readonly center: Vec2;
+  readonly pointA: Vec2;
+  readonly pointB: Vec2;
+  readonly ta: number;
+  readonly tb: number;
+}
+
 export interface SketchGeometry {
   /**
    * All intersections of the curves (construction ones too, also in shared end points), ordered
@@ -31,4 +45,10 @@ export interface SketchGeometry {
    * arc), with the id of the input; exact (a spline through Geom2d_BSplineCurve.Segment).
    */
   segment(curve: Curve2, from: number, to: number): Promise<Curve2>;
+  /**
+   * The fillet arc of `radius` between a and b (each a line or an arc), of the possible centres
+   * the one nearest to `near`; rejects without a solution (a radius too large, parallel lines
+   * further than 2·radius apart).
+   */
+  fillet(a: Curve2, b: Curve2, radius: number, near: Vec2): Promise<FilletArc>;
 }

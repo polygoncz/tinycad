@@ -4,7 +4,8 @@ import { err, ok, plane, type Plane, type Result, type Vec2, type Vec3 } from '@
 // input shared by every GeometryKernel implementation (contract bullet makeFace). Since M30 also
 // the regions of SketchOps.profileRegions and the check of its input (spec 06, "Stav po M30").
 // Since M33 the intersections of SketchOps.curveIntersections and the check of the curveSegment
-// input (spec 06, "Stav po M33").
+// input (spec 06, "Stav po M33"). Since M34 the fillet center of SketchOps.filletArc and the
+// check of its input (spec 06, "Stav po M34").
 
 /**
  * 2D curve in a plane; the same shape as Curve2 from sketch (kernel does not depend on sketch).
@@ -88,6 +89,30 @@ export interface CurveSegmentInput {
   readonly curve: ProfileCurve;
   readonly from: number;
   readonly to: number;
+}
+
+/**
+ * The center of a fillet (M34, spec 06 "Stav po M34"): `radius` away from the carriers of both
+ * curves, `pointA` and `pointB` the projections of `center` on them, `ta` and `tb` their
+ * parameters t (spec 12 "Port a parametr křivky"; on a line also outside [0, 1]).
+ */
+export interface FilletArc {
+  readonly center: Vec2;
+  readonly pointA: Vec2;
+  readonly pointB: Vec2;
+  readonly ta: number;
+  readonly tb: number;
+}
+
+/** A curve filletArc takes: a line or an arc. */
+export type FilletCurve = Extract<ProfileCurve, { kind: 'line' | 'arc' }>;
+
+/** The input of filletArc after the check (M34). */
+export interface FilletArcInput {
+  readonly a: FilletCurve;
+  readonly b: FilletCurve;
+  readonly radius: number;
+  readonly near: Vec2;
 }
 
 /** Spec 06: tolerance of plane.isOrthonormal for the face plane. */
@@ -324,6 +349,48 @@ export function parseCurveSegmentInput(p: unknown): Result<CurveSegmentInput, re
     // A getter that throws, a proxy… – input outside the types is still just invalid.
     return err([...errors, `cannot read input: ${e instanceof Error ? e.message : String(e)}`]);
   }
+}
+
+/**
+ * Checks `p` against the filletArc contract (spec 06, M34) and returns a fresh copy of it, or
+ * every error found: `a` and `b` lines or arcs as makeFace takes them (their ids optional), a
+ * finite `radius` > 0 and a finite `near`. Reads `p` synchronously and never throws.
+ */
+export function parseFilletArcInput(p: unknown): Result<FilletArcInput, readonly string[]> {
+  const errors: string[] = [];
+  try {
+    if (!isObject(p)) return err(['input must be an object']);
+    const a = readFilletCurve(Reflect.get(p, 'a'), 'a', errors);
+    const b = readFilletCurve(Reflect.get(p, 'b'), 'b', errors);
+    const radius: unknown = Reflect.get(p, 'radius');
+    const near = readVec2(Reflect.get(p, 'near'));
+    if (typeof radius !== 'number' || !Number.isFinite(radius) || !(radius > 0)) {
+      errors.push('radius must be finite and > 0');
+    }
+    if (near === undefined) errors.push('near must be 2 finite numbers');
+    if (
+      errors.length > 0 ||
+      a === undefined ||
+      b === undefined ||
+      typeof radius !== 'number' ||
+      near === undefined
+    ) {
+      return err(errors.length > 0 ? errors : ['invalid input']);
+    }
+    return ok({ a, b, radius, near });
+  } catch (e) {
+    // A getter that throws, a proxy… – input outside the types is still just invalid.
+    return err([...errors, `cannot read input: ${e instanceof Error ? e.message : String(e)}`]);
+  }
+}
+
+/** A line or an arc as makeFace takes it; undefined (and an error) for anything else. */
+function readFilletCurve(x: unknown, path: string, errors: string[]): FilletCurve | undefined {
+  const curve = readCurve(x, path, errors, FACE_CURVE);
+  if (curve === undefined || curve === null) return undefined;
+  if (curve.kind === 'line' || curve.kind === 'arc') return curve;
+  errors.push(`${path} must be a line or an arc`);
+  return undefined;
 }
 
 /** The range of t (spec 12): a circle [0, 2π], an arc [0, sweep], a line [0, 1], a spline its knots. */

@@ -3,12 +3,15 @@ import { createKernelError } from './errors';
 import type { KernelErrorCode } from './errors';
 import type { Axis, BooleanOp, GeometryKernel } from './kernel';
 import { computeCurveIntersections, computeCurveSegment } from './fake-curves';
+import { computeFilletArc } from './fake-fillet';
 import { computeProfileRegions } from './fake-regions';
 import {
   parseCurveSegmentInput,
   parseFaceInput,
+  parseFilletArcInput,
   parseProfileRegionsInput,
   type CurveIntersection,
+  type FilletArc,
   type ProfileCurve,
   type ProfileLoop,
   type ProfileRegions,
@@ -294,6 +297,25 @@ class FakeKernelImpl implements FakeKernel {
           throw createKernelError('invalid-input', `curveSegment: ${parsed.error.join('; ')}`);
         }
         return computeCurveSegment(parsed.value);
+      },
+    );
+  }
+
+  filletArc(p: {
+    readonly a: ProfileCurve;
+    readonly b: ProfileCurve;
+    readonly radius: number;
+    readonly near: Vec2;
+  }): Promise<FilletArc> {
+    // parseFilletArcInput reads the input synchronously into a fresh copy and never throws.
+    return this.call(
+      'filletArc',
+      () => parseFilletArcInput(p),
+      (parsed) => {
+        if (!parsed.ok) {
+          throw createKernelError('invalid-input', `filletArc: ${parsed.error.join('; ')}`);
+        }
+        return computeFilletArc(parsed.value);
       },
     );
   }

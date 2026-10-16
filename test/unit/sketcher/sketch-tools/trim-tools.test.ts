@@ -210,6 +210,7 @@ function expectNear(actual: Vec2, expected: Vec2): void {
 const SILENT: SketchGeometry = {
   intersections: () => new Promise<never>(() => undefined),
   segment: () => new Promise<never>(() => undefined),
+  fillet: () => new Promise<never>(() => undefined),
 };
 
 describe('the trim tool', () => {
@@ -375,6 +376,7 @@ describe('the extend tool', () => {
           ? new Promise((resolve) => answers.push(resolve))
           : fake.intersections(curves),
       segment: (curve, from, to) => fake.segment(curve, from, to),
+      fillet: (a, b, radius, near) => fake.fillet(a, b, radius, near),
     };
     const { viewport, session, rewrite } = await editing(LINE_CIRCLE, 'sketch.extend', geometry);
     await move(viewport, [35, 0]);
@@ -499,6 +501,7 @@ function splineGeometry(): SketchGeometry & { readonly segments: [number, number
       segments.push([from, to]);
       return Promise.resolve(bezierPiece(curve, from, to));
     },
+    fillet: () => Promise.reject(new Error('fillet is not used here')),
   };
 }
 

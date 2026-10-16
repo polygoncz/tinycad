@@ -291,4 +291,80 @@ describe('createFakeSketchGeometry', () => {
     const anonymous: Curve2 = { kind: 'line', from: [0, 0], to: [1, 0] };
     await expect(geometry.intersections([anonymous])).rejects.toThrow();
   });
+
+  describe('fillet', () => {
+    const arc = (id: string, center: Vec2, from: Vec2, to: Vec2): Curve2 => ({
+      kind: 'arc',
+      center,
+      from,
+      to,
+      ccw: true,
+      id,
+    });
+    const close = (p: Vec2, q: Vec2): void => {
+      expect(p[0]).toBeCloseTo(q[0], 9);
+      expect(p[1]).toBeCloseTo(q[1], 9);
+    };
+
+    it('rounds two perpendicular lines, the centre nearest near', async () => {
+      const h = line('h', [0, 0], [10, 0]);
+      const v = line('v', [10, 0], [10, 5]);
+      const inside = await geometry.fillet(h, v, 1, [9.5, 0.5]);
+      close(inside.center, [9, 1]);
+      close(inside.pointA, [9, 0]);
+      close(inside.pointB, [10, 1]);
+      expect(inside.ta).toBeCloseTo(0.9, 12);
+      expect(inside.tb).toBeCloseTo(0.2, 12);
+      const outside = await geometry.fillet(h, v, 1, [11, -1]);
+      close(outside.center, [11, -1]);
+      expect(outside.tb).toBeCloseTo(-0.2, 12); // on the extension of v
+    });
+
+    it('rounds lines under 60° and lines that do not meet', async () => {
+      const h = line('h', [0, 0], [10, 0]);
+      const s = line('s', [0, 0], [5, 5 * Math.sqrt(3)]);
+      const f = await geometry.fillet(h, s, 1, [2, 0.5]);
+      // The centre on the bisector at 30°, 1 from both: (√3, 1).
+      close(f.center, [Math.sqrt(3), 1]);
+      close(f.pointA, [Math.sqrt(3), 0]);
+
+      const far = await geometry.fillet(h, line('v', [12, 2], [12, 8]), 1, [11, 1]);
+      close(far.pointA, [11, 0]);
+      close(far.pointB, [12, 1]);
+      expect(far.ta).toBeCloseTo(1.1, 12);
+      expect(far.tb).toBeCloseTo(-1 / 6, 12);
+    });
+
+    it('rounds a line and an arc outside and inside, and two arcs', async () => {
+      const l = line('l', [10, -10], [10, 0]);
+      const k = arc('k', [10, 10], [10, 0], [20, 10]);
+      const out = await geometry.fillet(l, k, 1, [11, -1]);
+      expect(out.center[0]).toBeCloseTo(11, 9);
+      expect(Math.hypot(out.center[0] - 10, out.center[1] - 10)).toBeCloseTo(11, 9);
+      expect(Math.hypot(out.pointB[0] - 10, out.pointB[1] - 10)).toBeCloseTo(10, 9);
+      expect(out.ta).toBeGreaterThan(0.9);
+      // The parameter on the arc: the angle from its start counter-clockwise.
+      expect(out.tb).toBeCloseTo(Math.atan2(1, Math.sqrt(120)), 9);
+
+      const within = await geometry.fillet(l, k, 1, [11, 1]);
+      expect(Math.hypot(within.center[0] - 10, within.center[1] - 10)).toBeCloseTo(9, 9);
+
+      const m = arc('m', [30, 10], [20, 10], [30, 0]);
+      const two = await geometry.fillet(k, m, 1, [20, 5]);
+      expect(Math.hypot(two.center[0] - 10, two.center[1] - 10)).toBeCloseTo(11, 9);
+      expect(Math.hypot(two.center[0] - 30, two.center[1] - 10)).toBeCloseTo(11, 9);
+    });
+
+    it('rejects a radius too large, parallel lines too far apart, a circle', async () => {
+      const a = line('a', [0, 0], [10, 0]);
+      const b = line('b', [0, 3], [10, 3]);
+      await expect(geometry.fillet(a, b, 1, [5, 1])).rejects.toThrow();
+      const half = await geometry.fillet(a, b, 1.5, [12, 1]);
+      close(half.center, [12, 1.5]);
+      const k = arc('k', [0, 10], [1, 10], [0, 11]);
+      await expect(geometry.fillet(a, k, 2, [0, 5])).rejects.toThrow();
+      const circle: Curve2 = { kind: 'circle', center: [0, 5], radius: 1, id: 'c' };
+      await expect(geometry.fillet(a, circle, 1, [0, 1])).rejects.toThrow();
+    });
+  });
 });

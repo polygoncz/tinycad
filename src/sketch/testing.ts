@@ -3,12 +3,19 @@
 // it never reaches the production bundle.
 
 import type { Vec2 } from '@/core';
-import { nearestParam, paramRange, pointAt, pointTolerance, samePoint } from './curve-param';
+import {
+  arcAngle,
+  nearestParam,
+  paramRange,
+  pointAt,
+  pointTolerance,
+  samePoint,
+} from './curve-param';
 import type { Curve2 } from './geometry';
 import type { SketchConstraint, SketchData, SketchEntity } from './model';
 import { parseSketchData } from './parse';
 import type { ConstraintSolver, SolveInput, SolveResult } from './solver';
-import type { CurveHit, SketchGeometry } from './geometry-port';
+import type { CurveHit, FilletArc, SketchGeometry } from './geometry-port';
 
 export interface FakeSolver extends ConstraintSolver {
   /** The next solve returns the echo overridden by these fields (a queue: one per call). */
@@ -141,8 +148,9 @@ function deepFreeze<T>(value: T): T {
 
 /**
  * The SketchGeometry of tests (M33): analytic intersections of lines, arcs and circles and pieces
- * of them, with the parameter t of spec 12 (curve-param.ts). A spline is not supported: any call
- * with one rejects, like a failing kernel. Every curve of `intersections` needs a unique id.
+ * of them, with the parameter t of spec 12 (curve-param.ts), and fillet arcs of lines and arcs
+ * (M34). A spline is not supported: any call with one rejects, like a failing kernel. Every curve
+ * of `intersections` needs a unique id.
  */
 export function createFakeSketchGeometry(): SketchGeometry {
   return Object.freeze({
@@ -177,6 +185,8 @@ export function createFakeSketchGeometry(): SketchGeometry {
         const ccw = curve.kind === 'circle' || curve.ccw;
         return Object.freeze({ kind: 'arc', center: curve.center, from: p, to: q, ccw, ...id });
       }),
+    fillet: (a: Curve2, b: Curve2, radius: number, near: Vec2) =>
+      settle(() => filletArc(a, b, radius, near)),
   });
 }
 
@@ -293,4 +303,119 @@ function roundRound(a: AnalyticRound, b: AnalyticRound): Candidate[] {
     { point: [mid[0] - (h * dy) / d, mid[1] + (h * dx) / d], overlap: false },
     { point: [mid[0] + (h * dy) / d, mid[1] - (h * dx) / d], overlap: false },
   ];
+}
+
+/** The carrier of a line or an arc of a fillet: the infinite line (a unit direction) or the circle. */
+type Carrier =
+  | { readonly kind: 'line'; readonly point: Vec2; readonly dir: Vec2 }
+  | ({ readonly kind: 'circle' } & Circle);
+
+/**
+ * The fillet arc of spec 06 "Stav po M34" analytically: the centres are the intersections of the
+ * offsets of both carriers by ±radius (a circle by R + radius and R − radius); of them the one
+ * nearest `near` (on two coinciding offset lines the foot of `near`); the points of contact are
+ * its projections on the carriers.
+ */
+function filletArc(a: Curve2, b: Curve2, radius: number, near: Vec2): FilletArc {
+  if (!(Number.isFinite(radius) && radius > 0)) throw new Error('FakeSketchGeometry: bad radius');
+  const ca = filletCarrier(a);
+  const cb = filletCarrier(b);
+  const centres = offsets(ca, radius).flatMap((oa) =>
+    offsets(cb, radius).flatMap((ob) => offsetsMeet(oa, ob, near)),
+  );
+  const center = centres.reduce<Vec2 | null>(
+    (best, p) => (best === null || distance(p, near) < distance(best, near) ? p : best),
+    null,
+  );
+  if (center === null) throw new Error('FakeSketchGeometry: no fillet (operation-failed)');
+  const pointA = project(ca, center);
+  const pointB = project(cb, center);
+  return Object.freeze({
+    center,
+    pointA,
+    pointB,
+    ta: carrierParam(a, pointA),
+    tb: carrierParam(b, pointB),
+  });
+}
+
+function filletCarrier(c: Curve2): Carrier {
+  if (c.kind === 'line') {
+    const d: Vec2 = [c.to[0] - c.from[0], c.to[1] - c.from[1]];
+    const len = Math.hypot(...d);
+    if (len === 0) throw new Error('FakeSketchGeometry: a line of zero length');
+    return { kind: 'line', point: c.from, dir: [d[0] / len, d[1] / len] };
+  }
+  if (c.kind === 'arc') return { kind: 'circle', ...carrier({ ...c, id: '' }) };
+  throw new Error(`FakeSketchGeometry: no fillet of a ${c.kind}`);
+}
+
+function offsets(c: Carrier, r: number): readonly Carrier[] {
+  if (c.kind === 'line') {
+    const n: Vec2 = [-c.dir[1], c.dir[0]];
+    return [-r, r].map((s) => ({ ...c, point: [c.point[0] + n[0] * s, c.point[1] + n[1] * s] }));
+  }
+  const inner = c.radius - r;
+  const outer = { ...c, radius: c.radius + r };
+  return inner > pointTolerance(c.center) ? [outer, { ...c, radius: inner }] : [outer];
+}
+
+/** The common points of two offsets; two coinciding lines give the foot of `near` on them. */
+function offsetsMeet(a: Carrier, b: Carrier, near: Vec2): readonly Vec2[] {
+  const line = (c: Extract<Carrier, { kind: 'line' }>): AnalyticLine => ({
+    kind: 'line',
+    from: c.point,
+    to: [c.point[0] + c.dir[0], c.point[1] + c.dir[1]],
+    id: '',
+  });
+  const circle = (c: Extract<Carrier, { kind: 'circle' }>): AnalyticRound => ({
+    kind: 'circle',
+    center: c.center,
+    radius: c.radius,
+    id: '',
+  });
+  if (a.kind === 'line' && b.kind === 'line') {
+    const cross = a.dir[0] * b.dir[1] - a.dir[1] * b.dir[0];
+    const w: Vec2 = [b.point[0] - a.point[0], b.point[1] - a.point[1]];
+    if (Math.abs(cross) > 1e-12) {
+      const s = (w[0] * b.dir[1] - w[1] * b.dir[0]) / cross;
+      return [[a.point[0] + a.dir[0] * s, a.point[1] + a.dir[1] * s]];
+    }
+    const off = Math.abs(w[0] * a.dir[1] - w[1] * a.dir[0]);
+    return off > pointTolerance(a.point, b.point) ? [] : [project(a, near)];
+  }
+  if (a.kind === 'line' && b.kind === 'circle') return lineCircle(line(a), b).map((k) => k.point);
+  if (a.kind === 'circle' && b.kind === 'line') return lineCircle(line(b), a).map((k) => k.point);
+  if (a.kind === 'circle' && b.kind === 'circle') {
+    return roundRound(circle(a), circle(b)).map((k) => k.point);
+  }
+  return [];
+}
+
+/** The foot of p on the carrier. */
+function project(c: Carrier, p: Vec2): Vec2 {
+  if (c.kind === 'line') {
+    const s = (p[0] - c.point[0]) * c.dir[0] + (p[1] - c.point[1]) * c.dir[1];
+    return [c.point[0] + c.dir[0] * s, c.point[1] + c.dir[1] * s];
+  }
+  const d = distance(p, c.center);
+  if (d === 0) throw new Error('FakeSketchGeometry: a fillet centre in the centre of an arc');
+  return [
+    c.center[0] + ((p[0] - c.center[0]) * c.radius) / d,
+    c.center[1] + ((p[1] - c.center[1]) * c.radius) / d,
+  ];
+}
+
+/** The parameter t of a point of the carrier: on a line also outside [0, 1], on an arc in [0, 2π). */
+function carrierParam(c: Curve2, p: Vec2): number {
+  if (c.kind === 'line') {
+    const d: Vec2 = [c.to[0] - c.from[0], c.to[1] - c.from[1]];
+    return ((p[0] - c.from[0]) * d[0] + (p[1] - c.from[1]) * d[1]) / (d[0] * d[0] + d[1] * d[1]);
+  }
+  if (c.kind === 'arc') return arcAngle(c, p);
+  throw new Error(`FakeSketchGeometry: no fillet of a ${c.kind}`);
+}
+
+function distance(a: Vec2, b: Vec2): number {
+  return Math.hypot(a[0] - b[0], a[1] - b[1]);
 }

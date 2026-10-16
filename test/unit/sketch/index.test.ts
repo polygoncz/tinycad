@@ -3,9 +3,16 @@ import * as sketch from '@/sketch';
 import type {
   Curve2,
   CurveHit,
+  FilletArc,
+  FilletEdge,
+  SketchArc,
   SketchConstraint,
   SketchConstraintDraft,
+  SketchData,
+  SketchEntity,
+  SketchEntityId,
   SketchGeometry,
+  SketchLine,
 } from '@/sketch';
 
 // Guards the public API: a value export removed or added by accident shows up here.
@@ -31,12 +38,19 @@ describe('sketch public API', () => {
         'constraintTargets',
         'curvePoints',
         'curve2',
+        'chamferEdit',
+        'cornerOf',
         'crossingPoints',
         'cutsOf',
         'defaultPlacement',
         'dimensionFor',
+        'directionFromEnd',
+        'edgeLength',
+        'endIds',
         'endTangent',
         'extendEdit',
+        'filletEdit',
+        'isFilletEdge',
         'nearestParam',
         'paramRange',
         'pieceAt',
@@ -181,8 +195,18 @@ describe('sketch public API', () => {
     >();
   });
 
-  it('SketchGeometry has the intersections and pieces of M33 (spec 12 "Port a parametr křivky")', () => {
-    expectTypeOf<keyof SketchGeometry>().toEqualTypeOf<'intersections' | 'segment'>();
+  it('SketchGeometry has the intersections and pieces of M33 and the fillet of M34 (spec 12)', () => {
+    expectTypeOf<keyof SketchGeometry>().toEqualTypeOf<'intersections' | 'segment' | 'fillet'>();
+    expectTypeOf<SketchGeometry['fillet']>().toEqualTypeOf<
+      (a: Curve2, b: Curve2, radius: number, near: readonly [number, number]) => Promise<FilletArc>
+    >();
+    expectTypeOf<FilletArc>().toEqualTypeOf<{
+      readonly center: readonly [number, number];
+      readonly pointA: readonly [number, number];
+      readonly pointB: readonly [number, number];
+      readonly ta: number;
+      readonly tb: number;
+    }>();
     expectTypeOf<SketchGeometry['intersections']>().toEqualTypeOf<
       (curves: readonly Curve2[]) => Promise<readonly CurveHit[]>
     >();
@@ -197,6 +221,19 @@ describe('sketch public API', () => {
       readonly tb: number;
       readonly overlap?: true;
     }>();
+  });
+
+  it('has the corner helpers of the fillet and chamfer tools (M34, spec 12)', () => {
+    expectTypeOf<FilletEdge>().toEqualTypeOf<SketchLine | SketchArc>();
+    expectTypeOf(sketch.isFilletEdge).toEqualTypeOf<
+      (e: SketchEntity | null | undefined) => e is FilletEdge
+    >();
+    expectTypeOf(sketch.directionFromEnd).toEqualTypeOf<
+      (data: SketchData, curve: FilletEdge, end: SketchEntityId) => readonly [number, number] | null
+    >();
+    expectTypeOf(sketch.edgeLength).toEqualTypeOf<
+      (data: SketchData, curve: FilletEdge) => number
+    >();
   });
 
   it('keeps SPLINE_TOLERANCE for the drawing and the snapper (M30)', () => {

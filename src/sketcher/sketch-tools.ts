@@ -4,6 +4,7 @@
 import type { Mode, ToolDescriptor } from '@/interaction';
 import { SKETCH_SELECT_TOOL_ID } from './constants';
 import type { SketchEditor } from './sketch-editor';
+import { createChamferTool } from './sketch-tools/chamfer-tool';
 import { createArcTangentTool } from './sketch-tools/arc-tangent-tool';
 import { createArcTool } from './sketch-tools/arc-tool';
 import { createArc3pTool } from './sketch-tools/arc3p-tool';
@@ -25,6 +26,7 @@ import { createSlotTool } from './sketch-tools/slot-tool';
 import { createSplineTool } from './sketch-tools/spline-tool';
 import { createSplitTool } from './sketch-tools/split-tool';
 import { createExtendTool } from './sketch-tools/extend-tool';
+import { createFilletTool } from './sketch-tools/fillet-tool';
 import { createTrimTool } from './sketch-tools/trim-tool';
 import { createXLineTool } from './sketch-tools/xline-tool';
 
@@ -267,6 +269,35 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       modes: SKETCH,
       family: 'modify',
       create: () => createSplitTool(sketches),
+    }),
+    // Fillet and chamfer (M34), no shortcut; Tabler icons of a rounded corner, of a bevelled join
+    // and of an angle.
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.fillet',
+      label: 'tool.fillet',
+      icon: 'border-radius',
+      group: 'modify',
+      modes: SKETCH,
+      family: 'modify',
+      create: () => createFilletTool(sketches),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.chamfer',
+      label: 'tool.chamfer',
+      icon: 'join-bevel',
+      group: 'modify',
+      modes: SKETCH,
+      family: 'modify',
+      create: () => createChamferTool(sketches, 'distances'),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.chamferAngle',
+      label: 'tool.chamferAngle',
+      icon: 'angle',
+      group: 'modify',
+      modes: SKETCH,
+      family: 'modify',
+      create: () => createChamferTool(sketches, 'angle'),
     }),
     // Mirror and patterns (M36), no shortcut; Tabler icons of a flip, a grid of dots and a full turn.
     Object.freeze<ToolDescriptor>({

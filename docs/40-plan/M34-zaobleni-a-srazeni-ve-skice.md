@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 34
 aliases:
   - M34
@@ -15,7 +15,7 @@ specs:
 depends_on:
   - "[[M33-trim-extend-split]]"
 started: 2026-10-16
-finished:
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-16
@@ -44,10 +44,10 @@ Předpřipravený build nemá `ChFi2d_*`; zaoblení úseček a oblouků je analy
 ## Úkoly
 
 - [x] Kontrakt ([[12-skicar#Zaoblení a sražení ve skice (M34)]], [[06-geometricke-jadro#Stav po M34]]).
-- [ ] Jádro: `filletArc` (fake, OCCT, kontraktová sada).
-- [ ] `sketch`: `cornerOf`, `filletEdit`, `chamferEdit`, port `fillet`.
-- [ ] `app` port, `rewrite` s otevřením kóty, nástroje v liště, e2e.
-- [ ] Spec podle skutečnosti.
+- [x] Jádro: `filletArc` (fake, OCCT, kontraktová sada).
+- [x] `sketch`: `cornerOf`, `filletEdit`, `chamferEdit`, port `fillet`.
+- [x] `app` port, `rewrite` s otevřením kóty, nástroje v liště, e2e.
+- [x] Spec podle skutečnosti.
 
 ## Implementační plán
 
@@ -67,7 +67,7 @@ Jeden úkol = jedno spuštění `implementer`. Úkoly 1 a 2 souběžně (2 má f
 
 ### 3. Port v `app`, session, nástroje, e2e
 
-- **Soubory:** `src/app/sketch-geometry.ts` (`fillet` → `filletArc`), `sketcher/sketch-session.ts` (`rewrite(…, opts?: { edit })`), nové `sketch-tools/fillet-tool.ts`, `chamfer-tool.ts` (obě varianty), `sketch-tools.ts` (rodina `fillet`, skupina `modify`), i18n; e2e `test/e2e/m34.spec.ts`.
+- **Soubory:** `src/app/sketch-geometry.ts` (`fillet` → `filletArc`), `sketcher/sketch-session.ts` (`rewrite(…, opts?: { edit })`), nové `sketch-tools/fillet-tool.ts`, `chamfer-tool.ts` (obě varianty), `sketch-tools.ts` (rodina a skupina `modify`; původně vlastní rodina `fillet`, změněno při sloučení M33 – jedna rodina úprav), i18n; e2e `test/e2e/m34.spec.ts`.
 - **Testy:** nástroje s fake portem (náhled, klik na roh, dvě křivky, příliš velký poloměr nic, otevření kóty); e2e podle spec 12.
 - **Hotovo když:** `npm run check` a `npm run test:e2e` zelené.
 
@@ -88,4 +88,31 @@ Rozdíl mezi zaoblením ve skice (2D, vazby) a zaoblením hran tělesa ([[M14-to
 
 _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hlavní sezení to při sloučení přenese do deníku.)_
 
+**2026-10-16 – natažen `main` s M31** (stopa B): sčítací konflikty v nástrojích, i18n, testech lišty a spec 12. `xline` řeže ostatní křivky, ale trim/extend/split ji neberou (doplněno do spec 12 M33 + test). E2e lišty skicáře: „široká“ lišta při 1800 px místo 1400 px (skupina `modify`).
+
+**Úkol 2 hotový** – tvar požadavků a lokální volby (směr oblouku, `added` bez kót, reference úhlu) schváleny a zapsány ve spec 12.
+
+**Úkol 1 hotový.** OCCT: `InterCurveCurve` na ekvidistantě **nekonečné** `Geom2d_Line` vyhodí výjimku (meze ±2e100) → úsečka jako oříznutá přímka ±1e6 · měřítko. Shodné ekvidistanty hlásí jako segment (u celé kružnice `Segment` padá) – ošetřeno. Spec 06 doplněna.
+
+**Úkol 3 hotový** (nástroje `fillet-tool.ts`, `chamfer-tool.ts`, společný `corner-tool.ts`; e2e `m34.spec.ts`). Náhled volá `filletEdit`/`chamferEdit` s dočasnými id, takže ukáže přesně to, co klik zapíše.
+
+**2026-10-16/17 – natažen `main` s M36, pak s M32 a M33.** Sémantické konflikty s M36: entity polí nejsou křivky pro úpravy ani průsečíky (`isCurveEntity`, `isPattern`; kopie pole se nevyberou). Lišta: se třemi rodinami úprav Vazby při 1280 px přetekly do „…“ (e2e m12 aj.); Pavel při slučování M33 rozhodl **jednu rodinu `modify`** – nástroje M34 jsou v ní za `sketch.split`, e2e vybírá přes šipku „Ořezat“. Po natažení: `npm run check` 7601 unit + 42 integračních, e2e 176/176.
+
+**Architektonická revize:** bez závažných porušení. Opraveno: geometrie dat skici zdvojená v `corner-tool.ts` → exporty `isFilletEdge`, `directionFromEnd`, `edgeLength`, `endIds` ze `sketch`; nástroje dostávají jen `SketchGeometry`, ne celou session; spec 12 už netvrdí, že sražení bere číselný vstup (napojení na M32 a HUD nápověda → M35).
+
 ## Retrospektiva
+
+_(Návrh stopy, Pavel doplní nebo upraví.)_
+
+**Splnění kritérií:** zaoblení rohu obdélníku dá tečný oblouk a změna kóty poloměru drží tvar (e2e `m34.spec.ts`, roh zůstane zakótovaný přes virtuální ostrý roh); zaoblení nesousedících křivek je ořeže k bodům dotyku (unit testy `filletEdit`, kontraktová sada `filletArc` s body na prodloužení). `npm run check` 7607 unit + 42 integračních, e2e 176/176.
+
+**Co bylo jinak, než se čekalo:**
+- Build nemá `Geom2dGcc` ani `ChFi2d`, ale střed zaoblení jako průsečík ekvidistant fungoval – jen ekvidistanta nekonečné přímky v `InterCurveCurve` padá, pomohla oříznutá přímka.
+- Nejvíc práce nebyla geometrie, ale lišta: tři souběžné stopy přidávaly do skupiny Úpravy a při 1280 px přetekly Vazby. Rozhodnutí „jedna rodina úprav“ padlo až při slučování.
+- Sražení se dvěma vzdálenostmi a se stejnou vzdáleností se bez číselného vstupu neliší; svázat kóty by chtělo vazbu, kterou nemáme.
+
+**Co se osvědčilo:**
+- Virtuální ostrý roh – kóty obdélníku přežijí zaoblení bez nové vazby, stačí dvě `pointOnCurve`.
+- Náhled nástroje volá tutéž čistou funkci jako klik (`filletEdit` s dočasnými id) – co uživatel vidí, to se zapíše.
+- Natahování `main` hned po každém sloučení jiné stopy: konflikty malé a sémantické chyby (pole jako křivky) chytil typecheck.
+

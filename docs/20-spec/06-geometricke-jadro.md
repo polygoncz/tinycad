@@ -303,7 +303,8 @@ SketchOps.filletArc(p: { readonly a: ProfileCurve; readonly b: ProfileCurve; rea
 ```
 
 - `a`, `b` úsečka nebo oblouk (tvar z `makeFace`, id nepovinné), `radius` konečné > 0, `near` konečné, jinak `'invalid-input'`. Střed ve vzdálenosti `radius` od nosné geometrie obou (nekonečná přímka, celá kružnice), nejbližší `near`; body dotyku a jejich `t` (M33; u úsečky i mimo `[0, 1]`). Bez řešení → `'operation-failed'`.
-- OCCT: `Geom2d_OffsetCurve(±radius)` nosné geometrie (`Geom2d_Line`, `Geom2d_Circle`), průsečíky `Geom2dAPI_InterCurveCurve`, body dotyku `Geom2dAPI_ProjectPointOnCurve`. Fake: analyticky (přímka–přímka, přímka–kružnice, kružnice–kružnice).
+- Nekonečně mnoho středů (rovnoběžky přesně `2r` od sebe, kolineární úsečky, soustředné oblouky s mezerou `2r`) → bod společné ekvidistanty nejbližší `near`; při shodě vzdáleností první nalezený. `t` bodu dotyku mimo oblouk = úhel od `from` ve směru oblouku v `[0, 2π)`.
+- OCCT: `Geom2d_OffsetCurve(±radius)` nosné geometrie – úsečka jako `Geom2d_TrimmedCurve(Geom2d_Line)` na `±1e6 · měřítko` kolem `from` (`InterCurveCurve` na ekvidistantě nekonečné přímky vyhodí výjimku; střed dál než tato mez → `'operation-failed'`, fake ho najde – mimo kontrakt), oblouk jako `Geom2d_Circle`; průsečíky `Geom2dAPI_InterCurveCurve` (tečný dotyk hlášený jako úsek jako v M33), body dotyku `Geom2dAPI_ProjectPointOnCurve`. Degenerovaná ekvidistanta oblouku (`|ρ − r|` v toleranci) se vynechá. Kód `kernel-occt/fillet.ts`. Fake: analyticky (`kernel/fake-fillet.ts`). Kontrola vstupu `parseFilletArcInput` z `kernel`.
 
 ### Kontrakt (platí pro každou implementaci)
 

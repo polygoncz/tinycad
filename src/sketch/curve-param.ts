@@ -122,7 +122,7 @@ function arcSweep(c: Arc): number {
 }
 
 /** The angle of p around the centre measured from `from` in the direction of the arc, [0, 2π). */
-function arcAngle(c: Arc, p: Vec2): number {
+export function arcAngle(c: Arc, p: Vec2): number {
   const a0 = angleOf(sub(c.from, c.center));
   const a = angleOf(sub(p, c.center));
   return mod2pi(c.ccw ? a - a0 : a0 - a);

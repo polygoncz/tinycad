@@ -1153,15 +1153,15 @@ Když dvě křivky sdílí koncový bod (roh), roh **zůstane** jako samostatný
 ### Zaoblení (`sketch.fillet`)
 
 - **Výběr:** klik na roh (bod, který jako koncový bod používají **právě dvě** úsečky nebo oblouky), nebo klik na dvě křivky (úsečka/oblouk) za sebou. `near`: u rohu bod uvnitř úhlu (roh + `r` · jednotkový součet směrů obou křivek od rohu), u dvou křivek střed obou míst kliknutí.
-- **Poloměr:** poslední použitý v session; první = ¼ délky kratší z obou křivek (oblouk: délka oblouku), zaokrouhleno na 2 platné číslice. Po zápisu se kóta poloměru otevře k úpravě (`SketchState.editingDimension`, jako nástroj Kóta). Náhled oblouku při pohybu nad rohem nebo druhou křivkou (asynchronně, poslední vyhrává).
-- **Data** (`filletEdit`, čistá funkce, pravidla M33): nový střed (bod) a oblouk proti směru z `pointA` k `pointB` nebo naopak (kratší oblouk mezi body dotyku, na straně `near`); konec každé křivky bližší rohu (u dvou křivek bližší bodu dotyku) se přesune do bodu dotyku = **sdílený** koncový bod oblouku (nový bod). Původní koncový bod: roh → virtuální ostrý roh; jinak podle pravidla 2 M33 (smaže se, jen když ho nic nepoužívá). Vazby `tangent(oblouk, a)`, `tangent(oblouk, b)`, kóta `radius` (hodnota `r`). Úsečka zkrácená na nulovou délku → `null` (nic se nezapíše, nástroj ohlásí příliš velký poloměr).
+- **Poloměr:** poslední použitý v session (`WeakMap<SketchSession, …>` v `corner-tool.ts`, přežije přepnutí nástroje; dokud kóta posledního zaoblení existuje, platí její **aktuální** hodnota; zaoblení a sražení mají každé svou paměť, obě sražení společnou); první = ¼ délky kratší z obou křivek (oblouk: délka oblouku), zaokrouhleno na 2 platné číslice. Po zápisu se kóta poloměru otevře k úpravě (`SketchState.editingDimension`, jako nástroj Kóta). Náhled oblouku při pohybu nad rohem nebo druhou křivkou (asynchronně, poslední vyhrává).
+- **Data** (`filletEdit`, čistá funkce, pravidla M33): nový střed (bod) a oblouk proti směru z `pointA` k `pointB` nebo naopak (kratší oblouk mezi body dotyku, na straně `near`); konec každé křivky bližší rohu (u dvou křivek bližší bodu dotyku) se přesune do bodu dotyku = **sdílený** koncový bod oblouku (nový bod). Původní koncový bod: roh → virtuální ostrý roh; jinak podle pravidla 2 M33 (smaže se, jen když ho nic nepoužívá). Vazby `tangent(oblouk, a)`, `tangent(oblouk, b)`, kóta `radius` (hodnota `r`). Úsečka zkrácená na nulovou délku → `null` (nic se nezapíše; nástroj nic nehlásí – session nemá kanál pro hlášky nástrojů, nápověda přijde s HUD nápovědou nástrojů v M35).
 
 ### Sražení (`sketch.chamfer`, `sketch.chamferAngle`)
 
 Jen v rohu (dvě úsečky/oblouky se sdíleným koncovým bodem). Rodina `fillet`: `sketch.fillet`, `sketch.chamfer` (dvě vzdálenosti), `sketch.chamferAngle` (vzdálenost a úhel).
 
 - **Body:** na křivce ve vzdálenosti (tětivě) `d` od rohu – úsečka po své délce, oblouk průsečík s kružnicí `(roh, d)` přes `geometry.intersections` (bližší rohu po oblouku). Vzdálenost větší než křivka → `null`.
-- **Dvě vzdálenosti:** obě `d` stejné (poslední použité, první ¼ kratší křivky); kóty `distance(roh, pA) = d`, `distance(roh, pB) = d`, první se otevře k úpravě. Kóty **nejsou svázané** (vazbu „stejná vzdálenost“ nemáme); stejné hodnoty jen při vytvoření. S číselným vstupem ([[M32-ciselny-vstup|M32]]) zadá uživatel obě hodnoty předem.
+- **Dvě vzdálenosti:** obě `d` stejné (poslední použité, první ¼ kratší křivky); kóty `distance(roh, pA) = d`, `distance(roh, pB) = d`, první se otevře k úpravě. Kóty **nejsou svázané** (vazbu „stejná vzdálenost“ nemáme); stejné hodnoty jen při vytvoření. Číselný vstup ([[M32-ciselny-vstup|M32]]) nástroje zaoblení a sražení zatím nepoužívají – hodnota jde z paměti a upraví se kótou; napojení na číselný vstup (obě hodnoty předem) je úkol M35 spolu s HUD nápovědou.
 - **Vzdálenost a úhel:** referenční křivka = první vybraná (u kliku na roh ta, ke které je kurzor blíž), **musí to být úsečka** (úhel kótujeme jen mezi úsečkami). Kóta `distance(roh, pA) = d` a `angle(sražení, a) = 45°`; bod na druhé křivce z úhlu (průsečík paprsku z `pA` přes `geometry.intersections`).
 - **Data** (`chamferEdit`): nová úsečka `pA → pB`, konce obou křivek u rohu přesunuté do `pA`, `pB` (nové sdílené body), roh → virtuální ostrý roh, kóty podle varianty.
 
@@ -1170,11 +1170,31 @@ Jen v rohu (dvě úsečky/oblouky se sdíleným koncovým bodem). Rodina `fillet
 export function filletEdit(data: SketchData, req: FilletRequest, ids: IdSource): SketchEdit | null;
 export function chamferEdit(data: SketchData, req: ChamferRequest, ids: IdSource): SketchEdit | null;
 export function cornerOf(data: SketchData, point: SketchEntityId): { readonly a: SketchEntityId; readonly b: SketchEntityId } | null;   // roh = bod dvou úseček/oblouků
+// pomůcky pro nástroje (revize M34: geometrie dat skici jen v sketch)
+export type FilletEdge = SketchLine | SketchArc;
+export function isFilletEdge(e: SketchEntity | null | undefined): e is FilletEdge;
+export function directionFromEnd(data: SketchData, curve: FilletEdge, end: SketchEntityId): Vec2 | null;   // jednotkový směr od konce dovnitř křivky (oblouk po tečně); null = end není konec / nulová délka
+export function edgeLength(data: SketchData, curve: FilletEdge): number;   // oblouk po oblouku
+export function endIds(curve: SketchCurve): readonly SketchEntityId[];      // koncové body (trim.ts; kružnice a přímka [])
 ```
 
-`SketchEdit` rozšíří o `edit?: SketchConstraintId` (kóta k otevření); `SketchSession.rewrite(next, added, opts?: { edit?: SketchConstraintId })` ji po zápisu nastaví jako `editingDimension`. Přesný tvar `FilletRequest`/`ChamferRequest` navrhne implementace (vzor `TrimRequest`).
+`SketchEdit` rozšíří o `edit?: SketchConstraintId` (kóta k otevření); `SketchSession.rewrite(next, added, opts?: { edit?: SketchConstraintId })` ji po zápisu nastaví jako `editingDimension`.
 
-**Lišta:** rodina `modify` (jako trim, ne vlastní rodina – šířka lišty) ve skupině `modify` – `sketch.fillet` (ikona `vector-spline`… ověřit v sadě Tabler, např. `border-radius`), `sketch.chamfer`, `sketch.chamferAngle` (např. `vector-triangle`); popisky Zaoblit, Srazit, Srazit s úhlem / Fillet, Chamfer, Chamfer with angle. `sketch.chamferAngle` je nové id rodiny `fillet` stopy A (doplněno k [[#Id nástrojů, akcí a rodin]]).
+Upřesnění z implementace (úkol 2 M34, schváleno hlavním sezením stopy A):
+
+```ts
+export interface Corner { readonly a: SketchEntityId; readonly b: SketchEntityId }   // cornerOf: a, b v pořadí entit; jen koncové body (ne střed oblouku)
+export interface FilletRequest { readonly a: SketchEntityId; readonly b: SketchEntityId; readonly corner?: SketchEntityId; readonly radius: number; readonly arc: FilletArc }
+export interface ChamferRequest { readonly corner: SketchEntityId; readonly a: SketchEntityId; readonly b: SketchEntityId; readonly pointA: Vec2; readonly pointB: Vec2; readonly distance: number; readonly angle?: number }
+```
+
+- `corner` = posouvá se konec v rohu a roh zůstane jako virtuální; bez něj se posouvá konec bližší bodu dotyku. **Nástroj pošle `corner` vždy, když dvě kliknuté křivky sdílí konec** (`cornerOf`), jinak by roh i s kótami zmizel.
+- Směr oblouku zaoblení: tak, aby plynule navazoval na upravené křivky (proti směru od bodu dotyku na `a`, když tím směrem `a` pokračuje) – v běžných případech kratší oblouk.
+- Bod dotyku nebo sražení musí ležet ostře uvnitř své křivky (ne v rohu ani za vzdáleným koncem), jinak `null`.
+- `added` = nové geometrické vazby (tečnosti, `pointOnCurve` virtuálního rohu), kóty ne; kóty mají hodnotu z požadavku. Varianta s úhlem: `angle(sražení, referenční úsečka)` (`reverseB`, když roh je `p1` reference), otevře se kóta vzdálenosti. Reference oblouk → `chamferEdit` vrátí `null`; **nástroj** pak vezme za referenci druhou křivku, je-li úsečka, jinak nic nenabídne.
+- Oblouk zaoblení a úsečka sražení jsou konstrukční, jen když jsou konstrukční obě křivky.
+
+**Lišta:** v jediné rodině `modify` (jako trim, ne vlastní rodina – šířka lišty) ve skupině `modify`, za `sketch.split`: `sketch.fillet` (ikona `border-radius`), `sketch.chamfer` (`join-bevel`), `sketch.chamferAngle` (`angle`), bez klávesové zkratky; popisky Zaoblit, Srazit, Srazit s úhlem / Fillet, Chamfer, Chamfer with angle. `sketch.chamferAngle` je nové id stopy A (doplněno k [[#Id nástrojů, akcí a rodin]]).
 
 **Testy:** jádro – kontraktová sada `filletArc` (dvě kolmé úsečky, úsečky pod 60°, úsečka–oblouk zvenku i zevnitř, oblouk–oblouk, nesousedící úsečky – body dotyku na prodloužení, výběr podle `near`, příliš velký poloměr → `'operation-failed'`); `sketch` – `cornerOf`, `filletEdit` a `chamferEdit` (obě varianty) pro obdélník: oblouk tečný, kóty obdélníku přežijí přes virtuální roh, výsledek projde `parseSketchData` a body jsou před křivkami; `sketcher` – nástroje s fake portem; e2e – zaoblit roh obdélníku, změnit kótu poloměru (tvar drží, roh zůstává zakótovaný), srazit roh, vysunout.
 

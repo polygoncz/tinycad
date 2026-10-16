@@ -1,5 +1,11 @@
-import type { Mat4, Plane, Vec3 } from '@/core';
-import type { CurveIntersection, ProfileCurve, ProfileLoop, ProfileRegions } from './profile';
+import type { Mat4, Plane, Vec2, Vec3 } from '@/core';
+import type {
+  CurveIntersection,
+  FilletArc,
+  ProfileCurve,
+  ProfileLoop,
+  ProfileRegions,
+} from './profile';
 import type {
   BoundingBox,
   MeshData,
@@ -74,6 +80,18 @@ export interface SketchOps {
     readonly from: number;
     readonly to: number;
   }): Promise<ProfileCurve>;
+  /**
+   * M34: the center of a fillet of radius `radius` between the lines or arcs `a` and `b`: at the
+   * distance `radius` from both carriers (a line infinite, an arc its whole circle), the one
+   * nearest `near`, with the touching points and their t (spec 06 "Stav po M34"). No handle,
+   * no side effects; no solution rejects with 'operation-failed'.
+   */
+  filletArc(p: {
+    readonly a: ProfileCurve;
+    readonly b: ProfileCurve;
+    readonly radius: number;
+    readonly near: Vec2;
+  }): Promise<FilletArc>;
 }
 
 /** An axis: a point and a direction (need not be unit length). */

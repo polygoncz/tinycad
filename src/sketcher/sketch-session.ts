@@ -83,8 +83,14 @@ export interface SketchSession {
    * Replaces the data by `next` (M33: trim, extend, split): solves it and on a conflict solves
    * again without the constraints `added`, like the automatic constraints of the tools (M26);
    * written in one setParams. Added constraints the solver finds redundant are left out.
+   * `opts.edit` (M34, fillet and chamfer): once written, that dimension opens for editing
+   * (editingDimension), like a dimension of addConstraint.
    */
-  rewrite(next: SketchData, added: ReadonlySet<SketchConstraintId>): Promise<boolean>;
+  rewrite(
+    next: SketchData,
+    added: ReadonlySet<SketchConstraintId>,
+    opts?: { readonly edit?: SketchConstraintId },
+  ): Promise<boolean>;
   /**
    * The intersections of all curves of the current data (M33, SketchGeometry.intersections),
    * construction ones too; null = not computed for the current data yet, or the port failed.
@@ -845,7 +851,7 @@ export function openSketchSession(deps: {
       checkOpen('remove');
       return change((data) => removeItems(data, ids));
     },
-    rewrite(next, added) {
+    rewrite(next, added, opts) {
       checkOpen('rewrite');
       const without = next.constraints.filter((c) => !added.has(c.id));
       // Without any added constraint in the data a second solve would be the same.
@@ -864,6 +870,8 @@ export function openSketchSession(deps: {
               entities: result.entities ?? next.entities,
               constraints: constraints.filter((c) => !(added.has(c.id) && redundant.has(c.id))),
             });
+            // A dimension missing from the written data is dropped by buildState.
+            if (opts?.edit !== undefined) editingDimension = opts.edit;
             refresh();
             return true;
           }

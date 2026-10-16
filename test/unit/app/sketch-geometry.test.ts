@@ -73,6 +73,32 @@ describe('createSketchGeometry', () => {
 
     await expect(geometry.intersections([H, V])).rejects.toThrow();
     await expect(geometry.segment(H, 0, 0.5)).rejects.toThrow();
+    await expect(geometry.fillet(H, V, 0.1, [1.1, 0.1])).rejects.toThrow();
+  });
+
+  it('gives the fillet arc of two lines from the kernel (filletArc)', async () => {
+    const kernel = createFakeKernel();
+    const geometry = createSketchGeometry(() => kernel);
+
+    const arc = await geometry.fillet(H, V, 0.1, [1.1, 0.1]);
+
+    expect(arc.center[0]).toBeCloseTo(1.1, 9);
+    expect(arc.center[1]).toBeCloseTo(0.1, 9);
+    expect(arc.pointA[0]).toBeCloseTo(1.1, 9);
+    expect(arc.pointA[1]).toBeCloseTo(0, 9);
+    expect(arc.pointB[0]).toBeCloseTo(1, 9);
+    expect(arc.pointB[1]).toBeCloseTo(0.1, 9);
+    expect(arc.ta).toBeCloseTo(0.55, 9);
+    expect(arc.tb).toBeCloseTo(0.55, 9);
+    expect(kernel.callCount('filletArc')).toBe(1);
+  });
+
+  it('rejects a fillet the kernel cannot make', async () => {
+    const kernel = createFakeKernel();
+    const geometry = createSketchGeometry(() => kernel);
+    kernel.failNext('filletArc', 'operation-failed', 'no fillet');
+
+    await expect(geometry.fillet(H, V, 0.1, [1.1, 0.1])).rejects.toThrow('no fillet');
   });
 
   it('takes the kernel anew on every call (a restarted kernel)', async () => {

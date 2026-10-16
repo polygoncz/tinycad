@@ -489,6 +489,33 @@ describe('createSketchTools', () => {
         family: 'modify',
       },
       {
+        id: 'sketch.fillet',
+        label: 'tool.fillet',
+        icon: 'border-radius',
+        group: 'modify',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'modify',
+      },
+      {
+        id: 'sketch.chamfer',
+        label: 'tool.chamfer',
+        icon: 'join-bevel',
+        group: 'modify',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'modify',
+      },
+      {
+        id: 'sketch.chamferAngle',
+        label: 'tool.chamferAngle',
+        icon: 'angle',
+        group: 'modify',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'modify',
+      },
+      {
         id: 'sketch.mirror',
         label: 'tool.mirror',
         icon: 'flip-horizontal',
@@ -543,6 +570,21 @@ describe('createSketchTools', () => {
       'sketch.arc',
       'sketch.arc3p',
       'sketch.arcTangent',
+    ]);
+  });
+
+  it('the modify tools are one family, trim first, fillet and chamfers after split (M33, M34, M36)', () => {
+    const { tools } = setup();
+    expect(tools.filter((t) => t.family === 'modify').map((t) => t.id)).toEqual([
+      'sketch.trim',
+      'sketch.extend',
+      'sketch.split',
+      'sketch.fillet',
+      'sketch.chamfer',
+      'sketch.chamferAngle',
+      'sketch.mirror',
+      'sketch.linearPattern',
+      'sketch.circularPattern',
     ]);
   });
 
