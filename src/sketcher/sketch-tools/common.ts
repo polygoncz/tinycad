@@ -173,7 +173,8 @@ export function constrainPolar(
   }
   if (length === undefined) return cursor;
   const size = Math.hypot(d[0], d[1]);
-  if (size <= MIN_LENGTH) return from;
+  // The cursor on the start has no direction: +x of the plane, like Fusion (M32).
+  if (size <= MIN_LENGTH) return [from[0] + length, from[1]];
   return [from[0] + (length * d[0]) / size, from[1] + (length * d[1]) / size];
 }
 

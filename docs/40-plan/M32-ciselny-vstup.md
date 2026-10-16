@@ -45,7 +45,7 @@ Pavel 2026-10-16: „Chtěl bych ještě dodělat do Sketch následující featu
 - [x] Vstup v `clickTool`, vrstva v `ui`, úsečka, bod a přímka.
 - [x] Obdélníky, kružnice a oblouk.
 - [x] Drážky.
-- [ ] E2e a spec.
+- [x] E2e a spec.
 
 ## Implementační plán
 
@@ -105,5 +105,6 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **Úkol 2 hotový:** vstup v `clickTool` (`ToolMods`, `SnapMode.input` → `freeTarget`), `SketchState.numericInput`, `SketchInput.vue`, úsečka/bod/přímka s kótami. **B9 (rozhodnutí stopy podle akceptačního kritéria):** zamčený úhel vynechá automatické osy, rovnoběžnost, kolmost a tečnost, zamčená délka vynechá `equal` (`withoutLocked`) – jinak by řešič zadaný rozměr posunul. API propsané do spec 10, 11, 12. `npm run check` zelený (6996 testů).
 - **Úkol 4 hotový:** drážky (3 druhy) s poli a povinnými kótami (`distance`, `diameter`), 16 testů; `sweep` modulo 360° a úhel začátku oblouku bez kóty dopsané do spec.
 - **Úkol 3 hotový:** obdélníky (3 druhy), kružnice a oblouk s poli a povinnými kótami (`rectangle-input.ts`, `withTyped`), 24 testů. Po kontrole doplněno: dopočítané rohy se zadaným rozměrem se nepřichytí k blízkému bodu (`computedTolerance`, test). Zamčený průměr/poloměr vypne `equal` (B9).
+- **Úkol 5 hotový:** e2e `m32.spec.ts` (5 scénářů × 2 prohlížeče: úsečka 50 mm pod 30° jen klávesnicí, délka + směr myší, obdélník 40 × 20, kružnice ⌀ 30, bod na 12,5; 7 s mřížkou); celé e2e 158/158. **B10 (rozhodnutí stopy):** délka/průměr s kurzorem přesně v předchozím bodě má výchozí směr +x (jako Fusion) místo tichého degenerovaného kroku.
 
 ## Retrospektiva

@@ -443,8 +443,8 @@ describe('constrainPolar (spec 12, M32 "constrain")', () => {
     expectNear(constrainPolar(from, [13, 14], new Map([['length', 10]])), [16, 18]);
   });
 
-  it('a length with the cursor on the start: the start (degenerate)', () => {
-    expect(constrainPolar(from, from, new Map([['length', 10]]))).toEqual(from);
+  it('a length with the cursor on the start: the default direction +x', () => {
+    expect(constrainPolar(from, from, new Map([['length', 10]]))).toEqual([20, 10]);
   });
 
   it('an angle: the projection of the cursor onto the ray', () => {
