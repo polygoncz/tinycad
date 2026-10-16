@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: doing
 order: 36
 aliases:
   - M36
@@ -15,7 +15,7 @@ specs:
   - "[[12-skicar]]"
 depends_on:
   - "[[M29-spliny]]"
-started:
+started: 2026-10-16
 finished:
 tags:
   - milnik
@@ -26,7 +26,7 @@ updated: 2026-10-16
 **Cíl:** zrcadlení podle osy, lineární a kruhové pole entit skici jako **parametrická entita**: počet, rozteč a úhel jdou změnit i po vytvoření, přímo přes vynesené kóty ve viewportu.
 
 
-**Specifikace:** [[12-skicar#Data (`sketch`)]], [[12-skicar#Řešič vazeb]], [[12-skicar#Kóty (M28)]]
+**Specifikace:** [[12-skicar#Zrcadlení a pole (M36)]], [[12-skicar#Data (`sketch`)]], [[12-skicar#Řešič vazeb]], [[12-skicar#Kóty (M28)]]
 
 **Navazuje na:** [[M29-spliny|M29]]. Milník série *Rozšíření skicáře II* (M30–M37), viz [[12-skicar#Rozšíření skicáře II (M30–M37)]] a [[Roadmapa#Rozšíření skicáře II (M30–M37)]]. Stopa C; geometrii nemění, na [[M30-geometrie-skici-v-occt|M30]] nečeká.
 
@@ -100,5 +100,7 @@ Odvozená geometrie v parametrickém modelu: kdy data nesou výsledek a kdy jen 
 ## Průběh stopy
 
 _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hlavní sezení to při sloučení přenese do deníku.)_
+
+- **2026-10-16 start:** Pavel rozhodl směr lineárního pole jako **úhel** (parametr `angle` u každého směru, vynesená kóta), ne referenční úsečku. Kontrakt v [[12-skicar#Zrcadlení a pole (M36)]]. Doplněno bez otázky (k potvrzení Pavlem): `MAX_PATTERN_COUNT = 100`, kruhové pole se znaménkem úhlu a krokem `angle/count` u plného kruhu, jinak `angle/(count−1)`; vynesené kóty jen u vybraného pole; kopie bodů jsou součástí kopií (sdílené body → uzavřené oblasti). Osa zrcadlení a symetrie zatím jen úsečka, `xline` přibude po sloučení M31.
 
 ## Retrospektiva

@@ -745,6 +745,66 @@ export interface SketchGeometry {}
 - Postup výpočtu v sekci *Oblasti (profily)* výše platí dál jako **kontrakt výsledku** (co je oblast, díra, jméno, křížení, pořadí); OCCT ho smí dosáhnout jinou cestou (dělení hran `BOPAlgo`, stěny z `BRepBuilderAPI`), tolerance jsou OCCT.
 
 
+## Zrcadlení a pole (M36)
+
+Rozhodnuto v [[Q089 Parametrické zrcadlení a pole ve skice|Q089]]: entita je **recept** (zdroje + parametry), kopie se odvozují z vyřešeného originálu a do řešiče nevstupují; vazby a kóty na kopie nejdou. Směr lineárního pole je **úhel** (Pavel 2026-10-16, jako manipulátor v Onshape): pole nezávisí na jiné entitě a úhel je další vynesená kóta. Verze schématu skici zůstává 1 (nové druhy jen přibývají).
+
+```ts
+// sketch/model.ts – členy SketchEntity, ne SketchCurve
+/** Zrcadlení zdrojů podle osy (úsečka; po sloučení M31 i xline). Jedna kopie s indexem 1. */
+export interface SketchMirror {
+  readonly kind: 'mirror'; readonly id: SketchEntityId;
+  readonly sources: readonly SketchEntityId[];
+  readonly axis: SketchEntityId;
+}
+/** Jeden směr lineárního pole: count ≥ 2 instancí (včetně originálu) po spacing (mm) ve směru angle. */
+export interface PatternDirection {
+  readonly angle: number;     // rad od osy x roviny skici, libovolné konečné číslo
+  readonly count: number;     // celé číslo, 2 ≤ count ≤ MAX_PATTERN_COUNT
+  readonly spacing: number;   // mm, > 0, vzdálenost sousedních instancí
+}
+/** Lineární pole: směr 1 povinný, směr 2 volitelný (mřížka, jako Onshape). */
+export interface SketchLinearPattern {
+  readonly kind: 'linearPattern'; readonly id: SketchEntityId;
+  readonly sources: readonly SketchEntityId[];
+  readonly direction1: PatternDirection;
+  readonly direction2?: PatternDirection;
+}
+/** Kruhové pole kolem bodu skici: count instancí (včetně originálu) v celkovém úhlu angle. */
+export interface SketchCircularPattern {
+  readonly kind: 'circularPattern'; readonly id: SketchEntityId;
+  readonly sources: readonly SketchEntityId[];
+  readonly center: SketchEntityId;   // bod skici
+  readonly count: number;            // celé číslo, 2 ≤ count ≤ MAX_PATTERN_COUNT
+  readonly angle: number;            // rad, 0 < |angle| ≤ 2π; kladný = proti směru hodinových ručiček
+}
+export type SketchPattern = SketchMirror | SketchLinearPattern | SketchCircularPattern;
+export type SketchEntity = SketchPoint | SketchCurve | SketchPattern;
+export const MAX_PATTERN_COUNT = 100;
+export function isPattern(e: SketchEntity): e is SketchPattern;
+
+// sketch/patterns.ts (nový)
+/** Kopie všech polí skici jako běžné entity (body a křivky) s odvozenými id; originál (index 0) se nekopíruje. */
+export function patternCopies(data: SketchData): readonly (SketchPoint | SketchCurve)[];
+/** Id entity pole z odvozeného id kopie ('<pole>:<přípona>'), jinak null. */
+export function patternOfCopy(id: string): SketchEntityId | null;
+```
+
+- **Zdroje:** neprázdné, bez duplicit, každý je bod nebo křivka skici (ne pole, ne text); u zrcadlení zdrojem není osa, u kruhového pole zdrojem není střed. Jeden zdroj smí být ve více polích. Id pole a id zdrojů nesmí obsahovat `:` ani `,` (odvozené id by nebylo jednoznačné; id z generátoru je base62).
+- **Kopie** (`patternCopies`, čistá funkce nad vyřešenými daty): pro každou instanci kromě originálu se zkopíruje každý zdroj **i jeho definiční body** (`curvePoints`; u `fitSpline` body `fit`). Kopie bodu má id `<pole>:<index>.<id bodu>`, kopie křivky `<pole>:<index>.<id křivky>` a odkazuje na odvozená id svých bodů; dvě zdrojové křivky se společným bodem mají tedy v kopii také společný bod (oblasti z kopií zůstanou uzavřené). Kopie křivky přebírá `construction` zdroje. Pořadí: pole v pořadí entit, instance vzestupně, zdroje v pořadí `sources`, body před křivkou; každé id jen jednou.
+  - **Index:** zrcadlení `1`; lineární pole s jedním směrem `i` (1 … count−1); se dvěma směry `i-j` (`i` směr 1, `j` směr 2, všechny dvojice kromě `0-0`); kruhové pole `k` (1 … count−1). Přidání směru 2 tedy id změní (`1` → `1-0`), to je změna parametru.
+  - **Transformace:** lineární posun `i·s₁·(cos α₁, sin α₁) + j·s₂·(cos α₂, sin α₂)`; kruhové otočení kolem středu o `k·krok`, kde `krok = angle / count` pro plný kruh (`| |angle| − 2π | ≤ 1e-9`) a `angle / (count − 1)` jinak (jako Fusion); zrcadlení podle přímky osy.
+  - **Zrcadlení obrací orientaci:** zrcadlený oblouk má prohozené `start` a `end` (oblouk zůstane proti směru hodinových ručiček); kružnice jen střed; spline transformuje body (`bspline` póly jako body, `fitSpline` body `fit` a uložené `poles`), uzly a parametry beze změny.
+  - **Stabilita id:** změna rozteče, úhlu nebo zdrojové geometrie id nemění; snížení počtu odebere jen instance s nejvyšším indexem. Odebrání zdroje odebere jen jeho kopie.
+- **Kontrola dat** (`sketch.invalidEntity` u pole): tvar a pole jako u ostatních entit; `sources` podle pravidel výše; `axis` vede na úsečku (po M31 i `xline`); `center` na bod; `count` celé číslo v rozsahu; `spacing > 0` konečné; `angle` konečné, u kruhového `0 < |angle| ≤ 2π` (+1e-9); `direction2` volitelné, ale když je, platné. Vazby na entitu pole nesmějí odkazovat (`sketch.invalidConstraint`).
+- **Mazání** (`removeItems`): (2a) smazání zdroje ho vyřadí ze `sources` všech polí, pole s prázdnými zdroji se smaže; (2b) smazání osy nebo středu smaže pole; smazání pole zdroje ani osu nemaže. V kroku (3) se bod, který používá zbylé pole jako `center`, počítá jako použitý. Kaskáda běží do ustálení (smazaná křivka → vyřazený zdroj → smazané pole).
+- **Pomůcky editace:** `constraintFor` a `dimensionFor` s polem ve výběru → `null`; `toggleConstruction` pole přeskočí; `constraintFor('symmetric', [a, b, osa])` – dva body a úsečka (po M31 i xline) v tomto pořadí, body nejsou body osy.
+- **Řešič:** entity polí do řešiče nevstupují (adaptér je přeskočí); osa a střed jsou běžné entity. Vazba `symmetric` → `symmetric_ppl` (sekce *Vazba symetrie* výše).
+- **Kresba, výběr, snapper:** kresba editované i regenerované skici přidá `patternCopies(data)` stylem zdroje (konstrukční čárkovaně), kopie bodů jako body. Najetí a klik na kopii se přeloží `patternOfCopy` na id pole (vzor `__poles:` z M29), takže klik na kopii vybere celé pole a Delete ho smaže. Tah za kopii nic nepohne. Snapper bere kopie jako geometrii bez identity: přichytí se polohou (konec, střed, na křivce), ale nevznikne automatická vazba a bod se nesloučí s kopií. Glyfy vazeb kopie nemají.
+- **Vynesené kóty pole** (vzor *Kóty (M28)*): u **vybraného** pole a během nástroje ukazuje viewport popisky parametrů: u lineárního pole pro každý směr počet `n×` u poslední instance, rozteč `… mm` mezi originálem a první instancí a úhel `…°` u originálu; u kruhového počet `n×` a celkový úhel `…°` na oblouku kolem středu; zrcadlení popisky nemá. Kotva = střed obálky definičních bodů zdrojů. Klik na popisek otevře pole hodnoty a potvrzení zapíše nový parametr jedním `setParams` (bez řešiče – pole do něj nevstupuje); neplatná hodnota (počet mimo rozsah, rozteč ≤ 0) se nezapíše. Přesný tvar pohledu (`SketchState`) a API session dopíše úkol 4.
+- **Oblasti** (úkol 5, po sloučení M30): `regionCurves` přidá nekonstrukční kopie křivek z `patternCopies` jako `Curve2` s odvozeným id; jména ploch pak `face:side:<pole>:<index>.<zdroj>`.
+
+
 ## Testy
 
 - `sketch`: `parseSketchData` pro každé pravidlo (platná data, každý druh chyby s `index`); `constraintFor` a `dimensionFor` pro platné i neplatné výběry; `measure`; `removeItems` (kaskáda bod → křivky → osiřelé body → vazby); `toggleConstruction`; `computeRegions`: obdélník (1 oblast, jméno z id 4 úseček, plocha), dva obdélníky vedle sebe se sdílenou hranou (2 oblasti), obdélník s kružnicí uvnitř (díra, 2 oblasti), kružnice v kružnici v kružnici, drážka z úseček a tečných oblouků (řazení při shodě úhlu), otevřená polyline (0), polyline s „ocáskem“ (prořezání), konstrukční úsečka uvnitř obdélníku (ignorována), křížící se úsečky (`crossing`), body spojené `coincident` (splynutí uzlů), stabilita jména po změně souřadnic a pořadí entit; `FakeSolver`.
