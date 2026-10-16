@@ -296,7 +296,16 @@ describe('createSketchTools', () => {
         group: 'draw',
         modes: ['sketch'],
         shortcut: 'L',
-        family: undefined,
+        family: 'line',
+      },
+      {
+        id: 'sketch.xline',
+        label: 'tool.xline',
+        icon: 'arrows-horizontal',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'line',
       },
       {
         id: 'sketch.rectangle',
@@ -305,7 +314,25 @@ describe('createSketchTools', () => {
         group: 'draw',
         modes: ['sketch'],
         shortcut: 'R',
-        family: undefined,
+        family: 'rectangle',
+      },
+      {
+        id: 'sketch.rectangleCenter',
+        label: 'tool.rectangleCenter',
+        icon: 'square-dot',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'rectangle',
+      },
+      {
+        id: 'sketch.rectangle3p',
+        label: 'tool.rectangle3p',
+        icon: 'square-rotated',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'rectangle',
       },
       {
         id: 'sketch.circle',
@@ -425,6 +452,15 @@ describe('createSketchTools', () => {
         family: 'slot',
       },
       {
+        id: 'sketch.point',
+        label: 'tool.point',
+        icon: 'point',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: 'P',
+        family: undefined,
+      },
+      {
         id: 'sketch.dimension',
         label: 'tool.dimension',
         icon: 'ruler-measure',
@@ -452,6 +488,19 @@ describe('createSketchTools', () => {
       'sketch.arc',
       'sketch.arc3p',
       'sketch.arcTangent',
+    ]);
+  });
+
+  it('the rectangles and the lines are families with the old tool first (M31)', () => {
+    const { tools } = setup();
+    expect(tools.filter((t) => t.family === 'rectangle').map((t) => t.id)).toEqual([
+      'sketch.rectangle',
+      'sketch.rectangleCenter',
+      'sketch.rectangle3p',
+    ]);
+    expect(tools.filter((t) => t.family === 'line').map((t) => t.id)).toEqual([
+      'sketch.line',
+      'sketch.xline',
     ]);
   });
 

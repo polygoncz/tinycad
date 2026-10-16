@@ -141,7 +141,11 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   // Sketcher (M12): tools, toolbar groups, actions, constraints, the sketch panel.
   'tool.sketch': 'Sketch',
   'tool.line': 'Line',
-  'tool.rectangle': 'Rectangle',
+  'tool.rectangle': 'Corner rectangle',
+  'tool.rectangleCenter': 'Center rectangle',
+  'tool.rectangle3p': '3-point rectangle',
+  'tool.point': 'Point',
+  'tool.xline': 'Construction line',
   'tool.circle': 'Circle',
   'tool.circle2p': '2-point circle',
   'tool.circle3p': '3-point circle',

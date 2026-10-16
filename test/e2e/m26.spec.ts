@@ -78,7 +78,7 @@ test('a rectangle on the edge of another one shares its points, no redundant con
   const status = panel.getByRole('status');
 
   // 1. A rectangle away from the origin: four points (8) minus two horizontal and two vertical.
-  await toolbarButton(page, 'Obdélník').click();
+  await toolbarButton(page, 'Obdélník rohy').click();
   await clickCanvas(page, -160, 60);
   await clickCanvas(page, -40, -40);
   await expect(status).toHaveText('Stupně volnosti: 4');

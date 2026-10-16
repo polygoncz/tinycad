@@ -60,7 +60,7 @@ async function rectangleWithWidth(
   [x1, y1]: readonly [number, number],
   dofAfter: string,
 ): Promise<void> {
-  await toolbarButton(page, 'Obdélník').click();
+  await toolbarButton(page, 'Obdélník rohy').click();
   await clickCanvas(page, x0, y0);
   await clickCanvas(page, x1, y1);
   await expect(status).toHaveText(dofAfter);

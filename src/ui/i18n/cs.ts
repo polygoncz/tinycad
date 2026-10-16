@@ -142,7 +142,11 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   // Sketcher (M12): tools, toolbar groups, actions, constraints, the sketch panel.
   'tool.sketch': 'Skica',
   'tool.line': 'Úsečka',
-  'tool.rectangle': 'Obdélník',
+  'tool.rectangle': 'Obdélník rohy',
+  'tool.rectangleCenter': 'Obdélník středem',
+  'tool.rectangle3p': 'Obdélník 3 body',
+  'tool.point': 'Bod',
+  'tool.xline': 'Konstrukční přímka',
   'tool.circle': 'Kružnice',
   'tool.circle2p': 'Kružnice 2 body',
   'tool.circle3p': 'Kružnice 3 body',
