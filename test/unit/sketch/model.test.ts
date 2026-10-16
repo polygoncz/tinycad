@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_PATTERN_COUNT,
+  TEXT_FONTS,
   circularStep,
   isPatternSource,
   patternParamsValid,
@@ -131,5 +132,12 @@ describe('isPatternSource', () => {
     ];
     for (const [entity, source] of entities)
       expect(isPatternSource(entity), entity.kind).toBe(source);
+  });
+});
+
+describe('TEXT_FONTS', () => {
+  it('lists the bundled fonts in panel order and is frozen', () => {
+    expect(TEXT_FONTS).toEqual(['sans', 'serif', 'mono']);
+    expect(Object.isFrozen(TEXT_FONTS)).toBe(true);
   });
 });

@@ -41,7 +41,7 @@ Upřesnění v sezení 2026-10-16: obrysy přes knihovnu **opentype.js** v TS ([
 ## Úkoly
 
 - [x] Rozhodnout [[Q091 Fonty pro text ve skice|Q091]].
-- [ ] Adaptér `text-opentype`, fonty, port `TextOutliner`, pravidla závislostí.
+- [x] Adaptér `text-opentype`, fonty, port `TextOutliner`, pravidla závislostí.
 - [ ] Entita text, kontrola dat, `textCurves`, odvozená id, oblasti.
 - [ ] Kresba, výběr, nástroj Text, `setTextParams` a panel.
 - [ ] Integrační test a e2e (gravírování „tinycad“), spec 01, 10, 11.
@@ -89,5 +89,8 @@ Jak fungují obrysy písmen v TrueType/OpenType (kvadratické a kubické Bézier
 ## Průběh stopy
 
 _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hlavní sezení to při sloučení přenese do deníku.)_
+
+- **2026-10-16 start:** Pavel rozhodl [[Q091 Fonty pro text ve skice|Q091]]: tři přibalené OFL fonty (Noto Sans, Serif, Sans Mono), obrysy uložené v datech (upřesnění ADR 0029). Fonty stažené z `notofonts.github.io` (se souhlasem) a ořezané `pyftsubset` na ~25 kB.
+- **Úkol 1 hotový:** port `TextOutliner`, adaptér `text-opentype` (`opentype.js` 2.0.0), `FakeTextOutliner`, spec 01 doplněná. Fonty přegenerované s `--notdef-outline` (bez něj byl `.notdef` prázdný). 19 testů se skutečnými fonty, `npm run check` zelený. Postřeh mimo stopu: `lint:deps` nekontroluje modul, který v tabulce `.dependency-cruiser.cjs` chybí – kandidát na pravidlo „každá složka `src/` je v tabulce“.
 
 ## Retrospektiva

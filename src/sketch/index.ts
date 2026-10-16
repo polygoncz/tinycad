@@ -1,10 +1,11 @@
 // Ring 1 – sketch data model, data checks, 2D geometry, the curves bounding regions, editing
-// helpers and the ConstraintSolver and SketchGeometry ports (spec 12, ADR 0017). Depends only on
-// core.
+// helpers and the ConstraintSolver, SketchGeometry and TextOutliner ports (spec 12, ADR 0017).
+// Depends only on core.
 // Public API of sketch. Everything else in this folder is internal.
 
 export { GEOMETRIC_CONSTRAINT_KINDS, SKETCH_FEATURE_TYPE, SKETCH_PARAM } from './model';
 export { DIMENSION_KINDS, isDimension } from './model';
+export { TEXT_FONTS } from './model';
 export {
   MAX_PATTERN_COUNT,
   circularStep,
@@ -39,6 +40,9 @@ export type {
   SketchMirror,
   SketchPattern,
   SketchPoint,
+  TextContour,
+  TextFontId,
+  TextSegment,
 } from './model';
 export { patternCopies, patternOfCopy } from './patterns';
 export { parseSketchData } from './parse';
@@ -78,3 +82,4 @@ export type { DimensionTarget } from './dimension-placement';
 export { SPLINE_TOLERANCE } from './geometry';
 export type { ConstraintSolver, SolveInput, SolveResult, SolveStatus } from './solver';
 export type { SketchGeometry } from './geometry-port';
+export type { TextOutliner } from './text';

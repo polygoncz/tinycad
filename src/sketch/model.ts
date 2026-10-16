@@ -120,6 +120,24 @@ export interface SketchCircularPattern {
   readonly angle: number;
 }
 
+/** A font bundled for sketch text (spec 12 "Text ve skice (M37)"). */
+export type TextFontId = 'sans' | 'serif' | 'mono';
+/** In this order: the order of the font choice in the panel. */
+export const TEXT_FONTS: readonly TextFontId[] = Object.freeze(['sans', 'serif', 'mono']);
+/**
+ * A piece of a letter outline in the local coordinates of a text (mm): 2 poles = a line, 3 = a
+ * quadratic, 4 = a cubic Bézier curve.
+ */
+export type TextSegment = readonly Vec2[];
+/** One closed loop of one letter; the end of the last segment = the start of the first. */
+export interface TextContour {
+  /** Index of the character in [...text] (code points, not UTF-16 units). */
+  readonly char: number;
+  /** The code point of that character (checks that the outline matches the text). */
+  readonly code: number;
+  readonly segments: readonly TextSegment[];
+}
+
 /** A mirror or a pattern: a member of SketchEntity, not of SketchCurve (it carries a recipe). */
 export type SketchPattern = SketchMirror | SketchLinearPattern | SketchCircularPattern;
 export type SketchEntity = SketchPoint | SketchCurve | SketchPattern;

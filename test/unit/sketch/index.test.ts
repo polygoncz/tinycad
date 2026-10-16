@@ -14,6 +14,7 @@ describe('sketch public API', () => {
         'SKETCH_FEATURE_TYPE',
         'SKETCH_PARAM',
         'SPLINE_TOLERANCE',
+        'TEXT_FONTS',
         'arcFrom3',
         'circleFrom2',
         'circleFrom3',

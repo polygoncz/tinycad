@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SketchData, SketchEntityId } from '@/sketch/model';
 import { parseSketchData } from '@/sketch/parse';
 import type { SolveInput, SolveResult } from '@/sketch/solver';
-import { createFakeSolver, rectangleData } from '@/sketch/testing';
+import { createFakeSolver, createFakeTextOutliner, rectangleData } from '@/sketch/testing';
 
 const pointId = (data: SketchData, id: string): SketchEntityId => {
   const p = data.entities.find((e) => e.id === id);
@@ -198,5 +198,45 @@ describe('FakeSolver', () => {
     solver.next({ dof: 9 });
     solver.release();
     expect((await p).dof).toBe(7);
+  });
+});
+
+describe('createFakeTextOutliner', () => {
+  it('gives one closed square loop per non-whitespace character, none for a space', async () => {
+    const outliner = createFakeTextOutliner();
+    const contours = await outliner.outline({ text: 'aŽ b', font: 'sans', height: 10 });
+    expect(contours.map((c) => [c.char, c.code])).toEqual([
+      [0, 0x61],
+      [1, 0x17d],
+      [3, 0x62],
+    ]);
+    const first = contours[0];
+    const round = (v: number) => Math.round(v * 1e9) / 1e9;
+    expect(first?.segments.map((seg) => seg.map(([x, y]) => [round(x), round(y)]))).toEqual([
+      [
+        [0.5, 0],
+        [5.5, 0],
+      ],
+      [
+        [5.5, 0],
+        [5.5, 5],
+      ],
+      [
+        [5.5, 5],
+        [0.5, 5],
+      ],
+      [
+        [0.5, 5],
+        [0.5, 0],
+      ],
+    ]);
+    expect(contours[2]?.segments[0]?.[0]?.[0]).toBeCloseTo(18.5);
+    expect(Object.isFrozen(contours)).toBe(true);
+  });
+
+  it('advances 0.6 · height per code point', async () => {
+    const outliner = createFakeTextOutliner();
+    expect(await outliner.advance({ text: 'Žl ť', font: 'mono', height: 10 })).toBeCloseTo(24);
+    expect(await outliner.advance({ text: '', font: 'serif', height: 10 })).toBe(0);
   });
 });

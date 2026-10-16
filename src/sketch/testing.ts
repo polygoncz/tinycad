@@ -2,10 +2,12 @@
 // modules. dependency-cruiser allows importing it only from *.test.ts, so it never reaches the
 // production bundle.
 
-import type { SketchConstraint, SketchData, SketchEntity } from './model';
+import type { Vec2 } from '@/core';
+import type { SketchConstraint, SketchData, SketchEntity, TextContour, TextSegment } from './model';
 import { parseSketchData } from './parse';
 import type { ConstraintSolver, SolveInput, SolveResult } from './solver';
 import type { SketchGeometry } from './geometry-port';
+import type { TextOutliner } from './text';
 
 export interface FakeSolver extends ConstraintSolver {
   /** The next solve returns the echo overridden by these fields (a queue: one per call). */
@@ -142,4 +144,44 @@ function deepFreeze<T>(value: T): T {
  */
 export function createFakeSketchGeometry(): SketchGeometry {
   return Object.freeze({});
+}
+
+/** Advance of one character of the fake outliner, as a fraction of the height. */
+const FAKE_ADVANCE = 0.6;
+/** Side of the square letter of the fake outliner, as a fraction of the height. */
+const FAKE_SQUARE = 0.5;
+
+/**
+ * The TextOutliner of tests (M37): no font, deterministic and font-independent. Every character
+ * (code point) advances by 0.6·height; every non-whitespace character is one counter-clockwise
+ * square loop of side 0.5·height standing on the baseline, from x = i·0.6·height + 0.05·height,
+ * made of 4 line segments; whitespace has no loop. advance = 0.6·height·(number of code points).
+ */
+export function createFakeTextOutliner(): TextOutliner {
+  const outliner: TextOutliner = {
+    outline({ text, height }) {
+      const contours: TextContour[] = [];
+      // Code points, like TextContour.char (spec 12), not graphemes.
+      Array.from(text).forEach((ch, char) => {
+        if (/\s/u.test(ch)) return;
+        const x0 = (char * FAKE_ADVANCE + (FAKE_ADVANCE - FAKE_SQUARE) / 2) * height;
+        const x1 = x0 + FAKE_SQUARE * height;
+        const y1 = FAKE_SQUARE * height;
+        const corners: readonly Vec2[] = [
+          [x0, 0],
+          [x1, 0],
+          [x1, y1],
+          [x0, y1],
+        ];
+        const segments: TextSegment[] = corners.map((p, i) => [p, corners[(i + 1) % 4] ?? p]);
+        // codePointAt(0) of a code point from the string iterator is never undefined.
+        contours.push({ char, code: ch.codePointAt(0) ?? 0, segments });
+      });
+      return Promise.resolve(deepFreeze(contours));
+    },
+    advance({ text, height }) {
+      return Promise.resolve(Array.from(text).length * FAKE_ADVANCE * height);
+    },
+  };
+  return Object.freeze(outliner);
 }
