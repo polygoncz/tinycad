@@ -310,11 +310,16 @@ export interface ShapeIds {
   constraint(): SketchConstraintId;
 }
 
-/** Curves and constraints of a shape; the tool adds the points (with the snapper constraints). `required` = the constraints that define the shape. */
+/**
+ * Curves and constraints of a shape; the tool adds the points (with the snapper constraints).
+ * `required` = the constraints that define the shape. `axis` = the line of the shape the tool
+ * gives an automatic horizontal/vertical (the first side, the construction axis), or null.
+ */
 export interface ShapeDraft {
   readonly curves: readonly SketchCurve[];
   readonly constraints: readonly SketchConstraint[];
   readonly required: readonly SketchConstraintId[];
+  readonly axis: SketchEntityId | null;
 }
 
 /** The corner ids a, b, c, d of a rectangle. */
@@ -370,6 +375,7 @@ export function rectangleCenterShape(
       { kind: 'vertical', id: ids.constraint(), line: da.id },
       { kind: 'midpoint', id: ids.constraint(), point: center, line: ac.id },
     ],
+    null,
   );
 }
 
@@ -383,6 +389,7 @@ export function rectangle3Shape(corners: RectCornerIds, ids: ShapeIds): ShapeDra
       { kind: 'parallel', id: ids.constraint(), a: cd.id, b: ab.id },
       { kind: 'parallel', id: ids.constraint(), a: da.id, b: bc.id },
     ],
+    ab.id,
   );
 }
 
@@ -419,6 +426,7 @@ export function arcSlotShape(p: ArcSlotPointIds, ids: ShapeIds): ShapeDraft {
       { kind: 'tangent', id: ids.constraint(), a: endArc.id, b: outer.id },
       { kind: 'tangent', id: ids.constraint(), a: endArc.id, b: inner.id },
     ],
+    null,
   );
 }
 
@@ -450,6 +458,7 @@ function straightSlot(
       { kind: 'equal', id: ids.constraint(), a: arc2.id, b: arc1.id },
       ...extra(arc1.id, arc2.id, axis.id),
     ],
+    axis.id,
   );
 }
 
@@ -484,8 +493,9 @@ function arcOf(
 function shape(
   curves: readonly SketchCurve[],
   constraints: readonly SketchConstraint[],
+  axis: SketchEntityId | null,
 ): ShapeDraft {
-  return { curves, constraints, required: constraints.map((c) => c.id) };
+  return { curves, constraints, required: constraints.map((c) => c.id), axis };
 }
 
 function slotFit(c1: Vec2, c2: Vec2, n: Vec2, r: number): SlotFit {

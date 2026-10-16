@@ -3,7 +3,7 @@
 // SketchState.dimensions) and every move places it anew (placeDimension: the kind, the value and
 // the placement). A click writes it, the session marks it as editingDimension; Esc drops it.
 
-import { dimensionTarget, placeDimension } from '@/sketch';
+import { dimensionTarget, isLineCarrier, placeDimension } from '@/sketch';
 import type {
   DimensionTarget,
   SketchConstraint,
@@ -176,7 +176,7 @@ export function createDimensionTool(sketches: SketchEditor): Tool {
  */
 function retarget(line: SketchLine, entity: SketchEntity | null): DimensionTarget | null {
   if (entity === null) return null;
-  if ((entity.kind === 'line' || entity.kind === 'xline') && entity.id !== line.id) {
+  if (isLineCarrier(entity) && entity.id !== line.id) {
     return dimensionTarget([line, entity]);
   }
   if (entity.kind === 'point') return dimensionTarget([line, entity]);

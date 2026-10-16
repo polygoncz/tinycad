@@ -1,8 +1,9 @@
 // Actions of the sketcher (spec 10, "Nástroje a akce skicáře"): finish, cancel, delete,
 // construction and one action per geometric constraint over the selection of the sketch. They
 // exist only in the mode 'sketch'; app registers them next to the built-in actions.
-// M31 (spec 12, "Režim konstrukce"): construction toggles the selected curves, or without a curve
-// in the selection the construction mode of the session; it is checked while the mode is on.
+// M31 (spec 12, "Režim konstrukce"): construction toggles the selected curves, or without a
+// togglable curve in the selection (an xline is always construction) the construction mode of the
+// session; it is checked while the mode is on.
 
 import { DisposableStore, ObservableValue } from '@/core';
 import type { Disposable, IdGenerator, Observable } from '@/core';
@@ -30,6 +31,9 @@ const CONSTRAINT_SHORTCUTS: Partial<Record<GeometricConstraintKind, string>> = {
   vertical: 'V',
   coincident: 'I',
 };
+
+/** A curve whose construction flag the action toggles: every curve but an xline (always construction). */
+const isTogglable = (e: SketchEntity): boolean => e.kind !== 'point' && e.kind !== 'xline';
 
 /**
  * Registers the sketcher actions into `deps.registry`. The returned Disposable unsubscribes the
@@ -139,8 +143,7 @@ export function createSketchActions(deps: {
       const s = session();
       if (s === null) return;
       const state = s.state.get();
-      if (selectedEntities(state).some((e) => e.kind !== 'point'))
-        s.toggleConstruction(state.selection);
+      if (selectedEntities(state).some(isTogglable)) s.toggleConstruction(state.selection);
       else s.setConstructionMode(!state.constructionMode);
     },
   });

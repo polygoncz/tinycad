@@ -515,6 +515,10 @@ describe('rectangleCenterShape', () => {
     ]);
   });
 
+  it('has no axis for the tool: its sides are horizontal and vertical already', () => {
+    expect(draft.axis).toBeNull();
+  });
+
   it('holds it by horizontal ab, cd, vertical bc, da and the centre in the middle of ac, all required', () => {
     expect(draft.constraints).toEqual([
       { kind: 'horizontal', id: 'k1', line: 'e1' },
@@ -552,6 +556,10 @@ describe('rectangle3Shape', () => {
     ]);
   });
 
+  it('gives the tool the first side ab for its axis', () => {
+    expect(draft.axis).toBe('e1');
+  });
+
   it('holds it by perpendicular(ab, bc), parallel(cd, ab), parallel(da, bc), all required', () => {
     expect(draft.constraints).toEqual([
       { kind: 'perpendicular', id: 'k1', a: 'e1', b: 'e2' },
@@ -577,6 +585,10 @@ describe('slotShape', () => {
       { kind: 'arc', id: 'e4', center: 'c1', start: 'l1', end: 'r1' },
       { kind: 'line', id: 'e5', p1: 'c1', p2: 'c2', construction: true },
     ]);
+  });
+
+  it('gives the tool the construction axis c1c2 for its axis', () => {
+    expect(draft.axis).toBe('e5');
   });
 
   it('holds it by four tangencies in l1, l2, r2, r1 and equal arcs, all required', () => {
@@ -629,6 +641,10 @@ describe('slotOverallShape', () => {
       { kind: 'arc', id: 'e4', center: 'c1', start: 'l1', end: 'r1' },
       { kind: 'line', id: 'e5', p1: 'p1', p2: 'p2', construction: true },
     ]);
+  });
+
+  it('gives the tool the construction axis e1e2 for its axis', () => {
+    expect(draft.axis).toBe('e5');
   });
 
   it('adds the ends on the arcs and the centres on the axis, all required', () => {
@@ -684,6 +700,10 @@ describe('arcSlotShape', () => {
       { kind: 'arc', id: 'e3', center: 's', start: 'is', end: 'os' },
       { kind: 'arc', id: 'e4', center: 'e', start: 'oe', end: 'ie' },
     ]);
+  });
+
+  it('has no axis for the tool', () => {
+    expect(draft.axis).toBeNull();
   });
 
   it('holds it by four tangencies only (no equal), all required', () => {

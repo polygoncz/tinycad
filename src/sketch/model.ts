@@ -133,6 +133,14 @@ export function isDimensionKind(kind: string): kind is DimensionKind {
 }
 
 /**
+ * A line or an xline: the entities a constraint or a dimension may take as their infinite carrier
+ * line (M31). One guard for the whole sketcher, so a new carrier kind changes one place.
+ */
+export function isLineCarrier(e: SketchEntity): e is SketchLine | SketchXLine {
+  return e.kind === 'line' || e.kind === 'xline';
+}
+
+/**
  * A dimension (a constraint or a draft with a value) by its kind, not by its shape: a later
  * constraint with a `value` field is not a dimension by accident.
  */

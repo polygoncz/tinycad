@@ -5,31 +5,23 @@
 // inferred constraints, like the arc tool), a fourth click the width. The width is the position of
 // the cursor (the grid applies, the snapped point and its inferences do not). The construction of
 // sketch gives the positions, the computed points (tangency points, centres) are new points
-// without the snapper, and the *Shape function gives the curves and the required constraints. The
-// axis of a straight slot gets horizontal/vertical from inferLine (automatic; Ctrl/Cmd turns it
-// off). A degenerate input makes nothing and the picked points stay. The click and the preview of
-// a move share one step (slotStep), so the preview shows exactly the constraints the click adds.
+// without the snapper, and the *Shape function gives the curves, the required constraints and the
+// axis line (ShapeDraft.axis). The axis of a straight slot gets horizontal/vertical like a first
+// side (sideAxis: an alignment of the second point with the first, otherwise inferLine;
+// automatic; Ctrl/Cmd turns it off). A degenerate input makes nothing and the picked points stay.
+// The click and the preview of a move share one step (slotStep), so the preview shows exactly the
+// constraints the click adds.
 
 import type { Vec2 } from '@/core';
 import {
   arcSlotFrom,
   arcSlotShape,
-  inferLine,
   slotFromCenters,
   slotFromEnds,
   slotOverallShape,
   slotShape,
 } from '@/sketch';
-import type {
-  ArcSlotFit,
-  PointInference,
-  ShapeDraft,
-  ShapeIds,
-  SketchConstraint,
-  SketchData,
-  SketchEntityId,
-  SlotFit,
-} from '@/sketch';
+import type { ArcSlotFit, ShapeDraft, SketchData, SlotFit } from '@/sketch';
 import { isPlainEscape } from '@/interaction';
 import type { Tool, ToolContext } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
@@ -37,27 +29,23 @@ import type { GlyphKind } from '../sketch-glyphs';
 import type { SketchSession } from '../sketch-session';
 import { ccwSweep } from '../sketch-angles';
 import {
-  ANGLE_TOLERANCE,
   MIN_LENGTH,
   arcPoints,
   clearPreview,
   clickTool,
   distance,
-  newConstraintId,
-  newEntityId,
   previewInference,
   previewPairs,
   previewPolyline,
   snapMode,
-  addDrawn,
 } from './common';
 import { freeTarget, placePoint, samePoint, sessionData, snapAt } from './snap';
 import type { PlacedPoint, SnapTarget } from './snap';
+import { addShape, axisConstraint, shapeIds, sideAxis } from './shape';
+import type { AxisKind } from './shape';
 
 /** centers = sketch.slot, overall = sketch.slotOverall, arc = sketch.slotArc. */
 export type SlotKind = 'centers' | 'overall' | 'arc';
-
-type AxisKind = 'horizontal' | 'vertical';
 
 /** A picked point of the axis; the second point of a straight axis carries its inferred axis. */
 interface AxisPoint {
@@ -148,7 +136,8 @@ function slotStep(
       return { kind: 'none' };
     }
     if (kind === 'arc') return axisStep(target);
-    return secondAxisStep(data, from, target, infer);
+    // Like a first side (spec 12): an alignment with the first point becomes the axis.
+    return { kind: 'axis', point: sideAxis(data, from, target, infer) };
   }
   if (kind === 'arc' && third === undefined) {
     // The end is always a new point: projecting an existing point would move it.
@@ -179,33 +168,6 @@ const axisStep = (target: SnapTarget): SlotStep => ({
 
 const slotOf = (fit: SlotFit | null): SlotStep =>
   fit === null ? { kind: 'none' } : { kind: 'slot', fit: { kind: 'straight', fit } };
-
-/**
- * The second point of a straight axis: horizontal/vertical of the axis from inferLine (spec 12,
- * B3: only the axes), which replaces an alignment of the point with the first one (the line tool
- * does the same; both would be one constraint twice).
- */
-function secondAxisStep(
-  data: SketchData,
-  from: SnapTarget,
-  target: SnapTarget,
-  infer: boolean,
-): SlotStep {
-  const inferred = target.inferred.filter((i) => !alignedWith(i, from.point));
-  const axis = infer
-    ? (inferLine({ at: from.at, point: null }, target.at, data, {
-        previous: null,
-        angleTolerance: ANGLE_TOLERANCE,
-      }).find((i): i is { readonly kind: AxisKind } => isAxis(i.kind))?.kind ?? null)
-    : null;
-  return { kind: 'axis', point: { target: { ...target, inferred }, axis } };
-}
-
-const isAxis = (kind: string): kind is AxisKind => kind === 'horizontal' || kind === 'vertical';
-
-function alignedWith(i: PointInference, point: SketchEntityId | null): boolean {
-  return point !== null && (i.kind === 'hAlign' || i.kind === 'vAlign') && i.with === point;
-}
 
 /** The inferences the click of the step adds: of the picked point and of its axis; the width adds none. */
 function stepInferences(step: SlotStep): readonly { readonly kind: GlyphKind }[] {
@@ -280,9 +242,9 @@ function ccwArc(center: Vec2, radius: number, a: Vec2, b: Vec2): Vec2[] {
 }
 
 /**
- * The slot in one addDrawn (construction mode, M31): the points of the axis (clicked ones through placePoint), the new
+ * The slot in one addShape: the points of the axis (clicked ones through placePoint), the new
  * computed points, then the curves and constraints of the shape (required) and the inferred axis
- * of a straight slot (automatic).
+ * of a straight slot on the axis line of the draft (automatic).
  */
 function addSlot(
   ctx: ToolContext,
@@ -292,7 +254,7 @@ function addSlot(
   fit: SlotFitOf,
 ): void {
   const place = (at: Vec2): PlacedPoint => placePoint(ctx, freeTarget(at));
-  const ids: ShapeIds = { entity: () => newEntityId(ctx), constraint: () => newConstraintId(ctx) };
+  const ids = shapeIds(ctx);
   const [p0, p1, p2] = axis.map((p) => placePoint(ctx, p.target));
   if (p0 === undefined || p1 === undefined) return;
   let points: readonly PlacedPoint[];
@@ -335,20 +297,8 @@ function addSlot(
       draft = slotShape({ c1: p0.id, c2: p1.id, ...tangency }, ids);
     }
   }
-  const axisKind = axis[1]?.axis ?? null;
-  const axisLine = draft.curves.find((c) => c.kind === 'line' && c.construction === true);
-  const inferred: readonly SketchConstraint[] =
-    axisKind === null || axisLine === undefined || fit.kind === 'arc'
-      ? []
-      : [{ kind: axisKind, id: newConstraintId(ctx), line: axisLine.id }];
-  void addDrawn(
-    session,
-    {
-      entities: [...points.flatMap((p) => p.entities), ...draft.curves],
-      constraints: [...points.flatMap((p) => p.constraints), ...draft.constraints, ...inferred],
-    },
-    { required: new Set(draft.required) },
-  );
+  // An arc slot has no axis line (draft.axis null) and its points no axis.
+  addShape(session, points, draft, axisConstraint(ctx, axis[1]?.axis ?? null, draft.axis));
 }
 
 const angle = (center: Vec2, p: Vec2): number => Math.atan2(p[1] - center[1], p[0] - center[0]);

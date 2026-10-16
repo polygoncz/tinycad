@@ -103,7 +103,16 @@ function aFakeSession() {
     if (!parsed.ok) throw new Error('invalid test data');
     state.set(Object.freeze({ ...state.get(), entities: parsed.value.entities }));
   };
-  return { session, calls, select, setBusy, addLonePoint };
+  /** Adds an xline x through the corners a and c of the rectangle (always construction, M31). */
+  const addXLine = (): void => {
+    const parsed = parseSketchData(
+      [...RECT.entities, { kind: 'xline', id: 'x', p1: 'a', p2: 'c', construction: true }],
+      [],
+    );
+    if (!parsed.ok) throw new Error('invalid test data');
+    state.set(Object.freeze({ ...state.get(), entities: parsed.value.entities }));
+  };
+  return { session, calls, select, setBusy, addLonePoint, addXLine };
 }
 
 function setup() {
@@ -277,6 +286,26 @@ describe('createSketchActions', () => {
       ['setConstructionMode', false],
     ]);
     expect(checked(SKETCH_ACTION_IDS.construction)).toBe(false);
+  });
+
+  it('construction with only an xline and points selected switches the mode (M31)', () => {
+    const { registry, open, checked } = setup();
+    const { calls, select, addXLine } = open();
+    addXLine();
+
+    // An xline is always construction: it cannot be toggled, so it does not count as a curve.
+    select('x', 'a');
+    registry.run(SKETCH_ACTION_IDS.construction);
+    expect(calls).toEqual([['setConstructionMode', true]]);
+    expect(checked(SKETCH_ACTION_IDS.construction)).toBe(true);
+
+    // With a togglable curve beside it the selection is toggled as before.
+    select('x', 'bc');
+    registry.run(SKETCH_ACTION_IDS.construction);
+    expect(calls).toEqual([
+      ['setConstructionMode', true],
+      ['toggleConstruction', ['x', 'bc']],
+    ]);
   });
 
   it('Q runs construction; checked is false without a session', () => {

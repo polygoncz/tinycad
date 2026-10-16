@@ -109,13 +109,13 @@ export function sideAxis(
 
 const isAxis = (kind: string): kind is AxisKind => kind === 'horizontal' || kind === 'vertical';
 
-/** The axis constraint of the line `line` (automatic), or none. */
+/** The axis constraint of the line `line` (automatic; ShapeDraft.axis), or none. */
 export function axisConstraint(
   ctx: ToolContext,
   axis: AxisKind | null,
-  line: SketchEntityId | undefined,
+  line: SketchEntityId | null,
 ): readonly SketchConstraint[] {
-  if (axis === null || line === undefined) return [];
+  if (axis === null || line === null) return [];
   return [{ kind: axis, id: newConstraintId(ctx), line }];
 }
 

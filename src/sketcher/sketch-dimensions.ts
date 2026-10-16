@@ -4,7 +4,7 @@
 
 import { plane as planeMath } from '@/core';
 import type { Plane, Vec2, Vec3 } from '@/core';
-import { defaultPlacement, isDimension } from '@/sketch';
+import { defaultPlacement, isDimension, isLineCarrier } from '@/sketch';
 import type {
   AngularPlacement,
   DimensionConstraint,
@@ -323,7 +323,7 @@ function pointOf(byId: Entities, id: string): Vec2 | null {
 /** p1 and p2 of a line or an xline (M31: dimensions measure to its carrier line). */
 function lineOf(byId: Entities, id: string): readonly [Vec2, Vec2] | null {
   const entity = byId.get(id);
-  if (entity?.kind !== 'line' && entity?.kind !== 'xline') return null;
+  if (entity === undefined || !isLineCarrier(entity)) return null;
   const p1 = pointOf(byId, entity.p1);
   const p2 = pointOf(byId, entity.p2);
   return p1 === null || p2 === null ? null : [p1, p2];

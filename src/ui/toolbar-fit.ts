@@ -2,6 +2,16 @@
 // bar; the rest goes into the menu of the button "…". A pure function of the measured widths,
 // kept out of Toolbar.vue so it runs in Node tests. All in px; the width of a group includes its
 // separator, the width of the button "…" its own.
+// M31: also the state of a toggle button (ariaPressed), kept out of the template for the same reason.
+
+/**
+ * The aria-pressed of a toolbar button from ToolbarItem.checked: a toggle (true/false) says
+ * 'true'/'false', a plain button (null) has no attribute (undefined drops it in Vue).
+ */
+export function ariaPressed(checked: boolean | null): 'true' | 'false' | undefined {
+  if (checked === null) return undefined;
+  return checked ? 'true' : 'false';
+}
 
 /**
  * The number of groups from the left that fit into `available`. When all of them fit, all of

@@ -31,6 +31,7 @@ describe('sketch public API', () => {
         'inferRadius',
         'dimensionTarget',
         'isDimension',
+        'isLineCarrier',
         'measure',
         'movePlacement',
         'parseSketchData',

@@ -2,6 +2,7 @@ import { assert, assertNever } from '@/core';
 import type { Vec2 } from '@/core';
 import { measureDraft } from './edit';
 import { pointsById } from './geometry';
+import { isLineCarrier } from './model';
 import type {
   AngularPlacement,
   DimensionConstraint,
@@ -13,8 +14,6 @@ import type {
   SketchData,
   SketchEntity,
   SketchEntityId,
-  SketchLine,
-  SketchXLine,
 } from './model';
 
 // Choosing the kind and the placement of a dimension from the cursor (spec 12 "Kóty (M28)",
@@ -52,19 +51,14 @@ export function dimensionTarget(selected: readonly SketchEntity[]): DimensionTar
   if (first.kind === 'point' && second.kind === 'point') {
     return { kind: 'points', a: first.id, b: second.id };
   }
-  if (isCarrier(first) && isCarrier(second)) {
+  if (isLineCarrier(first) && isLineCarrier(second)) {
     return { kind: 'lines', a: first.id, b: second.id };
   }
   const point = first.kind === 'point' ? first : second.kind === 'point' ? second : undefined;
-  const line = isCarrier(first) ? first : isCarrier(second) ? second : undefined;
+  const line = isLineCarrier(first) ? first : isLineCarrier(second) ? second : undefined;
   if (point === undefined || line === undefined) return null;
   if (point.id === line.p1 || point.id === line.p2) return null;
   return { kind: 'pointLine', point: point.id, line: line.id };
-}
-
-/** A line or an xline: a dimension of a pair measures to its infinite carrier line. */
-function isCarrier(e: SketchEntity): e is SketchLine | SketchXLine {
-  return e.kind === 'line' || e.kind === 'xline';
 }
 
 /**
@@ -338,10 +332,7 @@ function geometry(data: SketchData): Geometry {
     point,
     line(id) {
       const l = entity(id);
-      assert(
-        l?.kind === 'line' || l?.kind === 'xline',
-        `dimension placement: '${id}' is not a line`,
-      );
+      assert(l !== undefined && isLineCarrier(l), `dimension placement: '${id}' is not a line`);
       return [point(l.p1), point(l.p2)];
     },
     round(id) {

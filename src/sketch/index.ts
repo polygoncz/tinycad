@@ -3,7 +3,7 @@
 // Public API of sketch. Everything else in this folder is internal.
 
 export { GEOMETRIC_CONSTRAINT_KINDS, SKETCH_FEATURE_TYPE, SKETCH_PARAM } from './model';
-export { DIMENSION_KINDS, isDimension } from './model';
+export { DIMENSION_KINDS, isDimension, isLineCarrier } from './model';
 export type {
   AngularPlacement,
   DimensionConstraint,

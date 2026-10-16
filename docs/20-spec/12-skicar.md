@@ -678,6 +678,7 @@ export type SketchCurve = SketchLine | SketchCircle | SketchArc | SketchBSpline 
 - Vazby: kde vazba bere úsečku jako **přímku** (`horizontal`, `vertical`, `parallel`, `perpendicular`, `angle`, `pointLineDistance`, `pointOnCurve`, `tangent` přímka–kružnice/oblouk, osa `symmetric`), bere i `xline`. Kde jde o **úsečku s délkou** (`midpoint`, `equal`, kóta délky z `dimensionFor`), `xline` ne (`constraintFor`/`dimensionFor` → `null`, parse → `sketch.invalidConstraint`). Planegcs: přímka jako `line` přes `p1`, `p2` (vazby na úsečce už dnes pracují s nekonečnou přímkou).
 - `removeItems`: smazání `p1` nebo `p2` smaže přímku, jako u úsečky.
 - Totéž pravidlo platí pro umístění a kresbu kót (`dimensionTarget`, `sketch-dimensions.ts`): bod + přímka a dvě přímky (úhel) ano, samotná přímka (délka) ne. Řešič převede přímku na `line` jednou na vstupu (`asLine`), mapování vazeb se nemění. `endTangent(xline)` → `null` (nemá konce).
+- `isLineCarrier(e: SketchEntity): e is SketchLine | SketchXLine` (`sketch/model.ts`, veřejné API) je jediné místo pravidla „úsečka nebo přímka jako nosná přímka“; používají ho `edit`, `dimension-placement`, `infer`, `sketch-dimensions` a nástroj kóty. `parse.ts` má vlastní množinu druhů (pracuje se surovými daty).
 - `inferLine`: navazující křivka pro `parallel`/`perpendicular` je i přímka, jejíž `p1` nebo `p2` je počátečním bodem nové úsečky; `equal` s přímkou ne.
 - Osa rotace (Revolve) zatím bere jen úsečku (`isSketchLine`, `resolveSketchLine`); přímka jako osa je mimo M31.
 
@@ -781,7 +782,8 @@ export function arcSlotFrom(center: Vec2, start: Vec2, end: Vec2, width: Vec2): 
 /** Nová id pro topologii (nástroj je bere z ToolContext.ids). */
 export interface ShapeIds { entity(): SketchEntityId; constraint(): SketchConstraintId }
 /** Křivky a vazby tvaru; body (s vazbami ze snapperu) dodá nástroj. `required` = vazby, které tvar definují. */
-export interface ShapeDraft { readonly curves: readonly SketchCurve[]; readonly constraints: readonly SketchConstraint[]; readonly required: readonly SketchConstraintId[] }
+/** axis = úsečka, které nástroj dá automatickou `horizontal`/`vertical` (B3): obdélník 3 body → ab, přímé drážky → konstrukční osa, obdélník středem a oblouková drážka → null. */
+export interface ShapeDraft { readonly curves: readonly SketchCurve[]; readonly constraints: readonly SketchConstraint[]; readonly required: readonly SketchConstraintId[]; readonly axis: SketchEntityId | null }
 
 export type RectCornerIds = readonly [SketchEntityId, SketchEntityId, SketchEntityId, SketchEntityId];
 // SlotPointIds { c1; c2; l1; l2; r2; r1 }, SlotOverallPointIds extends SlotPointIds { e1; e2 }, ArcSlotPointIds { center; start; end; innerStart; innerEnd; outerStart; outerEnd } – readonly SketchEntityId
@@ -846,7 +848,7 @@ interface Action { …; /** M31: přepínač – tlačítko v liště svítí, k
 interface ActionState { …; readonly checked: boolean | null }   // null = akce není přepínač (bez `checked`)
 ```
 
-- **Akce `sketch.construction`** (`Q`): povolená s otevřenou session (dřív jen s křivkou ve výběru); `run`: výběr obsahuje křivku → `toggleConstruction(výběr)`, jinak `setConstructionMode(!constructionMode)`. `checked` = `constructionMode`.
+- **Akce `sketch.construction`** (`Q`): povolená s otevřenou session (dřív jen s křivkou ve výběru); `run`: výběr obsahuje křivku, kterou jde přepnout (každou kromě `xline`, ta je vždy konstrukční) → `toggleConstruction(výběr)`, jinak `setConstructionMode(!constructionMode)`. `checked` = `constructionMode`.
 - **Kdo používá `addDrawn`:** všechny kreslicí nástroje (úsečka a tečný oblouk v polyline, obdélníky, kružnice, oblouky, spliny, drážky, přímka, bod). Mimo kreslicí nástroje (kóta, výběr, budoucí úpravy jiných stop) se `addGeometry` volá dál přímo a režim ho neovlivní – trim nebo zrcadlení tak neudělá z normální křivky konstrukční. Přímka je konstrukční vždy; bod nemá `construction`.
 - **Lišta:** akce má skupinu akcí `sketch.draw` (`SKETCH_DRAW_ACTION_GROUP`, sketcher `constants.ts`) a `SKETCH_TOOLBAR.actionGroups` ji dá do skupiny lišty `draw` za nástroje (ikona `line-dashed`; `actionButtons` by ji daly před nástroje). `ToolbarItem.active` u tlačítka akce = `checked === true` (dosud „nikdy akce“), `ToolbarItem.checked` = `ActionState.checked`; `Toolbar.vue` kreslí přepínač jako aktivní nástroj, s `aria-pressed="true"`/`"false"` ([[11-ui#Komponenty]]).
 - Režim se neukládá a přežije přepnutí nástroje; zavřením session zanikne.

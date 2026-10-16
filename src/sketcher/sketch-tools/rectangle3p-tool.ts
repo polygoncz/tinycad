@@ -119,8 +119,7 @@ export function createRectangle3pTool(sketches: SketchEditor): Tool {
           ] as const;
           const [pa, pb, pc, pd] = placed;
           const draft = rectangle3Shape([pa.id, pb.id, pc.id, pd.id], shapeIds(ctx));
-          // The first curve of the draft is the side ab.
-          const axis = axisConstraint(ctx, step.side.axis, draft.curves[0]?.id);
+          const axis = axisConstraint(ctx, step.side.axis, draft.axis);
           addShape(session, placed, draft, axis);
           return;
         }

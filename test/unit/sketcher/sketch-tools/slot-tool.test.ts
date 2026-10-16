@@ -263,6 +263,26 @@ describe('the centre slot tool', () => {
     expect(kindsOf(session)).toEqual([...TANGENTS_AND_EQUAL, 'horizontal']);
   });
 
+  it('a short axis aligned with an existing first centre gets the axis of the alignment', async () => {
+    const { viewport, session } = await drawing('sketch.slot', POINT);
+
+    // The cursor is 4° off the horizontal of m (more than the 3° of inferLine), within the
+    // tolerance of its alignment and just outside the snap onto m itself.
+    await clicks(viewport, [
+      [10, 10],
+      [17, 10.5],
+      [20, 20],
+    ]);
+
+    const axis = newEntities(session, POINT).find(
+      (e) => e.kind === 'line' && e.construction === true,
+    );
+    expect(axis?.kind === 'line' ? axis.p1 : undefined).toBe('m');
+    expect(xyOf(session, axis?.kind === 'line' ? axis.p2 : '')).toEqual([17, 10]);
+    expect(kindsOf(session)).toEqual([...TANGENTS_AND_EQUAL, 'horizontal']);
+    expect(kindsOf(session)).not.toContain('hAlign');
+  });
+
   it('a width on the axis makes nothing and the centres stay', async () => {
     const { viewport, session } = await drawing('sketch.slot');
 

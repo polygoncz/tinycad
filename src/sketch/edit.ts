@@ -1,5 +1,6 @@
 import { assert, assertNever } from '@/core';
 import { pointsById } from './geometry';
+import { isLineCarrier } from './model';
 import type {
   DimensionKind,
   GeometricConstraintKind,
@@ -22,8 +23,6 @@ import type {
 const MIN_DIMENSION = 1e-9;
 
 const isRound = (e: SketchEntity): boolean => e.kind === 'circle' || e.kind === 'arc';
-/** A line or an xline: where a constraint takes a line as its infinite carrier line (M31). */
-const isCarrier = (e: SketchEntity): boolean => e.kind === 'line' || e.kind === 'xline';
 const isCurve = (e: SketchEntity): e is SketchCurve => e.kind !== 'point';
 
 /** The end points of a spline (first and last pole or fit point), or undefined for other entities. */
@@ -52,7 +51,7 @@ export function constraintFor(
 ): SketchConstraintDraft | null {
   const [first, second] = selected;
   if (selected.length === 1 && first !== undefined) {
-    if ((kind === 'horizontal' || kind === 'vertical') && isCarrier(first)) {
+    if ((kind === 'horizontal' || kind === 'vertical') && isLineCarrier(first)) {
       return { kind, line: first.id };
     }
     if (kind === 'fix' && first.kind === 'point') return { kind, point: first.id };
@@ -64,7 +63,7 @@ export function constraintFor(
   const b = second.id;
   const points = selected.filter((e) => e.kind === 'point').length;
   const lines = selected.filter((e) => e.kind === 'line').length;
-  const carriers = selected.filter(isCarrier).length;
+  const carriers = selected.filter(isLineCarrier).length;
   const rounds = selected.filter(isRound).length;
   switch (kind) {
     case 'coincident':
@@ -170,7 +169,7 @@ export function measureDraft(
   };
   const line = (id: SketchEntityId): readonly [SketchPoint, SketchPoint] => {
     const l = data.entities.find((e) => e.id === id);
-    assert(l?.kind === 'line' || l?.kind === 'xline', `measure: '${id}' is not a line`);
+    assert(l !== undefined && isLineCarrier(l), `measure: '${id}' is not a line`);
     return [point(l.p1), point(l.p2)];
   };
   const radius = (id: SketchEntityId): number => {
