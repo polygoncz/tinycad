@@ -43,6 +43,15 @@ export {
 export { ORIGIN_SNAP, snap } from './snap';
 export type { PointInference, SnapGuide, SnapKind, SnapOptions, SnapResult } from './snap';
 export { inferLine, inferRadius } from './infer';
+export {
+  arcFrom3,
+  circleFrom2,
+  circleFrom3,
+  endTangent,
+  tangentArcFrom,
+  tangentCircle,
+} from './construct';
+export type { ArcFit, CircleFit } from './construct';
 export type { LineInference } from './infer';
 export {
   defaultPlacement,

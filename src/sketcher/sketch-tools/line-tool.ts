@@ -4,9 +4,14 @@
 // line through inferLine (axis, parallel, perpendicular, tangent, equal with the previous line of
 // the chain); Ctrl/Cmd turns the inference off. The click and the preview of a move share one
 // step (lineStep), so the preview shows exactly the constraints the click adds.
+//
+// A press on the last point of the chain dragged past the click tolerance draws a tangent arc
+// instead (spec 12, M27, "Tečný oblouk v polyline"): tangent to the previous line or arc of the
+// chain, written on release, and the chain goes on from its end. Without a previous curve the
+// drag is ignored; Escape cancels the drag and keeps the chain.
 
 import type { Vec2 } from '@/core';
-import { inferLine } from '@/sketch';
+import { endTangent, inferLine } from '@/sketch';
 import type {
   LineInference,
   PointInference,
@@ -16,24 +21,28 @@ import type {
   SketchEntityId,
 } from '@/sketch';
 import { isPlainEscape } from '@/interaction';
-import type { Tool, ToolContext } from '@/interaction';
+import type { KeyMods, Tool, ToolContext } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
 import type { SketchSession } from '../sketch-session';
 import {
   ANGLE_TOLERANCE,
   MIN_LENGTH,
+  clearInference,
   clearPreview,
   clickTool,
   distance,
   existingLine,
   newConstraintId,
   newEntityId,
+  previewArcFit,
   previewInference,
   previewPairs,
   snapMode,
 } from './common';
 import { placePoint, sessionData, snapAt } from './snap';
 import type { PlacedPoint, SnapTarget } from './snap';
+import { tangentArcGeometry, tangentArcInferences, tangentArcTo } from './tangent-arc';
+import type { TangentArc, TangentStart } from './tangent-arc';
 
 interface Chain {
   readonly first: PlacedPoint;
@@ -41,7 +50,10 @@ interface Chain {
   /** What the first point still has to add (written with the first line). */
   readonly pending: PlacedPoint | null;
   readonly lines: number;
-  /** The last line of the chain (`previous` of inferLine); null before the first line. */
+  /**
+   * The last line or arc of the chain (`previous` of inferLine, the curve a tangent arc
+   * continues); null before the first line.
+   */
   readonly previous: SketchEntityId | null;
   /**
    * The entities of the chain, which may not be written yet: the snapper and inferLine see them
@@ -71,10 +83,29 @@ const NO_STEP: LineStep = { kind: 'none' };
 
 export function createLineTool(sketches: SketchEditor): Tool {
   let chain: Chain | null = null;
+  /** The start of the tangent arc being dragged; null without a drag. */
+  let arc: TangentStart | null = null;
 
   function end(ctx: ToolContext): void {
     chain = null;
     clearPreview(ctx);
+  }
+
+  /** The tangent arc to the target of a drag at (x, y) from `start`, or null (degenerate). */
+  function arcAt(
+    ctx: ToolContext,
+    session: SketchSession,
+    current: Chain,
+    start: TangentStart,
+    x: number,
+    y: number,
+    mods: KeyMods,
+  ) {
+    const target = snapAt(ctx, session, x, y, {
+      ...snapMode(sketches, mods),
+      pending: current.entities,
+    });
+    return target === null ? null : tangentArcTo(start, target);
   }
 
   /**
@@ -120,6 +151,7 @@ export function createLineTool(sketches: SketchEditor): Tool {
   return clickTool(sketches, {
     reset() {
       chain = null;
+      arc = null;
     },
     onMove(ctx, session, x, y, mods) {
       const mode = snapMode(sketches, mods);
@@ -171,7 +203,91 @@ export function createLineTool(sketches: SketchEditor): Tool {
       end(ctx);
       return true;
     },
+    onDragStart(ctx, session, x, y, mods) {
+      const current = chain;
+      if (current === null) return false;
+      const pending = current.entities;
+      const target = snapAt(ctx, session, x, y, { ...snapMode(sketches, mods), pending });
+      if (target === null) return false;
+      arc = tangentStart(sessionData(session, pending), current, target);
+      return arc !== null;
+    },
+    onDrag(ctx, session, x, y, mods) {
+      const current = chain;
+      const start = arc;
+      if (current === null || start === null) return;
+      const step = arcAt(ctx, session, current, start, x, y, mods);
+      if (step === null) {
+        // A degenerate arc (the end on the line of the direction) is not drawn.
+        clearInference(session);
+        clearPreview(ctx);
+        return;
+      }
+      previewInference(session, step.end.at, tangentArcInferences(step), step.end.guides);
+      previewArcFit(ctx, session, step.fit, start.at, step.end.at);
+    },
+    onDragEnd(ctx, session, x, y, mods) {
+      const current = chain;
+      const start = arc;
+      arc = null;
+      clearPreview(ctx);
+      if (current === null || start === null) return;
+      const step = arcAt(ctx, session, current, start, x, y, mods);
+      if (step === null) return;
+      addArc(ctx, session, current, start, step);
+    },
+    onDragCancel(ctx) {
+      arc = null;
+      clearPreview(ctx);
+    },
   });
+
+  /**
+   * Adds the tangent arc from the end of the chain and moves the chain on to the end of the arc
+   * (the point at the cursor, also when a clockwise arc swaps its ends in the data).
+   */
+  function addArc(
+    ctx: ToolContext,
+    session: SketchSession,
+    current: Chain,
+    start: TangentStart,
+    step: TangentArc,
+  ): void {
+    const geometry = tangentArcGeometry(ctx, start, step);
+    const { pending } = current;
+    const entities = [...(pending?.entities ?? []), ...geometry.entities];
+    const constraints = [...(pending?.constraints ?? []), ...geometry.constraints];
+    const started: Chain = {
+      first: current.first,
+      last: geometry.end,
+      pending: null,
+      lines: current.lines + 1,
+      previous: geometry.arc,
+      entities: [...current.entities, ...geometry.entities],
+    };
+    // An arc onto the first point closes the chain and ends it, like a closing line.
+    const closes = geometry.end.id === current.first.id;
+    chain = closes ? null : started;
+    void session
+      .addGeometry({ entities, constraints }, { required: geometry.required })
+      .then((written) => {
+        // A refused arc would leave the chain on a point that is not in the sketch.
+        if (!written && chain === started) chain = null;
+      });
+  }
+}
+
+/**
+ * The start of a tangent arc dragged from `target`: the last point of the chain, continuing the
+ * previous line or arc of the chain; null for another point or without a previous curve.
+ */
+function tangentStart(data: SketchData, chain: Chain, target: SnapTarget): TangentStart | null {
+  const { last, previous } = chain;
+  if (previous === null || target.point !== last.id) return null;
+  const curve = data.entities.find((e) => e.id === previous);
+  if (curve?.kind !== 'line' && curve?.kind !== 'arc') return null;
+  const direction = endTangent(curve, last.id, data);
+  return direction === null ? null : { point: last.id, at: target.at, curve: previous, direction };
 }
 
 /**

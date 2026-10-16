@@ -135,13 +135,21 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'toolbar.group.feature': 'Features',
   // The button of the groups that do not fit into the bar (M19.1).
   'toolbar.more': 'More tools',
+  // The arrow of a split button of a tool family (M27); name = the label of the shown tool.
+  'toolbar.variants': 'More: {name}',
 
   // Sketcher (M12): tools, toolbar groups, actions, constraints, the sketch panel.
   'tool.sketch': 'Sketch',
   'tool.line': 'Line',
   'tool.rectangle': 'Rectangle',
   'tool.circle': 'Circle',
-  'tool.arc': 'Arc',
+  'tool.circle2p': '2-point circle',
+  'tool.circle3p': '3-point circle',
+  'tool.circle2t': '2-tangent circle',
+  'tool.circle3t': '3-tangent circle',
+  'tool.arc': 'Center point arc',
+  'tool.arc3p': '3-point arc',
+  'tool.arcTangent': 'Tangent arc',
   'tool.spline': 'Control point spline',
   'tool.fitSpline': 'Spline',
   'tool.dimension': 'Dimension',

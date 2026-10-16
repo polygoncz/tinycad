@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 27
 aliases:
   - M27
@@ -15,8 +15,8 @@ specs:
   - "[[11-ui]]"
 depends_on:
   - "[[M26-snapper-a-auto-vazby]]"
-started:
-finished:
+started: 2026-10-15
+finished: 2026-10-15
 tags:
   - milnik
 created: 2026-10-15
@@ -26,12 +26,9 @@ updated: 2026-10-15
 
 **Cíl:** kružnice a oblouky jde zadat stejnými způsoby jako ve Fusionu; každý způsob vytvoří odpovídající vazby (tečnost, sdílené body).
 
-**Specifikace:** [[12-skicar#Režim skicáře (sketcher)]], [[10-interakce#Nástroje a akce skicáře]], [[11-ui#Komponenty]]
+**Specifikace:** [[12-skicar#Oblouky a kružnice (M27)]], [[12-skicar#Režim skicáře (sketcher)]], [[10-interakce#Nástroje a akce skicáře]], [[11-ui#Komponenty]]
 
 **Navazuje na:** [[M26-snapper-a-auto-vazby|M26]] – tečné nástroje a výběr křivek používají snapper a inferenci tečnosti.
-
-> [!note] Hrubý plán
-> Úkoly a akceptační kritéria se upřesní při startu milníku spolu se specifikací a implementačním plánem.
 
 ## Rozsah
 
@@ -46,17 +43,59 @@ Rozhodnutí v sezení 2026-10-15 (brainstorming), Pavel vybral všechny nabídnu
 
 ## Úkoly
 
-- [ ] Upřesnit spec (gesta každého nástroje, vznikající vazby, degenerované případy) a implementační plán
-- [ ] Geometrické pomůcky v `sketch` (kružnice ze 3 bodů, tečné kružnice, oblouk ze 3 bodů)
-- [ ] Nástroje kružnic
-- [ ] Nástroje oblouků
-- [ ] Tečný oblouk v polyline
-- [ ] Skupiny nástrojů v liště, zkratky, e2e
+- [x] 0. Kontrakt ve spec 12 (gesta, vazby, degenerované případy) a implementační plán
+- [x] 1. Konstrukce v `sketch` (`circleFrom2`, `circleFrom3`, `arcFrom3`, `tangentArcFrom`, `tangentCircle`, `endTangent`)
+- [x] 2. Rodiny nástrojů v liště (`ToolDescriptor.family`, `ToolbarItem.variants`, dělené tlačítko v `Toolbar.vue`)
+- [x] 3. Nástroje kružnic (2 body, 3 body, 2 tečny, 3 tečny)
+- [x] 4. Nástroje oblouků (3 body, tečný)
+- [x] 5. Tečný oblouk v polyline
+- [x] 6. e2e `m27.spec.ts`, propsání do spec 10 a 11
+
+## Implementační plán
+
+Jeden úkol = jedno spuštění subagenta `implementer`. Kontrakt je v [[12-skicar#Oblouky a kružnice (M27)]]. Úkoly 1 a 2 jsou na sobě nezávislé (jiné moduly) a běží souběžně; 3–5 stojí na obou.
+
+### 1. Konstrukce
+
+- **Soubory:** nový `src/sketch/construct.ts`, export v `index.ts`; 2D pomůcky z `sketch/vec2.ts`.
+- **Testy:** `test/unit/sketch/construct.test.ts` podle seznamu ve spec (tabulkově, tečnost výsledku ověřit vzdálenostmi).
+- **Hotovo když:** `npm run check` zelený.
+
+### 2. Rodiny nástrojů v liště
+
+- **Soubory:** `src/interaction/tools.ts` (`family`), `toolbar-model.ts` (`variants`, naposledy aktivovaná varianta), `src/ui/components/Toolbar.vue` (dělené tlačítko, nabídka variant), `ui/toolbar-fit.ts`, i18n (`aria-label` šipky).
+- **Testy:** `test/unit/interaction/toolbar-model.test.ts` (rodina = jedna položka, varianta, `active`), `renderToString` lišty.
+- **Hotovo když:** `npm run check` zelený, stávající e2e lišty (`m19-1-toolbar`) projdou.
+
+### 3. Nástroje kružnic
+
+- **Soubory:** nové `src/sketcher/sketch-tools/circle2p-tool.ts`, `circle3p-tool.ts`, `circle-tangent-tool.ts` (2t i 3t), registrace v `sketch-tools.ts` s `family: 'circle'`, i18n popisků; `circle-tool.ts` dostane `family`.
+- **Testy:** `test/unit/sketcher/sketch-tools/` – každý nástroj (entity, vazby, `required`, degenerovaný vstup, Esc, náhled).
+- **Hotovo když:** `npm run check` zelený.
+
+### 4. Nástroje oblouků
+
+- **Soubory:** nové `arc3p-tool.ts`, `arc-tangent-tool.ts`, registrace s `family: 'arc'`, i18n.
+- **Testy:** jako u 3; navíc prohození konců při `ccw === false`, navazující křivka tečného oblouku.
+- **Hotovo když:** `npm run check` zelený.
+
+### 5. Tečný oblouk v polyline
+
+- **Soubory:** `line-tool.ts` (stisk a tah z posledního bodu), případně `common.ts` (`clickTool` s tahem).
+- **Testy:** tah → oblouk + tečna, řetěz pokračuje z konce oblouku, tah bez předchozí křivky nic, Esc během tahu.
+- **Hotovo když:** `npm run check` zelený.
+
+### 6. e2e a spec
+
+- **Soubory:** `test/e2e/m27.spec.ts`; [[10-interakce]] (tabulka nástrojů, rodiny v liště) a [[11-ui]] (dělené tlačítko).
+- **Hotovo když:** e2e projdou, `npm run check` zelený, spec odpovídá kódu.
 
 ## Akceptační kritéria
 
-- Každý nástroj vytvoří geometrii, kterou řešič přijme (`'ok'`) a jejíž vazby odpovídají gestu (např. 2 tečny → 2× `tangent`).
-- Degenerovaný vstup (tři body na přímce, rovnoběžné tečny bez řešení) nic nevytvoří a nástroj zůstane aktivní.
+- Každý nástroj vytvoří geometrii, kterou řešič přijme (`'ok'`) a jejíž vazby odpovídají gestu (např. 2 tečny → 2× `tangent`, 3 body přes existující body → 3× `pointOnCurve`).
+- Degenerovaný vstup (tři body na přímce, tečny bez řešení, konec tečného oblouku na přímce tečny) nic nevytvoří a nástroj zůstane aktivní.
+- Tah z posledního bodu polyline vytvoří tečný oblouk a kreslení pokračuje úsečkou z jeho konce.
+- Kružnice a oblouky jsou v liště dvě dělená tlačítka (Kružnice ▾, Oblouk ▾) s naposledy použitou variantou.
 
 ## Co se naučíš
 
@@ -70,6 +109,26 @@ Rozhodnutí v sezení 2026-10-15 (brainstorming), Pavel vybral všechny nabídnu
 
 _(Souběžná stopa, [[Roadmapa#Souběžné stopy (pokus od M25)|pravidla]]: místo deníku sem zapisuje průběh; hlavní sezení ho při sloučení přenese do deníku.)_
 
+- **2026-10-15, start:** `main` 98e8366 (sloučená stopa A s M25 a M26) natažen fast-forwardem. Kontrakt v [[12-skicar#Oblouky a kružnice (M27)]]. Rozhodnutí stopy k revizi:
+  - A17: počáteční poloha tečných kružnic je numerický odhad (Gauss–Newton nad středem a poloměrem, u dvou křivek se slabým tahem ke kurzoru); přesnou tečnost dořeší řešič z povinných vazeb `tangent` – to je i učební cíl milníku (Apolloniova úloha se v CAD neřeší uzavřeným vzorcem).
+  - A18: rozbalovací skupina = `ToolDescriptor.family`; tlačítko ukazuje naposledy aktivovanou variantu (jako Fusion), stav se neukládá. Zkratky zůstávají `C` a `A` na dosavadních nástrojích.
+  - A19: body kliknuté nástroji 2p/3p nejsou entity (kružnice má jen střed a poloměr); vazbu dostane jen klik přichycený na existující bod (`pointOnCurve`). Vazby, které definují gesto (`tangent`, `pointOnCurve`), jsou povinné (`required`).
+  - A20: `sketch.arc3p` má pořadí kliků začátek, konec, bod na oblouku (Fusion); oblouk po směru se v datech uloží prohozením konců.
+  - A21: tečný oblouk v polyline vzniká stiskem a tahem z posledního bodu (Fusion); uvolnění ho zapíše.
+- **2026-10-15, úkol 1** (konstrukce): hotovo, 36 tabulkových testů. A22: `tangentCircle` má po Levenberg–Marquardtu druhou fázi – projekci na tečné kružnice (Gauss–Newton s nejmenší normou nad rezidui tečnosti); slabý člen ke kurzoru jinak posune minimum o ~λ a tolerance tečnosti by odmítla běžná zadání. Propsáno do spec 12. `endTangent` úsečky/oblouku nulové délky a kružnice → null.
+- **2026-10-15, úkol 2** (rodiny v liště): hotovo souběžně s úkolem 1 v izolovaném worktree (větev sloučená bez konfliktů – úkoly se souborově nepotkaly). Model si naposledy aktivovanou variantu bere z `tools.active` (počítá se i zkratka a nabídka). A23: rodina s jediným nástrojem v režimu a skupině je obyčejné tlačítko; popisek šipky nese název zobrazené varianty. Propsáno do spec 12.
+- **2026-10-15, úkol 3** (kružnice 2 body, 3 body, 2 a 3 tečny): hotovo, 23 testů. Ověřeno na skutečném planegcs: `tangent_cc`/`tangent_ca` si vnitřní či vnější dotyk bere z výchozí polohy, takže odhad `tangentCircle` ho určí a řešič zachová. A24: vybrané křivky tečných nástrojů jsou výběrem session; klik u konce úsečky vybere úsečku, na střed úsečky také; tatáž křivka dvakrát nic; počátek v okruhu 6 px výběr křivky zastíní (známé omezení). Propsáno do spec 12.
+- **2026-10-15, úkol 4** (oblouk 3 body, tečný oblouk): hotovo souběžně s úkolem 3 v izolovaném worktree; sloučení mělo konflikty jen v registraci nástrojů a i18n (sousední řádky). Esc u nových nástrojů: první zruší rozpracované body, druhý ukončí nástroj. Tečný oblouk nemá `inferRadius` (poloměr určuje tečnost).
+  - **Nález:** planegcs hlásí `tangent_la`/`tangent_aa` mezi křivkami se sdíleným koncem jako redundantní, `addGeometry` ji zahodí – tečný oblouk by tečnost neměl. Platilo už pro tečnu úsečky z konce oblouku v M26 (vazba tiše mizela). A25: adaptér mapuje tečnost ve sdíleném bodě na `angle_via_point` (0 nebo π podle geometrie), jako FreeCAD; propsáno do [[12-skicar#Tečnost ve sdíleném koncovém bodě (adaptér planegcs)]].
+- **2026-10-15, adaptér** (A25): `angle_via_point` s úhlem číslem (pevný parametr jako `l2l_angle_pppp`); oblouk na úsečku, na oblouk zevnitř i do S dají `ok` bez redundance a tečnost drží i po tažení. Body spojené jen `coincident` (různá id) jdou dál přes `tangent_*` – omezení zapsané ve spec.
+- **2026-10-15, úkol 5** (tečný oblouk v polyline): hotovo v izolovaném worktree, sloučeno bez konfliktů. `clickTool` umí volitelný tah (`onDragStart` …), společný kód s Tečným obloukem v `tangent-arc.ts`. A26: oblouk se počítá do podmínky uzavření; oblouk končící na prvním bodu řetěz uzavře a ukončí (doplněno hlavním sezením s testem).
+- **2026-10-15, úkol 6** (e2e, spec 10 a 11): `m27.spec.ts` (dělené tlačítko Kružnice ▾, kružnice 3 body, 3 body na přímce nic, 2 tečny → 2× Tečnost, tečný oblouk v polyline), celé e2e 128/128. **Nalezená chyba:** nástroje bez zkratky (nové varianty) neměly akci a lišta je ve skicáři (zamčená editace) zakazovala; opraveno pravidlem jako u akcí nástrojů, propsáno do spec 10.
+- **2026-10-15, revize** (`architecture-reviewer`): bez závažných porušení. Spec upřesněna (nezáporný skalární součin tečen → úhel 0). Opraveno: výběr variant pro nabídku přesunut z `Toolbar.vue` do čisté funkce v `ui/toolbar-fit.ts`; `lastInFamily` se aktualizuje v odběru `tools.active`, ne jako vedlejší efekt `compute` (ADR 0010).
+- **2026-10-15, uzavření:** `npm run check` zelený (6454 unit, 39 integračních), e2e 128/128 v chrome i webkit (`E2E_PORT=4201`). Natažen `main` b64f69e (jen deník). Commit na větev `claude/stopa-a-m25-m27-f7ea83`.
+
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+- **Co šlo dobře:** souběh uvnitř milníku – úkoly 1 a 2 (různé moduly) a 3 a 4 (různé nové soubory) běžely ve dvojicích v izolovaných worktree; slučování stálo jen pár sousedních řádků v registraci nástrojů a i18n. Konstrukce jako čisté funkce v `sketch` + „odhad, řešič dořeší“ zjednodušily tečné kružnice na numerickou úlohu bez rozboru Apolloniových případů.
+- **Co drhlo:** dvě chyby, které unit testy s `FakeSolver` nemohly chytit: (1) planegcs zahazoval tečnost ve sdíleném koncovém bodě jako redundantní (platilo už od M26 – automatická tečna úsečky z oblouku tiše mizela); našel to až test adaptéru se skutečným planegcs; (2) nástroje bez zkratky byly ve skicáři zakázané – našlo to až e2e. Kontrakt `tangentCircle` měl matematickou díru (slabý člen posouvá minimum), opravila ji druhá fáze projekce.
+- **Souběh stop:** větev obsahuje `main` 98e8366; M27 mění `interaction/toolbar-model.ts`, `Toolbar.vue` a adaptér planegcs – kdyby se mezitím v `main` měnily (např. M29 úkol 8 přidá nástroje splinu do skupiny `draw`), konflikty budou v registraci nástrojů a i18n. Nástroje splinu mohou dostat `family: 'spline'`.
+- **Kandidáti na poznatky:** (1) každé mapování vazby na řešič ověřit testem proti skutečnému řešiči, ne jen fake – redundance se v Jacobiánu projeví jen u skutečné numeriky (tečnost v maximu vzdálenosti); (2) konstrukce v CAD stačí odhadnout, přesnost je práce řešiče z vazeb gesta.

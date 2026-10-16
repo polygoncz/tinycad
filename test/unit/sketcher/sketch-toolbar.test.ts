@@ -55,17 +55,7 @@ describe('SKETCH_TOOLBAR', () => {
     mode.set('sketch');
     expect(toolbar.groups.get().map((g) => [g.id, g.items.map((i) => i.id)])).toEqual([
       ['select', ['sketch.select']],
-      [
-        'draw',
-        [
-          'sketch.line',
-          'sketch.rectangle',
-          'sketch.circle',
-          'sketch.arc',
-          'sketch.spline',
-          'sketch.fitSpline',
-        ],
-      ],
+      ['draw', ['sketch.line', 'sketch.rectangle', 'sketch.circle', 'sketch.arc', 'sketch.spline']],
       [
         'constrain',
         ['sketch.dimension', ...GEOMETRIC_CONSTRAINT_KINDS.map(sketchConstraintActionId)],

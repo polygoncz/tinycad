@@ -411,7 +411,7 @@ function constraintPrimitives(
     case 'equal':
       return [equalPrimitive(c.id, curveOf(entities, c.a), curveOf(entities, c.b))];
     case 'tangent':
-      return [tangentPrimitive(c.id, curveOf(entities, c.a), curveOf(entities, c.b))];
+      return [tangentPrimitive(c.id, curveOf(entities, c.a), curveOf(entities, c.b), entities)];
     case 'pointOnCurve':
       return [pointOnCurvePrimitive(c.id, c.point, curveOf(entities, c.curve))];
     case 'midpoint': {
@@ -557,7 +557,14 @@ function equalPrimitive(id: string, a: Curve, b: Curve): SketchPrimitive {
   throw new Error(`equal between a ${a.kind} and a ${b.kind}`);
 }
 
-function tangentPrimitive(id: string, a: Curve, b: Curve): SketchPrimitive {
+function tangentPrimitive(
+  id: string,
+  a: Curve,
+  b: Curve,
+  entities: ReadonlyMap<SketchEntityId, SketchEntity>,
+): SketchPrimitive {
+  const shared = sharedEnd(a, b);
+  if (shared !== undefined) return tangentAtEndPrimitive(id, a, b, shared, entities);
   // The line always first.
   const [first, second] = b.kind === 'line' ? [b, a] : [a, b];
   if (first.kind === 'line' && (second.kind === 'bspline' || second.kind === 'fitSpline')) {
@@ -582,6 +589,66 @@ function tangentPrimitive(id: string, a: Curve, b: Curve): SketchPrimitive {
     return { id, type: 'tangent_ca', c_id: second.id, a_id: first.id };
   }
   throw new Error(`tangent between a ${a.kind} and a ${b.kind}`);
+}
+
+/**
+ * The end point a line or an arc shares with another line or arc (spec 12, "Tečnost ve sdíleném
+ * koncovém bodě"); undefined for any other pair. Splines and circles keep their own mapping.
+ */
+function sharedEnd(a: Curve, b: Curve): SketchEntityId | undefined {
+  const endsA = endsOf(a);
+  const endsB = endsOf(b);
+  if (endsA === undefined || endsB === undefined) return undefined;
+  if (a.kind === 'line' && b.kind === 'line') return undefined;
+  return endsA.find((p) => endsB.includes(p));
+}
+
+function endsOf(c: Curve): readonly SketchEntityId[] | undefined {
+  if (c.kind === 'line') return [c.p1, c.p2];
+  if (c.kind === 'arc') return [c.start, c.end];
+  return undefined;
+}
+
+/**
+ * Tangency in a shared end point as FreeCAD does it: the angle between the curves in the point
+ * is 0 or π, whichever is nearer to the current one. tangent_la / tangent_aa are degenerate
+ * there (the distance of the centre from the other curve is at its maximum, the gradient is
+ * dependent) and planegcs would report them redundant. Decided anew on every solve; the
+ * geometry moves continuously between solves.
+ */
+function tangentAtEndPrimitive(
+  id: string,
+  a: Curve,
+  b: Curve,
+  at: SketchEntityId,
+  entities: ReadonlyMap<SketchEntityId, SketchEntity>,
+): SketchPrimitive {
+  const ta = tangentAt(a, at, entities);
+  const tb = tangentAt(b, at, entities);
+  const sameSense = ta.x * tb.x + ta.y * tb.y >= 0;
+  return {
+    id,
+    type: 'angle_via_point',
+    crv1_id: a.id,
+    crv2_id: b.id,
+    p_id: at,
+    angle: sameSense ? 0 : Math.PI,
+  };
+}
+
+/**
+ * The tangent direction of a line (p1 → p2) or an arc (counter-clockwise) in its end point, in
+ * the sense planegcs measures the angle via a point (its normals are these turned by 90°).
+ */
+function tangentAt(
+  c: Curve,
+  at: SketchEntityId,
+  entities: ReadonlyMap<SketchEntityId, SketchEntity>,
+): { readonly x: number; readonly y: number } {
+  if (c.kind === 'line') return direction(entities, c.p1, c.p2);
+  if (c.kind !== 'arc') throw new Error(`tangent in an end point of a ${c.kind}`);
+  const r = direction(entities, c.center, at);
+  return { x: -r.y, y: r.x };
 }
 
 /**

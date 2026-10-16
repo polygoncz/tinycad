@@ -271,7 +271,7 @@ Naplánováno 2026-10-15, zatím jen rozsah – kontrakt se do sekcí výše dop
 |---|---|---|---|
 | [[M25-glyfy-vazeb\|M25]] | glyfy vazeb ve viewportu, výběr a mazání glyfu, seznam vazeb v panelu sbalený | žádný (`SketchState.glyphs`, vrstva v `ui`) | [[Q083 Rozložení glyfů vazeb\|Q083]] |
 | [[M26-snapper-a-auto-vazby\|M26]] | snapper (čistá funkce v `sketch`), vodítka, automatické vazby ověřené řešičem, potlačení Ctrl/Cmd | nové vazby `pointOnCurve`, `midpoint`, `hAlign`/`vAlign` (zpětně kompatibilní) | [[Q084 Inference automatických vazeb\|Q084]] |
-| [[M27-oblouky-a-kruznice\|M27]] | kružnice 2 body, 3 body, 2 a 3 tečny; oblouk 3 body a tečný; tečný oblouk v polyline | žádný | – |
+| [[M27-oblouky-a-kruznice\|M27]] | kružnice 2 body, 3 body, 2 a 3 tečny; oblouk 3 body a tečný; tečný oblouk v polyline; rodiny nástrojů v liště | žádný | – |
 | [[M28-koty\|M28]] | jeden nástroj Kóta (druh podle polohy myši), vodorovná, svislá, bod–přímka, úhel, průměr; přetahování | nové druhy kót, poloha popisku | [[Q085 Poloha kóty v datech\|Q085]] |
 | [[M29-spliny\|M29]] | kubický B-spline přes řídicí body (NURBS) a přes body; oblasti, vysunutí | nová entita, nová varianta `ProfileCurve` v `kernel` | [[Q086 Spline přes body v řešiči\|Q086]] |
 
@@ -413,6 +413,82 @@ export function inferRadius(radius: number, data: SketchData, previous: SketchEn
 
 **Testy:** `snap` tabulkově (každý krok pořadí, shoda vzdáleností, `exclude`, `infer: false`, mřížka s `align`), `inferLine` (osa, rovnoběžka, kolmice, tečna k oblouku, `equal` 2 % hranice, jen navazující křivky, nejvýš jedna na dvojici), `inferRadius`; `parseSketchData` a `constraintFor` nových vazeb, `removeItems` kaskáda; adaptér planegcs (bod zůstane na úsečce při tažení úsečky, `midpoint`, `hAlign`); session (`conflict` → zápis bez sporných vazeb, `required` zůstanou, nejvýš tři řešení); nástroje s `FakeViewport` (Ctrl/Cmd bez vazeb, bod na úsečce dostane `pointOnCurve`, kolmá úsečka `perpendicular`, náhled a jeho smazání); e2e (akceptační kritéria M26).
 
+## Oblouky a kružnice (M27)
+
+Datový model se nemění (`circle`, `arc`); přibývají nástroje, čisté konstrukce počáteční polohy v `sketch` a rozbalovací skupiny nástrojů v liště. Počáteční poloha je jen **odhad**: vazby nástroje (tečnost, bod na křivce, sdílené body) ji při zápisu dořeší řešičem, jako ve Fusionu.
+
+### Konstrukce (`sketch/construct.ts`, čisté funkce, souřadnice roviny)
+
+```ts
+export interface CircleFit { readonly center: Vec2; readonly radius: number }
+export interface ArcFit { readonly center: Vec2; readonly radius: number; readonly ccw: boolean }   // ccw = od začátku ke konci proti směru hodinových ručiček
+/** Kružnice s průměrem a–b; |a − b| ≤ 1e-9 → null. */
+export function circleFrom2(a: Vec2, b: Vec2): CircleFit | null;
+/** Opsaná kružnice; body na přímce (|cross| ≤ 1e-9 · max(1, rozměr²)) nebo shodné → null. */
+export function circleFrom3(a: Vec2, b: Vec2, c: Vec2): CircleFit | null;
+/** Oblouk start → end přes `through`; ccw podle toho, na které straně úsečky start–end leží through; na přímce → null. */
+export function arcFrom3(start: Vec2, through: Vec2, end: Vec2): ArcFit | null;
+/** Oblouk ze `start` tečný ke směru `direction` (jednotkový) do `end`; ccw, když end leží vlevo od směru; end na přímce směru (úhel ≤ 1e-9) nebo shodný → null. */
+export function tangentArcFrom(start: Vec2, direction: Vec2, end: Vec2): ArcFit | null;
+/**
+ * Kružnice tečná ke 2 nebo 3 křivkám (úsečka = celá nosná přímka, oblouk = celá kružnice), odhad
+ * nejbližší k `hint`: numericky (Gauss–Newton / Levenberg–Marquardt nad středem a poloměrem,
+ * nejvýš 50 iterací) minimalizuje Σ (d_i(střed) − r)², u dvou křivek navíc slabý člen
+ * λ · |střed − hint|² (λ = 1e-3), takže střed leží na množině středů nejblíž kurzoru. d_i je
+ * vzdálenost od přímky, u kružnice | |p − c| − R |. Start ve `hint` s r = průměr d_i. Slabý člen
+ * minimum mírně posune mimo tečné kružnice, proto následuje projekce: Gauss–Newton s nejmenší
+ * normou jen nad rezidui tečnosti (obě fáze dohromady nejvýš 50 iterací). Jiný počet křivek než 2
+ * nebo 3, úsečka nulové délky a spline → null.
+ * Nekonvergence, r ≤ 1e-9 nebo zbytek tečnosti > 1e-6 · max(1, r) → null.
+ */
+export function tangentCircle(curves: readonly Curve2[], hint: Vec2): CircleFit | null;
+/** Směr, kterým křivka pokračuje za svým koncovým bodem `point` (úsečka: od druhého konce; oblouk: tečna ve směru pohybu ke konci a dál); bod není koncem → null. */
+export function endTangent(curve: SketchCurve, point: SketchEntityId, data: SketchData): Vec2 | null;
+```
+
+### Nástroje
+
+| Nástroj (`id`) | Rodina, zkratka | Gesto | Vznikne |
+|---|---|---|---|
+| `sketch.circle` | `circle`, `C` | střed, bod na obvodu (jako dřív) | kružnice; vazby středu ze snapperu, `inferRadius` |
+| `sketch.circle2p` | `circle` | dva body průměru | kružnice `circleFrom2`; klik přichycený na existující bod → `pointOnCurve(bod, kružnice)`; `inferRadius` |
+| `sketch.circle3p` | `circle` | tři body na obvodu | `circleFrom3`; existující body → `pointOnCurve`; `inferRadius` |
+| `sketch.circle2t` | `circle` | klik na křivku A, klik na křivku B, pohyb volí polohu (`tangentCircle([A, B], kurzor)`), klik zapíše | kružnice + `tangent(kružnice, A)`, `tangent(kružnice, B)` |
+| `sketch.circle3t` | `circle` | klik na tři křivky; třetí klik zapíše | `tangentCircle([A, B, C], těžiště tří kliků)` + 3× `tangent` |
+| `sketch.arc` | `arc`, `A` | střed, začátek, konec (jako dřív) | beze změny |
+| `sketch.arc3p` | `arc` | začátek, konec, bod na oblouku | `arcFrom3`; nový bod středu; začátek a konec jsou body ze snapperu se svými vazbami; bod na oblouku přichycený na existující bod → `pointOnCurve`; `ccw === false` → začátek a konec se v datech prohodí (oblouk je vždy proti směru); `inferRadius` |
+| `sketch.arcTangent` | `arc` | klik na koncový bod existující úsečky nebo oblouku, konec | `tangentArcFrom(bod, endTangent(křivka, bod), konec)`; sdílený začátek, `tangent(oblouk, křivka)`; konec je bod ze snapperu se svými vazbami |
+
+- **Křivka pod kurzorem** (2t, 3t): úsečka, kružnice nebo oblouk editované skici do 6 px – snapper s vyloučenými body skici (klik u konce úsečky vybere úsečku), přichycení na střed úsečky je zásah té úsečky, jinak kandidát `onCurve`; klik mimo křivku nebo na už vybranou křivku nic. Do 6 px od počátku vyhrává počátek (křivku tam vybrat nejde – známé omezení). Vybrané křivky jsou během nástroje **výběrem session** (`select`/`clearSelection`, kreslí se stylem `selected`, předchozí výběr se zruší); Esc s rozpracovaným výběrem ho zruší, bez něj nástroj skončí. Hledání křivky ignoruje Ctrl/Cmd (tečny jsou povinné).
+- **Navazující křivka** u `sketch.arcTangent`: koncový bod (snap `point`) musí být koncem úsečky nebo oblouku (začátek/konec), jinak klik nic; víc takových křivek → poslední v datech.
+- **Povinné vazby** (`addGeometry` `required`, [[#Snapper a auto-vazby (M26)]]): `tangent` nástrojů 2t, 3t a tečného oblouku, `pointOnCurve` kliků 2p, 3p a bodu na oblouku. Ostatní (vazby bodů ze snapperu, `inferRadius`) jsou automatické. Konflikt i bez automatických → geometrie se nezapíše (`sketch.conflict`), nástroj zůstane aktivní.
+- **Degenerovaný vstup** (konstrukce vrátí `null`, nulový poloměr): klik nic nevytvoří, rozpracovaný stav zůstane, náhled se nekreslí.
+- **Náhled** jako u ostatních nástrojů: tvar stylem `preview` v overlay `'sketch-tool'`, náhled vazeb (`setInferencePreview`) z jedné funkce kroku nástroje (`circle2pStep` …), včetně `tangent` a `pointOnCurve`.
+- **Ctrl/Cmd** vypne automatické vazby jako v M26, povinné zůstanou.
+
+### Tečnost ve sdíleném koncovém bodě (adaptér planegcs)
+
+Když dvě křivky vazby `tangent` (úsečka + oblouk, oblouk + oblouk) sdílejí koncový bod, planegcs u `tangent_la`/`tangent_aa` hlásí vazbu jako redundantní (ve sdíleném bodě je tečnost maximum vzdálenosti středu od druhé křivky, gradient je závislý na ostatních vazbách) a `addGeometry` by ji zahodil. Adaptér proto v tom případě mapuje `tangent` jako FreeCAD na **`angle_via_point(křivka a, křivka b, sdílený bod, úhel)`** s úhlem 0, nebo π podle toho, který je blíž úhlu tečen v aktuální geometrii (rozhoduje se při každém řešení; geometrie se mezi řešeními hýbe spojitě). Data se nemění. Týká se i tečny úsečky z konce oblouku z M26 (`inferLine`) a tečného oblouku v polyline. Kružnice koncové body nemá; bez sdíleného bodu zůstává `tangent_*`. „Sdílený“ znamená stejné id bodu – dva body spojené jen vazbou `coincident` jdou dál přes `tangent_*` (planegcs ji tam nejspíš označí za redundantní; nástroje body sdílejí, takže se to týká jen ručně spojených bodů). Úhel tečen: úsečka ve směru p1 → p2, oblouk proti směru hodinových ručiček; nezáporný skalární součin → 0, záporný → π. Úsečka u konce splinu má vlastní mapování ze stopy M29.
+
+### Tečný oblouk v polyline
+
+V nástroji úsečka s rozpracovaným řetězem: stisk na posledním bodu řetězu a tah nad `CLICK_TOLERANCE_PX` přepne do tečného oblouku (náhled oblouku `tangentArcFrom(poslední bod, směr předchozí úsečky nebo oblouku řetězu, kurzor)`); uvolnění zapíše oblouk se sdíleným začátkem, `tangent(oblouk, předchozí)` (povinná) a konec ze snapperu; řetěz pokračuje z konce oblouku (`previous` = oblouk – další úsečka dostane tečnu přes `inferLine`, je-li do 3°). Bez předchozí křivky (první bod řetězu) se tah ignoruje. Esc během tahu tah zruší, řetěz zůstane. Oblouk se počítá do podmínky uzavření (dvě křivky řetězu); konec oblouku na prvním bodu řetězu řetěz uzavře a ukončí jako uzavírací úsečka. Oblouk po směru se v datech uloží prohozením konců a řetěz pokračuje z bodu u kurzoru. Tah obsluhuje `clickTool` (`onDragStart` při prvním pohybu nad toleranci, `onDrag`, `onDragEnd`, Esc → `onDragCancel`); nástroj bez `onDragStart` tah ignoruje jako dřív. Společný kód s nástrojem Tečný oblouk je v `sketch-tools/tangent-arc.ts`.
+
+### Rodiny nástrojů v liště
+
+```ts
+// interaction/tools.ts
+interface ToolDescriptor { …; readonly family?: string }   // nástroje se stejnou rodinou ve skupině = jedno rozbalovací tlačítko
+// interaction/toolbar-model.ts
+interface ToolbarItem { …; readonly variants: readonly ToolbarItem[] }   // [] = obyčejné tlačítko (i rodina s jediným nástrojem v režimu a skupině); jinak všechny nástroje rodiny v pořadí registrace
+```
+
+- Rodina je v liště jedna položka: tlačítko ukazuje **naposledy aktivovaný** nástroj rodiny (stav modelu, neukládá se), na začátku první registrovaný; `active` = některý nástroj rodiny je aktivní. Šipka ▾ vedle otevře nabídku variant (stejná komponenta jako nabídka skupiny); položka nabídky nástroj aktivuje. Nabídka skupiny a „…“ ukazují varianty jako běžné položky.
+- `ui`: `Toolbar.vue` kreslí položku s `variants` jako dělené tlačítko (hlavní část + ▾ s `aria-haspopup="menu"`, `aria-label` „Další způsoby: {popisek zobrazené varianty}“ / „More: {…}“, klíč `toolbar.variants`); šířka pro `toolbar-fit` je šířka obou částí.
+- Popisky nástrojů i18n `tool.<id bez sketch.>`: `circle2p` „Kružnice 2 body“ / „2-point circle“, `circle3p` „Kružnice 3 body“ / „3-point circle“, `circle2t` „Kružnice 2 tečny“ / „2-tangent circle“, `circle3t` „Kružnice 3 tečny“ / „3-tangent circle“, `arc` „Oblouk středem“ / „Center point arc“, `arc3p` „Oblouk 3 body“ / „3-point arc“, `arcTangent` „Tečný oblouk“ / „Tangent arc“; `circle` zůstane „Kružnice“, rodiny bez vlastního popisku.
+
+**Testy:** konstrukce (kružnice 2 a 3 body, kolineární → null, `arcFrom3` obě orientace, `tangentArcFrom` vlevo/vpravo/přímka, `tangentCircle` – dvě různoběžky: střed na ose úhlu u kurzoru; rovnoběžky: r = polovina vzdálenosti; úsečka + kružnice; tři strany trojúhelníku s hintem uvnitř → vepsaná; nekonvergence → null; `endTangent` úsečky a oblouku na obou koncích); model lišty (rodina = jedna položka, naposledy aktivovaná varianta, `active`, nabídka); nástroje s `FakeViewport` a `FakeSolver` (každý nástroj: vzniklé entity a vazby, degenerovaný vstup nic, Esc, náhled vazeb, `ccw === false` prohodí konce); polyline (tah z posledního bodu → oblouk + tečna, řetěz pokračuje, tah bez předchozí křivky nic); e2e (kružnice 3 body, 2 tečny ke dvěma úsečkám → 2× Tečnost v panelu, tečný oblouk v polyline, dělené tlačítko Kružnice ▾).
+
 ## Kóty (M28)
 
 Rozhodnuto v [[Q085 Poloha kóty v datech|Q085]]. Nové druhy kót a volitelná poloha; staré dokumenty jsou platné beze změny, verze schématu skici zůstává 1.
@@ -543,7 +619,7 @@ export interface SketchFitSpline {
 - **Kresba:** `SketchDrawingCurve` dostane variantu `{ kind: 'polyline'; id; points: readonly Vec2[]; style }`; `sketcher` spline tessellací převede na ni, `render` ji kreslí a pickuje jako řadu úseček s jedním id. Řídicí body `bspline` jsou body skici a kreslí se s tečkovanou řídicí lomenou čarou (styl `construction`); fit body jsou body skici, řídicí body `fitSpline` se nekreslí. Upřesněno při úkolu 6: tolerance tessellace pro kresbu je stejná jako pro oblasti (`1e-4 · max(1, největší |souřadnice| řídicích bodů splinu)`); řídicí lomená čára má id `__poles:<id splinu>` (vzor `'__origin'`: picking ji vrátí, ale entitu k ní skicář nenajde, takže se nic nevybere) a v kresbě je až za svým splinem, aby při shodné vzdálenosti vyhrál spline; kreslí se stylem `construction` (čárkovaně, jak ho `render` kreslí). Kresba skici z regenerace řídicí lomenou čáru nemá. **Picking lomené čáry** (úkol 8, Pavel 2026-10-15): skicář přeloží id `__poles:<id>` na id splinu – najetí na lomenou čáru i klik na ni najede a vybere spline (bez změny `render`).
 - **Bod na splinu** (úkol 8, Pavel 2026-10-15): `pointOnCurve` smí mít jako `curve` i `bspline` a `fitSpline`. Bod nesmí být bodem splinu (`poles` u `bspline`, `fit` u `fitSpline`), jinak `sketch.invalidConstraint` / `constraintFor` → `null` (stejně jako definiční bod jiné křivky). `constraintFor('coincident', bod + spline)` → `pointOnCurve`. **Snapper** krok 4 (`onCurve`): průmět na spline = nejbližší bod tessellace splinu (tolerance `SPLINE_TOLERANCE` · měřítko, jako oblasti) – úsek tessellace jako úsečka. **Adaptér planegcs:** `pointOnCurve` na spline → `point_on_bspline` s **volným** parametrem (nová proměnná planegcs `<id vazby>:t`, počáteční hodnota = nejbližší z 16 vzorků v každém intervalu uzlů zpřesněný nejvýš 8 Newtonovými kroky na (C(t) − p) · C′(t) = 0, oříznutý do [0, 1]; při každém řešení znovu z aktuální polohy bodu, data parametr neukládají; `<id>:t` je parametr, ne vazba, do seznamů sporů se nedostane). Proměnná přidá 1 stupeň volnosti, vazba odebere 2, takže bod na splinu má jako bod na úsečce 1 stupeň volnosti. `bspline`, na který odkazuje `point_on_bspline`, se do planegcs přidá (řídicí body = body skici) a korekce `dof` −4 z [[Q087 Spline v řešiči a v jádře – zjištění z implementace|Q087]] platí i pro něj. Parametr se nesmí dostat mimo [0, 1] (jinak by bod „utekl“ za konec křivky): implementace ověří chování planegcs při tažení bodu za konec splinu; planegcs rozsah neomezuje (parametr při tažení uteče, bod pak leží na polynomiálním prodloužení), proto (Pavel 2026-10-16) **druhé řešení na konci**: vyjde-li po řešení parametr některého bodu na splinu mimo [0, 1], adaptér vyřeší soustavu znovu s pevným parametrem 0 nebo 1 pro všechny takové vazby najednou (nejvýš jedno druhé řešení, hranice ostrá) – bod se „přilepí“ ke konci splinu (jako v Onshape). `dof` se hlásí z prvního řešení; konflikt nebo selhání druhého řešení je výsledkem. Volný parametr: `push_sketch_param('<id>:t', t0, false)` a `pointparam` jako řetězec (primitiv `param` planegcs vždy fixuje). **Glyf:** `pointOnCurve` u bodu jako dřív.
 - **Kotva glyfu splinu** (úkol 8): bod křivky v polovině rozsahu parametru (`t = 0,5`), `side` = normála tečny v něm otočená k +y roviny (jako u úsečky; nulová derivace → +y). Glyfy `tangent` úsečka–spline mají jeden glyf u úsečky a jeden u splinu.
-- **Nástroje** (úkol 8, Pavel 2026-10-15): `sketch.spline` (*Spline přes řídicí body* / *Control point spline*) a `sketch.fitSpline` (*Spline přes body* / *Spline*) v `sketcher/sketch-tools/spline-tool.ts`, jeden nástroj parametrizovaný druhem, bez klávesové zkratky, v liště skicáře (skupina `draw`) za obloukem; ikony z Tabler webfontu jako ostatní nástroje: `vector-bezier` (řídicí body) a `vector-spline` (přes body). Enter jde přes `Tool.onKey` (lokální `isPlainEnter`, obdoba `isPlainEscape`); bez umístěných bodů Enter i Esc vrací `false` (Esc pak přepne na výběrový nástroj jako u ostatních).
+- **Nástroje** (úkol 8, Pavel 2026-10-15): `sketch.spline` (*Spline přes řídicí body* / *Control point spline*) a `sketch.fitSpline` (*Spline přes body* / *Spline*) v `sketcher/sketch-tools/spline-tool.ts`, jeden nástroj parametrizovaný druhem, bez klávesové zkratky, v liště skicáře (skupina `draw`) jako rodina `spline` (`ToolDescriptor.family`, M27) za oblouky; ikony z Tabler webfontu jako ostatní nástroje: `vector-bezier` (řídicí body) a `vector-spline` (přes body). Enter jde přes `Tool.onKey` (lokální `isPlainEnter`, obdoba `isPlainEscape`); bez umístěných bodů Enter i Esc vrací `false` (Esc pak přepne na výběrový nástroj jako u ostatních).
   - Každý klik umístí bod přes snapper (`snapAt`, `placePoint`): přichycení na existující bod použije jeho id, nový bod dostane `inferred` vazby (`fix`, `pointOnCurve`, `midpoint`, `hAlign`/`vAlign`); `inferLine`/`inferRadius` se nepoužijí. Rozpracované body nástroj drží jako `pending` (snapper je vidí jako data, `exclude` jako u úsečky).
   - Klik na **vlastní poslední bod** (stejné id nebo do tolerance snapperu – náhrada dvojkliku, port nemá dvojklik) nebo **Enter** spline ukončí a zapíše jedním `addGeometry`: body, vazby z `inferred` (automatické) a entitu. Klik na **vlastní první bod** při aspoň 3 bodech spline **uzavře**: poslední bod vznikne nový na místě prvního s vazbou `coincident` k němu (povinná, `required`) a spline se zapíše. Klik na jiný vlastní bod se ignoruje (body splinu musí být různé). Méně než 2 body při ukončení → nic se nezapíše.
   - `bspline`: `degree = min(3, n − 1)`, uzly **sevřené rovnoměrné** (vnitřní uzly `j / (n − degree)`, `j = 1 … n − degree − 1`). `fitSpline`: `bspline.interpolate` z poloh bodů (`degree`, `params`, `knots`, `poles`); klik do tolerance od posledního bodu spline ukončí (shodné body tak nevzniknou); uzavření `fitSpline`, jehož poslední bod už leží na místě prvního, se ignoruje (`interpolate` by vyhodilo výjimku).

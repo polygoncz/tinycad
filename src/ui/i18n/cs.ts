@@ -136,13 +136,21 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'toolbar.group.feature': 'Featury',
   // The button of the groups that do not fit into the bar (M19.1).
   'toolbar.more': 'Další nástroje',
+  // The arrow of a split button of a tool family (M27); name = the label of the shown tool.
+  'toolbar.variants': 'Další způsoby: {name}',
 
   // Sketcher (M12): tools, toolbar groups, actions, constraints, the sketch panel.
   'tool.sketch': 'Skica',
   'tool.line': 'Úsečka',
   'tool.rectangle': 'Obdélník',
   'tool.circle': 'Kružnice',
-  'tool.arc': 'Oblouk',
+  'tool.circle2p': 'Kružnice 2 body',
+  'tool.circle3p': 'Kružnice 3 body',
+  'tool.circle2t': 'Kružnice 2 tečny',
+  'tool.circle3t': 'Kružnice 3 tečny',
+  'tool.arc': 'Oblouk středem',
+  'tool.arc3p': 'Oblouk 3 body',
+  'tool.arcTangent': 'Tečný oblouk',
   'tool.spline': 'Spline přes řídicí body',
   'tool.fitSpline': 'Spline přes body',
   'tool.dimension': 'Kóta',

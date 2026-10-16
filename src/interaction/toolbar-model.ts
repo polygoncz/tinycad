@@ -8,6 +8,9 @@
 // The groups are a pure function of the snapshots (toolbarGroups); the model only follows its
 // sources. ui keeps the fitting of the groups into the width of the bar (pixels, toolbar-fit.ts).
 // The label of a group is the translation key `toolbar.group.<id>`.
+// M27: the tools of one family (ToolDescriptor.family) in a group are one item, a split button
+// showing the last activated tool of the family; the tools are its variants. The last activated
+// tool is the state of the model (not stored), toolbarGroups gets it as an input.
 
 import { DisposableStore, ObservableValue } from '@/core';
 import type { Observable } from '@/core';
@@ -33,8 +36,17 @@ export interface ToolbarItem extends ActionState {
   readonly command: ToolbarCommand;
   /** Only in the menu of the group and of "…", not drawn as a button (the standard views). */
   readonly menuOnly: boolean;
-  /** The button of the active tool (ToolManager.active); never an action. */
+  /**
+   * The button of the active tool (ToolManager.active); never an action. Of a family: any of its
+   * tools is active.
+   */
   readonly active: boolean;
+  /**
+   * [] = a plain button. Otherwise the item of a tool family (M27): every tool of the family in
+   * the group, in registration order, as plain items; the item itself is the one shown (the last
+   * activated, at first the first one) with `active` of the whole family.
+   */
+  readonly variants: readonly ToolbarItem[];
 }
 
 export interface ToolbarGroup {
@@ -164,6 +176,36 @@ function actionItem(
     command: Object.freeze({ kind: 'action', id: action.id }),
     menuOnly,
     active: false,
+    variants: NO_VARIANTS,
+  });
+}
+
+const NO_VARIANTS: readonly ToolbarItem[] = Object.freeze([]);
+
+/** The tools of one family in one toolbar group, in registration order. */
+interface FamilyMembers {
+  readonly family: string;
+  /** Never empty: a family is created with its first tool. */
+  readonly items: [ToolbarItem, ...ToolbarItem[]];
+}
+
+/**
+ * The item of a family: the shown tool (lastInFamily, else the first one) with all as variants; a
+ * family of one tool is that tool's plain item.
+ */
+function familyItem(
+  members: FamilyMembers,
+  lastInFamily: ReadonlyMap<string, string>,
+): ToolbarItem {
+  const items = members.items;
+  // A family of one tool (in this mode and group) is a plain button.
+  if (items.length === 1) return items[0];
+  const last = lastInFamily.get(members.family);
+  const shown = items.find((item) => item.id === last) ?? items[0];
+  return Object.freeze({
+    ...shown,
+    active: items.some((item) => item.active),
+    variants: Object.freeze([...items]),
   });
 }
 
@@ -179,6 +221,8 @@ export function toolbarGroups(input: {
   readonly mode: Mode;
   /** The contributions of the modes other than model (the sketcher's). */
   readonly contributions: readonly ToolbarModeContribution[];
+  /** The last activated tool (id) of each family (ToolDescriptor.family), by family. */
+  readonly lastInFamily: ReadonlyMap<string, string>;
 }): readonly ToolbarGroup[] {
   const actionById = new Map(input.actions.map((a) => [a.id, a]));
   const items = new Map<string, ToolbarItem[]>();
@@ -198,27 +242,46 @@ export function toolbarGroups(input: {
     }
   }
 
+  // A family is held in its group by its first item until all tools are in (familyItem below).
+  const families = new Map<string, FamilyMembers>();
+  const familyByFirst = new Map<ToolbarItem, FamilyMembers>();
   for (const tool of input.tools) {
     const action = actionById.get(toolActionId(tool.id));
     // With an action its modes, otherwise the tool's own (the same unless app filters).
     const modes = action?.modes ?? toolModes(tool);
     if (!modes.includes(input.mode)) continue;
-    add(
-      Object.freeze({
-        id: tool.id,
-        label: tool.label,
-        shortcut: tool.shortcut ?? null,
-        group: tool.group,
-        enabled: action?.enabled ?? !input.locked,
-        modes,
-        icon: tool.icon,
-        command: Object.freeze(
-          action === undefined ? { kind: 'tool', id: tool.id } : { kind: 'action', id: action.id },
-        ),
-        menuOnly: false,
-        active: input.activeTool === tool.id,
-      }),
-    );
+    const item: ToolbarItem = Object.freeze({
+      id: tool.id,
+      label: tool.label,
+      shortcut: tool.shortcut ?? null,
+      group: tool.group,
+      // As the tool actions (builtin-actions): the sketcher is an open feature edit (locked), so
+      // in the mode 'sketch' the lock does not count.
+      enabled: action?.enabled ?? (input.mode === 'sketch' || !input.locked),
+      modes,
+      icon: tool.icon,
+      command: Object.freeze(
+        action === undefined ? { kind: 'tool', id: tool.id } : { kind: 'action', id: action.id },
+      ),
+      menuOnly: false,
+      active: input.activeTool === tool.id,
+      variants: NO_VARIANTS,
+    });
+    if (tool.family === undefined) {
+      add(item);
+      continue;
+    }
+    // The same family in another group is another family (JSON: no separator to collide with).
+    const key = JSON.stringify([tool.group, tool.family]);
+    const members = families.get(key);
+    if (members !== undefined) {
+      members.items.push(item);
+      continue;
+    }
+    const created: FamilyMembers = { family: tool.family, items: [item] };
+    families.set(key, created);
+    familyByFirst.set(item, created);
+    add(item);
   }
 
   for (const group of contribution?.actionGroups ?? []) {
@@ -232,7 +295,10 @@ export function toolbarGroups(input: {
   const unknown = [...items.keys()].filter((group) => !order.includes(group));
   return Object.freeze(
     [...order, ...unknown].flatMap((id) => {
-      const list = items.get(id);
+      const list = items.get(id)?.map((item) => {
+        const members = familyByFirst.get(item);
+        return members === undefined ? item : familyItem(members, input.lastInFamily);
+      });
       return list === undefined ? [] : [Object.freeze({ id, items: Object.freeze(list) })];
     }),
   );
@@ -251,6 +317,18 @@ export function createToolbarModel(deps: {
 }): ToolbarModel {
   const { tools, actions } = deps;
   checkContributions(deps.contributions);
+  const familyOf = new Map(
+    deps.toolList.flatMap((tool) =>
+      tool.family === undefined ? [] : [[tool.id, tool.family] as const],
+    ),
+  );
+  /** The last activated tool of each family; follows ToolManager.active, not stored. */
+  const lastInFamily = new Map<string, string>();
+  const rememberActive = (): void => {
+    const activeTool = tools.active.get();
+    const family = familyOf.get(activeTool);
+    if (family !== undefined) lastInFamily.set(family, activeTool);
+  };
   const compute = (): readonly ToolbarGroup[] =>
     toolbarGroups({
       tools: deps.toolList,
@@ -259,13 +337,22 @@ export function createToolbarModel(deps: {
       locked: deps.locked.get(),
       mode: deps.mode.get(),
       contributions: deps.contributions,
+      lastInFamily,
     });
+  rememberActive();
   const groups = new ObservableValue(compute());
   const subscriptions = new DisposableStore();
   const update = (): void => {
     groups.set(compute());
   };
-  for (const source of [actions.actions, tools.active, deps.locked, deps.mode]) {
+  // The active tool is remembered in its family before the groups are computed from it.
+  subscriptions.add(
+    tools.active.subscribe(() => {
+      rememberActive();
+      update();
+    }),
+  );
+  for (const source of [actions.actions, deps.locked, deps.mode]) {
     subscriptions.add(source.subscribe(update));
   }
 

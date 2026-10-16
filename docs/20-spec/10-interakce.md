@@ -206,6 +206,7 @@ Stav, který UI zobrazuje, vystavují prezentační modely jako `Observable<T>` 
 | `DocumentListModel` (M20) | `list: Observable<DocumentListState>` (`loading` / `loaded` / `failed`), `busy`, `error`, `renaming` | `load`, `retry`, `create`, `importFile`, `remove`, `beginRename`, `commitRename`, `cancelRename` |
 
 - **`ToolbarModel`** (`createToolbarModel({ tools, toolList, actions, locked, mode, contributions })`): logika lišty z dřívějšího `ui/toolbar-groups.ts` (filtr podle režimu, povolení, pořadí skupin) a navíc `ToolbarItem.active` (aktivní nástroj). Obsah lišty režimu nezná, dodá ho příspěvek:
+  - **Povolení nástroje bez akce** (M27): nástroj bez klávesové zkratky nemá akci; jeho položka je povolená podle akce, je-li, jinak v režimu `sketch` vždy a v ostatních režimech jen bez zámku (`action?.enabled ?? (mode === 'sketch' || !locked)`) – stejné pravidlo jako akce nástrojů ve vestavěných akcích (ve skicáři se zámek editace nepočítá). Dřív se neprojevilo, protože všechny nástroje skicáře měly zkratku.
 
   ```ts
   interface ToolbarModeContribution {
@@ -299,6 +300,7 @@ export interface ToolDescriptor {
   readonly group: 'select' | 'primitive' | 'sketch' | 'feature' | 'modify' | 'draw' | 'constrain';   // 'draw', 'constrain' od M12 (lišta skicáře)
   readonly modes?: readonly Mode[];      // režimy, ve kterých nástroj je; výchozí ['model'] (M12)
   readonly shortcut?: string;            // jen informace pro UI; zkratku registruje app jako akci
+  readonly family?: string;              // M27: nástroje stejné rodiny ve skupině = jedno dělené tlačítko v liště ([[12-skicar#Oblouky a kružnice (M27)]])
   create(): Tool;
 }
 
@@ -1147,9 +1149,11 @@ export function createSketchActions(deps: { registry: ActionRegistry; sketches: 
 | `sketch.line` | `sketch`, `draw`, `L` | polyline: první klik začne řetěz, každý další přidá úsečku z posledního bodu (`addGeometry`); klik na první bod řetězu ho uzavře a ukončí; M26: body přes snapper, každá úsečka dostane vazby z `inferLine` (osa do 3°, rovnoběžka, kolmice, tečna k navazujícímu oblouku, `equal` s předchozí úsečkou řetězu do 2 %), Ctrl/Cmd je vypne; úsečka mezi body už spojenými existující úsečkou nevznikne; `Escape` s rozpracovaným řetězem ho ukončí (`true`), jinak nástroj skončí |
 | `sketch.rectangle` | `sketch`, `draw`, `R` | dva rohy → 4 body (rohy ze snapu znovu použité, M26 i dopočítané), 4 úsečky, 2× `horizontal`, 2× `vertical` (`required`); strana na existující úsečce se sdílí; rohy se stejnou x nebo y nic |
 | `sketch.circle` | `sketch`, `draw`, `C` | střed, bod na obvodu → kružnice (poloměr > 0); M26: střed přes snapper s vazbami, bod na obvodu jen polohou, `equal` s poslední kružnicí/obloukem do 2 % (`inferRadius`) |
+| `sketch.circle2p`, `sketch.circle3p`, `sketch.circle2t`, `sketch.circle3t` | `sketch`, `draw`, rodina `circle`, bez zkratky | M27: kružnice 2 body, 3 body, 2 a 3 tečny; gesta, vazby a degenerované případy v [[12-skicar#Oblouky a kružnice (M27)]] |
 | `sketch.arc` | `sketch`, `draw`, `A` | střed, začátek, konec (promítnutý na kružnici) → oblouk proti směru hodinových ručiček; M26: body přes snapper (konec vždy nový bod, bez `fix`), `inferRadius` |
-| `sketch.spline` | `sketch`, `draw`, – | M29: spline přes řídicí body – body přes snapper (s `inferred`), Enter nebo klik na vlastní poslední bod ukončí a zapíše jedním `addGeometry` (`bspline`, sevřené rovnoměrné uzly), klik na vlastní první bod (≥ 3 body) uzavře novým bodem s `coincident` (`required`), Esc zruší rozpracovaný spline; náhled křivky a řídicí lomené čáry. Kontrakt v [[12-skicar#Spliny (M29)]] |
-| `sketch.fitSpline` | `sketch`, `draw`, – | M29: totéž pro spline přes body (`fitSpline` z `bspline.interpolate`) |
+| `sketch.arc3p`, `sketch.arcTangent` | `sketch`, `draw`, rodina `arc`, bez zkratky | M27: oblouk 3 body (začátek, konec, bod na oblouku) a tečný oblouk z konce úsečky nebo oblouku; [[12-skicar#Oblouky a kružnice (M27)]]. Od M27 má `sketch.circle` rodinu `circle` a `sketch.arc` rodinu `arc` (popisek „Oblouk středem“). Nástroj úsečka: stisk a tah z posledního bodu řetězu kreslí tečný oblouk (`clickTool` s volitelným tahem `onDragStart`/`onDrag`/`onDragEnd`/`onDragCancel`). |
+| `sketch.spline` | `sketch`, `draw`, rodina `spline`, bez zkratky | M29: spline přes řídicí body – body přes snapper (s `inferred`), Enter nebo klik na vlastní poslední bod ukončí a zapíše jedním `addGeometry` (`bspline`, sevřené rovnoměrné uzly), klik na vlastní první bod (≥ 3 body) uzavře novým bodem s `coincident` (`required`), Esc zruší rozpracovaný spline; náhled křivky a řídicí lomené čáry. Kontrakt v [[12-skicar#Spliny (M29)]] |
+| `sketch.fitSpline` | `sketch`, `draw`, rodina `spline`, bez zkratky | M29: totéž pro spline přes body (`fitSpline` z `bspline.interpolate`) |
 | `sketch.dimension` | `sketch`, `constrain`, `D` | M28: klik na entitu nebo dvě entity určí cíl (`dimensionTarget`), kóta pak visí na myši a druh i polohu volí kurzor (`placeDimension`, náhled přes `previewDimension`); klik ji zapíše (`addConstraint` s `placement`), Esc náhled zruší. Průběh výběru v [[12-skicar#Kóty (M28)]] |
 
 - **Bod pod kurzorem od M26** ([[12-skicar#Snapper a auto-vazby (M26)]]): `snapAt` už nepickuje, volá čistou `snap` ze `sketch` nad daty session (i s nezapsanými entitami rozpracovaného řetězu) s prahem 6 px převedeným na mm v místě kurzoru, mřížkou podle `snapGrid` a `infer: !mods.mod`; `placePoint` z `inferred` vytvoří vazby s novými id. Klik i náhled počítá jedna funkce kroku nástroje (`lineStep`, `rectangleStep`, `circleStep`, `arcStep`). Náhled vazeb a vodítek (`setInferencePreview`) smaže klik, Esc, `leave`, deaktivace a zavření session. Odstavce níže popisují stav M12–M19.2.

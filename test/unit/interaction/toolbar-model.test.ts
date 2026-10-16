@@ -79,6 +79,11 @@ const PROBE_TOOLBAR: ToolbarModeContribution = {
   ],
 };
 
+/** A sketch tool of the family `family` in the group 'draw' (M27). */
+function aFamilyTool(id: string, family: string, shortcut?: string): ToolDescriptor {
+  return { ...aTool(id, 'draw', shortcut, ['sketch']), family };
+}
+
 type Input = Parameters<typeof toolbarGroups>[0];
 
 /** The inputs every call shares; the tests override what they look at. */
@@ -90,6 +95,7 @@ function groupsOf(
     locked: false,
     mode: 'model',
     contributions: [PROBE_TOOLBAR],
+    lastInFamily: new Map(),
     ...input,
   });
 }
@@ -156,6 +162,7 @@ describe('toolbarGroups', () => {
         command: { kind: 'action', id: 'undo' },
         menuOnly: false,
         active: false,
+        variants: [],
       },
       {
         id: 'redo',
@@ -168,6 +175,7 @@ describe('toolbarGroups', () => {
         command: { kind: 'action', id: 'redo' },
         menuOnly: false,
         active: false,
+        variants: [],
       },
     ]);
     expect(groups[1]?.items.map((i) => i.id)).toEqual(['view.fitAll']);
@@ -206,6 +214,7 @@ describe('toolbarGroups', () => {
         command: { kind: 'action', id: 'tool.box' },
         menuOnly: false,
         active: false,
+        variants: [],
       },
     ]);
   });
@@ -218,6 +227,12 @@ describe('toolbarGroups', () => {
     expect(open[0]?.items[0]?.enabled).toBe(true);
     expect(open[0]?.items[0]?.shortcut).toBeNull();
     expect(locked[0]?.items[0]?.enabled).toBe(false);
+  });
+
+  it('a tool without an action is enabled in the sketch mode despite the lock', () => {
+    const tools = [aTool('circle3p', 'draw', undefined, ['sketch'])];
+    const groups = groupsOf({ tools, actions: [], locked: true, mode: 'sketch' });
+    expect(groups.flatMap((g) => g.items).find((i) => i.id === 'circle3p')?.enabled).toBe(true);
   });
 
   it('only the button of the active tool is active, actions never', () => {
@@ -265,6 +280,7 @@ describe('toolbarGroups', () => {
       command: { kind: 'action', id: 'probe.done' },
       menuOnly: false,
       active: false,
+      variants: [],
     });
     expect(items.get('probe.cancel')?.icon).toBe('x');
     expect(items.get('probe.view')).toMatchObject({ group: 'view', icon: 'eye', menuOnly: true });
@@ -323,6 +339,105 @@ describe('toolbarGroups', () => {
   });
 });
 
+describe('toolbarGroups: tool families (M27)', () => {
+  const FAMILY_TOOLS: readonly ToolDescriptor[] = [
+    aTool('sketch.line', 'draw', 'L', ['sketch']),
+    aFamilyTool('sketch.circle', 'circle', 'C'),
+    aFamilyTool('sketch.arc', 'arc', 'A'),
+    aFamilyTool('sketch.circle3p', 'circle'),
+    aTool('sketch.rectangle', 'draw', 'R', ['sketch']),
+    aFamilyTool('sketch.arc3p', 'arc'),
+    // The same family in another group is another button (of one tool: a plain one).
+    { ...aTool('probe.circle', 'modify', undefined, ['sketch']), family: 'circle' },
+  ];
+
+  /** The draw group in the mode 'sketch'. */
+  function draw(input: Partial<Input> = {}): ToolbarGroup | undefined {
+    return groupsOf({ tools: FAMILY_TOOLS, actions: [], mode: 'sketch', ...input }).find(
+      (g) => g.id === 'draw',
+    );
+  }
+
+  it('a family is one item at the place of its first tool, its variants in registration order', () => {
+    const group = draw();
+    expect(group?.items.map((i) => [i.id, i.variants.map((v) => v.id)])).toEqual([
+      ['sketch.line', []],
+      ['sketch.circle', ['sketch.circle', 'sketch.circle3p']],
+      ['sketch.arc', ['sketch.arc', 'sketch.arc3p']],
+      ['sketch.rectangle', []],
+    ]);
+    const modify = groupsOf({ tools: FAMILY_TOOLS, actions: [], mode: 'sketch' }).find(
+      (g) => g.id === 'modify',
+    );
+    expect(modify?.items.map((i) => [i.id, i.variants.map((v) => v.id)])).toEqual([
+      ['probe.circle', []],
+    ]);
+  });
+
+  it('the variants are plain items, the family item is its shown variant with the variants', () => {
+    const circle = draw()?.items[1];
+    const [first, second] = circle?.variants ?? [];
+    expect(first).toMatchObject({ id: 'sketch.circle', shortcut: 'C', variants: [] });
+    expect(second).toMatchObject({
+      id: 'sketch.circle3p',
+      label: 'sketch.circle3p.label',
+      icon: 'sketch.circle3p',
+      command: { kind: 'tool', id: 'sketch.circle3p' },
+      variants: [],
+    });
+    expect(circle).toEqual({ ...first, variants: circle?.variants });
+    expect(Object.isFrozen(circle?.variants)).toBe(true);
+  });
+
+  it('the item shows the last activated tool of the family, the first one without any', () => {
+    const lastInFamily = new Map([['circle', 'sketch.circle3p']]);
+    const group = draw({ lastInFamily });
+    expect(group?.items.map((i) => i.id)).toEqual([
+      'sketch.line',
+      'sketch.circle3p',
+      'sketch.arc',
+      'sketch.rectangle',
+    ]);
+    const circle = group?.items[1];
+    expect(circle).toMatchObject({
+      label: 'sketch.circle3p.label',
+      icon: 'sketch.circle3p',
+      shortcut: null,
+      command: { kind: 'tool', id: 'sketch.circle3p' },
+    });
+    // The order of the variants stays.
+    expect(circle?.variants.map((v) => v.id)).toEqual(['sketch.circle', 'sketch.circle3p']);
+  });
+
+  it('a last activated tool that is not in the family of the group shows the first one', () => {
+    const group = draw({ lastInFamily: new Map([['circle', 'probe.circle']]) });
+    expect(group?.items[1]?.id).toBe('sketch.circle');
+  });
+
+  it('the family item is active when any of its tools is, the variant itself too', () => {
+    const group = draw({ activeTool: 'sketch.arc3p' });
+    const arc = group?.items[2];
+    expect(arc?.active).toBe(true);
+    expect(arc?.variants.map((v) => v.active)).toEqual([false, true]);
+    expect(group?.items[1]?.active).toBe(false);
+  });
+
+  it('only the tools of the mode make a family', () => {
+    const tools = [
+      ...FAMILY_TOOLS,
+      { ...aTool('model.circle', 'draw', undefined, ['model']), family: 'circle' },
+    ];
+    expect(draw({ tools })?.items[1]?.variants.map((v) => v.id)).toEqual([
+      'sketch.circle',
+      'sketch.circle3p',
+    ]);
+    const model = groupsOf({ tools, actions: [] }).find((g) => g.id === 'draw');
+    expect(model?.items.map((i) => [i.id, i.variants.map((v) => v.id)])).toEqual([
+      ['model.circle', []],
+    ]);
+  });
+});
+
 const PROBE_TOOLS: readonly ToolDescriptor[] = [
   aTool('select', 'select'),
   aTool('box', 'primitive', 'B'),
@@ -373,6 +488,8 @@ function setup() {
     aTool('box', 'primitive', 'B'),
     aTool('chamfer', 'modify'),
     aTool('sketch.line', 'draw', 'L', ['sketch']),
+    aFamilyTool('sketch.circle', 'circle', 'C'),
+    aFamilyTool('sketch.circle3p', 'circle'),
   ];
   const toolbar = createToolbarModel({
     tools: { active: active.asObservable(), activate },
@@ -430,6 +547,10 @@ describe('createToolbarModel', () => {
     mode.set('sketch');
     expect(seen).toHaveBeenCalled();
     expect(toolbar.groups.get().map((g) => g.id)).toEqual(['history', 'draw']);
+    expect(toolbar.groups.get()[1]?.items.map((i) => i.id)).toEqual([
+      'sketch.line',
+      'sketch.circle',
+    ]);
   });
 
   it('follows the lock: a tool without an action is disabled', () => {
@@ -451,6 +572,37 @@ describe('createToolbarModel', () => {
     active.set('chamfer');
     expect(item('select').active).toBe(false);
     expect(item('chamfer').active).toBe(true);
+  });
+
+  it('a family shows its last activated tool, also after another tool is active', () => {
+    const { toolbar, mode, active } = setup();
+    mode.set('sketch');
+    const circle = () => toolbar.groups.get()[1]?.items[1];
+    expect(circle()?.id).toBe('sketch.circle');
+    active.set('sketch.circle3p');
+    expect(circle()).toMatchObject({ id: 'sketch.circle3p', active: true });
+    active.set('sketch.line');
+    expect(circle()).toMatchObject({ id: 'sketch.circle3p', active: false });
+    active.set('sketch.circle');
+    expect(circle()?.id).toBe('sketch.circle');
+  });
+
+  it('remembers a tool of a family activated in another mode', () => {
+    const { toolbar, mode, active } = setup();
+    active.set('sketch.circle3p');
+    active.set('select');
+    mode.set('sketch');
+    expect(toolbar.groups.get()[1]?.items[1]?.id).toBe('sketch.circle3p');
+  });
+
+  it('run: a variant of a family activates its tool', () => {
+    const { toolbar, mode, activate } = setup();
+    mode.set('sketch');
+    const variant = toolbar.groups.get()[1]?.items[1]?.variants[1];
+    if (variant === undefined) throw new Error('no variant');
+    toolbar.run(variant);
+    expect(activate).toHaveBeenCalledWith('sketch.circle3p');
+    expect(toolbar.groups.get()[1]?.items[1]?.id).toBe('sketch.circle3p');
   });
 
   it('run: an action button runs its action, a tool without one is activated', () => {
