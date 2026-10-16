@@ -50,7 +50,7 @@ describe('SKETCH_TOOLBAR', () => {
     expect(Object.isFrozen(SKETCH_TOOLBAR.groupOrder)).toBe(true);
   });
 
-  it('in the sketch mode: select, draw, constrain, finish with the tools and actions', () => {
+  it('in the sketch mode: select, draw, modify, constrain, finish with the tools and actions', () => {
     const { toolbar, mode } = setup();
     mode.set('sketch');
     expect(toolbar.groups.get().map((g) => [g.id, g.items.map((i) => i.id)])).toEqual([
@@ -64,10 +64,11 @@ describe('SKETCH_TOOLBAR', () => {
           'sketch.arc',
           'sketch.spline',
           'sketch.slot',
-          'sketch.point',
           SKETCH_ACTION_IDS.construction,
         ],
       ],
+      // Mirror and patterns one family (M36), so the sketcher fits 1280 px.
+      ['modify', ['sketch.mirror']],
       [
         'constrain',
         ['sketch.dimension', ...GEOMETRIC_CONSTRAINT_KINDS.map(sketchConstraintActionId)],
@@ -81,6 +82,7 @@ describe('SKETCH_TOOLBAR', () => {
       'history',
       'select',
       'draw',
+      'modify',
       'constrain',
       'finish',
       'view',
@@ -139,5 +141,6 @@ const EXPECTED_ICONS: Readonly<Record<string, string>> = {
   equal: 'equal',
   tangent: 'circle-dot',
   midpoint: 'letter-m',
+  symmetric: 'flip-vertical',
   fix: 'lock',
 };

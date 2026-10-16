@@ -1,3 +1,4 @@
+import { assertNever } from '@/core';
 import type { Brand, Vec2 } from '@/core';
 
 // The data model of a sketch (spec 12 "Data"). Plain immutable data stored in the params of a
@@ -90,7 +91,133 @@ export interface SketchXLine {
 
 export type SketchCurve =
   SketchLine | SketchCircle | SketchArc | SketchBSpline | SketchFitSpline | SketchXLine;
-export type SketchEntity = SketchPoint | SketchCurve;
+
+/**
+ * Mirror of the sources across the axis (a line). One copy with index 1 (spec 12 "Zrcadlení a
+ * pole (M36)"). Like every pattern, a recipe: the copies are derived (patternCopies).
+ */
+export interface SketchMirror {
+  readonly kind: 'mirror';
+  readonly id: SketchEntityId;
+  readonly sources: readonly SketchEntityId[];
+  readonly axis: SketchEntityId;
+}
+
+/** One direction of a linear pattern: count ≥ 2 instances (with the original) spacing apart in direction angle. */
+export interface PatternDirection {
+  /** Rad from the plane x axis, any finite number. */
+  readonly angle: number;
+  /** An integer, 2 ≤ count ≤ MAX_PATTERN_COUNT. */
+  readonly count: number;
+  /** Mm, > 0, the distance of neighbouring instances. */
+  readonly spacing: number;
+}
+
+/** Linear pattern: direction 1 required, direction 2 optional (a grid, like Onshape). */
+export interface SketchLinearPattern {
+  readonly kind: 'linearPattern';
+  readonly id: SketchEntityId;
+  readonly sources: readonly SketchEntityId[];
+  readonly direction1: PatternDirection;
+  readonly direction2?: PatternDirection;
+}
+
+/** Circular pattern around a sketch point: count instances (with the original) within the total angle. */
+export interface SketchCircularPattern {
+  readonly kind: 'circularPattern';
+  readonly id: SketchEntityId;
+  readonly sources: readonly SketchEntityId[];
+  /** A sketch point. */
+  readonly center: SketchEntityId;
+  /** An integer, 2 ≤ count ≤ MAX_PATTERN_COUNT. */
+  readonly count: number;
+  /** Rad, 0 < |angle| ≤ 2π; positive = counter-clockwise. */
+  readonly angle: number;
+}
+
+/** A mirror or a pattern: a member of SketchEntity, not of SketchCurve (it carries a recipe). */
+export type SketchPattern = SketchMirror | SketchLinearPattern | SketchCircularPattern;
+export type SketchEntity = SketchPoint | SketchCurve | SketchPattern;
+
+/** The largest number of instances in one direction of a pattern. */
+export const MAX_PATTERN_COUNT = 100;
+
+export function isPattern(e: SketchEntity): e is SketchPattern {
+  return e.kind === 'mirror' || e.kind === 'linearPattern' || e.kind === 'circularPattern';
+}
+
+/** A possible source of a mirror or pattern: a point or a curve, never a pattern (spec 12). */
+export function isPatternSource(e: SketchEntity): e is SketchPoint | SketchCurve {
+  switch (e.kind) {
+    case 'point':
+    case 'line':
+    case 'circle':
+    case 'arc':
+    case 'bspline':
+    case 'fitSpline':
+    case 'xline':
+      return true;
+    case 'mirror':
+    case 'linearPattern':
+    case 'circularPattern':
+      return false;
+    default:
+      return assertNever(e);
+  }
+}
+
+/**
+ * |angle| of a circular pattern within this of 2π is a full circle (count steps instead of
+ * count − 1); |angle| may exceed 2π by this much (a full circle from arithmetic).
+ */
+export const FULL_CIRCLE_TOLERANCE = 1e-9;
+
+/**
+ * The angle between neighbouring instances of a circular pattern: angle / count for a full circle
+ * (the last instance is not the original again), else angle / (count − 1).
+ */
+export function circularStep(pattern: Pick<SketchCircularPattern, 'count' | 'angle'>): number {
+  const { count, angle } = pattern;
+  const full = Math.abs(Math.abs(angle) - 2 * Math.PI) <= FULL_CIRCLE_TOLERANCE;
+  return full ? angle / count : angle / (count - 1);
+}
+
+/**
+ * The parameters of one mirror or pattern are valid (spec 12, "Platné hodnoty"): every count an
+ * integer 2 … MAX_PATTERN_COUNT, a spacing finite and > 0, a direction angle finite, the angle of
+ * a circular pattern finite with 0 < |angle| ≤ 2π. A mirror has none. Its references are not
+ * checked here (parseSketchData does).
+ */
+export function patternParamsValid(p: SketchPattern): boolean {
+  switch (p.kind) {
+    case 'mirror':
+      return true;
+    case 'linearPattern':
+      return (
+        directionValid(p.direction1) && (p.direction2 === undefined || directionValid(p.direction2))
+      );
+    case 'circularPattern':
+      return (
+        countValid(p.count) &&
+        Number.isFinite(p.angle) &&
+        p.angle !== 0 &&
+        Math.abs(p.angle) <= 2 * Math.PI + FULL_CIRCLE_TOLERANCE
+      );
+    default:
+      return assertNever(p);
+  }
+}
+
+function directionValid(d: PatternDirection): boolean {
+  return (
+    countValid(d.count) && Number.isFinite(d.spacing) && d.spacing > 0 && Number.isFinite(d.angle)
+  );
+}
+
+/** An integer number of instances, 2 … MAX_PATTERN_COUNT. */
+function countValid(count: number): boolean {
+  return Number.isInteger(count) && count >= 2 && count <= MAX_PATTERN_COUNT;
+}
 
 export type GeometricConstraintKind =
   | 'coincident'
@@ -101,6 +228,7 @@ export type GeometricConstraintKind =
   | 'equal'
   | 'tangent'
   | 'midpoint'
+  | 'symmetric'
   | 'fix';
 
 /** In this order: the order of the constraint actions in the toolbar. */
@@ -113,6 +241,7 @@ export const GEOMETRIC_CONSTRAINT_KINDS: readonly GeometricConstraintKind[] = Ob
   'equal',
   'tangent',
   'midpoint',
+  'symmetric',
   'fix',
 ]);
 
@@ -239,6 +368,14 @@ export type SketchConstraint =
       readonly id: SketchConstraintId;
       readonly a: SketchEntityId;
       readonly b: SketchEntityId;
+    }
+  /** Points a, b symmetric across the axis (a line): the middle of ab on the axis, ab perpendicular to it (M36). */
+  | {
+      readonly kind: 'symmetric';
+      readonly id: SketchConstraintId;
+      readonly a: SketchEntityId;
+      readonly b: SketchEntityId;
+      readonly axis: SketchEntityId;
     }
   /** The point stays at its coordinates. */
   | { readonly kind: 'fix'; readonly id: SketchConstraintId; readonly point: SketchEntityId }

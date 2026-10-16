@@ -172,7 +172,8 @@ test('points: one on a line gets Bod na křivce, a free one; Escape ends the too
   await expect(status).toHaveText('Stupně volnosti: 3');
 
   // A point on the line off its middle (+1), a free point (+2).
-  await toolbarButton(page, 'Bod').click();
+  // The point is a variant of the line family (the sketcher toolbar fits 1280 px).
+  await pickVariant(page, 'Úsečka', 'Bod');
   await clickCanvas(page, 50, 60);
   await expect(status).toHaveText('Stupně volnosti: 4');
   await expect(constraintRowsOf(panel, 'Bod na křivce')).toHaveCount(1);

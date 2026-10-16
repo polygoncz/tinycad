@@ -19,8 +19,10 @@ import {
   tangentCircle,
 } from '@/sketch/construct';
 import type { CircleFit, ShapeDraft, ShapeIds } from '@/sketch/construct';
-import { curve2, pointsById } from '@/sketch/geometry';
+import { curve2 } from '@/sketch/geometry';
+import { pointsById } from '@/sketch/points';
 import type { Curve2 } from '@/sketch/geometry';
+import { isPattern } from '@/sketch/model';
 import type {
   SketchConstraintId,
   SketchCurve,
@@ -255,7 +257,7 @@ describe('endTangent', () => {
   ]);
   const curve = (cid: string): SketchCurve => {
     const e = data.entities.find((x) => x.id === cid);
-    if (e === undefined || e.kind === 'point') throw new Error(`no curve ${cid}`);
+    if (e === undefined || e.kind === 'point' || isPattern(e)) throw new Error(`no curve ${cid}`);
     return e;
   };
 

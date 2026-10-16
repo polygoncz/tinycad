@@ -4,7 +4,14 @@
 
 import { assert, assertNever, bspline, vec3 } from '@/core';
 import type { Plane, Vec2, Vec3 } from '@/core';
-import { SPLINE_TOLERANCE, curve2, pointsById } from '@/sketch';
+import {
+  SPLINE_TOLERANCE,
+  curve2,
+  isPattern,
+  patternCopies,
+  patternOfCopy,
+  pointsById,
+} from '@/sketch';
 import type {
   Curve2,
   SketchCurve,
@@ -60,7 +67,9 @@ const AXIS_Z_LIMIT = 0.9;
 /**
  * All curves and points of the data with the style from `styleOf`, a spline as a polyline (M29);
  * after a bspline its control polygon (controlPolygonId) in the style 'construction' (the poles
- * are points of the sketch, the poles of a fitSpline are not drawn); `origin` adds the point
+ * are points of the sketch, the poles of a fitSpline are not drawn); then the copies of the
+ * patterns (patternCopies, M36) drawn like their sources, in the style of their pattern when it is
+ * 'selected' or 'hover' (styleOf is never asked for the id of a copy); `origin` adds the point
  * ORIGIN_POINT_ID at [0, 0] in the style 'normal' after the points of the sketch; `editing` marks
  * the drawing of the sketch edited in the sketcher (SketchDrawing.editing). Frozen.
  */
@@ -70,15 +79,22 @@ export function toSketchDrawing(
   styleOf: (id: SketchItemId) => SketchStyle,
   opts: { readonly origin?: boolean; readonly editing?: boolean } = {},
 ): SketchDrawing {
-  const points = pointsById(data);
-  const curves = data.entities.filter(isCurve).flatMap((c) => {
-    const curve = drawingCurve(c.id, curve2(c, points), styleOf(c.id));
+  const copies = patternCopies(data);
+  const points = pointsById({ entities: [...data.entities, ...copies], constraints: [] });
+  const style = (e: SketchPoint | SketchCurve): SketchStyle => {
+    const pattern = patternOfCopy(e.id);
+    if (pattern === null) return styleOf(e.id);
+    const ofPattern = styleOf(pattern);
+    if (ofPattern === 'selected' || ofPattern === 'hover') return ofPattern;
+    return e.kind !== 'point' && e.construction === true ? 'construction' : ofPattern;
+  };
+  const entities = [...data.entities.filter(isGeometry), ...copies];
+  const curves = entities.filter(isCurve).flatMap((c) => {
+    const curve = drawingCurve(c.id, curve2(c, points), style(c));
     return c.kind === 'bspline' ? [curve, controlPolygon(c.id, c.poles, points)] : [curve];
   });
-  const drawn: SketchDrawingPoint[] = data.entities.flatMap((e) =>
-    e.kind === 'point'
-      ? [Object.freeze({ id: e.id, at: vec2(e.x, e.y), style: styleOf(e.id) })]
-      : [],
+  const drawn: SketchDrawingPoint[] = entities.flatMap((e) =>
+    e.kind === 'point' ? [Object.freeze({ id: e.id, at: vec2(e.x, e.y), style: style(e) })] : [],
   );
   if (opts.origin === true) {
     drawn.push(Object.freeze({ id: ORIGIN_POINT_ID, at: vec2(0, 0), style: 'normal' }));
@@ -91,7 +107,8 @@ export function toSketchDrawing(
 /**
  * The curves of a regenerated sketch without points: non-construction ones in the style 'normal',
  * construction ones in the style 'construction' (M13, R74: a construction line can be the axis of
- * Revolve), and `regions` (the outlines of the kernel, SketchArtifact.outlines, M30) as polygons
+ * Revolve), then the curves of the copies of the patterns (patternCopies, M36) styled the same
+ * way, and `regions` (the outlines of the kernel, SketchArtifact.outlines, M30) as polygons
  * named like the regions, in their order (M13). Frozen.
  */
 export function artifactDrawing(
@@ -100,8 +117,9 @@ export function artifactDrawing(
   regions: readonly SketchRegion[],
 ): SketchDrawing {
   const data: SketchData = { entities, constraints: [] };
-  const points = pointsById(data);
-  const curves = entities
+  const copies = patternCopies(data);
+  const points = pointsById({ entities: [...entities, ...copies], constraints: [] });
+  const curves = [...entities, ...copies]
     .filter(isCurve)
     .map((c) =>
       drawingCurve(c.id, curve2(c, points), c.construction === true ? 'construction' : 'normal'),
@@ -152,7 +170,10 @@ export function axisDrawing(
   return freezeDrawing(frame, [line], []);
 }
 
-const isCurve = (e: SketchEntity): e is SketchCurve => e.kind !== 'point';
+const isCurve = (e: SketchEntity): e is SketchCurve => e.kind !== 'point' && !isPattern(e);
+
+/** A point or a curve: what a drawing shows of the data (a pattern shows through its copies). */
+const isGeometry = (e: SketchEntity): e is SketchPoint | SketchCurve => !isPattern(e);
 
 /** The polyline through the pole points of a bspline, in the style 'construction' (M29). */
 function controlPolygon(

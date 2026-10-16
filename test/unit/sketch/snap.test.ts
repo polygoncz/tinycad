@@ -469,3 +469,65 @@ describe('snap: xlines (M31)', () => {
     expect(snap([200.3, 199.8], XLINE_DATA, { ...OPTS, infer: false }).kind).toBe('free');
   });
 });
+
+describe('snap: copies of patterns are geometry without identity (M36)', () => {
+  /** Line ab (10,10)–(30,10) mirrored across the vertical axis x = 0: copy (-10,10)–(-30,10). */
+  const MIRRORED = sketch([
+    { kind: 'point', id: 'a', x: 10, y: 10 },
+    { kind: 'point', id: 'b', x: 30, y: 10 },
+    { kind: 'line', id: 'ab', p1: 'a', p2: 'b' },
+    { kind: 'point', id: 'u', x: 0, y: -50 },
+    { kind: 'point', id: 'w', x: 0, y: 50 },
+    { kind: 'line', id: 'uw', p1: 'u', p2: 'w', construction: true },
+    { kind: 'mirror', id: 'm', sources: ['ab'], axis: 'uw' },
+  ]);
+
+  const cases: readonly {
+    readonly name: string;
+    readonly cursor: Vec2;
+    readonly opts?: Partial<SnapOptions>;
+    readonly expected: SnapResult;
+  }[] = [
+    {
+      name: 'an end of a copy: its position, no point to reuse',
+      cursor: [-10.3, 10.2],
+      expected: { at: [-10, 10], kind: 'point', point: null, inferred: [], guides: [] },
+    },
+    {
+      name: 'an end of a copy without inference (Ctrl/Cmd)',
+      cursor: [-29.6, 9.8],
+      opts: { infer: false },
+      expected: { at: [-30, 10], kind: 'point', point: null, inferred: [], guides: [] },
+    },
+    {
+      name: 'the midpoint of a copy line: no midpoint constraint',
+      cursor: [-20.2, 10.3],
+      expected: { at: [-20, 10], kind: 'midpoint', point: null, inferred: [], guides: [] },
+    },
+    {
+      name: 'on a copy line: no pointOnCurve constraint',
+      cursor: [-25, 10.4],
+      expected: { at: [-25, 10], kind: 'onCurve', point: null, inferred: [], guides: [] },
+    },
+    {
+      name: 'no alignment with a point of a copy',
+      cursor: [-10.3, 40],
+      expected: { at: [-10.3, 40], kind: 'free', point: null, inferred: [], guides: [] },
+    },
+  ];
+
+  it.each(cases)('$name', ({ cursor, opts, expected }) => {
+    const r = snap(cursor, MIRRORED, { ...OPTS, ...opts });
+
+    expect({ ...r, at: [0, 0] }).toEqual({ ...expected, at: [0, 0] });
+    expectAt(r, expected.at);
+  });
+
+  it('a point of the data beats a copy point at the same distance', () => {
+    const withPoint = sketch([...MIRRORED.entities, { kind: 'point', id: 'n', x: -10, y: 12 }]);
+
+    const r = snap([-10, 11], withPoint, OPTS);
+
+    expect(r).toMatchObject({ kind: 'point', point: id('n') });
+  });
+});

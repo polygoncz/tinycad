@@ -1,6 +1,6 @@
 import { assert, assertNever } from '@/core';
-import { pointsById } from './geometry';
-import { isLineCarrier } from './model';
+import { pointsById } from './points';
+import { isLineCarrier, isPattern } from './model';
 import type {
   DimensionKind,
   GeometricConstraintKind,
@@ -12,6 +12,7 @@ import type {
   SketchEntity,
   SketchEntityId,
   SketchItemId,
+  SketchPattern,
   SketchPoint,
   SketchXLine,
 } from './model';
@@ -23,7 +24,7 @@ import type {
 const MIN_DIMENSION = 1e-9;
 
 const isRound = (e: SketchEntity): boolean => e.kind === 'circle' || e.kind === 'arc';
-const isCurve = (e: SketchEntity): e is SketchCurve => e.kind !== 'point';
+const isCurve = (e: SketchEntity): e is SketchCurve => e.kind !== 'point' && !isPattern(e);
 
 /** The end points of a spline (first and last pole or fit point), or undefined for other entities. */
 function splineEnds(e: SketchEntity): readonly SketchEntityId[] | undefined {
@@ -42,13 +43,15 @@ function lineAtSplineEnd(first: SketchEntity, second: SketchEntity): boolean {
 
 /**
  * The constraint for the selected entities (in selection order), or null when the selection does
- * not fit. Onshape's convention for the M26 kinds: coincident of a point and a curve is
- * pointOnCurve, horizontal/vertical of two points is hAlign/vAlign.
+ * not fit or contains a pattern (M36). Onshape's convention for the M26 kinds: coincident of a
+ * point and a curve is pointOnCurve, horizontal/vertical of two points is hAlign/vAlign.
  */
 export function constraintFor(
   kind: GeometricConstraintKind,
   selected: readonly SketchEntity[],
 ): SketchConstraintDraft | null {
+  if (selected.some(isPattern)) return null;
+  if (kind === 'symmetric') return symmetricFor(selected);
   const [first, second] = selected;
   if (selected.length === 1 && first !== undefined) {
     if ((kind === 'horizontal' || kind === 'vertical') && isLineCarrier(first)) {
@@ -107,6 +110,16 @@ export function constraintFor(
   }
 }
 
+/** symmetric (M36): two different points and an axis line, in this order; no point of the axis. */
+function symmetricFor(selected: readonly SketchEntity[]): SketchConstraintDraft | null {
+  const [a, b, axis] = selected;
+  if (selected.length !== 3 || a?.kind !== 'point' || b?.kind !== 'point') return null;
+  if (axis?.kind !== 'line' || a.id === b.id) return null;
+  const ends = curvePoints(axis);
+  if (ends.includes(a.id) || ends.includes(b.id)) return null;
+  return { kind: 'symmetric', a: a.id, b: b.id, axis: axis.id };
+}
+
 /**
  * A constraint of a point and a curve selected in either order: null unless one is a point and
  * the other a curve accepted by `accepts`, and the point does not define the curve.
@@ -118,19 +131,21 @@ function pointOn(
   make: (point: SketchEntityId, curve: SketchEntityId) => SketchConstraintDraft,
 ): SketchConstraintDraft | null {
   const [point, curve] = first.kind === 'point' ? [first, second] : [second, first];
-  if (point.kind !== 'point' || curve.kind === 'point' || !accepts(curve)) return null;
+  if (point.kind !== 'point' || !isCurve(curve) || !accepts(curve)) return null;
   if (curvePoints(curve).includes(point.id)) return null;
   return make(point.id, curve.id);
 }
 
 /**
  * The dimension for the selected entities: 1 line → distance(p1, p2); 1 circle/arc → radius;
- * 2 points → distance. value = the measured value; ≤ 1e-9 → null. An xline has no length → null.
+ * 2 points → distance. value = the measured value; ≤ 1e-9 → null. An xline has no length → null;
+ * a pattern selected → null.
  */
 export function dimensionFor(
   selected: readonly SketchEntity[],
   data: SketchData,
 ): SketchConstraintDraft | null {
+  if (selected.some(isPattern)) return null;
   const [first, second] = selected;
   let draft: Extract<SketchConstraintDraft, { kind: DimensionKind }> | null = null;
   if (selected.length === 1 && first !== undefined) {
@@ -274,7 +289,8 @@ export function curvePoints(c: SketchCurve): readonly SketchEntityId[] {
 /**
  * Entity ids a constraint refers to: [a, b] for the constraints of two entities (coincident,
  * hAlign and vAlign included), [line] for horizontal and vertical, [point] for fix, [curve] for
- * radius, [point, curve] for pointOnCurve, [point, line] for midpoint.
+ * radius, [point, curve] for pointOnCurve, [point, line] for midpoint, [a, b, axis] for
+ * symmetric.
  */
 export function constraintTargets(c: SketchConstraint): readonly SketchEntityId[] {
   switch (c.kind) {
@@ -290,6 +306,8 @@ export function constraintTargets(c: SketchConstraint): readonly SketchEntityId[
     case 'vDistance':
     case 'angle':
       return [c.a, c.b];
+    case 'symmetric':
+      return [c.a, c.b, c.axis];
     case 'pointOnCurve':
       return [c.point, c.curve];
     case 'midpoint':
@@ -312,25 +330,48 @@ export function constraintTargets(c: SketchConstraint): readonly SketchEntityId[
 /**
  * Removes items with a cascade; the order of the rest does not change. Unknown ids are ignored.
  * (1) selected constraints; (2) selected entities, with a point also the curves using it;
- * (3) points of removed curves that no remaining curve uses; (4) constraints on removed entities.
+ * (2a) removed sources leave the sources of patterns, a pattern without sources goes; (2b) a
+ * pattern goes with its axis or center; (3) points of removed curves that no remaining curve uses
+ * and that are no center of a remaining pattern; (4) constraints on removed entities. Steps 2–3
+ * repeat until nothing more goes (a removed curve empties a pattern, which frees its center).
  */
 export function removeItems(data: SketchData, ids: readonly SketchItemId[]): SketchData {
   const selected = new Set<string>(ids);
   const removed = new Set<string>();
   for (const e of data.entities) if (selected.has(e.id)) removed.add(e.id);
   const curves = data.entities.filter(isCurve);
-  for (const c of curves) {
-    if (curvePoints(c).some((p) => removed.has(p))) removed.add(c.id);
+  const patterns = data.entities.filter(isPattern);
+  let before = -1;
+  while (removed.size !== before) {
+    before = removed.size;
+    for (const c of curves) {
+      if (curvePoints(c).some((p) => removed.has(p))) removed.add(c.id);
+    }
+    for (const p of patterns) {
+      const anchor = patternAnchor(p);
+      const anchorRemoved = anchor !== undefined && removed.has(anchor);
+      if (anchorRemoved || p.sources.every((s) => removed.has(s))) removed.add(p.id);
+    }
+    const stillUsed = new Set<string>([
+      ...curves.filter((c) => !removed.has(c.id)).flatMap((c) => curvePoints(c)),
+      ...patterns.flatMap((p) =>
+        p.kind === 'circularPattern' && !removed.has(p.id) ? [p.center] : [],
+      ),
+    ]);
+    for (const c of curves) {
+      if (!removed.has(c.id)) continue;
+      for (const p of curvePoints(c)) if (!stillUsed.has(p)) removed.add(p);
+    }
   }
-  const stillUsed = new Set<string>(
-    curves.filter((c) => !removed.has(c.id)).flatMap((c) => curvePoints(c)),
-  );
-  for (const c of curves) {
-    if (!removed.has(c.id)) continue;
-    for (const p of curvePoints(c)) if (!stillUsed.has(p)) removed.add(p);
-  }
+  const entities = data.entities.flatMap((e): SketchEntity[] => {
+    if (removed.has(e.id)) return [];
+    if (!isPattern(e) || !e.sources.some((s) => removed.has(s))) return [e];
+    return [
+      Object.freeze({ ...e, sources: Object.freeze(e.sources.filter((s) => !removed.has(s))) }),
+    ];
+  });
   return Object.freeze({
-    entities: Object.freeze(data.entities.filter((e) => !removed.has(e.id))),
+    entities: Object.freeze(entities),
     constraints: Object.freeze(
       data.constraints.filter(
         (c) => !selected.has(c.id) && !constraintTargets(c).some((t) => removed.has(t)),
@@ -340,9 +381,26 @@ export function removeItems(data: SketchData, ids: readonly SketchItemId[]): Ske
 }
 
 /**
+ * The entity a pattern stands on besides its sources: the axis of a mirror, the center of a
+ * circular pattern; a linear pattern has none.
+ */
+function patternAnchor(p: SketchPattern): SketchEntityId | undefined {
+  switch (p.kind) {
+    case 'mirror':
+      return p.axis;
+    case 'circularPattern':
+      return p.center;
+    case 'linearPattern':
+      return undefined;
+    default:
+      return assertNever(p);
+  }
+}
+
+/**
  * Toggles construction of the selected curves: all construction → all normal, otherwise all
- * construction. Points, constraints and xlines (always construction, M31) are ignored. A normal
- * curve has no `construction` field.
+ * construction. Points, patterns, constraints and xlines (always construction, M31) are ignored.
+ * A normal curve has no `construction` field.
  */
 export function toggleConstruction(data: SketchData, ids: readonly SketchItemId[]): SketchData {
   const selected = new Set<string>(ids);

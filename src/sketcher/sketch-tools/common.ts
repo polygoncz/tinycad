@@ -3,6 +3,7 @@
 
 import { plane as planeMath } from '@/core';
 import type { Vec2, Vec3 } from '@/core';
+import { isPattern } from '@/sketch';
 import type {
   SketchConstraint,
   SketchConstraintId,
@@ -75,7 +76,8 @@ function asConstruction(add: SketchData): SketchData {
   return Object.freeze({
     entities: Object.freeze(
       add.entities.map((e): SketchEntity =>
-        e.kind === 'point' || e.construction === true
+        // Points and mirrors or patterns (M36, recipes without the flag) stay as they are.
+        e.kind === 'point' || isPattern(e) || e.construction === true
           ? e
           : Object.freeze({ ...e, construction: true }),
       ),

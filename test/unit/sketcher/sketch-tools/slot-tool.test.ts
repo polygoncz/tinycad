@@ -4,7 +4,7 @@ import type { Vec2 } from '@/core';
 import { ORIGIN_PLANE_IDS, createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
 import type { FeatureSchema, ParamSchema } from '@/document';
 import { anOpsSession } from '@/ops/testing';
-import { SKETCH_FEATURE_TYPE, parseSketchData } from '@/sketch';
+import { SKETCH_FEATURE_TYPE, isPattern, parseSketchData } from '@/sketch';
 import type { SketchConstraint, SketchData, SketchEntity } from '@/sketch';
 import { createFakeSketchGeometry, createFakeSolver } from '@/sketch/testing';
 import {
@@ -600,7 +600,9 @@ describe('the slot tools in the construction mode (M31)', () => {
       [30, 20],
     ]);
 
-    const curves = newEntities(session).flatMap((e) => (e.kind === 'point' ? [] : [e]));
+    const curves = newEntities(session).flatMap((e) =>
+      e.kind === 'point' || isPattern(e) ? [] : [e],
+    );
     expect(curves).toHaveLength(5);
     expect(curves.every((c) => c.construction === true)).toBe(true);
   });

@@ -209,7 +209,7 @@ describe('parseSketchData – entities', () => {
 describe('parseSketchData – constraints', () => {
   it.each([
     ['not an object', 'x'],
-    ['unknown kind', { kind: 'symmetric', id: 'x', a: 'a', b: 'b' }],
+    ['unknown kind', { kind: 'concentric', id: 'x', a: 'a', b: 'b' }],
     ['missing property', { kind: 'horizontal', id: 'x' }],
     ['extra property', { kind: 'fix', id: 'x', point: 'a', value: 1 }],
     ['empty id', { kind: 'fix', id: '', point: 'a' }],
@@ -729,6 +729,135 @@ describe('parseSketchData – infinite line (xline, M31)', () => {
     ['coincident', { kind: 'coincident', id: 'z', a: 'e', b: 'x' }],
   ])('reports %s on an xline', (_name, bad) => {
     expect(xlineConstraintIssues([{ kind: 'fix', id: 'g', point: 'a' }, bad])).toEqual([
+      constraintIssue(1),
+    ]);
+  });
+});
+
+describe('parseSketchData – mirror and patterns (M36)', () => {
+  const DIR = { angle: 0, count: 3, spacing: 5 };
+  const MIRROR = { kind: 'mirror', id: 'm', sources: ['ab', 'k'], axis: 'bc' };
+  const LINEAR = { kind: 'linearPattern', id: 'lp', sources: ['ab', 'c'], direction1: DIR };
+  const CIRCULAR = {
+    kind: 'circularPattern',
+    id: 'cp',
+    sources: ['q', 'ab'],
+    center: 'c',
+    count: 4,
+    angle: 2 * Math.PI,
+  };
+
+  it('accepts a mirror, a linear pattern with one and two directions and a circular pattern', () => {
+    expect(
+      entityIssues([
+        ...ENTITIES,
+        MIRROR,
+        LINEAR,
+        {
+          ...LINEAR,
+          id: 'lp2',
+          direction2: { angle: -7, count: 100, spacing: 0.1 },
+        },
+        CIRCULAR,
+        { ...CIRCULAR, id: 'cp2', angle: -Math.PI / 3, count: 2 },
+        // A source in more patterns, a pattern before its sources.
+        { ...MIRROR, id: 'm2', sources: ['ab'] },
+      ]),
+    ).toEqual([]);
+    expect(entityIssues([{ ...MIRROR, sources: ['ab'] }, ...ENTITIES])).toEqual([]);
+  });
+
+  it('accepts a full circle within 1e-9', () => {
+    expect(entityIssues([...ENTITIES, { ...CIRCULAR, angle: 2 * Math.PI + 5e-10 }])).toEqual([]);
+  });
+
+  it.each([
+    ['mirror with construction', { ...MIRROR, construction: true }],
+    ['mirror without sources', { kind: 'mirror', id: 'm', axis: 'bc' }],
+    ['mirror with an extra property', { ...MIRROR, count: 2 }],
+    ['sources not an array', { ...MIRROR, sources: 'ab' }],
+    ['empty sources', { ...MIRROR, sources: [] }],
+    ['duplicate source', { ...MIRROR, sources: ['ab', 'ab'] }],
+    ['missing source', { ...MIRROR, sources: ['zz'] }],
+    ['source not a string', { ...MIRROR, sources: [1] }],
+    ['source is a pattern', { ...MIRROR, sources: ['lp'] }],
+    ['source is the pattern itself', { ...MIRROR, sources: ['m'] }],
+    ['source is the axis', { ...MIRROR, sources: ['ab', 'bc'] }],
+    ['axis is a point', { ...MIRROR, axis: 'a' }],
+    ['axis is a circle', { ...MIRROR, axis: 'k' }],
+    ['axis missing', { ...MIRROR, axis: 'zz' }],
+    ['pattern id with a colon', { ...MIRROR, id: 'm:1' }],
+    ['pattern id with a comma', { ...MIRROR, id: 'm,1' }],
+    ['linear without direction1', { kind: 'linearPattern', id: 'lp', sources: ['ab'] }],
+    ['direction not an object', { ...LINEAR, direction1: 3 }],
+    ['direction with an extra property', { ...LINEAR, direction1: { ...DIR, x: 1 } }],
+    ['direction without spacing', { ...LINEAR, direction1: { angle: 0, count: 2 } }],
+    ['count 1', { ...LINEAR, direction1: { ...DIR, count: 1 } }],
+    ['count above the maximum', { ...LINEAR, direction1: { ...DIR, count: 101 } }],
+    ['count not an integer', { ...LINEAR, direction1: { ...DIR, count: 2.5 } }],
+    ['spacing zero', { ...LINEAR, direction1: { ...DIR, spacing: 0 } }],
+    ['spacing negative', { ...LINEAR, direction1: { ...DIR, spacing: -1 } }],
+    ['spacing infinite', { ...LINEAR, direction1: { ...DIR, spacing: Infinity } }],
+    ['direction angle NaN', { ...LINEAR, direction1: { ...DIR, angle: Number.NaN } }],
+    ['invalid direction2', { ...LINEAR, direction2: { ...DIR, count: 0 } }],
+    ['direction2 undefined', { ...LINEAR, direction2: undefined }],
+    ['circular center is a line', { ...CIRCULAR, center: 'ab' }],
+    ['circular center missing', { ...CIRCULAR, center: 'zz' }],
+    ['circular center is a source', { ...CIRCULAR, sources: ['ab', 'c'] }],
+    ['circular count 1', { ...CIRCULAR, count: 1 }],
+    ['circular count 101', { ...CIRCULAR, count: 101 }],
+    ['circular count not an integer', { ...CIRCULAR, count: 3.2 }],
+    ['circular angle zero', { ...CIRCULAR, angle: 0 }],
+    ['circular angle above 2π', { ...CIRCULAR, angle: 2 * Math.PI + 1e-6 }],
+    ['circular angle below −2π', { ...CIRCULAR, angle: -7 }],
+    ['circular angle infinite', { ...CIRCULAR, angle: Infinity }],
+  ])('reports %s at its index', (_name, bad) => {
+    expect(entityIssues([...ENTITIES, LINEAR, bad])).toEqual([entityIssue(ENTITIES.length + 1)]);
+  });
+
+  it('reports a pattern whose source id has a colon or a comma', () => {
+    const entities = [P('x:1'), P('y,1'), ...ENTITIES];
+    expect(
+      entityIssues([
+        ...entities,
+        { ...MIRROR, sources: ['x:1'] },
+        { ...LINEAR, id: 'lp', sources: ['y,1'] },
+      ]),
+    ).toEqual([entityIssue(entities.length), entityIssue(entities.length + 1)]);
+  });
+
+  it.each([
+    ['a constraint on a pattern', { kind: 'horizontal', id: 'x', line: 'm' }],
+    ['an equal of two patterns', { kind: 'equal', id: 'x', a: 'm', b: 'lp' }],
+    ['a fix of a pattern', { kind: 'fix', id: 'x', point: 'cp' }],
+    ['a pointOnCurve on a pattern', { kind: 'pointOnCurve', id: 'x', point: 'a', curve: 'm' }],
+    ['a radius of a pattern', { kind: 'radius', id: 'x', curve: 'cp', value: 1 }],
+  ])('reports %s', (_name, bad) => {
+    const r = parseSketchData([...ENTITIES, MIRROR, LINEAR, CIRCULAR], [bad]);
+    expect(r.ok ? [] : r.error).toEqual([constraintIssue(0)]);
+  });
+});
+
+describe('parseSketchData – symmetric (M36)', () => {
+  it('accepts two points symmetric across a line', () => {
+    // c and d are not points of ab.
+    expect(constraintIssues([{ kind: 'symmetric', id: 'x', a: 'c', b: 'd', axis: 'ab' }])).toEqual(
+      [],
+    );
+  });
+
+  it.each([
+    ['a = b', { kind: 'symmetric', id: 'x', a: 'c', b: 'c', axis: 'ab' }],
+    ['a point of the axis as a', { kind: 'symmetric', id: 'x', a: 'a', b: 'd', axis: 'ab' }],
+    ['a point of the axis as b', { kind: 'symmetric', id: 'x', a: 'c', b: 'b', axis: 'ab' }],
+    ['axis a circle', { kind: 'symmetric', id: 'x', a: 'c', b: 'd', axis: 'k' }],
+    ['axis a point', { kind: 'symmetric', id: 'x', a: 'c', b: 'd', axis: 'a' }],
+    ['a a line', { kind: 'symmetric', id: 'x', a: 'bc', b: 'd', axis: 'ab' }],
+    ['b missing', { kind: 'symmetric', id: 'x', a: 'c', b: 'zz', axis: 'ab' }],
+    ['no axis', { kind: 'symmetric', id: 'x', a: 'c', b: 'd' }],
+    ['a value', { kind: 'symmetric', id: 'x', a: 'c', b: 'd', axis: 'ab', value: 1 }],
+  ])('reports %s', (_name, bad) => {
+    expect(constraintIssues([{ kind: 'fix', id: 'f', point: 'a' }, bad])).toEqual([
       constraintIssue(1),
     ]);
   });

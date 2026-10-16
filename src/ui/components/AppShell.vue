@@ -5,9 +5,9 @@
 // M13) – or, while a sketch session is open (M12), the sketch panel instead of the dialog: the
 // sketch is a feature edit session too, but it has its own panel. In development the debug panel
 // of topological names floats bottom left (M14). While a sketch is open, its dimensions (M19.2
-// D4) and the glyphs of its constraints (M25) lie over the view, above the viewport host and
-// below the floating panels. The panels are DOM siblings of the viewport
-// host, never its children, so pointer and wheel events over a panel never reach the view.
+// D4), the dimensions of a selected pattern (M36) and the glyphs of its constraints (M25) lie
+// over the view, above the viewport host and below the floating panels. The panels are DOM
+// siblings of the viewport host, never its children, so pointer and wheel events over a panel never reach the view.
 // M15: the history panel floats on the right where the dialog and the sketch panel are, so it is
 // drawn only without them; whether it is open is layout state of this window (the TitleBar
 // switch), nothing of the session.
@@ -35,6 +35,7 @@ import SketchDimensions from './SketchDimensions.vue';
 import SketchGlyphs from './SketchGlyphs.vue';
 import SketchInput from './SketchInput.vue';
 import SketchPanel from './SketchPanel.vue';
+import SketchPatternDimensions from './SketchPatternDimensions.vue';
 import Timeline from './Timeline.vue';
 import TitleBar from './TitleBar.vue';
 import Toolbar from './Toolbar.vue';
@@ -155,6 +156,11 @@ onUnmounted(() => {
       <SketchDimensions
         v-if="sketchSession !== null"
         :key="`dimensions-${sketchSession.featureId}`"
+        :sketch="sketchSession"
+      />
+      <SketchPatternDimensions
+        v-if="sketchSession !== null"
+        :key="`pattern-dimensions-${sketchSession.featureId}`"
         :sketch="sketchSession"
       />
       <SketchGlyphs

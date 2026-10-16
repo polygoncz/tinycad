@@ -7,7 +7,7 @@
 
 import { DisposableStore, ObservableValue } from '@/core';
 import type { Disposable, IdGenerator, Observable } from '@/core';
-import { GEOMETRIC_CONSTRAINT_KINDS, constraintFor } from '@/sketch';
+import { GEOMETRIC_CONSTRAINT_KINDS, constraintFor, isPattern } from '@/sketch';
 import type {
   GeometricConstraintKind,
   SketchConstraint,
@@ -33,7 +33,10 @@ const CONSTRAINT_SHORTCUTS: Partial<Record<GeometricConstraintKind, string>> = {
 };
 
 /** A curve whose construction flag the action toggles: every curve but an xline (always construction). */
-const isTogglable = (e: SketchEntity): boolean => e.kind !== 'point' && e.kind !== 'xline';
+// A curve whose construction flag Q can flip: no point, no xline (always construction, M31), no
+// mirror or pattern (a recipe, M36).
+const isTogglable = (e: SketchEntity): boolean =>
+  e.kind !== 'point' && e.kind !== 'xline' && !isPattern(e);
 
 /**
  * Registers the sketcher actions into `deps.registry`. The returned Disposable unsubscribes the

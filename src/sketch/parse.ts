@@ -1,7 +1,7 @@
 import { err, ok } from '@/core';
 import type { Result } from '@/core';
-import { isDimensionKind } from './model';
-import type { DimensionKind, DimensionPlacement, SketchData } from './model';
+import { isDimensionKind, patternParamsValid } from './model';
+import type { DimensionKind, DimensionPlacement, SketchData, SketchPattern } from './model';
 
 // Shape and invariant checks of sketch data (spec 12 "Kontrola dat"). The only trusted place
 // where raw params become typed SketchData: ids are branded here, nowhere else.
@@ -31,7 +31,13 @@ const ENTITY_FIELDS: Readonly<Record<string, { required: string[]; optional: str
   },
   // Always construction (M31): the flag is required and must be true.
   xline: { required: ['id', 'p1', 'p2', 'construction'], optional: [] },
+  mirror: { required: ['id', 'sources', 'axis'], optional: [] },
+  linearPattern: { required: ['id', 'sources', 'direction1'], optional: ['direction2'] },
+  circularPattern: { required: ['id', 'sources', 'center', 'count', 'angle'], optional: [] },
 };
+
+/** The entity kinds of mirrors and patterns (M36): recipes, no constraint may refer to them. */
+const PATTERN = new Set(['mirror', 'linearPattern', 'circularPattern']);
 
 /** The highest spline degree (cubic); a spline's degree = min(MAX_SPLINE_DEGREE, points − 1). */
 const MAX_SPLINE_DEGREE = 3;
@@ -76,6 +82,7 @@ const CONSTRAINT_FIELDS: Readonly<Record<string, Readonly<Record<string, Target 
   midpoint: { point: 'point', line: 'line' },
   hAlign: { a: 'point', b: 'point' },
   vAlign: { a: 'point', b: 'point' },
+  symmetric: { a: 'point', b: 'point', axis: 'line' },
   fix: { point: 'point' },
   distance: { a: 'point', b: 'point', value: 'value' },
   hDistance: { a: 'point', b: 'point', value: 'value' },
@@ -193,9 +200,71 @@ function entityValid(
         knotsValid(item.knots, n, degree)
       );
     }
+    case 'mirror': {
+      const axis = typeof item.axis === 'string' ? targets.get(item.axis) : undefined;
+      return patternValid(item, targets, item.axis) && axis?.kind === 'line';
+    }
+    case 'linearPattern':
+      return (
+        patternValid(item, targets, undefined) &&
+        directionShape(item.direction1) &&
+        (!Object.hasOwn(item, 'direction2') || directionShape(item.direction2)) &&
+        patternValuesValid(item)
+      );
+    case 'circularPattern':
+      return (
+        patternValid(item, targets, item.center) &&
+        point(item.center) !== undefined &&
+        typeof item.count === 'number' &&
+        typeof item.angle === 'number' &&
+        patternValuesValid(item)
+      );
     default:
       return false;
   }
+}
+
+/**
+ * The common rules of a mirror or pattern (M36): its id and the ids of its sources have no `:` or
+ * `,` (derived ids stay unambiguous); the sources are a non-empty list of distinct points or
+ * curves of the sketch, without the axis or center (`anchor`).
+ */
+function patternValid(
+  item: Fields,
+  targets: ReadonlyMap<string, Fields>,
+  anchor: unknown,
+): boolean {
+  if (!plainId(item.id) || !Array.isArray(item.sources) || item.sources.length === 0) return false;
+  const sources = item.sources as readonly unknown[];
+  if (new Set(sources).size !== sources.length || sources.includes(anchor)) return false;
+  return sources.every((ref) => {
+    if (!plainId(ref)) return false;
+    const kind = targets.get(ref)?.kind;
+    return kind === 'point' || (typeof kind === 'string' && CURVE.has(kind));
+  });
+}
+
+/** An id usable in a derived id: no `:` and no `,`. */
+function plainId(v: unknown): v is string {
+  return isId(v) && !v.includes(':') && !v.includes(',');
+}
+
+/** The shape of a direction of a linear pattern: exactly angle, count and spacing, all numbers. */
+function directionShape(v: unknown): boolean {
+  return (
+    isRecord(v) &&
+    hasExactly(v, ['angle', 'count', 'spacing'], []) &&
+    typeof v.angle === 'number' &&
+    typeof v.count === 'number' &&
+    typeof v.spacing === 'number'
+  );
+}
+
+/** The values of the parameters of a pattern whose shape is checked (patternParamsValid). */
+function patternValuesValid(item: Fields): boolean {
+  // The caller checked the kind, the fields and that every parameter is a number, so the item
+  // has the shape of a SketchPattern; patternParamsValid judges only the values.
+  return patternParamsValid(item as unknown as SketchPattern);
 }
 
 /** |end − center| = |start − center| within the relative tolerance, radius not degenerate. */
@@ -318,6 +387,8 @@ function constraintValid(
     if (target !== undefined) refTargets.push(target);
   }
   if (refs.length === 2 && refs[0] === refs[1]) return false;
+  // Mirrors and patterns are recipes: no constraint refers to them (M36).
+  if (refKinds.some((k) => PATTERN.has(k))) return false;
   if (kind === 'tangent' && lineAtSplineEnd(refTargets)) return true;
   if (kind === 'equal' || kind === 'tangent') return pairAllowed(kind, refKinds);
   if (kind === 'pointLineDistance' && isEndOf(item.point, item.line, targets)) return false;
@@ -325,6 +396,16 @@ function constraintValid(
     .filter((need) => need !== 'value')
     .every((need, i) => matches(need, refKinds[i]));
   if (!kindsMatch) return false;
+  if (kind === 'symmetric') {
+    // Two different points, neither a point of the axis.
+    const axis = typeof item.axis === 'string' ? targets.get(item.axis) : undefined;
+    return (
+      item.a !== item.b &&
+      axis !== undefined &&
+      !definesCurve(item.a, axis) &&
+      !definesCurve(item.b, axis)
+    );
+  }
   if (kind === 'pointOnCurve' || kind === 'midpoint') {
     const [point, curve] = refs;
     const target = typeof curve === 'string' ? targets.get(curve) : undefined;
