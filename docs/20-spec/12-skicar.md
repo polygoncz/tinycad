@@ -122,7 +122,7 @@ export type Curve2 =
   | { readonly kind: 'circle'; readonly center: Vec2; readonly radius: number };
 export function pointsById(data: SketchData): ReadonlyMap<SketchEntityId, SketchPoint>;
 export function curve2(curve: SketchCurve, points: ReadonlyMap<SketchEntityId, SketchPoint>): Curve2;   // arc → ccw: true; od M14 s id: curve.id
-// M14: každá varianta Curve2 má readonly id?: string – id entity skici; computeRegions ho vyplní u všech křivek outer i holes (R98), jádro z něj dělá role face:side:<id>
+// M14: každá varianta Curve2 má readonly id?: string – id entity skici; od M30 ho nese `regionCurves` a jádro (`profileRegions`) ho vrátí u všech křivek outer i holes (R98), jádro z něj dělá role face:side:<id>
 
 // sketch/edit.ts
 /** Vazba pro vybrané entity (v pořadí výběru), nebo null, když výběr nesedí. */
@@ -157,7 +157,7 @@ export const sketchPlugin: FeaturePlugin<SketchParams>;
 
 - Schéma `type: SKETCH_FEATURE_TYPE`, `version: 1`, `label: 'sketch.label'`, `icon: 'pencil'`; parametry v pořadí `plane` (`{ kind: 'planes', label: 'sketch.plane', min: 1, max: 1 }`), `entities` a `constraints` (`{ kind: 'data', label: … }`). Jména parametrů jsou v modulu `sketch` jako `SKETCH_PARAM` a schéma ověří typem (`satisfies Record<keyof SketchParams, ParamSpec>`), že sedí na klíče `SketchParams`. Skicář v `interaction` čte a zapisuje parametry skici jen přes `SKETCH_PARAM`, takže jedinou vazbou na plugin zůstává `SKETCH_FEATURE_TYPE` a tato jména ([[0017-modul-sketch-a-skicar|ADR 0017]]). `validate` = `validateAgainstSchema` a, když jsou `entities` i `constraints` přítomné, `parseSketchData` převedené na `ParamIssue { param: path, code, params: { index } }`.
 - Plugin **nemá nástroje** ani operace: vstup do skicáře je vestavěný nástroj `sketch` v modulu `sketcher` ([[0024-modul-sketcher|ADR 0024]]) ([[0017-modul-sketch-a-skicar|ADR 0017]]) a editace jde přes `feature.setParams` ([[Q074 Operace skicáře v logu|Q074]]).
-- **Builder:** (1) `ctx.resolvePlanes(params.plane)`, chyba → `unresolvedReference('plane', e)`; (2) `parseSketchData` (parametry jsou ověřené, `err` je chyba programu → výjimka); (3) `computeRegions(data)`; `crossing` → `ctx.warn('Sketch curves cross each other; no regions')`; (4) pro každou oblast v pořadí `kernel.makeFace({ plane, outer, holes })`; (5) nový artefakt `SketchArtifact { kind: 'sketch', id: sketchId(feature.id), owner: feature.id, plane, entities: data.entities, regions }` (mapa jméno → handle v pořadí oblastí), zmrazený, do nové mapy artefaktů. Chyba jádra proletí (`KERNEL`). Skica bez oblastí je platná (artefakt s prázdnou mapou).
+- **Builder:** (1) `ctx.resolvePlanes(params.plane)`, chyba → `unresolvedReference('plane', e)`; (2) `parseSketchData` (parametry jsou ověřené, `err` je chyba programu → výjimka); (3) od M30 `ctx.kernel.profileRegions({ curves: regionCurves(data) })` (do M29 `computeRegions(data)`); `crossing` → `ctx.warn('Sketch curves cross each other; no regions')`; (4) pro každou oblast v pořadí `kernel.makeFace({ plane, outer, holes })`; (5) nový artefakt `SketchArtifact { kind: 'sketch', id: sketchId(feature.id), owner: feature.id, plane, entities: data.entities, regions, outlines }` (mapa jméno → handle v pořadí oblastí; `outlines` = oblasti z jádra, od M30, **hluboce** zmrazené v builderu, protože přes worker přijdou po `postMessage` měnitelné), zmrazený, do nové mapy artefaktů. Chyba jádra proletí (`KERNEL`). Skica bez oblastí je platná (artefakt s prázdnou mapou).
 
 ## Roviny a počátek
 
@@ -179,7 +179,7 @@ Osa y roviny = `normal × xDir` vyjde u všech tří +Y, +Z, +Z – skica na př
 > Oblasti počítá jádro (`SketchOps.profileRegions`, [[0028-geometrie-skici-v-jadre|ADR 0028]]), algoritmus níže je od té doby implementace `FakeKernel` a **kontrakt výsledku** pro obě implementace. Viz [[#Geometrie skici v jádře (M30)]].
 
 ```ts
-// sketch/regions.ts
+// do M29 sketch/regions.ts; od M30 typ v sketch/geometry.ts a výpočet = SketchOps.profileRegions
 export interface SketchRegion {
   /** Id všech hraničních křivek (vnější i díry), bez duplicit, seřazená (porovnání řetězců), spojená ','. */
   readonly name: string;
@@ -187,11 +187,10 @@ export interface SketchRegion {
   readonly holes: readonly (readonly Curve2[])[];        // uzavřené smyčky po směru hodinových ručiček
   readonly area: number;                                 // > 0: vnější minus díry
 }
-export interface RegionsResult { readonly regions: readonly SketchRegion[]; readonly crossing: boolean }
-export function computeRegions(data: SketchData): RegionsResult;   // oblasti seřazené podle name
+// do M29: computeRegions(data): { regions, crossing }; od M30 ProfileRegions z jádra (spec 06)
 ```
 
-Čistá 2D geometrie v TypeScriptu, testovatelná bez OCCT. Postup:
+Do M29 čistá 2D geometrie v TypeScriptu, od M30 algoritmus `FakeKernel` (`kernel/fake-regions.ts`) a kontrakt výsledku pro OCCT (`kernel-occt/regions.ts`, [[06-geometricke-jadro#Oblasti skici v adaptéru (M30)]]). Postup:
 
 1. **Křivky:** jen nekonstrukční úsečky, kružnice a oblouky; úsečka nulové délky (≤ tolerance) se vynechá. Tolerance `tol = 1e-9 · max(1, největší |souřadnice|)`.
 2. **Uzly:** konce křivek; konce bližší než `tol` jsou jeden uzel (body s vazbou `coincident` tak splynou). Kružnice je uzavřená hrana bez uzlu.
@@ -201,7 +200,7 @@ export function computeRegions(data: SketchData): RegionsResult;   // oblasti se
 6. **Díry:** vnější hranici komponenty (a kružnici jako samostatnou komponentu) přiřadí jako díru té omezené stěně **jiné** komponenty s nejmenší plochou, která obsahuje její libovolný bod (např. první bod první křivky). Bez takové stěny se nepřiřadí nikam.
 7. **Jméno** z id hraničních křivek, takže je stabilní při změně kót i pořadí kreslení; jiná oblast stejné jméno mít nemůže (dvě omezené stěny s týmž souborem hran planární graf bez křížení nedovolí). Extrude ukládá `SketchRegionRef { sketch: FeatureId, region: name }` ([[03-dokument#Reference na jiné entity]]).
 
-**Spotřebitelé oblastí (M13):** Vysunutí a Rotace dostanou plochu oblasti přes `BuildContext.resolveRegions` ([[07-regenerace#Builder featury]]); `interaction` spočítá stejné oblasti z entit artefaktu znovu (`artifactDrawing`), aby je `render` uměl vyplnit a pickovat ([[10-interakce#Kresba skici]]) – jména se shodují, protože jde o stejnou čistou funkci nad stejnými daty. Osou Rotace může být úsečka skici, i konstrukční (`SketchEntityRef`). **M14:** id křivek v oblastech (`Curve2.id`) dávají bočním plochám vysunutí a rotace jména `face:side:<id entity>` ([[08-topologicke-pojmenovani#Plochy]]).
+**Spotřebitelé oblastí (M13):** Vysunutí a Rotace dostanou plochu oblasti přes `BuildContext.resolveRegions` ([[07-regenerace#Builder featury]]); kresba skic z regenerace (`artifactDrawing`) je do M29 počítala z entit artefaktu znovu, od M30 bere obrysy z artefaktu (`SketchArtifact.outlines`), aby je `render` uměl vyplnit a pickovat ([[10-interakce#Kresba skici]]) – jména se shodují, protože jde o týž výsledek jádra. Osou Rotace může být úsečka skici, i konstrukční (`SketchEntityRef`). **M14:** id křivek v oblastech (`Curve2.id`) dávají bočním plochám vysunutí a rotace jména `face:side:<id entity>` ([[08-topologicke-pojmenovani#Plochy]]).
 
 ## Řešič vazeb
 
@@ -740,9 +739,10 @@ export interface SketchGeometry {}
 
 - **Builder skici:** `regionCurves(data)` → `kernel.profileRegions({ curves })` → `crossing` → `ctx.warn` jako dnes → `makeFace` pro každou oblast v pořadí → artefakt s `regions` a `outlines`. Regenerace tak volá jádro o jednou víc na skicu; plánovač a cache se nemění.
 - **Kresba skic z regenerace:** `app` (`regen-pipeline.ts`) předá `artifact.outlines` do `artifactDrawing`; `sketcher` oblasti nepočítá. Kresba editované skici oblasti nemá (beze změny).
-- **`sketch/regions.ts`** se přesune do `kernel` jako implementace `profileRegions` ve `FakeKernel` (soubor `kernel/fake-regions.ts`, matematika splinu z `core`). `sketch` přestane exportovat `computeRegions` a `RegionsResult`; `SPLINE_TOLERANCE` zůstane (kresba), fake má vlastní konstantu se stejnou hodnotou. Testy `test/unit/sketch/regions.test.ts` se přesunou do kontraktové sady jádra (`describeGeometryKernelContract`), takže stejné případy běží proti fake i OCCT.
-- **`SketchGeometry`** je v `sketch` (prstenec 1, jen typ), implementuje ho `app` nad klientem jádra a skicář ho dostane v závislostech `SketchSession` jako `ConstraintSolver`. V M30 vznikne jen prázdné rozhraní a jeho předání, aby stopa A v M33 nemusela měnit kompoziční kořen; pravidla závislostí se nemění.
-- Postup výpočtu v sekci *Oblasti (profily)* výše platí dál jako **kontrakt výsledku** (co je oblast, díra, jméno, křížení, pořadí); OCCT ho smí dosáhnout jinou cestou (dělení hran `BOPAlgo`, stěny z `BRepBuilderAPI`), tolerance jsou OCCT.
+- **`sketch/regions.ts`** se přesunul do `kernel` jako implementace `profileRegions` ve `FakeKernel` (soubor `kernel/fake-regions.ts`, matematika splinu z `core`). `sketch` přestane exportovat `computeRegions` a `RegionsResult`; `SPLINE_TOLERANCE` zůstane (kresba), fake má vlastní konstantu se stejnou hodnotou. Testy `test/unit/sketch/regions.test.ts` se přesunou do kontraktové sady jádra (`describeGeometryKernelContract`), takže stejné případy běží proti fake i OCCT.
+- **`SketchGeometry`** je v `sketch` (`sketch/geometry-port.ts`, prstenec 1, jen typ), implementuje ho `app` nad klientem jádra a skicář ho dostane v závislostech `SketchSession` jako `ConstraintSolver`. V M30 vznikne jen prázdné rozhraní a jeho předání, aby stopa A v M33 nemusela měnit kompoziční kořen; pravidla závislostí se nemění.
+- Postup výpočtu v sekci *Oblasti (profily)* výše platí dál jako **kontrakt výsledku** (co je oblast, díra, jméno, křížení, pořadí); OCCT ho dosahuje stejným postupem s geometrií z OCCT (průsečíky `Geom2dAPI_InterCurveCurve`, plocha Greenovou větou – zvoleno prototypem, [[06-geometricke-jadro#Oblasti skici v adaptéru (M30)]]), tolerance `1e-7 · max(1, |souřadnice|)`.
+- **Port `SketchGeometry` (skutečnost M30):** `app/sketch-geometry.ts` `createSketchGeometry()` zatím bez parametrů (klient jádra by byl nepoužitý argument); port jde `createSketchEditor` (`SketchEditorDeps.geometry`) → `openSketchSession` vedle `solver`. M33 přidá parametr klienta jádra a metody.
 
 
 ## Zrcadlení a pole (M36)
@@ -840,7 +840,7 @@ export function patternOfCopy(id: string): SketchEntityId | null;
 
 ## Testy
 
-- `sketch`: `parseSketchData` pro každé pravidlo (platná data, každý druh chyby s `index`); `constraintFor` a `dimensionFor` pro platné i neplatné výběry; `measure`; `removeItems` (kaskáda bod → křivky → osiřelé body → vazby); `toggleConstruction`; `computeRegions`: obdélník (1 oblast, jméno z id 4 úseček, plocha), dva obdélníky vedle sebe se sdílenou hranou (2 oblasti), obdélník s kružnicí uvnitř (díra, 2 oblasti), kružnice v kružnici v kružnici, drážka z úseček a tečných oblouků (řazení při shodě úhlu), otevřená polyline (0), polyline s „ocáskem“ (prořezání), konstrukční úsečka uvnitř obdélníku (ignorována), křížící se úsečky (`crossing`), body spojené `coincident` (splynutí uzlů), stabilita jména po změně souřadnic a pořadí entit; `FakeSolver`.
+- `sketch`: `parseSketchData` pro každé pravidlo (platná data, každý druh chyby s `index`); `constraintFor` a `dimensionFor` pro platné i neplatné výběry; `measure`; `removeItems` (kaskáda bod → křivky → osiřelé body → vazby); `toggleConstruction`; `regionCurves` (M30: konstrukční křivky ne, id u všech, spline jako `bspline`); oblasti (do M29 `computeRegions`, od M30 kontraktová sada jádra `describeGeometryKernelContract`, proti fake i OCCT): obdélník (1 oblast, jméno z id 4 úseček, plocha), dva obdélníky vedle sebe se sdílenou hranou (2 oblasti), obdélník s kružnicí uvnitř (díra, 2 oblasti), kružnice v kružnici v kružnici, drážka z úseček a tečných oblouků (řazení při shodě úhlu), otevřená polyline (0), polyline s „ocáskem“ (prořezání), konstrukční úsečka uvnitř obdélníku (ignorována), křížící se úsečky (`crossing`), body spojené `coincident` (splynutí uzlů), stabilita jména po změně souřadnic a pořadí entit; `FakeSolver`.
 - `solver-planegcs` (Node, skutečný planegcs): obdélník bez kót `dof` 4 → se dvěma kótami 2 → s `fix` 0; změna kóty posune body; konflikt (třetí kóta úhlopříčky, kóta mezi dvěma fixovanými body) → `'conflict'` s id vazby; dvakrát `horizontal` → `'ok'` s `redundant`; tažení bodu u `dof > 0` (bod sleduje cíl) a u `dof 0` (nic se nehne, `'ok'`); kružnice s poloměrem; oblouk tečný k úsečce; `dof` s tažením = bez tažení; nic na konzoli; OOM (≥ 1000 obdélníků) → `'failed'` a další malé řešení projde; worker přes `MessageChannel`.
 - `features/sketch`: schéma (společné testy pluginu), builder s `FakeKernel` (jedna oblast → `makeFace` jednou, artefakt s rovinou, `crossing` → varování a žádné plochy, neznámá rovina → `UNRESOLVED_REFERENCE`).
 - `interaction`: `SketchEditor`/`SketchSession` s `FakeSolver` a `FakeViewport` (vstup, kresba, výběr, vazby, kóty, odmítnutí, souběh tažení, Hotovo = jeden záznam, Zrušit = nic), nástroje skicáře.

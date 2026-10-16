@@ -1,7 +1,8 @@
 import { err, ok, plane, type Plane, type Result, type Vec2, type Vec3 } from '@/core';
 
 // Planar profiles for SketchOps.makeFace (spec 06, "Stav po M12") and the one check of a face
-// input shared by every GeometryKernel implementation (contract bullet makeFace).
+// input shared by every GeometryKernel implementation (contract bullet makeFace). Since M30 also
+// the regions of SketchOps.profileRegions and the check of its input (spec 06, "Stav po M30").
 
 /**
  * 2D curve in a plane; the same shape as Curve2 from sketch (kernel does not depend on sketch).
@@ -42,6 +43,27 @@ export interface FaceInput {
   readonly outer: ProfileLoop;
   readonly holes: readonly ProfileLoop[];
 }
+
+/** Region (M30): a closed outer loop and holes; structurally SketchRegion of sketch. */
+export interface ProfileRegion {
+  /** Ids of all boundary curves (outer and holes), without duplicates, sorted (string comparison), joined by ','. */
+  readonly name: string;
+  /** Counter-clockwise, the curves oriented along the loop. */
+  readonly outer: ProfileLoop;
+  /** Clockwise. */
+  readonly holes: readonly ProfileLoop[];
+  /** > 0: outer minus holes. */
+  readonly area: number;
+}
+
+/** The result of profileRegions (M30): regions sorted by name; a crossing gives no regions. */
+export interface ProfileRegions {
+  readonly regions: readonly ProfileRegion[];
+  readonly crossing: boolean;
+}
+
+/** A curve of the profileRegions input after the check: its id is required (spec 06, M30). */
+export type IdentifiedCurve = ProfileCurve & { readonly id: string };
 
 /** Spec 06: tolerance of plane.isOrthonormal for the face plane. */
 const ORTHONORMAL_TOLERANCE = 1e-9;
@@ -153,8 +175,8 @@ function readLoop(x: unknown, path: string, errors: string[]): ProfileLoop | und
     errors.push(`${path} must not be empty`);
     return undefined;
   }
-  const read = items.map((item, i) => readCurve(item, `${path}[${String(i)}]`, errors));
-  const curves = read.filter((c) => c !== undefined);
+  const read = items.map((item, i) => readCurve(item, `${path}[${String(i)}]`, errors, FACE_CURVE));
+  const curves = read.filter((c) => c !== undefined && c !== null);
   if (curves.length !== read.length) return undefined;
 
   if (curves.some((c) => c.kind === 'circle')) {
@@ -175,13 +197,72 @@ function readLoop(x: unknown, path: string, errors: string[]): ProfileLoop | und
   return curves;
 }
 
-function readCurve(x: unknown, path: string, errors: string[]): ProfileCurve | undefined {
+/**
+ * How readCurve treats the differences between the makeFace and the profileRegions input
+ * (spec 06): whether the id is required and whether a curve of zero length is an error
+ * ('reject') or left out ('skip', readCurve returns null).
+ */
+interface CurveRules {
+  readonly idRequired: boolean;
+  readonly zeroLength: 'reject' | 'skip';
+}
+
+const FACE_CURVE: CurveRules = { idRequired: false, zeroLength: 'reject' };
+const REGION_CURVE: CurveRules = { idRequired: true, zeroLength: 'skip' };
+
+/**
+ * Checks `p` against the profileRegions contract (spec 06, M30) and returns a fresh copy of its
+ * curves without those of zero length, or every error found. The same curve rules as makeFace
+ * (finite numbers, equal arc radii, valid spline knots), but every id is required, non-empty
+ * and unique within the call. Reads `p` synchronously and never throws.
+ */
+export function parseProfileRegionsInput(
+  p: unknown,
+): Result<readonly IdentifiedCurve[], readonly string[]> {
+  const errors: string[] = [];
+  try {
+    if (!isObject(p)) return err(['input must be an object']);
+    const value: unknown = Reflect.get(p, 'curves');
+    if (!Array.isArray(value)) return err(['curves must be an array']);
+    const items: readonly unknown[] = value;
+    const curves: IdentifiedCurve[] = [];
+    const seen = new Set<string>();
+    items.forEach((item, i) => {
+      const path = `curves[${String(i)}]`;
+      // Unique among all curves, the skipped ones of zero length too.
+      const id: unknown = isObject(item) ? Reflect.get(item, 'id') : undefined;
+      if (typeof id === 'string' && id.length > 0) {
+        if (seen.has(id)) errors.push(`${path}: id ${id} is used by another curve`);
+        seen.add(id);
+      }
+      const curve = readCurve(item, path, errors, REGION_CURVE);
+      if (curve !== undefined && curve !== null && curve.id !== undefined) {
+        curves.push({ ...curve, id: curve.id });
+      }
+    });
+    return errors.length > 0 ? err(errors) : ok(curves);
+  } catch (e) {
+    // A getter that throws, a proxy… – input outside the types is still just invalid.
+    return err([...errors, `cannot read input: ${e instanceof Error ? e.message : String(e)}`]);
+  }
+}
+
+/**
+ * One curve: a fresh copy, undefined (and an error) when it breaks the rules, null when it has
+ * zero length and `rules` skip such curves.
+ */
+function readCurve(
+  x: unknown,
+  path: string,
+  errors: string[],
+  rules: CurveRules,
+): ProfileCurve | null | undefined {
   if (!isObject(x)) {
     errors.push(`${path} must be an object`);
     return undefined;
   }
   const kind: unknown = Reflect.get(x, 'kind');
-  const id = readId(Reflect.get(x, 'id'), path, errors);
+  const id = readId(Reflect.get(x, 'id'), path, errors, rules.idRequired);
   if (id === undefined) return undefined;
   switch (kind) {
     case 'line': {
@@ -192,6 +273,7 @@ function readCurve(x: unknown, path: string, errors: string[]): ProfileCurve | u
         return undefined;
       }
       if (samePoint(from, to)) {
+        if (rules.zeroLength === 'skip') return null;
         errors.push(`${path}: a line must not have zero length`);
         return undefined;
       }
@@ -211,6 +293,7 @@ function readCurve(x: unknown, path: string, errors: string[]): ProfileCurve | u
         return undefined;
       }
       if (samePoint(from, to)) {
+        if (rules.zeroLength === 'skip') return null;
         errors.push(`${path}: an arc must not have zero length`);
         return undefined;
       }
@@ -239,8 +322,16 @@ function readCurve(x: unknown, path: string, errors: string[]): ProfileCurve | u
       }
       return { kind, center, radius, ...id };
     }
-    case 'bspline':
-      return readBSpline(x, path, errors, id);
+    case 'bspline': {
+      const spline = readBSpline(x, path, errors, id);
+      // Zero length: every pole in one point (the curve lies in the hull of its poles). Its
+      // ends alone do not tell: a closed spline has both in one point.
+      if (spline?.kind === 'bspline' && rules.zeroLength === 'skip') {
+        const [first] = spline.poles;
+        if (first !== undefined && spline.poles.every((q) => samePoint(q, first))) return null;
+      }
+      return spline;
+    }
     default:
       errors.push(`${path}: unknown curve kind ${String(kind)}`);
       return undefined;
@@ -326,11 +417,16 @@ function knotsProblem(knots: readonly number[], degree: number): string | undefi
 }
 
 /**
- * The optional entity id of a curve (M14) as a property bag to spread into the copy: `{}` when
- * absent, `{ id }` for a non-empty string; undefined (and an error) for anything else.
+ * The entity id of a curve (M14) as a property bag to spread into the copy: `{}` when absent and
+ * not `required`, `{ id }` for a non-empty string; undefined (and an error) for anything else.
  */
-function readId(x: unknown, path: string, errors: string[]): { readonly id?: string } | undefined {
-  if (x === undefined) return {};
+function readId(
+  x: unknown,
+  path: string,
+  errors: string[],
+  required: boolean,
+): { readonly id?: string } | undefined {
+  if (x === undefined && !required) return {};
   if (typeof x === 'string' && x.length > 0) return { id: x };
   errors.push(`${path}: id must be a non-empty string`);
   return undefined;

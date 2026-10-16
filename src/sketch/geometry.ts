@@ -1,8 +1,14 @@
 import { assert, assertNever } from '@/core';
 import type { Vec2 } from '@/core';
-import type { SketchCurve, SketchData, SketchEntityId, SketchPoint } from './model';
+import type { SketchCurve, SketchData, SketchEntity, SketchEntityId, SketchPoint } from './model';
 
 // 2D geometry of sketch curves for regions and the kernel (spec 12 "Geometrie a pomůcky editace").
+
+/**
+ * Spline tessellation tolerance relative to the sketch scale (spec 12 "Spliny (M29)"): the
+ * sketcher draws and snaps to splines with it.
+ */
+export const SPLINE_TOLERANCE = 1e-4;
 
 /**
  * A 2D curve for regions and the kernel. The same shape as ProfileCurve in kernel (structural
@@ -32,6 +38,21 @@ export type Curve2 =
       readonly knots: readonly number[];
       readonly id?: string;
     };
+
+/**
+ * A closed region of a sketch (spec 12 "Oblasti (profily)"), computed by the kernel since M30
+ * (SketchOps.profileRegions); structurally ProfileRegion of kernel (ADR 0017).
+ */
+export interface SketchRegion {
+  /** Ids of all boundary curves (outer and holes), without duplicates, sorted (string comparison), joined by ','. */
+  readonly name: string;
+  /** A closed counter-clockwise loop. */
+  readonly outer: readonly Curve2[];
+  /** Closed clockwise loops. */
+  readonly holes: readonly (readonly Curve2[])[];
+  /** > 0: outer minus holes. */
+  readonly area: number;
+}
 
 export function pointsById(data: SketchData): ReadonlyMap<SketchEntityId, SketchPoint> {
   const points = new Map<SketchEntityId, SketchPoint>();
@@ -85,5 +106,36 @@ export function curve2(
       };
     default:
       return assertNever(curve);
+  }
+}
+
+/**
+ * The curves that bound regions (spec 12 "Křivky pro oblasti a odvozená id"): the non-construction
+ * curves of the sketch as Curve2 with the entity id, in the order of the entities. The one place
+ * that decides what bounds regions; the kernel skips degenerate curves itself.
+ */
+export function regionCurves(data: SketchData): readonly Curve2[] {
+  const points = pointsById(data);
+  return Object.freeze(data.entities.filter(isRegionCurve).map((curve) => curve2(curve, points)));
+}
+
+// Exhaustive on purpose: a new kind of entity (M31, M36, M37) must decide here whether it
+// bounds regions, the type checker does not check a type predicate.
+function isRegionCurve(e: SketchEntity): e is SketchCurve {
+  switch (e.kind) {
+    case 'point':
+    case 'mirror':
+    case 'linearPattern':
+    case 'circularPattern':
+      // A pattern is a recipe, not a curve; its copies are added by regionCurves (M36).
+      return false;
+    case 'line':
+    case 'circle':
+    case 'arc':
+    case 'bspline':
+    case 'fitSpline':
+      return e.construction !== true;
+    default:
+      return assertNever(e);
   }
 }

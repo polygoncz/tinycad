@@ -1,11 +1,10 @@
 import type { Vec2 } from '@/core';
 import { assertNever, bspline } from '@/core';
-import { curve2, pointsById } from './geometry';
+import { SPLINE_TOLERANCE, curve2, pointsById } from './geometry';
 import type { Curve2 } from './geometry';
 import { isPattern } from './model';
 import { patternCopies } from './patterns';
 import type { SketchCurve, SketchData, SketchEntity, SketchEntityId, SketchPoint } from './model';
-import { SPLINE_TOLERANCE } from './regions';
 import { angleOf, dist, dot, length, lerp, mod2pi, sub } from './vec2';
 
 // The snapper of the sketcher tools (spec 12 "Snapper a auto-vazby (M26)"): where a click lands in

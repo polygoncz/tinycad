@@ -1,7 +1,7 @@
 import type { Plane, Vec3 } from '@/core';
 import { ORIGIN, ORIGIN_AXES, ORIGIN_PLANES } from '@/document';
 import type { AxisId, BodyId, FeatureId, ParamIssue, PlaneId, SketchId } from '@/document';
-import type { ShapeHandle } from '@/kernel';
+import type { ProfileRegion, ShapeHandle } from '@/kernel';
 import type { SketchEntity } from '@/sketch';
 import type { NameTable } from './names';
 
@@ -42,8 +42,8 @@ export interface PlaneArtifact {
 }
 
 /**
- * The result of a sketch (M12, spec 12): its plane, the solved geometry for drawing and the
- * planar faces of its regions in the kernel.
+ * The result of a sketch (M12, spec 12): its plane, the solved geometry for drawing, the planar
+ * faces of its regions in the kernel and their outlines (M30).
  */
 export interface SketchArtifact {
   readonly kind: 'sketch';
@@ -55,6 +55,11 @@ export interface SketchArtifact {
   readonly entities: readonly SketchEntity[];
   /** Region name -> planar face (SketchOps.makeFace), in the order of the regions. */
   readonly regions: ReadonlyMap<string, ShapeHandle>;
+  /**
+   * M30: the outlines of the regions from the kernel (SketchOps.profileRegions), in the same
+   * order and with the same names as `regions`; for drawing and picking the regions.
+   */
+  readonly outlines: readonly ProfileRegion[];
 }
 
 /** An axis (M13): the origin axes of the owner ORIGIN; construction axes later. */

@@ -2,12 +2,13 @@ import { sketchId } from '@/document';
 import type { ShapeHandle } from '@/kernel';
 import { unresolvedReference } from '@/regen';
 import type { FeatureBuilder, SketchArtifact } from '@/regen';
-import { SKETCH_FEATURE_TYPE, computeRegions, parseSketchData } from '@/sketch';
+import { SKETCH_FEATURE_TYPE, parseSketchData, regionCurves } from '@/sketch';
 import type { SketchParams } from './schema';
 
-// The behaviour half of the sketch feature (ADR 0004, spec 12 "Featura skici"): one planar face
-// in the kernel per region of the sketch, and the sketch artifact that carries them. The data
-// are solved already; the builder never calls the solver.
+// The behaviour half of the sketch feature (ADR 0004, spec 12 "Featura skici"): the regions of
+// the sketch from the kernel (M30, ADR 0028), one planar face per region, and the sketch artifact
+// that carries the faces and the outlines. The data are solved already; the builder never calls
+// the solver.
 
 export const sketchBuilder: FeatureBuilder<SketchParams> = Object.freeze<
   FeatureBuilder<SketchParams>
@@ -24,10 +25,11 @@ export const sketchBuilder: FeatureBuilder<SketchParams> = Object.freeze<
     const parsed = parseSketchData(params.entities, params.constraints);
     if (!parsed.ok) throw new Error(`Sketch '${feature.id}' has invalid data after validation`);
     const data = parsed.value;
-    const { regions, crossing } = computeRegions(data);
+    // Curve2 of sketch has the shape of ProfileCurve of kernel (ADR 0017): no conversion. A
+    // kernel error of profileRegions or makeFace flies (KERNEL).
+    const { regions, crossing } = await ctx.kernel.profileRegions({ curves: regionCurves(data) });
     if (crossing) ctx.warn('Sketch curves cross each other; no regions');
-    // Curve2 of sketch has the shape of ProfileCurve of kernel (ADR 0017): no conversion. One
-    // face after another, in the order of the regions; a kernel error flies (KERNEL).
+    // One face after another, in the order of the regions.
     const faces = new Map<string, ShapeHandle>();
     for (const region of regions) {
       const { shape } = await ctx.kernel.makeFace({
@@ -45,9 +47,19 @@ export const sketchBuilder: FeatureBuilder<SketchParams> = Object.freeze<
       plane,
       entities: data.entities,
       regions: faces,
+      // Deeply: through the worker (postMessage) the kernel's frozen result arrives mutable.
+      outlines: freezeDeep(regions),
     });
     // A new map, the input state stays as it is; the maps are guarded by their types (Q048).
     const artifacts = new Map(state.artifacts).set(id, artifact);
     return { ok: true, state: Object.freeze({ artifacts }), anchors: {} };
   },
 });
+
+/** Freezes plain data (the regions from the kernel) recursively and returns it. */
+function freezeDeep<T>(value: T): T {
+  if (typeof value !== 'object' || value === null) return value;
+  Object.freeze(value);
+  for (const child of Object.values(value)) freezeDeep(child);
+  return value;
+}

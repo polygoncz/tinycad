@@ -5,7 +5,7 @@ import { ORIGIN_AXES, ORIGIN_PLANES, ORIGIN_PLANE_IDS } from '@/document';
 import type { PlaneId } from '@/document';
 import type { SketchDrawingCurve } from '@/interaction';
 import { parseSketchData } from '@/sketch';
-import type { SketchData, SketchItemId } from '@/sketch';
+import type { Curve2, SketchData, SketchItemId, SketchRegion } from '@/sketch';
 import { rectangleData } from '@/sketch/testing';
 import {
   ORIGIN_POINT_ID,
@@ -280,7 +280,7 @@ describe('splines (M29)', () => {
         .map((e) => (e.id === 'b' ? { ...e, construction: true } : e)),
     ]);
 
-    const drawing = artifactDrawing(XY, construction.entities);
+    const drawing = artifactDrawing(XY, construction.entities, []);
 
     expect(drawing.curves.map((c) => [c.kind, c.id, c.style])).toEqual([
       ['polyline', 'b', 'construction'],
@@ -311,9 +311,30 @@ function distanceToPolyline(p: Vec2, polyline: readonly Vec2[]): number {
   return best;
 }
 
+/** A region as the kernel gives it (SketchArtifact.outlines); the area does not matter to the drawing. */
+function region(
+  name: string,
+  outer: readonly Curve2[],
+  holes: readonly (readonly Curve2[])[] = [],
+): SketchRegion {
+  return { name, outer, holes, area: 1 };
+}
+
+const line = (id: string, from: Vec2, to: Vec2): Curve2 => ({ kind: 'line', id, from, to });
+
+/** The counter-clockwise loop of the rectangle 10 × 5 of rectangleData. */
+const RECT_LOOP: readonly Curve2[] = [
+  line('ab', [0, 0], [10, 0]),
+  line('bc', [10, 0], [10, 5]),
+  line('cd', [10, 5], [0, 5]),
+  line('da', [0, 5], [0, 0]),
+];
+
+const CIRCLE: Curve2 = { kind: 'circle', id: 'k', center: [5, 2.5], radius: 1 };
+
 describe('artifactDrawing', () => {
   it('draws the curves without points: construction ones in the style construction (M13)', () => {
-    const drawing = artifactDrawing(XY, ROUND.entities);
+    const drawing = artifactDrawing(XY, ROUND.entities, []);
 
     expect(drawing.plane).toBe(XY);
     expect(drawing.curves.map((c) => [c.id, c.style])).toEqual([
@@ -325,39 +346,40 @@ describe('artifactDrawing', () => {
     expect(Object.isFrozen(drawing)).toBe(true);
   });
 
-  it('adds the region of a rectangle, named like computeRegions, counter-clockwise', () => {
+  it('takes the regions from the argument, not from the entities (M30)', () => {
     const rect = rectangleData({ width: 10, height: 5 });
 
-    const drawing = artifactDrawing(XY, rect.entities);
-
-    expect(drawing.regions).toHaveLength(1);
-    const [region] = drawing.regions ?? [];
-    expect(region?.id).toBe('ab,bc,cd,da');
-    expect(region?.holes).toEqual([]);
-    expect(region?.outer).toHaveLength(4);
-    expect(new Set(region?.outer.map(([x, y]) => `${String(x)},${String(y)}`))).toEqual(
-      new Set(['0,0', '10,0', '10,5', '0,5']),
-    );
-    expect(polygonArea(region?.outer ?? [])).toBeCloseTo(50);
-    expect(Object.isFrozen(drawing.regions)).toBe(true);
-    expect(Object.isFrozen(region)).toBe(true);
+    expect(artifactDrawing(XY, rect.entities, []).regions).toEqual([]);
   });
 
-  it('a circle in a rectangle: the rectangle region has a hole, the circle is a region of its own', () => {
+  it('draws a rectangle region from its outline, named like the region, counter-clockwise', () => {
     const rect = rectangleData({ width: 10, height: 5 });
-    const withCircle = data(
-      [
-        ...rect.entities,
-        { kind: 'point', id: 'o', x: 5, y: 2.5 },
-        { kind: 'circle', id: 'k', center: 'o', radius: 1 },
-      ],
-      rect.constraints,
-    );
 
-    const drawing = artifactDrawing(XY, withCircle.entities);
+    const drawing = artifactDrawing(XY, rect.entities, [region('ab,bc,cd,da', RECT_LOOP)]);
 
-    expect(drawing.regions?.map((r) => r.id)).toEqual(['ab,bc,cd,da,k', 'k']);
-    const [outer, circle] = drawing.regions ?? [];
+    expect(drawing.regions).toHaveLength(1);
+    const [drawn] = drawing.regions ?? [];
+    expect(drawn?.id).toBe('ab,bc,cd,da');
+    expect(drawn?.holes).toEqual([]);
+    expect(drawn?.outer).toEqual([
+      [0, 0],
+      [10, 0],
+      [10, 5],
+      [0, 5],
+    ]);
+    expect(polygonArea(drawn?.outer ?? [])).toBeCloseTo(50);
+    expect(Object.isFrozen(drawing.regions)).toBe(true);
+    expect(Object.isFrozen(drawn)).toBe(true);
+  });
+
+  it('keeps the order of the regions; a hole and a circle become polygons', () => {
+    const disc = region('k', [CIRCLE]);
+    const holed = region('ab,bc,cd,da,k', RECT_LOOP, [[CIRCLE]]);
+
+    const drawing = artifactDrawing(XY, [], [disc, holed]);
+
+    expect(drawing.regions?.map((r) => r.id)).toEqual(['k', 'ab,bc,cd,da,k']);
+    const [circle, outer] = drawing.regions ?? [];
     expect(outer?.outer).toHaveLength(4);
     expect(outer?.holes).toHaveLength(1);
     // A full circle in steps of π/36.
@@ -370,31 +392,39 @@ describe('artifactDrawing', () => {
 
   it('an arc becomes a polyline with steps of at most π/36', () => {
     // A half disc: the arc from [1, 0] to [-1, 0] around [0, 0] and the line back.
-    const halfDisc = data([
-      { kind: 'point', id: 'c', x: 0, y: 0 },
-      { kind: 'point', id: 's', x: 1, y: 0 },
-      { kind: 'point', id: 'e', x: -1, y: 0 },
-      { kind: 'arc', id: 'a', center: 'c', start: 's', end: 'e' },
-      { kind: 'line', id: 'l', p1: 'e', p2: 's' },
+    const halfDisc = region('a,l', [
+      { kind: 'arc', id: 'a', center: [0, 0], from: [1, 0], to: [-1, 0], ccw: true },
+      line('l', [-1, 0], [1, 0]),
     ]);
 
-    const [region] = artifactDrawing(XY, halfDisc.entities).regions ?? [];
+    const [drawn] = artifactDrawing(XY, [], [halfDisc]).regions ?? [];
 
     // 36 arc segments (π / (π/36)) give 36 points from the start of the arc, plus the end of it.
-    expect(region?.outer).toHaveLength(37);
-    expect(polygonArea(region?.outer ?? [])).toBeGreaterThan(0);
+    expect(drawn?.outer).toHaveLength(37);
+    expect(polygonArea(drawn?.outer ?? [])).toBeGreaterThan(0);
   });
 
-  it('crossing curves give no regions', () => {
-    const crossing = data([
-      { kind: 'point', id: 'a', x: 0, y: 0 },
-      { kind: 'point', id: 'b', x: 2, y: 2 },
-      { kind: 'point', id: 'c', x: 0, y: 2 },
-      { kind: 'point', id: 'd', x: 2, y: 0 },
-      { kind: 'line', id: 'ab', p1: 'a', p2: 'b' },
-      { kind: 'line', id: 'cd', p1: 'c', p2: 'd' },
-    ]);
-    expect(artifactDrawing(XY, crossing.entities).regions).toEqual([]);
+  it('a spline of an outline becomes the points of its tessellation (M29)', () => {
+    const spline: Curve2 = {
+      kind: 'bspline',
+      id: 'b',
+      degree: 3,
+      poles: POLES,
+      knots: [0, 0, 0, 0, 1, 1, 1, 1],
+    };
+    // The spline from [0, 0] to [30, 0], closed by a line back.
+    const closed = region('b,l', [spline, line('l', [30, 0], [0, 0])]);
+
+    const [drawn] = artifactDrawing(XY, [], [closed]).regions ?? [];
+
+    const outer = drawn?.outer ?? [];
+    // The tessellation without its end (the start of the line), then the start of the line.
+    expect(outer.length).toBeGreaterThan(4);
+    expect(outer[0]).toEqual([0, 0]);
+    expect(outer.at(-1)).toEqual([30, 0]);
+    for (const t of [0.25, 0.5, 0.75]) {
+      expect(distanceToPolyline(bspline.evaluate(spline, t), outer)).toBeLessThan(1e-2);
+    }
   });
 });
 
@@ -576,7 +606,7 @@ describe('copies of patterns (M36)', () => {
   });
 
   it('the regenerated sketch draws the copies too, construction ones dashed', () => {
-    const drawing = artifactDrawing(XY, MIRRORED.entities);
+    const drawing = artifactDrawing(XY, MIRRORED.entities, []);
 
     expect(drawing.curves.map((c) => [c.id, c.style])).toEqual([
       ['ab', 'normal'],

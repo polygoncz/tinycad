@@ -142,6 +142,7 @@ describe('endOnFatal', () => {
       transform: (s, m) => fake.transform(s, m),
       boolean: (op, targets, tools) => fake.boolean(op, targets, tools),
       makeFace: (p) => fake.makeFace(p),
+      profileRegions: (p) => fake.profileRegions(p),
       extrude: (s, d, l) => fake.extrude(s, d, l),
       revolve: (s, a, angle) => fake.revolve(s, a, angle),
       tessellate: (s, q) => fake.tessellate(s, q),

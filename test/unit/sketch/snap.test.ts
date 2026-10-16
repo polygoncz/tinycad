@@ -3,7 +3,7 @@ import { bspline } from '@/core';
 import type { Vec2 } from '@/core';
 import type { SketchData, SketchEntityId } from '@/sketch/model';
 import { parseSketchData } from '@/sketch/parse';
-import { SPLINE_TOLERANCE } from '@/sketch/regions';
+import { SPLINE_TOLERANCE } from '@/sketch/geometry';
 import { ORIGIN_SNAP, snap } from '@/sketch/snap';
 import type { SnapOptions, SnapResult } from '@/sketch/snap';
 

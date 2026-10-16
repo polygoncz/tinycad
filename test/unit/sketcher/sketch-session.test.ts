@@ -18,7 +18,7 @@ import type {
   SketchData,
   SketchEntityId,
 } from '@/sketch';
-import { createFakeSolver } from '@/sketch/testing';
+import { createFakeSketchGeometry, createFakeSolver } from '@/sketch/testing';
 import { createFeatureEditor } from '@/interaction';
 import { FakeViewport } from '@/interaction/testing';
 import { createSketchEditor } from '@/sketcher/sketch-editor';
@@ -100,6 +100,7 @@ async function editing(plane: Plane = XY, sketch: SketchData = SKETCH) {
   const sketches = createSketchEditor({
     features: editor,
     solver,
+    geometry: createFakeSketchGeometry(),
     viewport,
     resolvePlane: () => plane,
     planeOfSketch: () => plane,

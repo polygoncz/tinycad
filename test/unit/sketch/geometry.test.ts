@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { curve2, pointsById } from '@/sketch/geometry';
+import { curve2, pointsById, regionCurves } from '@/sketch/geometry';
 import { isPattern } from '@/sketch/model';
 import type { SketchCurve, SketchData } from '@/sketch/model';
 import { parseSketchData } from '@/sketch/parse';
@@ -131,5 +131,104 @@ describe('curve2 – splines', () => {
 
   it('throws when a pole point is missing (a programming error)', () => {
     expect(() => curve2(curve(data, 's'), new Map())).toThrow();
+  });
+});
+
+describe('regionCurves', () => {
+  const data = sketch([
+    { kind: 'point', id: 'a', x: 0, y: 0 },
+    { kind: 'point', id: 'b', x: 4, y: 0 },
+    { kind: 'point', id: 'c', x: 4, y: 3 },
+    { kind: 'point', id: 'd', x: 0, y: 4 },
+    { kind: 'line', id: 'ab', p1: 'a', p2: 'b' },
+    { kind: 'line', id: 'bc', p1: 'b', p2: 'c', construction: true },
+    { kind: 'arc', id: 'q', center: 'a', start: 'b', end: 'd' },
+    { kind: 'circle', id: 'k', center: 'c', radius: 1 },
+    { kind: 'circle', id: 'kc', center: 'a', radius: 9, construction: true },
+    { kind: 'bspline', id: 's', degree: 2, poles: ['a', 'b', 'c'], knots: [0, 0, 0, 1, 1, 1] },
+    {
+      kind: 'fitSpline',
+      id: 'f',
+      degree: 2,
+      fit: ['c', 'b', 'a'],
+      params: [0, 0.5, 1],
+      poles: [
+        [4, 3],
+        [5, 1],
+        [0, 0],
+      ],
+      knots: [0, 0, 0, 1, 1, 1],
+    },
+    {
+      kind: 'fitSpline',
+      id: 'fc',
+      degree: 2,
+      fit: ['a', 'b', 'c'],
+      params: [0, 0.5, 1],
+      poles: [
+        [0, 0],
+        [5, 1],
+        [4, 3],
+      ],
+      knots: [0, 0, 0, 1, 1, 1],
+      construction: true,
+    },
+  ]);
+
+  it('gives the non-construction curves in the order of the entities, without points', () => {
+    expect(regionCurves(data).map((c) => c.id)).toEqual(['ab', 'q', 'k', 's', 'f']);
+  });
+
+  it('gives every curve the id of its entity', () => {
+    const curves = regionCurves(data);
+    expect(curves.every((c) => c.id !== undefined)).toBe(true);
+  });
+
+  it('turns each curve like curve2: a control point spline into a bspline', () => {
+    const points = pointsById(data);
+    expect(regionCurves(data)).toEqual(
+      ['ab', 'q', 'k', 's', 'f'].map((id) => curve2(curve(data, id), points)),
+    );
+    expect(regionCurves(data)[3]).toEqual({
+      kind: 'bspline',
+      degree: 2,
+      poles: [
+        [0, 0],
+        [4, 0],
+        [4, 3],
+      ],
+      knots: [0, 0, 0, 1, 1, 1],
+      id: 's',
+    });
+  });
+
+  it('turns a fit point spline into a bspline with its stored poles', () => {
+    expect(regionCurves(data)[4]).toEqual({
+      kind: 'bspline',
+      degree: 2,
+      poles: [
+        [4, 3],
+        [5, 1],
+        [0, 0],
+      ],
+      knots: [0, 0, 0, 1, 1, 1],
+      id: 'f',
+    });
+  });
+
+  it('gives nothing for a sketch with only points or construction curves', () => {
+    expect(
+      regionCurves(
+        sketch([
+          { kind: 'point', id: 'a', x: 0, y: 0 },
+          { kind: 'point', id: 'b', x: 1, y: 0 },
+          { kind: 'line', id: 'l', p1: 'a', p2: 'b', construction: true },
+        ]),
+      ),
+    ).toEqual([]);
+  });
+
+  it('returns a frozen array', () => {
+    expect(Object.isFrozen(regionCurves(data))).toBe(true);
   });
 });

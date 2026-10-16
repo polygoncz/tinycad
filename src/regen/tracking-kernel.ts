@@ -26,6 +26,8 @@ export function createTrackingKernel(
     transform: (shape, m) => kernel.transform(shape, m).then(track),
     boolean: (op, targets, tools) => kernel.boolean(op, targets, tools).then(track),
     makeFace: (p) => kernel.makeFace(p).then(track),
+    // Data, no handle (spec 06 "Stav po M30"): nothing to own, passed through.
+    profileRegions: (p) => kernel.profileRegions(p),
     extrude: (profile, direction, distance) =>
       kernel.extrude(profile, direction, distance).then(track),
     revolve: (profile, axis, angle) => kernel.revolve(profile, axis, angle).then(track),

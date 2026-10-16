@@ -1,30 +1,12 @@
 import { assert, bspline, type Vec2 } from '@/core';
-import { curve2, pointsById } from './geometry';
-import type { Curve2 } from './geometry';
-import { isPattern } from './model';
-import type { SketchCurve, SketchData, SketchEntity } from './model';
+import type { IdentifiedCurve, ProfileCurve, ProfileRegion, ProfileRegions } from './profile';
 import { angleOf, cross, dist, dot, length, lerp, mod2pi, normalize, sub, TWO_PI } from './vec2';
 
-// Closed regions (profiles) of a sketch as a planar graph (spec 12 "Oblasti (profily)").
-// Pure 2D geometry, testable without OCCT: curves → nodes → crossing check → pruning of open
-// chains → faces by half-edges → holes → names from curve ids. Splines (M29) are edges between
-// their end poles; crossings, areas and containment use their tessellation (spec 12 "Spliny").
-
-export interface SketchRegion {
-  /** Ids of all boundary curves (outer and holes), without duplicates, sorted (string comparison), joined by ','. */
-  readonly name: string;
-  /** A closed counter-clockwise loop. */
-  readonly outer: readonly Curve2[];
-  /** Closed clockwise loops. */
-  readonly holes: readonly (readonly Curve2[])[];
-  /** > 0: outer minus holes. */
-  readonly area: number;
-}
-
-export interface RegionsResult {
-  readonly regions: readonly SketchRegion[];
-  readonly crossing: boolean;
-}
+// profileRegions of the FakeKernel (spec 06 "Stav po M30", spec 12 "Oblasti (profily)"): the
+// sketcher's region algorithm of M12–M29, moved here from sketch/regions.ts (ADR 0028). Closed
+// regions of curves as a planar graph: curves → nodes → crossing check → pruning of open chains
+// → faces by half-edges → holes → names from curve ids. Splines (M29) are edges between their end
+// poles; crossings, areas and containment use their tessellation. Internal to kernel.
 
 /** Outgoing directions closer than this (radians) are a tie, broken by curvature (spec 12). */
 const ANGLE_TIE = 1e-9;
@@ -36,17 +18,17 @@ const NODE_MATCH_FACTOR = 1e3;
 /** Direction of the containment ray: irrational, so it practically never hits a vertex exactly. */
 const RAY: Vec2 = normalize([Math.SQRT2, Math.PI]);
 /**
- * Spline tessellation tolerance relative to the sketch scale (spec 12 "Spliny (M29)"); the sketcher
- * draws splines with the same tolerance.
+ * Spline tessellation tolerance relative to the scale of the curves (spec 12 "Spliny (M29)"); the
+ * same value as SPLINE_TOLERANCE of sketch, with which the sketcher draws splines.
  */
-export const SPLINE_TOLERANCE = 1e-4;
+const SPLINE_TOLERANCE = 1e-4;
 
 /**
  * A curve of a loop with the tessellation of a spline in the same direction (`poly`, only for
  * splines): crossings, areas and containment of a spline are computed on it.
  */
 interface Part {
-  readonly curve: Curve2;
+  readonly curve: ProfileCurve;
   readonly poly?: readonly Vec2[];
 }
 
@@ -56,7 +38,7 @@ interface Part {
  */
 interface Edge extends Part {
   readonly id: string;
-  readonly curve: Extract<Curve2, { kind: 'line' | 'arc' | 'bspline' }>;
+  readonly curve: Extract<ProfileCurve, { kind: 'line' | 'arc' | 'bspline' }>;
   readonly from: number;
   readonly to: number;
 }
@@ -101,13 +83,16 @@ interface Loop {
   readonly component: number;
 }
 
-export function computeRegions(data: SketchData): RegionsResult {
-  const points = pointsById(data);
-  const scale = Math.max(1, ...[...points.values()].flatMap((p) => [Math.abs(p.x), Math.abs(p.y)]));
+/**
+ * Regions bounded by `curves` (checked by parseProfileRegionsInput: ids present and unique, no
+ * curve of zero length), sorted by name; a crossing gives no regions.
+ */
+export function computeProfileRegions(curves: readonly IdentifiedCurve[]): ProfileRegions {
+  const scale = Math.max(1, ...curves.flatMap(coordinatesOf).map(Math.abs));
   const tol = 1e-9 * scale;
   const splineTol = SPLINE_TOLERANCE * scale;
 
-  // 1. Curves: non-construction only, degenerate ones skipped.
+  // 1. Curves: degenerate ones skipped.
   const nodes: Vec2[] = [];
   const nodeAt = (p: Vec2): number => {
     const found = nodes.findIndex((n) => dist(n, p) <= tol);
@@ -116,13 +101,14 @@ export function computeRegions(data: SketchData): RegionsResult {
     return nodes.length - 1;
   };
   const edges: Edge[] = [];
-  const circles: { readonly id: string; readonly curve: Extract<Curve2, { kind: 'circle' }> }[] =
-    [];
-  for (const e of data.entities) {
-    if (!isCurve(e) || e.construction === true) continue;
-    const curve = curve2(e, points);
+  const circles: {
+    readonly id: string;
+    readonly curve: Extract<ProfileCurve, { kind: 'circle' }>;
+  }[] = [];
+  for (const input of curves) {
+    const curve = counterClockwise(input);
     if (curve.kind === 'circle') {
-      circles.push({ id: e.id, curve });
+      circles.push({ id: input.id, curve });
       continue;
     }
     if (curve.kind === 'bspline') {
@@ -134,14 +120,14 @@ export function computeRegions(data: SketchData): RegionsResult {
         continue;
       }
       // 2. Nodes: a spline with both ends in one node is a closed loop at that node.
-      edges.push({ id: e.id, curve, poly, from: nodeAt(first), to: nodeAt(last) });
+      edges.push({ id: input.id, curve, poly, from: nodeAt(first), to: nodeAt(last) });
       continue;
     }
     if (dist(curve.from, curve.to) <= tol) continue;
     // 2. Nodes: ends closer than tol are one node.
     const from = nodeAt(curve.from);
     const to = nodeAt(curve.to);
-    if (from !== to) edges.push({ id: e.id, curve, from, to });
+    if (from !== to) edges.push({ id: input.id, curve, from, to });
   }
 
   // 3. Crossing: a common point other than a shared end node.
@@ -215,7 +201,7 @@ export function computeRegions(data: SketchData): RegionsResult {
   }
 
   // 7. Names from curve ids.
-  const regions = faces.map((face): SketchRegion => {
+  const regions = faces.map((face): ProfileRegion => {
     const faceHoles = holes.get(face) ?? [];
     const ids = new Set([face.ids, ...faceHoles.map((h) => h.ids)].flat());
     return Object.freeze({
@@ -229,11 +215,27 @@ export function computeRegions(data: SketchData): RegionsResult {
   return Object.freeze({ regions: Object.freeze(regions), crossing: false });
 }
 
-function isCurve(e: SketchEntity): e is SketchCurve {
-  return e.kind !== 'point' && !isPattern(e);
+/** Every coordinate of a curve: its points, and the center of an arc or a circle. */
+function coordinatesOf(c: ProfileCurve): readonly number[] {
+  switch (c.kind) {
+    case 'line':
+      return [...c.from, ...c.to];
+    case 'arc':
+      return [...c.center, ...c.from, ...c.to];
+    case 'circle':
+      return [...c.center];
+    case 'bspline':
+      return c.poles.flat();
+  }
 }
 
-function curvesOf(loop: Loop): readonly Curve2[] {
+/** An arc running counter-clockwise from `from` to `to` (the same arc); other curves unchanged. */
+function counterClockwise(c: IdentifiedCurve): IdentifiedCurve {
+  if (c.kind !== 'arc' || c.ccw) return c;
+  return { kind: 'arc', center: c.center, from: c.to, to: c.from, ccw: true, id: c.id };
+}
+
+function curvesOf(loop: Loop): readonly ProfileCurve[] {
   return Object.freeze(loop.parts.map((p) => p.curve));
 }
 
@@ -374,17 +376,19 @@ function halfEdges(e: Edge): readonly [HalfEdge, HalfEdge] {
 }
 
 /**
- * Half-edges of a spline: the tangent from the first derivative at the end leaving the node (−r'(1)
- * at the far end), the signed curvature κ = (x'y'' − y'x'') / |r'|³ from the first and second
- * derivatives; reversing the direction flips the sign of κ.
+ * Half-edges of a spline: the tangent from the first derivative at the end leaving the node (−r'(b)
+ * at the far end of the knot range [a, b]), the signed curvature κ = (x'y'' − y'x'') / |r'|³ from
+ * the first and second derivatives; reversing the direction flips the sign of κ.
  */
 function splineHalfEdges(
   e: Edge,
-  curve: Extract<Curve2, { kind: 'bspline' }>,
+  curve: Extract<ProfileCurve, { kind: 'bspline' }>,
   poly: readonly Vec2[],
 ): readonly [HalfEdge, HalfEdge] {
-  const d0 = bspline.derivative(curve, 0, 1);
-  const d1 = bspline.derivative(curve, 1, 1);
+  // The kernel takes any clamped knot range (spec 06), a sketch spline has [0, 1].
+  const [t0, t1] = knotRange(curve);
+  const d0 = bspline.derivative(curve, t0, 1);
+  const d1 = bspline.derivative(curve, t1, 1);
   const back: Vec2 = [-d1[0], -d1[1]];
   const reversedPoly = [...poly].reverse();
   return [
@@ -392,7 +396,7 @@ function splineHalfEdges(
       origin: e.from,
       dest: e.to,
       angle: direction(tangentOr(d0, poly)),
-      curvature: curvature(d0, bspline.derivative(curve, 0, 2)),
+      curvature: curvature(d0, bspline.derivative(curve, t0, 2)),
       curve,
       poly,
     },
@@ -400,7 +404,7 @@ function splineHalfEdges(
       origin: e.to,
       dest: e.from,
       angle: direction(tangentOr(back, reversedPoly)),
-      curvature: -curvature(d1, bspline.derivative(curve, 1, 2)),
+      curvature: -curvature(d1, bspline.derivative(curve, t1, 2)),
       curve: reverseSpline(curve, e.id),
       poly: reversedPoly,
     },
@@ -420,16 +424,28 @@ function curvature(d1: Vec2, d2: Vec2): number {
   return speed === 0 ? 0 : cross(d1, d2) / speed ** 3;
 }
 
-/** The same spline traversed backwards: poles reversed, knots mirrored (k → 1 − k, reversed). */
+/** The first and the last knot: the parameter range of a clamped spline. */
+function knotRange(curve: Extract<ProfileCurve, { kind: 'bspline' }>): readonly [number, number] {
+  const first = curve.knots[0];
+  const last = curve.knots[curve.knots.length - 1];
+  assert(first !== undefined && last !== undefined, 'regions: a spline without knots');
+  return [first, last];
+}
+
+/**
+ * The same spline traversed backwards: poles reversed, knots mirrored in their range (k → a + b − k,
+ * reversed; for the range [0, 1] of a sketch spline k → 1 − k).
+ */
 function reverseSpline(
-  curve: Extract<Curve2, { kind: 'bspline' }>,
+  curve: Extract<ProfileCurve, { kind: 'bspline' }>,
   id: string,
-): Extract<Curve2, { kind: 'bspline' }> {
+): Extract<ProfileCurve, { kind: 'bspline' }> {
+  const [a, b] = knotRange(curve);
   return {
     kind: 'bspline',
     degree: curve.degree,
     poles: [...curve.poles].reverse(),
-    knots: curve.knots.map((k) => 1 - k).reverse(),
+    knots: curve.knots.map((k) => a + b - k).reverse(),
     id,
   };
 }
