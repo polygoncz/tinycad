@@ -102,8 +102,9 @@ test('the sketcher overflows too: the menu "…" has the same states and runs th
   await expect(menu).toBeHidden();
   await expect(panel).toBeVisible();
 
-  // A wide window: the same states on the buttons, no "…".
-  await page.setViewportSize({ width: 1400, height: 720 });
+  // A wide window: the same states on the buttons, no "…". 1800 px since the group Upravit of the
+  // sketcher (M33 trim, M34 fillet, M36 mirror and patterns) made the bar wider than 1400 px.
+  await page.setViewportSize({ width: 1800, height: 720 });
   await expect(more).toBeHidden();
   await expect(toolbarButton(page, 'Kóta')).toBeEnabled();
   await expect(toolbarButton(page, 'Vodorovná')).toBeVisible();
