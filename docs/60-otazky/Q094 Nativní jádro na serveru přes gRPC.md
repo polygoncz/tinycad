@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[01-architektura]]"
 decide_by: "[[M37-text-ve-skice]]"
 proposal: "Po M37 zmrazit TS doménu a naráz přepsat dokument, regeneraci a OCCT do nativního C++ jádra tinycad-core s gRPC; prohlížeč přes gRPC-Web a Envoy, vše lokálně v Docker Compose, v jednom repozitáři."
-decision: ""
+decision: "Po M37 naráz nativní C++ jádro tinycad-core s gRPC za Envoy (gRPC-Web), lokálně v Docker Compose, jeden repozitář; řešič skici v klientovi se serverem jako autoritou; SQLite soubor na dokument s operačním logem; klient zná jen model skici a read model; .proto podle čtyř zásad; M16 nahradí série serveru."
 tags:
   - otazka
 created: 2026-10-16
@@ -29,11 +29,11 @@ Co už vzešlo z rozhovoru (Pavlova slova, ne rozhodnutí):
 
 Co zbývá rozhodnout před plánováním série milníků:
 
-1. Kde se řeší skica během tažení: řešič `planegcs` ([[0016-planegcs-resic-vazeb|ADR 0016]]) v klientovi, nebo na serveru?
-2. Formát a místo úložiště dokumentů na serveru. Co se stane s dnešní perzistencí v IndexedDB ([[05-persistence]])?
-3. Co bude klient dál znát z domény: jen read model (strom featur, parametry, sítě) jako DTO, nebo i část modelu?
-4. Návrh služeb a zpráv v `.proto`: sezení (otevření a uvolnění dokumentu v paměti jádra), operace, události, chyby.
-5. Osud [[M16-vlastni-occt-build|M16]] (vlastní WASM build): archivovat, nebo nahradit milníkem nativního buildu?
+1. Kde se řeší skica během tažení: řešič `planegcs` ([[0016-planegcs-resic-vazeb|ADR 0016]]) v klientovi, nebo na serveru? _(rozhodnuto, viz níže)_
+2. Formát a místo úložiště dokumentů na serveru. Co se stane s dnešní perzistencí v IndexedDB ([[05-persistence]])? _(rozhodnuto, viz níže)_
+3. Co bude klient dál znát z domény: jen read model (strom featur, parametry, sítě) jako DTO, nebo i část modelu? _(rozhodnuto, viz níže)_
+4. Návrh služeb a zpráv v `.proto`: sezení (otevření a uvolnění dokumentu v paměti jádra), operace, události, chyby. _(rozhodnuto, viz níže)_
+5. Osud [[M16-vlastni-occt-build|M16]] (vlastní WASM build): archivovat, nebo nahradit milníkem nativního buildu? _(rozhodnuto, viz níže)_
 
 ## Možnosti a návrh
 
@@ -74,5 +74,26 @@ tinycad-core (C++, gRPC, OCCT)        │
 Řešič nechat v klientovi kvůli tažení bez síťové latence. Onshape řeší skicu podobně, lokálně. `planegcs` je původem C++ z FreeCADu, takže na serveru poběží nativně tentýž kód, který je v klientovi ve WASM. Klient řeší tažení, server je autorita nad uloženou skicou.
 
 ## Rozhodnutí
+
+Rozhodnuto po částech 2026-10-16, všechny body jsou uzavřené.
+
+- **Bod 1, skica během tažení (Pavel 2026-10-16):** rozhoduje, co bude fungovat **odkudkoli**, ne co stačí na localhostu. Řešič `planegcs` proto zůstává v klientovi a tažení nejde přes síť. Server je autorita: při potvrzení úpravy skicu znovu vyřeší nativním `planegcs` a jeho výsledek platí. Důsledky:
+  - Klient si ponechá model skici v TS (`sketch`, `solver-planegcs`). Bod 3 tím není „jen DTO“.
+  - Hrozí, že se TS a C++ model skici rozejdou. Zmírnění: sdílené testovací případy (skici ve formátu dokumentu) a obě sady testů ověřují stejný výsledek řešiče.
+  - Obousměrný stream (a tedy WebSocket vedle gRPC-Web) není kvůli skice potřeba.
+- **Bod 2, úložiště (Pavel 2026-10-16, podle návrhu Clauda):** jeden **SQLite** soubor na dokument v Docker volume. Uvnitř je operační log ([[0005-operacni-log|ADR 0005]]): tabulka `operations`, do které se jen přidává (`seq`, `operation_id` s unikátním indexem jako klíč idempotence, data operace), a tabulka `snapshots` s občasným celým stavem dokumentu, aby se při otevření nemusel přehrávat celý log. Důvody: dokument je dál vidět jako soubor, transakce a WAL chrání proti pádu, operace i klíč idempotence se zapíšou atomicky, žádný kontejner navíc. Postgres až pro víc uživatelů.
+  - `seq` zároveň slouží k navázání streamu `WatchSession` po výpadku.
+  - `.tinycad.json` zůstává formátem pro import a export. IndexedDB přestává být zdrojem pravdy, mezipaměť v klientovi je mimo rozsah.
+- **Bod 3, co klient zná z domény (Pavel 2026-10-16, podle návrhu Clauda):** v klientovi zůstává z domény **jen model skici** (kvůli bodu 1), se kterým pracuje skicář a ven posílá operaci uložení skici. Všechno ostatní je **read model** generovaný z `.proto`: strom featur, parametry, stav regenerace, chyby a sítě. Klient ho jen čte. Validace parametrů je jen na serveru, chyba přijde v odpovědi, takže pravidla nejsou na dvou místech.
+- **Bod 4, `.proto` (Pavel 2026-10-16, podle návrhu Clauda):** teď jen zásady, služby a zprávy se navrhnou při plánování série po M37, až bude známá doména po M37.
+  1. **Sezení nezávislé na spojení:** jádro drží otevřený dokument pod `session_id`, ne pod spojením. Výpadek sítě dokument nezavře, uvolní se až po timeoutu nečinnosti.
+  2. **Idempotentní operace:** každá nese `operation_id` vygenerované klientem. Opakované odeslání vrátí uložený výsledek, operace se neprovede dvakrát.
+  3. **Navazovaný stream:** události `WatchSession` mají `seq`, klient se po výpadku připojí s posledním přijatým `seq` a dostane zbytek.
+  4. **Chyby** jako `google.rpc.Status`, v podrobnostech typovaný doménový kód (dnešní `KernelErrorCode`), ne text.
+  - Stabilitu dělají tyto zásady, ne Envoy. Envoy je jen překladač gRPC-Web na gRPC, přidává timeouty a health checky.
+- **Bod 5, osud [[M16-vlastni-occt-build|M16]] (Pavel 2026-10-16, podle návrhu Clauda):** M16 nahradí série nativního jádra. Zatím se **nearchivuje**, jen se označí jako nahrazený. Do archivu se přesune, až vzniknou ADR a milníky série serveru, aby roadmapa nikdy neměla díru.
+
+**Další krok:** při plánování série po M37 propsat rozhodnutí do specifikací ([[01-architektura]], [[06-geometricke-jadro]], [[05-persistence]]), napsat ADR, které nahradí [[0002-occt-wasm-ve-workeru|ADR 0002]] a [[0013-replicad-opencascadejs|ADR 0013]], a navrhnout `.proto`. Dnes se specifikace nemění, protože implementace je až do M37 dál WASM.
+
 
 _(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR, které nahradí [[0002-occt-wasm-ve-workeru|ADR 0002]] a [[0013-replicad-opencascadejs|ADR 0013]].)_
