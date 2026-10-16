@@ -41,7 +41,7 @@ Pavel 2026-10-16: „Chtěl bych ještě dodělat do Sketch následující featu
 ## Úkoly
 
 - [x] Rozhodnout [[Q090 Číselný vstup při kreslení|Q090]] (styl Fusion, nebo Onshape; souřadnice; vznik kót).
-- [ ] Model vstupu a Tab na plátně.
+- [x] Model vstupu a Tab na plátně.
 - [ ] Vstup v `clickTool`, vrstva v `ui`, úsečka, bod a přímka.
 - [ ] Obdélníky, kružnice a oblouk.
 - [ ] Drážky.
@@ -101,5 +101,6 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **B6 (Pavel):** psaná hodnota je jen náhled, zamkne ji `Tab` nebo `Enter` (jako Fusion); klik myší bere jen zamčené hodnoty.
 - **B7 (Pavel):** úhel = směr od osy x; 0/180° → `horizontal`, 90/270° → `vertical`; u úsečky řetězu s předchozí úsečkou kóta `angle` mezi nimi; jinak a úhly oblouku bez kóty (vazba úhlu k ose roviny v datech není).
 - **B8 (návrh stopy):** pole jsou štítky u kurzoru, ne `<input>` – fokus zůstává v pohledu; Tab na plátně drží `ViewKeyEvent.consume` (`preventDefault`).
+- **Úkol 1 hotový:** `sketcher/numeric-input.ts` (50 tabulkových testů), `ViewKeyEvent.consume` (`ToolManager`, `render/view-events.ts`). Upřesnění krajních případů (Shift, `-` uprostřed, Tab s neplatným textem) dopsané do spec. `npm run check` zelený (6924 testů).
 
 ## Retrospektiva

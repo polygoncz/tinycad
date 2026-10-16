@@ -1557,3 +1557,69 @@ describe('createToolManager – layers', () => {
     expect(rec.calls).toEqual([]);
   });
 });
+
+// --- M32: ViewKeyEvent.consume (spec 12, "Klávesa Tab na plátně") ---
+
+describe('createToolManager – consume', () => {
+  /** The key with a consume that counts its calls. */
+  function consumable(k: string): { readonly e: ViewKeyEvent; readonly consumed: () => number } {
+    let count = 0;
+    const e: ViewKeyEvent = {
+      ...key(k),
+      consume: () => {
+        count++;
+      },
+    };
+    return { e, consumed: () => count };
+  }
+
+  it('a key handled by a layer is consumed', () => {
+    const { viewport } = setupLayers((calls) => [
+      aRecordingLayer('a', calls, { key: (e) => e.key === 'Tab' }),
+    ]);
+    const { e, consumed } = consumable('Tab');
+    viewport.emitKey(e);
+    expect(consumed()).toBe(1);
+  });
+
+  it('a key handled by the tool is consumed', () => {
+    const { manager, viewport } = setup({
+      tools: (r) => [aRecordingTool('box', r, { onKey: (e) => e.key === 'Tab' })],
+    });
+    manager.activate('box');
+    const { e, consumed } = consumable('Tab');
+    viewport.emitKey(e);
+    expect(consumed()).toBe(1);
+  });
+
+  it('a key handled by unhandledKey is consumed', () => {
+    const { viewport } = setup({ unhandledKey: (e) => e.key === 'z' });
+    const { e, consumed } = consumable('z');
+    viewport.emitKey(e);
+    expect(consumed()).toBe(1);
+  });
+
+  it('a key nobody handles is not consumed', () => {
+    const { viewport } = setup({ unhandledKey: () => false });
+    const { e, consumed } = consumable('Tab');
+    viewport.emitKey(e);
+    expect(consumed()).toBe(0);
+  });
+
+  it('without unhandledKey an unhandled key is not consumed', () => {
+    const { viewport } = setup();
+    const { e, consumed } = consumable('Tab');
+    viewport.emitKey(e);
+    expect(consumed()).toBe(0);
+  });
+
+  it('a key without consume is handled as before', () => {
+    const { manager, viewport } = setup({
+      tools: (r) => [aRecordingTool('box', r, { onKey: () => true })],
+    });
+    manager.activate('box');
+    expect(() => {
+      viewport.emitKey(key('Tab'));
+    }).not.toThrow();
+  });
+});

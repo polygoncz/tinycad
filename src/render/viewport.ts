@@ -693,8 +693,12 @@ export function createViewport(deps: {
     listen(resources, canvas, 'pointerleave', (e) => {
       emitPointer('leave', e);
     });
+    // consume (M32): a key handled by interaction keeps its default, so Tab stays in the view.
     listen(resources, canvas, 'keydown', (e) => {
-      emitter.emit('key', toViewKeyEvent(e, isMac, false));
+      const consume = (): void => {
+        e.preventDefault();
+      };
+      emitter.emit('key', toViewKeyEvent(e, isMac, false, consume));
     });
     // The right button orbits the camera; no context menu over the view.
     listen(resources, canvas, 'contextmenu', (e) => {
