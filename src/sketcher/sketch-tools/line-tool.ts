@@ -25,13 +25,14 @@ import type { KeyMods, Tool, ToolContext } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
 import type { SketchSession } from '../sketch-session';
 import {
+  addDrawn,
   ANGLE_TOLERANCE,
-  MIN_LENGTH,
   clearInference,
   clearPreview,
   clickTool,
   distance,
   existingLine,
+  MIN_LENGTH,
   newConstraintId,
   newEntityId,
   previewArcFit,
@@ -142,7 +143,7 @@ export function createLineTool(sketches: SketchEditor): Tool {
       entities: [...current.entities, ...to.entities, line],
     };
     chain = started;
-    void session.addGeometry({ entities, constraints }).then((written) => {
+    void addDrawn(session, { entities, constraints }).then((written) => {
       // A refused line would leave the chain on a point that is not in the sketch.
       if (!written && chain === started) chain = null;
     });
@@ -268,12 +269,12 @@ export function createLineTool(sketches: SketchEditor): Tool {
     // An arc onto the first point closes the chain and ends it, like a closing line.
     const closes = geometry.end.id === current.first.id;
     chain = closes ? null : started;
-    void session
-      .addGeometry({ entities, constraints }, { required: geometry.required })
-      .then((written) => {
+    void addDrawn(session, { entities, constraints }, { required: geometry.required }).then(
+      (written) => {
         // A refused arc would leave the chain on a point that is not in the sketch.
         if (!written && chain === started) chain = null;
-      });
+      },
+    );
   }
 }
 

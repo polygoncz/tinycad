@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 31
 aliases:
   - M31
@@ -17,8 +17,8 @@ specs:
   - "[[11-ui]]"
 depends_on:
   - "[[M29-spliny]]"
-started:
-finished:
+started: 2026-10-16
+finished: 2026-10-16
 tags:
   - milnik
 created: 2026-10-16
@@ -43,12 +43,12 @@ Upřesnění v sezení 2026-10-16:
 
 ## Úkoly
 
-- [ ] Nekonečná přímka v datech, řešiči a geometrii.
-- [ ] Konstrukce obdélníků a drážek.
-- [ ] Nástroje obdélník středem a třemi body, bod, přímka.
-- [ ] Nástroje drážek.
-- [ ] Režim konstrukce.
-- [ ] Snapper, glyfy, e2e a spec.
+- [x] Nekonečná přímka v datech, řešiči a geometrii.
+- [x] Konstrukce obdélníků a drážek.
+- [x] Nástroje obdélník středem a třemi body, bod, přímka.
+- [x] Nástroje drážek.
+- [x] Režim konstrukce.
+- [x] Snapper, glyfy, e2e a spec.
 
 ## Implementační plán
 
@@ -81,13 +81,13 @@ Jeden úkol = jedno spuštění subagenta `implementer`. Sdílené typy: [[12-sk
 
 ### 5. Režim konstrukce
 
-- **Soubory:** `src/sketcher/sketch-session.ts` (`SketchState.constructionMode`, přepnutí), `sketch-actions.ts` a `constants.ts` (akce `sketch.constructionMode`, klávesa `Q`), společné místo zápisu geometrie nástrojů (`common.ts`) – v režimu konstrukce dostanou nové křivky `construction: true`; `ui` přepínač v liště (stav zapnuto).
+- **Soubory:** `src/sketcher/sketch-session.ts` (`SketchState.constructionMode`, přepnutí), `sketch-actions.ts` a `constants.ts` (podle B4 rozšířená akce `sketch.construction`, klávesa `Q`), společné místo zápisu geometrie nástrojů (`common.ts`) – v režimu konstrukce dostanou nové křivky `construction: true`; `ui` přepínač v liště (stav zapnuto).
 - **Testy:** session (přepnutí, nástroj v režimu kreslí konstrukční křivky, body beze změny), akce a klávesa, lišta.
 - **Hotovo když:** testy projdou a `npm run check` je zelený.
 
 ### 6. Snapper, glyfy, e2e a spec
 
-- **Soubory:** `src/sketch/snap.ts` (přímka: jen `p1`, `p2` a `onCurve`), `src/sketcher/sketch-glyphs.ts` (kotva glyfu přímky v polovině `p1p2`), `test/e2e/m31.spec.ts` (obdélník středem, třemi body, drážka, bod, přímka s rovnoběžnou úsečkou, režim konstrukce), spec 12, 10 a 11.
+- **Soubory:** `src/sketch/snap.ts` (přímka: jen `p1`, `p2` a `onCurve`), `src/sketcher/sketch-glyphs.ts` (kotva glyfu přímky v polovině `p1p2` – hotové v úkolu 1), `src/sketcher/sketch-tools/dimension-tool.ts` (klik na přímku po bodu nebo po úsečce: `retarget` bere i `xline` pro vzdálenost bodu od přímky a úhel), `test/e2e/m31.spec.ts` (obdélník středem, třemi body, drážka, bod, přímka s rovnoběžnou úsečkou, režim konstrukce), spec 12, 10 a 11.
 - **Hotovo když:** e2e projdou, `npm run check` je zelený, spec odpovídá kódu.
 
 ## Akceptační kritéria
@@ -108,4 +108,33 @@ Jak tvar popsat vazbami místo souřadnic (obdélník = 4 úsečky + rovnoběžn
 
 _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hlavní sezení to při sloučení přenese do deníku.)_
 
+- **B1 (2026-10-16, Pavel schválil):** kontrakt konstrukcí v [[12-skicar#Nové kreslicí nástroje (M31)]] – každý tvar = funkce polohy (Vec2 → body, `null` pro degenerovaný vstup) a funkce topologie (id bodů → křivky a vazby); snapper nástroje stojí mezi nimi. Obdélník středem: H/V + konstrukční úhlopříčka a `midpoint` středu; obdélník 3 body: `perpendicular` + 2× `parallel`; přímá drážka: 4× `tangent` + `equal` + konstrukční osa (celkovou délkou: osa mezi konci + 4× `pointOnCurve`).
+- **B2 (odchylka od plánu, Pavel schválil):** oblouková drážka bez `equal` koncových oblouků a bez konstrukčního oblouku osy – obojí plyne z tečností, řešič by to hlásil jako redundantní (vnitřní vazbu oblouku osy nejde vynechat, zahodila by se tečnost a soustava by byla degenerovaná).
+- **B3 (Pavel):** první strana obdélníku 3 body, osa přímé drážky a konstrukční přímka dostanou `horizontal`/`vertical` z `inferLine` do 3° (automatické, Ctrl/Cmd vypne).
+- **Úkol 1 hotový:** pravidlo „přímka jako nosná přímka ano, délka ne“ platí i pro `dimensionTarget` a kresbu kót (dopsáno do spec). Nástroj kóty zatím přímku nepřijme v `retarget` → přidáno do úkolu 6. Přímka jako osa Revolve je mimo M31 (kandidát na pozdější milník). `npm run check` zelený (6545 unit testů).
+- **Úkol 2 hotový:** konstrukce v `sketch/construct.ts`; planegcs potvrdil `dof` z tabulky tvarů a žádnou redundanci (B2 tím ověřené). Doplněno do spec: pojmenované typy id bodů, `arcSlotFrom` s koncem ve středu → `null`, pořadí id a vazeb.
+- **Úkol 5 hotový:** `addDrawn` ve všech kreslicích nástrojích, akce `sketch.construction` podle B4, `Action.checked`. Tlačítko je ve skupině akcí `sketch.draw` (přes `actionGroups`, protože `actionButtons` kreslí před nástroje). Po kontrole upraveno **`ActionState.checked: boolean | null`** (null = není přepínač), aby vypnutý přepínač měl `aria-pressed="false"` a čtečka ho poznala; propsáno do spec 10, 11, 12.
+- **Úkol 4 hotový:** `slot-tool.ts` (tři druhy jedním nástrojem), ikony `capsule-horizontal`, `arrow-autofit-width`, `rainbow`. Klik šířky bere jen souřadnici ze snapperu (přichytí se i k existujícímu bodu, jeho id ani vazby se nepoužijí). Zarovnání druhého bodu osy s prvním nahradí `horizontal`/`vertical` osy (jako u úsečky). Při sloučení přepnuto na `addDrawn` + test drážky v režimu konstrukce.
+- **Úkol 3 hotový:** `rectangle-center-tool.ts`, `rectangle3p-tool.ts`, `point-tool.ts`, `xline-tool.ts`, společné `shape.ts` (`snapComputed`, `sideAxis`, `addShape`); ikony `square-dot`, `square-rotated`, `point`, `arrows-horizontal`. Pořadí ve skupině Kreslit: úsečka ▾, obdélník ▾, kružnice ▾, oblouk ▾, spline ▾, drážka ▾, bod, Konstrukční. Bod bez rozpracovaného stavu → Esc ukončí nástroj. Popisek „Obdélník“ → „Obdélník rohy“ (e2e upravené). Při sloučení přepnuto na `addDrawn`; `npm run check` zelený (6688 testů). Zjištěno mimo rozsah: stávající rohový obdélník nemá vlastní Esc (Esc po prvním rohu ukončí nástroj místo zrušení rohu).
+- **Úkol 6 hotový:** snapper přímky (jen `p1`, `p2`, `onCurve` na celé nosné přímce), nástroj kóty bere přímku (po kontrole doplněno i pořadí přímka → bod/úsečka), `inferLine` bere přímku sdílející bod (rovnoběžnost/kolmost), e2e `m31.spec.ts` (12 testů v chrome i webkit). Lišta skicáře je širší: test přetékání v `m19-1-toolbar` běží při 800 px místo 700 px (propsáno do spec 11). `npm run check` zelený (6701 testů); celé e2e 146/148 před úpravou šířky, obě selhání = šířka lišty.
+- **Architektonická revize:** 5 drobných nálezů, opraveno – `slot-tool.ts` používá společné pomůcky ze `shape.ts` (`sideAxis` – zarovnání druhého bodu osy se stane osou), jedna stráž `isLineCarrier` v `sketch`, akce `Q` s výběrem jen přímky přepne režim, `ShapeDraft.axis` místo spoléhání na pořadí křivek, `aria-pressed` z čisté `ariaPressed` v `ui/toolbar-fit.ts`. `npm run check` zelený (6710 testů).
+- **B4 (Pavel, jako Onshape):** režim konstrukce = rozšířená akce `sketch.construction` (`Q`): s křivkami ve výběru je přepne, bez nich přepne režim; tlačítko v liště svítí (`Action.checked`). Id `sketch.constructionMode` nevzniká (`Q` už patří `sketch.construction`, registr nedovolí dvě akce se stejnou zkratkou). Nové křivky označí pomůcka nástrojů `addDrawn`, ne `addGeometry`, aby režim nezasáhl úpravy jiných stop (trim, zrcadlení).
+- **Natažení `main` (M30):** 5 sčítacích konfliktů (`sketch/geometry.ts`, `index.ts`, testy geometrie, indexu a snapperu), 2 sémantické: `isRegionCurve` z M30 neznal `xline` (typecheck ho našel – vyčerpávající `switch`, přímka vrací `false`, test `regionCurves` ji vynechá) a nové testy nástrojů neměly závislost `geometry` session. `npm run check` zelený (6867 unit, 41 integračních), celé e2e 148/148.
+
 ## Retrospektiva
+
+_(Návrh stopy, Pavel doplní nebo upraví.)_
+
+**Splnění kritérií:** každý nový nástroj má testy entit, vazeb, `required`, degenerovaného vstupu a Esc (`rectangle-tools`, `point-tool`, `xline-tool`, `slot-tool`); tvar po změně kóty drží – ověřeno skutečným planegcs (`solver-planegcs/shapes.test.ts`: `dof` přesně podle tabulky, žádná redundance); režim konstrukce kreslí konstrukčně ve všech nástrojích (testy nástrojů + e2e); přímka nevstupuje do oblastí (`regionCurves`). E2e `m31.spec.ts` (6 scénářů × 2 prohlížeče).
+
+**Co bylo jinak, než se čekalo:**
+- Plán u obloukové drážky chtěl `equal` koncových oblouků a konstrukční osu. Počítání stupňů volnosti ukázalo, že obojí plyne z tečností – planegcs by je hlásil jako redundantní a zahodil by tečnost. Počítat DOF tvaru před kontraktem se vyplatilo; planegcs to pak potvrdil přesně.
+- Klávesa `Q` už patřila přepnutí konstrukce u výběru → režim konstrukce jako v Onshape (jedno tlačítko, chování podle výběru) místo nové akce z tabulky sdílených id.
+- Přepínač v liště potřeboval `checked: boolean | null`: `false` by nerozlišilo „vypnutý přepínač“ od „obyčejné akce“ a čtečka by tlačítko nepoznala.
+- Širší skupina Kreslit změnila přetékání lišty v úzkém okně (e2e při 800 px místo 700 px).
+
+**Co se osvědčilo:**
+- Rozdělení konstrukce na polohu a topologii: snapper stojí mezi nimi, konstrukce jsou čisté a testovatelné i s řešičem.
+- Úkoly 2–5 v izolovaných worktree implementátorů souběžně, slučování cherry-pickem – konflikty jen v registraci nástrojů a i18n (sčítací).
+- Režim konstrukce přes pomůcku nástrojů (`addDrawn`), ne v `addGeometry` – nezasáhne trim a zrcadlení jiných stop.
+- Architektonická revize našla opsané pomůcky, které se už rozešly (drážka × `shape.ts`) – po souběžných úkolech čekat duplicity a hledat je.

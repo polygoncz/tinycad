@@ -487,3 +487,38 @@ function rad(angle: number, distance: number): unknown {
 function ang(radius: number, t: number): unknown {
   return { kind: 'angular', radius: close(radius), t: close(t) };
 }
+
+describe('infinite lines (xline, M31) in dimensions', () => {
+  /** xline x through l1 (300,0) and l2 (310,0), lb as in DATA, lone point z (5,5). */
+  const XDATA = sketch([
+    ...DATA.entities,
+    { kind: 'xline', id: 'x', p1: 'l1', p2: 'l2', construction: true },
+  ]);
+  const xe = (...names: string[]): SketchEntity[] =>
+    names.map((name) => {
+      const found = XDATA.entities.find((v) => v.id === name);
+      if (found === undefined) throw new Error(`no entity ${name}`);
+      return found;
+    });
+  const xid = (name: string): SketchEntityId => xe(name)[0]?.id ?? id(name);
+
+  it.each<[string, string[], DimensionTarget | null]>([
+    ['1 xline (no length)', ['x'], null],
+    ['point + xline', ['z', 'x'], { kind: 'pointLine', point: xid('z'), line: xid('x') }],
+    ['xline + point', ['x', 'z'], { kind: 'pointLine', point: xid('z'), line: xid('x') }],
+    ['xline + its own point', ['x', 'l1'], null],
+    ['xline + line', ['x', 'lb'], { kind: 'lines', a: xid('x'), b: xid('lb') }],
+    ['line + xline', ['lb', 'x'], { kind: 'lines', a: xid('lb'), b: xid('x') }],
+  ])('dimensionTarget: %s', (_name, names, expected) => {
+    expect(dimensionTarget(xe(...names))).toEqual(expected);
+  });
+
+  it('placeDimension measures the distance of a point from an xline and the angle to it', () => {
+    expect(
+      placeDimension({ kind: 'pointLine', point: xid('z'), line: xid('x') }, [5, 2], XDATA),
+    ).toMatchObject({ kind: 'pointLineDistance', point: 'z', line: 'x', value: close(5) });
+    expect(
+      placeDimension({ kind: 'lines', a: xid('x'), b: xid('lb') }, at(5, 1), XDATA),
+    ).toMatchObject({ kind: 'angle', a: 'x', b: 'lb', value: close(Math.PI / 4) });
+  });
+});

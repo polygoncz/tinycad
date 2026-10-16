@@ -25,5 +25,11 @@ export function sketchConstraintActionId(kind: string): string {
  */
 export const SKETCH_CONSTRAINT_ACTION_GROUP = 'sketch.constraint';
 
+/**
+ * The action group of the actions that are buttons of the toolbar group 'draw' after its tools
+ * (M31: construction); the toolbar contribution places them like the constraint actions.
+ */
+export const SKETCH_DRAW_ACTION_GROUP = 'sketch.draw';
+
 /** The id of the default tool of the sketch mode (spec 10, "Nástroje a akce skicáře"). */
 export const SKETCH_SELECT_TOOL_ID = 'sketch.select';

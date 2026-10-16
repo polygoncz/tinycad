@@ -53,6 +53,8 @@ export const ORIGIN_SNAP: Vec2 = Object.freeze([0, 0] as const);
 /**
  * Where the cursor snaps: the first step of spec 12 that applies – an existing point, the origin,
  * a midpoint of a line, a curve, alignment with two points, with one point, the grid, the cursor.
+ * An xline (M31) snaps only at p1, p2 (points) and on its whole carrier line, not at the ends or
+ * the middle of the long line curve2 draws it as.
  * Steps 3–6 only with `infer`. A tie of distances is won by the earlier entity in the data.
  */
 export function snap(cursor: Vec2, data: SketchData, opts: SnapOptions): SnapResult {
@@ -89,11 +91,12 @@ function inferredSnap(
   const curves = data.entities
     .filter(isCurve)
     .filter(included)
-    .map((c) => ({ id: c.id, shape: curve2(c, byId) }));
+    // An xline (M31) is drawn as a long line, but has no midpoint and projects without clamping.
+    .map((c) => ({ id: c.id, shape: curve2(c, byId), infinite: c.kind === 'xline' }));
 
   const mid = nearest(
     curves,
-    (c) => (c.shape.kind === 'line' ? dist(cursor, midpointOf(c.shape)) : Infinity),
+    (c) => (c.shape.kind === 'line' && !c.infinite ? dist(cursor, midpointOf(c.shape)) : Infinity),
     tolerance,
   );
   if (mid !== null && mid.item.shape.kind === 'line') {
@@ -107,7 +110,10 @@ function inferredSnap(
   const splineTolerance = SPLINE_TOLERANCE * scale;
   const projections = curves.map((c) => ({
     id: c.id,
-    at: project(cursor, c.shape, splineTolerance),
+    at:
+      c.infinite && c.shape.kind === 'line'
+        ? onCarrier(cursor, c.shape.from, c.shape.to)
+        : project(cursor, c.shape, splineTolerance),
   }));
   const onCurve = nearest(
     projections,
@@ -216,6 +222,12 @@ function onSegment(p: Vec2, from: Vec2, to: Vec2): Vec2 {
   const len2 = dot(d, d);
   const t = len2 === 0 ? 0 : Math.min(1, Math.max(0, dot(sub(p, from), d) / len2));
   return lerp(from, d, t);
+}
+
+/** The projection on the whole line through from and to (from ≠ to), not clamped. */
+function onCarrier(p: Vec2, from: Vec2, to: Vec2): Vec2 {
+  const d = sub(to, from);
+  return lerp(from, d, dot(sub(p, from), d) / dot(d, d));
 }
 
 /** The nearest projection on the segments of the polyline; the first segment wins a tie. */

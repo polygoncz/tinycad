@@ -29,16 +29,22 @@ const ENTITY_FIELDS: Readonly<Record<string, { required: string[]; optional: str
     required: ['id', 'degree', 'fit', 'params', 'poles', 'knots'],
     optional: ['construction'],
   },
+  // Always construction (M31): the flag is required and must be true.
+  xline: { required: ['id', 'p1', 'p2', 'construction'], optional: [] },
 };
 
 /** The highest spline degree (cubic); a spline's degree = min(MAX_SPLINE_DEGREE, points − 1). */
 const MAX_SPLINE_DEGREE = 3;
 
-/** Entity kind groups a constraint field may refer to. */
-type Target = 'point' | 'line' | 'round' | 'curve';
+/**
+ * Entity kind groups a constraint field may refer to: `line` a line with its length and ends,
+ * `carrier` a line or an xline taken as its infinite carrier line (M31).
+ */
+type Target = 'point' | 'line' | 'carrier' | 'round' | 'curve';
 const ROUND = new Set(['circle', 'arc']);
-/** pointOnCurve may lie on any curve, a spline too (M29). */
-const CURVE = new Set(['line', 'circle', 'arc', 'bspline', 'fitSpline']);
+const CARRIER = new Set(['line', 'xline']);
+/** pointOnCurve may lie on any curve, a spline (M29) and an xline (M31) too. */
+const CURVE = new Set(['line', 'circle', 'arc', 'bspline', 'fitSpline', 'xline']);
 
 /**
  * The fields of each curve kind that refer to its defining points (curvePoints on raw data); a
@@ -50,6 +56,7 @@ const DEFINING_POINT_FIELDS: Readonly<Record<string, readonly string[]>> = {
   arc: ['center', 'start', 'end'],
   bspline: ['poles'],
   fitSpline: ['fit'],
+  xline: ['p1', 'p2'],
 };
 
 /**
@@ -59,10 +66,10 @@ const DEFINING_POINT_FIELDS: Readonly<Record<string, readonly string[]>> = {
  */
 const CONSTRAINT_FIELDS: Readonly<Record<string, Readonly<Record<string, Target | 'value'>>>> = {
   coincident: { a: 'point', b: 'point' },
-  horizontal: { line: 'line' },
-  vertical: { line: 'line' },
-  parallel: { a: 'line', b: 'line' },
-  perpendicular: { a: 'line', b: 'line' },
+  horizontal: { line: 'carrier' },
+  vertical: { line: 'carrier' },
+  parallel: { a: 'carrier', b: 'carrier' },
+  perpendicular: { a: 'carrier', b: 'carrier' },
   equal: { a: 'line', b: 'line' },
   tangent: { a: 'line', b: 'line' },
   pointOnCurve: { point: 'point', curve: 'curve' },
@@ -73,8 +80,8 @@ const CONSTRAINT_FIELDS: Readonly<Record<string, Readonly<Record<string, Target 
   distance: { a: 'point', b: 'point', value: 'value' },
   hDistance: { a: 'point', b: 'point', value: 'value' },
   vDistance: { a: 'point', b: 'point', value: 'value' },
-  pointLineDistance: { point: 'point', line: 'line', value: 'value' },
-  angle: { a: 'line', b: 'line', value: 'value' },
+  pointLineDistance: { point: 'point', line: 'carrier', value: 'value' },
+  angle: { a: 'carrier', b: 'carrier', value: 'value' },
   radius: { curve: 'round', value: 'value' },
   diameter: { curve: 'round', value: 'value' },
 };
@@ -157,6 +164,7 @@ function entityValid(
     case 'point':
       return isFiniteNumber(item.x) && isFiniteNumber(item.y);
     case 'line':
+    case 'xline':
       return point(item.p1) !== undefined && point(item.p2) !== undefined && item.p1 !== item.p2;
     case 'circle':
       return point(item.center) !== undefined && isFiniteNumber(item.radius) && item.radius > 0;
@@ -365,18 +373,21 @@ function placementValid(v: unknown, kind: DimensionPlacement['kind'] | undefined
   }
 }
 
-/** True when the point is p1 or p2 of the line. */
+/** True when the point is p1 or p2 of the line or the xline. */
 function isEndOf(point: unknown, line: unknown, targets: ReadonlyMap<string, Fields>): boolean {
   const target = typeof line === 'string' ? targets.get(line) : undefined;
   return target !== undefined && (target.p1 === point || target.p2 === point);
 }
 
-/** equal: two lines or two rounds; tangent: a line and a round (any order) or two rounds. */
+/**
+ * equal: two lines or two rounds (an xline has no length); tangent: a line or an xline and a
+ * round (any order) or two rounds.
+ */
 function pairAllowed(kind: 'equal' | 'tangent', [a, b]: readonly string[]): boolean {
-  const lines = [a, b].filter((k) => k === 'line').length;
   const rounds = [a, b].filter((k) => k !== undefined && ROUND.has(k)).length;
-  if (kind === 'equal') return lines === 2 || rounds === 2;
-  return rounds === 2 || (lines === 1 && rounds === 1);
+  if (kind === 'equal') return (a === 'line' && b === 'line') || rounds === 2;
+  const carriers = [a, b].filter((k) => k !== undefined && CARRIER.has(k)).length;
+  return rounds === 2 || (carriers === 1 && rounds === 1);
 }
 
 /**
@@ -398,6 +409,7 @@ function matches(need: Target | 'value', kind: string | undefined): boolean {
   if (kind === undefined) return false;
   if (need === 'round') return ROUND.has(kind);
   if (need === 'curve') return CURVE.has(kind);
+  if (need === 'carrier') return CARRIER.has(kind);
   return need === kind;
 }
 

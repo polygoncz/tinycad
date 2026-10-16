@@ -163,7 +163,7 @@ interface Anchor {
 
 /**
  * The anchor of the glyphs of an entity in plane coordinates: a point = the point (side +x+y); a
- * line = its middle (side its normal turned to +y, a vertical line −x); a circle = its top (side
+ * line and an xline = the middle of p1p2 (side its normal turned to +y, a vertical line −x); a circle = its top (side
  * +y); an arc = the middle of the arc (side from the centre outwards); a spline = its point at
  * t = 0.5 (side the normal of its tangent there turned to +y, like a line). null when a point of
  * the entity is missing.
@@ -172,7 +172,9 @@ function anchorOf(byId: ReadonlyMap<string, SketchEntity>, entity: SketchEntity)
   switch (entity.kind) {
     case 'point':
       return { point: [entity.x, entity.y], side: POINT_SIDE };
-    case 'line': {
+    // An xline (M31) like a line: in the middle of p1p2, not of its long drawn line.
+    case 'line':
+    case 'xline': {
       const p1 = pointOf(byId, entity.p1);
       const p2 = pointOf(byId, entity.p2);
       if (p1 === null || p2 === null) return null;

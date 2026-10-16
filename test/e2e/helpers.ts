@@ -112,7 +112,7 @@ export async function drawDimensionedRectangle(page: Page, sketch: string): Prom
   // Into the sketch mode: the toolbar shows the sketcher, the panel is there.
   await toolbarButton(page, 'Skica').click();
   await expect(toolbarButton(page, 'Úsečka')).toBeVisible();
-  await expect(toolbarButton(page, 'Obdélník')).toBeVisible();
+  await expect(toolbarButton(page, 'Obdélník rohy')).toBeVisible();
   const panel = sketchPanel(page, sketch);
   await expect(panel).toBeVisible();
   const status = panel.getByRole('status');
@@ -120,7 +120,7 @@ export async function drawDimensionedRectangle(page: Page, sketch: string): Prom
   // A rectangle from the origin (snap → fix): two degrees of freedom stay (width, height). The
   // corner is placed with Alt held, so it does not snap to the grid (M19.2 D4) and its edges stay
   // under the clicks below.
-  await toolbarButton(page, 'Obdélník').click();
+  await toolbarButton(page, 'Obdélník rohy').click();
   await clickCanvas(page, 0, 0);
   await page.keyboard.down('Alt');
   await clickCanvas(page, 120, -80);

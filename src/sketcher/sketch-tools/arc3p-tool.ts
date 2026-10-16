@@ -14,11 +14,12 @@ import type { SketchEditor } from '../sketch-editor';
 import type { GlyphKind } from '../sketch-glyphs';
 import type { SketchSession } from '../sketch-session';
 import {
-  MIN_LENGTH,
+  addDrawn,
   clearPreview,
   clickTool,
   distance,
   lastRound,
+  MIN_LENGTH,
   newConstraintId,
   newEntityId,
   previewArcFit,
@@ -170,7 +171,8 @@ function addArc(
       : [{ kind: 'pointOnCurve', id: newConstraintId(ctx), point: through, curve: id }];
   const equals: readonly SketchConstraint[] =
     equal === null ? [] : [{ kind: 'equal', id: newConstraintId(ctx), a: id, b: equal }];
-  void session.addGeometry(
+  void addDrawn(
+    session,
     {
       entities: [
         ...c.entities,

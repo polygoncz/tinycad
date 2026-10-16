@@ -491,6 +491,9 @@ function pieceEntity(
         ...construction,
       });
     }
+    case 'xline':
+      // findCurve never gives an infinite line: it has no ends to trim, extend or split.
+      throw new Error(`trim: the infinite line '${curve.id}' has no pieces`);
     default:
       return assertNever(curve);
   }
@@ -579,7 +582,8 @@ function removed(data: SketchData, curve: SketchEntityId): SketchEdit {
 
 function findCurve(data: SketchData, id: SketchEntityId): SketchCurve | null {
   const e = data.entities.find((x) => x.id === id);
-  return e === undefined || e.kind === 'point' ? null : e;
+  // An infinite line (M31) only cuts other curves: it has no ends to trim, extend or split.
+  return e === undefined || e.kind === 'point' || e.kind === 'xline' ? null : e;
 }
 
 /** The points at the start and the end of the curve ([] for a circle). */
@@ -590,6 +594,7 @@ function endIds(curve: SketchCurve): readonly SketchEntityId[] {
     case 'arc':
       return [curve.start, curve.end];
     case 'circle':
+    case 'xline':
       return [];
     case 'bspline':
       return firstAndLast(curve.poles);

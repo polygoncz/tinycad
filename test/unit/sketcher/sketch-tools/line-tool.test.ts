@@ -233,6 +233,30 @@ describe('the tangent arc of the polyline', () => {
     expect(manager.active.get()).toBe('sketch.line');
   });
 
+  it('in the construction mode the arc is construction, its constraints unchanged (M31)', async () => {
+    const { viewport, session } = await chained();
+    session.setConstructionMode(true);
+    const line = linesOf(session)[0]?.id;
+
+    drag(
+      viewport,
+      [30, 10],
+      [
+        [35, 12],
+        [40, 20],
+      ],
+    );
+    await settle();
+
+    const arc = theArc(session);
+    expect(arc.construction).toBe(true);
+    expect(linesOf(session)[0]?.construction).not.toBe(true);
+    expect(constraintsOf(session)).toEqual([
+      { kind: 'horizontal', line },
+      { kind: 'tangent', a: arc.id, b: line },
+    ]);
+  });
+
   it('tangent is required: it stays when the solver finds a conflict in everything', async () => {
     const { viewport, session, solver } = await chained();
     const line = linesOf(session)[0]?.id;

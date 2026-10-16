@@ -36,8 +36,9 @@ export function curveAt(
   return { entity, curve, cursor, t: nearestParam(curve, cursor), data };
 }
 
+/** A curve the modify tools work on: not a point, not an infinite line (M31, it has no ends). */
 function isCurve(e: SketchEntity): e is SketchCurve {
-  return e.kind !== 'point';
+  return e.kind !== 'point' && e.kind !== 'xline';
 }
 
 /** The ids of an edit, minted from the generator of the tool context like the drawing tools. */

@@ -117,6 +117,8 @@ export interface SketchSession {
    * solved nor written.
    */
   setInferencePreview(p: InferencePreview | null): void;
+  /** M31: SketchState.constructionMode; without the solver and without writing, only the session's state. */
+  setConstructionMode(on: boolean): void;
   setHover(id: SketchItemId | null): void;
   /** Without additive = only this one; additive = toggle. */
   select(id: SketchItemId, opts?: { readonly additive?: boolean }): void;
@@ -189,6 +191,11 @@ export interface SketchState {
    * origin plane XY and the panel asks for a new plane. A picked plane that resolves clears it.
    */
   readonly planeMissing: boolean;
+  /**
+   * M31: the new curves of the drawing tools are construction (addDrawn). Default false, false on
+   * opening the session.
+   */
+  readonly constructionMode: boolean;
 }
 
 /** The preview of the inferred constraints of a drawing tool (M26): in plane coordinates. */
@@ -240,6 +247,11 @@ const NO_ITEMS: readonly SketchItemId[] = Object.freeze([]);
 const MAX_ADD_SOLVES = 3;
 const NO_ENTITIES: ReadonlySet<SketchItemId> = new Set<SketchItemId>();
 const NO_PARAMS: Readonly<Record<string, number>> = Object.freeze({});
+/** The keys of SketchState the drawing of the sketch does not show (refresh does not redraw). */
+const NOT_DRAWN: ReadonlySet<keyof SketchState> = new Set<keyof SketchState>([
+  'inference',
+  'constructionMode',
+]);
 const MESSAGES: { readonly [K in SketchMessageKey]: { readonly key: K } } = Object.freeze({
   'sketch.conflict': Object.freeze({ key: 'sketch.conflict' }),
   'sketch.redundant': Object.freeze({ key: 'sketch.redundant' }),
@@ -291,6 +303,8 @@ export function openSketchSession(deps: {
   let inference: Pick<InferencePreview, 'at' | 'kinds'> | null = null;
   /** The guides of the inference preview are in the overlay. */
   let guidesShown = false;
+  /** SketchState.constructionMode (setConstructionMode). */
+  let constructionMode = false;
   /**
    * Queued or running jobs that may write to the sketch (SketchState.busy while open); a toggle of
    * construction waits for them.
@@ -379,6 +393,7 @@ export function openSketchSession(deps: {
       inference: inferenceOf(plane.get(), open ? inference : null, prev?.inference ?? null),
       planeField: planeFieldOf(edit.state.get(), prev?.planeField ?? null),
       planeMissing,
+      constructionMode,
     });
   }
 
@@ -397,7 +412,7 @@ export function openSketchSession(deps: {
   /**
    * Publishes a new snapshot unless nothing has changed, and redraws the sketch; `redraw` also
    * when only the plane moved. A change of only the inference preview (every move of a drawing
-   * tool) does not redraw: the drawing does not show it.
+   * tool) or of the construction mode does not redraw: the drawing does not show them.
    */
   function refresh(redraw = false): void {
     const prev = state.get();
@@ -407,7 +422,7 @@ export function openSketchSession(deps: {
     if (open && next.entities !== prev.entities) requestHits(next.entities);
     if (open && redraw) drawCrossings(crossings);
     if (changed.length > 0) state.set(next);
-    if (open && (changed.some((key) => key !== 'inference') || redraw)) draw();
+    if (open && (changed.some((key) => !NOT_DRAWN.has(key)) || redraw)) draw();
   }
 
   /** The guides as dashed construction lines in the overlay; none removes them. */
@@ -867,6 +882,11 @@ export function openSketchSession(deps: {
         p === null || p.kinds.length === 0
           ? null
           : Object.freeze({ at: p.at, kinds: Object.freeze([...p.kinds]) });
+      refresh();
+    },
+    setConstructionMode(on) {
+      checkOpen('setConstructionMode');
+      constructionMode = on;
       refresh();
     },
     setHover(id) {

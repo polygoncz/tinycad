@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { familyVariants, fitGroups, menuEntries, overflowItems } from '@/ui/toolbar-fit';
+import {
+  ariaPressed,
+  familyVariants,
+  fitGroups,
+  menuEntries,
+  overflowItems,
+} from '@/ui/toolbar-fit';
 
 describe('fitGroups', () => {
   const widths = [100, 100, 100];
@@ -122,5 +128,13 @@ describe('familyVariants', () => {
 
   it('an unknown group: none', () => {
     expect(familyVariants(groups, 'missing', 'arc')).toEqual([]);
+  });
+});
+
+describe('ariaPressed', () => {
+  it('a toggle says pressed or not, a plain button has no aria-pressed (M31)', () => {
+    expect(ariaPressed(true)).toBe('true');
+    expect(ariaPressed(false)).toBe('false');
+    expect(ariaPressed(null)).toBeUndefined();
   });
 });

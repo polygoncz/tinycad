@@ -993,3 +993,27 @@ describe('splitEdit', () => {
     expectPoint(coords(edit.data, second.poles[0] ?? id('')), pointAt(z, 0.3));
   });
 });
+
+describe('the infinite line (M31)', () => {
+  // The line l (0,0)–(10,0) and the xline x through (5,−1) and (5,1).
+  const WITH_XLINE = sketch([
+    { kind: 'point', id: 'l1', x: 0, y: 0 },
+    { kind: 'point', id: 'l2', x: 10, y: 0 },
+    { kind: 'line', id: 'l', p1: 'l1', p2: 'l2' },
+    { kind: 'point', id: 'x1', x: 5, y: -1 },
+    { kind: 'point', id: 'x2', x: 5, y: 1 },
+    { kind: 'xline', id: 'x', p1: 'x1', p2: 'x2', construction: true },
+  ]);
+
+  it('cuts other curves like any curve', async () => {
+    const cuts = cutsOf(WITH_XLINE, id('l'), await hitsOf(WITH_XLINE));
+    expect(cuts.map((c) => [c.by, c.at])).toEqual([['x', null]]);
+    expectPoint(cuts[0]?.point ?? [NaN, NaN], [5, 0]);
+  });
+
+  it('is not trimmed itself: no ends, the edit is null', async () => {
+    const hits = await hitsOf(WITH_XLINE);
+    const piece = pieceAt(curveOf(WITH_XLINE, 'x'), cutsOf(WITH_XLINE, id('x'), hits), 0.25);
+    expect(trimEdit(WITH_XLINE, { curve: id('x'), piece }, idSource())).toBeNull();
+  });
+});

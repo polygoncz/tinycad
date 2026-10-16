@@ -1,11 +1,20 @@
 import type { Vec2 } from '@/core';
 import { curve2, pointsById } from './geometry';
 import type { Curve2 } from './geometry';
-import type { SketchCurve, SketchData, SketchEntityId } from './model';
-import { cross, dist, dot, length, sub } from './vec2';
+import type {
+  SketchArc,
+  SketchConstraint,
+  SketchConstraintId,
+  SketchCurve,
+  SketchData,
+  SketchEntityId,
+  SketchLine,
+} from './model';
+import { cross, dist, dot, length, lerp, sub } from './vec2';
 
-// Initial positions of new circles and arcs (spec 12 "Oblouky a kružnice (M27)"). Only an
-// estimate: the constraints of the tool settle the final position in the solver. Pure.
+// Initial positions of new circles and arcs (spec 12 "Oblouky a kružnice (M27)"), and of the
+// rectangles and slots of M31 with their topology. Only an estimate: the constraints of the tool
+// settle the final position in the solver. Pure.
 
 export interface CircleFit {
   readonly center: Vec2;
@@ -178,12 +187,333 @@ export function endTangent(
       const r = sub(c.from, c.center);
       return unit([r[1], -r[0]]);
     }
-    // A circle has no ends; splines (M29) are not supported.
+    // A circle and an xline (M31) have no ends; splines (M29) are not supported.
     case 'circle':
     case 'bspline':
     case 'fitSpline':
+    case 'xline':
       return null;
   }
+}
+
+// Rectangles and slots (spec 12 "Nové kreslicí nástroje (M31)"). Each shape has a position
+// function (plane coordinates → points, null for a degenerate input) and a topology function
+// (point ids → curves and constraints); the snapper of the tool stands between them.
+
+/** Corners a, b, c, d; lines ab, bc, cd, da. */
+export type RectCorners = readonly [Vec2, Vec2, Vec2, Vec2];
+
+/**
+ * An axis-parallel rectangle with its centre and one corner c; a = 2·center − corner,
+ * b = [c.x, a.y], d = [a.x, c.y]. A side ≤ 1e-9 → null.
+ */
+export function rectangleFromCenter(center: Vec2, corner: Vec2): RectCorners | null {
+  const a: Vec2 = [2 * center[0] - corner[0], 2 * center[1] - corner[1]];
+  if (Math.abs(corner[0] - a[0]) <= EPS || Math.abs(corner[1] - a[1]) <= EPS) return null;
+  return [a, [corner[0], a[1]], corner, [a[0], corner[1]]];
+}
+
+/**
+ * a = p1, b = p2; c, d = b, a moved by h·n̂ (n̂ the left normal of ab, h = (p3 − p2)·n̂ signed).
+ * |ab| ≤ 1e-9 or |h| ≤ 1e-9 → null.
+ */
+export function rectangleFrom3(p1: Vec2, p2: Vec2, p3: Vec2): RectCorners | null {
+  const n = leftNormal(p1, p2);
+  if (n === null) return null;
+  const h = dot(sub(p3, p2), n);
+  if (Math.abs(h) <= EPS) return null;
+  return [p1, p2, lerp(p2, n, h), lerp(p1, n, h)];
+}
+
+/**
+ * A straight slot: the arc centres c1, c2 and the radius; the tangency points l1 = c1 + r·n̂,
+ * l2 = c2 + r·n̂, r2 = c2 − r·n̂, r1 = c1 − r·n̂ (n̂ the left normal of c1 → c2).
+ */
+export interface SlotFit {
+  readonly c1: Vec2;
+  readonly c2: Vec2;
+  readonly radius: number;
+  readonly l1: Vec2;
+  readonly l2: Vec2;
+  readonly r2: Vec2;
+  readonly r1: Vec2;
+}
+
+/** Centre to centre: r = the distance of `width` from the line c1c2. |c1c2| ≤ 1e-9 or r ≤ 1e-9 → null. */
+export function slotFromCenters(c1: Vec2, c2: Vec2, width: Vec2): SlotFit | null {
+  const n = leftNormal(c1, c2);
+  if (n === null) return null;
+  const r = Math.abs(dot(sub(width, c1), n));
+  if (r <= EPS) return null;
+  return slotFit(c1, c2, n, r);
+}
+
+/**
+ * Overall length: e1, e2 the extreme points, r as above, c1 = e1 + r·d̂, c2 = e2 − r·d̂.
+ * |e1e2| − 2r ≤ 1e-9 or r ≤ 1e-9 → null.
+ */
+export function slotFromEnds(e1: Vec2, e2: Vec2, width: Vec2): SlotFit | null {
+  const n = leftNormal(e1, e2);
+  if (n === null) return null;
+  const r = Math.abs(dot(sub(width, e1), n));
+  if (r <= EPS || dist(e1, e2) - 2 * r <= EPS) return null;
+  const d: Vec2 = [n[1], -n[0]];
+  return slotFit(lerp(e1, d, r), lerp(e2, d, -r), n, r);
+}
+
+/**
+ * An arc slot: the axis = the arc around center counter-clockwise from start to end (end
+ * projected onto the circle |start − center|), half = half the width.
+ */
+export interface ArcSlotFit {
+  readonly center: Vec2;
+  readonly start: Vec2;
+  readonly end: Vec2;
+  readonly radius: number;
+  readonly half: number;
+  readonly innerStart: Vec2;
+  readonly innerEnd: Vec2;
+  readonly outerStart: Vec2;
+  readonly outerEnd: Vec2;
+}
+
+/**
+ * w = | |width − center| − R |. R ≤ 1e-9, end in the direction of start (angle ≤ 1e-9), w ≤ 1e-9
+ * or w ≥ R − 1e-9 → null. An end at the centre has no direction → null as well.
+ */
+export function arcSlotFrom(center: Vec2, start: Vec2, end: Vec2, width: Vec2): ArcSlotFit | null {
+  const us = sub(start, center);
+  const radius = length(us);
+  if (radius <= EPS) return null;
+  const s = unit(us);
+  const e = unit(sub(end, center));
+  if (s === null || e === null) return null;
+  if (Math.atan2(Math.abs(cross(s, e)), dot(s, e)) <= EPS) return null;
+  const half = Math.abs(dist(width, center) - radius);
+  if (half <= EPS || half >= radius - EPS) return null;
+  return {
+    center,
+    start,
+    end: lerp(center, e, radius),
+    radius,
+    half,
+    innerStart: lerp(center, s, radius - half),
+    innerEnd: lerp(center, e, radius - half),
+    outerStart: lerp(center, s, radius + half),
+    outerEnd: lerp(center, e, radius + half),
+  };
+}
+
+/** New ids for a topology (the tool takes them from ToolContext.ids). */
+export interface ShapeIds {
+  entity(): SketchEntityId;
+  constraint(): SketchConstraintId;
+}
+
+/**
+ * Curves and constraints of a shape; the tool adds the points (with the snapper constraints).
+ * `required` = the constraints that define the shape. `axis` = the line of the shape the tool
+ * gives an automatic horizontal/vertical (the first side, the construction axis), or null.
+ */
+export interface ShapeDraft {
+  readonly curves: readonly SketchCurve[];
+  readonly constraints: readonly SketchConstraint[];
+  readonly required: readonly SketchConstraintId[];
+  readonly axis: SketchEntityId | null;
+}
+
+/** The corner ids a, b, c, d of a rectangle. */
+export type RectCornerIds = readonly [
+  SketchEntityId,
+  SketchEntityId,
+  SketchEntityId,
+  SketchEntityId,
+];
+
+/** The point ids of a straight slot centre to centre (see SlotFit). */
+export interface SlotPointIds {
+  readonly c1: SketchEntityId;
+  readonly c2: SketchEntityId;
+  readonly l1: SketchEntityId;
+  readonly l2: SketchEntityId;
+  readonly r2: SketchEntityId;
+  readonly r1: SketchEntityId;
+}
+
+/** The point ids of a straight slot by overall length: the ends e1, e2 and the slot points. */
+export interface SlotOverallPointIds extends SlotPointIds {
+  readonly e1: SketchEntityId;
+  readonly e2: SketchEntityId;
+}
+
+/** The point ids of an arc slot (see ArcSlotFit). */
+export interface ArcSlotPointIds {
+  readonly center: SketchEntityId;
+  readonly start: SketchEntityId;
+  readonly end: SketchEntityId;
+  readonly innerStart: SketchEntityId;
+  readonly innerEnd: SketchEntityId;
+  readonly outerStart: SketchEntityId;
+  readonly outerEnd: SketchEntityId;
+}
+
+/** ab, bc, cd, da, the construction diagonal ac; horizontal ab, cd, vertical bc, da, midpoint(center, ac). */
+export function rectangleCenterShape(
+  corners: RectCornerIds,
+  center: SketchEntityId,
+  ids: ShapeIds,
+): ShapeDraft {
+  const [a, , c] = corners;
+  const [ab, bc, cd, da] = rectangleSides(corners, ids);
+  const ac = lineOf(ids, a, c, true);
+  return shape(
+    [ab, bc, cd, da, ac],
+    [
+      { kind: 'horizontal', id: ids.constraint(), line: ab.id },
+      { kind: 'horizontal', id: ids.constraint(), line: cd.id },
+      { kind: 'vertical', id: ids.constraint(), line: bc.id },
+      { kind: 'vertical', id: ids.constraint(), line: da.id },
+      { kind: 'midpoint', id: ids.constraint(), point: center, line: ac.id },
+    ],
+    null,
+  );
+}
+
+/** ab, bc, cd, da; perpendicular(ab, bc), parallel(cd, ab), parallel(da, bc). */
+export function rectangle3Shape(corners: RectCornerIds, ids: ShapeIds): ShapeDraft {
+  const [ab, bc, cd, da] = rectangleSides(corners, ids);
+  return shape(
+    [ab, bc, cd, da],
+    [
+      { kind: 'perpendicular', id: ids.constraint(), a: ab.id, b: bc.id },
+      { kind: 'parallel', id: ids.constraint(), a: cd.id, b: ab.id },
+      { kind: 'parallel', id: ids.constraint(), a: da.id, b: bc.id },
+    ],
+    ab.id,
+  );
+}
+
+/** Lines l1→l2, r2→r1, arcs around c2 (r2 → l2) and c1 (l1 → r1), the construction axis c1c2; 4× tangent, equal arcs. */
+export function slotShape(p: SlotPointIds, ids: ShapeIds): ShapeDraft {
+  return straightSlot(p, p.c1, p.c2, ids, () => []);
+}
+
+/** As slotShape with the construction axis e1e2, plus e1, e2 on the arcs and c1, c2 on the axis. */
+export function slotOverallShape(p: SlotOverallPointIds, ids: ShapeIds): ShapeDraft {
+  return straightSlot(p, p.e1, p.e2, ids, (arc1, arc2, axis) => [
+    { kind: 'pointOnCurve', id: ids.constraint(), point: p.e1, curve: arc1 },
+    { kind: 'pointOnCurve', id: ids.constraint(), point: p.e2, curve: arc2 },
+    { kind: 'pointOnCurve', id: ids.constraint(), point: p.c1, curve: axis },
+    { kind: 'pointOnCurve', id: ids.constraint(), point: p.c2, curve: axis },
+  ]);
+}
+
+/**
+ * The inner and outer arcs around center, the end arcs around start (innerStart → outerStart) and
+ * end (outerEnd → innerEnd); tangent end–inner and end–outer in the 4 shared points. No equal and
+ * no axis arc: both follow from the tangencies and would be redundant (spec 12).
+ */
+export function arcSlotShape(p: ArcSlotPointIds, ids: ShapeIds): ShapeDraft {
+  const inner = arcOf(ids, p.center, p.innerStart, p.innerEnd);
+  const outer = arcOf(ids, p.center, p.outerStart, p.outerEnd);
+  const startArc = arcOf(ids, p.start, p.innerStart, p.outerStart);
+  const endArc = arcOf(ids, p.end, p.outerEnd, p.innerEnd);
+  return shape(
+    [inner, outer, startArc, endArc],
+    [
+      { kind: 'tangent', id: ids.constraint(), a: startArc.id, b: inner.id },
+      { kind: 'tangent', id: ids.constraint(), a: startArc.id, b: outer.id },
+      { kind: 'tangent', id: ids.constraint(), a: endArc.id, b: outer.id },
+      { kind: 'tangent', id: ids.constraint(), a: endArc.id, b: inner.id },
+    ],
+    null,
+  );
+}
+
+/** The slot curves with the construction axis from → to; `extra` adds constraints after the shared ones. */
+function straightSlot(
+  p: SlotPointIds,
+  axisFrom: SketchEntityId,
+  axisTo: SketchEntityId,
+  ids: ShapeIds,
+  extra: (
+    arc1: SketchEntityId,
+    arc2: SketchEntityId,
+    axis: SketchEntityId,
+  ) => readonly SketchConstraint[],
+): ShapeDraft {
+  const left = lineOf(ids, p.l1, p.l2);
+  const right = lineOf(ids, p.r2, p.r1);
+  const arc2 = arcOf(ids, p.c2, p.r2, p.l2);
+  const arc1 = arcOf(ids, p.c1, p.l1, p.r1);
+  const axis = lineOf(ids, axisFrom, axisTo, true);
+  return shape(
+    [left, right, arc2, arc1, axis],
+    [
+      // In the shared points l1, l2, r2, r1.
+      { kind: 'tangent', id: ids.constraint(), a: left.id, b: arc1.id },
+      { kind: 'tangent', id: ids.constraint(), a: left.id, b: arc2.id },
+      { kind: 'tangent', id: ids.constraint(), a: right.id, b: arc2.id },
+      { kind: 'tangent', id: ids.constraint(), a: right.id, b: arc1.id },
+      { kind: 'equal', id: ids.constraint(), a: arc2.id, b: arc1.id },
+      ...extra(arc1.id, arc2.id, axis.id),
+    ],
+    axis.id,
+  );
+}
+
+function rectangleSides(
+  [a, b, c, d]: RectCornerIds,
+  ids: ShapeIds,
+): readonly [SketchLine, SketchLine, SketchLine, SketchLine] {
+  return [lineOf(ids, a, b), lineOf(ids, b, c), lineOf(ids, c, d), lineOf(ids, d, a)];
+}
+
+function lineOf(
+  ids: ShapeIds,
+  p1: SketchEntityId,
+  p2: SketchEntityId,
+  construction = false,
+): SketchLine {
+  const line: SketchLine = { kind: 'line', id: ids.entity(), p1, p2 };
+  return construction ? { ...line, construction: true } : line;
+}
+
+/** A counter-clockwise arc from start to end. */
+function arcOf(
+  ids: ShapeIds,
+  center: SketchEntityId,
+  start: SketchEntityId,
+  end: SketchEntityId,
+): SketchArc {
+  return { kind: 'arc', id: ids.entity(), center, start, end };
+}
+
+/** All constraints of a shape are required. */
+function shape(
+  curves: readonly SketchCurve[],
+  constraints: readonly SketchConstraint[],
+  axis: SketchEntityId | null,
+): ShapeDraft {
+  return { curves, constraints, required: constraints.map((c) => c.id), axis };
+}
+
+function slotFit(c1: Vec2, c2: Vec2, n: Vec2, r: number): SlotFit {
+  return {
+    c1,
+    c2,
+    radius: r,
+    l1: lerp(c1, n, r),
+    l2: lerp(c2, n, r),
+    r2: lerp(c2, n, -r),
+    r1: lerp(c1, n, -r),
+  };
+}
+
+/** The unit left normal of from → to; |from − to| ≤ 1e-9 → null. */
+function leftNormal(from: Vec2, to: Vec2): Vec2 | null {
+  const d = unit(sub(to, from));
+  return d === null ? null : [-d[1], d[0]];
 }
 
 /** A zero vector (a degenerate curve) → null. */

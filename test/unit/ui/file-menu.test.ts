@@ -3,7 +3,7 @@ import type { ActionState } from '@/interaction';
 import { fileMenuItems } from '@/ui/file-menu';
 
 function action(id: string, group: string | null, enabled = true): ActionState {
-  return { id, label: id, shortcut: null, group, enabled, modes: ['model'] };
+  return { id, label: id, shortcut: null, group, enabled, modes: ['model'], checked: false };
 }
 
 const FILE_IDS = ['file.exportDocument', 'file.exportStep'];

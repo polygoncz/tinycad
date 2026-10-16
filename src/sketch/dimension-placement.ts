@@ -2,6 +2,7 @@ import { assert, assertNever } from '@/core';
 import type { Vec2 } from '@/core';
 import { measureDraft } from './edit';
 import { pointsById } from './geometry';
+import { isLineCarrier } from './model';
 import type {
   AngularPlacement,
   DimensionConstraint,
@@ -36,7 +37,8 @@ const MIN = 1e-9;
 /**
  * The target of the selected entities: 1 line → its points; 2 points → in selection order;
  * point + line (either order) → pointLine, null when the point is an end of the line; 2 lines →
- * in selection order; 1 circle/arc → round; anything else → null.
+ * in selection order; 1 circle/arc → round; anything else → null. An xline counts as a line in a
+ * pair (pointLine, lines), alone it has no length → null (M31).
  */
 export function dimensionTarget(selected: readonly SketchEntity[]): DimensionTarget | null {
   const [first, second] = selected;
@@ -49,11 +51,11 @@ export function dimensionTarget(selected: readonly SketchEntity[]): DimensionTar
   if (first.kind === 'point' && second.kind === 'point') {
     return { kind: 'points', a: first.id, b: second.id };
   }
-  if (first.kind === 'line' && second.kind === 'line') {
+  if (isLineCarrier(first) && isLineCarrier(second)) {
     return { kind: 'lines', a: first.id, b: second.id };
   }
   const point = first.kind === 'point' ? first : second.kind === 'point' ? second : undefined;
-  const line = first.kind === 'line' ? first : second.kind === 'line' ? second : undefined;
+  const line = isLineCarrier(first) ? first : isLineCarrier(second) ? second : undefined;
   if (point === undefined || line === undefined) return null;
   if (point.id === line.p1 || point.id === line.p2) return null;
   return { kind: 'pointLine', point: point.id, line: line.id };
@@ -330,7 +332,7 @@ function geometry(data: SketchData): Geometry {
     point,
     line(id) {
       const l = entity(id);
-      assert(l?.kind === 'line', `dimension placement: '${id}' is not a line`);
+      assert(l !== undefined && isLineCarrier(l), `dimension placement: '${id}' is not a line`);
       return [point(l.p1), point(l.p2)];
     },
     round(id) {

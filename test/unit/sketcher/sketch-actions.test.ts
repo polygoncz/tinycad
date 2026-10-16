@@ -48,6 +48,7 @@ function aFakeSession() {
       inference: null,
       planeField: null,
       planeMissing: false,
+      constructionMode: false,
     }),
   );
   const record =
@@ -69,6 +70,10 @@ function aFakeSession() {
     geometry: createFakeSketchGeometry(),
     toggleConstruction: (ids) => {
       calls.push(['toggleConstruction', ids]);
+    },
+    setConstructionMode: (on) => {
+      calls.push(['setConstructionMode', on]);
+      state.set(Object.freeze({ ...state.get(), constructionMode: on }));
     },
     drag: () => undefined,
     endDrag: () => Promise.resolve(),
@@ -101,7 +106,16 @@ function aFakeSession() {
     if (!parsed.ok) throw new Error('invalid test data');
     state.set(Object.freeze({ ...state.get(), entities: parsed.value.entities }));
   };
-  return { session, calls, select, setBusy, addLonePoint };
+  /** Adds an xline x through the corners a and c of the rectangle (always construction, M31). */
+  const addXLine = (): void => {
+    const parsed = parseSketchData(
+      [...RECT.entities, { kind: 'xline', id: 'x', p1: 'a', p2: 'c', construction: true }],
+      [],
+    );
+    if (!parsed.ok) throw new Error('invalid test data');
+    state.set(Object.freeze({ ...state.get(), entities: parsed.value.entities }));
+  };
+  return { session, calls, select, setBusy, addLonePoint, addXLine };
 }
 
 function setup() {
@@ -138,7 +152,9 @@ function setup() {
   };
   const enabled = (id: string): boolean | undefined =>
     registry.actions.get().find((a) => a.id === id)?.enabled;
-  return { registry, actions, open, close, enabled };
+  const checked = (id: string): boolean | null | undefined =>
+    registry.actions.get().find((a) => a.id === id)?.checked;
+  return { registry, actions, open, close, enabled, checked };
 }
 
 describe('createSketchActions', () => {
@@ -159,7 +175,7 @@ describe('createSketchActions', () => {
       ['sketch.finish', 'sketch.finish', 'sketch', null],
       ['sketch.cancel', 'sketch.cancel', 'sketch', null],
       ['sketch.delete', 'sketch.delete', null, 'Delete'],
-      ['sketch.construction', 'sketch.construction', null, 'Q'],
+      ['sketch.construction', 'sketch.construction', 'sketch.draw', 'Q'],
       ['sketch.constraint.coincident', 'sketch.constraint.coincident', 'sketch.constraint', 'I'],
       ['sketch.constraint.horizontal', 'sketch.constraint.horizontal', 'sketch.constraint', 'H'],
       ['sketch.constraint.vertical', 'sketch.constraint.vertical', 'sketch.constraint', 'V'],
@@ -237,17 +253,80 @@ describe('createSketchActions', () => {
     ]);
   });
 
-  it('construction is enabled when the selection has a curve', () => {
-    const { registry, open, enabled } = setup();
+  it('construction is enabled with an open session (M31)', () => {
+    const { open, close, enabled } = setup();
+    expect(enabled(SKETCH_ACTION_IDS.construction)).toBe(false);
+
+    open();
+    expect(enabled(SKETCH_ACTION_IDS.construction)).toBe(true);
+    close();
+    expect(enabled(SKETCH_ACTION_IDS.construction)).toBe(false);
+  });
+
+  it('construction with a curve in the selection toggles it', () => {
+    const { registry, open, checked } = setup();
     const { calls, select } = open();
 
-    select('a', 'h1');
-    expect(enabled(SKETCH_ACTION_IDS.construction)).toBe(false);
     select('a', 'bc');
-    expect(enabled(SKETCH_ACTION_IDS.construction)).toBe(true);
+    registry.run(SKETCH_ACTION_IDS.construction);
+
+    expect(calls).toEqual([['toggleConstruction', ['a', 'bc']]]);
+    expect(checked(SKETCH_ACTION_IDS.construction)).toBe(false);
+  });
+
+  it('construction without a curve in the selection switches the construction mode (M31)', () => {
+    const { registry, open, checked } = setup();
+    const { calls, select } = open();
+    expect(checked(SKETCH_ACTION_IDS.construction)).toBe(false);
 
     registry.run(SKETCH_ACTION_IDS.construction);
-    expect(calls).toEqual([['toggleConstruction', ['a', 'bc']]]);
+    expect(checked(SKETCH_ACTION_IDS.construction)).toBe(true);
+    select('a', 'h1');
+    registry.run(SKETCH_ACTION_IDS.construction);
+
+    expect(calls).toEqual([
+      ['setConstructionMode', true],
+      ['setConstructionMode', false],
+    ]);
+    expect(checked(SKETCH_ACTION_IDS.construction)).toBe(false);
+  });
+
+  it('construction with only an xline and points selected switches the mode (M31)', () => {
+    const { registry, open, checked } = setup();
+    const { calls, select, addXLine } = open();
+    addXLine();
+
+    // An xline is always construction: it cannot be toggled, so it does not count as a curve.
+    select('x', 'a');
+    registry.run(SKETCH_ACTION_IDS.construction);
+    expect(calls).toEqual([['setConstructionMode', true]]);
+    expect(checked(SKETCH_ACTION_IDS.construction)).toBe(true);
+
+    // With a togglable curve beside it the selection is toggled as before.
+    select('x', 'bc');
+    registry.run(SKETCH_ACTION_IDS.construction);
+    expect(calls).toEqual([
+      ['setConstructionMode', true],
+      ['toggleConstruction', ['x', 'bc']],
+    ]);
+  });
+
+  it('Q runs construction; checked is false without a session', () => {
+    const { registry, open, close, checked } = setup();
+    const { calls } = open();
+
+    expect(
+      registry.handleKey({
+        key: 'q',
+        mods: { shift: false, alt: false, mod: false },
+        inTextField: false,
+      }),
+    ).toBe(true);
+    expect(calls).toEqual([['setConstructionMode', true]]);
+    expect(checked(SKETCH_ACTION_IDS.construction)).toBe(true);
+
+    close();
+    expect(checked(SKETCH_ACTION_IDS.construction)).toBe(false);
   });
 
   it('a constraint action is enabled when constraintFor fits the selected entities', () => {

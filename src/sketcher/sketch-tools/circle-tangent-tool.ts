@@ -25,11 +25,12 @@ import type { SketchEditor } from '../sketch-editor';
 import type { GlyphKind } from '../sketch-glyphs';
 import type { SketchSession } from '../sketch-session';
 import {
-  MIN_LENGTH,
+  addDrawn,
   circlePoints,
   clearPreview,
   clickTool,
   cursorAt,
+  MIN_LENGTH,
   newConstraintId,
   newEntityId,
   previewInference,
@@ -238,5 +239,5 @@ function addTangentCircle(
     b: curve,
   }));
   const required: ReadonlySet<SketchConstraintId> = new Set(tangents.map((c) => c.id));
-  void session.addGeometry({ entities, constraints: tangents }, { required });
+  void addDrawn(session, { entities, constraints: tangents }, { required });
 }
