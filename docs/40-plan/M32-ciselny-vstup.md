@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 32
 aliases:
   - M32
@@ -17,7 +17,7 @@ specs:
 depends_on:
   - "[[M31-nove-kreslici-nastroje]]"
 started: 2026-10-16
-finished:
+finished: 2026-10-16
 tags:
   - milnik
 created: 2026-10-16
@@ -107,5 +107,21 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **Úkol 3 hotový:** obdélníky (3 druhy), kružnice a oblouk s poli a povinnými kótami (`rectangle-input.ts`, `withTyped`), 24 testů. Po kontrole doplněno: dopočítané rohy se zadaným rozměrem se nepřichytí k blízkému bodu (`computedTolerance`, test). Zamčený průměr/poloměr vypne `equal` (B9).
 - **Úkol 5 hotový:** e2e `m32.spec.ts` (5 scénářů × 2 prohlížeče: úsečka 50 mm pod 30° jen klávesnicí, délka + směr myší, obdélník 40 × 20, kružnice ⌀ 30, bod na 12,5; 7 s mřížkou); celé e2e 158/158. **B10 (rozhodnutí stopy):** délka/průměr s kurzorem přesně v předchozím bodě má výchozí směr +x (jako Fusion) místo tichého degenerovaného kroku.
 - **Architektonická revize:** bez porušení ADR; 6 nálezů (duplicity mezi nástroji: kóta vzdálenosti, `withTyped`, `sweep`/poloměr, pole kroků a normála; `equal` přes `withoutLocked`; nevyužitý parametr `session` háčků) – opraveno, sdílené pomůcky v `common.ts` (propsáno do spec 12), `SketchInput` ve stromu komponent spec 11. `npm run check` zelený (7037 testů), e2e m31 + m32 22/22.
+- **Natažení `main`:** jen deník a tabulka id ve spec 12, bez konfliktů. `npm run check` zelený (7037 unit, 41 integračních), celé e2e 158/158.
 
 ## Retrospektiva
+
+_(Návrh stopy, Pavel doplní nebo upraví.)_
+
+**Splnění kritérií:** entita z klávesnice má přesné rozměry a kóty – e2e `m32.spec.ts` (úsečka 50 mm pod 30° jen klávesnicí: body na 6 desetinných míst a jediná kóta 50; obdélník 40 × 20; kružnice ⌀ 30; bod na 12,5; 7) a unit testy každého nástroje; myš a klávesnice dohromady – zamčená délka a směr myší (e2e i unit).
+
+**Co bylo jinak, než se čekalo:**
+- „Každá zadaná hodnota = kóta“ narazila na úhel: vazba úhlu k ose roviny v datech není, takže úhel bez reference jen umístí geometrii (B7). Pravidlo vzniklo až při návrhu tabulky polí, ne v [[Q090 Číselný vstup při kreslení|Q090]].
+- Zamčená hodnota se bila s automatickými vazbami z M26 (osa do 3°, `equal` do 2 %) a s přichycením dopočítaných rohů – řešič by zadaný rozměr posunul. Pravidlo „zamčené má přednost“ (B9) a `computedTolerance` přišly až z implementace a kontroly.
+- Tab na plátně: prohlížeč ho bere pro fokus a `render` dřív `preventDefault` nevolal – malá změna portu (`ViewKeyEvent.consume`).
+- Souběžné úkoly 3 a 4 si každý napsal vlastní pomůcky (`sweep`, poloměr, normála, kóta vzdálenosti); revize je sjednotila do `common.ts`.
+
+**Co se osvědčilo:**
+- Napojení přes `ToolMods.input` → `snapAt` vrací volný cíl: nástroje dostaly omezený bod bez vlastní logiky přeskočení snapperu.
+- Model vstupu jako čistá funkce (50 tabulkových testů) a `ui` jen kreslí stav – stejný vzor jako náhled vazeb z M26.
+- Rozhodnout s Pavlem dvě věci, které mění chování (zamykání Tabem, úhel bez kóty), a krajní případy (výchozí směr +x, `sweep` modulo 360°) řešit podle akceptačních kritérií a zapisovat jako B-rozhodnutí.
