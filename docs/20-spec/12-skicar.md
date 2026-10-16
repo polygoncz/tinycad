@@ -20,6 +20,7 @@ milestones:
   - "[[M27-oblouky-a-kruznice]]"
   - "[[M28-koty]]"
   - "[[M29-spliny]]"
+  - "[[M31-nove-kreslici-nastroje]]"
 tags:
   - spec
 created: 2026-10-12
@@ -744,6 +745,86 @@ export interface SketchGeometry {}
 - **`SketchGeometry`** je v `sketch` (prstenec 1, jen typ), implementuje ho `app` nad klientem jádra a skicář ho dostane v závislostech `SketchSession` jako `ConstraintSolver`. V M30 vznikne jen prázdné rozhraní a jeho předání, aby stopa A v M33 nemusela měnit kompoziční kořen; pravidla závislostí se nemění.
 - Postup výpočtu v sekci *Oblasti (profily)* výše platí dál jako **kontrakt výsledku** (co je oblast, díra, jméno, křížení, pořadí); OCCT ho smí dosáhnout jinou cestou (dělení hran `BOPAlgo`, stěny z `BRepBuilderAPI`), tolerance jsou OCCT.
 
+
+## Nové kreslicí nástroje (M31)
+
+Kontrakt stopy B ([[M31-nove-kreslici-nastroje#Implementační plán]]). Datový model přibírá jen nekonečnou přímku ([[#Nekonečná přímka (M31, stopa B)]]); obdélníky a drážky jsou dnešní entity držené **vazbami**, ne novým typem – po změně kóty zůstanou tvarem díky řešiči, ne díky datům.
+
+### Konstrukce (`sketch/construct.ts`, čisté funkce)
+
+Každý tvar má dvě funkce: **poloha** (souřadnice roviny → body, `null` pro degenerovaný vstup) a **topologie** (id bodů → křivky a vazby). Mezi nimi stojí snapper nástroje: kliknuté a dopočítané body umístí `placePoint` (existující bod = jeho id, nový bod se svými `inferred`), a teprve z jejich id vznikne tvar. Konstrukce tak nezávisí na snapperu ani na `ToolContext` a jdou testovat i s planegcs.
+
+```ts
+/** Rohy a, b, c, d; úsečky ab, bc, cd, da. */
+export type RectCorners = readonly [Vec2, Vec2, Vec2, Vec2];
+/** Osově rovnoběžný obdélník se středem a jedním rohem c; a = 2·center − corner, b = [c.x, a.y], d = [a.x, c.y]. Strana ≤ 1e-9 → null. */
+export function rectangleFromCenter(center: Vec2, corner: Vec2): RectCorners | null;
+/** a = p1, b = p2; c, d = b, a posunuté o h·n̂ (n̂ levá normála ab, h = (p3 − p2)·n̂ se znaménkem). |ab| ≤ 1e-9 nebo |h| ≤ 1e-9 → null. */
+export function rectangleFrom3(p1: Vec2, p2: Vec2, p3: Vec2): RectCorners | null;
+
+/** Přímá drážka: středy oblouků c1, c2, poloměr; body tečnosti l1 = c1 + r·n̂, l2 = c2 + r·n̂, r2 = c2 − r·n̂, r1 = c1 − r·n̂ (n̂ levá normála c1→c2). */
+export interface SlotFit { readonly c1: Vec2; readonly c2: Vec2; readonly radius: number; readonly l1: Vec2; readonly l2: Vec2; readonly r2: Vec2; readonly r1: Vec2 }
+/** Střed–střed: r = vzdálenost `width` od přímky c1c2. |c1c2| ≤ 1e-9 nebo r ≤ 1e-9 → null. */
+export function slotFromCenters(c1: Vec2, c2: Vec2, width: Vec2): SlotFit | null;
+/** Celkovou délkou: e1, e2 krajní body, r jako výše, c1 = e1 + r·d̂, c2 = e2 − r·d̂. |e1e2| − 2r ≤ 1e-9 nebo r ≤ 1e-9 → null. */
+export function slotFromEnds(e1: Vec2, e2: Vec2, width: Vec2): SlotFit | null;
+
+/** Oblouková drážka: osa = oblouk kolem center proti směru od start do end (end promítnutý na kružnici |start − center|), w = polovina šířky. */
+export interface ArcSlotFit { readonly center: Vec2; readonly start: Vec2; readonly end: Vec2; readonly radius: number; readonly half: number;
+  readonly innerStart: Vec2; readonly innerEnd: Vec2; readonly outerStart: Vec2; readonly outerEnd: Vec2 }
+/** w = | |width − center| − R |. R ≤ 1e-9, end ve směru start (úhel ≤ 1e-9), w ≤ 1e-9 nebo w ≥ R − 1e-9 → null. */
+export function arcSlotFrom(center: Vec2, start: Vec2, end: Vec2, width: Vec2): ArcSlotFit | null;
+
+/** Nová id pro topologii (nástroj je bere z ToolContext.ids). */
+export interface ShapeIds { entity(): SketchEntityId; constraint(): SketchConstraintId }
+/** Křivky a vazby tvaru; body (s vazbami ze snapperu) dodá nástroj. `required` = vazby, které tvar definují. */
+export interface ShapeDraft { readonly curves: readonly SketchCurve[]; readonly constraints: readonly SketchConstraint[]; readonly required: readonly SketchConstraintId[] }
+
+export function rectangleCenterShape(corners: readonly [SketchEntityId, SketchEntityId, SketchEntityId, SketchEntityId], center: SketchEntityId, ids: ShapeIds): ShapeDraft;
+export function rectangle3Shape(corners: readonly [SketchEntityId, SketchEntityId, SketchEntityId, SketchEntityId], ids: ShapeIds): ShapeDraft;
+export function slotShape(p: { c1; c2; l1; l2; r2; r1: SketchEntityId }, ids: ShapeIds): ShapeDraft;
+export function slotOverallShape(p: { e1; e2; c1; c2; l1; l2; r2; r1: SketchEntityId }, ids: ShapeIds): ShapeDraft;
+export function arcSlotShape(p: { center; start; end; innerStart; innerEnd; outerStart; outerEnd: SketchEntityId }, ids: ShapeIds): ShapeDraft;
+```
+
+**Vazby tvarů** (všechny `required`, pořadí křivek v datech jako v tabulce):
+
+| Tvar | Křivky | Vazby | Stupně volnosti tvaru |
+|---|---|---|---|
+| obdélník středem | ab, bc, cd, da; konstrukční úhlopříčka ac | `horizontal` ab, cd; `vertical` bc, da; `midpoint(center, ac)` | 4 (střed, šířka, výška) |
+| obdélník 3 body | ab, bc, cd, da | `perpendicular(ab, bc)`, `parallel(cd, ab)`, `parallel(da, bc)` | 5 (+ natočení) |
+| drážka střed–střed | úsečky l1→l2, r2→r1; oblouky kolem c2 (r2 → l2) a c1 (l1 → r1); konstrukční osa c1c2 | `tangent` úsečka–oblouk ve 4 sdílených bodech; `equal` oblouků | 5 (2 středy, poloměr) |
+| drážka celkovou délkou | jako střed–střed, konstrukční osa e1e2 místo c1c2 | jako střed–střed + `pointOnCurve(e1, oblouk c1)`, `pointOnCurve(e2, oblouk c2)`, `pointOnCurve(c1, osa)`, `pointOnCurve(c2, osa)` | 5 |
+| oblouková drážka | vnitřní (center, innerStart → innerEnd) a vnější (center, outerStart → outerEnd) oblouk; koncové oblouky kolem start (innerStart → outerStart) a end (outerEnd → innerEnd) | `tangent` koncový–vnitřní a koncový–vnější oblouk ve 4 sdílených bodech | 6 (střed, poloměr, 2 úhly, šířka) |
+
+- Oblouky jsou v datech vždy proti směru hodinových ručiček; začátky a konce v tabulce to splňují (koncový oblouk se vyklene ven z drážky).
+- **Oblouková drážka bez `equal` koncových oblouků a bez konstrukční osy:** z tečností plyne, že start i end jsou středy úseček mezi vnitřním a vnějším obloukem, takže leží na téže kružnici o poloměru (R_vnitřní + R_vnější)/2 a oba koncové oblouky mají poloměr (R_vnější − R_vnitřní)/2. `equal` by tedy byla redundantní a konstrukční oblouk osy přes start a end také (jeho vnitřní vazbu |start − c| = |end − c| nejde vynechat, planegcs by zahodil některou tečnost a řešil by degenerovanou soustavu). Odchylka od plánu; poloměr osy jde kótovat vzdáleností center–start. U přímé drážky `equal` nutná je (bez ní by šly oblouky různých poloměrů s tečnými úsečkami).
+- Tečnost ve sdíleném bodě mapuje adaptér na `angle_via_point` ([[#Tečnost ve sdíleném koncovém bodě (adaptér planegcs)]]); tvar tedy nepotřebuje nic nového v řešiči.
+
+### Nástroje
+
+| Nástroj (`id`) | Rodina, zkratka | Gesto | Body ze snapperu |
+|---|---|---|---|
+| `sketch.rectangle` | `rectangle`, `R` | dva protilehlé rohy (beze změny) | – |
+| `sketch.rectangleCenter` | `rectangle` | střed, roh | střed a roh kliknutím; tři dopočítané rohy jako u rohového obdélníku (bez mřížky, bez kliknutých bodů) |
+| `sketch.rectangle3p` | `rectangle` | 1. roh, 2. roh (první strana), 3. klik výška | rohy a, b kliknutím; c, d dopočítané (bez mřížky, `exclude` a, b) |
+| `sketch.point` | –, `P` | klik | bod se svými `inferred` (na křivce → `pointOnCurve`); klik na existující bod nic |
+| `sketch.line` | `line`, `L` | polyline (beze změny) | – |
+| `sketch.xline` | `line` | dva body přímky | oba kliknutím; vazby `horizontal`/`vertical` z `inferLine` (jen osy, automatické) |
+| `sketch.slot` | `slot` | střed 1, střed 2, šířka | středy kliknutím; body tečnosti nové bez snapperu |
+| `sketch.slotOverall` | `slot` | konec 1, konec 2, šířka | konce kliknutím; středy a body tečnosti nové |
+| `sketch.slotArc` | `slot` | střed, začátek, konec, šířka | střed a začátek kliknutím, konec promítnutý na kružnici bez `inferred` (jako u oblouku); ostatní nové |
+
+- Osa přímé drážky, první strana obdélníku 3 body a přímka dostanou `horizontal`/`vertical` z `inferLine` (do 3°, automatické, Ctrl/Cmd vypne) – tvar pak zůstane osově rovnoběžný jako ve Fusionu. Ostatní automatické vazby (`parallel` k sousední úsečce, `equal`) se nové tvary neodvozují.
+- Degenerovaný vstup (konstrukce `null`) → klik nic nevytvoří, rozpracovaný stav zůstane. Esc zruší rozpracovaný tvar, bez něj ukončí nástroj. Náhled tvaru stylem `preview` v overlay `'sketch-tool'`, náhled vazeb z funkce kroku nástroje (jako M26/M27).
+- Nové tvary vytvoří vždy všechny své křivky (strana na existující úsečce se nesdílí – to umí jen rohový obdélník).
+- Popisky i18n `tool.<id bez sketch.>`: `rectangle` „Obdélník rohy“ / „Corner rectangle“, `rectangleCenter` „Obdélník středem“ / „Center rectangle“, `rectangle3p` „Obdélník 3 body“ / „3-point rectangle“, `point` „Bod“ / „Point“, `line` „Úsečka“ / „Line“ (beze změny), `xline` „Konstrukční přímka“ / „Construction line“, `slot` „Drážka středy“ / „Center slot“, `slotOverall` „Drážka celková“ / „Overall slot“, `slotArc` „Oblouková drážka“ / „Arc slot“.
+
+### Režim konstrukce
+
+Doplní se při úkolu 5.
+
+**Testy:** konstrukce (poloha každého tvaru, degenerované vstupy, orientace oblouků proti směru, topologie: křivky, vazby a `required`); s planegcs: každý tvar má `dof` z tabulky, změna jedné kóty (šířka, poloměr) drží tvar; nástroje s `FakeViewport` a `FakeSolver`.
 
 ## Testy
 

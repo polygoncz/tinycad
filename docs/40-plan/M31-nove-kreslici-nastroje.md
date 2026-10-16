@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: doing
 order: 31
 aliases:
   - M31
@@ -17,7 +17,7 @@ specs:
   - "[[11-ui]]"
 depends_on:
   - "[[M29-spliny]]"
-started:
+started: 2026-10-16
 finished:
 tags:
   - milnik
@@ -107,5 +107,9 @@ Jak tvar popsat vazbami místo souřadnic (obdélník = 4 úsečky + rovnoběžn
 ## Průběh stopy
 
 _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hlavní sezení to při sloučení přenese do deníku.)_
+
+- **B1 (2026-10-16, Pavel schválil):** kontrakt konstrukcí v [[12-skicar#Nové kreslicí nástroje (M31)]] – každý tvar = funkce polohy (Vec2 → body, `null` pro degenerovaný vstup) a funkce topologie (id bodů → křivky a vazby); snapper nástroje stojí mezi nimi. Obdélník středem: H/V + konstrukční úhlopříčka a `midpoint` středu; obdélník 3 body: `perpendicular` + 2× `parallel`; přímá drážka: 4× `tangent` + `equal` + konstrukční osa (celkovou délkou: osa mezi konci + 4× `pointOnCurve`).
+- **B2 (odchylka od plánu, Pavel schválil):** oblouková drážka bez `equal` koncových oblouků a bez konstrukčního oblouku osy – obojí plyne z tečností, řešič by to hlásil jako redundantní (vnitřní vazbu oblouku osy nejde vynechat, zahodila by se tečnost a soustava by byla degenerovaná).
+- **B3 (Pavel):** první strana obdélníku 3 body, osa přímé drážky a konstrukční přímka dostanou `horizontal`/`vertical` z `inferLine` do 3° (automatické, Ctrl/Cmd vypne).
 
 ## Retrospektiva
