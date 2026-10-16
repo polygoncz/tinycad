@@ -579,8 +579,8 @@ describe('the slot tools in the construction mode (M31)', () => {
       [30, 20],
     ]);
 
-    const curves = newEntities(session).filter((e) => e.kind !== 'point');
+    const curves = newEntities(session).flatMap((e) => (e.kind === 'point' ? [] : [e]));
     expect(curves).toHaveLength(5);
-    expect(curves.every((c) => c.kind !== 'point' && c.construction === true)).toBe(true);
+    expect(curves.every((c) => c.construction === true)).toBe(true);
   });
 });
