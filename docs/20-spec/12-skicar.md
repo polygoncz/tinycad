@@ -835,7 +835,7 @@ export function patternOfCopy(id: string): SketchEntityId | null;
   - Zdroje jsou body a křivky **výběru session** v pořadí výběru (nástroj je nedrží zvlášť); aktivace výběr zúží na ně. Esc ve zdrojích zruší celý výběr. Ikony: `flip-horizontal` (zrcadlení), `grid-dots` (lineární), `rotate-360` (kruhové). Skupiny lišty: `history, select, draw, modify, constrain, finish, view`.
   - Zrcadlení: po Enter klik na úsečku (ne zdroj) zapíše `mirror`. Kruhové pole: po Enter klik na bod skici (ne zdroj; počátek není entita) zapíše `circularPattern` s `count = 4`, `angle = 2π`. Lineární pole: Enter rovnou zapíše `linearPattern` s `direction1 = { angle: 0, count: 3, spacing }`, kde `spacing = 1,5 ×` šířka obálky definičních bodů zdrojů ve směru x (kružnice ± poloměr), nebo 10 mm při šířce ≤ 1e-9.
   - Zápis = `addGeometry` s jedinou novou entitou (id z generátoru, bez vazeb); nové pole je pak vybrané (jeho vynesené kóty se ukážou) a nástroj začne znovu. Esc v kroku osy nebo středu vrátí ke zdrojům, ve zdrojích zruší výběr zdrojů, pak deaktivuje nástroj jako ostatní.
-- **Oblasti** (úkol 5, po sloučení M30): `regionCurves` přidá nekonstrukční kopie křivek z `patternCopies` jako `Curve2` s odvozeným id; jména ploch pak `face:side:<pole>:<index>.<zdroj>`.
+- **Oblasti** (úkol 5, po sloučení M30): `regionCurves` přidá nekonstrukční kopie křivek z `patternCopies` jako `Curve2` s odvozeným id; jména ploch pak `face:side:<pole>:<index>.<zdroj>`. Pořadí: křivky dat, pak kopie v pořadí `patternCopies` (na jménech oblastí nezáleží, jsou to seřazená id). `pointsById` se kvůli cyklu `geometry → patterns → geometry` přesunul do `sketch/points.ts` (veřejné API beze změny).
 
 
 ## Testy

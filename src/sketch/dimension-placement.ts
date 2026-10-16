@@ -1,7 +1,7 @@
 import { assert, assertNever } from '@/core';
 import type { Vec2 } from '@/core';
 import { measureDraft } from './edit';
-import { pointsById } from './geometry';
+import { pointsById } from './points';
 import type {
   AngularPlacement,
   DimensionConstraint,

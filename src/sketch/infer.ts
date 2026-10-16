@@ -1,7 +1,7 @@
 import { assert } from '@/core';
 import type { Vec2 } from '@/core';
 import { curvePoints } from './edit';
-import { pointsById } from './geometry';
+import { pointsById } from './points';
 import type { SketchData, SketchEntity, SketchEntityId, SketchPoint } from './model';
 import { cross, dist, dot, length, sub } from './vec2';
 

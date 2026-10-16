@@ -1,7 +1,7 @@
 import { assertNever } from '@/core';
 import type { Vec2 } from '@/core';
 import { curvePoints } from './edit';
-import { pointsById } from './geometry';
+import { pointsById } from './points';
 import { isPattern } from './model';
 import type {
   SketchCircularPattern,

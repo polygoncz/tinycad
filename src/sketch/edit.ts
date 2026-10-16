@@ -1,5 +1,5 @@
 import { assert, assertNever } from '@/core';
-import { pointsById } from './geometry';
+import { pointsById } from './points';
 import { isPattern } from './model';
 import type {
   DimensionKind,

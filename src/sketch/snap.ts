@@ -1,6 +1,7 @@
 import type { Vec2 } from '@/core';
 import { assertNever, bspline } from '@/core';
-import { SPLINE_TOLERANCE, curve2, pointsById } from './geometry';
+import { SPLINE_TOLERANCE, curve2 } from './geometry';
+import { pointsById } from './points';
 import type { Curve2 } from './geometry';
 import { isPattern } from './model';
 import { patternCopies } from './patterns';

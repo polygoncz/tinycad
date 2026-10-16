@@ -37,7 +37,8 @@ export type {
 export { patternCopies, patternOfCopy } from './patterns';
 export { parseSketchData } from './parse';
 export type { SketchIssue } from './parse';
-export { curve2, pointsById, regionCurves } from './geometry';
+export { curve2, regionCurves } from './geometry';
+export { pointsById } from './points';
 export type { Curve2, SketchRegion } from './geometry';
 export {
   constraintFor,

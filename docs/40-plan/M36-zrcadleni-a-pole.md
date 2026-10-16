@@ -42,7 +42,7 @@ Upřesnění v sezení 2026-10-16: zrcadlení a pole jako **parametrická entita
 - [x] Řešič: vazba symetrie, kopie mimo řešič.
 - [x] Kresba, výběr a snapper kopií.
 - [x] Nástroje a vynesené kóty.
-- [ ] Kopie v oblastech (*čeká na sloučení M30*).
+- [x] Kopie v oblastech (*čeká na sloučení M30*).
 - [x] e2e a spec.
 
 ## Implementační plán
@@ -108,5 +108,7 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **Úkol 4, část sketcher hotová:** Pavel rozhodl průběh nástrojů *zdroje → Enter → osa/střed* a směr 2 přes popisek počtu `1×`. Nástroje `mirror-tool.ts`, `pattern-tool.ts`, skupina `modify` (zavedla stopa C, pokud se sloučí první), `sketch-pattern-dimensions.ts`, `setPatternParam` bez řešiče (fronta `writeInTurn`). 6655 testů zelených. Zbývá `ui` popisků.
 - **Úkol 4 hotový:** `ui` popisků (`SketchPatternDimensions.vue` v `AppShell`), editace jedním klikem. `npm run check` zelený (6673 testů).
 - **Úkol 6 hotový:** `test/e2e/m36.spec.ts` (zrcadlení, mřížka 3 × 2 přes popisek `1×`, kruhové pole, počet 3 → 5 i po reloadu), celé e2e 144/144 zelené; spec 10 a 11 propsané. Postřeh: po potvrzení popisku Enterem není fokus ve viewportu, Esc nástroje funguje až po kliku na plátno (stejně jako u kót M28).
+- **Natažení `main` s M30 (merge `013c44c`):** konflikty v `regions.ts` (přijato smazání/přesun), `sketch-drawing.ts`, spec 10, testech; `isRegionCurve` dostal větve polí. Check zelený.
+- **Úkol 5 hotový:** `regionCurves` přidá nekonstrukční kopie; integrační test nad OCCT `sketch-pattern-regions.test.ts` (deska s kruhovým polem děr, plochy `face:side:cp:1.k`… přežijí změnu úhlu). Check 6835 unit + 42 integračních, e2e 144/144.
 
 ## Retrospektiva
