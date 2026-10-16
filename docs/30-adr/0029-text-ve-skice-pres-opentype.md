@@ -45,3 +45,8 @@ Pavel chce ve skice psát text, který jde vysunout (gravírování, popisky). P
 - (+) Obrysy jsou přesné (Bézier je speciální případ B-spline).
 - (−) Další závislost a další 2D geometrie mimo OCCT (jen převod písmen na křivky, ne topologie).
 - (−) Font musí být k dispozici při každé regeneraci, i v Node testech ([[Q091 Fonty pro text ve skice|Q091]]).
+
+## Upřesnění 2026-10-16 (M37, Q091)
+
+Pavel rozhodl v [[Q091 Fonty pro text ve skice|Q091]]: **obrysy písmen se v datech skici ukládají** (v lokálních souřadnicích textu, jako vyřešené póly `fitSpline`) – mění to bod 2 výše. Řetězec, font a výška zůstávají v entitě jako recept, ze kterého skicář obrysy přepočítá při každé jejich změně; regenerace font ani opentype.js nepotřebuje a jen uložené křivky posune a otočí podle kotevní úsečky. Fonty jsou přibalené (OFL, sans, serif, mono). Knihovna žije v adaptéru `text-opentype` (prstenec 3, jako `solver-planegcs`) za portem `TextOutliner` v `sketch`. Kontrakt v [[12-skicar#Text ve skice (M37)]].
+

@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: doing
 order: 37
 aliases:
   - M37
@@ -16,7 +16,7 @@ specs:
 depends_on:
   - "[[M30-geometrie-skici-v-occt]]"
   - "[[M36-zrcadleni-a-pole]]"
-started:
+started: 2026-10-16
 finished:
 tags:
   - milnik
@@ -26,9 +26,9 @@ updated: 2026-10-16
 # M37 – Text ve skice
 **Cíl:** nástroj Text: řetězec v daném fontu, výšce, poloze a natočení se ve skice zobrazí jako obrysy písmen, které tvoří oblasti pro vysunutí.
 
-> Hrubý plán – před zahájením rozhodnout [[Q091 Fonty pro text ve skice|Q091]] a upřesnit. Sdílené typy jsou zafixované v [[12-skicar#Sdílené kontrakty série II]].
+> Upřesněno 2026-10-16 po rozhodnutí [[Q091 Fonty pro text ve skice|Q091]]: kontrakt v [[12-skicar#Text ve skice (M37)]], plán níže. Sdílené typy jsou zafixované v [[12-skicar#Sdílené kontrakty série II]].
 
-**Specifikace:** [[12-skicar]], [[0029-text-ve-skice-pres-opentype|ADR 0029]]
+**Specifikace:** [[12-skicar#Text ve skice (M37)]], [[0029-text-ve-skice-pres-opentype|ADR 0029]]
 
 **Navazuje na:** [[M30-geometrie-skici-v-occt|M30]] (oblasti písmen s dírami počítá jádro) a [[M36-zrcadleni-a-pole|M36]] (pořadí ve stopě C). Milník série *Rozšíření skicáře II* (M30–M37), viz [[12-skicar#Rozšíření skicáře II (M30–M37)]] a [[Roadmapa#Rozšíření skicáře II (M30–M37)]].
 
@@ -38,12 +38,40 @@ Pavel 2026-10-16: „Chtěl bych ještě dodělat do Sketch následující featu
 
 Upřesnění v sezení 2026-10-16: obrysy přes knihovnu **opentype.js** v TS ([[0029-text-ve-skice-pres-opentype|ADR 0029]]), ne přes OCCT (předpřipravený build nemá fonty).
 
-## Úkoly (orientačně)
+## Úkoly
 
-- [ ] Rozhodnout [[Q091 Fonty pro text ve skice|Q091]]; modul pro opentype.js a pravidla v `.dependency-cruiser.cjs` a spec 01.
-- [ ] Entita text (řetězec, font, výška, kotevní body), kontrola dat, převod na `Curve2` (Bézier → B-spline), id křivek písmen.
-- [ ] Nástroj Text a panel pro úpravu řetězce; vazby na kotevní body.
-- [ ] Oblasti a vysunutí textu, e2e (gravírování „tinycad“ do kvádru).
+- [x] Rozhodnout [[Q091 Fonty pro text ve skice|Q091]].
+- [ ] Adaptér `text-opentype`, fonty, port `TextOutliner`, pravidla závislostí.
+- [ ] Entita text, kontrola dat, `textCurves`, odvozená id, oblasti.
+- [ ] Kresba, výběr, nástroj Text, `setTextParams` a panel.
+- [ ] Integrační test a e2e (gravírování „tinycad“), spec 01, 10, 11.
+
+## Implementační plán
+
+Jeden úkol = jedno spuštění subagenta `implementer`. Kontrakt: [[12-skicar#Text ve skice (M37)]].
+
+### 1. Adaptér a fonty
+
+- **Soubory:** `src/sketch/text.ts` (port `TextOutliner`, typy `TextFontId`, `TextContour`, `TextSegment` v `model.ts`), nový modul `src/text-opentype/` (`index.ts`, `outliner.ts`, `fonts/*.ttf` + `LICENSE`), `.dependency-cruiser.cjs` (modul `text-opentype`: `core`, `sketch`, npm `opentype.js`; importuje ho jen `app`), `package.json` (`opentype.js`), `FakeTextOutliner` v `sketch/testing.ts`.
+- **Testy:** `test/unit/text-opentype/outliner.test.ts` v Node se skutečným fontem přes `fs` („o“ dá 2 smyčky, „B“ 3, mezera 0, smyčky uzavřené, `char`/`code` sedí, výška škáluje, y nahoru, `advance` roste s textem, cache fontu).
+- **Hotovo když:** testy projdou, `npm run check` zelený.
+
+### 2. Entita text
+
+- **Soubory:** `src/sketch/model.ts` (`SketchText`, `TEXT_FONTS`, `MAX_TEXT_LENGTH`), `parse.ts`, `edit.ts` (`removeItems`, `toggleConstruction`, `constraintFor`/`dimensionFor`), `text.ts` (`textCurves`), `patterns.ts` nebo nový soubor (`derivedOwner`), `geometry.ts` (`regionCurves`, `isRegionCurve`), `isPatternSource`.
+- **Testy:** `parse.test.ts`, `edit.test.ts`, `text.test.ts` (transformace, Bézier → bspline, odvozená id, úsečka nulové délky), `geometry.test.ts` (text v oblastech, konstrukční ne).
+- **Hotovo když:** testy projdou, `npm run check` zelený.
+
+### 3. Skicář a UI
+
+- **Soubory:** `sketch-drawing.ts`, `sketch-tools/snap.ts` (`derivedOwner`), `sketch-tools/text-tool.ts`, `sketch-tools.ts`, `sketch-session.ts` (`setTextParams`, závislost `TextOutliner`), `sketch-editor.ts`, `app` (vytvoření outlineru, URL fontů), `ui` panel (pole Text, Font, Výška), i18n.
+- **Testy:** kresba a pick textu, nástroj s `FakeViewport` a `FakeTextOutliner`, session (`setTextParams` platné/neplatné, bez řešiče), `ui` panel.
+- **Hotovo když:** testy projdou, `npm run check` zelený.
+
+### 4. Integrace a e2e
+
+- **Soubory:** `test/integration/sketch-text-regions.test.ts` (OCCT: „oaB“ → oblasti s dírami, vysunutí, změna jiného znaku zachová jména ploch), `test/e2e/m37.spec.ts` (nástroj Text, změna řetězce v panelu, gravírování „tinycad“ do kvádru odebráním).
+- **Hotovo když:** e2e projdou, `npm run check` zelený; spec 01 (modul), 10 a 11 propsané (hlavní sezení).
 
 ## Akceptační kritéria
 

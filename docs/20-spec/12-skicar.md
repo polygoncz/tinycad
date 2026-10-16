@@ -844,6 +844,59 @@ export function patternOfCopy(id: string): SketchEntityId | null;
 - **Oblasti** (úkol 5, po sloučení M30): `regionCurves` přidá nekonstrukční kopie křivek z `patternCopies` jako `Curve2` s odvozeným id; jména ploch pak `face:side:<pole>:<index>.<zdroj>`. Pořadí: křivky dat, pak kopie v pořadí `patternCopies` (na jménech oblastí nezáleží, jsou to seřazená id). `pointsById` se kvůli cyklu `geometry → patterns → geometry` přesunul do `sketch/points.ts` (veřejné API beze změny).
 
 
+## Text ve skice (M37)
+
+Rozhodnuto v [[0029-text-ve-skice-pres-opentype|ADR 0029]] a [[Q091 Fonty pro text ve skice|Q091]] (Pavel 2026-10-16): přibalené OFL fonty, **obrysy písmen uložené v datech** v lokálních souřadnicích textu; regenerace font nepotřebuje. Verze schématu skici zůstává 1.
+
+```ts
+// sketch/model.ts – člen SketchEntity, ne SketchCurve (jako pole, M36)
+export type TextFontId = 'sans' | 'serif' | 'mono';
+export const TEXT_FONTS: readonly TextFontId[];          // zmrazené, v tomto pořadí (výběr v panelu)
+/** Úsek obrysu v lokálních souřadnicích textu (mm): 2 póly = úsečka, 3 = kvadratická, 4 = kubická Bézierova křivka. */
+export type TextSegment = readonly Vec2[];
+/** Jedna uzavřená smyčka jednoho písmene; konec posledního úseku = začátek prvního. */
+export interface TextContour {
+  readonly char: number;     // index znaku v [...text] (kódové body, ne UTF-16)
+  readonly code: number;     // kódový bod toho znaku (kontrola souladu s text)
+  readonly segments: readonly TextSegment[];
+}
+export interface SketchText {
+  readonly kind: 'text'; readonly id: SketchEntityId;
+  readonly text: string;               // 1 … MAX_TEXT_LENGTH kódových bodů, jeden řádek, bez řídicích znaků
+  readonly font: TextFontId;
+  readonly height: number;             // mm, > 0: velikost písma (em), jako font-size
+  readonly baseline: SketchEntityId;   // úsečka (po M31 i xline): počátek účaří = p1, směr p1 → p2; délka nehraje roli
+  readonly contours: readonly TextContour[];   // vypočtené skicářem z text, font, height (TextOutliner)
+  readonly construction?: true;
+}
+export const MAX_TEXT_LENGTH = 200;
+
+// sketch/text.ts
+/** Port: obrysy písmen; implementuje adaptér text-opentype (opentype.js + přibalené fonty), testy FakeTextOutliner. */
+export interface TextOutliner {
+  outline(p: { readonly text: string; readonly font: TextFontId; readonly height: number }): Promise<readonly TextContour[]>;
+  /** Šířka účaří (posun za posledním znakem) v mm – délka kotevní úsečky nového textu. */
+  advance(p: { readonly text: string; readonly font: TextFontId; readonly height: number }): Promise<number>;
+}
+/** Křivky textů skici ve skutečné poloze (Curve2 line/bspline) s odvozenými id; čistá funkce bez fontu. */
+export function textCurves(data: SketchData): readonly Curve2[];
+/** Id entity, ze které odvozená křivka pochází (kopie pole i písmeno textu), jinak null; nahrazuje patternOfCopy v picku. */
+export function derivedOwner(id: string): SketchEntityId | null;
+```
+
+- **Lokální souřadnice:** x podél účaří od `p1` kotevní úsečky, y kolmo vlevo (nahoru pro vodorovnou úsečku zleva doprava), mm. `textCurves` je převede: `P = p1 + x·û + y·(−û.y, û.x)`, `û` = jednotkový směr `p1 → p2`; úsečka nulové délky → žádné křivky (jako zrcadlení, M36). Tah kotvy tedy font nepotřebuje.
+- **Úsek → `Curve2`:** 2 póly → `line`; 3 nebo 4 póly → `bspline` stupně 2 nebo 3 s uzly `[0…0, 1…1]` (Bézierova křivka je přesně B-spline, [[M29-spliny|M29]]).
+- **Odvozené id:** `<id textu>:<char>-<code>.<smyčka>.<úsek>` (smyčka a úsek = pořadí v rámci znaku). Změna jiného znaku, posunutí nebo otočení kotvy id nemění; změna znaku na indexu nebo vložení před něj ho změní (reference na to písmeno se rozpadne, ostatní přežijí). `derivedOwner` uzná kopie polí (M36) i písmena textu.
+- **Kontrola dat** (`sketch.invalidEntity`): `text` neprázdný řetězec nejvýš `MAX_TEXT_LENGTH` kódových bodů bez řídicích znaků (`\p{Cc}`); `font` z `TEXT_FONTS`; `height > 0` konečné; `baseline` vede na úsečku; `contours` pole, každá smyčka s `char` v rozsahu, `code === [...text][char].codePointAt(0)`, ≥ 1 úsek, každý úsek 2–4 konečné body, smyčka uzavřená (do 1e-9 · max(1, |souřadnice|)) a navazující (konec úseku = začátek dalšího). Znak bez smyček (mezera) je v pořádku. Vazby na text nesmějí odkazovat; text není zdrojem pole (`isPatternSource` → false).
+- **Mazání a editace:** smazání kotevní úsečky (nebo jejího bodu) smaže text; smazání textu kotevní úsečku nemaže. `toggleConstruction` přepíná i text (konstrukční text se kreslí čárkovaně a oblasti netvoří). `constraintFor`/`dimensionFor` s textem → `null`.
+- **Oblasti:** `regionCurves` přidá křivky nekonstrukčních textů z `textCurves` (za kopie polí); díry písmen (o, a, B) řeší jádro. Jména ploch `face:side:<text>:<char>-<code>.<smyčka>.<úsek>`.
+- **Řešič:** text do řešiče nevstupuje; kotevní úsečka je běžná entita (vazby a kóty na ni jdou).
+- **Kresba a výběr:** kresba editované i regenerované skice přidá `textCurves` stylem textu; pick odvozeného id se přeloží `derivedOwner` na id textu (klik na písmeno vybere text). Snapper text ignoruje. Glyfy text nemá.
+- **Adaptér `text-opentype`** (prstenec 3, jako `solver-planegcs`; závisí na `core`, `sketch`; npm `opentype.js`; jen `app` ho importuje): `createOpentypeOutliner(loadFont: (font: TextFontId) => Promise<ArrayBuffer>): TextOutliner` – font se načte a naparsuje při prvním použití a drží v cache. Obrys: `font.getPath(text, 0, 0, height)` → příkazy M/L/Q/C/Z; souřadnice y se převrátí (opentype má y dolů), smyčky se rozdělí podle znaků přes `font.stringToGlyphs` a posuny (`advanceWidth`, kerning podle opentype výchozího). Úsečky nulové délky se vynechají. Fonty: soubory `.ttf` (podmnožina latinky s českou diakritikou, licence OFL v `LICENSE` vedle) v `src/text-opentype/fonts/`; prohlížeč je načte přes URL z Vite (`?url`), Node testy přes `fs`. Znak, který font nemá, dá glyf `.notdef` (obdélník) – žádná chyba.
+- **Nástroj Text** (`sketch.text`, skupina `draw`, bez zkratky): klik (přes snapper) = počátek účaří; zapíše kotevní konstrukční úsečku vodorovně délky `advance` a text `"Text"`, font `sans`, výška 10 mm (obrysy přes `TextOutliner` před zápisem), jedním `addGeometry` bez vazeb; text se vybere a panel dá fokus poli řetězce. Esc deaktivuje.
+- **Úprava:** `SketchSession.setTextParams(id, { text?, font?, height? }): Promise<boolean>` – ověří hodnoty, přepočítá `contours` přes `TextOutliner`, zapíše jedním `setParams` bez řešiče (fronta jako `toggleConstruction`); neplatné → `false`. Panel skici při výběru právě jednoho textu ukáže pole Text, Font (výběr z `TEXT_FONTS`, popisky `sketch.font.sans|serif|mono`) a Výška (mm). `SketchSession` dostane `TextOutliner` v závislostech jako `solver`; `app` ho vytvoří (`createOpentypeOutliner` s načítáním přes URL fontů).
+
+
 ## Testy
 
 - `sketch`: `parseSketchData` pro každé pravidlo (platná data, každý druh chyby s `index`); `constraintFor` a `dimensionFor` pro platné i neplatné výběry; `measure`; `removeItems` (kaskáda bod → křivky → osiřelé body → vazby); `toggleConstruction`; `regionCurves` (M30: konstrukční křivky ne, id u všech, spline jako `bspline`); oblasti (do M29 `computeRegions`, od M30 kontraktová sada jádra `describeGeometryKernelContract`, proti fake i OCCT): obdélník (1 oblast, jméno z id 4 úseček, plocha), dva obdélníky vedle sebe se sdílenou hranou (2 oblasti), obdélník s kružnicí uvnitř (díra, 2 oblasti), kružnice v kružnici v kružnici, drážka z úseček a tečných oblouků (řazení při shodě úhlu), otevřená polyline (0), polyline s „ocáskem“ (prořezání), konstrukční úsečka uvnitř obdélníku (ignorována), křížící se úsečky (`crossing`), body spojené `coincident` (splynutí uzlů), stabilita jména po změně souřadnic a pořadí entit; `FakeSolver`.
