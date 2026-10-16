@@ -48,6 +48,7 @@ import {
   snapComputed,
   withoutOwnAlignment,
   withTyped,
+  computedTolerance,
 } from './shape';
 import type { AxisKind } from './shape';
 
@@ -115,7 +116,14 @@ export function createRectangle3pTool(sketches: SketchEditor): Tool {
       if (target === null || tolerance === null) return;
       const data = sessionData(session, []);
       const values = inputValues(mods);
-      const step = rectangle3pStep(data, progress, target, tolerance, mode.infer, values);
+      const step = rectangle3pStep(
+        data,
+        progress,
+        target,
+        computedTolerance(mode, tolerance),
+        mode.infer,
+        values,
+      );
       previewInference(session, target.at, stepInferences(step), target.guides);
       if (progress === null) return;
       // A degenerate side or rectangle is not drawn.
@@ -139,7 +147,14 @@ export function createRectangle3pTool(sketches: SketchEditor): Tool {
       if (target === null || tolerance === null) return;
       const data = sessionData(session, []);
       const values = inputValues(mods);
-      const step = rectangle3pStep(data, progress, target, tolerance, mode.infer, values);
+      const step = rectangle3pStep(
+        data,
+        progress,
+        target,
+        computedTolerance(mode, tolerance),
+        mode.infer,
+        values,
+      );
       switch (step.kind) {
         case 'none':
           return;

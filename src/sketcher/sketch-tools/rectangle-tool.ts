@@ -39,6 +39,7 @@ import {
 } from './common';
 import { constrainSize, measureSize, SIZE_FIELDS, sizeDimensions } from './rectangle-input';
 import { freeTarget, placePoint, sessionData, snapAt, snapPoint, snapToleranceAt } from './snap';
+import { computedTolerance } from './shape';
 import type { PlacedPoint, SnapTarget } from './snap';
 
 /** Four corners a, b, c, d (lines ab, bc, cd, da). */
@@ -76,7 +77,13 @@ export function createRectangleTool(sketches: SketchEditor): Tool {
       const target = snapAt(ctx, session, x, y, mode);
       const tolerance = snapToleranceAt(ctx, session, x, y);
       if (target === null || tolerance === null) return;
-      const step = rectangleStep(sessionData(session, []), corner, target, tolerance, mode.infer);
+      const step = rectangleStep(
+        sessionData(session, []),
+        corner,
+        target,
+        computedTolerance(mode, tolerance),
+        mode.infer,
+      );
       previewInference(session, target.at, stepInferences(step), target.guides);
       if (corner === null) return;
       const [a, b, c, d] = corners(corner.at, target.at);
@@ -87,7 +94,13 @@ export function createRectangleTool(sketches: SketchEditor): Tool {
       const target = snapAt(ctx, session, x, y, mode);
       const tolerance = snapToleranceAt(ctx, session, x, y);
       if (target === null || tolerance === null) return;
-      const step = rectangleStep(sessionData(session, []), corner, target, tolerance, mode.infer);
+      const step = rectangleStep(
+        sessionData(session, []),
+        corner,
+        target,
+        computedTolerance(mode, tolerance),
+        mode.infer,
+      );
       switch (step.kind) {
         case 'none':
           return;

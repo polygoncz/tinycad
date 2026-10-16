@@ -29,7 +29,14 @@ import {
 import { constrainSize, measureSize, SIZE_FIELDS, sizeDimensions } from './rectangle-input';
 import { placePoint, samePoint, sessionData, snapAt, snapToleranceAt } from './snap';
 import type { SnapTarget } from './snap';
-import { addShape, shapeIds, snapComputed, withoutOwnAlignment, withTyped } from './shape';
+import {
+  addShape,
+  computedTolerance,
+  shapeIds,
+  snapComputed,
+  withoutOwnAlignment,
+  withTyped,
+} from './shape';
 
 /** Corners a, b, c, d (lines ab, bc, cd, da); c is the clicked corner. */
 type Corners = readonly [SnapTarget, SnapTarget, SnapTarget, SnapTarget];
@@ -67,7 +74,13 @@ export function createRectangleCenterTool(sketches: SketchEditor): Tool {
       const tolerance = snapToleranceAt(ctx, session, x, y);
       if (target === null || tolerance === null) return;
       const data = sessionData(session, []);
-      const step = rectangleCenterStep(data, center, target, tolerance, mode.infer);
+      const step = rectangleCenterStep(
+        data,
+        center,
+        target,
+        computedTolerance(mode, tolerance),
+        mode.infer,
+      );
       previewInference(session, target.at, stepInferences(step), target.guides);
       if (center === null) return;
       // A degenerate rectangle is not drawn.
@@ -80,7 +93,13 @@ export function createRectangleCenterTool(sketches: SketchEditor): Tool {
       const tolerance = snapToleranceAt(ctx, session, x, y);
       if (target === null || tolerance === null) return;
       const data = sessionData(session, []);
-      const step = rectangleCenterStep(data, center, target, tolerance, mode.infer);
+      const step = rectangleCenterStep(
+        data,
+        center,
+        target,
+        computedTolerance(mode, tolerance),
+        mode.infer,
+      );
       switch (step.kind) {
         case 'none':
           return;

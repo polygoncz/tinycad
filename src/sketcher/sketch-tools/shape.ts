@@ -151,3 +151,12 @@ export function addShape(
     { required: new Set(draft.required) },
   );
 }
+
+/**
+ * The snap tolerance of the computed corners of a rectangle (M32): 0 with a point of the numeric
+ * input, so a corner of a typed size never jumps onto a nearby point (the solver would then move
+ * the typed size); otherwise `tolerance`.
+ */
+export function computedTolerance(mode: { readonly input?: Vec2 }, tolerance: number): number {
+  return mode.input === undefined ? tolerance : 0;
+}

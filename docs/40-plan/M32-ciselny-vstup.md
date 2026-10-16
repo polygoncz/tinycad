@@ -43,7 +43,7 @@ Pavel 2026-10-16: „Chtěl bych ještě dodělat do Sketch následující featu
 - [x] Rozhodnout [[Q090 Číselný vstup při kreslení|Q090]] (styl Fusion, nebo Onshape; souřadnice; vznik kót).
 - [x] Model vstupu a Tab na plátně.
 - [x] Vstup v `clickTool`, vrstva v `ui`, úsečka, bod a přímka.
-- [ ] Obdélníky, kružnice a oblouk.
+- [x] Obdélníky, kružnice a oblouk.
 - [x] Drážky.
 - [ ] E2e a spec.
 
@@ -104,5 +104,6 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **Úkol 1 hotový:** `sketcher/numeric-input.ts` (50 tabulkových testů), `ViewKeyEvent.consume` (`ToolManager`, `render/view-events.ts`). Upřesnění krajních případů (Shift, `-` uprostřed, Tab s neplatným textem) dopsané do spec. `npm run check` zelený (6924 testů).
 - **Úkol 2 hotový:** vstup v `clickTool` (`ToolMods`, `SnapMode.input` → `freeTarget`), `SketchState.numericInput`, `SketchInput.vue`, úsečka/bod/přímka s kótami. **B9 (rozhodnutí stopy podle akceptačního kritéria):** zamčený úhel vynechá automatické osy, rovnoběžnost, kolmost a tečnost, zamčená délka vynechá `equal` (`withoutLocked`) – jinak by řešič zadaný rozměr posunul. API propsané do spec 10, 11, 12. `npm run check` zelený (6996 testů).
 - **Úkol 4 hotový:** drážky (3 druhy) s poli a povinnými kótami (`distance`, `diameter`), 16 testů; `sweep` modulo 360° a úhel začátku oblouku bez kóty dopsané do spec.
+- **Úkol 3 hotový:** obdélníky (3 druhy), kružnice a oblouk s poli a povinnými kótami (`rectangle-input.ts`, `withTyped`), 24 testů. Po kontrole doplněno: dopočítané rohy se zadaným rozměrem se nepřichytí k blízkému bodu (`computedTolerance`, test). Zamčený průměr/poloměr vypne `equal` (B9).
 
 ## Retrospektiva

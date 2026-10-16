@@ -230,6 +230,23 @@ describe('the numeric input of the rectangle tool (M32)', () => {
     ]);
   });
 
+  it('a typed size never snaps a computed corner onto a nearby point', async () => {
+    // A lone point 1 mm from the computed corner b (50, 10): within the snap tolerance.
+    const near = data([{ kind: 'point', id: 'n', x: 51, y: 10 }]);
+    const { viewport, session } = await drawing('sketch.rectangle', near);
+    move(viewport, [70, 50]);
+    await type(viewport, [...chars('10'), 'Tab', ...chars('10'), 'Enter']);
+    await type(viewport, [...chars('40'), 'Tab', ...chars('20'), 'Enter']);
+
+    expect(cornersOf(session)).toEqual([
+      [10, 10],
+      [50, 10],
+      [50, 30],
+      [10, 30],
+    ]);
+    expect(xyOf(session, 'n')).toEqual([51, 10]);
+  });
+
   it('the sign of the width and the height follows the quadrant of the cursor', async () => {
     const { viewport, session } = await drawing('sketch.rectangle');
     await click(viewport, [10, 10]);
