@@ -1,3 +1,4 @@
+import { assert } from '@/core';
 import type { Vec2 } from '@/core';
 import { nearestParam, paramRange, pointAt, samePoint } from './curve-param';
 import { curve2 } from './geometry';
@@ -15,7 +16,7 @@ import type {
 } from './model';
 import { coordinatesOf, endIds, findCurve, isCurveEntity, newPoints, rebuild } from './trim';
 import type { IdSource, SketchEdit } from './trim';
-import { dist, dot, sub } from './vec2';
+import { dist, dot, length } from './vec2';
 
 // Fillet and chamfer between two sketch curves (spec 12 "Zaoblení a sražení ve skice (M34)"):
 // pure functions over the data rules of trim (M33). The geometry comes in the request: the
@@ -23,7 +24,7 @@ import { dist, dot, sub } from './vec2';
 // chamfer computed by the tool (through SketchGeometry.intersections on an arc).
 
 /** Only lines and arcs are filleted and chamfered (the solver has no arc–spline tangency). */
-type Edge = SketchLine | SketchArc;
+export type FilletEdge = SketchLine | SketchArc;
 
 /** The two curves of a corner, in the order of the entities. */
 export interface Corner {
@@ -75,7 +76,7 @@ export function cornerOf(data: SketchData, point: SketchEntityId): Corner | null
   if (data.entities.find((e) => e.id === point)?.kind !== 'point') return null;
   const using = data.entities.filter((e) => isCurveEntity(e) && endIds(e).includes(point));
   const [a, b] = using;
-  if (using.length !== 2 || !isEdge(a) || !isEdge(b)) return null;
+  if (using.length !== 2 || !isFilletEdge(a) || !isFilletEdge(b)) return null;
   return Object.freeze({ a: a.id, b: b.id });
 }
 
@@ -193,8 +194,60 @@ export function chamferEdit(
   return finish(moved.edit, [chamfer], virtual, [first, second], first.id);
 }
 
-function isEdge(e: SketchEntity | null | undefined): e is Edge {
+/** Whether the entity is a line or an arc, the curves a fillet and a chamfer take. */
+export function isFilletEdge(e: SketchEntity | null | undefined): e is FilletEdge {
   return e?.kind === 'line' || e?.kind === 'arc';
+}
+
+/**
+ * The unit direction in which the curve leaves its end `end`: a line towards its other end, an
+ * arc along its tangent (counter-clockwise from its start, clockwise from its end). Null when
+ * `end` is no end of the curve, a point is missing, or the direction is degenerate.
+ */
+export function directionFromEnd(
+  data: SketchData,
+  curve: FilletEdge,
+  end: SketchEntityId,
+): Vec2 | null {
+  if (!endIds(curve).includes(end)) return null;
+  const points = pointsById(data);
+  const at = points.get(end);
+  if (at === undefined) return null;
+  const d = leaving(curve, end, [at.x, at.y], points);
+  if (d === null) return null;
+  const l = length(d);
+  return l < 1e-9 ? null : [d[0] / l, d[1] / l];
+}
+
+/** The length of a line, or of an arc along it. */
+export function edgeLength(data: SketchData, curve: FilletEdge): number {
+  const c = curve2(curve, pointsById(data));
+  if (c.kind === 'arc') {
+    const [, sweep] = paramRange(c);
+    return dist(c.from, c.center) * sweep;
+  }
+  return c.kind === 'line' ? dist(c.from, c.to) : 0;
+}
+
+/**
+ * The direction (not unit) in which the curve leaves its end `end` taken at p: a line towards its
+ * other end, an arc counter-clockwise from its start, clockwise from its end. Null for a missing
+ * point.
+ */
+function leaving(
+  curve: FilletEdge,
+  end: SketchEntityId,
+  p: Vec2,
+  points: ReadonlyMap<SketchEntityId, SketchPoint>,
+): Vec2 | null {
+  if (curve.kind === 'line') {
+    const other = points.get(end === curve.p1 ? curve.p2 : curve.p1);
+    return other === undefined ? null : [other.x - p[0], other.y - p[1]];
+  }
+  const center = points.get(curve.center);
+  if (center === undefined) return null;
+  const r: Vec2 = [p[0] - center.x, p[1] - center.y];
+  return end === curve.start ? [-r[1], r[0]] : [r[1], -r[0]];
 }
 
 /** The curves of the request: two different lines or arcs; with a corner, its curves. */
@@ -203,11 +256,11 @@ function edgePair(
   a: SketchEntityId,
   b: SketchEntityId,
   corner: SketchEntityId | undefined,
-): readonly [Edge, Edge] | null {
+): readonly [FilletEdge, FilletEdge] | null {
   if (a === b) return null;
   const ca = findCurve(data, a);
   const cb = findCurve(data, b);
-  if (!isEdge(ca) || !isEdge(cb)) return null;
+  if (!isFilletEdge(ca) || !isFilletEdge(cb)) return null;
   if (corner !== undefined) {
     const pair = cornerOf(data, corner);
     if (pair === null || ![a, b].every((id) => id === pair.a || id === pair.b)) return null;
@@ -220,7 +273,7 @@ function edgePair(
  * would degenerate: p on the end that stays; in a corner p not strictly inside the curve.
  */
 function movedEnd(
-  curve: Edge,
+  curve: FilletEdge,
   p: Vec2,
   corner: SketchEntityId | undefined,
   points: ReadonlyMap<SketchEntityId, SketchPoint>,
@@ -253,13 +306,13 @@ interface MovedEnds {
  */
 function moveEnds(
   data: SketchData,
-  a: readonly [Edge, SketchEntityId, Vec2],
-  b: readonly [Edge, SketchEntityId, Vec2],
+  a: readonly [FilletEdge, SketchEntityId, Vec2],
+  b: readonly [FilletEdge, SketchEntityId, Vec2],
   corner: SketchEntityId | undefined,
   ids: IdSource,
 ): MovedEnds | null {
   const keep = corner === undefined ? {} : { keep: corner };
-  const move = (from: SketchData, [curve, end, p]: readonly [Edge, SketchEntityId, Vec2]) => {
+  const move = (from: SketchData, [curve, end, p]: readonly [FilletEdge, SketchEntityId, Vec2]) => {
     // The curve as it is in `from` (its points are the same as in data).
     const made = newPoints(curve.id, ids);
     const point = made.newPoint(p);
@@ -292,18 +345,15 @@ function moveEnds(
  * line from its staying end, an arc counter-clockwise into its end, clockwise into its start.
  */
 function keptDirection(
-  curve: Edge,
+  curve: FilletEdge,
   moved: SketchEntityId,
   p: Vec2,
   points: ReadonlyMap<SketchEntityId, SketchPoint>,
 ): Vec2 {
-  if (curve.kind === 'line') {
-    const staying = moved === curve.p1 ? curve.p2 : curve.p1;
-    return sub(p, coordinatesOf(points, staying));
-  }
-  const r = sub(p, coordinatesOf(points, curve.center));
-  const ccw: Vec2 = [-r[1], r[0]];
-  return moved === curve.end ? ccw : [-ccw[0], -ccw[1]];
+  // Running into the end is leaving it backwards.
+  const d = leaving(curve, moved, p, points);
+  assert(d !== null, `fillet: missing point of '${curve.id}'`);
+  return [-d[0], -d[1]];
 }
 
 function newPoint(p: Vec2, ids: IdSource): SketchPoint {
@@ -311,15 +361,15 @@ function newPoint(p: Vec2, ids: IdSource): SketchPoint {
 }
 
 /** A new curve is construction when both curves are. */
-function construction(a: Edge, b: Edge): { readonly construction?: true } {
+function construction(a: FilletEdge, b: FilletEdge): { readonly construction?: true } {
   return a.construction === true && b.construction === true ? { construction: true } : {};
 }
 
 /** The virtual sharp corner: pointOnCurve of the corner to both curves (none without a corner). */
 function virtualCorner(
   corner: SketchEntityId | undefined,
-  a: Edge,
-  b: Edge,
+  a: FilletEdge,
+  b: FilletEdge,
   ids: IdSource,
 ): readonly SketchConstraint[] {
   if (corner === undefined) return [];

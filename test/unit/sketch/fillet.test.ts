@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec2 } from '@/core';
 import { measure } from '@/sketch/edit';
-import { chamferEdit, cornerOf, filletEdit } from '@/sketch/fillet';
+import {
+  chamferEdit,
+  cornerOf,
+  directionFromEnd,
+  edgeLength,
+  filletEdit,
+  isFilletEdge,
+} from '@/sketch/fillet';
 import type { FilletRequest } from '@/sketch/fillet';
 import { samePoint } from '@/sketch/curve-param';
 import { curve2 } from '@/sketch/geometry';
@@ -9,12 +16,14 @@ import { pointsById } from '@/sketch/points';
 import { isPattern } from '@/sketch/model';
 import type { Curve2 } from '@/sketch/geometry';
 import type {
+  SketchArc,
   SketchConstraint,
   SketchConstraintId,
   SketchCurve,
   SketchData,
   SketchEntity,
   SketchEntityId,
+  SketchLine,
 } from '@/sketch/model';
 import { parseSketchData } from '@/sketch/parse';
 import { createFakeSketchGeometry, rectangleData } from '@/sketch/testing';
@@ -518,3 +527,71 @@ function sweepOf(data: SketchData, arcId: string): number {
   const a = Math.atan2(e[1] - o[1], e[0] - o[0]) - Math.atan2(s[1] - o[1], s[0] - o[0]);
   return ((a % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
 }
+
+/** A line p → q along x and a quarter arc k around o from q to r (counter-clockwise). */
+function lineAndArc(): SketchData {
+  return sketch([
+    { kind: 'point', id: 'p', x: 0, y: 0 },
+    { kind: 'point', id: 'q', x: 10, y: 0 },
+    { kind: 'point', id: 'o', x: 10, y: 5 },
+    { kind: 'point', id: 'r', x: 15, y: 5 },
+    { kind: 'line', id: 'l', p1: 'p', p2: 'q' },
+    { kind: 'arc', id: 'k', center: 'o', start: 'q', end: 'r' },
+    { kind: 'circle', id: 'c', center: 'o', radius: 2 },
+  ]);
+}
+
+function edgeOf(data: SketchData, name: string): SketchLine | SketchArc {
+  const e = entity(data, name);
+  if (!isFilletEdge(e)) throw new Error(`no line or arc ${name}`);
+  return e;
+}
+
+describe('isFilletEdge', () => {
+  it('is true for a line and an arc only', () => {
+    const data = lineAndArc();
+    expect(isFilletEdge(entity(data, 'l'))).toBe(true);
+    expect(isFilletEdge(entity(data, 'k'))).toBe(true);
+    expect(isFilletEdge(entity(data, 'c'))).toBe(false);
+    expect(isFilletEdge(entity(data, 'p'))).toBe(false);
+    expect(isFilletEdge(undefined)).toBe(false);
+    expect(isFilletEdge(null)).toBe(false);
+  });
+});
+
+describe('directionFromEnd', () => {
+  it('leaves a line towards its other end, as a unit vector', () => {
+    const data = lineAndArc();
+    const l = edgeOf(data, 'l');
+    expectPoint(directionFromEnd(data, l, id('p')) ?? [NaN, NaN], [1, 0]);
+    expectPoint(directionFromEnd(data, l, id('q')) ?? [NaN, NaN], [-1, 0]);
+  });
+
+  it('leaves an arc along its tangent: counter-clockwise from its start, clockwise from its end', () => {
+    const data = lineAndArc();
+    const k = edgeOf(data, 'k');
+    // q is below the centre: counter-clockwise is +x; r is right of it: clockwise is -y.
+    expectPoint(directionFromEnd(data, k, id('q')) ?? [NaN, NaN], [1, 0]);
+    expectPoint(directionFromEnd(data, k, id('r')) ?? [NaN, NaN], [0, -1]);
+  });
+
+  it('is null for a point that is no end of the curve and for a line of zero length', () => {
+    const data = lineAndArc();
+    expect(directionFromEnd(data, edgeOf(data, 'l'), id('r'))).toBeNull();
+    expect(directionFromEnd(data, edgeOf(data, 'k'), id('p'))).toBeNull();
+    const zero = sketch([
+      { kind: 'point', id: 'a', x: 1, y: 1 },
+      { kind: 'point', id: 'b', x: 1, y: 1 },
+      { kind: 'line', id: 'z', p1: 'a', p2: 'b' },
+    ]);
+    expect(directionFromEnd(zero, edgeOf(zero, 'z'), id('a'))).toBeNull();
+  });
+});
+
+describe('edgeLength', () => {
+  it('is the length of a line and the length of an arc along it', () => {
+    const data = lineAndArc();
+    expect(edgeLength(data, edgeOf(data, 'l'))).toBeCloseTo(10, 9);
+    expect(edgeLength(data, edgeOf(data, 'k'))).toBeCloseTo((5 * Math.PI) / 2, 9);
+  });
+});

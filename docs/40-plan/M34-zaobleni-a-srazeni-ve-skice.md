@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 34
 aliases:
   - M34
@@ -15,7 +15,7 @@ specs:
 depends_on:
   - "[[M33-trim-extend-split]]"
 started: 2026-10-16
-finished:
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-16
@@ -47,7 +47,7 @@ Předpřipravený build nemá `ChFi2d_*`; zaoblení úseček a oblouků je analy
 - [x] Jádro: `filletArc` (fake, OCCT, kontraktová sada).
 - [x] `sketch`: `cornerOf`, `filletEdit`, `chamferEdit`, port `fillet`.
 - [x] `app` port, `rewrite` s otevřením kóty, nástroje v liště, e2e.
-- [ ] Spec podle skutečnosti.
+- [x] Spec podle skutečnosti.
 
 ## Implementační plán
 
@@ -98,4 +98,21 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 
 **2026-10-16/17 – natažen `main` s M36, pak s M32 a M33.** Sémantické konflikty s M36: entity polí nejsou křivky pro úpravy ani průsečíky (`isCurveEntity`, `isPattern`; kopie pole se nevyberou). Lišta: se třemi rodinami úprav Vazby při 1280 px přetekly do „…“ (e2e m12 aj.); Pavel při slučování M33 rozhodl **jednu rodinu `modify`** – nástroje M34 jsou v ní za `sketch.split`, e2e vybírá přes šipku „Ořezat“. Po natažení: `npm run check` 7601 unit + 42 integračních, e2e 176/176.
 
+**Architektonická revize:** bez závažných porušení. Opraveno: geometrie dat skici zdvojená v `corner-tool.ts` → exporty `isFilletEdge`, `directionFromEnd`, `edgeLength`, `endIds` ze `sketch`; nástroje dostávají jen `SketchGeometry`, ne celou session; spec 12 už netvrdí, že sražení bere číselný vstup (napojení na M32 a HUD nápověda → M35).
+
 ## Retrospektiva
+
+_(Návrh stopy, Pavel doplní nebo upraví.)_
+
+**Splnění kritérií:** zaoblení rohu obdélníku dá tečný oblouk a změna kóty poloměru drží tvar (e2e `m34.spec.ts`, roh zůstane zakótovaný přes virtuální ostrý roh); zaoblení nesousedících křivek je ořeže k bodům dotyku (unit testy `filletEdit`, kontraktová sada `filletArc` s body na prodloužení). `npm run check` 7607 unit + 42 integračních, e2e 176/176.
+
+**Co bylo jinak, než se čekalo:**
+- Build nemá `Geom2dGcc` ani `ChFi2d`, ale střed zaoblení jako průsečík ekvidistant fungoval – jen ekvidistanta nekonečné přímky v `InterCurveCurve` padá, pomohla oříznutá přímka.
+- Nejvíc práce nebyla geometrie, ale lišta: tři souběžné stopy přidávaly do skupiny Úpravy a při 1280 px přetekly Vazby. Rozhodnutí „jedna rodina úprav“ padlo až při slučování.
+- Sražení se dvěma vzdálenostmi a se stejnou vzdáleností se bez číselného vstupu neliší; svázat kóty by chtělo vazbu, kterou nemáme.
+
+**Co se osvědčilo:**
+- Virtuální ostrý roh – kóty obdélníku přežijí zaoblení bez nové vazby, stačí dvě `pointOnCurve`.
+- Náhled nástroje volá tutéž čistou funkci jako klik (`filletEdit` s dočasnými id) – co uživatel vidí, to se zapíše.
+- Natahování `main` hned po každém sloučení jiné stopy: konflikty malé a sémantické chyby (pole jako křivky) chytil typecheck.
+

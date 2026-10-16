@@ -4,9 +4,15 @@ import type {
   Curve2,
   CurveHit,
   FilletArc,
+  FilletEdge,
+  SketchArc,
   SketchConstraint,
   SketchConstraintDraft,
+  SketchData,
+  SketchEntity,
+  SketchEntityId,
   SketchGeometry,
+  SketchLine,
 } from '@/sketch';
 
 // Guards the public API: a value export removed or added by accident shows up here.
@@ -38,9 +44,13 @@ describe('sketch public API', () => {
         'cutsOf',
         'defaultPlacement',
         'dimensionFor',
+        'directionFromEnd',
+        'edgeLength',
+        'endIds',
         'endTangent',
         'extendEdit',
         'filletEdit',
+        'isFilletEdge',
         'nearestParam',
         'paramRange',
         'pieceAt',
@@ -211,6 +221,19 @@ describe('sketch public API', () => {
       readonly tb: number;
       readonly overlap?: true;
     }>();
+  });
+
+  it('has the corner helpers of the fillet and chamfer tools (M34, spec 12)', () => {
+    expectTypeOf<FilletEdge>().toEqualTypeOf<SketchLine | SketchArc>();
+    expectTypeOf(sketch.isFilletEdge).toEqualTypeOf<
+      (e: SketchEntity | null | undefined) => e is FilletEdge
+    >();
+    expectTypeOf(sketch.directionFromEnd).toEqualTypeOf<
+      (data: SketchData, curve: FilletEdge, end: SketchEntityId) => readonly [number, number] | null
+    >();
+    expectTypeOf(sketch.edgeLength).toEqualTypeOf<
+      (data: SketchData, curve: FilletEdge) => number
+    >();
   });
 
   it('keeps SPLINE_TOLERANCE for the drawing and the snapper (M30)', () => {

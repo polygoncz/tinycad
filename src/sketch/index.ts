@@ -103,7 +103,7 @@ export { SPLINE_TOLERANCE } from './geometry';
 export type { ConstraintSolver, SolveInput, SolveResult, SolveStatus } from './solver';
 export type { CurveHit, FilletArc, SketchGeometry } from './geometry-port';
 export { nearestParam, paramRange, piecePolyline, pointAt, samePoint } from './curve-param';
-export { crossingPoints, cutsOf, extendEdit, pieceAt, splitEdit, trimEdit } from './trim';
+export { crossingPoints, cutsOf, endIds, extendEdit, pieceAt, splitEdit, trimEdit } from './trim';
 export type {
   CurveCut,
   CurvePiece,
@@ -113,5 +113,12 @@ export type {
   SplitRequest,
   TrimRequest,
 } from './trim';
-export { chamferEdit, cornerOf, filletEdit } from './fillet';
-export type { ChamferRequest, Corner, FilletRequest } from './fillet';
+export {
+  chamferEdit,
+  cornerOf,
+  directionFromEnd,
+  edgeLength,
+  filletEdit,
+  isFilletEdge,
+} from './fillet';
+export type { ChamferRequest, Corner, FilletEdge, FilletRequest } from './fillet';

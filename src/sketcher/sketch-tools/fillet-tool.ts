@@ -5,11 +5,11 @@
 // dimension opens for editing.
 
 import type { Vec2 } from '@/core';
-import { curve2, filletEdit, pointsById } from '@/sketch';
+import { curve2, directionFromEnd, filletEdit, pointsById } from '@/sketch';
 import type { FilletArc } from '@/sketch';
 import type { Tool } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
-import { createCornerTool, directionFrom } from './corner-tool';
+import { createCornerTool } from './corner-tool';
 import type { CornerKey, PickedPair } from './corner-tool';
 
 interface FilletKey extends CornerKey {
@@ -25,9 +25,9 @@ export function createFilletTool(sketches: SketchEditor): Tool {
       return near === null ? null : { pair, value: radius, near };
     },
     sameRest: (a, b) => a.near[0] === b.near[0] && a.near[1] === b.near[1],
-    answer(session, { pair, value, near }) {
+    answer(geometry, { pair, value, near }) {
       const points = pointsById(pair.data);
-      return session.geometry.fillet(curve2(pair.a, points), curve2(pair.b, points), value, near);
+      return geometry.fillet(curve2(pair.a, points), curve2(pair.b, points), value, near);
     },
     edit({ pair, value }, arc, ids) {
       const corner = pair.corner === null ? {} : { corner: pair.corner };
@@ -47,11 +47,10 @@ export function createFilletTool(sketches: SketchEditor): Tool {
 function insideCorner(pair: PickedPair, radius: number): Vec2 | null {
   const { corner } = pair;
   if (corner === null) return null;
-  const points = pointsById(pair.data);
-  const at = points.get(corner);
+  const at = pointsById(pair.data).get(corner);
   if (at === undefined) return null;
-  const da = directionFrom(pair.a, corner, at, points);
-  const db = directionFrom(pair.b, corner, at, points);
+  const da = directionFromEnd(pair.data, pair.a, corner);
+  const db = directionFromEnd(pair.data, pair.b, corner);
   if (da === null || db === null) return null;
   const sum: Vec2 = [da[0] + db[0], da[1] + db[1]];
   const length = Math.hypot(sum[0], sum[1]);

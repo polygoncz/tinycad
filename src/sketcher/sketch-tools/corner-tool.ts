@@ -10,7 +10,10 @@ import {
   isPattern,
   cornerOf,
   curve2,
+  edgeLength,
+  endIds,
   isDimension,
+  isFilletEdge,
   nearestParam,
   paramRange,
   piecePolyline,
@@ -19,15 +22,14 @@ import {
 } from '@/sketch';
 import type {
   Curve2,
+  FilletEdge,
   IdSource,
-  SketchArc,
   SketchConstraintId,
   SketchData,
   SketchEdit,
   SketchEntity,
   SketchEntityId,
-  SketchLine,
-  SketchPoint,
+  SketchGeometry,
 } from '@/sketch';
 import type { Tool, ToolContext } from '@/interaction';
 import { isPlainEscape } from '@/interaction';
@@ -37,18 +39,11 @@ import { clearPreview, clickTool, cursorAt, distance, previewPairs } from './com
 import { idSource, unchanged } from './curve-pick';
 import { entityAt } from './snap';
 
-/** Only lines and arcs are filleted and chamfered (spec 12). */
-export type Edge = SketchLine | SketchArc;
-
-export function isEdge(e: SketchEntity | undefined): e is Edge {
-  return e?.kind === 'line' || e?.kind === 'arc';
-}
-
 /** Two lines or arcs the user picked. */
 export interface PickedPair {
   /** For a click on a corner the curve nearer the cursor, else the first picked curve. */
-  readonly a: Edge;
-  readonly b: Edge;
+  readonly a: FilletEdge;
+  readonly b: FilletEdge;
   /** The end point a and b share as a corner (cornerOf), or null. */
   readonly corner: SketchEntityId | null;
   /** True for a click on the corner point, false for two curves. */
@@ -76,7 +71,7 @@ export interface CornerToolSpec<K extends CornerKey, A> {
   /** Whether two keys ask the same (beyond the pair and the value, which are compared already). */
   sameRest(a: K, b: K): boolean;
   /** Asks the kernel; null or a rejection = nothing to offer. */
-  answer(session: SketchSession, key: K): Promise<A | null>;
+  answer(geometry: SketchGeometry, key: K): Promise<A | null>;
   /** The edit of the answer (filletEdit, chamferEdit). */
   edit(key: K, answer: A, ids: IdSource): SketchEdit | null;
 }
@@ -101,7 +96,12 @@ interface FirstPick {
 /** What is under the cursor: a corner (with its pair), a line or an arc, or nothing. */
 type Under =
   | { readonly kind: 'corner'; readonly pair: PickedPair }
-  | { readonly kind: 'edge'; readonly edge: Edge; readonly at: Vec2; readonly data: SketchData };
+  | {
+      readonly kind: 'edge';
+      readonly edge: FilletEdge;
+      readonly at: Vec2;
+      readonly data: SketchData;
+    };
 
 export function createCornerTool<K extends CornerKey, A>(
   sketches: SketchEditor,
@@ -140,7 +140,7 @@ export function createCornerTool<K extends CornerKey, A>(
   /** Without a pair: the first picked curve stays visible, else nothing. */
   function showFirst(ctx: ToolContext, session: SketchSession): void {
     const picked = first === null ? undefined : session.state.get().entities.find(byId(first.id));
-    if (!isEdge(picked)) {
+    if (!isFilletEdge(picked)) {
       clearPreview(ctx);
       return;
     }
@@ -229,7 +229,7 @@ async function answerOf<K extends CornerKey, A>(
 ): Promise<Answer<A> | null> {
   let input: A | null;
   try {
-    input = await spec.answer(session, key);
+    input = await spec.answer(session.geometry, key);
   } catch {
     // The kernel failed (no solution, or not running): nothing to offer.
     return null;
@@ -290,7 +290,7 @@ function underCursor(ctx: ToolContext, session: SketchSession, x: number, y: num
     if (corner === null) return null;
     const ca = entities.find(byId(corner.a));
     const cb = entities.find(byId(corner.b));
-    if (!isEdge(ca) || !isEdge(cb)) return null;
+    if (!isFilletEdge(ca) || !isFilletEdge(cb)) return null;
     // The curve nearer the cursor first (the reference of a chamfer with an angle, spec 12).
     const [a, b] = distanceTo(ca, at, data) <= distanceTo(cb, at, data) ? [ca, cb] : [cb, ca];
     return {
@@ -298,7 +298,7 @@ function underCursor(ctx: ToolContext, session: SketchSession, x: number, y: num
       pair: { a, b, corner: entity.id, clickedCorner: true, near: at, data },
     };
   }
-  return isEdge(entity) ? { kind: 'edge', edge: entity, at, data } : null;
+  return isFilletEdge(entity) ? { kind: 'edge', edge: entity, at, data } : null;
 }
 
 /** The pair of what is under the cursor: a corner, or the first picked curve and another one. */
@@ -306,7 +306,7 @@ function pairOf(under: Under, first: FirstPick | null): PickedPair | null {
   if (under.kind === 'corner') return under.pair;
   if (first === null || first.id === under.edge.id) return null;
   const a = under.data.entities.find(byId(first.id));
-  if (!isEdge(a)) return null;
+  if (!isFilletEdge(a)) return null;
   const b = under.edge;
   const near: Vec2 = [(first.at[0] + under.at[0]) / 2, (first.at[1] + under.at[1]) / 2];
   const corner = sharedCorner(under.data, a, b, near);
@@ -317,11 +317,16 @@ function pairOf(under: Under, first: FirstPick | null): PickedPair | null {
  * The end a and b share as a corner (cornerOf names both): the tool sends it whenever there is
  * one, so the corner and its dimensions stay (spec 12). Of two such ends the one nearer `near`.
  */
-function sharedCorner(data: SketchData, a: Edge, b: Edge, near: Vec2): SketchEntityId | null {
+function sharedCorner(
+  data: SketchData,
+  a: FilletEdge,
+  b: FilletEdge,
+  near: Vec2,
+): SketchEntityId | null {
   const points = pointsById(data);
   let best: { readonly id: SketchEntityId; readonly d: number } | null = null;
-  for (const end of endsOf(a)) {
-    if (!endsOf(b).includes(end)) continue;
+  for (const end of endIds(a)) {
+    if (!endIds(b).includes(end)) continue;
     const corner = cornerOf(data, end);
     if (corner === null || ![a.id, b.id].every((id) => id === corner.a || id === corner.b)) {
       continue;
@@ -333,47 +338,9 @@ function sharedCorner(data: SketchData, a: Edge, b: Edge, near: Vec2): SketchEnt
   return best?.id ?? null;
 }
 
-export function endsOf(e: Edge): readonly SketchEntityId[] {
-  return e.kind === 'line' ? [e.p1, e.p2] : [e.start, e.end];
-}
-
-function distanceTo(e: Edge, p: Vec2, data: SketchData): number {
+function distanceTo(e: FilletEdge, p: Vec2, data: SketchData): number {
   const c = curve2(e, pointsById(data));
   return distance(pointAt(c, nearestParam(c, p)), p);
-}
-
-/**
- * The unit direction in which the curve leaves its end `corner`: a line towards its other end,
- * an arc along its tangent (counter-clockwise from its start, clockwise from its end).
- */
-export function directionFrom(
-  e: Edge,
-  corner: SketchEntityId,
-  at: SketchPoint,
-  points: ReadonlyMap<SketchEntityId, SketchPoint>,
-): Vec2 | null {
-  let d: Vec2;
-  if (e.kind === 'line') {
-    const other = points.get(e.p1 === corner ? e.p2 : e.p1);
-    if (other === undefined) return null;
-    d = [other.x - at.x, other.y - at.y];
-  } else {
-    const center = points.get(e.center);
-    if (center === undefined) return null;
-    const r: Vec2 = [at.x - center.x, at.y - center.y];
-    d = e.start === corner ? [-r[1], r[0]] : [r[1], -r[0]];
-  }
-  const length = Math.hypot(d[0], d[1]);
-  return length < 1e-9 ? null : [d[0] / length, d[1] / length];
-}
-
-/** The length of a line or of an arc along it. */
-export function edgeLength(c: Curve2): number {
-  if (c.kind === 'arc') {
-    const [, sweep] = paramRange(c);
-    return Math.hypot(c.from[0] - c.center[0], c.from[1] - c.center[1]) * sweep;
-  }
-  return c.kind === 'line' ? distance(c.from, c.to) : 0;
 }
 
 // ---- The value last used in the session ----
@@ -412,8 +379,7 @@ function valueOf(session: SketchSession, kind: MemoryKind, pair: PickedPair): nu
     const dim = session.state.get().constraints.find((c) => c.id === last.dimension);
     return dim !== undefined && isDimension(dim) ? dim.value : last.value;
   }
-  const points = pointsById(pair.data);
-  const shorter = Math.min(edgeLength(curve2(pair.a, points)), edgeLength(curve2(pair.b, points)));
+  const shorter = Math.min(edgeLength(pair.data, pair.a), edgeLength(pair.data, pair.b));
   if (!(shorter > 0)) return null;
   return Number((shorter / 4).toPrecision(2));
 }

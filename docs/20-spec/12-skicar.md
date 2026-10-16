@@ -1161,7 +1161,7 @@ Když dvě křivky sdílí koncový bod (roh), roh **zůstane** jako samostatný
 Jen v rohu (dvě úsečky/oblouky se sdíleným koncovým bodem). Rodina `fillet`: `sketch.fillet`, `sketch.chamfer` (dvě vzdálenosti), `sketch.chamferAngle` (vzdálenost a úhel).
 
 - **Body:** na křivce ve vzdálenosti (tětivě) `d` od rohu – úsečka po své délce, oblouk průsečík s kružnicí `(roh, d)` přes `geometry.intersections` (bližší rohu po oblouku). Vzdálenost větší než křivka → `null`.
-- **Dvě vzdálenosti:** obě `d` stejné (poslední použité, první ¼ kratší křivky); kóty `distance(roh, pA) = d`, `distance(roh, pB) = d`, první se otevře k úpravě. Kóty **nejsou svázané** (vazbu „stejná vzdálenost“ nemáme); stejné hodnoty jen při vytvoření. S číselným vstupem ([[M32-ciselny-vstup|M32]]) zadá uživatel obě hodnoty předem.
+- **Dvě vzdálenosti:** obě `d` stejné (poslední použité, první ¼ kratší křivky); kóty `distance(roh, pA) = d`, `distance(roh, pB) = d`, první se otevře k úpravě. Kóty **nejsou svázané** (vazbu „stejná vzdálenost“ nemáme); stejné hodnoty jen při vytvoření. Číselný vstup ([[M32-ciselny-vstup|M32]]) nástroje zaoblení a sražení zatím nepoužívají – hodnota jde z paměti a upraví se kótou; napojení na číselný vstup (obě hodnoty předem) je úkol M35 spolu s HUD nápovědou.
 - **Vzdálenost a úhel:** referenční křivka = první vybraná (u kliku na roh ta, ke které je kurzor blíž), **musí to být úsečka** (úhel kótujeme jen mezi úsečkami). Kóta `distance(roh, pA) = d` a `angle(sražení, a) = 45°`; bod na druhé křivce z úhlu (průsečík paprsku z `pA` přes `geometry.intersections`).
 - **Data** (`chamferEdit`): nová úsečka `pA → pB`, konce obou křivek u rohu přesunuté do `pA`, `pB` (nové sdílené body), roh → virtuální ostrý roh, kóty podle varianty.
 
@@ -1170,6 +1170,12 @@ Jen v rohu (dvě úsečky/oblouky se sdíleným koncovým bodem). Rodina `fillet
 export function filletEdit(data: SketchData, req: FilletRequest, ids: IdSource): SketchEdit | null;
 export function chamferEdit(data: SketchData, req: ChamferRequest, ids: IdSource): SketchEdit | null;
 export function cornerOf(data: SketchData, point: SketchEntityId): { readonly a: SketchEntityId; readonly b: SketchEntityId } | null;   // roh = bod dvou úseček/oblouků
+// pomůcky pro nástroje (revize M34: geometrie dat skici jen v sketch)
+export type FilletEdge = SketchLine | SketchArc;
+export function isFilletEdge(e: SketchEntity | null | undefined): e is FilletEdge;
+export function directionFromEnd(data: SketchData, curve: FilletEdge, end: SketchEntityId): Vec2 | null;   // jednotkový směr od konce dovnitř křivky (oblouk po tečně); null = end není konec / nulová délka
+export function edgeLength(data: SketchData, curve: FilletEdge): number;   // oblouk po oblouku
+export function endIds(curve: SketchCurve): readonly SketchEntityId[];      // koncové body (trim.ts; kružnice a přímka [])
 ```
 
 `SketchEdit` rozšíří o `edit?: SketchConstraintId` (kóta k otevření); `SketchSession.rewrite(next, added, opts?: { edit?: SketchConstraintId })` ji po zápisu nastaví jako `editingDimension`.
