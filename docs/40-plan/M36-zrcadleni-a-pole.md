@@ -41,7 +41,7 @@ Upřesnění v sezení 2026-10-16: zrcadlení a pole jako **parametrická entita
 - [x] Entity zrcadlení a polí, kopie, vazba symetrie.
 - [x] Řešič: vazba symetrie, kopie mimo řešič.
 - [x] Kresba, výběr a snapper kopií.
-- [ ] Nástroje a vynesené kóty.
+- [x] Nástroje a vynesené kóty.
 - [ ] Kopie v oblastech (*čeká na sloučení M30*).
 - [ ] e2e a spec.
 
@@ -106,5 +106,6 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **Úkol 2 hotový:** jen testy (adaptér už z úkolu 1): symetrie drží při tažení i s volnou osou, pole nemění stupně volnosti, kopie se po tažení zdroje přepočítají (test session). `FakeSolver` váží `symmetric` 2. Postřeh: planegcs u neúplně určené skici dává výsledek závislý na předchozích řešeních (rozdíl ~1e-6 i jiná větev) – testy poloh jen u úplně určených skic.
 - **Úkol 3 hotový:** kopie v kresbě (editovaná i regenerovaná skica), `entityAt` překládá kopii na pole, snapper bere kopie jako anonymní geometrii uvnitř `snap()` (bez změny API). Upřesnění do spec 12 (styl kopií, `point: null`, bez zarovnání ke kopiím). `npm run check` zelený (6624 testů).
 - **Úkol 4, část sketcher hotová:** Pavel rozhodl průběh nástrojů *zdroje → Enter → osa/střed* a směr 2 přes popisek počtu `1×`. Nástroje `mirror-tool.ts`, `pattern-tool.ts`, skupina `modify` (zavedla stopa C, pokud se sloučí první), `sketch-pattern-dimensions.ts`, `setPatternParam` bez řešiče (fronta `writeInTurn`). 6655 testů zelených. Zbývá `ui` popisků.
+- **Úkol 4 hotový:** `ui` popisků (`SketchPatternDimensions.vue` v `AppShell`), editace jedním klikem. `npm run check` zelený (6673 testů).
 
 ## Retrospektiva
