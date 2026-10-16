@@ -63,6 +63,7 @@ describe('SKETCH_TOOLBAR', () => {
           'sketch.circle',
           'sketch.arc',
           'sketch.spline',
+          'sketch.slot',
           SKETCH_ACTION_IDS.construction,
         ],
       ],

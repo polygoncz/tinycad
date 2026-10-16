@@ -398,6 +398,33 @@ describe('createSketchTools', () => {
         shortcut: undefined,
       },
       {
+        id: 'sketch.slot',
+        label: 'tool.slot',
+        icon: 'capsule-horizontal',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'slot',
+      },
+      {
+        id: 'sketch.slotOverall',
+        label: 'tool.slotOverall',
+        icon: 'arrow-autofit-width',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'slot',
+      },
+      {
+        id: 'sketch.slotArc',
+        label: 'tool.slotArc',
+        icon: 'rainbow',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'slot',
+      },
+      {
         id: 'sketch.dimension',
         label: 'tool.dimension',
         icon: 'ruler-measure',
@@ -408,6 +435,15 @@ describe('createSketchTools', () => {
       },
     ]);
     expect(Object.isFrozen(tools)).toBe(true);
+  });
+
+  it('the slot tools are one family in the order slot, slotOverall, slotArc (M31)', () => {
+    const { tools } = setup();
+    expect(tools.filter((t) => t.family === 'slot').map((t) => t.id)).toEqual([
+      'sketch.slot',
+      'sketch.slotOverall',
+      'sketch.slotArc',
+    ]);
   });
 
   it('the arc tools are one family in the order arc, arc3p, arcTangent (M27)', () => {

@@ -16,6 +16,7 @@ import { createEntryTool } from './sketch-tools/entry-tool';
 import { createLineTool } from './sketch-tools/line-tool';
 import { createRectangleTool } from './sketch-tools/rectangle-tool';
 import { createSketchSelectTool } from './sketch-tools/select-tool';
+import { createSlotTool } from './sketch-tools/slot-tool';
 import { createSplineTool } from './sketch-tools/spline-tool';
 
 const MODEL: readonly Mode[] = Object.freeze(['model']);
@@ -153,6 +154,35 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       modes: SKETCH,
       family: 'spline',
       create: () => createSplineTool(sketches, 'fitSpline'),
+    }),
+    // The slots (M31) have no shortcut; Tabler icons of a capsule, of an overall width and of an
+    // arc band.
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.slot',
+      label: 'tool.slot',
+      icon: 'capsule-horizontal',
+      group: 'draw',
+      modes: SKETCH,
+      family: 'slot',
+      create: () => createSlotTool(sketches, 'centers'),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.slotOverall',
+      label: 'tool.slotOverall',
+      icon: 'arrow-autofit-width',
+      group: 'draw',
+      modes: SKETCH,
+      family: 'slot',
+      create: () => createSlotTool(sketches, 'overall'),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.slotArc',
+      label: 'tool.slotArc',
+      icon: 'rainbow',
+      group: 'draw',
+      modes: SKETCH,
+      family: 'slot',
+      create: () => createSlotTool(sketches, 'arc'),
     }),
     Object.freeze<ToolDescriptor>({
       id: 'sketch.dimension',
