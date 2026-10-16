@@ -1,6 +1,7 @@
 import type { Vec2 } from '@/core';
 import { nearestParam, paramRange, pointAt, samePoint } from './curve-param';
-import { curve2, pointsById } from './geometry';
+import { curve2 } from './geometry';
+import { pointsById } from './points';
 import type { FilletArc } from './geometry-port';
 import type {
   SketchArc,
@@ -12,7 +13,7 @@ import type {
   SketchLine,
   SketchPoint,
 } from './model';
-import { coordinatesOf, endIds, findCurve, newPoints, rebuild } from './trim';
+import { coordinatesOf, endIds, findCurve, isCurveEntity, newPoints, rebuild } from './trim';
 import type { IdSource, SketchEdit } from './trim';
 import { dist, dot, sub } from './vec2';
 
@@ -72,7 +73,7 @@ export interface ChamferRequest {
  */
 export function cornerOf(data: SketchData, point: SketchEntityId): Corner | null {
   if (data.entities.find((e) => e.id === point)?.kind !== 'point') return null;
-  const using = data.entities.filter((e) => e.kind !== 'point' && endIds(e).includes(point));
+  const using = data.entities.filter((e) => isCurveEntity(e) && endIds(e).includes(point));
   const [a, b] = using;
   if (using.length !== 2 || !isEdge(a) || !isEdge(b)) return null;
   return Object.freeze({ a: a.id, b: b.id });

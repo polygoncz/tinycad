@@ -3,7 +3,7 @@
 // not change while the kernel answered.
 
 import type { Vec2 } from '@/core';
-import { curve2, nearestParam, pointsById } from '@/sketch';
+import { curve2, nearestParam, pointsById, isPattern } from '@/sketch';
 import type { Curve2, IdSource, SketchCurve, SketchData, SketchEntity } from '@/sketch';
 import type { ToolContext } from '@/interaction';
 import type { SketchSession } from '../sketch-session';
@@ -36,9 +36,12 @@ export function curveAt(
   return { entity, curve, cursor, t: nearestParam(curve, cursor), data };
 }
 
-/** A curve the modify tools work on: not a point, not an infinite line (M31, it has no ends). */
+/**
+ * A curve the modify tools work on: not a point, not an infinite line (M31, it has no ends), not a
+ * pattern (M36: a picked copy is translated to its pattern, and copies are no entities to modify).
+ */
 function isCurve(e: SketchEntity): e is SketchCurve {
-  return e.kind !== 'point' && e.kind !== 'xline';
+  return e.kind !== 'point' && e.kind !== 'xline' && !isPattern(e);
 }
 
 /** The ids of an edit, minted from the generator of the tool context like the drawing tools. */

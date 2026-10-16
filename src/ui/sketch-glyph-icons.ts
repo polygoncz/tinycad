@@ -35,6 +35,8 @@ export const GLYPH_ICONS: Readonly<Record<GlyphKind, GlyphIcon>> = Object.freeze
   // The letter M: the mark of the middle.
   midpoint: strokes('M3 12V4L8 9L13 4V12'),
   // Dotted horizontal / vertical line between two points.
+  // Two triangles mirrored across a dashed vertical axis.
+  symmetric: strokes('M8 2V4', 'M8 6V10', 'M8 12V14', 'M6 4L2 12H6Z', 'M10 4L14 12H10Z'),
   hAlign: strokes('M2 8H4', 'M6 8H10', 'M12 8H14'),
   vAlign: strokes('M8 2V4', 'M8 6V10', 'M8 12V14'),
 });

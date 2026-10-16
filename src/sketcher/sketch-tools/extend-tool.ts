@@ -6,7 +6,7 @@
 // SketchGeometry.intersections asynchronously; the last request wins. Splines and circles are not
 // extended; without an intersection nothing happens.
 
-import { curve2, extendEdit, paramRange, pointsById, samePoint } from '@/sketch';
+import { isPattern, curve2, extendEdit, paramRange, pointsById, samePoint } from '@/sketch';
 import type { Curve2, CurveHit, SketchData, SketchEntityId } from '@/sketch';
 import type { Tool, ToolContext } from '@/interaction';
 import type { Vec2 } from '@/core';
@@ -134,7 +134,7 @@ async function extendTarget(session: SketchSession, key: ExtendKey): Promise<Ext
   const others: Curve2[] = [];
   let carrier: Carrier | null = null;
   for (const e of key.data.entities) {
-    if (e.kind === 'point') continue;
+    if (e.kind === 'point' || isPattern(e)) continue;
     const curve = curve2(e, points);
     if (e.id !== key.curve) others.push(curve);
     else carrier = carrierOf(curve, key.end);

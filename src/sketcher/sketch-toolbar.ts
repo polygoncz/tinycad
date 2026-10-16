@@ -1,5 +1,5 @@
 // The sketcher's part of the Toolbar (spec 11, "Komponenty"; M20): in the sketch mode the groups
-// Historie, Výběr, Kreslit, Upravit (M33), Vazby, Dokončit, Zobrazit, cancel and finish of a
+// Historie, Výběr, Kreslit, Upravit (M33, M36), Vazby, Dokončit, Zobrazit, cancel and finish of a
 // sketch as buttons of the group 'finish', the constraint actions as buttons of the group
 // 'constrain' after the dimension tool, and construction (M31) as a button of the group 'draw'
 // after the drawing tools. app passes it to createToolbarModel; interaction knows nothing of it.
@@ -25,6 +25,8 @@ const CONSTRAINT_ICONS: Readonly<Record<GeometricConstraintKind, string>> = {
   tangent: 'circle-dot',
   // The M mark of the midpoint glyph.
   midpoint: 'letter-m',
+  // Two shapes mirrored across an axis.
+  symmetric: 'flip-vertical',
   fix: 'lock',
 };
 /** The icon of the construction button (M31). */

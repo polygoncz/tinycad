@@ -64,11 +64,12 @@ describe('SKETCH_TOOLBAR', () => {
           'sketch.arc',
           'sketch.spline',
           'sketch.slot',
-          'sketch.point',
           SKETCH_ACTION_IDS.construction,
         ],
       ],
-      ['modify', ['sketch.trim', 'sketch.fillet']],
+      // Mirror and patterns one family (M36), trim and fillet one family each (M33, M34), so the
+      // sketcher fits 1280 px.
+      ['modify', ['sketch.mirror', 'sketch.trim', 'sketch.fillet']],
       [
         'constrain',
         ['sketch.dimension', ...GEOMETRIC_CONSTRAINT_KINDS.map(sketchConstraintActionId)],
@@ -141,5 +142,6 @@ const EXPECTED_ICONS: Readonly<Record<string, string>> = {
   equal: 'equal',
   tangent: 'circle-dot',
   midpoint: 'letter-m',
+  symmetric: 'flip-vertical',
   fix: 'lock',
 };

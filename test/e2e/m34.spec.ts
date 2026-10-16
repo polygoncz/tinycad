@@ -20,10 +20,6 @@ import {
 // dimension) or chamfered, and the profile extrudes. The data are read from the exported document
 // (File → Export document).
 
-// The sketcher toolbar with the group Upravit (M33, M34) needs 1500 px to show the group Vazby
-// (the dimension tool of drawDimensionedRectangle) outside the menu "…".
-test.use({ viewport: { width: 1600, height: 720 } });
-
 /** The parts of an exported document the tests read (persistence TinycadFile, spec 05). */
 interface ExportedDocument {
   readonly snapshot: {

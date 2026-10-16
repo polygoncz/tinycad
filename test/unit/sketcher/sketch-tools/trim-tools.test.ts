@@ -484,7 +484,7 @@ const SPLINE = data([
 
 function splineCurve(): Curve2 {
   const z = SPLINE.entities.find((e) => e.id === 'z');
-  if (z === undefined || z.kind === 'point') throw new Error('no spline');
+  if (z === undefined || z.kind !== 'bspline') throw new Error('no spline');
   return curve2(z, pointsById(SPLINE));
 }
 

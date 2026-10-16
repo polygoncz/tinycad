@@ -9,8 +9,8 @@ import {
 } from '@/document';
 import type { BodyId, FeatureId, FeatureSchema, ParamSchema, PlaneRef, TopoRef } from '@/document';
 import { anOpsSession } from '@/ops/testing';
-import { SKETCH_FEATURE_TYPE, parseSketchData } from '@/sketch';
-import type { SketchConstraint, SketchData, SketchEntity } from '@/sketch';
+import { SKETCH_FEATURE_TYPE, isPattern, parseSketchData } from '@/sketch';
+import type { SketchConstraint, SketchCurve, SketchData, SketchEntity } from '@/sketch';
 import { createFakeSketchGeometry, createFakeSolver } from '@/sketch/testing';
 import {
   createFeatureEditor,
@@ -309,6 +309,15 @@ describe('createSketchTools', () => {
         family: 'line',
       },
       {
+        id: 'sketch.point',
+        label: 'tool.point',
+        icon: 'point',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: 'P',
+        family: 'line',
+      },
+      {
         id: 'sketch.rectangle',
         label: 'tool.rectangle',
         icon: 'square',
@@ -453,13 +462,31 @@ describe('createSketchTools', () => {
         family: 'slot',
       },
       {
-        id: 'sketch.point',
-        label: 'tool.point',
-        icon: 'point',
-        group: 'draw',
+        id: 'sketch.mirror',
+        label: 'tool.mirror',
+        icon: 'flip-horizontal',
+        group: 'modify',
         modes: ['sketch'],
-        shortcut: 'P',
-        family: undefined,
+        family: 'pattern',
+        shortcut: undefined,
+      },
+      {
+        id: 'sketch.linearPattern',
+        label: 'tool.linearPattern',
+        icon: 'grid-dots',
+        group: 'modify',
+        modes: ['sketch'],
+        family: 'pattern',
+        shortcut: undefined,
+      },
+      {
+        id: 'sketch.circularPattern',
+        label: 'tool.circularPattern',
+        icon: 'rotate-360',
+        group: 'modify',
+        modes: ['sketch'],
+        family: 'pattern',
+        shortcut: undefined,
       },
       {
         id: 'sketch.trim',
@@ -555,7 +582,7 @@ describe('createSketchTools', () => {
     ]);
   });
 
-  it('the rectangles and the lines are families with the old tool first (M31)', () => {
+  it('the rectangles and the lines (with the point) are families with the old tool first (M31)', () => {
     const { tools } = setup();
     expect(tools.filter((t) => t.family === 'rectangle').map((t) => t.id)).toEqual([
       'sketch.rectangle',
@@ -565,6 +592,7 @@ describe('createSketchTools', () => {
     expect(tools.filter((t) => t.family === 'line').map((t) => t.id)).toEqual([
       'sketch.line',
       'sketch.xline',
+      'sketch.point',
     ]);
   });
 
@@ -1112,8 +1140,8 @@ describe('the construction mode (M31)', () => {
     return session.state.get();
   }
 
-  const curvesOf = (entities: readonly SketchEntity[]) =>
-    entities.filter((e) => e.kind !== 'point');
+  const curvesOf = (entities: readonly SketchEntity[]): SketchCurve[] =>
+    entities.filter((e): e is SketchCurve => e.kind !== 'point' && !isPattern(e));
   const withoutConstruction = (entities: readonly SketchEntity[]) =>
     // toEqual takes an undefined field for a missing one.
     entities.map((e) => (e.kind === 'point' ? e : { ...e, construction: undefined }));
@@ -1202,6 +1230,53 @@ describe('the select tool of the sketch', () => {
     expect(session.state.get().hover).toBe('sp');
     click(viewport, 25, 150);
     expect(session.state.get().selection).toEqual(['sp']);
+  });
+
+  describe('copies of a pattern (M36)', () => {
+    // pq mirrored across the vertical axis x = 60: the copy line (80,10)–(110,10).
+    const mirrored = data([
+      ...sketch.entities,
+      { kind: 'point', id: 'a', x: 60, y: 0 },
+      { kind: 'point', id: 'b', x: 60, y: 50 },
+      { kind: 'line', id: 'ab', p1: 'a', p2: 'b', construction: true },
+      { kind: 'mirror', id: 'm', sources: ['pq'], axis: 'ab' },
+    ]);
+
+    it('hover and click on a copy line or point pick the pattern; Delete removes it', async () => {
+      const { viewport, session } = await sketching({ sketch: mirrored });
+      expect(viewport.pick(95, 10, ['sketchEntity'])).toMatchObject({ entity: 'm:1.pq' });
+
+      viewport.emitPointer(pointer('move', 95, 10));
+      expect(session.state.get().hover).toBe('m');
+      click(viewport, 95, 10);
+      expect(session.state.get().selection).toEqual(['m']);
+      click(viewport, 110, 10);
+      expect(session.state.get().selection).toEqual(['m']);
+
+      await session.remove(session.state.get().selection);
+      expect(session.state.get().entities.map((e) => e.id)).toEqual([
+        'p',
+        'q',
+        'pq',
+        'a',
+        'b',
+        'ab',
+      ]);
+    });
+
+    it('dragging a copy point moves nothing and selects nothing', async () => {
+      const { viewport, session, solver } = await sketching({ sketch: mirrored });
+      const before = solver.calls.length;
+
+      viewport.emitPointer(pointer('down', 110, 10));
+      viewport.emitPointer(pointer('move', 120, 30));
+      viewport.emitPointer(pointer('up', 120, 30));
+      await settle();
+
+      expect(solver.calls).toHaveLength(before);
+      expect(session.state.get().selection).toEqual([]);
+      expect(xyOf(session, 'q')).toEqual([40, 10]);
+    });
   });
 
   it('Escape with a selection clears it', async () => {

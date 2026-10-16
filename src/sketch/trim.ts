@@ -2,9 +2,11 @@ import { assert, assertNever } from '@/core';
 import type { Vec2 } from '@/core';
 import { nearestParam, paramRange, pointAt, samePoint } from './curve-param';
 import { constraintTargets, curvePoints, removeItems } from './edit';
-import { curve2, pointsById } from './geometry';
+import { curve2 } from './geometry';
+import { pointsById } from './points';
 import type { Curve2 } from './geometry';
 import type { CurveHit } from './geometry-port';
+import { isPattern } from './model';
 import type {
   SketchConstraint,
   SketchConstraintId,
@@ -101,7 +103,7 @@ export function cutsOf(
 ): readonly CurveCut[] {
   const curves = new Map<string, { readonly curve: SketchCurve; readonly index: number }>();
   data.entities.forEach((e, index) => {
-    if (e.kind !== 'point') curves.set(e.id, { curve: e, index });
+    if (isCurveEntity(e)) curves.set(e.id, { curve: e, index });
   });
   const self = curves.get(curve)?.curve;
   if (self === undefined) return Object.freeze([]);
@@ -174,7 +176,7 @@ export function cutsOf(
  */
 export function crossingPoints(data: SketchData, hits: readonly CurveHit[]): readonly Vec2[] {
   const curves = new Map<string, SketchCurve>();
-  for (const e of data.entities) if (e.kind !== 'point') curves.set(e.id, e);
+  for (const e of data.entities) if (isCurveEntity(e)) curves.set(e.id, e);
   const points = pointsById(data);
   const endsOf = (c: SketchCurve): readonly Vec2[] =>
     endIds(c).map((id) => coordinatesOf(points, id));
@@ -424,7 +426,7 @@ export function rebuild(
   const replaced = data.entities.flatMap((e): SketchEntity[] =>
     e.id === curve.id ? [...made.points, ...interior, first, ...rest] : [e],
   );
-  const used = new Set(replaced.flatMap((e) => (e.kind === 'point' ? [] : curvePoints(e))));
+  const used = new Set(replaced.flatMap((e) => (isCurveEntity(e) ? curvePoints(e) : [])));
   const dropped = new Set<string>(
     curvePoints(curve).filter((p) => !used.has(p) && p !== opts.keep),
   );
@@ -577,7 +579,7 @@ function isSpline(
 }
 
 function defines(curve: SketchEntity | undefined, point: SketchEntityId): boolean {
-  return curve !== undefined && curve.kind !== 'point' && curvePoints(curve).includes(point);
+  return curve !== undefined && isCurveEntity(curve) && curvePoints(curve).includes(point);
 }
 
 /** The edit that removes the whole curve (no cut to trim at). */
@@ -588,7 +590,7 @@ function removed(data: SketchData, curve: SketchEntityId): SketchEdit {
 export function findCurve(data: SketchData, id: SketchEntityId): SketchCurve | null {
   const e = data.entities.find((x) => x.id === id);
   // An infinite line (M31) only cuts other curves: it has no ends to trim, extend or split.
-  return e === undefined || e.kind === 'point' || e.kind === 'xline' ? null : e;
+  return e === undefined || !isCurveEntity(e) || e.kind === 'xline' ? null : e;
 }
 
 /** The points at the start and the end of the curve ([] for a circle). */
@@ -639,4 +641,12 @@ function splineDegree(n: number): 1 | 2 | 3 {
   const degree = Math.min(3, n - 1);
   if (degree === 1 || degree === 2 || degree === 3) return degree;
   throw new Error(`trim: a spline piece needs at least 2 poles, got ${String(n)}`);
+}
+
+/**
+ * A curve entity of the data: not a point and not a pattern (M36 – a recipe whose copies are no
+ * entities, so the modify tools never cut, trim or join them; Q089).
+ */
+export function isCurveEntity(e: SketchEntity): e is SketchCurve {
+  return e.kind !== 'point' && !isPattern(e);
 }

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec2 } from '@/core';
 import { pointAt } from '@/sketch/curve-param';
-import { curve2, pointsById } from '@/sketch/geometry';
+import { curve2 } from '@/sketch/geometry';
+import { pointsById } from '@/sketch/points';
 import type { Curve2 } from '@/sketch/geometry';
 import type { CurveHit } from '@/sketch/geometry-port';
 import type {

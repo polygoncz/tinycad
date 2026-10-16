@@ -2,6 +2,8 @@ import { assert, assertNever } from '@/core';
 import type { Vec2 } from '@/core';
 import type { SketchCurve, SketchData, SketchEntity, SketchEntityId, SketchPoint } from './model';
 import { lerp, normalize, sub } from './vec2';
+import { patternCopies } from './patterns';
+import { pointsById } from './points';
 
 // 2D geometry of sketch curves for regions and the kernel (spec 12 "Geometrie a pomůcky editace").
 
@@ -59,12 +61,6 @@ export interface SketchRegion {
   readonly holes: readonly (readonly Curve2[])[];
   /** > 0: outer minus holes. */
   readonly area: number;
-}
-
-export function pointsById(data: SketchData): ReadonlyMap<SketchEntityId, SketchPoint> {
-  const points = new Map<SketchEntityId, SketchPoint>();
-  for (const e of data.entities) if (e.kind === 'point') points.set(e.id, e);
-  return points;
 }
 
 /**
@@ -132,12 +128,17 @@ export function curve2(
 
 /**
  * The curves that bound regions (spec 12 "Křivky pro oblasti a odvozená id"): the non-construction
- * curves of the sketch as Curve2 with the entity id, in the order of the entities. The one place
- * that decides what bounds regions; the kernel skips degenerate curves itself.
+ * curves of the sketch as Curve2 with the entity id, in the order of the entities, then the
+ * non-construction curve copies of mirrors and patterns (M36) with their derived ids, in the
+ * order of patternCopies. The one place that decides what bounds regions; the kernel skips
+ * degenerate curves itself. Region names are sorted ids, so the order does not change them.
  */
 export function regionCurves(data: SketchData): readonly Curve2[] {
-  const points = pointsById(data);
-  return Object.freeze(data.entities.filter(isRegionCurve).map((curve) => curve2(curve, points)));
+  const copies = patternCopies(data);
+  const points = new Map(pointsById(data));
+  for (const copy of copies) if (copy.kind === 'point') points.set(copy.id, copy);
+  const curves = [...data.entities, ...copies].filter(isRegionCurve);
+  return Object.freeze(curves.map((curve) => curve2(curve, points)));
 }
 
 // Exhaustive on purpose: a new kind of entity (M31, M36, M37) must decide here whether it
@@ -147,6 +148,10 @@ function isRegionCurve(e: SketchEntity): e is SketchCurve {
     // An xline is always construction (M31): it never bounds a region.
     case 'point':
     case 'xline':
+    case 'mirror':
+    case 'linearPattern':
+    case 'circularPattern':
+      // A pattern is a recipe, not a curve; its copies are added by regionCurves (M36).
       return false;
     case 'line':
     case 'circle':

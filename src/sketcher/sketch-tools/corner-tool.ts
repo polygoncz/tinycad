@@ -7,6 +7,7 @@
 
 import type { Vec2 } from '@/core';
 import {
+  isPattern,
   cornerOf,
   curve2,
   isDimension,
@@ -258,7 +259,7 @@ function newCurves(before: SketchData, after: SketchData): readonly Vec2[] {
   const old = new Set<string>(before.entities.map((e) => e.id));
   const points = pointsById(after);
   return after.entities.flatMap((e) =>
-    e.kind === 'point' || old.has(e.id) ? [] : curvePairs(curve2(e, points)),
+    e.kind === 'point' || isPattern(e) || old.has(e.id) ? [] : curvePairs(curve2(e, points)),
   );
 }
 

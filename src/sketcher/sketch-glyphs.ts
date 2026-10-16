@@ -109,6 +109,7 @@ export function isGlyphConstraint(c: SketchConstraint): c is GlyphConstraint {
     case 'midpoint':
     case 'hAlign':
     case 'vAlign':
+    case 'symmetric':
       return true;
     case 'distance':
     case 'hDistance':
@@ -209,6 +210,11 @@ function anchorOf(byId: ReadonlyMap<string, SketchEntity>, entity: SketchEntity)
       // The side of the tangent as a line through the anchor; a zero derivative → +y.
       return { point, side: lineSide(point, [point[0] + d[0], point[1] + d[1]]) };
     }
+    case 'mirror':
+    case 'linearPattern':
+    case 'circularPattern':
+      // No constraint refers to a pattern (parseSketchData), so it never carries a glyph.
+      return null;
     default:
       return assertNever(entity);
   }

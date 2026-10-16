@@ -12,6 +12,7 @@ import {
   curve2,
   curvePoints,
   isDimension,
+  isPattern,
   movePlacement,
   parseSketchData,
   pointsById,
@@ -50,6 +51,8 @@ import { planeRefOf } from './plane-ref';
 import { constraintNumbers, dimensionViews } from './sketch-dimensions';
 import type { SketchDimensionView } from './sketch-dimensions';
 import { toSketchDrawing } from './sketch-drawing';
+import { patternDimensionViews, withPatternParam } from './sketch-pattern-dimensions';
+import type { PatternParam, SketchPatternDimensionView } from './sketch-pattern-dimensions';
 import { glyphViews, isGlyphConstraint } from './sketch-glyphs';
 import type { GlyphKind, SketchGlyphView } from './sketch-glyphs';
 
@@ -118,6 +121,12 @@ export interface SketchSession {
   /** Writes the placement of the dragged dimension in one setParams; without a move nothing. */
   endMoveDimension(): void;
   /**
+   * A new parameter of a pattern (M36, a label of SketchState.patternDimensions) in one setParams
+   * without the solver, queued like toggleConstruction. An invalid value, a parameter the pattern
+   * does not have or an id that is no pattern → false and nothing written.
+   */
+  setPatternParam(pattern: SketchEntityId, param: PatternParam, value: number): boolean;
+  /**
    * The constraints a click of a drawing tool would add at `at` (M26), or null for none: shown as
    * SketchState.inference; the guides are drawn into the overlay SKETCH_GUIDES_OVERLAY_ID. Neither
    * solved nor written.
@@ -179,6 +188,11 @@ export interface SketchState {
   readonly editingDimension: SketchConstraintId | null;
   /** The dimensions for the viewport, then the preview of the dimension tool (dimensionViews, M28). */
   readonly dimensions: readonly SketchDimensionView[];
+  /**
+   * The dimensions of the parameters of the selected patterns for the viewport, in selection
+   * order (patternDimensionViews, M36); a mirror has none.
+   */
+  readonly patternDimensions: readonly SketchPatternDimensionView[];
   /**
    * The glyphs of the geometric constraints for the viewport (glyphViews, M25): those of the
    * selected and hovered entities and of the entities of a selected or hovered constraint; all of
@@ -337,6 +351,19 @@ export function openSketchSession(deps: {
 
   // ---- state ----
 
+  /**
+   * Runs a write without the solver now, or behind the pending writes: a solve that read the data
+   * before would undo it with its own write (toggleConstruction, endMoveDimension).
+   */
+  function writeInTurn(apply: () => void): void {
+    if (writers === 0) apply();
+    else
+      void enqueueWrite(() => {
+        if (open) apply();
+        return Promise.resolve();
+      });
+  }
+
   /** The data in the document; invalid data reads as empty. */
   function readData(): SketchData {
     const { params } = edit.state.get();
@@ -385,6 +412,12 @@ export function openSketchSession(deps: {
         selection,
         prev?.dimensions ?? [],
         preview,
+      ),
+      patternDimensions: patternDimensionViews(
+        plane.get(),
+        entities,
+        selection,
+        prev?.patternDimensions ?? [],
       ),
       glyphs: glyphViews(
         plane.get(),
@@ -457,7 +490,10 @@ export function openSketchSession(deps: {
     const version = ++hitsVersion;
     const data: SketchData = { entities, constraints: EMPTY_DATA.constraints };
     const points = pointsById(data);
-    const curves = entities.flatMap((e) => (e.kind === 'point' ? [] : [curve2(e, points)]));
+    // Patterns (M36) are recipes: their copies are no entities, the modify tools leave them out.
+    const curves = entities.flatMap((e) =>
+      e.kind === 'point' || isPattern(e) ? [] : [curve2(e, points)],
+    );
     promiseOf(() => geometry.intersections(curves)).then(
       (hits) => {
         if (!open || version !== hitsVersion) return;
@@ -528,7 +564,9 @@ export function openSketchSession(deps: {
   function draw(): void {
     const s = state.get();
     const construction = new Set<string>(
-      s.entities.flatMap((e) => (e.kind !== 'point' && e.construction === true ? [e.id] : [])),
+      s.entities.flatMap((e) =>
+        e.kind !== 'point' && !isPattern(e) && e.construction === true ? [e.id] : [],
+      ),
     );
     const selectedVia = entitiesOfConstraints(s.constraints, s.selection);
     const hoveredVia = entitiesOfConstraints(s.constraints, s.hover === null ? [] : [s.hover]);
@@ -824,12 +862,7 @@ export function openSketchSession(deps: {
       };
       // Written at once; behind a pending solve it waits its turn, or that solve's write would
       // undo it (the solve read the data before the toggle).
-      if (writers === 0) apply();
-      else
-        void enqueueWrite(() => {
-          if (open) apply();
-          return Promise.resolve();
-        });
+      writeInTurn(apply);
     },
     drag(point, to) {
       checkOpen('drag');
@@ -876,12 +909,23 @@ export function openSketchSession(deps: {
       };
       // Like toggleConstruction: behind a pending solve it waits its turn, or that solve's write
       // would undo it (the solve read the data before the move).
-      if (writers === 0) apply();
-      else
-        void enqueueWrite(() => {
-          if (open) apply();
-          return Promise.resolve();
+      writeInTurn(apply);
+    },
+    setPatternParam(pattern, param, value) {
+      checkOpen('setPatternParam');
+      const current = readData().entities.find((e) => e.id === pattern);
+      if (current === undefined || !isPattern(current)) return false;
+      if (withPatternParam(current, param, value) === null) return false;
+      writeInTurn(() => {
+        // The data when its turn comes: the pattern may have changed or gone meanwhile.
+        const data = readData();
+        const entities = data.entities.map((e) => {
+          if (e.id !== pattern || !isPattern(e)) return e;
+          return withPatternParam(e, param, value) ?? e;
         });
+        write({ entities, constraints: data.constraints });
+      });
+      return true;
     },
     setInferencePreview(p) {
       checkOpen('setInferencePreview');
@@ -1078,7 +1122,7 @@ function glyphsShownFor(
 ): ReadonlySet<SketchItemId> {
   const items = hover === null ? selection : [...selection, hover];
   const points = data.entities.flatMap((e) =>
-    items.includes(e.id) && e.kind !== 'point' ? curvePoints(e) : [],
+    items.includes(e.id) && e.kind !== 'point' && !isPattern(e) ? curvePoints(e) : [],
   );
   return new Set<SketchItemId>([
     ...items,
