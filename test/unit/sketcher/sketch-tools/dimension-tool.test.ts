@@ -6,7 +6,7 @@ import type { FeatureSchema, ParamSchema } from '@/document';
 import { anOpsSession } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE, parseSketchData } from '@/sketch';
 import type { SketchData } from '@/sketch';
-import { createFakeSolver } from '@/sketch/testing';
+import { createFakeSketchGeometry, createFakeSolver } from '@/sketch/testing';
 import {
   SELECT_TOOL,
   createFeatureEditor,
@@ -127,6 +127,7 @@ async function dimensioning() {
   const sketches = createSketchEditor({
     features: editor,
     solver: createFakeSolver(),
+    geometry: createFakeSketchGeometry(),
     viewport,
     resolvePlane: () => ({ origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, 0, 1] }),
     planeOfSketch: () => undefined,

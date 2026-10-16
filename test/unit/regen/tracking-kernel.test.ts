@@ -145,10 +145,21 @@ describe('createTrackingKernel', () => {
       'makeBox',
       'makeCylinder',
       'makeFace',
+      'profileRegions',
       'revolve',
       'topology',
       'transform',
     ]);
+  });
+
+  it('passes profileRegions through and owns nothing: it returns data, no handle (M30)', async () => {
+    const { real, owned, kernel } = setup();
+    const curves = [{ kind: 'circle', center: [0, 0], radius: 1, id: 'k' }] as const;
+    const result = await kernel.profileRegions({ curves });
+    expect(result).toEqual(await real.profileRegions({ curves }));
+    expect(result.regions.map((r) => r.name)).toEqual(['k']);
+    expect(real.callCount('profileRegions')).toBe(2);
+    expect(owned.size).toBe(0);
   });
 
   it('delegates boundingBox', async () => {

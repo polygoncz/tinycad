@@ -50,7 +50,7 @@ export interface PlaneArtifact {
   readonly plane: Plane;                             // z core
 }
 
-/** Výsledek skici (M12, spec 12): rovina, vyřešená geometrie pro kresbu a plochy oblastí v jádře. */
+/** Výsledek skici (M12, spec 12): rovina, vyřešená geometrie pro kresbu, plochy oblastí v jádře a (M30) jejich obrysy. */
 export interface SketchArtifact {
   readonly kind: 'sketch';
   readonly id: SketchId;                             // sketchId(owner)
@@ -58,6 +58,7 @@ export interface SketchArtifact {
   readonly plane: Plane;
   readonly entities: readonly SketchEntity[];        // ze sketch; kresba v render
   readonly regions: ReadonlyMap<string, ShapeHandle>; // jméno oblasti → rovinná plocha (SketchOps.makeFace), v pořadí oblastí
+  readonly outlines: readonly ProfileRegion[];        // M30: oblasti z SketchOps.profileRegions ve stejném pořadí a se stejnými jmény jako regions; pro kresbu a picking
 }
 
 /** Osa (M13): osy počátku vlastníka ORIGIN; později konstrukční osy. */

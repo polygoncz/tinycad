@@ -3,7 +3,7 @@
 // feature lists and results. dependency-cruiser allows importing it only from *.test.ts.
 
 import { expect } from 'vitest';
-import type { Plane } from '@/core';
+import type { Plane, Vec2 } from '@/core';
 import { ORIGIN_PLANES, bodyId, createFeatureSchemaRegistry, sketchId } from '@/document';
 import type {
   Evaluated,
@@ -17,7 +17,7 @@ import type {
 } from '@/document';
 import { aFeature, anEvaluated } from '@/document/testing';
 import type { DefaultParams } from '@/document/testing';
-import type { ShapeHandle, TopologySummary } from '@/kernel';
+import type { ProfileCurve, ProfileRegion, ShapeHandle, TopologySummary } from '@/kernel';
 import type { SketchEntity } from '@/sketch';
 import { createFakeKernel } from '@/kernel/testing';
 import type { FakeKernel } from '@/kernel/testing';
@@ -87,7 +87,8 @@ export const buildCube: FeatureBuilder['build'] = async (
 /**
  * The sketch artifact of the feature `owner`, by default on the origin plane XY and without
  * entities, with the `faces` as regions 'r1', 'r2', … (deeply frozen like the output of a
- * builder). Code that reads bodies must skip it.
+ * builder). The outline of region 'ri' is a unit circle with the id 'ri' at the origin, so the
+ * outlines keep the order and the names of the regions. Code that reads bodies must skip it.
  */
 export function aSketchArtifact(
   owner: string,
@@ -104,7 +105,31 @@ export function aSketchArtifact(
     owner: feature,
     plane: opts.plane ?? xy.plane,
     entities: Object.freeze([...(opts.entities ?? [])]),
-    regions: new Map(faces.map((face, i) => [`r${String(i + 1)}`, face])),
+    regions: new Map(faces.map((face, i) => [regionName(i), face])),
+    outlines: Object.freeze(faces.map((_, i) => unitCircleRegion(regionName(i)))),
+  });
+}
+
+/** The name of the i-th region of aSketchArtifact. */
+function regionName(i: number): string {
+  return `r${String(i + 1)}`;
+}
+
+/** A region bounded by one unit circle at the origin whose id is the name (deeply frozen). */
+function unitCircleRegion(name: string): ProfileRegion {
+  const center: Vec2 = [0, 0];
+  Object.freeze(center);
+  const circle: ProfileCurve = Object.freeze({
+    kind: 'circle',
+    center,
+    radius: 1,
+    id: name,
+  });
+  return Object.freeze({
+    name,
+    outer: Object.freeze([circle]),
+    holes: Object.freeze([]),
+    area: Math.PI,
   });
 }
 

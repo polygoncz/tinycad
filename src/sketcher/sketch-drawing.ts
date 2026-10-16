@@ -4,7 +4,7 @@
 
 import { assert, assertNever, bspline, vec3 } from '@/core';
 import type { Plane, Vec2, Vec3 } from '@/core';
-import { SPLINE_TOLERANCE, computeRegions, curve2, pointsById } from '@/sketch';
+import { SPLINE_TOLERANCE, curve2, pointsById } from '@/sketch';
 import type {
   Curve2,
   SketchCurve,
@@ -91,9 +91,14 @@ export function toSketchDrawing(
 /**
  * The curves of a regenerated sketch without points: non-construction ones in the style 'normal',
  * construction ones in the style 'construction' (M13, R74: a construction line can be the axis of
- * Revolve), and the regions of computeRegions as polygons named like the regions (M13). Frozen.
+ * Revolve), and `regions` (the outlines of the kernel, SketchArtifact.outlines, M30) as polygons
+ * named like the regions, in their order (M13). Frozen.
  */
-export function artifactDrawing(plane: Plane, entities: readonly SketchEntity[]): SketchDrawing {
+export function artifactDrawing(
+  plane: Plane,
+  entities: readonly SketchEntity[],
+  regions: readonly SketchRegion[],
+): SketchDrawing {
   const data: SketchData = { entities, constraints: [] };
   const points = pointsById(data);
   const curves = entities
@@ -101,12 +106,11 @@ export function artifactDrawing(plane: Plane, entities: readonly SketchEntity[])
     .map((c) =>
       drawingCurve(c.id, curve2(c, points), c.construction === true ? 'construction' : 'normal'),
     );
-  const regions = computeRegions(data).regions.map(drawingRegion);
   return Object.freeze({
     plane,
     curves: Object.freeze(curves),
     points: Object.freeze([]),
-    regions: Object.freeze(regions),
+    regions: Object.freeze(regions.map(drawingRegion)),
   });
 }
 
@@ -178,7 +182,7 @@ function splinePoints(curve: Extract<Curve2, { kind: 'bspline' }>): Vec2[] {
   return bspline.tessellate(curve, SPLINE_TOLERANCE * size).map(([x, y]) => vec2(x, y));
 }
 
-/** A region as polygons: the outer loop counter-clockwise, the holes as computeRegions gives them. */
+/** A region as polygons: the outer loop counter-clockwise, the holes as the kernel gives them. */
 function drawingRegion(region: SketchRegion): SketchDrawingRegion {
   return Object.freeze({
     id: region.name,

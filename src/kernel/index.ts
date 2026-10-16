@@ -31,8 +31,14 @@ export type {
   SweepOps,
   TransformOps,
 } from './kernel';
-export { validateFaceInput } from './profile';
-export type { ProfileCurve, ProfileLoop } from './profile';
+export { parseProfileRegionsInput, validateFaceInput } from './profile';
+export type {
+  IdentifiedCurve,
+  ProfileCurve,
+  ProfileLoop,
+  ProfileRegion,
+  ProfileRegions,
+} from './profile';
 export { isRigidMotion } from './transform';
 export { createKernelError, kernelErrorCode } from './errors';
 export type { KernelErrorCode } from './errors';

@@ -43,7 +43,7 @@ import type {
   SketchConstraintId,
   SketchEntity,
 } from '@/sketch';
-import { rectangleData } from '@/sketch/testing';
+import { createFakeSketchGeometry, rectangleData } from '@/sketch/testing';
 import { createSketchEditor } from '@/sketcher';
 import type { SketchSession } from '@/sketcher';
 import { createInThreadPlanegcsSolver } from '@/solver-planegcs/testing';
@@ -73,6 +73,7 @@ function setup(kernel: GeometryKernel) {
   const sketcher = createSketchEditor({
     features,
     solver: createInThreadPlanegcsSolver(),
+    geometry: createFakeSketchGeometry(),
     viewport: new FakeViewport(),
     resolvePlane: (ref) => (ref.kind === 'plane' ? planes.get(ref.plane) : undefined),
     // Only origin planes here: the reference is the plane of the artifact.

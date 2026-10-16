@@ -266,7 +266,7 @@ function createSketchDrawings(port: SketchPort): {
       // The regeneration keeps the artifact of an unchanged feature: no new drawing for it.
       if (drawn.get(artifact.id) === artifact) continue;
       drawn.set(artifact.id, artifact);
-      port.set(artifact.id, artifactDrawing(artifact.plane, artifact.entities));
+      port.set(artifact.id, artifactDrawing(artifact.plane, artifact.entities, artifact.outlines));
     }
     for (const id of [...drawn.keys()]) {
       if (shown.has(id)) continue;
