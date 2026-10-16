@@ -178,10 +178,11 @@ export function endTangent(
       const r = sub(c.from, c.center);
       return unit([r[1], -r[0]]);
     }
-    // A circle has no ends; splines (M29) are not supported.
+    // A circle and an xline (M31) have no ends; splines (M29) are not supported.
     case 'circle':
     case 'bspline':
     case 'fitSpline':
+    case 'xline':
       return null;
   }
 }

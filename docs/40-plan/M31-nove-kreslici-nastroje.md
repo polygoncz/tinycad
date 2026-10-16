@@ -43,7 +43,7 @@ Upřesnění v sezení 2026-10-16:
 
 ## Úkoly
 
-- [ ] Nekonečná přímka v datech, řešiči a geometrii.
+- [x] Nekonečná přímka v datech, řešiči a geometrii.
 - [ ] Konstrukce obdélníků a drážek.
 - [ ] Nástroje obdélník středem a třemi body, bod, přímka.
 - [ ] Nástroje drážek.
@@ -87,7 +87,7 @@ Jeden úkol = jedno spuštění subagenta `implementer`. Sdílené typy: [[12-sk
 
 ### 6. Snapper, glyfy, e2e a spec
 
-- **Soubory:** `src/sketch/snap.ts` (přímka: jen `p1`, `p2` a `onCurve`), `src/sketcher/sketch-glyphs.ts` (kotva glyfu přímky v polovině `p1p2`), `test/e2e/m31.spec.ts` (obdélník středem, třemi body, drážka, bod, přímka s rovnoběžnou úsečkou, režim konstrukce), spec 12, 10 a 11.
+- **Soubory:** `src/sketch/snap.ts` (přímka: jen `p1`, `p2` a `onCurve`), `src/sketcher/sketch-glyphs.ts` (kotva glyfu přímky v polovině `p1p2` – hotové v úkolu 1), `src/sketcher/sketch-tools/dimension-tool.ts` (klik na přímku po bodu nebo po úsečce: `retarget` bere i `xline` pro vzdálenost bodu od přímky a úhel), `test/e2e/m31.spec.ts` (obdélník středem, třemi body, drážka, bod, přímka s rovnoběžnou úsečkou, režim konstrukce), spec 12, 10 a 11.
 - **Hotovo když:** e2e projdou, `npm run check` je zelený, spec odpovídá kódu.
 
 ## Akceptační kritéria
@@ -111,6 +111,7 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **B1 (2026-10-16, Pavel schválil):** kontrakt konstrukcí v [[12-skicar#Nové kreslicí nástroje (M31)]] – každý tvar = funkce polohy (Vec2 → body, `null` pro degenerovaný vstup) a funkce topologie (id bodů → křivky a vazby); snapper nástroje stojí mezi nimi. Obdélník středem: H/V + konstrukční úhlopříčka a `midpoint` středu; obdélník 3 body: `perpendicular` + 2× `parallel`; přímá drážka: 4× `tangent` + `equal` + konstrukční osa (celkovou délkou: osa mezi konci + 4× `pointOnCurve`).
 - **B2 (odchylka od plánu, Pavel schválil):** oblouková drážka bez `equal` koncových oblouků a bez konstrukčního oblouku osy – obojí plyne z tečností, řešič by to hlásil jako redundantní (vnitřní vazbu oblouku osy nejde vynechat, zahodila by se tečnost a soustava by byla degenerovaná).
 - **B3 (Pavel):** první strana obdélníku 3 body, osa přímé drážky a konstrukční přímka dostanou `horizontal`/`vertical` z `inferLine` do 3° (automatické, Ctrl/Cmd vypne).
+- **Úkol 1 hotový:** pravidlo „přímka jako nosná přímka ano, délka ne“ platí i pro `dimensionTarget` a kresbu kót (dopsáno do spec). Nástroj kóty zatím přímku nepřijme v `retarget` → přidáno do úkolu 6. Přímka jako osa Revolve je mimo M31 (kandidát na pozdější milník). `npm run check` zelený (6545 unit testů).
 - **B4 (Pavel, jako Onshape):** režim konstrukce = rozšířená akce `sketch.construction` (`Q`): s křivkami ve výběru je přepne, bez nich přepne režim; tlačítko v liště svítí (`Action.checked`). Id `sketch.constructionMode` nevzniká (`Q` už patří `sketch.construction`, registr nedovolí dvě akce se stejnou zkratkou). Nové křivky označí pomůcka nástrojů `addDrawn`, ne `addGeometry`, aby režim nezasáhl úpravy jiných stop (trim, zrcadlení).
 
 ## Retrospektiva

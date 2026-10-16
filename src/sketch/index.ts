@@ -26,10 +26,11 @@ export type {
   SketchItemId,
   SketchLine,
   SketchPoint,
+  SketchXLine,
 } from './model';
 export { parseSketchData } from './parse';
 export type { SketchIssue } from './parse';
-export { curve2, pointsById } from './geometry';
+export { XLINE_EXTENT, curve2, pointsById } from './geometry';
 export type { Curve2 } from './geometry';
 export {
   constraintFor,

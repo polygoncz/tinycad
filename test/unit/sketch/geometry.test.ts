@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { curve2, pointsById } from '@/sketch/geometry';
+import { XLINE_EXTENT, curve2, pointsById } from '@/sketch/geometry';
 import type { SketchCurve, SketchData } from '@/sketch/model';
 import { parseSketchData } from '@/sketch/parse';
 
@@ -130,5 +130,27 @@ describe('curve2 – splines', () => {
 
   it('throws when a pole point is missing (a programming error)', () => {
     expect(() => curve2(curve(data, 's'), new Map())).toThrow();
+  });
+});
+
+describe('curve2 – infinite line (xline, M31)', () => {
+  it('turns an xline into a line XLINE_EXTENT long each way from the middle of p1p2', () => {
+    const data = sketch([
+      { kind: 'point', id: 'p', x: 1, y: 1 },
+      { kind: 'point', id: 'q', x: 4, y: 5 },
+      { kind: 'xline', id: 'x', p1: 'p', p2: 'q', construction: true },
+    ]);
+    const c = curve2(curve(data, 'x'), pointsById(data));
+    // m = (2.5, 3), d̂ = (0.6, 0.8).
+    expect(c).toEqual({
+      kind: 'line',
+      from: [
+        expect.closeTo(2.5 - 0.6 * XLINE_EXTENT, 6),
+        expect.closeTo(3 - 0.8 * XLINE_EXTENT, 6),
+      ],
+      to: [expect.closeTo(2.5 + 0.6 * XLINE_EXTENT, 6), expect.closeTo(3 + 0.8 * XLINE_EXTENT, 6)],
+      id: 'x',
+    });
+    expect(XLINE_EXTENT).toBe(1e5);
   });
 });

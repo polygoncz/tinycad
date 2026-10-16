@@ -12,6 +12,7 @@ import type {
   SketchEntityId,
   SketchItemId,
   SketchPoint,
+  SketchXLine,
 } from './model';
 
 // Pure editing helpers of the sketcher (spec 12 "Geometrie a pomůcky editace"). They return new
@@ -21,6 +22,8 @@ import type {
 const MIN_DIMENSION = 1e-9;
 
 const isRound = (e: SketchEntity): boolean => e.kind === 'circle' || e.kind === 'arc';
+/** A line or an xline: where a constraint takes a line as its infinite carrier line (M31). */
+const isCarrier = (e: SketchEntity): boolean => e.kind === 'line' || e.kind === 'xline';
 const isCurve = (e: SketchEntity): e is SketchCurve => e.kind !== 'point';
 
 /** The end points of a spline (first and last pole or fit point), or undefined for other entities. */
@@ -49,7 +52,7 @@ export function constraintFor(
 ): SketchConstraintDraft | null {
   const [first, second] = selected;
   if (selected.length === 1 && first !== undefined) {
-    if ((kind === 'horizontal' || kind === 'vertical') && first.kind === 'line') {
+    if ((kind === 'horizontal' || kind === 'vertical') && isCarrier(first)) {
       return { kind, line: first.id };
     }
     if (kind === 'fix' && first.kind === 'point') return { kind, point: first.id };
@@ -61,11 +64,12 @@ export function constraintFor(
   const b = second.id;
   const points = selected.filter((e) => e.kind === 'point').length;
   const lines = selected.filter((e) => e.kind === 'line').length;
+  const carriers = selected.filter(isCarrier).length;
   const rounds = selected.filter(isRound).length;
   switch (kind) {
     case 'coincident':
       if (points === 2) return { kind, a, b };
-      // Any curve, a spline too (M29); not a point of the curve itself.
+      // Any curve, a spline (M29) and an xline (M31) too; not a point of the curve itself.
       return pointOn(
         first,
         second,
@@ -82,11 +86,12 @@ export function constraintFor(
       return points === 2 ? { kind: 'vAlign', a, b } : null;
     case 'parallel':
     case 'perpendicular':
-      return lines === 2 ? { kind, a, b } : null;
+      return carriers === 2 ? { kind, a, b } : null;
     case 'equal':
+      // Lengths: an xline has none.
       return lines === 2 || rounds === 2 ? { kind, a, b } : null;
     case 'tangent':
-      return rounds === 2 || (lines === 1 && rounds === 1) || lineAtSplineEnd(first, second)
+      return rounds === 2 || (carriers === 1 && rounds === 1) || lineAtSplineEnd(first, second)
         ? { kind, a, b }
         : null;
     case 'midpoint':
@@ -121,7 +126,7 @@ function pointOn(
 
 /**
  * The dimension for the selected entities: 1 line → distance(p1, p2); 1 circle/arc → radius;
- * 2 points → distance. value = the measured value; ≤ 1e-9 → null.
+ * 2 points → distance. value = the measured value; ≤ 1e-9 → null. An xline has no length → null.
  */
 export function dimensionFor(
   selected: readonly SketchEntity[],
@@ -165,7 +170,7 @@ export function measureDraft(
   };
   const line = (id: SketchEntityId): readonly [SketchPoint, SketchPoint] => {
     const l = data.entities.find((e) => e.id === id);
-    assert(l?.kind === 'line', `measure: '${id}' is not a line`);
+    assert(l?.kind === 'line' || l?.kind === 'xline', `measure: '${id}' is not a line`);
     return [point(l.p1), point(l.p2)];
   };
   const radius = (id: SketchEntityId): number => {
@@ -215,7 +220,12 @@ export function measureDraft(
   }
 }
 
-function withoutConstruction(c: SketchCurve): SketchCurve {
+/** A curve whose construction flag can be toggled: all but an xline (always construction). */
+type TogglableCurve = Exclude<SketchCurve, SketchXLine>;
+
+const isTogglable = (e: SketchEntity): e is TogglableCurve => isCurve(e) && e.kind !== 'xline';
+
+function withoutConstruction(c: TogglableCurve): TogglableCurve {
   switch (c.kind) {
     case 'line':
       return { kind: c.kind, id: c.id, p1: c.p1, p2: c.p2 };
@@ -241,11 +251,13 @@ function withoutConstruction(c: SketchCurve): SketchCurve {
 }
 
 /**
- * Point ids a curve is defined by: line [p1, p2], circle [center], arc [center, start, end].
+ * Point ids a curve is defined by: line and xline [p1, p2], circle [center], arc [center, start,
+ * end].
  */
 export function curvePoints(c: SketchCurve): readonly SketchEntityId[] {
   switch (c.kind) {
     case 'line':
+    case 'xline':
       return [c.p1, c.p2];
     case 'circle':
       return [c.center];
@@ -330,15 +342,16 @@ export function removeItems(data: SketchData, ids: readonly SketchItemId[]): Ske
 
 /**
  * Toggles construction of the selected curves: all construction → all normal, otherwise all
- * construction. Points and constraints are ignored. A normal curve has no `construction` field.
+ * construction. Points, constraints and xlines (always construction, M31) are ignored. A normal
+ * curve has no `construction` field.
  */
 export function toggleConstruction(data: SketchData, ids: readonly SketchItemId[]): SketchData {
   const selected = new Set<string>(ids);
-  const targets = data.entities.filter((e) => isCurve(e) && selected.has(e.id));
+  const targets = data.entities.filter((e) => isTogglable(e) && selected.has(e.id));
   if (targets.length === 0) return data;
-  const makeConstruction = !targets.every((c) => isCurve(c) && c.construction === true);
+  const makeConstruction = !targets.every((c) => isTogglable(c) && c.construction === true);
   const entities = data.entities.map((e): SketchEntity => {
-    if (!isCurve(e) || !selected.has(e.id)) return e;
+    if (!isTogglable(e) || !selected.has(e.id)) return e;
     if (makeConstruction) return Object.freeze({ ...e, construction: true });
     // Rebuilt without the field: a normal curve has no `construction` at all.
     return Object.freeze(withoutConstruction(e));

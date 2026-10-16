@@ -677,6 +677,8 @@ export type SketchCurve = SketchLine | SketchCircle | SketchArc | SketchBSpline 
 - `curve2(xline)` vrátí `line` od `m − XLINE_EXTENT · d̂` do `m + XLINE_EXTENT · d̂` (`m` střed `p1p2`, `d̂` jednotkový směr, `XLINE_EXTENT = 1e5` mm, export ze `sketch`). Kresba, picking a snapper tak přímku vidí jako dlouhou úsečku bez zásahu do `render`. Snapper nepřichytí ke „koncům“ ani ke středu té úsečky – jen k `p1`, `p2` a k přímce (`onCurve`).
 - Vazby: kde vazba bere úsečku jako **přímku** (`horizontal`, `vertical`, `parallel`, `perpendicular`, `angle`, `pointLineDistance`, `pointOnCurve`, `tangent` přímka–kružnice/oblouk, osa `symmetric`), bere i `xline`. Kde jde o **úsečku s délkou** (`midpoint`, `equal`, kóta délky z `dimensionFor`), `xline` ne (`constraintFor`/`dimensionFor` → `null`, parse → `sketch.invalidConstraint`). Planegcs: přímka jako `line` přes `p1`, `p2` (vazby na úsečce už dnes pracují s nekonečnou přímkou).
 - `removeItems`: smazání `p1` nebo `p2` smaže přímku, jako u úsečky.
+- Totéž pravidlo platí pro umístění a kresbu kót (`dimensionTarget`, `sketch-dimensions.ts`): bod + přímka a dvě přímky (úhel) ano, samotná přímka (délka) ne. Řešič převede přímku na `line` jednou na vstupu (`asLine`), mapování vazeb se nemění. `endTangent(xline)` → `null` (nemá konce).
+- Osa rotace (Revolve) zatím bere jen úsečku (`isSketchLine`, `resolveSketchLine`); přímka jako osa je mimo M31.
 
 #### Vazba symetrie (M36, stopa C)
 
