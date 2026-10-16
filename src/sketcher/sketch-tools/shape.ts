@@ -120,6 +120,19 @@ export function axisConstraint(
 }
 
 /**
+ * The draft with the constraints of the locked fields of the numeric input (M32) appended, all of
+ * them required (the entered dimensions are exact).
+ */
+export function withTyped(draft: ShapeDraft, typed: readonly SketchConstraint[]): ShapeDraft {
+  if (typed.length === 0) return draft;
+  return {
+    ...draft,
+    constraints: [...draft.constraints, ...typed],
+    required: [...draft.required, ...typed.map((c) => c.id)],
+  };
+}
+
+/**
  * Writes a shape: the new points with their inferred constraints, the curves and constraints of
  * the draft (its `required` required) and the `automatic` constraints, in one addDrawn (construction mode, M31).
  */
@@ -137,4 +150,13 @@ export function addShape(
     },
     { required: new Set(draft.required) },
   );
+}
+
+/**
+ * The snap tolerance of the computed corners of a rectangle (M32): 0 with a point of the numeric
+ * input, so a corner of a typed size never jumps onto a nearby point (the solver would then move
+ * the typed size); otherwise `tolerance`.
+ */
+export function computedTolerance(mode: { readonly input?: Vec2 }, tolerance: number): number {
+  return mode.input === undefined ? tolerance : 0;
 }

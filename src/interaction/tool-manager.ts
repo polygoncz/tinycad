@@ -184,16 +184,22 @@ export function createToolManager(deps: {
     current?.tool.onPointer?.(e);
   }
 
+  /** M32: a key handled by a layer, the tool or unhandledKey is consumed (Tab keeps the focus). */
   function onKey(e: ViewKeyEvent): void {
-    if (layers.some((layer) => layer.onKey(e))) return;
+    if (handleKey(e)) e.consume?.();
+  }
+
+  /** True = a layer, the tool or unhandledKey handled the key. */
+  function handleKey(e: ViewKeyEvent): boolean {
+    if (layers.some((layer) => layer.onKey(e))) return true;
     const activation = current;
-    if (activation === null) return;
-    if (activation.tool.onKey?.(e) === true) return;
+    if (activation === null) return false;
+    if (activation.tool.onKey?.(e) === true) return true;
     if (isPlainEscape(e) && activation.id !== defaultToolId()) {
       switchTo(defaultToolId());
-      return;
+      return false;
     }
-    deps.unhandledKey?.(e);
+    return deps.unhandledKey?.(e) === true;
   }
 
   /** A new mode: the active tool gives way to the default tool of the mode. */

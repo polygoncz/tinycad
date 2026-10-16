@@ -258,3 +258,42 @@ describe('the point tool', () => {
     expect(viewport.overlayShapes.has('sketch-tool')).toBe(false);
   });
 });
+
+/** Types the keys into the view one by one. */
+function type(viewport: FakeViewport, keys: readonly string[]): void {
+  for (const key of keys) viewport.emitKey({ key, mods: NO_MODS, inTextField: false });
+}
+
+const chars = (text: string): readonly string[] => Array.from(text);
+
+describe('the numeric input of the point tool (M32)', () => {
+  it('X and Y from the keyboard place a point there, without constraints', async () => {
+    const { viewport, session } = await drawing('sketch.point');
+    move(viewport, [40, 40]);
+    type(viewport, [...chars('12'), 'Tab', ...chars('-5'), 'Enter']);
+    await settle();
+
+    const [point] = added(session, 'point');
+    expect(xyOf(session, point?.id ?? '')).toEqual([12, -5]);
+    expect(constraintsOf(session)).toEqual([]);
+  });
+
+  it('a locked X with Y from the mouse; the point is not snapped onto an existing one', async () => {
+    const { viewport, session } = await drawing('sketch.point', LONE_POINT);
+    type(viewport, [...chars('50'), 'Tab']);
+    await click(viewport, [49, 50]);
+
+    const [point] = added(session, 'point', LONE_POINT);
+    expect(xyOf(session, point?.id ?? '')).toEqual([50, 50]);
+    expect(constraintsOf(session)).toEqual([]);
+  });
+
+  it('shows the fields x and y at the cursor', async () => {
+    const { viewport, session } = await drawing('sketch.point');
+    move(viewport, [3, 4]);
+    expect(session.state.get().numericInput?.fields.map((f) => [f.id, f.text])).toEqual([
+      ['x', '3.00'],
+      ['y', '4.00'],
+    ]);
+  });
+});

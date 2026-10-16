@@ -4,6 +4,10 @@
 // (required). The centre and the corner go through the snapper; the three computed corners too,
 // at their place, without the grid and never onto the clicked points. A degenerate rectangle
 // makes nothing. The click and the preview of a move share one step (rectangleCenterStep).
+//
+// The numeric input (spec 12, M32): the centre has the fields x and y, the corner the whole width
+// and height (the sign from the quadrant of the cursor); a locked width becomes a required
+// distance of the side ab, a locked height of the side bc.
 
 import type { Vec2 } from '@/core';
 import { rectangleCenterShape, rectangleFromCenter } from '@/sketch';
@@ -11,10 +15,28 @@ import type { PointInference, SketchData } from '@/sketch';
 import { isPlainEscape } from '@/interaction';
 import type { Tool } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
-import { clearPreview, clickTool, previewInference, previewPairs, snapMode } from './common';
+import {
+  clearPreview,
+  clickTool,
+  constrainXY,
+  inputValues,
+  measureXY,
+  previewInference,
+  previewPairs,
+  snapMode,
+  XY_FIELDS,
+} from './common';
+import { constrainSize, measureSize, SIZE_FIELDS, sizeDimensions } from './rectangle-input';
 import { placePoint, samePoint, sessionData, snapAt, snapToleranceAt } from './snap';
 import type { SnapTarget } from './snap';
-import { addShape, shapeIds, snapComputed, withoutOwnAlignment } from './shape';
+import {
+  addShape,
+  computedTolerance,
+  shapeIds,
+  snapComputed,
+  withoutOwnAlignment,
+  withTyped,
+} from './shape';
 
 /** Corners a, b, c, d (lines ab, bc, cd, da); c is the clicked corner. */
 type Corners = readonly [SnapTarget, SnapTarget, SnapTarget, SnapTarget];
@@ -35,13 +57,30 @@ export function createRectangleCenterTool(sketches: SketchEditor): Tool {
     reset() {
       center = null;
     },
+    inputFields() {
+      return center === null ? XY_FIELDS : SIZE_FIELDS;
+    },
+    constrain(cursor, values) {
+      return center === null
+        ? constrainXY(cursor, values)
+        : constrainSize(center.at, cursor, values, true);
+    },
+    measure(at) {
+      return center === null ? measureXY(at) : measureSize(center.at, at, true);
+    },
     onMove(ctx, session, x, y, mods) {
       const mode = snapMode(sketches, mods);
       const target = snapAt(ctx, session, x, y, mode);
       const tolerance = snapToleranceAt(ctx, session, x, y);
       if (target === null || tolerance === null) return;
       const data = sessionData(session, []);
-      const step = rectangleCenterStep(data, center, target, tolerance, mode.infer);
+      const step = rectangleCenterStep(
+        data,
+        center,
+        target,
+        computedTolerance(mode, tolerance),
+        mode.infer,
+      );
       previewInference(session, target.at, stepInferences(step), target.guides);
       if (center === null) return;
       // A degenerate rectangle is not drawn.
@@ -54,7 +93,13 @@ export function createRectangleCenterTool(sketches: SketchEditor): Tool {
       const tolerance = snapToleranceAt(ctx, session, x, y);
       if (target === null || tolerance === null) return;
       const data = sessionData(session, []);
-      const step = rectangleCenterStep(data, center, target, tolerance, mode.infer);
+      const step = rectangleCenterStep(
+        data,
+        center,
+        target,
+        computedTolerance(mode, tolerance),
+        mode.infer,
+      );
       switch (step.kind) {
         case 'none':
           return;
@@ -78,7 +123,8 @@ export function createRectangleCenterTool(sketches: SketchEditor): Tool {
             placedCenter.id,
             shapeIds(ctx),
           );
-          addShape(session, [placedCenter, ...placed], draft);
+          const typed = sizeDimensions(ctx, [pa.id, pb.id, pc.id], inputValues(mods));
+          addShape(session, [placedCenter, ...placed], withTyped(draft, typed));
           return;
         }
       }

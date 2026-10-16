@@ -218,6 +218,11 @@ export interface ViewKeyEvent {
   readonly mods: KeyMods;
   /** Focus in a text field → shortcuts are ignored. */
   readonly inTextField: boolean;
+  /**
+   * M32: the key was handled (ToolManager calls it after a layer, the tool or unhandledKey took
+   * it); render fills it with preventDefault, so Tab does not move the focus out of the view.
+   */
+  consume?(): void;
 }
 
 /** M19: the HUD of a manipulator moves (spec 10, "Port viewportu"). */
