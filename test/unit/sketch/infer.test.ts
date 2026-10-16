@@ -287,3 +287,28 @@ describe('inferRadius', () => {
     expect(inferRadius(radius, DATA, previous === null ? null : id(previous))).toBe(expected);
   });
 });
+
+describe('inferLine with an xline (M31)', () => {
+  /** The xline x through a (0,0) and b at 30°. */
+  const XLINE = sketch([
+    { kind: 'point', id: 'a', x: 0, y: 0 },
+    { kind: 'point', id: 'b', x: B[0], y: B[1] },
+    { kind: 'xline', id: 'x', p1: 'a', p2: 'b', construction: true },
+  ]);
+  const opts = { previous: null, angleTolerance: TOL };
+
+  it('a line from a point of the xline gets parallel or perpendicular to its carrier line', () => {
+    expect(inferLine(from(XLINE, 'b'), polar(B, 7, 31), XLINE, opts)).toEqual([
+      { kind: 'parallel', line: id('x') },
+    ]);
+    expect(inferLine(from(XLINE, 'a'), polar([0, 0], 7, 121), XLINE, opts)).toEqual([
+      { kind: 'perpendicular', line: id('x') },
+    ]);
+  });
+
+  it('an xline as `previous` gives no equal (it has no length)', () => {
+    expect(
+      inferLine(NEW([100, 0]), polar([100, 0], 10, 30 + 45), XLINE, { ...opts, previous: id('x') }),
+    ).toEqual([]);
+  });
+});

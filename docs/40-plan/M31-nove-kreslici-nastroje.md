@@ -48,7 +48,7 @@ Upřesnění v sezení 2026-10-16:
 - [x] Nástroje obdélník středem a třemi body, bod, přímka.
 - [x] Nástroje drážek.
 - [x] Režim konstrukce.
-- [ ] Snapper, glyfy, e2e a spec.
+- [x] Snapper, glyfy, e2e a spec.
 
 ## Implementační plán
 
@@ -116,6 +116,7 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **Úkol 5 hotový:** `addDrawn` ve všech kreslicích nástrojích, akce `sketch.construction` podle B4, `Action.checked`. Tlačítko je ve skupině akcí `sketch.draw` (přes `actionGroups`, protože `actionButtons` kreslí před nástroje). Po kontrole upraveno **`ActionState.checked: boolean | null`** (null = není přepínač), aby vypnutý přepínač měl `aria-pressed="false"` a čtečka ho poznala; propsáno do spec 10, 11, 12.
 - **Úkol 4 hotový:** `slot-tool.ts` (tři druhy jedním nástrojem), ikony `capsule-horizontal`, `arrow-autofit-width`, `rainbow`. Klik šířky bere jen souřadnici ze snapperu (přichytí se i k existujícímu bodu, jeho id ani vazby se nepoužijí). Zarovnání druhého bodu osy s prvním nahradí `horizontal`/`vertical` osy (jako u úsečky). Při sloučení přepnuto na `addDrawn` + test drážky v režimu konstrukce.
 - **Úkol 3 hotový:** `rectangle-center-tool.ts`, `rectangle3p-tool.ts`, `point-tool.ts`, `xline-tool.ts`, společné `shape.ts` (`snapComputed`, `sideAxis`, `addShape`); ikony `square-dot`, `square-rotated`, `point`, `arrows-horizontal`. Pořadí ve skupině Kreslit: úsečka ▾, obdélník ▾, kružnice ▾, oblouk ▾, spline ▾, drážka ▾, bod, Konstrukční. Bod bez rozpracovaného stavu → Esc ukončí nástroj. Popisek „Obdélník“ → „Obdélník rohy“ (e2e upravené). Při sloučení přepnuto na `addDrawn`; `npm run check` zelený (6688 testů). Zjištěno mimo rozsah: stávající rohový obdélník nemá vlastní Esc (Esc po prvním rohu ukončí nástroj místo zrušení rohu).
+- **Úkol 6 hotový:** snapper přímky (jen `p1`, `p2`, `onCurve` na celé nosné přímce), nástroj kóty bere přímku (po kontrole doplněno i pořadí přímka → bod/úsečka), `inferLine` bere přímku sdílející bod (rovnoběžnost/kolmost), e2e `m31.spec.ts` (12 testů v chrome i webkit). Lišta skicáře je širší: test přetékání v `m19-1-toolbar` běží při 800 px místo 700 px (propsáno do spec 11). `npm run check` zelený (6701 testů); celé e2e 146/148 před úpravou šířky, obě selhání = šířka lišty.
 - **B4 (Pavel, jako Onshape):** režim konstrukce = rozšířená akce `sketch.construction` (`Q`): s křivkami ve výběru je přepne, bez nich přepne režim; tlačítko v liště svítí (`Action.checked`). Id `sketch.constructionMode` nevzniká (`Q` už patří `sketch.construction`, registr nedovolí dvě akce se stejnou zkratkou). Nové křivky označí pomůcka nástrojů `addDrawn`, ne `addGeometry`, aby režim nezasáhl úpravy jiných stop (trim, zrcadlení).
 
 ## Retrospektiva

@@ -110,8 +110,8 @@ function segmentDistance(from: Vec2, to: Vec2, x: number, y: number): number {
   return Math.hypot(x - (ax + t * (bx - ax)), y - (ay + t * (by - ay)));
 }
 
-/** An open new sketch with SKETCH, the dimension tool active. */
-async function dimensioning() {
+/** An open new sketch with `sketch` (SKETCH by default), the dimension tool active. */
+async function dimensioning(sketch: SketchData = SKETCH) {
   const schemas = createFeatureSchemaRegistry();
   schemas.register(SKETCH_SCHEMA);
   const ops = anOpsSession({ schemas });
@@ -152,7 +152,7 @@ async function dimensioning() {
   manager.activate('sketch');
   const session = sketches.current.get();
   if (session === null) throw new Error('no session');
-  await session.addGeometry(SKETCH);
+  await session.addGeometry(sketch);
   await settle();
   manager.activate('sketch.dimension');
   return { viewport, manager, session };
@@ -398,6 +398,79 @@ describe('the dimension tool: a point first', () => {
 
     expect(previewOf(session)).toBeUndefined();
     expect(constraintsOf(session)).toEqual([]);
+  });
+});
+
+/** SKETCH with the horizontal xline x through x1 (0,150) and x2 (10,150) (M31). */
+const WITH_XLINE = data([
+  ...SKETCH.entities,
+  { kind: 'point', id: 'x1', x: 0, y: 150 },
+  { kind: 'point', id: 'x2', x: 10, y: 150 },
+  { kind: 'xline', id: 'x', p1: 'x1', p2: 'x2', construction: true },
+]);
+
+/** A point on the xline far from p1p2. */
+const ON_X: Vec2 = [300, 150];
+
+describe('the dimension tool: an xline (M31)', () => {
+  it('an xline on its own has no length: no preview, it waits for another entity', async () => {
+    const { viewport, session } = await dimensioning(WITH_XLINE);
+    await click(viewport, ON_X);
+    move(viewport, [300, 200]);
+    expect(previewOf(session)).toBeUndefined();
+    await click(viewport, [300, 200]);
+
+    expect(constraintsOf(session)).toEqual([]);
+  });
+
+  it('the xline and then a point: the distance of the point from the xline', async () => {
+    const { viewport, session } = await dimensioning(WITH_XLINE);
+    await click(viewport, ON_X);
+    await click(viewport, [100, 20]);
+    expect(previewOf(session)?.kind).toBe('pointLineDistance');
+    await click(viewport, [150, 0]);
+
+    expect(constraintsOf(session)).toHaveLength(1);
+    expect(constraintsOf(session)[0]).toMatchObject({
+      kind: 'pointLineDistance',
+      point: 'm',
+      line: 'x',
+    });
+  });
+
+  it('the xline and then a line: the angle', async () => {
+    const { viewport, session } = await dimensioning(WITH_XLINE);
+    await click(viewport, ON_X);
+    await click(viewport, ON_PQ);
+    expect(previewOf(session)?.kind).toBe('angle');
+  });
+
+  it('a point and then the xline: the distance of the point from the xline', async () => {
+    const { viewport, session } = await dimensioning(WITH_XLINE);
+    await click(viewport, [100, 20]);
+    await click(viewport, ON_X);
+    expect(previewOf(session)?.kind).toBe('pointLineDistance');
+    await click(viewport, [150, 0]);
+
+    const [dimension] = constraintsOf(session);
+    expect(constraintsOf(session)).toHaveLength(1);
+    expect(dimension).toMatchObject({ kind: 'pointLineDistance', point: 'm', line: 'x' });
+    expect(dimension).toHaveProperty('value', expect.closeTo(130, 9));
+  });
+
+  it('a hanging dimension of a line and a click on the xline: the angle', async () => {
+    const { viewport, session } = await dimensioning(WITH_XLINE);
+    await click(viewport, ON_PQ);
+    await click(viewport, ON_X);
+    expect(constraintsOf(session)).toEqual([]);
+    expect(previewOf(session)?.kind).toBe('angle');
+
+    // The vertex is (115, 150); d_pq = (30, 40), d_x = (10, 0): the cursor between both rays.
+    await click(viewport, [200, 200]);
+    const [angle] = constraintsOf(session);
+    expect(constraintsOf(session)).toHaveLength(1);
+    expect(angle).toMatchObject({ kind: 'angle', a: 'pq', b: 'x' });
+    expect(angle).toHaveProperty('value', expect.closeTo(Math.acos(0.6), 9));
   });
 });
 

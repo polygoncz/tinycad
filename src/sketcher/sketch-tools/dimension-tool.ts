@@ -21,7 +21,7 @@ import { entityAt } from './snap';
 /** The work in progress of the tool. */
 type Step =
   | { readonly kind: 'idle' }
-  /** A point clicked: waits for the second entity. */
+  /** A point or an xline (M31, it has no length) clicked: waits for the second entity. */
   | { readonly kind: 'point'; readonly point: SketchEntity }
   /**
    * The dimension hangs on the cursor. `line` = the target is one line, so a click on another
@@ -112,7 +112,10 @@ export function createDimensionTool(sketches: SketchEditor): Tool {
     void session.addConstraint(constraint);
   }
 
-  /** A click without a target: a line or a curve hangs at once, a point waits for another entity. */
+  /**
+   * A click without a target: a line or a curve hangs at once, a point or an xline waits for
+   * another entity.
+   */
   function start(
     ctx: ToolContext,
     session: SketchSession,
@@ -120,7 +123,7 @@ export function createDimensionTool(sketches: SketchEditor): Tool {
     x: number,
     y: number,
   ): void {
-    if (entity.kind === 'point') {
+    if (entity.kind === 'point' || entity.kind === 'xline') {
       step = { kind: 'point', point: entity };
       return;
     }
@@ -167,12 +170,15 @@ export function createDimensionTool(sketches: SketchEditor): Tool {
 }
 
 /**
- * The new target when a dimension of one line hangs: another line → the angle, a point that is
- * not an end of the line → the distance of the point from the line; anything else → null (place).
+ * The new target when a dimension of one line hangs: another line or an xline (M31) → the angle,
+ * a point that is not an end of the line → the distance of the point from the line; anything
+ * else → null (place).
  */
 function retarget(line: SketchLine, entity: SketchEntity | null): DimensionTarget | null {
   if (entity === null) return null;
-  if (entity.kind === 'line' && entity.id !== line.id) return dimensionTarget([line, entity]);
+  if ((entity.kind === 'line' || entity.kind === 'xline') && entity.id !== line.id) {
+    return dimensionTarget([line, entity]);
+  }
   if (entity.kind === 'point') return dimensionTarget([line, entity]);
   return null;
 }
