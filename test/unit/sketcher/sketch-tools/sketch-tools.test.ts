@@ -11,7 +11,11 @@ import type { BodyId, FeatureId, FeatureSchema, ParamSchema, PlaneRef, TopoRef }
 import { anOpsSession } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE, isPattern, parseSketchData } from '@/sketch';
 import type { SketchConstraint, SketchCurve, SketchData, SketchEntity } from '@/sketch';
-import { createFakeSketchGeometry, createFakeSolver } from '@/sketch/testing';
+import {
+  createFakeSketchGeometry,
+  createFakeSolver,
+  createFakeTextOutliner,
+} from '@/sketch/testing';
 import {
   createFeatureEditor,
   createSelectionModel,
@@ -155,6 +159,7 @@ function setup(opts: { gridStep?: () => number } = {}) {
     features: editor,
     solver,
     geometry: createFakeSketchGeometry(),
+    text: createFakeTextOutliner(),
     viewport,
     resolvePlane,
     planeOfSketch: () => undefined,
@@ -315,6 +320,15 @@ describe('createSketchTools', () => {
         group: 'draw',
         modes: ['sketch'],
         shortcut: 'P',
+        family: 'line',
+      },
+      {
+        id: 'sketch.text',
+        label: 'tool.text',
+        icon: 'typography',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
         family: 'line',
       },
       {
@@ -519,7 +533,7 @@ describe('createSketchTools', () => {
     ]);
   });
 
-  it('the rectangles and the lines (with the point) are families with the old tool first (M31)', () => {
+  it('the rectangles and the lines (with the point and the text, M37) are families with the old tool first (M31)', () => {
     const { tools } = setup();
     expect(tools.filter((t) => t.family === 'rectangle').map((t) => t.id)).toEqual([
       'sketch.rectangle',
@@ -530,6 +544,7 @@ describe('createSketchTools', () => {
       'sketch.line',
       'sketch.xline',
       'sketch.point',
+      'sketch.text',
     ]);
   });
 

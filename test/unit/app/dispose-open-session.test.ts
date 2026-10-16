@@ -4,7 +4,7 @@ import type { DocumentId } from '@/document';
 import { createMemoryDocumentStore } from '@/persistence';
 import type { DocumentStore } from '@/persistence';
 import { createManualScheduler } from '@/persistence/testing';
-import { createFakeSolver } from '@/sketch/testing';
+import { createFakeSolver, createFakeTextOutliner } from '@/sketch/testing';
 import { disposeOpenSession } from '@/app/dispose-open-session';
 import { BUILT_IN_PLUGINS, createAppSession } from '@/app/index';
 import { aKernelFactory, FakeAppViewport, settle } from '@/app/testing';
@@ -93,6 +93,7 @@ describe('disposeOpenSession', () => {
       confirm: () => true,
       readOnly: false,
       solver: createFakeSolver(),
+      text: createFakeTextOutliner(),
       download: () => undefined,
       theme: 'light',
     });

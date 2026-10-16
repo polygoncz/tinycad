@@ -220,3 +220,20 @@ describe('derivedOwner', () => {
     },
   );
 });
+
+describe('textCurves on an xline (after M31)', () => {
+  it('lays the text along an xline from its p1', () => {
+    const base = textData({ text: 'a', contours: [SQUARE], p1: [5, 7], p2: [20, 7] });
+    const data = {
+      ...base,
+      entities: base.entities.map((e) =>
+        e.kind === 'line'
+          ? { kind: 'xline' as const, id: e.id, p1: e.p1, p2: e.p2, construction: true as const }
+          : e,
+      ),
+    };
+    const curves = textCurves(data);
+    expect(curves).toHaveLength(4);
+    expect(line(curves[0])).toEqual({ from: [5, 7], to: [6, 7] });
+  });
+});

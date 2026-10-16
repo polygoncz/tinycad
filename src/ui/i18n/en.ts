@@ -146,6 +146,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'tool.rectangle3p': '3-point rectangle',
   'tool.point': 'Point',
   'tool.xline': 'Construction line',
+  'tool.text': 'Text',
   'tool.circle': 'Circle',
   'tool.circle2p': '2-point circle',
   'tool.circle3p': '3-point circle',
@@ -334,6 +335,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'hint.circularPattern.center': 'Click the center point of the pattern, Esc goes back',
   'hint.pattern.edit':
     'Click a pattern dimension to change the count, spacing or angle, or select more sources',
+  'hint.text.place': 'Click the start of the baseline of the text',
 
   // Labels of the built-in operations in the history panel: the dispatcher writes the op type
   // as the label of an entry without one. feature.rename and feature.suppress are above (actions).

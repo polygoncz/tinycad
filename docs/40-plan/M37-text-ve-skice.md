@@ -104,5 +104,6 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **Úkol 2 hotový:** `SketchText`, parse, `removeItems` (kotva → text), `toggleConstruction`, `textCurves`, `derivedOwner`, větev `regionCurves`; `Curve2` přesunutý do `curve2.ts` kvůli cyklu. 6945 unit testů zelených.
 - **Natažení `main` (M36 sloučený s M31, merge `2d00268`):** 4 konflikty (edit, geometry, index), `toggleConstruction` sjednocený s `isTogglable` M31 (text přepínatelný, xline ne).
 - **Úkol 2a (HUD nápověda) hotový:** Pavel schválil kontrakt `ToolHint`/`setHint`/`ToolManager.hint`/`AppSession.tools.hint`, `ToolHintHud.vue`; nápovědy zrcadlení a polí po krocích. Kontrakt ohlášen hlavnímu sezení. 7170 unit, e2e 156/156.
+- **Úkol 3, část skicář hotová:** kresba a pick písmen (`derivedOwner`), nástroj Text v rodině `line` za bodem (`addDrawn`, bez vazeb), `setTextParams`, `SketchEditor.text`, `fontUrl` + `createOpentypeOutliner` v `app/browser.ts` (fonty v `dist/assets`), osa zrcadlení / symetrie a kotva textu i `xline`. 7226 unit, e2e 156/156.
 
 ## Retrospektiva

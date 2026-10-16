@@ -8,6 +8,7 @@ import type {
   TextContour,
   TextFontId,
 } from './model';
+import { isLineCarrier } from './model';
 import { patternOfCopy } from './patterns';
 import { pointsById } from './points';
 
@@ -87,7 +88,7 @@ function placement(
   points: ReadonlyMap<SketchEntityId, SketchPoint>,
 ): ((p: Vec2) => Vec2) | undefined {
   const baseline = data.entities.find((e) => e.id === text.baseline);
-  if (baseline?.kind !== 'line') return undefined;
+  if (baseline === undefined || !isLineCarrier(baseline)) return undefined;
   const p1 = points.get(baseline.p1);
   const p2 = points.get(baseline.p2);
   if (p1 === undefined || p2 === undefined) return undefined;

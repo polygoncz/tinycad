@@ -6,7 +6,11 @@ import type { FeatureSchema, ParamSchema } from '@/document';
 import { anOpsSession } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE, isPattern, parseSketchData } from '@/sketch';
 import type { SketchData, SketchEntityId, SketchPattern } from '@/sketch';
-import { createFakeSketchGeometry, createFakeSolver } from '@/sketch/testing';
+import {
+  createFakeSketchGeometry,
+  createFakeSolver,
+  createFakeTextOutliner,
+} from '@/sketch/testing';
 import {
   SELECT_TOOL,
   createFeatureEditor,
@@ -152,6 +156,7 @@ async function patterning(
     features: editor,
     solver,
     geometry: createFakeSketchGeometry(),
+    text: createFakeTextOutliner(),
     viewport,
     resolvePlane: () => ({ origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, 0, 1] }),
     planeOfSketch: () => undefined,
@@ -278,6 +283,28 @@ describe('the mirror tool', () => {
     await click(viewport, ON_PQ);
     expect(selectionOf(session)).toEqual(['pq']);
     expect(newPatternsOf(session)).toHaveLength(1);
+  });
+
+  it('takes an xline as the axis (after M31)', async () => {
+    // The vertical xline x = 150 through o and u, clicked far from both points.
+    const sketch = data(
+      [
+        ...SKETCH.entities,
+        { kind: 'point', id: 'u', x: 150, y: 60 },
+        { kind: 'xline', id: 'xl', p1: 'o', p2: 'u', construction: true },
+      ],
+      SKETCH.constraints,
+    );
+    const { viewport, session } = await patterning('sketch.mirror', {
+      preselect: ['pq'],
+      sketch,
+    });
+
+    await key(viewport, 'Enter');
+    await click(viewport, [150, 200]);
+
+    const [mirror] = newPatternsOf(session);
+    expect(mirror).toEqual({ kind: 'mirror', id: mirror?.id, sources: ['pq'], axis: 'xl' });
   });
 
   it('in the axis step a point, a circle, a source line or nothing write nothing', async () => {

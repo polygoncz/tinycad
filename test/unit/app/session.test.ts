@@ -16,7 +16,7 @@ import type { ManualScheduler } from '@/persistence/testing';
 import type { FeaturePlugin } from '@/plugin-api';
 import { aSchema, aSketchArtifact, aSpyBuilder, buildCube } from '@/regen/testing';
 import { DARK_PALETTE } from '@/render';
-import { createFakeSolver, rectangleData } from '@/sketch/testing';
+import { createFakeSolver, createFakeTextOutliner, rectangleData } from '@/sketch/testing';
 import { SKETCH_ACTION_IDS } from '@/sketcher';
 import { createAppSession } from '@/app/index';
 import { RESTART_LIMIT } from '@/app/kernel-supervisor';
@@ -77,6 +77,7 @@ async function open(
     confirm: () => true,
     readOnly: false,
     solver: createFakeSolver(),
+    text: createFakeTextOutliner(),
     download: downloads.download,
     theme: 'light',
     ...overrides,
@@ -111,6 +112,7 @@ function sessionDeps(kernels: KernelFactory): AppSessionDeps {
     confirm: () => true,
     readOnly: false,
     solver: createFakeSolver(),
+    text: createFakeTextOutliner(),
     download: () => undefined,
     theme: 'light',
   };

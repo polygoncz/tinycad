@@ -4,7 +4,7 @@ import type { DocumentId } from '@/document';
 import { createMemoryDocumentStore } from '@/persistence';
 import type { FeaturePlugin } from '@/plugin-api';
 import { createManualScheduler } from '@/persistence/testing';
-import { createFakeSolver } from '@/sketch/testing';
+import { createFakeSolver, createFakeTextOutliner } from '@/sketch/testing';
 import { BUILT_IN_PLUGINS, createAppSession } from '@/app/index';
 import { aKernelFactory, FakeAppViewport } from '@/app/testing';
 
@@ -39,6 +39,7 @@ describe('BUILT_IN_PLUGINS', () => {
       confirm: () => true,
       readOnly: false,
       solver: createFakeSolver(),
+      text: createFakeTextOutliner(),
       download: () => undefined,
       theme: 'light',
     });

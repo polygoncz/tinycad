@@ -147,6 +147,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'tool.rectangle3p': 'Obdélník 3 body',
   'tool.point': 'Bod',
   'tool.xline': 'Konstrukční přímka',
+  'tool.text': 'Text',
   'tool.circle': 'Kružnice',
   'tool.circle2p': 'Kružnice 2 body',
   'tool.circle3p': 'Kružnice 3 body',
@@ -333,6 +334,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'hint.circularPattern.center': 'Klikni na bod středu pole, Esc zpět',
   'hint.pattern.edit':
     'Klikni na kótu pole a změň počet, rozteč nebo úhel, nebo vyber další zdroje',
+  'hint.text.place': 'Klikni na počátek účaří textu',
 
   // Labels of the built-in operations in the history panel: the dispatcher writes the op type
   // as the label of an entry without one. feature.rename and feature.suppress are above (actions).

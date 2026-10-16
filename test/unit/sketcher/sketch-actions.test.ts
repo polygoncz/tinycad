@@ -4,7 +4,7 @@ import { ORIGIN_PLANES, ORIGIN_PLANE_IDS } from '@/document';
 import type { FeatureId, PlaneId } from '@/document';
 import { GEOMETRIC_CONSTRAINT_KINDS, parseSketchData } from '@/sketch';
 import type { SketchConstraint, SketchItemId } from '@/sketch';
-import { rectangleData } from '@/sketch/testing';
+import { createFakeTextOutliner, rectangleData } from '@/sketch/testing';
 import { createActionRegistry } from '@/interaction';
 import type { Mode } from '@/interaction';
 import { SKETCH_ACTION_IDS, sketchConstraintActionId } from '@/sketcher/constants';
@@ -80,6 +80,7 @@ function aFakeSession() {
     moveDimension: () => undefined,
     endMoveDimension: () => undefined,
     setPatternParam: () => false,
+    setTextParams: () => Promise.resolve(false),
     setHover: () => undefined,
     select: () => undefined,
     clearSelection: () => undefined,
@@ -131,6 +132,7 @@ function setup() {
     showAllConstraints: new ObservableValue(false).asObservable(),
     setShowAllConstraints: () => expect.fail('setShowAllConstraints is not expected'),
     gridStep: () => expect.fail('gridStep is not expected'),
+    text: createFakeTextOutliner(),
   };
   const registry = createActionRegistry({ mode: mode.asObservable() });
   const actions = createSketchActions({

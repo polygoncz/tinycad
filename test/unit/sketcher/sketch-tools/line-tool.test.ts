@@ -6,7 +6,11 @@ import type { FeatureSchema, ParamSchema } from '@/document';
 import { anOpsSession } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE, parseSketchData } from '@/sketch';
 import type { SketchData, SketchEntity } from '@/sketch';
-import { createFakeSketchGeometry, createFakeSolver } from '@/sketch/testing';
+import {
+  createFakeSketchGeometry,
+  createFakeSolver,
+  createFakeTextOutliner,
+} from '@/sketch/testing';
 import {
   SELECT_TOOL,
   createFeatureEditor,
@@ -83,6 +87,7 @@ async function sketching(opts: { sketch?: SketchData } = {}) {
     features: editor,
     solver: fake,
     geometry: createFakeSketchGeometry(),
+    text: createFakeTextOutliner(),
     viewport,
     resolvePlane: () => ({ origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, 0, 1] }),
     planeOfSketch: () => undefined,

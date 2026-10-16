@@ -60,6 +60,7 @@ describe('sketch public API', () => {
         'tangentArcFrom',
         'tangentCircle',
         'textCurves',
+        'textParamsValid',
         'toggleConstruction',
       ].sort(),
     );

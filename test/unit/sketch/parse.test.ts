@@ -1098,3 +1098,40 @@ describe('parseSketchData – text (M37)', () => {
     expect(r.ok).toBe(true);
   });
 });
+
+describe('parseSketchData – an xline as an axis or a baseline (M36, M37 after M31)', () => {
+  const XLINE = { kind: 'xline', id: 'x', p1: 'b', p2: 'd', construction: true };
+  const WITH_XLINE: readonly unknown[] = [...ENTITIES, XLINE];
+
+  it('accepts a mirror across an xline', () => {
+    const mirror = { kind: 'mirror', id: 'm', sources: ['ab'], axis: 'x' };
+    expect(entityIssues([...WITH_XLINE, mirror])).toEqual([]);
+  });
+
+  it('accepts a text on an xline', () => {
+    const text = {
+      kind: 'text',
+      id: 't',
+      text: 'a',
+      font: 'sans',
+      height: 10,
+      baseline: 'x',
+      contours: [],
+    };
+    expect(entityIssues([...WITH_XLINE, text])).toEqual([]);
+  });
+
+  it('accepts a symmetric constraint across an xline', () => {
+    const r = parseSketchData(WITH_XLINE, [
+      { kind: 'symmetric', id: 's', a: 'a', b: 'c', axis: 'x' },
+    ]);
+    expect(r.ok ? [] : r.error).toEqual([]);
+  });
+
+  it('reports a symmetric constraint with a point of the xline', () => {
+    const r = parseSketchData(WITH_XLINE, [
+      { kind: 'symmetric', id: 's', a: 'b', b: 'c', axis: 'x' },
+    ]);
+    expect(r.ok ? [] : r.error).toEqual([constraintIssue(0)]);
+  });
+});

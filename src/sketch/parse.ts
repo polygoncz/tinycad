@@ -1,6 +1,6 @@
 import { err, ok } from '@/core';
 import type { Result } from '@/core';
-import { MAX_TEXT_LENGTH, TEXT_FONTS, isDimensionKind, patternParamsValid } from './model';
+import { isDimensionKind, patternParamsValid, textParamsValid } from './model';
 import type { DimensionKind, DimensionPlacement, SketchData, SketchPattern } from './model';
 
 // Shape and invariant checks of sketch data (spec 12 "Kontrola dat"). The only trusted place
@@ -62,6 +62,9 @@ const MAX_SPLINE_DEGREE = 3;
 type Target = 'point' | 'line' | 'carrier' | 'round' | 'curve';
 const ROUND = new Set(['circle', 'arc']);
 const CARRIER = new Set(['line', 'xline']);
+/** A raw target that is a line or an xline (M31): a mirror axis, a text baseline. */
+const isCarrier = (t: Fields | undefined): boolean =>
+  typeof t?.kind === 'string' && CARRIER.has(t.kind);
 /** pointOnCurve may lie on any curve, a spline (M29) and an xline (M31) too. */
 const CURVE = new Set(['line', 'circle', 'arc', 'bspline', 'fitSpline', 'xline']);
 
@@ -95,7 +98,7 @@ const CONSTRAINT_FIELDS: Readonly<Record<string, Readonly<Record<string, Target 
   midpoint: { point: 'point', line: 'line' },
   hAlign: { a: 'point', b: 'point' },
   vAlign: { a: 'point', b: 'point' },
-  symmetric: { a: 'point', b: 'point', axis: 'line' },
+  symmetric: { a: 'point', b: 'point', axis: 'carrier' },
   fix: { point: 'point' },
   distance: { a: 'point', b: 'point', value: 'value' },
   hDistance: { a: 'point', b: 'point', value: 'value' },
@@ -215,7 +218,7 @@ function entityValid(
     }
     case 'mirror': {
       const axis = typeof item.axis === 'string' ? targets.get(item.axis) : undefined;
-      return patternValid(item, targets, item.axis) && axis?.kind === 'line';
+      return patternValid(item, targets, item.axis) && isCarrier(axis);
     }
     case 'linearPattern':
       return (
@@ -236,11 +239,12 @@ function entityValid(
       const baseline = typeof item.baseline === 'string' ? targets.get(item.baseline) : undefined;
       return (
         plainId(item.id) &&
-        baseline?.kind === 'line' &&
-        (TEXT_FONTS as readonly unknown[]).includes(item.font) &&
-        isFiniteNumber(item.height) &&
-        item.height > 0 &&
-        textContentValid(item.text, item.contours)
+        isCarrier(baseline) &&
+        typeof item.text === 'string' &&
+        typeof item.font === 'string' &&
+        typeof item.height === 'number' &&
+        textParamsValid({ text: item.text, font: item.font, height: item.height }) &&
+        contoursValid(item.text, item.contours)
       );
     }
     default:
@@ -249,14 +253,12 @@ function entityValid(
 }
 
 /**
- * The string and the outlines of a text (M37): 1 … MAX_TEXT_LENGTH code points without control
- * characters; every contour belongs to a character of the string (its index in code points and its
- * code point) and is a closed chain of 2–4-pole segments with finite coordinates.
+ * The outlines of a text (M37): every contour belongs to a character of the string (its index in
+ * code points and its code point) and is a closed chain of 2–4-pole segments with finite
+ * coordinates.
  */
-function textContentValid(text: unknown, contours: unknown): boolean {
-  if (typeof text !== 'string' || /\p{Cc}/u.test(text)) return false;
+function contoursValid(text: string, contours: unknown): boolean {
   const chars = Array.from(text);
-  if (chars.length === 0 || chars.length > MAX_TEXT_LENGTH) return false;
   if (!Array.isArray(contours)) return false;
   return (contours as readonly unknown[]).every((c) => {
     if (!isRecord(c) || !hasExactly(c, ['char', 'code', 'segments'], [])) return false;

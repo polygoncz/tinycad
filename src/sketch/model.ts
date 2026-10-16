@@ -93,7 +93,7 @@ export type SketchCurve =
   SketchLine | SketchCircle | SketchArc | SketchBSpline | SketchFitSpline | SketchXLine;
 
 /**
- * Mirror of the sources across the axis (a line). One copy with index 1 (spec 12 "Zrcadlení a
+ * Mirror of the sources across the axis (a line or an xline, M31). One copy with index 1 (spec 12 "Zrcadlení a
  * pole (M36)"). Like every pattern, a recipe: the copies are derived (patternCopies).
  */
 export interface SketchMirror {
@@ -167,7 +167,7 @@ export interface SketchText {
   readonly font: TextFontId;
   /** Mm, > 0: the size of the font (em), like font-size. */
   readonly height: number;
-  /** A line: the baseline starts at its p1 and runs towards p2; its length does not matter. */
+  /** A line or an xline (M31): the baseline starts at its p1 and runs towards p2; its length does not matter. */
   readonly baseline: SketchEntityId;
   /** Computed by the sketcher from text, font and height (TextOutliner). */
   readonly contours: readonly TextContour[];
@@ -176,6 +176,27 @@ export interface SketchText {
 
 /** The longest text in code points. */
 export const MAX_TEXT_LENGTH = 200;
+
+/**
+ * The values of a text the user sets (M37): `text` 1 … MAX_TEXT_LENGTH code points without control
+ * characters (\p{Cc}), `font` one of TEXT_FONTS, `height` finite and > 0. The one rule for the
+ * data check (parseSketchData) and SketchSession.setTextParams.
+ */
+export function textParamsValid(p: {
+  readonly text: string;
+  readonly font: string;
+  readonly height: number;
+}): boolean {
+  const length = Array.from(p.text).length;
+  return (
+    length > 0 &&
+    length <= MAX_TEXT_LENGTH &&
+    !/\p{Cc}/u.test(p.text) &&
+    (TEXT_FONTS as readonly string[]).includes(p.font) &&
+    Number.isFinite(p.height) &&
+    p.height > 0
+  );
+}
 
 /** A mirror or a pattern: a member of SketchEntity, not of SketchCurve (it carries a recipe). */
 export type SketchPattern = SketchMirror | SketchLinearPattern | SketchCircularPattern;
@@ -412,7 +433,7 @@ export type SketchConstraint =
       readonly a: SketchEntityId;
       readonly b: SketchEntityId;
     }
-  /** Points a, b symmetric across the axis (a line): the middle of ab on the axis, ab perpendicular to it (M36). */
+  /** Points a, b symmetric across the axis (a line or an xline): the middle of ab on the axis, ab perpendicular to it (M36). */
   | {
       readonly kind: 'symmetric';
       readonly id: SketchConstraintId;

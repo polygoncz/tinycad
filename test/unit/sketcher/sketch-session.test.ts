@@ -17,8 +17,14 @@ import type {
   SketchConstraintId,
   SketchData,
   SketchEntityId,
+  TextOutliner,
 } from '@/sketch';
-import { createFakeSketchGeometry, createFakeSolver } from '@/sketch/testing';
+import {
+  createFakeSketchGeometry,
+  createFakeSolver,
+  createFakeTextOutliner,
+  textData,
+} from '@/sketch/testing';
 import { createFeatureEditor } from '@/interaction';
 import { FakeViewport } from '@/interaction/testing';
 import { createSketchEditor } from '@/sketcher/sketch-editor';
@@ -74,7 +80,11 @@ const SKETCH = data(
 );
 
 /** An open session on the sketch 's1' (on `plane`), after the first solve. */
-async function editing(plane: Plane = XY, sketch: SketchData = SKETCH) {
+async function editing(
+  plane: Plane = XY,
+  sketch: SketchData = SKETCH,
+  text: TextOutliner = createFakeTextOutliner(),
+) {
   const schemas = createFeatureSchemaRegistry();
   schemas.register(SKETCH_SCHEMA);
   const feature = aFeature<Record<string, unknown>>({
@@ -101,6 +111,7 @@ async function editing(plane: Plane = XY, sketch: SketchData = SKETCH) {
     features: editor,
     solver,
     geometry: createFakeSketchGeometry(),
+    text,
     viewport,
     resolvePlane: () => plane,
     planeOfSketch: () => plane,
@@ -589,5 +600,120 @@ describe('SketchSession pattern dimensions (M36)', () => {
 
     expect(docEntity(doc, 'm')).toBeUndefined();
     expect(docEntity(doc, 'lp')).toMatchObject({ direction1: { count: 5 } });
+  });
+});
+
+describe('SketchSession.setTextParams (M37)', () => {
+  /** The text 't' ('ab', sans, 10 mm) on its baseline and the line pq of SKETCH. */
+  const TEXT = data([...SKETCH.entities, ...textData().entities], SKETCH.constraints);
+  const fake = createFakeTextOutliner();
+
+  function docEntity(doc: ReturnType<typeof anOpsSession>['doc'], id: string): unknown {
+    const params = doc.feature(fid('s1'))?.params as Record<string, unknown> | undefined; // a sketch feature
+    const entities = (params?.entities as readonly { readonly id: string }[] | undefined) ?? [];
+    return entities.find((e) => e.id === id);
+  }
+
+  it('writes the string with new contours in one setParams without the solver', async () => {
+    const { session, solver, applied, doc } = await editing(XY, TEXT);
+    const calls = solver.calls.length;
+
+    await expect(session.setTextParams(eid('t'), { text: 'xyz' })).resolves.toBe(true);
+    await settle();
+
+    expect(applied.map((op) => op.type)).toEqual(['feature.setParams']);
+    expect(solver.calls).toHaveLength(calls);
+    expect(docEntity(doc, 't')).toEqual({
+      kind: 'text',
+      id: 't',
+      text: 'xyz',
+      font: 'sans',
+      height: 10,
+      baseline: 't.bl',
+      contours: await fake.outline({ text: 'xyz', font: 'sans', height: 10 }),
+    });
+  });
+
+  it('changes the font and the height; the rest of the text stays', async () => {
+    const construction = data([...textData({ construction: true }).entities]);
+    const { session, doc } = await editing(XY, construction);
+
+    await expect(session.setTextParams(eid('t'), { font: 'mono', height: 4 })).resolves.toBe(true);
+
+    expect(docEntity(doc, 't')).toEqual({
+      kind: 'text',
+      id: 't',
+      text: 'ab',
+      font: 'mono',
+      height: 4,
+      baseline: 't.bl',
+      contours: await fake.outline({ text: 'ab', font: 'mono', height: 4 }),
+      construction: true,
+    });
+  });
+
+  it('asks the outliner with the merged values', async () => {
+    const asked: unknown[] = [];
+    const spy: TextOutliner = {
+      outline(p) {
+        asked.push(p);
+        return fake.outline(p);
+      },
+      advance: (p) => fake.advance(p),
+    };
+    const { session } = await editing(XY, TEXT, spy);
+
+    await session.setTextParams(eid('t'), { height: 3 });
+
+    expect(asked).toEqual([{ text: 'ab', font: 'sans', height: 3 }]);
+  });
+
+  it.each([
+    ['an empty string', 't', { text: '' }],
+    ['a string too long', 't', { text: 'x'.repeat(201) }],
+    ['a line break', 't', { text: 'a\nb' }],
+    ['an unknown font', 't', { font: 'comic' as unknown as 'sans' }],
+    ['height zero', 't', { height: 0 }],
+    ['height negative', 't', { height: -1 }],
+    ['height NaN', 't', { height: Number.NaN }],
+    ['height infinite', 't', { height: Infinity }],
+    ['the id of a line', 'pq', { text: 'x' }],
+    ['an unknown id', 'nope', { text: 'x' }],
+  ])('%s → false and nothing written', async (_name, id, params) => {
+    const { session, applied } = await editing(XY, TEXT);
+    const before = session.state.get();
+
+    await expect(session.setTextParams(eid(id), params)).resolves.toBe(false);
+    await settle();
+
+    expect(applied).toEqual([]);
+    expect(session.state.get()).toBe(before);
+  });
+
+  it('an outliner that fails → false and nothing written', async () => {
+    const failing: TextOutliner = {
+      outline: () => Promise.reject(new Error('no font')),
+      advance: () => Promise.reject(new Error('no font')),
+    };
+    const { session, applied } = await editing(XY, TEXT, failing);
+
+    await expect(session.setTextParams(eid('t'), { text: 'x' })).resolves.toBe(false);
+    await settle();
+
+    expect(applied).toEqual([]);
+  });
+
+  it('behind a pending solve the write waits its turn and survives it', async () => {
+    const { session, solver, doc } = await editing(XY, TEXT);
+    solver.hold();
+    void session.remove([eid('k')]);
+
+    const written = session.setTextParams(eid('t'), { text: 'q' });
+    solver.release();
+    await expect(written).resolves.toBe(true);
+    await settle();
+
+    expect(docEntity(doc, 'k')).toBeUndefined();
+    expect(docEntity(doc, 't')).toMatchObject({ text: 'q' });
   });
 });

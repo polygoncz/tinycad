@@ -963,3 +963,32 @@ describe('editing helpers with texts (M37)', () => {
     expect(idsOf(r)).toEqual(['e', 'f', 'ef']);
   });
 });
+
+describe('symmetric constraint across an xline (after M31)', () => {
+  const X = sketch(
+    [
+      ...PATTERNS.entities.filter((e) => !isPattern(e)),
+      { kind: 'xline', id: 'xx', p1: 'x', p2: 'y', construction: true },
+    ],
+    [],
+  );
+  const sel = (...xs: string[]) =>
+    xs.map((id) => {
+      const found = X.entities.find((e) => e.id === id);
+      if (found === undefined) throw new Error(`no entity ${id}`);
+      return found;
+    });
+
+  it('constraintFor takes an xline as the axis', () => {
+    expect(constraintFor('symmetric', sel('a', 'c', 'xx'))).toEqual({
+      kind: 'symmetric',
+      a: 'a',
+      b: 'c',
+      axis: 'xx',
+    });
+  });
+
+  it('constraintFor refuses a point of the xline', () => {
+    expect(constraintFor('symmetric', sel('x', 'c', 'xx'))).toBeNull();
+  });
+});

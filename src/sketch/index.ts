@@ -5,7 +5,7 @@
 
 export { GEOMETRIC_CONSTRAINT_KINDS, SKETCH_FEATURE_TYPE, SKETCH_PARAM } from './model';
 export { DIMENSION_KINDS, isDimension, isLineCarrier } from './model';
-export { MAX_TEXT_LENGTH, TEXT_FONTS } from './model';
+export { MAX_TEXT_LENGTH, TEXT_FONTS, textParamsValid } from './model';
 export {
   MAX_PATTERN_COUNT,
   circularStep,

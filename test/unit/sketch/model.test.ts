@@ -7,6 +7,7 @@ import {
   isLineCarrier,
   isPatternSource,
   patternParamsValid,
+  textParamsValid,
 } from '@/sketch/model';
 import type {
   SketchCircularPattern,
@@ -185,5 +186,29 @@ describe('TEXT_FONTS', () => {
 describe('MAX_TEXT_LENGTH', () => {
   it('is 200 code points', () => {
     expect(MAX_TEXT_LENGTH).toBe(200);
+  });
+});
+
+describe('textParamsValid (M37)', () => {
+  const OK = { text: 'Text', font: 'sans', height: 10 } as const;
+
+  it('accepts a one-line string, a known font and a positive height', () => {
+    expect(textParamsValid(OK)).toBe(true);
+    expect(textParamsValid({ ...OK, text: '😀'.repeat(MAX_TEXT_LENGTH), font: 'mono' })).toBe(true);
+    expect(textParamsValid({ ...OK, text: '  ', font: 'serif', height: 1e-3 })).toBe(true);
+  });
+
+  it.each([
+    ['an empty string', { ...OK, text: '' }],
+    ['a string too long', { ...OK, text: 'x'.repeat(MAX_TEXT_LENGTH + 1) }],
+    ['a line break', { ...OK, text: 'a\nb' }],
+    ['a tab', { ...OK, text: 'a\tb' }],
+    ['an unknown font', { ...OK, font: 'comic' }],
+    ['height zero', { ...OK, height: 0 }],
+    ['height negative', { ...OK, height: -1 }],
+    ['height infinite', { ...OK, height: Infinity }],
+    ['height NaN', { ...OK, height: Number.NaN }],
+  ])('refuses %s', (_name, p) => {
+    expect(textParamsValid(p)).toBe(false);
   });
 });

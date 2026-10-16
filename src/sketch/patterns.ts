@@ -2,7 +2,7 @@ import { assertNever } from '@/core';
 import type { Vec2 } from '@/core';
 import { curvePoints } from './edit';
 import { pointsById } from './points';
-import { circularStep, isPattern, isPatternSource } from './model';
+import { circularStep, isLineCarrier, isPattern, isPatternSource } from './model';
 import type {
   SketchCircularPattern,
   SketchCurve,
@@ -185,14 +185,17 @@ function mirrorInstances(
   return [{ index: '1', map, mirrored: true }];
 }
 
-/** The coordinates of the two points of the axis line, or undefined when it is not a line of the sketch. */
+/**
+ * The coordinates of the two points of the axis (a line or an xline, M31), or undefined when it is
+ * neither in the sketch.
+ */
 function axisPoints(
   axis: SketchEntityId,
   entities: ReadonlyMap<SketchEntityId, SketchEntity>,
   points: ReadonlyMap<SketchEntityId, SketchPoint>,
 ): readonly [Vec2, Vec2] | undefined {
   const line = entities.get(axis);
-  if (line?.kind !== 'line') return undefined;
+  if (line === undefined || !isLineCarrier(line)) return undefined;
   const p1 = points.get(line.p1);
   const p2 = points.get(line.p2);
   if (p1 === undefined || p2 === undefined) return undefined;

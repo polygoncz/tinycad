@@ -114,11 +114,14 @@ export function constraintFor(
   }
 }
 
-/** symmetric (M36): two different points and an axis line, in this order; no point of the axis. */
+/**
+ * symmetric (M36): two different points and an axis (a line or an xline, M31), in this order; no
+ * point of the axis.
+ */
 function symmetricFor(selected: readonly SketchEntity[]): SketchConstraintDraft | null {
   const [a, b, axis] = selected;
   if (selected.length !== 3 || a?.kind !== 'point' || b?.kind !== 'point') return null;
-  if (axis?.kind !== 'line' || a.id === b.id) return null;
+  if (axis === undefined || !isLineCarrier(axis) || a.id === b.id) return null;
   const ends = curvePoints(axis);
   if (ends.includes(a.id) || ends.includes(b.id)) return null;
   return { kind: 'symmetric', a: a.id, b: b.id, axis: axis.id };
