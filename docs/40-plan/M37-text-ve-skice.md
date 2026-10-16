@@ -26,7 +26,7 @@ updated: 2026-10-16
 # M37 – Text ve skice
 **Cíl:** nástroj Text: řetězec v daném fontu, výšce, poloze a natočení se ve skice zobrazí jako obrysy písmen, které tvoří oblasti pro vysunutí.
 
-> Hrubý plán – před zahájením rozhodnout [[Q091 Fonty pro text ve skice|Q091]] a upřesnit.
+> Hrubý plán – před zahájením rozhodnout [[Q091 Fonty pro text ve skice|Q091]] a upřesnit. Sdílené typy jsou zafixované v [[12-skicar#Sdílené kontrakty série II]].
 
 **Specifikace:** [[12-skicar]], [[0029-text-ve-skice-pres-opentype|ADR 0029]]
 

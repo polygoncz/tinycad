@@ -25,7 +25,7 @@ updated: 2026-10-16
 # M36 – Zrcadlení a pole
 **Cíl:** zrcadlení podle osy, lineární a kruhové pole entit skici jako **parametrická entita**: počet, rozteč a úhel jdou změnit i po vytvoření, přímo přes vynesené kóty ve viewportu.
 
-> Hrubý plán – před zahájením rozhodnout [[Q089 Parametrické zrcadlení a pole ve skice|Q089]] a upřesnit.
+> Hrubý plán – před zahájením rozhodnout [[Q089 Parametrické zrcadlení a pole ve skice|Q089]] a upřesnit. Sdílené typy jsou zafixované v [[12-skicar#Sdílené kontrakty série II]].
 
 **Specifikace:** [[12-skicar#Data (`sketch`)]], [[12-skicar#Řešič vazeb]], [[12-skicar#Kóty (M28)]]
 
@@ -40,7 +40,7 @@ Upřesnění v sezení 2026-10-16: zrcadlení a pole jako **parametrická entita
 ## Úkoly (orientačně)
 
 - [ ] Rozhodnout [[Q089 Parametrické zrcadlení a pole ve skice|Q089]] (identita kopií, vazby na kopie, řešič, vynesené kóty); prototyp v planegcs.
-- [ ] Data: entita zrcadlení a pole, kontrola dat, odvození kopií; vazba symetrie.
+- [ ] Data: entita zrcadlení a pole, kontrola dat, odvození kopií; vazba `symmetric` ([[12-skicar#Vazba symetrie (M36, stopa C)]]), kopie v `regionCurves` s odvozenými id ([[12-skicar#Křivky pro oblasti a odvozená id (M30 zavede, stopa C rozšíří)]]).
 - [ ] Nástroje Zrcadlit, Lineární pole, Kruhové pole; vynesené kóty počtu, rozteče a úhlu.
 - [ ] Kopie v kresbě, oblastech a snapperu; mazání originálu a pole.
 - [ ] Spec 12, e2e.

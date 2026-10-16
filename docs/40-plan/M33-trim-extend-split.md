@@ -26,7 +26,7 @@ updated: 2026-10-16
 # M33 – Trim, extend, split
 **Cíl:** nástroje Ořezat (trim), Prodloužit (extend) a Rozdělit (split) nad úsečkami, kružnicemi, oblouky a spliny; průsečíky počítá jádro.
 
-> Hrubý plán – před zahájením upřesnit.
+> Hrubý plán – před zahájením upřesnit. Sdílené typy jsou zafixované v [[12-skicar#Sdílené kontrakty série II]].
 
 **Specifikace:** [[12-skicar]], [[06-geometricke-jadro]]
 

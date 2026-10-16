@@ -26,7 +26,7 @@ updated: 2026-10-16
 # M32 – Číselný vstup
 **Cíl:** při kreslení jde zadat délku, úhel, poloměr nebo souřadnice z klávesnice místo kliknutí; zadaná hodnota se stane kótou.
 
-> Hrubý plán – před zahájením rozhodnout [[Q090 Číselný vstup při kreslení|Q090]] a upřesnit.
+> Hrubý plán – před zahájením rozhodnout [[Q090 Číselný vstup při kreslení|Q090]] a upřesnit. Sdílené typy jsou zafixované v [[12-skicar#Sdílené kontrakty série II]].
 
 **Specifikace:** [[12-skicar#Režim skicáře (sketcher)]], [[10-interakce]], [[11-ui#Komponenty]]
 

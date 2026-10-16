@@ -243,6 +243,33 @@ export interface GeometryKernel
 - `ExchangeOps` **není** v `ModelingKernel` ([[07-regenerace#Builder featury]]): builder featury nic neexportuje.
 - Import STEP do modelu není; `STEPControl_Reader` používá jen test adaptéru (zpětné načtení).
 
+### Stav po M30
+
+M30 přesunul výpočet oblastí skici z TypeScriptu do jádra ([[M30-geometrie-skici-v-occt|M30]], [[0028-geometrie-skici-v-jadre|ADR 0028]], [[Q092 Hranice geometrie skici v TS a v OCCT|Q092]]). Nová metoda vrací **data**, ne handle – plochy dál staví `makeFace`:
+
+```ts
+// kernel/profile.ts
+/** Oblast: uzavřená vnější smyčka a díry; strukturálně = SketchRegion ze sketch. */
+export interface ProfileRegion {
+  /** Id všech hraničních křivek (vnější i díry), bez duplicit, seřazená (porovnání řetězců), spojená ','. */
+  readonly name: string;
+  readonly outer: ProfileLoop;                    // proti směru hodinových ručiček, křivky orientované podél smyčky
+  readonly holes: readonly ProfileLoop[];         // po směru hodinových ručiček
+  readonly area: number;                          // > 0: vnější minus díry
+}
+export interface ProfileRegions { readonly regions: readonly ProfileRegion[]; readonly crossing: boolean }
+
+export interface SketchOps {
+  makeFace(…): Promise<ShapeResult>;              // beze změny
+  /** M30: oblasti ohraničené křivkami. Bez handle, bez vedlejších účinků. */
+  profileRegions(p: { readonly curves: readonly ProfileCurve[] }): Promise<ProfileRegions>;
+}
+```
+
+- Je v `SketchOps`, a tedy i v `ModelingKernel` builderu ([[07-regenerace#Builder featury]]).
+- Křivky ve smyčkách výsledku nesou `id` vstupní křivky a jsou orientované podél smyčky (oblouk může mít `ccw: false`, spline obrácené `poles` a uzly `1 − k` pozpátku – tatáž křivka). Výsledek jde rovnou do `makeFace` (`outer`, `holes`).
+- **Klient workeru** posílá vstup i výsledek jako strukturovaná data (`postMessage`), bez handle; `TrackingKernel` regenerace ho jen přeposílá (nic neuvolňuje).
+
 ### Kontrakt (platí pro každou implementaci)
 
 Ověřuje ho kontraktová sada ([[#Testy]]), spuštěná pro `FakeKernel` v M5 a pro OCCT v M7.
@@ -253,6 +280,7 @@ Ověřuje ho kontraktová sada ([[#Testy]]), spuštěná pro `FakeKernel` v M5 a
 - **`transform`** (M11): všech 16 prvků konečných a `isRigidMotion(m)`, jinak `'invalid-input'`; neznámý handle → `'unknown-handle'`. Vstupní tvar se nemění a zůstává platný. Bounding box výsledku = bounding box tvaru přemístěného `m` (tolerance 1e-5).
 - **`boolean`** (M11): `op` je jedna ze tří hodnot, `targets` i `tools` neprázdné a žádný handle se neopakuje (ani napříč seznamy), jinak `'invalid-input'`; neznámý handle → `'unknown-handle'`. Výsledek bez jediného solidu (prázdný průnik, rozdíl, který cíl celý odebere) a selhání algoritmu → `'operation-failed'`. Vstupy zůstávají platné. `union` = sjednocení všech vstupů, `subtract` = cíle bez nástrojů, `intersect` = společná část cílů a nástrojů.
 - **`makeFace`** (M12): `plane` má konečné složky, `xDir` i `normal` jednotkové a navzájem kolmé (`plane.isOrthonormal`, tolerance 1e-9); `outer` neprázdná; každá smyčka je buď jediná `circle` (poloměr konečný > 0), nebo ≥ 1 křivek `line`/`arc` (bez `circle`), kde konec každé křivky leží na začátku další a konec poslední na začátku první (tolerance `1e-7 · max(1, |souřadnice|)`); úsečka a oblouk nenulové délky (`from ≠ to`), oblouk s `|to − center| = |from − center|` (relativně 1e-7) a poloměrem > 1e-9. Jinak `'invalid-input'`. Orientace smyček je libovolná (jádro si ji srovná). Bounding box výsledku = obálka smyčky `outer` v prostoru (tolerance 1e-5; kontraktová sada jen pro roviny s osami rovnoběžnými se souřadnicovými). Plochu, kterou nejde postavit (samoprotínající se smyčka), OCCT hlásí `'operation-failed'`.
+- **`profileRegions`** (M30): každá křivka má `id` (neprázdný řetězec, v rámci volání unikátní) a splňuje tvar křivky z `makeFace` (konečná čísla, oblouk se stejnými poloměry, spline s platnými uzly), jinak `'invalid-input'`; pořadí a orientace křivek jsou libovolné. Úsečka, oblouk nebo spline nulové délky (konce do tolerance) se **vynechá** (není chyba). Výsledek podle [[12-skicar#Oblasti (profily)]]: konce křivek do tolerance jsou jeden uzel; dvě křivky se společným bodem mimo sdílený koncový uzel (průsečík, dotyk konce s vnitřkem, překryv, i spline křížící sám sebe) → `{ regions: [], crossing: true }`; otevřené čáry nic neohraničují; vnější hranice komponenty se stane dírou nejmenší omezené stěny **jiné** komponenty, která ji obsahuje; oblasti seřazené podle `name`. Kontraktová sada porovnává `name`, `crossing`, počet děr a jejich jména přesně, `area` relativně 1e-6 (spline 1e-4) a body smyček do `1e-7 · max(1, |souřadnice|)`. Tolerance výpočtu jsou věcí implementace (TS fake, OCCT `Precision::Confusion`); případy na hraně tolerance kontraktová sada nezkouší.
 - **`extrude`** (M13): neznámý handle → `'unknown-handle'`; `profile` není plocha (`TopAbs_FACE` – výsledek `makeFace` nebo jeho `transform`) → `'invalid-input'`; každá složka `direction` konečná a jeho délka > 1e-9, `distance` konečné > 0, jinak `'invalid-input'`. Vrací nový handle se solidem, profil zůstává platný. Bounding box výsledku = obálka bbox profilu a bbox profilu posunutého o `d̂ · distance` (tolerance 1e-5; kontraktová sada jen pro plochy v rovinách rovnoběžných se souřadnicovými). Směr rovnoběžný s rovinou plochy se nekontroluje ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R63]] ⚠). Pozor: směr ležící **přesně** v rovině profilu OCCT nechytí – vznikne solid nulové tloušťky, který projde i `BRepCheck_Analyzer`, takže jádro vrátí úspěch. V tinycad to nenastane, protože směr je vždy normála skici ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R84]] ⚠).
 - **`revolve`** (M13): neznámý handle → `'unknown-handle'`; `profile` není plocha → `'invalid-input'`; složky `axis.origin` a `axis.direction` konečné, délka směru > 1e-9, `angle` konečný a `0 < angle ≤ 2π + 1e-9`, jinak `'invalid-input'`. Profil zůstává platný. Bounding box pro případy kontraktové sady (profil v rovině obsahující osu rovnoběžnou se souřadnicovou osou, úhel začíná na souřadnicové rovině) s tolerancí 1e-5. Osa, která profil protíná, se předem nekontroluje (R63 ⚠); OCCT ji odmítne už v `IsDone()` → `'operation-failed'` (ověřeno testem v `kernel-occt/occt-sweep.test.ts`). Osa ležící na hraně profilu je platná (válec).
 - **`roles` a `history`** (M14): podle [[#Stav po M14]]. Indexy v rolích a historii jsou platné indexy podtvarů výstupu (a vstupů), vzestupně bez duplicit. **Úplnost historie:** každá plocha každého vstupu je v `history` právě jednou – buď v `modified` (i nezměněná plocha jako identita na svůj index ve výstupu), nebo v `deleted`. Pořadí položek: podle vstupu, pak druhu (`face`, `edge`, `vertex`), pak indexu.
@@ -462,6 +490,7 @@ export function describeGeometryKernelContract(name: string, factory: () => Prom
 - Od M14: `topology` každého záznamu je topologie kvádru AABB – 6 rovinných ploch v pořadí sítě (−X, +X, −Y, +Y, −Z, +Z, rovina se středem stěny a normálou ven), 12 hran v pořadí sítě se sousedností a vrcholy odvozenými z rohů, 8 vrcholů, střed hrany = střed úsečky. Role: `makeBox` → `left 0, right 1, front 2, back 3, bottom 4, top 5`; `makeCylinder` → `bottom`/`top` = stěna ve směru −/+ převládající složky osy, `side` = zbylé 4; `extrude` → `start`/`end` = stěna ve směru −/+ převládající složky `d̂` (boční role fake nevrací); `makeFace` a `revolve` role nevrací. Historie: `transform`, `fillet`, `chamfer` identita 6 ploch; `boolean` identita prvního vstupu, ostatní vstupy `deleted`; `extrude`/`revolve` profil `deleted`. `fillet`/`chamfer` vrací AABB beze změny (nový handle) a kontrolují vstup jako OCCT (rozsah hran = 12).
 - Od M15: `exportStep` kontroluje vstup jako OCCT a vrací deterministický pseudo-STEP (bajty ASCII kódované ručně `charCodeAt`, protože doménový tsconfig bez DOM a typů Node `TextEncoder` nezná – stejné bajty jako `TextEncoder` pro ASCII): `ISO-10303-21;`, `HEADER;` … `ENDSEC;`, `DATA;`, řádek `#<i>=FAKE_SOLID((min),(max));` na každý tvar v pořadí `shapes` (AABB), `ENDSEC;`, `END-ISO-10303-21;`. Testy vyšších vrstev tak ověří, co se exportovalo.
 - Od M29 `makeFace` se splinem: AABB z bodů `bspline.tessellate` (`core`) s tolerancí `1e-7 · max(1, největší |souřadnice|)`; validace jako u OCCT.
+- Od M30 `profileRegions` počítá oblasti původním algoritmem skicáře z M12–M29 v TypeScriptu (planární graf, polohrany, tessellace splinu s `1e-4 · max(1, |souřadnice|)`), přesunutým ze `sketch/regions.ts` do `kernel/fake-regions.ts`. Fake je tak skutečný výpočet, ne aproximace: vyšší vrstvy testují oblasti bez OCCT a kontraktová sada drží obě implementace ve shodě.
 - `tessellate` vrací AABB jako kvádr: 6 ploch po 2 trojúhelnících (24 vrcholů, normály ploch), pořadí ploch −X, +X, −Y, +Y, −Z, +Z. Dál 12 hran po 2 bodech. Platí pro každý tvar, i válec a výsledek booleanu.
 - Volání `failNext` se týká jen dalšího volání dané metody. Injektovaná chyba nevytvoří handle a nic neuvolní.
 - Výsledky se vrací asynchronně (v mikroúloze), nikdy synchronně, aby testy vyšších vrstev nespoléhaly na pořadí, které by s workerem neplatilo.

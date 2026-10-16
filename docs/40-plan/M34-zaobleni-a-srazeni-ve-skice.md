@@ -24,7 +24,7 @@ updated: 2026-10-16
 # M34 – Zaoblení a sražení ve skice
 **Cíl:** zaoblení (fillet) a sražení (chamfer) mezi dvěma křivkami skici: vznikne oblouk nebo úsečka, sousední křivky se ořežou a vzniknou vazby (tečnost, poloměr, vzdálenost).
 
-> Hrubý plán – před zahájením upřesnit.
+> Hrubý plán – před zahájením upřesnit. Sdílené typy jsou zafixované v [[12-skicar#Sdílené kontrakty série II]].
 
 **Specifikace:** [[12-skicar]]
 

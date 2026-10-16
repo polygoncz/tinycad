@@ -129,7 +129,7 @@ Souběžné stopy podle metodiky [[Souběžné stopy agentů]] (pravidla 1–4 j
 | B – kreslení | [[M31-nove-kreslici-nastroje\|M31]] → [[M32-ciselny-vstup\|M32]] | jen nové entity a vazby; [[Q090 Číselný vstup při kreslení\|Q090]] při startu M32 |
 | C – odvozené entity | [[M36-zrcadleni-a-pole\|M36]] → [[M37-text-ve-skice\|M37]] | M37 až po sloučení M30; [[Q089 Parametrické zrcadlení a pole ve skice\|Q089]], [[Q091 Fonty pro text ve skice\|Q091]] |
 
-Před `/stopa start` je potřeba zafixovat kontrakty sdílených typů ve spec 12 (nové členy `SketchEntity`, `SketchConstraint`, `Curve2`, rodiny nástrojů) a port jádra z M30, protože ho stopa C potřebuje pro text.
+Sdílené kontrakty jsou zafixované (2026-10-16) v [[12-skicar#Sdílené kontrakty série II]]: kdo přidává které členy unií, nekonečná přímka, vazba symetrie, `regionCurves` a odvozená id, id nástrojů a akcí. Port jádra M30 je v [[12-skicar#Geometrie skici v jádře (M30)]] a [[06-geometricke-jadro#Stav po M30]], implementační plán v [[M30-geometrie-skici-v-occt#Implementační plán]]. Stopa A smí jako jediná měnit `kernel`, `kernel-occt` a builder skici.
 
 ## Jak pracovat s milníkem
 

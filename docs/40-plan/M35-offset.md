@@ -25,7 +25,7 @@ updated: 2026-10-16
 # M35 – Offset
 **Cíl:** nástroj Odsazení (offset): z vybrané křivky nebo řetězce křivek vznikne ekvidistanta ve zvolené vzdálenosti, počítaná v OCCT.
 
-> Hrubý plán – před zahájením upřesnit.
+> Hrubý plán – před zahájením upřesnit. Sdílené typy jsou zafixované v [[12-skicar#Sdílené kontrakty série II]].
 
 **Specifikace:** [[12-skicar]], [[06-geometricke-jadro]]
 

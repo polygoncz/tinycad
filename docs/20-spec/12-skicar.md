@@ -175,6 +175,9 @@ Osa y roviny = `normal × xDir` vyjde u všech tří +Y, +Z, +Z – skica na př
 
 ## Oblasti (profily)
 
+> [!note] Od M30
+> Oblasti počítá jádro (`SketchOps.profileRegions`, [[0028-geometrie-skici-v-jadre|ADR 0028]]), algoritmus níže je od té doby implementace `FakeKernel` a **kontrakt výsledku** pro obě implementace. Viz [[#Geometrie skici v jádře (M30)]].
+
 ```ts
 // sketch/regions.ts
 export interface SketchRegion {
@@ -630,7 +633,7 @@ export interface SketchFitSpline {
 
 ## Rozšíření skicáře II (M30–M37)
 
-Naplánováno 2026-10-16, zatím jen rozsah – kontrakt se dopíše před spuštěním stop ([[Roadmapa#Rozšíření skicáře II (M30–M37)]]).
+Naplánováno 2026-10-16. Sdílené kontrakty, které musí znát víc stop, jsou zafixované níže předem (sekce *Sdílené kontrakty série II* a *Geometrie skici v jádře (M30)*); zbytek kontraktu dopíše každá stopa do své sekce při startu milníku ([[Roadmapa#Rozšíření skicáře II (M30–M37)]]).
 
 | Milník | Co přibude | Dopad na data | Otázka |
 |---|---|---|---|
@@ -642,6 +645,105 @@ Naplánováno 2026-10-16, zatím jen rozsah – kontrakt se dopíše před spuš
 | [[M35-offset\|M35]] | ekvidistanta křivky a řetězce | možná vazba odsazení | – |
 | [[M36-zrcadleni-a-pole\|M36]] | parametrické zrcadlení, lineární a kruhové pole, vynesené kóty | nové entity, vazba symetrie | [[Q089 Parametrické zrcadlení a pole ve skice\|Q089]] |
 | [[M37-text-ve-skice\|M37]] | text jako obrysy písmen (opentype.js, [[0029-text-ve-skice-pres-opentype\|ADR 0029]]) | nová entita text | [[Q091 Fonty pro text ve skice\|Q091]] |
+
+### Sdílené kontrakty série II
+
+Zafixováno 2026-10-16 před spuštěním stop. Pravidlo jako v první sérii: stopa přidává jen **své** členy unií a své větve vyčerpávajících `switch`; cizí členy nepřidává ani „pro jistotu“. Sémantické konflikty po sloučení najde typecheck.
+
+**Kdo co přidává do sdílených typů a souborů:**
+
+| Stopa | `SketchEntity` / `SketchCurve` | `SketchConstraint` | `Curve2` / `ProfileCurve` | Ostatní sdílené |
+|---|---|---|---|---|
+| A (M30, M33–M35) | – | případná vazba odsazení (M35, `kind: 'offset'`) | – (beze změny) | port jádra `profileRegions`, `SketchArtifact.outlines`, `regionCurves`, port `SketchGeometry`; průsečíky a offset v M33/M35 |
+| B (M31, M32) | `SketchXLine` (`kind: 'xline'`) | – | – | `SketchState.constructionMode`; nástroje a akce níže |
+| C (M36, M37) | entity zrcadlení, polí a textu – tvar podle [[Q089 Parametrické zrcadlení a pole ve skice\|Q089]] a [[Q091 Fonty pro text ve skice\|Q091]], `kind` z `'mirror' \| 'linearPattern' \| 'circularPattern' \| 'text'` | `symmetric` | – (text a kopie jsou `line`/`arc`/`circle`/`bspline` s odvozeným id) | větve `regionCurves` pro kopie a text |
+
+Druhy `xline`, `mirror`, `linearPattern`, `circularPattern`, `text`, `symmetric` a `offset` jsou tím rezervované; jiná stopa je nepoužije pro nic jiného. Stopa C smí místo entit zvolit samostatné pole v `SketchData` (rozhodne Q089), pak ho přidá jako volitelné (`patterns?:`), aby staré dokumenty platily.
+
+#### Nekonečná přímka (M31, stopa B)
+
+```ts
+/** Konstrukční přímka bez konců přes dva body skici (Onshape Construction line, SolidWorks Centerline nekonečná). */
+export interface SketchXLine {
+  readonly kind: 'xline'; readonly id: SketchEntityId;
+  readonly p1: SketchEntityId; readonly p2: SketchEntityId;   // dva různé body, určují polohu a směr
+  readonly construction: true;                               // povinně: přímka nikdy neohraničuje oblast
+}
+export type SketchCurve = SketchLine | SketchCircle | SketchArc | SketchBSpline | SketchFitSpline | SketchXLine;
+```
+
+- `construction: true` je **povinné** (ne volitelné), takže všechny dnešní filtry `c.construction === true` přímku z oblastí a z builderu vyřadí bez další větve. `toggleConstruction` přímku přeskočí. `parseSketchData`: chybějící nebo jiné `construction` → `sketch.invalidEntity`.
+- `curve2(xline)` vrátí `line` od `m − XLINE_EXTENT · d̂` do `m + XLINE_EXTENT · d̂` (`m` střed `p1p2`, `d̂` jednotkový směr, `XLINE_EXTENT = 1e5` mm, export ze `sketch`). Kresba, picking a snapper tak přímku vidí jako dlouhou úsečku bez zásahu do `render`. Snapper nepřichytí ke „koncům“ ani ke středu té úsečky – jen k `p1`, `p2` a k přímce (`onCurve`).
+- Vazby: kde vazba bere úsečku jako **přímku** (`horizontal`, `vertical`, `parallel`, `perpendicular`, `angle`, `pointLineDistance`, `pointOnCurve`, `tangent` přímka–kružnice/oblouk, osa `symmetric`), bere i `xline`. Kde jde o **úsečku s délkou** (`midpoint`, `equal`, kóta délky z `dimensionFor`), `xline` ne (`constraintFor`/`dimensionFor` → `null`, parse → `sketch.invalidConstraint`). Planegcs: přímka jako `line` přes `p1`, `p2` (vazby na úsečce už dnes pracují s nekonečnou přímkou).
+- `removeItems`: smazání `p1` nebo `p2` smaže přímku, jako u úsečky.
+
+#### Vazba symetrie (M36, stopa C)
+
+```ts
+/** Body a, b souměrné podle osy (úsečka nebo xline): střed ab leží na ose a ab je na ni kolmá. */
+| { readonly kind: 'symmetric'; readonly id: SketchConstraintId; readonly a: SketchEntityId; readonly b: SketchEntityId; readonly axis: SketchEntityId }
+```
+
+- `a !== b`, oba body; `axis` úsečka nebo `xline`; žádný z bodů není bodem osy. Planegcs: `symmetric_ppl`. `GEOMETRIC_CONSTRAINT_KINDS` ji přidá **před `fix`** (na konec geometrických vazeb, `fix` zůstane poslední) – pořadí akcí v liště upraví stopa C.
+- Stopa B ji **nepoužívá**: obdélník středem drží střed vazbou `midpoint` na konstrukční úhlopříčce.
+
+#### Křivky pro oblasti a odvozená id (M30 zavede, stopa C rozšíří)
+
+```ts
+// sketch/geometry.ts (M30)
+/** Křivky, které ohraničují oblasti: nekonstrukční křivky skici jako Curve2 s id; M36/M37 přidají kopie polí a obrysy textu. */
+export function regionCurves(data: SketchData): readonly Curve2[];
+```
+
+- Builder skici volá `regionCurves` a výsledek pošle jádru (`profileRegions`). Je to **jediné místo**, kde se rozhoduje, co ohraničuje oblasti; stopa C sem přidá své větve, nikam jinam.
+- **Odvozené id** (kopie z pole, písmeno textu) má tvar `<id entity>:<přípona>`; přípona neobsahuje `,` ani `:` navíc a je stabilní, dokud se nezmění parametr, ze kterého vznikla (tvar přípony rozhodne Q089, resp. M37). Id z generátoru jsou base62 ([[Q002 Formát ID|Q002]]), dvojtečku ani čárku neobsahují, takže odvozené id se s id entity nesrazí a jméno oblasti (id spojená `,`) zůstane jednoznačné. Jádro bere id jako neprůhledný řetězec; role `edge:<id>` a `face:side:<id>` fungují beze změny.
+- Výběr a picking odvozené křivky: kresba ji nese s odvozeným id; skicář ho přeloží na id zdrojové entity (vzor `__poles:` z M29). Detail rozhodne stopa C.
+
+#### Id nástrojů, akcí a rodin
+
+Aby se stopy nesrazily v `sketch-tools.ts`, `constants.ts` a i18n, jsou id rozdělená předem (popisky i18n `tool.<id bez sketch.>`, česky / anglicky dopíše stopa):
+
+| Stopa | Nástroje (rodina) | Akce |
+|---|---|---|
+| B | `sketch.rectangle` (stávající, rohy) + `sketch.rectangleCenter`, `sketch.rectangle3p` (rodina `rectangle`); `sketch.line` + `sketch.xline` (rodina `line`); `sketch.point`; `sketch.slot`, `sketch.slotOverall`, `sketch.slotArc` (rodina `slot`) | `sketch.constructionMode` (přepínač, klávesa `Q`) |
+| A | `sketch.trim`, `sketch.extend`, `sketch.split` (rodina `trim`); `sketch.fillet`, `sketch.chamfer` (rodina `fillet`); `sketch.offset` | – |
+| C | `sketch.mirror`; `sketch.linearPattern`, `sketch.circularPattern` (rodina `pattern`); `sketch.text` | `sketch.constraint.symmetric` (z `GEOMETRIC_CONSTRAINT_KINDS`) |
+
+Skupiny lišty: kreslení `draw`, úpravy (trim, fillet, offset, mirror, pole) nová skupina `modify` – zavede ji ta stopa, která se do `main` sloučí první, druhá ji jen použije. Klávesové zkratky: B `Q` (režim konstrukce), `P` (bod); A `T` (trim); ostatní bez zkratky, dokud se nedohodne.
+
+## Geometrie skici v jádře (M30)
+
+Rozhodnuto v [[0028-geometrie-skici-v-jadre|ADR 0028]] a [[Q092 Hranice geometrie skici v TS a v OCCT|Q092]]. **Chování se nemění:** stejné oblasti, stejná jména, křížení = žádné oblasti (oblasti z křížících se křivek: [[Q093 Oblasti z křížících se křivek|Q093]]). Mění se jen to, **kdo** je počítá.
+
+```ts
+// kernel (port, spec 06 „Stav po M30“)
+SketchOps.profileRegions(p: { readonly curves: readonly ProfileCurve[] }): Promise<ProfileRegions>;
+
+// regen/state.ts
+export interface SketchArtifact {
+  …                                                    // beze změny
+  readonly regions: ReadonlyMap<string, ShapeHandle>;  // beze změny: jméno oblasti → plocha
+  /** M30: obrysy oblastí z jádra ve stejném pořadí jako regions; pro kresbu a picking oblastí. */
+  readonly outlines: readonly ProfileRegion[];
+}
+
+// sketch/geometry.ts – typ zůstává, přesouvá se sem z regions.ts (strukturálně = ProfileRegion)
+export interface SketchRegion { readonly name: string; readonly outer: readonly Curve2[]; readonly holes: readonly (readonly Curve2[])[]; readonly area: number }
+export function regionCurves(data: SketchData): readonly Curve2[];   // viz výše
+
+// sketcher/sketch-drawing.ts
+export function artifactDrawing(plane: Plane, entities: readonly SketchEntity[], regions: readonly SketchRegion[]): SketchDrawing;
+
+// sketch/geometry-port.ts – port pro skicář (Q092 bod 3); v M30 bez metod, M33 a M35 přidají průsečíky a offset
+export interface SketchGeometry {}
+```
+
+- **Builder skici:** `regionCurves(data)` → `kernel.profileRegions({ curves })` → `crossing` → `ctx.warn` jako dnes → `makeFace` pro každou oblast v pořadí → artefakt s `regions` a `outlines`. Regenerace tak volá jádro o jednou víc na skicu; plánovač a cache se nemění.
+- **Kresba skic z regenerace:** `app` (`regen-pipeline.ts`) předá `artifact.outlines` do `artifactDrawing`; `sketcher` oblasti nepočítá. Kresba editované skici oblasti nemá (beze změny).
+- **`sketch/regions.ts`** se přesune do `kernel` jako implementace `profileRegions` ve `FakeKernel` (soubor `kernel/fake-regions.ts`, matematika splinu z `core`). `sketch` přestane exportovat `computeRegions` a `RegionsResult`; `SPLINE_TOLERANCE` zůstane (kresba), fake má vlastní konstantu se stejnou hodnotou. Testy `test/unit/sketch/regions.test.ts` se přesunou do kontraktové sady jádra (`describeGeometryKernelContract`), takže stejné případy běží proti fake i OCCT.
+- **`SketchGeometry`** je v `sketch` (prstenec 1, jen typ), implementuje ho `app` nad klientem jádra a skicář ho dostane v závislostech `SketchSession` jako `ConstraintSolver`. V M30 vznikne jen prázdné rozhraní a jeho předání, aby stopa A v M33 nemusela měnit kompoziční kořen; pravidla závislostí se nemění.
+- Postup výpočtu v sekci *Oblasti (profily)* výše platí dál jako **kontrakt výsledku** (co je oblast, díra, jméno, křížení, pořadí); OCCT ho smí dosáhnout jinou cestou (dělení hran `BOPAlgo`, stěny z `BRepBuilderAPI`), tolerance jsou OCCT.
+
 
 ## Testy
 

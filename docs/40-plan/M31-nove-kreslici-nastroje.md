@@ -27,7 +27,7 @@ updated: 2026-10-16
 # M31 – Nové kreslicí nástroje
 **Cíl:** skicář umí obdélník středem a rohem, obdélník třemi body (natočený), samostatný bod, drážku (přímou středem i celkovou délkou, obloukovou), režim konstrukce pro nově kreslené entity a nekonečnou konstrukční přímku.
 
-> Hrubý plán – před zahájením upřesnit (kontrakt ve spec 12).
+> Hrubý plán – před zahájením upřesnit (kontrakt ve spec 12). Sdílené typy jsou zafixované v [[12-skicar#Sdílené kontrakty série II]].
 
 **Specifikace:** [[12-skicar#Data (`sketch`)]], [[12-skicar#Režim skicáře (sketcher)]], [[12-skicar#Rodiny nástrojů v liště]]
 
@@ -47,7 +47,7 @@ Upřesnění v sezení 2026-10-16:
 - [ ] Konstrukce v `sketch/construct.ts`: obdélník ze středu a rohu (vazba `midpoint` nebo symetrie na úhlopříčku), obdélník ze tří bodů (rovnoběžnost a kolmost místo vodorovná/svislá), drážky (úsečky + oblouky s tečností a rovností).
 - [ ] Nástroje: obdélníky do rodiny Obdélník, drážky do rodiny Drážka, nástroj Bod.
 - [ ] Režim konstrukce: přepínač v liště a klávesa (Q jako Onshape); nástroje vytvářejí entity s `construction: true`.
-- [ ] Nekonečná přímka: nová entita (bod + směr nebo dva body), jen konstrukční, kresba ořezaná do pohledu, snapper a vazby (rovnoběžnost, bod na křivce, symetrie podle ní v M36).
+- [ ] Nekonečná přímka: entita `SketchXLine` přes dva body, vždy konstrukční, kresba jako dlouhá úsečka, snapper a vazby podle kontraktu ([[12-skicar#Nekonečná přímka (M31, stopa B)]]).
 - [ ] Spec 12, glyfy a snapper pro nové entity, e2e.
 
 ## Akceptační kritéria

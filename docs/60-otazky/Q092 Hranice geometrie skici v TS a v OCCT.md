@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[12-skicar]]"
 decide_by: "[[M30-geometrie-skici-v-occt]]"
-proposal: ""
-decision: ""
+proposal: "Obrysy oblastí v artefaktu z jádra; náhled trimu a snapper v TS, zápis trimu z průsečíků jádra; sketcher volá jádro přes úzký port SketchGeometry v sketch (implementuje app); TS algoritmus oblastí se přesune do FakeKernel."
+decision: "Podle návrhu (Pavel 2026-10-16). Oblasti z křížících se křivek ne v M30 (beze změny chování), otevřeno jako Q093 pro M33."
 tags:
   - otazka
 created: 2026-10-16
@@ -26,6 +26,16 @@ updated: 2026-10-16
 
 ## Možnosti a návrh
 
-_(Doplnit při startu M30.)_
+Zjištění z kódu (2026-10-16): oblasti se dnes počítají dvakrát – v builderu skici (plochy) a v `artifactDrawing` (vyplnění a picking oblastí skic z regenerace). **Editovaná skica oblasti nekreslí vůbec**, takže obava z bodu 1 (zpoždění oblastí při tažení) odpadá.
+
+Návrh:
+1. Artefakt skici nese i **obrysy oblastí** z jádra; `artifactDrawing` je převezme místo vlastního výpočtu.
+2. **Náhled trimu a snapper zůstávají v TS** (synchronní, pod kurzorem). Co se zapíše do dokumentu (body ořezu), počítá jádro.
+3. Sketcher volá jádro přes **úzký port `SketchGeometry`** definovaný v `sketch` a implementovaný v `app` nad klientem jádra – stejně jako `ConstraintSolver` ([[0016-planegcs-resic-vazeb|ADR 0016]]). `interaction` a `sketcher` dál nezávisí na `kernel`.
+4. Dnešní TS algoritmus oblastí (`sketch/regions.ts`) se **přesune do `FakeKernel`** jako jeho implementace `profileRegions`; testy oblastí se stanou kontraktovou sadou, která běží proti fake i OCCT.
 
 ## Rozhodnutí
+
+Pavel 2026-10-16: **podle návrhu, body 1–4.** Kontrakt je v [[12-skicar#Geometrie skici v jádře (M30)]] a [[06-geometricke-jadro#Stav po M30]].
+
+K tomu: OCCT by umělo křížící se křivky rozdělit a postavit z nich oblasti jako Onshape. Pavel: **v M30 beze změny chování** (křížení = žádné oblasti); oblasti z křížících se křivek otevírá [[Q093 Oblasti z křížících se křivek|Q093]] pro M33.
