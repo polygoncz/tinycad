@@ -38,6 +38,7 @@ Výpočty jádra trvají desítky až stovky milisekund. Na hlavním vlákně by
 ## Zvažované alternativy
 
 - **Jádro na serveru** (jako Onshape s Parasolidem) – zajímavá architektura, ale vyžaduje backend. Díky portu ji lze později přidat jako jiný adaptér.
+  Tuto variantu znovu otevírá [[Q094 Nativní jádro na serveru přes gRPC|Q094]] (2026-10-16).
 - **Jádro na hlavním vlákně** – jednodušší, ale blokuje UI.
 - **Truck (Rust)** – čistší návrh, ale slabé fillety a booleany.
 - **Comlink** – hotové RPC, ale skrývá mechanismus, který se chceme naučit.
