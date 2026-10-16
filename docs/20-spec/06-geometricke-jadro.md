@@ -270,6 +270,29 @@ export interface SketchOps {
 - Křivky ve smyčkách výsledku nesou `id` vstupní křivky a jsou orientované podél smyčky (oblouk může mít `ccw: false`, spline obrácené `poles` a uzly `a + b − k` pozpátku, kde `[a, b]` je rozsah uzlů – pro `[0, 1]` tedy `1 − k`; tatáž křivka). Výsledek jde rovnou do `makeFace` (`outer`, `holes`).
 - **Klient workeru** posílá vstup i výsledek jako strukturovaná data (`postMessage`), bez handle; `TrackingKernel` regenerace ho jen přeposílá (nic neuvolňuje).
 
+### Stav po M33
+
+Průsečíky a kusy křivek skici pro trim, extend a split ([[M33-trim-extend-split|M33]], [[12-skicar#Trim, extend, split (M33)]]). Data, ne handle:
+
+```ts
+// kernel/profile.ts
+export interface CurveIntersection {
+  readonly a: string; readonly b: string;          // id křivek; a === b samoprůsečík splinu (ta < tb)
+  readonly point: Vec2;
+  readonly ta: number; readonly tb: number;        // parametr t podle spec 12 „Port a parametr křivky“
+  readonly overlap?: true;                         // konec společného úseku překrývajících se křivek
+}
+export interface SketchOps {
+  /** M33: všechny průsečíky dvojic křivek (a před b v pořadí vstupu) a samoprůsečíky splinů; pořadí a, b, ta. */
+  curveIntersections(p: { readonly curves: readonly ProfileCurve[] }): Promise<readonly CurveIntersection[]>;
+  /** M33: kus křivky mezi from < to, stejného druhu (kružnice → oblouk), s id vstupu. */
+  curveSegment(p: { readonly curve: ProfileCurve; readonly from: number; readonly to: number }): Promise<ProfileCurve>;
+}
+```
+
+- **`curveIntersections`:** vstup jako u `profileRegions` (`parseProfileRegionsInput`: id povinné a unikátní, nulové délky vynechané). Průsečíky i ve sdílených koncových bodech a tečné dotyky; překryv → oba konce společného úseku s `overlap`. Body se slučují do `1e-7 · max(1, |souřadnice|)`. OCCT: `Geom2dAPI_InterCurveCurve` s předfiltrem obálek (jako oblasti), parametry přes `Geom2dAPI_ProjectPointOnCurve` (`InterCurveCurve` je nevrací), převedené na `t` ze spec 12. Fake: TS algoritmus z `fake-regions.ts` (spline tessellací), parametry stejně definované.
+- **`curveSegment`:** křivka podle tvaru z `makeFace` (bez povinného id), `from < to` v definičním oboru (`t` ze spec 12; u kružnice `to ≤ from + 2π`), jinak `'invalid-input'`. Úsečka a oblouk přesně ze vzorců; spline `Geom2d_BSplineCurve.Segment(from, to)` (fake: vkládání uzlů v TS), uzly kusu přeškálované do `[0, 1]`. Body kusu leží na původní křivce (kontraktová sada vzorkuje).
+
 ### Kontrakt (platí pro každou implementaci)
 
 Ověřuje ho kontraktová sada ([[#Testy]]), spuštěná pro `FakeKernel` v M5 a pro OCCT v M7.
