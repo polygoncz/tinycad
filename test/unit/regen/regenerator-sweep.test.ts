@@ -60,8 +60,10 @@ function aSquare(size: number): Parameters<SketchOps['makeFace']>[0] {
  * XY with two region faces made by makeFace through ctx.kernel.
  */
 const buildTwoFaceSketch: FeatureBuilder['build'] = async ({ feature, state }, { kernel }) => {
-  const a = await kernel.makeFace(aSquare(1));
-  const b = await kernel.makeFace(aSquare(2));
+  const squareA = aSquare(1);
+  const squareB = aSquare(2);
+  const a = await kernel.makeFace(squareA);
+  const b = await kernel.makeFace(squareB);
   const xy = EMPTY_STATE.artifacts.get(ORIGIN_PLANE_IDS.xy);
   if (xy?.kind !== 'plane') throw new Error('EMPTY_STATE has no XY plane');
   const id = sketchId(feature.id);
@@ -75,6 +77,10 @@ const buildTwoFaceSketch: FeatureBuilder['build'] = async ({ feature, state }, {
       ['a', a.shape],
       ['b', b.shape],
     ]),
+    outlines: [
+      { name: 'a', outer: squareA.outer, holes: [], area: 1 },
+      { name: 'b', outer: squareB.outer, holes: [], area: 4 },
+    ],
   });
   return {
     ok: true,

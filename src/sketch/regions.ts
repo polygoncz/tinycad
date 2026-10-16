@@ -1,6 +1,6 @@
 import { assert, bspline, type Vec2 } from '@/core';
 import { curve2, pointsById } from './geometry';
-import type { Curve2 } from './geometry';
+import type { Curve2, SketchRegion } from './geometry';
 import type { SketchCurve, SketchData, SketchEntity } from './model';
 import { angleOf, cross, dist, dot, length, lerp, mod2pi, normalize, sub, TWO_PI } from './vec2';
 
@@ -9,16 +9,7 @@ import { angleOf, cross, dist, dot, length, lerp, mod2pi, normalize, sub, TWO_PI
 // chains → faces by half-edges → holes → names from curve ids. Splines (M29) are edges between
 // their end poles; crossings, areas and containment use their tessellation (spec 12 "Spliny").
 
-export interface SketchRegion {
-  /** Ids of all boundary curves (outer and holes), without duplicates, sorted (string comparison), joined by ','. */
-  readonly name: string;
-  /** A closed counter-clockwise loop. */
-  readonly outer: readonly Curve2[];
-  /** Closed clockwise loops. */
-  readonly holes: readonly (readonly Curve2[])[];
-  /** > 0: outer minus holes. */
-  readonly area: number;
-}
+export type { SketchRegion } from './geometry';
 
 export interface RegionsResult {
   readonly regions: readonly SketchRegion[];

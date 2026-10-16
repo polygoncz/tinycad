@@ -13,12 +13,14 @@ import {
   type GeometryKernel,
   type MeshData,
   type MeshQuality,
+  type ProfileCurve,
   type ProfileLoop,
   type ProfileRegions,
   type ShapeHandle,
   type ShapeResult,
   type SubShapeIndex,
   type TopologySummary,
+  parseProfileRegionsInput,
   validateFaceInput,
 } from '@/kernel';
 import { dressupResult, type DressupKind } from './dressup';
@@ -33,6 +35,7 @@ import {
   type ShapeEntry,
 } from './shape-entry';
 import { writeStep } from './step';
+import { profileRegionsOf } from './regions';
 import { prismResult, requireFace, revolResult } from './sweep';
 import { tessellateEntry } from './tessellate';
 import { topologyOf } from './topology';
@@ -183,11 +186,17 @@ export class OcctKernelImpl implements GeometryKernel {
     });
   }
 
-  profileRegions(): Promise<ProfileRegions> {
-    // M30 task 1: the port is in place, the OCCT regions follow in task 2 (the input unread).
-    return this.run(noInput, () => {
-      throw createKernelError('operation-failed', 'profileRegions: not implemented');
-    });
+  profileRegions(p: { readonly curves: readonly ProfileCurve[] }): Promise<ProfileRegions> {
+    // parseProfileRegionsInput reads the input synchronously into a fresh copy and never throws.
+    return this.run(
+      () => parseProfileRegionsInput(p),
+      (parsed) => {
+        if (!parsed.ok) {
+          throw createKernelError('invalid-input', `profileRegions: ${parsed.error.join('; ')}`);
+        }
+        return profileRegionsOf(this.oc, parsed.value);
+      },
+    );
   }
 
   extrude(profile: ShapeHandle, direction: Vec3, distance: number): Promise<ShapeResult> {

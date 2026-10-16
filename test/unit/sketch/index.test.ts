@@ -33,6 +33,7 @@ describe('sketch public API', () => {
         'parseSketchData',
         'placeDimension',
         'pointsById',
+        'regionCurves',
         'removeItems',
         'snap',
         'tangentArcFrom',

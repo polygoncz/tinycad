@@ -198,9 +198,6 @@ describe('endOnFatal', () => {
   });
 });
 
-describeGeometryKernelContract(
-  'OcctKernelClient over MessageChannel',
-  () => Promise.resolve(connect(Promise.resolve(new OcctKernelImpl(oc))).kernel),
-  // Until task 2 of M30: the OCCT regions are not implemented yet.
-  { skipProfileRegions: true },
+describeGeometryKernelContract('OcctKernelClient over MessageChannel', () =>
+  Promise.resolve(connect(Promise.resolve(new OcctKernelImpl(oc))).kernel),
 );

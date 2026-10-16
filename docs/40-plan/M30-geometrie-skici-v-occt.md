@@ -51,8 +51,8 @@ Rozhodnutí v sezení 2026-10-16 ([[Q092 Hranice geometrie skici v TS a v OCCT|Q
 
 - [x] Rozhodnout [[Q092 Hranice geometrie skici v TS a v OCCT|Q092]] a dopsat kontrakt do spec 06 a 12.
 - [x] Port `profileRegions`, typy a `FakeKernel` s přesunutým algoritmem.
-- [ ] `kernel-occt`: oblasti v OCCT (po prototypu).
-- [ ] `regionCurves`, builder skici a artefakt s obrysy.
+- [x] `kernel-occt`: oblasti v OCCT (po prototypu).
+- [x] `regionCurves`, builder skici a artefakt s obrysy.
 - [ ] Kresba oblastí z artefaktu a port `SketchGeometry`.
 - [ ] Spec podle skutečnosti, dodatek k [[0017-modul-sketch-a-skicar|ADR 0017]], regresní testy.
 
@@ -116,5 +116,15 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **b) `InterCurveCurve` + vlastní polohrany:** všech 16 případů jako TS (jména, díry, křížení vč. samoprůsečíku splinu). Plocha znaménkovou Greenovou větou (Gauss nad `EvalD1`) – `MakeFace` + `BRepGProp` dává u sevřené smyčky špatný obsah (104 místo 96). Bod v oblasti paritou paprsku přes `InterCurveCurve`. S předfiltrem obálek rychlejší než TS (1860 křivek: 25 ms vs. TS 392 ms, Splitter 100 ms).
 - **Návrh:** cesta b. Splitter se hodí až pro [[Q093 Oblasti z křížících se křivek|Q093]] (dělení křivek v průsečících a jména kusů z historie).
 - **Pavel 2026-10-16:** „Souhlasím s cestou b (Geom2dAPI_InterCurveCurve + vlastní polohrany, plocha Greenovou větou).“
+
+**2026-10-16 – úkol 1 hotový** (commit `dc55727`). Upřesnění spec 06 z implementace:
+- Tolerance plochy splinu v kontraktové sadě 1e-3 místo 1e-4: fake spline tessellací s tolerancí `1e-4 · měřítko` a chyba plochy vychází až 3·10⁻⁴. Kontrakt výsledku se nemění, jen přísnost porovnání.
+- Kontrolu vstupu sdílí obě implementace přes `parseProfileRegionsInput` z `kernel` (vzor `validateFaceInput`); spline nulové délky = všechny póly v jednom bodě; `profileRegions(null)` → `'invalid-input'`; obrácení splinu obecně `a + b − k`.
+- Oblouk ze skici s nestejnými poloměry teď `profileRegions` odmítne (dřív až `makeFace`) → featura skici chybná jako dřív, jen o krok dřív. Řešič drží poloměry s přesností mnohem lepší než `1e-7`, prakticky nenastane.
+- `kernel/vec2.ts` je kopie 2D pomůcek ze `sketch/vec2.ts` (kernel nesmí importovat sketch); kandidát na přesun do `core/math` – nechávám na revizi.
+
+**2026-10-16 – úkoly 2 a 3 hotové** (souběžně v izolovaných worktree, sloučené jedním commitem).
+- Úkol 2: `kernel-occt/regions.ts` cestou b. Křížení přes `Geom2dAPI_InterCurveCurve` jen pro dvojice s překrytými obálkami (řazení podle x), samoprůsečík splinu zvlášť; plocha Greenovou větou (5bodový Gauss–Legendre nad `D1`); bod v oblasti paritou paprsku pod iracionálním úhlem, při průchodu uzlem nebo tečném dotyku další směr (zlatý úhel, nejvýš 8 pokusů); smyčky výsledku ze vstupních křivek, ne z OCCT. Tolerance `1e-7 · max(1, |souřadnice|)` (fake slučuje uzly při `1e-9`; kontrakt hranu tolerance nezkouší). Mřížka 840 úseček 49 ms, 1860 úseček 110 ms. Kontraktová sada projde s fake i OCCT (přímo i přes worker).
+- Úkol 3: `regionCurves` filtruje vyčerpávajícím `switch` (ne „vše kromě bodu“), aby nová entita stopy B nebo C musela rozhodnout, jestli ohraničuje oblasti – typový predikát typecheck nekontroluje. Plán tvrdil, že úkol 3 je na úkolu 2 nezávislý; ve skutečnosti integrační testy (součást `npm run check`) bez OCCT `profileRegions` padají, proto sloučení až po obou.
 
 ## Retrospektiva

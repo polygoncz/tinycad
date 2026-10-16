@@ -29,8 +29,8 @@ export type {
 } from './model';
 export { parseSketchData } from './parse';
 export type { SketchIssue } from './parse';
-export { curve2, pointsById } from './geometry';
-export type { Curve2 } from './geometry';
+export { curve2, pointsById, regionCurves } from './geometry';
+export type { Curve2, SketchRegion } from './geometry';
 export {
   constraintFor,
   constraintTargets,
@@ -61,5 +61,5 @@ export {
 } from './dimension-placement';
 export type { DimensionTarget } from './dimension-placement';
 export { SPLINE_TOLERANCE, computeRegions } from './regions';
-export type { RegionsResult, SketchRegion } from './regions';
+export type { RegionsResult } from './regions';
 export type { ConstraintSolver, SolveInput, SolveResult, SolveStatus } from './solver';

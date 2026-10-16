@@ -459,16 +459,9 @@ function expectStepFrame(bytes: Uint8Array): void {
   expect(text.endsWith('END-ISO-10303-21;'), 'ends with END-ISO-10303-21;').toBe(true);
 }
 
-/** Parts of the contract suite an implementation does not have yet. */
-export interface ContractOptions {
-  /** Skip the profileRegions cases (M30): the OCCT kernel until task 2 of M30. */
-  readonly skipProfileRegions?: boolean;
-}
-
 export function describeGeometryKernelContract(
   name: string,
   factory: () => Promise<GeometryKernel>,
-  options: ContractOptions = {},
 ): void {
   describe(`GeometryKernel contract: ${name}`, () => {
     let kernel: GeometryKernel;
@@ -892,7 +885,7 @@ export function describeGeometryKernelContract(
       );
     });
 
-    describe.skipIf(options.skipProfileRegions === true)('profileRegions (M30)', () => {
+    describe('profileRegions (M30)', () => {
       describeProfileRegions(() => kernel);
     });
 
