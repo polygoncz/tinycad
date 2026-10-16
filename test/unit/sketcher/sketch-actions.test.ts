@@ -64,6 +64,8 @@ function aFakeSession() {
     addConstraint: record('addConstraint'),
     setDimension: record('setDimension'),
     remove: record('remove'),
+    rewrite: record('rewrite'),
+    hits: () => null,
     toggleConstruction: (ids) => {
       calls.push(['toggleConstruction', ids]);
     },

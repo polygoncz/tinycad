@@ -53,10 +53,12 @@ export function createOverlayLayer(options: OverlayLayerOptions): OverlayLayerIn
       gapSize: GAP_SIZE,
       depthTest: true,
     }),
+    warning: new THREE.LineBasicMaterial({ color: warningColor(palette), depthTest: true }),
   };
   const pointMaterials: Record<OverlayStyle, THREE.PointsMaterial> = {
     preview: createPointMaterial(palette.preview),
     construction: createPointMaterial(palette.construction),
+    warning: createPointMaterial(warningColor(palette)),
   };
   const entries = new Map<string, Entry>();
 
@@ -113,6 +115,8 @@ export function createOverlayLayer(options: OverlayLayerOptions): OverlayLayerIn
         lineMaterials[style].color.setHex(next[style]);
         pointMaterials[style].color.setHex(next[style]);
       }
+      lineMaterials.warning.color.setHex(warningColor(next));
+      pointMaterials.warning.color.setHex(warningColor(next));
     },
     bounds(): BoundingBox | null {
       return unionBounds([...entries.values()].map((entry) => entry.bounds));
@@ -130,6 +134,15 @@ export function createOverlayLayer(options: OverlayLayerOptions): OverlayLayerIn
       }
     },
   };
+}
+
+/**
+ * The colour of the style 'warning' (M33, the crossing points of a sketch): the red of the X
+ * axis, the one red of both palettes, apart from the blue sketch and the orange selection. The
+ * palette has no colour of warnings of its own.
+ */
+function warningColor(palette: ScenePalette): number {
+  return palette.axes[0];
 }
 
 function createPointMaterial(color: number): THREE.PointsMaterial {

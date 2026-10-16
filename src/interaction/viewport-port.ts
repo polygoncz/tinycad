@@ -110,7 +110,8 @@ export interface HighlightPort {
   setSelection(targets: readonly HighlightTarget[]): void;
 }
 
-export type OverlayStyle = 'preview' | 'construction';
+/** 'warning' (M33): the crossing points of the sketch curves, in a colour of warnings. */
+export type OverlayStyle = 'preview' | 'construction' | 'warning';
 
 /** Platform-neutral shapes in world coordinates; no Three.js types (Q058). */
 export type OverlayShape =

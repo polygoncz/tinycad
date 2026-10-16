@@ -8,15 +8,19 @@ import type { Observable, Plane, Vec2, Vec3 } from '@/core';
 import {
   SKETCH_PARAM,
   constraintTargets,
+  curve2,
   curvePoints,
   isDimension,
   movePlacement,
   parseSketchData,
+  pointsById,
   removeItems,
   toggleConstruction,
 } from '@/sketch';
 import type {
   ConstraintSolver,
+  Curve2,
+  CurveHit,
   DimensionConstraint,
   DimensionPlacement,
   SketchConstraint,
@@ -71,6 +75,17 @@ export interface SketchSession {
   setDimension(id: SketchConstraintId, value: number): Promise<boolean>;
   /** removeItems from sketch. */
   remove(ids: readonly SketchItemId[]): Promise<boolean>;
+  /**
+   * Replaces the data by `next` (M33: trim, extend, split): solves it and on a conflict solves
+   * again without the constraints `added`, like the automatic constraints of the tools (M26);
+   * written in one setParams. Added constraints the solver finds redundant are left out.
+   */
+  rewrite(next: SketchData, added: ReadonlySet<SketchConstraintId>): Promise<boolean>;
+  /**
+   * The intersections of all curves of the current data (M33, SketchGeometry.intersections),
+   * construction ones too; null = not computed for the current data yet, or the port failed.
+   */
+  hits(): readonly CurveHit[] | null;
   /** Without the solver: construction does not change the solution. */
   toggleConstruction(ids: readonly SketchItemId[]): void;
   /** Dragging a point (the select tool). */
@@ -208,6 +223,9 @@ export const EDIT_SKETCH_DRAWING_ID = 'sketch-edit';
 /** The overlay id of the snap guides of the inference preview (M26). */
 export const SKETCH_GUIDES_OVERLAY_ID = 'sketch-guides';
 
+/** The overlay id of the crossing points of the curves (M33, Q093). */
+export const SKETCH_CROSSINGS_OVERLAY_ID = 'sketch-crossings';
+
 const EMPTY_DATA: SketchData = Object.freeze({
   entities: Object.freeze([]),
   constraints: Object.freeze([]),
@@ -235,7 +253,7 @@ export function openSketchSession(deps: {
   /** SketchEditor.showAllConstraints: the glyphs of all constraints, not only the selected ones (M25). */
   showAllConstraints: Observable<boolean>;
   solver: ConstraintSolver;
-  /** M30: the geometry of the sketch in the kernel (SketchGeometry); no method yet, M33 and M35 add them. */
+  /** The geometry of the sketch in the kernel (SketchGeometry, M30): intersections and pieces (M33). */
   geometry: SketchGeometry;
   /**
    * The drawings: the session draws the edited sketch and nothing else; screenToRay: the cursor
@@ -244,7 +262,7 @@ export function openSketchSession(deps: {
   viewport: Pick<ViewportPort, 'sketches' | 'screenToRay' | 'overlay'>;
   onClose: () => void;
 }): SketchSession {
-  const { edit, resolvePlane, showAllConstraints, solver, viewport, onClose } = deps;
+  const { edit, resolvePlane, showAllConstraints, solver, geometry, viewport, onClose } = deps;
   const plane = new ObservableValue<Plane>(deps.plane);
   /** The plane reference last followed; a change of the param moves the plane (M21). */
   let planeRef = planeRefOf(edit.state.get().params);
@@ -273,9 +291,17 @@ export function openSketchSession(deps: {
    * construction waits for them.
    */
   let writers = 0;
+  /** The version of the entities the last intersections were asked for (M33); a change raises it. */
+  let hitsVersion = 0;
+  /** The last answer of SketchGeometry.intersections with the version it was asked for. */
+  let hitsAnswer: { readonly version: number; readonly hits: readonly CurveHit[] } | null = null;
+  /** The crossing points in plane coordinates, drawn in the overlay while there are some. */
+  let crossings: readonly Vec2[] = [];
+  let crossingsShown = false;
 
   const state = new ObservableValue<SketchState>(buildState(null));
   draw();
+  requestHits(state.get().entities);
   const unsubscribeEdit = edit.state.subscribe(() => {
     if (!edit.state.get().open) close();
     else refresh(followPlane());
@@ -373,6 +399,8 @@ export function openSketchSession(deps: {
     const next = buildState(prev);
     const keys = Object.keys(next) as (keyof SketchState)[]; // the keys of the snapshot just built
     const changed = keys.filter((key) => !Object.is(next[key], prev[key]));
+    if (open && next.entities !== prev.entities) requestHits(next.entities);
+    if (open && redraw) drawCrossings(crossings);
     if (changed.length > 0) state.set(next);
     if (open && (changed.some((key) => key !== 'inference') || redraw)) draw();
   }
@@ -392,6 +420,53 @@ export function openSketchSession(deps: {
     };
     viewport.overlay.set(SKETCH_GUIDES_OVERLAY_ID, [shape]);
     guidesShown = true;
+  }
+
+  /**
+   * Asks for the intersections of all curves of the entities (M33); the last request wins, an
+   * older answer is dropped. An answer draws the crossing points; a failure of the port leaves
+   * hits() null, warns in the console and removes them.
+   */
+  function requestHits(entities: readonly SketchEntity[]): void {
+    const version = ++hitsVersion;
+    const points = pointsById({ entities, constraints: EMPTY_DATA.constraints });
+    const curves = new Map<string, { readonly curve: Curve2; readonly construction: boolean }>();
+    for (const e of entities) {
+      if (e.kind !== 'point') {
+        curves.set(e.id, { curve: curve2(e, points), construction: e.construction === true });
+      }
+    }
+    promiseOf(() => geometry.intersections([...curves.values()].map(({ curve }) => curve))).then(
+      (hits) => {
+        if (!open || version !== hitsVersion) return;
+        hitsAnswer = Object.freeze({ version, hits });
+        drawCrossings(crossingPointsOf(hits, curves));
+      },
+      () => {
+        // Spec 12 asks for a warning in the console here; ring 2 has no console (ADR 0009),
+        // open question of M33 task 4.
+        if (!open || version !== hitsVersion) return;
+        drawCrossings([]);
+      },
+    );
+  }
+
+  /** The crossing points as points of the style 'warning' in the overlay; none removes them. */
+  function drawCrossings(points: readonly Vec2[]): void {
+    crossings = points;
+    if (points.length === 0) {
+      if (crossingsShown) viewport.overlay.remove(SKETCH_CROSSINGS_OVERLAY_ID);
+      crossingsShown = false;
+      return;
+    }
+    const p = plane.get();
+    const shape: OverlayShape = {
+      kind: 'points',
+      points: points.map((q) => planeMath.toWorld(p, q)),
+      style: 'warning',
+    };
+    viewport.overlay.set(SKETCH_CROSSINGS_OVERLAY_ID, [shape]);
+    crossingsShown = true;
   }
 
   /**
@@ -459,6 +534,7 @@ export function openSketchSession(deps: {
     } finally {
       try {
         drawGuides([]);
+        drawCrossings([]);
         viewport.sketches.remove(EDIT_SKETCH_DRAWING_ID);
       } finally {
         onClose();
@@ -685,6 +761,36 @@ export function openSketchSession(deps: {
       checkOpen('remove');
       return change((data) => removeItems(data, ids));
     },
+    rewrite(next, added) {
+      checkOpen('rewrite');
+      const without = next.constraints.filter((c) => !added.has(c.id));
+      // Without any added constraint in the data a second solve would be the same.
+      const attempts =
+        without.length === next.constraints.length
+          ? [next.constraints]
+          : [next.constraints, without];
+      return enqueueWrite(async () => {
+        for (const constraints of attempts) {
+          const result = await solve({ entities: next.entities, constraints });
+          if (!open) return false;
+          if (result === null || result.status === 'failed') return reject('sketch.solverFailed');
+          if (result.status === 'ok') {
+            const redundant = new Set(result.redundant);
+            accept(result, {
+              entities: result.entities ?? next.entities,
+              constraints: constraints.filter((c) => !(added.has(c.id) && redundant.has(c.id))),
+            });
+            refresh();
+            return true;
+          }
+        }
+        return reject('sketch.conflict');
+      });
+    },
+    hits() {
+      const answer = hitsAnswer;
+      return answer !== null && answer.version === hitsVersion ? answer.hits : null;
+    },
     toggleConstruction(ids) {
       checkOpen('toggleConstruction');
       const apply = (): void => {
@@ -831,6 +937,59 @@ function retryOf(
   const withoutConflicting = attempt.filter((c) => !conflicting.has(c.id) || kept.includes(c));
   if (tried.length === 1 && fresh(withoutConflicting)) return withoutConflicting;
   return fresh(kept) ? kept : null;
+}
+
+/**
+ * The crossing points (spec 12, "Průsečíky v session a body křížení", Q093): the hits of two
+ * non-construction curves (or a self-intersection of a spline) that are not in an end point
+ * shared by both curves, and the ends of overlaps; in plane coordinates. Hits of curves not in
+ * `curves` are skipped.
+ */
+function crossingPointsOf(
+  hits: readonly CurveHit[],
+  curves: ReadonlyMap<string, { readonly curve: Curve2; readonly construction: boolean }>,
+): readonly Vec2[] {
+  return hits.flatMap((hit) => {
+    const a = curves.get(hit.a);
+    const b = curves.get(hit.b);
+    if (a === undefined || b === undefined || a.construction || b.construction) return [];
+    if (hit.overlap === true) return [hit.point];
+    return atSharedEnd(a.curve, b.curve, hit.a === hit.b, hit.point) ? [] : [hit.point];
+  });
+}
+
+/**
+ * The point is an end point of both curves; for a self-intersection (`self`) both ends of the
+ * spline are in it (a closed spline meeting itself in its ends).
+ */
+function atSharedEnd(a: Curve2, b: Curve2, self: boolean, point: Vec2): boolean {
+  const endsA = curveEnds(a);
+  if (self) return endsA.length === 2 && endsA.every((end) => samePoint(end, point));
+  return (
+    endsA.some((end) => samePoint(end, point)) && curveEnds(b).some((end) => samePoint(end, point))
+  );
+}
+
+/** The end points of a curve; a circle has none, a clamped spline ends in its first and last pole. */
+function curveEnds(c: Curve2): readonly Vec2[] {
+  switch (c.kind) {
+    case 'line':
+    case 'arc':
+      return [c.from, c.to];
+    case 'circle':
+      return [];
+    case 'bspline': {
+      const first = c.poles[0];
+      const last = c.poles.at(-1);
+      return first === undefined || last === undefined ? [] : [first, last];
+    }
+  }
+}
+
+/** Equal points within the tolerance of spec 12: 1e-7 · max(1, |coordinate|). */
+function samePoint(a: Vec2, b: Vec2): boolean {
+  const tolerance = 1e-7 * Math.max(1, ...[...a, ...b].map(Math.abs));
+  return Math.hypot(a[0] - b[0], a[1] - b[1]) <= tolerance;
 }
 
 /**

@@ -1,16 +1,29 @@
-// The SketchGeometry port of the sketcher over the kernel (spec 12 "Geometrie skici v jádře (M30)",
-// ADR 0028): app owns the kernel client, so it implements the port and hands it to the sketcher
-// like the ConstraintSolver.
+// The SketchGeometry port of the sketcher over the kernel (spec 12 "Geometrie skici v jádře (M30)"
+// and "Trim, extend, split (M33)", spec 06 "Stav po M33", ADR 0028): app owns the kernel client,
+// so it implements the port and hands it to the sketcher like the ConstraintSolver.
 
+import type { GeometryKernel } from '@/kernel';
 import type { SketchGeometry } from '@/sketch';
 
 /**
- * Not implemented yet: M33 added the methods to the port, the implementation over
- * SketchOps.curveIntersections and curveSegment of the kernel follows in task 3 of M33. Until
- * then every call rejects, so the sketcher only gets no intersections (its error path).
+ * The port over SketchOps.curveIntersections and curveSegment. `kernel` is read on every call,
+ * so after a restart the new kernel answers; null (no kernel running) rejects. Curve2 and
+ * ProfileCurve, CurveHit and CurveIntersection have the same shape (ADR 0017), so the data pass
+ * through without a conversion (the assignments below check it). The kernel checks the input
+ * (a curve without an id is an error of the caller) and every error is a rejected Promise.
  */
-export function createSketchGeometry(): SketchGeometry {
-  const notImplemented = (): Promise<never> =>
-    Promise.reject(new Error('SketchGeometry: not implemented'));
-  return Object.freeze({ intersections: notImplemented, segment: notImplemented });
+export function createSketchGeometry(kernel: () => GeometryKernel | null): SketchGeometry {
+  const live = (): GeometryKernel => {
+    const k = kernel();
+    if (k === null) throw new Error('No geometry kernel is running');
+    return k;
+  };
+  return Object.freeze({
+    async intersections(curves) {
+      return live().curveIntersections({ curves });
+    },
+    async segment(curve, from, to) {
+      return live().curveSegment({ curve, from, to });
+    },
+  } satisfies SketchGeometry);
 }

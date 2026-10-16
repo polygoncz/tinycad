@@ -46,8 +46,8 @@ Pavel 2026-10-16: „Chtěl bych ještě dodělat do Sketch následující featu
 - [x] Kontrakt: vazby a kóty ořezané křivky, id nových částí ([[12-skicar#Trim, extend, split (M33)]]).
 - [x] Jádro: `curveIntersections`, `curveSegment` (fake, OCCT, kontraktová sada).
 - [x] `sketch`: port `SketchGeometry`, parametr křivky, `cutsOf`, `trimEdit`/`extendEdit`/`splitEdit`.
-- [ ] `app`: `SketchGeometry` nad jádrem.
-- [ ] Session: cache průsečíků, body křížení, `rewrite`.
+- [x] `app`: `SketchGeometry` nad jádrem.
+- [x] Session: cache průsečíků, body křížení, `rewrite`.
 - [ ] Nástroje Trim, Extend, Split v liště.
 - [ ] Spec podle skutečnosti, e2e.
 
@@ -111,5 +111,10 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - Úkol 1: OCCT ověřeno – `Geom2dAPI_ProjectPointOnCurve` dá parametr průsečíku, `Geom2d_BSplineCurve.Segment` na `Copy()` (pole OCCT od 1). OCCT hlásí tečný dotyk jako krátký „společný úsek“ (u kružnice ještě rozdělený ve švu) – adaptér rozliší skutečný překryv podle mezery uvnitř úseku. Fake počítá průsečíky splinu vzorkováním + Newton (tessellace nestačí na bodovou toleranci). Stavba 2D křivek a předfiltr obálek vytknuté do `kernel-occt/geom2d.ts`, sdílí je oblasti i průsečíky. Hlavní sezení zúžilo `curveSegment` kružnice na `to < from + 2π` (celá otáčka = oblouk nulové délky).
 - Úkol 2: typy požadavků a `IdSource` navrhl implementátor, schváleno (spec 12). Hlavní sezení rozhodlo dvě díry: řezy se stejným bodem v jedné úpravě dávají jeden bod (smyčka splinu); `tangent` úsečky a splinu přejde ke kusu se sdíleným koncem.
 - `npm run check` po sloučení: 6867 unit, 41 integračních testů.
+
+**2026-10-16 – úkoly 3 a 4** (souběžně).
+- Úkol 3: `createSketchGeometry(() => supervisor.kernel())` – jádro se bere při každém volání, bez jádra odmítne.
+- Úkol 4: session drží průsečíky k verzi pole entit (poslední vyhrává), body křížení v overlayi `sketch-crossings` stylem `'warning'`, `rewrite(next, added)`. Spec chtěla varování v konzoli při chybě portu – `sketcher` (prstenec 2) `console` nemá, varování vypuštěno ze spec. Barva `'warning'` zatím `palette.axes[0]`; vlastní klíč `ScenePalette` (spec 09) je návrh pro hlavní sezení.
+- `npm run check`: 6895 unit, 41 integračních.
 
 ## Retrospektiva
