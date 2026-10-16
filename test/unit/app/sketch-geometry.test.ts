@@ -75,6 +75,12 @@ describe('createSketchGeometry', () => {
     await expect(geometry.segment(H, 0, 0.5)).rejects.toThrow();
   });
 
+  it('has no fillet yet: it rejects (M34 task 3 forwards it to the kernel)', async () => {
+    const geometry = createSketchGeometry(() => createFakeKernel());
+
+    await expect(geometry.fillet(H, V, 0.1, [1.1, 0.1])).rejects.toThrow('not implemented');
+  });
+
   it('takes the kernel anew on every call (a restarted kernel)', async () => {
     const first = createFakeKernel();
     const second = createFakeKernel();

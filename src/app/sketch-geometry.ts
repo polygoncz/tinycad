@@ -25,5 +25,9 @@ export function createSketchGeometry(kernel: () => GeometryKernel | null): Sketc
     async segment(curve, from, to) {
       return live().curveSegment({ curve, from, to });
     },
+    // M34 task 3 forwards this to SketchOps.filletArc; until then the port has no fillet.
+    fillet() {
+      return Promise.reject(new Error('SketchGeometry.fillet: not implemented'));
+    },
   } satisfies SketchGeometry);
 }

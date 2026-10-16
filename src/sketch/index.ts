@@ -1,5 +1,6 @@
 // Ring 1 – sketch data model, data checks, 2D geometry, the curves bounding regions, editing
-// helpers, the parameter of curves and trim/extend/split (M33) and the ConstraintSolver and
+// helpers, the parameter of curves, trim/extend/split (M33), fillet and chamfer (M34) and the
+// ConstraintSolver and
 // SketchGeometry ports (spec 12, ADR 0017). Depends only on core.
 // Public API of sketch. Everything else in this folder is internal.
 
@@ -86,7 +87,7 @@ export {
 export type { DimensionTarget } from './dimension-placement';
 export { SPLINE_TOLERANCE } from './geometry';
 export type { ConstraintSolver, SolveInput, SolveResult, SolveStatus } from './solver';
-export type { CurveHit, SketchGeometry } from './geometry-port';
+export type { CurveHit, FilletArc, SketchGeometry } from './geometry-port';
 export { nearestParam, paramRange, piecePolyline, pointAt, samePoint } from './curve-param';
 export { crossingPoints, cutsOf, extendEdit, pieceAt, splitEdit, trimEdit } from './trim';
 export type {
@@ -98,3 +99,5 @@ export type {
   SplitRequest,
   TrimRequest,
 } from './trim';
+export { chamferEdit, cornerOf, filletEdit } from './fillet';
+export type { ChamferRequest, Corner, FilletRequest } from './fillet';

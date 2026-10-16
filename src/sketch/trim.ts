@@ -53,6 +53,8 @@ export interface IdSource {
 export interface SketchEdit {
   readonly data: SketchData;
   readonly added: ReadonlySet<SketchConstraintId>;
+  /** A dimension of the edit to open for editing after the write (M34: fillet and chamfer). */
+  readonly edit?: SketchConstraintId;
 }
 
 export interface TrimRequest {
@@ -325,7 +327,7 @@ export function splitEdit(data: SketchData, req: SplitRequest, ids: IdSource): S
 }
 
 /** A kept piece of the edited curve with the ids of its end points. */
-interface PieceSpec {
+export interface PieceSpec {
   readonly from: number;
   readonly to: number;
   readonly start: SketchEntityId;
@@ -335,7 +337,7 @@ interface PieceSpec {
 }
 
 /** The new points of an edit and their pointOnCurve constraints, in the order they were minted. */
-interface NewPoints {
+export interface NewPoints {
   readonly points: readonly SketchPoint[];
   readonly added: readonly SketchConstraint[];
   newPoint(p: Vec2): SketchEntityId;
@@ -343,7 +345,7 @@ interface NewPoints {
   cutPoint(cut: CurveCut): SketchEntityId;
 }
 
-function newPoints(curve: SketchEntityId, ids: IdSource): NewPoints {
+export function newPoints(curve: SketchEntityId, ids: IdSource): NewPoints {
   const points: SketchPoint[] = [];
   const added: SketchConstraint[] = [];
   const newPoint = (p: Vec2): SketchEntityId => {
@@ -393,17 +395,18 @@ function withSplines(
 /**
  * The data with the curve replaced by its pieces (pieces[0] keeps the id, the others get new
  * ids), the new points before the pieces (the planegcs solver needs the points of a line or
- * an arc before it), the original defining points no entity uses any more removed, and the
- * constraints carried over by rule 3 of spec 12.
+ * an arc before it), the original defining points no entity uses any more removed (but `keep`:
+ * the virtual sharp corner of a fillet, M34), and the constraints carried over by rule 3 of
+ * spec 12.
  */
-function rebuild(
+export function rebuild(
   data: SketchData,
   curve: SketchCurve,
   original: Curve2,
   pieces: readonly PieceSpec[],
   made: NewPoints,
   ids: IdSource,
-  opts: { readonly parallel?: boolean } = {},
+  opts: { readonly parallel?: boolean; readonly keep?: SketchEntityId } = {},
 ): SketchEdit {
   const pieceIds = pieces.map((_, i) => (i === 0 ? curve.id : ids.entity()));
   const interior: SketchPoint[] = [];
@@ -422,7 +425,9 @@ function rebuild(
     e.id === curve.id ? [...made.points, ...interior, first, ...rest] : [e],
   );
   const used = new Set(replaced.flatMap((e) => (e.kind === 'point' ? [] : curvePoints(e))));
-  const dropped = new Set<string>(curvePoints(curve).filter((p) => !used.has(p)));
+  const dropped = new Set<string>(
+    curvePoints(curve).filter((p) => !used.has(p) && p !== opts.keep),
+  );
   const kept = replaced.filter((e) => !dropped.has(e.id));
 
   const points = pointsById(data);
@@ -580,14 +585,14 @@ function removed(data: SketchData, curve: SketchEntityId): SketchEdit {
   return Object.freeze({ data: removeItems(data, [curve]), added: new Set<SketchConstraintId>() });
 }
 
-function findCurve(data: SketchData, id: SketchEntityId): SketchCurve | null {
+export function findCurve(data: SketchData, id: SketchEntityId): SketchCurve | null {
   const e = data.entities.find((x) => x.id === id);
   // An infinite line (M31) only cuts other curves: it has no ends to trim, extend or split.
   return e === undefined || e.kind === 'point' || e.kind === 'xline' ? null : e;
 }
 
 /** The points at the start and the end of the curve ([] for a circle). */
-function endIds(curve: SketchCurve): readonly SketchEntityId[] {
+export function endIds(curve: SketchCurve): readonly SketchEntityId[] {
   switch (curve.kind) {
     case 'line':
       return [curve.p1, curve.p2];
@@ -620,7 +625,10 @@ function endAt(
   return endIds(curve).find((id) => samePoint(coordinatesOf(points, id), p)) ?? null;
 }
 
-function coordinatesOf(points: ReadonlyMap<SketchEntityId, SketchPoint>, id: SketchEntityId): Vec2 {
+export function coordinatesOf(
+  points: ReadonlyMap<SketchEntityId, SketchPoint>,
+  id: SketchEntityId,
+): Vec2 {
   const p = points.get(id);
   assert(p !== undefined, `trim: missing point '${id}'`);
   return [p.x, p.y];

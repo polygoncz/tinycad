@@ -45,7 +45,7 @@ Předpřipravený build nemá `ChFi2d_*`; zaoblení úseček a oblouků je analy
 
 - [x] Kontrakt ([[12-skicar#Zaoblení a sražení ve skice (M34)]], [[06-geometricke-jadro#Stav po M34]]).
 - [ ] Jádro: `filletArc` (fake, OCCT, kontraktová sada).
-- [ ] `sketch`: `cornerOf`, `filletEdit`, `chamferEdit`, port `fillet`.
+- [x] `sketch`: `cornerOf`, `filletEdit`, `chamferEdit`, port `fillet`.
 - [ ] `app` port, `rewrite` s otevřením kóty, nástroje v liště, e2e.
 - [ ] Spec podle skutečnosti.
 
@@ -87,5 +87,9 @@ Rozdíl mezi zaoblením ve skice (2D, vazby) a zaoblením hran tělesa ([[M14-to
 ## Průběh stopy
 
 _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hlavní sezení to při sloučení přenese do deníku.)_
+
+**2026-10-16 – natažen `main` s M31** (stopa B): sčítací konflikty v nástrojích, i18n, testech lišty a spec 12. `xline` řeže ostatní křivky, ale trim/extend/split ji neberou (doplněno do spec 12 M33 + test). E2e lišty skicáře: „široká“ lišta při 1800 px místo 1400 px (skupina `modify`).
+
+**Úkol 2 hotový** – tvar požadavků a lokální volby (směr oblouku, `added` bez kót, reference úhlu) schváleny a zapsány ve spec 12.
 
 ## Retrospektiva

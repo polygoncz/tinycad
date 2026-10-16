@@ -3,6 +3,7 @@ import * as sketch from '@/sketch';
 import type {
   Curve2,
   CurveHit,
+  FilletArc,
   SketchConstraint,
   SketchConstraintDraft,
   SketchGeometry,
@@ -29,12 +30,15 @@ describe('sketch public API', () => {
         'constraintTargets',
         'curvePoints',
         'curve2',
+        'chamferEdit',
+        'cornerOf',
         'crossingPoints',
         'cutsOf',
         'defaultPlacement',
         'dimensionFor',
         'endTangent',
         'extendEdit',
+        'filletEdit',
         'nearestParam',
         'paramRange',
         'pieceAt',
@@ -154,8 +158,18 @@ describe('sketch public API', () => {
     >();
   });
 
-  it('SketchGeometry has the intersections and pieces of M33 (spec 12 "Port a parametr křivky")', () => {
-    expectTypeOf<keyof SketchGeometry>().toEqualTypeOf<'intersections' | 'segment'>();
+  it('SketchGeometry has the intersections and pieces of M33 and the fillet of M34 (spec 12)', () => {
+    expectTypeOf<keyof SketchGeometry>().toEqualTypeOf<'intersections' | 'segment' | 'fillet'>();
+    expectTypeOf<SketchGeometry['fillet']>().toEqualTypeOf<
+      (a: Curve2, b: Curve2, radius: number, near: readonly [number, number]) => Promise<FilletArc>
+    >();
+    expectTypeOf<FilletArc>().toEqualTypeOf<{
+      readonly center: readonly [number, number];
+      readonly pointA: readonly [number, number];
+      readonly pointB: readonly [number, number];
+      readonly ta: number;
+      readonly tb: number;
+    }>();
     expectTypeOf<SketchGeometry['intersections']>().toEqualTypeOf<
       (curves: readonly Curve2[]) => Promise<readonly CurveHit[]>
     >();

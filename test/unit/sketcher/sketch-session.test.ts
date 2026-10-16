@@ -380,6 +380,7 @@ function controlledGeometry(): { geometry: SketchGeometry; calls: IntersectionsC
         calls.push({ curves, resolve, reject });
       }),
     segment: () => Promise.reject(new Error('segment is not used here')),
+    fillet: () => Promise.reject(new Error('fillet is not used here')),
   };
   return { geometry, calls };
 }
