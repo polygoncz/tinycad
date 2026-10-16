@@ -656,9 +656,9 @@ Zafixováno 2026-10-16 před spuštěním stop. Pravidlo jako v první sérii: s
 |---|---|---|---|---|
 | A (M30, M33–M35) | – | případná vazba odsazení (M35, `kind: 'offset'`) | – (beze změny) | port jádra `profileRegions`, `SketchArtifact.outlines`, `regionCurves`, port `SketchGeometry`; průsečíky a offset v M33/M35 |
 | B (M31, M32) | `SketchXLine` (`kind: 'xline'`) | – | – | `SketchState.constructionMode`; nástroje a akce níže |
-| C (M36, M37) | entity zrcadlení, polí a textu – tvar podle [[Q089 Parametrické zrcadlení a pole ve skice\|Q089]] a [[Q091 Fonty pro text ve skice\|Q091]], `kind` z `'mirror' \| 'linearPattern' \| 'circularPattern' \| 'text'` | `symmetric` | – (text a kopie jsou `line`/`arc`/`circle`/`bspline` s odvozeným id) | větve `regionCurves` pro kopie a text |
+| C (M36, M37) | entity `mirror`, `linearPattern`, `circularPattern` (recept, kopie odvozené – [[Q089 Parametrické zrcadlení a pole ve skice\|Q089]]) a `text` ([[Q091 Fonty pro text ve skice\|Q091]]); **nejsou** v `SketchCurve` | `symmetric` | – (text a kopie jsou `line`/`arc`/`circle`/`bspline` s odvozeným id) | větve `regionCurves` pro kopie a text |
 
-Druhy `xline`, `mirror`, `linearPattern`, `circularPattern`, `text`, `symmetric` a `offset` jsou tím rezervované; jiná stopa je nepoužije pro nic jiného. Stopa C smí místo entit zvolit samostatné pole v `SketchData` (rozhodne Q089), pak ho přidá jako volitelné (`patterns?:`), aby staré dokumenty platily.
+Druhy `xline`, `mirror`, `linearPattern`, `circularPattern`, `text`, `symmetric` a `offset` jsou tím rezervované; jiná stopa je nepoužije pro nic jiného. Entity stopy C jsou členy `SketchEntity`, ale ne `SketchCurve` (nejsou to křivky, nesou recept); funkce nad `SketchCurve` se jich proto netýkají a stopa C doplní jen `switch` nad `SketchEntity`.
 
 #### Nekonečná přímka (M31, stopa B)
 
@@ -696,7 +696,7 @@ export function regionCurves(data: SketchData): readonly Curve2[];
 ```
 
 - Builder skici volá `regionCurves` a výsledek pošle jádru (`profileRegions`). Je to **jediné místo**, kde se rozhoduje, co ohraničuje oblasti; stopa C sem přidá své větve, nikam jinam.
-- **Odvozené id** (kopie z pole, písmeno textu) má tvar `<id entity>:<přípona>`; přípona neobsahuje `,` ani `:` navíc a je stabilní, dokud se nezmění parametr, ze kterého vznikla (tvar přípony rozhodne Q089, resp. M37). Id z generátoru jsou base62 ([[Q002 Formát ID|Q002]]), dvojtečku ani čárku neobsahují, takže odvozené id se s id entity nesrazí a jméno oblasti (id spojená `,`) zůstane jednoznačné. Jádro bere id jako neprůhledný řetězec; role `edge:<id>` a `face:side:<id>` fungují beze změny.
+- **Odvozené id** (kopie z pole, písmeno textu) má tvar `<id entity>:<přípona>`; přípona neobsahuje `,` ani `:` navíc a je stabilní, dokud se nezmění parametr, ze kterého vznikla. Kopie: `<id entity>:<index>.<id zdroje>` (index `i`, u mřížky `i-j`; [[Q089 Parametrické zrcadlení a pole ve skice|Q089]]); písmena textu určí M37. Id z generátoru jsou base62 ([[Q002 Formát ID|Q002]]), dvojtečku ani čárku neobsahují, takže odvozené id se s id entity nesrazí a jméno oblasti (id spojená `,`) zůstane jednoznačné. Jádro bere id jako neprůhledný řetězec; role `edge:<id>` a `face:side:<id>` fungují beze změny.
 - Výběr a picking odvozené křivky: kresba ji nese s odvozeným id; skicář ho přeloží na id zdrojové entity (vzor `__poles:` z M29). Detail rozhodne stopa C.
 
 #### Id nástrojů, akcí a rodin

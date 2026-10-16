@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[12-skicar]]"
 decide_by: "[[M36-zrcadleni-a-pole]]"
-proposal: ""
-decision: ""
+proposal: "Entita jako recept (zdroje + parametry), kopie odvozené po vyřešení originálu, mimo řešič; vazby na kopie ne; odvozená id <entita>:<index>.<zdroj>; vynesené kóty editují parametry entity."
+decision: "Recept s odvozenými kopiemi podle návrhu; lineární pole se dvěma směry (Pavel 2026-10-16)."
 tags:
   - otazka
 created: 2026-10-16
@@ -26,6 +26,11 @@ Parametrická entita odvozuje kopie z originálu. Otevřené je:
 
 ## Možnosti a návrh
 
-_(Doplnit při startu M36, po prototypu v planegcs.)_
+- a) **Recept, kopie odvozené:** entita nese zdrojové entity a parametry (zrcadlení: osa; lineární pole: směr, počet a rozteč; kruhové pole: střed, počet a úhel). Kopie se dopočítají z **vyřešeného** originálu, do řešiče nevstupují. Vazby a kóty na kopie nejdou; snapper se ke kopii přichytí jen polohou, bez automatické vazby. Odvozená id `<id entity>:<index>.<id zdroje>`. Vynesené kóty jsou parametry entity, které popisek ve viewportu edituje (jako tah kóty z [[M28-koty|M28]]), ne vazby v seznamu.
+- b) **Kopie jako entity řešiče** s vazbami pole; vazby na kopie jdou, ale změna počtu kopie přidává a maže, planegcs nemá vazbu rotace (kruhové pole by potřebovalo vlastní rovnice).
+
+**Návrh:** a).
 
 ## Rozhodnutí
+
+Pavel 2026-10-16: **a) recept s odvozenými kopiemi.** Lineární pole má **dva směry** (mřížka jako Onshape): směr 1 povinný, směr 2 volitelný, každý s počtem a roztečí. Zrcadlení je také recept (zdroje + osa), ne kopie s vazbou `symmetric`; vazba `symmetric` přesto vznikne jako samostatná geometrická vazba dvou bodů podle osy. Kontrakt dopíše stopa C do [[12-skicar]] v sekci M36 při úkolu 1 ([[M36-zrcadleni-a-pole#Implementační plán]]).

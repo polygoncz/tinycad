@@ -56,4 +56,8 @@ Rozdíl mezi zaoblením ve skice (2D, vazby) a zaoblením hran tělesa ([[M14-to
 
 ![[otazky.base#Otázky k této poznámce]]
 
+## Průběh stopy
+
+_(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hlavní sezení to při sloučení přenese do deníku.)_
+
 ## Retrospektiva

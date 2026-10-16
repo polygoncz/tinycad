@@ -57,4 +57,8 @@ Topologická operace nad parametrickými daty: kde se střetává „geometrie v
 
 ![[otazky.base#Otázky k této poznámce]]
 
+## Průběh stopy
+
+_(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hlavní sezení to při sloučení přenese do deníku.)_
+
 ## Retrospektiva

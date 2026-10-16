@@ -127,7 +127,7 @@ Souběžné stopy podle metodiky [[Souběžné stopy agentů]] (pravidla 1–4 j
 |---|---|---|
 | A – geometrie | [[M30-geometrie-skici-v-occt\|M30]] → [[M33-trim-extend-split\|M33]] → [[M34-zaobleni-a-srazeni-ve-skice\|M34]] → [[M35-offset\|M35]] | jádro a OCCT; [[Q092 Hranice geometrie skici v TS a v OCCT\|Q092]] při startu M30 |
 | B – kreslení | [[M31-nove-kreslici-nastroje\|M31]] → [[M32-ciselny-vstup\|M32]] | jen nové entity a vazby; [[Q090 Číselný vstup při kreslení\|Q090]] při startu M32 |
-| C – odvozené entity | [[M36-zrcadleni-a-pole\|M36]] → [[M37-text-ve-skice\|M37]] | M37 až po sloučení M30; [[Q089 Parametrické zrcadlení a pole ve skice\|Q089]], [[Q091 Fonty pro text ve skice\|Q091]] |
+| C – odvozené entity | [[M36-zrcadleni-a-pole\|M36]] → [[M37-text-ve-skice\|M37]] | úkol 5 M36 (kopie v oblastech) a M37 až po sloučení M30; [[Q089 Parametrické zrcadlení a pole ve skice\|Q089]] rozhodnutá, [[Q091 Fonty pro text ve skice\|Q091]] při startu M37 |
 
 Sdílené kontrakty jsou zafixované (2026-10-16) v [[12-skicar#Sdílené kontrakty série II]]: kdo přidává které členy unií, nekonečná přímka, vazba symetrie, `regionCurves` a odvozená id, id nástrojů a akcí. Port jádra M30 je v [[12-skicar#Geometrie skici v jádře (M30)]] a [[06-geometricke-jadro#Stav po M30]], implementační plán v [[M30-geometrie-skici-v-occt#Implementační plán]]. Stopa A smí jako jediná měnit `kernel`, `kernel-occt` a builder skici.
 

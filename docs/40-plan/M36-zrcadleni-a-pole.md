@@ -25,7 +25,6 @@ updated: 2026-10-16
 # M36 – Zrcadlení a pole
 **Cíl:** zrcadlení podle osy, lineární a kruhové pole entit skici jako **parametrická entita**: počet, rozteč a úhel jdou změnit i po vytvoření, přímo přes vynesené kóty ve viewportu.
 
-> Hrubý plán – před zahájením rozhodnout [[Q089 Parametrické zrcadlení a pole ve skice|Q089]] a upřesnit. Sdílené typy jsou zafixované v [[12-skicar#Sdílené kontrakty série II]].
 
 **Specifikace:** [[12-skicar#Data (`sketch`)]], [[12-skicar#Řešič vazeb]], [[12-skicar#Kóty (M28)]]
 
@@ -37,13 +36,53 @@ Pavel 2026-10-16: „Chtěl bych ještě dodělat do Sketch následující featu
 
 Upřesnění v sezení 2026-10-16: zrcadlení a pole jako **parametrická entita**, „plus by tam bylo dobré mít i vynesené kóty podobně jako v Onshape nebo Fusion“.
 
-## Úkoly (orientačně)
+## Úkoly
 
-- [ ] Rozhodnout [[Q089 Parametrické zrcadlení a pole ve skice|Q089]] (identita kopií, vazby na kopie, řešič, vynesené kóty); prototyp v planegcs.
-- [ ] Data: entita zrcadlení a pole, kontrola dat, odvození kopií; vazba `symmetric` ([[12-skicar#Vazba symetrie (M36, stopa C)]]), kopie v `regionCurves` s odvozenými id ([[12-skicar#Křivky pro oblasti a odvozená id (M30 zavede, stopa C rozšíří)]]).
-- [ ] Nástroje Zrcadlit, Lineární pole, Kruhové pole; vynesené kóty počtu, rozteče a úhlu.
-- [ ] Kopie v kresbě, oblastech a snapperu; mazání originálu a pole.
-- [ ] Spec 12, e2e.
+- [ ] Entity zrcadlení a polí, kopie, vazba symetrie.
+- [ ] Řešič: vazba symetrie, kopie mimo řešič.
+- [ ] Kresba, výběr a snapper kopií.
+- [ ] Nástroje a vynesené kóty.
+- [ ] Kopie v oblastech (*čeká na sloučení M30*).
+- [ ] e2e a spec.
+
+## Implementační plán
+
+Jeden úkol = jedno spuštění subagenta `implementer`. Rozhodnutí: [[Q089 Parametrické zrcadlení a pole ve skice|Q089]] (recept, kopie odvozené, lineární pole ve dvou směrech). Sdílené typy: [[12-skicar#Sdílené kontrakty série II]]. Stopa C při úkolu 1 dopíše do spec 12 sekci *Zrcadlení a pole (M36)* s tvarem entit (s Pavlem, jako hlavní sezení).
+
+### 1. Entity a kopie
+
+- **Soubory:** `src/sketch/model.ts` (`SketchMirror` – zdroje a osa; `SketchLinearPattern` – zdroje, směr 1 a volitelný směr 2, každý počet ≥ 2 a rozteč > 0, směr jako úhel nebo referenční úsečka – rozhodne stopa; `SketchCircularPattern` – zdroje, středový bod, počet ≥ 2, celkový úhel; vazba `symmetric`; `GEOMETRIC_CONSTRAINT_KINDS`), `parse.ts` (zdroje jsou křivky nebo body skici, ne jiné pole), `edit.ts` (`removeItems`: smazání zdroje ho z receptu vyřadí, prázdné zdroje smažou entitu; smazání osy nebo středu smaže entitu; `constraintFor('symmetric', [a, b, osa])`), nový `src/sketch/patterns.ts` (`patternCopies(data)` → kopie jako `SketchCurve`/body s odvozenými id `<id>:<index>.<zdroj>`, mřížka `i-j`; originál = index 0 se nekopíruje).
+- **Testy:** `parse.test.ts`, `edit.test.ts`, `patterns.test.ts` (zrcadlení úsečky, oblouku – obrácená orientace, splinu; lineární 1 a 2 směry; kruhové 360° vs. menší úhel; stabilní id při změně rozteče, při změně počtu zmizí jen poslední).
+- **Hotovo když:** testy projdou a `npm run check` je zelený.
+
+### 2. Řešič
+
+- **Soubory:** `src/solver-planegcs/solve.ts` (`symmetric` → `symmetric_ppl`; entity polí do řešiče nevstupují – osa a střed jsou běžné entity).
+- **Testy:** `solve.test.ts` (tažený bod drží symetrii, stupně volnosti), kopie se po tažení zdroje přepočítají (test session).
+- **Hotovo když:** testy projdou a `npm run check` je zelený.
+
+### 3. Kresba, výběr a snapper kopií
+
+- **Soubory:** `src/sketcher/sketch-drawing.ts` (kopie s odvozenými id a stylem zdroje, u editované i regenerované skici), překlad odvozeného id na id entity pole při najetí a výběru (vzor `__poles:`), `src/sketch/snap.ts` (kopie jako geometrie bez identity: přichycení polohou, bez automatické vazby), glyfy (kopie žádné).
+- **Testy:** `sketch-drawing.test.ts`, test výběrového nástroje (klik na kopii vybere pole), `snap.test.ts`.
+- **Hotovo když:** testy projdou a `npm run check` je zelený.
+
+### 4. Nástroje a vynesené kóty
+
+- **Soubory:** `src/sketcher/sketch-tools/mirror-tool.ts`, `pattern-tool.ts` (lineární a kruhové), `sketch-tools.ts` (skupina `modify`, rodina `pattern`), vynesené kóty parametrů (počet, rozteč, úhel) v `SketchState` vedle kót a jejich editace (popisek → nová hodnota parametru jedním `setParams`), `ui` vrstva popisků (vzor `SketchDimensions.vue`), i18n.
+- **Testy:** nástroje s `FakeViewport` (výběr zdrojů, osa nebo směr, Enter, Esc), session (změna počtu přes popisek), `ui` (editace popisku).
+- **Hotovo když:** testy projdou a `npm run check` je zelený.
+
+### 5. Kopie v oblastech – *čeká na sloučení M30*
+
+- **Soubory:** `src/sketch/geometry.ts` (`regionCurves` přidá nekonstrukční kopie z `patternCopies`).
+- **Testy:** `geometry.test.ts`; integrační test: skica s kruhovým polem děr → vysunutí, jména ploch `face:side:<id>:<index>.<zdroj>`, změna rozteče zachová vysunutí.
+- **Hotovo když:** M30 je v `main` a natažené, testy projdou, `npm run check` je zelený.
+
+### 6. e2e a spec
+
+- **Soubory:** `test/e2e/m36.spec.ts` (zrcadlení podle přímky, lineární pole ve dvou směrech, kruhové pole, změna počtu přes vynesenou kótu), spec 12, 10 a 11.
+- **Hotovo když:** e2e projdou, `npm run check` je zelený, spec odpovídá kódu.
 
 ## Akceptační kritéria
 
@@ -57,5 +96,9 @@ Odvozená geometrie v parametrickém modelu: kdy data nesou výsledek a kdy jen 
 ## Otevřené otázky
 
 ![[otazky.base#Otázky k této poznámce]]
+
+## Průběh stopy
+
+_(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hlavní sezení to při sloučení přenese do deníku.)_
 
 ## Retrospektiva

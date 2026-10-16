@@ -54,4 +54,8 @@ Jak OCCT řeší ekvidistanty (spojování v rozích, zánik krátkých segment�
 
 ![[otazky.base#Otázky k této poznámce]]
 
+## Průběh stopy
+
+_(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hlavní sezení to při sloučení přenese do deníku.)_
+
 ## Retrospektiva
