@@ -46,7 +46,7 @@ Předpřipravený build nemá `ChFi2d_*`; zaoblení úseček a oblouků je analy
 - [x] Kontrakt ([[12-skicar#Zaoblení a sražení ve skice (M34)]], [[06-geometricke-jadro#Stav po M34]]).
 - [x] Jádro: `filletArc` (fake, OCCT, kontraktová sada).
 - [x] `sketch`: `cornerOf`, `filletEdit`, `chamferEdit`, port `fillet`.
-- [ ] `app` port, `rewrite` s otevřením kóty, nástroje v liště, e2e.
+- [x] `app` port, `rewrite` s otevřením kóty, nástroje v liště, e2e.
 - [ ] Spec podle skutečnosti.
 
 ## Implementační plán
@@ -93,5 +93,9 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 **Úkol 2 hotový** – tvar požadavků a lokální volby (směr oblouku, `added` bez kót, reference úhlu) schváleny a zapsány ve spec 12.
 
 **Úkol 1 hotový.** OCCT: `InterCurveCurve` na ekvidistantě **nekonečné** `Geom2d_Line` vyhodí výjimku (meze ±2e100) → úsečka jako oříznutá přímka ±1e6 · měřítko. Shodné ekvidistanty hlásí jako segment (u celé kružnice `Segment` padá) – ošetřeno. Spec 06 doplněna.
+
+**Úkol 3 hotový** (nástroje `fillet-tool.ts`, `chamfer-tool.ts`, společný `corner-tool.ts`; e2e `m34.spec.ts`). Náhled volá `filletEdit`/`chamferEdit` s dočasnými id, takže ukáže přesně to, co klik zapíše.
+
+**2026-10-16/17 – natažen `main` s M36, pak s M32 a M33.** Sémantické konflikty s M36: entity polí nejsou křivky pro úpravy ani průsečíky (`isCurveEntity`, `isPattern`; kopie pole se nevyberou). Lišta: se třemi rodinami úprav Vazby při 1280 px přetekly do „…“ (e2e m12 aj.); Pavel při slučování M33 rozhodl **jednu rodinu `modify`** – nástroje M34 jsou v ní za `sketch.split`, e2e vybírá přes šipku „Ořezat“. Po natažení: `npm run check` 7601 unit + 42 integračních, e2e 176/176.
 
 ## Retrospektiva
