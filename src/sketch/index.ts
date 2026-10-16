@@ -46,13 +46,35 @@ export type { PointInference, SnapGuide, SnapKind, SnapOptions, SnapResult } fro
 export { inferLine, inferRadius } from './infer';
 export {
   arcFrom3,
+  arcSlotFrom,
+  arcSlotShape,
   circleFrom2,
   circleFrom3,
   endTangent,
+  rectangle3Shape,
+  rectangleCenterShape,
+  rectangleFrom3,
+  rectangleFromCenter,
+  slotFromCenters,
+  slotFromEnds,
+  slotOverallShape,
+  slotShape,
   tangentArcFrom,
   tangentCircle,
 } from './construct';
-export type { ArcFit, CircleFit } from './construct';
+export type {
+  ArcFit,
+  ArcSlotFit,
+  ArcSlotPointIds,
+  CircleFit,
+  RectCornerIds,
+  RectCorners,
+  ShapeDraft,
+  ShapeIds,
+  SlotFit,
+  SlotOverallPointIds,
+  SlotPointIds,
+} from './construct';
 export type { LineInference } from './infer';
 export {
   defaultPlacement,
