@@ -1,5 +1,5 @@
 // Ring 1 – sketch data model, data checks, 2D geometry, regions, editing helpers and the
-// ConstraintSolver port (spec 12, ADR 0017). Depends only on core.
+// ConstraintSolver and SketchGeometry ports (spec 12, ADR 0017). Depends only on core.
 // Public API of sketch. Everything else in this folder is internal.
 
 export { GEOMETRIC_CONSTRAINT_KINDS, SKETCH_FEATURE_TYPE, SKETCH_PARAM } from './model';
@@ -60,6 +60,6 @@ export {
   placeDimension,
 } from './dimension-placement';
 export type { DimensionTarget } from './dimension-placement';
-export { SPLINE_TOLERANCE, computeRegions } from './regions';
-export type { RegionsResult } from './regions';
+export { SPLINE_TOLERANCE } from './geometry';
 export type { ConstraintSolver, SolveInput, SolveResult, SolveStatus } from './solver';
+export type { SketchGeometry } from './geometry-port';

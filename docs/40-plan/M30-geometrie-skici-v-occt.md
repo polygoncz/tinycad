@@ -53,7 +53,7 @@ Rozhodnutí v sezení 2026-10-16 ([[Q092 Hranice geometrie skici v TS a v OCCT|Q
 - [x] Port `profileRegions`, typy a `FakeKernel` s přesunutým algoritmem.
 - [x] `kernel-occt`: oblasti v OCCT (po prototypu).
 - [x] `regionCurves`, builder skici a artefakt s obrysy.
-- [ ] Kresba oblastí z artefaktu a port `SketchGeometry`.
+- [x] Kresba oblastí z artefaktu a port `SketchGeometry`.
 - [ ] Spec podle skutečnosti, dodatek k [[0017-modul-sketch-a-skicar|ADR 0017]], regresní testy.
 
 ## Implementační plán
@@ -126,5 +126,7 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 **2026-10-16 – úkoly 2 a 3 hotové** (souběžně v izolovaných worktree, sloučené jedním commitem).
 - Úkol 2: `kernel-occt/regions.ts` cestou b. Křížení přes `Geom2dAPI_InterCurveCurve` jen pro dvojice s překrytými obálkami (řazení podle x), samoprůsečík splinu zvlášť; plocha Greenovou větou (5bodový Gauss–Legendre nad `D1`); bod v oblasti paritou paprsku pod iracionálním úhlem, při průchodu uzlem nebo tečném dotyku další směr (zlatý úhel, nejvýš 8 pokusů); smyčky výsledku ze vstupních křivek, ne z OCCT. Tolerance `1e-7 · max(1, |souřadnice|)` (fake slučuje uzly při `1e-9`; kontrakt hranu tolerance nezkouší). Mřížka 840 úseček 49 ms, 1860 úseček 110 ms. Kontraktová sada projde s fake i OCCT (přímo i přes worker).
 - Úkol 3: `regionCurves` filtruje vyčerpávajícím `switch` (ne „vše kromě bodu“), aby nová entita stopy B nebo C musela rozhodnout, jestli ohraničuje oblasti – typový predikát typecheck nekontroluje. Plán tvrdil, že úkol 3 je na úkolu 2 nezávislý; ve skutečnosti integrační testy (součást `npm run check`) bez OCCT `profileRegions` padají, proto sloučení až po obou.
+
+**2026-10-16 – úkol 4 hotový.** `artifactDrawing` bere oblasti z `artifact.outlines`, `sketch/regions.ts` a jeho testy smazané (`computeRegions` v `src/` nikde). `SPLINE_TOLERANCE` přešla do `sketch/geometry.ts`. Port `SketchGeometry` je prázdné rozhraní; `app/sketch-geometry.ts` ho zatím vyrábí bez parametrů (klient jádra by v M30 byl nepoužitý argument) – M33 přidá parametr a metody. Port se předává `createSketchEditor` → `openSketchSession` vedle `solver`.
 
 ## Retrospektiva

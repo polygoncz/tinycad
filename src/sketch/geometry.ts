@@ -5,6 +5,12 @@ import type { SketchCurve, SketchData, SketchEntity, SketchEntityId, SketchPoint
 // 2D geometry of sketch curves for regions and the kernel (spec 12 "Geometrie a pomůcky editace").
 
 /**
+ * Spline tessellation tolerance relative to the sketch scale (spec 12 "Spliny (M29)"): the
+ * sketcher draws and snaps to splines with it.
+ */
+export const SPLINE_TOLERANCE = 1e-4;
+
+/**
  * A 2D curve for regions and the kernel. The same shape as ProfileCurve in kernel (structural
  * typing, ADR 0017). `id` (M14) is the id of the sketch entity the curve comes from.
  */

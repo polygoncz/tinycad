@@ -377,6 +377,30 @@ describe('createRegenPipeline – sketch drawings', () => {
     expect(h.viewport.sketchDrawings.has(sketchId(f2.id))).toBe(false);
     expect(set).not.toHaveBeenCalled();
   });
+
+  it('fills the regions of a drawing from the outlines of the artifact (M30)', async () => {
+    // Faces with fake handles: only their count matters; the artifact has no entities, so the
+    // regions can come only from its outlines (unit circles named r1, r2).
+    // A ShapeHandle is a branded number; the drawing never hands it to a kernel.
+    const faces = [1, 2].map((n) => n as ShapeHandle);
+    const h = setup({
+      build: ({ feature, state }) => {
+        const sketch = aSketchArtifact(feature.id, faces);
+        return Promise.resolve({
+          ok: true,
+          state: { artifacts: new Map(state.artifacts).set(sketch.id, sketch) },
+          anchors: {},
+        });
+      },
+    });
+    const [f1] = features(1);
+    h.studio = aStudio([f1 ?? expect.fail()]);
+    h.pipeline.request();
+    await settle();
+    const drawn = h.viewport.sketchDrawings.get(sketchId(f1?.id ?? expect.fail()));
+    expect(drawn?.regions?.map((r) => r.id)).toEqual(['r1', 'r2']);
+    expect(drawn?.regions?.[0]?.outer).toHaveLength(72);
+  });
 });
 
 describe('createRegenPipeline – open feature dialog (M21, ADR 0025)', () => {

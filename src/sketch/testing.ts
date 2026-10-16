@@ -5,6 +5,7 @@
 import type { SketchConstraint, SketchData, SketchEntity } from './model';
 import { parseSketchData } from './parse';
 import type { ConstraintSolver, SolveInput, SolveResult } from './solver';
+import type { SketchGeometry } from './geometry-port';
 
 export interface FakeSolver extends ConstraintSolver {
   /** The next solve returns the echo overridden by these fields (a queue: one per call). */
@@ -132,4 +133,12 @@ function deepFreeze<T>(value: T): T {
   Object.freeze(value);
   for (const child of Object.values(value)) deepFreeze(child);
   return value;
+}
+
+/**
+ * The SketchGeometry of tests (M30): the port has no methods yet; M33 and M35 add fakes of theirs
+ * here.
+ */
+export function createFakeSketchGeometry(): SketchGeometry {
+  return Object.freeze({});
 }
