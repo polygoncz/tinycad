@@ -28,6 +28,8 @@ updated: 2026-10-15
 
 **Návrat do plánu (Pavel 2026-10-14):** po [[M21-vstupni-stav-editovane-featury|M21]], kvůli zásobníku Emscriptenu (A7). Od 2026-10-15 až po režimech zobrazení [[M22-rezimy-zobrazeni|M22]]–[[M24-realisticke-zobrazeni|M24]].
 
+**Možná náhrada (2026-10-16):** brainstorming nativního jádra na serveru přes gRPC ([[Q094 Nativní jádro na serveru přes gRPC|Q094]]) by WASM build nahradil. Rozhodnout po M37.
+
 **Navazuje na:** [[M07-kernel-occt]]. Technicky stačí hotové M7, v roadmapě je zařazený až za [[M15-export-a-dokonceni|M15]]. Dřív se vyplatí, pokud předpřipravenému buildu bude chybět třída (např. pro [[M14-topologicke-pojmenovani|M14]]) nebo když bude pomalé počítání map podtvarů ([[0013-replicad-opencascadejs#Důsledky|ADR 0013]]).
 
 ## Úkoly (orientačně)
