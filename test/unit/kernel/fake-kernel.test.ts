@@ -645,6 +645,35 @@ describe('FakeKernel profileRegions (M30)', () => {
   });
 });
 
+describe('FakeKernel filletArc (M34)', () => {
+  const A = { kind: 'line', from: [0, 0], to: [10, 0] } as const;
+  const B = { kind: 'line', from: [10, 0], to: [10, 10] } as const;
+
+  it('counts the calls and an injected failure wins', async () => {
+    const kernel = createFakeKernel();
+    kernel.failNext('filletArc', 'internal', 'bang');
+    const failed = await rejection(kernel.filletArc({ a: A, b: B, radius: 2, near: [9, 1] }));
+    expect(kernelErrorCode(failed)).toBe('internal');
+    expect(await kernel.filletArc({ a: A, b: B, radius: 2, near: [9, 1] })).toEqual({
+      center: [8, 2],
+      pointA: [8, 0],
+      pointB: [10, 2],
+      ta: 0.8,
+      tb: 0.2,
+    });
+    expect(kernel.callCount('filletArc')).toBe(2);
+  });
+
+  it('collinear lines: the centers lie on the common offsets, the one nearest near', async () => {
+    const kernel = createFakeKernel();
+    const C = { kind: 'line', from: [12, 0], to: [20, 0] } as const;
+    const fillet = await kernel.filletArc({ a: A, b: C, radius: 1, near: [11, 3] });
+    expect(fillet.center).toEqual([11, 1]);
+    expect(fillet.ta).toBeCloseTo(1.1, 12);
+    expect(fillet.tb).toBeCloseTo(-1 / 8, 12);
+  });
+});
+
 describe('FakeKernel curveIntersections and curveSegment (M33)', () => {
   const P = { kind: 'line', from: [0, 0], to: [10, 0], id: 'p' } as const;
   const Q = { kind: 'line', from: [4, -2], to: [4, 8], id: 'q' } as const;

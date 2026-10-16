@@ -31,10 +31,17 @@ export type {
   SweepOps,
   TransformOps,
 } from './kernel';
-export { parseCurveSegmentInput, parseProfileRegionsInput, validateFaceInput } from './profile';
+export {
+  parseCurveSegmentInput,
+  parseFilletArcInput,
+  parseProfileRegionsInput,
+  validateFaceInput,
+} from './profile';
 export type {
   CurveIntersection,
   CurveSegmentInput,
+  FilletArc,
+  FilletArcInput,
   IdentifiedCurve,
   ProfileCurve,
   ProfileLoop,

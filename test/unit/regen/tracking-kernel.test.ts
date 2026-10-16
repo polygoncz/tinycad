@@ -144,6 +144,7 @@ describe('createTrackingKernel', () => {
       'curveSegment',
       'extrude',
       'fillet',
+      'filletArc',
       'makeBox',
       'makeCylinder',
       'makeFace',
@@ -177,6 +178,19 @@ describe('createTrackingKernel', () => {
     expect(await kernel.curveSegment(segment)).toEqual(await real.curveSegment(segment));
     expect(real.callCount('curveIntersections')).toBe(2);
     expect(real.callCount('curveSegment')).toBe(2);
+    expect(owned.size).toBe(0);
+  });
+
+  it('passes filletArc through and owns nothing (M34)', async () => {
+    const { real, owned, kernel } = setup();
+    const params = {
+      a: { kind: 'line', from: [0, 0], to: [10, 0] },
+      b: { kind: 'line', from: [10, 0], to: [10, 10] },
+      radius: 2,
+      near: [9, 1],
+    } as const;
+    expect(await kernel.filletArc(params)).toEqual(await real.filletArc(params));
+    expect(real.callCount('filletArc')).toBe(2);
     expect(owned.size).toBe(0);
   });
 

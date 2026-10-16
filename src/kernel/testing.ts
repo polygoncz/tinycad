@@ -12,7 +12,13 @@ import { bspline, mat4, type Mat4, type Plane, type Vec2, type Vec3 } from '@/co
 import { kernelErrorCode } from './errors';
 import type { KernelErrorCode } from './errors';
 import type { Axis, BooleanOp, GeometryKernel } from './kernel';
-import type { CurveIntersection, ProfileCurve, ProfileLoop, ProfileRegions } from './profile';
+import type {
+  CurveIntersection,
+  FilletArc,
+  ProfileCurve,
+  ProfileLoop,
+  ProfileRegions,
+} from './profile';
 import { validateMeshData } from './mesh';
 import type {
   BoundingBox,
@@ -502,6 +508,16 @@ export function describeGeometryKernelContract(
           'curveSegment',
           (k: GeometryKernel) => k.curveSegment({ curve: line([0, 0], [1, 0]), from: 1, to: 0 }),
         ],
+        [
+          'filletArc',
+          (k: GeometryKernel) =>
+            k.filletArc({
+              a: line([0, 0], [1, 0]),
+              b: line([0, 0], [0, 1]),
+              radius: 0,
+              near: [0, 0],
+            }),
+        ],
         ['extrude', (k: GeometryKernel) => k.extrude(UNKNOWN, [0, 0, 1], 5)],
         ['revolve', (k: GeometryKernel) => k.revolve(UNKNOWN, Z_AXIS, TURN)],
         ['fillet', (k: GeometryKernel) => k.fillet(UNKNOWN, [0], 1)],
@@ -532,6 +548,12 @@ export function describeGeometryKernelContract(
           kernel.makeFace(FACE),
           kernel.curveIntersections({ curves: [] }),
           kernel.curveSegment({ curve: line([0, 0], [1, 0]), from: 0, to: 1 }),
+          kernel.filletArc({
+            a: line([0, 0], [1, 0]),
+            b: line([0, 0], [0, 1]),
+            radius: 0.1,
+            near: [0.1, 0.1],
+          }),
           kernel.extrude(profile, [0, 0, 1], 5),
           kernel.revolve(profile, Z_AXIS, TURN),
           kernel.fillet(shape, [0], 0.5),
@@ -905,6 +927,10 @@ export function describeGeometryKernelContract(
 
     describe('curveSegment (M33)', () => {
       describeCurveSegment(() => kernel);
+    });
+
+    describe('filletArc (M34)', () => {
+      describeFilletArc(() => kernel);
     });
 
     describe('extrude', () => {
@@ -3073,6 +3099,247 @@ function describeCurveSegment(kernelOf: () => GeometryKernel): void {
       Reflect.set(end, 0, 40);
       Reflect.set(params, 'from', 0);
       expectCurveClose(await found, seg('p', [2, 4], [7, 14]));
+    });
+  });
+}
+
+// --- filletArc (M34) ---------------------------------------------------------------------------
+// Spec 06 "Stav po M34", spec 12 "Zaoblení a sražení ve skice (M34)": points within
+// LOOP_POINT_TOLERANCE · max(1, |coordinate|), parameters t (spec 12) within PARAM_TOLERANCE.
+
+type FilletParams = Parameters<GeometryKernel['filletArc']>[0];
+
+function expectFillet(actual: FilletArc, expected: FilletArc): void {
+  expectPoint2Close(actual.center, expected.center, 'center');
+  expectPoint2Close(actual.pointA, expected.pointA, 'pointA');
+  expectPoint2Close(actual.pointB, expected.pointB, 'pointB');
+  expectParamClose(actual.ta, expected.ta, 'ta');
+  expectParamClose(actual.tb, expected.tb, 'tb');
+}
+
+/** The point at `distance` from `p` in the direction of `to`. */
+function toward(p: Vec2, to: Vec2, distance: number): Vec2 {
+  const d = Math.hypot(to[0] - p[0], to[1] - p[1]);
+  return [p[0] + ((to[0] - p[0]) / d) * distance, p[1] + ((to[1] - p[1]) / d) * distance];
+}
+
+/** The angle of `p` around `center`, in [0, 2π). */
+function angleIn(center: Vec2, p: Vec2): number {
+  const a = Math.atan2(p[1] - center[1], p[0] - center[0]);
+  return a < 0 ? a + TURN : a;
+}
+
+/** The x axis from −10 to 10. */
+const X_AXIS_LINE = seg('x', [-10, 0], [10, 0]);
+
+function describeFilletArc(kernelOf: () => GeometryKernel): void {
+  const filletOf = (p: FilletParams): Promise<FilletArc> =>
+    callWithoutThrow(() => kernelOf().filletArc(p));
+
+  describe('centers (spec 06 Stav po M34)', () => {
+    it('two perpendicular lines meeting in a corner', async () => {
+      const a = seg('a', [0, 0], [10, 0]);
+      const b = seg('b', [10, 0], [10, 10]);
+      expectFillet(await filletOf({ a, b, radius: 2, near: [9, 1] }), {
+        center: [8, 2],
+        pointA: [8, 0],
+        pointB: [10, 2],
+        ta: 0.8,
+        tb: 0.2,
+      });
+    });
+
+    it('lines at 60°: the center on the bisector', async () => {
+      const a = seg('a', [0, 0], [10, 0]);
+      const b = seg('b', [0, 0], [5, 5 * Math.sqrt(3)]);
+      const s3 = Math.sqrt(3);
+      expectFillet(await filletOf({ a, b, radius: 1, near: [2, 0.5] }), {
+        center: [s3, 1],
+        pointA: [s3, 0],
+        pointB: [s3 / 2, 1.5],
+        ta: s3 / 10,
+        tb: s3 / 10,
+      });
+    });
+
+    it('a line and an arc, the fillet outside the arc', async () => {
+      // The lower half of the circle r = 3 around (0, 5), counter-clockwise from (−3, 5).
+      const b = ccwArc('k', [0, 5], [-3, 5], [3, 5]);
+      const pointB = toward([0, 5], [4, 2], 3);
+      expectFillet(await filletOf({ a: X_AXIS_LINE, b, radius: 2, near: [4, 1.5] }), {
+        center: [4, 2],
+        pointA: [4, 0],
+        pointB,
+        ta: 0.7,
+        tb: angleIn([0, 5], pointB) - Math.PI,
+      });
+    });
+
+    it('a line and an arc, the fillet inside the arc; a clockwise arc counts from its from', async () => {
+      const center: Vec2 = [Math.sqrt(5), 2];
+      const expected: FilletArc = {
+        center,
+        pointA: [Math.sqrt(5), 0],
+        pointB: toward([0, 0], center, 5),
+        ta: (Math.sqrt(5) + 10) / 20,
+        tb: Math.atan2(2, Math.sqrt(5)),
+      };
+      expectFillet(
+        await filletOf({ a: X_AXIS_LINE, b: UPPER_ARC, radius: 2, near: [2.2, 1.8] }),
+        expected,
+      );
+      expectFillet(
+        await filletOf({ a: X_AXIS_LINE, b: UPPER_ARC_CW, radius: 2, near: [2.2, 1.8] }),
+        { ...expected, tb: Math.PI - expected.tb },
+      );
+    });
+
+    it('two arcs, the fillet outside both', async () => {
+      const a = ccwArc('a', [0, 0], [5, 0], [0, 5]);
+      const b = ccwArc('b', [8, 0], [12, 0], [4, 0]);
+      // 7 from (0, 0) and 6 from (8, 0).
+      const x = 77 / 16;
+      const center: Vec2 = [x, Math.sqrt(49 - x * x)];
+      const pointA = toward([0, 0], center, 5);
+      const pointB = toward([8, 0], center, 4);
+      expectFillet(await filletOf({ a, b, radius: 2, near: [5, 5] }), {
+        center,
+        pointA,
+        pointB,
+        ta: angleIn([0, 0], pointA),
+        tb: angleIn([8, 0], pointB),
+      });
+    });
+
+    it('lines that do not meet: the touching points on their extensions', async () => {
+      const a = seg('a', [0, 0], [4, 0]);
+      const b = seg('b', [10, 4], [10, 10]);
+      expectFillet(await filletOf({ a, b, radius: 2, near: [9, 1] }), {
+        center: [8, 2],
+        pointA: [8, 0],
+        pointB: [10, 2],
+        ta: 2,
+        tb: -1 / 3,
+      });
+    });
+
+    it('near chooses among the possible centers', async () => {
+      const a = seg('a', [0, 0], [10, 0]);
+      const b = seg('b', [10, 0], [10, 10]);
+      expectFillet(await filletOf({ a, b, radius: 2, near: [11, -1] }), {
+        center: [12, -2],
+        pointA: [12, 0],
+        pointB: [10, -2],
+        ta: 1.2,
+        tb: -0.2,
+      });
+      expectFillet(await filletOf({ a, b, radius: 2, near: [11, 1] }), {
+        center: [12, 2],
+        pointA: [12, 0],
+        pointB: [10, 2],
+        ta: 1.2,
+        tb: 0.2,
+      });
+    });
+
+    it('a touching point beyond the end of an arc: t is the angle from its from in its direction, in [0, 2π)', async () => {
+      // A quarter of the circle r = 5 around the origin, from (0, 5) counter-clockwise to (−5, 0);
+      // the fillet with the x axis on the right touches the circle at the angle atan2(2, √5).
+      const b = ccwArc('k', [0, 0], [0, 5], [-5, 0]);
+      const center: Vec2 = [Math.sqrt(5), 2];
+      expectFillet(await filletOf({ a: X_AXIS_LINE, b, radius: 2, near: [2.2, 1.8] }), {
+        center,
+        pointA: [Math.sqrt(5), 0],
+        pointB: toward([0, 0], center, 5),
+        ta: (Math.sqrt(5) + 10) / 20,
+        tb: Math.atan2(2, Math.sqrt(5)) - Math.PI / 2 + TURN,
+      });
+    });
+  });
+
+  describe('no solution (spec 06 Stav po M34)', () => {
+    it.each([
+      [
+        'parallel lines farther apart than 2r',
+        seg('a', [0, 0], [10, 0]),
+        seg('b', [0, 5], [10, 5]),
+        2,
+      ],
+      [
+        'a line and an arc too far for the radius',
+        X_AXIS_LINE,
+        ccwArc('k', [0, 20], [1, 20], [-1, 20]),
+        2,
+      ],
+      [
+        'concentric arcs whose gap does not fit the radius',
+        ccwArc('a', [0, 0], [3, 0], [0, 3]),
+        ccwArc('b', [0, 0], [7, 0], [0, 7]),
+        1,
+      ],
+    ] satisfies [string, ProfileCurve, ProfileCurve, number][])(
+      '%s rejects with operation-failed',
+      async (_name, a, b, radius) => {
+        expect(
+          await rejectionCode(() => kernelOf().filletArc({ a, b, radius, near: [1, 1] })),
+        ).toBe('operation-failed');
+      },
+    );
+  });
+
+  describe('input (spec 06 filletArc)', () => {
+    const a = seg('a', [0, 0], [10, 0]);
+    const b = seg('b', [10, 0], [10, 10]);
+
+    it.each([
+      ['a circle', { a: ring('c', [0, 0], 1), b, radius: 1, near: [1, 1] }],
+      ['a spline', { a, b: WAVY, radius: 1, near: [1, 1] }],
+      ['a line of zero length', { a: seg('a', [1, 0], [1, 0]), b, radius: 1, near: [1, 1] }],
+      [
+        'an arc with two radii',
+        { a, b: ccwArc('k', [0, 0], [1, 0], [0, 2]), radius: 1, near: [1, 1] },
+      ],
+      ['radius 0', { a, b, radius: 0, near: [9, 1] }],
+      ['a negative radius', { a, b, radius: -1, near: [9, 1] }],
+      ['an infinite radius', { a, b, radius: Number.POSITIVE_INFINITY, near: [9, 1] }],
+      ['a NaN near', { a, b, radius: 1, near: [Number.NaN, 1] }],
+    ] satisfies [string, FilletParams][])(
+      '%s rejects with invalid-input',
+      async (_name, params) => {
+        expect(await rejectionCode(() => kernelOf().filletArc(params))).toBe('invalid-input');
+      },
+    );
+
+    it('filletArc(null) rejects instead of throwing', async () => {
+      // Outside the types on purpose.
+      const params = null as unknown as FilletParams;
+      expect(await rejectionCode(() => kernelOf().filletArc(params))).toBe('invalid-input');
+    });
+
+    it('the ids are optional', async () => {
+      const fillet = await filletOf({
+        a: line([0, 0], [10, 0]),
+        b: line([10, 0], [10, 10]),
+        radius: 2,
+        near: [9, 1],
+      });
+      expectPoint2Close(fillet.center, [8, 2], 'center');
+    });
+
+    it('creates no handle', async () => {
+      await filletOf({ a, b, radius: 2, near: [9, 1] });
+      expect(await kernelOf().liveHandleCount()).toBe(0);
+    });
+
+    it('changing the input right after the call, before await, does not change the result', async () => {
+      const near: Vec2 = [9, 1];
+      const params = { a, b, radius: 2, near };
+      const found = callWithoutThrow(() => kernelOf().filletArc(params));
+      // The inputs are readonly; the test writes into them on purpose.
+      Reflect.set(near, 0, 11);
+      Reflect.set(near, 1, -1);
+      Reflect.set(params, 'radius', 1);
+      expectPoint2Close((await found).center, [8, 2], 'center');
     });
   });
 }

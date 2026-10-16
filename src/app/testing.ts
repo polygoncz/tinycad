@@ -368,6 +368,7 @@ export function createCrashableKernel(): CrashableKernel {
     profileRegions: (p) => guard(() => fake.profileRegions(p)),
     curveIntersections: (p) => guard(() => fake.curveIntersections(p)),
     curveSegment: (p) => guard(() => fake.curveSegment(p)),
+    filletArc: (p) => guard(() => fake.filletArc(p)),
     extrude: (profile, direction, distance) =>
       guard(() => fake.extrude(profile, direction, distance)),
     revolve: (profile, axis, angle) => guard(() => fake.revolve(profile, axis, angle)),

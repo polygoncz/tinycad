@@ -3,7 +3,7 @@ import type {
   NCollection_List_TopoDS_Shape,
   TopoDS_Shape,
 } from 'replicad-opencascadejs';
-import type { Mat4, Plane, Vec3 } from '@/core';
+import type { Mat4, Plane, Vec2, Vec3 } from '@/core';
 import {
   createKernelError,
   isRigidMotion,
@@ -11,6 +11,7 @@ import {
   type BooleanOp,
   type BoundingBox,
   type CurveIntersection,
+  type FilletArc,
   type GeometryKernel,
   type MeshData,
   type MeshQuality,
@@ -22,11 +23,13 @@ import {
   type SubShapeIndex,
   type TopologySummary,
   parseCurveSegmentInput,
+  parseFilletArcInput,
   parseProfileRegionsInput,
   validateFaceInput,
 } from '@/kernel';
 import { curveIntersectionsOf, curveSegmentOf } from './curves';
 import { dressupResult, type DressupKind } from './dressup';
+import { filletArcOf } from './fillet';
 import { copyFaceInput, faceResult } from './face';
 import { collectHistory } from './history';
 import { hasSolid, toKernelError, type Occt } from './occt';
@@ -233,6 +236,24 @@ export class OcctKernelImpl implements GeometryKernel {
           throw createKernelError('invalid-input', `curveSegment: ${parsed.error.join('; ')}`);
         }
         return curveSegmentOf(this.oc, parsed.value);
+      },
+    );
+  }
+
+  filletArc(p: {
+    readonly a: ProfileCurve;
+    readonly b: ProfileCurve;
+    readonly radius: number;
+    readonly near: Vec2;
+  }): Promise<FilletArc> {
+    // parseFilletArcInput reads the input synchronously into a fresh copy and never throws.
+    return this.run(
+      () => parseFilletArcInput(p),
+      (parsed) => {
+        if (!parsed.ok) {
+          throw createKernelError('invalid-input', `filletArc: ${parsed.error.join('; ')}`);
+        }
+        return filletArcOf(this.oc, parsed.value);
       },
     );
   }
