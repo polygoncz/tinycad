@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   constraintFor,
   constraintTargets,
+  curvePoints,
   dimensionFor,
   measure,
   removeItems,
   toggleConstruction,
 } from '@/sketch/edit';
-import { isPattern } from '@/sketch/model';
+import { isDimension, isPattern } from '@/sketch/model';
 import type { SketchConstraint, SketchData, SketchEntity, SketchItemId } from '@/sketch/model';
 import { parseSketchData } from '@/sketch/parse';
 import { textData } from '@/sketch/testing';
@@ -579,6 +580,121 @@ describe('splines in editing helpers', () => {
     expect(construction).toEqual(['s', 'f']);
     const back = toggleConstruction(once, splineIds('s', 'f'));
     expect(back.entities).toEqual(SPLINES.entities);
+  });
+});
+
+describe('infinite lines (xline, M31) in editing helpers', () => {
+  /** Line ab, xlines x (a→c) and y (b→d), circle k around o, arc q, spline s from a, lone point z. */
+  const X = sketch(
+    [
+      { kind: 'point', id: 'a', x: 0, y: 0 },
+      { kind: 'point', id: 'b', x: 10, y: 0 },
+      { kind: 'point', id: 'c', x: 10, y: 10 },
+      { kind: 'point', id: 'd', x: 0, y: 10 },
+      { kind: 'line', id: 'ab', p1: 'a', p2: 'b' },
+      { kind: 'xline', id: 'x', p1: 'a', p2: 'c', construction: true },
+      { kind: 'xline', id: 'y', p1: 'b', p2: 'd', construction: true },
+      { kind: 'point', id: 'o', x: 30, y: 0 },
+      { kind: 'circle', id: 'k', center: 'o', radius: 3 },
+      { kind: 'point', id: 's1', x: 34, y: 0 },
+      { kind: 'point', id: 't1', x: 30, y: 4 },
+      { kind: 'arc', id: 'q', center: 'o', start: 's1', end: 't1' },
+      { kind: 'point', id: 'e', x: -5, y: 3 },
+      { kind: 'bspline', id: 's', degree: 1, poles: ['a', 'e'], knots: [0, 0, 1, 1] },
+      { kind: 'point', id: 'z', x: 20, y: 0 },
+    ],
+    [
+      { kind: 'parallel', id: 'p1', a: 'x', b: 'ab' },
+      { kind: 'pointLineDistance', id: 'pl', point: 'z', line: 'x', value: 1 },
+      { kind: 'angle', id: 'an', a: 'x', b: 'ab', value: 1 },
+    ],
+  );
+  const xe = (...names: string[]): SketchEntity[] =>
+    names.map((id) => {
+      const found = X.entities.find((v) => v.id === id);
+      if (found === undefined) throw new Error(`no entity ${id}`);
+      return found;
+    });
+  const xids = (...xs: string[]): readonly SketchItemId[] =>
+    [...X.entities, ...X.constraints].map((v) => v.id).filter((id) => xs.includes(id));
+
+  it('constraintFor takes an xline as a carrier line', () => {
+    expect(constraintFor('horizontal', xe('x'))).toEqual({ kind: 'horizontal', line: 'x' });
+    expect(constraintFor('vertical', xe('x'))).toEqual({ kind: 'vertical', line: 'x' });
+    expect(constraintFor('parallel', xe('x', 'ab'))).toEqual({ kind: 'parallel', a: 'x', b: 'ab' });
+    expect(constraintFor('parallel', xe('x', 'y'))).toEqual({ kind: 'parallel', a: 'x', b: 'y' });
+    expect(constraintFor('perpendicular', xe('ab', 'x'))).toEqual({
+      kind: 'perpendicular',
+      a: 'ab',
+      b: 'x',
+    });
+    expect(constraintFor('tangent', xe('x', 'k'))).toEqual({ kind: 'tangent', a: 'x', b: 'k' });
+    expect(constraintFor('tangent', xe('q', 'x'))).toEqual({ kind: 'tangent', a: 'q', b: 'x' });
+    expect(constraintFor('coincident', xe('z', 'x'))).toEqual({
+      kind: 'pointOnCurve',
+      point: 'z',
+      curve: 'x',
+    });
+    expect(constraintFor('coincident', xe('x', 'z'))).toEqual({
+      kind: 'pointOnCurve',
+      point: 'z',
+      curve: 'x',
+    });
+  });
+
+  it('constraintFor returns null where an xline would need a length or ends', () => {
+    expect(constraintFor('midpoint', xe('z', 'x'))).toBeNull();
+    expect(constraintFor('midpoint', xe('x', 'z'))).toBeNull();
+    expect(constraintFor('equal', xe('x', 'y'))).toBeNull();
+    expect(constraintFor('equal', xe('x', 'ab'))).toBeNull();
+    // x shares a with the first pole of s.
+    expect(constraintFor('tangent', xe('x', 's'))).toBeNull();
+    expect(constraintFor('tangent', xe('x', 'y'))).toBeNull();
+    expect(constraintFor('coincident', xe('a', 'x'))).toBeNull();
+    expect(constraintFor('fix', xe('x'))).toBeNull();
+  });
+
+  it('dimensionFor returns null for an xline (it has no length)', () => {
+    expect(dimensionFor(xe('x'), X)).toBeNull();
+    expect(dimensionFor(xe('x', 'ab'), X)).toBeNull();
+  });
+
+  it('measure measures the distance and the angle to an xline', () => {
+    const [pl, angle] = X.constraints.filter(isDimension);
+    expect(pl === undefined ? NaN : measure(X, pl)).toBeCloseTo(20 / Math.SQRT2, 9);
+    expect(angle === undefined ? NaN : measure(X, angle)).toBeCloseTo(Math.PI / 4, 9);
+  });
+
+  it('curvePoints of an xline are its two points', () => {
+    const [x] = xe('x');
+    expect(x?.kind === 'xline' ? curvePoints(x) : []).toEqual(['a', 'c']);
+  });
+
+  it('removing a point of an xline removes the xline and its constraints', () => {
+    const out = removeItems(X, xids('c'));
+    expect(entityIds(out)).not.toContain('x');
+    expect(entityIds(out)).not.toContain('c');
+    // a is still used by ab and s.
+    expect(entityIds(out)).toContain('a');
+    expect(constraintIds(out)).toEqual([]);
+  });
+
+  it('removing an xline removes its orphan points', () => {
+    const out = removeItems(X, xids('y'));
+    expect(entityIds(out)).not.toContain('y');
+    expect(entityIds(out)).not.toContain('d');
+    expect(entityIds(out)).toContain('b');
+  });
+
+  it('toggleConstruction skips an xline: it stays construction', () => {
+    expect(toggleConstruction(X, xids('x'))).toBe(X);
+    const out = toggleConstruction(X, xids('x', 'ab'));
+    const byId = (id: string) => out.entities.find((v) => v.id === id);
+    expect(byId('ab')).toMatchObject({ construction: true });
+    expect(byId('x')).toBe(X.entities.find((v) => v.id === 'x'));
+    const back = toggleConstruction(out, xids('x', 'ab'));
+    expect(back.entities.find((v) => v.id === 'ab')).not.toHaveProperty('construction');
+    expect(back.entities.find((v) => v.id === 'x')).toMatchObject({ construction: true });
   });
 });
 

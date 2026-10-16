@@ -9,8 +9,8 @@ import {
 } from '@/document';
 import type { BodyId, FeatureId, FeatureSchema, ParamSchema, PlaneRef, TopoRef } from '@/document';
 import { anOpsSession } from '@/ops/testing';
-import { SKETCH_FEATURE_TYPE, parseSketchData } from '@/sketch';
-import type { SketchConstraint, SketchData, SketchEntity } from '@/sketch';
+import { SKETCH_FEATURE_TYPE, isPattern, parseSketchData } from '@/sketch';
+import type { SketchConstraint, SketchCurve, SketchData, SketchEntity } from '@/sketch';
 import { createFakeSketchGeometry, createFakeSolver } from '@/sketch/testing';
 import {
   createFeatureEditor,
@@ -297,7 +297,25 @@ describe('createSketchTools', () => {
         group: 'draw',
         modes: ['sketch'],
         shortcut: 'L',
-        family: undefined,
+        family: 'line',
+      },
+      {
+        id: 'sketch.xline',
+        label: 'tool.xline',
+        icon: 'arrows-horizontal',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'line',
+      },
+      {
+        id: 'sketch.point',
+        label: 'tool.point',
+        icon: 'point',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: 'P',
+        family: 'line',
       },
       {
         id: 'sketch.rectangle',
@@ -306,7 +324,25 @@ describe('createSketchTools', () => {
         group: 'draw',
         modes: ['sketch'],
         shortcut: 'R',
-        family: undefined,
+        family: 'rectangle',
+      },
+      {
+        id: 'sketch.rectangleCenter',
+        label: 'tool.rectangleCenter',
+        icon: 'square-dot',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'rectangle',
+      },
+      {
+        id: 'sketch.rectangle3p',
+        label: 'tool.rectangle3p',
+        icon: 'square-rotated',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'rectangle',
       },
       {
         id: 'sketch.circle',
@@ -399,12 +435,39 @@ describe('createSketchTools', () => {
         shortcut: undefined,
       },
       {
+        id: 'sketch.slot',
+        label: 'tool.slot',
+        icon: 'capsule-horizontal',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'slot',
+      },
+      {
+        id: 'sketch.slotOverall',
+        label: 'tool.slotOverall',
+        icon: 'arrow-autofit-width',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'slot',
+      },
+      {
+        id: 'sketch.slotArc',
+        label: 'tool.slotArc',
+        icon: 'rainbow',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'slot',
+      },
+      {
         id: 'sketch.mirror',
         label: 'tool.mirror',
         icon: 'flip-horizontal',
         group: 'modify',
         modes: ['sketch'],
-        family: undefined,
+        family: 'pattern',
         shortcut: undefined,
       },
       {
@@ -438,12 +501,35 @@ describe('createSketchTools', () => {
     expect(Object.isFrozen(tools)).toBe(true);
   });
 
+  it('the slot tools are one family in the order slot, slotOverall, slotArc (M31)', () => {
+    const { tools } = setup();
+    expect(tools.filter((t) => t.family === 'slot').map((t) => t.id)).toEqual([
+      'sketch.slot',
+      'sketch.slotOverall',
+      'sketch.slotArc',
+    ]);
+  });
+
   it('the arc tools are one family in the order arc, arc3p, arcTangent (M27)', () => {
     const { tools } = setup();
     expect(tools.filter((t) => t.family === 'arc').map((t) => t.id)).toEqual([
       'sketch.arc',
       'sketch.arc3p',
       'sketch.arcTangent',
+    ]);
+  });
+
+  it('the rectangles and the lines (with the point) are families with the old tool first (M31)', () => {
+    const { tools } = setup();
+    expect(tools.filter((t) => t.family === 'rectangle').map((t) => t.id)).toEqual([
+      'sketch.rectangle',
+      'sketch.rectangleCenter',
+      'sketch.rectangle3p',
+    ]);
+    expect(tools.filter((t) => t.family === 'line').map((t) => t.id)).toEqual([
+      'sketch.line',
+      'sketch.xline',
+      'sketch.point',
     ]);
   });
 
@@ -921,6 +1007,109 @@ describe('the arc tool', () => {
     ]);
 
     expect(session.state.get().entities).toEqual([]);
+  });
+});
+
+describe('the construction mode (M31)', () => {
+  /** The tools with the clicks that draw one shape of each. */
+  const SHAPES: readonly (readonly [string, readonly Vec2[]])[] = [
+    [
+      'sketch.line',
+      [
+        [10, 10],
+        [30, 20],
+        [40, 50],
+      ],
+    ],
+    [
+      'sketch.rectangle',
+      [
+        [10, 10],
+        [40, 30],
+      ],
+    ],
+    [
+      'sketch.circle',
+      [
+        [10, 10],
+        [13, 14],
+      ],
+    ],
+    [
+      'sketch.arc',
+      [
+        [10, 10],
+        [20, 10],
+        [10, 40],
+      ],
+    ],
+    [
+      'sketch.circle2p',
+      [
+        [10, 10],
+        [20, 10],
+      ],
+    ],
+    [
+      'sketch.circle3p',
+      [
+        [10, 10],
+        [20, 10],
+        [15, 20],
+      ],
+    ],
+    [
+      'sketch.arc3p',
+      [
+        [10, 10],
+        [30, 10],
+        [20, 15],
+      ],
+    ],
+  ];
+
+  /** The data the tool draws, without the construction flag of the curves. */
+  async function drawn(tool: string, points: readonly Vec2[], mode: boolean) {
+    const { manager, viewport, session } = await sketching();
+    if (mode) session.setConstructionMode(true);
+    manager.activate(tool);
+    await clicks(viewport, points);
+    return session.state.get();
+  }
+
+  const curvesOf = (entities: readonly SketchEntity[]): SketchCurve[] =>
+    entities.filter((e): e is SketchCurve => e.kind !== 'point' && !isPattern(e));
+  const withoutConstruction = (entities: readonly SketchEntity[]) =>
+    // toEqual takes an undefined field for a missing one.
+    entities.map((e) => (e.kind === 'point' ? e : { ...e, construction: undefined }));
+
+  for (const [tool, points] of SHAPES) {
+    it(`${tool} draws construction curves in the mode, points and constraints unchanged`, async () => {
+      const plain = await drawn(tool, points, false);
+      const construction = await drawn(tool, points, true);
+
+      expect(curvesOf(plain.entities).length).toBeGreaterThan(0);
+      expect(curvesOf(plain.entities).every((e) => e.construction !== true)).toBe(true);
+      expect(curvesOf(construction.entities).every((e) => e.construction === true)).toBe(true);
+      expect(withoutConstruction(construction.entities)).toEqual(
+        withoutConstruction(plain.entities),
+      );
+      expect(construction.constraints).toEqual(plain.constraints);
+    });
+  }
+
+  it('survives a switch of the tool', async () => {
+    const { manager, viewport, session } = await sketching();
+    session.setConstructionMode(true);
+    manager.activate('sketch.circle');
+    manager.activate('sketch.line');
+    await clicks(viewport, [
+      [10, 10],
+      [30, 20],
+    ]);
+
+    expect(session.state.get().constructionMode).toBe(true);
+    expect(curvesOf(session.state.get().entities).map((e) => e.construction)).toEqual([true]);
   });
 });
 

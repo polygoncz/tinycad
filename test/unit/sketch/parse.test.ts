@@ -661,6 +661,79 @@ describe('parseSketchData – splines', () => {
   });
 });
 
+describe('parseSketchData – infinite line (xline, M31)', () => {
+  /** The square points, xline x through a and c, line ab, circle k, arc q, spline s from a. */
+  const XLINE_ENTITIES: readonly unknown[] = [
+    ...ENTITIES,
+    P('e', 5, 3),
+    { kind: 'xline', id: 'x', p1: 'a', p2: 'c', construction: true },
+    { kind: 'xline', id: 'y', p1: 'b', p2: 'd', construction: true },
+    { kind: 'bspline', id: 's', degree: 1, poles: ['a', 'e'], knots: [0, 0, 1, 1] },
+  ];
+
+  function xlineConstraintIssues(constraints: unknown): readonly SketchIssue[] {
+    const r = parseSketchData(XLINE_ENTITIES, constraints);
+    return r.ok ? [] : r.error;
+  }
+
+  it('accepts an xline through two distinct points', () => {
+    expect(entityIssues(XLINE_ENTITIES)).toEqual([]);
+  });
+
+  it.each([
+    ['without construction', { kind: 'xline', id: 'x', p1: 'a', p2: 'b' }],
+    ['with construction false', { kind: 'xline', id: 'x', p1: 'a', p2: 'b', construction: false }],
+    ['with p1 = p2', { kind: 'xline', id: 'x', p1: 'a', p2: 'a', construction: true }],
+    ['with a missing point', { kind: 'xline', id: 'x', p1: 'a', p2: 'z', construction: true }],
+    ['with a non-point p2', { kind: 'xline', id: 'x', p1: 'a', p2: 'k', construction: true }],
+    [
+      'with an extra field',
+      { kind: 'xline', id: 'x', p1: 'a', p2: 'b', construction: true, radius: 1 },
+    ],
+  ])('reports an xline %s', (_name, bad) => {
+    expect(
+      entityIssues([P('a'), P('b', 1), { kind: 'circle', id: 'k', center: 'a', radius: 1 }, bad]),
+    ).toEqual([entityIssue(3)]);
+  });
+
+  it('accepts the constraints that take a line as a carrier line on an xline', () => {
+    expect(
+      xlineConstraintIssues([
+        { kind: 'horizontal', id: 'c1', line: 'x' },
+        { kind: 'vertical', id: 'c2', line: 'x' },
+        { kind: 'parallel', id: 'c3', a: 'x', b: 'ab' },
+        { kind: 'parallel', id: 'c4', a: 'x', b: 'y' },
+        { kind: 'perpendicular', id: 'c5', a: 'ab', b: 'x' },
+        { kind: 'angle', id: 'c6', a: 'x', b: 'ab', value: 1 },
+        { kind: 'pointLineDistance', id: 'c7', point: 'e', line: 'x', value: 1 },
+        { kind: 'pointOnCurve', id: 'c8', point: 'e', curve: 'x' },
+        { kind: 'tangent', id: 'c9', a: 'x', b: 'k' },
+        { kind: 'tangent', id: 'c10', a: 'q', b: 'x' },
+      ]),
+    ).toEqual([]);
+  });
+
+  it.each([
+    ['midpoint', { kind: 'midpoint', id: 'z', point: 'e', line: 'x' }],
+    ['equal of two xlines', { kind: 'equal', id: 'z', a: 'x', b: 'y' }],
+    ['equal of an xline and a line', { kind: 'equal', id: 'z', a: 'x', b: 'ab' }],
+    // x shares a with the first pole of s: allowed for a line, not for an xline.
+    ['tangent with a spline', { kind: 'tangent', id: 'z', a: 'x', b: 's' }],
+    ['tangent of two xlines', { kind: 'tangent', id: 'z', a: 'x', b: 'y' }],
+    ['pointOnCurve of its own point', { kind: 'pointOnCurve', id: 'z', point: 'a', curve: 'x' }],
+    [
+      'pointLineDistance of its own point',
+      { kind: 'pointLineDistance', id: 'z', point: 'c', line: 'x', value: 1 },
+    ],
+    ['radius', { kind: 'radius', id: 'z', curve: 'x', value: 1 }],
+    ['coincident', { kind: 'coincident', id: 'z', a: 'e', b: 'x' }],
+  ])('reports %s on an xline', (_name, bad) => {
+    expect(xlineConstraintIssues([{ kind: 'fix', id: 'g', point: 'a' }, bad])).toEqual([
+      constraintIssue(1),
+    ]);
+  });
+});
+
 describe('parseSketchData – mirror and patterns (M36)', () => {
   const DIR = { angle: 0, count: 3, spacing: 5 };
   const MIRROR = { kind: 'mirror', id: 'm', sources: ['ab', 'k'], axis: 'bc' };

@@ -24,6 +24,7 @@ function anItem(id: string, change: Partial<ToolbarItem> = {}): ToolbarItem {
     command: { kind: 'tool', id },
     menuOnly: false,
     active: false,
+    checked: null,
     variants: [],
     ...change,
   };
@@ -34,7 +35,19 @@ const circle3p = anItem('circle3p', { active: true });
 const GROUPS: readonly ToolbarGroup[] = [
   {
     id: 'draw',
-    items: [anItem('line'), { ...circle3p, variants: [circle, circle3p] }, anItem('rectangle')],
+    items: [
+      anItem('line'),
+      { ...circle3p, variants: [circle, circle3p] },
+      anItem('rectangle'),
+      // A checked action (M31, the construction mode): active like a tool, pressed.
+      anItem('construction', {
+        command: { kind: 'action', id: 'construction' },
+        checked: true,
+        active: true,
+      }),
+      // A toggle that is off: not active, aria-pressed="false".
+      anItem('toggleOff', { command: { kind: 'action', id: 'toggleOff' }, checked: false }),
+    ],
   },
 ];
 
@@ -84,6 +97,8 @@ describe('Toolbar (spec 11, "Komponenty"; M27 split button)', () => {
       '3-point circle',
       'More: 3-point circle',
       'probe.rectangle',
+      'probe.construction',
+      'probe.toggleOff',
       'More tools',
     ]);
     const arrow = buttons(html).find((tag) => ariaLabel(tag) === 'More: 3-point circle');
@@ -95,6 +110,17 @@ describe('Toolbar (spec 11, "Komponenty"; M27 split button)', () => {
     const main = buttons(html).find((tag) => ariaLabel(tag) === '3-point circle');
     expect(main).toMatch(/class="[^"]*\bactive\b/);
     expect(buttons(html).filter((tag) => tag.includes('aria-haspopup="menu"'))).toHaveLength(1);
+  });
+
+  it('a checked action is active and pressed, an unchecked toggle not pressed; other buttons have no aria-pressed (M31)', async () => {
+    const html = await render('en');
+    const toggle = buttons(html).find((tag) => ariaLabel(tag) === 'probe.construction');
+    expect(toggle).toMatch(/class="[^"]*\bactive\b/);
+    expect(toggle).toContain('aria-pressed="true"');
+    const off = buttons(html).find((tag) => ariaLabel(tag) === 'probe.toggleOff');
+    expect(off).not.toMatch(/class="[^"]*\bactive\b/);
+    expect(off).toContain('aria-pressed="false"');
+    expect(buttons(html).filter((tag) => tag.includes('aria-pressed'))).toHaveLength(2);
   });
 
   it('the arrow is named in Czech', async () => {

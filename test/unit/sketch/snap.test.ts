@@ -3,7 +3,7 @@ import { bspline } from '@/core';
 import type { Vec2 } from '@/core';
 import type { SketchData, SketchEntityId } from '@/sketch/model';
 import { parseSketchData } from '@/sketch/parse';
-import { SPLINE_TOLERANCE } from '@/sketch/geometry';
+import { SPLINE_TOLERANCE, XLINE_EXTENT } from '@/sketch/geometry';
 import { ORIGIN_SNAP, snap } from '@/sketch/snap';
 import type { SnapOptions, SnapResult } from '@/sketch/snap';
 
@@ -421,6 +421,52 @@ describe('snap: splines (M29)', () => {
       'align',
     );
     expect(snap([210, 0.5], SPLINE_DATA, { ...OPTS, infer: false }).kind).toBe('free');
+  });
+});
+
+/**
+ * An xline x through u (100,100) and w (110,110) at 45°; the middle of p1p2 is (105,105). curve2
+ * draws it as a line ±XLINE_EXTENT from there, but its ends and middle are no snap targets.
+ */
+const XLINE_DATA = sketch([
+  { kind: 'point', id: 'u', x: 100, y: 100 },
+  { kind: 'point', id: 'w', x: 110, y: 110 },
+  { kind: 'xline', id: 'x', p1: 'u', p2: 'w', construction: true },
+]);
+
+describe('snap: xlines (M31)', () => {
+  it('p1 and p2 snap as points', () => {
+    expect(snap([100.3, 99.8], XLINE_DATA, OPTS)).toMatchObject({ kind: 'point', point: 'u' });
+    expect(snap([110.2, 110.4], XLINE_DATA, OPTS)).toMatchObject({ kind: 'point', point: 'w' });
+  });
+
+  it('the middle of p1p2 is no midpoint, only a point on the xline', () => {
+    const r = snap([105.3, 104.9], XLINE_DATA, OPTS);
+    expect(r.kind).toBe('onCurve');
+    expect(r.inferred).toEqual([{ kind: 'pointOnCurve', curve: 'x' }]);
+    expectAt(r, [105.1, 105.1]);
+  });
+
+  it('projects onto the whole carrier line, also far beyond p1p2', () => {
+    const r = snap([-500.4, -499.6], XLINE_DATA, OPTS);
+    expect(r.kind).toBe('onCurve');
+    expect(r.inferred).toEqual([{ kind: 'pointOnCurve', curve: 'x' }]);
+    expectAt(r, [-500, -500]);
+  });
+
+  it('the ends of the drawn line (±XLINE_EXTENT) are no snap targets', () => {
+    const end = 105 + XLINE_EXTENT * R45;
+    const r = snap([end + 3 * R45 + 0.3, end + 3 * R45 - 0.3], XLINE_DATA, OPTS);
+    expect(r.kind).toBe('onCurve');
+    expect(r.guides).toEqual([]);
+    expectAt(r, [end + 3 * R45, end + 3 * R45]);
+  });
+
+  it('an excluded xline and infer false give no projection', () => {
+    expect(snap([200.3, 199.8], XLINE_DATA, { ...OPTS, exclude: new Set([id('x')]) }).kind).toBe(
+      'free',
+    );
+    expect(snap([200.3, 199.8], XLINE_DATA, { ...OPTS, infer: false }).kind).toBe('free');
   });
 });
 

@@ -38,7 +38,7 @@ function anAction(
   shortcut: string | null = null,
   change: Partial<ActionState> = {},
 ): ActionState {
-  return { id, label: id, shortcut, group: null, enabled, modes: BOTH, ...change };
+  return { id, label: id, shortcut, group: null, enabled, modes: BOTH, checked: null, ...change };
 }
 
 /** An action of the action group 'probe.group' that exists only in the mode 'sketch'. */
@@ -162,6 +162,7 @@ describe('toolbarGroups', () => {
         command: { kind: 'action', id: 'undo' },
         menuOnly: false,
         active: false,
+        checked: null,
         variants: [],
       },
       {
@@ -175,6 +176,7 @@ describe('toolbarGroups', () => {
         command: { kind: 'action', id: 'redo' },
         menuOnly: false,
         active: false,
+        checked: null,
         variants: [],
       },
     ]);
@@ -214,6 +216,7 @@ describe('toolbarGroups', () => {
         command: { kind: 'action', id: 'tool.box' },
         menuOnly: false,
         active: false,
+        checked: null,
         variants: [],
       },
     ]);
@@ -235,12 +238,26 @@ describe('toolbarGroups', () => {
     expect(groups.flatMap((g) => g.items).find((i) => i.id === 'circle3p')?.enabled).toBe(true);
   });
 
-  it('only the button of the active tool is active, actions never', () => {
+  it('only the button of the active tool is active, unchecked actions never', () => {
     const tools = [aTool('select', 'select'), aTool('box', 'primitive', 'B')];
     const items = groupsOf({ tools, actions: ACTIONS, activeTool: 'box' }).flatMap((g) => g.items);
     expect(items.filter((i) => i.active).map((i) => i.id)).toEqual(['box']);
     const none = groupsOf({ tools, actions: ACTIONS, activeTool: 'tool.box' });
     expect(none.flatMap((g) => g.items).some((i) => i.active)).toBe(false);
+  });
+
+  it('the button of a checked action is active and checked (M31)', () => {
+    const checked = PROBE_ACTIONS.map((a) =>
+      a.id === 'probe.done' || a.id === 'probe.a' ? { ...a, checked: true } : a,
+    );
+    const items = new Map(
+      groupsOf({ tools: [], actions: checked, mode: 'sketch' })
+        .flatMap((g) => g.items)
+        .map((i) => [i.id, i]),
+    );
+    expect(items.get('probe.done')).toMatchObject({ active: true, checked: true });
+    expect(items.get('probe.a')).toMatchObject({ active: true, checked: true });
+    expect(items.get('probe.cancel')).toMatchObject({ active: false, checked: null });
   });
 
   it('in the model mode only the tools of the model are shown, no contribution of another mode', () => {
@@ -280,6 +297,7 @@ describe('toolbarGroups', () => {
       command: { kind: 'action', id: 'probe.done' },
       menuOnly: false,
       active: false,
+      checked: null,
       variants: [],
     });
     expect(items.get('probe.cancel')?.icon).toBe('x');

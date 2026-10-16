@@ -135,6 +135,9 @@ function copyCurve(
         knots: c.knots,
         ...construction,
       };
+    case 'xline':
+      // An xline (M31) is always construction; its copy too.
+      return { kind: c.kind, id, p1: derived(c.p1), p2: derived(c.p2), construction: true };
     default:
       return assertNever(c);
   }

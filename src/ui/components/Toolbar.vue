@@ -25,7 +25,7 @@ import type { ToolbarGroup, ToolbarItem } from '@/interaction';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
 import { isMacPlatform, shortcutText } from '../keyboard';
-import { familyVariants, fitGroups, menuEntries, overflowItems } from '../toolbar-fit';
+import { ariaPressed, familyVariants, fitGroups, menuEntries, overflowItems } from '../toolbar-fit';
 import ContextMenu from './ContextMenu.vue';
 
 const session = useSession();
@@ -184,6 +184,7 @@ function runMenuItem(id: string): void {
                 type="button"
                 class="tool"
                 :class="{ active: item.active }"
+                :aria-pressed="ariaPressed(item.checked)"
                 :disabled="!item.enabled"
                 :aria-label="t(item.label)"
                 @click="run(item)"

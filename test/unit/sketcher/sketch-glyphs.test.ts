@@ -278,6 +278,20 @@ describe('glyphViews: anchors and sides', () => {
     expectVec(g.side, [H, H, 0]);
   });
 
+  it('an xline (M31): the middle of p1p2, not of its long drawn line; side like a line', () => {
+    const xline = data(
+      [
+        { kind: 'point', id: 'p', x: 2, y: 1 },
+        { kind: 'point', id: 'q', x: 8, y: 1 },
+        { kind: 'xline', id: 'x', p1: 'p', p2: 'q', construction: true },
+      ],
+      [{ kind: 'horizontal', id: 'h', line: 'x' }],
+    );
+    const g = glyph(views('all', { sketch: xline }), 'h', 'x');
+    expectVec(g.anchor, [5, 1, 0]);
+    expectVec(g.side, [0, 1, 0]);
+  });
+
   it('anchors and sides are in world coordinates of the plane', () => {
     const onXz = views('all', { plane: XZ });
     const h = glyph(onXz, 'h', 'ab');

@@ -3,7 +3,14 @@
 
 import { plane as planeMath } from '@/core';
 import type { Vec2, Vec3 } from '@/core';
-import type { SketchConstraintId, SketchData, SketchEntityId, SnapGuide } from '@/sketch';
+import { isPattern } from '@/sketch';
+import type {
+  SketchConstraintId,
+  SketchData,
+  SketchEntity,
+  SketchEntityId,
+  SnapGuide,
+} from '@/sketch';
 import { CLICK_TOLERANCE_PX, isPlainEscape } from '@/interaction';
 import type {
   KeyMods,
@@ -39,6 +46,36 @@ export function openSession(sketches: SketchEditor): SketchSession | null {
 export const newEntityId = (ctx: ToolContext): SketchEntityId => ctx.ids.next() as SketchEntityId;
 export const newConstraintId = (ctx: ToolContext): SketchConstraintId =>
   ctx.ids.next() as SketchConstraintId;
+
+/**
+ * Writes the geometry of a drawing tool (M31, spec 12 "Režim konstrukce"): in the construction
+ * mode of the session every curve of `add` becomes construction (points and constraints as they
+ * are), then session.addGeometry. Only the drawing tools write through it, so the mode never
+ * turns the curves of other edits (trim, mirror) into construction.
+ */
+export function addDrawn(
+  session: SketchSession,
+  add: SketchData,
+  opts?: { readonly required?: ReadonlySet<SketchConstraintId> },
+): Promise<boolean> {
+  const data = session.state.get().constructionMode ? asConstruction(add) : add;
+  return opts === undefined ? session.addGeometry(data) : session.addGeometry(data, opts);
+}
+
+/** The data with every curve construction; points and constraints unchanged. */
+function asConstruction(add: SketchData): SketchData {
+  return Object.freeze({
+    entities: Object.freeze(
+      add.entities.map((e): SketchEntity =>
+        // Points and mirrors or patterns (M36, recipes without the flag) stay as they are.
+        e.kind === 'point' || isPattern(e) || e.construction === true
+          ? e
+          : Object.freeze({ ...e, construction: true }),
+      ),
+    ),
+    constraints: add.constraints,
+  });
+}
 
 /**
  * The grid step a drawing tool snaps to (M19.2 D4): the current step of the editor while the snap

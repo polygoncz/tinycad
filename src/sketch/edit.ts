@@ -1,6 +1,6 @@
 import { assert, assertNever } from '@/core';
 import { pointsById } from './points';
-import { isPattern } from './model';
+import { isLineCarrier, isPattern } from './model';
 import type {
   DimensionKind,
   GeometricConstraintKind,
@@ -15,6 +15,7 @@ import type {
   SketchPattern,
   SketchPoint,
   SketchText,
+  SketchXLine,
 } from './model';
 
 // Pure editing helpers of the sketcher (spec 12 "Geometrie a pomůcky editace"). They return new
@@ -57,7 +58,7 @@ export function constraintFor(
   if (kind === 'symmetric') return symmetricFor(selected);
   const [first, second] = selected;
   if (selected.length === 1 && first !== undefined) {
-    if ((kind === 'horizontal' || kind === 'vertical') && first.kind === 'line') {
+    if ((kind === 'horizontal' || kind === 'vertical') && isLineCarrier(first)) {
       return { kind, line: first.id };
     }
     if (kind === 'fix' && first.kind === 'point') return { kind, point: first.id };
@@ -69,11 +70,12 @@ export function constraintFor(
   const b = second.id;
   const points = selected.filter((e) => e.kind === 'point').length;
   const lines = selected.filter((e) => e.kind === 'line').length;
+  const carriers = selected.filter(isLineCarrier).length;
   const rounds = selected.filter(isRound).length;
   switch (kind) {
     case 'coincident':
       if (points === 2) return { kind, a, b };
-      // Any curve, a spline too (M29); not a point of the curve itself.
+      // Any curve, a spline (M29) and an xline (M31) too; not a point of the curve itself.
       return pointOn(
         first,
         second,
@@ -90,11 +92,12 @@ export function constraintFor(
       return points === 2 ? { kind: 'vAlign', a, b } : null;
     case 'parallel':
     case 'perpendicular':
-      return lines === 2 ? { kind, a, b } : null;
+      return carriers === 2 ? { kind, a, b } : null;
     case 'equal':
+      // Lengths: an xline has none.
       return lines === 2 || rounds === 2 ? { kind, a, b } : null;
     case 'tangent':
-      return rounds === 2 || (lines === 1 && rounds === 1) || lineAtSplineEnd(first, second)
+      return rounds === 2 || (carriers === 1 && rounds === 1) || lineAtSplineEnd(first, second)
         ? { kind, a, b }
         : null;
     case 'midpoint':
@@ -139,8 +142,8 @@ function pointOn(
 
 /**
  * The dimension for the selected entities: 1 line → distance(p1, p2); 1 circle/arc → radius;
- * 2 points → distance. value = the measured value; ≤ 1e-9 → null; a pattern or a text selected
- * → null.
+ * 2 points → distance. value = the measured value; ≤ 1e-9 → null. An xline has no length → null;
+ * a pattern or a text selected → null.
  */
 export function dimensionFor(
   selected: readonly SketchEntity[],
@@ -185,7 +188,7 @@ export function measureDraft(
   };
   const line = (id: SketchEntityId): readonly [SketchPoint, SketchPoint] => {
     const l = data.entities.find((e) => e.id === id);
-    assert(l?.kind === 'line', `measure: '${id}' is not a line`);
+    assert(l !== undefined && isLineCarrier(l), `measure: '${id}' is not a line`);
     return [point(l.p1), point(l.p2)];
   };
   const radius = (id: SketchEntityId): number => {
@@ -235,7 +238,13 @@ export function measureDraft(
   }
 }
 
-function withoutConstruction(c: SketchCurve): SketchCurve {
+/** What construction can be toggled on: curves but an xline (always construction), and texts (M37). */
+type TogglableCurve = Exclude<SketchCurve, SketchXLine> | SketchText;
+
+const isTogglable = (e: SketchEntity): e is TogglableCurve =>
+  (isCurve(e) && e.kind !== 'xline') || e.kind === 'text';
+
+function withoutConstruction(c: TogglableCurve): TogglableCurve {
   switch (c.kind) {
     case 'line':
       return { kind: c.kind, id: c.id, p1: c.p1, p2: c.p2 };
@@ -255,17 +264,29 @@ function withoutConstruction(c: SketchCurve): SketchCurve {
         poles: c.poles,
         knots: c.knots,
       };
+    case 'text':
+      return {
+        kind: c.kind,
+        id: c.id,
+        text: c.text,
+        font: c.font,
+        height: c.height,
+        baseline: c.baseline,
+        contours: c.contours,
+      };
     default:
       return assertNever(c);
   }
 }
 
 /**
- * Point ids a curve is defined by: line [p1, p2], circle [center], arc [center, start, end].
+ * Point ids a curve is defined by: line and xline [p1, p2], circle [center], arc [center, start,
+ * end].
  */
 export function curvePoints(c: SketchCurve): readonly SketchEntityId[] {
   switch (c.kind) {
     case 'line':
+    case 'xline':
       return [c.p1, c.p2];
     case 'circle':
       return [c.center];
@@ -395,32 +416,16 @@ function patternAnchor(p: SketchPattern): SketchEntityId | undefined {
 
 /**
  * Toggles construction of the selected curves and texts (M37): all construction → all normal,
- * otherwise all construction. Points, patterns and constraints are ignored. A normal curve or text
- * has no `construction` field.
+ * otherwise all construction. Points, patterns, constraints and xlines (always construction, M31)
+ * are ignored. A normal curve or text has no `construction` field.
  */
 export function toggleConstruction(data: SketchData, ids: readonly SketchItemId[]): SketchData {
   const selected = new Set<string>(ids);
-  const targets = data.entities.filter(
-    (e): e is SketchCurve | SketchText => (isCurve(e) || e.kind === 'text') && selected.has(e.id),
-  );
+  const targets = data.entities.filter((e) => isTogglable(e) && selected.has(e.id));
   if (targets.length === 0) return data;
-  const makeConstruction = !targets.every((c) => c.construction === true);
+  const makeConstruction = !targets.every((c) => isTogglable(c) && c.construction === true);
   const entities = data.entities.map((e): SketchEntity => {
-    if (!selected.has(e.id)) return e;
-    if (e.kind === 'text') {
-      if (makeConstruction) return Object.freeze({ ...e, construction: true });
-      // Rebuilt without the field, like a curve.
-      return Object.freeze({
-        kind: e.kind,
-        id: e.id,
-        text: e.text,
-        font: e.font,
-        height: e.height,
-        baseline: e.baseline,
-        contours: e.contours,
-      });
-    }
-    if (!isCurve(e)) return e;
+    if (!isTogglable(e) || !selected.has(e.id)) return e;
     if (makeConstruction) return Object.freeze({ ...e, construction: true });
     // Rebuilt without the field: a normal curve has no `construction` at all.
     return Object.freeze(withoutConstruction(e));

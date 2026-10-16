@@ -267,7 +267,7 @@ test('a linear pattern of a circle grows into the second direction by its label 
 
   // 2. Linear pattern: a click on the circle picks it, Enter writes the pattern and selects it,
   // so its labels show: the count 3× of direction 1 and 1× of direction 2.
-  await toolbarButton(page, 'Lineární pole').click();
+  await pickVariant(page, 'Zrcadlit', 'Lineární pole');
   await clickAt(page, [centre[0], centre[1] - radius]);
   await page.keyboard.press('Enter');
   await expect(patternLabel(page, 'Počet', '3×')).toBeVisible();
@@ -318,7 +318,7 @@ test('a circular pattern of a circle around the end of a line: four instances', 
 
   // 2. Circular pattern: a click on the circle picks it, Enter, a click on the end of the line
   // writes the pattern (four instances over the full circle) and selects it.
-  await pickVariant(page, 'Lineární pole', 'Kruhové pole');
+  await pickVariant(page, 'Zrcadlit', 'Kruhové pole');
   await clickAt(page, [centre[0], centre[1] - radius]);
   await page.keyboard.press('Enter');
   await clickAt(page, pivot);
@@ -357,7 +357,7 @@ test('the count of a linear pattern changed by its label, kept after a reload', 
   const spacing = 3 * radius;
   await drawCircle(page, centre, radius);
   await expect(panel.getByRole('status')).toHaveText('Stupně volnosti: 3');
-  await toolbarButton(page, 'Lineární pole').click();
+  await pickVariant(page, 'Zrcadlit', 'Lineární pole');
   await clickAt(page, [centre[0], centre[1] - radius]);
   await page.keyboard.press('Enter');
   await expect(patternLabel(page, 'Počet', '3×')).toBeVisible();

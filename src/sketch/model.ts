@@ -75,7 +75,22 @@ export interface SketchFitSpline {
   readonly construction?: true;
 }
 
-export type SketchCurve = SketchLine | SketchCircle | SketchArc | SketchBSpline | SketchFitSpline;
+/**
+ * A construction line without ends through two sketch points (Onshape Construction line, M31).
+ * Always construction: it never bounds a region. Constraints that take a line as its carrier line
+ * take it too; those that need a length or ends do not.
+ */
+export interface SketchXLine {
+  readonly kind: 'xline';
+  readonly id: SketchEntityId;
+  /** Two distinct points; they give the position and the direction. */
+  readonly p1: SketchEntityId;
+  readonly p2: SketchEntityId;
+  readonly construction: true;
+}
+
+export type SketchCurve =
+  SketchLine | SketchCircle | SketchArc | SketchBSpline | SketchFitSpline | SketchXLine;
 
 /**
  * Mirror of the sources across the axis (a line). One copy with index 1 (spec 12 "Zrcadlení a
@@ -182,6 +197,7 @@ export function isPatternSource(e: SketchEntity): e is SketchPoint | SketchCurve
     case 'arc':
     case 'bspline':
     case 'fitSpline':
+    case 'xline':
       return true;
     case 'mirror':
     case 'linearPattern':
@@ -289,6 +305,14 @@ export function isDimensionKind(kind: string): kind is DimensionKind {
 }
 
 /**
+ * A line or an xline: the entities a constraint or a dimension may take as their infinite carrier
+ * line (M31). One guard for the whole sketcher, so a new carrier kind changes one place.
+ */
+export function isLineCarrier(e: SketchEntity): e is SketchLine | SketchXLine {
+  return e.kind === 'line' || e.kind === 'xline';
+}
+
+/**
  * A dimension (a constraint or a draft with a value) by its kind, not by its shape: a later
  * constraint with a `value` field is not a dimension by accident.
  */
@@ -334,19 +358,20 @@ export type SketchConstraint =
       readonly a: SketchEntityId;
       readonly b: SketchEntityId;
     }
+  /** A line or an xline (M31). */
   | {
       readonly kind: 'horizontal' | 'vertical';
       readonly id: SketchConstraintId;
       readonly line: SketchEntityId;
     }
-  /** Two lines. */
+  /** Two lines or xlines (M31). */
   | {
       readonly kind: 'parallel' | 'perpendicular';
       readonly id: SketchConstraintId;
       readonly a: SketchEntityId;
       readonly b: SketchEntityId;
     }
-  /** Two lines (length) or two circles/arcs (radius). */
+  /** Two lines (length) or two circles/arcs (radius); never an xline. */
   | {
       readonly kind: 'equal';
       readonly id: SketchConstraintId;
@@ -354,8 +379,8 @@ export type SketchConstraint =
       readonly b: SketchEntityId;
     }
   /**
-   * A line and a circle/arc (either order), or two circles/arcs; or a line and a spline (either
-   * order) when the line shares a point with an end of the spline (M29).
+   * A line or an xline and a circle/arc (either order), or two circles/arcs; or a line (not an
+   * xline) and a spline (either order) when the line shares a point with an end of the spline (M29).
    */
   | {
       readonly kind: 'tangent';
@@ -364,8 +389,8 @@ export type SketchConstraint =
       readonly b: SketchEntityId;
     }
   /**
-   * A point on the whole carrier line of a line or the whole circle of an arc (M26), or on a
-   * spline within its ends (M29); the point is not a defining point of the curve.
+   * A point on the whole carrier line of a line or an xline or the whole circle of an arc (M26),
+   * or on a spline within its ends (M29); the point is not a defining point of the curve.
    */
   | {
       readonly kind: 'pointOnCurve';
@@ -373,7 +398,7 @@ export type SketchConstraint =
       readonly point: SketchEntityId;
       readonly curve: SketchEntityId;
     }
-  /** A point in the middle of a line, not one of its ends (M26). */
+  /** A point in the middle of a line (not an xline), not one of its ends (M26). */
   | {
       readonly kind: 'midpoint';
       readonly id: SketchConstraintId;
@@ -406,7 +431,10 @@ export type SketchConstraint =
       readonly value: number;
       readonly placement?: LinearPlacement;
     }
-  /** A point and a line it is not an end of: the distance to the infinite line, value > 0. */
+  /**
+   * A point and a line or an xline it is not a point of: the distance to the infinite line,
+   * value > 0.
+   */
   | {
       readonly kind: 'pointLineDistance';
       readonly id: SketchConstraintId;
@@ -416,8 +444,8 @@ export type SketchConstraint =
       readonly placement?: LinearPlacement;
     }
   /**
-   * Two different lines, 0 < value < π (rad): the angle between their directions p1→p2, each
-   * reversed by its flag.
+   * Two different lines or xlines, 0 < value < π (rad): the angle between their directions p1→p2,
+   * each reversed by its flag.
    */
   | {
       readonly kind: 'angle';

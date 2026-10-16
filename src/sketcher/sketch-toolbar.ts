@@ -1,7 +1,8 @@
 // The sketcher's part of the Toolbar (spec 11, "Komponenty"; M20): in the sketch mode the groups
 // Historie, Výběr, Kreslit, Upravit (M36), Vazby, Dokončit, Zobrazit, cancel and finish of a
-// sketch as buttons of the group 'finish', and the constraint actions as buttons of the group 'constrain' after the
-// dimension tool. app passes it to createToolbarModel; interaction knows nothing of it.
+// sketch as buttons of the group 'finish', the constraint actions as buttons of the group
+// 'constrain' after the dimension tool, and construction (M31) as a button of the group 'draw'
+// after the drawing tools. app passes it to createToolbarModel; interaction knows nothing of it.
 
 import type { ToolbarModeContribution } from '@/interaction';
 import { GEOMETRIC_CONSTRAINT_KINDS } from '@/sketch';
@@ -9,6 +10,7 @@ import type { GeometricConstraintKind } from '@/sketch';
 import {
   SKETCH_ACTION_IDS,
   SKETCH_CONSTRAINT_ACTION_GROUP,
+  SKETCH_DRAW_ACTION_GROUP,
   sketchConstraintActionId,
 } from './constants';
 
@@ -27,6 +29,8 @@ const CONSTRAINT_ICONS: Readonly<Record<GeometricConstraintKind, string>> = {
   symmetric: 'flip-vertical',
   fix: 'lock',
 };
+/** The icon of the construction button (M31). */
+const CONSTRUCTION_ICON = 'line-dashed';
 /** The icon of an action of the constraint group that is not one of the kinds. */
 const DEFAULT_CONSTRAINT_ICON = 'link';
 
@@ -52,6 +56,12 @@ export const SKETCH_TOOLBAR: ToolbarModeContribution = Object.freeze({
       actionGroup: SKETCH_CONSTRAINT_ACTION_GROUP,
       toolbarGroup: 'constrain',
       icon: (actionId: string) => ICON_BY_ACTION.get(actionId) ?? DEFAULT_CONSTRAINT_ICON,
+    }),
+    // actionButtons come before the tools of a group, an action group after them.
+    Object.freeze({
+      actionGroup: SKETCH_DRAW_ACTION_GROUP,
+      toolbarGroup: 'draw',
+      icon: () => CONSTRUCTION_ICON,
     }),
   ]),
 });

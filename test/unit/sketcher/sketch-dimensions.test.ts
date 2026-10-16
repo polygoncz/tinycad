@@ -160,6 +160,20 @@ describe('dimensionViews: linear dimensions', () => {
     expectClose(g.lineTo, [2.2, 4, 0]);
     expectClose(g.label, [2.2, 2, 0]);
   });
+
+  it('pointLineDistance to an xline (M31): to its carrier line, like a line', () => {
+    const entities = [...LINES, { kind: 'xline', id: 'x', p1: 'a1', p2: 'a2', construction: true }];
+    const d = only(entities, {
+      kind: 'pointLineDistance',
+      id: 'd',
+      point: 'm',
+      line: 'x',
+      value: 4,
+    });
+    const g = geometryOf(d, 'linear');
+    expectClose(g.from, [3, 0, 0]);
+    expectClose(g.to, [3, 4, 0]);
+  });
 });
 
 describe('dimensionViews: radial dimensions', () => {

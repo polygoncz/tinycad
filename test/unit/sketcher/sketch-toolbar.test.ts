@@ -55,9 +55,20 @@ describe('SKETCH_TOOLBAR', () => {
     mode.set('sketch');
     expect(toolbar.groups.get().map((g) => [g.id, g.items.map((i) => i.id)])).toEqual([
       ['select', ['sketch.select']],
-      ['draw', ['sketch.line', 'sketch.rectangle', 'sketch.circle', 'sketch.arc', 'sketch.spline']],
-      // The mirror alone, the patterns one family (M36).
-      ['modify', ['sketch.mirror', 'sketch.linearPattern']],
+      [
+        'draw',
+        [
+          'sketch.line',
+          'sketch.rectangle',
+          'sketch.circle',
+          'sketch.arc',
+          'sketch.spline',
+          'sketch.slot',
+          SKETCH_ACTION_IDS.construction,
+        ],
+      ],
+      // Mirror and patterns one family (M36), so the sketcher fits 1280 px.
+      ['modify', ['sketch.mirror']],
       [
         'constrain',
         ['sketch.dimension', ...GEOMETRIC_CONSTRAINT_KINDS.map(sketchConstraintActionId)],
@@ -78,6 +89,19 @@ describe('SKETCH_TOOLBAR', () => {
     ]);
   });
 
+  it('the construction button follows the tools of draw, disabled without a session (M31)', () => {
+    const { toolbar, mode } = setup();
+    mode.set('sketch');
+    const draw = toolbar.groups.get().find((g) => g.id === 'draw');
+    expect(draw?.items.at(-1)).toMatchObject({
+      id: SKETCH_ACTION_IDS.construction,
+      command: { kind: 'action', id: SKETCH_ACTION_IDS.construction },
+      enabled: false,
+      active: false,
+      checked: false,
+    });
+  });
+
   it('gives cancel, finish and every constraint kind its icon', () => {
     const { toolbar, mode } = setup();
     mode.set('sketch');
@@ -89,6 +113,7 @@ describe('SKETCH_TOOLBAR', () => {
     );
     expect(icons.get(SKETCH_ACTION_IDS.cancel)).toBe('x');
     expect(icons.get(SKETCH_ACTION_IDS.finish)).toBe('check');
+    expect(icons.get(SKETCH_ACTION_IDS.construction)).toBe('line-dashed');
     expect(GEOMETRIC_CONSTRAINT_KINDS.map((k) => icons.get(sketchConstraintActionId(k)))).toEqual(
       GEOMETRIC_CONSTRAINT_KINDS.map((k) => EXPECTED_ICONS[k]),
     );

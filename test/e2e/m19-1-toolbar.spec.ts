@@ -7,6 +7,12 @@ import { createDocument, sketchPanel, toolbarButton } from './helpers';
 // nástroje") offers their items in a menu, with the same label, shortcut, state and command as
 // the buttons. In a wide window there is no "…". Both modes: the sketcher has more buttons.
 
+/**
+ * The narrow window of the sketcher (px): since M31 (Drážka ▾, Bod, Konstrukční) the group
+ * Kreslit is about 430 px wide and does not fit into 700 px next to Historie and Výběr.
+ */
+const SKETCH_NARROW = 800;
+
 /** The button "…" of the toolbar. */
 function moreButton(page: Page): Locator {
   return page.getByRole('navigation').getByRole('button', { name: 'Další nástroje', exact: true });
@@ -72,7 +78,8 @@ test('at 700 px the group Výběr runs from the menu "…", at 1400 px there is 
 test('the sketcher overflows too: the menu "…" has the same states and runs the actions', async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 700, height: 720 });
+  // 800 px: the group Kreslit (wider since M31) still fits, the constraints and Finish do not.
+  await page.setViewportSize({ width: SKETCH_NARROW, height: 720 });
   await createDocument(page);
   await toolbarButton(page, 'Skica').click();
   const panel = sketchPanel(page, 'Skica 1');
@@ -95,15 +102,16 @@ test('the sketcher overflows too: the menu "…" has the same states and runs th
   await expect(menu).toBeHidden();
   await expect(panel).toBeVisible();
 
-  // A wide window: the same states on the buttons, no "…".
-  await page.setViewportSize({ width: 1400, height: 720 });
+  // A wide window: the same states on the buttons, no "…". Since M31 and M36 the sketcher needs
+  // about 1450 px; at 1280 px only Dokončit and Zobrazit go to the menu (spec 11).
+  await page.setViewportSize({ width: 1600, height: 720 });
   await expect(more).toBeHidden();
   await expect(toolbarButton(page, 'Kóta')).toBeEnabled();
   await expect(toolbarButton(page, 'Vodorovná')).toBeVisible();
   await expect(toolbarButton(page, 'Vodorovná')).toBeDisabled();
 
   // Narrow again: Zrušit skicu from the menu ends the sketch, the bar models again.
-  await page.setViewportSize({ width: 700, height: 720 });
+  await page.setViewportSize({ width: SKETCH_NARROW, height: 720 });
   await more.click();
   await menuItem(menu, 'Zrušit skicu').click();
   await expect(menu).toBeHidden();

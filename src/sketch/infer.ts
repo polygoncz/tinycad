@@ -2,6 +2,7 @@ import { assert } from '@/core';
 import type { Vec2 } from '@/core';
 import { curvePoints } from './edit';
 import { pointsById } from './points';
+import { isLineCarrier } from './model';
 import type { SketchData, SketchEntity, SketchEntityId, SketchPoint } from './model';
 import { cross, dist, dot, length, sub } from './vec2';
 
@@ -41,7 +42,8 @@ export function inferLine(
   const points = pointsById(data);
   if (from.point !== null) {
     for (const e of data.entities) {
-      if (e.kind === 'line' && !axis && curvePoints(e).includes(from.point)) {
+      // An xline through the point too (M31): parallel and perpendicular take its carrier line.
+      if (isLineCarrier(e) && !axis && curvePoints(e).includes(from.point)) {
         const other = sub(at(points, e.p2), at(points, e.p1));
         if (isZero(other)) continue;
         if (isParallel(d, other, tol)) out.push({ kind: 'parallel', line: e.id });
