@@ -45,7 +45,7 @@ Upřesnění v sezení 2026-10-16: obrysy přes knihovnu **opentype.js** v TS ([
 - [x] Entita text, kontrola dat, `textCurves`, odvozená id, oblasti.
 - [x] HUD nápověda nástrojů (`ToolHint`, `ToolHintHud`), naplněná u zrcadlení a polí.
 - [x] Kresba, výběr, nástroj Text, `setTextParams` a panel.
-- [ ] Integrační test a e2e (gravírování „tinycad“), spec 01, 10, 11.
+- [x] Integrační test a e2e (gravírování „tinycad“), spec 01, 10, 11.
 
 ## Implementační plán
 
@@ -108,5 +108,6 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **Natažení `main` s M32** bez konfliktů, jen dva nové testy potřebovaly `setHint` a `text`.
 - **Úkol 3 hotový:** panel textu (sekce Text nad vazbami, fokus nového textu). 7415 unit; e2e 165/166 – jednou spadl `m19-2-rename` ve WebKitu, samostatně prošel (nestabilní, nesouvisí).
 - **Natažení `main` s M33:** 7 sčítacích konfliktů; text vynechán z `isCurveEntity` (trim/extend/split, průsečíky `requestHits`). 7674 unit zelených.
+- **Úkol 4 hotový:** integrační `sketch-text-regions.test.ts` nad OCCT („oaB“: 7 oblastí, díry 1/1/2, vnitřní okénka jsou samostatné oblasti; „oaB“ → „oxB“ zachová jména ploch „o“ a „B“; konstrukční text bez oblastí), e2e `m37.spec.ts` (nástroj Text a panel, gravírování „tinycad“ do kvádru 1 mm, HUD nápověda). Check 7674 unit + 44 integračních, e2e 177/178 (nestabilní `m19-2-rename` WebKit). Postřehy: výběr nástroje z menu rodiny nevrací fokus pohledu (Esc pak nástroj nevypne – existující chování, i M36); Odebrat mimo těleso nic nehlásí.
 
 ## Retrospektiva
