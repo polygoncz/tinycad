@@ -430,6 +430,17 @@ Modulový worker inicializuje OCCT asynchronně. Zpráva, která do workeru dora
 
 - **B-spline (M29):** `Geom_BSplineCurve(Poles: NCollection_Array1_gp_Pnt, Knots: NCollection_Array1_double, Multiplicities: NCollection_Array1_int, Degree)` ve 3D (řídicí body převedené `plane.toWorld`, pole s dolní mezí 0 – OCCT je přijme), uzly zkomprimované na unikátní hodnoty a násobnosti (build neexportuje `BSplCLib`), hrana `BRepBuilderAPI_MakeEdge(Geom_Curve)`. Adaptér nic nevzorkuje ani neaproximuje; platnost hlídá stávající `BRepCheck_Analyzer` (spline křížící jinou stranu → `'operation-failed'`). Měření plochy v testech potřebuje přesnou variantu `BRepGProp.SurfaceProperties(shape, props, 1e-9, false)` – výchozí se u plochy se splinem plete o ~2e-4 relativně.
 
+### Oblasti skici v adaptéru (M30)
+
+`kernel-occt/regions.ts` (`profileRegionsOf`). Cesta zvolená prototypem ([[M30-geometrie-skici-v-occt#Průběh stopy|M30]]): build neváže `BOPAlgo_Builder`, `BOPAlgo_Tools`, `IntAna2d`, `GCE2d` ani klasifikátory bodu v ploše (`BRepClass_FaceClassifier`, `BRepTopAdaptor_FClass2d`); `BRepAlgoAPI_Splitter` nepozná spline křížící sám sebe, visící hranu nechá v ploše a trojúhelník dotýkající se obdélníku rohem udělá dírou. Proto algoritmus kontraktu (spec 12 *Oblasti (profily)*) s geometrií z OCCT:
+
+- Vstup zkontroluje `parseProfileRegionsInput` (sdílený s fake). 2D křivky `GC_MakeSegment2d`, `GC_MakeArcOfCircle2d` (oblouk vždy proti směru, `ccw: false` se otočí), `GC_MakeCircle2d`, `Geom2d_BSplineCurve` (uzly přes `compressKnots` z `face.ts`). Tolerance `tol = 1e-7 · max(1, největší |souřadnice|)` pro uzly i průsečíky.
+- **Křížení:** `Geom2dAPI_InterCurveCurve(c1, c2, tol)` jen pro dvojice s překrytými obálkami (řazení podle x); `NbSegments() > 0` (překryv) nebo bod průsečíku dál než `1e3 · tol` od sdíleného uzlu → `crossing`. Spline proti sobě `Geom2dAPI_InterCurveCurve(c, tol)`; u uzavřeného splinu bod v jeho uzlu jen tehdy, když jím křivka prochází i uvnitř (promítnutí uzlu). Průsečíky nevrací parametry, rozhoduje poloha bodu.
+- **Stěny:** polohrany s úhlem tečny a znaménkovou křivostí z `D1`/`D2` (zápis do předem vytvořených `gp_Pnt2d`/`gp_Vec2d`, bez alokace v cyklu), `next(e)` jako fake. Znaménková plocha cyklu = součet Greenových integrálů ∮(x dy − y dx)/2 hran (5bodový Gauss–Legendre nad `D1`, spline po úsecích mezi uzly, oblouk 16 kusů na otáčku); ne `BRepGProp` nad plochou z `MakeFace`, který u sevřené smyčky dává jiný obsah. Osamocená kružnice πr².
+- **Díry:** bod vnější hranice v kandidátní stěně: obálka, pak parita průsečíků paprsku (`Geom2d_Line` + `InterCurveCurve`). Paprsek pod iracionálním úhlem; když projde uzlem nebo se křivky jen dotkne (sin úhlu ≤ 1e-3), další směr posunutý o zlatý úhel, nejvýš 8 pokusů.
+- **Výstup:** smyčky ze **vstupních** křivek (souřadnice beze změny), zpětná polohrana = úsečka s prohozenými konci, oblouk `ccw: false`, spline s obrácenými póly a uzly `a + b − k`. Oblasti podle `name`, výsledek zmrazený. Mřížka 840 úseček ~50 ms, 1860 ~110 ms (TS fake ~390 ms).
+- Pro [[Q093 Oblasti z křížících se křivek|Q093]] (oblasti z křížících se křivek) je kandidát `BRepAlgoAPI_Splitter`: křivky v průsečících rozdělí sám a jména kusů dá historie.
+
 ### Tažení v adaptéru (M13)
 
 - Typ profilu: `shape.ShapeType()` musí být `TopAbs_FACE`, jinak `'invalid-input'` (kontrola před stavbou).

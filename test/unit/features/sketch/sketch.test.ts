@@ -391,6 +391,24 @@ describe('sketchBuilder', () => {
     expect(kernel.callCount('profileRegions')).toBe(1);
   });
 
+  it('freezes the outlines deeply, also when the kernel returns them mutable (worker)', async () => {
+    const kernel = createFakeKernel();
+    const data = rectangleWithCircle();
+    // Like a structured clone through postMessage: the same data, nothing frozen.
+    const cloned = structuredClone(await kernel.profileRegions({ curves: regionCurves(data) }));
+    const ctx: BuildContext = {
+      ...aBuildContext(kernel),
+      kernel: { ...aBuildContext(kernel).kernel, profileRegions: () => Promise.resolve(cloned) },
+    };
+    const result = await sketchBuilder.build(aBuildInput(aSketch('s1', data), EMPTY_STATE), ctx);
+    if (!result.ok) throw new Error('build failed');
+    const artifact = sketchesOf(result.state)[0];
+    const hole = artifact?.outlines.find((r) => r.holes.length > 0)?.holes[0]?.[0];
+    expect(Object.isFrozen(artifact?.outlines)).toBe(true);
+    expect(Object.isFrozen(artifact?.outlines[0]?.outer)).toBe(true);
+    expect(Object.isFrozen(hole)).toBe(true);
+  });
+
   it('a rectangle with a circle inside gives two faces in the order of the regions', async () => {
     const kernel = createFakeKernel();
     const artifact = await build(aSketch('s1', rectangleWithCircle()), kernel);

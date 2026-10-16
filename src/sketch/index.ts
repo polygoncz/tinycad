@@ -1,5 +1,6 @@
-// Ring 1 – sketch data model, data checks, 2D geometry, regions, editing helpers and the
-// ConstraintSolver and SketchGeometry ports (spec 12, ADR 0017). Depends only on core.
+// Ring 1 – sketch data model, data checks, 2D geometry, the curves bounding regions, editing
+// helpers and the ConstraintSolver and SketchGeometry ports (spec 12, ADR 0017). Depends only on
+// core.
 // Public API of sketch. Everything else in this folder is internal.
 
 export { GEOMETRIC_CONSTRAINT_KINDS, SKETCH_FEATURE_TYPE, SKETCH_PARAM } from './model';

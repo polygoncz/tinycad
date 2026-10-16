@@ -53,3 +53,9 @@ Další série skicáře ([[Roadmapa#Rozšíření skicáře II (M30–M37)]]) p
 - (−) Testy oblastí potřebují OCCT (kontraktová sada jádra a `FakeKernel` s jednoduchou implementací), přestávají být čistě v Node bez WASM.
 - (−) Změna sahá do `kernel`, `kernel-occt`, `features/sketch`, `interaction`, `sketcher` a `app` – proto samostatný milník bez nových funkcí.
 - Bod 4 a důsledek „dvě reprezentace“ z [[0017-modul-sketch-a-skicar|ADR 0017]] tímto ADR přestávají platit; zbytek ADR 0017 platí dál.
+
+## Doplněk 2026-10-16: jak to dopadlo v M30
+
+- Bod 1: oblasti nepoužívají `BOPAlgo` (předpřipravený build ho neváže) ani `BRepAlgoAPI_Splitter` (nepozná samoprůsečík splinu, liší se v krajních případech). Implementace v `kernel-occt/regions.ts` je algoritmus kontraktu s průsečíky z `Geom2dAPI_InterCurveCurve` a plochou z Greenovy věty – viz [[06-geometricke-jadro#Oblasti skici v adaptéru (M30)]]. Splitter zůstává kandidátem pro [[Q093 Oblasti z křížících se křivek|Q093]].
+- Bod 6: `sketch/regions.ts` se přesunul do `kernel/fake-regions.ts` jako implementace `FakeKernel` (ne do archivu); jeho testy jsou kontraktová sada jádra, která běží proti fake i OCCT.
+- Důsledek „testy oblastí potřebují OCCT“ platí jen pro adaptér: vyšší vrstvy testují oblasti nad `FakeKernel` v Node bez WASM.

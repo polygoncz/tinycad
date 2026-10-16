@@ -54,7 +54,7 @@ Rozhodnutí v sezení 2026-10-16 ([[Q092 Hranice geometrie skici v TS a v OCCT|Q
 - [x] `kernel-occt`: oblasti v OCCT (po prototypu).
 - [x] `regionCurves`, builder skici a artefakt s obrysy.
 - [x] Kresba oblastí z artefaktu a port `SketchGeometry`.
-- [ ] Spec podle skutečnosti, dodatek k [[0017-modul-sketch-a-skicar|ADR 0017]], regresní testy.
+- [x] Spec podle skutečnosti, dodatek k [[0017-modul-sketch-a-skicar|ADR 0017]], regresní testy.
 
 ## Implementační plán
 
@@ -128,5 +128,11 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - Úkol 3: `regionCurves` filtruje vyčerpávajícím `switch` (ne „vše kromě bodu“), aby nová entita stopy B nebo C musela rozhodnout, jestli ohraničuje oblasti – typový predikát typecheck nekontroluje. Plán tvrdil, že úkol 3 je na úkolu 2 nezávislý; ve skutečnosti integrační testy (součást `npm run check`) bez OCCT `profileRegions` padají, proto sloučení až po obou.
 
 **2026-10-16 – úkol 4 hotový.** `artifactDrawing` bere oblasti z `artifact.outlines`, `sketch/regions.ts` a jeho testy smazané (`computeRegions` v `src/` nikde). `SPLINE_TOLERANCE` přešla do `sketch/geometry.ts`. Port `SketchGeometry` je prázdné rozhraní; `app/sketch-geometry.ts` ho zatím vyrábí bez parametrů (klient jádra by v M30 byl nepoužitý argument) – M33 přidá parametr a metody. Port se předává `createSketchEditor` → `openSketchSession` vedle `solver`.
+
+**2026-10-16 – úkol 5 a architektonická revize.**
+- Regresní test `test/integration/sketch-regions-regression.test.ts` (obdélník se splinem jako stranou a kruhovou dírou, vysunutí). Literály změřené na commitu před M30 (`929fa1a`): jména oblastí, díry a všech 7 jmen ploch tělesa beze změny. Obsah oblasti se splinem je po M30 **přesnější** (851,0602 místo 851,0192, ověřeno nezávislou integrací) – dřív se počítal z tessellace; test porovnává relativně 1e-4.
+- Spec 06 (nová sekce *Oblasti skici v adaptéru (M30)*), 07 (`SketchArtifact.outlines`), 08 (zdroj `id` křivek), 10 (`artifactDrawing` s oblastmi z argumentu), 12 (builder, *Oblasti (profily)*, testy, skutečnost M30), dodatek ADR 0017, doplněk ADR 0028.
+- Revize `architecture-reviewer`: bez porušení ADR 0008–0011. Opraveno: obrysy v artefaktu se hluboce zmrazí v builderu (přes worker přijdou po `postMessage` měnitelné; nový test), zastaralé zmínky `computeRegions` ve spec 08, 10 a komentáři `sketch`.
+- **Pro hlavní sezení (návrh, neděláno):** 2D vektorové pomůcky jsou třikrát (`sketch/vec2.ts`, kopie `kernel/vec2.ts`, `dist` v `kernel-occt/regions.ts`). Revize navrhuje `core/math/vec2.ts` (jmenný prostor `vec2` vedle `vec3`); to je nový veřejný export `core` a změna spec 02, mimo vlastnictví stopy A – vhodné po sloučení všech stop.
 
 ## Retrospektiva

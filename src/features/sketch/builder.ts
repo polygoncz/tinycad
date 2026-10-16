@@ -47,10 +47,19 @@ export const sketchBuilder: FeatureBuilder<SketchParams> = Object.freeze<
       plane,
       entities: data.entities,
       regions: faces,
-      outlines: regions,
+      // Deeply: through the worker (postMessage) the kernel's frozen result arrives mutable.
+      outlines: freezeDeep(regions),
     });
     // A new map, the input state stays as it is; the maps are guarded by their types (Q048).
     const artifacts = new Map(state.artifacts).set(id, artifact);
     return { ok: true, state: Object.freeze({ artifacts }), anchors: {} };
   },
 });
+
+/** Freezes plain data (the regions from the kernel) recursively and returns it. */
+function freezeDeep<T>(value: T): T {
+  if (typeof value !== 'object' || value === null) return value;
+  Object.freeze(value);
+  for (const child of Object.values(value)) freezeDeep(child);
+  return value;
+}
