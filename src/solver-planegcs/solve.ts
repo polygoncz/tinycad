@@ -3,10 +3,12 @@
 
 import { DebugMode, GcsWrapper, SolveStatus, type SketchPrimitive } from '@salusoft89/planegcs';
 import { bspline, type BSplineShape, type Vec2 } from '@/core';
+import { isPattern } from '@/sketch';
 import type {
   SketchBSpline,
   SketchConstraint,
   SketchConstraintId,
+  SketchCurve,
   SketchEntity,
   SketchEntityId,
   SketchFitSpline,
@@ -263,6 +265,11 @@ function entityPrimitives(
         ),
       ];
     }
+    case 'mirror':
+    case 'linearPattern':
+    case 'circularPattern':
+      // Recipes (M36): their copies are derived from the solved originals, never solved.
+      return [];
   }
 }
 
@@ -443,6 +450,8 @@ function constraintPrimitives(
       return [{ id: c.id, type: 'horizontal_pp', p1_id: c.a, p2_id: c.b }];
     case 'vAlign':
       return [{ id: c.id, type: 'vertical_pp', p1_id: c.a, p2_id: c.b }];
+    case 'symmetric':
+      return [{ id: c.id, type: 'p2p_symmetric_ppl', p1_id: c.a, p2_id: c.b, l_id: c.axis }];
     case 'fix': {
       // Two equations on the current coordinates instead of `fixed: true` (ADR 0016).
       const p = pointOf(entities, c.point);
@@ -483,7 +492,7 @@ function constraintPrimitives(
   }
 }
 
-type Curve = Exclude<SketchEntity, { readonly kind: 'point' }>;
+type Curve = SketchCurve;
 
 /**
  * hDistance/vDistance: the model value is unsigned, planegcs `difference` is signed
@@ -713,7 +722,8 @@ function pointOf(
 
 function curveOf(entities: ReadonlyMap<SketchEntityId, SketchEntity>, id: SketchEntityId): Curve {
   const e = entities.get(id);
-  if (e === undefined || e.kind === 'point') throw new Error(`${id} is not a curve`);
+  if (e === undefined || e.kind === 'point' || isPattern(e))
+    throw new Error(`${id} is not a curve`);
   return e;
 }
 

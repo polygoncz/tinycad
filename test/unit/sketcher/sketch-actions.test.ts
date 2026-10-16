@@ -44,6 +44,7 @@ function aFakeSession() {
       constraintRows: [],
       editingDimension: null,
       dimensions: [],
+      patternDimensions: [],
       glyphs: [],
       inference: null,
       planeField: null,
@@ -78,6 +79,7 @@ function aFakeSession() {
     setInferencePreview: () => undefined,
     moveDimension: () => undefined,
     endMoveDimension: () => undefined,
+    setPatternParam: () => false,
     setHover: () => undefined,
     select: () => undefined,
     clearSelection: () => undefined,
@@ -186,6 +188,7 @@ describe('createSketchActions', () => {
       ['sketch.constraint.equal', 'sketch.constraint.equal', 'sketch.constraint', null],
       ['sketch.constraint.tangent', 'sketch.constraint.tangent', 'sketch.constraint', null],
       ['sketch.constraint.midpoint', 'sketch.constraint.midpoint', 'sketch.constraint', null],
+      ['sketch.constraint.symmetric', 'sketch.constraint.symmetric', 'sketch.constraint', null],
       ['sketch.constraint.fix', 'sketch.constraint.fix', 'sketch.constraint', null],
     ]);
     expect(SKETCH_ACTION_IDS).toEqual({
@@ -385,6 +388,23 @@ describe('createSketchActions', () => {
     expect(calls.at(-1)).toEqual([
       'addConstraint',
       { kind: 'midpoint', point: 'm', line: 'ab', id: 'c1' },
+    ]);
+  });
+
+  it('symmetric is enabled for two points and an axis line and adds the constraint (M36)', () => {
+    const { registry, open, enabled } = setup();
+    const { calls, select } = open();
+    const symmetric = sketchConstraintActionId('symmetric');
+
+    select('a', 'b');
+    expect(enabled(symmetric)).toBe(false);
+    // a and b are not points of cd.
+    select('a', 'b', 'cd');
+    expect(enabled(symmetric)).toBe(true);
+    registry.run(symmetric);
+    expect(calls.at(-1)).toEqual([
+      'addConstraint',
+      { kind: 'symmetric', a: 'a', b: 'b', axis: 'cd', id: 'c1' },
     ]);
   });
 

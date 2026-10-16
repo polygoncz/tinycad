@@ -3,7 +3,7 @@
 // not mint ids, so the preview can call it on every move; placePoint mints them for a click.
 
 import type { Vec2 } from '@/core';
-import { snap } from '@/sketch';
+import { patternOfCopy, snap } from '@/sketch';
 import type {
   PointInference,
   SketchConstraint,
@@ -156,7 +156,8 @@ export function samePoint(a: SnapTarget, b: SnapTarget): boolean {
 
 /**
  * The entity of the session under the cursor (render's pick); the origin and other drawings are
- * nothing. The control polygon of a bspline stands for the spline (spec 12, M29).
+ * nothing. The control polygon of a bspline stands for the spline (spec 12, M29), a copy of a
+ * pattern (also the control polygon of a copied bspline) for the pattern (M36).
  */
 export function entityAt(
   ctx: ToolContext,
@@ -166,6 +167,7 @@ export function entityAt(
 ): SketchEntity | null {
   const hit = ctx.viewport.pick(x, y, ['sketchEntity']);
   if (hit?.kind !== 'sketchEntity' || hit.sketch !== EDIT_SKETCH_DRAWING_ID) return null;
-  const id = splineOfControlPolygon(hit.entity) ?? hit.entity;
+  const drawn = splineOfControlPolygon(hit.entity) ?? hit.entity;
+  const id = patternOfCopy(drawn) ?? drawn;
   return session.state.get().entities.find((e) => e.id === id) ?? null;
 }

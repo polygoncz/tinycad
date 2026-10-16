@@ -5,6 +5,13 @@
 
 export { GEOMETRIC_CONSTRAINT_KINDS, SKETCH_FEATURE_TYPE, SKETCH_PARAM } from './model';
 export { DIMENSION_KINDS, isDimension, isLineCarrier } from './model';
+export {
+  MAX_PATTERN_COUNT,
+  circularStep,
+  isPattern,
+  isPatternSource,
+  patternParamsValid,
+} from './model';
 export type {
   AngularPlacement,
   DimensionConstraint,
@@ -12,10 +19,12 @@ export type {
   DimensionPlacement,
   GeometricConstraintKind,
   LinearPlacement,
+  PatternDirection,
   RadialPlacement,
   SketchArc,
   SketchBSpline,
   SketchCircle,
+  SketchCircularPattern,
   SketchConstraint,
   SketchConstraintDraft,
   SketchConstraintId,
@@ -26,12 +35,17 @@ export type {
   SketchFitSpline,
   SketchItemId,
   SketchLine,
+  SketchLinearPattern,
+  SketchMirror,
+  SketchPattern,
   SketchPoint,
   SketchXLine,
 } from './model';
+export { patternCopies, patternOfCopy } from './patterns';
 export { parseSketchData } from './parse';
 export type { SketchIssue } from './parse';
-export { XLINE_EXTENT, curve2, pointsById, regionCurves } from './geometry';
+export { XLINE_EXTENT, curve2, regionCurves } from './geometry';
+export { pointsById } from './points';
 export type { Curve2, SketchRegion } from './geometry';
 export {
   constraintFor,

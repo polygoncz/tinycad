@@ -12,6 +12,7 @@ export type {
   SketchState,
 } from './sketch-session';
 export type { DimensionGeometry, SketchDimensionView } from './sketch-dimensions';
+export type { PatternParam, SketchPatternDimensionView } from './sketch-pattern-dimensions';
 export type { GlyphKind, SketchGlyphView } from './sketch-glyphs';
 export { artifactDrawing, axisDrawing, planeDrawing } from './sketch-drawing';
 export { createSketchActions } from './sketch-actions';

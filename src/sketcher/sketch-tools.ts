@@ -16,6 +16,8 @@ import { createEntryTool } from './sketch-tools/entry-tool';
 import { createLineTool } from './sketch-tools/line-tool';
 import { createPointTool } from './sketch-tools/point-tool';
 import { createRectangleCenterTool } from './sketch-tools/rectangle-center-tool';
+import { createMirrorTool } from './sketch-tools/mirror-tool';
+import { createCircularPatternTool, createLinearPatternTool } from './sketch-tools/pattern-tool';
 import { createRectangleTool } from './sketch-tools/rectangle-tool';
 import { createRectangle3pTool } from './sketch-tools/rectangle3p-tool';
 import { createSketchSelectTool } from './sketch-tools/select-tool';
@@ -66,6 +68,18 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       modes: SKETCH,
       family: 'line',
       create: () => createXLineTool(sketches),
+    }),
+    // The lone point (M31) is the last variant of the line family: a toolbar of 1280 px holds the
+    // sketcher only with it folded in (merge of M31 and M36).
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.point',
+      label: 'tool.point',
+      icon: 'point',
+      group: 'draw',
+      modes: SKETCH,
+      shortcut: 'P',
+      family: 'line',
+      create: () => createPointTool(sketches),
     }),
     Object.freeze<ToolDescriptor>({
       id: 'sketch.rectangle',
@@ -219,15 +233,34 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       family: 'slot',
       create: () => createSlotTool(sketches, 'arc'),
     }),
-    // The lone point (M31) belongs to no family.
+    // Mirror and patterns (M36) are one family, so the toolbar fits 1280 px; no shortcut. Tabler
+    // icons of a flip, a grid of dots and a full turn.
     Object.freeze<ToolDescriptor>({
-      id: 'sketch.point',
-      label: 'tool.point',
-      icon: 'point',
-      group: 'draw',
+      id: 'sketch.mirror',
+      label: 'tool.mirror',
+      icon: 'flip-horizontal',
+      group: 'modify',
       modes: SKETCH,
-      shortcut: 'P',
-      create: () => createPointTool(sketches),
+      family: 'pattern',
+      create: () => createMirrorTool(sketches),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.linearPattern',
+      label: 'tool.linearPattern',
+      icon: 'grid-dots',
+      group: 'modify',
+      modes: SKETCH,
+      family: 'pattern',
+      create: () => createLinearPatternTool(sketches),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.circularPattern',
+      label: 'tool.circularPattern',
+      icon: 'rotate-360',
+      group: 'modify',
+      modes: SKETCH,
+      family: 'pattern',
+      create: () => createCircularPatternTool(sketches),
     }),
     Object.freeze<ToolDescriptor>({
       id: 'sketch.dimension',

@@ -688,7 +688,7 @@ export type SketchCurve = SketchLine | SketchCircle | SketchArc | SketchBSpline 
 | { readonly kind: 'symmetric'; readonly id: SketchConstraintId; readonly a: SketchEntityId; readonly b: SketchEntityId; readonly axis: SketchEntityId }
 ```
 
-- `a !== b`, oba body; `axis` úsečka nebo `xline`; žádný z bodů není bodem osy. Planegcs: `symmetric_ppl`. `GEOMETRIC_CONSTRAINT_KINDS` ji přidá **před `fix`** (na konec geometrických vazeb, `fix` zůstane poslední) – pořadí akcí v liště upraví stopa C.
+- `a !== b`, oba body; `axis` úsečka nebo `xline`; žádný z bodů není bodem osy. Planegcs: `p2p_symmetric_ppl`. `GEOMETRIC_CONSTRAINT_KINDS` ji přidá **před `fix`** (na konec geometrických vazeb, `fix` zůstane poslední) – pořadí akcí v liště upraví stopa C.
 - Stopa B ji **nepoužívá**: obdélník středem drží střed vazbou `midpoint` na konstrukční úhlopříčce.
 
 #### Křivky pro oblasti a odvozená id (M30 zavede, stopa C rozšíří)
@@ -711,7 +711,7 @@ Aby se stopy nesrazily v `sketch-tools.ts`, `constants.ts` a i18n, jsou id rozd�
 |---|---|---|
 | B | `sketch.rectangle` (stávající, rohy) + `sketch.rectangleCenter`, `sketch.rectangle3p` (rodina `rectangle`); `sketch.line` + `sketch.xline` (rodina `line`); `sketch.point`; `sketch.slot`, `sketch.slotOverall`, `sketch.slotArc` (rodina `slot`) | ~~`sketch.constructionMode`~~ – nevzniklo: režim konstrukce přepíná rozšířená akce `sketch.construction` (`Q`), viz [[#Nové kreslicí nástroje (M31)]] (B4) |
 | A | `sketch.trim`, `sketch.extend`, `sketch.split` (rodina `trim`); `sketch.fillet`, `sketch.chamfer` (rodina `fillet`); `sketch.offset` | – |
-| C | `sketch.mirror`; `sketch.linearPattern`, `sketch.circularPattern` (rodina `pattern`); `sketch.text` | `sketch.constraint.symmetric` (z `GEOMETRIC_CONSTRAINT_KINDS`) |
+| C | `sketch.mirror`, `sketch.linearPattern`, `sketch.circularPattern` (rodina `pattern`, od sloučení i zrcadlení); `sketch.text` | `sketch.constraint.symmetric` (z `GEOMETRIC_CONSTRAINT_KINDS`) |
 
 Skupiny lišty: kreslení `draw`, úpravy (trim, fillet, offset, mirror, pole) nová skupina `modify` – zavede ji ta stopa, která se do `main` sloučí první, druhá ji jen použije. Klávesové zkratky: B `Q` (režim konstrukce), `P` (bod); A `T` (trim); ostatní bez zkratky, dokud se nedohodne.
 
@@ -816,7 +816,7 @@ export function arcSlotShape(p: ArcSlotPointIds, ids: ShapeIds): ShapeDraft;
 | `sketch.rectangle` | `rectangle`, `R` | dva protilehlé rohy (beze změny) | – |
 | `sketch.rectangleCenter` | `rectangle` | střed, roh | střed a roh kliknutím; tři dopočítané rohy jako u rohového obdélníku (bez mřížky, bez kliknutých bodů) |
 | `sketch.rectangle3p` | `rectangle` | 1. roh, 2. roh (první strana), 3. klik výška | rohy a, b kliknutím; c, d dopočítané (bez mřížky, `exclude` a, b) |
-| `sketch.point` | –, `P` | klik | bod se svými `inferred` (na křivce → `pointOnCurve`); klik na existující bod nic |
+| `sketch.point` | `line`, `P` | klik | bod se svými `inferred` (na křivce → `pointOnCurve`); klik na existující bod nic |
 | `sketch.line` | `line`, `L` | polyline (beze změny) | – |
 | `sketch.xline` | `line` | dva body přímky | oba kliknutím; vazby `horizontal`/`vertical` z `inferLine` (jen osy, automatické) |
 | `sketch.slot` | `slot` | střed 1, střed 2, šířka | středy kliknutím; body tečnosti nové bez snapperu |
@@ -826,7 +826,7 @@ export function arcSlotShape(p: ArcSlotPointIds, ids: ShapeIds): ShapeDraft;
 - Osa přímé drážky, první strana obdélníku 3 body a přímka dostanou `horizontal`/`vertical` z `inferLine` (do 3°, automatické, Ctrl/Cmd vypne) – tvar pak zůstane osově rovnoběžný jako ve Fusionu. Ostatní automatické vazby (`parallel` k sousední úsečce, `equal`) se nové tvary neodvozují.
 - Degenerovaný vstup (konstrukce `null`) → klik nic nevytvoří, rozpracovaný stav zůstane. Esc zruší rozpracovaný tvar, bez něj ukončí nástroj. Náhled tvaru stylem `preview` v overlay `'sketch-tool'`, náhled vazeb z funkce kroku nástroje (jako M26/M27).
 - **Klik šířky** (drážky) bere jen souřadnici ze snapperu (mřížka, přichycení k bodu); id bodu ani jeho vazby se nepoužijí. Zarovnání druhého bodu osy s prvním (`hAlign`/`vAlign`) nahradí `horizontal`/`vertical` osy, jako u úsečky.
-- **Pořadí ve skupině `draw`:** úsečka ▾ (úsečka, přímka), obdélník ▾ (rohy, středem, 3 body), kružnice ▾, oblouk ▾, spline ▾, drážka ▾, bod, tlačítko *Konstrukční*. Bod nemá rozpracovaný stav, Esc ho ukončí.
+- **Pořadí ve skupině `draw`:** úsečka ▾ (úsečka, přímka, bod), obdélník ▾ (rohy, středem, 3 body), kružnice ▾, oblouk ▾, spline ▾, drážka ▾, tlačítko *Konstrukční*. Bod nemá rozpracovaný stav, Esc ho ukončí. **Bod je v rodině `line`** od sloučení M31 a M36 (Pavel 2026-10-16, „zhustit lištu“): jinak by se lišta skicáře nevešla do 1280 px a skupina *Vazby* by padla do „…“.
 - Nové tvary vytvoří vždy všechny své křivky (strana na existující úsečce se nesdílí – to umí jen rohový obdélník).
 - Popisky i18n `tool.<id bez sketch.>`: `rectangle` „Obdélník rohy“ / „Corner rectangle“, `rectangleCenter` „Obdélník středem“ / „Center rectangle“, `rectangle3p` „Obdélník 3 body“ / „3-point rectangle“, `point` „Bod“ / „Point“, `line` „Úsečka“ / „Line“ (beze změny), `xline` „Konstrukční přímka“ / „Construction line“, `slot` „Drážka středy“ / „Center slot“, `slotOverall` „Drážka celková“ / „Overall slot“, `slotArc` „Oblouková drážka“ / „Arc slot“.
 
@@ -854,6 +854,105 @@ interface ActionState { …; readonly checked: boolean | null }   // null = akce
 - Režim se neukládá a přežije přepnutí nástroje; zavřením session zanikne.
 
 **Testy:** konstrukce (poloha každého tvaru, degenerované vstupy, orientace oblouků proti směru, topologie: křivky, vazby a `required`); s planegcs (`solver-planegcs/shapes.test.ts`): každý tvar má `dof` z tabulky, změna jedné kóty (šířka, poloměr) drží tvar; nástroje s `FakeViewport` a `FakeSolver`; snapper a `inferLine` s přímkou; nástroj kóty s přímkou; e2e `m31.spec.ts` (obdélník středem a 3 body, drážka, bod, přímka s rovnoběžnou úsečkou, režim konstrukce přes `Q`).
+
+## Zrcadlení a pole (M36)
+
+Rozhodnuto v [[Q089 Parametrické zrcadlení a pole ve skice|Q089]]: entita je **recept** (zdroje + parametry), kopie se odvozují z vyřešeného originálu a do řešiče nevstupují; vazby a kóty na kopie nejdou. Směr lineárního pole je **úhel** (Pavel 2026-10-16, jako manipulátor v Onshape): pole nezávisí na jiné entitě a úhel je další vynesená kóta. Verze schématu skici zůstává 1 (nové druhy jen přibývají).
+
+```ts
+// sketch/model.ts – členy SketchEntity, ne SketchCurve
+/** Zrcadlení zdrojů podle osy (úsečka nebo xline). Jedna kopie s indexem 1. */
+export interface SketchMirror {
+  readonly kind: 'mirror'; readonly id: SketchEntityId;
+  readonly sources: readonly SketchEntityId[];
+  readonly axis: SketchEntityId;
+}
+/** Jeden směr lineárního pole: count ≥ 2 instancí (včetně originálu) po spacing (mm) ve směru angle. */
+export interface PatternDirection {
+  readonly angle: number;     // rad od osy x roviny skici, libovolné konečné číslo
+  readonly count: number;     // celé číslo, 2 ≤ count ≤ MAX_PATTERN_COUNT
+  readonly spacing: number;   // mm, > 0, vzdálenost sousedních instancí
+}
+/** Lineární pole: směr 1 povinný, směr 2 volitelný (mřížka, jako Onshape). */
+export interface SketchLinearPattern {
+  readonly kind: 'linearPattern'; readonly id: SketchEntityId;
+  readonly sources: readonly SketchEntityId[];
+  readonly direction1: PatternDirection;
+  readonly direction2?: PatternDirection;
+}
+/** Kruhové pole kolem bodu skici: count instancí (včetně originálu) v celkovém úhlu angle. */
+export interface SketchCircularPattern {
+  readonly kind: 'circularPattern'; readonly id: SketchEntityId;
+  readonly sources: readonly SketchEntityId[];
+  readonly center: SketchEntityId;   // bod skici
+  readonly count: number;            // celé číslo, 2 ≤ count ≤ MAX_PATTERN_COUNT
+  readonly angle: number;            // rad, 0 < |angle| ≤ 2π; kladný = proti směru hodinových ručiček
+}
+export type SketchPattern = SketchMirror | SketchLinearPattern | SketchCircularPattern;
+export type SketchEntity = SketchPoint | SketchCurve | SketchPattern;
+export const MAX_PATTERN_COUNT = 100;
+export function isPattern(e: SketchEntity): e is SketchPattern;
+/** Smí být zdrojem pole: bod nebo křivka (vyčerpávající switch, text M37 ne). */
+export function isPatternSource(e: SketchEntity): e is SketchPoint | SketchCurve;
+/** Hodnoty parametrů jednoho pole (počty, rozteče, úhly) podle Kontroly dat; jediné místo pravidel pro parse i setPatternParam. */
+export function patternParamsValid(p: SketchPattern): boolean;
+/** Krok kruhového pole: angle / count u plného kruhu, jinak angle / (count − 1). */
+export function circularStep(p: Pick<SketchCircularPattern, 'count' | 'angle'>): number;
+
+// sketch/patterns.ts (nový)
+/** Kopie všech polí skici jako běžné entity (body a křivky) s odvozenými id; originál (index 0) se nekopíruje. */
+export function patternCopies(data: SketchData): readonly (SketchPoint | SketchCurve)[];
+/** Id entity pole z odvozeného id kopie ('<pole>:<přípona>'), jinak null. */
+export function patternOfCopy(id: string): SketchEntityId | null;
+```
+
+- **Zdroje:** neprázdné, bez duplicit, každý je bod nebo křivka skici (ne pole, ne text); u zrcadlení zdrojem není osa, u kruhového pole zdrojem není střed. Jeden zdroj smí být ve více polích. Id pole a id zdrojů nesmí obsahovat `:` ani `,` (odvozené id by nebylo jednoznačné; id z generátoru je base62).
+- **Kopie** (`patternCopies`, čistá funkce nad vyřešenými daty): pro každou instanci kromě originálu se zkopíruje každý zdroj **i jeho definiční body** (`curvePoints`; u `fitSpline` body `fit`). Kopie bodu má id `<pole>:<index>.<id bodu>`, kopie křivky `<pole>:<index>.<id křivky>` a odkazuje na odvozená id svých bodů; dvě zdrojové křivky se společným bodem mají tedy v kopii také společný bod (oblasti z kopií zůstanou uzavřené). Kopie křivky přebírá `construction` zdroje. Pořadí: pole v pořadí entit, instance vzestupně, zdroje v pořadí `sources`, body před křivkou; každé id jen jednou.
+  - **Index:** zrcadlení `1`; lineární pole s jedním směrem `i` (1 … count−1); se dvěma směry `i-j` (`i` směr 1, `j` směr 2, všechny dvojice kromě `0-0`); kruhové pole `k` (1 … count−1). Přidání směru 2 tedy id změní (`1` → `1-0`), to je změna parametru.
+  - **Transformace:** lineární posun `i·s₁·(cos α₁, sin α₁) + j·s₂·(cos α₂, sin α₂)`; kruhové otočení kolem středu o `k·krok`, kde `krok = angle / count` pro plný kruh (`| |angle| − 2π | ≤ 1e-9`) a `angle / (count − 1)` jinak (jako Fusion); zrcadlení podle přímky osy.
+  - **Zrcadlení obrací orientaci:** zrcadlený oblouk má prohozené `start` a `end` (oblouk zůstane proti směru hodinových ručiček); kružnice jen střed; spline transformuje body (`bspline` póly jako body, `fitSpline` body `fit` a uložené `poles`), uzly a parametry beze změny.
+  - **Degenerace:** osa nulové délky nebo chybějící střed → pole nemá žádné kopie (ne souřadnice NaN); data jsou přesto platná, jako kóta úsečky nulové délky.
+  - **`patternOfCopy`** uzná jen příponu tvaru `<číslo>` nebo `<číslo>-<číslo>`, tečka a id bez `:` a `,`; jiná id s dvojtečkou (např. `__poles:<id>` z M29) vrátí `null`.
+  - **Stabilita id:** změna rozteče, úhlu nebo zdrojové geometrie id nemění; snížení počtu odebere jen instance s nejvyšším indexem. Odebrání zdroje odebere jen jeho kopie.
+- **Kontrola dat** (`sketch.invalidEntity` u pole): tvar a pole jako u ostatních entit; `sources` podle pravidel výše; `axis` vede na úsečku (po M31 i `xline`); `center` na bod; `count` celé číslo v rozsahu; `spacing > 0` konečné; `angle` konečné, u kruhového `0 < |angle| ≤ 2π` (+1e-9); `direction2` volitelné, ale když je, platné. Vazby na entitu pole nesmějí odkazovat (`sketch.invalidConstraint`).
+- **Mazání** (`removeItems`): (2a) smazání zdroje ho vyřadí ze `sources` všech polí, pole s prázdnými zdroji se smaže; (2b) smazání osy nebo středu smaže pole; smazání pole zdroje ani osu nemaže. V kroku (3) se bod, který používá zbylé pole jako `center`, počítá jako použitý. Kaskáda běží do ustálení (smazaná křivka → vyřazený zdroj → smazané pole).
+- **Pomůcky editace:** `constraintFor` a `dimensionFor` s polem ve výběru → `null`; `toggleConstruction` pole přeskočí; `constraintFor('symmetric', [a, b, osa])` – dva body a úsečka (po M31 i xline) v tomto pořadí, body nejsou body osy.
+- **Glyf symetrie:** vazba `symmetric` má glyf (dva zrcadlené trojúhelníky kolem čárkované osy, Tabler `flip-vertical` v liště) u bodu `a`, u bodu `b` a u osy.
+- **Řešič:** entity polí do řešiče nevstupují (adaptér je přeskočí); osa a střed jsou běžné entity. Vazba `symmetric` → `p2p_symmetric_ppl` (sekce *Vazba symetrie* výše).
+- **Kresba, výběr, snapper:** kresba editované i regenerované skici přidá `patternCopies(data)` stylem zdroje (konstrukční čárkovaně), kopie bodů jako body. Najetí a klik na kopii se přeloží `patternOfCopy` na id pole (vzor `__poles:` z M29), takže klik na kopii vybere celé pole a Delete ho smaže. Tah za kopii nic nepohne. Snapper bere kopie jako geometrii bez identity: přichytí se polohou (konec, střed, na křivce), ale nevznikne automatická vazba a bod se nesloučí s kopií. Glyfy vazeb kopie nemají.
+  - Kresba editované skici: body dat, body kopií, bod počátku; kopie zkopírovaného `bspline` má i kontrolní polygon `__poles:<id kopie>` (překlad řetězově: polygon → kopie → pole). Styl kopie: když je pole vybrané nebo pod kurzorem, mají ten styl všechny jeho kopie; jinak konstrukční podle zdroje, nebo styl pole. Kresba z regenerace přidá kopie křivek stylem `normal`/`construction`.
+  - Snapper (`snap()` si kopie spočítá sám z dat, API beze změny): bod kopie → `kind: 'point'` s `point: null` (poloha bez znovupoužití bodu, takže ani `fix` v počátku); střed a „na křivce“ kopie bez automatické vazby; k bodům kopií se **nezarovnává** (zarovnání je vazba). Při shodě vzdáleností vyhraje entita dat.
+- **Vynesené kóty pole** (vzor *Kóty (M28)*): u **vybraného** pole a během nástroje ukazuje viewport popisky parametrů: u lineárního pole pro každý směr počet `n×` u poslední instance, rozteč `… mm` mezi originálem a první instancí a úhel `…°` u originálu; u kruhového počet `n×` a celkový úhel `…°` na oblouku kolem středu; zrcadlení popisky nemá. Kotva = střed obálky definičních bodů zdrojů. Klik na popisek otevře pole hodnoty a potvrzení zapíše nový parametr jedním `setParams` (bez řešiče – pole do něj nevstupuje); neplatná hodnota (počet mimo rozsah, rozteč ≤ 0) se nezapíše. U lineárního pole se popisek počtu směru 2 ukazuje vždy, i bez směru 2 jako `1×` (kolmo na směr 1 ve vzdálenosti rozteče 1): přepsání na ≥ 2 vytvoří `direction2` s úhlem `angle1 + π/2` a roztečí `spacing1`, přepsání na 1 ho odebere (Pavel 2026-10-16, žádné další UI).
+
+  ```ts
+  // sketcher
+  export type PatternParam = 'count1' | 'spacing1' | 'angle1' | 'count2' | 'spacing2' | 'angle2' | 'count' | 'angle';
+  export interface SketchPatternDimensionView {
+    readonly pattern: SketchEntityId;
+    readonly param: PatternParam;
+    readonly format: 'count' | 'length' | 'angle';   // ui: „n×“, „… mm“, „…°“
+    readonly value: number;                          // úhel v radiánech; count2 bez směru 2 = 1
+    readonly label: Vec3;                            // střed popisku ve světě
+    readonly guide: readonly Vec3[];                 // lomená čára kóty (rozteč: úsečka, úhel: navzorkovaný oblouk), může být prázdná
+  }
+  // SketchState
+  readonly patternDimensions: readonly SketchPatternDimensionView[];   // vybraná pole v pořadí výběru
+  // SketchSession
+  /** Nový parametr pole jedním setParams bez řešiče (fronta jako toggleConstruction); neplatná hodnota → false a nic. */
+  setPatternParam(pattern: SketchEntityId, param: PatternParam, value: number): boolean;
+  ```
+
+  - **Poloha popisků** (kotva A, jednotkový směr `u = (cos α, sin α)`): rozteč – úsečka A → A + s·u, popisek v jejím středu; počet – u A + (n − 1)·s·u; úhel – oblouk kolem A o poloměru s/2 od osy x roviny k `u`, popisek uprostřed; směr 2 bez `direction2` – počet `1×` u A + s₁·(−u₁.y, u₁.x). Kruhové pole (střed C, `r = |A − C|`, při r ≈ 0 r = 10 mm): úhel – oblouk kolem C o poloměru r od A o celkový úhel, popisek uprostřed; počet – u obrazu A v poslední instanci.
+  - **Neplatné volání `setPatternParam`** (→ `false`, nic se nezapíše): parametr, který pole nemá (`count` u lineárního, `count1` u kruhového, cokoli u zrcadlení), `spacing2`/`angle2` bez `direction2`. `count2 = 1` bez `direction2` vrátí `true` a nezapíše nic. Popisky „během nástroje“ = popisky vybraného pole: nástroj nové pole po zápisu vybere.
+  - **`ui`** (`SketchPatternDimensions.vue`, čisté funkce `ui/sketch-pattern-dimensions.ts`): popisek je tlačítko, **jeden klik** otevře pole (pole kóty pole nemá výběr ani tah, na rozdíl od kót vazeb s dvojklikem); Enter i opuštění pole zapíše, Esc zruší, neplatný text pole jen zavře. Rozteč má na rozdíl od kót vazeb jednotku (`20 mm`), aby se parametr pole od kóty odlišil.
+  - **Platné hodnoty:** počet celé číslo 2 … `MAX_PATTERN_COUNT` (u `count2` i 1), rozteč > 0, úhel konečný (lineární libovolný, kruhový 0 < |úhel| ≤ 2π); `ui` zadává úhel ve stupních a převádí.
+- **Nástroje** (`sketcher`, skupina lišty `modify`; rodina `pattern`: `sketch.mirror`, `sketch.linearPattern`, `sketch.circularPattern` (zrcadlení v rodině od sloučení s M31 kvůli šířce lišty); Pavel 2026-10-16): **zdroje → Enter → osa nebo střed.**
+  - Zdroje = předvýběr bodů a křivek při aktivaci, nebo klikání (klik přepíná zdroj, výběr ukazuje zdroje); pole, kopie a jiné položky se do zdrojů nedostanou. Enter bez zdrojů nic.
+  - Zdroje jsou body a křivky **výběru session** v pořadí výběru (nástroj je nedrží zvlášť); aktivace výběr zúží na ně. Esc ve zdrojích zruší celý výběr. Ikony: `flip-horizontal` (zrcadlení), `grid-dots` (lineární), `rotate-360` (kruhové). Skupiny lišty: `history, select, draw, modify, constrain, finish, view`.
+  - Zrcadlení: po Enter klik na úsečku (ne zdroj) zapíše `mirror`. Kruhové pole: po Enter klik na bod skici (ne zdroj; počátek není entita) zapíše `circularPattern` s `count = 4`, `angle = 2π`. Lineární pole: Enter rovnou zapíše `linearPattern` s `direction1 = { angle: 0, count: 3, spacing }`, kde `spacing = 1,5 ×` šířka obálky definičních bodů zdrojů ve směru x (kružnice ± poloměr), nebo 10 mm při šířce ≤ 1e-9.
+  - Zápis = `addGeometry` s jedinou novou entitou (id z generátoru, bez vazeb); nové pole je pak vybrané (jeho vynesené kóty se ukážou) a nástroj začne znovu. Esc v kroku osy nebo středu vrátí ke zdrojům, ve zdrojích zruší výběr zdrojů, pak deaktivuje nástroj jako ostatní.
+- **Oblasti** (úkol 5, po sloučení M30): `regionCurves` přidá nekonstrukční kopie křivek z `patternCopies` jako `Curve2` s odvozeným id; jména ploch pak `face:side:<pole>:<index>.<zdroj>`. Pořadí: křivky dat, pak kopie v pořadí `patternCopies` (na jménech oblastí nezáleží, jsou to seřazená id). `pointsById` se kvůli cyklu `geometry → patterns → geometry` přesunul do `sketch/points.ts` (veřejné API beze změny).
+
 
 ## Testy
 

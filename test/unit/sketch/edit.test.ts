@@ -8,7 +8,7 @@ import {
   removeItems,
   toggleConstruction,
 } from '@/sketch/edit';
-import { isDimension } from '@/sketch/model';
+import { isDimension, isPattern } from '@/sketch/model';
 import type { SketchConstraint, SketchData, SketchEntity, SketchItemId } from '@/sketch/model';
 import { parseSketchData } from '@/sketch/parse';
 
@@ -409,7 +409,9 @@ describe('removeItems', () => {
 
 describe('toggleConstruction', () => {
   const construction = (data: SketchData) =>
-    data.entities.filter((x) => x.kind !== 'point' && x.construction === true).map((x) => x.id);
+    data.entities
+      .filter((x) => x.kind !== 'point' && !isPattern(x) && x.construction === true)
+      .map((x) => x.id);
 
   it('makes all selected curves construction when some are normal', () => {
     const once = toggleConstruction(DATA, ids('ab', 'k'));
@@ -572,7 +574,7 @@ describe('splines in editing helpers', () => {
   it('toggleConstruction switches splines like other curves', () => {
     const once = toggleConstruction(SPLINES, splineIds('s', 'f'));
     const construction = once.entities
-      .filter((x) => x.kind !== 'point' && x.construction === true)
+      .filter((x) => x.kind !== 'point' && !isPattern(x) && x.construction === true)
       .map((x) => x.id);
     expect(construction).toEqual(['s', 'f']);
     const back = toggleConstruction(once, splineIds('s', 'f'));
@@ -664,7 +666,10 @@ describe('infinite lines (xline, M31) in editing helpers', () => {
 
   it('curvePoints of an xline are its two points', () => {
     const [x] = xe('x');
-    expect(x === undefined || x.kind === 'point' ? [] : curvePoints(x)).toEqual(['a', 'c']);
+    expect(x === undefined || x.kind === 'point' || isPattern(x) ? [] : curvePoints(x)).toEqual([
+      'a',
+      'c',
+    ]);
   });
 
   it('removing a point of an xline removes the xline and its constraints', () => {
@@ -692,5 +697,192 @@ describe('infinite lines (xline, M31) in editing helpers', () => {
     const back = toggleConstruction(out, xids('x', 'ab'));
     expect(back.entities.find((v) => v.id === 'ab')).not.toHaveProperty('construction');
     expect(back.entities.find((v) => v.id === 'x')).toMatchObject({ construction: true });
+  });
+});
+
+/**
+ * M36: square a b c d with lines ab, bc, cd, da; an axis line xy (x [20, 0], y [20, 10]); a lone
+ * point z; mirror m of ab and z across xy; linear pattern lp of bc and cd; circular pattern cp of
+ * da around z.
+ */
+const PATTERNS = sketch(
+  [
+    ...DATA.entities.slice(0, 8),
+    { kind: 'point', id: 'x', x: 20, y: 0 },
+    { kind: 'point', id: 'y', x: 20, y: 10 },
+    { kind: 'line', id: 'xy', p1: 'x', p2: 'y', construction: true },
+    { kind: 'point', id: 'z', x: 5, y: 5 },
+    { kind: 'mirror', id: 'm', sources: ['ab', 'z'], axis: 'xy' },
+    {
+      kind: 'linearPattern',
+      id: 'lp',
+      sources: ['bc', 'cd'],
+      direction1: { angle: 0, count: 3, spacing: 12 },
+    },
+    {
+      kind: 'circularPattern',
+      id: 'cp',
+      sources: ['da'],
+      center: 'z',
+      count: 4,
+      angle: 2 * Math.PI,
+    },
+  ],
+  [
+    { kind: 'horizontal', id: 'h1', line: 'ab' },
+    { kind: 'symmetric', id: 's1', a: 'a', b: 'c', axis: 'xy' },
+  ],
+);
+
+const patternIds = (...xs: string[]): readonly SketchItemId[] =>
+  [...PATTERNS.entities, ...PATTERNS.constraints].map((x) => x.id).filter((id) => xs.includes(id));
+
+function patternEntity(id: string): SketchEntity {
+  const found = PATTERNS.entities.find((x) => x.id === id);
+  if (found === undefined) throw new Error(`no entity ${id}`);
+  return found;
+}
+
+function sourcesOf(data: SketchData, id: string): readonly string[] | undefined {
+  const found = data.entities.find((x) => x.id === id);
+  return found !== undefined && isPattern(found) ? found.sources : undefined;
+}
+
+describe('symmetric constraint (M36)', () => {
+  const sel = (...xs: string[]) => xs.map(patternEntity);
+
+  it('constraintFor takes two points and an axis line, in this order', () => {
+    expect(constraintFor('symmetric', sel('a', 'c', 'xy'))).toEqual({
+      kind: 'symmetric',
+      a: 'a',
+      b: 'c',
+      axis: 'xy',
+    });
+  });
+
+  it('constraintFor returns null for other selections', () => {
+    expect(constraintFor('symmetric', sel('a', 'c'))).toBeNull();
+    expect(constraintFor('symmetric', sel('xy', 'a', 'c'))).toBeNull();
+    expect(constraintFor('symmetric', sel('a', 'a', 'xy'))).toBeNull();
+    expect(constraintFor('symmetric', sel('a', 'c', 'z'))).toBeNull();
+    expect(constraintFor('symmetric', sel('a', 'c', 'xy', 'z'))).toBeNull();
+    // A point of the axis.
+    expect(constraintFor('symmetric', sel('x', 'c', 'xy'))).toBeNull();
+    expect(constraintFor('symmetric', sel('a', 'y', 'xy'))).toBeNull();
+    // Three entities fit no other constraint.
+    expect(constraintFor('coincident', sel('a', 'c', 'xy'))).toBeNull();
+  });
+
+  it('constraintTargets lists a, b and the axis', () => {
+    const symmetric = PATTERNS.constraints.find((c) => c.id === 's1');
+    expect(symmetric !== undefined && constraintTargets(symmetric)).toEqual(['a', 'c', 'xy']);
+  });
+
+  it('removeItems removes it with its axis or a point', () => {
+    expect(constraintIds(removeItems(PATTERNS, patternIds('xy')))).toEqual(['h1']);
+    expect(constraintIds(removeItems(PATTERNS, patternIds('c')))).toEqual(['h1']);
+  });
+});
+
+describe('editing helpers with patterns (M36)', () => {
+  it('constraintFor and dimensionFor return null when a pattern is selected', () => {
+    expect(constraintFor('horizontal', [patternEntity('m')])).toBeNull();
+    expect(constraintFor('fix', [patternEntity('cp')])).toBeNull();
+    expect(constraintFor('equal', [patternEntity('m'), patternEntity('lp')])).toBeNull();
+    expect(constraintFor('coincident', [patternEntity('z'), patternEntity('m')])).toBeNull();
+    expect(
+      constraintFor('symmetric', [patternEntity('a'), patternEntity('c'), patternEntity('m')]),
+    ).toBeNull();
+    expect(dimensionFor([patternEntity('lp')], PATTERNS)).toBeNull();
+    expect(dimensionFor([patternEntity('a'), patternEntity('cp')], PATTERNS)).toBeNull();
+  });
+
+  it('toggleConstruction skips patterns', () => {
+    const r = toggleConstruction(PATTERNS, patternIds('m', 'lp', 'ab'));
+    expect(r.entities.find((x) => x.id === 'm')).toBe(patternEntity('m'));
+    expect(r.entities.find((x) => x.id === 'lp')).toBe(patternEntity('lp'));
+    const ab = r.entities.find((x) => x.id === 'ab');
+    expect(ab?.kind === 'line' && ab.construction).toBe(true);
+    expect(toggleConstruction(PATTERNS, patternIds('m', 'cp'))).toBe(PATTERNS);
+  });
+});
+
+describe('removeItems with patterns (M36)', () => {
+  it('removing a pattern keeps its sources, axis and center', () => {
+    const r = removeItems(PATTERNS, patternIds('m', 'lp', 'cp'));
+    expect(entityIds(r)).toEqual(entityIds(PATTERNS).filter((x) => !['m', 'lp', 'cp'].includes(x)));
+    expect(constraintIds(r)).toEqual(['h1', 's1']);
+  });
+
+  it('removing a source drops it from the sources of the patterns', () => {
+    const r = removeItems(PATTERNS, patternIds('cd'));
+    expect(sourcesOf(r, 'lp')).toEqual(['bc']);
+    expect(Object.isFrozen(sourcesOf(r, 'lp'))).toBe(true);
+    // Other patterns stay the same objects.
+    expect(r.entities.find((x) => x.id === 'm')).toBe(patternEntity('m'));
+  });
+
+  it('removing the last source removes the pattern', () => {
+    const r = removeItems(PATTERNS, patternIds('da'));
+    expect(entityIds(r)).not.toContain('cp');
+  });
+
+  it('removing a point source drops it too', () => {
+    const r = removeItems(PATTERNS, patternIds('z'));
+    expect(sourcesOf(r, 'm')).toEqual(['ab']);
+    // z is the center of cp: cp goes as well.
+    expect(entityIds(r)).not.toContain('cp');
+  });
+
+  it('removing the axis or the center removes the pattern', () => {
+    const axis = removeItems(PATTERNS, patternIds('xy'));
+    expect(entityIds(axis)).not.toContain('m');
+    expect(entityIds(axis)).toContain('ab');
+    // A point of the axis removes the axis and so the mirror.
+    const point = removeItems(PATTERNS, patternIds('y'));
+    expect(entityIds(point)).not.toContain('xy');
+    expect(entityIds(point)).not.toContain('m');
+  });
+
+  it('cascades to a fixed point: a point removes its curves, they leave the sources, empty patterns go', () => {
+    // a removes ab and da; ab is the only curve of m (z stays its source), da the only source of cp.
+    const r = removeItems(PATTERNS, patternIds('a'));
+    expect(sourcesOf(r, 'm')).toEqual(['z']);
+    expect(entityIds(r)).not.toContain('cp');
+    expect(sourcesOf(r, 'lp')).toEqual(['bc', 'cd']);
+  });
+
+  it('a point used as a center counts as used', () => {
+    // A circle around z removed: z stays, it is the center of cp.
+    const data = sketch(
+      [...PATTERNS.entities, { kind: 'circle', id: 'k', center: 'z', radius: 1 }],
+      [],
+    );
+    const withoutM = removeItems(data, [
+      ...patternIds('m'),
+      ...data.entities.filter((x) => x.id === 'k').map((x) => x.id),
+    ]);
+    expect(entityIds(withoutM)).toContain('z');
+    expect(entityIds(withoutM)).toContain('cp');
+  });
+
+  it('removes a center point when its pattern goes in the same cascade', () => {
+    // o is used only by circle k and as the center of pattern po of k: removing k empties po,
+    // so o is an orphan of k and goes too.
+    const data = sketch(
+      [
+        { kind: 'point', id: 'o', x: 0, y: 0 },
+        { kind: 'point', id: 'p', x: 3, y: 0 },
+        { kind: 'circle', id: 'k', center: 'p', radius: 1 },
+        { kind: 'line', id: 'op', p1: 'o', p2: 'p' },
+        { kind: 'circularPattern', id: 'po', sources: ['k'], center: 'o', count: 2, angle: 1 },
+      ],
+      [],
+    );
+    const r = removeItems(
+      data,
+      data.entities.filter((x) => x.id === 'op' || x.id === 'k').map((x) => x.id),
+    );
+    expect(entityIds(r)).toEqual([]);
   });
 });

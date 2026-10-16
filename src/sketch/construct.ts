@@ -1,5 +1,6 @@
 import type { Vec2 } from '@/core';
-import { curve2, pointsById } from './geometry';
+import { curve2 } from './geometry';
+import { pointsById } from './points';
 import type { Curve2 } from './geometry';
 import type {
   SketchArc,
