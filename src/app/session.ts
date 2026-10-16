@@ -351,8 +351,9 @@ function wireSession(
   const sketches = createSketchEditor({
     features,
     solver: deps.solver,
-    // M30: the geometry of the sketch in the kernel; empty until M33.
-    geometry: createSketchGeometry(),
+    // M30, M33: the geometry of the sketch in the kernel; always the live kernel of the
+    // supervisor (declared below, read only when the sketcher calls the port).
+    geometry: createSketchGeometry(() => supervisor.kernel()),
     text: deps.text,
     viewport,
     // Origin planes and planar faces of the last regeneration (M14); before the first one

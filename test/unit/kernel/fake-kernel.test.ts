@@ -644,3 +644,56 @@ describe('FakeKernel profileRegions (M30)', () => {
     expect(regions[0]?.area).toBeGreaterThan(0);
   });
 });
+
+describe('FakeKernel curveIntersections and curveSegment (M33)', () => {
+  const P = { kind: 'line', from: [0, 0], to: [10, 0], id: 'p' } as const;
+  const Q = { kind: 'line', from: [4, -2], to: [4, 8], id: 'q' } as const;
+
+  it('counts the calls and an injected failure wins', async () => {
+    const kernel = createFakeKernel();
+    kernel.failNext('curveIntersections', 'operation-failed');
+    kernel.failNext('curveSegment', 'operation-failed');
+    const failedHits = await rejection(kernel.curveIntersections({ curves: [P, Q] }));
+    expect(kernelErrorCode(failedHits)).toBe('operation-failed');
+    const failedPiece = await rejection(kernel.curveSegment({ curve: P, from: 0, to: 1 }));
+    expect(kernelErrorCode(failedPiece)).toBe('operation-failed');
+    expect(await kernel.curveIntersections({ curves: [P, Q] })).toHaveLength(1);
+    expect(await kernel.curveSegment({ curve: P, from: 0, to: 0.5 })).toEqual({
+      kind: 'line',
+      from: [0, 0],
+      to: [5, 0],
+      id: 'p',
+    });
+    expect(kernel.callCount('curveIntersections')).toBe(2);
+    expect(kernel.callCount('curveSegment')).toBe(2);
+  });
+
+  it('cuts a spline at a knot of full multiplicity without inserting it', async () => {
+    // A quadratic spline of two Bézier pieces joined at 0.5 (multiplicity 2 = degree).
+    const sp = {
+      kind: 'bspline',
+      degree: 2,
+      poles: [
+        [0, 0],
+        [1, 2],
+        [2, 0],
+        [3, -2],
+        [4, 0],
+      ],
+      knots: [0, 0, 0, 0.5, 0.5, 1, 1, 1],
+      id: 'sp',
+    } as const;
+    const kernel = createFakeKernel();
+    expect(await kernel.curveSegment({ curve: sp, from: 0.5, to: 1 })).toEqual({
+      kind: 'bspline',
+      degree: 2,
+      poles: [
+        [2, 0],
+        [3, -2],
+        [4, 0],
+      ],
+      knots: [0, 0, 0, 1, 1, 1],
+      id: 'sp',
+    });
+  });
+});

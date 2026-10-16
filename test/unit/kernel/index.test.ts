@@ -8,6 +8,7 @@ describe('kernel public API', () => {
       'createKernelError',
       'isRigidMotion',
       'kernelErrorCode',
+      'parseCurveSegmentInput',
       'parseProfileRegionsInput',
       'validateFaceInput',
       'validateMeshData',

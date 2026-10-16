@@ -102,9 +102,9 @@ test('the sketcher overflows too: the menu "…" has the same states and runs th
   await expect(menu).toBeHidden();
   await expect(panel).toBeVisible();
 
-  // A wide window: the same states on the buttons, no "…". Since M31 and M36 the sketcher needs
-  // about 1450 px; at 1280 px only Dokončit and Zobrazit go to the menu (spec 11).
-  await page.setViewportSize({ width: 1600, height: 720 });
+  // A wide window: the same states on the buttons, no "…". Since M31, M33 and M36 the sketcher
+  // needs about 1520 px; at 1280 px only Dokončit and Zobrazit go to the menu (spec 11).
+  await page.setViewportSize({ width: 1800, height: 720 });
   await expect(more).toBeHidden();
   await expect(toolbarButton(page, 'Kóta')).toBeEnabled();
   await expect(toolbarButton(page, 'Vodorovná')).toBeVisible();

@@ -1,13 +1,29 @@
-// The SketchGeometry port of the sketcher over the kernel (spec 12 "Geometrie skici v jádře (M30)",
-// ADR 0028): app owns the kernel client, so it implements the port and hands it to the sketcher
-// like the ConstraintSolver.
+// The SketchGeometry port of the sketcher over the kernel (spec 12 "Geometrie skici v jádře (M30)"
+// and "Trim, extend, split (M33)", spec 06 "Stav po M33", ADR 0028): app owns the kernel client,
+// so it implements the port and hands it to the sketcher like the ConstraintSolver.
 
+import type { GeometryKernel } from '@/kernel';
 import type { SketchGeometry } from '@/sketch';
 
 /**
- * Empty in M30: the port has no methods yet. M33 (intersections) and M35 (offset) add them here
- * over the live kernel of the supervisor; the composition root already hands the port on.
+ * The port over SketchOps.curveIntersections and curveSegment. `kernel` is read on every call,
+ * so after a restart the new kernel answers; null (no kernel running) rejects. Curve2 and
+ * ProfileCurve, CurveHit and CurveIntersection have the same shape (ADR 0017), so the data pass
+ * through without a conversion (the assignments below check it). The kernel checks the input
+ * (a curve without an id is an error of the caller) and every error is a rejected Promise.
  */
-export function createSketchGeometry(): SketchGeometry {
-  return Object.freeze({});
+export function createSketchGeometry(kernel: () => GeometryKernel | null): SketchGeometry {
+  const live = (): GeometryKernel => {
+    const k = kernel();
+    if (k === null) throw new Error('No geometry kernel is running');
+    return k;
+  };
+  return Object.freeze({
+    async intersections(curves) {
+      return live().curveIntersections({ curves });
+    },
+    async segment(curve, from, to) {
+      return live().curveSegment({ curve, from, to });
+    },
+  } satisfies SketchGeometry);
 }

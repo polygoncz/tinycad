@@ -535,6 +535,8 @@ function rayHitsSegment(p: Vec2, a: Vec2, b: Vec2): boolean {
 }
 
 // --- Intersections for the crossing check ---------------------------------------------------
+// lineLine, lineRound, roundRound and onRound serve curveIntersections of the FakeKernel too
+// (fake-curves.ts, M33).
 
 /** Common points of two shapes, or 'overlap' when they share a piece of positive length. */
 function intersect(a: Shape, b: Shape, tol: number): readonly Vec2[] | 'overlap' {
@@ -608,7 +610,7 @@ function segmentsOf(s: Extract<Shape, { kind: 'polyline' }>): Extract<Shape, { k
 }
 
 /** A circle or an arc as center, radius and angular range (a circle covers the full turn). */
-interface Round {
+export interface Round {
   readonly c: Vec2;
   readonly r: number;
   readonly start: number;
@@ -623,7 +625,7 @@ function roundOf(s: Extract<Shape, { kind: 'arc' | 'circle' }>): Round {
     : { c: s.c, r: s.r, start: s.start, sweep: s.sweep, full: false, ends: s.ends };
 }
 
-function lineLine(
+export function lineLine(
   a0: Vec2,
   a1: Vec2,
   b0: Vec2,
@@ -654,8 +656,8 @@ function lineLine(
   return t >= -e1 && t <= 1 + e1 && u >= -e2 && u <= 1 + e2 ? [lerp(a0, d1, t)] : [];
 }
 
-function lineRound(
-  line: Extract<Shape, { kind: 'line' }>,
+export function lineRound(
+  line: { readonly a: Vec2; readonly b: Vec2 },
   round: Round,
   tol: number,
 ): readonly Vec2[] {
@@ -679,7 +681,7 @@ function lineRound(
     .filter((p) => onRound(round, p, tol));
 }
 
-function roundRound(a: Round, b: Round, tol: number): readonly Vec2[] | 'overlap' {
+export function roundRound(a: Round, b: Round, tol: number): readonly Vec2[] | 'overlap' {
   const d = dist(a.c, b.c);
   if (d <= tol) {
     if (Math.abs(a.r - b.r) > tol) return [];
@@ -721,7 +723,7 @@ function arcsOverlap(a: Round, b: Round, tol: number): boolean {
 }
 
 /** The point (already on the circle) lies within the arc's angular range, with tolerance. */
-function onRound(round: Round, p: Vec2, tol: number): boolean {
+export function onRound(round: Round, p: Vec2, tol: number): boolean {
   if (round.full) return true;
   const eps = tol / round.r;
   const diff = mod2pi(angleOf(sub(p, round.c)) - round.start);

@@ -199,7 +199,7 @@ Stav, který UI zobrazuje, vystavují prezentační modely jako `Observable<T>` 
 | `ActionRegistry` | `actions: Observable<readonly ActionState[]>` | `run` |
 | `SelectionModel` | `items: Observable<readonly SelectionItem[]>` | `set`, `toggle`, `clear` |
 | `SketchEditor` (M12) | `current: Observable<SketchSession \| null>`, `mode: Observable<Mode>` | `create`, `edit` |
-| `SketchSession` (M12) | `state: Observable<SketchState>` (entity, vazby, stupně volnosti, výběr, řádky vazeb) | `addGeometry`, `addConstraint`, `setDimension`, `remove`, `drag`, `select`, `finish`, `cancel`; M28 `previewDimension`, `moveDimension`, `endMoveDimension` |
+| `SketchSession` (M12) | `state: Observable<SketchState>` (entity, vazby, stupně volnosti, výběr, řádky vazeb) | `addGeometry`, `addConstraint`, `setDimension`, `remove`, `drag`, `select`, `finish`, `cancel`; M28 `previewDimension`, `moveDimension`, `endMoveDimension`; M33 `rewrite`, `hits`, `geometry` |
 | `HistoryModel` (M15) | `state: Observable<HistoryState>` (řádky logu, celkový počet, počet starších) | – (jen čtení) |
 | `FileActions` (M15) | `status: Observable<FileStatus>` | `dismiss` (akce exportu jsou v `ActionRegistry`) |
 | `ToolbarModel` (M20) | `groups: Observable<readonly ToolbarGroup[]>` (nástroje a akce aktuálního režimu po skupinách, povolení, `active`, `menuOnly`) | `run(item)` |
@@ -1026,6 +1026,9 @@ export interface SketchSession {
   cancelPlanePick(): boolean;                              // M21: true = výběr běžel a skončil
   readonly state: Observable<SketchState>;
   addGeometry(add: SketchData, opts?: { readonly required?: ReadonlySet<SketchConstraintId> }): Promise<boolean>; // nové entity a automatické vazby (nástroje); true = zapsáno; M26: required = vazby, které se při konfliktu nevynechají
+  rewrite(next: SketchData, added: ReadonlySet<SketchConstraintId>): Promise<boolean>; // M33: celá nová data (trim, extend, split); při konfliktu znovu bez added; jeden setParams
+  hits(): readonly CurveHit[] | null;                      // M33: průsečíky křivek k aktuálním datům (null = ještě nespočítané nebo chyba portu); 12-skicar, Trim, extend, split
+  readonly geometry: SketchGeometry;                       // M33: port geometrie z jádra pro nástroje (kusy splinu, průsečíky extend)
   /** M26: náhled vazeb, které by klik kreslicího nástroje zapsal (SketchState.inference), a vodítka snapperu v overlay 'sketch-guides'; null = smazat. */
   setInferencePreview(p: { readonly at: Vec2; readonly kinds: readonly GlyphKind[]; readonly guides: readonly SnapGuide[] } | null): void;
   addConstraint(c: SketchConstraint): Promise<boolean>;    // akce vazeb, kóta

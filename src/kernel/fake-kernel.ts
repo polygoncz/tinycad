@@ -2,10 +2,13 @@ import { bspline, mat4, plane, type Mat4, type Plane, type Vec2, type Vec3 } fro
 import { createKernelError } from './errors';
 import type { KernelErrorCode } from './errors';
 import type { Axis, BooleanOp, GeometryKernel } from './kernel';
+import { computeCurveIntersections, computeCurveSegment } from './fake-curves';
 import { computeProfileRegions } from './fake-regions';
 import {
+  parseCurveSegmentInput,
   parseFaceInput,
   parseProfileRegionsInput,
+  type CurveIntersection,
   type ProfileCurve,
   type ProfileLoop,
   type ProfileRegions,
@@ -254,6 +257,43 @@ class FakeKernelImpl implements FakeKernel {
           throw createKernelError('invalid-input', `profileRegions: ${parsed.error.join('; ')}`);
         }
         return computeProfileRegions(parsed.value);
+      },
+    );
+  }
+
+  curveIntersections(p: {
+    readonly curves: readonly ProfileCurve[];
+  }): Promise<readonly CurveIntersection[]> {
+    // The same input check as profileRegions (spec 06 "Stav po M33"): a fresh copy, no throw.
+    return this.call(
+      'curveIntersections',
+      () => parseProfileRegionsInput(p),
+      (parsed) => {
+        if (!parsed.ok) {
+          throw createKernelError(
+            'invalid-input',
+            `curveIntersections: ${parsed.error.join('; ')}`,
+          );
+        }
+        return computeCurveIntersections(parsed.value);
+      },
+    );
+  }
+
+  curveSegment(p: {
+    readonly curve: ProfileCurve;
+    readonly from: number;
+    readonly to: number;
+  }): Promise<ProfileCurve> {
+    // parseCurveSegmentInput reads the input synchronously into a fresh copy and never throws.
+    return this.call(
+      'curveSegment',
+      () => parseCurveSegmentInput(p),
+      (parsed) => {
+        if (!parsed.ok) {
+          throw createKernelError('invalid-input', `curveSegment: ${parsed.error.join('; ')}`);
+        }
+        return computeCurveSegment(parsed.value);
       },
     );
   }

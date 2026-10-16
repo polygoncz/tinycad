@@ -10,6 +10,7 @@ import {
   type Axis,
   type BooleanOp,
   type BoundingBox,
+  type CurveIntersection,
   type GeometryKernel,
   type MeshData,
   type MeshQuality,
@@ -20,9 +21,11 @@ import {
   type ShapeResult,
   type SubShapeIndex,
   type TopologySummary,
+  parseCurveSegmentInput,
   parseProfileRegionsInput,
   validateFaceInput,
 } from '@/kernel';
+import { curveIntersectionsOf, curveSegmentOf } from './curves';
 import { dressupResult, type DressupKind } from './dressup';
 import { copyFaceInput, faceResult } from './face';
 import { collectHistory } from './history';
@@ -195,6 +198,41 @@ export class OcctKernelImpl implements GeometryKernel {
           throw createKernelError('invalid-input', `profileRegions: ${parsed.error.join('; ')}`);
         }
         return profileRegionsOf(this.oc, parsed.value);
+      },
+    );
+  }
+
+  curveIntersections(p: {
+    readonly curves: readonly ProfileCurve[];
+  }): Promise<readonly CurveIntersection[]> {
+    // The same input check as profileRegions (spec 06 "Stav po M33"): a fresh copy, no throw.
+    return this.run(
+      () => parseProfileRegionsInput(p),
+      (parsed) => {
+        if (!parsed.ok) {
+          throw createKernelError(
+            'invalid-input',
+            `curveIntersections: ${parsed.error.join('; ')}`,
+          );
+        }
+        return curveIntersectionsOf(this.oc, parsed.value);
+      },
+    );
+  }
+
+  curveSegment(p: {
+    readonly curve: ProfileCurve;
+    readonly from: number;
+    readonly to: number;
+  }): Promise<ProfileCurve> {
+    // parseCurveSegmentInput reads the input synchronously into a fresh copy and never throws.
+    return this.run(
+      () => parseCurveSegmentInput(p),
+      (parsed) => {
+        if (!parsed.ok) {
+          throw createKernelError('invalid-input', `curveSegment: ${parsed.error.join('; ')}`);
+        }
+        return curveSegmentOf(this.oc, parsed.value);
       },
     );
   }

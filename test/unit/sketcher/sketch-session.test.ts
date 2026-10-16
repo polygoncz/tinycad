@@ -13,10 +13,13 @@ import type { Operation } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE, parseSketchData, patternCopies } from '@/sketch';
 import type {
+  Curve2,
+  CurveHit,
   SketchConstraintDraft,
   SketchConstraintId,
   SketchData,
   SketchEntityId,
+  SketchGeometry,
   TextOutliner,
 } from '@/sketch';
 import {
@@ -82,9 +85,13 @@ const SKETCH = data(
 /** An open session on the sketch 's1' (on `plane`), after the first solve. */
 async function editing(
   plane: Plane = XY,
-  sketch: SketchData = SKETCH,
-  text: TextOutliner = createFakeTextOutliner(),
+  opts: {
+    readonly sketch?: SketchData;
+    readonly geometry?: SketchGeometry;
+    readonly text?: TextOutliner;
+  } = {},
 ) {
+  const sketch = opts.sketch ?? SKETCH;
   const schemas = createFeatureSchemaRegistry();
   schemas.register(SKETCH_SCHEMA);
   const feature = aFeature<Record<string, unknown>>({
@@ -110,8 +117,8 @@ async function editing(
   const sketches = createSketchEditor({
     features: editor,
     solver,
-    geometry: createFakeSketchGeometry(),
-    text,
+    geometry: opts.geometry ?? createFakeSketchGeometry(),
+    text: opts.text ?? createFakeTextOutliner(),
     viewport,
     resolvePlane: () => plane,
     planeOfSketch: () => plane,
@@ -426,6 +433,318 @@ describe('SketchSession.setNumericInput (M32)', () => {
   });
 });
 
+// ---- M33: the intersections of the curves, the crossing points and rewrite ----
+
+/** A call of SketchGeometry.intersections the test answers by hand. */
+interface IntersectionsCall {
+  readonly curves: readonly Curve2[];
+  readonly resolve: (hits: readonly CurveHit[]) => void;
+  readonly reject: (error: Error) => void;
+}
+
+/** A SketchGeometry whose intersections wait for the test; segment is not used. */
+function controlledGeometry(): { geometry: SketchGeometry; calls: IntersectionsCall[] } {
+  const calls: IntersectionsCall[] = [];
+  const geometry: SketchGeometry = {
+    intersections: (curves) =>
+      new Promise((resolve, reject) => {
+        calls.push({ curves, resolve, reject });
+      }),
+    segment: () => Promise.reject(new Error('segment is not used here')),
+  };
+  return { geometry, calls };
+}
+
+function hit(
+  a: string,
+  b: string,
+  point: readonly [number, number],
+  extra: Partial<CurveHit> = {},
+): CurveHit {
+  return { a, b, point, ta: 0, tb: 0, ...extra };
+}
+
+/** The shapes of the crossing overlay, or undefined without it. */
+function crossings(viewport: FakeViewport): unknown {
+  return viewport.overlayShapes.get('sketch-crossings');
+}
+
+/** The crossing overlay with the points in plane coordinates. */
+function warningPoints(plane: Plane, points: readonly (readonly [number, number])[]): unknown {
+  return [
+    { kind: 'points', points: points.map((p) => planeMath.toWorld(plane, p)), style: 'warning' },
+  ];
+}
+
+/**
+ * The line ab (0,0)–(10,0), the line cd (5,−5)–(5,5) crossing it in (5,0), the line be from the
+ * end b of ab to (10,5) and the construction line fg (2,−1)–(2,1) crossing ab in (2,0).
+ */
+const CROSSED = data([
+  { kind: 'point', id: 'a', x: 0, y: 0 },
+  { kind: 'point', id: 'b', x: 10, y: 0 },
+  { kind: 'line', id: 'ab', p1: 'a', p2: 'b' },
+  { kind: 'point', id: 'c', x: 5, y: -5 },
+  { kind: 'point', id: 'd', x: 5, y: 5 },
+  { kind: 'line', id: 'cd', p1: 'c', p2: 'd' },
+  { kind: 'point', id: 'e', x: 10, y: 5 },
+  { kind: 'line', id: 'be', p1: 'b', p2: 'e' },
+  { kind: 'point', id: 'f', x: 2, y: -1 },
+  { kind: 'point', id: 'g', x: 2, y: 1 },
+  { kind: 'line', id: 'fg', p1: 'f', p2: 'g', construction: true },
+]);
+
+describe('SketchSession.hits (M33)', () => {
+  it('asks for the intersections of all curves on opening, construction ones too', async () => {
+    const { geometry, calls } = controlledGeometry();
+    await editing(XY, { sketch: CROSSED, geometry });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.curves.map((c) => c.id)).toEqual(['ab', 'cd', 'be', 'fg']);
+    expect(calls[0]?.curves[0]).toEqual({ kind: 'line', from: [0, 0], to: [10, 0], id: 'ab' });
+  });
+
+  it('is null before the answer, then the answer for the current data', async () => {
+    const { geometry, calls } = controlledGeometry();
+    const { session } = await editing(XY, { sketch: CROSSED, geometry });
+    expect(session.hits()).toBeNull();
+
+    const hits = [hit('ab', 'cd', [5, 0])];
+    calls[0]?.resolve(hits);
+    await settle();
+
+    expect(session.hits()).toEqual(hits);
+  });
+
+  it('a write of the entities asks again; until the answer hits() is null', async () => {
+    const { geometry, calls } = controlledGeometry();
+    const { session } = await editing(XY, { sketch: CROSSED, geometry });
+    calls[0]?.resolve([hit('ab', 'cd', [5, 0])]);
+    await settle();
+
+    expect(await session.remove([eid('fg')])).toBe(true);
+
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.curves.map((c) => c.id)).toEqual(['ab', 'cd', 'be']);
+    expect(session.hits()).toBeNull();
+    calls[1]?.resolve([]);
+    await settle();
+    expect(session.hits()).toEqual([]);
+  });
+
+  it('the last request wins: an older answer is dropped', async () => {
+    const { geometry, calls } = controlledGeometry();
+    const { session } = await editing(XY, { sketch: CROSSED, geometry });
+    await session.remove([eid('fg')]);
+    const newer = [hit('ab', 'cd', [5, 0])];
+
+    calls[0]?.resolve([hit('ab', 'fg', [2, 0])]);
+    await settle();
+    expect(session.hits()).toBeNull();
+
+    calls[1]?.resolve(newer);
+    await settle();
+    expect(session.hits()).toEqual(newer);
+
+    // Also when the older answer comes after the newer one.
+    await session.remove([eid('be')]);
+    await session.remove([eid('cd')]);
+    calls[3]?.resolve([]);
+    calls[2]?.resolve(newer);
+    await settle();
+    expect(session.hits()).toEqual([]);
+  });
+
+  it('a change of only the constraints does not ask again', async () => {
+    const { geometry, calls } = controlledGeometry();
+    const { session } = await editing(XY, { geometry });
+
+    expect(await session.setDimension(cid('d'), 12)).toBe(true);
+
+    expect(calls).toHaveLength(1);
+  });
+
+  it('an error of the port gives null', async () => {
+    const { geometry, calls } = controlledGeometry();
+    const { session } = await editing(XY, { sketch: CROSSED, geometry });
+
+    calls[0]?.reject(new Error('kernel down'));
+    await settle();
+
+    expect(session.hits()).toBeNull();
+  });
+});
+
+describe('SketchSession crossing points (M33, Q093)', () => {
+  it('marks the crossings of non-construction curves, not their shared end points', async () => {
+    const { viewport } = await editing(XZ, { sketch: CROSSED });
+
+    expect(crossings(viewport)).toEqual(warningPoints(XZ, [[5, 0]]));
+  });
+
+  it('marks an end point of one curve on the inside of another (not shared by both)', async () => {
+    const { geometry, calls } = controlledGeometry();
+    const { viewport } = await editing(XY, { sketch: CROSSED, geometry });
+
+    // A hand-made answer: cd passes through the end b of ab, which is no end of cd.
+    calls[0]?.resolve([hit('ab', 'be', [10, 0]), hit('ab', 'cd', [10, 0])]);
+    await settle();
+
+    expect(crossings(viewport)).toEqual(warningPoints(XY, [[10, 0]]));
+  });
+
+  it('marks the ends of overlaps, also in a shared end point', async () => {
+    const { geometry, calls } = controlledGeometry();
+    const { viewport } = await editing(XY, { sketch: CROSSED, geometry });
+
+    calls[0]?.resolve([hit('ab', 'be', [10, 0], { overlap: true })]);
+    await settle();
+
+    expect(crossings(viewport)).toEqual(warningPoints(XY, [[10, 0]]));
+  });
+
+  it('marks a self-intersection of a spline', async () => {
+    const sketch = data([
+      { kind: 'point', id: 'p0', x: 0, y: 0 },
+      { kind: 'point', id: 'p1', x: 10, y: 10 },
+      { kind: 'point', id: 'p2', x: 10, y: 0 },
+      { kind: 'point', id: 'p3', x: 0, y: 10 },
+      {
+        kind: 'bspline',
+        id: 's',
+        degree: 3,
+        poles: ['p0', 'p1', 'p2', 'p3'],
+        knots: [0, 0, 0, 0, 1, 1, 1, 1],
+      },
+    ]);
+    const { geometry, calls } = controlledGeometry();
+    const { viewport } = await editing(XY, { sketch, geometry });
+
+    calls[0]?.resolve([hit('s', 's', [5, 4], { ta: 0.3, tb: 0.7 })]);
+    await settle();
+
+    expect(crossings(viewport)).toEqual(warningPoints(XY, [[5, 4]]));
+  });
+
+  it('without crossings there is no overlay; a write that removes them removes it', async () => {
+    const { session, viewport } = await editing(XY, { sketch: CROSSED });
+    expect(crossings(viewport)).toBeDefined();
+
+    await session.remove([eid('cd')]);
+    await settle();
+
+    expect(crossings(viewport)).toBeUndefined();
+  });
+
+  it('an error of the port removes the overlay', async () => {
+    const { geometry, calls } = controlledGeometry();
+    const { session, viewport } = await editing(XY, { sketch: CROSSED, geometry });
+    calls[0]?.resolve([hit('ab', 'cd', [5, 0])]);
+    await settle();
+    expect(crossings(viewport)).toBeDefined();
+
+    await session.remove([eid('fg')]);
+    calls[1]?.reject(new Error('kernel down'));
+    await settle();
+
+    expect(crossings(viewport)).toBeUndefined();
+  });
+
+  it('closing the session removes the overlay', async () => {
+    const { session, viewport } = await editing(XY, { sketch: CROSSED });
+    expect(crossings(viewport)).toBeDefined();
+
+    session.cancel();
+
+    expect(crossings(viewport)).toBeUndefined();
+  });
+
+  it('an answer after closing draws nothing', async () => {
+    const { geometry, calls } = controlledGeometry();
+    const { session, viewport } = await editing(XY, { sketch: CROSSED, geometry });
+
+    session.cancel();
+    calls[0]?.resolve([hit('ab', 'cd', [5, 0])]);
+    await settle();
+
+    expect(crossings(viewport)).toBeUndefined();
+  });
+});
+
+describe('SketchSession.rewrite (M33)', () => {
+  /** SKETCH with a new point n and the added constraint x (vertical pq). */
+  const NEXT = data(
+    [...SKETCH.entities, { kind: 'point', id: 'n', x: 3, y: 3 }],
+    [...SKETCH.constraints, { kind: 'vertical', id: 'x', line: 'pq' }],
+  );
+  const ADDED: ReadonlySet<SketchConstraintId> = new Set([cid('x')]);
+
+  it('solves the new data and writes it in one setParams', async () => {
+    const { session, solver, applied, doc } = await editing();
+    const calls = solver.calls.length;
+
+    expect(await session.rewrite(NEXT, ADDED)).toBe(true);
+
+    expect(solver.calls.slice(calls)).toEqual([NEXT]);
+    expect(applied.map((op) => op.type)).toEqual(['feature.setParams']);
+    expect(docConstraints(doc)).toEqual(NEXT.constraints);
+  });
+
+  it('on a conflict solves again without the added constraints', async () => {
+    const { session, solver, applied, doc } = await editing();
+    const calls = solver.calls.length;
+    solver.next({ status: 'conflict', conflicting: [cid('x')] });
+
+    expect(await session.rewrite(NEXT, ADDED)).toBe(true);
+
+    expect(solver.calls.slice(calls).map((c) => c.constraints.map((k) => k.id))).toEqual([
+      ['d', 'h', 'x'],
+      ['d', 'h'],
+    ]);
+    expect(applied).toHaveLength(1);
+    expect(docConstraints(doc)).toEqual(SKETCH.constraints);
+  });
+
+  it('an added constraint the solver finds redundant is left out', async () => {
+    const { session, solver, doc } = await editing();
+    solver.next({ redundant: [cid('x')] });
+
+    expect(await session.rewrite(NEXT, ADDED)).toBe(true);
+
+    expect(docConstraints(doc)).toEqual(SKETCH.constraints);
+  });
+
+  it('a conflict without the added constraints too writes nothing and reports it', async () => {
+    const { session, solver, applied } = await editing();
+    solver.next({ status: 'conflict', conflicting: [cid('x')] });
+    solver.next({ status: 'conflict', conflicting: [cid('d')] });
+
+    expect(await session.rewrite(NEXT, ADDED)).toBe(false);
+
+    expect(applied).toEqual([]);
+    expect(session.state.get().message).toEqual({ key: 'sketch.conflict' });
+  });
+
+  it('a failed solve writes nothing and reports it', async () => {
+    const { session, solver, applied } = await editing();
+    solver.next({ status: 'failed' });
+
+    expect(await session.rewrite(NEXT, ADDED)).toBe(false);
+
+    expect(applied).toEqual([]);
+    expect(session.state.get().message).toEqual({ key: 'sketch.solverFailed' });
+  });
+
+  it('is busy until written', async () => {
+    const { session } = await editing();
+
+    const written = session.rewrite(NEXT, ADDED);
+    expect(session.state.get().busy).toBe(true);
+    await written;
+    expect(session.state.get().busy).toBe(false);
+  });
+});
+
 describe('SketchSession.setConstructionMode (M31)', () => {
   it('is off on opening', async () => {
     const { session } = await editing();
@@ -486,7 +805,7 @@ describe('SketchSession pattern copies (M36)', () => {
   }
 
   it('the copies follow a dragged source point in the state and in the document', async () => {
-    const { session, doc } = await editing(XY, PATTERNED);
+    const { session, doc } = await editing(XY, { sketch: PATTERNED });
     expect(copy(session.state.get().entities, 'lp:1.q')).toMatchObject({ x: 10, y: 5 });
 
     session.drag(eid('q'), [8, 2]);
@@ -524,7 +843,7 @@ describe('SketchSession pattern dimensions (M36)', () => {
   }
 
   it('patternDimensions shows only the selected patterns, in selection order', async () => {
-    const { session } = await editing(XY, PATTERNS);
+    const { session } = await editing(XY, { sketch: PATTERNS });
     expect(session.state.get().patternDimensions).toEqual([]);
 
     session.select(eid('pq'));
@@ -544,7 +863,7 @@ describe('SketchSession pattern dimensions (M36)', () => {
   });
 
   it('setPatternParam writes the parameter in one setParams without the solver', async () => {
-    const { session, solver, applied, doc } = await editing(XY, PATTERNS);
+    const { session, solver, applied, doc } = await editing(XY, { sketch: PATTERNS });
     const calls = solver.calls.length;
 
     expect(session.setPatternParam(eid('lp'), 'count1', 4)).toBe(true);
@@ -563,7 +882,7 @@ describe('SketchSession pattern dimensions (M36)', () => {
   });
 
   it('each parameter of a linear and of a circular pattern', async () => {
-    const { session, doc } = await editing(XY, PATTERNS);
+    const { session, doc } = await editing(XY, { sketch: PATTERNS });
 
     expect(session.setPatternParam(eid('lp'), 'spacing1', 7.5)).toBe(true);
     expect(session.setPatternParam(eid('lp'), 'angle1', -1)).toBe(true);
@@ -578,7 +897,7 @@ describe('SketchSession pattern dimensions (M36)', () => {
   });
 
   it('count2 ≥ 2 adds the second direction across direction 1 at spacing 1; 1 removes it', async () => {
-    const { session, doc } = await editing(XY, PATTERNS);
+    const { session, doc } = await editing(XY, { sketch: PATTERNS });
 
     expect(session.setPatternParam(eid('lp'), 'count2', 3)).toBe(true);
     await settle();
@@ -608,7 +927,7 @@ describe('SketchSession pattern dimensions (M36)', () => {
   });
 
   it('an invalid value, an unknown id, a mirror or a foreign param → false and nothing', async () => {
-    const { session, applied } = await editing(XY, PATTERNS);
+    const { session, applied } = await editing(XY, { sketch: PATTERNS });
     const before = session.state.get();
     const refused: readonly (readonly [
       string,
@@ -649,7 +968,7 @@ describe('SketchSession pattern dimensions (M36)', () => {
   });
 
   it('behind a pending solve the write waits its turn and survives it', async () => {
-    const { session, solver, doc } = await editing(XY, PATTERNS);
+    const { session, solver, doc } = await editing(XY, { sketch: PATTERNS });
     solver.hold();
     void session.setDimension(cid('nope'), 1);
     void session.remove([eid('m')]);
@@ -675,7 +994,7 @@ describe('SketchSession.setTextParams (M37)', () => {
   }
 
   it('writes the string with new contours in one setParams without the solver', async () => {
-    const { session, solver, applied, doc } = await editing(XY, TEXT);
+    const { session, solver, applied, doc } = await editing(XY, { sketch: TEXT });
     const calls = solver.calls.length;
 
     await expect(session.setTextParams(eid('t'), { text: 'xyz' })).resolves.toBe(true);
@@ -696,7 +1015,7 @@ describe('SketchSession.setTextParams (M37)', () => {
 
   it('changes the font and the height; the rest of the text stays', async () => {
     const construction = data([...textData({ construction: true }).entities]);
-    const { session, doc } = await editing(XY, construction);
+    const { session, doc } = await editing(XY, { sketch: construction });
 
     await expect(session.setTextParams(eid('t'), { font: 'mono', height: 4 })).resolves.toBe(true);
 
@@ -721,7 +1040,7 @@ describe('SketchSession.setTextParams (M37)', () => {
       },
       advance: (p) => fake.advance(p),
     };
-    const { session } = await editing(XY, TEXT, spy);
+    const { session } = await editing(XY, { sketch: TEXT, text: spy });
 
     await session.setTextParams(eid('t'), { height: 3 });
 
@@ -740,7 +1059,7 @@ describe('SketchSession.setTextParams (M37)', () => {
     ['the id of a line', 'pq', { text: 'x' }],
     ['an unknown id', 'nope', { text: 'x' }],
   ])('%s → false and nothing written', async (_name, id, params) => {
-    const { session, applied } = await editing(XY, TEXT);
+    const { session, applied } = await editing(XY, { sketch: TEXT });
     const before = session.state.get();
 
     await expect(session.setTextParams(eid(id), params)).resolves.toBe(false);
@@ -755,7 +1074,7 @@ describe('SketchSession.setTextParams (M37)', () => {
       outline: () => Promise.reject(new Error('no font')),
       advance: () => Promise.reject(new Error('no font')),
     };
-    const { session, applied } = await editing(XY, TEXT, failing);
+    const { session, applied } = await editing(XY, { sketch: TEXT, text: failing });
 
     await expect(session.setTextParams(eid('t'), { text: 'x' })).resolves.toBe(false);
     await settle();
@@ -764,7 +1083,7 @@ describe('SketchSession.setTextParams (M37)', () => {
   });
 
   it('behind a pending solve the write waits its turn and survives it', async () => {
-    const { session, solver, doc } = await editing(XY, TEXT);
+    const { session, solver, doc } = await editing(XY, { sketch: TEXT });
     solver.hold();
     void session.remove([eid('k')]);
 

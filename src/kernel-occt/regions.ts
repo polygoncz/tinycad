@@ -1,7 +1,20 @@
 import type { Geom2d_Curve, gp_Pnt2d, gp_Vec2d } from 'replicad-opencascadejs';
 import type { Vec2 } from '@/core';
 import type { IdentifiedCurve, ProfileCurve, ProfileRegion, ProfileRegions } from '@/kernel';
-import { compressKnots } from './face';
+import {
+  boundedCurve,
+  boxOf,
+  circleCurve,
+  coordinatesOf,
+  counterClockwise,
+  dist,
+  endOf,
+  inBox,
+  overlappingPairs,
+  startOf,
+  unionOf,
+  type Box,
+} from './geom2d';
 import type { Occt } from './occt';
 
 // profileRegions of the OCCT adapter (spec 06 "Stav po M30", spec 12 "Oblasti (profily)"; M30
@@ -51,9 +64,6 @@ const TANGENT_STEP = 1e-3;
 
 type Bounded = Extract<IdentifiedCurve, { kind: 'line' | 'arc' | 'bspline' }>;
 type Circle = Extract<IdentifiedCurve, { kind: 'circle' }>;
-
-/** Axis-aligned box [minX, minY, maxX, maxY]. */
-type Box = readonly [number, number, number, number];
 
 /**
  * A line, an arc or a spline between two nodes, with its OCCT curve parametrised from `from` to
@@ -218,144 +228,6 @@ export function profileRegionsOf(oc: Occt, curves: readonly IdentifiedCurve[]): 
   }
 }
 
-// --- Curves -----------------------------------------------------------------------------------
-
-/** Every coordinate of a curve: its points, and the center of an arc or a circle. */
-function coordinatesOf(c: ProfileCurve): readonly number[] {
-  switch (c.kind) {
-    case 'line':
-      return [...c.from, ...c.to];
-    case 'arc':
-      return [...c.center, ...c.from, ...c.to];
-    case 'circle':
-      return [...c.center];
-    case 'bspline':
-      return c.poles.flat();
-  }
-}
-
-/** An arc running counter-clockwise from `from` to `to` (the same arc); other curves unchanged. */
-function counterClockwise(c: IdentifiedCurve): IdentifiedCurve {
-  if (c.kind !== 'arc' || c.ccw) return c;
-  return { kind: 'arc', center: c.center, from: c.to, to: c.from, ccw: true, id: c.id };
-}
-
-function startOf(c: Bounded): Vec2 {
-  return c.kind === 'bspline' ? (c.poles[0] ?? [Number.NaN, Number.NaN]) : c.from;
-}
-
-function endOf(c: Bounded): Vec2 {
-  return c.kind === 'bspline' ? (c.poles[c.poles.length - 1] ?? [Number.NaN, Number.NaN]) : c.to;
-}
-
-/**
- * New Geom2d curve of a line, a counter-clockwise arc or a spline, parametrised from its start
- * to its end; the caller owns it.
- */
-function boundedCurve(oc: Occt, c: Bounded): Geom2d_Curve {
-  switch (c.kind) {
-    case 'line': {
-      using from = new oc.gp_Pnt2d(c.from[0], c.from[1]);
-      using to = new oc.gp_Pnt2d(c.to[0], c.to[1]);
-      using maker = new oc.GC_MakeSegment2d(from, to);
-      return maker.Value();
-    }
-    case 'arc': {
-      const radius = dist(c.center, c.from);
-      using circle = circleOf(oc, c.center, radius);
-      using from = new oc.gp_Pnt2d(c.from[0], c.from[1]);
-      using to = new oc.gp_Pnt2d(c.to[0], c.to[1]);
-      using maker = new oc.GC_MakeArcOfCircle2d(circle, from, to, true);
-      return maker.Value();
-    }
-    case 'bspline': {
-      const { knots, multiplicities } = compressKnots(c.knots);
-      using poles = new oc.NCollection_Array1_gp_Pnt2d(c.poles.length);
-      c.poles.forEach((q, i) => {
-        using pole = new oc.gp_Pnt2d(q[0], q[1]);
-        poles.SetValue(i, pole);
-      });
-      using knotArray = new oc.NCollection_Array1_double(knots.length);
-      using multArray = new oc.NCollection_Array1_int(knots.length);
-      knots.forEach((k, i) => {
-        knotArray.SetValue(i, k);
-        multArray.SetValue(i, multiplicities[i] ?? 0);
-      });
-      return new oc.Geom2d_BSplineCurve(poles, knotArray, multArray, c.degree, false);
-    }
-  }
-}
-
-/** New counter-clockwise Geom2d_Circle; the caller owns it. */
-function circleCurve(oc: Occt, c: Circle): Geom2d_Curve {
-  using center = new oc.gp_Pnt2d(c.center[0], c.center[1]);
-  using xDir = new oc.gp_Dir2d(1, 0);
-  using axis = new oc.gp_Ax2d(center, xDir);
-  return new oc.Geom2d_Circle(axis, c.radius, true);
-}
-
-/** New counter-clockwise gp_Circ2d. */
-function circleOf(oc: Occt, center: Vec2, radius: number) {
-  using c = new oc.gp_Pnt2d(center[0], center[1]);
-  using xDir = new oc.gp_Dir2d(1, 0);
-  using axis = new oc.gp_Ax2d(c, xDir);
-  return new oc.gp_Circ2d(axis, radius, true);
-}
-
-/**
- * A box around the curve grown by `tol`: an arc by its whole circle, a spline by its poles (the
- * curve lies in their convex hull).
- */
-function boxOf(c: IdentifiedCurve, tol: number): Box {
-  let points: readonly Vec2[];
-  switch (c.kind) {
-    case 'line':
-      points = [c.from, c.to];
-      break;
-    case 'arc': {
-      const r = dist(c.center, c.from);
-      points = [
-        [c.center[0] - r, c.center[1] - r],
-        [c.center[0] + r, c.center[1] + r],
-      ];
-      break;
-    }
-    case 'circle':
-      points = [
-        [c.center[0] - c.radius, c.center[1] - c.radius],
-        [c.center[0] + c.radius, c.center[1] + c.radius],
-      ];
-      break;
-    case 'bspline':
-      points = c.poles;
-  }
-  const xs = points.map((q) => q[0]);
-  const ys = points.map((q) => q[1]);
-  return [
-    Math.min(...xs) - tol,
-    Math.min(...ys) - tol,
-    Math.max(...xs) + tol,
-    Math.max(...ys) + tol,
-  ];
-}
-
-function unionOf(boxes: readonly Box[]): Box {
-  return [
-    Math.min(...boxes.map((b) => b[0])),
-    Math.min(...boxes.map((b) => b[1])),
-    Math.max(...boxes.map((b) => b[2])),
-    Math.max(...boxes.map((b) => b[3])),
-  ];
-}
-
-function boxesOverlap(a: Box, b: Box): boolean {
-  return a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
-}
-
-function inBox(b: Box, q: Vec2): boolean {
-  return q[0] >= b[0] && q[0] <= b[2] && q[1] >= b[1] && q[1] <= b[3];
-}
-
 // --- Areas ------------------------------------------------------------------------------------
 
 /**
@@ -443,29 +315,21 @@ function crosses(ctx: Context, circles: readonly LoneCircle[]): boolean {
   for (const s of shapes) {
     if (s.selfCheck !== 'none' && crossesItself(ctx, s)) return true;
   }
-  const order = shapes
-    .map((_, i) => i)
-    .sort((i, j) => (shapes[i]?.box[0] ?? 0) - (shapes[j]?.box[0] ?? 0));
-  for (let k = 0; k < order.length; k++) {
-    const a = shapes[order[k] ?? -1];
-    if (a === undefined) continue;
-    for (let m = k + 1; m < order.length; m++) {
-      const b = shapes[order[m] ?? -1];
-      if (b === undefined) continue;
-      if (b.box[0] > a.box[2]) break;
-      if (!boxesOverlap(a.box, b.box)) continue;
-      using inter = new oc.Geom2dAPI_InterCurveCurve(a.g, b.g, tol);
-      if (inter.NbSegments() > 0) return true;
-      const shared = a.nodes.filter((n) => b.nodes.includes(n));
-      for (let i = 1; i <= inter.NbPoints(); i++) {
-        using point = inter.Point(i);
-        const q: Vec2 = [point.X(), point.Y()];
-        const atShared = shared.some((n) => {
-          const node = nodes[n];
-          return node !== undefined && dist(node, q) <= nodeTol;
-        });
-        if (!atShared) return true;
-      }
+  for (const [i, j] of overlappingPairs(shapes.map((s) => s.box))) {
+    const a = shapes[i];
+    const b = shapes[j];
+    if (a === undefined || b === undefined) continue;
+    using inter = new oc.Geom2dAPI_InterCurveCurve(a.g, b.g, tol);
+    if (inter.NbSegments() > 0) return true;
+    const shared = a.nodes.filter((n) => b.nodes.includes(n));
+    for (let k = 1; k <= inter.NbPoints(); k++) {
+      using point = inter.Point(k);
+      const q: Vec2 = [point.X(), point.Y()];
+      const atShared = shared.some((n) => {
+        const node = nodes[n];
+        return node !== undefined && dist(node, q) <= nodeTol;
+      });
+      if (!atShared) return true;
     }
   }
   return false;
@@ -807,10 +671,6 @@ function reversed(c: Bounded): Bounded {
       };
     }
   }
-}
-
-function dist(a: Vec2, b: Vec2): number {
-  return Math.hypot(a[0] - b[0], a[1] - b[1]);
 }
 
 /** Plain string comparison by UTF-16 code units (spec 12: names sorted by string comparison). */

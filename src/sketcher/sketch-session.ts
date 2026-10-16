@@ -8,17 +8,22 @@ import type { Observable, Plane, Vec2, Vec3 } from '@/core';
 import {
   SKETCH_PARAM,
   constraintTargets,
+  crossingPoints,
+  curve2,
   curvePoints,
   isDimension,
+  isCurveEntity,
   isPattern,
   movePlacement,
   parseSketchData,
+  pointsById,
   removeItems,
   textParamsValid,
   toggleConstruction,
 } from '@/sketch';
 import type {
   ConstraintSolver,
+  CurveHit,
   DimensionConstraint,
   DimensionPlacement,
   SketchConstraint,
@@ -80,6 +85,22 @@ export interface SketchSession {
   setDimension(id: SketchConstraintId, value: number): Promise<boolean>;
   /** removeItems from sketch. */
   remove(ids: readonly SketchItemId[]): Promise<boolean>;
+  /**
+   * Replaces the data by `next` (M33: trim, extend, split): solves it and on a conflict solves
+   * again without the constraints `added`, like the automatic constraints of the tools (M26);
+   * written in one setParams. Added constraints the solver finds redundant are left out.
+   */
+  rewrite(next: SketchData, added: ReadonlySet<SketchConstraintId>): Promise<boolean>;
+  /**
+   * The intersections of all curves of the current data (M33, SketchGeometry.intersections),
+   * construction ones too; null = not computed for the current data yet, or the port failed.
+   */
+  hits(): readonly CurveHit[] | null;
+  /**
+   * The geometry port of the session (M33): the trim, extend and split tools ask it for the
+   * pieces of splines and the intersections of an extension.
+   */
+  readonly geometry: SketchGeometry;
   /** Without the solver: construction does not change the solution. */
   toggleConstruction(ids: readonly SketchItemId[]): void;
   /** Dragging a point (the select tool). */
@@ -269,6 +290,9 @@ export const EDIT_SKETCH_DRAWING_ID = 'sketch-edit';
 /** The overlay id of the snap guides of the inference preview (M26). */
 export const SKETCH_GUIDES_OVERLAY_ID = 'sketch-guides';
 
+/** The overlay id of the crossing points of the curves (M33, Q093). */
+export const SKETCH_CROSSINGS_OVERLAY_ID = 'sketch-crossings';
+
 const EMPTY_DATA: SketchData = Object.freeze({
   entities: Object.freeze([]),
   constraints: Object.freeze([]),
@@ -302,7 +326,7 @@ export function openSketchSession(deps: {
   /** SketchEditor.showAllConstraints: the glyphs of all constraints, not only the selected ones (M25). */
   showAllConstraints: Observable<boolean>;
   solver: ConstraintSolver;
-  /** M30: the geometry of the sketch in the kernel (SketchGeometry); no method yet, M33 and M35 add them. */
+  /** The geometry of the sketch in the kernel (SketchGeometry, M30): intersections and pieces (M33). */
   geometry: SketchGeometry;
   /** M37: the letter outlines of setTextParams (spec 12 "Text ve skice"). */
   text: TextOutliner;
@@ -313,7 +337,7 @@ export function openSketchSession(deps: {
   viewport: Pick<ViewportPort, 'sketches' | 'screenToRay' | 'overlay'>;
   onClose: () => void;
 }): SketchSession {
-  const { edit, resolvePlane, showAllConstraints, solver, viewport, onClose } = deps;
+  const { edit, resolvePlane, showAllConstraints, solver, geometry, viewport, onClose } = deps;
   const plane = new ObservableValue<Plane>(deps.plane);
   /** The plane reference last followed; a change of the param moves the plane (M21). */
   let planeRef = planeRefOf(edit.state.get().params);
@@ -346,9 +370,17 @@ export function openSketchSession(deps: {
    * construction waits for them.
    */
   let writers = 0;
+  /** The version of the entities the last intersections were asked for (M33); a change raises it. */
+  let hitsVersion = 0;
+  /** The last answer of SketchGeometry.intersections with the version it was asked for. */
+  let hitsAnswer: { readonly version: number; readonly hits: readonly CurveHit[] } | null = null;
+  /** The crossing points in plane coordinates, drawn in the overlay while there are some. */
+  let crossings: readonly Vec2[] = [];
+  let crossingsShown = false;
 
   const state = new ObservableValue<SketchState>(buildState(null));
   draw();
+  requestHits(state.get().entities);
   const unsubscribeEdit = edit.state.subscribe(() => {
     if (!edit.state.get().open) close();
     else refresh(followPlane());
@@ -471,6 +503,8 @@ export function openSketchSession(deps: {
     const next = buildState(prev);
     const keys = Object.keys(next) as (keyof SketchState)[]; // the keys of the snapshot just built
     const changed = keys.filter((key) => !Object.is(next[key], prev[key]));
+    if (open && next.entities !== prev.entities) requestHits(next.entities);
+    if (open && redraw) drawCrossings(crossings);
     if (changed.length > 0) state.set(next);
     if (open && (changed.some((key) => !NOT_DRAWN.has(key)) || redraw)) draw();
   }
@@ -490,6 +524,51 @@ export function openSketchSession(deps: {
     };
     viewport.overlay.set(SKETCH_GUIDES_OVERLAY_ID, [shape]);
     guidesShown = true;
+  }
+
+  /**
+   * Asks for the intersections of all curves of the entities (M33); the last request wins, an
+   * older answer is dropped. An answer draws the crossing points; a failure of the port leaves
+   * hits() null and removes them, without a warning (ring 2 has no console, ADR 0009).
+   */
+  function requestHits(entities: readonly SketchEntity[]): void {
+    const version = ++hitsVersion;
+    const data: SketchData = { entities, constraints: EMPTY_DATA.constraints };
+    const points = pointsById(data);
+    const curves = entities.flatMap((e) =>
+      // A mirror, a pattern (M36) or a text (M37) is a recipe: its derived curves do not cut.
+      isCurveEntity(e) ? [curve2(e, points)] : [],
+    );
+    promiseOf(() => geometry.intersections(curves)).then(
+      (hits) => {
+        if (!open || version !== hitsVersion) return;
+        hitsAnswer = Object.freeze({ version, hits });
+        drawCrossings(crossingPoints(data, hits));
+      },
+      () => {
+        // A failure of the port: hits() stays null and the crossing points go.
+        if (!open || version !== hitsVersion) return;
+        drawCrossings([]);
+      },
+    );
+  }
+
+  /** The crossing points as points of the style 'warning' in the overlay; none removes them. */
+  function drawCrossings(points: readonly Vec2[]): void {
+    crossings = points;
+    if (points.length === 0) {
+      if (crossingsShown) viewport.overlay.remove(SKETCH_CROSSINGS_OVERLAY_ID);
+      crossingsShown = false;
+      return;
+    }
+    const p = plane.get();
+    const shape: OverlayShape = {
+      kind: 'points',
+      points: points.map((q) => planeMath.toWorld(p, q)),
+      style: 'warning',
+    };
+    viewport.overlay.set(SKETCH_CROSSINGS_OVERLAY_ID, [shape]);
+    crossingsShown = true;
   }
 
   /**
@@ -560,6 +639,7 @@ export function openSketchSession(deps: {
     } finally {
       try {
         drawGuides([]);
+        drawCrossings([]);
         viewport.sketches.remove(EDIT_SKETCH_DRAWING_ID);
       } finally {
         onClose();
@@ -734,6 +814,7 @@ export function openSketchSession(deps: {
     featureId: edit.featureId,
     plane: plane.asObservable(),
     state: state.asObservable(),
+    geometry,
     addGeometry(add, opts = {}) {
       checkOpen('addGeometry');
       const { required } = opts;
@@ -796,6 +877,36 @@ export function openSketchSession(deps: {
     remove(ids) {
       checkOpen('remove');
       return change((data) => removeItems(data, ids));
+    },
+    rewrite(next, added) {
+      checkOpen('rewrite');
+      const without = next.constraints.filter((c) => !added.has(c.id));
+      // Without any added constraint in the data a second solve would be the same.
+      const attempts =
+        without.length === next.constraints.length
+          ? [next.constraints]
+          : [next.constraints, without];
+      return enqueueWrite(async () => {
+        for (const constraints of attempts) {
+          const result = await solve({ entities: next.entities, constraints });
+          if (!open) return false;
+          if (result === null || result.status === 'failed') return reject('sketch.solverFailed');
+          if (result.status === 'ok') {
+            const redundant = new Set(result.redundant);
+            accept(result, {
+              entities: result.entities ?? next.entities,
+              constraints: constraints.filter((c) => !(added.has(c.id) && redundant.has(c.id))),
+            });
+            refresh();
+            return true;
+          }
+        }
+        return reject('sketch.conflict');
+      });
+    },
+    hits() {
+      const answer = hitsAnswer;
+      return answer !== null && answer.version === hitsVersion ? answer.hits : null;
     },
     toggleConstruction(ids) {
       checkOpen('toggleConstruction');

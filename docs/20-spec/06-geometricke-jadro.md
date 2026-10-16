@@ -270,6 +270,41 @@ export interface SketchOps {
 - Křivky ve smyčkách výsledku nesou `id` vstupní křivky a jsou orientované podél smyčky (oblouk může mít `ccw: false`, spline obrácené `poles` a uzly `a + b − k` pozpátku, kde `[a, b]` je rozsah uzlů – pro `[0, 1]` tedy `1 − k`; tatáž křivka). Výsledek jde rovnou do `makeFace` (`outer`, `holes`).
 - **Klient workeru** posílá vstup i výsledek jako strukturovaná data (`postMessage`), bez handle; `TrackingKernel` regenerace ho jen přeposílá (nic neuvolňuje).
 
+### Stav po M33
+
+Průsečíky a kusy křivek skici pro trim, extend a split ([[M33-trim-extend-split|M33]], [[12-skicar#Trim, extend, split (M33)]]). Data, ne handle:
+
+```ts
+// kernel/profile.ts
+export interface CurveIntersection {
+  readonly a: string; readonly b: string;          // id křivek; a === b samoprůsečík splinu (ta < tb)
+  readonly point: Vec2;
+  readonly ta: number; readonly tb: number;        // parametr t podle spec 12 „Port a parametr křivky“
+  readonly overlap?: true;                         // konec společného úseku překrývajících se křivek
+}
+export interface SketchOps {
+  /** M33: všechny průsečíky dvojic křivek (a před b v pořadí vstupu) a samoprůsečíky splinů; pořadí a, b, ta. */
+  curveIntersections(p: { readonly curves: readonly ProfileCurve[] }): Promise<readonly CurveIntersection[]>;
+  /** M33: kus křivky mezi from < to, stejného druhu (kružnice → oblouk), s id vstupu. */
+  curveSegment(p: { readonly curve: ProfileCurve; readonly from: number; readonly to: number }): Promise<ProfileCurve>;
+}
+```
+
+- **`curveIntersections`:** vstup jako u `profileRegions` (`parseProfileRegionsInput`: id povinné a unikátní, nulové délky vynechané). Průsečíky i ve sdílených koncových bodech a tečné dotyky; překryv → oba konce společného úseku s `overlap`. Body se slučují do `1e-7 · max(1, |souřadnice|)`. Uzel uzavřeného splinu se hlásí jako samoprůsečík (`ta` první, `tb` poslední uzel). **Nehlásí se:** dvě shodné kružnice (překryv bez konců) a překryv se splinem. OCCT hlásí tečný dotyk jako krátký společný úsek; adaptér ho podle mezery uvnitř úseku převede na jeden bod. OCCT: `Geom2dAPI_InterCurveCurve` s předfiltrem obálek (jako oblasti), parametry přes `Geom2dAPI_ProjectPointOnCurve` (`InterCurveCurve` je nevrací), převedené na `t` ze spec 12. Fake: vzorce z `fake-regions.ts`, spline vzorkováním úseků mezi uzly a Newtonem na přesné křivce (tessellace by bodovou toleranci nesplnila). Kód: `kernel/fake-curves.ts`, `kernel-occt/curves.ts`, sdílená stavba 2D křivek a předfiltr obálek `kernel-occt/geom2d.ts`.
+- **`curveSegment`:** křivka podle tvaru z `makeFace` (bez povinného id), `from < to` v definičním oboru (`t` ze spec 12; u kružnice `to < from + 2π` – celá otáčka by byl oblouk nulové délky), jinak `'invalid-input'`; parametr do `1e-9 · max(1, |mez|)` za mezí se posune na mez. Kontrolu sdílí obě jádra: `parseCurveSegmentInput(p: unknown): Result<CurveSegmentInput, readonly string[]>` z `kernel`. Úsečka a oblouk přesně ze vzorců; spline `Geom2d_BSplineCurve.Segment(from, to)` (fake: vkládání uzlů v TS), uzly kusu přeškálované do `[0, 1]`. Body kusu leží na původní křivce (kontraktová sada vzorkuje).
+
+### Stav po M34
+
+Střed zaoblení ve skice ([[M34-zaobleni-a-srazeni-ve-skice|M34]], [[12-skicar#Zaoblení a sražení ve skice (M34)]]):
+
+```ts
+export interface FilletArc { readonly center: Vec2; readonly pointA: Vec2; readonly pointB: Vec2; readonly ta: number; readonly tb: number }
+SketchOps.filletArc(p: { readonly a: ProfileCurve; readonly b: ProfileCurve; readonly radius: number; readonly near: Vec2 }): Promise<FilletArc>;
+```
+
+- `a`, `b` úsečka nebo oblouk (tvar z `makeFace`, id nepovinné), `radius` konečné > 0, `near` konečné, jinak `'invalid-input'`. Střed ve vzdálenosti `radius` od nosné geometrie obou (nekonečná přímka, celá kružnice), nejbližší `near`; body dotyku a jejich `t` (M33; u úsečky i mimo `[0, 1]`). Bez řešení → `'operation-failed'`.
+- OCCT: `Geom2d_OffsetCurve(±radius)` nosné geometrie (`Geom2d_Line`, `Geom2d_Circle`), průsečíky `Geom2dAPI_InterCurveCurve`, body dotyku `Geom2dAPI_ProjectPointOnCurve`. Fake: analyticky (přímka–přímka, přímka–kružnice, kružnice–kružnice).
+
 ### Kontrakt (platí pro každou implementaci)
 
 Ověřuje ho kontraktová sada ([[#Testy]]), spuštěná pro `FakeKernel` v M5 a pro OCCT v M7.

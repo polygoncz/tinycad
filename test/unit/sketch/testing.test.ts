@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import type { Vec2 } from '@/core';
+import type { Curve2 } from '@/sketch/geometry';
 import type { SketchData, SketchEntityId } from '@/sketch/model';
 import { parseSketchData } from '@/sketch/parse';
 import type { SolveInput, SolveResult } from '@/sketch/solver';
 import {
+  createFakeSketchGeometry,
   createFakeSolver,
   createFakeTextOutliner,
   rectangleData,
@@ -275,5 +278,95 @@ describe('textData', () => {
   it('takes given contours, font and construction', () => {
     const t = textData({ text: 'a', font: 'mono', contours: [], construction: true }).entities[3];
     expect(t).toMatchObject({ font: 'mono', contours: [], construction: true });
+  });
+});
+
+describe('createFakeSketchGeometry', () => {
+  const geometry = createFakeSketchGeometry();
+  const line = (id: string, from: Vec2, to: Vec2): Curve2 => ({ kind: 'line', from, to, id });
+
+  it('intersects lines; parameters by spec 12; order a, b, ta', async () => {
+    const hits = await geometry.intersections([
+      line('h', [0, 0], [10, 0]),
+      line('u', [7, -1], [7, 1]),
+      line('v', [3, -1], [3, 1]),
+    ]);
+    expect(hits.map((h) => [h.a, h.b])).toEqual([
+      ['h', 'u'],
+      ['h', 'v'],
+    ]);
+    expect(hits[0]?.ta).toBeCloseTo(0.7, 12);
+    expect(hits[0]?.tb).toBeCloseTo(0.5, 12);
+    expect(hits[1]?.point[0]).toBeCloseTo(3, 12);
+  });
+
+  it('reports shared end points and the ends of an overlap', async () => {
+    const shared = await geometry.intersections([
+      line('a', [0, 0], [1, 0]),
+      line('b', [1, 0], [1, 1]),
+    ]);
+    expect(shared).toEqual([{ a: 'a', b: 'b', point: [1, 0], ta: 1, tb: 0 }]);
+    const overlap = await geometry.intersections([
+      line('a', [0, 0], [4, 0]),
+      line('b', [2, 0], [6, 0]),
+    ]);
+    expect(overlap.map((h) => [h.point, h.ta, h.tb, h.overlap])).toEqual([
+      [[2, 0], 0.5, 0, true],
+      [[4, 0], 1, 0.5, true],
+    ]);
+  });
+
+  it('intersects a line with an arc in two points and touches a circle once', async () => {
+    const arc: Curve2 = {
+      kind: 'arc',
+      center: [0, 0],
+      from: [5, 0],
+      to: [-5, 0],
+      ccw: true,
+      id: 'a',
+    };
+    const hits = await geometry.intersections([arc, line('l', [-10, 3], [10, 3])]);
+    const angle = Math.atan2(3, 4);
+    expect(hits).toHaveLength(2);
+    expect(hits[0]?.ta).toBeCloseTo(angle, 9);
+    expect(hits[1]?.ta).toBeCloseTo(Math.PI - angle, 9);
+    expect(hits[0]?.tb).toBeCloseTo(0.7, 9);
+    expect(hits[1]?.tb).toBeCloseTo(0.3, 9);
+    const circle: Curve2 = { kind: 'circle', center: [0, 0], radius: 2, id: 'k' };
+    const other: Curve2 = { kind: 'circle', center: [5, 0], radius: 3, id: 'm' };
+    const touch = await geometry.intersections([circle, other]);
+    expect(touch).toHaveLength(1);
+    expect(touch[0]?.ta).toBeCloseTo(0, 9);
+    expect(touch[0]?.tb).toBeCloseTo(Math.PI, 9);
+  });
+
+  it('gives pieces of lines, arcs and circles (a circle → an arc, past 2π)', async () => {
+    const piece = await geometry.segment(line('l', [0, 0], [10, 0]), 0.2, 0.5);
+    expect(piece).toEqual({ kind: 'line', from: [2, 0], to: [5, 0], id: 'l' });
+    const circle: Curve2 = { kind: 'circle', center: [0, 0], radius: 1, id: 'k' };
+    const arc = await geometry.segment(circle, 1.5 * Math.PI, 2.5 * Math.PI);
+    expect(arc).toMatchObject({ kind: 'arc', center: [0, 0], ccw: true, id: 'k' });
+    if (arc.kind !== 'arc') throw new Error('not an arc');
+    expect(arc.from[1]).toBeCloseTo(-1, 12);
+    expect(arc.to[1]).toBeCloseTo(1, 12);
+    await expect(geometry.segment(line('l', [0, 0], [1, 0]), 0.5, 0.2)).rejects.toThrow();
+    await expect(geometry.segment(circle, 1, 1 + 3 * Math.PI)).rejects.toThrow();
+  });
+
+  it('rejects splines and curves without an id', async () => {
+    const spline: Curve2 = {
+      kind: 'bspline',
+      degree: 1,
+      poles: [
+        [0, 0],
+        [1, 1],
+      ],
+      knots: [0, 0, 1, 1],
+      id: 's',
+    };
+    await expect(geometry.intersections([spline])).rejects.toThrow();
+    await expect(geometry.segment(spline, 0, 0.5)).rejects.toThrow();
+    const anonymous: Curve2 = { kind: 'line', from: [0, 0], to: [1, 0] };
+    await expect(geometry.intersections([anonymous])).rejects.toThrow();
   });
 });

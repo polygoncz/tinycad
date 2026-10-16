@@ -1,6 +1,6 @@
 // Ring 1 – sketch data model, data checks, 2D geometry, the curves bounding regions, editing
-// helpers and the ConstraintSolver, SketchGeometry and TextOutliner ports (spec 12, ADR 0017).
-// Depends only on core.
+// helpers, the parameter of curves and trim/extend/split (M33) and the ConstraintSolver,
+// SketchGeometry and TextOutliner ports (spec 12, ADR 0017). Depends only on core.
 // Public API of sketch. Everything else in this folder is internal.
 
 export { GEOMETRIC_CONSTRAINT_KINDS, SKETCH_FEATURE_TYPE, SKETCH_PARAM } from './model';
@@ -105,6 +105,25 @@ export {
 export type { DimensionTarget } from './dimension-placement';
 export { SPLINE_TOLERANCE } from './geometry';
 export type { ConstraintSolver, SolveInput, SolveResult, SolveStatus } from './solver';
-export type { SketchGeometry } from './geometry-port';
+export type { CurveHit, SketchGeometry } from './geometry-port';
+export { nearestParam, paramRange, piecePolyline, pointAt, samePoint } from './curve-param';
+export {
+  crossingPoints,
+  cutsOf,
+  extendEdit,
+  isCurveEntity,
+  pieceAt,
+  splitEdit,
+  trimEdit,
+} from './trim';
+export type {
+  CurveCut,
+  CurvePiece,
+  ExtendRequest,
+  IdSource,
+  SketchEdit,
+  SplitRequest,
+  TrimRequest,
+} from './trim';
 export { derivedOwner, textCurves } from './text';
 export type { TextOutliner } from './text';

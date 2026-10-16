@@ -50,6 +50,8 @@ export async function createOcctKernel(): Promise<
     boolean: (op, targets, tools) => client.boolean(op, targets, tools),
     makeFace: (p) => client.makeFace(p),
     profileRegions: (p) => client.profileRegions(p),
+    curveIntersections: (p) => client.curveIntersections(p),
+    curveSegment: (p) => client.curveSegment(p),
     extrude: (profile, direction, distance) => client.extrude(profile, direction, distance),
     revolve: (profile, axis, angle) => client.revolve(profile, axis, angle),
     fillet: (shape, edges, radius) => client.fillet(shape, edges, radius),
