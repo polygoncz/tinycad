@@ -29,6 +29,8 @@ type PanelState = Pick<
   | 'planeField'
   | 'constraintRows'
   | 'editingDimension'
+  | 'entities'
+  | 'selection'
 >;
 
 const STATE: PanelState = {
@@ -45,10 +47,28 @@ const STATE: PanelState = {
     { id: cid('c2'), kind: 'distance', n: 1, value: 40, selected: false },
   ],
   editingDimension: null,
+  entities: [],
+  selection: [],
 };
 
-async function render(showAll: boolean): Promise<string> {
-  const state = new ObservableValue(STATE);
+type Entity = SketchState['entities'][number];
+// Test ids are trusted.
+const eid = (id: string): Entity['id'] => id as Entity['id'];
+
+/** A text of 12.5 mm in the serif font, on the line l1. */
+const TEXT: Entity = {
+  kind: 'text',
+  id: eid('t1'),
+  text: 'tinycad',
+  font: 'serif',
+  height: 12.5,
+  baseline: eid('l1'),
+  contours: [],
+};
+const POINT: Entity = { kind: 'point', id: eid('p1'), x: 0, y: 0 };
+
+async function render(showAll: boolean, over: Partial<PanelState> = {}): Promise<string> {
+  const state = new ObservableValue({ ...STATE, ...over });
   // The panel reads only the fields of PanelState and calls the methods on user input, which a
   // server render has none of.
   const sketch = { state: state.asObservable() } as unknown as SketchSession;
@@ -93,5 +113,45 @@ describe('SketchPanel (spec 12, "Glyfy vazeb (M25)", Panel)', () => {
     const on = buttonWith(await render(true), 'Show constraints');
     expect(on).toContain('aria-pressed="true"');
     expect(on).toMatch(/class="[^"]*\bon\b/);
+  });
+});
+
+describe('SketchPanel, section Text (spec 12, "Text ve skice (M37)", Úprava)', () => {
+  // Test ids are trusted.
+  const sel = (id: string): SketchState['selection'][number] =>
+    id as SketchState['selection'][number];
+
+  it('shows the string, the font and the height of the only selected text', async () => {
+    const html = await render(false, { entities: [POINT, TEXT], selection: [sel('t1')] });
+    expect(html).toMatch(/<h3[^>]*>\s*Text\s*<\/h3>/);
+    expect(html).toMatch(/<input[^>]*value="tinycad"/);
+    expect(html).toMatch(
+      /<input[^>]*value="12.5"[^>]*inputmode="decimal"|<input[^>]*inputmode="decimal"[^>]*value="12.5"/,
+    );
+    expect(html).toContain('mm');
+    // The fonts in the order of TEXT_FONTS, with their labels; the font of the text is selected.
+    const options = [...html.matchAll(/<option[^>]*value="(\w+)"[^>]*>\s*([^<]*?)\s*<\/option>/g)];
+    expect(options.map((m) => [m[1], m[2]])).toEqual([
+      ['sans', 'Sans'],
+      ['serif', 'Serif'],
+      ['mono', 'Mono'],
+    ]);
+    expect(html).toMatch(/<option[^>]*value="serif"[^>]*selected/);
+    // The fields are named by their labels.
+    for (const name of ['Text', 'Font', 'Height']) {
+      const forId = new RegExp(`<label for="([^"]+)"[^>]*>\\s*${name}\\s*</label>`).exec(html)?.[1];
+      expect(forId).toBeDefined();
+      expect(html).toContain(`id="${forId ?? ''}"`);
+    }
+    // Above the constraints.
+    expect(html.indexOf('tinycad')).toBeLessThan(html.indexOf('<details'));
+  });
+
+  it('has no section without exactly one text selected', async () => {
+    for (const selection of [[], [sel('p1')], [sel('t1'), sel('p1')]]) {
+      const html = await render(false, { entities: [POINT, TEXT], selection });
+      expect(html).not.toContain('<h3');
+      expect(html).not.toContain('<select');
+    }
   });
 });

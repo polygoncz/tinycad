@@ -44,7 +44,7 @@ Upřesnění v sezení 2026-10-16: obrysy přes knihovnu **opentype.js** v TS ([
 - [x] Adaptér `text-opentype`, fonty, port `TextOutliner`, pravidla závislostí.
 - [x] Entita text, kontrola dat, `textCurves`, odvozená id, oblasti.
 - [x] HUD nápověda nástrojů (`ToolHint`, `ToolHintHud`), naplněná u zrcadlení a polí.
-- [ ] Kresba, výběr, nástroj Text, `setTextParams` a panel.
+- [x] Kresba, výběr, nástroj Text, `setTextParams` a panel.
 - [ ] Integrační test a e2e (gravírování „tinycad“), spec 01, 10, 11.
 
 ## Implementační plán
@@ -105,5 +105,7 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **Natažení `main` (M36 sloučený s M31, merge `2d00268`):** 4 konflikty (edit, geometry, index), `toggleConstruction` sjednocený s `isTogglable` M31 (text přepínatelný, xline ne).
 - **Úkol 2a (HUD nápověda) hotový:** Pavel schválil kontrakt `ToolHint`/`setHint`/`ToolManager.hint`/`AppSession.tools.hint`, `ToolHintHud.vue`; nápovědy zrcadlení a polí po krocích. Kontrakt ohlášen hlavnímu sezení. 7170 unit, e2e 156/156.
 - **Úkol 3, část skicář hotová:** kresba a pick písmen (`derivedOwner`), nástroj Text v rodině `line` za bodem (`addDrawn`, bez vazeb), `setTextParams`, `SketchEditor.text`, `fontUrl` + `createOpentypeOutliner` v `app/browser.ts` (fonty v `dist/assets`), osa zrcadlení / symetrie a kotva textu i `xline`. 7226 unit, e2e 156/156.
+- **Natažení `main` s M32** bez konfliktů, jen dva nové testy potřebovaly `setHint` a `text`.
+- **Úkol 3 hotový:** panel textu (sekce Text nad vazbami, fokus nového textu). 7415 unit; e2e 165/166 – jednou spadl `m19-2-rename` ve WebKitu, samostatně prošel (nestabilní, nesouvisí).
 
 ## Retrospektiva
