@@ -1,6 +1,6 @@
 ---
 type: insight
-status: seed
+status: evergreen
 aliases:
   - Metodika souběžných stop
   - Souběžné stopy
@@ -50,18 +50,36 @@ updated: 2026-10-15
    - stopu, která čeká na jinou (např. nástroje nad snapperem), pozdrží a pustí ji až po sloučení té druhé.
 6. **Přehled pro člověka:** stav se bere z gitu a z vaultu, ne z paměti agenta. V tinycad to dělá panel `/stopy` (mod Claude Code v `.claude/skills/tinycad-stopy/`): worktree, commity navíc, rozpracované soubory, milníky podle `status`, zaškrtnuté úkoly a `depends_on`.
 
-### Co se zatím ukázalo (série M25–M29, 2026-10-15)
+### Zhodnocení první série (M25–M29, 2026-10-15 a 16)
 
-- Stopa ve spodních vrstvách (`core`, `kernel`, oblasti) se sloučila **bez jediného konfliktu** (37 souborů, ~3 650 řádků).
-- Kontrakt psaný předem udělal z rozporu s realitou konkrétní otázku: planegcs se choval jinak, než předpokládal kontrakt ([[Q087 Spline v řešiči a v jádře – zjištění z implementace|Q087]]). Bez kontraktu by se rozpor ukázal až jako záhadná chyba při slučování.
-- Chyba v kontraktu (matematika B-spline v modulu, na kterém `kernel` nesmí záviset) se ukázala hned. Kontrola hranic modulů funguje jako pojistka i pro souběžnou práci.
-- Člověk rychle ztratí přehled o tom, co je hotové, co čeká a na co. Proto vznikl panel stavu.
-- `depends_on` zděděné ze sekvenčního plánu lže o souběhu a musí se opravit.
+**Verdikt (Pavel):** vyplatilo se, pokračovat. Nejtěžší pro člověka byla **ztráta přehledu**.
 
-### Otevřené
+| Měřítko | Výsledek |
+|---|---|
+| Čas | plán v `main` 18:32; do 20:42 sloučené M29 (úkoly 1–7), M28, M25, M26 – 4½ milníku za ~2 h 10 min; M27 hotový 21:45, úkol 8 M29 (čekal na M26) ráno. Den předtím sekvenčně ~1–2 h na milník → **zhruba dvojnásobné zrychlení**. |
+| Konflikty | stopa C (spodní vrstvy) 0; stopa B 3 textové + 1 skrytý (testovací pomůcka neznala novou variantu kresby); stopa A při natažení `main` 23 textových v 17 souborech + 3 sémantické. Všechny sémantické našel `strict` TypeScript s vyčerpávajícími `switch`. |
+| Kvalita | žádná regrese po sloučení; e2e 104 → 136; architektonické revize každé stopy bez závažných porušení. Jediná skrytá chyba (zahozená tečnost ve sdíleném bodě, z M26) se našla v M27 a se souběhem nesouvisí. |
+| Kontrakty | dvakrát narazily na realitu (planegcs, hranice modulů B-spline) a pokaždé z toho byla konkrétní otázka ([[Q087 Spline v řešiči a v jádře – zjištění z implementace\|Q087]]), ne záhada při slučování. |
+| Režie člověka | 6 otázek ve vaultu, přes 20 rozhodnutí stop (A7–A26), zkřížené zprávy, nutnost panelu stavu. |
 
-- Vyplatí se to? Zhodnotit na konci série: čas proti sekvenční práci, počet a velikost konfliktů, kvalita (revize, chyby po sloučení).
-- Má z metodiky vzniknout skill (start stop, sloučení stopy)? Rozhodnout po druhém použití.
+**Co se osvědčilo:**
+- Rozdělení podle průniku souborů: stopa ve spodních vrstvách (`core`, `kernel`, oblasti) se sloučila bez konfliktu; stopa v nejvíc sdíleném souboru (`sketch-session.ts`) jela sekvenčně a konflikty si řešila sama při natažení `main`.
+- Kontrakty sdílených typů předem: konflikty v uniích a `switch` byly sčítací a mechanické.
+- Typová kontrola jako detektor sémantických konfliktů – po každém sloučení celý `npm run check`, ne jen vyřešené konflikty.
+- Stopy si samy paralelizovaly úkoly (stopa A přes izolované worktree implementátorů, B a C ve sdíleném worktree s disjunktními soubory).
+- Panel stavu z gitu a vaultu (`/stopy`) – přehled bez spoléhání na paměť agenta.
+
+**Co zlepšit:**
+- **Přehled pro člověka je hlavní úzké hrdlo.** Panel spustit hned se stopami, ne až když se člověk ztratí; hlavní sezení má hlásit stav krátce a vždy ve stejném tvaru.
+- Zprávy se kříží: odpověď vždy s úplným stavem rozhodnutí a se jménem otázky.
+- `depends_on` ze sekvenčního plánu opravit hned při rozdělení do stop.
+- Sdílený `npm run check` ve worktree s více implementátory padá na rozpracovaných souborech sousedů – buď izolované worktree implementátorů (jako stopa A), nebo počkat.
+- Úkol, který čeká na jinou stopu (nástroje splinu na snapperu), rozdělit už v plánu a hlídat v panelu.
+- Primitiva cizí knihovny ověřit prototypem před kontraktem ([[Primitivum knihovny ověř prototypem před kontraktem]]).
+
+### Opakovatelnost
+
+Postup je od 2026-10-16 i skill `/stopa start|sloucit` (`.claude/skills/stopa/`).
 
 ## Jak to využívá tinycad
 

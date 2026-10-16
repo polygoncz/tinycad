@@ -30,7 +30,7 @@ Výuková webová CAD aplikace (Onshape-like Part Studio). Autor: Pavel. Pavel z
 
 ### Souběžné stopy (od M25)
 
-Sérii milníků s malým průnikem dotčených souborů lze implementovat souběžně: každá stopa je samostatná session ve vlastním git worktree, hlavní sezení předem zafixuje kontrakty sdílených typů, dělá dispečera a slučuje do `main` po jednom. Postup a pravidla: `docs/70-poznatky/Souběžné stopy agentů.md`, pravidla aktuální série v `docs/40-plan/Roadmapa.md`. Stav stop ukazuje panel `/stopy` (mod Claude Code v `.claude/skills/tinycad-stopy/`, načítá se automaticky).
+Sérii milníků s malým průnikem dotčených souborů lze implementovat souběžně: každá stopa je samostatná session ve vlastním git worktree, hlavní sezení předem zafixuje kontrakty sdílených typů, dělá dispečera a slučuje do `main` po jednom. Postup a pravidla: `docs/70-poznatky/Souběžné stopy agentů.md` a skill `/stopa start|sloucit`, pravidla aktuální série v `docs/40-plan/Roadmapa.md`. Pavel po první sérii (M25–M29): pokračovat; nejtěžší je pro něj přehled, proto panel spouštět hned se stopami a stav hlásit krátce a vždy stejně. Stav stop ukazuje panel `/stopy` (mod Claude Code v `.claude/skills/tinycad-stopy/`, načítá se automaticky).
 
 ## Konvence kódu
 
@@ -45,7 +45,7 @@ Sérii milníků s malým průnikem dotčených souborů lze implementovat soub�
 
 ## Nástroje Claude Code (`.claude/`)
 
-- Skilly: `/milnik start|konec Mnn`, `/zaznam otazka|adr|pojem|poznatek <název>`, `/denik` (konec sezení). Skill `obsidian-format` (syntaxe vaultu) se načítá automaticky.
+- Skilly: `/milnik start|konec Mnn`, `/stopa start <milníky>|sloucit <stopa>` (souběžné stopy), `/zaznam otazka|adr|pojem|poznatek <název>`, `/denik` (konec sezení). Skill `obsidian-format` (syntaxe vaultu) se načítá automaticky.
 - Subagent `architecture-reviewer` (`.claude/agents/`): revize kódu proti ADR 0008–0011 a spec 01, hlásí jen to, co nechytí `npm run check`. Spouštět na konci milníku před `/milnik konec`.
 - Subagent `implementer` (`.claude/agents/`, model Opus): implementuje jeden úkol z Implementačního plánu milníku podle spec, metodou TDD; vault nemění, necommituje, nejasnosti vrací jako otázky.
 - Mod `tinycad-stopy` (`.claude/skills/tinycad-stopy/`): příkaz `/stopy` otevře panel se stavem souběžných stop (worktree, větve, milníky z vaultu). Kontrola: `claude plugin validate .claude/skills/tinycad-stopy` a `claude plugin test .claude/skills/tinycad-stopy` (Claude Code s API modů, ne starší `claude` v PATH); ESLint ho ignoruje.
