@@ -984,7 +984,9 @@ function glyphsShownFor(
 ): ReadonlySet<SketchItemId> {
   const items = hover === null ? selection : [...selection, hover];
   const points = data.entities.flatMap((e) =>
-    items.includes(e.id) && e.kind !== 'point' && !isPattern(e) ? curvePoints(e) : [],
+    items.includes(e.id) && e.kind !== 'point' && e.kind !== 'text' && !isPattern(e)
+      ? curvePoints(e)
+      : [],
   );
   return new Set<SketchItemId>([
     ...items,

@@ -138,9 +138,33 @@ export interface TextContour {
   readonly segments: readonly TextSegment[];
 }
 
+/**
+ * A one-line text (spec 12 "Text ve skice (M37)"): letter outlines stored in its local coordinates
+ * (x along the baseline from p1 of the anchor line, y to the left of it, mm), so regen needs no
+ * font. A member of SketchEntity, not of SketchCurve (like a pattern, M36): its curves are derived
+ * (textCurves) and it never enters the solver.
+ */
+export interface SketchText {
+  readonly kind: 'text';
+  readonly id: SketchEntityId;
+  /** 1 … MAX_TEXT_LENGTH code points, one line, no control characters. */
+  readonly text: string;
+  readonly font: TextFontId;
+  /** Mm, > 0: the size of the font (em), like font-size. */
+  readonly height: number;
+  /** A line: the baseline starts at its p1 and runs towards p2; its length does not matter. */
+  readonly baseline: SketchEntityId;
+  /** Computed by the sketcher from text, font and height (TextOutliner). */
+  readonly contours: readonly TextContour[];
+  readonly construction?: true;
+}
+
+/** The longest text in code points. */
+export const MAX_TEXT_LENGTH = 200;
+
 /** A mirror or a pattern: a member of SketchEntity, not of SketchCurve (it carries a recipe). */
 export type SketchPattern = SketchMirror | SketchLinearPattern | SketchCircularPattern;
-export type SketchEntity = SketchPoint | SketchCurve | SketchPattern;
+export type SketchEntity = SketchPoint | SketchCurve | SketchPattern | SketchText;
 
 /** The largest number of instances in one direction of a pattern. */
 export const MAX_PATTERN_COUNT = 100;
@@ -149,7 +173,7 @@ export function isPattern(e: SketchEntity): e is SketchPattern {
   return e.kind === 'mirror' || e.kind === 'linearPattern' || e.kind === 'circularPattern';
 }
 
-/** A possible source of a mirror or pattern: a point or a curve, never a pattern (spec 12). */
+/** A possible source of a mirror or pattern: a point or a curve, never a pattern or a text (spec 12). */
 export function isPatternSource(e: SketchEntity): e is SketchPoint | SketchCurve {
   switch (e.kind) {
     case 'point':
@@ -162,6 +186,7 @@ export function isPatternSource(e: SketchEntity): e is SketchPoint | SketchCurve
     case 'mirror':
     case 'linearPattern':
     case 'circularPattern':
+    case 'text':
       return false;
     default:
       return assertNever(e);

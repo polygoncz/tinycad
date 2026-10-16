@@ -5,7 +5,7 @@
 
 export { GEOMETRIC_CONSTRAINT_KINDS, SKETCH_FEATURE_TYPE, SKETCH_PARAM } from './model';
 export { DIMENSION_KINDS, isDimension } from './model';
-export { TEXT_FONTS } from './model';
+export { MAX_TEXT_LENGTH, TEXT_FONTS } from './model';
 export {
   MAX_PATTERN_COUNT,
   circularStep,
@@ -40,6 +40,7 @@ export type {
   SketchMirror,
   SketchPattern,
   SketchPoint,
+  SketchText,
   TextContour,
   TextFontId,
   TextSegment,
@@ -82,4 +83,5 @@ export type { DimensionTarget } from './dimension-placement';
 export { SPLINE_TOLERANCE } from './geometry';
 export type { ConstraintSolver, SolveInput, SolveResult, SolveStatus } from './solver';
 export type { SketchGeometry } from './geometry-port';
+export { derivedOwner, textCurves } from './text';
 export type { TextOutliner } from './text';

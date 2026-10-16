@@ -288,5 +288,5 @@ function isPoint(e: SketchEntity): e is SketchPoint {
 }
 
 function isCurve(e: SketchEntity): e is SketchCurve {
-  return e.kind !== 'point' && !isPattern(e);
+  return e.kind !== 'point' && e.kind !== 'text' && !isPattern(e);
 }

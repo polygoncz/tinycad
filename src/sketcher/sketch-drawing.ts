@@ -170,10 +170,15 @@ export function axisDrawing(
   return freezeDrawing(frame, [line], []);
 }
 
-const isCurve = (e: SketchEntity): e is SketchCurve => e.kind !== 'point' && !isPattern(e);
+const isCurve = (e: SketchEntity): e is SketchCurve =>
+  e.kind !== 'point' && e.kind !== 'text' && !isPattern(e);
 
-/** A point or a curve: what a drawing shows of the data (a pattern shows through its copies). */
-const isGeometry = (e: SketchEntity): e is SketchPoint | SketchCurve => !isPattern(e);
+/**
+ * A point or a curve: what a drawing shows of the data (a pattern shows through its copies; a
+ * text is not drawn yet, M37 task 3).
+ */
+const isGeometry = (e: SketchEntity): e is SketchPoint | SketchCurve =>
+  e.kind !== 'text' && !isPattern(e);
 
 /** The polyline through the pole points of a bspline, in the style 'construction' (M29). */
 function controlPolygon(

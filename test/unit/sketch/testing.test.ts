@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { SketchData, SketchEntityId } from '@/sketch/model';
 import { parseSketchData } from '@/sketch/parse';
 import type { SolveInput, SolveResult } from '@/sketch/solver';
-import { createFakeSolver, createFakeTextOutliner, rectangleData } from '@/sketch/testing';
+import {
+  createFakeSolver,
+  createFakeTextOutliner,
+  rectangleData,
+  textData,
+} from '@/sketch/testing';
 
 const pointId = (data: SketchData, id: string): SketchEntityId => {
   const p = data.entities.find((e) => e.id === id);
@@ -238,5 +243,37 @@ describe('createFakeTextOutliner', () => {
     const outliner = createFakeTextOutliner();
     expect(await outliner.advance({ text: 'Žl ť', font: 'mono', height: 10 })).toBeCloseTo(24);
     expect(await outliner.advance({ text: '', font: 'serif', height: 10 })).toBe(0);
+  });
+});
+
+describe('textData', () => {
+  it('is valid frozen data: baseline points, construction baseline, text with fake outlines', async () => {
+    const data = textData({ id: 'x', text: 'a b', height: 2, p1: [1, 2], p2: [3, 2] });
+    expect(parseSketchData(data.entities, data.constraints).ok).toBe(true);
+    expect(Object.isFrozen(data.entities[3])).toBe(true);
+    expect(data.entities.slice(0, 3)).toEqual([
+      { kind: 'point', id: 'x.p1', x: 1, y: 2 },
+      { kind: 'point', id: 'x.p2', x: 3, y: 2 },
+      { kind: 'line', id: 'x.bl', p1: 'x.p1', p2: 'x.p2', construction: true },
+    ]);
+    const outlines = await createFakeTextOutliner().outline({
+      text: 'a b',
+      font: 'sans',
+      height: 2,
+    });
+    expect(data.entities[3]).toEqual({
+      kind: 'text',
+      id: 'x',
+      text: 'a b',
+      font: 'sans',
+      height: 2,
+      baseline: 'x.bl',
+      contours: outlines,
+    });
+  });
+
+  it('takes given contours, font and construction', () => {
+    const t = textData({ text: 'a', font: 'mono', contours: [], construction: true }).entities[3];
+    expect(t).toMatchObject({ font: 'mono', contours: [], construction: true });
   });
 });

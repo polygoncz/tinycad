@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_PATTERN_COUNT,
+  MAX_TEXT_LENGTH,
   TEXT_FONTS,
   circularStep,
   isPatternSource,
@@ -95,7 +96,7 @@ describe('patternParamsValid', () => {
 });
 
 describe('isPatternSource', () => {
-  it('a point or a curve is a source, a mirror or pattern is not', () => {
+  it('a point or a curve is a source, a mirror, pattern or text is not', () => {
     const entities: readonly [SketchEntity, boolean][] = [
       [{ kind: 'point', id: eid('a'), x: 0, y: 0 }, true],
       [{ kind: 'line', id: eid('ab'), p1: eid('a'), p2: eid('b') }, true],
@@ -129,6 +130,18 @@ describe('isPatternSource', () => {
       [MIRROR, false],
       [LINEAR, false],
       [CIRCULAR, false],
+      [
+        {
+          kind: 'text',
+          id: eid('t'),
+          text: 'a',
+          font: 'sans',
+          height: 1,
+          baseline: eid('ab'),
+          contours: [],
+        },
+        false,
+      ],
     ];
     for (const [entity, source] of entities)
       expect(isPatternSource(entity), entity.kind).toBe(source);
@@ -139,5 +152,11 @@ describe('TEXT_FONTS', () => {
   it('lists the bundled fonts in panel order and is frozen', () => {
     expect(TEXT_FONTS).toEqual(['sans', 'serif', 'mono']);
     expect(Object.isFrozen(TEXT_FONTS)).toBe(true);
+  });
+});
+
+describe('MAX_TEXT_LENGTH', () => {
+  it('is 200 code points', () => {
+    expect(MAX_TEXT_LENGTH).toBe(200);
   });
 });

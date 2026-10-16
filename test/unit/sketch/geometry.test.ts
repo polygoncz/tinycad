@@ -3,6 +3,8 @@ import { curve2, regionCurves } from '@/sketch/geometry';
 import { isPattern } from '@/sketch/model';
 import { patternCopies } from '@/sketch/patterns';
 import { pointsById } from '@/sketch/points';
+import { textData } from '@/sketch/testing';
+import { textCurves } from '@/sketch/text';
 import type { SketchCurve, SketchData } from '@/sketch/model';
 import { parseSketchData } from '@/sketch/parse';
 
@@ -14,7 +16,8 @@ function sketch(entities: readonly unknown[]): SketchData {
 
 function curve(data: SketchData, id: string): SketchCurve {
   const c = data.entities.find((e) => e.id === id);
-  if (c === undefined || c.kind === 'point' || isPattern(c)) throw new Error(`no curve ${id}`);
+  if (c === undefined || c.kind === 'point' || c.kind === 'text' || isPattern(c))
+    throw new Error(`no curve ${id}`);
   return c;
 }
 
@@ -341,5 +344,31 @@ describe('regionCurves – copies of mirrors and patterns (M36)', () => {
   it('returns a frozen array with copies', () => {
     const data = sketch([...BASE, { kind: 'mirror', id: 'm', sources: ['k'], axis: 'ou' }]);
     expect(Object.isFrozen(regionCurves(data))).toBe(true);
+  });
+});
+
+describe('regionCurves – texts (M37)', () => {
+  const MIRRORED = [
+    { kind: 'point', id: 'o', x: 0, y: -5 },
+    { kind: 'point', id: 'u', x: 1, y: -5 },
+    { kind: 'point', id: 'c', x: 3, y: -1 },
+    { kind: 'line', id: 'ou', p1: 'o', p2: 'u', construction: true },
+    { kind: 'circle', id: 'k', center: 'c', radius: 0.5 },
+    { kind: 'mirror', id: 'm', sources: ['k'], axis: 'ou' },
+  ];
+
+  it('appends the curves of a text after the curves of the data and the copies', () => {
+    const text = textData({ text: 'ab' });
+    const data = sketch([...text.entities, ...MIRRORED]);
+    const curves = regionCurves(data);
+    expect(curves.map((c) => c.id)).toEqual(['k', 'm:1.k', ...textCurves(text).map((c) => c.id)]);
+    expect(curves.slice(2)).toEqual(textCurves(text));
+  });
+
+  it('skips a construction text, but not the text on a construction baseline', () => {
+    const normal = textData({ id: 'n', text: 'a' });
+    const construction = textData({ id: 'c', text: 'b', construction: true, p1: [0, 20] });
+    const data = sketch([...construction.entities, ...normal.entities]);
+    expect(regionCurves(data).map((c) => c.id)).toEqual(textCurves(normal).map((c) => c.id));
   });
 });

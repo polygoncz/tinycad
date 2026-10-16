@@ -251,7 +251,9 @@ function entityPrimitives(
     case 'mirror':
     case 'linearPattern':
     case 'circularPattern':
-      // Recipes (M36): their copies are derived from the solved originals, never solved.
+    case 'text':
+      // Recipes (M36, M37): their copies and letters are derived from the solved originals,
+      // never solved.
       return [];
   }
 }
@@ -705,7 +707,7 @@ function pointOf(
 
 function curveOf(entities: ReadonlyMap<SketchEntityId, SketchEntity>, id: SketchEntityId): Curve {
   const e = entities.get(id);
-  if (e === undefined || e.kind === 'point' || isPattern(e))
+  if (e === undefined || e.kind === 'point' || e.kind === 'text' || isPattern(e))
     throw new Error(`${id} is not a curve`);
   return e;
 }

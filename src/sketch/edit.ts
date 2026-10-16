@@ -14,6 +14,7 @@ import type {
   SketchItemId,
   SketchPattern,
   SketchPoint,
+  SketchText,
 } from './model';
 
 // Pure editing helpers of the sketcher (spec 12 "Geometrie a pomůcky editace"). They return new
@@ -23,7 +24,10 @@ import type {
 const MIN_DIMENSION = 1e-9;
 
 const isRound = (e: SketchEntity): boolean => e.kind === 'circle' || e.kind === 'arc';
-const isCurve = (e: SketchEntity): e is SketchCurve => e.kind !== 'point' && !isPattern(e);
+const isCurve = (e: SketchEntity): e is SketchCurve =>
+  e.kind !== 'point' && e.kind !== 'text' && !isPattern(e);
+/** A pattern (M36) or a text (M37): a recipe no constraint or dimension may refer to. */
+const isRecipe = (e: SketchEntity): boolean => isPattern(e) || e.kind === 'text';
 
 /** The end points of a spline (first and last pole or fit point), or undefined for other entities. */
 function splineEnds(e: SketchEntity): readonly SketchEntityId[] | undefined {
@@ -42,14 +46,14 @@ function lineAtSplineEnd(first: SketchEntity, second: SketchEntity): boolean {
 
 /**
  * The constraint for the selected entities (in selection order), or null when the selection does
- * not fit or contains a pattern (M36). Onshape's convention for the M26 kinds: coincident of a
+ * not fit or contains a pattern (M36) or a text (M37). Onshape's convention for the M26 kinds: coincident of a
  * point and a curve is pointOnCurve, horizontal/vertical of two points is hAlign/vAlign.
  */
 export function constraintFor(
   kind: GeometricConstraintKind,
   selected: readonly SketchEntity[],
 ): SketchConstraintDraft | null {
-  if (selected.some(isPattern)) return null;
+  if (selected.some(isRecipe)) return null;
   if (kind === 'symmetric') return symmetricFor(selected);
   const [first, second] = selected;
   if (selected.length === 1 && first !== undefined) {
@@ -135,13 +139,14 @@ function pointOn(
 
 /**
  * The dimension for the selected entities: 1 line → distance(p1, p2); 1 circle/arc → radius;
- * 2 points → distance. value = the measured value; ≤ 1e-9 → null; a pattern selected → null.
+ * 2 points → distance. value = the measured value; ≤ 1e-9 → null; a pattern or a text selected
+ * → null.
  */
 export function dimensionFor(
   selected: readonly SketchEntity[],
   data: SketchData,
 ): SketchConstraintDraft | null {
-  if (selected.some(isPattern)) return null;
+  if (selected.some(isRecipe)) return null;
   const [first, second] = selected;
   let draft: Extract<SketchConstraintDraft, { kind: DimensionKind }> | null = null;
   if (selected.length === 1 && first !== undefined) {
@@ -320,7 +325,7 @@ export function constraintTargets(c: SketchConstraint): readonly SketchEntityId[
  * Removes items with a cascade; the order of the rest does not change. Unknown ids are ignored.
  * (1) selected constraints; (2) selected entities, with a point also the curves using it;
  * (2a) removed sources leave the sources of patterns, a pattern without sources goes; (2b) a
- * pattern goes with its axis or center; (3) points of removed curves that no remaining curve uses
+ * pattern goes with its axis or center; (2c) a text goes with its baseline (M37); (3) points of removed curves that no remaining curve uses
  * and that are no center of a remaining pattern; (4) constraints on removed entities. Steps 2–3
  * repeat until nothing more goes (a removed curve empties a pattern, which frees its center).
  */
@@ -330,6 +335,7 @@ export function removeItems(data: SketchData, ids: readonly SketchItemId[]): Ske
   for (const e of data.entities) if (selected.has(e.id)) removed.add(e.id);
   const curves = data.entities.filter(isCurve);
   const patterns = data.entities.filter(isPattern);
+  const texts = data.entities.filter((e) => e.kind === 'text');
   let before = -1;
   while (removed.size !== before) {
     before = removed.size;
@@ -341,6 +347,7 @@ export function removeItems(data: SketchData, ids: readonly SketchItemId[]): Ske
       const anchorRemoved = anchor !== undefined && removed.has(anchor);
       if (anchorRemoved || p.sources.every((s) => removed.has(s))) removed.add(p.id);
     }
+    for (const t of texts) if (removed.has(t.baseline)) removed.add(t.id);
     const stillUsed = new Set<string>([
       ...curves.filter((c) => !removed.has(c.id)).flatMap((c) => curvePoints(c)),
       ...patterns.flatMap((p) =>
@@ -387,17 +394,33 @@ function patternAnchor(p: SketchPattern): SketchEntityId | undefined {
 }
 
 /**
- * Toggles construction of the selected curves: all construction → all normal, otherwise all
- * construction. Points, patterns and constraints are ignored. A normal curve has no
- * `construction` field.
+ * Toggles construction of the selected curves and texts (M37): all construction → all normal,
+ * otherwise all construction. Points, patterns and constraints are ignored. A normal curve or text
+ * has no `construction` field.
  */
 export function toggleConstruction(data: SketchData, ids: readonly SketchItemId[]): SketchData {
   const selected = new Set<string>(ids);
-  const targets = data.entities.filter((e) => isCurve(e) && selected.has(e.id));
+  const targets = data.entities.filter(
+    (e): e is SketchCurve | SketchText => (isCurve(e) || e.kind === 'text') && selected.has(e.id),
+  );
   if (targets.length === 0) return data;
-  const makeConstruction = !targets.every((c) => isCurve(c) && c.construction === true);
+  const makeConstruction = !targets.every((c) => c.construction === true);
   const entities = data.entities.map((e): SketchEntity => {
-    if (!isCurve(e) || !selected.has(e.id)) return e;
+    if (!selected.has(e.id)) return e;
+    if (e.kind === 'text') {
+      if (makeConstruction) return Object.freeze({ ...e, construction: true });
+      // Rebuilt without the field, like a curve.
+      return Object.freeze({
+        kind: e.kind,
+        id: e.id,
+        text: e.text,
+        font: e.font,
+        height: e.height,
+        baseline: e.baseline,
+        contours: e.contours,
+      });
+    }
+    if (!isCurve(e)) return e;
     if (makeConstruction) return Object.freeze({ ...e, construction: true });
     // Rebuilt without the field: a normal curve has no `construction` at all.
     return Object.freeze(withoutConstruction(e));

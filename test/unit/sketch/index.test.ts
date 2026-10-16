@@ -8,6 +8,7 @@ describe('sketch public API', () => {
     expect(Object.keys(sketch).sort()).toEqual(
       [
         'DIMENSION_KINDS',
+        'MAX_TEXT_LENGTH',
         'GEOMETRIC_CONSTRAINT_KINDS',
         'MAX_PATTERN_COUNT',
         'ORIGIN_SNAP',
@@ -24,6 +25,7 @@ describe('sketch public API', () => {
         'curvePoints',
         'curve2',
         'defaultPlacement',
+        'derivedOwner',
         'dimensionFor',
         'endTangent',
         'inferLine',
@@ -45,6 +47,7 @@ describe('sketch public API', () => {
         'snap',
         'tangentArcFrom',
         'tangentCircle',
+        'textCurves',
         'toggleConstruction',
       ].sort(),
     );
