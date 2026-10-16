@@ -705,7 +705,7 @@ Aby se stopy nesrazily v `sketch-tools.ts`, `constants.ts` a i18n, jsou id rozd�
 | Stopa | Nástroje (rodina) | Akce |
 |---|---|---|
 | B | `sketch.rectangle` (stávající, rohy) + `sketch.rectangleCenter`, `sketch.rectangle3p` (rodina `rectangle`); `sketch.line` + `sketch.xline` (rodina `line`); `sketch.point`; `sketch.slot`, `sketch.slotOverall`, `sketch.slotArc` (rodina `slot`) | `sketch.constructionMode` (přepínač, klávesa `Q`) |
-| A | `sketch.trim`, `sketch.extend`, `sketch.split` (rodina `trim`); `sketch.fillet`, `sketch.chamfer` (rodina `fillet`); `sketch.offset` | – |
+| A | `sketch.trim`, `sketch.extend`, `sketch.split` (rodina `trim`); `sketch.fillet`, `sketch.chamfer`, `sketch.chamferAngle` (M34, rodina `fillet`); `sketch.offset` | – |
 | C | `sketch.mirror`; `sketch.linearPattern`, `sketch.circularPattern` (rodina `pattern`); `sketch.text` | `sketch.constraint.symmetric` (z `GEOMETRIC_CONSTRAINT_KINDS`) |
 
 Skupiny lišty: kreslení `draw`, úpravy (trim, fillet, offset, mirror, pole) nová skupina `modify` – zavede ji ta stopa, která se do `main` sloučí první, druhá ji jen použije. Klávesové zkratky: B `Q` (režim konstrukce), `P` (bod); A `T` (trim); ostatní bez zkratky, dokud se nedohodne.
@@ -846,6 +846,55 @@ export interface SplitRequest { readonly curve: SketchEntityId; readonly where: 
 **Lišta:** rodina `trim` (`sketch.trim` – ikona `scissors`, klávesa `T`; `sketch.extend` – `arrow-bar-to-right`; `sketch.split` – `separator`) ve skupině `modify` ([[#Id nástrojů, akcí a rodin]]); v liště skicáře je `modify` mezi `draw` a `constrain` (`groupOrder` v `sketch-toolbar.ts`); popisky `tool.trim`, `tool.extend`, `tool.split` (Ořezat, Prodloužit, Rozdělit). Nástroje berou port z `SketchSession.geometry`. Bez `hits()`: trim nic nenabízí, split dělí v bodě kurzoru bez přichycení, extend `hits()` nepotřebuje (počítá vlastní průsečíky s `__extend`, výsledek drží pro dvojici křivka–konec a verzi entit). Po odpovědi jádra (`segment`, `intersections`) nástroj ověří, že se data mezitím nezměnila, jinak nic nezapíše. `XLINE_EXTENT` je do sloučení stopy B lokální konstanta nástroje Extend.
 
 **Testy:** jádro – kontraktová sada `curveIntersections` (úsečka×úsečka, úsečka×oblouk ve dvou bodech, tečná kružnice, překryv úseček, spline×úsečka, samoprůsečík splinu, parametry podle definice) a `curveSegment` (všechny druhy, kružnice → oblouk přes `2π`, spline: body kusu leží na původním splinu); `sketch` – `pointAt`/`nearestParam` (inverze), `cutsOf` (vlastní konce vynechané, sloučení, `at`), `trimEdit`/`extendEdit`/`splitEdit` pro každý řádek tabulky a každé pravidlo dat (id, body, vazby; výsledek projde `parseSketchData`); `sketcher` – cache průsečíků (poslední vyhrává), body křížení, nástroje s `FakeSketchGeometry`; e2e – oříznout křížící se úsečky obdélníku → oblast a vysunutí, prodloužit úsečku ke kružnici, rozdělit úsečku.
+
+## Zaoblení a sražení ve skice (M34)
+
+Rozhodnuto 2026-10-16 se stopou A ([[M34-zaobleni-a-srazeni-ve-skice|M34]]). Build neváže `ChFi2d` ani `Geom2dGcc`/`GccAna`: střed zaoblení počítá jádro jako průsečík ekvidistant (`Geom2d_OffsetCurve`), body sražení na oblouku dá průsečík s kružnicí o poloměru `d` přes `SketchGeometry.intersections` (M33). **Jen úsečky a oblouky** (spline ne: řešič neumí tečnost oblouk–spline; kružnice ne).
+
+### Port
+
+```ts
+// kernel: SketchOps (spec 06 „Stav po M34“)
+filletArc(p: { readonly a: ProfileCurve; readonly b: ProfileCurve; readonly radius: number; readonly near: Vec2 }): Promise<FilletArc>;
+export interface FilletArc { readonly center: Vec2; readonly pointA: Vec2; readonly pointB: Vec2; readonly ta: number; readonly tb: number }
+
+// sketch/geometry-port.ts
+SketchGeometry.fillet(a: Curve2, b: Curve2, radius: number, near: Vec2): Promise<FilletArc>;   // stejný tvar, typ FilletArc v sketch
+```
+
+Střed leží ve vzdálenosti `radius` od nosné geometrie obou křivek (úsečka jako nekonečná přímka, oblouk jako celá kružnice); z možných středů ten nejbližší `near`. `pointA`, `pointB` = průměty středu na nosnou geometrii, `ta`, `tb` jejich parametr `t` (M33; u úsečky smí ležet mimo `[0, 1]` – prodloužení). Bez řešení (poloměr příliš velký, rovnoběžné úsečky dál než `2r`) → `'operation-failed'`.
+
+### Virtuální ostrý roh
+
+Když dvě křivky sdílí koncový bod (roh), roh **zůstane** jako samostatný bod skici (žádná křivka ho nepoužívá) s vazbami `pointOnCurve(roh, a)` a `pointOnCurve(roh, b)` – drží průsečík nosných přímek / kružnic. Vazby a kóty na roh (rozměry obdélníku) zůstanou. Body oblasti neohraničují.
+
+### Zaoblení (`sketch.fillet`)
+
+- **Výběr:** klik na roh (bod, který jako koncový bod používají **právě dvě** úsečky nebo oblouky), nebo klik na dvě křivky (úsečka/oblouk) za sebou. `near`: u rohu bod uvnitř úhlu (roh + `r` · jednotkový součet směrů obou křivek od rohu), u dvou křivek střed obou míst kliknutí.
+- **Poloměr:** poslední použitý v session; první = ¼ délky kratší z obou křivek (oblouk: délka oblouku), zaokrouhleno na 2 platné číslice. Po zápisu se kóta poloměru otevře k úpravě (`SketchState.editingDimension`, jako nástroj Kóta). Náhled oblouku při pohybu nad rohem nebo druhou křivkou (asynchronně, poslední vyhrává).
+- **Data** (`filletEdit`, čistá funkce, pravidla M33): nový střed (bod) a oblouk proti směru z `pointA` k `pointB` nebo naopak (kratší oblouk mezi body dotyku, na straně `near`); konec každé křivky bližší rohu (u dvou křivek bližší bodu dotyku) se přesune do bodu dotyku = **sdílený** koncový bod oblouku (nový bod). Původní koncový bod: roh → virtuální ostrý roh; jinak podle pravidla 2 M33 (smaže se, jen když ho nic nepoužívá). Vazby `tangent(oblouk, a)`, `tangent(oblouk, b)`, kóta `radius` (hodnota `r`). Úsečka zkrácená na nulovou délku → `null` (nic se nezapíše, nástroj ohlásí příliš velký poloměr).
+
+### Sražení (`sketch.chamfer`, `sketch.chamferAngle`)
+
+Jen v rohu (dvě úsečky/oblouky se sdíleným koncovým bodem). Rodina `fillet`: `sketch.fillet`, `sketch.chamfer` (dvě vzdálenosti), `sketch.chamferAngle` (vzdálenost a úhel).
+
+- **Body:** na křivce ve vzdálenosti (tětivě) `d` od rohu – úsečka po své délce, oblouk průsečík s kružnicí `(roh, d)` přes `geometry.intersections` (bližší rohu po oblouku). Vzdálenost větší než křivka → `null`.
+- **Dvě vzdálenosti:** obě `d` stejné (poslední použité, první ¼ kratší křivky); kóty `distance(roh, pA) = d`, `distance(roh, pB) = d`, první se otevře k úpravě. Kóty **nejsou svázané** (vazbu „stejná vzdálenost“ nemáme); stejné hodnoty jen při vytvoření. S číselným vstupem ([[M32-ciselny-vstup|M32]]) zadá uživatel obě hodnoty předem.
+- **Vzdálenost a úhel:** referenční křivka = první vybraná (u kliku na roh ta, ke které je kurzor blíž), **musí to být úsečka** (úhel kótujeme jen mezi úsečkami). Kóta `distance(roh, pA) = d` a `angle(sražení, a) = 45°`; bod na druhé křivce z úhlu (průsečík paprsku z `pA` přes `geometry.intersections`).
+- **Data** (`chamferEdit`): nová úsečka `pA → pB`, konce obou křivek u rohu přesunuté do `pA`, `pB` (nové sdílené body), roh → virtuální ostrý roh, kóty podle varianty.
+
+```ts
+// sketch/fillet.ts (čisté funkce)
+export function filletEdit(data: SketchData, req: FilletRequest, ids: IdSource): SketchEdit | null;
+export function chamferEdit(data: SketchData, req: ChamferRequest, ids: IdSource): SketchEdit | null;
+export function cornerOf(data: SketchData, point: SketchEntityId): { readonly a: SketchEntityId; readonly b: SketchEntityId } | null;   // roh = bod dvou úseček/oblouků
+```
+
+`SketchEdit` rozšíří o `edit?: SketchConstraintId` (kóta k otevření); `SketchSession.rewrite(next, added, opts?: { edit?: SketchConstraintId })` ji po zápisu nastaví jako `editingDimension`. Přesný tvar `FilletRequest`/`ChamferRequest` navrhne implementace (vzor `TrimRequest`).
+
+**Lišta:** rodina `fillet` ve skupině `modify` – `sketch.fillet` (ikona `vector-spline`… ověřit v sadě Tabler, např. `border-radius`), `sketch.chamfer`, `sketch.chamferAngle` (např. `vector-triangle`); popisky Zaoblit, Srazit, Srazit s úhlem / Fillet, Chamfer, Chamfer with angle. `sketch.chamferAngle` je nové id rodiny `fillet` stopy A (doplněno k [[#Id nástrojů, akcí a rodin]]).
+
+**Testy:** jádro – kontraktová sada `filletArc` (dvě kolmé úsečky, úsečky pod 60°, úsečka–oblouk zvenku i zevnitř, oblouk–oblouk, nesousedící úsečky – body dotyku na prodloužení, výběr podle `near`, příliš velký poloměr → `'operation-failed'`); `sketch` – `cornerOf`, `filletEdit` a `chamferEdit` (obě varianty) pro obdélník: oblouk tečný, kóty obdélníku přežijí přes virtuální roh, výsledek projde `parseSketchData` a body jsou před křivkami; `sketcher` – nástroje s fake portem; e2e – zaoblit roh obdélníku, změnit kótu poloměru (tvar drží, roh zůstává zakótovaný), srazit roh, vysunout.
 
 ## Testy
 
