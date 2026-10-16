@@ -628,6 +628,21 @@ export interface SketchFitSpline {
   - Tažení bodů splinu jako u ostatních entit (výběrový nástroj, řešič).
 - **Testy:** `core/math/bspline.ts` (hodnoty a derivace proti ručně spočítaným, tessellace v toleranci), `bspline.interpolate` (prochází body, 2–3 body → nižší stupeň), `parseSketchData` všech pravidel, `removeItems`, `computeRegions` (obdélník s jednou stranou spline, uzavřený spline, spline křížící úsečku → `crossing`, díra ze splinu), adaptér planegcs (tažený fit bod → spline jím prochází, `dof` fit-splinu = 2 · fit bodů, tečná úsečka na konci), `validateFaceInput` a `FakeKernel`, `kernel-occt` (plocha profilu se splinem ≈ plocha z tessellace), kresba `polyline`, integrační test (skica se splinem → Vysunutí, jméno `face:side:<id>`), e2e po nástrojích.
 
+## Rozšíření skicáře II (M30–M37)
+
+Naplánováno 2026-10-16, zatím jen rozsah – kontrakt se dopíše před spuštěním stop ([[Roadmapa#Rozšíření skicáře II (M30–M37)]]).
+
+| Milník | Co přibude | Dopad na data | Otázka |
+|---|---|---|---|
+| [[M30-geometrie-skici-v-occt\|M30]] | oblasti, křížení a průsečíky v jádře místo `sketch/regions.ts` ([[0028-geometrie-skici-v-jadre\|ADR 0028]]) | žádný; nový port jádra | [[Q092 Hranice geometrie skici v TS a v OCCT\|Q092]] |
+| [[M31-nove-kreslici-nastroje\|M31]] | obdélník středem a třemi body, bod, drážky (3 druhy), režim konstrukce, nekonečná přímka | nová entita přímky | – |
+| [[M32-ciselny-vstup\|M32]] | délka, úhel a souřadnice z klávesnice při kreslení | žádný (vznikají kóty) | [[Q090 Číselný vstup při kreslení\|Q090]] |
+| [[M33-trim-extend-split\|M33]] | ořezání, prodloužení, dělení | nové entity z částí křivek | – |
+| [[M34-zaobleni-a-srazeni-ve-skice\|M34]] | zaoblení a sražení mezi dvěma křivkami | žádný (oblouk/úsečka + vazby) | – |
+| [[M35-offset\|M35]] | ekvidistanta křivky a řetězce | možná vazba odsazení | – |
+| [[M36-zrcadleni-a-pole\|M36]] | parametrické zrcadlení, lineární a kruhové pole, vynesené kóty | nové entity, vazba symetrie | [[Q089 Parametrické zrcadlení a pole ve skice\|Q089]] |
+| [[M37-text-ve-skice\|M37]] | text jako obrysy písmen (opentype.js, [[0029-text-ve-skice-pres-opentype\|ADR 0029]]) | nová entita text | [[Q091 Fonty pro text ve skice\|Q091]] |
+
 ## Testy
 
 - `sketch`: `parseSketchData` pro každé pravidlo (platná data, každý druh chyby s `index`); `constraintFor` a `dimensionFor` pro platné i neplatné výběry; `measure`; `removeItems` (kaskáda bod → křivky → osiřelé body → vazby); `toggleConstruction`; `computeRegions`: obdélník (1 oblast, jméno z id 4 úseček, plocha), dva obdélníky vedle sebe se sdílenou hranou (2 oblasti), obdélník s kružnicí uvnitř (díra, 2 oblasti), kružnice v kružnici v kružnici, drážka z úseček a tečných oblouků (řazení při shodě úhlu), otevřená polyline (0), polyline s „ocáskem“ (prořezání), konstrukční úsečka uvnitř obdélníku (ignorována), křížící se úsečky (`crossing`), body spojené `coincident` (splynutí uzlů), stabilita jména po změně souřadnic a pořadí entit; `FakeSolver`.

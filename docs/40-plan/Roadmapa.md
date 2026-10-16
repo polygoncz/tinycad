@@ -53,6 +53,14 @@ Jediná entita až do M10 je **kvádr (Box)**. Druhá entita v M11 je zkouška r
 | [[M27-oblouky-a-kruznice\|M27]] | Oblouky a kružnice | `sketch`, `sketcher`, `ui` | kružnice 2 body, 3 body, 2 a 3 tečny; oblouk 3 body a tečný; tečný oblouk v polyline |
 | [[M28-koty\|M28]] | Kóty | `sketch`, `solver-planegcs`, `features/*`, `sketcher`, `render`, `ui` | jeden nástroj Kóta s druhem podle polohy myši, nové druhy (vodorovná, svislá, úhel, průměr…), přetahování a uložená poloha |
 | [[M29-spliny\|M29]] | Spliny | `sketch`, `solver-planegcs`, `features/*`, `kernel`, `kernel-occt`, `sketcher`, `render` | kubický B-spline přes řídicí body (NURBS) a přes body, oblasti a vysunutí |
+| [[M30-geometrie-skici-v-occt\|M30]] | Geometrie skici v OCCT | `kernel`, `kernel-occt`, `sketch`, `features/*`, `regen`, `interaction`, `sketcher`, `app` | oblasti, křížení a průsečíky skici počítá jádro ([[0028-geometrie-skici-v-jadre\|ADR 0028]]) |
+| [[M31-nove-kreslici-nastroje\|M31]] | Nové kreslicí nástroje | `sketch`, `solver-planegcs`, `sketcher`, `render`, `ui` | obdélník středem a třemi body, bod, drážky, režim konstrukce, nekonečná přímka |
+| [[M32-ciselny-vstup\|M32]] | Číselný vstup | `sketcher`, `interaction`, `render`, `ui` | délka, úhel a souřadnice z klávesnice při kreslení ([[Q090 Číselný vstup při kreslení\|Q090]]) |
+| [[M33-trim-extend-split\|M33]] | Trim, extend, split | `kernel`, `kernel-occt`, `sketch`, `sketcher`, `render` | ořezání, prodloužení a dělení křivek |
+| [[M34-zaobleni-a-srazeni-ve-skice\|M34]] | Zaoblení a sražení ve skice | `sketch`, `sketcher`, `kernel`, `kernel-occt` | fillet a chamfer mezi dvěma křivkami |
+| [[M35-offset\|M35]] | Offset | `kernel`, `kernel-occt`, `sketch`, `sketcher` | ekvidistanta křivky a řetězce v OCCT |
+| [[M36-zrcadleni-a-pole\|M36]] | Zrcadlení a pole | `sketch`, `solver-planegcs`, `sketcher`, `render`, `ui` | parametrické zrcadlení, lineární a kruhové pole s vynesenými kótami ([[Q089 Parametrické zrcadlení a pole ve skice\|Q089]]) |
+| [[M37-text-ve-skice\|M37]] | Text ve skice | `sketch`, `features/*`, `sketcher`, `render`, `ui` | text jako obrysy písmen přes opentype.js ([[0029-text-ve-skice-pres-opentype\|ADR 0029]]) |
 
 **Noční rychloakce 2026-10-14:** [[M11-dalsi-entity|M11]]–[[M15-export-a-dokonceni|M15]] implementovány bez průběžného schvalování, rozhodnutí v [[Rozhodnutí noční rychloakce]]. M16 se tehdy nedělal – předpřipravený build stačil na celou první verzi. Pavel 2026-10-14 ho vrátil do plánu za M21 kvůli zásobníku Emscriptenu (A7 z [[Revize kódu 2026-10-14|revize kódu]]).
 
@@ -69,6 +77,11 @@ M0 → M1 → M2 → M3 ─┬─► M4 ─────────────�
                                                                                              └─► M17 ─► M17.1 ─► M18 ─► M19 ─► M19.1 ─► M19.2 ─► M20 ─► M21 ─► M22 ─► M23 ─► M24 ─┬─► M25 ─► M26 ─► M27 ─┬─► M16
                                                                                                                                                                                   ├─► M28 ───────────────┤
                                                                                                                                                                                   └─► M29 (1–7) ─► M29 (8, po M26)
+
+Rozšíření skicáře II (po M29):
+  stopa A: M30 ─► M33 ─► M34 ─► M35
+  stopa B: M31 ─► M32
+  stopa C: M36 ─► M37 (po sloučení M30)
 ```
 
 M4 (persistence) a M5 (port jádra) na sobě nezávisí – pořadí lze prohodit. Persistence je dřív, protože ověří formát logu, dokud je čerstvý.
@@ -96,6 +109,27 @@ Pravidla:
 4. Retrospektiva série zhodnotí, jestli se souběh vyplatil (čas, konflikty, kvalita).
 
 **Zhodnocení (2026-10-16):** série M25–M29 je celá v `main`. Souběh zrychlil práci zhruba dvakrát (4½ milníku za ~2 h 10 min), bez regrese po sloučení; nejtěžší pro Pavla byla ztráta přehledu (vznikl panel `/stopy`). Pavel: pokračovat i v dalších sériích. Podrobnosti v [[Souběžné stopy agentů#Zhodnocení první série (M25–M29, 2026-10-15 a 16)]], postup je skill `/stopa`.
+
+## Rozšíření skicáře II (M30–M37)
+
+Naplánováno 2026-10-16 po sérii M25–M29. Pavel: „Chtěl bych ještě dodělat do Sketch následující feature: obdélník zadaný středem a jedním krajním bodem, obdélník zadaný třemi body, možnost zadat bod, zadávat text, Construction Line, fillet a chamfer mezi dvěma hranami, trim, extend, split, offset, slot, mirror, linear a circular pattern.“
+
+Rozhodnutí v sezení 2026-10-16:
+- **Celá geometrie skici do OCCT** ([[Q088 Geometrie skici v TypeScriptu nebo v OCCT#Znovuotevření 2026-10-16|Q088]], [[0028-geometrie-skici-v-jadre|ADR 0028]]) jako samostatný milník [[M30-geometrie-skici-v-occt|M30]] před operacemi, které geometrii mění.
+- „Construction Line“ = režim konstrukce **i** nekonečná přímka; „zadat bod“ = nástroj Bod **i** číselný vstup.
+- Text přes **opentype.js** ([[0029-text-ve-skice-pres-opentype|ADR 0029]]).
+- Zrcadlení a pole jako **parametrická entita** s vynesenými kótami ([[Q089 Parametrické zrcadlení a pole ve skice|Q089]]).
+- Drážky: přímá střed–střed, přímá celkovou délkou, oblouková.
+
+Souběžné stopy podle metodiky [[Souběžné stopy agentů]] (pravidla 1–4 jako u první série):
+
+| Stopa | Milníky | Poznámka |
+|---|---|---|
+| A – geometrie | [[M30-geometrie-skici-v-occt\|M30]] → [[M33-trim-extend-split\|M33]] → [[M34-zaobleni-a-srazeni-ve-skice\|M34]] → [[M35-offset\|M35]] | jádro a OCCT; [[Q092 Hranice geometrie skici v TS a v OCCT\|Q092]] při startu M30 |
+| B – kreslení | [[M31-nove-kreslici-nastroje\|M31]] → [[M32-ciselny-vstup\|M32]] | jen nové entity a vazby; [[Q090 Číselný vstup při kreslení\|Q090]] při startu M32 |
+| C – odvozené entity | [[M36-zrcadleni-a-pole\|M36]] → [[M37-text-ve-skice\|M37]] | M37 až po sloučení M30; [[Q089 Parametrické zrcadlení a pole ve skice\|Q089]], [[Q091 Fonty pro text ve skice\|Q091]] |
+
+Před `/stopa start` je potřeba zafixovat kontrakty sdílených typů ve spec 12 (nové členy `SketchEntity`, `SketchConstraint`, `Curve2`, rodiny nástrojů) a port jádra z M30, protože ho stopa C potřebuje pro text.
 
 ## Jak pracovat s milníkem
 
