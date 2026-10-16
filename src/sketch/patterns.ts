@@ -2,7 +2,7 @@ import { assertNever } from '@/core';
 import type { Vec2 } from '@/core';
 import { curvePoints } from './edit';
 import { pointsById } from './points';
-import { isPattern } from './model';
+import { circularStep, isPattern, isPatternSource } from './model';
 import type {
   SketchCircularPattern,
   SketchCurve,
@@ -18,9 +18,6 @@ import type {
 // Copies of mirrors and patterns (spec 12 "Zrcadlení a pole (M36)"). A pattern is a recipe; its
 // copies are derived here from the solved originals and never enter the solver. A copy has the
 // derived id '<pattern>:<index>.<source>', stable while only spacing, angle or geometry change.
-
-/** |angle| within this of 2π is a full circle: count steps instead of count − 1. */
-const FULL_CIRCLE_TOLERANCE = 1e-9;
 
 /** The index part of a derived id: i or i-j, then a dot and a non-empty id without : and ,. */
 const COPY_SUFFIX = /^\d+(?:-\d+)?\.[^:,]+$/;
@@ -59,7 +56,7 @@ export function patternCopies(data: SketchData): readonly Copy[] {
       for (const sourceId of pattern.sources) {
         const source = entities.get(sourceId);
         // parseSketchData guarantees a point or a curve; anything else has no copy.
-        if (source === undefined || isPattern(source)) continue;
+        if (source === undefined || !isPatternSource(source)) continue;
         if (source.kind === 'point') {
           copyPoint(source.id);
           continue;
@@ -241,11 +238,9 @@ function circularInstances(
 ): readonly Instance[] {
   const center = points.get(pattern.center);
   if (center === undefined) return [];
-  const { count, angle } = pattern;
-  const full = Math.abs(Math.abs(angle) - 2 * Math.PI) <= FULL_CIRCLE_TOLERANCE;
-  const step = full ? angle / count : angle / (count - 1);
+  const step = circularStep(pattern);
   const out: Instance[] = [];
-  for (let k = 1; k < count; k++) {
+  for (let k = 1; k < pattern.count; k++) {
     const cos = Math.cos(k * step);
     const sin = Math.sin(k * step);
     const map = ([x, y]: Vec2): Vec2 => {

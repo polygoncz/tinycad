@@ -782,6 +782,12 @@ export type SketchPattern = SketchMirror | SketchLinearPattern | SketchCircularP
 export type SketchEntity = SketchPoint | SketchCurve | SketchPattern;
 export const MAX_PATTERN_COUNT = 100;
 export function isPattern(e: SketchEntity): e is SketchPattern;
+/** Smí být zdrojem pole: bod nebo křivka (vyčerpávající switch, text M37 ne). */
+export function isPatternSource(e: SketchEntity): e is SketchPoint | SketchCurve;
+/** Hodnoty parametrů jednoho pole (počty, rozteče, úhly) podle Kontroly dat; jediné místo pravidel pro parse i setPatternParam. */
+export function patternParamsValid(p: SketchPattern): boolean;
+/** Krok kruhového pole: angle / count u plného kruhu, jinak angle / (count − 1). */
+export function circularStep(p: Pick<SketchCircularPattern, 'count' | 'angle'>): number;
 
 // sketch/patterns.ts (nový)
 /** Kopie všech polí skici jako běžné entity (body a křivky) s odvozenými id; originál (index 0) se nekopíruje. */

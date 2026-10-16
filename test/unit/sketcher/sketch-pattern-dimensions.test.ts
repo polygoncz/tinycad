@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import type { Plane, Vec3 } from '@/core';
 import { parseSketchData } from '@/sketch';
-import type { SketchData, SketchEntityId, SketchItemId } from '@/sketch';
-import { patternDimensionViews, sourceBox } from '@/sketcher/sketch-pattern-dimensions';
+import type {
+  SketchCircularPattern,
+  SketchData,
+  SketchEntityId,
+  SketchItemId,
+  SketchLinearPattern,
+} from '@/sketch';
+import {
+  patternDimensionViews,
+  sourceBox,
+  withPatternParam,
+} from '@/sketcher/sketch-pattern-dimensions';
 import type { SketchPatternDimensionView } from '@/sketcher/sketch-pattern-dimensions';
 
 // The dimensions of the parameters of a selected pattern (spec 12, "Zrcadlení a pole (M36)",
@@ -253,5 +263,61 @@ describe('patternDimensionViews: selection', () => {
     expect(next).not.toBe(first);
     expect(next[1]).toBe(first[1]);
     expect(next[0]).not.toBe(first[0]);
+  });
+});
+
+describe('withPatternParam', () => {
+  const LP: SketchLinearPattern = {
+    kind: 'linearPattern',
+    id: eid('lp'),
+    sources: [eid('pq')],
+    direction1: { angle: 0, count: 3, spacing: 4 },
+  };
+  const CP: SketchCircularPattern = {
+    kind: 'circularPattern',
+    id: eid('cp'),
+    sources: [eid('pq')],
+    center: eid('p'),
+    count: 3,
+    angle: Math.PI,
+  };
+
+  it('sets a parameter; count2 adds the second direction across direction 1, 1 removes it', () => {
+    expect(withPatternParam(LP, 'spacing1', 7)).toEqual({
+      ...LP,
+      direction1: { angle: 0, count: 3, spacing: 7 },
+    });
+    const grid = withPatternParam(LP, 'count2', 4);
+    expect(grid).toEqual({
+      ...LP,
+      direction2: { angle: Math.PI / 2, count: 4, spacing: 4 },
+    });
+    expect(grid === null ? null : withPatternParam(grid, 'count2', 1)).toEqual(LP);
+    expect(withPatternParam(CP, 'angle', -2 * Math.PI)).toEqual({ ...CP, angle: -2 * Math.PI });
+  });
+
+  it('null for an invalid value or a parameter the pattern does not have', () => {
+    expect(withPatternParam(LP, 'count1', 1)).toBeNull();
+    expect(withPatternParam(LP, 'count2', 0)).toBeNull();
+    expect(withPatternParam(LP, 'count2', 2.5)).toBeNull();
+    expect(withPatternParam(LP, 'spacing1', 0)).toBeNull();
+    expect(withPatternParam(LP, 'spacing2', 3)).toBeNull();
+    expect(withPatternParam(LP, 'count', 3)).toBeNull();
+    expect(withPatternParam(CP, 'count', 101)).toBeNull();
+    expect(withPatternParam(CP, 'angle', 0)).toBeNull();
+    expect(withPatternParam(CP, 'spacing1', 3)).toBeNull();
+  });
+
+  it('the result is frozen with its sources and directions', () => {
+    const grid = withPatternParam(LP, 'count2', 3);
+    expect(grid?.kind).toBe('linearPattern');
+    if (grid?.kind !== 'linearPattern') return;
+    expect(Object.isFrozen(grid)).toBe(true);
+    expect(Object.isFrozen(grid.sources)).toBe(true);
+    expect(Object.isFrozen(grid.direction1)).toBe(true);
+    expect(Object.isFrozen(grid.direction2)).toBe(true);
+    const circular = withPatternParam(CP, 'count', 5);
+    expect(Object.isFrozen(circular)).toBe(true);
+    expect(circular === null || Object.isFrozen(circular.sources)).toBe(true);
   });
 });

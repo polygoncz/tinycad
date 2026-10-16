@@ -1,3 +1,4 @@
+import { assertNever } from '@/core';
 import type { Brand, Vec2 } from '@/core';
 
 // The data model of a sketch (spec 12 "Data"). Plain immutable data stored in the params of a
@@ -128,6 +129,78 @@ export const MAX_PATTERN_COUNT = 100;
 
 export function isPattern(e: SketchEntity): e is SketchPattern {
   return e.kind === 'mirror' || e.kind === 'linearPattern' || e.kind === 'circularPattern';
+}
+
+/** A possible source of a mirror or pattern: a point or a curve, never a pattern (spec 12). */
+export function isPatternSource(e: SketchEntity): e is SketchPoint | SketchCurve {
+  switch (e.kind) {
+    case 'point':
+    case 'line':
+    case 'circle':
+    case 'arc':
+    case 'bspline':
+    case 'fitSpline':
+      return true;
+    case 'mirror':
+    case 'linearPattern':
+    case 'circularPattern':
+      return false;
+    default:
+      return assertNever(e);
+  }
+}
+
+/**
+ * |angle| of a circular pattern within this of 2π is a full circle (count steps instead of
+ * count − 1); |angle| may exceed 2π by this much (a full circle from arithmetic).
+ */
+export const FULL_CIRCLE_TOLERANCE = 1e-9;
+
+/**
+ * The angle between neighbouring instances of a circular pattern: angle / count for a full circle
+ * (the last instance is not the original again), else angle / (count − 1).
+ */
+export function circularStep(pattern: Pick<SketchCircularPattern, 'count' | 'angle'>): number {
+  const { count, angle } = pattern;
+  const full = Math.abs(Math.abs(angle) - 2 * Math.PI) <= FULL_CIRCLE_TOLERANCE;
+  return full ? angle / count : angle / (count - 1);
+}
+
+/**
+ * The parameters of one mirror or pattern are valid (spec 12, "Platné hodnoty"): every count an
+ * integer 2 … MAX_PATTERN_COUNT, a spacing finite and > 0, a direction angle finite, the angle of
+ * a circular pattern finite with 0 < |angle| ≤ 2π. A mirror has none. Its references are not
+ * checked here (parseSketchData does).
+ */
+export function patternParamsValid(p: SketchPattern): boolean {
+  switch (p.kind) {
+    case 'mirror':
+      return true;
+    case 'linearPattern':
+      return (
+        directionValid(p.direction1) && (p.direction2 === undefined || directionValid(p.direction2))
+      );
+    case 'circularPattern':
+      return (
+        countValid(p.count) &&
+        Number.isFinite(p.angle) &&
+        p.angle !== 0 &&
+        Math.abs(p.angle) <= 2 * Math.PI + FULL_CIRCLE_TOLERANCE
+      );
+    default:
+      return assertNever(p);
+  }
+}
+
+function directionValid(d: PatternDirection): boolean {
+  return (
+    countValid(d.count) && Number.isFinite(d.spacing) && d.spacing > 0 && Number.isFinite(d.angle)
+  );
+}
+
+/** An integer number of instances, 2 … MAX_PATTERN_COUNT. */
+function countValid(count: number): boolean {
+  return Number.isInteger(count) && count >= 2 && count <= MAX_PATTERN_COUNT;
 }
 
 export type GeometricConstraintKind =

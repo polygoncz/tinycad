@@ -6,7 +6,7 @@
 
 import { plane as planeMath } from '@/core';
 import type { Plane, Vec2, Vec3 } from '@/core';
-import { MAX_PATTERN_COUNT, curvePoints, isPattern } from '@/sketch';
+import { circularStep, curvePoints, isPatternSource, patternParamsValid } from '@/sketch';
 import type {
   PatternDirection,
   SketchCircularPattern,
@@ -40,8 +40,6 @@ const ARC_POINTS = 33;
 const MIN = 1e-9;
 /** The radius of the angle of a circular pattern whose anchor lies in its centre (spec 12). */
 const FALLBACK_RADIUS = 10;
-/** |angle| within this of 2π is a full circle, like patternCopies. */
-const FULL_CIRCLE_TOLERANCE = 1e-9;
 
 /**
  * The direction and its field of a parameter of a linear pattern; count2 is not here (it adds or
@@ -72,7 +70,7 @@ export function sourceBox(
   const corners: Vec2[] = [];
   for (const id of sources) {
     const source = byId.get(id);
-    if (source === undefined || isPattern(source)) continue;
+    if (source === undefined || !isPatternSource(source)) continue;
     if (source.kind === 'point') {
       corners.push([source.x, source.y]);
       continue;
@@ -226,8 +224,7 @@ function circularViews(
   const r = degenerate ? FALLBACK_RADIUS : Math.hypot(ca[0], ca[1]);
   const from = degenerate ? 0 : Math.atan2(ca[1], ca[0]);
   const { count, angle } = pattern;
-  const full = Math.abs(Math.abs(angle) - 2 * Math.PI) <= FULL_CIRCLE_TOLERANCE;
-  const step = full ? angle / count : angle / (count - 1);
+  const step = circularStep(pattern);
   return [
     {
       param: 'count',
@@ -301,32 +298,35 @@ export function withPatternParam(
   param: PatternParam,
   value: number,
 ): SketchPattern | null {
+  const candidate = candidateWith(pattern, param, value);
+  return candidate !== null && patternParamsValid(candidate) ? freezePattern(candidate) : null;
+}
+
+/** The pattern with the parameter set, not yet checked; null when the parameter is not one of it. */
+function candidateWith(
+  pattern: SketchPattern,
+  param: PatternParam,
+  value: number,
+): SketchPattern | null {
   switch (pattern.kind) {
     case 'mirror':
       return null;
     case 'circularPattern':
-      if (param === 'count') return isCount(value, 2) ? { ...pattern, count: value } : null;
-      if (param === 'angle') {
-        const valid =
-          Number.isFinite(value) &&
-          value !== 0 &&
-          Math.abs(value) <= 2 * Math.PI + FULL_CIRCLE_TOLERANCE;
-        return valid ? { ...pattern, angle: value } : null;
-      }
+      if (param === 'count') return { ...pattern, count: value };
+      if (param === 'angle') return { ...pattern, angle: value };
       return null;
     case 'linearPattern':
-      return withLinearParam(pattern, param, value);
+      return linearWith(pattern, param, value);
   }
 }
 
-function withLinearParam(
+function linearWith(
   pattern: SketchLinearPattern,
   param: PatternParam,
   value: number,
 ): SketchLinearPattern | null {
   const { direction2, ...rest } = pattern;
   if (param === 'count2') {
-    if (!isCount(value, 1)) return null;
     if (value === 1) return rest;
     const d1 = pattern.direction1;
     const base = direction2 ?? { angle: d1.angle + Math.PI / 2, spacing: d1.spacing, count: 2 };
@@ -336,23 +336,20 @@ function withLinearParam(
   if (target === undefined) return null;
   const [n, field] = target;
   const direction = n === 1 ? pattern.direction1 : direction2;
-  if (direction === undefined || !isDirectionValue(field, value)) return null;
+  if (direction === undefined) return null;
   const next: PatternDirection = { ...direction, [field]: value };
   return n === 1 ? { ...pattern, direction1: next } : { ...pattern, direction2: next };
 }
 
-/** An integer count from `min` to MAX_PATTERN_COUNT. */
-function isCount(value: number, min: number): boolean {
-  return Number.isInteger(value) && value >= min && value <= MAX_PATTERN_COUNT;
-}
-
-function isDirectionValue(field: keyof PatternDirection, value: number): boolean {
-  switch (field) {
-    case 'count':
-      return isCount(value, 2);
-    case 'spacing':
-      return Number.isFinite(value) && value > 0;
-    case 'angle':
-      return Number.isFinite(value);
-  }
+/** The pattern frozen with its sources and directions, like removeItems. */
+function freezePattern(pattern: SketchPattern): SketchPattern {
+  const sources = Object.freeze([...pattern.sources]);
+  if (pattern.kind !== 'linearPattern') return Object.freeze({ ...pattern, sources });
+  const { direction2, ...rest } = pattern;
+  return Object.freeze({
+    ...rest,
+    sources,
+    direction1: Object.freeze({ ...pattern.direction1 }),
+    ...(direction2 === undefined ? {} : { direction2: Object.freeze({ ...direction2 }) }),
+  });
 }

@@ -1,7 +1,7 @@
 import { err, ok } from '@/core';
 import type { Result } from '@/core';
-import { MAX_PATTERN_COUNT, isDimensionKind } from './model';
-import type { DimensionKind, DimensionPlacement, SketchData } from './model';
+import { isDimensionKind, patternParamsValid } from './model';
+import type { DimensionKind, DimensionPlacement, SketchData, SketchPattern } from './model';
 
 // Shape and invariant checks of sketch data (spec 12 "Kontrola dat"). The only trusted place
 // where raw params become typed SketchData: ids are branded here, nowhere else.
@@ -36,9 +36,6 @@ const ENTITY_FIELDS: Readonly<Record<string, { required: string[]; optional: str
 
 /** The entity kinds of mirrors and patterns (M36): recipes, no constraint may refer to them. */
 const PATTERN = new Set(['mirror', 'linearPattern', 'circularPattern']);
-
-/** |angle| of a circular pattern may exceed 2π by this much (a full circle from arithmetic). */
-const FULL_CIRCLE_TOLERANCE = 1e-9;
 
 /** The highest spline degree (cubic); a spline's degree = min(MAX_SPLINE_DEGREE, points − 1). */
 const MAX_SPLINE_DEGREE = 3;
@@ -202,17 +199,17 @@ function entityValid(
     case 'linearPattern':
       return (
         patternValid(item, targets, undefined) &&
-        directionValid(item.direction1) &&
-        (!Object.hasOwn(item, 'direction2') || directionValid(item.direction2))
+        directionShape(item.direction1) &&
+        (!Object.hasOwn(item, 'direction2') || directionShape(item.direction2)) &&
+        patternValuesValid(item)
       );
     case 'circularPattern':
       return (
         patternValid(item, targets, item.center) &&
         point(item.center) !== undefined &&
-        countValid(item.count) &&
-        isFiniteNumber(item.angle) &&
-        item.angle !== 0 &&
-        Math.abs(item.angle) <= 2 * Math.PI + FULL_CIRCLE_TOLERANCE
+        typeof item.count === 'number' &&
+        typeof item.angle === 'number' &&
+        patternValuesValid(item)
       );
     default:
       return false;
@@ -244,21 +241,22 @@ function plainId(v: unknown): v is string {
   return isId(v) && !v.includes(':') && !v.includes(',');
 }
 
-/** A direction of a linear pattern: exactly angle (finite), count and spacing (finite, > 0). */
-function directionValid(v: unknown): boolean {
+/** The shape of a direction of a linear pattern: exactly angle, count and spacing, all numbers. */
+function directionShape(v: unknown): boolean {
   return (
     isRecord(v) &&
     hasExactly(v, ['angle', 'count', 'spacing'], []) &&
-    isFiniteNumber(v.angle) &&
-    countValid(v.count) &&
-    isFiniteNumber(v.spacing) &&
-    v.spacing > 0
+    typeof v.angle === 'number' &&
+    typeof v.count === 'number' &&
+    typeof v.spacing === 'number'
   );
 }
 
-/** An integer number of instances, 2 … MAX_PATTERN_COUNT. */
-function countValid(v: unknown): boolean {
-  return Number.isInteger(v) && typeof v === 'number' && v >= 2 && v <= MAX_PATTERN_COUNT;
+/** The values of the parameters of a pattern whose shape is checked (patternParamsValid). */
+function patternValuesValid(item: Fields): boolean {
+  // The caller checked the kind, the fields and that every parameter is a number, so the item
+  // has the shape of a SketchPattern; patternParamsValid judges only the values.
+  return patternParamsValid(item as unknown as SketchPattern);
 }
 
 /** |end − center| = |start − center| within the relative tolerance, radius not degenerate. */

@@ -4,7 +4,7 @@
 // click on its axis or centre (mirror, circular). The pattern is written by addGeometry as one new
 // entity without constraints, becomes the selection (its dimensions show) and the tool starts again.
 
-import { isPattern } from '@/sketch';
+import { isPatternSource } from '@/sketch';
 import type { SketchEntity, SketchEntityId, SketchItemId, SketchPattern } from '@/sketch';
 import { isPlainEscape } from '@/interaction';
 import type { Tool, ToolContext, ViewKeyEvent } from '@/interaction';
@@ -104,7 +104,7 @@ export function createPatternTool(sketches: SketchEditor, finish: PatternFinish)
       if (entity === null) return;
       const sources = picking;
       if (sources === null) {
-        if (isSource(entity)) toggleSource(session, entity.id);
+        if (isPatternSource(entity)) toggleSource(session, entity.id);
         return;
       }
       if (finish.kind !== 'pick' || !finish.accepts(entity) || sources.includes(entity.id)) return;
@@ -133,18 +133,13 @@ export function createPatternTool(sketches: SketchEditor, finish: PatternFinish)
   };
 }
 
-/** A point or a curve of the sketch; not a pattern (nor a copy, which picks its pattern). */
-function isSource(e: SketchEntity): boolean {
-  return !isPattern(e);
-}
-
 /** The sources: the selected points and curves in selection order. */
 function sourcesOf(session: SketchSession): readonly SketchEntityId[] {
   const { entities, selection } = session.state.get();
   const byId = new Map<string, SketchEntity>(entities.map((e) => [e.id, e]));
   return selection.flatMap((id) => {
     const e = byId.get(id);
-    return e !== undefined && isSource(e) ? [e.id] : [];
+    return e !== undefined && isPatternSource(e) ? [e.id] : [];
   });
 }
 
