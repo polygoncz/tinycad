@@ -3,6 +3,7 @@ import { assertNever, bspline } from '@/core';
 import { curve2, pointsById } from './geometry';
 import type { Curve2 } from './geometry';
 import { isPattern } from './model';
+import { patternCopies } from './patterns';
 import type { SketchCurve, SketchData, SketchEntity, SketchEntityId, SketchPoint } from './model';
 import { SPLINE_TOLERANCE } from './regions';
 import { angleOf, dist, dot, length, lerp, mod2pi, sub } from './vec2';
@@ -56,21 +57,32 @@ export const ORIGIN_SNAP: Vec2 = Object.freeze([0, 0] as const);
  * Where the cursor snaps: the first step of spec 12 that applies – an existing point, the origin,
  * a midpoint of a line, a curve, alignment with two points, with one point, the grid, the cursor.
  * Steps 3–6 only with `infer`. A tie of distances is won by the earlier entity in the data.
+ * Copies of patterns (patternCopies, M36) are snapped to by position only, after the data: a copy
+ * point gives no point to reuse, a copy curve no constraint, and no alignment.
  */
 export function snap(cursor: Vec2, data: SketchData, opts: SnapOptions): SnapResult {
   const { tolerance, exclude } = opts;
   const included = (e: SketchEntity): boolean => exclude?.has(e.id) !== true;
-  const points = data.entities.filter(isPoint).filter(included);
+  const copies = patternCopies(data);
+  const anonymous = new Set<SketchEntityId>(copies.map((c) => c.id));
+  const geometry: SketchData =
+    copies.length === 0 ? data : { entities: [...data.entities, ...copies], constraints: [] };
+  const allPoints = geometry.entities.filter(isPoint).filter(included);
 
-  const point = nearest(points, (p) => dist(cursor, at(p)), tolerance);
-  if (point !== null) return result(at(point.item), 'point', point.item.id);
+  const point = nearest(allPoints, (p) => dist(cursor, at(p)), tolerance);
+  if (point !== null) {
+    const id = point.item.id;
+    return result(at(point.item), 'point', anonymous.has(id) ? null : id);
+  }
 
   if (dist(cursor, ORIGIN_SNAP) <= tolerance) {
     return result(ORIGIN_SNAP, 'origin', null, [{ kind: 'fix' }]);
   }
 
   if (opts.infer) {
-    const inferred = inferredSnap(cursor, data, points, opts, included);
+    // Alignment makes a constraint with the point: only points of the data.
+    const points = allPoints.filter((p) => !anonymous.has(p.id));
+    const inferred = inferredSnap(cursor, geometry, points, opts, included, anonymous);
     if (inferred !== null) return inferred;
   }
 
@@ -78,13 +90,17 @@ export function snap(cursor: Vec2, data: SketchData, opts: SnapOptions): SnapRes
   return result(cursor, 'free');
 }
 
-/** Steps 3–6: a midpoint, a curve, alignment; null when none applies. */
+/**
+ * Steps 3–6: a midpoint, a curve, alignment; null when none applies. A curve in `anonymous` (a
+ * copy) gives its position without a constraint.
+ */
 function inferredSnap(
   cursor: Vec2,
   data: SketchData,
   points: readonly SketchPoint[],
   opts: SnapOptions,
   included: (e: SketchEntity) => boolean,
+  anonymous: ReadonlySet<SketchEntityId>,
 ): SnapResult | null {
   const { tolerance } = opts;
   const byId = pointsById(data);
@@ -92,6 +108,8 @@ function inferredSnap(
     .filter(isCurve)
     .filter(included)
     .map((c) => ({ id: c.id, shape: curve2(c, byId) }));
+  const unless = <T>(id: SketchEntityId, inference: T): readonly T[] =>
+    anonymous.has(id) ? [] : [inference];
 
   const mid = nearest(
     curves,
@@ -99,9 +117,12 @@ function inferredSnap(
     tolerance,
   );
   if (mid !== null && mid.item.shape.kind === 'line') {
-    return result(midpointOf(mid.item.shape), 'midpoint', null, [
-      { kind: 'midpoint', line: mid.item.id },
-    ]);
+    return result(
+      midpointOf(mid.item.shape),
+      'midpoint',
+      null,
+      unless(mid.item.id, { kind: 'midpoint', line: mid.item.id }),
+    );
   }
 
   // The tessellation tolerance of a spline is relative to the sketch scale, as in regions.
@@ -117,9 +138,12 @@ function inferredSnap(
     tolerance,
   );
   if (onCurve !== null && onCurve.item.at !== null) {
-    return result(onCurve.item.at, 'onCurve', null, [
-      { kind: 'pointOnCurve', curve: onCurve.item.id },
-    ]);
+    return result(
+      onCurve.item.at,
+      'onCurve',
+      null,
+      unless(onCurve.item.id, { kind: 'pointOnCurve', curve: onCurve.item.id }),
+    );
   }
 
   return alignSnap(cursor, points, opts);

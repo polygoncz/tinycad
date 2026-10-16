@@ -466,3 +466,125 @@ describe('planeDrawing', () => {
     expect(drawing.curves[0]).toMatchObject({ from: [-10, -10], to: [10, -10] });
   });
 });
+
+/**
+ * A line a → b from [1, 0] to [3, 0], a construction line a → c up to [1, 2] and a vertical
+ * construction axis o → u (x = 0); the mirror m copies both lines across the axis (M36).
+ */
+const MIRRORED = data([
+  { kind: 'point', id: 'a', x: 1, y: 0 },
+  { kind: 'point', id: 'b', x: 3, y: 0 },
+  { kind: 'point', id: 'c', x: 1, y: 2 },
+  { kind: 'line', id: 'ab', p1: 'a', p2: 'b' },
+  { kind: 'line', id: 'ac', p1: 'a', p2: 'c', construction: true },
+  { kind: 'point', id: 'o', x: 0, y: 0 },
+  { kind: 'point', id: 'u', x: 0, y: 5 },
+  { kind: 'line', id: 'ou', p1: 'o', p2: 'u', construction: true },
+  { kind: 'mirror', id: 'm', sources: ['ab', 'ac'], axis: 'ou' },
+]);
+
+/** The style of the data: 'construction' for ac and ou, `pattern` for m, else 'normal'. */
+function styleWith(pattern: 'normal' | 'selected' | 'hover') {
+  return (id: SketchItemId) =>
+    id === 'm' ? pattern : id === 'ac' || id === 'ou' ? 'construction' : 'normal';
+}
+
+describe('copies of patterns (M36)', () => {
+  it('draws the copies after the curves and points of the data, with derived ids', () => {
+    const drawing = toSketchDrawing(XY, MIRRORED, styleWith('normal'), { origin: true });
+
+    expect(drawing.curves.map((c) => [c.id, c.style])).toEqual([
+      ['ab', 'normal'],
+      ['ac', 'construction'],
+      ['ou', 'construction'],
+      ['m:1.ab', 'normal'],
+      ['m:1.ac', 'construction'],
+    ]);
+    expect(drawing.curves[3]).toEqual({
+      kind: 'line',
+      id: 'm:1.ab',
+      from: [-1, 0],
+      to: [-3, 0],
+      style: 'normal',
+    });
+    expect(drawing.points.map((p) => p.id)).toEqual([
+      'a',
+      'b',
+      'c',
+      'o',
+      'u',
+      'm:1.a',
+      'm:1.b',
+      'm:1.c',
+      ORIGIN_POINT_ID,
+    ]);
+    expect(drawing.points[6]).toEqual({ id: 'm:1.b', at: [-3, 0], style: 'normal' });
+  });
+
+  it('a selected or hovered pattern draws all its copies so, construction ones too', () => {
+    for (const style of ['selected', 'hover'] as const) {
+      const drawing = toSketchDrawing(XY, MIRRORED, styleWith(style));
+
+      const copies = [...drawing.curves, ...drawing.points].filter((c) => c.id.startsWith('m:'));
+      expect(copies).toHaveLength(5);
+      expect(copies.every((c) => c.style === style)).toBe(true);
+    }
+  });
+
+  it('a copy is never styled by its own id', () => {
+    const seen: string[] = [];
+    toSketchDrawing(XY, MIRRORED, (id) => {
+      seen.push(id);
+      return 'normal';
+    });
+
+    expect(seen.some((id) => id.includes(':'))).toBe(false);
+  });
+
+  it('a copy of a bspline has its control polygon, picked back to the copy', () => {
+    const mirroredSpline = data([
+      { kind: 'point', id: 'p0', x: 1, y: 0 },
+      { kind: 'point', id: 'p1', x: 2, y: 1 },
+      { kind: 'point', id: 'p2', x: 3, y: 0 },
+      {
+        kind: 'bspline',
+        id: 's',
+        degree: 2,
+        poles: ['p0', 'p1', 'p2'],
+        knots: [0, 0, 0, 1, 1, 1],
+      },
+      { kind: 'point', id: 'o', x: 0, y: 0 },
+      { kind: 'point', id: 'u', x: 0, y: 5 },
+      { kind: 'line', id: 'ou', p1: 'o', p2: 'u' },
+      { kind: 'mirror', id: 'm', sources: ['s'], axis: 'ou' },
+    ]);
+
+    const drawing = toSketchDrawing(XY, mirroredSpline, normal);
+
+    const polygon = drawing.curves.find((c) => c.id === controlPolygonId('m:1.s'));
+    expect(polygon).toEqual({
+      kind: 'polyline',
+      id: '__poles:m:1.s',
+      points: [
+        [-1, 0],
+        [-2, 1],
+        [-3, 0],
+      ],
+      style: 'construction',
+    });
+    expect(splineOfControlPolygon(polygon?.id ?? '')).toBe('m:1.s');
+  });
+
+  it('the regenerated sketch draws the copies too, construction ones dashed', () => {
+    const drawing = artifactDrawing(XY, MIRRORED.entities);
+
+    expect(drawing.curves.map((c) => [c.id, c.style])).toEqual([
+      ['ab', 'normal'],
+      ['ac', 'construction'],
+      ['ou', 'construction'],
+      ['m:1.ab', 'normal'],
+      ['m:1.ac', 'construction'],
+    ]);
+    expect(drawing.points).toEqual([]);
+  });
+});

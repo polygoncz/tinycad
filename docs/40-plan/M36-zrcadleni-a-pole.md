@@ -40,7 +40,7 @@ Upřesnění v sezení 2026-10-16: zrcadlení a pole jako **parametrická entita
 
 - [x] Entity zrcadlení a polí, kopie, vazba symetrie.
 - [x] Řešič: vazba symetrie, kopie mimo řešič.
-- [ ] Kresba, výběr a snapper kopií.
+- [x] Kresba, výběr a snapper kopií.
 - [ ] Nástroje a vynesené kóty.
 - [ ] Kopie v oblastech (*čeká na sloučení M30*).
 - [ ] e2e a spec.
@@ -104,5 +104,6 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **2026-10-16 start:** Pavel rozhodl směr lineárního pole jako **úhel** (parametr `angle` u každého směru, vynesená kóta), ne referenční úsečku. Kontrakt v [[12-skicar#Zrcadlení a pole (M36)]]. Doplněno bez otázky (k potvrzení Pavlem): `MAX_PATTERN_COUNT = 100`, kruhové pole se znaménkem úhlu a krokem `angle/count` u plného kruhu, jinak `angle/(count−1)`; vynesené kóty jen u vybraného pole; kopie bodů jsou součástí kopií (sdílené body → uzavřené oblasti). Osa zrcadlení a symetrie zatím jen úsečka, `xline` přibude po sloučení M31.
 - **Úkol 1 hotový:** `patterns.ts` (23 testů), parse, `removeItems` do ustálení, `symmetric` už i v adaptéru planegcs (`p2p_symmetric_ppl`, vynutil typecheck) a s glyfem. Při sloučení M30: stopa A maže `sketch/regions.ts`, kde úkol 1 upravil soukromý `isCurve` – konflikt vyřešit přijetím smazání. `npm run check` zelený (6602 testů).
 - **Úkol 2 hotový:** jen testy (adaptér už z úkolu 1): symetrie drží při tažení i s volnou osou, pole nemění stupně volnosti, kopie se po tažení zdroje přepočítají (test session). `FakeSolver` váží `symmetric` 2. Postřeh: planegcs u neúplně určené skici dává výsledek závislý na předchozích řešeních (rozdíl ~1e-6 i jiná větev) – testy poloh jen u úplně určených skic.
+- **Úkol 3 hotový:** kopie v kresbě (editovaná i regenerovaná skica), `entityAt` překládá kopii na pole, snapper bere kopie jako anonymní geometrii uvnitř `snap()` (bez změny API). Upřesnění do spec 12 (styl kopií, `point: null`, bez zarovnání ke kopiím). `npm run check` zelený (6624 testů).
 
 ## Retrospektiva

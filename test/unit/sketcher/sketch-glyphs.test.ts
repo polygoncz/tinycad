@@ -418,3 +418,24 @@ describe('glyphViews: splines (M29)', () => {
     expectVec(g.side, [0, 0, 1]);
   });
 });
+
+describe('glyphViews: copies of patterns (M36)', () => {
+  it('a copy has no glyphs: only the constrained source has them', () => {
+    const mirrored = data(
+      [
+        { kind: 'point', id: 'a', x: 1, y: 0 },
+        { kind: 'point', id: 'b', x: 3, y: 0 },
+        { kind: 'line', id: 'ab', p1: 'a', p2: 'b' },
+        { kind: 'point', id: 'o', x: 0, y: 0 },
+        { kind: 'point', id: 'u', x: 0, y: 5 },
+        { kind: 'line', id: 'ou', p1: 'o', p2: 'u' },
+        { kind: 'mirror', id: 'm', sources: ['ab'], axis: 'ou' },
+      ],
+      [{ kind: 'horizontal', id: 'h', line: 'ab' }],
+    );
+
+    const glyphs = views('all', { sketch: mirrored, selection: [item('m')] });
+
+    expect(pairs(glyphs)).toEqual([['h', 'ab']]);
+  });
+});

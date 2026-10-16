@@ -952,6 +952,53 @@ describe('the select tool of the sketch', () => {
     expect(session.state.get().selection).toEqual(['sp']);
   });
 
+  describe('copies of a pattern (M36)', () => {
+    // pq mirrored across the vertical axis x = 60: the copy line (80,10)–(110,10).
+    const mirrored = data([
+      ...sketch.entities,
+      { kind: 'point', id: 'a', x: 60, y: 0 },
+      { kind: 'point', id: 'b', x: 60, y: 50 },
+      { kind: 'line', id: 'ab', p1: 'a', p2: 'b', construction: true },
+      { kind: 'mirror', id: 'm', sources: ['pq'], axis: 'ab' },
+    ]);
+
+    it('hover and click on a copy line or point pick the pattern; Delete removes it', async () => {
+      const { viewport, session } = await sketching({ sketch: mirrored });
+      expect(viewport.pick(95, 10, ['sketchEntity'])).toMatchObject({ entity: 'm:1.pq' });
+
+      viewport.emitPointer(pointer('move', 95, 10));
+      expect(session.state.get().hover).toBe('m');
+      click(viewport, 95, 10);
+      expect(session.state.get().selection).toEqual(['m']);
+      click(viewport, 110, 10);
+      expect(session.state.get().selection).toEqual(['m']);
+
+      await session.remove(session.state.get().selection);
+      expect(session.state.get().entities.map((e) => e.id)).toEqual([
+        'p',
+        'q',
+        'pq',
+        'a',
+        'b',
+        'ab',
+      ]);
+    });
+
+    it('dragging a copy point moves nothing and selects nothing', async () => {
+      const { viewport, session, solver } = await sketching({ sketch: mirrored });
+      const before = solver.calls.length;
+
+      viewport.emitPointer(pointer('down', 110, 10));
+      viewport.emitPointer(pointer('move', 120, 30));
+      viewport.emitPointer(pointer('up', 120, 30));
+      await settle();
+
+      expect(solver.calls).toHaveLength(before);
+      expect(session.state.get().selection).toEqual([]);
+      expect(xyOf(session, 'q')).toEqual([40, 10]);
+    });
+  });
+
   it('Escape with a selection clears it', async () => {
     const { viewport, session, manager } = await sketching({ sketch });
     click(viewport, 10, 10);
