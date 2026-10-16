@@ -1,8 +1,9 @@
 import type { Vec2 } from '@/core';
-import { assertNever } from '@/core';
+import { assertNever, bspline } from '@/core';
 import { curve2, pointsById } from './geometry';
 import type { Curve2 } from './geometry';
 import type { SketchCurve, SketchData, SketchEntity, SketchEntityId, SketchPoint } from './model';
+import { SPLINE_TOLERANCE } from './regions';
 import { angleOf, dist, dot, length, lerp, mod2pi, sub } from './vec2';
 
 // The snapper of the sketcher tools (spec 12 "Snapper a auto-vazby (M26)"): where a click lands in
@@ -102,7 +103,13 @@ function inferredSnap(
     ]);
   }
 
-  const projections = curves.map((c) => ({ id: c.id, at: project(cursor, c.shape) }));
+  // The tessellation tolerance of a spline is relative to the sketch scale, as in regions.
+  const scale = Math.max(1, ...[...byId.values()].flatMap((p) => [Math.abs(p.x), Math.abs(p.y)]));
+  const splineTolerance = SPLINE_TOLERANCE * scale;
+  const projections = curves.map((c) => ({
+    id: c.id,
+    at: project(cursor, c.shape, splineTolerance),
+  }));
   const onCurve = nearest(
     projections,
     (p) => (p.at === null ? Infinity : dist(cursor, p.at)),
@@ -181,15 +188,14 @@ function nearest<T>(
   return best;
 }
 
-/** The nearest point of the curve: within the segment of a line, within the range of an arc. */
-function project(p: Vec2, c: Curve2): Vec2 | null {
+/**
+ * The nearest point of the curve: within the segment of a line, within the range of an arc; on a
+ * spline the nearest point of its tessellation (each segment like a line).
+ */
+function project(p: Vec2, c: Curve2, splineTolerance: number): Vec2 | null {
   switch (c.kind) {
-    case 'line': {
-      const d = sub(c.to, c.from);
-      const len2 = dot(d, d);
-      const t = len2 === 0 ? 0 : Math.min(1, Math.max(0, dot(sub(p, c.from), d) / len2));
-      return lerp(c.from, d, t);
-    }
+    case 'line':
+      return onSegment(p, c.from, c.to);
     case 'circle':
       return onCircle(p, c.center, c.radius);
     case 'arc': {
@@ -199,11 +205,36 @@ function project(p: Vec2, c: Curve2): Vec2 | null {
       return onCircle(p, c.center, length(sub(c.from, c.center)));
     }
     case 'bspline':
-      // No pointOnCurve on a spline yet (spec 12, M26): a spline is no onCurve candidate.
-      return null;
+      return onPolyline(p, bspline.tessellate(c, splineTolerance));
     default:
       return assertNever(c);
   }
+}
+
+/** The projection on the segment from–to, clamped to its ends. */
+function onSegment(p: Vec2, from: Vec2, to: Vec2): Vec2 {
+  const d = sub(to, from);
+  const len2 = dot(d, d);
+  const t = len2 === 0 ? 0 : Math.min(1, Math.max(0, dot(sub(p, from), d) / len2));
+  return lerp(from, d, t);
+}
+
+/** The nearest projection on the segments of the polyline; the first segment wins a tie. */
+function onPolyline(p: Vec2, polyline: readonly Vec2[]): Vec2 | null {
+  let best: Vec2 | null = null;
+  let bestDistance = Infinity;
+  for (let i = 1; i < polyline.length; i++) {
+    const from = polyline[i - 1];
+    const to = polyline[i];
+    if (from === undefined || to === undefined) continue;
+    const at = onSegment(p, from, to);
+    const d = dist(p, at);
+    if (d < bestDistance) {
+      best = at;
+      bestDistance = d;
+    }
+  }
+  return best;
 }
 
 /** The projection on a circle; null at its center (no direction). */

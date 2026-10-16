@@ -150,6 +150,8 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'tool.arc': 'Center point arc',
   'tool.arc3p': '3-point arc',
   'tool.arcTangent': 'Tangent arc',
+  'tool.spline': 'Control point spline',
+  'tool.fitSpline': 'Spline',
   'tool.dimension': 'Dimension',
   'toolbar.group.draw': 'Draw',
   'toolbar.group.constrain': 'Constrain',

@@ -318,3 +318,103 @@ describe('glyphViews: immutability', () => {
     expect(glyph(after, 't', 'cf')).toBe(glyph(before, 't', 'cf'));
   });
 });
+
+/**
+ * Splines (M29) with lines at their first ends for tangent: s a quadratic arch over p0 (0,0),
+ * p1 (2,4), p2 (4,0) with the top (2,2) at t = 0.5 and a horizontal tangent there; f a fit point
+ * spline from (14,4) down to (10,0) (stored poles, tangent (−1,−1)); z a spline of zero length at
+ * (30,0); w a vertical one from (40,0) to (40,4). A point x on s (pointOnCurve).
+ */
+const SPLINE_SKETCH = data(
+  [
+    { kind: 'point', id: 'p0', x: 0, y: 0 },
+    { kind: 'point', id: 'p1', x: 2, y: 4 },
+    { kind: 'point', id: 'p2', x: 4, y: 0 },
+    { kind: 'point', id: 'q', x: -3, y: -3 },
+    { kind: 'line', id: 'l', p1: 'q', p2: 'p0' },
+    { kind: 'bspline', id: 's', degree: 2, poles: ['p0', 'p1', 'p2'], knots: [0, 0, 0, 1, 1, 1] },
+    { kind: 'point', id: 'f0', x: 14, y: 4 },
+    { kind: 'point', id: 'f1', x: 10, y: 0 },
+    { kind: 'point', id: 'fq', x: 14, y: 8 },
+    { kind: 'line', id: 'lf', p1: 'f0', p2: 'fq' },
+    {
+      kind: 'fitSpline',
+      id: 'f',
+      degree: 1,
+      fit: ['f0', 'f1'],
+      params: [0, 1],
+      poles: [
+        [14, 4],
+        [10, 0],
+      ],
+      knots: [0, 0, 1, 1],
+    },
+    { kind: 'point', id: 'z0', x: 30, y: 0 },
+    { kind: 'point', id: 'z1', x: 30, y: 0 },
+    { kind: 'point', id: 'zq', x: 33, y: 0 },
+    { kind: 'line', id: 'lz', p1: 'z0', p2: 'zq' },
+    { kind: 'bspline', id: 'z', degree: 1, poles: ['z0', 'z1'], knots: [0, 0, 1, 1] },
+    { kind: 'point', id: 'w0', x: 40, y: 0 },
+    { kind: 'point', id: 'w1', x: 40, y: 4 },
+    { kind: 'point', id: 'wq', x: 43, y: 0 },
+    { kind: 'line', id: 'lw', p1: 'w0', p2: 'wq' },
+    { kind: 'bspline', id: 'w', degree: 1, poles: ['w0', 'w1'], knots: [0, 0, 1, 1] },
+    { kind: 'point', id: 'x', x: 2, y: 2 },
+  ],
+  [
+    { kind: 'tangent', id: 'ts', a: 'l', b: 's' },
+    { kind: 'tangent', id: 'tf', a: 'f', b: 'lf' },
+    { kind: 'tangent', id: 'tz', a: 'lz', b: 'z' },
+    { kind: 'tangent', id: 'tw', a: 'lw', b: 'w' },
+    { kind: 'pointOnCurve', id: 'on', point: 'x', curve: 's' },
+  ],
+);
+
+describe('glyphViews: splines (M29)', () => {
+  const glyphs = views('all', { sketch: SPLINE_SKETCH });
+
+  it('tangent line–spline has one glyph at the line and one at the spline', () => {
+    expect(pairs(glyphs.filter((g) => g.constraint === 'ts'))).toEqual([
+      ['ts', 'l'],
+      ['ts', 's'],
+    ]);
+    expect(pairs(glyphs.filter((g) => g.constraint === 'tf'))).toEqual([
+      ['tf', 'f'],
+      ['tf', 'lf'],
+    ]);
+  });
+
+  it('a control point spline: the point at t = 0.5, side its tangent normal turned to +y', () => {
+    const g = glyph(glyphs, 'ts', 's');
+    expectVec(g.anchor, [2, 2, 0]);
+    expectVec(g.side, [0, 1, 0]);
+  });
+
+  it('a fit point spline: from its stored poles, the normal turned to +y', () => {
+    const g = glyph(glyphs, 'tf', 'f');
+    expectVec(g.anchor, [12, 2, 0]);
+    expectVec(g.side, [-H, H, 0]);
+  });
+
+  it('a zero derivative gives the side +y', () => {
+    const g = glyph(glyphs, 'tz', 'z');
+    expectVec(g.anchor, [30, 0, 0]);
+    expectVec(g.side, [0, 1, 0]);
+  });
+
+  it('a vertical tangent gives the side −x, like a vertical line', () => {
+    const g = glyph(glyphs, 'tw', 'w');
+    expectVec(g.anchor, [40, 2, 0]);
+    expectVec(g.side, [-1, 0, 0]);
+  });
+
+  it('pointOnCurve on a spline has one glyph at the point', () => {
+    expect(pairs(glyphs.filter((g) => g.constraint === 'on'))).toEqual([['on', 'x']]);
+  });
+
+  it('the spline anchor is in world coordinates of the plane', () => {
+    const g = glyph(views('all', { sketch: SPLINE_SKETCH, plane: XZ }), 'ts', 's');
+    expectVec(g.anchor, [2, 5, 2]);
+    expectVec(g.side, [0, 0, 1]);
+  });
+});

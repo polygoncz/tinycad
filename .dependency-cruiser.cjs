@@ -269,6 +269,22 @@ module.exports = {
       },
     },
     {
+      name: 'no-deep-import-from-scenario-tests',
+      severity: 'error',
+      comment:
+        'Integration and e2e tests belong to no module (spec 01): they import a module only ' +
+        'through its index.ts or testing.ts (ADR 0008, ADR 0023).',
+      from: { path: '^test/(?:integration|e2e)/' },
+      to: {
+        path: '^src/(features/[^/]+|persistence/idb|[^/]+)/.+',
+        pathNot: [
+          '/index\\.ts$',
+          '/testing\\.ts$',
+          ...Object.keys(DATA_ENTRY_MODULES).map(dataEntryPoint),
+        ],
+      },
+    },
+    {
       name: 'testing-only-in-tests',
       severity: 'error',
       comment:

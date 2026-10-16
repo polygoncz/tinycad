@@ -513,8 +513,28 @@ describe('splines in editing helpers', () => {
     expect(constraintFor('perpendicular', se('s', 'pq'))).toBeNull();
     expect(constraintFor('horizontal', se('s'))).toBeNull();
     expect(constraintFor('vertical', se('f'))).toBeNull();
-    expect(constraintFor('coincident', se('p', 's'))).toBeNull();
     expect(constraintFor('fix', se('f'))).toBeNull();
+  });
+
+  it('constraintFor makes coincident of a point and a spline pointOnCurve, in either order', () => {
+    expect(constraintFor('coincident', se('v', 's'))).toEqual({
+      kind: 'pointOnCurve',
+      point: 'v',
+      curve: 's',
+    });
+    expect(constraintFor('coincident', se('f', 'p'))).toEqual({
+      kind: 'pointOnCurve',
+      point: 'p',
+      curve: 'f',
+    });
+  });
+
+  it('constraintFor returns null for coincident of a spline and its own point', () => {
+    expect(constraintFor('coincident', se('p', 's'))).toBeNull();
+    expect(constraintFor('coincident', se('r', 's'))).toBeNull();
+    expect(constraintFor('coincident', se('f', 'v'))).toBeNull();
+    expect(constraintFor('coincident', se('q', 'f'))).toBeNull();
+    expect(constraintFor('coincident', se('s', 'f'))).toBeNull();
   });
 
   it('dimensionFor returns null for a spline', () => {

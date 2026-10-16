@@ -16,6 +16,7 @@ import { createEntryTool } from './sketch-tools/entry-tool';
 import { createLineTool } from './sketch-tools/line-tool';
 import { createRectangleTool } from './sketch-tools/rectangle-tool';
 import { createSketchSelectTool } from './sketch-tools/select-tool';
+import { createSplineTool } from './sketch-tools/spline-tool';
 
 const MODEL: readonly Mode[] = Object.freeze(['model']);
 const SKETCH: readonly Mode[] = Object.freeze(['sketch']);
@@ -132,6 +133,26 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       modes: SKETCH,
       family: 'arc',
       create: () => createArcTangentTool(sketches),
+    }),
+    // The splines (M29) have no shortcut; Tabler icons of a curve with handles and of a curve
+    // through points.
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.spline',
+      label: 'tool.spline',
+      icon: 'vector-bezier',
+      group: 'draw',
+      modes: SKETCH,
+      family: 'spline',
+      create: () => createSplineTool(sketches, 'bspline'),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.fitSpline',
+      label: 'tool.fitSpline',
+      icon: 'vector-spline',
+      group: 'draw',
+      modes: SKETCH,
+      family: 'spline',
+      create: () => createSplineTool(sketches, 'fitSpline'),
     }),
     Object.freeze<ToolDescriptor>({
       id: 'sketch.dimension',

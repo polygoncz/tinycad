@@ -203,3 +203,19 @@ export async function isoCanvasOffset(
   const r = rel(point);
   return { dx: dot(r, right) * pxPerMm, dy: -dot(r, up) * pxPerMm };
 }
+
+/** The arrow ▾ of the split button of a tool family, named by the shown variant. */
+export function variantsButton(page: Page, shown: string): Locator {
+  return page
+    .getByRole('navigation')
+    .getByRole('button', { name: `Další způsoby: ${shown}`, exact: true });
+}
+
+/** Opens the menu of the variants by the arrow of the family showing `shown` and picks `variant`. */
+export async function pickVariant(page: Page, shown: string, variant: string): Promise<void> {
+  await variantsButton(page, shown).click();
+  const menu = page.getByRole('menu');
+  await expect(menu).toBeVisible();
+  await menu.getByRole('menuitem', { name: new RegExp(`^${variant}( |$)`) }).click();
+  await expect(menu).toBeHidden();
+}

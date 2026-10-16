@@ -80,7 +80,8 @@ export interface OverlayPort {
 export type SketchStyle = 'normal' | 'defined' | 'construction' | 'hover' | 'selected' | 'plane';
 export type SketchDrawingCurve =
   | { kind: 'line'; id: string; from: Vec2; to: Vec2; style: SketchStyle }
-  | { kind: 'arc'; id: string; center: Vec2; radius: number; startAngle: number; endAngle: number; style: SketchStyle };  // proti směru hodin, endAngle > startAngle; kruh = +2π
+  | { kind: 'arc'; id: string; center: Vec2; radius: number; startAngle: number; endAngle: number; style: SketchStyle }  // proti směru hodin, endAngle > startAngle; kruh = +2π
+  | { kind: 'polyline'; id: string; points: readonly Vec2[]; style: SketchStyle };  // M29: spline tesselovaný ve sketcheru; render ji kreslí a pickuje jako úsečky s jedním id
 export interface SketchDrawingPoint { id: string; at: Vec2; style: SketchStyle }
 export interface SketchDrawing { plane: Plane; curves: readonly SketchDrawingCurve[]; points: readonly SketchDrawingPoint[]; regions?: readonly SketchDrawingRegion[];
   editing?: boolean }   // M19.2: kresba skici editované ve skicáři; chybí = false
@@ -1124,6 +1125,8 @@ export function axisDrawing(axis: { readonly origin: Vec3; readonly direction: V
 
 Oblouk → `startAngle = atan2(start − center)`, `endAngle = atan2(end − center)` (+2π, dokud není větší); kružnice `0 … 2π`.
 
+Spline (M29) → `polyline` z `bspline.tessellate` s tolerancí `SPLINE_TOLERANCE · max(1, největší |souřadnice| řídicích bodů)`; u `bspline` za ním řídicí lomená čára id `__poles:<id>` stylem `construction` (jen `toSketchDrawing`, ne `artifactDrawing`). Pick lomené čáry skicář přeloží na id splinu (`entityAt` v `sketch-tools/snap.ts`). Polygon oblasti obsahuje body tessellace splinu ([[12-skicar#Spliny (M29)]]).
+
 - `artifactDrawing` (M13): konstrukční křivky se kreslí (stylem `construction`), aby šla konstrukční úsečka vybrat jako osa Rotace ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R74]] ⚠); `regions` = `computeRegions({ entities, constraints: [] })` ze `sketch`, `id` = jméno oblasti (shodné s klíči `SketchArtifact.regions`), oblouky a kružnice lomenou čarou s krokem nejvýš π/36.
 - `axisDrawing` (M13): rovina kresby s `xDir = d̂`, `normal = unit(d̂ × (|d̂_z| < 0.9 ? +Z : +X))` a počátkem `axis.origin`, jedna úsečka id `'axis'` od `−size/2` do `size/2`; bez bodů a oblastí. Id kresby je id osy, takže zásah osy ve viewportu převede `refPick` na `AxisRef`.
 
@@ -1149,6 +1152,8 @@ export function createSketchActions(deps: { registry: ActionRegistry; sketches: 
 | `sketch.circle2p`, `sketch.circle3p`, `sketch.circle2t`, `sketch.circle3t` | `sketch`, `draw`, rodina `circle`, bez zkratky | M27: kružnice 2 body, 3 body, 2 a 3 tečny; gesta, vazby a degenerované případy v [[12-skicar#Oblouky a kružnice (M27)]] |
 | `sketch.arc` | `sketch`, `draw`, `A` | střed, začátek, konec (promítnutý na kružnici) → oblouk proti směru hodinových ručiček; M26: body přes snapper (konec vždy nový bod, bez `fix`), `inferRadius` |
 | `sketch.arc3p`, `sketch.arcTangent` | `sketch`, `draw`, rodina `arc`, bez zkratky | M27: oblouk 3 body (začátek, konec, bod na oblouku) a tečný oblouk z konce úsečky nebo oblouku; [[12-skicar#Oblouky a kružnice (M27)]]. Od M27 má `sketch.circle` rodinu `circle` a `sketch.arc` rodinu `arc` (popisek „Oblouk středem“). Nástroj úsečka: stisk a tah z posledního bodu řetězu kreslí tečný oblouk (`clickTool` s volitelným tahem `onDragStart`/`onDrag`/`onDragEnd`/`onDragCancel`). |
+| `sketch.spline` | `sketch`, `draw`, rodina `spline`, bez zkratky | M29: spline přes řídicí body – body přes snapper (s `inferred`), Enter nebo klik na vlastní poslední bod ukončí a zapíše jedním `addGeometry` (`bspline`, sevřené rovnoměrné uzly), klik na vlastní první bod (≥ 3 body) uzavře novým bodem s `coincident` (`required`), Esc zruší rozpracovaný spline; náhled křivky a řídicí lomené čáry. Kontrakt v [[12-skicar#Spliny (M29)]] |
+| `sketch.fitSpline` | `sketch`, `draw`, rodina `spline`, bez zkratky | M29: totéž pro spline přes body (`fitSpline` z `bspline.interpolate`) |
 | `sketch.dimension` | `sketch`, `constrain`, `D` | M28: klik na entitu nebo dvě entity určí cíl (`dimensionTarget`), kóta pak visí na myši a druh i polohu volí kurzor (`placeDimension`, náhled přes `previewDimension`); klik ji zapíše (`addConstraint` s `placement`), Esc náhled zruší. Průběh výběru v [[12-skicar#Kóty (M28)]] |
 
 - **Bod pod kurzorem od M26** ([[12-skicar#Snapper a auto-vazby (M26)]]): `snapAt` už nepickuje, volá čistou `snap` ze `sketch` nad daty session (i s nezapsanými entitami rozpracovaného řetězu) s prahem 6 px převedeným na mm v místě kurzoru, mřížkou podle `snapGrid` a `infer: !mods.mod`; `placePoint` z `inferred` vytvoří vazby s novými id. Klik i náhled počítá jedna funkce kroku nástroje (`lineStep`, `rectangleStep`, `circleStep`, `arcStep`). Náhled vazeb a vodítek (`setInferencePreview`) smaže klik, Esc, `leave`, deaktivace a zavření session. Odstavce níže popisují stav M12–M19.2.

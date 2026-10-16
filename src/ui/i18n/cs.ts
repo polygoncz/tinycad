@@ -151,6 +151,8 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'tool.arc': 'Oblouk středem',
   'tool.arc3p': 'Oblouk 3 body',
   'tool.arcTangent': 'Tečný oblouk',
+  'tool.spline': 'Spline přes řídicí body',
+  'tool.fitSpline': 'Spline přes body',
   'tool.dimension': 'Kóta',
   'toolbar.group.draw': 'Kreslit',
   'toolbar.group.constrain': 'Vazby',
