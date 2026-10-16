@@ -391,3 +391,162 @@ describe('SketchSession pattern copies (M36)', () => {
     expect(copy(written.entities, 'lp:1.q')).toMatchObject({ x: 8, y: 7 });
   });
 });
+
+describe('SketchSession pattern dimensions (M36)', () => {
+  /** PATTERNED with a circular pattern cp around o and a mirror m across ab. */
+  const PATTERNS = data([
+    ...PATTERNED.entities,
+    { kind: 'point', id: 'o', x: 5, y: -10 },
+    { kind: 'circularPattern', id: 'cp', sources: ['pq'], center: 'o', count: 4, angle: Math.PI },
+    { kind: 'point', id: 'a', x: 0, y: 20 },
+    { kind: 'point', id: 'b', x: 10, y: 20 },
+    { kind: 'line', id: 'ab', p1: 'a', p2: 'b' },
+    { kind: 'mirror', id: 'm', sources: ['pq'], axis: 'ab' },
+  ]);
+
+  /** The entity `id` of 's1' in the document. */
+  function docEntity(doc: ReturnType<typeof anOpsSession>['doc'], id: string): unknown {
+    const params = doc.feature(fid('s1'))?.params as Record<string, unknown> | undefined; // a sketch feature
+    const entities = (params?.entities as readonly { readonly id: string }[] | undefined) ?? [];
+    return entities.find((e) => e.id === id);
+  }
+
+  it('patternDimensions shows only the selected patterns, in selection order', async () => {
+    const { session } = await editing(XY, PATTERNS);
+    expect(session.state.get().patternDimensions).toEqual([]);
+
+    session.select(eid('pq'));
+    session.select(eid('m'), { additive: true });
+    expect(session.state.get().patternDimensions).toEqual([]);
+
+    session.select(eid('cp'));
+    session.select(eid('lp'), { additive: true });
+    expect(session.state.get().patternDimensions.map((v) => `${v.pattern}/${v.param}`)).toEqual([
+      'cp/count',
+      'cp/angle',
+      'lp/count1',
+      'lp/spacing1',
+      'lp/angle1',
+      'lp/count2',
+    ]);
+  });
+
+  it('setPatternParam writes the parameter in one setParams without the solver', async () => {
+    const { session, solver, applied, doc } = await editing(XY, PATTERNS);
+    const calls = solver.calls.length;
+
+    expect(session.setPatternParam(eid('lp'), 'count1', 4)).toBe(true);
+    await settle();
+
+    expect(applied.map((op) => op.type)).toEqual(['feature.setParams']);
+    expect(solver.calls).toHaveLength(calls);
+    expect(docEntity(doc, 'lp')).toEqual({
+      kind: 'linearPattern',
+      id: 'lp',
+      sources: ['pq'],
+      direction1: { angle: Math.PI / 2, count: 4, spacing: 5 },
+    });
+    session.select(eid('lp'));
+    expect(session.state.get().patternDimensions[0]).toMatchObject({ param: 'count1', value: 4 });
+  });
+
+  it('each parameter of a linear and of a circular pattern', async () => {
+    const { session, doc } = await editing(XY, PATTERNS);
+
+    expect(session.setPatternParam(eid('lp'), 'spacing1', 7.5)).toBe(true);
+    expect(session.setPatternParam(eid('lp'), 'angle1', -1)).toBe(true);
+    expect(session.setPatternParam(eid('cp'), 'count', 6)).toBe(true);
+    expect(session.setPatternParam(eid('cp'), 'angle', -2 * Math.PI)).toBe(true);
+    await settle();
+
+    expect(docEntity(doc, 'lp')).toMatchObject({
+      direction1: { angle: -1, count: 2, spacing: 7.5 },
+    });
+    expect(docEntity(doc, 'cp')).toMatchObject({ count: 6, angle: -2 * Math.PI });
+  });
+
+  it('count2 ≥ 2 adds the second direction across direction 1 at spacing 1; 1 removes it', async () => {
+    const { session, doc } = await editing(XY, PATTERNS);
+
+    expect(session.setPatternParam(eid('lp'), 'count2', 3)).toBe(true);
+    await settle();
+    expect(docEntity(doc, 'lp')).toEqual({
+      kind: 'linearPattern',
+      id: 'lp',
+      sources: ['pq'],
+      direction1: { angle: Math.PI / 2, count: 2, spacing: 5 },
+      direction2: { angle: Math.PI, count: 3, spacing: 5 },
+    });
+
+    expect(session.setPatternParam(eid('lp'), 'spacing2', 2)).toBe(true);
+    expect(session.setPatternParam(eid('lp'), 'angle2', 3)).toBe(true);
+    await settle();
+    expect(docEntity(doc, 'lp')).toMatchObject({
+      direction2: { angle: 3, count: 3, spacing: 2 },
+    });
+
+    expect(session.setPatternParam(eid('lp'), 'count2', 1)).toBe(true);
+    await settle();
+    expect(docEntity(doc, 'lp')).toEqual({
+      kind: 'linearPattern',
+      id: 'lp',
+      sources: ['pq'],
+      direction1: { angle: Math.PI / 2, count: 2, spacing: 5 },
+    });
+  });
+
+  it('an invalid value, an unknown id, a mirror or a foreign param → false and nothing', async () => {
+    const { session, applied } = await editing(XY, PATTERNS);
+    const before = session.state.get();
+    const refused: readonly (readonly [
+      string,
+      Parameters<typeof session.setPatternParam>[1],
+      number,
+    ])[] = [
+      ['lp', 'count1', 1],
+      ['lp', 'count1', 101],
+      ['lp', 'count1', 2.5],
+      ['lp', 'count2', 0],
+      ['lp', 'count2', 101],
+      ['lp', 'spacing1', 0],
+      ['lp', 'spacing1', -2],
+      ['lp', 'spacing1', Infinity],
+      ['lp', 'angle1', Number.NaN],
+      // No second direction to change.
+      ['lp', 'spacing2', 3],
+      ['lp', 'angle2', 1],
+      ['lp', 'count', 3],
+      ['cp', 'count', 1],
+      ['cp', 'angle', 0],
+      ['cp', 'angle', 7],
+      ['cp', 'count1', 3],
+      ['m', 'count', 3],
+      ['pq', 'count', 3],
+      ['nope', 'count', 3],
+    ];
+    for (const [id, param, value] of refused) {
+      expect(
+        session.setPatternParam(eid(id), param, value),
+        `${id} ${param} ${String(value)}`,
+      ).toBe(false);
+    }
+    await settle();
+
+    expect(applied).toEqual([]);
+    expect(session.state.get()).toBe(before);
+  });
+
+  it('behind a pending solve the write waits its turn and survives it', async () => {
+    const { session, solver, doc } = await editing(XY, PATTERNS);
+    solver.hold();
+    void session.setDimension(cid('nope'), 1);
+    void session.remove([eid('m')]);
+
+    expect(session.setPatternParam(eid('lp'), 'count1', 5)).toBe(true);
+    solver.release();
+    await settle();
+
+    expect(docEntity(doc, 'm')).toBeUndefined();
+    expect(docEntity(doc, 'lp')).toMatchObject({ direction1: { count: 5 } });
+  });
+});

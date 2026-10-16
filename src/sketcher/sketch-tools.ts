@@ -14,6 +14,8 @@ import { createCircleTool } from './sketch-tools/circle-tool';
 import { createDimensionTool } from './sketch-tools/dimension-tool';
 import { createEntryTool } from './sketch-tools/entry-tool';
 import { createLineTool } from './sketch-tools/line-tool';
+import { createMirrorTool } from './sketch-tools/mirror-tool';
+import { createCircularPatternTool, createLinearPatternTool } from './sketch-tools/pattern-tool';
 import { createRectangleTool } from './sketch-tools/rectangle-tool';
 import { createSketchSelectTool } from './sketch-tools/select-tool';
 import { createSplineTool } from './sketch-tools/spline-tool';
@@ -153,6 +155,34 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       modes: SKETCH,
       family: 'spline',
       create: () => createSplineTool(sketches, 'fitSpline'),
+    }),
+    // Mirror and patterns (M36) have no shortcut; Tabler icons of a flip, a grid of dots and a
+    // full turn.
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.mirror',
+      label: 'tool.mirror',
+      icon: 'flip-horizontal',
+      group: 'modify',
+      modes: SKETCH,
+      create: () => createMirrorTool(sketches),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.linearPattern',
+      label: 'tool.linearPattern',
+      icon: 'grid-dots',
+      group: 'modify',
+      modes: SKETCH,
+      family: 'pattern',
+      create: () => createLinearPatternTool(sketches),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.circularPattern',
+      label: 'tool.circularPattern',
+      icon: 'rotate-360',
+      group: 'modify',
+      modes: SKETCH,
+      family: 'pattern',
+      create: () => createCircularPatternTool(sketches),
     }),
     Object.freeze<ToolDescriptor>({
       id: 'sketch.dimension',

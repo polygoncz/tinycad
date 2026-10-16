@@ -50,12 +50,14 @@ describe('SKETCH_TOOLBAR', () => {
     expect(Object.isFrozen(SKETCH_TOOLBAR.groupOrder)).toBe(true);
   });
 
-  it('in the sketch mode: select, draw, constrain, finish with the tools and actions', () => {
+  it('in the sketch mode: select, draw, modify, constrain, finish with the tools and actions', () => {
     const { toolbar, mode } = setup();
     mode.set('sketch');
     expect(toolbar.groups.get().map((g) => [g.id, g.items.map((i) => i.id)])).toEqual([
       ['select', ['sketch.select']],
       ['draw', ['sketch.line', 'sketch.rectangle', 'sketch.circle', 'sketch.arc', 'sketch.spline']],
+      // The mirror alone, the patterns one family (M36).
+      ['modify', ['sketch.mirror', 'sketch.linearPattern']],
       [
         'constrain',
         ['sketch.dimension', ...GEOMETRIC_CONSTRAINT_KINDS.map(sketchConstraintActionId)],
@@ -69,6 +71,7 @@ describe('SKETCH_TOOLBAR', () => {
       'history',
       'select',
       'draw',
+      'modify',
       'constrain',
       'finish',
       'view',
