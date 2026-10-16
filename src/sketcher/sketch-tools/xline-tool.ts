@@ -4,6 +4,11 @@
 // within 3° (automatic, B3); Ctrl/Cmd turns it off. Two clicks on one place make nothing. After a
 // line the tool stays for the next one. The click and the preview of a move share one step
 // (xlineStep).
+//
+// The numeric input (spec 12, M32): the first point has the fields x and y, the second length and
+// angle from the first. The length only places the second point (no dimension); a locked angle
+// replaces the automatic axis: 0/180° → a required horizontal, 90/270° → vertical, another angle
+// none.
 
 import type { Vec2 } from '@/core';
 import { XLINE_EXTENT } from '@/sketch';
@@ -14,14 +19,22 @@ import type { SketchEditor } from '../sketch-editor';
 import type { GlyphKind } from '../sketch-glyphs';
 import {
   MIN_LENGTH,
+  POLAR_FIELDS,
+  XY_FIELDS,
+  addDrawn,
+  axisOfAngle,
   clearPreview,
   clickTool,
+  constrainPolar,
+  constrainXY,
   distance,
+  inputValues,
+  measurePolar,
+  measureXY,
   newEntityId,
   previewInference,
   previewPairs,
   snapMode,
-  addDrawn,
 } from './common';
 import { placePoint, samePoint, sessionData, snapAt } from './snap';
 import type { SnapTarget } from './snap';
@@ -35,7 +48,13 @@ import type { AxisKind } from './shape';
 type XLineStep =
   | { readonly kind: 'none' }
   | { readonly kind: 'first'; readonly target: SnapTarget }
-  | { readonly kind: 'xline'; readonly target: SnapTarget; readonly axis: AxisKind | null };
+  | {
+      readonly kind: 'xline';
+      readonly target: SnapTarget;
+      readonly axis: AxisKind | null;
+      /** The axis is of a locked angle (M32): required, not automatic. */
+      readonly typed: boolean;
+    };
 
 export function createXLineTool(sketches: SketchEditor): Tool {
   let first: SnapTarget | null = null;
@@ -44,11 +63,23 @@ export function createXLineTool(sketches: SketchEditor): Tool {
     reset() {
       first = null;
     },
+    inputFields() {
+      return first === null ? XY_FIELDS : POLAR_FIELDS;
+    },
+    constrain(cursor, values) {
+      return first === null
+        ? constrainXY(cursor, values)
+        : constrainPolar(first.at, cursor, values);
+    },
+    measure(at) {
+      return first === null ? measureXY(at) : measurePolar(first.at, at);
+    },
     onMove(ctx, session, x, y, mods) {
       const mode = snapMode(sketches, mods);
       const target = snapAt(ctx, session, x, y, mode);
       if (target === null) return;
-      const step = xlineStep(sessionData(session, []), first, target, mode.infer);
+      const angle = inputValues(mods).get('angle') ?? null;
+      const step = xlineStep(sessionData(session, []), first, target, mode.infer, angle);
       previewInference(session, target.at, stepInferences(step), target.guides);
       if (first === null) return;
       // A degenerate line is not drawn.
@@ -59,7 +90,8 @@ export function createXLineTool(sketches: SketchEditor): Tool {
       const mode = snapMode(sketches, mods);
       const target = snapAt(ctx, session, x, y, mode);
       if (target === null) return;
-      const step = xlineStep(sessionData(session, []), first, target, mode.infer);
+      const angle = inputValues(mods).get('angle') ?? null;
+      const step = xlineStep(sessionData(session, []), first, target, mode.infer, angle);
       switch (step.kind) {
         case 'none':
           return;
@@ -79,14 +111,16 @@ export function createXLineTool(sketches: SketchEditor): Tool {
             p2: p2.id,
             construction: true,
           };
-          void addDrawn(session, {
-            entities: [...p1.entities, ...p2.entities, line],
-            constraints: [
-              ...p1.constraints,
-              ...p2.constraints,
-              ...axisConstraint(ctx, step.axis, line.id),
-            ],
-          });
+          const axis = axisConstraint(ctx, step.axis, line.id);
+          const required = new Set(step.typed ? axis.map((c) => c.id) : []);
+          void addDrawn(
+            session,
+            {
+              entities: [...p1.entities, ...p2.entities, line],
+              constraints: [...p1.constraints, ...p2.constraints, ...axis],
+            },
+            { required },
+          );
           return;
         }
       }
@@ -101,21 +135,26 @@ export function createXLineTool(sketches: SketchEditor): Tool {
 }
 
 /**
- * The step of a click at `target` after the first point `first` (null = none yet). Pure over
- * `data`, so the preview of a move can call it too.
+ * The step of a click at `target` after the first point `first` (null = none yet); `angle` = the
+ * entered angle (M32, radians), which replaces the automatic axis. Pure over `data`, so the
+ * preview of a move can call it too.
  */
 function xlineStep(
   data: SketchData,
   first: SnapTarget | null,
   target: SnapTarget,
   infer: boolean,
+  angle: number | null,
 ): XLineStep {
   if (first === null) return { kind: 'first', target };
   if (samePoint(first, target) || distance(first.at, target.at) <= MIN_LENGTH) {
     return { kind: 'none' };
   }
   const side = sideAxis(data, first, target, infer);
-  return { kind: 'xline', target: side.target, axis: side.axis };
+  if (angle !== null) {
+    return { kind: 'xline', target: side.target, axis: axisOfAngle(angle), typed: true };
+  }
+  return { kind: 'xline', target: side.target, axis: side.axis, typed: false };
 }
 
 /** The inferences the click of the step adds: of the clicked point and the axis of the line. */

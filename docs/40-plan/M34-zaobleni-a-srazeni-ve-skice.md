@@ -67,7 +67,7 @@ Jeden úkol = jedno spuštění `implementer`. Úkoly 1 a 2 souběžně (2 má f
 
 ### 3. Port v `app`, session, nástroje, e2e
 
-- **Soubory:** `src/app/sketch-geometry.ts` (`fillet` → `filletArc`), `sketcher/sketch-session.ts` (`rewrite(…, opts?: { edit })`), nové `sketch-tools/fillet-tool.ts`, `chamfer-tool.ts` (obě varianty), `sketch-tools.ts` (rodina `fillet`, skupina `modify`), i18n; e2e `test/e2e/m34.spec.ts`.
+- **Soubory:** `src/app/sketch-geometry.ts` (`fillet` → `filletArc`), `sketcher/sketch-session.ts` (`rewrite(…, opts?: { edit })`), nové `sketch-tools/fillet-tool.ts`, `chamfer-tool.ts` (obě varianty), `sketch-tools.ts` (rodina a skupina `modify`; původně vlastní rodina `fillet`, změněno při sloučení M33 – jedna rodina úprav), i18n; e2e `test/e2e/m34.spec.ts`.
 - **Testy:** nástroje s fake portem (náhled, klik na roh, dvě křivky, příliš velký poloměr nic, otevření kóty); e2e podle spec 12.
 - **Hotovo když:** `npm run check` a `npm run test:e2e` zelené.
 

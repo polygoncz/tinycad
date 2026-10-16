@@ -238,36 +238,10 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       family: 'slot',
       create: () => createSlotTool(sketches, 'arc'),
     }),
-    // Mirror and patterns (M36) are one family, so the toolbar fits 1280 px; no shortcut. Tabler
-    // icons of a flip, a grid of dots and a full turn.
-    Object.freeze<ToolDescriptor>({
-      id: 'sketch.mirror',
-      label: 'tool.mirror',
-      icon: 'flip-horizontal',
-      group: 'modify',
-      modes: SKETCH,
-      family: 'pattern',
-      create: () => createMirrorTool(sketches),
-    }),
-    Object.freeze<ToolDescriptor>({
-      id: 'sketch.linearPattern',
-      label: 'tool.linearPattern',
-      icon: 'grid-dots',
-      group: 'modify',
-      modes: SKETCH,
-      family: 'pattern',
-      create: () => createLinearPatternTool(sketches),
-    }),
-    Object.freeze<ToolDescriptor>({
-      id: 'sketch.circularPattern',
-      label: 'tool.circularPattern',
-      icon: 'rotate-360',
-      group: 'modify',
-      modes: SKETCH,
-      family: 'pattern',
-      create: () => createCircularPatternTool(sketches),
-    }),
-    // Trim, extend and split (M33) in the group 'modify', one family; only trim has a shortcut.
+    // All modify tools are ONE family 'modify' (Pavel 2026-10-16): the sketcher toolbar must fit
+    // 1280 px with the group Vazby. Trim first (the shown variant until another one is used, the
+    // only shortcut T), then extend and split (M33), mirror and patterns (M36); fillet, chamfer
+    // and offset (M34, M35) join the same family.
     Object.freeze<ToolDescriptor>({
       id: 'sketch.trim',
       label: 'tool.trim',
@@ -275,7 +249,7 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       group: 'modify',
       modes: SKETCH,
       shortcut: 'T',
-      family: 'trim',
+      family: 'modify',
       create: () => createTrimTool(sketches),
     }),
     Object.freeze<ToolDescriptor>({
@@ -284,7 +258,7 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       icon: 'arrow-bar-to-right',
       group: 'modify',
       modes: SKETCH,
-      family: 'trim',
+      family: 'modify',
       create: () => createExtendTool(sketches),
     }),
     Object.freeze<ToolDescriptor>({
@@ -293,18 +267,18 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       icon: 'separator',
       group: 'modify',
       modes: SKETCH,
-      family: 'trim',
+      family: 'modify',
       create: () => createSplitTool(sketches),
     }),
-    // Fillet and chamfer (M34) in the group 'modify', one family, without a shortcut; Tabler icons
-    // of a rounded corner, of a bevelled join and of an angle.
+    // Fillet and chamfer (M34), no shortcut; Tabler icons of a rounded corner, of a bevelled join
+    // and of an angle.
     Object.freeze<ToolDescriptor>({
       id: 'sketch.fillet',
       label: 'tool.fillet',
       icon: 'border-radius',
       group: 'modify',
       modes: SKETCH,
-      family: 'fillet',
+      family: 'modify',
       create: () => createFilletTool(sketches),
     }),
     Object.freeze<ToolDescriptor>({
@@ -313,7 +287,7 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       icon: 'join-bevel',
       group: 'modify',
       modes: SKETCH,
-      family: 'fillet',
+      family: 'modify',
       create: () => createChamferTool(sketches, 'distances'),
     }),
     Object.freeze<ToolDescriptor>({
@@ -322,8 +296,36 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       icon: 'angle',
       group: 'modify',
       modes: SKETCH,
-      family: 'fillet',
+      family: 'modify',
       create: () => createChamferTool(sketches, 'angle'),
+    }),
+    // Mirror and patterns (M36), no shortcut; Tabler icons of a flip, a grid of dots and a full turn.
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.mirror',
+      label: 'tool.mirror',
+      icon: 'flip-horizontal',
+      group: 'modify',
+      modes: SKETCH,
+      family: 'modify',
+      create: () => createMirrorTool(sketches),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.linearPattern',
+      label: 'tool.linearPattern',
+      icon: 'grid-dots',
+      group: 'modify',
+      modes: SKETCH,
+      family: 'modify',
+      create: () => createLinearPatternTool(sketches),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.circularPattern',
+      label: 'tool.circularPattern',
+      icon: 'rotate-360',
+      group: 'modify',
+      modes: SKETCH,
+      family: 'modify',
+      create: () => createCircularPatternTool(sketches),
     }),
     Object.freeze<ToolDescriptor>({
       id: 'sketch.dimension',

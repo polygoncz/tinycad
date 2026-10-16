@@ -308,3 +308,83 @@ describe('the construction line tool', () => {
     expect(viewport.overlayShapes.has('sketch-tool')).toBe(false);
   });
 });
+
+/** Types the keys into the view one by one. */
+function type(viewport: FakeViewport, keys: readonly string[]): void {
+  for (const key of keys) viewport.emitKey({ key, mods: NO_MODS, inTextField: false });
+}
+
+const chars = (text: string): readonly string[] => Array.from(text);
+
+describe('the numeric input of the construction line tool (M32)', () => {
+  it('the first point from X/Y, the second from length and 90°: vertical, no distance', async () => {
+    const { viewport, session } = await drawing('sketch.xline');
+    move(viewport, [40, 40]);
+    // The origin would snap with fix; the typed point is a plain new point.
+    type(viewport, ['0', 'Tab', '0', 'Enter']);
+    type(viewport, [...chars('10'), 'Tab', ...chars('90'), 'Enter']);
+    await settle();
+
+    const [line] = added(session, 'xline');
+    if (line === undefined) throw new Error('no xline');
+    expect(xyOf(session, line.p1)).toEqual([0, 0]);
+    const p2 = xyOf(session, line.p2);
+    expect(p2?.[0]).toBeCloseTo(0, 9);
+    expect(p2?.[1]).toBeCloseTo(10, 9);
+    expect(constraintsOf(session).map((c) => c.kind)).toEqual(['vertical']);
+  });
+
+  it('the vertical of a typed angle is required: a conflict drops only the automatic ones', async () => {
+    const { viewport, session, solver } = await drawing('sketch.xline', LINE_AT_25);
+    // The first point on the line h: pointOnCurve, automatic.
+    await click(viewport, [0, 25]);
+    move(viewport, [5, 40]);
+    type(viewport, ['Tab', ...chars('90')]);
+    solver.next({ status: 'conflict', entities: null, conflicting: [] });
+    type(viewport, ['Enter']);
+    await settle();
+
+    const [line] = added(session, 'xline', LINE_AT_25);
+    expect(constraintsOf(session)).toEqual([
+      expect.objectContaining({ kind: 'vertical', line: line?.id }),
+    ]);
+  });
+
+  it('a locked length only places the second point: the axis stays automatic', async () => {
+    const { viewport, session } = await drawing('sketch.xline');
+    await click(viewport, [10, 10]);
+    type(viewport, [...chars('5'), 'Tab']);
+    await click(viewport, [40, 11]);
+
+    const [line] = added(session, 'xline');
+    if (line === undefined) throw new Error('no xline');
+    const p2 = xyOf(session, line.p2);
+    const d = Math.hypot(30, 1);
+    expect(p2?.[0]).toBeCloseTo(10 + (5 * 30) / d, 9);
+    expect(p2?.[1]).toBeCloseTo(10 + 5 / d, 9);
+    expect(constraintsOf(session)).toEqual([expect.objectContaining({ kind: 'horizontal' })]);
+  });
+
+  it('an angle off the axes has no constraint and no automatic axis', async () => {
+    const { viewport, session } = await drawing('sketch.xline');
+    await click(viewport, [10, 10]);
+    move(viewport, [40, 11]);
+    type(viewport, ['Tab', '1', 'Enter']);
+    await settle();
+
+    expect(added(session, 'xline')).toHaveLength(1);
+    expect(constraintsOf(session)).toEqual([]);
+  });
+
+  it('shows x, y for the first point and length, angle for the second', async () => {
+    const { viewport, session } = await drawing('sketch.xline');
+    move(viewport, [3, 4]);
+    expect(session.state.get().numericInput?.fields.map((f) => f.id)).toEqual(['x', 'y']);
+    await click(viewport, [30, 40]);
+    move(viewport, [30, 44]);
+    expect(session.state.get().numericInput?.fields.map((f) => [f.id, f.text])).toEqual([
+      ['length', '4.00'],
+      ['angle', '90.00'],
+    ]);
+  });
+});
