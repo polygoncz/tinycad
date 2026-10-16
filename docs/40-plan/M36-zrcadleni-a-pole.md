@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 36
 aliases:
   - M36
@@ -16,7 +16,7 @@ specs:
 depends_on:
   - "[[M29-spliny]]"
 started: 2026-10-16
-finished:
+finished: 2026-10-16
 tags:
   - milnik
 created: 2026-10-16
@@ -110,5 +110,12 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **Úkol 6 hotový:** `test/e2e/m36.spec.ts` (zrcadlení, mřížka 3 × 2 přes popisek `1×`, kruhové pole, počet 3 → 5 i po reloadu), celé e2e 144/144 zelené; spec 10 a 11 propsané. Postřeh: po potvrzení popisku Enterem není fokus ve viewportu, Esc nástroje funguje až po kliku na plátno (stejně jako u kót M28).
 - **Natažení `main` s M30 (merge `013c44c`):** konflikty v `regions.ts` (přijato smazání/přesun), `sketch-drawing.ts`, spec 10, testech; `isRegionCurve` dostal větve polí. Check zelený.
 - **Úkol 5 hotový:** `regionCurves` přidá nekonstrukční kopie; integrační test nad OCCT `sketch-pattern-regions.test.ts` (deska s kruhovým polem děr, plochy `face:side:cp:1.k`… přežijí změnu úhlu). Check 6835 unit + 42 integračních, e2e 144/144.
+- **Revize architektury:** bez vážných porušení; 4 drobné nálezy opraveny (krok kruhového pole, platnost parametrů a zdroje polí měl `sketcher` zopakované – teď `circularStep`, `patternParamsValid`, `isPatternSource` v `sketch`; zmrazený výsledek `withPatternParam`).
 
 ## Retrospektiva
+
+_Návrh k doplnění Pavlem:_
+- **Recept místo výsledku se vyplatil:** kopie jako čistá funkce `patternCopies(data)` daly kresbu, výběr, snapper i oblasti skoro zadarmo – všechny vrstvy už uměly běžné `SketchEntity`, stačilo je přidat. Řešič se vůbec neměnil (kromě vazby `symmetric`).
+- **Vyčerpávající `switch` jako kontrakt mezi stopami:** `isRegionCurve` ze stopy A (M30) po sloučení okamžitě vynutil rozhodnutí pro nové entity; typecheck nahradil domluvu.
+- **Co bylo jinak:** úkol 4 (nástroje + vynesené kóty) byl na jeden běh implementátora velký, rozdělil se na `sketcher` a `ui`. Revize našla duplikovaná doménová pravidla v `sketcher` – implementátor je napsal, protože `sketch` neexportoval jedinou pravdu; příště při spec rovnou určit, kde pravidlo žije.
+- **Kandidát na poznatek:** „Odvozená geometrie jako čistá funkce nad vyřešenými daty“ (stabilní id z receptu, kopie bez identity ve snapperu a vazbách).
