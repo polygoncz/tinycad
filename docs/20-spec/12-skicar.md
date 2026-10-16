@@ -656,7 +656,7 @@ Zafixováno 2026-10-16 před spuštěním stop. Pravidlo jako v první sérii: s
 | Stopa | `SketchEntity` / `SketchCurve` | `SketchConstraint` | `Curve2` / `ProfileCurve` | Ostatní sdílené |
 |---|---|---|---|---|
 | A (M30, M33–M35) | – | případná vazba odsazení (M35, `kind: 'offset'`) | – (beze změny) | port jádra `profileRegions`, `SketchArtifact.outlines`, `regionCurves`, port `SketchGeometry`; průsečíky a offset v M33/M35 |
-| B (M31, M32) | `SketchXLine` (`kind: 'xline'`) | – | – | `SketchState.constructionMode`; nástroje a akce níže |
+| B (M31, M32) | `SketchXLine` (`kind: 'xline'`) | – | – | `SketchState.constructionMode`, `Action.checked` / `ActionState.checked: boolean \| null` ([[10-interakce]]); nástroje a akce níže |
 | C (M36, M37) | entity `mirror`, `linearPattern`, `circularPattern` (recept, kopie odvozené – [[Q089 Parametrické zrcadlení a pole ve skice\|Q089]]) a `text` ([[Q091 Fonty pro text ve skice\|Q091]]); **nejsou** v `SketchCurve` | `symmetric` | – (text a kopie jsou `line`/`arc`/`circle`/`bspline` s odvozeným id) | větve `regionCurves` pro kopie a text |
 
 Druhy `xline`, `mirror`, `linearPattern`, `circularPattern`, `text`, `symmetric` a `offset` jsou tím rezervované; jiná stopa je nepoužije pro nic jiného. Entity stopy C jsou členy `SketchEntity`, ale ne `SketchCurve` (nejsou to křivky, nesou recept); funkce nad `SketchCurve` se jich proto netýkají a stopa C doplní jen `switch` nad `SketchEntity`.
@@ -710,7 +710,7 @@ Aby se stopy nesrazily v `sketch-tools.ts`, `constants.ts` a i18n, jsou id rozd�
 
 | Stopa | Nástroje (rodina) | Akce |
 |---|---|---|
-| B | `sketch.rectangle` (stávající, rohy) + `sketch.rectangleCenter`, `sketch.rectangle3p` (rodina `rectangle`); `sketch.line` + `sketch.xline` (rodina `line`); `sketch.point`; `sketch.slot`, `sketch.slotOverall`, `sketch.slotArc` (rodina `slot`) | `sketch.constructionMode` (přepínač, klávesa `Q`) |
+| B | `sketch.rectangle` (stávající, rohy) + `sketch.rectangleCenter`, `sketch.rectangle3p` (rodina `rectangle`); `sketch.line` + `sketch.xline` (rodina `line`); `sketch.point`; `sketch.slot`, `sketch.slotOverall`, `sketch.slotArc` (rodina `slot`) | ~~`sketch.constructionMode`~~ – nevzniklo: režim konstrukce přepíná rozšířená akce `sketch.construction` (`Q`), viz [[#Nové kreslicí nástroje (M31)]] (B4) |
 | A | `sketch.trim`, `sketch.extend`, `sketch.split` (rodina `trim`); `sketch.fillet`, `sketch.chamfer` (rodina `fillet`); `sketch.offset` | – |
 | C | `sketch.mirror`; `sketch.linearPattern`, `sketch.circularPattern` (rodina `pattern`); `sketch.text` | `sketch.constraint.symmetric` (z `GEOMETRIC_CONSTRAINT_KINDS`) |
 
