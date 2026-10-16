@@ -2,7 +2,9 @@ import { DebugMode, GcsWrapper, type SketchPrimitive } from '@salusoft89/planegc
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { bspline, type BSplineShape, type Vec2 } from '@/core';
 import {
+  endTangent,
   measure,
+  tangentArcFrom,
   parseSketchData,
   type DimensionConstraint,
   type SketchData,
@@ -325,6 +327,117 @@ describe('solveSketch – M26 constraints', () => {
     expectPoint(point(result.entities, 'm'), -5, 0);
     // The arc itself did not grow to reach the point.
     expectPoint(point(result.entities, 'ae'), 0, 5);
+  });
+});
+
+describe('solveSketch – M27 tangent arcs', () => {
+  // What sketch.arcTangent writes (spec 12, "Oblouky a kružnice (M27)"): an arc from the end point
+  // of a line or an arc, placed by tangentArcFrom, sharing that point, with tangent(arc, curve).
+
+  /** The line l (10, 10)–(30, 10) and the ccw quarter arc a around (100, 100), (110, 100)–(100, 110). */
+  const CURVES = [
+    { kind: 'point', id: 'l1', x: 10, y: 10 },
+    { kind: 'point', id: 'l2', x: 30, y: 10 },
+    { kind: 'line', id: 'l', p1: 'l1', p2: 'l2' },
+    { kind: 'point', id: 'ac', x: 100, y: 100 },
+    { kind: 'point', id: 'as', x: 110, y: 100 },
+    { kind: 'point', id: 'ae', x: 100, y: 110 },
+    { kind: 'arc', id: 'a', center: 'ac', start: 'as', end: 'ae' },
+  ];
+
+  /** The tangent arc from the end point `from` of `curve` to `to`, as the tool writes it. */
+  function tangentArc(curve: 'l' | 'a', from: 'l2' | 'ae', to: Vec2): SketchData {
+    const base = sketch(CURVES, []);
+    const c = base.entities.find((e) => e.id === curve);
+    const at = point(base.entities, from);
+    const direction =
+      c?.kind === 'line' || c?.kind === 'arc' ? endTangent(c, idOf(base, from), base) : null;
+    const fit = direction === null ? null : tangentArcFrom([at.x, at.y], direction, to);
+    if (fit === null) throw new Error('no tangent arc');
+    const [start, end] = fit.ccw ? [from, 'e'] : ['e', from];
+    return sketch(
+      [
+        ...CURVES,
+        { kind: 'point', id: 'c', x: fit.center[0], y: fit.center[1] },
+        { kind: 'point', id: 'e', x: to[0], y: to[1] },
+        { kind: 'arc', id: 'T', center: 'c', start, end },
+      ],
+      [{ kind: 'tangent', id: 't', a: 'T', b: curve }],
+    );
+  }
+
+  const CASES = [
+    { name: 'a line', curve: 'l', from: 'l2', to: [40, 20] },
+    { name: 'an arc, inside (same sense)', curve: 'a', from: 'ae', to: [80, 90] },
+    { name: 'an arc, outside (an S)', curve: 'a', from: 'ae', to: [80, 125] },
+  ] as const;
+
+  /** The unit tangent of a solved line (p1 → p2) or arc (counter-clockwise) in its point `at`. */
+  function tangentIn(entities: readonly SketchEntity[] | null, curve: string, at: string): Vec2 {
+    const c = entities?.find((e) => e.id === curve);
+    let t: Vec2;
+    if (c?.kind === 'line') {
+      const p1 = point(entities, c.p1);
+      const p2 = point(entities, c.p2);
+      t = [p2.x - p1.x, p2.y - p1.y];
+    } else if (c?.kind === 'arc') {
+      const center = point(entities, c.center);
+      const p = point(entities, at);
+      t = [-(p.y - center.y), p.x - center.x];
+    } else {
+      throw new Error(`no line or arc ${curve}`);
+    }
+    const length = Math.hypot(t[0], t[1]);
+    return [t[0] / length, t[1] / length];
+  }
+
+  /** The solved arc T is tangent to `curve` in `at`: parallel tangents, end points on the circle. */
+  function expectTangentInEnd(entities: readonly SketchEntity[] | null, curve: string, at: string) {
+    const [ax, ay] = tangentIn(entities, 'T', at);
+    const [bx, by] = tangentIn(entities, curve, at);
+    expect(ax * by - ay * bx).toBeCloseTo(0, 6);
+    const c = point(entities, 'c');
+    const p = point(entities, at);
+    const e = point(entities, 'e');
+    expect(Math.hypot(e.x - c.x, e.y - c.y)).toBeCloseTo(Math.hypot(p.x - c.x, p.y - c.y), 6);
+  }
+
+  for (const c of CASES) {
+    it(`an arc tangent to ${c.name} from its end point solves ok, the tangent kept`, () => {
+      const result = solveSketch(mod, tangentArc(c.curve, c.from, c.to));
+
+      // line 4 + arc a 5 + arc T 5 − the shared point 2 − the tangent 1
+      expect(result).toMatchObject({ status: 'ok', dof: 11, conflicting: [], redundant: [] });
+      expectTangentInEnd(result.entities, c.curve, c.from);
+    });
+
+    it(`an arc tangent to ${c.name} stays tangent while its free end is dragged`, () => {
+      const data = tangentArc(c.curve, c.from, c.to);
+      const result = solveSketch(mod, {
+        ...data,
+        drag: { point: idOf(data, 'e'), to: [c.to[0] + 5, c.to[1] - 3] },
+      });
+
+      expect(result).toMatchObject({ status: 'ok', conflicting: [], redundant: [] });
+      expectTangentInEnd(result.entities, c.curve, c.from);
+    });
+  }
+
+  it('a line tangent to an arc without a shared point stays tangent_la', () => {
+    // The line y = 10 and the arc a around (100, 100) with r = 10: the solve moves them to touch.
+    const data = sketch(CURVES, [{ kind: 'tangent', id: 't', a: 'l', b: 'a' }]);
+
+    const result = solveSketch(mod, data);
+
+    // line 4 + arc 5 − the tangent 1
+    expect(result).toMatchObject({ status: 'ok', dof: 8, conflicting: [], redundant: [] });
+    const l1 = point(result.entities, 'l1');
+    const l2 = point(result.entities, 'l2');
+    const center = point(result.entities, 'ac');
+    const start = point(result.entities, 'as');
+    const r = Math.hypot(start.x - center.x, start.y - center.y);
+    const cross = (l2.x - l1.x) * (center.y - l1.y) - (l2.y - l1.y) * (center.x - l1.x);
+    expect(Math.abs(cross) / Math.hypot(l2.x - l1.x, l2.y - l1.y)).toBeCloseTo(r, 6);
   });
 });
 

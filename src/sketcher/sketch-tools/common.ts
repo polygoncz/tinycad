@@ -14,6 +14,7 @@ import type {
   ViewPointerEvent,
 } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
+import { ccwSweep } from '../sketch-angles';
 import type { GlyphKind } from '../sketch-glyphs';
 import type { SketchSession } from '../sketch-session';
 
@@ -152,6 +153,25 @@ export function arcPoints(center: Vec2, radius: number, from: number, sweep: num
 export const circlePoints = (center: Vec2, radius: number): Vec2[] =>
   arcPoints(center, radius, 0, FULL_TURN);
 
+/**
+ * Sets the preview: the arc around `fit.center` of `fit.radius` from a to b, counter-clockwise
+ * when `fit.ccw`, otherwise clockwise (M27, the fits of arcFrom3 and tangentArcFrom).
+ */
+export function previewArcFit(
+  ctx: ToolContext,
+  session: SketchSession,
+  fit: { readonly center: Vec2; readonly radius: number; readonly ccw: boolean },
+  a: Vec2,
+  b: Vec2,
+): void {
+  const [from, to] = fit.ccw ? [a, b] : [b, a];
+  const begin = angleAt(fit.center, from);
+  const sweep = ccwSweep(begin, angleAt(fit.center, to));
+  previewPolyline(ctx, session, arcPoints(fit.center, fit.radius, begin, sweep));
+}
+
+const angleAt = (center: Vec2, p: Vec2): number => Math.atan2(p[1] - center[1], p[0] - center[0]);
+
 export function clearPreview(ctx: ToolContext): void {
   ctx.viewport.overlay.remove(PREVIEW_OVERLAY_ID);
 }
@@ -184,17 +204,37 @@ export interface ClickHandlers {
   onKey?(ctx: ToolContext, session: SketchSession, e: ViewKeyEvent): boolean;
   /** Forgets the work in progress (deactivate, another session). */
   reset(): void;
+  /**
+   * A left press moved past the click tolerance (M27, the tangent arc of the polyline), asked once
+   * per press with the position of the press; true = the tool takes the drag: its moves go to
+   * onDrag instead of onMove and its release to onDragEnd. Without it a drag is ignored.
+   */
+  onDragStart?(
+    ctx: ToolContext,
+    session: SketchSession,
+    x: number,
+    y: number,
+    mods: KeyMods,
+  ): boolean;
+  /** A move of a taken drag (the preview). */
+  onDrag?(ctx: ToolContext, session: SketchSession, x: number, y: number, mods: KeyMods): void;
+  /** The release of a taken drag. */
+  onDragEnd?(ctx: ToolContext, session: SketchSession, x: number, y: number, mods: KeyMods): void;
+  /** Escape during a taken drag: the drag is forgotten; the moves until the release are plain moves. */
+  onDragCancel?(ctx: ToolContext, session: SketchSession): void;
 }
 
 /**
  * A tool of clicks over the open session. Without an open session it does nothing; a new session
  * resets the work in progress (it belonged to the old one). Deactivate removes the preview; it,
  * a click, Escape and the pointer leaving the view remove the inference preview too (spec 12,
- * M26).
+ * M26). A tool with onDragStart may take a drag of the left button instead (M27).
  */
 export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool {
   let ctx: ToolContext | null = null;
   let down: { readonly x: number; readonly y: number } | null = null;
+  /** What the tool said to the drag of the current press; null = not asked yet. */
+  let drag: 'taken' | 'refused' | null = null;
   let owner: SketchSession | null = null;
 
   /** The open session; resets the handlers when it is another one than before. */
@@ -204,6 +244,7 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
       clearInference(owner);
       owner = session;
       down = null;
+      drag = null;
       handlers.reset();
       if (ctx !== null) clearPreview(ctx);
     }
@@ -222,6 +263,7 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
       ctx = null;
       owner = null;
       down = null;
+      drag = null;
     },
     onPointer(e: ViewPointerEvent) {
       const c = ctx;
@@ -229,21 +271,41 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
       const session = current();
       if (session === null) return;
       switch (e.type) {
-        case 'move':
-          handlers.onMove?.(c, session, e.x, e.y, e.mods);
+        case 'move': {
+          const start = down;
+          if (
+            start !== null &&
+            drag === null &&
+            handlers.onDragStart !== undefined &&
+            Math.hypot(e.x - start.x, e.y - start.y) > CLICK_TOLERANCE_PX
+          ) {
+            drag = handlers.onDragStart(c, session, start.x, start.y, e.mods) ? 'taken' : 'refused';
+          }
+          if (drag === 'taken') handlers.onDrag?.(c, session, e.x, e.y, e.mods);
+          else handlers.onMove?.(c, session, e.x, e.y, e.mods);
           return;
+        }
         case 'leave':
           // Off the view the click would add nothing: like Escape, the preview goes.
           clearInference(session);
           return;
         case 'down':
-          if (e.button === 'left') down = { x: e.x, y: e.y };
+          if (e.button !== 'left') return;
+          down = { x: e.x, y: e.y };
+          drag = null;
           return;
         case 'up': {
           if (e.button !== 'left') return;
           const start = down;
+          const taken = drag === 'taken';
           down = null;
+          drag = null;
           if (start === null) return;
+          if (taken) {
+            clearInference(session);
+            handlers.onDragEnd?.(c, session, e.x, e.y, e.mods);
+            return;
+          }
           if (Math.hypot(e.x - start.x, e.y - start.y) > CLICK_TOLERANCE_PX) return;
           // The click adds what the preview showed; the next move shows the next one.
           clearInference(session);
@@ -258,6 +320,13 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
       const session = current();
       if (session === null) return false;
       if (isPlainEscape(e)) clearInference(session);
+      if (isPlainEscape(e) && drag === 'taken') {
+        // Only the drag is cancelled; the release that follows is no click.
+        down = null;
+        drag = null;
+        handlers.onDragCancel?.(c, session);
+        return true;
+      }
       return handlers.onKey?.(c, session, e) ?? false;
     },
   };

@@ -15,13 +15,17 @@
 // not drawn, focused, clicked nor seen by assistive tech.
 // M19.2 (D8): items with menuOnly (the standard views) are not buttons, only items of the menu of
 // their group and of "…"; fitGroups measures only the drawn buttons, so it needs no change.
+// M27: an item with variants (a tool family) is a split button: the main part runs the shown tool,
+// the arrow ▾ opens the menu of the variants (the same ContextMenu as the menu of a group). Both
+// parts are inside the slot of the group, so its measured width for fitGroups includes them. The
+// menus of a group and of "…" show the variants as plain items (menuEntries).
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ToolbarGroup, ToolbarItem } from '@/interaction';
 import { useObservable } from '../composables/use-observable';
 import { useSession } from '../composables/use-session';
 import { isMacPlatform, shortcutText } from '../keyboard';
-import { fitGroups, overflowItems } from '../toolbar-fit';
+import { familyVariants, fitGroups, menuEntries, overflowItems } from '../toolbar-fit';
 import ContextMenu from './ContextMenu.vue';
 
 const session = useSession();
@@ -112,34 +116,47 @@ onBeforeUnmount(() => {
 });
 
 /**
- * An open menu at (x, y): under a group label (groupId), or of the button "…" (null). Both show
- * the same items as the buttons (a ToolbarItem is an ActionState); "…" the items of the groups
- * out of the bar, group after group.
+ * What an open menu shows: the items of a group (its label), of the groups out of the bar (the
+ * button "…"), or the variants of a tool family (its arrow; found by a tool of the family, which
+ * stays in it when the shown variant changes).
+ */
+type MenuSource =
+  | { readonly kind: 'group'; readonly groupId: string }
+  | { readonly kind: 'more' }
+  | { readonly kind: 'variants'; readonly groupId: string; readonly toolId: string };
+
+/**
+ * An open menu at (x, y). All show the same items as the buttons (a ToolbarItem is an
+ * ActionState); "…" the items of the groups out of the bar, group after group.
  */
 interface OpenMenu {
   readonly x: number;
   readonly y: number;
-  readonly groupId: string | null;
+  readonly source: MenuSource;
 }
 
 const menu = ref<OpenMenu | null>(null);
 const menuItems = computed<readonly ToolbarItem[]>(() => {
   const open = menu.value;
   if (open === null) return [];
-  if (open.groupId === null) return overflowItems(groups.value, fitCount.value);
-  return groups.value.find((g) => g.id === open.groupId)?.items ?? [];
+  const source = open.source;
+  if (source.kind === 'more') return menuEntries(overflowItems(groups.value, fitCount.value));
+  if (source.kind === 'variants')
+    return familyVariants(groups.value, source.groupId, source.toolId);
+  const group = groups.value.find((g) => g.id === source.groupId);
+  return group === undefined ? [] : menuEntries(group.items);
 });
 
 // All groups fit again (a wider window) while the menu of "…" is open: it would stay empty.
 watch(overflowing, (now) => {
-  if (!now && menu.value?.groupId === null) menu.value = null;
+  if (!now && menu.value?.source.kind === 'more') menu.value = null;
 });
 
-function openMenu(groupId: string | null, e: MouseEvent): void {
+function openMenu(source: MenuSource, e: MouseEvent): void {
   const target = e.currentTarget;
   if (!(target instanceof HTMLElement)) return;
   const box = target.getBoundingClientRect();
-  menu.value = { x: box.left, y: box.bottom + 4, groupId };
+  menu.value = { x: box.left, y: box.bottom + 4, source };
 }
 
 function runMenuItem(id: string): void {
@@ -161,24 +178,39 @@ function runMenuItem(id: string): void {
         <div v-if="i > 0" class="separator" />
         <div class="group">
           <div class="buttons">
-            <button
-              v-for="item in buttonsOf(group)"
-              :key="item.id"
-              type="button"
-              class="tool"
-              :class="{ active: item.active }"
-              :disabled="!item.enabled"
-              :aria-label="t(item.label)"
-              @click="run(item)"
-            >
-              <i class="ti" :class="`ti-${item.icon}`" aria-hidden="true" />
-              <span class="tip" role="tooltip">
-                {{ t(item.label) }}
-                <kbd v-if="item.shortcut !== null">{{ shortcutText(item.shortcut, isMac) }}</kbd>
-              </span>
-            </button>
+            <!-- A plain button, or the split button of a tool family (main part + arrow). -->
+            <div v-for="item in buttonsOf(group)" :key="item.id" class="item">
+              <button
+                type="button"
+                class="tool"
+                :class="{ active: item.active }"
+                :disabled="!item.enabled"
+                :aria-label="t(item.label)"
+                @click="run(item)"
+              >
+                <i class="ti" :class="`ti-${item.icon}`" aria-hidden="true" />
+                <span class="tip" role="tooltip">
+                  {{ t(item.label) }}
+                  <kbd v-if="item.shortcut !== null">{{ shortcutText(item.shortcut, isMac) }}</kbd>
+                </span>
+              </button>
+              <button
+                v-if="item.variants.length > 0"
+                type="button"
+                class="variants"
+                aria-haspopup="menu"
+                :aria-label="t('toolbar.variants', { name: t(item.label) })"
+                @click="openMenu({ kind: 'variants', groupId: group.id, toolId: item.id }, $event)"
+              >
+                <i class="ti ti-chevron-down" aria-hidden="true" />
+              </button>
+            </div>
           </div>
-          <button type="button" class="group-label" @click="openMenu(group.id, $event)">
+          <button
+            type="button"
+            class="group-label"
+            @click="openMenu({ kind: 'group', groupId: group.id }, $event)"
+          >
             {{ groupLabel(group) }} <i class="ti ti-chevron-down" aria-hidden="true" />
           </button>
         </div>
@@ -193,7 +225,7 @@ function runMenuItem(id: string): void {
               type="button"
               class="tool"
               :aria-label="t('toolbar.more')"
-              @click="openMenu(null, $event)"
+              @click="openMenu({ kind: 'more' }, $event)"
             >
               <i class="ti ti-dots" aria-hidden="true" />
             </button>
@@ -273,8 +305,26 @@ function runMenuItem(id: string): void {
   color: var(--text-primary);
   font-size: var(--toolbar-icon);
 }
-.tool:hover:not(:disabled) {
+.item {
+  display: flex;
+}
+.tool:hover:not(:disabled),
+.variants:hover {
   background: var(--control-hover);
+}
+/* The arrow of a split button: narrow, as high as a button, right after its main part. */
+.variants {
+  width: 14px;
+  height: var(--toolbar-button);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-button);
+  background: none;
+  color: var(--text-secondary);
+  font-size: 10px;
 }
 .tool:disabled {
   color: var(--text-tertiary);

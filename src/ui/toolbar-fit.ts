@@ -36,3 +36,30 @@ export function overflowItems<T>(
 ): readonly T[] {
   return Object.freeze(groups.slice(fitCount).flatMap((group) => group.items));
 }
+
+/**
+ * The items of a menu of the toolbar (of a group, of "…") from items of the bar: the variants of a
+ * tool family as plain items in place of its split button (M27), the others as they are.
+ */
+export function menuEntries<T extends { readonly variants: readonly T[] }>(
+  items: readonly T[],
+): readonly T[] {
+  return Object.freeze(
+    items.flatMap((item) => (item.variants.length > 0 ? item.variants : [item])),
+  );
+}
+
+/**
+ * The variants of the tool family with `toolId` in the group `groupId` (the menu of its arrow,
+ * M27): found by any tool of the family, so it stays found when the shown variant changes. No
+ * such group or family → none.
+ */
+export function familyVariants<T extends { readonly id: string; readonly variants: readonly T[] }>(
+  groups: readonly { readonly id: string; readonly items: readonly T[] }[],
+  groupId: string,
+  toolId: string,
+): readonly T[] {
+  const group = groups.find((g) => g.id === groupId);
+  const family = group?.items.find((item) => item.variants.some((v) => v.id === toolId));
+  return family?.variants ?? [];
+}

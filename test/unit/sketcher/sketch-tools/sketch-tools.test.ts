@@ -261,13 +261,14 @@ describe('createSketchTools', () => {
   it('describes the tools of the sketcher (spec 10, "Nástroje a akce skicáře")', () => {
     const { tools } = setup();
     expect(
-      tools.map(({ id, label, icon, group, modes, shortcut }) => ({
+      tools.map(({ id, label, icon, group, modes, shortcut, family }) => ({
         id,
         label,
         icon,
         group,
         modes,
         shortcut,
+        family,
       })),
     ).toEqual([
       {
@@ -277,6 +278,7 @@ describe('createSketchTools', () => {
         group: 'sketch',
         modes: ['model'],
         shortcut: 'Shift+S',
+        family: undefined,
       },
       {
         id: 'sketch.select',
@@ -285,6 +287,7 @@ describe('createSketchTools', () => {
         group: 'select',
         modes: ['sketch'],
         shortcut: undefined,
+        family: undefined,
       },
       {
         id: 'sketch.line',
@@ -293,6 +296,7 @@ describe('createSketchTools', () => {
         group: 'draw',
         modes: ['sketch'],
         shortcut: 'L',
+        family: undefined,
       },
       {
         id: 'sketch.rectangle',
@@ -301,6 +305,7 @@ describe('createSketchTools', () => {
         group: 'draw',
         modes: ['sketch'],
         shortcut: 'R',
+        family: undefined,
       },
       {
         id: 'sketch.circle',
@@ -309,6 +314,43 @@ describe('createSketchTools', () => {
         group: 'draw',
         modes: ['sketch'],
         shortcut: 'C',
+        family: 'circle',
+      },
+      {
+        id: 'sketch.circle2p',
+        label: 'tool.circle2p',
+        icon: 'circle-number-2',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'circle',
+      },
+      {
+        id: 'sketch.circle3p',
+        label: 'tool.circle3p',
+        icon: 'circle-number-3',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'circle',
+      },
+      {
+        id: 'sketch.circle2t',
+        label: 'tool.circle2t',
+        icon: 'circles-relation',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'circle',
+      },
+      {
+        id: 'sketch.circle3t',
+        label: 'tool.circle3t',
+        icon: 'circle-letter-t',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'circle',
       },
       {
         id: 'sketch.arc',
@@ -317,6 +359,25 @@ describe('createSketchTools', () => {
         group: 'draw',
         modes: ['sketch'],
         shortcut: 'A',
+        family: 'arc',
+      },
+      {
+        id: 'sketch.arc3p',
+        label: 'tool.arc3p',
+        icon: 'chart-arcs-3',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'arc',
+      },
+      {
+        id: 'sketch.arcTangent',
+        label: 'tool.arcTangent',
+        icon: 'ease-out',
+        group: 'draw',
+        modes: ['sketch'],
+        shortcut: undefined,
+        family: 'arc',
       },
       {
         id: 'sketch.dimension',
@@ -325,9 +386,19 @@ describe('createSketchTools', () => {
         group: 'constrain',
         modes: ['sketch'],
         shortcut: 'D',
+        family: undefined,
       },
     ]);
     expect(Object.isFrozen(tools)).toBe(true);
+  });
+
+  it('the arc tools are one family in the order arc, arc3p, arcTangent (M27)', () => {
+    const { tools } = setup();
+    expect(tools.filter((t) => t.family === 'arc').map((t) => t.id)).toEqual([
+      'sketch.arc',
+      'sketch.arc3p',
+      'sketch.arcTangent',
+    ]);
   });
 
   it('tools without an open session do nothing', () => {
