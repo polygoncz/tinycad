@@ -857,6 +857,40 @@ describe('solveSketch – point on a spline', () => {
     });
   }
 
+  it('a second solve that sticks the point to an end can end in a conflict', () => {
+    // A fixed line x = 4.5 misses the fixed spline (it ends at [4, 2]) but crosses its
+    // polynomial extension: the first solve puts q there with t > 1, the second one fixes t = 1
+    // and q at [4, 2] cannot lie on the line.
+    const data = onSpline(
+      [
+        ...controlSpline(),
+        { kind: 'point', id: 'l1', x: 4.5, y: -5 },
+        { kind: 'point', id: 'l2', x: 4.5, y: 10 },
+        line('L', 'l1', 'l2'),
+      ],
+      'S',
+      ...fixes('p0', 'p1', 'p2', 'p3', 'l1', 'l2'),
+      { kind: 'pointOnCurve', id: 'onL', point: 'q', curve: 'L' },
+    );
+    const moved = {
+      ...data,
+      entities: data.entities.map((e) =>
+        e.id === 'q' && e.kind === 'point' ? { ...e, x: 4.4, y: 2.8 } : e,
+      ),
+    };
+    const solve = vi.spyOn(GcsWrapper.prototype, 'solve');
+    const result = solveSketch(mod, moved);
+    // Two solves: the first one ended 'ok' with the parameter out of range.
+    expect(solve).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({ status: 'conflict', entities: null, dof: 0 });
+    expect(result.conflicting.length).toBeGreaterThan(0);
+    const constraintIds: readonly string[] = data.constraints.map((c) => c.id);
+    for (const id of [...result.conflicting, ...result.redundant]) {
+      expect(id).not.toContain(':');
+      expect(constraintIds).toContain(id);
+    }
+  });
+
   it('a bspline nothing refers to is not in planegcs, one a point refers to is', () => {
     // The dof correction holds for it: 4 control points + the point − 1.
     const data = onSpline(controlSpline(), 'S');

@@ -11,6 +11,7 @@ import {
   isoCanvasOffset,
   openConstraintSection,
   openTool,
+  pickVariant,
   refField,
   sketchPanel,
   timelineFeature,
@@ -117,7 +118,7 @@ async function exportDocument(page: Page): Promise<ExportedDocument> {
     .click();
   const text = await readFile(await (await downloading).path(), 'utf8');
   // The file is the export of the app under test (TinycadFile); the test reads only the parts
-  // described by ExportedDocument and fails on a missing one.
+  // described by ExportedDocument; the readers below check the arrays they rely on.
   return JSON.parse(text) as ExportedDocument;
 }
 
@@ -131,7 +132,10 @@ function feature(doc: ExportedDocument, name: string): ExportedFeature {
 /** The entities of the sketch feature. */
 function entitiesOf(doc: ExportedDocument, sketch: string): readonly ExportedEntity[] {
   // A sketch keeps its entities in the data param 'entities' (sketch model, SKETCH_PARAM).
-  return feature(doc, sketch).params['entities'] as readonly ExportedEntity[];
+  const entities = feature(doc, sketch).params['entities'];
+  if (!Array.isArray(entities)) throw new Error(`no entities in ${sketch}`);
+  // The export is the document as stored; parseSketchData checked it when it was written.
+  return entities as readonly ExportedEntity[];
 }
 
 /** The only entity of the kind in the sketch. */
@@ -180,7 +184,7 @@ test('a profile of lines and a spline through points: extrude, face:side:<id of 
   // 2. The fourth side with "Spline přes body": from the end of the last line (snapped onto it)
   // through a point bulging to +x into the start of the first line; Enter ends it. The right side
   // faces the iso camera, so its edge can be picked later.
-  await toolbarButton(page, 'Spline přes body').click();
+  await pickVariant(page, 'Spline přes řídicí body', 'Spline přes body');
   await clickAt(page, bottomRight);
   await clickCanvas(page, 115, 0);
   await clickAt(page, topRight);
@@ -238,9 +242,12 @@ test('a profile of lines and a spline through points: extrude, face:side:<id of 
   await expectNoErrors(page);
 
   const filleted = await exportDocument(page);
-  const refs = feature(filleted, 'Zaoblení 1').params['edges'] as readonly { name: string }[];
+  const refs: unknown = feature(filleted, 'Zaoblení 1').params['edges'];
+  if (!Array.isArray(refs)) throw new Error('no edges in Zaoblení 1');
   expect(refs).toHaveLength(1);
-  expect(refs[0]?.name).toContain(`${extrudeFeature.id}/face:side:${spline.id}`);
+  const ref: unknown = refs[0];
+  const name: unknown = typeof ref === 'object' && ref !== null ? Reflect.get(ref, 'name') : null;
+  expect(name).toContain(`${extrudeFeature.id}/face:side:${spline.id}`);
 });
 
 test('a control point spline: uniform knots, a click on its control polygon selects it', async ({
@@ -296,7 +303,7 @@ test('a spline through points passes through all of them after one is dragged', 
     [40, 45],
     [140, -20],
   ] as const;
-  await toolbarButton(page, 'Spline přes body').click();
+  await pickVariant(page, 'Spline přes řídicí body', 'Spline přes body');
   for (const p of fit) await clickAt(page, p);
   await page.keyboard.press('Enter');
   await expect(panel.getByRole('status')).toHaveText('Stupně volnosti: 8');
@@ -337,7 +344,7 @@ test('Escape while drawing a spline writes nothing, the tool stays', async ({ pa
   const empty = await status.textContent();
 
   // 1. Two points of a spline, Escape: nothing written; Enter after it writes nothing either.
-  await toolbarButton(page, 'Spline přes body').click();
+  await pickVariant(page, 'Spline přes řídicí body', 'Spline přes body');
   await clickCanvas(page, -100, 40);
   await clickCanvas(page, 50, -30);
   await page.keyboard.press('Escape');

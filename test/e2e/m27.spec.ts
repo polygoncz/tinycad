@@ -5,8 +5,10 @@ import {
   constraintSection,
   createDocument,
   openConstraintSection,
+  pickVariant,
   sketchPanel,
   toolbarButton,
+  variantsButton,
 } from './helpers';
 
 // The arcs and circles of M27 (spec 12, "Oblouky a kružnice (M27)") with planegcs in the browser,
@@ -30,22 +32,6 @@ async function openSketchWithoutGrid(page: Page): Promise<Locator> {
   // from the view, whose keys (Escape of the tools) need it until the next click on the canvas.
   await openConstraintSection(panel);
   return panel;
-}
-
-/** The arrow ▾ of the split button of a tool family, named by the shown variant. */
-function variantsButton(page: Page, shown: string): Locator {
-  return page
-    .getByRole('navigation')
-    .getByRole('button', { name: `Další způsoby: ${shown}`, exact: true });
-}
-
-/** Opens the menu of the variants by the arrow of the family showing `shown` and picks `variant`. */
-async function pickVariant(page: Page, shown: string, variant: string): Promise<void> {
-  await variantsButton(page, shown).click();
-  const menu = page.getByRole('menu');
-  await expect(menu).toBeVisible();
-  await menu.getByRole('menuitem', { name: new RegExp(`^${variant}( |$)`) }).click();
-  await expect(menu).toBeHidden();
 }
 
 /** The name buttons of the constraint rows of a kind ("Tečnost 1", "Tečnost 2" …). */

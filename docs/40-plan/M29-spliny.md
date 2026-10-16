@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 29
 aliases:
   - M29
@@ -20,7 +20,7 @@ specs:
 depends_on:
   - "[[M24-realisticke-zobrazeni]]"
 started: 2026-10-15
-finished:
+finished: 2026-10-16
 tags:
   - milnik
 created: 2026-10-15
@@ -57,11 +57,11 @@ Kontrakt: [[12-skicar#Spliny (M29)]].
 - [x] 5. `kernel`, `kernel-occt`: `ProfileCurve` `bspline`, `validateFaceInput`, `FakeKernel`, hrana v OCCT
 - [x] 6. Kresba: `SketchDrawingCurve` `polyline` (`interaction`, `render`), tessellace v `sketcher`
 - [x] 7. Integrační test skica se splinem → Vysunutí
-- [ ] 8. Nástroje splinu a bod na splinu (po sloučení M26)
+- [x] 8. Nástroje splinu a bod na splinu (po sloučení M26)
   - [x] 8a. `sketch`: `pointOnCurve` se splinem (`parseSketchData`, `constraintFor`, snapper `onCurve`), kotva glyfu splinu
   - [x] 8b. `solver-planegcs`: `pointOnCurve` na spline (`point_on_bspline` s volným parametrem), interní id mimo `conflicting`/`redundant`
   - [x] 8c. `sketcher`: nástroje `sketch.spline` a `sketch.fitSpline`, lišta, i18n, picking řídicí lomené čáry
-  - [ ] 8d. e2e `m29.spec.ts`, propsání do spec 06, 09, 10, 11
+  - [x] 8d. e2e `m29.spec.ts`, propsání do spec 06, 09, 10, 11
 
 ## Implementační plán
 
@@ -155,7 +155,12 @@ _(Souběžná stopa, [[Roadmapa#Souběžné stopy (pokus od M25)|pravidla]]: mí
 - **Očekávané konflikty při sloučení:** `src/sketch/parse.ts` (`constraintValid`: `refTargets` a předčasné `return true` pro tečnost úsečka–spline – po stopě B ověřit, že neobchází nové kontroly kót), `src/sketch/model.ts` (komentář u `tangent` uvnitř unie `SketchConstraint`, kterou mění stopa B), `src/sketch/edit.ts` (`withoutConstruction`, `curvePoints` – větve vedle větví stopy A), `src/solver-planegcs/solve.ts` (`dof`, smyčka v `toPrimitives` vedle `constraintPrimitives` stopy B), `src/sketch/index.ts`, `src/interaction/viewport-port.ts` (unie `SketchDrawingCurve`, glyfy stopy A).
 - Stav: úkoly 1–7 hotové, `npm run check` (5893 unit, 39 integračních) zelený. Úkol 8 čeká na sloučení M26.
 - **2026-10-15/16 – úkol 8:** natažen `main` (M25–M28). Pavel rozhodl kontrakt: bod na splinu už v M29, interní id z `conflicting` vynechat, klik na řídicí lomenou čáru vybere spline, sevřené rovnoměrné uzly a uzavření klikem na první bod. 8a (bod na splinu v datech a snapperu, kotva glyfu `t = 0,5`), 8c (nástroje `sketch.spline`/`sketch.fitSpline`, ikony Tabler `vector-bezier`/`vector-spline`, Enter přes `onKey`, picking `__poles:<id>`). 8b: planegcs nechá volný parametr utéct z [0, 1] → Pavel: druhé řešení s pevným parametrem na konci.
+- **2026-10-16 – 8d a uzavření:** e2e `m29.spec.ts` (4 scénáře v Chrome i WebKitu). Nástroje bez zkratky byly v liště zašedlé, opravil to až `main` s M27 (akce i pro nástroje bez zkratky). Natažen `main` s M27: konflikty v `solve.ts` (tečnost ve sdíleném bodě `angle_via_point` ze stopy A; `sharedEnd` spliny vynechá, takže tečnost úsečka–spline zůstává `point_on_line_pl`), i18n a spec 10/11. Nástroje splinu jsou rodina `spline`. Architektonická revize: bez porušení ADR; doplněno pravidlo dependency-cruiser `no-deep-import-from-scenario-tests` (e2e a integrační testy jen přes `index.ts`/`testing.ts`), `pickVariant` přesunut do `test/e2e/helpers.ts`, test sporu ve druhém řešení bodu na splinu. `npm run check` (6508 unit, 39 integračních) a `npm run test:e2e` (136) zelené.
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+- **Co bylo jinak:** kontrakt z Q086 narazil při implementaci na tři zvláštnosti planegcs: tečnost na krajním uzlu nefunguje, wrapper přidává 4 nepoužité proměnné a volný parametr neomezí na [0, 1]. Každá stála kolo otázka → rozhodnutí → nová implementace ([[Q087 Spline v řešiči a v jádře – zjištění z implementace|Q087]]). Obecně: [[Primitivum knihovny ověř prototypem před kontraktem]].
+- **Matematika B-spline skončila v `core`**, ne ve `sketch`. Potřebuje ji i `FakeKernel` a `kernel` smí jen na `core`. Hranici modulů rozhodla potřeba testovacího dvojníka, ne doména.
+- **OCCT bez překvapení:** hrana přes `Geom_BSplineCurve` fungovala napoprvé. Překvapilo jen měření plochy v testech (`BRepGProp` s výchozí přesností se plete o ~2e-4) a nutnost validovat uzly před konstruktorem, který jinak vyhodí výjimku.
+- **Souběh (stopa C):** úkoly 3–6 běžely souběžně ve stejném worktree. Sdílený `npm run check` občas padal na rozpracovaném souboru sousedního úkolu a stačilo počkat. Dočasná re-exportní vrstva při přesunu do `core` umožnila přesun během běžících úkolů. Konflikty se stopami A a B byly malé (i18n, spec 10/11, `solve.ts`), protože kontrakty sdílených typů byly předem zafixované.
+- **Úkol 8 na snapperu z M26** šel hladce: nástroj splinu je obdoba nástroje úsečky (`clickTool`, `snapAt`, `placePoint`, jedna funkce kroku pro klik i náhled).
