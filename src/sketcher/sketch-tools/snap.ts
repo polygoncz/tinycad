@@ -40,6 +40,11 @@ export interface SnapMode {
    * to like the data until they are written.
    */
   readonly pending?: readonly SketchEntity[];
+  /**
+   * The point of the numeric input (M32, ToolMods.input): snapAt returns it as a free target,
+   * without the snapper and without the grid.
+   */
+  readonly input?: Vec2;
 }
 
 /** The snap tolerance in px of the view (spec 12). */
@@ -48,7 +53,8 @@ const SNAP_TOLERANCE_PX = 6;
 /**
  * The snapper at the cursor: snap(cursorAt(x, y), data, { tolerance, grid, infer, exclude }) with
  * the tolerance = the distance in the plane between cursorAt(x, y) and cursorAt(x + 6, y). null
- * when the ray is parallel to the plane (the click is ignored).
+ * when the ray is parallel to the plane (the click is ignored). With the point of the numeric
+ * input (mode.input, M32) that point as a free target.
  */
 export function snapAt(
   ctx: ToolContext,
@@ -57,6 +63,7 @@ export function snapAt(
   y: number,
   mode: SnapMode,
 ): SnapTarget | null {
+  if (mode.input !== undefined) return freeTarget(mode.input);
   const cursor = cursorAt(ctx, session, x, y);
   const tolerance = snapToleranceAt(ctx, session, x, y);
   if (cursor === null || tolerance === null) return null;

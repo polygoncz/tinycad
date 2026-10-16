@@ -5,6 +5,7 @@ import { plane as planeMath } from '@/core';
 import type { Vec2, Vec3 } from '@/core';
 import { isPattern } from '@/sketch';
 import type {
+  SketchConstraint,
   SketchConstraintId,
   SketchData,
   SketchEntity,
@@ -20,6 +21,14 @@ import type {
   ViewKeyEvent,
   ViewPointerEvent,
 } from '@/interaction';
+import {
+  emptyInput,
+  inputFieldViews,
+  inputKey,
+  lockedValues,
+  previewValues,
+} from '../numeric-input';
+import type { InputField, NumericInput } from '../numeric-input';
 import type { SketchEditor } from '../sketch-editor';
 import { ccwSweep } from '../sketch-angles';
 import type { GlyphKind } from '../sketch-glyphs';
@@ -78,6 +87,24 @@ function asConstruction(add: SketchData): SketchData {
 }
 
 /**
+ * The point of the numeric input (spec 12, "Číselný vstup (M32)"): the cursor constrained by the
+ * entered values (ClickHandlers.constrain) and those values by field id (a length in mm, an angle
+ * in radians).
+ */
+export interface InputPoint {
+  readonly at: Vec2;
+  readonly values: ReadonlyMap<string, number>;
+}
+
+/**
+ * The modifiers of a move or a click of clickTool; `input` = the entered values constrain the
+ * point (M32): snapMode passes it on, so snapAt returns it as a free target.
+ */
+export interface ToolMods extends KeyMods {
+  readonly input?: InputPoint;
+}
+
+/**
  * The grid step a drawing tool snaps to (M19.2 D4): the current step of the editor while the snap
  * is on and Alt is not held, otherwise null (no grid). Read on every move and click.
  */
@@ -91,9 +118,225 @@ export function snapGrid(sketches: SketchEditor, mods: KeyMods): number | null {
  */
 export function snapMode(
   sketches: SketchEditor,
-  mods: KeyMods,
-): { readonly grid: number | null; readonly infer: boolean } {
-  return { grid: snapGrid(sketches, mods), infer: !mods.mod };
+  mods: ToolMods,
+): { readonly grid: number | null; readonly infer: boolean; readonly input?: Vec2 } {
+  const mode = { grid: snapGrid(sketches, mods), infer: !mods.mod };
+  return mods.input === undefined ? mode : { ...mode, input: mods.input.at };
+}
+
+/** The values the click of a tool entered (M32): the locked fields; none without the input. */
+export function inputValues(mods: ToolMods): ReadonlyMap<string, number> {
+  return mods.input?.values ?? NO_VALUES;
+}
+
+const NO_VALUES: ReadonlyMap<string, number> = new Map();
+
+/** The fields of a first point (spec 12, M32): its coordinates in the plane. */
+export const XY_FIELDS: readonly InputField[] = Object.freeze([
+  Object.freeze({ id: 'x', kind: 'x' }),
+  Object.freeze({ id: 'y', kind: 'y' }),
+]);
+
+/** The fields of a next point from a previous one (spec 12, M32): the length and the direction. */
+export const POLAR_FIELDS: readonly InputField[] = Object.freeze([
+  Object.freeze({ id: 'length', kind: 'length' }),
+  Object.freeze({ id: 'angle', kind: 'angle' }),
+]);
+
+/** The fields of a point around a centre (spec 12, M32: the start of an arc): the radius and the angle. */
+export const RADIAL_FIELDS: readonly InputField[] = Object.freeze([
+  Object.freeze({ id: 'radius', kind: 'length' }),
+  Object.freeze({ id: 'angle', kind: 'angle' }),
+]);
+
+/** The field of the end of an arc (spec 12, M32): the sweep from the start. */
+export const SWEEP_FIELDS: readonly InputField[] = Object.freeze([
+  Object.freeze({ id: 'sweep', kind: 'angle' }),
+]);
+
+/** The field of the width of a slot (spec 12, M32). */
+export const WIDTH_FIELDS: readonly InputField[] = Object.freeze([
+  Object.freeze({ id: 'width', kind: 'length' }),
+]);
+
+/** The field of the height of a rectangle from its first side (spec 12, M32: the 3-point rectangle). */
+export const HEIGHT_FIELDS: readonly InputField[] = Object.freeze([
+  Object.freeze({ id: 'height', kind: 'length' }),
+]);
+
+/** The cursor with the entered coordinates `x`, `y` (the others from the cursor). */
+export function constrainXY(cursor: Vec2, values: ReadonlyMap<string, number>): Vec2 {
+  return [values.get('x') ?? cursor[0], values.get('y') ?? cursor[1]];
+}
+
+export function measureXY(at: Vec2): ReadonlyMap<string, number> {
+  return new Map([
+    ['x', at[0]],
+    ['y', at[1]],
+  ]);
+}
+
+/**
+ * The point from `from` for the cursor and the entered `length` and `angle` (spec 12, M32
+ * "constrain"): both = the fixed point; the length = the point in the direction of the cursor at
+ * that distance (`from` for the cursor on `from`); the angle = the projection of the cursor onto
+ * the ray at that angle, `from` for a negative one (a degenerate step).
+ */
+export function constrainPolar(
+  from: Vec2,
+  cursor: Vec2,
+  values: ReadonlyMap<string, number>,
+): Vec2 {
+  return polarPoint(from, cursor, values.get('length'), values.get('angle'));
+}
+
+/** The `length` and the `angle` (in [0, 2π)) from `from` to `at`. */
+export function measurePolar(from: Vec2, at: Vec2): ReadonlyMap<string, number> {
+  return new Map([
+    ['length', distance(from, at)],
+    ['angle', directionOf(from, at)],
+  ]);
+}
+
+/** Like constrainPolar around `center` with the entered `radius` (RADIAL_FIELDS) as the length. */
+export function constrainRadial(
+  center: Vec2,
+  cursor: Vec2,
+  values: ReadonlyMap<string, number>,
+): Vec2 {
+  return polarPoint(center, cursor, values.get('radius'), values.get('angle'));
+}
+
+/** The `radius` and the `angle` (in [0, 2π)) from `center` to `at` (RADIAL_FIELDS). */
+export function measureRadial(center: Vec2, at: Vec2): ReadonlyMap<string, number> {
+  return new Map([
+    ['radius', distance(center, at)],
+    ['angle', directionOf(center, at)],
+  ]);
+}
+
+/** The point of constrainPolar for the entered `length` and `angle` (undefined = not entered). */
+function polarPoint(
+  from: Vec2,
+  cursor: Vec2,
+  length: number | undefined,
+  angle: number | undefined,
+): Vec2 {
+  const d: Vec2 = [cursor[0] - from[0], cursor[1] - from[1]];
+  if (angle !== undefined) {
+    const dir: Vec2 = [Math.cos(angle), Math.sin(angle)];
+    const t = length ?? Math.max(0, d[0] * dir[0] + d[1] * dir[1]);
+    return [from[0] + t * dir[0], from[1] + t * dir[1]];
+  }
+  if (length === undefined) return cursor;
+  const size = Math.hypot(d[0], d[1]);
+  // The cursor on the start has no direction: +x of the plane, like Fusion (M32).
+  if (size <= MIN_LENGTH) return [from[0] + length, from[1]];
+  return [from[0] + (length * d[0]) / size, from[1] + (length * d[1]) / size];
+}
+
+/** The direction from `from` to `at` in [0, 2π). */
+function directionOf(from: Vec2, at: Vec2): number {
+  const angle = angleAt(from, at);
+  return angle < 0 ? angle + FULL_TURN : angle;
+}
+
+/**
+ * The end of an arc around `center` from `start` for the cursor and the entered `sweep` (spec 12,
+ * M32): on the circle through the start at the angle of the start + sweep. A sweep ≤ 0 is a
+ * degenerate step: the start itself, which the tool refuses.
+ */
+export function constrainSweep(
+  center: Vec2,
+  start: Vec2,
+  cursor: Vec2,
+  values: ReadonlyMap<string, number>,
+): Vec2 {
+  const sweep = values.get('sweep');
+  if (sweep === undefined) return cursor;
+  if (sweep <= 0) return start;
+  const r = distance(center, start);
+  const to = angleAt(center, start) + sweep;
+  return [center[0] + r * Math.cos(to), center[1] + r * Math.sin(to)];
+}
+
+/**
+ * The `sweep` of the arc around `center` from `start` to the direction of `at` (counter-clockwise,
+ * ccwSweep: `at` in the direction of the start gives 2π); 0 for `at` on the centre.
+ */
+export function measureSweep(center: Vec2, start: Vec2, at: Vec2): ReadonlyMap<string, number> {
+  const sweep =
+    distance(center, at) <= MIN_LENGTH ? 0 : ccwSweep(angleAt(center, start), angleAt(center, at));
+  return new Map([['sweep', sweep]]);
+}
+
+/** The unit left normal of the line a → b, or null for a ≈ b. */
+export function leftNormal(a: Vec2, b: Vec2): Vec2 | null {
+  const d = distance(a, b);
+  if (d <= MIN_LENGTH) return null;
+  return [-(b[1] - a[1]) / d, (b[0] - a[0]) / d];
+}
+
+/** The signed distance of `p` from the line through `a` with the unit normal `n` (+ on its side). */
+export const signedOffset = (a: Vec2, n: Vec2, p: Vec2): number =>
+  (p[0] - a[0]) * n[0] + (p[1] - a[1]) * n[1];
+
+/**
+ * The required distance dimension of the points a and b with the entered `value` (spec 12, M32:
+ * a locked length, width or height); none without it.
+ */
+export function distanceDimension(
+  ctx: ToolContext,
+  a: SketchEntityId,
+  b: SketchEntityId,
+  value: number | null | undefined,
+): readonly SketchConstraint[] {
+  if (value === null || value === undefined) return [];
+  return [{ kind: 'distance', id: newConstraintId(ctx), a, b, value }];
+}
+
+/** Below this (in degrees) an entered angle is on an axis. */
+const AXIS_ANGLE_TOLERANCE_DEG = 1e-9;
+
+/**
+ * The axis constraint of an entered angle (spec 12, M32, "Úhel"): 0/180° → horizontal, 90/270° →
+ * vertical (any multiple of them); another angle → null.
+ */
+export function axisOfAngle(angle: number): 'horizontal' | 'vertical' | null {
+  const deg = (angle * 180) / Math.PI;
+  const half = ((deg % 180) + 180) % 180;
+  const near = (v: number): boolean => Math.abs(half - v) <= AXIS_ANGLE_TOLERANCE_DEG;
+  if (near(0) || near(180)) return 'horizontal';
+  if (near(90)) return 'vertical';
+  return null;
+}
+
+/** The inferred kinds that set the direction of a curve: a locked angle replaces them (M32). */
+const DIRECTION_KINDS: ReadonlySet<string> = new Set([
+  'horizontal',
+  'vertical',
+  'parallel',
+  'perpendicular',
+  'tangent',
+]);
+
+/** The inferred kinds that set the size of a curve: a locked size replaces them (M32). */
+const SIZE_KINDS: ReadonlySet<string> = new Set(['equal']);
+
+/**
+ * The automatic inferences without those a locked field replaces (spec 12, M32; the entered
+ * dimensions are exact): a locked direction (an angle) drops horizontal, vertical, parallel,
+ * perpendicular and tangent, a locked size (a length, a radius…) drops equal.
+ */
+export function withoutLocked<T extends { readonly kind: string }>(
+  inferences: readonly T[],
+  locked: { readonly direction: boolean; readonly size: boolean },
+): readonly T[] {
+  return inferences.filter(
+    (i) =>
+      !(locked.direction && DIRECTION_KINDS.has(i.kind)) &&
+      !(locked.size && SIZE_KINDS.has(i.kind)),
+  );
 }
 
 /** A new line within this angle of an axis or of a connected line is inferred (spec 12, 3°). */
@@ -233,10 +476,16 @@ export function clearInference(session: SketchSession | null): void {
 
 /** What a drawing tool reacts to; every call has an open session. */
 export interface ClickHandlers {
-  /** The cursor moved (preview); the modifiers decide the grid snap (Alt = off, M19.2 D4). */
-  onMove?(ctx: ToolContext, session: SketchSession, x: number, y: number, mods: KeyMods): void;
-  /** A left click (up within the click tolerance of its down). */
-  onClick(ctx: ToolContext, session: SketchSession, x: number, y: number, mods: KeyMods): void;
+  /**
+   * The cursor moved (preview); the modifiers decide the grid snap (Alt = off, M19.2 D4). With the
+   * entered values (previewValues, M32) mods.input is the constrained point.
+   */
+  onMove?(ctx: ToolContext, session: SketchSession, x: number, y: number, mods: ToolMods): void;
+  /**
+   * A left click (up within the click tolerance of its down) or Enter of the numeric input at the
+   * last cursor (M32); with locked values mods.input is the constrained point.
+   */
+  onClick(ctx: ToolContext, session: SketchSession, x: number, y: number, mods: ToolMods): void;
   /** Escape etc.; true = handled. */
   onKey?(ctx: ToolContext, session: SketchSession, e: ViewKeyEvent): boolean;
   /** Forgets the work in progress (deactivate, another session). */
@@ -259,6 +508,24 @@ export interface ClickHandlers {
   onDragEnd?(ctx: ToolContext, session: SketchSession, x: number, y: number, mods: KeyMods): void;
   /** Escape during a taken drag: the drag is forgotten; the moves until the release are plain moves. */
   onDragCancel?(ctx: ToolContext, session: SketchSession): void;
+  /** M32: the fields of the current step; null/[] = a step without input. Asked after every step of the tool. */
+  inputFields?(): readonly InputField[] | null;
+  /** M32: the point of the plane for the cursor `cursor` and the entered values: the cursor projected so that it meets them. */
+  constrain?(cursor: Vec2, values: ReadonlyMap<string, number>): Vec2;
+  /** M32: the values of the fields for the point `at` (what the fields would show if not entered). */
+  measure?(at: Vec2): ReadonlyMap<string, number>;
+}
+
+/** Removes the numeric input of a session that is still open. */
+function clearNumericInput(session: SketchSession | null): void {
+  if (session?.state.get().open === true) session.setNumericInput(null);
+}
+
+/** The last cursor of a move over the view: px and the modifiers. */
+interface Cursor {
+  readonly x: number;
+  readonly y: number;
+  readonly mods: KeyMods;
 }
 
 /**
@@ -266,6 +533,14 @@ export interface ClickHandlers {
  * resets the work in progress (it belonged to the old one). Deactivate removes the preview; it,
  * a click, Escape and the pointer leaving the view remove the inference preview too (spec 12,
  * M26). A tool with onDragStart may take a drag of the left button instead (M27).
+ *
+ * The numeric input (spec 12, "Číselný vstup (M32)"): the tool holds the NumericInput of the
+ * fields of the current step (inputFields), emptied after every step (a click, Enter, a handled
+ * key, the end of a drag, a reset) and when a move finds other fields (a refused write reset the
+ * step). A key goes to inputKey first, then to onKey of the handlers.
+ * With entered values a move (previewValues) and a click or Enter (lockedValues, at the last
+ * cursor) pass the constrained point in mods.input; the fields are shown in
+ * SketchState.numericInput at that point (or at the cursor), free ones with the measured values.
  */
 export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool {
   let ctx: ToolContext | null = null;
@@ -273,34 +548,146 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
   /** What the tool said to the drag of the current press; null = not asked yet. */
   let drag: 'taken' | 'refused' | null = null;
   let owner: SketchSession | null = null;
+  /** The numeric input of the current step (M32). */
+  let input: NumericInput = emptyInput([]);
+  /** The last cursor over the view; null before a move and after leaving the view. */
+  let cursor: Cursor | null = null;
+  /** SketchState.numericInput was set by this tool (cleared once, not on every move). */
+  let shown = false;
 
   /** The open session; resets the handlers when it is another one than before. */
   function current(): SketchSession | null {
     const session = openSession(sketches);
     if (session !== owner) {
       clearInference(owner);
+      clearNumericInput(owner);
       owner = session;
       down = null;
       drag = null;
+      cursor = null;
+      shown = false;
       handlers.reset();
+      input = emptyInput(session === null ? [] : fieldsOf());
       if (ctx !== null) clearPreview(ctx);
     }
     return session;
+  }
+
+  function fieldsOf(): readonly InputField[] {
+    return handlers.inputFields?.() ?? [];
+  }
+
+  /**
+   * The step changed without an event of the tool (a write refused later resets the work in
+   * progress): other fields than those of the input empty it.
+   */
+  function follow(): void {
+    const fields = fieldsOf();
+    const same =
+      fields.length === input.fields.length &&
+      fields.every((f, i) => {
+        const old = input.fields[i];
+        return old !== undefined && f.id === old.id && f.kind === old.kind;
+      });
+    if (!same) input = emptyInput(fields);
+  }
+
+  /** A new step of the tool: the fields asked again, the input empty, shown at the cursor. */
+  function restart(c: ToolContext, session: SketchSession): void {
+    input = emptyInput(fieldsOf());
+    show(c, session);
+  }
+
+  /** The cursor in the plane and its point constrained by `values` (null off the plane). */
+  function pointAt(
+    c: ToolContext,
+    session: SketchSession,
+    at: Cursor,
+    values: ReadonlyMap<string, number>,
+  ): { readonly cursor: Vec2; readonly input?: InputPoint } | null {
+    const plane = cursorAt(c, session, at.x, at.y);
+    if (plane === null) return null;
+    if (values.size === 0 || handlers.constrain === undefined) return { cursor: plane };
+    return { cursor: plane, input: { at: handlers.constrain(plane, values), values } };
+  }
+
+  /** The modifiers of a move or a click at `at` with the entered `values`. */
+  function modsAt(
+    c: ToolContext,
+    session: SketchSession,
+    at: Cursor,
+    values: ReadonlyMap<string, number>,
+  ): ToolMods {
+    const point = pointAt(c, session, at, values);
+    return point?.input === undefined ? at.mods : { ...at.mods, input: point.input };
+  }
+
+  /** SketchState.numericInput: the fields at the (constrained) cursor, null without fields or a cursor. */
+  function show(c: ToolContext, session: SketchSession): void {
+    const point =
+      cursor === null || input.fields.length === 0
+        ? null
+        : pointAt(c, session, cursor, previewValues(input));
+    if (point === null) {
+      if (shown) session.setNumericInput(null);
+      shown = false;
+      return;
+    }
+    const at = point.input?.at ?? point.cursor;
+    const measured = handlers.measure?.(at) ?? new Map<string, number>();
+    session.setNumericInput({ at, fields: inputFieldViews(input, measured) });
+    shown = true;
+  }
+
+  /** The preview of a move at the last cursor with the typed values. */
+  function preview(c: ToolContext, session: SketchSession): void {
+    const at = cursor;
+    if (at !== null && drag !== 'taken') {
+      handlers.onMove?.(c, session, at.x, at.y, modsAt(c, session, at, previewValues(input)));
+    }
+    show(c, session);
+  }
+
+  /** A click at `at` with the locked values; the next step starts. */
+  function click(c: ToolContext, session: SketchSession, at: Cursor): void {
+    // The click adds what the preview showed; the next move shows the next one.
+    clearInference(session);
+    handlers.onClick(c, session, at.x, at.y, modsAt(c, session, at, lockedValues(input)));
+    restart(c, session);
+  }
+
+  /** A key of the numeric input; true = spent by it. */
+  function inputKeyOf(c: ToolContext, session: SketchSession, e: ViewKeyEvent): boolean {
+    if (drag === 'taken') return false;
+    const result = inputKey(input, e);
+    if (result === null) return false;
+    input = result.input;
+    // Enter = a click at the last cursor; without one the values only stay locked.
+    if (result.commit && cursor !== null) click(c, session, cursor);
+    else preview(c, session);
+    return true;
   }
 
   return {
     activate(c) {
       ctx = c;
       owner = openSession(sketches);
+      input = emptyInput(owner === null ? [] : fieldsOf());
+      cursor = null;
+      shown = false;
     },
     deactivate() {
       if (ctx !== null) clearPreview(ctx);
       clearInference(owner);
+      if (shown) clearNumericInput(owner);
       handlers.reset();
       ctx = null;
       owner = null;
       down = null;
       drag = null;
+      input = emptyInput([]);
+      cursor = null;
+      shown = false;
     },
     onPointer(e: ViewPointerEvent) {
       const c = ctx;
@@ -318,13 +705,20 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
           ) {
             drag = handlers.onDragStart(c, session, start.x, start.y, e.mods) ? 'taken' : 'refused';
           }
-          if (drag === 'taken') handlers.onDrag?.(c, session, e.x, e.y, e.mods);
-          else handlers.onMove?.(c, session, e.x, e.y, e.mods);
+          if (drag === 'taken') {
+            handlers.onDrag?.(c, session, e.x, e.y, e.mods);
+            return;
+          }
+          cursor = { x: e.x, y: e.y, mods: e.mods };
+          follow();
+          preview(c, session);
           return;
         }
         case 'leave':
           // Off the view the click would add nothing: like Escape, the preview goes.
           clearInference(session);
+          cursor = null;
+          show(c, session);
           return;
         case 'down':
           if (e.button !== 'left') return;
@@ -341,12 +735,12 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
           if (taken) {
             clearInference(session);
             handlers.onDragEnd?.(c, session, e.x, e.y, e.mods);
+            restart(c, session);
             return;
           }
           if (Math.hypot(e.x - start.x, e.y - start.y) > CLICK_TOLERANCE_PX) return;
-          // The click adds what the preview showed; the next move shows the next one.
-          clearInference(session);
-          handlers.onClick(c, session, e.x, e.y, e.mods);
+          cursor = { x: e.x, y: e.y, mods: e.mods };
+          click(c, session, cursor);
           return;
         }
       }
@@ -356,6 +750,7 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
       if (c === null) return false;
       const session = current();
       if (session === null) return false;
+      if (inputKeyOf(c, session, e)) return true;
       if (isPlainEscape(e)) clearInference(session);
       if (isPlainEscape(e) && drag === 'taken') {
         // Only the drag is cancelled; the release that follows is no click.
@@ -364,7 +759,9 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
         handlers.onDragCancel?.(c, session);
         return true;
       }
-      return handlers.onKey?.(c, session, e) ?? false;
+      const handled = handlers.onKey?.(c, session, e) ?? false;
+      if (handled) restart(c, session);
+      return handled;
     },
   };
 }

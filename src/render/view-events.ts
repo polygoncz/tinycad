@@ -49,10 +49,13 @@ export function toViewPointerEvent(input: PointerInput, isMac: boolean): ViewPoi
   };
 }
 
+/** `consume` (M32): what marks the key as handled, the viewport passes preventDefault. */
 export function toViewKeyEvent(
   input: KeyInput,
   isMac: boolean,
   inTextField: boolean,
+  consume?: () => void,
 ): ViewKeyEvent {
-  return { key: input.key, mods: toMods(input, isMac), inTextField };
+  const event = { key: input.key, mods: toMods(input, isMac), inTextField };
+  return consume === undefined ? event : { ...event, consume };
 }

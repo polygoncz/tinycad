@@ -411,3 +411,226 @@ describe('the tangent arc of the polyline', () => {
     expect(inferenceOf(session)).toBeNull();
   });
 });
+
+// The numeric input of the line tool (spec 12, "Číselný vstup (M32)"): the first point x, y, a
+// next point length, angle; locked values become required constraints.
+
+const DEG = Math.PI / 180;
+
+/** Types the keys into the view one by one (a string: each character; longer names whole). */
+function type(viewport: FakeViewport, keys: readonly string[]): void {
+  for (const key of keys) viewport.emitKey({ key, mods: NO_MODS, inTextField: false });
+}
+
+const chars = (text: string): readonly string[] => Array.from(text);
+
+describe('the numeric input of the line tool (M32)', () => {
+  it('50 mm under 30° only from the keyboard: the points and a required distance 50', async () => {
+    const { viewport, session, manager } = await sketching();
+    manager.activate('sketch.line');
+    move(viewport, 70, 3);
+    type(viewport, [...chars('10'), 'Tab', ...chars('10'), 'Enter']);
+    type(viewport, [...chars('50'), 'Tab', ...chars('30'), 'Enter']);
+    await settle();
+
+    const [line] = linesOf(session);
+    if (line === undefined) throw new Error('no line');
+    expect(xyOf(session, line.p1)).toEqual([10, 10]);
+    expectNear(xyOf(session, line.p2), [
+      10 + 50 * Math.cos(30 * DEG),
+      10 + 50 * Math.sin(30 * DEG),
+    ]);
+    expect(constraintsOf(session)).toEqual([
+      { kind: 'distance', a: line.p1, b: line.p2, value: 50 },
+    ]);
+  });
+
+  it('shows x, y for the first point and length, angle for a next one', async () => {
+    const { viewport, session, manager } = await sketching();
+    manager.activate('sketch.line');
+    move(viewport, 30, 40);
+    expect(session.state.get().numericInput?.fields.map((f) => [f.id, f.text])).toEqual([
+      ['x', '30.00'],
+      ['y', '40.00'],
+    ]);
+
+    await clicks(viewport, [[10, 10]]);
+    move(viewport, 10, 30);
+    expect(session.state.get().numericInput?.fields.map((f) => [f.id, f.text])).toEqual([
+      ['length', '20.00'],
+      ['angle', '90.00'],
+    ]);
+  });
+
+  it('an angle of 0° is horizontal instead of the automatic axis', async () => {
+    const { viewport, session, manager } = await sketching();
+    manager.activate('sketch.line');
+    await clicks(viewport, [[10, 10]]);
+    move(viewport, 40, 20);
+    type(viewport, ['Tab', '0', 'Enter']);
+    await settle();
+
+    const [line] = linesOf(session);
+    if (line === undefined) throw new Error('no line');
+    expect(xyOf(session, line.p2)).toEqual([40, 10]);
+    expect(constraintsOf(session)).toEqual([{ kind: 'horizontal', line: line.id }]);
+  });
+
+  it('an angle of 90° is vertical; the preview shows it', async () => {
+    const { viewport, session, manager } = await sketching();
+    manager.activate('sketch.line');
+    await clicks(viewport, [[10, 10]]);
+    move(viewport, 40, 20);
+    type(viewport, ['Tab', ...chars('90')]);
+    expect(inferenceOf(session)?.kinds).toEqual(['vertical']);
+
+    type(viewport, ['Enter']);
+    await settle();
+
+    const [line] = linesOf(session);
+    expect(xyOf(session, line?.p2 ?? '')).toEqual([10, 20]);
+    expect(constraintsOf(session)).toEqual([{ kind: 'vertical', line: line?.id }]);
+  });
+
+  it('an angle off the axes on a first line has no dimension and no automatic axis', async () => {
+    const { viewport, session, manager } = await sketching();
+    manager.activate('sketch.line');
+    await clicks(viewport, [[10, 10]]);
+    move(viewport, 40, 11);
+    type(viewport, [...chars('20'), 'Tab', '2', 'Enter']);
+    await settle();
+
+    const [line] = linesOf(session);
+    if (line === undefined) throw new Error('no line');
+    expectNear(xyOf(session, line.p2), [10 + 20 * Math.cos(2 * DEG), 10 + 20 * Math.sin(2 * DEG)]);
+    expect(constraintsOf(session)).toEqual([
+      { kind: 'distance', a: line.p1, b: line.p2, value: 20 },
+    ]);
+  });
+
+  it('an angle off the axes after a line of the chain is an angle dimension between them', async () => {
+    const { viewport, session } = await chained();
+    const previous = linesOf(session)[0];
+    move(viewport, 40, 40);
+    // 20 = the previous length: equal would be inferred, but the locked length replaces it.
+    type(viewport, [...chars('20'), 'Tab', ...chars('60'), 'Enter']);
+    await settle();
+
+    const line = linesOf(session)[1];
+    if (line === undefined || previous === undefined) throw new Error('no lines');
+    expectNear(xyOf(session, line.p2), [
+      30 + 20 * Math.cos(60 * DEG),
+      10 + 20 * Math.sin(60 * DEG),
+    ]);
+    const [horizontal, distance, angle] = constraintsOf(session);
+    expect(horizontal).toEqual({ kind: 'horizontal', line: previous.id });
+    expect(distance).toEqual({ kind: 'distance', a: line.p1, b: line.p2, value: 20 });
+    // The rays from (30, 10): back along the previous line and along the new one, 120°.
+    expect(angle).toMatchObject({ kind: 'angle', a: previous.id, b: line.id, reverseA: true });
+    expect(angle?.kind === 'angle' ? angle.value : null).toBeCloseTo(120 * DEG, 9);
+    expect(constraintsOf(session)).toHaveLength(3);
+  });
+
+  it('a locked length with the direction from the mouse', async () => {
+    const { viewport, session } = await chained();
+    type(viewport, [...chars('25'), 'Tab']);
+    await clicks(viewport, [[31, 60]]);
+
+    const line = linesOf(session)[1];
+    if (line === undefined) throw new Error('no line');
+    const d = Math.hypot(1, 50);
+    expectNear(xyOf(session, line.p2), [30 + (25 * 1) / d, 10 + (25 * 50) / d]);
+    expect(constraintsOf(session).slice(1)).toEqual([
+      { kind: 'vertical', line: line.id },
+      { kind: 'distance', a: line.p1, b: line.p2, value: 25 },
+    ]);
+  });
+
+  it('a typed point is not snapped: next to an existing point it is a new one', async () => {
+    const { viewport, session } = await chained();
+    move(viewport, 10, 12);
+    type(viewport, [...chars('20'), 'Tab', ...chars('180'), 'Enter']);
+    await settle();
+
+    const line = linesOf(session)[1];
+    if (line === undefined) throw new Error('no line');
+    expect(line.p2).not.toBe(linesOf(session)[0]?.p1);
+    expectNear(xyOf(session, line.p2), [10, 10]);
+  });
+
+  it('the typed constraints are required: a conflict drops only the automatic ones', async () => {
+    const { viewport, session, solver } = await chained();
+    // The direction from the mouse: vertical is inferred (within 3°), automatic.
+    type(viewport, [...chars('20'), 'Tab']);
+    solver.next({ status: 'conflict', entities: null, conflicting: [] });
+    await clicks(viewport, [[31, 60]]);
+
+    const line = linesOf(session)[1];
+    if (line === undefined) throw new Error('no line');
+    expect(constraintsOf(session).slice(1)).toEqual([
+      { kind: 'distance', a: line.p1, b: line.p2, value: 20 },
+    ]);
+  });
+});
+
+describe('the locked fields replace the automatic inferences (M32)', () => {
+  it('a locked angle drops the automatic parallel, perpendicular and axis', async () => {
+    const { viewport, session } = await chained();
+    // 91° from the end of the horizontal line: perpendicular and vertical within 3° by the mouse.
+    move(viewport, 30, 40);
+    type(viewport, ['Tab', ...chars('91')]);
+    expect(inferenceOf(session)?.kinds ?? []).toEqual([]);
+    type(viewport, ['Enter']);
+    await settle();
+
+    const line = linesOf(session)[1];
+    if (line === undefined) throw new Error('no line');
+    expect(
+      constraintsOf(session)
+        .slice(1)
+        .map((c) => c.kind),
+    ).toEqual(['angle']);
+  });
+
+  it('a locked length drops the automatic equal; the direction stays automatic', async () => {
+    const { viewport, session } = await chained();
+    type(viewport, [...chars('20'), 'Tab']);
+    await clicks(viewport, [[60, 41]]);
+
+    const line = linesOf(session)[1];
+    if (line === undefined) throw new Error('no line');
+    expect(constraintsOf(session).slice(1)).toEqual([
+      { kind: 'distance', a: line.p1, b: line.p2, value: 20 },
+    ]);
+  });
+
+  it('without locked fields the line keeps equal and the axis', async () => {
+    const { viewport, session } = await chained();
+    await clicks(viewport, [[30, 30]]);
+
+    expect(
+      constraintsOf(session)
+        .slice(1)
+        .map((c) => c.kind),
+    ).toEqual(['vertical', 'equal']);
+  });
+});
+
+describe('a refused line of the numeric input (M32)', () => {
+  it('resets the chain: the next move shows x and y again', async () => {
+    const { viewport, session, manager, solver } = await sketching();
+    manager.activate('sketch.line');
+    await clicks(viewport, [[10, 10]]);
+    // Only required constraints: a conflict refuses the line.
+    type(viewport, [...chars('20'), 'Tab']);
+    solver.next({ status: 'conflict', entities: null, conflicting: [] });
+    await clicks(viewport, [[40, 50]]);
+    expect(linesOf(session)).toEqual([]);
+
+    move(viewport, 7, 8);
+    expect(session.state.get().numericInput?.fields.map((f) => [f.id, f.text])).toEqual([
+      ['x', '7.00'],
+      ['y', '8.00'],
+    ]);
+  });
+});

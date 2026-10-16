@@ -58,6 +58,17 @@ describe('toViewKeyEvent', () => {
     });
   });
 
+  it('M32: passes consume on, without it the event has none', () => {
+    let consumed = 0;
+    const consume = (): void => {
+      consumed++;
+    };
+    const e = toViewKeyEvent({ key: 'Tab', ...noMods }, false, false, consume);
+    e.consume?.();
+    expect(consumed).toBe(1);
+    expect(toViewKeyEvent({ key: 'Tab', ...noMods }, false, false)).not.toHaveProperty('consume');
+  });
+
   it('mod is Meta on Mac and Ctrl elsewhere', () => {
     const meta = { key: 'z', ...noMods, metaKey: true };
     const ctrl = { key: 'z', ...noMods, ctrlKey: true };

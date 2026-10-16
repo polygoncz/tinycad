@@ -355,6 +355,66 @@ describe('SketchSession.setInferencePreview (M26)', () => {
   });
 });
 
+describe('SketchSession.setNumericInput (M32)', () => {
+  const FIELD = {
+    id: 'length',
+    kind: 'length',
+    text: '50',
+    typed: true,
+    locked: false,
+    valid: true,
+    active: true,
+  } as const;
+
+  it('shows the fields at the anchor in the world, neither solved nor written nor redrawn', async () => {
+    const { session, solver, viewport, applied } = await editing(XZ);
+    const calls = solver.calls.length;
+    const drawing = viewport.sketchDrawings.get('sketch-edit');
+
+    session.setNumericInput({ at: [10, 5], fields: [FIELD] });
+
+    expect(session.state.get().numericInput).toEqual({
+      anchor: planeMath.toWorld(XZ, [10, 5]),
+      fields: [FIELD],
+    });
+    expect(solver.calls.length).toBe(calls);
+    expect(applied).toEqual([]);
+    expect(viewport.sketchDrawings.get('sketch-edit')).toBe(drawing);
+  });
+
+  it('null or no fields is no input', async () => {
+    const { session } = await editing();
+    session.setNumericInput({ at: [10, 5], fields: [FIELD] });
+    session.setNumericInput(null);
+    expect(session.state.get().numericInput).toBeNull();
+
+    session.setNumericInput({ at: [10, 5], fields: [] });
+    expect(session.state.get().numericInput).toBeNull();
+  });
+
+  it('an unchanged input publishes no new state; a changed text does', async () => {
+    const { session } = await editing();
+    session.setNumericInput({ at: [10, 5], fields: [FIELD] });
+    const before = session.state.get();
+
+    session.setNumericInput({ at: [10, 5], fields: [{ ...FIELD }] });
+    expect(session.state.get()).toBe(before);
+
+    session.setNumericInput({ at: [10, 5], fields: [{ ...FIELD, text: '5' }] });
+    expect(session.state.get()).not.toBe(before);
+    expect(session.state.get().numericInput?.fields[0]?.text).toBe('5');
+  });
+
+  it('closing the session removes the input', async () => {
+    const { session } = await editing();
+    session.setNumericInput({ at: [10, 5], fields: [FIELD] });
+
+    session.cancel();
+
+    expect(session.state.get().numericInput).toBeNull();
+  });
+});
+
 describe('SketchSession.setConstructionMode (M31)', () => {
   it('is off on opening', async () => {
     const { session } = await editing();
