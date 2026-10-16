@@ -2,11 +2,20 @@
 // snapper with its inferred constraints (on a curve → pointOnCurve, the origin → fix …, all
 // automatic); a click on an existing point makes nothing. The tool keeps no work in progress, so
 // Escape ends it. The click and the preview of a move share one step (pointStep).
+// The numeric input (spec 12, M32): the fields x and y place the point, without a dimension.
 
 import type { PointInference } from '@/sketch';
 import type { Tool } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
-import { addDrawn, clickTool, previewInference, snapMode } from './common';
+import {
+  addDrawn,
+  clickTool,
+  constrainXY,
+  measureXY,
+  previewInference,
+  snapMode,
+  XY_FIELDS,
+} from './common';
 import { placePoint, snapAt } from './snap';
 import type { SnapTarget } from './snap';
 
@@ -19,6 +28,9 @@ export function createPointTool(sketches: SketchEditor): Tool {
     reset() {
       // No work in progress.
     },
+    inputFields: () => XY_FIELDS,
+    constrain: (_session, cursor, values) => constrainXY(cursor, values),
+    measure: (_session, at) => measureXY(at),
     onMove(ctx, session, x, y, mods) {
       const target = snapAt(ctx, session, x, y, snapMode(sketches, mods));
       if (target === null) return;

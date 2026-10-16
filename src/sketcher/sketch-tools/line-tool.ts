@@ -9,13 +9,21 @@
 // instead (spec 12, M27, "Tečný oblouk v polyline"): tangent to the previous line or arc of the
 // chain, written on release, and the chain goes on from its end. Without a previous curve the
 // drag is ignored; Escape cancels the drag and keeps the chain.
+//
+// The numeric input (spec 12, "Číselný vstup (M32)"): the first point has the fields x and y, a
+// next point length and angle from the last point. A locked length becomes a required distance of
+// the new line; a locked angle replaces the automatic axis: 0/180° → horizontal, 90/270° →
+// vertical, another angle with a previous line of the chain → an angle dimension between them.
+// A locked angle drops the automatic direction (axis, parallel, perpendicular, tangent), a locked
+// length the automatic equal, so the entered values are exact.
 
 import type { Vec2 } from '@/core';
-import { endTangent, inferLine } from '@/sketch';
+import { endTangent, inferLine, measure } from '@/sketch';
 import type {
   LineInference,
   PointInference,
   SketchConstraint,
+  SketchConstraintId,
   SketchData,
   SketchEntity,
   SketchEntityId,
@@ -23,22 +31,32 @@ import type {
 import { isPlainEscape } from '@/interaction';
 import type { KeyMods, Tool, ToolContext } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
+import type { GlyphKind } from '../sketch-glyphs';
 import type { SketchSession } from '../sketch-session';
 import {
   addDrawn,
   ANGLE_TOLERANCE,
+  axisOfAngle,
   clearInference,
   clearPreview,
   clickTool,
+  constrainPolar,
+  constrainXY,
   distance,
   existingLine,
+  inputValues,
+  measurePolar,
+  measureXY,
   MIN_LENGTH,
   newConstraintId,
   newEntityId,
+  POLAR_FIELDS,
   previewArcFit,
   previewInference,
   previewPairs,
   snapMode,
+  withoutLocked,
+  XY_FIELDS,
 } from './common';
 import { placePoint, sessionData, snapAt } from './snap';
 import type { PlacedPoint, SnapTarget } from './snap';
@@ -78,6 +96,8 @@ type LineStep =
       readonly close: boolean;
       readonly existing: SketchEntityId | null;
       readonly inferences: readonly LineInference[];
+      /** The axis of a locked angle on an axis (M32), required; null = none. */
+      readonly typedAxis: AxisKind | null;
     };
 
 const NO_STEP: LineStep = { kind: 'none' };
@@ -119,6 +139,7 @@ export function createLineTool(sketches: SketchEditor): Tool {
     current: Chain,
     to: PlacedPoint,
     step: Extract<LineStep, { kind: 'line' }>,
+    values: ReadonlyMap<string, number>,
   ): void {
     const { last: from, pending } = current;
     if (step.existing !== null) {
@@ -128,10 +149,19 @@ export function createLineTool(sketches: SketchEditor): Tool {
     const id = newEntityId(ctx);
     const line: SketchEntity = { kind: 'line', id, p1: from.id, p2: to.id };
     const entities = [...(pending?.entities ?? []), ...to.entities, line];
+    const typed = typedConstraints(
+      ctx,
+      sessionData(session, [...current.entities, ...to.entities, line]),
+      current,
+      line,
+      step.typedAxis,
+      values,
+    );
     const constraints = [
       ...(pending?.constraints ?? []),
       ...to.constraints,
       ...step.inferences.map((i) => lineConstraint(ctx, id, i)),
+      ...typed,
     ];
     // The chain moves on before the write, so the next line starts from this point.
     const started: Chain = {
@@ -143,7 +173,8 @@ export function createLineTool(sketches: SketchEditor): Tool {
       entities: [...current.entities, ...to.entities, line],
     };
     chain = started;
-    void addDrawn(session, { entities, constraints }).then((written) => {
+    const required = new Set<SketchConstraintId>(typed.map((c) => c.id));
+    void addDrawn(session, { entities, constraints }, { required }).then((written) => {
       // A refused line would leave the chain on a point that is not in the sketch.
       if (!written && chain === started) chain = null;
     });
@@ -154,13 +185,28 @@ export function createLineTool(sketches: SketchEditor): Tool {
       chain = null;
       arc = null;
     },
+    inputFields() {
+      return chain === null ? XY_FIELDS : POLAR_FIELDS;
+    },
+    constrain(_session, cursor, values) {
+      return chain === null
+        ? constrainXY(cursor, values)
+        : constrainPolar(chain.last.at, cursor, values);
+    },
+    measure(_session, at) {
+      return chain === null ? measureXY(at) : measurePolar(chain.last.at, at);
+    },
     onMove(ctx, session, x, y, mods) {
       const mode = snapMode(sketches, mods);
       const pending = chain?.entities ?? [];
       const target = snapAt(ctx, session, x, y, { ...mode, pending });
       if (target === null) return;
-      const step = lineStep(sessionData(session, pending), chain, target, mode.infer);
-      const inferences = step.kind === 'line' ? step.inferences : [];
+      const values = inputValues(mods);
+      const step = lineStep(sessionData(session, pending), chain, target, mode.infer, values);
+      const inferences: readonly { readonly kind: GlyphKind }[] =
+        step.kind === 'line'
+          ? [...step.inferences, ...(step.typedAxis === null ? [] : [{ kind: step.typedAxis }])]
+          : [];
       const inferred = step.kind === 'none' ? [] : step.target.inferred;
       previewInference(session, target.at, [...inferred, ...inferences], target.guides);
       if (chain !== null) previewPairs(ctx, session, [chain.last.at, target.at]);
@@ -171,7 +217,8 @@ export function createLineTool(sketches: SketchEditor): Tool {
       const pending = current?.entities ?? [];
       const target = snapAt(ctx, session, x, y, { ...mode, pending });
       if (target === null) return;
-      const step = lineStep(sessionData(session, pending), current, target, mode.infer);
+      const values = inputValues(mods);
+      const step = lineStep(sessionData(session, pending), current, target, mode.infer, values);
       switch (step.kind) {
         case 'none':
           return;
@@ -193,7 +240,7 @@ export function createLineTool(sketches: SketchEditor): Tool {
           const to = step.close
             ? { ...current.first, entities: [], constraints: [] }
             : placePoint(ctx, step.target);
-          addLine(ctx, session, current, to, step);
+          addLine(ctx, session, current, to, step, values);
           if (step.close) end(ctx);
           return;
         }
@@ -301,6 +348,7 @@ function lineStep(
   chain: Chain | null,
   target: SnapTarget,
   infer: boolean,
+  values: ReadonlyMap<string, number>,
 ): LineStep {
   if (chain === null) return { kind: 'start', target };
   const { first, last } = chain;
@@ -309,42 +357,118 @@ function lineStep(
     // Closing needs two lines already, otherwise it would double the only one.
     if (chain.lines < 2) return NO_STEP;
     const closing = { ...target, inferred: [] };
-    return lineTo(data, chain, closing, first, { infer, axis: null, close: true });
+    return lineTo(data, chain, closing, first, { infer, axis: null, close: true, values });
   }
   if (distance(last.at, target.at) <= MIN_LENGTH) return NO_STEP;
   const { inferred, axis } = alignmentWith(target.inferred, last.id);
   const to = { id: target.point, at: target.at };
-  return lineTo(data, chain, { ...target, inferred }, to, { infer, axis, close: false });
+  return lineTo(data, chain, { ...target, inferred }, to, { infer, axis, close: false, values });
 }
 
 /**
  * The line step from the end of the chain to the point `to` (id null = a new point). `axis`
  * replaces an alignment of `to` with the start of the line (one constraint of the line, not of
- * its two points).
+ * its two points). The locked fields (M32) replace the automatic inferences they fix
+ * (withoutLocked): an angle every direction (on an axis it is the required typedAxis), a length
+ * equal.
  */
 function lineTo(
   data: SketchData,
   chain: Chain,
   target: SnapTarget,
   to: { readonly id: SketchEntityId | null; readonly at: Vec2 },
-  opts: { readonly infer: boolean; readonly axis: AxisKind | null; readonly close: boolean },
+  opts: {
+    readonly infer: boolean;
+    readonly axis: AxisKind | null;
+    readonly close: boolean;
+    readonly values: ReadonlyMap<string, number>;
+  },
 ): LineStep {
   const { last: from } = chain;
-  const { axis, close } = opts;
+  const { close } = opts;
   const existing = to.id === null ? null : existingLine(data, from.id, to.id);
-  if (existing !== null) return { kind: 'line', target, close, existing, inferences: [] };
+  if (existing !== null) {
+    return { kind: 'line', target, close, existing, inferences: [], typedAxis: null };
+  }
   const inferred = opts.infer
     ? inferLine({ at: from.at, point: from.id }, to.at, data, {
         previous: chain.previous,
         angleTolerance: ANGLE_TOLERANCE,
       })
     : [];
+  const angle = opts.values.get('angle');
+  const free = withoutLocked(inferred, {
+    direction: angle !== undefined,
+    size: opts.values.has('length'),
+  });
+  if (angle !== undefined) {
+    const typedAxis = axisOfAngle(angle);
+    return { kind: 'line', target, close, existing: null, inferences: free, typedAxis };
+  }
+  const { axis } = opts;
   const inferences: readonly LineInference[] =
-    axis === null || inferred.some((i) => i.kind === axis)
-      ? inferred
-      : [{ kind: axis }, ...inferred];
-  return { kind: 'line', target, close, existing: null, inferences };
+    axis === null || free.some((i) => i.kind === axis) ? free : [{ kind: axis }, ...free];
+  return { kind: 'line', target, close, existing: null, inferences, typedAxis: null };
 }
+
+/**
+ * The required constraints of the locked fields of a new line (spec 12, M32): `length` → the
+ * distance of its points; the angle → typedAxis, or for an angle off the axes with a previous
+ * line of the chain the angle dimension between the previous and the new line with the measured
+ * value (between the rays from their common point; none for collinear lines). `data` holds the
+ * new line.
+ */
+function typedConstraints(
+  ctx: ToolContext,
+  data: SketchData,
+  chain: Chain,
+  line: Extract<SketchEntity, { kind: 'line' }>,
+  typedAxis: AxisKind | null,
+  values: ReadonlyMap<string, number>,
+): readonly SketchConstraint[] {
+  const out: SketchConstraint[] = [];
+  const length = values.get('length');
+  if (length !== undefined) {
+    out.push({ kind: 'distance', id: newConstraintId(ctx), a: line.p1, b: line.p2, value: length });
+  }
+  if (typedAxis !== null) {
+    out.push({ kind: typedAxis, id: newConstraintId(ctx), line: line.id });
+  } else if (values.has('angle')) {
+    const angle = angleToPrevious(ctx, data, chain, line);
+    if (angle !== null) out.push(angle);
+  }
+  return out;
+}
+
+/**
+ * The angle dimension between the previous line of the chain and the new line `line` (it starts
+ * at the last point of the chain): the previous line reversed when it ends there, so both rays go
+ * from that point. null without a previous line or for collinear lines (no valid angle).
+ */
+function angleToPrevious(
+  ctx: ToolContext,
+  data: SketchData,
+  chain: Chain,
+  line: Extract<SketchEntity, { kind: 'line' }>,
+): SketchConstraint | null {
+  const previous = data.entities.find((e) => e.id === chain.previous);
+  if (previous?.kind !== 'line') return null;
+  const reverseA: { reverseA?: true } = previous.p2 === line.p1 ? { reverseA: true } : {};
+  const draft = {
+    kind: 'angle',
+    id: newConstraintId(ctx),
+    a: previous.id,
+    b: line.id,
+    value: 0,
+    ...reverseA,
+  } as const;
+  const value = measure(data, draft);
+  if (value <= MIN_ANGLE || value >= Math.PI - MIN_ANGLE) return null;
+  return { ...draft, value };
+}
+
+/** Below this an angle between two lines is degenerate (collinear). */
+const MIN_ANGLE = 1e-9;
 
 type AxisKind = 'horizontal' | 'vertical';
 

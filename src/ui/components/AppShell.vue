@@ -33,6 +33,7 @@ import { dialogFor } from './feature-dialogs';
 import HistoryPanel from './HistoryPanel.vue';
 import SketchDimensions from './SketchDimensions.vue';
 import SketchGlyphs from './SketchGlyphs.vue';
+import SketchInput from './SketchInput.vue';
 import SketchPanel from './SketchPanel.vue';
 import Timeline from './Timeline.vue';
 import TitleBar from './TitleBar.vue';
@@ -159,6 +160,11 @@ onUnmounted(() => {
       <SketchGlyphs
         v-if="sketchSession !== null"
         :key="`glyphs-${sketchSession.featureId}`"
+        :sketch="sketchSession"
+      />
+      <SketchInput
+        v-if="sketchSession !== null"
+        :key="`input-${sketchSession.featureId}`"
         :sketch="sketchSession"
       />
       <Browser class="floating-browser" />

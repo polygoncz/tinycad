@@ -104,6 +104,51 @@ export function previewValues(input: NumericInput): ReadonlyMap<string, number> 
   return values;
 }
 
+/**
+ * A field as SketchState.numericInput shows it (spec 12, "Náhled"): `text` is the typed or locked
+ * text, otherwise the measured value rounded to 2 decimals (an angle in degrees).
+ */
+export interface InputFieldView {
+  readonly id: string;
+  readonly kind: InputFieldKind;
+  readonly text: string;
+  readonly typed: boolean;
+  readonly locked: boolean;
+  readonly valid: boolean;
+  readonly active: boolean;
+}
+
+/**
+ * The views of the fields of the input; `measured` are the values of the fields at the cursor
+ * (ClickHandlers.measure: a length in mm, an angle in radians). A free field without a measured
+ * value has an empty text.
+ */
+export function inputFieldViews(
+  input: NumericInput,
+  measured: ReadonlyMap<string, number>,
+): readonly InputFieldView[] {
+  return input.fields.map((field, i) => {
+    const text = input.texts[i] ?? null;
+    const value = measured.get(field.id);
+    return {
+      id: field.id,
+      kind: field.kind,
+      text: text ?? (value === undefined ? '' : formatMeasured(field, value)),
+      typed: text !== null,
+      locked: input.locked[i] === true,
+      valid: text === null || parseField(field, text) !== null,
+      active: i === input.active,
+    };
+  });
+}
+
+/** A measured value with 2 decimals, an angle in degrees; never "-0.00". */
+function formatMeasured(field: InputField, value: number): string {
+  const shown = field.kind === 'angle' ? value / DEG : value;
+  const rounded = Math.round(shown * 100) / 100;
+  return (rounded === 0 ? 0 : rounded).toFixed(2);
+}
+
 /** The value of a text in the unit of the field kind; null = invalid. */
 function parseField(field: InputField, text: string): number | null {
   if (text === '') return null;

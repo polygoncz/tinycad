@@ -42,6 +42,7 @@ import type {
   SketchStyle,
   ViewportPort,
 } from '@/interaction';
+import type { InputFieldView } from './numeric-input';
 import { planeRefOf } from './plane-ref';
 import { constraintNumbers, dimensionViews } from './sketch-dimensions';
 import type { SketchDimensionView } from './sketch-dimensions';
@@ -97,6 +98,11 @@ export interface SketchSession {
    * solved nor written.
    */
   setInferencePreview(p: InferencePreview | null): void;
+  /**
+   * The numeric input of a drawing tool at `at` (M32), or null for none: shown as
+   * SketchState.numericInput. Neither solved nor written; it does not redraw the sketch.
+   */
+  setNumericInput(p: NumericInputPreview | null): void;
   /** M31: SketchState.constructionMode; without the solver and without writing, only the session's state. */
   setConstructionMode(on: boolean): void;
   setHover(id: SketchItemId | null): void;
@@ -164,6 +170,15 @@ export interface SketchState {
    * and the anchor in world coordinates; null without a preview or when it has no kinds.
    */
   readonly inference: { readonly anchor: Vec3; readonly kinds: readonly GlyphKind[] } | null;
+  /**
+   * The numeric input of the drawing tool (setNumericInput, M32): the fields of its step and the
+   * anchor (the cursor after the constraint) in world coordinates; null for a step without fields
+   * or a cursor off the view.
+   */
+  readonly numericInput: {
+    readonly anchor: Vec3;
+    readonly fields: readonly InputFieldView[];
+  } | null;
   /** The field "Plane" of the panel (M21); null without a visible plane param. */
   readonly planeField: SketchPlaneField | null;
   /**
@@ -183,6 +198,12 @@ export interface InferencePreview {
   readonly at: Vec2;
   readonly kinds: readonly GlyphKind[];
   readonly guides: readonly SnapGuide[];
+}
+
+/** The numeric input of a drawing tool (M32): its fields at `at` in plane coordinates. */
+export interface NumericInputPreview {
+  readonly at: Vec2;
+  readonly fields: readonly InputFieldView[];
 }
 
 /** The field "Plane" of the sketch panel (M21, Q076): the plane param of the feature session. */
@@ -227,6 +248,7 @@ const NO_PARAMS: Readonly<Record<string, number>> = Object.freeze({});
 /** The keys of SketchState the drawing of the sketch does not show (refresh does not redraw). */
 const NOT_DRAWN: ReadonlySet<keyof SketchState> = new Set<keyof SketchState>([
   'inference',
+  'numericInput',
   'constructionMode',
 ]);
 const MESSAGES: { readonly [K in SketchMessageKey]: { readonly key: K } } = Object.freeze({
@@ -280,6 +302,8 @@ export function openSketchSession(deps: {
   let inference: Pick<InferencePreview, 'at' | 'kinds'> | null = null;
   /** The guides of the inference preview are in the overlay. */
   let guidesShown = false;
+  /** The numeric input of a drawing tool with some fields (setNumericInput). */
+  let numericInput: NumericInputPreview | null = null;
   /** SketchState.constructionMode (setConstructionMode). */
   let constructionMode = false;
   /**
@@ -360,6 +384,11 @@ export function openSketchSession(deps: {
         prev?.glyphs ?? [],
       ),
       inference: inferenceOf(plane.get(), open ? inference : null, prev?.inference ?? null),
+      numericInput: numericInputOf(
+        plane.get(),
+        open ? numericInput : null,
+        prev?.numericInput ?? null,
+      ),
       planeField: planeFieldOf(edit.state.get(), prev?.planeField ?? null),
       planeMissing,
       constructionMode,
@@ -469,6 +498,7 @@ export function openSketchSession(deps: {
     unsubscribeEdit();
     unsubscribeShowAll();
     inference = null;
+    numericInput = null;
     try {
       refresh();
     } finally {
@@ -777,6 +807,11 @@ export function openSketchSession(deps: {
           : Object.freeze({ at: p.at, kinds: Object.freeze([...p.kinds]) });
       refresh();
     },
+    setNumericInput(p) {
+      checkOpen('setNumericInput');
+      numericInput = p === null || p.fields.length === 0 ? null : p;
+      refresh();
+    },
     setConstructionMode(on) {
       checkOpen('setConstructionMode');
       constructionMode = on;
@@ -870,6 +905,43 @@ function inferenceOf(
     prev.kinds.length === preview.kinds.length &&
     prev.kinds.every((k, i) => k === preview.kinds[i]);
   return same ? prev : Object.freeze({ anchor, kinds: preview.kinds });
+}
+
+/**
+ * SketchState.numericInput of the input on the plane; `prev` while the anchor and the fields stay
+ * the same, so an unchanged input does not publish a new state.
+ */
+function numericInputOf(
+  plane: Plane,
+  input: NumericInputPreview | null,
+  prev: SketchState['numericInput'],
+): SketchState['numericInput'] {
+  if (input === null) return null;
+  const anchor = planeMath.toWorld(plane, input.at);
+  const same =
+    prev !== null &&
+    anchor.every((v, i) => Object.is(v, prev.anchor[i])) &&
+    prev.fields.length === input.fields.length &&
+    prev.fields.every((f, i) => sameFieldView(f, input.fields[i]));
+  return same
+    ? prev
+    : Object.freeze({
+        anchor,
+        fields: Object.freeze(input.fields.map((f) => Object.freeze({ ...f }))),
+      });
+}
+
+function sameFieldView(a: InputFieldView, b: InputFieldView | undefined): boolean {
+  return (
+    b !== undefined &&
+    a.id === b.id &&
+    a.kind === b.kind &&
+    a.text === b.text &&
+    a.typed === b.typed &&
+    a.locked === b.locked &&
+    a.valid === b.valid &&
+    a.active === b.active
+  );
 }
 
 /** The dimension with the placement; a placement of another kind (never from movePlacement) keeps it. */

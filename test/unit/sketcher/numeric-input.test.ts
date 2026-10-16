@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { KeyMods, ViewKeyEvent } from '@/interaction';
-import { emptyInput, inputKey, lockedValues, previewValues } from '@/sketcher/numeric-input';
+import {
+  emptyInput,
+  inputFieldViews,
+  inputKey,
+  lockedValues,
+  previewValues,
+} from '@/sketcher/numeric-input';
 import type { InputField, NumericInput } from '@/sketcher/numeric-input';
 
 const LENGTH_ANGLE: readonly InputField[] = [
@@ -246,5 +252,60 @@ describe('validity and values', () => {
   it('an empty input has no values', () => {
     expect(previewValues(emptyInput(XY)).size).toBe(0);
     expect(lockedValues(emptyInput(XY)).size).toBe(0);
+  });
+});
+
+describe('inputFieldViews (spec 12, "Náhled")', () => {
+  const measured = new Map([
+    ['length', 12.345],
+    ['angle', Math.PI / 6],
+  ]);
+
+  it('shows the measured values of free fields with 2 decimals, an angle in degrees', () => {
+    expect(inputFieldViews(emptyInput(LENGTH_ANGLE), measured)).toEqual([
+      {
+        id: 'length',
+        kind: 'length',
+        text: '12.35',
+        typed: false,
+        locked: false,
+        valid: true,
+        active: true,
+      },
+      {
+        id: 'angle',
+        kind: 'angle',
+        text: '30.00',
+        typed: false,
+        locked: false,
+        valid: true,
+        active: false,
+      },
+    ]);
+  });
+
+  it('shows the typed and the locked texts; an invalid text is not valid', () => {
+    const input = type(emptyInput(LENGTH_ANGLE), ['5', 'Tab', '-']);
+    const [length, angle] = inputFieldViews(input, measured);
+    expect(length).toMatchObject({
+      text: '5',
+      typed: true,
+      locked: true,
+      valid: true,
+      active: false,
+    });
+    expect(angle).toMatchObject({
+      text: '-',
+      typed: true,
+      locked: false,
+      valid: false,
+      active: true,
+    });
+  });
+
+  it('an unmeasured free field has an empty text; a tiny negative value is 0.00', () => {
+    const [x, y] = inputFieldViews(emptyInput(XY), new Map([['y', -0.001]]));
+    expect(x?.text).toBe('');
+    expect(y?.text).toBe('0.00');
   });
 });
