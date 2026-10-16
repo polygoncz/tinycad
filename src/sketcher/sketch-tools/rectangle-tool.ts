@@ -64,12 +64,12 @@ export function createRectangleTool(sketches: SketchEditor): Tool {
     inputFields() {
       return corner === null ? XY_FIELDS : SIZE_FIELDS;
     },
-    constrain(_session, cursor, values) {
+    constrain(cursor, values) {
       return corner === null
         ? constrainXY(cursor, values)
         : constrainSize(corner.at, cursor, values, false);
     },
-    measure(_session, at) {
+    measure(at) {
       return corner === null ? measureXY(at) : measureSize(corner.at, at, false);
     },
     onMove(ctx, session, x, y, mods) {

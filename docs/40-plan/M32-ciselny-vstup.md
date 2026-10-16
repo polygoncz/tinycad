@@ -106,5 +106,6 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **Úkol 4 hotový:** drážky (3 druhy) s poli a povinnými kótami (`distance`, `diameter`), 16 testů; `sweep` modulo 360° a úhel začátku oblouku bez kóty dopsané do spec.
 - **Úkol 3 hotový:** obdélníky (3 druhy), kružnice a oblouk s poli a povinnými kótami (`rectangle-input.ts`, `withTyped`), 24 testů. Po kontrole doplněno: dopočítané rohy se zadaným rozměrem se nepřichytí k blízkému bodu (`computedTolerance`, test). Zamčený průměr/poloměr vypne `equal` (B9).
 - **Úkol 5 hotový:** e2e `m32.spec.ts` (5 scénářů × 2 prohlížeče: úsečka 50 mm pod 30° jen klávesnicí, délka + směr myší, obdélník 40 × 20, kružnice ⌀ 30, bod na 12,5; 7 s mřížkou); celé e2e 158/158. **B10 (rozhodnutí stopy):** délka/průměr s kurzorem přesně v předchozím bodě má výchozí směr +x (jako Fusion) místo tichého degenerovaného kroku.
+- **Architektonická revize:** bez porušení ADR; 6 nálezů (duplicity mezi nástroji: kóta vzdálenosti, `withTyped`, `sweep`/poloměr, pole kroků a normála; `equal` přes `withoutLocked`; nevyužitý parametr `session` háčků) – opraveno, sdílené pomůcky v `common.ts` (propsáno do spec 12), `SketchInput` ve stromu komponent spec 11. `npm run check` zelený (7037 testů), e2e m31 + m32 22/22.
 
 ## Retrospektiva

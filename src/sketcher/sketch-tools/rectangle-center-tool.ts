@@ -60,12 +60,12 @@ export function createRectangleCenterTool(sketches: SketchEditor): Tool {
     inputFields() {
       return center === null ? XY_FIELDS : SIZE_FIELDS;
     },
-    constrain(_session, cursor, values) {
+    constrain(cursor, values) {
       return center === null
         ? constrainXY(cursor, values)
         : constrainSize(center.at, cursor, values, true);
     },
-    measure(_session, at) {
+    measure(at) {
       return center === null ? measureXY(at) : measureSize(center.at, at, true);
     },
     onMove(ctx, session, x, y, mods) {

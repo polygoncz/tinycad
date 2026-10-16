@@ -49,26 +49,36 @@ import { ccwSweep } from '../sketch-angles';
 import {
   MIN_LENGTH,
   POLAR_FIELDS,
+  RADIAL_FIELDS,
+  SWEEP_FIELDS,
+  WIDTH_FIELDS,
   XY_FIELDS,
   arcPoints,
   axisOfAngle,
   clearPreview,
   clickTool,
   constrainPolar,
+  constrainRadial,
+  constrainSweep,
   constrainXY,
   distance,
+  distanceDimension,
   inputValues,
+  leftNormal,
   measurePolar,
+  measureRadial,
+  measureSweep,
   measureXY,
   newConstraintId,
   previewInference,
   previewPairs,
   previewPolyline,
+  signedOffset,
   snapMode,
 } from './common';
 import { freeTarget, placePoint, samePoint, sessionData, snapAt } from './snap';
 import type { PlacedPoint, SnapTarget } from './snap';
-import { addShape, axisConstraint, shapeIds, sideAxis } from './shape';
+import { addShape, axisConstraint, shapeIds, sideAxis, withTyped } from './shape';
 import type { AxisKind } from './shape';
 
 /** centers = sketch.slot, overall = sketch.slotOverall, arc = sketch.slotArc. */
@@ -107,10 +117,10 @@ export function createSlotTool(sketches: SketchEditor, kind: SlotKind): Tool {
     inputFields() {
       return fieldsOf(kind, picked.length);
     },
-    constrain(_session, cursor, values) {
+    constrain(cursor, values) {
       return constrainStep(kind, picked, cursor, values);
     },
-    measure(_session, at) {
+    measure(at) {
       return measureStep(kind, picked, at);
     },
     onMove(ctx, session, x, y, mods) {
@@ -159,37 +169,12 @@ export function createSlotTool(sketches: SketchEditor, kind: SlotKind): Tool {
 /** Points of the axis before the width: 2 for a straight slot, centre, start and end for an arc slot. */
 const axisCount = (kind: SlotKind): number => (kind === 'arc' ? 3 : 2);
 
-/** The start of an arc slot from its centre (spec 12, M32): the radius and the angle. */
-const ARC_START_FIELDS: readonly InputField[] = Object.freeze([
-  Object.freeze({ id: 'radius', kind: 'length' }),
-  Object.freeze({ id: 'angle', kind: 'angle' }),
-]);
-
-/** The end of an arc slot: the sweep from the start. */
-const SWEEP_FIELDS: readonly InputField[] = Object.freeze([
-  Object.freeze({ id: 'sweep', kind: 'angle' }),
-]);
-
-/** The width of a slot. */
-const WIDTH_FIELDS: readonly InputField[] = Object.freeze([
-  Object.freeze({ id: 'width', kind: 'length' }),
-]);
-
 /** The fields of the step after `count` picked points (spec 12, M32, "Pole a kóty podle nástrojů"). */
 function fieldsOf(kind: SlotKind, count: number): readonly InputField[] {
   if (count === 0) return XY_FIELDS;
-  if (count === 1) return kind === 'arc' ? ARC_START_FIELDS : POLAR_FIELDS;
+  if (count === 1) return kind === 'arc' ? RADIAL_FIELDS : POLAR_FIELDS;
   if (count === 2 && kind === 'arc') return SWEEP_FIELDS;
   return WIDTH_FIELDS;
-}
-
-/** The values with the key `from` renamed to `to` (the radius of an arc slot is a polar length). */
-function renamed(
-  values: ReadonlyMap<string, number>,
-  from: string,
-  to: string,
-): ReadonlyMap<string, number> {
-  return new Map([...values].map(([k, v]) => [k === from ? to : k, v]));
 }
 
 /** The cursor constrained by the entered values of the current step (ClickHandlers.constrain). */
@@ -202,11 +187,12 @@ function constrainStep(
   const [first, second] = picked.map((p) => p.target.at);
   if (first === undefined) return constrainXY(cursor, values);
   if (second === undefined) {
-    const polar = kind === 'arc' ? renamed(values, 'radius', 'length') : values;
-    return constrainPolar(first, cursor, polar);
+    return kind === 'arc'
+      ? constrainRadial(first, cursor, values)
+      : constrainPolar(first, cursor, values);
   }
   if (kind !== 'arc') return constrainStraightWidth(first, second, cursor, values.get('width'));
-  if (picked.length === 2) return constrainSweep(first, second, cursor, values.get('sweep'));
+  if (picked.length === 2) return constrainSweep(first, second, cursor, values);
   return constrainArcWidth(first, second, cursor, values.get('width'));
 }
 
@@ -219,17 +205,14 @@ function measureStep(
   const [first, second] = picked.map((p) => p.target.at);
   if (first === undefined) return measureXY(at);
   if (second === undefined) {
-    const polar = measurePolar(first, at);
-    return kind === 'arc' ? renamed(polar, 'length', 'radius') : polar;
+    return kind === 'arc' ? measureRadial(first, at) : measurePolar(first, at);
   }
   if (kind !== 'arc') {
     const n = leftNormal(first, second);
-    const width = n === null ? 0 : 2 * Math.abs(offset(first, n, at));
+    const width = n === null ? 0 : 2 * Math.abs(signedOffset(first, n, at));
     return new Map([['width', width]]);
   }
-  if (picked.length === 2) {
-    return new Map([['sweep', ccwSweep(angle(first, second), angle(first, at))]]);
-  }
+  if (picked.length === 2) return measureSweep(first, second, at);
   return new Map([['width', 2 * Math.abs(distance(first, at) - distance(first, second))]]);
 }
 
@@ -241,21 +224,9 @@ function measureStep(
 function constrainStraightWidth(a: Vec2, b: Vec2, cursor: Vec2, width: number | undefined): Vec2 {
   const n = leftNormal(a, b);
   if (width === undefined || n === null) return cursor;
-  const s = offset(a, n, cursor);
+  const s = signedOffset(a, n, cursor);
   const t = (s < 0 ? -width : width) / 2 - s;
   return [cursor[0] + t * n[0], cursor[1] + t * n[1]];
-}
-
-/**
- * The end of an arc slot for the sweep: on the circle through the start at the angle of the start
- * plus the sweep; a sweep ≤ 0 is degenerate (the start, which the step refuses).
- */
-function constrainSweep(center: Vec2, start: Vec2, cursor: Vec2, sweep: number | undefined): Vec2 {
-  if (sweep === undefined) return cursor;
-  if (sweep <= 0) return start;
-  const r = distance(center, start);
-  const a = angle(center, start) + sweep;
-  return [center[0] + r * Math.cos(a), center[1] + r * Math.sin(a)];
 }
 
 /**
@@ -282,16 +253,6 @@ function constrainArcWidth(
     center[1] + ((towards[1] - center[1]) * r) / size,
   ];
 }
-
-/** The unit left normal of a → b, or null for a ≈ b. */
-function leftNormal(a: Vec2, b: Vec2): Vec2 | null {
-  const d = distance(a, b);
-  if (d <= MIN_LENGTH) return null;
-  return [-(b[1] - a[1]) / d, (b[0] - a[0]) / d];
-}
-
-/** The signed distance of `p` from the line through `a` with the unit normal `n`. */
-const offset = (a: Vec2, n: Vec2, p: Vec2): number => (p[0] - a[0]) * n[0] + (p[1] - a[1]) * n[1];
 
 /**
  * The step of a click at `target` after the points of the axis picked so far; `values` = the
@@ -493,30 +454,16 @@ function addSlot(
   // The axis of a locked angle is entered (M32): required with the dimensions, not automatic.
   const enteredAxis = second?.values.has('angle') === true && fit.kind === 'straight';
   const dimensions = [
-    ...lengthDimension(
+    ...distanceDimension(
       ctx,
-      [p0.id, p1.id],
+      p0.id,
+      p1.id,
       second?.values.get(fit.kind === 'arc' ? 'radius' : 'length'),
     ),
     ...(enteredAxis ? axisLine : []),
     ...widthDimension(ctx, draft, widthCenter, values.get('width')),
   ];
-  const dimensioned: ShapeDraft = {
-    ...draft,
-    constraints: [...draft.constraints, ...dimensions],
-    required: [...draft.required, ...dimensions.map((c) => c.id)],
-  };
-  addShape(session, points, dimensioned, enteredAxis ? [] : axisLine);
-}
-
-/** The locked length (or radius) of the axis (M32): the distance of its two points a and b. */
-function lengthDimension(
-  ctx: ToolContext,
-  [a, b]: readonly [SketchEntityId, SketchEntityId],
-  value: number | undefined,
-): readonly SketchConstraint[] {
-  if (value === undefined) return [];
-  return [{ kind: 'distance', id: newConstraintId(ctx), a, b, value }];
+  addShape(session, points, withTyped(draft, dimensions), enteredAxis ? [] : axisLine);
 }
 
 /** The locked width (M32): the diameter of the end arc of the draft around `center`. */

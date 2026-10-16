@@ -29,8 +29,8 @@ export function createPointTool(sketches: SketchEditor): Tool {
       // No work in progress.
     },
     inputFields: () => XY_FIELDS,
-    constrain: (_session, cursor, values) => constrainXY(cursor, values),
-    measure: (_session, at) => measureXY(at),
+    constrain: constrainXY,
+    measure: measureXY,
     onMove(ctx, session, x, y, mods) {
       const target = snapAt(ctx, session, x, y, snapMode(sketches, mods));
       if (target === null) return;

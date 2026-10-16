@@ -138,10 +138,10 @@ async function aTool(opts: { fields?: (step: number) => readonly InputField[] } 
       asked += 1;
       return fieldsOf(step);
     },
-    constrain(_session, cursor, values) {
+    constrain(cursor, values) {
       return step % 2 === 0 ? constrainPolar([0, 0], cursor, values) : constrainXY(cursor, values);
     },
-    measure(_session, at) {
+    measure(at) {
       return step % 2 === 0
         ? measurePolar([0, 0], at)
         : new Map([

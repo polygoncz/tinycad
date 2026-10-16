@@ -7,7 +7,7 @@ import type { Vec2 } from '@/core';
 import type { SketchConstraint, SketchEntityId } from '@/sketch';
 import type { ToolContext } from '@/interaction';
 import type { InputField } from '../numeric-input';
-import { newConstraintId } from './common';
+import { distanceDimension } from './common';
 
 /** The fields of the second point of an axis-parallel rectangle: its width and height. */
 export const SIZE_FIELDS: readonly InputField[] = Object.freeze([
@@ -59,15 +59,4 @@ export function sizeDimensions(
     ...distanceDimension(ctx, a, b, values.get('width')),
     ...distanceDimension(ctx, b, c, values.get('height')),
   ];
-}
-
-/** The distance dimension of the points a and b with the entered `value`; none without it. */
-export function distanceDimension(
-  ctx: ToolContext,
-  a: SketchEntityId,
-  b: SketchEntityId,
-  value: number | null | undefined,
-): readonly SketchConstraint[] {
-  if (value === null || value === undefined) return [];
-  return [{ kind: 'distance', id: newConstraintId(ctx), a, b, value }];
 }

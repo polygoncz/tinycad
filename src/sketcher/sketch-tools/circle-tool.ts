@@ -31,6 +31,7 @@ import {
   previewInference,
   previewPolyline,
   snapMode,
+  withoutLocked,
   XY_FIELDS,
 } from './common';
 import { placePoint, sessionData, snapAt } from './snap';
@@ -60,13 +61,13 @@ export function createCircleTool(sketches: SketchEditor): Tool {
     inputFields() {
       return center === null ? XY_FIELDS : DIAMETER_FIELDS;
     },
-    constrain(_session, cursor, values) {
+    constrain(cursor, values) {
       if (center === null) return constrainXY(cursor, values);
       const diameter = values.get('diameter');
       if (diameter === undefined) return cursor;
       return constrainPolar(center.at, cursor, new Map([['length', diameter / 2]]));
     },
-    measure(_session, at) {
+    measure(at) {
       if (center === null) return measureXY(at);
       return new Map([['diameter', 2 * distance(center.at, at)]]);
     },
@@ -123,7 +124,7 @@ export function createCircleTool(sketches: SketchEditor): Tool {
 /**
  * The step of a click at `target` after the centre `center` (null = none yet); the rim snaps only
  * for its place. The entered `diameter` (M32, null = none) sets the radius exactly and replaces
- * the automatic equal (a locked size, like withoutLocked). Pure over `data`, so the preview of a
+ * the automatic equal (a locked size, withoutLocked). Pure over `data`, so the preview of a
  * move can call it too.
  */
 function circleStep(
@@ -137,8 +138,13 @@ function circleStep(
   const radius = diameter === null ? distance(center.at, target.at) : diameter / 2;
   // A rim on the centre has no direction, even with an entered diameter.
   if (distance(center.at, target.at) <= MIN_LENGTH) return { kind: 'none' };
-  const equal = infer && diameter === null ? inferRadius(radius, data, lastRound(data)) : null;
-  return { kind: 'circle', radius, equal };
+  const round = infer ? inferRadius(radius, data, lastRound(data)) : null;
+  // A locked diameter is exact (M32): it replaces the automatic equal.
+  const [equal] = withoutLocked(round === null ? [] : [{ kind: 'equal', with: round }], {
+    direction: false,
+    size: diameter !== null,
+  });
+  return { kind: 'circle', radius, equal: equal?.with ?? null };
 }
 
 /** The inferences the click of the step adds: of the centre, or equal of the circle. */

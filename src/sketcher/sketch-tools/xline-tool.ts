@@ -66,12 +66,12 @@ export function createXLineTool(sketches: SketchEditor): Tool {
     inputFields() {
       return first === null ? XY_FIELDS : POLAR_FIELDS;
     },
-    constrain(_session, cursor, values) {
+    constrain(cursor, values) {
       return first === null
         ? constrainXY(cursor, values)
         : constrainPolar(first.at, cursor, values);
     },
-    measure(_session, at) {
+    measure(at) {
       return first === null ? measureXY(at) : measurePolar(first.at, at);
     },
     onMove(ctx, session, x, y, mods) {

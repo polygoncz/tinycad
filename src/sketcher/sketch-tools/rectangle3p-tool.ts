@@ -16,10 +16,10 @@ import { rectangle3Shape, rectangleFrom3 } from '@/sketch';
 import type { SketchConstraint, SketchData, SketchEntityId } from '@/sketch';
 import { isPlainEscape } from '@/interaction';
 import type { Tool, ToolContext } from '@/interaction';
-import type { InputField } from '../numeric-input';
 import type { SketchEditor } from '../sketch-editor';
 import type { GlyphKind } from '../sketch-glyphs';
 import {
+  HEIGHT_FIELDS,
   MIN_LENGTH,
   POLAR_FIELDS,
   XY_FIELDS,
@@ -29,15 +29,17 @@ import {
   constrainPolar,
   constrainXY,
   distance,
+  distanceDimension,
   inputValues,
+  leftNormal,
   measurePolar,
   measureXY,
   previewInference,
   previewPairs,
   previewPolyline,
+  signedOffset,
   snapMode,
 } from './common';
-import { distanceDimension } from './rectangle-input';
 import { placePoint, samePoint, sessionData, snapAt, snapToleranceAt } from './snap';
 import type { SnapTarget } from './snap';
 import {
@@ -63,11 +65,6 @@ interface Side {
   readonly typed: boolean;
   readonly length: number | null;
 }
-
-/** The field of the third point (M32): the height of the rectangle. */
-const HEIGHT_FIELDS: readonly InputField[] = Object.freeze([
-  Object.freeze({ id: 'height', kind: 'length' }),
-]);
 
 /**
  * What a click at a target does: nothing (degenerate), take the first corner, take the second
@@ -99,12 +96,12 @@ export function createRectangle3pTool(sketches: SketchEditor): Tool {
       if (progress === null) return XY_FIELDS;
       return progress.kind === 'first' ? POLAR_FIELDS : HEIGHT_FIELDS;
     },
-    constrain(_session, cursor, values) {
+    constrain(cursor, values) {
       if (progress === null) return constrainXY(cursor, values);
       if (progress.kind === 'first') return constrainPolar(progress.a.at, cursor, values);
       return constrainHeight(progress.side, cursor, values);
     },
-    measure(_session, at) {
+    measure(at) {
       if (progress === null) return measureXY(at);
       if (progress.kind === 'first') return measurePolar(progress.a.at, at);
       return measureHeight(progress.side, at);
@@ -248,17 +245,6 @@ function stepInferences(step: Rectangle3pStep): readonly { readonly kind: GlyphK
   }
 }
 
-/** The unit left normal of the side a → b; null for a degenerate side. */
-function normalOf(side: Side): Vec2 | null {
-  const length = distance(side.a.at, side.b.at);
-  if (length <= MIN_LENGTH) return null;
-  return [-(side.b.at[1] - side.a.at[1]) / length, (side.b.at[0] - side.a.at[0]) / length];
-}
-
-/** The signed offset of `at` from the side along its left normal n. */
-const offsetOf = (side: Side, n: Vec2, at: Vec2): number =>
-  (at[0] - side.b.at[0]) * n[0] + (at[1] - side.b.at[1]) * n[1];
-
 /**
  * The third point for the cursor and the entered `height` (spec 12, M32): the corner c at that
  * distance from b perpendicular to the side, on the side of the cursor (a cursor on the side
@@ -266,16 +252,16 @@ const offsetOf = (side: Side, n: Vec2, at: Vec2): number =>
  */
 function constrainHeight(side: Side, cursor: Vec2, values: ReadonlyMap<string, number>): Vec2 {
   const height = values.get('height');
-  const n = normalOf(side);
+  const n = leftNormal(side.a.at, side.b.at);
   if (height === undefined || n === null) return cursor;
-  const h = offsetOf(side, n, cursor) < 0 ? -height : height;
+  const h = signedOffset(side.b.at, n, cursor) < 0 ? -height : height;
   return [side.b.at[0] + h * n[0], side.b.at[1] + h * n[1]];
 }
 
 /** The `height` of the rectangle with the third point `at`: its distance from the side. */
 function measureHeight(side: Side, at: Vec2): ReadonlyMap<string, number> {
-  const n = normalOf(side);
-  return new Map([['height', n === null ? 0 : Math.abs(offsetOf(side, n, at))]]);
+  const n = leftNormal(side.a.at, side.b.at);
+  return new Map([['height', n === null ? 0 : Math.abs(signedOffset(side.b.at, n, at))]]);
 }
 
 /**

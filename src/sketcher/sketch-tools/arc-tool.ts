@@ -15,7 +15,6 @@ import type { Vec2 } from '@/core';
 import { inferRadius } from '@/sketch';
 import type { SketchConstraint, SketchData, SketchEntityId } from '@/sketch';
 import type { Tool } from '@/interaction';
-import type { InputField } from '../numeric-input';
 import type { SketchEditor } from '../sketch-editor';
 import type { GlyphKind } from '../sketch-glyphs';
 import {
@@ -23,12 +22,14 @@ import {
   arcPoints,
   clearPreview,
   clickTool,
-  constrainPolar,
+  constrainRadial,
+  constrainSweep,
   constrainXY,
   distance,
   inputValues,
   lastRound,
-  measurePolar,
+  measureRadial,
+  measureSweep,
   measureXY,
   MIN_LENGTH,
   newConstraintId,
@@ -36,7 +37,10 @@ import {
   previewInference,
   previewPairs,
   previewPolyline,
+  RADIAL_FIELDS,
   snapMode,
+  SWEEP_FIELDS,
+  withoutLocked,
   XY_FIELDS,
 } from './common';
 import { ccwSweep } from '../sketch-angles';
@@ -53,17 +57,6 @@ type ArcStep =
   | { readonly kind: 'center' | 'start'; readonly target: SnapTarget }
   | { readonly kind: 'arc'; readonly end: SnapTarget; readonly equal: SketchEntityId | null };
 
-/** The fields of the start (M32): its radius and angle from the centre. */
-const START_FIELDS: readonly InputField[] = Object.freeze([
-  Object.freeze({ id: 'radius', kind: 'length' }),
-  Object.freeze({ id: 'angle', kind: 'angle' }),
-]);
-
-/** The field of the end (M32): the sweep of the arc from the start. */
-const END_FIELDS: readonly InputField[] = Object.freeze([
-  Object.freeze({ id: 'sweep', kind: 'angle' }),
-]);
-
 export function createArcTool(sketches: SketchEditor): Tool {
   let center: SnapTarget | null = null;
   let start: SnapTarget | null = null;
@@ -78,25 +71,17 @@ export function createArcTool(sketches: SketchEditor): Tool {
     },
     inputFields() {
       if (center === null) return XY_FIELDS;
-      return start === null ? START_FIELDS : END_FIELDS;
+      return start === null ? RADIAL_FIELDS : SWEEP_FIELDS;
     },
-    constrain(_session, cursor, values) {
+    constrain(cursor, values) {
       if (center === null) return constrainXY(cursor, values);
-      if (start === null) return constrainPolar(center.at, cursor, polarOf(values));
+      if (start === null) return constrainRadial(center.at, cursor, values);
       return constrainSweep(center.at, start.at, cursor, values);
     },
-    measure(_session, at) {
+    measure(at) {
       if (center === null) return measureXY(at);
-      if (start === null) {
-        const polar = measurePolar(center.at, at);
-        return new Map([
-          ['radius', polar.get('length') ?? 0],
-          ['angle', polar.get('angle') ?? 0],
-        ]);
-      }
-      const end = project(center.at, start.at, at);
-      const sweep = end === null ? 0 : ccwSweep(angle(center.at, start.at), angle(center.at, end));
-      return new Map([['sweep', sweep]]);
+      if (start === null) return measureRadial(center.at, at);
+      return measureSweep(center.at, start.at, at);
     },
     onMove(ctx, session, x, y, mods) {
       const mode = snapMode(sketches, mods);
@@ -209,10 +194,14 @@ function arcStep(
   // The end is always a new point: projecting an existing point would move it.
   const at = project(center.at, start.at, target.at);
   if (at === null || distance(at, start.at) <= MIN_LENGTH) return { kind: 'none' };
-  const radius = distance(center.at, start.at);
-  const equal = infer && picked.radius === null ? inferRadius(radius, data, lastRound(data)) : null;
+  const round = infer ? inferRadius(distance(center.at, start.at), data, lastRound(data)) : null;
+  // A locked radius is exact (M32): it replaces the automatic equal.
+  const [equal] = withoutLocked(round === null ? [] : [{ kind: 'equal', with: round }], {
+    direction: false,
+    size: picked.radius !== null,
+  });
   // No inferences of the snap: they hold at the cursor, not at the projected end (spec 12).
-  return { kind: 'arc', end: freeTarget(at), equal };
+  return { kind: 'arc', end: freeTarget(at), equal: equal?.with ?? null };
 }
 
 /** The inferences the click of the step adds: of the picked point, or of the end and equal. */
@@ -239,33 +228,4 @@ function project(center: Vec2, start: Vec2, cursor: Vec2): Vec2 | null {
     center[0] + ((cursor[0] - center[0]) * r) / d,
     center[1] + ((cursor[1] - center[1]) * r) / d,
   ];
-}
-
-/** The entered `radius` and `angle` of the start as the `length` and `angle` of constrainPolar. */
-function polarOf(values: ReadonlyMap<string, number>): ReadonlyMap<string, number> {
-  const polar = new Map<string, number>();
-  const radius = values.get('radius');
-  const direction = values.get('angle');
-  if (radius !== undefined) polar.set('length', radius);
-  if (direction !== undefined) polar.set('angle', direction);
-  return polar;
-}
-
-/**
- * The end for the cursor and the entered `sweep` (spec 12, M32): on the circle through the start
- * at the angle of the start + sweep. A sweep ≤ 0 is a degenerate step: the start itself, which
- * arcStep refuses.
- */
-function constrainSweep(
-  center: Vec2,
-  start: Vec2,
-  cursor: Vec2,
-  values: ReadonlyMap<string, number>,
-): Vec2 {
-  const sweep = values.get('sweep');
-  if (sweep === undefined) return cursor;
-  if (sweep <= 0) return start;
-  const r = distance(center, start);
-  const to = angle(center, start) + sweep;
-  return [center[0] + r * Math.cos(to), center[1] + r * Math.sin(to)];
 }

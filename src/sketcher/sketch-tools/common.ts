@@ -4,6 +4,7 @@
 import { plane as planeMath } from '@/core';
 import type { Vec2, Vec3 } from '@/core';
 import type {
+  SketchConstraint,
   SketchConstraintId,
   SketchData,
   SketchEntity,
@@ -140,6 +141,27 @@ export const POLAR_FIELDS: readonly InputField[] = Object.freeze([
   Object.freeze({ id: 'angle', kind: 'angle' }),
 ]);
 
+/** The fields of a point around a centre (spec 12, M32: the start of an arc): the radius and the angle. */
+export const RADIAL_FIELDS: readonly InputField[] = Object.freeze([
+  Object.freeze({ id: 'radius', kind: 'length' }),
+  Object.freeze({ id: 'angle', kind: 'angle' }),
+]);
+
+/** The field of the end of an arc (spec 12, M32): the sweep from the start. */
+export const SWEEP_FIELDS: readonly InputField[] = Object.freeze([
+  Object.freeze({ id: 'sweep', kind: 'angle' }),
+]);
+
+/** The field of the width of a slot (spec 12, M32). */
+export const WIDTH_FIELDS: readonly InputField[] = Object.freeze([
+  Object.freeze({ id: 'width', kind: 'length' }),
+]);
+
+/** The field of the height of a rectangle from its first side (spec 12, M32: the 3-point rectangle). */
+export const HEIGHT_FIELDS: readonly InputField[] = Object.freeze([
+  Object.freeze({ id: 'height', kind: 'length' }),
+]);
+
 /** The cursor with the entered coordinates `x`, `y` (the others from the cursor). */
 export function constrainXY(cursor: Vec2, values: ReadonlyMap<string, number>): Vec2 {
   return [values.get('x') ?? cursor[0], values.get('y') ?? cursor[1]];
@@ -163,8 +185,41 @@ export function constrainPolar(
   cursor: Vec2,
   values: ReadonlyMap<string, number>,
 ): Vec2 {
-  const length = values.get('length');
-  const angle = values.get('angle');
+  return polarPoint(from, cursor, values.get('length'), values.get('angle'));
+}
+
+/** The `length` and the `angle` (in [0, 2π)) from `from` to `at`. */
+export function measurePolar(from: Vec2, at: Vec2): ReadonlyMap<string, number> {
+  return new Map([
+    ['length', distance(from, at)],
+    ['angle', directionOf(from, at)],
+  ]);
+}
+
+/** Like constrainPolar around `center` with the entered `radius` (RADIAL_FIELDS) as the length. */
+export function constrainRadial(
+  center: Vec2,
+  cursor: Vec2,
+  values: ReadonlyMap<string, number>,
+): Vec2 {
+  return polarPoint(center, cursor, values.get('radius'), values.get('angle'));
+}
+
+/** The `radius` and the `angle` (in [0, 2π)) from `center` to `at` (RADIAL_FIELDS). */
+export function measureRadial(center: Vec2, at: Vec2): ReadonlyMap<string, number> {
+  return new Map([
+    ['radius', distance(center, at)],
+    ['angle', directionOf(center, at)],
+  ]);
+}
+
+/** The point of constrainPolar for the entered `length` and `angle` (undefined = not entered). */
+function polarPoint(
+  from: Vec2,
+  cursor: Vec2,
+  length: number | undefined,
+  angle: number | undefined,
+): Vec2 {
   const d: Vec2 = [cursor[0] - from[0], cursor[1] - from[1]];
   if (angle !== undefined) {
     const dir: Vec2 = [Math.cos(angle), Math.sin(angle)];
@@ -178,13 +233,64 @@ export function constrainPolar(
   return [from[0] + (length * d[0]) / size, from[1] + (length * d[1]) / size];
 }
 
-/** The `length` and the `angle` (in [0, 2π)) from `from` to `at`. */
-export function measurePolar(from: Vec2, at: Vec2): ReadonlyMap<string, number> {
-  const angle = Math.atan2(at[1] - from[1], at[0] - from[0]);
-  return new Map([
-    ['length', distance(from, at)],
-    ['angle', angle < 0 ? angle + FULL_TURN : angle],
-  ]);
+/** The direction from `from` to `at` in [0, 2π). */
+function directionOf(from: Vec2, at: Vec2): number {
+  const angle = angleAt(from, at);
+  return angle < 0 ? angle + FULL_TURN : angle;
+}
+
+/**
+ * The end of an arc around `center` from `start` for the cursor and the entered `sweep` (spec 12,
+ * M32): on the circle through the start at the angle of the start + sweep. A sweep ≤ 0 is a
+ * degenerate step: the start itself, which the tool refuses.
+ */
+export function constrainSweep(
+  center: Vec2,
+  start: Vec2,
+  cursor: Vec2,
+  values: ReadonlyMap<string, number>,
+): Vec2 {
+  const sweep = values.get('sweep');
+  if (sweep === undefined) return cursor;
+  if (sweep <= 0) return start;
+  const r = distance(center, start);
+  const to = angleAt(center, start) + sweep;
+  return [center[0] + r * Math.cos(to), center[1] + r * Math.sin(to)];
+}
+
+/**
+ * The `sweep` of the arc around `center` from `start` to the direction of `at` (counter-clockwise,
+ * ccwSweep: `at` in the direction of the start gives 2π); 0 for `at` on the centre.
+ */
+export function measureSweep(center: Vec2, start: Vec2, at: Vec2): ReadonlyMap<string, number> {
+  const sweep =
+    distance(center, at) <= MIN_LENGTH ? 0 : ccwSweep(angleAt(center, start), angleAt(center, at));
+  return new Map([['sweep', sweep]]);
+}
+
+/** The unit left normal of the line a → b, or null for a ≈ b. */
+export function leftNormal(a: Vec2, b: Vec2): Vec2 | null {
+  const d = distance(a, b);
+  if (d <= MIN_LENGTH) return null;
+  return [-(b[1] - a[1]) / d, (b[0] - a[0]) / d];
+}
+
+/** The signed distance of `p` from the line through `a` with the unit normal `n` (+ on its side). */
+export const signedOffset = (a: Vec2, n: Vec2, p: Vec2): number =>
+  (p[0] - a[0]) * n[0] + (p[1] - a[1]) * n[1];
+
+/**
+ * The required distance dimension of the points a and b with the entered `value` (spec 12, M32:
+ * a locked length, width or height); none without it.
+ */
+export function distanceDimension(
+  ctx: ToolContext,
+  a: SketchEntityId,
+  b: SketchEntityId,
+  value: number | null | undefined,
+): readonly SketchConstraint[] {
+  if (value === null || value === undefined) return [];
+  return [{ kind: 'distance', id: newConstraintId(ctx), a, b, value }];
 }
 
 /** Below this (in degrees) an entered angle is on an axis. */
@@ -401,11 +507,11 @@ export interface ClickHandlers {
   /** Escape during a taken drag: the drag is forgotten; the moves until the release are plain moves. */
   onDragCancel?(ctx: ToolContext, session: SketchSession): void;
   /** M32: the fields of the current step; null/[] = a step without input. Asked after every step of the tool. */
-  inputFields?(session: SketchSession): readonly InputField[] | null;
+  inputFields?(): readonly InputField[] | null;
   /** M32: the point of the plane for the cursor `cursor` and the entered values: the cursor projected so that it meets them. */
-  constrain?(session: SketchSession, cursor: Vec2, values: ReadonlyMap<string, number>): Vec2;
+  constrain?(cursor: Vec2, values: ReadonlyMap<string, number>): Vec2;
   /** M32: the values of the fields for the point `at` (what the fields would show if not entered). */
-  measure?(session: SketchSession, at: Vec2): ReadonlyMap<string, number>;
+  measure?(at: Vec2): ReadonlyMap<string, number>;
 }
 
 /** Removes the numeric input of a session that is still open. */
@@ -459,22 +565,22 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
       cursor = null;
       shown = false;
       handlers.reset();
-      input = emptyInput(session === null ? [] : fieldsOf(session));
+      input = emptyInput(session === null ? [] : fieldsOf());
       if (ctx !== null) clearPreview(ctx);
     }
     return session;
   }
 
-  function fieldsOf(session: SketchSession): readonly InputField[] {
-    return handlers.inputFields?.(session) ?? [];
+  function fieldsOf(): readonly InputField[] {
+    return handlers.inputFields?.() ?? [];
   }
 
   /**
    * The step changed without an event of the tool (a write refused later resets the work in
    * progress): other fields than those of the input empty it.
    */
-  function follow(session: SketchSession): void {
-    const fields = fieldsOf(session);
+  function follow(): void {
+    const fields = fieldsOf();
     const same =
       fields.length === input.fields.length &&
       fields.every((f, i) => {
@@ -486,7 +592,7 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
 
   /** A new step of the tool: the fields asked again, the input empty, shown at the cursor. */
   function restart(c: ToolContext, session: SketchSession): void {
-    input = emptyInput(fieldsOf(session));
+    input = emptyInput(fieldsOf());
     show(c, session);
   }
 
@@ -500,7 +606,7 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
     const plane = cursorAt(c, session, at.x, at.y);
     if (plane === null) return null;
     if (values.size === 0 || handlers.constrain === undefined) return { cursor: plane };
-    return { cursor: plane, input: { at: handlers.constrain(session, plane, values), values } };
+    return { cursor: plane, input: { at: handlers.constrain(plane, values), values } };
   }
 
   /** The modifiers of a move or a click at `at` with the entered `values`. */
@@ -526,7 +632,7 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
       return;
     }
     const at = point.input?.at ?? point.cursor;
-    const measured = handlers.measure?.(session, at) ?? new Map<string, number>();
+    const measured = handlers.measure?.(at) ?? new Map<string, number>();
     session.setNumericInput({ at, fields: inputFieldViews(input, measured) });
     shown = true;
   }
@@ -564,7 +670,7 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
     activate(c) {
       ctx = c;
       owner = openSession(sketches);
-      input = emptyInput(owner === null ? [] : fieldsOf(owner));
+      input = emptyInput(owner === null ? [] : fieldsOf());
       cursor = null;
       shown = false;
     },
@@ -602,7 +708,7 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
             return;
           }
           cursor = { x: e.x, y: e.y, mods: e.mods };
-          follow(session);
+          follow();
           preview(c, session);
           return;
         }

@@ -43,6 +43,7 @@ import {
   constrainPolar,
   constrainXY,
   distance,
+  distanceDimension,
   existingLine,
   inputValues,
   measurePolar,
@@ -188,12 +189,12 @@ export function createLineTool(sketches: SketchEditor): Tool {
     inputFields() {
       return chain === null ? XY_FIELDS : POLAR_FIELDS;
     },
-    constrain(_session, cursor, values) {
+    constrain(cursor, values) {
       return chain === null
         ? constrainXY(cursor, values)
         : constrainPolar(chain.last.at, cursor, values);
     },
-    measure(_session, at) {
+    measure(at) {
       return chain === null ? measureXY(at) : measurePolar(chain.last.at, at);
     },
     onMove(ctx, session, x, y, mods) {
@@ -426,11 +427,9 @@ function typedConstraints(
   typedAxis: AxisKind | null,
   values: ReadonlyMap<string, number>,
 ): readonly SketchConstraint[] {
-  const out: SketchConstraint[] = [];
-  const length = values.get('length');
-  if (length !== undefined) {
-    out.push({ kind: 'distance', id: newConstraintId(ctx), a: line.p1, b: line.p2, value: length });
-  }
+  const out: SketchConstraint[] = [
+    ...distanceDimension(ctx, line.p1, line.p2, values.get('length')),
+  ];
   if (typedAxis !== null) {
     out.push({ kind: typedAxis, id: newConstraintId(ctx), line: line.id });
   } else if (values.has('angle')) {
