@@ -36,8 +36,8 @@ export interface ActionState {
   /** action.enabled and the current mode is in `modes`. */
   readonly enabled: boolean;
   readonly modes: readonly Mode[];
-  /** action.checked (M31); false without it. */
-  readonly checked: boolean;
+  /** action.checked (M31): true/false of a toggle; null = the action is no toggle. */
+  readonly checked: boolean | null;
 }
 
 export interface ActionRegistry {
@@ -94,7 +94,7 @@ export function createActionRegistry(deps: { mode?: Observable<Mode> } = {}): Ac
       group: a.group ?? null,
       enabled: isEnabled(a),
       modes: modesOf(a),
-      checked: a.checked?.get() ?? false,
+      checked: a.checked?.get() ?? null,
     });
   }
 
@@ -110,7 +110,7 @@ export function createActionRegistry(deps: { mode?: Observable<Mode> } = {}): Ac
       if (
         action === undefined ||
         old === undefined ||
-        (old.enabled === isEnabled(action) && old.checked === (action.checked?.get() ?? false))
+        (old.enabled === isEnabled(action) && old.checked === (action.checked?.get() ?? null))
       )
         continue;
       next ??= [...current];

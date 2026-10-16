@@ -175,7 +175,7 @@ function actionItem(
     icon,
     command: Object.freeze({ kind: 'action', id: action.id }),
     menuOnly,
-    active: action.checked,
+    active: action.checked === true,
     checked: action.checked,
     variants: NO_VARIANTS,
   });
@@ -267,7 +267,7 @@ export function toolbarGroups(input: {
       menuOnly: false,
       active: input.activeTool === tool.id,
       // A tool is no toggle; its state is `active`.
-      checked: false,
+      checked: null,
       variants: NO_VARIANTS,
     });
     if (tool.family === undefined) {

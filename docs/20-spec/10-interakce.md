@@ -205,7 +205,7 @@ Stav, který UI zobrazuje, vystavují prezentační modely jako `Observable<T>` 
 | `ToolbarModel` (M20) | `groups: Observable<readonly ToolbarGroup[]>` (nástroje a akce aktuálního režimu po skupinách, povolení, `active`, `menuOnly`) | `run(item)` |
 | `DocumentListModel` (M20) | `list: Observable<DocumentListState>` (`loading` / `loaded` / `failed`), `busy`, `error`, `renaming` | `load`, `retry`, `create`, `importFile`, `remove`, `beginRename`, `commitRename`, `cancelRename` |
 
-- **`ToolbarModel`** (`createToolbarModel({ tools, toolList, actions, locked, mode, contributions })`): logika lišty z dřívějšího `ui/toolbar-groups.ts` (filtr podle režimu, povolení, pořadí skupin) a navíc `ToolbarItem.active` (aktivní nástroj). Obsah lišty režimu nezná, dodá ho příspěvek:
+- **`ToolbarModel`** (`createToolbarModel({ tools, toolList, actions, locked, mode, contributions })`): logika lišty z dřívějšího `ui/toolbar-groups.ts` (filtr podle režimu, povolení, pořadí skupin) a navíc `ToolbarItem.active` (aktivní nástroj; od M31 i tlačítko akce s `checked === true`; `ToolbarItem.checked` = `ActionState.checked`, u nástroje `null`). Obsah lišty režimu nezná, dodá ho příspěvek:
   - **Povolení nástroje bez akce** (M27): nástroj bez klávesové zkratky nemá akci; jeho položka je povolená podle akce, je-li, jinak v režimu `sketch` vždy a v ostatních režimech jen bez zámku (`action?.enabled ?? (mode === 'sketch' || !locked)`) – stejné pravidlo jako akce nástrojů ve vestavěných akcích (ve skicáři se zámek editace nepočítá). Dřív se neprojevilo, protože všechny nástroje skicáře měly zkratku.
 
   ```ts
@@ -1162,7 +1162,7 @@ export function createSketchActions(deps: { registry: ActionRegistry; sketches: 
   - Kreslicí nástroje (úsečka, obdélník, kružnice, oblouk) volají `snapAt` s `snapGrid(sketches, mods)` = `gridSnap && !mods.alt ? gridStep() : null` (`common.ts`) při pohybu (náhled) i při kliku. `ClickHandlers.onMove(ctx, session, x, y, mods)` proto dostává i `mods: KeyMods`. Automatické `horizontal` a `vertical` úsečky se počítají z přichycených bodů. Výběrový nástroj (tažení bodu) a nástroj kóty se nepřichytávají.
 - **Náhled:** kreslicí nástroje kreslí rozpracovaný tvar přes `viewport.overlay.set('sketch-tool', …)` ve světových souřadnicích stylem `preview` (kružnice a oblouk lomenou čarou, 64 úseků na kruh); při deaktivaci `overlay.remove('sketch-tool')`.
 - Nástroje bez otevřené session nic nedělají.
-- **Akce** (`createSketchActions`, všechny `modes: ['sketch']`): `sketch.finish` a `sketch.cancel` (skupina `sketch`, bez zkratky, povolené s otevřenou session); `sketch.delete` (`Delete`, `Backspace`; povolená s neprázdným výběrem) → `remove(výběr)`; `sketch.construction` (`Q`; výběr obsahuje křivku) → `toggleConstruction`; pro každý druh z `GEOMETRIC_CONSTRAINT_KINDS` akce `sketch.constraint.<kind>` (skupina `sketch.constraint`, popisek `sketch.constraint.<kind>`, zkratky `H` vodorovná, `V` svislá, `I` shoda, ostatní bez; povolená, když `constraintFor(kind, vybrané entity) !== null`) → `addConstraint({ ...návrh, id: ids.next() })`.
+- **Akce** (`createSketchActions`, všechny `modes: ['sketch']`): `sketch.finish` a `sketch.cancel` (skupina `sketch`, bez zkratky, povolené s otevřenou session); `sketch.delete` (`Delete`, `Backspace`; povolená s neprázdným výběrem) → `remove(výběr)`; `sketch.construction` (`Q`, skupina `sketch.draw`; od M31 povolená s otevřenou session, `checked` = `SketchState.constructionMode`) → s křivkou ve výběru `toggleConstruction`, jinak `setConstructionMode(!constructionMode)` ([[12-skicar#Režim konstrukce]]); pro každý druh z `GEOMETRIC_CONSTRAINT_KINDS` akce `sketch.constraint.<kind>` (skupina `sketch.constraint`, popisek `sketch.constraint.<kind>`, zkratky `H` vodorovná, `V` svislá, `I` shoda, ostatní bez; povolená, když `constraintFor(kind, vybrané entity) !== null`) → `addConstraint({ ...návrh, id: ids.next() })`.
 
 ## Vestavěné akce
 
@@ -1208,6 +1208,7 @@ export interface Action {
   readonly shortcut?: string | readonly string[];  // 'Mod+Z'; víc zkratek = alternativy ('Delete', 'Backspace')
   readonly group?: string;          // 'feature' = kontextové menu featury (M10)
   readonly enabled: Observable<boolean>;
+  readonly checked?: Observable<boolean>;   // M31: přepínač (režim konstrukce); tlačítko v liště svítí, když true
   run(): void;
 }
 
@@ -1217,6 +1218,7 @@ export interface ActionState {
   readonly shortcut: string | null;   // první zkratka (pro zobrazení)
   readonly group: string | null;
   readonly enabled: boolean;
+  readonly checked: boolean | null;   // M31: hodnota `checked`, null = akce není přepínač
 }
 
 export interface ActionRegistry {

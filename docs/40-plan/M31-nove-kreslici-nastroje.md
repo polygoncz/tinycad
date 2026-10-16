@@ -47,7 +47,7 @@ Upřesnění v sezení 2026-10-16:
 - [x] Konstrukce obdélníků a drážek.
 - [ ] Nástroje obdélník středem a třemi body, bod, přímka.
 - [ ] Nástroje drážek.
-- [ ] Režim konstrukce.
+- [x] Režim konstrukce.
 - [ ] Snapper, glyfy, e2e a spec.
 
 ## Implementační plán
@@ -81,7 +81,7 @@ Jeden úkol = jedno spuštění subagenta `implementer`. Sdílené typy: [[12-sk
 
 ### 5. Režim konstrukce
 
-- **Soubory:** `src/sketcher/sketch-session.ts` (`SketchState.constructionMode`, přepnutí), `sketch-actions.ts` a `constants.ts` (akce `sketch.constructionMode`, klávesa `Q`), společné místo zápisu geometrie nástrojů (`common.ts`) – v režimu konstrukce dostanou nové křivky `construction: true`; `ui` přepínač v liště (stav zapnuto).
+- **Soubory:** `src/sketcher/sketch-session.ts` (`SketchState.constructionMode`, přepnutí), `sketch-actions.ts` a `constants.ts` (podle B4 rozšířená akce `sketch.construction`, klávesa `Q`), společné místo zápisu geometrie nástrojů (`common.ts`) – v režimu konstrukce dostanou nové křivky `construction: true`; `ui` přepínač v liště (stav zapnuto).
 - **Testy:** session (přepnutí, nástroj v režimu kreslí konstrukční křivky, body beze změny), akce a klávesa, lišta.
 - **Hotovo když:** testy projdou a `npm run check` je zelený.
 

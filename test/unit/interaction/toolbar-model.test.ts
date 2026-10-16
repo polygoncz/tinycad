@@ -38,7 +38,7 @@ function anAction(
   shortcut: string | null = null,
   change: Partial<ActionState> = {},
 ): ActionState {
-  return { id, label: id, shortcut, group: null, enabled, modes: BOTH, checked: false, ...change };
+  return { id, label: id, shortcut, group: null, enabled, modes: BOTH, checked: null, ...change };
 }
 
 /** An action of the action group 'probe.group' that exists only in the mode 'sketch'. */
@@ -162,7 +162,7 @@ describe('toolbarGroups', () => {
         command: { kind: 'action', id: 'undo' },
         menuOnly: false,
         active: false,
-        checked: false,
+        checked: null,
         variants: [],
       },
       {
@@ -176,7 +176,7 @@ describe('toolbarGroups', () => {
         command: { kind: 'action', id: 'redo' },
         menuOnly: false,
         active: false,
-        checked: false,
+        checked: null,
         variants: [],
       },
     ]);
@@ -216,7 +216,7 @@ describe('toolbarGroups', () => {
         command: { kind: 'action', id: 'tool.box' },
         menuOnly: false,
         active: false,
-        checked: false,
+        checked: null,
         variants: [],
       },
     ]);
@@ -257,7 +257,7 @@ describe('toolbarGroups', () => {
     );
     expect(items.get('probe.done')).toMatchObject({ active: true, checked: true });
     expect(items.get('probe.a')).toMatchObject({ active: true, checked: true });
-    expect(items.get('probe.cancel')).toMatchObject({ active: false, checked: false });
+    expect(items.get('probe.cancel')).toMatchObject({ active: false, checked: null });
   });
 
   it('in the model mode only the tools of the model are shown, no contribution of another mode', () => {
@@ -297,7 +297,7 @@ describe('toolbarGroups', () => {
       command: { kind: 'action', id: 'probe.done' },
       menuOnly: false,
       active: false,
-      checked: false,
+      checked: null,
       variants: [],
     });
     expect(items.get('probe.cancel')?.icon).toBe('x');

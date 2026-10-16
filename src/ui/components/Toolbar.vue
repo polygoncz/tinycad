@@ -184,7 +184,7 @@ function runMenuItem(id: string): void {
                 type="button"
                 class="tool"
                 :class="{ active: item.active }"
-                :aria-pressed="item.checked ? 'true' : undefined"
+                :aria-pressed="item.checked === null ? undefined : item.checked ? 'true' : 'false'"
                 :disabled="!item.enabled"
                 :aria-label="t(item.label)"
                 @click="run(item)"

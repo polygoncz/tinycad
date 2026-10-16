@@ -140,7 +140,7 @@ function setup() {
   };
   const enabled = (id: string): boolean | undefined =>
     registry.actions.get().find((a) => a.id === id)?.enabled;
-  const checked = (id: string): boolean | undefined =>
+  const checked = (id: string): boolean | null | undefined =>
     registry.actions.get().find((a) => a.id === id)?.checked;
   return { registry, actions, open, close, enabled, checked };
 }

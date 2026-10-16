@@ -56,7 +56,7 @@ describe('ActionRegistry', () => {
           group: null,
           enabled: true,
           modes: ALL_MODES,
-          checked: false,
+          checked: null,
         },
         {
           id: 'edit.redo',
@@ -65,7 +65,7 @@ describe('ActionRegistry', () => {
           group: null,
           enabled: false,
           modes: ALL_MODES,
-          checked: false,
+          checked: null,
         },
       ]);
     });
@@ -137,7 +137,7 @@ describe('ActionRegistry', () => {
       expect(calls).toBe(1);
     });
 
-    it('checked follows the observable of the action, false without one (M31)', () => {
+    it('checked follows the observable of the action, null without one (M31)', () => {
       const registry = createActionRegistry();
       const checked = new ObservableValue(false);
       registry.register({ ...anAction('a'), checked: checked.asObservable() });
@@ -152,7 +152,7 @@ describe('ActionRegistry', () => {
       expect(calls).toBe(1);
       expect(after[0]).toEqual({ ...before[0], checked: true });
       expect(after[1]).toBe(before[1]);
-      expect(after[1]?.checked).toBe(false);
+      expect(after[1]?.checked).toBe(null);
       checked.set(true);
       expect(calls).toBe(1);
     });

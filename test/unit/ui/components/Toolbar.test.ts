@@ -24,7 +24,7 @@ function anItem(id: string, change: Partial<ToolbarItem> = {}): ToolbarItem {
     command: { kind: 'tool', id },
     menuOnly: false,
     active: false,
-    checked: false,
+    checked: null,
     variants: [],
     ...change,
   };
@@ -45,6 +45,8 @@ const GROUPS: readonly ToolbarGroup[] = [
         checked: true,
         active: true,
       }),
+      // A toggle that is off: not active, aria-pressed="false".
+      anItem('toggleOff', { command: { kind: 'action', id: 'toggleOff' }, checked: false }),
     ],
   },
 ];
@@ -96,6 +98,7 @@ describe('Toolbar (spec 11, "Komponenty"; M27 split button)', () => {
       'More: 3-point circle',
       'probe.rectangle',
       'probe.construction',
+      'probe.toggleOff',
       'More tools',
     ]);
     const arrow = buttons(html).find((tag) => ariaLabel(tag) === 'More: 3-point circle');
@@ -109,12 +112,15 @@ describe('Toolbar (spec 11, "Komponenty"; M27 split button)', () => {
     expect(buttons(html).filter((tag) => tag.includes('aria-haspopup="menu"'))).toHaveLength(1);
   });
 
-  it('a checked action is active and pressed; other buttons have no aria-pressed (M31)', async () => {
+  it('a checked action is active and pressed, an unchecked toggle not pressed; other buttons have no aria-pressed (M31)', async () => {
     const html = await render('en');
     const toggle = buttons(html).find((tag) => ariaLabel(tag) === 'probe.construction');
     expect(toggle).toMatch(/class="[^"]*\bactive\b/);
     expect(toggle).toContain('aria-pressed="true"');
-    expect(buttons(html).filter((tag) => tag.includes('aria-pressed'))).toHaveLength(1);
+    const off = buttons(html).find((tag) => ariaLabel(tag) === 'probe.toggleOff');
+    expect(off).not.toMatch(/class="[^"]*\bactive\b/);
+    expect(off).toContain('aria-pressed="false"');
+    expect(buttons(html).filter((tag) => tag.includes('aria-pressed'))).toHaveLength(2);
   });
 
   it('the arrow is named in Czech', async () => {

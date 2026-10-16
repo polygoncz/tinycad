@@ -840,12 +840,12 @@ export function addDrawn(session: SketchSession, add: SketchData, opts?: { reado
 
 // interaction/actions.ts
 interface Action { …; /** M31: přepínač – tlačítko v liště svítí, když je true. */ readonly checked?: Observable<boolean> }
-interface ActionState { …; readonly checked: boolean }   // false bez `checked`
+interface ActionState { …; readonly checked: boolean | null }   // null = akce není přepínač (bez `checked`)
 ```
 
 - **Akce `sketch.construction`** (`Q`): povolená s otevřenou session (dřív jen s křivkou ve výběru); `run`: výběr obsahuje křivku → `toggleConstruction(výběr)`, jinak `setConstructionMode(!constructionMode)`. `checked` = `constructionMode`.
 - **Kdo používá `addDrawn`:** všechny kreslicí nástroje (úsečka a tečný oblouk v polyline, obdélníky, kružnice, oblouky, spliny, drážky, přímka, bod). Mimo kreslicí nástroje (kóta, výběr, budoucí úpravy jiných stop) se `addGeometry` volá dál přímo a režim ho neovlivní – trim nebo zrcadlení tak neudělá z normální křivky konstrukční. Přímka je konstrukční vždy; bod nemá `construction`.
-- **Lišta:** tlačítko akce ve skupině `draw` za nástroji (ikona `line-dashed`), `ToolbarItem.active` u tlačítka akce = `ActionState.checked` (dosud „nikdy akce“); `Toolbar.vue` ho kreslí stejně jako aktivní nástroj, s `aria-pressed`.
+- **Lišta:** akce má skupinu akcí `sketch.draw` (`SKETCH_DRAW_ACTION_GROUP`, sketcher `constants.ts`) a `SKETCH_TOOLBAR.actionGroups` ji dá do skupiny lišty `draw` za nástroje (ikona `line-dashed`; `actionButtons` by ji daly před nástroje). `ToolbarItem.active` u tlačítka akce = `checked === true` (dosud „nikdy akce“), `ToolbarItem.checked` = `ActionState.checked`; `Toolbar.vue` kreslí přepínač jako aktivní nástroj, s `aria-pressed="true"`/`"false"` ([[11-ui#Komponenty]]).
 - Režim se neukládá a přežije přepnutí nástroje; zavřením session zanikne.
 
 **Testy:** konstrukce (poloha každého tvaru, degenerované vstupy, orientace oblouků proti směru, topologie: křivky, vazby a `required`); s planegcs: každý tvar má `dof` z tabulky, změna jedné kóty (šířka, poloměr) drží tvar; nástroje s `FakeViewport` a `FakeSolver`.
