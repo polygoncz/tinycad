@@ -23,6 +23,9 @@ import { createRectangle3pTool } from './sketch-tools/rectangle3p-tool';
 import { createSketchSelectTool } from './sketch-tools/select-tool';
 import { createSlotTool } from './sketch-tools/slot-tool';
 import { createSplineTool } from './sketch-tools/spline-tool';
+import { createSplitTool } from './sketch-tools/split-tool';
+import { createExtendTool } from './sketch-tools/extend-tool';
+import { createTrimTool } from './sketch-tools/trim-tool';
 import { createXLineTool } from './sketch-tools/xline-tool';
 
 const MODEL: readonly Mode[] = Object.freeze(['model']);
@@ -233,15 +236,46 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       family: 'slot',
       create: () => createSlotTool(sketches, 'arc'),
     }),
-    // Mirror and patterns (M36) are one family, so the toolbar fits 1280 px; no shortcut. Tabler
-    // icons of a flip, a grid of dots and a full turn.
+    // All modify tools are ONE family 'modify' (Pavel 2026-10-16): the sketcher toolbar must fit
+    // 1280 px with the group Vazby. Trim first (the shown variant until another one is used, the
+    // only shortcut T), then extend and split (M33), mirror and patterns (M36); fillet, chamfer
+    // and offset (M34, M35) join the same family.
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.trim',
+      label: 'tool.trim',
+      icon: 'scissors',
+      group: 'modify',
+      modes: SKETCH,
+      shortcut: 'T',
+      family: 'modify',
+      create: () => createTrimTool(sketches),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.extend',
+      label: 'tool.extend',
+      icon: 'arrow-bar-to-right',
+      group: 'modify',
+      modes: SKETCH,
+      family: 'modify',
+      create: () => createExtendTool(sketches),
+    }),
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.split',
+      label: 'tool.split',
+      icon: 'separator',
+      group: 'modify',
+      modes: SKETCH,
+      family: 'modify',
+      create: () => createSplitTool(sketches),
+    }),
+    // Mirror and patterns (M36), no shortcut; Tabler icons of a flip, a grid of dots and a full turn.
     Object.freeze<ToolDescriptor>({
       id: 'sketch.mirror',
       label: 'tool.mirror',
       icon: 'flip-horizontal',
       group: 'modify',
       modes: SKETCH,
-      family: 'pattern',
+      family: 'modify',
       create: () => createMirrorTool(sketches),
     }),
     Object.freeze<ToolDescriptor>({
@@ -250,7 +284,7 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       icon: 'grid-dots',
       group: 'modify',
       modes: SKETCH,
-      family: 'pattern',
+      family: 'modify',
       create: () => createLinearPatternTool(sketches),
     }),
     Object.freeze<ToolDescriptor>({
@@ -259,7 +293,7 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       icon: 'rotate-360',
       group: 'modify',
       modes: SKETCH,
-      family: 'pattern',
+      family: 'modify',
       create: () => createCircularPatternTool(sketches),
     }),
     Object.freeze<ToolDescriptor>({

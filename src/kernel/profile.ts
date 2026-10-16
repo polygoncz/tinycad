@@ -3,6 +3,8 @@ import { err, ok, plane, type Plane, type Result, type Vec2, type Vec3 } from '@
 // Planar profiles for SketchOps.makeFace (spec 06, "Stav po M12") and the one check of a face
 // input shared by every GeometryKernel implementation (contract bullet makeFace). Since M30 also
 // the regions of SketchOps.profileRegions and the check of its input (spec 06, "Stav po M30").
+// Since M33 the intersections of SketchOps.curveIntersections and the check of the curveSegment
+// input (spec 06, "Stav po M33").
 
 /**
  * 2D curve in a plane; the same shape as Curve2 from sketch (kernel does not depend on sketch).
@@ -65,6 +67,29 @@ export interface ProfileRegions {
 /** A curve of the profileRegions input after the check: its id is required (spec 06, M30). */
 export type IdentifiedCurve = ProfileCurve & { readonly id: string };
 
+/**
+ * A common point of the curves `a` and `b` (M33, spec 06 "Stav po M33"); a === b is a spline
+ * meeting itself (ta < tb). `ta` and `tb` are the parameters t of spec 12 "Port a parametr
+ * křivky": a line [0, 1] from `from` to `to`; an arc the angle from `from` in its direction,
+ * [0, sweep]; a circle the angle atan2(p − center) in [0, 2π); a spline its knot parameter.
+ */
+export interface CurveIntersection {
+  readonly a: string;
+  readonly b: string;
+  readonly point: Vec2;
+  readonly ta: number;
+  readonly tb: number;
+  /** An end of a piece the two curves share (overlapping curves). */
+  readonly overlap?: true;
+}
+
+/** The input of curveSegment after the check (M33): `from < to`, both in the curve's range. */
+export interface CurveSegmentInput {
+  readonly curve: ProfileCurve;
+  readonly from: number;
+  readonly to: number;
+}
+
 /** Spec 06: tolerance of plane.isOrthonormal for the face plane. */
 const ORTHONORMAL_TOLERANCE = 1e-9;
 /** Spec 06: two points coincide within this · max(1, |coordinate|), per coordinate. */
@@ -75,6 +100,12 @@ const RADIUS_TOLERANCE = 1e-7;
 const MAX_SPLINE_DEGREE = 25;
 /** Spec 06: an arc radius must be larger than this. */
 const MIN_ARC_RADIUS = 1e-9;
+/**
+ * curveSegment: a parameter this much · max(1, |bound|) outside the range of the curve is taken
+ * as the bound itself (a t computed by the caller from the same data may miss it by rounding).
+ */
+const PARAM_TOLERANCE = 1e-9;
+const TURN = 2 * Math.PI;
 
 /** For both kernels: an empty array = the input is valid, otherwise descriptions of the errors (message 'invalid-input'). */
 export function validateFaceInput(p: unknown): readonly string[] {
@@ -245,6 +276,77 @@ export function parseProfileRegionsInput(
     // A getter that throws, a proxy… – input outside the types is still just invalid.
     return err([...errors, `cannot read input: ${e instanceof Error ? e.message : String(e)}`]);
   }
+}
+
+/**
+ * Checks `p` against the curveSegment contract (spec 06, M33) and returns a fresh copy of it, or
+ * every error found: the curve as makeFace takes it (its id optional), finite `from < to` in the
+ * range of t (spec 12): a line [0, 1], an arc [0, sweep], a circle `from` in [0, 2π) and
+ * `to ≤ from + 2π`, a spline its knot range. A parameter just outside the range (rounding) is
+ * moved onto its bound. Reads `p` synchronously and never throws.
+ */
+export function parseCurveSegmentInput(p: unknown): Result<CurveSegmentInput, readonly string[]> {
+  const errors: string[] = [];
+  try {
+    if (!isObject(p)) return err(['input must be an object']);
+    const curve = readCurve(Reflect.get(p, 'curve'), 'curve', errors, FACE_CURVE);
+    const from: unknown = Reflect.get(p, 'from');
+    const to: unknown = Reflect.get(p, 'to');
+    if (typeof from !== 'number' || !Number.isFinite(from)) errors.push('from must be finite');
+    if (typeof to !== 'number' || !Number.isFinite(to)) errors.push('to must be finite');
+    if (
+      errors.length > 0 ||
+      curve === undefined ||
+      curve === null ||
+      typeof from !== 'number' ||
+      typeof to !== 'number'
+    ) {
+      return err(errors.length > 0 ? errors : ['invalid input']);
+    }
+    if (!(from < to)) return err(['from must be smaller than to']);
+    const [low, high] = paramRange(curve);
+    const start = snapTo(from, low);
+    // A circle may run past 2π, by less than one turn from `from`: a full turn would be an arc
+    // with from = to, which makeFace and profileRegions take as zero length (spec 06).
+    const end = snapTo(to, curve.kind === 'circle' ? start + TURN : high);
+    if (start < low || start >= (curve.kind === 'circle' ? TURN : high)) {
+      return err([`from must lie in the range of the curve [${String(low)}, ${String(high)}]`]);
+    }
+    if (curve.kind === 'circle' ? end >= start + TURN : end > high) {
+      return err([
+        curve.kind === 'circle'
+          ? 'to must be less than one turn after from'
+          : `to must lie in the range of the curve [${String(low)}, ${String(high)}]`,
+      ]);
+    }
+    return ok({ curve, from: start, to: end });
+  } catch (e) {
+    // A getter that throws, a proxy… – input outside the types is still just invalid.
+    return err([...errors, `cannot read input: ${e instanceof Error ? e.message : String(e)}`]);
+  }
+}
+
+/** The range of t (spec 12): a circle [0, 2π], an arc [0, sweep], a line [0, 1], a spline its knots. */
+function paramRange(c: ProfileCurve): readonly [number, number] {
+  switch (c.kind) {
+    case 'line':
+      return [0, 1];
+    case 'circle':
+      return [0, TURN];
+    case 'arc': {
+      const a0 = Math.atan2(c.from[1] - c.center[1], c.from[0] - c.center[0]);
+      const a1 = Math.atan2(c.to[1] - c.center[1], c.to[0] - c.center[0]);
+      const sweep = (((c.ccw ? a1 - a0 : a0 - a1) % TURN) + TURN) % TURN;
+      return [0, sweep];
+    }
+    case 'bspline':
+      return [c.knots[0] ?? Number.NaN, c.knots[c.knots.length - 1] ?? Number.NaN];
+  }
+}
+
+/** `value` moved onto `bound` when it lies within PARAM_TOLERANCE of it. */
+function snapTo(value: number, bound: number): number {
+  return Math.abs(value - bound) <= PARAM_TOLERANCE * Math.max(1, Math.abs(bound)) ? bound : value;
 }
 
 /**

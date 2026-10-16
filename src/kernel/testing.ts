@@ -12,7 +12,7 @@ import { bspline, mat4, type Mat4, type Plane, type Vec2, type Vec3 } from '@/co
 import { kernelErrorCode } from './errors';
 import type { KernelErrorCode } from './errors';
 import type { Axis, BooleanOp, GeometryKernel } from './kernel';
-import type { ProfileCurve, ProfileLoop, ProfileRegions } from './profile';
+import type { CurveIntersection, ProfileCurve, ProfileLoop, ProfileRegions } from './profile';
 import { validateMeshData } from './mesh';
 import type {
   BoundingBox,
@@ -494,6 +494,14 @@ export function describeGeometryKernelContract(
         ['transform', (k: GeometryKernel) => k.transform(UNKNOWN, mat4.identity())],
         ['boolean', (k: GeometryKernel) => k.boolean('union', [], [])],
         ['makeFace', (k: GeometryKernel) => k.makeFace({ ...FACE, outer: [] })],
+        [
+          'curveIntersections',
+          (k: GeometryKernel) => k.curveIntersections({ curves: [line([0, 0], [1, 0])] }),
+        ],
+        [
+          'curveSegment',
+          (k: GeometryKernel) => k.curveSegment({ curve: line([0, 0], [1, 0]), from: 1, to: 0 }),
+        ],
         ['extrude', (k: GeometryKernel) => k.extrude(UNKNOWN, [0, 0, 1], 5)],
         ['revolve', (k: GeometryKernel) => k.revolve(UNKNOWN, Z_AXIS, TURN)],
         ['fillet', (k: GeometryKernel) => k.fillet(UNKNOWN, [0], 1)],
@@ -522,6 +530,8 @@ export function describeGeometryKernelContract(
           kernel.transform(shape, mat4.identity()),
           kernel.boolean('union', [shape], [other]),
           kernel.makeFace(FACE),
+          kernel.curveIntersections({ curves: [] }),
+          kernel.curveSegment({ curve: line([0, 0], [1, 0]), from: 0, to: 1 }),
           kernel.extrude(profile, [0, 0, 1], 5),
           kernel.revolve(profile, Z_AXIS, TURN),
           kernel.fillet(shape, [0], 0.5),
@@ -887,6 +897,14 @@ export function describeGeometryKernelContract(
 
     describe('profileRegions (M30)', () => {
       describeProfileRegions(() => kernel);
+    });
+
+    describe('curveIntersections (M33)', () => {
+      describeCurveIntersections(() => kernel);
+    });
+
+    describe('curveSegment (M33)', () => {
+      describeCurveSegment(() => kernel);
     });
 
     describe('extrude', () => {
@@ -2630,4 +2648,431 @@ function describeProfileRegions(kernelOf: () => GeometryKernel): void {
 /** A curve with its id in upper case (rectangles with ids AB BC CD DA). */
 function upperId(c: ProfileCurve): ProfileCurve {
   return c.id === undefined ? c : { ...c, id: c.id.toUpperCase() };
+}
+
+// --- curveIntersections, curveSegment (M33) --------------------------------------------------
+// Spec 06 "Stav po M33", spec 12 "Port a parametr křivky": points within LOOP_POINT_TOLERANCE ·
+// max(1, |coordinate|), parameters t by their definition (spec 12) within PARAM_TOLERANCE.
+
+/** A parameter of an intersection agrees within this (absolute). */
+const PARAM_TOLERANCE = 1e-6;
+
+type IntersectionsParams = Parameters<GeometryKernel['curveIntersections']>[0];
+type SegmentParams = Parameters<GeometryKernel['curveSegment']>[0];
+
+/** What an intersection is compared by; `overlap` absent = a plain point. */
+interface ExpectedHit {
+  readonly a: string;
+  readonly b: string;
+  readonly point: Vec2;
+  readonly ta: number;
+  readonly tb: number;
+  readonly overlap?: true;
+}
+
+/** The point at the parameter t of spec 12 on a curve. */
+function paramPoint(c: ProfileCurve, t: number): Vec2 {
+  switch (c.kind) {
+    case 'line':
+      return [c.from[0] + (c.to[0] - c.from[0]) * t, c.from[1] + (c.to[1] - c.from[1]) * t];
+    case 'circle':
+      return [c.center[0] + c.radius * Math.cos(t), c.center[1] + c.radius * Math.sin(t)];
+    case 'arc': {
+      const r = Math.hypot(c.from[0] - c.center[0], c.from[1] - c.center[1]);
+      const a = Math.atan2(c.from[1] - c.center[1], c.from[0] - c.center[0]) + (c.ccw ? t : -t);
+      return [c.center[0] + r * Math.cos(a), c.center[1] + r * Math.sin(a)];
+    }
+    case 'bspline':
+      return bspline.evaluate(c, t);
+  }
+}
+
+function expectParamClose(actual: number | undefined, expected: number, what: string): void {
+  const a = actual ?? Number.NaN;
+  if (!(Math.abs(a - expected) <= PARAM_TOLERANCE)) {
+    expect.fail(`${what}: ${String(a)} differs from ${String(expected)}`);
+  }
+}
+
+/** Exactly the expected intersections in this order (a, b, ta), each within the tolerances. */
+function expectHits(actual: readonly CurveIntersection[], expected: readonly ExpectedHit[]): void {
+  expect(
+    actual.map((h) => `${h.a}×${h.b}`),
+    'pairs',
+  ).toEqual(expected.map((h) => `${h.a}×${h.b}`));
+  expected.forEach((e, i) => {
+    const h = actual[i];
+    const what = `hit ${String(i)} ${e.a}×${e.b}`;
+    expectPoint2Close(h?.point, e.point, `${what}: point`);
+    expectParamClose(h?.ta, e.ta, `${what}: ta`);
+    expectParamClose(h?.tb, e.tb, `${what}: tb`);
+    expect(h?.overlap, `${what}: overlap`).toBe(e.overlap);
+  });
+}
+
+/** Every hit lies on both curves at its parameters (within the point tolerance). */
+function expectHitsOnCurves(
+  hits: readonly CurveIntersection[],
+  curves: readonly ProfileCurve[],
+): void {
+  for (const h of hits) {
+    const a = curves.find((c) => c.id === h.a);
+    const b = curves.find((c) => c.id === h.b);
+    if (a === undefined || b === undefined) {
+      expect.fail(`hit ${h.a}×${h.b} of an unknown curve`);
+    }
+    expectPoint2Close(paramPoint(a, h.ta), h.point, `${h.a} at ta`);
+    expectPoint2Close(paramPoint(b, h.tb), h.point, `${h.b} at tb`);
+  }
+}
+
+/** Upper half of the circle r = 5 around the origin, from (5, 0) counter-clockwise to (−5, 0). */
+const UPPER_ARC = ccwArc('k', [0, 0], [5, 0], [-5, 0]);
+/** The same half circle clockwise from (−5, 0) to (5, 0). */
+const UPPER_ARC_CW: ProfileCurve = {
+  kind: 'arc',
+  center: [0, 0],
+  from: [-5, 0],
+  to: [5, 0],
+  ccw: false,
+  id: 'k',
+};
+/** The angle of (4, 3) on a circle around the origin. */
+const ANGLE_43 = Math.atan2(3, 4);
+/**
+ * An open cubic Bézier with a loop: x = 45t − 105t² + 70t³, y = 30t(1 − t) crosses itself at
+ * t = 1/2 ± √(3/28) (y is symmetric about 1/2, x(1/2 + u) − x(1/2 − u) = 2u(70u² − 7.5)).
+ */
+const LOOP = spline('sp', [
+  [0, 0],
+  [15, 10],
+  [-5, 10],
+  [10, 0],
+]);
+const LOOP_U = Math.sqrt(3 / 28);
+/**
+ * A quadratic spline from (0, −4) to (10, −4): x = 10t, y = −4 + 24t − 24t², so it crosses
+ * y = 0 at t = (1 ∓ 1/√3) / 2.
+ */
+const ARCH = spline(
+  'sp',
+  [
+    [0, -4],
+    [5, 8],
+    [10, -4],
+  ],
+  2,
+);
+const ARCH_T = (1 - 1 / Math.sqrt(3)) / 2;
+
+function describeCurveIntersections(kernelOf: () => GeometryKernel): void {
+  const hitsOf = (curves: readonly ProfileCurve[]): Promise<readonly CurveIntersection[]> =>
+    callWithoutThrow(() => kernelOf().curveIntersections({ curves }));
+
+  describe('intersections (spec 06 Stav po M33)', () => {
+    it('crossing lines meet once, with t of both lines', async () => {
+      const curves = [seg('p', [0, 0], [10, 0]), seg('q', [4, -2], [4, 8])];
+      expectHits(await hitsOf(curves), [{ a: 'p', b: 'q', point: [4, 0], ta: 0.4, tb: 0.2 }]);
+    });
+
+    it('a line across an arc meets it twice, ordered by ta; t of the arc from its from', async () => {
+      const curves = [seg('l', [-10, 3], [10, 3]), UPPER_ARC];
+      expectHits(await hitsOf(curves), [
+        { a: 'l', b: 'k', point: [-4, 3], ta: 0.3, tb: Math.PI - ANGLE_43 },
+        { a: 'l', b: 'k', point: [4, 3], ta: 0.7, tb: ANGLE_43 },
+      ]);
+    });
+
+    it('a clockwise arc measures t from its from in its own direction', async () => {
+      const curves = [seg('l', [-10, 3], [10, 3]), UPPER_ARC_CW];
+      expectHits(await hitsOf(curves), [
+        { a: 'l', b: 'k', point: [-4, 3], ta: 0.3, tb: ANGLE_43 },
+        { a: 'l', b: 'k', point: [4, 3], ta: 0.7, tb: Math.PI - ANGLE_43 },
+      ]);
+    });
+
+    it('a circle has t = atan2(p − center) in [0, 2π)', async () => {
+      const curves = [seg('l', [4, -10], [4, 10]), ring('c', [1, 0], 5)];
+      expectHits(await hitsOf(curves), [
+        { a: 'l', b: 'c', point: [4, -4], ta: 0.3, tb: 2 * Math.PI - Math.atan2(4, 3) },
+        { a: 'l', b: 'c', point: [4, 4], ta: 0.7, tb: Math.atan2(4, 3) },
+      ]);
+    });
+
+    it('a line tangent to a circle touches it once', async () => {
+      const curves = [ring('c', [0, 0], 5), seg('l', [-10, 5], [10, 5])];
+      expectHits(await hitsOf(curves), [
+        { a: 'c', b: 'l', point: [0, 5], ta: Math.PI / 2, tb: 0.5 },
+      ]);
+    });
+
+    it('tangent circles touch once', async () => {
+      const curves = [ring('c1', [0, 0], 2), ring('c2', [0, 5], 3)];
+      expectHits(await hitsOf(curves), [
+        { a: 'c1', b: 'c2', point: [0, 2], ta: Math.PI / 2, tb: (3 * Math.PI) / 2 },
+      ]);
+    });
+
+    it('lines sharing an end meet in it', async () => {
+      const curves = [seg('ab', [0, 0], [10, 0]), seg('bc', [10, 0], [10, 5])];
+      expectHits(await hitsOf(curves), [{ a: 'ab', b: 'bc', point: [10, 0], ta: 1, tb: 0 }]);
+    });
+
+    it('overlapping lines give both ends of the shared piece as overlap', async () => {
+      const curves = [seg('ab', [0, 0], [10, 0]), seg('pq', [4, 0], [14, 0])];
+      expectHits(await hitsOf(curves), [
+        { a: 'ab', b: 'pq', point: [4, 0], ta: 0.4, tb: 0, overlap: true },
+        { a: 'ab', b: 'pq', point: [10, 0], ta: 1, tb: 0.6, overlap: true },
+      ]);
+    });
+
+    it('a spline across a line: t of the spline is its knot parameter', async () => {
+      const curves = [ARCH, seg('l', [-2, 0], [18, 0])];
+      const hits = await hitsOf(curves);
+      expectHits(hits, [
+        { a: 'sp', b: 'l', point: [10 * ARCH_T, 0], ta: ARCH_T, tb: (10 * ARCH_T + 2) / 20 },
+        {
+          a: 'sp',
+          b: 'l',
+          point: [10 * (1 - ARCH_T), 0],
+          ta: 1 - ARCH_T,
+          tb: (10 * (1 - ARCH_T) + 2) / 20,
+        },
+      ]);
+      expectHitsOnCurves(hits, curves);
+    });
+
+    it('a spline crossing itself is a hit of the spline with itself, ta < tb', async () => {
+      const ta = 0.5 - LOOP_U;
+      const hits = await hitsOf([LOOP]);
+      expectHits(hits, [
+        { a: 'sp', b: 'sp', point: bspline.evaluate(LOOP, ta), ta, tb: 0.5 + LOOP_U },
+      ]);
+      expectHitsOnCurves(hits, [LOOP]);
+    });
+
+    it('a spline across an arc lies on both at its parameters', async () => {
+      const curves = [
+        UPPER_ARC_CW,
+        spline('sp', [
+          [-6, 0],
+          [-2, 9],
+          [2, -3],
+          [6, 6],
+        ]),
+      ];
+      const hits = await hitsOf(curves);
+      expect(hits.length).toBeGreaterThan(0);
+      expectHitsOnCurves(hits, curves);
+    });
+
+    it('pairs follow the input order (a before b), then ta', async () => {
+      const curves = [
+        seg('h', [0, 0], [10, 0]),
+        seg('v8', [8, -1], [8, 1]),
+        seg('v2', [2, -1], [2, 1]),
+        seg('w', [-1, 0.5], [11, 0.5]),
+      ];
+      expectHits(await hitsOf(curves), [
+        { a: 'h', b: 'v8', point: [8, 0], ta: 0.8, tb: 0.5 },
+        { a: 'h', b: 'v2', point: [2, 0], ta: 0.2, tb: 0.5 },
+        { a: 'v8', b: 'w', point: [8, 0.5], ta: 0.75, tb: 0.75 },
+        { a: 'v2', b: 'w', point: [2, 0.5], ta: 0.75, tb: 0.25 },
+      ]);
+    });
+
+    it('curves apart, no curves, a curve alone: no intersections', async () => {
+      expect(await hitsOf([seg('p', [0, 0], [1, 0]), ring('c', [5, 5], 1)])).toEqual([]);
+      expect(await hitsOf([])).toEqual([]);
+      expect(await hitsOf([UPPER_ARC])).toEqual([]);
+    });
+
+    it('a curve of zero length is left out', async () => {
+      const curves = [seg('p', [0, 0], [10, 0]), seg('z', [5, 0], [5, 0])];
+      expect(await hitsOf(curves)).toEqual([]);
+    });
+  });
+
+  describe('input (spec 06 curveIntersections)', () => {
+    it.each([
+      [
+        'a curve without id',
+        [seg('p', [0, 0], [1, 0]), { kind: 'line', from: [0, 0], to: [1, 1] }],
+      ],
+      ['a duplicate id', [seg('p', [0, 0], [1, 0]), seg('p', [0, 1], [1, 1])]],
+      ['a NaN radius', [ring('c', [0, 0], Number.NaN)]],
+    ])('%s rejects with invalid-input', async (_name, curves) => {
+      // Some curves break the types on purpose; the cast through unknown lets them in.
+      const params = { curves } as unknown as IntersectionsParams;
+      expect(await rejectionCode(() => kernelOf().curveIntersections(params))).toBe(
+        'invalid-input',
+      );
+    });
+
+    it('curveIntersections(null) rejects instead of throwing', async () => {
+      // Outside the types on purpose.
+      const params = null as unknown as IntersectionsParams;
+      expect(await rejectionCode(() => kernelOf().curveIntersections(params))).toBe(
+        'invalid-input',
+      );
+    });
+
+    it('creates no handle', async () => {
+      await hitsOf([seg('l', [-10, 3], [10, 3]), UPPER_ARC, LOOP]);
+      expect(await kernelOf().liveHandleCount()).toBe(0);
+    });
+
+    it('changing the curves right after the call, before await, does not change the result', async () => {
+      const end: Vec2 = [4, 8];
+      const curves: ProfileCurve[] = [seg('p', [0, 0], [10, 0]), seg('q', [4, -2], end)];
+      const params = { curves };
+      const found = callWithoutThrow(() => kernelOf().curveIntersections(params));
+      // The inputs are readonly; the test writes into them on purpose.
+      Reflect.set(end, 0, 40);
+      curves.push(seg('x', [5, -5], [5, 5]));
+      Reflect.set(params, 'curves', []);
+      expectHits(await found, [{ a: 'p', b: 'q', point: [4, 0], ta: 0.4, tb: 0.2 }]);
+    });
+  });
+}
+
+/** A cubic spline with two inner knots over the knot range [0, 1]. */
+const WAVY = spline('w', [
+  [0, 0],
+  [2, 5],
+  [4, -3],
+  [6, 4],
+  [8, -2],
+  [10, 1],
+]);
+
+/** The piece lies on the original: its point at s is the original's at from + s · (to − from). */
+function expectPieceOnSpline(
+  piece: ProfileCurve,
+  original: Spline,
+  from: number,
+  to: number,
+): void {
+  if (piece.kind !== 'bspline') {
+    expect.fail(`the piece of a spline is a ${piece.kind}`);
+  }
+  expect(piece.id).toBe(original.id);
+  expect(piece.degree).toBe(original.degree);
+  expect(piece.knots[0]).toBe(0);
+  expect(piece.knots[piece.knots.length - 1]).toBe(1);
+  expect(piece.knots.length).toBe(piece.poles.length + piece.degree + 1);
+  for (let i = 0; i <= 40; i++) {
+    const s = i / 40;
+    expectPoint2Close(
+      bspline.evaluate(piece, s),
+      bspline.evaluate(original, from + s * (to - from)),
+      `piece at ${String(s)}`,
+    );
+  }
+}
+
+function describeCurveSegment(kernelOf: () => GeometryKernel): void {
+  const pieceOf = (curve: ProfileCurve, from: number, to: number): Promise<ProfileCurve> =>
+    callWithoutThrow(() => kernelOf().curveSegment({ curve, from, to }));
+
+  describe('pieces (spec 06 Stav po M33)', () => {
+    it('a piece of a line, with the id of the input', async () => {
+      expectCurveClose(
+        await pieceOf(seg('p', [0, 0], [10, 20]), 0.2, 0.7),
+        seg('p', [2, 4], [7, 14]),
+      );
+    });
+
+    it('a piece of a counter-clockwise arc', async () => {
+      const arc = ccwArc('k', [1, 1], [6, 1], [1, 6]);
+      const c = Math.cos(Math.PI / 8);
+      const s = Math.sin(Math.PI / 8);
+      const r = 5 * Math.SQRT1_2;
+      expectCurveClose(
+        await pieceOf(arc, Math.PI / 8, Math.PI / 4),
+        ccwArc('k', [1, 1], [1 + 5 * c, 1 + 5 * s], [1 + r, 1 + r]),
+      );
+    });
+
+    it('a piece of a clockwise arc runs clockwise from its from', async () => {
+      const arc: ProfileCurve = {
+        kind: 'arc',
+        center: [0, 0],
+        from: [0, 5],
+        to: [5, 0],
+        ccw: false,
+        id: 'k',
+      };
+      const r = 5 * Math.SQRT1_2;
+      expectCurveClose(await pieceOf(arc, 0, Math.PI / 4), { ...arc, to: [r, r] });
+    });
+
+    it('a piece of a circle is a counter-clockwise arc, also across 2π', async () => {
+      const circle = ring('c', [1, 2], 5);
+      expectCurveClose(
+        await pieceOf(circle, (3 * Math.PI) / 2, (5 * Math.PI) / 2),
+        ccwArc('c', [1, 2], [1, -3], [1, 7]),
+      );
+      expectCurveClose(await pieceOf(circle, 0, Math.PI), ccwArc('c', [1, 2], [6, 2], [-4, 2]));
+    });
+
+    it('a piece of a spline lies on it and has its knots in [0, 1]', async () => {
+      expectPieceOnSpline(await pieceOf(WAVY, 0.2, 0.9), WAVY, 0.2, 0.9);
+    });
+
+    it('a piece of a spline from an inner knot, and from the start', async () => {
+      expectPieceOnSpline(await pieceOf(WAVY, 1 / 3, 1), WAVY, 1 / 3, 1);
+      expectPieceOnSpline(await pieceOf(WAVY, 0, 0.5), WAVY, 0, 0.5);
+    });
+
+    it('a piece of a spline over the knot range [2, 6]', async () => {
+      const shifted: Spline = { ...WAVY, knots: WAVY.knots.map((k) => 2 + 4 * k) };
+      expectPieceOnSpline(await pieceOf(shifted, 3, 5), shifted, 3, 5);
+    });
+
+    it('the whole spline is the same spline', async () => {
+      expectCurveClose(await pieceOf(WAVY, 0, 1), WAVY);
+    });
+  });
+
+  describe('input (spec 06 curveSegment)', () => {
+    it.each([
+      ['from = to', seg('p', [0, 0], [1, 0]), 0.5, 0.5],
+      ['from > to', seg('p', [0, 0], [1, 0]), 0.6, 0.5],
+      ['a line from below 0', seg('p', [0, 0], [1, 0]), -0.1, 0.5],
+      ['a line to above 1', seg('p', [0, 0], [1, 0]), 0.5, 1.1],
+      ['an arc past its sweep', UPPER_ARC, 0, Math.PI + 0.1],
+      ['a circle from 2π', ring('c', [0, 0], 1), 2 * Math.PI, 3 * Math.PI],
+      ['a circle over more than one turn', ring('c', [0, 0], 1), 1, 1.1 + 2 * Math.PI],
+      ['a circle over exactly one turn', ring('c', [0, 0], 1), 1, 1 + 2 * Math.PI],
+      ['a spline outside its knots', WAVY, 0.5, 1.5],
+      ['a NaN parameter', seg('p', [0, 0], [1, 0]), Number.NaN, 0.5],
+      ['a line of zero length', seg('p', [1, 0], [1, 0]), 0, 1],
+    ])('%s rejects with invalid-input', async (_name, curve, from, to) => {
+      expect(await rejectionCode(() => kernelOf().curveSegment({ curve, from, to }))).toBe(
+        'invalid-input',
+      );
+    });
+
+    it('curveSegment(null) rejects instead of throwing', async () => {
+      // Outside the types on purpose.
+      const params = null as unknown as SegmentParams;
+      expect(await rejectionCode(() => kernelOf().curveSegment(params))).toBe('invalid-input');
+    });
+
+    it('creates no handle', async () => {
+      await pieceOf(WAVY, 0.2, 0.9);
+      expect(await kernelOf().liveHandleCount()).toBe(0);
+    });
+
+    it('changing the curve right after the call, before await, does not change the piece', async () => {
+      const end: Vec2 = [10, 20];
+      const params = { curve: seg('p', [0, 0], end), from: 0.2, to: 0.7 };
+      const found = callWithoutThrow(() => kernelOf().curveSegment(params));
+      // The inputs are readonly; the test writes into them on purpose.
+      Reflect.set(end, 0, 40);
+      Reflect.set(params, 'from', 0);
+      expectCurveClose(await found, seg('p', [2, 4], [7, 14]));
+    });
+  });
 }

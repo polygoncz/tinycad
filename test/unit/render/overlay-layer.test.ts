@@ -60,6 +60,34 @@ describe('OverlayLayer palette', () => {
   });
 });
 
+describe('OverlayLayer warning style (M33)', () => {
+  it('draws points and lines in red apart from the sketch and the selection, recoloured by setPalette', () => {
+    const layer = createOverlayLayer({ requestRender: () => undefined, palette: LIGHT_PALETTE });
+    const segment = [
+      [0, 0, 0],
+      [1, 0, 0],
+    ] as const;
+    layer.set('crossings', [
+      { kind: 'points', style: 'warning', points: segment },
+      { kind: 'lines', style: 'warning', points: segment },
+    ]);
+    expect(drawn(layer.group).map(({ color }) => color)).toEqual([
+      LIGHT_PALETTE.axes[0],
+      LIGHT_PALETTE.axes[0],
+    ]);
+    for (const key of ['sketch', 'sketchDefined', 'selection', 'hover', 'preview'] as const) {
+      expect(LIGHT_PALETTE.axes[0], key).not.toBe(LIGHT_PALETTE[key]);
+      expect(DARK_PALETTE.axes[0], key).not.toBe(DARK_PALETTE[key]);
+    }
+
+    layer.setPalette(DARK_PALETTE);
+    expect(drawn(layer.group).map(({ color }) => color)).toEqual([
+      DARK_PALETTE.axes[0],
+      DARK_PALETTE.axes[0],
+    ]);
+  });
+});
+
 describe('OverlayLayer bounds', () => {
   it('is null without shapes', () => {
     const layer = createOverlayLayer({ requestRender: () => undefined, palette: LIGHT_PALETTE });

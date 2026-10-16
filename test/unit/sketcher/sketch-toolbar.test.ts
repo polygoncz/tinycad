@@ -67,8 +67,8 @@ describe('SKETCH_TOOLBAR', () => {
           SKETCH_ACTION_IDS.construction,
         ],
       ],
-      // Mirror and patterns one family (M36), so the sketcher fits 1280 px.
-      ['modify', ['sketch.mirror']],
+      // All modify tools one family, trim first (M33, M36): the sketcher fits 1280 px.
+      ['modify', ['sketch.trim']],
       [
         'constrain',
         ['sketch.dimension', ...GEOMETRIC_CONSTRAINT_KINDS.map(sketchConstraintActionId)],
