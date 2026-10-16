@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 33
 aliases:
   - M33
@@ -17,7 +17,7 @@ specs:
 depends_on:
   - "[[M30-geometrie-skici-v-occt]]"
 started: 2026-10-16
-finished:
+finished: 2026-10-16
 tags:
   - milnik
 created: 2026-10-16
@@ -122,3 +122,18 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 - **Pro hlavní sezení:** skupina `modify` je v liště skicáře mezi `draw` a `constrain` – spec 11 (pořadí skupin Toolbaru) to zatím neuvádí, stopa A ji nemění. Robustnější by byl adaptér planegcs nezávislý na pořadí entit (u splinů už je) – případná otázka mimo M33.
 
 ## Retrospektiva
+
+_(Návrh stopy, Pavel doplní nebo upraví.)_
+
+**Splnění kritérií:** trim, extend a split pro všechny druhy křivek (extend úsečka a oblouk podle rozhodnutí, ke všem druhům včetně splinu) – unit testy každého řádku tabulek a pravidel dat, nástroje s fake portem, e2e `m33.spec.ts`; výsledek každé úpravy projde `parseSketchData` a skutečným řešičem (e2e). `npm run check` 6921 unit + 41 integračních, e2e 142/142.
+
+**Co bylo jinak, než se čekalo:**
+- Rozhodnutí Q093 „beze změny + body křížení“ nepotřebovalo změnu portu oblastí: body křížení vypadly z průsečíků, které skicář drží kvůli trimu.
+- OCCT hlásí tečný dotyk jako krátký společný úsek – adaptér ho musí rozlišit od skutečného překryvu.
+- Pořadí entit (body před křivkami) je pro planegcs podmínka, kterou `parseSketchData` ani `FakeSolver` nehlídají; chybu z úkolu 2 našel až e2e v úkolu 5.
+
+**Co se osvědčilo:**
+- Jedna definice parametru `t` pro jádro i TS: synchronní náhled pod kurzorem nad průsečíky spočítanými jednou po změně dat.
+- Souběh úkolů po dvojicích (1+2, 3+4) v izolovaných worktree bez konfliktů – plán stanovil nezávislost podle souborů.
+- Čistá funkce úpravy dat (`trimEdit` …) odděleně od nástroje – 40+ testů pravidel bez viewportu a řešiče.
+
