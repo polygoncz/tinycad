@@ -353,3 +353,43 @@ describe('SketchSession.setInferencePreview (M26)', () => {
     expect(viewport.overlayShapes.has('sketch-guides')).toBe(false);
   });
 });
+
+describe('SketchSession.setConstructionMode (M31)', () => {
+  it('is off on opening', async () => {
+    const { session } = await editing();
+    expect(session.state.get().constructionMode).toBe(false);
+  });
+
+  it('switches the state only: no solver, no write, no redraw', async () => {
+    const { session, solver, viewport, applied } = await editing();
+    const calls = solver.calls.length;
+    const drawing = viewport.sketchDrawings.get('sketch-edit');
+
+    session.setConstructionMode(true);
+    expect(session.state.get().constructionMode).toBe(true);
+    session.setConstructionMode(false);
+    await settle();
+
+    expect(session.state.get().constructionMode).toBe(false);
+    expect(solver.calls).toHaveLength(calls);
+    expect(applied).toEqual([]);
+    expect(viewport.sketchDrawings.get('sketch-edit')).toBe(drawing);
+  });
+
+  it('the same value publishes no new state', async () => {
+    const { session } = await editing();
+    session.setConstructionMode(true);
+    const before = session.state.get();
+
+    session.setConstructionMode(true);
+    expect(session.state.get()).toBe(before);
+  });
+
+  it('throws on a closed session', async () => {
+    const { session } = await editing();
+    session.cancel();
+    expect(() => {
+      session.setConstructionMode(true);
+    }).toThrow(/closed/);
+  });
+});

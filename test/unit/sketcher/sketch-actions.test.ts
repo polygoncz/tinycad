@@ -48,6 +48,7 @@ function aFakeSession() {
       inference: null,
       planeField: null,
       planeMissing: false,
+      constructionMode: false,
     }),
   );
   const record =
@@ -66,6 +67,10 @@ function aFakeSession() {
     remove: record('remove'),
     toggleConstruction: (ids) => {
       calls.push(['toggleConstruction', ids]);
+    },
+    setConstructionMode: (on) => {
+      calls.push(['setConstructionMode', on]);
+      state.set(Object.freeze({ ...state.get(), constructionMode: on }));
     },
     drag: () => undefined,
     endDrag: () => Promise.resolve(),
@@ -135,7 +140,9 @@ function setup() {
   };
   const enabled = (id: string): boolean | undefined =>
     registry.actions.get().find((a) => a.id === id)?.enabled;
-  return { registry, actions, open, close, enabled };
+  const checked = (id: string): boolean | undefined =>
+    registry.actions.get().find((a) => a.id === id)?.checked;
+  return { registry, actions, open, close, enabled, checked };
 }
 
 describe('createSketchActions', () => {
@@ -156,7 +163,7 @@ describe('createSketchActions', () => {
       ['sketch.finish', 'sketch.finish', 'sketch', null],
       ['sketch.cancel', 'sketch.cancel', 'sketch', null],
       ['sketch.delete', 'sketch.delete', null, 'Delete'],
-      ['sketch.construction', 'sketch.construction', null, 'Q'],
+      ['sketch.construction', 'sketch.construction', 'sketch.draw', 'Q'],
       ['sketch.constraint.coincident', 'sketch.constraint.coincident', 'sketch.constraint', 'I'],
       ['sketch.constraint.horizontal', 'sketch.constraint.horizontal', 'sketch.constraint', 'H'],
       ['sketch.constraint.vertical', 'sketch.constraint.vertical', 'sketch.constraint', 'V'],
@@ -234,17 +241,60 @@ describe('createSketchActions', () => {
     ]);
   });
 
-  it('construction is enabled when the selection has a curve', () => {
-    const { registry, open, enabled } = setup();
+  it('construction is enabled with an open session (M31)', () => {
+    const { open, close, enabled } = setup();
+    expect(enabled(SKETCH_ACTION_IDS.construction)).toBe(false);
+
+    open();
+    expect(enabled(SKETCH_ACTION_IDS.construction)).toBe(true);
+    close();
+    expect(enabled(SKETCH_ACTION_IDS.construction)).toBe(false);
+  });
+
+  it('construction with a curve in the selection toggles it', () => {
+    const { registry, open, checked } = setup();
     const { calls, select } = open();
 
-    select('a', 'h1');
-    expect(enabled(SKETCH_ACTION_IDS.construction)).toBe(false);
     select('a', 'bc');
-    expect(enabled(SKETCH_ACTION_IDS.construction)).toBe(true);
+    registry.run(SKETCH_ACTION_IDS.construction);
+
+    expect(calls).toEqual([['toggleConstruction', ['a', 'bc']]]);
+    expect(checked(SKETCH_ACTION_IDS.construction)).toBe(false);
+  });
+
+  it('construction without a curve in the selection switches the construction mode (M31)', () => {
+    const { registry, open, checked } = setup();
+    const { calls, select } = open();
+    expect(checked(SKETCH_ACTION_IDS.construction)).toBe(false);
 
     registry.run(SKETCH_ACTION_IDS.construction);
-    expect(calls).toEqual([['toggleConstruction', ['a', 'bc']]]);
+    expect(checked(SKETCH_ACTION_IDS.construction)).toBe(true);
+    select('a', 'h1');
+    registry.run(SKETCH_ACTION_IDS.construction);
+
+    expect(calls).toEqual([
+      ['setConstructionMode', true],
+      ['setConstructionMode', false],
+    ]);
+    expect(checked(SKETCH_ACTION_IDS.construction)).toBe(false);
+  });
+
+  it('Q runs construction; checked is false without a session', () => {
+    const { registry, open, close, checked } = setup();
+    const { calls } = open();
+
+    expect(
+      registry.handleKey({
+        key: 'q',
+        mods: { shift: false, alt: false, mod: false },
+        inTextField: false,
+      }),
+    ).toBe(true);
+    expect(calls).toEqual([['setConstructionMode', true]]);
+    expect(checked(SKETCH_ACTION_IDS.construction)).toBe(true);
+
+    close();
+    expect(checked(SKETCH_ACTION_IDS.construction)).toBe(false);
   });
 
   it('a constraint action is enabled when constraintFor fits the selected entities', () => {

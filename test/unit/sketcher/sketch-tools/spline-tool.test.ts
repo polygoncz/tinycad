@@ -199,6 +199,18 @@ describe('the control point spline tool (sketch.spline)', () => {
     expect(manager.active.get()).toBe('sketch.spline');
   });
 
+  it('in the construction mode the bspline is construction (M31)', async () => {
+    const { manager, viewport, session } = await sketching();
+    session.setConstructionMode(true);
+    manager.activate('sketch.spline');
+
+    await clicks(viewport, FOUR);
+    await enter(viewport);
+
+    expect(bsplinesOf(session).map((b) => b.construction)).toEqual([true]);
+    expect(pointsOf(session).map((p) => [p.x, p.y])).toEqual(FOUR);
+  });
+
   it('the degree is min(3, n − 1): two points are a line, three a quadratic', async () => {
     const { manager, viewport, session } = await sketching();
     manager.activate('sketch.spline');

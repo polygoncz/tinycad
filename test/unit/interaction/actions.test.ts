@@ -56,6 +56,7 @@ describe('ActionRegistry', () => {
           group: null,
           enabled: true,
           modes: ALL_MODES,
+          checked: false,
         },
         {
           id: 'edit.redo',
@@ -64,6 +65,7 @@ describe('ActionRegistry', () => {
           group: null,
           enabled: false,
           modes: ALL_MODES,
+          checked: false,
         },
       ]);
     });
@@ -133,6 +135,37 @@ describe('ActionRegistry', () => {
       enabled = false;
       notify();
       expect(calls).toBe(1);
+    });
+
+    it('checked follows the observable of the action, false without one (M31)', () => {
+      const registry = createActionRegistry();
+      const checked = new ObservableValue(false);
+      registry.register({ ...anAction('a'), checked: checked.asObservable() });
+      registry.register(anAction('b'));
+      const before = registry.actions.get();
+      let calls = 0;
+      registry.actions.subscribe(() => calls++);
+
+      checked.set(true);
+
+      const after = registry.actions.get();
+      expect(calls).toBe(1);
+      expect(after[0]).toEqual({ ...before[0], checked: true });
+      expect(after[1]).toBe(before[1]);
+      expect(after[1]?.checked).toBe(false);
+      checked.set(true);
+      expect(calls).toBe(1);
+    });
+
+    it('dispose unsubscribes from checked too', () => {
+      const registry = createActionRegistry();
+      const checked = new ObservableValue(false);
+      registry.register({ ...anAction('a'), checked: checked.asObservable() });
+      const before = registry.actions.get();
+      registry.dispose();
+
+      checked.set(true);
+      expect(registry.actions.get()).toBe(before);
     });
 
     it('dispose unsubscribes from enabled of all actions', () => {

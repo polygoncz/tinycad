@@ -22,6 +22,8 @@ export interface Action {
   readonly enabled: Observable<boolean>;
   /** Modes the action exists in; default all (M12). */
   readonly modes?: readonly Mode[];
+  /** M31: a toggle – its toolbar button is active while true; the registry subscribes to it. */
+  readonly checked?: Observable<boolean>;
   run(): void;
 }
 
@@ -34,6 +36,8 @@ export interface ActionState {
   /** action.enabled and the current mode is in `modes`. */
   readonly enabled: boolean;
   readonly modes: readonly Mode[];
+  /** action.checked (M31); false without it. */
+  readonly checked: boolean;
 }
 
 export interface ActionRegistry {
@@ -51,7 +55,7 @@ export interface ActionRegistry {
    * shortcut is ours).
    */
   handleKey(e: ViewKeyEvent): boolean;
-  /** Unsubscribes from enabled of all actions and from the mode. */
+  /** Unsubscribes from enabled and checked of all actions and from the mode. */
   dispose(): void;
 }
 
@@ -90,10 +94,11 @@ export function createActionRegistry(deps: { mode?: Observable<Mode> } = {}): Ac
       group: a.group ?? null,
       enabled: isEnabled(a),
       modes: modesOf(a),
+      checked: a.checked?.get() ?? false,
     });
   }
 
-  // Replaces only the states whose enabled changed; the others stay identical (===).
+  // Replaces only the states whose enabled or checked changed; the others stay identical (===).
   // One snapshot for all of them, none when nothing changed.
   function refresh(ids: Iterable<string>): void {
     const current = actions.get();
@@ -102,7 +107,12 @@ export function createActionRegistry(deps: { mode?: Observable<Mode> } = {}): Ac
       const action = byId.get(id);
       const index = current.findIndex((s) => s.id === id);
       const old = current[index];
-      if (action === undefined || old === undefined || old.enabled === isEnabled(action)) continue;
+      if (
+        action === undefined ||
+        old === undefined ||
+        (old.enabled === isEnabled(action) && old.checked === (action.checked?.get() ?? false))
+      )
+        continue;
       next ??= [...current];
       next[index] = toState(action);
     }
@@ -157,11 +167,14 @@ export function createActionRegistry(deps: { mode?: Observable<Mode> } = {}): Ac
       }
       byId.set(a.id, a);
       actions.set(Object.freeze([...actions.get(), toState(a)]));
-      subscriptions.add(
-        a.enabled.subscribe(() => {
-          refresh([a.id]);
-        }),
-      );
+      for (const source of [a.enabled, a.checked]) {
+        if (source === undefined) continue;
+        subscriptions.add(
+          source.subscribe(() => {
+            refresh([a.id]);
+          }),
+        );
+      }
     },
 
     run: (id) => runAction(get(id)),

@@ -209,6 +209,21 @@ describe('the tangent arc tool', () => {
     expect(manager.active.get()).toBe('sketch.arcTangent');
   });
 
+  it('in the construction mode the arc is construction (M31)', async () => {
+    const { manager, viewport, session } = await sketching({ sketch: SKETCH });
+    session.setConstructionMode(true);
+    manager.activate('sketch.arcTangent');
+
+    await clicks(viewport, [
+      [30, 10],
+      [40, 20],
+    ]);
+
+    const arc = newArc(session);
+    expect(arc.construction).toBe(true);
+    expect(constraintsOf(session)).toEqual([{ kind: 'tangent', a: arc.id, b: 'l' }]);
+  });
+
   it('to a point on the right the arc is clockwise: start and end swap in the data', async () => {
     const { manager, viewport, session } = await sketching({ sketch: SKETCH });
     manager.activate('sketch.arcTangent');

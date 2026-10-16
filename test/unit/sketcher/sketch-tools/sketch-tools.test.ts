@@ -896,6 +896,109 @@ describe('the arc tool', () => {
   });
 });
 
+describe('the construction mode (M31)', () => {
+  /** The tools with the clicks that draw one shape of each. */
+  const SHAPES: readonly (readonly [string, readonly Vec2[]])[] = [
+    [
+      'sketch.line',
+      [
+        [10, 10],
+        [30, 20],
+        [40, 50],
+      ],
+    ],
+    [
+      'sketch.rectangle',
+      [
+        [10, 10],
+        [40, 30],
+      ],
+    ],
+    [
+      'sketch.circle',
+      [
+        [10, 10],
+        [13, 14],
+      ],
+    ],
+    [
+      'sketch.arc',
+      [
+        [10, 10],
+        [20, 10],
+        [10, 40],
+      ],
+    ],
+    [
+      'sketch.circle2p',
+      [
+        [10, 10],
+        [20, 10],
+      ],
+    ],
+    [
+      'sketch.circle3p',
+      [
+        [10, 10],
+        [20, 10],
+        [15, 20],
+      ],
+    ],
+    [
+      'sketch.arc3p',
+      [
+        [10, 10],
+        [30, 10],
+        [20, 15],
+      ],
+    ],
+  ];
+
+  /** The data the tool draws, without the construction flag of the curves. */
+  async function drawn(tool: string, points: readonly Vec2[], mode: boolean) {
+    const { manager, viewport, session } = await sketching();
+    if (mode) session.setConstructionMode(true);
+    manager.activate(tool);
+    await clicks(viewport, points);
+    return session.state.get();
+  }
+
+  const curvesOf = (entities: readonly SketchEntity[]) =>
+    entities.filter((e) => e.kind !== 'point');
+  const withoutConstruction = (entities: readonly SketchEntity[]) =>
+    // toEqual takes an undefined field for a missing one.
+    entities.map((e) => (e.kind === 'point' ? e : { ...e, construction: undefined }));
+
+  for (const [tool, points] of SHAPES) {
+    it(`${tool} draws construction curves in the mode, points and constraints unchanged`, async () => {
+      const plain = await drawn(tool, points, false);
+      const construction = await drawn(tool, points, true);
+
+      expect(curvesOf(plain.entities).length).toBeGreaterThan(0);
+      expect(curvesOf(plain.entities).every((e) => e.construction !== true)).toBe(true);
+      expect(curvesOf(construction.entities).every((e) => e.construction === true)).toBe(true);
+      expect(withoutConstruction(construction.entities)).toEqual(
+        withoutConstruction(plain.entities),
+      );
+      expect(construction.constraints).toEqual(plain.constraints);
+    });
+  }
+
+  it('survives a switch of the tool', async () => {
+    const { manager, viewport, session } = await sketching();
+    session.setConstructionMode(true);
+    manager.activate('sketch.circle');
+    manager.activate('sketch.line');
+    await clicks(viewport, [
+      [10, 10],
+      [30, 20],
+    ]);
+
+    expect(session.state.get().constructionMode).toBe(true);
+    expect(curvesOf(session.state.get().entities).map((e) => e.construction)).toEqual([true]);
+  });
+});
+
 describe('the select tool of the sketch', () => {
   const sketch = data([
     { kind: 'point', id: 'p', x: 10, y: 10 },

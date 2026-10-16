@@ -16,10 +16,11 @@ import type { Tool, ToolContext, ViewKeyEvent } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
 import type { SketchSession } from '../sketch-session';
 import {
-  MIN_LENGTH,
+  addDrawn,
   clearPreview,
   clickTool,
   distance,
+  MIN_LENGTH,
   newConstraintId,
   newEntityId,
   previewInference,
@@ -234,7 +235,7 @@ function write(
     ],
   };
   const required = new Set(coincident === null ? [] : [coincident.id]);
-  void session.addGeometry(add, { required });
+  void addDrawn(session, add, { required });
 }
 
 /** The spline entity over the points: uniform knots of a bspline, the interpolation of a fitSpline. */

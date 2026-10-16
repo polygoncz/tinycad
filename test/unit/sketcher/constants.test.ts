@@ -3,6 +3,7 @@ import * as constants from '@/sketcher/constants';
 import {
   SKETCH_ACTION_IDS,
   SKETCH_CONSTRAINT_ACTION_GROUP,
+  SKETCH_DRAW_ACTION_GROUP,
   SKETCH_SELECT_TOOL_ID,
   sketchConstraintActionId,
 } from '@/sketcher/constants';
@@ -15,6 +16,7 @@ describe('sketcher/constants', () => {
       [
         'SKETCH_ACTION_IDS',
         'SKETCH_CONSTRAINT_ACTION_GROUP',
+        'SKETCH_DRAW_ACTION_GROUP',
         'SKETCH_SELECT_TOOL_ID',
         'sketchConstraintActionId',
       ].sort(),
@@ -35,8 +37,9 @@ describe('sketcher/constants', () => {
     expect(sketchConstraintActionId('horizontal')).toBe('sketch.constraint.horizontal');
   });
 
-  it('names the constraint action group and the default tool of the sketch mode', () => {
+  it('names the constraint and draw action groups and the default tool of the sketch mode', () => {
     expect(SKETCH_CONSTRAINT_ACTION_GROUP).toBe('sketch.constraint');
+    expect(SKETCH_DRAW_ACTION_GROUP).toBe('sketch.draw');
     expect(SKETCH_SELECT_TOOL_ID).toBe('sketch.select');
   });
 });
