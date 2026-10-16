@@ -10,7 +10,6 @@ import {
   expectNoErrors,
   openTool,
   refField,
-  toolbarButton,
   variantsButton,
 } from './helpers';
 
@@ -153,7 +152,8 @@ test('a filleted corner: a tangent arc, its radius changes, the corner stays dim
 
   // 1. Fillet the top right corner (the end of the dimension of the right edge, screen y down):
   // the radius dimension opens with the focus, the sketch stays fully defined.
-  await toolbarButton(page, 'Zaoblit').click();
+  // Fillet is a variant of the one family Úpravy (trim shown first, M33).
+  await pickExactVariant(page, 'Ořezat', 'Zaoblit');
   await clickCanvas(page, 120, -80);
   const radius = panel.getByRole('textbox', { name: 'Poloměr 1', exact: true });
   await expect(radius).toBeFocused();
@@ -205,7 +205,7 @@ test('chamfered corners: two distances and distance with an angle, then an extru
   const status = panel.getByRole('status');
 
   // 1. Chamfer the top right corner with two equal distances: the first one opens.
-  await pickExactVariant(page, 'Zaoblit', 'Srazit');
+  await pickExactVariant(page, 'Ořezat', 'Srazit');
   await clickCanvas(page, 120, -80);
   await expect(panel.getByRole('textbox', { name: 'Vzdálenost 1', exact: true })).toBeFocused();
   await expect(status).toHaveText('Plně určeno');
