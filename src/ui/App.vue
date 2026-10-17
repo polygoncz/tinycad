@@ -96,7 +96,7 @@ function hotPromise(data: unknown, key: string): Promise<unknown> | null {
 <template>
   <AppShell v-if="view.session !== null" :key="view.docId ?? ''" :session="view.session" />
   <div v-else class="start">
-    <DocumentList v-if="view.docId === null" :plugins="props.plugins" />
+    <DocumentList v-if="view.docId === null" />
     <div v-else class="notice" role="status">
       <template v-if="view.openError !== null">
         <i class="ti ti-alert-triangle error-icon" aria-hidden="true" />

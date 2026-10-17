@@ -1,7 +1,7 @@
-// Test-only entry point of app: a fake AppViewport, a kernel that can crash, a factory that
-// records the kernels it made and a download port that captures the files (M15). dependency-cruiser allows importing it only from *.test.ts.
+// Test-only entry point of app: a fake AppViewport and settle. dependency-cruiser allows importing
+// it only from *.test.ts.
 
-import { Emitter, RpcError } from '@/core';
+import { Emitter } from '@/core';
 import type { Subscribable, Unsubscribe, Vec3 } from '@/core';
 import type { BodyId, BodyMaterial } from '@/document';
 import type {
@@ -22,8 +22,6 @@ import type {
 } from '@/interaction';
 import { FakeViewport } from '@/interaction/testing';
 import type { MeshOps, ShapeHandle } from '@/kernel';
-import { createFakeKernel } from '@/kernel/testing';
-import type { FakeKernel } from '@/kernel/testing';
 import type {
   AoSettings,
   DisplayStyle,
@@ -32,10 +30,7 @@ import type {
   StandardView,
   ViewCubeLabels,
 } from '@/render';
-import type { DocumentLocks } from './doc-lock';
-import type { DownloadFile } from './file-exporter';
-import type { SupervisedKernel } from './kernel-supervisor';
-import type { AppViewport } from './session';
+import type { AppViewport } from './app-session';
 
 type SyncedBody = { readonly id: BodyId; readonly shape: ShapeHandle };
 type Ray = ReturnType<FakeViewport['screenToRay']>;
@@ -327,157 +322,7 @@ export class FakeAppViewport implements AppViewport {
   }
 }
 
-/**
- * A FakeKernel that can crash like a dead worker (a SupervisedKernel, M19.1): crash() rejects the
- * calls under way and every later one with RpcError 'disconnected' and tells onDisconnected.
- * Like RpcClient.onDisconnected: told once, never by dispose, a late listener at once.
- */
-export interface CrashableKernel extends SupervisedKernel {
-  readonly fake: FakeKernel;
-  /** The worker died: calls under way and later reject 'disconnected' with `message`. */
-  crash(message?: string): void;
-  readonly disposed: boolean;
-}
-
-export function createCrashableKernel(): CrashableKernel {
-  const fake = createFakeKernel();
-  let crashed: RpcError | null = null;
-  /** The crash onDisconnected told: not one that came after dispose. */
-  let told: RpcError | null = null;
-  let disposed = false;
-  /** Rejects of the calls under way. */
-  const running = new Set<(error: RpcError) => void>();
-  const listeners = new Emitter<{ disconnected: RpcError }>();
-  const guard = <T>(call: () => Promise<T>): Promise<T> => {
-    if (crashed !== null) return Promise.reject(crashed);
-    return new Promise<T>((resolve, reject) => {
-      running.add(reject);
-      // After a crash the promise is rejected already, so the late result changes nothing.
-      call()
-        .then(resolve, reject)
-        .finally(() => running.delete(reject));
-    });
-  };
-  return {
-    fake,
-    makeBox: (p) => guard(() => fake.makeBox(p)),
-    makeCylinder: (p) => guard(() => fake.makeCylinder(p)),
-    transform: (shape, m) => guard(() => fake.transform(shape, m)),
-    boolean: (op, targets, tools) => guard(() => fake.boolean(op, targets, tools)),
-    makeFace: (p) => guard(() => fake.makeFace(p)),
-    profileRegions: (p) => guard(() => fake.profileRegions(p)),
-    curveIntersections: (p) => guard(() => fake.curveIntersections(p)),
-    curveSegment: (p) => guard(() => fake.curveSegment(p)),
-    filletArc: (p) => guard(() => fake.filletArc(p)),
-    offsetCurves: (p) => guard(() => fake.offsetCurves(p)),
-    extrude: (profile, direction, distance) =>
-      guard(() => fake.extrude(profile, direction, distance)),
-    revolve: (profile, axis, angle) => guard(() => fake.revolve(profile, axis, angle)),
-    fillet: (shape, edges, radius) => guard(() => fake.fillet(shape, edges, radius)),
-    chamfer: (shape, edges, distance) => guard(() => fake.chamfer(shape, edges, distance)),
-    exportStep: (shapes) => guard(() => fake.exportStep(shapes)),
-    tessellate: (shape, q) => guard(() => fake.tessellate(shape, q)),
-    boundingBox: (shape) => guard(() => fake.boundingBox(shape)),
-    topology: (shape) => guard(() => fake.topology(shape)),
-    release: (handles) => guard(() => fake.release(handles)),
-    liveHandleCount: () => guard(() => fake.liveHandleCount()),
-    crash: (message = 'Kernel crashed') => {
-      if (crashed !== null) return;
-      const error = new RpcError('disconnected', message);
-      crashed = error;
-      const waiting = [...running];
-      running.clear();
-      for (const reject of waiting) reject(error);
-      if (disposed) return;
-      told = error;
-      listeners.emit('disconnected', error);
-    },
-    onDisconnected: (listener) => {
-      if (told !== null) {
-        listener(told);
-        return () => undefined;
-      }
-      return listeners.on('disconnected', listener);
-    },
-    dispose: () => {
-      disposed = true;
-    },
-    get disposed() {
-      return disposed;
-    },
-  };
-}
-
-/** createKernel for AppSessionDeps that records every kernel; failNext makes the next start reject. */
-export interface KernelFactory {
-  readonly create: () => Promise<CrashableKernel>;
-  readonly kernels: readonly CrashableKernel[];
-  /** The last kernel made; throws when there is none. */
-  readonly last: CrashableKernel;
-  failNext(error?: Error): void;
-}
-
-export function aKernelFactory(): KernelFactory {
-  const kernels: CrashableKernel[] = [];
-  const failures: Error[] = [];
-  return {
-    create: () => {
-      const failure = failures.shift();
-      if (failure !== undefined) return Promise.reject(failure);
-      const kernel = createCrashableKernel();
-      kernels.push(kernel);
-      return Promise.resolve(kernel);
-    },
-    kernels,
-    get last() {
-      const kernel = kernels[kernels.length - 1];
-      if (kernel === undefined) throw new Error('No kernel was created');
-      return kernel;
-    },
-    failNext: (error: Error = new Error('Kernel start failed')) => {
-      failures.push(error);
-    },
-  };
-}
-
 /** Lets every pending promise chain of resolved fakes run to its end (one macrotask). */
 export function settle(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
-}
-
-/** A LockManager with ifAvailable semantics: one holder per name, a busy name gets null. */
-export function aFakeLocks(): {
-  readonly locks: DocumentLocks;
-  /** Names held now. */
-  readonly held: Set<string>;
-  readonly requests: { name: string; ifAvailable: boolean }[];
-} {
-  const held = new Set<string>();
-  const requests: { name: string; ifAvailable: boolean }[] = [];
-  const locks: DocumentLocks = {
-    request(name, options, callback) {
-      requests.push({ name, ifAvailable: options.ifAvailable });
-      if (held.has(name)) return callback(null);
-      held.add(name);
-      return callback({ name }).finally(() => {
-        held.delete(name);
-      });
-    },
-  };
-  return { locks, held, requests };
-}
-
-/** AppSessionDeps.download that keeps every file (M15). */
-export function aDownloads(): {
-  readonly download: (file: DownloadFile) => void;
-  /** Downloaded files, oldest first. */
-  readonly files: readonly DownloadFile[];
-} {
-  const files: DownloadFile[] = [];
-  return {
-    download: (file) => {
-      files.push(file);
-    },
-    files,
-  };
 }

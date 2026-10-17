@@ -2,18 +2,15 @@
 // Public API of features/fillet. Everything else in this folder is internal.
 
 import type { FeaturePlugin } from '@/plugin-api';
-import { filletBuilder } from './builder';
 import { filletMessages } from './messages';
-import { filletSchema } from './schema';
-import type { FilletParams } from './schema';
+import type { FilletParams } from './params';
 import { filletTool } from './tool';
 
-export type { FilletParams } from './schema';
+export type { FilletParams } from './params';
 
 export const filletPlugin: FeaturePlugin<FilletParams> = Object.freeze<FeaturePlugin<FilletParams>>(
   {
-    schema: filletSchema,
-    builder: filletBuilder,
+    type: 'fillet',
     tools: Object.freeze([filletTool]),
     messages: filletMessages,
   },

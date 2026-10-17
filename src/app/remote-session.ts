@@ -50,7 +50,6 @@ import {
   SKETCH_TOOLBAR,
 } from '@/sketcher';
 import { createConnectionState } from './connection-state';
-import type { DownloadFile } from './file-exporter';
 import { MirrorDocument } from './mirror-document';
 import { refuseChanges } from './read-only';
 import { createReadModelView } from './read-model-view';
@@ -58,7 +57,7 @@ import { createRemoteDispatcher } from './remote-dispatcher';
 import { createRemoteFileExporter } from './remote-file-exporter';
 import { RemoteHistory } from './remote-history';
 import { createRemoteRegistries } from './remote-registries';
-import type { AppSession, AppViewport } from './session';
+import type { AppSession, AppViewport, DownloadFile } from './app-session';
 import { createVersionMeshes } from './version-meshes';
 import type { VersionMeshes } from './version-meshes';
 import { createViewSettings } from './view-settings';

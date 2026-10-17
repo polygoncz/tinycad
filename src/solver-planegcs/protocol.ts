@@ -9,7 +9,7 @@ interface SolverWorkerApi extends ConstraintSolver {
 /**
  * RPC protocol of the solver worker (spec 12 "Řešič vazeb", Worker): one entry per
  * ConstraintSolver method with the same arguments and result – derived from the port, so the two
- * cannot drift apart – plus `ready(): void`, like the OCCT worker.
+ * cannot drift apart – plus `ready(): void`.
  */
 export type SolverProtocol = {
   readonly [K in keyof SolverWorkerApi]: {

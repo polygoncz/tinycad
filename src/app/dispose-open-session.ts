@@ -5,7 +5,7 @@
 // browser.ts, so it runs in Node with fakes.
 
 import type { Disposable } from '@/core';
-import type { AppSession } from './session';
+import type { AppSession } from './app-session';
 
 export interface DisposeOpenSessionParts {
   readonly session: Pick<AppSession, 'dispose' | 'flush'>;

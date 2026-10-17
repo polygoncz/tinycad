@@ -10,10 +10,9 @@
 
 import { ObservableValue } from '@/core';
 import type { Disposable, Observable } from '@/core';
-import type { PersistenceStatus } from '@/persistence';
 import { isRetryable } from '@/remote';
 import type { ConnectionState, RemoteSession } from '@/remote';
-import type { KernelUiState } from './kernel-supervisor';
+import type { KernelUiState, PersistenceStatus } from './app-session';
 
 export interface ConnectionStateDeps {
   readonly session: Pick<RemoteSession, 'connection' | 'pending' | 'refresh'>;

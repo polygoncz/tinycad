@@ -2,19 +2,16 @@
 // Public API of features/cylinder. Everything else in this folder is internal.
 
 import type { FeaturePlugin } from '@/plugin-api';
-import { cylinderBuilder } from './builder';
 import { cylinderMessages } from './messages';
-import { cylinderSchema } from './schema';
-import type { CylinderParams } from './schema';
+import type { CylinderParams } from './params';
 import { cylinderTool } from './tool';
 
-export type { CylinderParams } from './schema';
+export type { CylinderParams } from './params';
 
 export const cylinderPlugin: FeaturePlugin<CylinderParams> = Object.freeze<
   FeaturePlugin<CylinderParams>
 >({
-  schema: cylinderSchema,
-  builder: cylinderBuilder,
+  type: 'cylinder',
   tools: Object.freeze([cylinderTool]),
   messages: cylinderMessages,
 });

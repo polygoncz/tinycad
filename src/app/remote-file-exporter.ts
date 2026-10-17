@@ -8,7 +8,7 @@ import type { Observable } from '@/core';
 import type { DocumentId } from '@/document';
 import type { FileExporter } from '@/interaction';
 import type { RemoteDocuments, RemoteSession } from '@/remote';
-import type { DownloadFile } from './file-exporter';
+import type { DownloadFile } from './app-session';
 
 export interface RemoteFileExporterDeps {
   readonly session: Pick<RemoteSession, 'pending' | 'exportStep'>;
