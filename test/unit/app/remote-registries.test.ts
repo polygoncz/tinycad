@@ -2,8 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { boxPlugin } from '@/features/box';
 import { cylinderPlugin } from '@/features/cylinder';
 import { extrudePlugin } from '@/features/extrude';
-import { featureSchemaOf } from '@/remote';
-import { aFeatureTypeDescriptor } from '@/remote/testing';
+import { aFeatureTypeDescriptor, featureSchemaOf } from '@/remote/testing';
 import { createRemoteRegistries } from '@/app/remote-registries';
 
 /** A schema of the server for `type` (its params do not matter to the registries). */

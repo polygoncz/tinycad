@@ -6,7 +6,7 @@ declare module '*.vue' {
   export default component;
 }
 
-// M39 (N3): the base URL of the native core (gRPC-Web through Envoy); unset = the WASM kernel.
+// M39 (N3): the base URL of the native core (gRPC-Web through Envoy); unset = '/api' (N68).
 interface ImportMetaEnv {
   readonly VITE_CORE_URL?: string;
 }

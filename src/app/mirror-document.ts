@@ -1,6 +1,8 @@
 // The optimistic mirror of the document (N63): the document of the last read model plus the
-// changes not confirmed yet, over an inner Document of document. Everyone reads it as a
-// DocumentReader; only the remote dispatcher writes through writer().
+// changes not confirmed yet, over an inner Document of document. Two faces: `reader`, a read-only
+// DocumentReader for AppSession.doc and interaction, and MirrorControl (reset, writer) for the
+// remote dispatcher only – the one that applies operations (ADR 0011: only the handlers get a
+// DocumentWriter).
 
 import { Emitter } from '@/core';
 import type { Subscribable, Unsubscribe } from '@/core';
@@ -17,6 +19,18 @@ import type {
   PartStudioData,
 } from '@/document';
 import type { ReadModelData } from '@/remote';
+
+/** What the remote dispatcher needs of the mirror: replace the content, write optimistically. */
+export interface MirrorControl {
+  /**
+   * Replaces the content by the document of a read model; `changed` only on a real change. A
+   * feature equal to the one already shown keeps its object, so the dialog and the tree compare
+   * values by identity.
+   */
+  reset(data: ReadModelData['document']): void;
+  /** The writer for the optimistic application of operations by the handlers. */
+  writer(): DocumentWriter;
+}
 
 /** Deep equality of plain JSON data (features, params, body metadata). */
 function sameJson(a: unknown, b: unknown): boolean {
@@ -37,10 +51,10 @@ function sameJson(a: unknown, b: unknown): boolean {
   );
 }
 
-export class MirrorDocument implements DocumentReader {
+export class MirrorDocument implements MirrorControl {
+  /** The read-only face for everyone but the dispatcher; it survives every reset. */
+  readonly reader: DocumentReader;
   private readonly emitter = new Emitter<DocumentEvents>();
-  // Only on/once, not the Emitter itself: a cast back to Emitter must not give emit (Q023).
-  readonly events: Subscribable<DocumentEvents> = this.emitter.asSubscribable();
   private inner: DocumentWriter;
   private offInner: Unsubscribe;
   /** Delegates to the current inner document, so it survives every reset. */
@@ -49,34 +63,12 @@ export class MirrorDocument implements DocumentReader {
   constructor(data: ReadModelData['document']) {
     this.inner = MirrorDocument.documentOf(data);
     this.offInner = this.forward(this.inner);
-    this.writerFacade = new MirrorWriter(() => this.inner, this.events);
+    // Only on/once, not the Emitter itself: a cast back to Emitter must not give emit (Q023).
+    const events = this.emitter.asSubscribable();
+    this.reader = new MirrorReader(() => this.inner, events);
+    this.writerFacade = new MirrorWriter(() => this.inner, events);
   }
 
-  get meta(): DocumentMeta {
-    return this.inner.meta;
-  }
-
-  get studio(): PartStudioData {
-    return this.inner.studio;
-  }
-
-  feature(id: FeatureId): FeatureInstance | undefined {
-    return this.inner.feature(id);
-  }
-
-  indexOf(id: FeatureId): number {
-    return this.inner.indexOf(id);
-  }
-
-  bodyMeta(body: BodyId): BodyMeta {
-    return this.inner.bodyMeta(body);
-  }
-
-  /**
-   * Replaces the content by the document of a read model; `changed` only on a real change. A
-   * feature equal to the one already shown keeps its object, so the dialog and the tree compare
-   * values by identity as with the local document.
-   */
   reset(data: ReadModelData['document']): void {
     const current = this.inner;
     const studio = this.shared(data.studio);
@@ -94,7 +86,6 @@ export class MirrorDocument implements DocumentReader {
     this.emitter.emit('changed', { studio: this.inner.studio });
   }
 
-  /** The writer for the optimistic application (only the remote dispatcher). */
   writer(): DocumentWriter {
     return this.writerFacade;
   }
@@ -135,12 +126,13 @@ export class MirrorDocument implements DocumentReader {
 }
 
 /**
- * The writer of the mirror: every call goes to the inner document of the moment, which reset
- * replaces; its events are those of the mirror.
+ * The reading face of the mirror: every call goes to the inner document of the moment, which
+ * reset replaces; its events are those of the mirror. An object of its own (not the
+ * MirrorDocument), so no cast of AppSession.doc reaches reset or writer.
  */
-class MirrorWriter implements DocumentWriter {
+class MirrorReader implements DocumentReader {
   readonly events: Subscribable<DocumentEvents>;
-  private readonly inner: () => DocumentWriter;
+  protected readonly inner: () => DocumentWriter;
 
   constructor(inner: () => DocumentWriter, events: Subscribable<DocumentEvents>) {
     this.inner = inner;
@@ -166,7 +158,10 @@ class MirrorWriter implements DocumentWriter {
   bodyMeta(body: BodyId): BodyMeta {
     return this.inner().bodyMeta(body);
   }
+}
 
+/** The writing face of the mirror, for the remote dispatcher only (MirrorControl.writer). */
+class MirrorWriter extends MirrorReader implements DocumentWriter {
   insertFeature(index: number, f: FeatureInstance): void {
     this.inner().insertFeature(index, f);
   }

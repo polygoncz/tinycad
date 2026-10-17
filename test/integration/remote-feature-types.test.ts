@@ -8,8 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { isParamVisible } from '@/document';
 import type { FeatureSchema, ParamSpec } from '@/document';
 import { TopoParam_Entity } from '@/protocol';
-import { featureSchemaOf } from '@/remote';
-import { aFeatureTypeDescriptor, listValue } from '@/remote/testing';
+import { aFeatureTypeDescriptor, featureSchemaOf, listValue } from '@/remote/testing';
 import { loadCases } from './shared-cases/support/case';
 import { builtInSchemas } from './shared-cases/support/schemas';
 

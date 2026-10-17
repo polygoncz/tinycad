@@ -41,7 +41,7 @@ const modules = {
   // the tests (anOpsSession of ops/testing.ts); the rule sketcher-ops-only-in-tests keeps its
   // production code off ops/index.ts.
   sketcher: { deps: ['core', 'document', 'ops', 'sketch', 'interaction'] },
-  'plugin-api': { deps: ['core', 'interaction'] },
+  'plugin-api': { deps: ['interaction'] },
   'features/*': { deps: ['core', 'document', 'interaction', 'plugin-api'] },
   app: {
     deps: [

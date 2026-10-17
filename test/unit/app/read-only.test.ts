@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { createDocument, createFeatureSchemaRegistry } from '@/document';
 import type { DocumentId } from '@/document';
 import { createOpHandlerRegistry } from '@/ops';
-import { createOperationDispatcher, createOperationLog } from '@/ops/testing';
+import { anOpsSession, createOperationDispatcher, createOperationLog } from '@/ops/testing';
 import type { DocumentRenameOp, OperationDispatcher } from '@/ops';
-import { refuseChanges } from '@/app/read-only';
+import { refuseChanges, refuseUndo } from '@/app/read-only';
 
 // Branded ids are created by a cast at one place in tests.
 const DOC = 'doc1' as DocumentId;
@@ -32,5 +32,22 @@ describe('refuseChanges', () => {
     const guarded = refuseChanges(wrapped);
     expect(guarded.inTransaction).toBe(false);
     expect(guarded.events).toBe(wrapped.events);
+  });
+});
+
+describe('refuseUndo', () => {
+  it('cannot undo or redo and both refuse; the stacks and events stay', () => {
+    const { undo } = anOpsSession();
+    const guarded = refuseUndo(undo);
+    expect(guarded.canUndo()).toBe(false);
+    expect(guarded.canRedo()).toBe(false);
+    expect(() => {
+      guarded.undo();
+    }).toThrow(/read-only/);
+    expect(() => {
+      guarded.redo();
+    }).toThrow(/read-only/);
+    expect(guarded.stacks()).toEqual(undo.stacks());
+    expect(guarded.events).toBe(undo.events);
   });
 });

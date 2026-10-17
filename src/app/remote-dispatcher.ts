@@ -4,8 +4,8 @@
 // yet. Undo and redo wait for the answer (N64).
 //
 // The mirror is always base + pending (+ the local sketch layer of N65):
-// - base: the document of the last read model taken over (an answer, or a read model of the
-//   session while nothing is pending),
+// - base: the document of the last read model the session published, taken over when a change is
+//   answered or while nothing is pending (the session orders read models by generation, N136),
 // - pending: the changes sent and not answered yet, in the order of the queue of the session;
 //   each knows how to apply itself again on top of a new base (replay),
 // - layer: setParams of a sketch the server refused with SKETCH_NOT_SOLVED (Q103), shown until
@@ -15,6 +15,7 @@ import { assert, DisposableStore, Emitter } from '@/core';
 import type { Disposable, Subscribable } from '@/core';
 import { createDocument } from '@/document';
 import type { DocumentWriter, FeatureId } from '@/document';
+import type { HistoryLog } from '@/interaction';
 import { applyOperation, OP_VERSION } from '@/ops';
 import type {
   BatchOp,
@@ -27,31 +28,34 @@ import type {
   Transaction,
   UndoManager,
 } from '@/ops';
-import { RemoteError } from '@/remote';
-import type {
-  ChangeOutcome,
-  ChangeRequest,
-  HistoryData,
-  ReadModelData,
-  RemoteSession,
-} from '@/remote';
-import type { MirrorDocument } from './mirror-document';
+import type { ChangeOutcome, ChangeRequest, ReadModelData, RemoteSession } from '@/remote';
+import type { MirrorControl } from './mirror-document';
 
 export interface RemoteDispatcherDeps {
-  readonly mirror: MirrorDocument;
-  readonly session: RemoteSession;
+  /** The mirror it alone writes (ADR 0011); everyone else reads MirrorDocument.reader. */
+  readonly mirror: MirrorControl;
+  readonly session: Pick<RemoteSession, 'readModel' | 'events' | 'change'>;
+  /** The undo stacks of the server (RemoteHistory, one GetHistory per new log entry). */
+  readonly history: Pick<HistoryLog, 'stacks'>;
   readonly handlers: OpHandlerRegistry;
   /** Time source of the provisional LogEntry.time. */
   readonly now: () => number;
-  /** A change the server refused (dropped from the mirror), or one that no longer applies. */
-  readonly onError: (error: RemoteError) => void;
+  /**
+   * A change dropped from the mirror: refused by the server (its RemoteError), or no longer
+   * applicable on a newer document of the server (an Error of the client).
+   */
+  readonly onError: (error: Error) => void;
   /** The open transaction ended on the server (RemoteSession `lost`). */
   readonly onLost: () => void;
 }
 
-export function createRemoteDispatcher(
-  deps: RemoteDispatcherDeps,
-): OperationDispatcher & { readonly undo: UndoManager } {
+export type RemoteDispatcherHandle = OperationDispatcher &
+  Disposable & {
+    /** Its dispose does nothing: the dispatcher owns the subscriptions (dispose above). */
+    readonly undo: UndoManager;
+  };
+
+export function createRemoteDispatcher(deps: RemoteDispatcherDeps): RemoteDispatcherHandle {
   return new RemoteDispatcher(deps);
 }
 
@@ -59,23 +63,6 @@ type DispatcherEvents = {
   applied: { entry: LogEntry | null; op: Operation };
   transaction: { active: boolean };
 };
-
-type Stacks = HistoryData['stacks'];
-
-interface Applied {
-  readonly inverse: Operation;
-  /** Exceptions of document subscribers thrown after the document changed. */
-  readonly deferred: readonly unknown[];
-}
-
-/**
- * Applies one operation to `doc` with the handlers, exactly as ops applies it (validation, batch
- * inverses, restoring the rollback bar), and returns its inverse; exceptions of subscribers thrown
- * after the document changed are deferred (N96).
- */
-function applyLocally(doc: DocumentWriter, handlers: OpHandlerRegistry, op: Operation): Applied {
-  return applyOperation(doc, handlers, op);
-}
 
 /** Throws what was collected: one error as is, more as AggregateError. */
 function throwCollected(errors: readonly unknown[], message: string): void {
@@ -189,13 +176,13 @@ class LocalTransaction implements Transaction {
   }
 }
 
-class RemoteDispatcher implements OperationDispatcher {
+class RemoteDispatcher implements OperationDispatcher, Disposable {
   private readonly emitter = new Emitter<DispatcherEvents>();
   readonly events: Subscribable<DispatcherEvents> = this.emitter.asSubscribable();
   readonly undo: UndoManager;
 
-  private readonly mirror: MirrorDocument;
-  private readonly session: RemoteSession;
+  private readonly mirror: MirrorControl;
+  private readonly session: RemoteDispatcherDeps['session'];
   private readonly handlers: OpHandlerRegistry;
   private readonly deps: RemoteDispatcherDeps;
   private readonly subscriptions = new DisposableStore();
@@ -209,7 +196,7 @@ class RemoteDispatcher implements OperationDispatcher {
   private stamp = 0;
   private base: ReadModelData['document'];
   private baseStamp = 0;
-  /** The last read model received by any path: canUndo, canRedo and the last known seq. */
+  /** The last read model the session published: canUndo, canRedo and the last known seq. */
   private latest: ReadModelData;
   /** A read model of the session that arrived while changes were pending (taken when drained). */
   private deferred: { readonly model: ReadModelData; readonly stamp: number } | null = null;
@@ -218,9 +205,8 @@ class RemoteDispatcher implements OperationDispatcher {
   private applying = false;
   private lastIssuedSeq = 0;
   private flags: { canUndo: boolean; canRedo: boolean };
-  private undoStacks: Stacks = { undo: [], redo: [] };
-  /** lastSeq the stacks were last requested for. */
-  private stacksSeq = Number.NaN;
+  /** The error last handed to onError: the callers of a coalesced change share one outcome. */
+  private lastReported: Error | null = null;
   private disposed = false;
 
   constructor(deps: RemoteDispatcherDeps) {
@@ -243,11 +229,16 @@ class RemoteDispatcher implements OperationDispatcher {
       }),
     );
     this.rebuild();
-    this.refreshStacks();
   }
 
   get inTransaction(): boolean {
     return this.tx !== null;
+  }
+
+  /** Stops following the session; answers that arrive later change nothing. */
+  dispose(): void {
+    this.disposed = true;
+    this.subscriptions.dispose();
   }
 
   dispatch(op: Operation, meta: DispatchMeta = {}): LogEntry {
@@ -264,7 +255,7 @@ class RemoteDispatcher implements OperationDispatcher {
         ? { kind: 'dispatch', op }
         : { kind: 'dispatch', op, label: meta.label };
     this.enqueue(request, null, null, (doc) => {
-      applyLocally(doc, this.handlers, op);
+      applyOperation(doc, this.handlers, op);
     });
     const entry = this.provisional(op, inverse, meta.label ?? op.type);
     const errors = [...deferred];
@@ -309,7 +300,7 @@ class RemoteDispatcher implements OperationDispatcher {
     const step: Step = { op, inverse, transient };
     tx.steps.push(step);
     this.enqueue({ kind: transient ? 'applyTransient' : 'apply', op }, tx, step, (doc) => {
-      applyLocally(doc, this.handlers, op);
+      applyOperation(doc, this.handlers, op);
     });
     const errors = [...deferred];
     collect(errors, () => {
@@ -378,7 +369,7 @@ class RemoteDispatcher implements OperationDispatcher {
   }
 
   private revert(doc: DocumentWriter, steps: readonly Step[]): void {
-    for (const s of [...steps].reverse()) applyLocally(doc, this.handlers, s.inverse);
+    for (const s of [...steps].reverse()) applyOperation(doc, this.handlers, s.inverse);
   }
 
   /** The provisional entry of a commit, or null for an empty transaction (as ops/transaction). */
@@ -437,8 +428,9 @@ class RemoteDispatcher implements OperationDispatcher {
       if (target !== null && layered !== undefined && layered.order < item.order) {
         this.layer.delete(target);
       }
-      this.receive(outcome.readModel);
-      this.base = outcome.readModel.document;
+      // The session published this answer, or a newer read model came first and holds this change
+      // too (N136): either way the last published one is the new base.
+      this.base = this.latest.document;
       this.baseStamp = this.stamp;
     } else if (known) {
       const op = opOf(item.request);
@@ -452,14 +444,21 @@ class RemoteDispatcher implements OperationDispatcher {
     this.rebuild();
     this.adoptDeferredIfDrained();
     this.notifyFlags();
-    this.refreshStacks();
-    if (!outcome.ok && known) this.deps.onError(outcome.error);
+    if (!outcome.ok && known) this.report(outcome.error);
+  }
+
+  /** onError once per error: both changes of a coalesced pair get the same outcome. */
+  private report(error: Error): void {
+    if (error === this.lastReported) return;
+    this.lastReported = error;
+    this.deps.onError(error);
   }
 
   /** A read model of the session (an answer, a refresh, an event of another tab, a new session). */
   private observe(model: ReadModelData): void {
     if (this.disposed || model === this.latest) return;
-    this.receive(model);
+    this.stamp += 1;
+    this.latest = model;
     if (this.pending.length === 0) {
       this.base = model.document;
       this.baseStamp = this.stamp;
@@ -468,12 +467,6 @@ class RemoteDispatcher implements OperationDispatcher {
       this.deferred = { model, stamp: this.stamp };
     }
     this.notifyFlags();
-    this.refreshStacks();
-  }
-
-  private receive(model: ReadModelData): void {
-    this.stamp += 1;
-    this.latest = model;
   }
 
   /** A read model deferred while changes were pending, when it is newer than the base. */
@@ -541,21 +534,17 @@ class RemoteDispatcher implements OperationDispatcher {
       try {
         item.replay(doc);
       } catch (e) {
+        // An error of the client, not of the server: the server has not answered this change yet.
         this.remove(item, true);
-        this.deps.onError(
-          new RemoteError({
-            code: 'FAILED_PRECONDITION',
-            reason: 'INVALID_OPERATION',
-            message: `A change not confirmed yet no longer applies: ${String(e)}`,
-            cause: e,
-          }),
+        this.report(
+          new Error(`A change not confirmed yet no longer applies: ${String(e)}`, { cause: e }),
         );
       }
     }
     for (const [featureId, layered] of [...this.layer]) {
       if (this.pending.some((item) => setParamsTarget(item.request) === featureId)) continue;
       try {
-        applyLocally(doc, this.handlers, layered.op);
+        applyOperation(doc, this.handlers, layered.op);
       } catch {
         this.layer.delete(featureId);
       }
@@ -563,10 +552,10 @@ class RemoteDispatcher implements OperationDispatcher {
     this.mirror.reset({ ...base, name: doc.meta.name, studio: doc.studio });
   }
 
-  private applyOnMirror(op: Operation): Applied {
+  private applyOnMirror(op: Operation): ReturnType<typeof applyOperation> {
     this.applying = true;
     try {
-      return applyLocally(this.mirror.writer(), this.handlers, op);
+      return applyOperation(this.mirror.writer(), this.handlers, op);
     } finally {
       this.applying = false;
     }
@@ -590,36 +579,19 @@ class RemoteDispatcher implements OperationDispatcher {
     this.undoEmitter.emit('changed', next);
   }
 
-  /** The stacks come from GetHistory, asked again when the log has a new last entry. */
-  private refreshStacks(): void {
-    const seq = this.latest.document.lastSeq;
-    if (seq === this.stacksSeq) return;
-    this.stacksSeq = seq;
-    // From after the last entry: only the stacks, no entries.
-    this.session.history(seq + 1).then(
-      (data) => {
-        if (!this.disposed && this.stacksSeq === seq) this.undoStacks = data.stacks;
-      },
-      () => {
-        if (this.stacksSeq === seq) this.stacksSeq = Number.NaN;
-      },
-    );
-  }
-
   private createUndo(): UndoManager {
     const request = (kind: 'undo' | 'redo'): void => {
       this.assertIdle(kind);
       // Not optimistic (N64): the mirror changes with the answer.
       this.enqueue({ kind }, null, null, () => undefined);
     };
-    const dispose: Disposable['dispose'] = () => {
-      this.disposed = true;
-      this.subscriptions.dispose();
-    };
     return {
       canUndo: () => this.currentFlags().canUndo,
       canRedo: () => this.currentFlags().canRedo,
-      stacks: () => ({ undo: [...this.undoStacks.undo], redo: [...this.undoStacks.redo] }),
+      stacks: () => {
+        const { undo, redo } = this.deps.history.stacks();
+        return { undo: [...undo], redo: [...redo] };
+      },
       undo: () => {
         assert(this.currentFlags().canUndo, 'undo: nothing to undo');
         request('undo');
@@ -629,7 +601,8 @@ class RemoteDispatcher implements OperationDispatcher {
         request('redo');
       },
       events: this.undoEmitter.asSubscribable(),
-      dispose,
+      // The dispatcher owns what the undo follows: RemoteDispatcher.dispose releases it.
+      dispose: () => undefined,
     };
   }
 }

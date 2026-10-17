@@ -11,9 +11,16 @@ import {
   MeshSchema,
 } from '@/protocol';
 import type { Mesh } from '@/protocol';
-import { decodeReadModel, RemoteError } from '@/remote';
+import { RemoteError } from '@/remote';
 import { decodeHistory, decodeLogEntry, decodeMesh } from '@/remote/read-model';
-import { aBodyView, aMeshData, aReadModel, aSketchView, meshToProto } from '@/remote/testing';
+import {
+  aBodyView,
+  aMeshData,
+  aReadModel,
+  aSketchView,
+  decodeReadModel,
+  meshToProto,
+} from '@/remote/testing';
 
 const PLANE_XY = {
   origin: { x: 0, y: 0, z: 0 },
@@ -37,6 +44,16 @@ function shifted(mesh: Mesh, offset: number): Mesh {
     edgePositions: atOffset(mesh.edgePositions, offset),
     edgeRanges: atOffset(mesh.edgeRanges, offset),
   });
+}
+
+/** Two triangles in two faces whose ranges come in the wrong order (first triangle 1, then 0). */
+function twoFacesOutOfOrder(): Pick<MeshData, 'positions' | 'normals' | 'indices' | 'faceRanges'> {
+  return {
+    positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0]),
+    normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1]),
+    indices: new Uint32Array([0, 1, 2, 1, 3, 2]),
+    faceRanges: new Uint32Array([1, 1, 1, 0, 0, 1]),
+  };
 }
 
 function plainMesh(mesh: MeshData) {
@@ -330,6 +347,39 @@ describe('decodeReadModel', () => {
                   bodies: [
                     aBodyView({
                       mesh: { ...meshToProto(aMeshData()), positions: new Uint8Array(5) },
+                    }),
+                  ],
+                },
+              },
+            }),
+          ),
+      ],
+      [
+        // render searches the face ranges binarily (mesh-index triangleToFace).
+        'with face ranges that do not increase',
+        () =>
+          decodeReadModel(
+            aReadModel({
+              regen: {
+                final: {
+                  bodies: [
+                    aBodyView({ mesh: meshToProto({ ...aMeshData(), ...twoFacesOutOfOrder() }) }),
+                  ],
+                },
+              },
+            }),
+          ),
+      ],
+      [
+        'with a vertex index out of range',
+        () =>
+          decodeReadModel(
+            aReadModel({
+              regen: {
+                final: {
+                  bodies: [
+                    aBodyView({
+                      mesh: meshToProto({ ...aMeshData(), indices: new Uint32Array([0, 1, 7]) }),
                     }),
                   ],
                 },

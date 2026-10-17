@@ -83,6 +83,8 @@ class RemoteSessionImpl implements RemoteSession {
   /** Aborts every call in flight on dispose. */
   private readonly abort = new AbortController();
   private sessionId = '';
+  /** The session the published read model came from: its generation orders the next ones. */
+  private publishedIn: string;
   /** Counts the sessions this object opened; tells a stale SESSION_NOT_FOUND from a fresh one. */
   private epoch = 0;
   private renewing: Promise<void> | null = null;
@@ -103,6 +105,7 @@ class RemoteSessionImpl implements RemoteSession {
     this.retrier = retrier;
     this.featureTypes = Object.freeze(opened.featureTypes.map(featureSchemaOf));
     this.readModelValue = new ObservableValue(decodeAnswer(opened.readModel));
+    this.publishedIn = opened.sessionId;
     retrier.onState = (state) => {
       this.connectionValue.set(state);
     };
@@ -148,22 +151,17 @@ class RemoteSessionImpl implements RemoteSession {
     return this.queue.enqueue(request);
   }
 
-  /**
-   * GetReadModel runs beside the queue of changes, so its answer may come after the answer of a
-   * change the server handled later: a read model of an older generation than the one published
-   * by then is dropped (it would put back the document without that change). The same generation
-   * is taken (the same document, maybe another input_of).
-   */
+  /** GetReadModel beside the queue of changes; its read model is published by the rule of publish. */
   async refresh(): Promise<void> {
-    const res = await this.call((sessionId) =>
-      this.client.getReadModel(
+    let asked = '';
+    const res = await this.call((sessionId) => {
+      asked = sessionId;
+      return this.client.getReadModel(
         { sessionId, read: readOptionsOf(this.options.readOptions()) },
         this.callOptions(),
-      ),
-    );
-    const model = decodeAnswer(res.readModel);
-    if (model.regen.generation < this.readModelValue.get().regen.generation) return;
-    this.readModelValue.set(model);
+      );
+    });
+    this.publish(decodeAnswer(res.readModel), asked);
   }
 
   async history(fromSeq: number): Promise<HistoryData> {
@@ -219,7 +217,7 @@ class RemoteSessionImpl implements RemoteSession {
       const result = await this.retrier.run(() => this.rpcOf(change, sessionId));
       const readModel = decodeAnswer(result?.readModel);
       const entry = result?.entry === undefined ? null : decodeLogEntry(result.entry);
-      this.readModelValue.set(readModel);
+      this.publish(readModel, sessionId);
       return { outcome: { ok: true, entry, readModel }, epoch };
     } catch (e) {
       return { outcome: { ok: false, error: toRemoteError(e) }, epoch };
@@ -300,8 +298,9 @@ class RemoteSessionImpl implements RemoteSession {
         this.callOptions(),
       ),
     );
-    this.readModelValue.set(decodeAnswer(opened.readModel));
+    const model = decodeAnswer(opened.readModel);
     this.adopt(opened);
+    this.publish(model, opened.sessionId);
     if (transactionOpen) this.reportLost();
   }
 
@@ -311,6 +310,21 @@ class RemoteSessionImpl implements RemoteSession {
     this.epoch += 1;
     this.options.resume.save(opened.sessionId);
     this.watch.restart(opened.sessionId, opened.eventSeq, this.epoch);
+  }
+
+  /**
+   * The one ordering rule of read models (N136): answers of changes and GetReadModel run side by
+   * side, so a read model may arrive after a newer one. Published only when it is of the current
+   * session and not older (regen.generation) than the published one of that session; the same
+   * generation is taken (the same document, maybe another input_of). A new session starts the
+   * order again: after a restart of the server its generation may be lower.
+   */
+  private publish(model: ReadModelData, sessionId: string): void {
+    if (sessionId !== this.sessionId) return; // an answer of a replaced session
+    const ordered = sessionId === this.publishedIn;
+    if (ordered && model.regen.generation < this.readModelValue.get().regen.generation) return;
+    this.publishedIn = sessionId;
+    this.readModelValue.set(model);
   }
 
   private reportLost(): void {
@@ -336,10 +350,15 @@ class RemoteSessionImpl implements RemoteSession {
 /**
  * Repeats a retryable call (spec 14 "Chyby"): the same request (so the same operation_id) after
  * baseDelayMs × 2ⁿ, `attempts` in all; reports the state of the connection on the way. Every call
- * starts from the first attempt (the connection may be back).
+ * starts from the first attempt (the connection may be back). The state is 'retrying' while any
+ * call retries; otherwise how the last call ended: 'online' (the core answered) or 'offline' (a
+ * call gave up), so calls side by side do not make it flicker.
  */
 class Retrier {
   onState: (state: ConnectionState) => void = () => undefined;
+  /** Calls waiting for their next attempt or in a repeated attempt. */
+  private retrying = 0;
+  private ended: 'online' | 'offline' = 'online';
   private readonly waits = new Set<{ readonly timer: Disposable; readonly fail: () => void }>();
   private disposed = false;
   private readonly timers: Timers;
@@ -351,26 +370,40 @@ class Retrier {
   }
 
   async run<T>(call: () => Promise<T>): Promise<T> {
-    for (let n = 0; ; n++) {
-      try {
-        const result = await call();
-        this.onState('online');
-        return result;
-      } catch (e) {
-        const error = toRemoteError(e);
-        if (this.disposed) throw error;
-        if (!isRetryable(error)) {
-          this.onState('online'); // the core answered
-          throw error;
+    let counted = false;
+    try {
+      for (let n = 0; ; n++) {
+        try {
+          const result = await call();
+          this.ended = 'online';
+          return result;
+        } catch (e) {
+          const error = toRemoteError(e);
+          if (this.disposed) throw error;
+          if (!isRetryable(error)) {
+            this.ended = 'online'; // the core answered
+            throw error;
+          }
+          if (n + 1 >= this.policy.attempts) {
+            this.ended = 'offline';
+            throw error;
+          }
+          if (!counted) {
+            counted = true;
+            this.retrying += 1;
+          }
+          this.report();
+          await this.wait(this.policy.baseDelayMs * 2 ** n);
         }
-        if (n + 1 >= this.policy.attempts) {
-          this.onState('offline');
-          throw error;
-        }
-        this.onState('retrying');
-        await this.wait(this.policy.baseDelayMs * 2 ** n);
       }
+    } finally {
+      if (counted) this.retrying -= 1;
+      if (!this.disposed) this.report();
     }
+  }
+
+  private report(): void {
+    this.onState(this.retrying > 0 ? 'retrying' : this.ended);
   }
 
   /** Ends every wait with a rejection; no call starts any more. */

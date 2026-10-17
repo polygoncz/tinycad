@@ -1,7 +1,8 @@
 // The history port over the server (N73): the log entries (LogEntryView, without the operations)
 // and the undo stacks of GetHistory. The history changes only with a new log entry, and every
 // answer that wrote one (and every refresh after a change elsewhere) brings a read model with a
-// new lastSeq, so the history is loaded again when lastSeq changes.
+// new lastSeq, so the history is loaded again when lastSeq changes. The one source of the undo
+// stacks of the client: the remote dispatcher reads them here too (UndoManager.stacks).
 
 import { Emitter } from '@/core';
 import type { Disposable, Subscribable, Unsubscribe } from '@/core';
@@ -22,10 +23,10 @@ export class RemoteHistory implements HistoryLog, Disposable {
   /** Counter of loads: an answer of an older load than the last started is dropped. */
   private loads = 0;
   private disposed = false;
-  private readonly session: RemoteSession;
+  private readonly session: Pick<RemoteSession, 'readModel' | 'history'>;
   private readonly offReadModel: Unsubscribe;
 
-  constructor(session: RemoteSession) {
+  constructor(session: Pick<RemoteSession, 'readModel' | 'history'>) {
     this.session = session;
     this.loadedSeq = session.readModel.get().document.lastSeq;
     this.offReadModel = session.readModel.subscribe(() => {

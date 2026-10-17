@@ -4,7 +4,7 @@ import { RemoteError } from '@/remote';
 import type { ConnectionState } from '@/remote';
 import { createConnectionState } from '@/app/connection-state';
 
-function setup(refresh: () => Promise<void> = () => Promise.resolve()) {
+function setup(refresh: () => Promise<void> = () => Promise.resolve(), readOnly = false) {
   const connection = new ObservableValue<ConnectionState>('connecting');
   const pending = new ObservableValue(0);
   const errors: unknown[] = [];
@@ -15,6 +15,7 @@ function setup(refresh: () => Promise<void> = () => Promise.resolve()) {
       pending: pending.asObservable(),
       refresh: refreshSpy,
     },
+    readOnly,
     reportError: (e) => errors.push(e),
   });
   return { connection, pending, errors, refresh: refreshSpy, state };
@@ -44,6 +45,18 @@ describe('createConnectionState', () => {
     h.connection.set(connection);
     h.pending.set(pending);
     expect(h.state.persistence.get()).toBe(status);
+  });
+
+  it('a read-only tab stays saved whatever the connection (it saves nothing)', () => {
+    const h = setup(undefined, true);
+    h.connection.set('retrying');
+    h.pending.set(1);
+    expect(h.state.persistence.get()).toBe('saved');
+    h.connection.set('offline');
+    h.state.changeDropped(new RemoteError({ code: 'UNAVAILABLE', message: 'down' }));
+    expect(h.state.persistence.get()).toBe('saved');
+    expect(h.state.persistenceError.get()).toBeNull();
+    expect(h.state.kernel.get()).toBe('unavailable');
   });
 
   it('is failed offline after the mirror dropped a change for the outage, until online (N92)', () => {

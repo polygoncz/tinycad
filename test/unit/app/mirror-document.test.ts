@@ -18,13 +18,21 @@ function aDocumentData(studio: Partial<PartStudioData> = {}, name = 'Part'): Doc
 }
 
 function setup(data: DocumentData = aDocumentData()) {
-  const mirror = new MirrorDocument(data);
+  const control = new MirrorDocument(data);
+  const mirror = control.reader;
   let changes = 0;
   mirror.events.on('changed', () => changes++);
-  return { mirror, changes: () => changes };
+  return { control, mirror, changes: () => changes };
 }
 
 describe('MirrorDocument', () => {
+  it('the reader has no way to write or reset (ADR 0011: only the handlers write)', () => {
+    const { mirror } = setup();
+    expect('writer' in mirror).toBe(false);
+    expect('reset' in mirror).toBe(false);
+    expect('insertFeature' in mirror).toBe(false);
+  });
+
   it('takes createdAt of the read model into its meta (N89)', () => {
     const { mirror } = setup({ ...aDocumentData(), createdAt: 1_700_000_000_000 });
     expect(mirror.meta.createdAt).toBe(1_700_000_000_000);
@@ -42,18 +50,20 @@ describe('MirrorDocument', () => {
   });
 
   it('writes through writer() and sends changed', () => {
-    const { mirror, changes } = setup();
+    const { control, mirror, changes } = setup();
     const box = aFeature({ id: 'f1' });
-    mirror.writer().insertFeature(0, box);
+    control.writer().insertFeature(0, box);
     expect(mirror.studio.features).toEqual([box]);
-    expect(mirror.writer().studio).toBe(mirror.studio);
+    expect(control.writer().studio).toBe(mirror.studio);
     expect(changes()).toBe(1);
   });
 
   it('reset replaces the content and sends changed once', () => {
-    const { mirror, changes } = setup(aDocumentData({ features: [aFeature({ id: 'f1' })] }));
+    const { control, mirror, changes } = setup(
+      aDocumentData({ features: [aFeature({ id: 'f1' })] }),
+    );
     const other = aFeature({ id: 'f2' });
-    mirror.reset(aDocumentData({ features: [other] }, 'Renamed'));
+    control.reset(aDocumentData({ features: [other] }, 'Renamed'));
     expect(mirror.studio.features.map((f) => f.id)).toEqual(['f2']);
     expect(mirror.meta.name).toBe('Renamed');
     expect(changes()).toBe(1);
@@ -61,9 +71,9 @@ describe('MirrorDocument', () => {
 
   it('reset with equal data sends nothing and keeps the objects', () => {
     const box = aFeature({ id: 'f1', params: { size: 3 } });
-    const { mirror, changes } = setup(aDocumentData({ features: [box] }));
+    const { control, mirror, changes } = setup(aDocumentData({ features: [box] }));
     const before = mirror.studio;
-    mirror.reset(
+    control.reset(
       aDocumentData({ features: [aFeature({ id: 'f1', name: box.name, params: { size: 3 } })] }),
     );
     expect(changes()).toBe(0);
@@ -73,18 +83,18 @@ describe('MirrorDocument', () => {
   it('reset keeps the objects of unchanged features', () => {
     const a = aFeature({ id: 'f1' });
     const b = aFeature({ id: 'f2', params: { size: 1 } });
-    const { mirror, changes } = setup(aDocumentData({ features: [a, b] }));
+    const { control, mirror, changes } = setup(aDocumentData({ features: [a, b] }));
     const keptA = mirror.feature(a.id);
-    mirror.reset(aDocumentData({ features: [{ ...a }, { ...b, params: { size: 2 } }] }));
+    control.reset(aDocumentData({ features: [{ ...a }, { ...b, params: { size: 2 } }] }));
     expect(changes()).toBe(1);
     expect(mirror.feature(a.id)).toBe(keptA);
     expect(mirror.feature(b.id)?.params).toEqual({ size: 2 });
   });
 
   it('the writer keeps working after a reset and the events of the new content arrive', () => {
-    const { mirror, changes } = setup();
-    const writer = mirror.writer();
-    mirror.reset(aDocumentData({ features: [aFeature({ id: 'f1' })] }));
+    const { control, mirror, changes } = setup();
+    const writer = control.writer();
+    control.reset(aDocumentData({ features: [aFeature({ id: 'f1' })] }));
     writer.removeFeature('f1' as FeatureId); // test ids are trusted
     expect(mirror.studio.features).toEqual([]);
     expect(changes()).toBe(2);
@@ -92,10 +102,10 @@ describe('MirrorDocument', () => {
 
   it('a change of the rollback index or the body metadata alone is a change', () => {
     const box = aFeature({ id: 'f1' });
-    const { mirror, changes } = setup(aDocumentData({ features: [box] }));
-    mirror.reset(aDocumentData({ features: [box], rollbackIndex: 0 }));
+    const { control, mirror, changes } = setup(aDocumentData({ features: [box] }));
+    control.reset(aDocumentData({ features: [box], rollbackIndex: 0 }));
     expect(mirror.studio.rollbackIndex).toBe(0);
-    mirror.reset(
+    control.reset(
       aDocumentData({
         features: [box],
         rollbackIndex: 0,

@@ -4,11 +4,11 @@
 // (ExportStep) and the document file with its history (ExportDocument; the server keeps the log,
 // so there is no export without history any more, M19.1 D4). The file goes to `download`.
 
-import type { Observable } from '@/core';
 import type { DocumentId } from '@/document';
 import type { FileExporter } from '@/interaction';
 import type { RemoteDocuments, RemoteSession } from '@/remote';
 import type { DownloadFile } from './app-session';
+import { queueEmpty } from './queue-empty';
 
 export interface RemoteFileExporterDeps {
   readonly session: Pick<RemoteSession, 'pending' | 'exportStep'>;
@@ -34,18 +34,6 @@ export function createRemoteFileExporter(deps: RemoteFileExporterDeps): FileExpo
       return { withHistory: true };
     },
   };
-}
-
-/** Resolves once no change is queued or in flight. */
-function queueEmpty(pending: Observable<number>): Promise<void> {
-  if (pending.get() === 0) return Promise.resolve();
-  return new Promise((resolve) => {
-    const unsubscribe = pending.subscribe(() => {
-      if (pending.get() !== 0) return;
-      unsubscribe();
-      resolve();
-    });
-  });
 }
 
 /** A copy over its own ArrayBuffer, as DownloadFile wants (a decoded `bytes` may be a view). */

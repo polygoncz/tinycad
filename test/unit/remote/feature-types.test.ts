@@ -7,8 +7,13 @@ import { isParamVisible, validateAgainstSchema } from '@/document';
 import type { FeatureSchema } from '@/document';
 import { FeatureTypeDescriptorSchema, TopoParam_Entity, VisibleWhenSchema } from '@/protocol';
 import type { FeatureTypeDescriptor } from '@/protocol';
-import { featureSchemaOf, RemoteError, visibleWhenOf } from '@/remote';
-import { aFeatureTypeDescriptor, listValue } from '@/remote/testing';
+import { RemoteError } from '@/remote';
+import {
+  aFeatureTypeDescriptor,
+  featureSchemaOf,
+  listValue,
+  visibleWhenOf,
+} from '@/remote/testing';
 
 const SHARED_CASES = join(import.meta.dirname, '../../shared-cases/schema');
 // The golden file written by the C++ tests (N88, N95).

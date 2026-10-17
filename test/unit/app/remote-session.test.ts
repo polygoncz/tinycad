@@ -195,6 +195,31 @@ describe('createRemoteAppSession', () => {
     expect(sizeOf(session)).toBe(21);
   });
 
+  // The review after M46/M47: one ordering rule for read models (N136), in the session.
+  it('a refresh of G2 answered before the change of G1: the document and the view stay on G2', async () => {
+    const { core, session } = await setup();
+    const answer = held<{ result: { readModel: ReadModel } }>();
+    core.respond('dispatch', () => answer.promise);
+    // G2: the rename and a change of another tab (size 50, a body).
+    const g2 = model(50, 2, { bodies: [aBodyView()] });
+    core.respond('getReadModel', { readModel: g2 });
+    expect(session.documentName.rename('Other')).toBe(true);
+    await flush();
+    session.retryKernel(); // GetReadModel
+    await flush();
+    answer.release({ result: { readModel: model(10, 1) } });
+    await flush();
+    expect(sizeOf(session)).toBe(50);
+    expect(session.regen.get().bodyCount).toBe(1);
+  });
+
+  it('a read-only tab keeps persistence saved', async () => {
+    const { session } = await setup({ writable: false });
+    session.retryKernel();
+    await flush();
+    expect(session.persistence.get()).toBe('saved');
+  });
+
   it('is read-only when the session is not writable and sends no change', async () => {
     const { core, session } = await setup({ writable: false });
     expect(session.readOnly).toBe(true);
@@ -209,7 +234,7 @@ describe('createRemoteAppSession', () => {
   // E2E M46: a reload whose CloseSession got lost resumes the session with the transaction of
   // the dialog of the page before; this page has no dialog, so every begin failed.
   it('aborts the transaction a resumed session still has open, before anything else', async () => {
-    const resumed = model(99, 3, { transaction: 'feature.edit' });
+    const resumed = model(99, 1, { transaction: 'feature.edit' });
     const { core, session } = await setup({ opened: resumed });
     expect(core.calls.filter((c) => c !== 'watchSession').slice(0, 2)).toEqual([
       'openSession',

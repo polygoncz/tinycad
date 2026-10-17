@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RpcError } from '@/core';
-import { createKernelError, kernelErrorCode } from '@/kernel/errors';
+import { createKernelError } from '@/kernel/errors';
+import { kernelErrorCode } from '@/kernel/testing';
 
 describe('kernelErrorCode', () => {
   it.each(['invalid-input', 'operation-failed', 'unknown-handle', 'internal'] as const)(
