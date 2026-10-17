@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 #
 # tinycad native core (ADR 0030). Build context is the repository root
-# (see .dockerignore): the image needs server/ and test/shared-cases/.
+# (see .dockerignore): the image needs server/, test/shared-cases/ and test/golden/.
 #
 #   deps    – toolchain, vcpkg at a pinned commit, all C++ dependencies
 #   build   – configure, build and run the GoogleTest suite (ctest)
@@ -72,6 +72,7 @@ FROM deps AS build
 
 COPY server/ /src/server/
 COPY test/shared-cases/ /src/test/shared-cases/
+COPY test/golden/ /src/test/golden/
 
 RUN cmake --preset docker \
       -DVCPKG_TARGET_TRIPLET="$(cat /opt/vcpkg-triplet)" \
