@@ -1,5 +1,8 @@
 #include "tinycad/storage/document_service.hpp"
 
+#include <openssl/evp.h>
+
+#include <array>
 #include <utility>
 
 #include "snapshot.hpp"
@@ -81,6 +84,22 @@ std::string safeFileName(const std::string& name) {
 }
 
 }  // namespace
+
+OperationKey importKey(std::string_view content) {
+  std::array<unsigned char, EVP_MAX_MD_SIZE> digest{};
+  unsigned int length = 0;
+  const int ok =
+      EVP_Digest(content.data(), content.size(), digest.data(), &length, EVP_sha256(), nullptr);
+  TINYCAD_ASSERT(ok == 1, "OpenSSL SHA-256 failed");
+  static constexpr char kHex[] = "0123456789abcdef";
+  std::string hex;
+  hex.reserve(2 * length);
+  for (unsigned int i = 0; i < length; ++i) {
+    hex.push_back(kHex[digest[i] >> 4]);
+    hex.push_back(kHex[digest[i] & 0x0f]);
+  }
+  return OperationKey{"import:" + hex, hex};
+}
 
 DocumentService::DocumentService(const Dependencies& deps) : deps_(deps) {}
 
