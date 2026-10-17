@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "tinycad-core",
+  "version": "0.1.0",
+  "description": "tinycad native core: gRPC server over OpenCascade (ADR 0030).",
+  "builtin-baseline": "a5f736224e85b32e25a8ffc52562333180396642",
+  "dependencies": [
+    "grpc",
+    "protobuf",
+    {
+      "name": "opencascade",
+      "default-features": false
+    },
+    "nlohmann-json",
+    "gtest",
+    "sqlite3",
+    "eigen3",
+    "boost-graph"
+  ]
+}
