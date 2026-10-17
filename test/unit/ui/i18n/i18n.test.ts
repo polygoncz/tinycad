@@ -64,7 +64,6 @@ const COMPOSED_KEYS = [
   'titleBar.persistence.pending',
   'titleBar.persistence.error',
   'titleBar.kernel.restarting',
-  'titleBar.kernel.failed',
   'titleBar.kernel.unavailable',
   'titleBar.locale.cs',
   'titleBar.locale.en',

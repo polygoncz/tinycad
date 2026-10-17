@@ -311,25 +311,18 @@ function nameOf(
   return undefined;
 }
 
-const WITH_HISTORY = Object.freeze({ withHistory: true });
-
 /** One call of the FakeFileExporter: STEP with its bodies, or the document. */
 export type FileExportCall =
   { readonly task: 'step'; readonly bodies: readonly BodyId[] } | { readonly task: 'document' };
 
-/** The result of a document export (M19.1): whether the file carries the edit history. */
-type DocumentExportResult = Awaited<ReturnType<FileExporter['exportDocument']>>;
-
 interface PendingExport {
-  /** A STEP export ignores the result. */
-  readonly resolve: (result: DocumentExportResult) => void;
+  readonly resolve: () => void;
   readonly reject: (e: unknown) => void;
 }
 
 /**
  * A FileExporter for tests: records the calls and leaves each one pending until the test
  * settles it with resolve() or reject(e), oldest first (manual settling, like FakeSolver.hold).
- * A document export resolves with the result given to resolve(), with history by default.
  */
 export class FakeFileExporter implements FileExporter {
   private callList: readonly FileExportCall[] = [];
@@ -349,15 +342,13 @@ export class FakeFileExporter implements FileExporter {
     await this.record(Object.freeze({ task: 'step', bodies: Object.freeze([...bodies]) }));
   }
 
-  exportDocument(): Promise<DocumentExportResult> {
+  exportDocument(): Promise<void> {
     return this.record(Object.freeze({ task: 'document' }));
   }
 
-  /**
-   * Fulfils the oldest pending call, a document export with `result`; none pending throws.
-   */
-  resolve(result: DocumentExportResult = WITH_HISTORY): void {
-    this.take().resolve(result);
+  /** Fulfils the oldest pending call; none pending throws. */
+  resolve(): void {
+    this.take().resolve();
   }
 
   /** Rejects the oldest pending call with `e`; none pending throws. */
@@ -365,9 +356,9 @@ export class FakeFileExporter implements FileExporter {
     this.take().reject(e);
   }
 
-  private record(call: FileExportCall): Promise<DocumentExportResult> {
+  private record(call: FileExportCall): Promise<void> {
     this.callList = Object.freeze([...this.callList, call]);
-    return new Promise<DocumentExportResult>((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       this.pending = [...this.pending, { resolve, reject }];
     });
   }

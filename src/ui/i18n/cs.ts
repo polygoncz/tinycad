@@ -117,10 +117,8 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'titleBar.persistence.export': 'Exportovat',
   'titleBar.kernel.starting': 'Připojuji se k serveru…',
   'titleBar.kernel.restarting': 'Spojení se serverem přerušeno, obnovuji spojení…',
-  'titleBar.kernel.failed': 'Geometrické jádro opakovaně spadlo.',
   'titleBar.kernel.unavailable': 'Server není dostupný.',
   'titleBar.kernel.retry': 'Zkusit znovu',
-  'titleBar.regen.failed': 'Přepočet selhal',
   'titleBar.details': 'Podrobnosti',
   'titleBar.language': 'Jazyk: {language}',
   'titleBar.locale.cs': 'čeština',
@@ -293,8 +291,6 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'file.running': 'Exportuji…',
   'file.failed': 'Export se nezdařil',
   // The warning of a finished export (M19.1, D4): FileStatus.warning is the key.
-  'file.exportedWithoutHistory':
-    'Dokument byl exportován bez historie úprav, protože ukládání nefunguje.',
 
   // History panel (M15).
   'history.title': 'Historie úprav',

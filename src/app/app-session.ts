@@ -27,7 +27,7 @@ import type { AppNotice } from './notices';
 import type { ViewportSettings, ViewSettings } from './view-settings';
 
 /** The state of the core for the title bar (N69: the connection mapped onto it). */
-export type KernelUiState = 'starting' | 'ready' | 'restarting' | 'failed' | 'unavailable';
+export type KernelUiState = 'starting' | 'ready' | 'restarting' | 'unavailable';
 
 /**
  * Whether the changes are saved (N69: the changes in flight mapped onto it). 'error': a write
@@ -43,11 +43,6 @@ export type RegenUiState = {
   readonly bodyCount: number;
   /** Duration of the last finished regeneration; null before the first. */
   readonly lastMs: number | null;
-  /**
-   * M19.1: text of the error of the last regeneration that threw (a bug, not a lost kernel);
-   * null before the first such error and after a successful regeneration.
-   */
-  readonly failed: string | null;
 };
 
 /** M15: a file to download; ui implements the port (a Blob and <a download>). */

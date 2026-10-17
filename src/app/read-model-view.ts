@@ -115,7 +115,7 @@ export function createReadModelView(deps: ReadModelViewDeps): ReadModelView {
 
   const state = new ObservableValue<RegenSnapshot>(EMPTY_SNAPSHOT);
   const ui = new ObservableValue<RegenUiState>(
-    Object.freeze({ busy: deps.pending.get() > 0, bodyCount: 0, lastMs: null, failed: null }),
+    Object.freeze({ busy: deps.pending.get() > 0, bodyCount: 0, lastMs: null }),
   );
   const updateUi = (change: Partial<RegenUiState>): void => {
     ui.set(Object.freeze({ ...ui.get(), ...change }));
@@ -207,7 +207,7 @@ export function createReadModelView(deps: ReadModelViewDeps): ReadModelView {
       // A subscriber may have disposed the view meanwhile: then the viewport is left alone.
       drawings.received(regen.final.sketches);
       if (!disposed) drawings.draw(edited());
-      updateUi({ bodyCount: regen.final.bodies.length, lastMs: regen.durationMs, failed: null });
+      updateUi({ bodyCount: regen.final.bodies.length, lastMs: regen.durationMs });
       if (!disposed) deps.afterSync();
       fitFirstView(regen.final.bodies.length);
     } finally {

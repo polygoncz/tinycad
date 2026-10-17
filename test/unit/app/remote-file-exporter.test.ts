@@ -47,7 +47,7 @@ describe('createRemoteFileExporter', () => {
 
   it('exports the document file of the server, always with history', async () => {
     const h = setup();
-    await expect(h.exporter.exportDocument()).resolves.toEqual({ withHistory: true });
+    await expect(h.exporter.exportDocument()).resolves.toBeUndefined();
     expect(h.exportFile).toHaveBeenCalledWith('doc-1');
     expect(h.downloads).toEqual([
       { name: 'Bracket.tinycad.json', mime: 'application/json', data: JSON_FILE },

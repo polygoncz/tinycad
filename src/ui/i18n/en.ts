@@ -117,10 +117,8 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'titleBar.persistence.export': 'Export',
   'titleBar.kernel.starting': 'Connecting to the server…',
   'titleBar.kernel.restarting': 'Connection to the server lost, reconnecting…',
-  'titleBar.kernel.failed': 'The geometry kernel crashed repeatedly.',
   'titleBar.kernel.unavailable': 'The server is not reachable.',
   'titleBar.kernel.retry': 'Try again',
-  'titleBar.regen.failed': 'Regeneration failed',
   'titleBar.details': 'Details',
   'titleBar.language': 'Language: {language}',
   'titleBar.locale.cs': 'Czech',
@@ -294,8 +292,6 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'file.running': 'Exporting…',
   'file.failed': 'Export failed',
   // The warning of a finished export (M19.1, D4): FileStatus.warning is the key.
-  'file.exportedWithoutHistory':
-    'The document was exported without its edit history because saving does not work.',
 
   // History panel (M15).
   'history.title': 'Edit history',

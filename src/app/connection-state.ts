@@ -1,8 +1,8 @@
 // The state of the connection to the core for the UI (N69, spec 11 "Stav jádra a ukládání"): the
 // connection and the changes in flight of a RemoteSession mapped onto the KernelUiState and the
 // PersistenceStatus the title bar and the banner already show, so ui gets only new texts.
-// Connecting = 'starting', online = 'ready', retrying = 'restarting', offline = 'unavailable';
-// changes in flight = 'pending', retrying = 'error', given up with unconfirmed changes = 'failed'.
+// Connecting = 'starting', online = 'ready', retrying = 'restarting', offline = 'unavailable' (the
+// four connection states are all the kernel states there are, N153); changes in flight = 'pending', retrying = 'error', given up with unconfirmed changes = 'failed'.
 // N92: the queue of the session settles every change it gave up on as failed and its `pending`
 // drops to 0, while the mirror dropped those changes; so 'failed' follows the changes of the
 // mirror that were dropped for the outage (changeDropped with a retryable error) until the
