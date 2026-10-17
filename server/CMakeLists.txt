@@ -23,10 +23,12 @@ enable_testing()
 
 add_subdirectory(src/proto)
 add_subdirectory(src/core)
+add_subdirectory(src/document)
 add_subdirectory(src/geometry)
 add_subdirectory(src/service)
 add_subdirectory(src/app)
 
 add_subdirectory(test/support)
+add_subdirectory(test/document)
 add_subdirectory(test/service)
 add_subdirectory(test/shared-cases)
