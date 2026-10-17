@@ -45,10 +45,10 @@ Prošla se všechna `server/src/features/*/schema.cpp`. Nad rámec `validateAgai
 
 ## Úkoly
 
-- [ ] 1. C++: `checkParamRules` (druh `DisjointRefs`), pravidla v `BuiltInSchema`, boolean bez vlastního `validate`, kontrola pravidel v registru.
-- [ ] 2. Kontrakt: `schema.proto` (`FeatureTypeDescriptor.rules`, zprávy `ParamRule` a `DisjointRefs`, jen přidaná pole), převod `describeRule`, zlatý soubor `test/golden/feature-types.json`.
-- [ ] 3. Klient: `document/rules.ts` (stejné vyhodnocení), `remote/feature-types.ts` (`validate` = obecná kontrola + pravidla), dialog ukáže kód u pole.
-- [ ] 4. Sdílené případy: běžec TS `schema.validate` a `schema.visibleWhen` nad zlatým souborem; kódy jen serverových pravidel se z očekávání odfiltrují; metatest pokrytí pravidel.
+- [x] 1. C++: `checkParamRules` (druh `DisjointRefs`), pravidla v `BuiltInSchema`, boolean bez vlastního `validate`, kontrola pravidel v registru.
+- [x] 2. Kontrakt: `schema.proto` (`FeatureTypeDescriptor.rules`, zprávy `ParamRule` a `DisjointRefs`, jen přidaná pole), převod `describeRule`, zlatý soubor `test/golden/feature-types.json`.
+- [x] 3. Klient: `document/rules.ts` (stejné vyhodnocení), `remote/feature-types.ts` (`validate` = obecná kontrola + pravidla), dialog ukáže kód u pole.
+- [x] 4. Sdílené případy: běžec TS `schema.validate` a `schema.visibleWhen` nad zlatým souborem; kódy jen serverových pravidel se z očekávání odfiltrují; metatest pokrytí pravidel.
 - [ ] 5. Spec 03, 13 a 14 a deník (hlavní sezení).
 
 ## Akceptační kritéria

@@ -15,6 +15,7 @@ milestones:
   - "[[M15-export-a-dokonceni]]"
   - "[[M40-dokument-a-operace-v-cpp]]"
   - "[[M47-uklid-a-dokonceni]]"
+  - "[[M49-pravidla-validace-v-popisu]]"
 tags:
   - spec
 created: 2026-10-12
@@ -28,7 +29,7 @@ updated: 2026-10-17
 
 Popisuje, **co** uživatel vytvořil: recept ze seřazených featur. Neobsahuje žádnou geometrii ani logiku jejího výpočtu. Závisí jen na `core`.
 
-**Kde běží (od [[M47-uklid-a-dokonceni|M47]]):** autoritou je C++ dokument na serveru, knihovna `tinycad_document` v `server/src/document` (třída `Document` nad `shared_ptr<const …>`, [[Rozhodnutí nativního jádra|N17]]; hlavičky v `server/src/document/include/tinycad/document/`). Zápis v TS níže zůstává zápisem kontraktu, C++ ho implementuje beze změny chování (sdílené případy, [[13-testovani#Sdílené testovací případy]]). Modul `document` v klientovi drží optimistické zrcadlo dokumentu (`app/mirror-document.ts`, [[Rozhodnutí nativního jádra|N63]]): model, reference, schéma a registr, `validateAgainstSchema` (generická kontrola v dialogu nad schématem z `FeatureTypeDescriptor`, [[14-protokol#Schéma featur]]), `evaluateParams` a `migrateFeatureData` pro handlery operací.
+**Kde běží (od [[M47-uklid-a-dokonceni|M47]]):** autoritou je C++ dokument na serveru, knihovna `tinycad_document` v `server/src/document` (třída `Document` nad `shared_ptr<const …>`, [[Rozhodnutí nativního jádra|N17]]; hlavičky v `server/src/document/include/tinycad/document/`). Zápis v TS níže zůstává zápisem kontraktu, C++ ho implementuje beze změny chování (sdílené případy, [[13-testovani#Sdílené testovací případy]]). Modul `document` v klientovi drží optimistické zrcadlo dokumentu (`app/mirror-document.ts`, [[Rozhodnutí nativního jádra|N63]]): model, reference, schéma a registr, `validateAgainstSchema` a `checkParamRules` (generická kontrola a deklarativní pravidla v dialogu nad schématem z `FeatureTypeDescriptor`, [[14-protokol#Schéma featur]], [[#Vlastní pravidla]]), `evaluateParams` a `migrateFeatureData` pro handlery operací.
 
 ## Model
 
@@ -280,11 +281,44 @@ export function createFeatureSchemaRegistry(): FeatureSchemaRegistry;
 
 `ParamSpec` slouží třem účelům najednou: validaci, generování formuláře v UI ([[11-ui|11]]) a rozpoznání, které parametry jsou reference (pro picking v dialogu).
 
-Pomocná funkce `validateAgainstSchema(schema, params)` dělá obecnou kontrolu (typ, min/max, počet referencí). Schéma featury ji v `validate` zavolá a přidá vlastní pravidla.
+Pomocná funkce `validateAgainstSchema(schema, params)` dělá obecnou kontrolu (typ, min/max, počet referencí). Schéma featury ji v `validate` zavolá a přidá vlastní pravidla ([[#Vlastní pravidla]]).
 
 - Chybějící parametr (je ve schématu, ne v `params`) i přebytečný parametr (je v `params`, ne ve schématu) je `ParamIssue` ([[Q028 Chybějící a přebytečné parametry|Q028]]). `migrate` proto musí po sobě uklidit i parametry, které nová verze nemá.
 - Referenční parametry (`bodies`, `topo`, `region`, `planes`) jsou v `params` vždy, prázdné jako `[]`, i při `min: 0`; `axis` je vždy přítomný, prázdný jako `null`.
-- Referenční parametr nesmí obsahovat stejnou referenci dvakrát (M11): po kontrole tvaru se hlásí první položka shodná s dřívější (`body` u `body`, `body` + `name` u `topo`, `sketch` + `region` u `region`, `plane` u `planes`) jako `param.duplicateRef` s jejím `index`. Pořadí kontrol: `invalidRef`, `duplicateRef`, `tooFewRefs`, `tooManyRefs`. Vztahy mezi parametry (těleso v cílech i nástrojích booleanu) jsou vlastní pravidlo schématu.
+- Referenční parametr nesmí obsahovat stejnou referenci dvakrát (M11): po kontrole tvaru se hlásí první položka shodná s dřívější (`body` u `body`, `body` + `name` u `topo`, `sketch` + `region` u `region`, `plane` u `planes`) jako `param.duplicateRef` s jejím `index`. Pořadí kontrol: `invalidRef`, `duplicateRef`, `tooFewRefs`, `tooManyRefs`. Vztahy mezi parametry (těleso v cílech i nástrojích booleanu) jsou vlastní pravidlo schématu ([[#Vlastní pravidla]]).
+
+### Vlastní pravidla
+
+Od [[M49-pravidla-validace-v-popisu|M49]] ([[Rozhodnutí nativního jádra|N148, N149]]): pravidlo nad rámec obecné kontroly, které jde popsat daty, je **data** jako `VisibleWhen` – `ParamRule` (C++ `server/src/document/include/tinycad/document/param_rule.hpp`, TS `src/document/rules.ts`). Server ho posílá v `FeatureTypeDescriptor.rules` ([[14-protokol#Schéma featur]]), takže dialog ukáže stejný kód `ParamIssue` u pole ještě před odesláním; rozhoduje dál server.
+
+```ts
+export interface ParamRule {
+  readonly kind: 'disjointRefs';   // zatím jediný druh (N149)
+  readonly code: string;           // ParamIssue.code a klíč překladu, 'boolean.sameBody'
+  readonly param: string;          // parametr, u kterého se hlásí
+  readonly other: string;          // druhý seznam referencí
+}
+/** Hlášení pravidel; issues = validateAgainstSchema(schema, params). Vrací jen nová hlášení, nikdy nehází. */
+export function checkParamRules(schema: ParamSchema, rules: readonly ParamRule[], params: unknown,
+                                issues: readonly ParamIssue[]): readonly ParamIssue[];
+```
+
+C++: `FeatureSchema::rules()` (výchozí prázdné) a `checkParamRules(schema, rules, params, issues&)`, které hlášení připojí. `BuiltInSchema` drží pravidla v konstruktoru a `validate` = `validateAgainstSchema` + `checkParamRules`; typ `FeatureSchema` v TS se nemění, pravidla žijí v uzávěru `validate` z `featureSchemaOf` (`remote/feature-types.ts`).
+
+- **`disjointRefs`**: žádná reference seznamu `param` nesmí být zároveň v seznamu `other` (shoda podle klíče `param.duplicateRef` včetně druhu reference). Hlásí se **jedno** hlášení `{ param, code, { index } }` u první takové položky `param` podle indexu.
+- Pravidlo se přeskočí, když `params` není objekt, když `param` nebo `other` není viditelný (`isParamVisible`), nebo když obecná kontrola nahlásila něco u `''`, u `param` nebo u `other` (oba jsou pak pole platných referencí). Hlášení u jiných parametrů (např. `param.unexpected`) pravidlo nezastaví; pravidlo nevidí hlášení jiného pravidla.
+- Pořadí hlášení: obecná kontrola, pak pravidla v pořadí `rules()`. Pořadí není kontrakt (sdílené případy třídí).
+- Registr C++ (`FeatureSchemaRegistry::add`) odmítne (AssertionError) pravidlo bez `code`, nad parametrem mimo schéma, se stejným `param` a `other` a u `disjointRefs` nad parametrem, který není seznam referencí (`bodies`, `topo`, `region`, `planes`; ne `axis`). Klient takové pravidlo jen přeskočí.
+- Pravidla vestavěných featur: `boolean` – `{ disjointRefs, 'boolean.sameBody', param: 'tools', other: 'targets' }` (vlastní `BooleanSchema::validate` zmizel, pravidlo je jednou, jako data). Ostatní featury pravidla nemají.
+- Nový druh pravidla = nová hodnota `ParamRule::Kind` a její větev v `checkParamRules` (C++), zpráva v `schema.proto`, položka v `RULE_CHECKS` v `src/document/rules.ts` a sdílené případy `schema.validate` ([[13-testovani#Sdílené testovací případy]]).
+
+#### Pravidla jen na serveru
+
+Pravidla, která daty popsat nejdou, zůstávají ve `FeatureSchema::validate` na serveru; dialog je neukáže, vrátí se jako červená featura v read modelu. Běžec TS sdílených případů jejich kódy vyřadí z očekávání (`SERVER_ONLY_CODES`, [[13-testovani#Sdílené testovací případy]]) – seznam tam musí odpovídat této tabulce.
+
+| Featura | Pravidlo | Kódy |
+|---|---|---|
+| `sketch` | `entities` a `constraints` musí projít `Sketch::parse` (model skici, [[12-skicar#Kontrola dat]]) | `sketch.invalidEntity`, `sketch.invalidConstraint` (`{ index }`) |
 
 ### Podmíněné a seskupené parametry (M13)
 
@@ -376,6 +410,7 @@ Testy modelu, referencí a schématu běží v obou jazycích (`test/unit/docume
 - M14: `planes` přijme `TopoRef` (validace, duplicita, `referencesOf`, `dependenciesOf` → vlastník tělesa), `topo` s prázdným `name` → `param.invalidRef`.
 - M15: `setBodyMeta` s barvou a bez ní (kanonický tvar, metadata jen s výchozí barvou zmizí), `fromData` s platnou a neplatnou barvou (`#FFF`, `#ABCDEF`, `red`, číslo), `isBodyColor`.
 - Počáteční geometrie a nové druhy parametrů (M12): `parsePlaneId`, `sketchId`, `ORIGIN_PLANES` (rámce ortonormální, id podle tabulky), `planes` v `readRef`/`referencesOf`/`validateAgainstSchema` (tvar, duplicita, min/max), `data` jen `param.missing`, `dependenciesOf` ignoruje `ORIGIN`, `fromData` a `feature.add` odmítnou `FeatureId` `'origin'`.
+- Vlastní pravidla (M49): `checkParamRules` nad malým schématem (`rules_test.cpp`, `rules.test.ts` se stejnými případy) – první shoda podle indexu, shoda `topo` podle `body` + `name`, skrytý parametr, rozbitý `param` nebo `other`, hlášení u jiného parametru pravidlo nezastaví, parametry nejsou objekt; registr odmítne pravidlo nad neznámým parametrem, nad `axis` nebo hodnotou, nad stejným parametrem a bez kódu; boolean má právě jedno pravidlo.
 - Metadata těles (M11): kanonizace v `setBodyMeta`, žádný `changed` beze změny, `features` zůstává totéž pole, ostatní mutátory metadata zachovají, `fromData` s platnými i poškozenými metadaty; `param.duplicateRef` pro `bodies` a `topo`.
 
 ## Otevřené otázky
