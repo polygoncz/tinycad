@@ -9,7 +9,9 @@
 // /data/documents (the Compose volume). Prints one line per file and exits with 1 when at least one
 // file failed:
 //
-//   docker compose run --rm -v ~/tinycad-export:/import core tinycad-import /import
+//   docker compose run --rm --entrypoint tinycad-import -v ~/tinycad-export:/import core /import
+//
+// (--entrypoint: the image starts tinycad-core by default; the data volume comes with M45.)
 
 #include <openssl/sha.h>
 

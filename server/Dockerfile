@@ -87,6 +87,9 @@ RUN apt-get update \
  && useradd --system --no-create-home tinycad
 
 COPY --from=build /src/server/build/docker/src/app/tinycad-core /usr/local/bin/tinycad-core
+# One-off import of documents exported from the browser (M41, decision N38):
+#   docker compose run --rm --entrypoint tinycad-import -v ~/tinycad-export:/import core /import
+COPY --from=build /src/server/build/docker/src/tools/tinycad-import /usr/local/bin/tinycad-import
 
 USER tinycad
 EXPOSE 50051
