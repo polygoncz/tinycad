@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator, ObservableValue } from '@/core';
 import { createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
 import type { BodyId, FeatureId, FeatureSchema, ParamSchema } from '@/document';
-import { anOpsSession } from '@/ops/testing';
+import { aFakeOps } from '@/ops/testing';
 import { createActionRegistry } from '@/interaction/actions';
 import { createFeatureEditor } from '@/interaction/feature-dialog/feature-editor';
 import { FILE_ACTION_IDS } from '@/interaction/constants';
@@ -39,12 +39,13 @@ const flush = (): Promise<void> =>
   });
 
 function setup() {
-  const { doc, dispatcher } = anOpsSession();
+  const ops = aFakeOps();
+  const { doc } = ops;
   const schemas = createFeatureSchemaRegistry();
   schemas.register(BOX);
   const editor = createFeatureEditor({
     doc,
-    ops: dispatcher,
+    ops,
     schemas,
     ids: createSequentialIdGenerator('f'),
   });

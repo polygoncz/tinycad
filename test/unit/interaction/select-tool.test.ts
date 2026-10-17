@@ -1,5 +1,5 @@
 import { createSequentialIdGenerator, ObservableValue } from '@/core';
-import { anOpsSession } from '@/ops/testing';
+import { aFakeOps } from '@/ops/testing';
 import { describe, expect, it } from 'vitest';
 import type { BodyId, PickResult, SelectionItem } from '@/interaction';
 import type {
@@ -81,7 +81,7 @@ function aFeatureEditorStub(): FeatureEditor {
 function setup() {
   const viewport = new FakeViewport();
   const selection = createSelectionModel({ regen: new FakeRegenStatus() });
-  const session = anOpsSession();
+  const session = aFakeOps();
   let finished = 0;
   const tool: Tool = SELECT_TOOL.create();
   tool.activate({

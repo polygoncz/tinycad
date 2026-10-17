@@ -6,10 +6,13 @@ import {
   sketchId,
   validateAgainstSchema,
 } from '@/document';
-import { aFeature, bodyId, ORIGIN_AXIS_IDS, toData } from '@/document/testing';
+import { aFeature, bodyId, ORIGIN_AXIS_IDS } from '@/document/testing';
+import type { TestDocument } from '@/document/testing';
 import type {
   AxisId,
+  BodyId,
   BodyMaterial,
+  BodyMeta,
   FeatureId,
   FeatureSchema,
   ParamSchema,
@@ -20,11 +23,10 @@ import type {
   BodySetColorOp,
   BodySetMaterialOp,
   BodySetVisibleOp,
-  FeatureRenameOp,
   Operation,
 } from '@/ops';
 import { OP_VERSION } from '@/ops';
-import { anOpsSession } from '@/ops/testing';
+import { aFakeOps } from '@/ops/testing';
 import { createBrowserModel } from '@/interaction/browser-model';
 import { createEditLock } from '@/interaction/edit-lock';
 import { createFeatureEditor } from '@/interaction/feature-dialog/feature-editor';
@@ -105,8 +107,7 @@ function setup(opts: { readOnly?: boolean; sketchEdit?: (feature: FeatureId) => 
   schemas.register(TOPO);
   schemas.register(REV);
   schemas.register(PLN);
-  const ops = anOpsSession({
-    schemas,
+  const ops = aFakeOps({
     features: [
       aFeature({ id: 'f1', name: 'Box 1' }),
       aFeature({ id: 'f2', name: 'Cylinder 1' }),
@@ -120,14 +121,14 @@ function setup(opts: { readOnly?: boolean; sketchEdit?: (feature: FeatureId) => 
   const selection = createSelectionModel({ regen });
   const editor = createFeatureEditor({
     doc: ops.doc,
-    ops: ops.dispatcher,
+    ops,
     schemas,
     ids: createSequentialIdGenerator('new'),
   });
   const locked = createEditLock({ readOnly: opts.readOnly ?? false, editor });
   const browser = createBrowserModel({
     doc: ops.doc,
-    ops: ops.dispatcher,
+    ops,
     regen,
     selection,
     editor,
@@ -146,7 +147,8 @@ function setup(opts: { readOnly?: boolean; sketchEdit?: (feature: FeatureId) => 
   browser.axes.subscribe(() => order.push('axes'));
   const count = (what: string): number => order.filter((o) => o === what).length;
   return {
-    ...ops,
+    ops,
+    doc: scripted(ops.doc),
     regen,
     selection,
     editor,
@@ -162,9 +164,28 @@ function setup(opts: { readOnly?: boolean; sketchEdit?: (feature: FeatureId) => 
   };
 }
 
-/** The ops of the log in order (body.* are never batched). */
+/**
+ * The document with read models of the server scripted by the test: new metadata of a body (empty
+ * removes them) or a new rollback index.
+ */
+function scripted(doc: TestDocument) {
+  return Object.assign(doc, {
+    setBodyMeta(body: BodyId, meta: BodyMeta): void {
+      const rest = Object.fromEntries(
+        Object.entries(doc.studio.bodies ?? {}).filter(([key]) => key !== body),
+      );
+      const bodies = Object.keys(meta).length === 0 ? rest : { ...rest, [body]: meta };
+      doc.replace({ studio: { ...doc.studio, bodies } });
+    },
+    setRollbackIndex(rollbackIndex: number): void {
+      doc.replace({ studio: { ...doc.studio, rollbackIndex } });
+    },
+  });
+}
+
+/** The body.* operations sent, in order (the dialog of a test sends its own feature.add). */
 function loggedOps(s: ReturnType<typeof setup>): readonly Operation[] {
-  return s.log.entries().map((e) => e.op);
+  return s.ops.ops().filter((op) => op.type.startsWith('body.'));
 }
 
 describe('BrowserModel rows', () => {
@@ -305,7 +326,7 @@ describe('BrowserModel.hidden', () => {
     const s = setup();
     s.regen.publish(new Map(), BODIES);
     s.order.length = 0;
-    s.browser.setVisible(B1, false);
+    s.doc.setBodyMeta(B1, { hidden: true });
     expect(s.order).toEqual(['hidden', 'bodies']);
   });
 
@@ -323,9 +344,9 @@ describe('BrowserModel.hidden', () => {
   it('a new hidden set is published on each change; the old one does not change', () => {
     const s = setup();
     s.regen.publish(new Map(), BODIES);
-    s.browser.setVisible(B1, false);
+    s.doc.setBodyMeta(B1, { hidden: true });
     const first = s.browser.hidden.get();
-    s.browser.setVisible(B2, false);
+    s.doc.setBodyMeta(B2, { hidden: true });
     expect([...first]).toEqual([B1]);
     expect(new Set(s.browser.hidden.get())).toEqual(new Set([B1, B2]));
   });
@@ -344,42 +365,35 @@ describe('BrowserModel.setVisible', () => {
       visible: false,
     };
     expect(loggedOps(s)).toEqual([op]);
-    expect(s.doc.bodyMeta(B2)).toEqual({ hidden: true });
+    // No optimism (N168): the row follows the read model of the answer.
+    expect(s.browser.hidden.get().size).toBe(0);
+    s.doc.setBodyMeta(B2, { hidden: true });
     expect([...s.browser.hidden.get()]).toEqual([B2]);
     const rows = s.browser.bodies.get();
     expect(rows.map((r) => r.visible)).toEqual([true, false]);
     expect(rows[0]).toBe(before[0]);
 
     s.browser.setVisible(B2, true);
-    expect(s.doc.bodyMeta(B2)).toEqual({});
+    s.doc.setBodyMeta(B2, {});
     expect(s.browser.hidden.get().size).toBe(0);
-  });
-
-  it('undo brings the visibility back', () => {
-    const s = setup();
-    s.regen.publish(new Map(), BODIES);
-    s.browser.setVisible(B1, false);
-    void s.undo.undo();
-    expect(s.doc.bodyMeta(B1)).toEqual({});
-    expect(s.browser.hidden.get().size).toBe(0);
-    expect(s.browser.bodies.get()[0]?.visible).toBe(true);
   });
 
   it('the same value does nothing', () => {
     const s = setup();
     s.regen.publish(new Map(), BODIES);
     s.browser.setVisible(B1, true);
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
     s.browser.setVisible(B1, false);
+    s.doc.setBodyMeta(B1, { hidden: true });
     s.browser.setVisible(B1, false);
-    expect(s.log.entries()).toHaveLength(1);
+    expect(loggedOps(s)).toHaveLength(1);
   });
 
   it('a body unknown to the last regeneration does nothing', () => {
     const s = setup();
     s.regen.publish(new Map(), BODIES);
     s.browser.setVisible(B3, false);
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
     expect(s.doc.bodyMeta(B3)).toEqual({});
   });
 
@@ -390,7 +404,7 @@ describe('BrowserModel.setVisible', () => {
     s.browser.setVisible(B1, false);
     expect(s.doc.bodyMeta(B1)).toEqual({});
     session.cancel();
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
   });
 });
 
@@ -452,7 +466,7 @@ describe('BrowserModel colors (M15)', () => {
       color: '#00ff00',
     };
     expect(loggedOps(s)).toEqual([op]);
-    expect(s.doc.bodyMeta(B2)).toEqual({ color: '#00ff00' });
+    s.doc.setBodyMeta(B2, { color: '#00ff00' });
     expect([...s.browser.colors.get()]).toEqual([[B2, '#00ff00']]);
     // The old map is never mutated.
     expect(first.size).toBe(0);
@@ -461,21 +475,8 @@ describe('BrowserModel colors (M15)', () => {
     expect(rows[0]).toBe(before[0]);
 
     s.browser.setColor(B2, null);
-    expect(s.doc.bodyMeta(B2)).toEqual({});
+    s.doc.setBodyMeta(B2, {});
     expect(s.browser.colors.get().size).toBe(0);
-  });
-
-  it('undo brings the color back', () => {
-    const s = setup();
-    s.regen.publish(new Map(), BODIES);
-    s.browser.setColor(B1, '#abcdef');
-    s.browser.setColor(B1, '#123456');
-    void s.undo.undo();
-    expect(s.doc.bodyMeta(B1)).toEqual({ color: '#abcdef' });
-    expect(s.browser.bodies.get()[0]?.color).toBe('#abcdef');
-    void s.undo.undo();
-    expect(s.browser.colors.get().size).toBe(0);
-    expect(s.browser.bodies.get()[0]?.color).toBeNull();
   });
 
   it('emits in the order hidden, colors, bodies', () => {
@@ -483,6 +484,8 @@ describe('BrowserModel colors (M15)', () => {
     s.regen.publish(new Map(), BODIES);
     s.order.length = 0;
     s.browser.setColor(B1, '#abcdef');
+    expect(s.order).toEqual([]);
+    s.doc.setBodyMeta(B1, { color: '#abcdef' });
     expect(s.order).toEqual(['colors', 'bodies']);
     s.order.length = 0;
     s.doc.setBodyMeta(B2, { hidden: true, color: '#000000' });
@@ -493,17 +496,18 @@ describe('BrowserModel colors (M15)', () => {
     const s = setup();
     s.regen.publish(new Map(), BODIES);
     s.browser.setColor(B1, null);
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
     s.browser.setColor(B1, '#abcdef');
+    s.doc.setBodyMeta(B1, { color: '#abcdef' });
     s.browser.setColor(B1, '#abcdef');
-    expect(s.log.entries()).toHaveLength(1);
+    expect(loggedOps(s)).toHaveLength(1);
   });
 
   it('a body unknown to the last regeneration does nothing', () => {
     const s = setup();
     s.regen.publish(new Map(), BODIES);
     s.browser.setColor(B3, '#abcdef');
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
     expect(s.doc.bodyMeta(B3)).toEqual({});
   });
 
@@ -514,14 +518,14 @@ describe('BrowserModel colors (M15)', () => {
     s.browser.setColor(B1, '#abcdef');
     expect(s.doc.bodyMeta(B1)).toEqual({});
     session.cancel();
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
   });
 
   it('does nothing read-only', () => {
     const s = setup({ readOnly: true });
     s.regen.publish(new Map(), BODIES);
     s.browser.setColor(B1, '#abcdef');
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
     expect(s.doc.bodyMeta(B1)).toEqual({});
   });
 
@@ -533,7 +537,7 @@ describe('BrowserModel colors (M15)', () => {
         s.browser.setColor(B1, color);
       }).toThrow();
     }
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
   });
 });
 
@@ -596,7 +600,7 @@ describe('BrowserModel materials (M24)', () => {
       material: 'aluminium',
     };
     expect(loggedOps(s)).toEqual([op]);
-    expect(s.doc.bodyMeta(B2)).toEqual({ material: 'aluminium' });
+    s.doc.setBodyMeta(B2, { material: 'aluminium' });
     expect([...s.browser.materials.get()]).toEqual([[B2, 'aluminium']]);
     // The old map is never mutated.
     expect(first.size).toBe(0);
@@ -606,22 +610,9 @@ describe('BrowserModel materials (M24)', () => {
 
     // The default is not a material in the map (it is never stored).
     s.browser.setMaterial(B2, 'plastic');
-    expect(s.doc.bodyMeta(B2)).toEqual({});
+    s.doc.setBodyMeta(B2, {});
     expect(s.browser.materials.get().size).toBe(0);
     expect(s.browser.bodies.get()[1]?.material).toBe('plastic');
-  });
-
-  it('undo brings the material back', () => {
-    const s = setup();
-    s.regen.publish(new Map(), BODIES);
-    s.browser.setMaterial(B1, 'steel');
-    s.browser.setMaterial(B1, 'glass');
-    void s.undo.undo();
-    expect(s.doc.bodyMeta(B1)).toEqual({ material: 'steel' });
-    expect(s.browser.bodies.get()[0]?.material).toBe('steel');
-    void s.undo.undo();
-    expect(s.browser.materials.get().size).toBe(0);
-    expect(s.browser.bodies.get()[0]?.material).toBe('plastic');
   });
 
   it('emits in the order hidden, colors, materials, bodies', () => {
@@ -629,6 +620,8 @@ describe('BrowserModel materials (M24)', () => {
     s.regen.publish(new Map(), BODIES);
     s.order.length = 0;
     s.browser.setMaterial(B1, 'brass');
+    expect(s.order).toEqual([]);
+    s.doc.setBodyMeta(B1, { material: 'brass' });
     expect(s.order).toEqual(['materials', 'bodies']);
     s.order.length = 0;
     s.doc.setBodyMeta(B2, { hidden: true, color: '#000000', material: 'steel' });
@@ -639,17 +632,18 @@ describe('BrowserModel materials (M24)', () => {
     const s = setup();
     s.regen.publish(new Map(), BODIES);
     s.browser.setMaterial(B1, 'plastic');
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
     s.browser.setMaterial(B1, 'steel');
+    s.doc.setBodyMeta(B1, { material: 'steel' });
     s.browser.setMaterial(B1, 'steel');
-    expect(s.log.entries()).toHaveLength(1);
+    expect(loggedOps(s)).toHaveLength(1);
   });
 
   it('a body unknown to the last regeneration does nothing', () => {
     const s = setup();
     s.regen.publish(new Map(), BODIES);
     s.browser.setMaterial(B3, 'steel');
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
     expect(s.doc.bodyMeta(B3)).toEqual({});
   });
 
@@ -660,14 +654,14 @@ describe('BrowserModel materials (M24)', () => {
     s.browser.setMaterial(B1, 'steel');
     expect(s.doc.bodyMeta(B1)).toEqual({});
     session.cancel();
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
   });
 
   it('does nothing read-only', () => {
     const s = setup({ readOnly: true });
     s.regen.publish(new Map(), BODIES);
     s.browser.setMaterial(B1, 'steel');
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
     expect(s.doc.bodyMeta(B1)).toEqual({});
   });
 
@@ -684,7 +678,7 @@ describe('BrowserModel materials (M24)', () => {
     expect(() => {
       s.browser.setMaterial(B3, 'gold' as BodyMaterial); // invalid on purpose, see above
     }).toThrow();
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
   });
 });
 
@@ -700,42 +694,36 @@ describe('BrowserModel.rename', () => {
       name: 'Base',
     };
     expect(loggedOps(s)).toEqual([op]);
+    s.doc.setBodyMeta(B1, { name: 'Base' });
     expect(s.browser.bodies.get()[0]?.userName).toBe('Base');
   });
 
   it('an empty name removes the name', () => {
     const s = setup();
     s.regen.publish(new Map(), BODIES);
-    s.browser.rename(B1, 'Base');
+    s.doc.setBodyMeta(B1, { name: 'Base' });
     s.browser.rename(B1, '   ');
-    expect(s.doc.bodyMeta(B1)).toEqual({});
-    expect(s.browser.bodies.get()[0]?.userName).toBeNull();
-  });
-
-  it('undo brings the old name back', () => {
-    const s = setup();
-    s.regen.publish(new Map(), BODIES);
-    s.browser.rename(B1, 'Base');
-    s.browser.rename(B1, 'Plate');
-    void s.undo.undo();
-    expect(s.browser.bodies.get()[0]?.userName).toBe('Base');
+    expect(loggedOps(s)).toEqual([
+      { type: 'body.rename', v: OP_VERSION['body.rename'], body: B1, name: '' },
+    ]);
   });
 
   it('the same name after trimming does nothing; an empty name of an unnamed body neither', () => {
     const s = setup();
     s.regen.publish(new Map(), BODIES);
     s.browser.rename(B1, '');
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
     s.browser.rename(B1, 'Base');
+    s.doc.setBodyMeta(B1, { name: 'Base' });
     s.browser.rename(B1, ' Base ');
-    expect(s.log.entries()).toHaveLength(1);
+    expect(loggedOps(s)).toHaveLength(1);
   });
 
   it('a body unknown to the last regeneration does nothing', () => {
     const s = setup();
     s.regen.publish(new Map(), BODIES);
     s.browser.rename(B3, 'X');
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
   });
 
   it('does nothing during a transaction', () => {
@@ -745,7 +733,7 @@ describe('BrowserModel.rename', () => {
     s.browser.rename(B1, 'Base');
     session.cancel();
     expect(s.doc.bodyMeta(B1)).toEqual({});
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
   });
 });
 
@@ -825,7 +813,7 @@ describe('BrowserModel.canEdit', () => {
     s.browser.beginRename(B1);
     s.browser.rename(B1, 'Base');
     expect(s.browser.renaming.get()).toBeNull();
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
     expect(s.doc.bodyMeta(B1)).toEqual({});
   });
 });
@@ -862,7 +850,7 @@ describe('BrowserModel rename mode', () => {
     s.browser.beginRename(B1);
     s.browser.cancelRename();
     expect(s.browser.renaming.get()).toBeNull();
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
   });
 
   it('rename ends the mode and renames', () => {
@@ -871,7 +859,7 @@ describe('BrowserModel rename mode', () => {
     s.browser.beginRename(B1);
     s.browser.rename(B1, 'Base');
     expect(s.browser.renaming.get()).toBeNull();
-    expect(s.doc.bodyMeta(B1)).toEqual({ name: 'Base' });
+    expect(loggedOps(s)).toHaveLength(1);
   });
 
   it('rename with null (the text did not change) ends the mode without an operation', () => {
@@ -881,7 +869,7 @@ describe('BrowserModel rename mode', () => {
     s.browser.beginRename(B1);
     s.browser.rename(B1, null);
     expect(s.browser.renaming.get()).toBeNull();
-    expect(s.log.entries()).toHaveLength(0);
+    expect(loggedOps(s)).toHaveLength(0);
     expect(s.doc.bodyMeta(B1)).toEqual({ name: 'Base' });
   });
 
@@ -915,27 +903,6 @@ describe('BrowserModel.dispose', () => {
     s.browser.dispose();
     s.editor.create('bool').cancel();
     expect(s.browser.renaming.get()).toBe(B1);
-  });
-});
-
-// The browser only reads; the data in the document are the proof of what it changed.
-describe('BrowserModel and the document data', () => {
-  it('hiding and renaming end up in toData', () => {
-    const s = setup();
-    s.regen.publish(new Map(), BODIES);
-    s.browser.setVisible(B1, false);
-    s.browser.rename(B2, 'Shaft');
-    expect(toData(s.doc).studio.bodies).toEqual({
-      [B1]: { hidden: true },
-      [B2]: { name: 'Shaft' },
-    });
-  });
-
-  it('a color ends up in toData', () => {
-    const s = setup();
-    s.regen.publish(new Map(), BODIES);
-    s.browser.setColor(B1, '#abcdef');
-    expect(toData(s.doc).studio.bodies).toEqual({ [B1]: { color: '#abcdef' } });
   });
 });
 
@@ -1076,7 +1043,7 @@ describe('BrowserModel planes (M12)', () => {
     s.browser.setPlaneVisible(xy, true);
     expect(s.order).toEqual(['visiblePlanes', 'planes']);
     s.order.length = 0;
-    s.browser.setVisible(B1, false);
+    s.doc.setBodyMeta(B1, { hidden: true });
     expect(s.order).toEqual(['hidden', 'bodies']);
     s.order.length = 0;
     s.selection.set([
@@ -1119,13 +1086,13 @@ describe('BrowserModel sketches (M12)', () => {
     const s = setup();
     s.regen.publish(new Map(), [], SKETCHES);
     const before = s.browser.sketches.get();
-    const op: FeatureRenameOp = {
-      type: 'feature.rename',
-      v: OP_VERSION['feature.rename'],
-      featureId: fid('s2'),
-      name: 'Profile',
-    };
-    void s.dispatcher.dispatch(op);
+    // The read model after feature.rename of s2.
+    s.doc.replace({
+      studio: {
+        ...s.doc.studio,
+        features: s.doc.studio.features.map((f) => (f.id === 's2' ? { ...f, name: 'Profile' } : f)),
+      },
+    });
     const rows = s.browser.sketches.get();
     expect(rows.map((r) => r.name)).toEqual(['Sketch 1', 'Profile']);
     expect(rows[0]).toBe(before[0]);

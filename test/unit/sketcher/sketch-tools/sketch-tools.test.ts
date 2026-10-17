@@ -8,7 +8,7 @@ import {
   validateAgainstSchema,
 } from '@/document';
 import type { BodyId, FeatureId, FeatureSchema, ParamSchema, PlaneRef, TopoRef } from '@/document';
-import { anOpsSession } from '@/ops/testing';
+import { aFakeOps } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE, isPattern, parseSketchData } from '@/sketch';
 import type { SketchConstraint, SketchCurve, SketchData, SketchEntity } from '@/sketch';
 import {
@@ -143,10 +143,10 @@ function setup(opts: { gridStep?: () => number } = {}) {
   const schemas = createFeatureSchemaRegistry();
   schemas.register(SKETCH_SCHEMA);
   schemas.register(BOX_SCHEMA);
-  const ops = anOpsSession({ schemas });
+  const ops = aFakeOps();
   const editor = createFeatureEditor({
     doc: ops.doc,
-    ops: ops.dispatcher,
+    ops,
     schemas,
     ids: createSequentialIdGenerator('f'),
     translate: (key) => key,
@@ -196,7 +196,18 @@ function setup(opts: { gridStep?: () => number } = {}) {
     mode: sketches.mode,
     defaultToolIds: { sketch: 'sketch.select' },
   });
-  return { ...ops, editor, solver, viewport, sketches, selection, manager, tools, ctx };
+  return {
+    doc: ops.doc,
+    lastParams: (id: FeatureId) => ops.lastParams(id),
+    editor,
+    solver,
+    viewport,
+    sketches,
+    selection,
+    manager,
+    tools,
+    ctx,
+  };
 }
 
 /** Lets the solver answers (microtasks) and the queue settle. */
@@ -675,14 +686,14 @@ describe('the entry tool sketch', () => {
   });
 
   it('creates the sketch on a selected named planar face (M14)', () => {
-    const { manager, sketches, selection, doc } = setup();
+    const { manager, sketches, selection, lastParams } = setup();
     selection.set([{ kind: 'face', body: BODY, faceIndex: 5 }]);
 
     manager.activate('sketch');
 
     const session = sketches.current.get();
     expect(session?.plane.get()).toBe(TOP);
-    expect(doc.feature(session?.featureId ?? ('' as FeatureId))?.params).toMatchObject({
+    expect(lastParams(session?.featureId ?? ('' as FeatureId))).toMatchObject({
       plane: [{ kind: 'topo', body: BODY, name: 'b1/face:top' }],
     });
   });

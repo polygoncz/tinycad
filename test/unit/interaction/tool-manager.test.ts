@@ -2,7 +2,7 @@ import { createSequentialIdGenerator, ObservableValue } from '@/core';
 import { createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
 import type { BodyId, Evaluated, FeatureId, FeatureSchema, TopoName } from '@/document';
 import type { ParamSchemaOf } from '@/document/testing';
-import { anOpsSession } from '@/ops/testing';
+import { aFakeOps } from '@/ops/testing';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import type {
   FeatureEditor,
@@ -119,7 +119,7 @@ function setup(
   registry.register(aRecordingTool('select', rec, options.selectOptions));
   for (const d of options.tools?.(rec) ?? [aRecordingTool('box', rec)]) registry.register(d);
   const viewport = new FakeViewport();
-  const session = anOpsSession();
+  const session = aFakeOps();
   const ctx = {
     viewport,
     selection: createSelectionModel({ regen: new FakeRegenStatus() }),
@@ -146,7 +146,7 @@ describe('createToolManager', () => {
     const rec: Recorder = { calls: [], contexts: [] };
     const registry = createToolRegistry();
     registry.register(aRecordingTool('select', rec));
-    const session = anOpsSession();
+    const session = aFakeOps();
     const viewport = new FakeViewport();
     const manager = createToolManager({
       registry,
@@ -165,7 +165,7 @@ describe('createToolManager', () => {
   });
 
   it('throws on an unknown default tool', () => {
-    const session = anOpsSession();
+    const session = aFakeOps();
     const viewport = new FakeViewport();
     expect(() =>
       createToolManager({
@@ -413,7 +413,7 @@ describe('createToolManager', () => {
         ctx: {
           viewport,
           selection: createSelectionModel({ regen: new FakeRegenStatus() }),
-          doc: anOpsSession().doc,
+          doc: aFakeOps().doc,
           ids: createSequentialIdGenerator(),
           features: aFeatureEditorStub(),
         },
@@ -688,7 +688,7 @@ describe('createToolManager', () => {
       const registry = createToolRegistry();
       registry.register(aRecordingTool('select', rec, { failActivate: true }));
       const viewport = new FakeViewport();
-      const session = anOpsSession();
+      const session = aFakeOps();
       const unhandled: string[] = [];
       expect(() =>
         createToolManager({
@@ -828,12 +828,12 @@ function setupRefPick(
   registry.register(aRecordingTool('select', rec));
   registry.register(aRecordingTool('box', rec));
   const viewport = new FakeViewport();
-  const ops = anOpsSession();
+  const ops = aFakeOps();
   const schemas = createFeatureSchemaRegistry();
   schemas.register(REF_SCHEMA);
   const features = createFeatureEditor({
     doc: ops.doc,
-    ops: ops.dispatcher,
+    ops,
     schemas,
     ids: createSequentialIdGenerator('new'),
   });
@@ -1157,7 +1157,7 @@ describe('createToolManager – modes', () => {
     for (const d of tools) registry.register(d);
     const mode = new ObservableValue<Mode>(options.initial ?? 'model');
     const viewport = new FakeViewport();
-    const session = anOpsSession();
+    const session = aFakeOps();
     const manager = createToolManager({
       registry,
       viewportEvents: viewport.events,
@@ -1349,7 +1349,7 @@ function setupManipulators(manipulators: ManipulatorController) {
   registry.register(aRecordingTool('select', rec));
   registry.register(aRecordingTool('box', rec));
   const viewport = new FakeViewport();
-  const ops = anOpsSession();
+  const ops = aFakeOps();
   const ctx = {
     viewport,
     selection: createSelectionModel({ regen: new FakeRegenStatus() }),
@@ -1420,7 +1420,7 @@ describe('createToolManager – manipulators', () => {
       }),
     });
     const viewport = new FakeViewport();
-    const ops = anOpsSession();
+    const ops = aFakeOps();
     createToolManager({
       registry,
       viewportEvents: viewport.events,
@@ -1489,12 +1489,12 @@ describe('createToolManager – manipulators', () => {
     const registry: ToolRegistry = createToolRegistry();
     registry.register(aRecordingTool('select', rec));
     const viewport = new FakeViewport();
-    const ops = anOpsSession();
+    const ops = aFakeOps();
     const schemas = createFeatureSchemaRegistry();
     schemas.register(REF_SCHEMA);
     const features = createFeatureEditor({
       doc: ops.doc,
-      ops: ops.dispatcher,
+      ops,
       schemas,
       ids: createSequentialIdGenerator('new'),
     });
@@ -1590,7 +1590,7 @@ function setupLayers(layers: (calls: string[]) => readonly InputLayer[]) {
   const registry: ToolRegistry = createToolRegistry();
   registry.register(aRecordingTool('select', rec));
   const viewport = new FakeViewport();
-  const ops = anOpsSession();
+  const ops = aFakeOps();
   const unhandled: string[] = [];
   const manager = createToolManager({
     registry,

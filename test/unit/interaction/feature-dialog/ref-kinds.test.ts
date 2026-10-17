@@ -10,7 +10,7 @@ import type {
   SketchId,
   TopoName,
 } from '@/document';
-import { anOpsSession } from '@/ops/testing';
+import { aFakeOps } from '@/ops/testing';
 import { rectangleData } from '@/sketch/testing';
 import {
   REF_KIND_BEHAVIOR,
@@ -73,7 +73,7 @@ function context(): RefHitContext {
       constraints: rect.constraints,
     },
   });
-  const ops = anOpsSession({ features: [sketch] });
+  const ops = aFakeOps({ features: [sketch] });
   const regen = new FakeRegenStatus();
   regen.publish(new Map(), [
     {
@@ -401,7 +401,7 @@ describe('chips, refText, preselect', () => {
   it('planes: the label of an origin plane, the face of a body, a missing reference (M21)', () => {
     const rect = rectangleData();
     const box = aFeature({ id: 'b1', type: 'box', name: 'Box 1' });
-    const { doc } = anOpsSession({
+    const { doc } = aFakeOps({
       features: [box, aFeature({ id: 's1', type: 'sketch', params: rect })],
     });
     const text = (value: unknown) => behaviorOf(PLANES).refText(value, doc);

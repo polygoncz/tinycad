@@ -7,7 +7,7 @@ import {
 } from '@/document';
 import { aFeature, ORIGIN_AXIS_IDS } from '@/document/testing';
 import type { BodyId, FeatureId, FeatureSchema, ParamSchema, TopoName } from '@/document';
-import { anOpsSession } from '@/ops/testing';
+import { aFakeOps } from '@/ops/testing';
 import { rectangleData } from '@/sketch/testing';
 import { describe, expect, it } from 'vitest';
 import { createFeatureEditor } from '@/interaction/feature-dialog/feature-editor';
@@ -82,10 +82,10 @@ function setupProfile() {
   });
   const schemas = createFeatureSchemaRegistry();
   schemas.register(PROFILE);
-  const ops = anOpsSession({ features: [sketch], schemas });
+  const ops = aFakeOps({ features: [sketch] });
   const editor = createFeatureEditor({
     doc: ops.doc,
-    ops: ops.dispatcher,
+    ops,
     schemas,
     ids: createSequentialIdGenerator('new'),
   });
@@ -301,10 +301,10 @@ function setupFillet(options: { readonly withRegen?: boolean } = {}) {
   const regen = new FakeRegenStatus();
   const schemas = createFeatureSchemaRegistry();
   schemas.register(FILLET);
-  const ops = anOpsSession({ schemas });
+  const ops = aFakeOps();
   const editor = createFeatureEditor({
     doc: ops.doc,
-    ops: ops.dispatcher,
+    ops,
     schemas,
     ids: createSequentialIdGenerator('new'),
   });
@@ -545,10 +545,10 @@ describe('refPick – the input of the edited feature (M21)', () => {
 function setupLayer() {
   const schemas = createFeatureSchemaRegistry();
   schemas.register(PROFILE);
-  const ops = anOpsSession({ schemas });
+  const ops = aFakeOps();
   const features = createFeatureEditor({
     doc: ops.doc,
-    ops: ops.dispatcher,
+    ops,
     schemas,
     ids: createSequentialIdGenerator('new'),
   });
