@@ -4,7 +4,7 @@ status: answered
 area: "[[14-protokol]]"
 decide_by: "[[Roadmapa]]"
 proposal: "protobuf-es a connect-web pro TS, vcpkg v režimu manifestu pro C++, OCCT podle volby Pavla."
-decision: "TS: protobuf-es a @connectrpc/connect-web (protokol gRPC-Web), buf na lint, generování a kontrolu zpětné kompatibility; C++: vcpkg v režimu manifestu s připnutou baseline; OCCT 8.0 (ve vcpkg od 2026.05)."
+decision: "TS: protobuf-es a @connectrpc/connect-web (protokol gRPC-Web), buf na lint, generování a kontrolu zpětné kompatibility; C++: vcpkg v režimu manifestu s připnutou baseline; OCCT 8.0.1, připnuté přesně."
 tags:
   - otazka
 created: 2026-10-17
@@ -36,4 +36,4 @@ Tři volby nástrojů pro sérii nativního jádra ([[Q094 Nativní jádro na se
 
 **Pavel 2026-10-17:** protobuf-es + connect-web, vcpkg v režimu manifestu a **OCCT 8.x** (proti návrhu Clauda, který chtěl jen „poslední stabilní“).
 
-Ověřeno 2026-10-17: OCCT 8.0.0 je vydané (vyžaduje C++17, přes 500 změn proti 7.9, průvodce migrací na dev.opencascade.org) a vcpkg ho má od vydání registru 2026.05.25. Existuje i značka 8.0.1, verze ve vcpkg se ověří a připne při startu [[M39-kostra-serveru|M39]]. Volba sedí s tím, že se adaptér píše znovu: nové API se neučí dvakrát. Rozdíly proti WASM buildu chytí sdílené testovací případy ([[M38-zmrazeni-domeny|M38]]).
+Ověřeno 2026-10-17: OCCT 8.0.0 je vydané (vyžaduje C++17, přes 500 změn proti 7.9, průvodce migrací na dev.opencascade.org) a vcpkg ho má od vydání registru 2026.05.25. **Upřesnění (Pavel 2026-10-17): OCCT 8.0.1**, připnuté přesně ve `vcpkg.json` (`overrides`). Pokud baseline vcpkg 8.0.1 ještě nemá, přidá [[M39-kostra-serveru|M39]] vlastní overlay port v `server/vcpkg-ports/opencascade/` se zdrojem ze značky `V8_0_1`. Volba sedí s tím, že se adaptér píše znovu: nové API se neučí dvakrát. Rozdíly proti WASM buildu chytí sdílené testovací případy ([[M38-zmrazeni-domeny|M38]]).

@@ -34,10 +34,10 @@ updated: 2026-10-17
 ## Úkoly
 
 - [ ] Rozhodnout [[Q106 Moduly klienta pro gRPC|Q106]] (moduly `protocol` a `remote`) a propsat do [[01-architektura]] a `.dependency-cruiser.cjs`.
-- [ ] `server/`: `CMakeLists.txt`, `CMakePresets.json`, `vcpkg.json` s připnutou baseline (grpc, protobuf, opencascade 8.0.x, sqlite3, gtest, nlohmann-json), ověřit a zapsat přesnou verzi OCCT ([[Q104 Nástroje pro kontrakt a C++ server|Q104]]).
+- [ ] `server/`: `CMakeLists.txt`, `CMakePresets.json`, `vcpkg.json` s připnutou baseline (grpc, protobuf, opencascade 8.0.1 přes `overrides`, sqlite3, gtest, nlohmann-json); když baseline 8.0.1 nemá, overlay port ze značky `V8_0_1` ([[Q104 Nástroje pro kontrakt a C++ server|Q104]]).
 - [ ] `buf generate`: C++ do buildu serveru, TS (protobuf-es) do `src/protocol/`. `npm run check` dostane `check:proto` (`buf lint`, `buf breaking` proti `main`).
 - [ ] `docker-compose.yml`: `core` (vícestupňový Dockerfile, binární cache vcpkg ve volume) a `envoy` (filtr `grpc_web`, CORS pro `localhost:5173`, health check). Vite proxy `/api` na Envoy.
-- [ ] `GeometryService` v C++ nad OCCT 8.0 (`Geom2dAPI_InterCurveCurve`, segment, zaoblení, offset) proti sdíleným případům z M38.
+- [ ] `GeometryService` v C++ nad OCCT 8.0.1 (`Geom2dAPI_InterCurveCurve`, segment, zaoblení, offset) proti sdíleným případům z M38.
 - [ ] Adaptér `SketchGeometry` v `remote/` s jedním požadavkem v letu na metodu ([[Q096 Geometrie skici přes síť|Q096]]); `app` ho použije místo WASM.
 - [ ] `npm run check` dostane `check:server` (build a GoogleTest v Dockeru); e2e trim/offset proti Docker Compose.
 
