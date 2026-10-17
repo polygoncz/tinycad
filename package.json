@@ -7,22 +7,34 @@
     "node": ">=26"
   },
   "scripts": {
+    "predev": "npm run gen:proto",
     "dev": "vite",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
+    "pretypecheck": "npm run gen:proto",
     "typecheck": "vue-tsc -b",
+    "prelint": "npm run gen:proto",
     "lint": "eslint . && prettier --check --cache --cache-strategy content .",
     "format": "prettier --write . && eslint --fix .",
+    "prelint:deps": "npm run gen:proto",
     "lint:deps": "depcruise src test --config .dependency-cruiser.cjs --output-type err-long",
     "lint:vault": "node scripts/vault-lint.mjs",
+    "pretest": "npm run gen:proto",
     "test": "vitest run --project unit",
+    "pretest:integration": "npm run gen:proto",
     "test:integration": "vitest run --project integration --passWithNoTests",
     "cases:record": "node scripts/cases-record.mjs",
     "test:e2e": "playwright test --project=chrome",
     "test:e2e:full": "playwright test",
-    "check": "run-p --aggregate-output --continue-on-error typecheck lint lint:deps lint:vault test test:integration"
+    "gen:proto": "node scripts/gen-proto.mjs",
+    "check:proto": "buf lint server/proto && buf breaking server/proto --against '.git#branch=main,subdir=server/proto'",
+    "check:server": "node scripts/check-server.mjs",
+    "check": "run-p --aggregate-output --continue-on-error check:proto typecheck lint lint:deps lint:vault test test:integration"
   },
   "dependencies": {
+    "@bufbuild/protobuf": "2.16.0",
+    "@connectrpc/connect": "2.2.0",
+    "@connectrpc/connect-web": "2.2.0",
     "@salusoft89/planegcs": "1.3.0",
     "@tabler/icons-webfont": "^3.49.0",
     "gl-matrix": "^3.4.4",
@@ -33,6 +45,8 @@
     "vue-i18n": "^11.4.14"
   },
   "devDependencies": {
+    "@bufbuild/buf": "1.74.0",
+    "@bufbuild/protoc-gen-es": "2.16.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.64.0",
     "@types/node": "^26.6.5",

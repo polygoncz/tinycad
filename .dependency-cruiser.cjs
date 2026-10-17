@@ -29,6 +29,14 @@ const modules = {
   'solver-planegcs': { deps: ['core', 'sketch'], npm: ['@salusoft89/planegcs'] },
   // M37: letter outlines over opentype.js and the bundled fonts (ADR 0029); only app imports it.
   'text-opentype': { deps: ['core', 'sketch'], npm: ['opentype.js'] },
+  // M39 (Q106): code generated from server/proto by npm run gen:proto; only remote imports it.
+  protocol: { npm: ['@bufbuild/protobuf'] },
+  // M39 (Q106): adapters of the ports over the gRPC protocol of the native core; only app imports
+  // it. kernel for createKernelError: a failed call rejects like a kernel call (spec 14).
+  remote: {
+    deps: ['core', 'kernel', 'sketch', 'protocol'],
+    npm: ['@bufbuild/protobuf', '@connectrpc/connect', '@connectrpc/connect-web'],
+  },
   regen: { deps: ['core', 'document', 'kernel', 'sketch'] },
   render: { deps: ['core'], types: ['kernel', 'interaction'], npm: ['three'] },
   interaction: { deps: ['core', 'document', 'ops', 'sketch'] },
@@ -52,6 +60,7 @@ const modules = {
       'sketch',
       'solver-planegcs',
       'text-opentype',
+      'remote',
       'regen',
       'render',
       'interaction',
