@@ -10,6 +10,9 @@ add_library(tinycad_ops STATIC
   parse_entry.cpp
   replay.cpp
   log.cpp
+  dispatcher.cpp
+  transaction.cpp
+  undo.cpp
   handlers/shape.cpp
   handlers/feature.cpp
   handlers/studio.cpp

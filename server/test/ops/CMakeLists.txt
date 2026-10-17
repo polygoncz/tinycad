@@ -7,7 +7,11 @@ add_executable(tinycad_ops_tests
   handler_test.cpp
   apply_test.cpp
   upcast_test.cpp
-  log_test.cpp)
+  log_test.cpp
+  dispatcher_test.cpp
+  transaction_test.cpp
+  undo_test.cpp
+  replay_property_test.cpp)
 target_include_directories(tinycad_ops_tests PRIVATE "${PROJECT_SOURCE_DIR}/test")
 target_link_libraries(tinycad_ops_tests PRIVATE
   tinycad_ops GTest::gtest GTest::gtest_main)

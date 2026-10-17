@@ -14,9 +14,12 @@
 #include "support/shared_cases.hpp"
 #include "tinycad/document/serialize.hpp"
 #include "tinycad/features/builtin.hpp"
+#include "tinycad/ops/dispatcher.hpp"
 #include "tinycad/ops/handler.hpp"
 #include "tinycad/ops/parse_entry.hpp"
 #include "tinycad/ops/replay.hpp"
+#include "tinycad/ops/transaction.hpp"
+#include "tinycad/ops/undo.hpp"
 #include "tinycad/ops/upcast.hpp"
 
 namespace tinycad::testing {
@@ -80,9 +83,79 @@ Json runReplay(const Json& input) {
   return {{"ok", {{"document", documentJson(*doc)}}}};
 }
 
+/** The value of a step that must not fail; a failure is a broken case. */
+ops::LogEntry must(core::Result<ops::LogEntry, ops::OperationLoadError> result, int step) {
+  if (!result) {
+    throw std::runtime_error("step " + std::to_string(step) + ": " + result.error().path + ": " +
+                             result.error().message);
+  }
+  return std::move(*result);
+}
+
+void must(core::Result<void, ops::OperationLoadError> result, int step) {
+  if (!result) {
+    throw std::runtime_error("step " + std::to_string(step) + ": " + result.error().path + ": " +
+                             result.error().message);
+  }
+}
+
+/**
+ * Runs the steps of ops.script over one session. The time of a log entry is the order of the step
+ * that wrote it (1, 2, 3…), so the log is deterministic (spec 13, Soubory a běh).
+ */
+Json runScript(const Json& input) {
+  auto doc = loadDocument(input.at("document"));
+  ops::OperationLog log;
+  int step = 0;
+  ops::OperationDispatcher dispatcher(*doc, handlers(), log,
+                                      [&step] { return static_cast<double>(step); });
+  ops::UndoManager undo(dispatcher, log);
+  std::unique_ptr<ops::Transaction> transaction;
+  const auto open = [&]() -> ops::Transaction& {
+    if (!transaction) throw std::runtime_error("step " + std::to_string(step) + ": no transaction");
+    return *transaction;
+  };
+
+  for (const Json& s : input.at("steps")) {
+    ++step;
+    if (s.contains("dispatch")) {
+      ops::DispatchMeta meta;
+      if (s.contains("label") && s.at("label").is_string()) meta.label = s.at("label").get<std::string>();
+      must(dispatcher.dispatch(s.at("dispatch"), meta), step);
+    } else if (s.contains("begin")) {
+      transaction = dispatcher.begin(s.at("begin").get<std::string>());
+    } else if (s.contains("apply")) {
+      must(open().apply(s.at("apply")), step);
+    } else if (s.contains("applyTransient")) {
+      must(open().applyTransient(s.at("applyTransient")), step);
+    } else if (s.value("commit", false)) {
+      open().commit();
+      transaction.reset();
+    } else if (s.value("abort", false)) {
+      open().abort();
+      transaction.reset();
+    } else if (s.value("undo", false)) {
+      must(undo.undo(), step);
+    } else if (s.value("redo", false)) {
+      must(undo.redo(), step);
+    } else {
+      throw std::runtime_error("step " + std::to_string(step) + ": unknown step " + s.dump());
+    }
+  }
+
+  Json entries = Json::array();
+  for (const auto& entry : log.entries()) entries.push_back(ops::logEntryJson(entry));
+  const Json result = {{"document", documentJson(*doc)},
+                       {"log", entries},
+                       {"canUndo", undo.canUndo()},
+                       {"canRedo", undo.canRedo()}};
+  return {{"ok", result}};
+}
+
 Json run(const std::string& kind, const Json& input) {
   if (kind == "ops.upcast") return runUpcast(input);
   if (kind == "ops.replay") return runReplay(input);
+  if (kind == "ops.script") return runScript(input);
   throw std::runtime_error("unknown kind " + kind);
 }
 

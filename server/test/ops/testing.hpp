@@ -10,7 +10,10 @@
 #include <utility>
 
 #include "document/testing.hpp"
+#include "tinycad/ops/dispatcher.hpp"
 #include "tinycad/ops/handler.hpp"
+#include "tinycad/ops/log.hpp"
+#include "tinycad/ops/undo.hpp"
 
 namespace tinycad::testing {
 
@@ -61,6 +64,30 @@ inline Json rollbackOp(int index) {
 }
 
 inline Json batchOp(Json ops) { return {{"type", "batch"}, {"v", 1}, {"ops", std::move(ops)}}; }
+
+/**
+ * A ready-made session (anOpsSession of src/ops/testing.ts): document, handlers, log, dispatcher
+ * and undo; LogEntry::time is deterministic (1, 2, 3, …). Not copyable: the parts refer to each
+ * other.
+ */
+class OpsSession {
+ public:
+  explicit OpsSession(DocumentOptions options = {},
+                      const document::FeatureSchemaRegistryReader& schemas = noSchemas())
+      : doc(aDocument(std::move(options))),
+        handlers(schemas),
+        dispatcher(*doc, handlers, log, [this] { return ++clock; }),
+        undo(dispatcher, log) {}
+  OpsSession(const OpsSession&) = delete;
+  OpsSession& operator=(const OpsSession&) = delete;
+
+  std::unique_ptr<document::Document> doc;
+  ops::OpHandlerRegistry handlers;
+  ops::OperationLog log;
+  double clock = 0;
+  ops::OperationDispatcher dispatcher;
+  ops::UndoManager undo;
+};
 
 /**
  * A handler of any type for tests (the object literals of the TS tests): inverts to itself,
