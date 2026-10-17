@@ -191,15 +191,15 @@ function shapeOf(byId: Entities, c: DimensionConstraint): Shape | null {
         c.kind === 'distance' ? direction(a, b) : c.kind === 'hDistance' ? [1, 0] : [0, 1];
       return { kind: 'linear', a, b, u, m: mid(a, b) };
     }
-    case 'pointLineDistance': {
-      const p = pointOf(byId, c.point);
-      const line = lineOf(byId, c.line);
-      if (p === null || line === null) return null;
-      const d = sub(line[1], line[0]);
-      // A zero-length line has no foot of the perpendicular.
-      if (len(d) <= MIN) return null;
-      const foot = add(line[0], scale(d, dot(sub(p, line[0]), d) / dot(d, d)));
-      return { kind: 'linear', a: foot, b: p, u: direction(foot, p), m: mid(foot, p) };
+    case 'pointLineDistance':
+      return pointLineShape(byId, c.point, c.line);
+    case 'offset': {
+      // Provisional until M35 task 5 (the drawing of an offset dimension): a line pair is drawn
+      // like pointLineDistance of copy.p1 from the source, a round pair is not drawn.
+      const [pair] = c.pairs;
+      const copy = pair === undefined ? undefined : byId.get(pair.copy);
+      if (pair === undefined || copy?.kind !== 'line') return null;
+      return pointLineShape(byId, copy.p1, pair.source);
     }
     case 'radius':
     case 'diameter':
@@ -217,6 +217,18 @@ function shapeOf(byId: Entities, c: DimensionConstraint): Shape | null {
       return { kind: 'angular', vertex: add(a[0], scale(da, s)), da, db };
     }
   }
+}
+
+/** From the foot of the perpendicular on the line (A) to the point (B); null for a zero-length line. */
+function pointLineShape(byId: Entities, pointId: string, lineId: string): Shape | null {
+  const p = pointOf(byId, pointId);
+  const line = lineOf(byId, lineId);
+  if (p === null || line === null) return null;
+  const d = sub(line[1], line[0]);
+  // A zero-length line has no foot of the perpendicular.
+  if (len(d) <= MIN) return null;
+  const foot = add(line[0], scale(d, dot(sub(p, line[0]), d) / dot(d, d)));
+  return { kind: 'linear', a: foot, b: p, u: direction(foot, p), m: mid(foot, p) };
 }
 
 /** The geometry in world coordinates; null when the placement does not fit the shape. */

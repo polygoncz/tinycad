@@ -137,6 +137,7 @@ describe('sketch public API', () => {
       'angle',
       'radius',
       'diameter',
+      'offset',
     ]);
     expect(Object.isFrozen(sketch.DIMENSION_KINDS)).toBe(true);
     expect(sketch.isDimension({ kind: 'angle' })).toBe(true);

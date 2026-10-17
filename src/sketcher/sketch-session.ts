@@ -1115,6 +1115,7 @@ function withPlacement(c: DimensionConstraint, p: DimensionPlacement): Dimension
     case 'hDistance':
     case 'vDistance':
     case 'pointLineDistance':
+    case 'offset':
       return p.kind === 'linear' ? { ...c, placement: p } : c;
   }
 }

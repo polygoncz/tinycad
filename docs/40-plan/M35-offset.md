@@ -44,7 +44,7 @@ Pavel 2026-10-16: „Chtěl bych ještě dodělat do Sketch následující featu
 
 - [x] Kontrakt ([[12-skicar#Offset (M35)]], [[06-geometricke-jadro#Stav po M35]]), otázka Q095.
 - [ ] Jádro: `offsetCurves`.
-- [ ] `sketch`: vazba a kóta `offset` (model, parse, edit, measure, poloha kóty).
+- [x] `sketch`: vazba a kóta `offset` (model, parse, edit, measure, poloha kóty).
 - [ ] Řešič planegcs: vazba `offset`.
 - [ ] `sketch`: `chainOf`, `offsetEdit`, port; `app`.
 - [ ] `sketcher`: kóta offsetu v kresbě, nástroj, HUD nápověda nástrojů stopy A, e2e.

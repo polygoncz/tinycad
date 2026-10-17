@@ -246,7 +246,14 @@ export const GEOMETRIC_CONSTRAINT_KINDS: readonly GeometricConstraintKind[] = Ob
 ]);
 
 export type DimensionKind =
-  'distance' | 'hDistance' | 'vDistance' | 'pointLineDistance' | 'angle' | 'radius' | 'diameter';
+  | 'distance'
+  | 'hDistance'
+  | 'vDistance'
+  | 'pointLineDistance'
+  | 'angle'
+  | 'radius'
+  | 'diameter'
+  | 'offset';
 export const DIMENSION_KINDS: readonly DimensionKind[] = Object.freeze([
   'distance',
   'hDistance',
@@ -255,6 +262,7 @@ export const DIMENSION_KINDS: readonly DimensionKind[] = Object.freeze([
   'angle',
   'radius',
   'diameter',
+  'offset',
 ]);
 
 export function isDimensionKind(kind: string): kind is DimensionKind {
@@ -421,6 +429,22 @@ export type SketchConstraint =
       readonly curve: SketchEntityId;
       readonly value: number;
       readonly placement?: RadialPlacement;
+    }
+  /**
+   * An associative offset (M35): each copy keeps the distance value from its source. Pairs source
+   * → copy: line → line, arc → arc or circle → circle around the same centre point; every curve
+   * at most once in all pairs; value > 0. Made only by the offset tool; its dimension measures the
+   * first pair.
+   */
+  | {
+      readonly kind: 'offset';
+      readonly id: SketchConstraintId;
+      readonly pairs: readonly {
+        readonly source: SketchEntityId;
+        readonly copy: SketchEntityId;
+      }[];
+      readonly value: number;
+      readonly placement?: LinearPlacement;
     };
 
 /** A dimension: a constraint with a value. */

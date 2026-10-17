@@ -489,6 +489,8 @@ function constraintPrimitives(
       }
       throw new Error(`diameter of a ${curve.kind}`);
     }
+    case 'offset':
+      throw new Error('offset: until task 3 of M35');
   }
 }
 

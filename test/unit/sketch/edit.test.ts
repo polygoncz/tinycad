@@ -886,3 +886,162 @@ describe('removeItems with patterns (M36)', () => {
     expect(entityIds(r)).toEqual([]);
   });
 });
+
+/**
+ * Lines l a→b and m b→c with their copies l2 a2→b2 and m2 b2→c2 (offset 2 to the right of the
+ * walk a→b→c); circle k (r 2) and its copy k2 (r 3) around o; arc q (r 4) and its copy q2
+ * (r 5.5) around o; an offset constraint of all four pairs and a horizontal l2.
+ */
+const OFFSET = sketch(
+  [
+    { kind: 'point', id: 'a', x: 0, y: 0 },
+    { kind: 'point', id: 'b', x: 10, y: 0 },
+    { kind: 'point', id: 'c', x: 10, y: 10 },
+    { kind: 'line', id: 'l', p1: 'a', p2: 'b' },
+    { kind: 'line', id: 'm', p1: 'b', p2: 'c' },
+    { kind: 'point', id: 'a2', x: 0, y: -2 },
+    { kind: 'point', id: 'b2', x: 12, y: -2 },
+    { kind: 'point', id: 'c2', x: 12, y: 10 },
+    { kind: 'line', id: 'l2', p1: 'a2', p2: 'b2' },
+    { kind: 'line', id: 'm2', p1: 'b2', p2: 'c2' },
+    { kind: 'point', id: 'o', x: 50, y: 0 },
+    { kind: 'circle', id: 'k', center: 'o', radius: 2 },
+    { kind: 'circle', id: 'k2', center: 'o', radius: 3 },
+    { kind: 'point', id: 's', x: 54, y: 0 },
+    { kind: 'point', id: 't', x: 50, y: 4 },
+    { kind: 'arc', id: 'q', center: 'o', start: 's', end: 't' },
+    { kind: 'point', id: 's2', x: 55.5, y: 0 },
+    { kind: 'point', id: 't2', x: 50, y: 5.5 },
+    { kind: 'arc', id: 'q2', center: 'o', start: 's2', end: 't2' },
+  ],
+  [
+    {
+      kind: 'offset',
+      id: 'off',
+      pairs: [
+        { source: 'l', copy: 'l2' },
+        { source: 'm', copy: 'm2' },
+        { source: 'k', copy: 'k2' },
+        { source: 'q', copy: 'q2' },
+      ],
+      value: 2,
+    },
+    { kind: 'horizontal', id: 'h', line: 'l2' },
+  ],
+);
+
+const offsetIds = (...xs: string[]): readonly SketchItemId[] =>
+  [...OFFSET.entities, ...OFFSET.constraints].map((x) => x.id).filter((id) => xs.includes(id));
+
+type Pairs = readonly (readonly [string, string])[];
+
+/** The pairs of the offset constraint of the data as plain strings; undefined without one. */
+function offsetPairs(data: SketchData): Pairs | undefined {
+  const c = data.constraints.find((x) => x.kind === 'offset');
+  return c?.kind === 'offset' ? c.pairs.map((p) => [p.source, p.copy] as const) : undefined;
+}
+
+/** An offset constraint on OFFSET with only the given pairs (parsed, so the ids are branded). */
+function offsetWith(pairs: Pairs): SketchConstraint {
+  const data = sketch(OFFSET.entities, [
+    {
+      kind: 'offset',
+      id: 'off',
+      pairs: pairs.map(([source, copy]) => ({ source, copy })),
+      value: 2,
+    },
+  ]);
+  const [c] = data.constraints;
+  if (c === undefined) throw new Error('no constraint');
+  return c;
+}
+
+describe('offset constraint (M35)', () => {
+  it('is a dimension', () => {
+    expect(OFFSET.constraints.map(isDimension)).toEqual([true, false]);
+  });
+
+  it('targets every source and copy, pair by pair', () => {
+    expect(
+      constraintTargets(
+        offsetWith([
+          ['l', 'l2'],
+          ['k', 'k2'],
+        ]),
+      ),
+    ).toEqual(['l', 'l2', 'k', 'k2']);
+  });
+
+  it.each<[string, Pairs, number]>([
+    ['a line pair: copy.p1 from the source line', [['l', 'l2']], 2],
+    ['a line pair: to the infinite line of the source', [['m', 'm2']], 2],
+    ['a circle pair: the difference of radii', [['k', 'k2']], 1],
+    ['an arc pair: the difference of radii', [['q', 'q2']], 1.5],
+    [
+      'the first pair only',
+      [
+        ['q', 'q2'],
+        ['l', 'l2'],
+      ],
+      1.5,
+    ],
+    ['an inward copy is positive', [['k2', 'k']], 1],
+  ])('measure – %s', (_name, pairs, expected) => {
+    const c = offsetWith(pairs);
+    expect(isDimension(c) && measure(OFFSET, c)).toBeCloseTo(expected, 12);
+  });
+
+  it('is never made from a selection', () => {
+    const selected = OFFSET.entities.filter((x) => x.id === 'l' || x.id === 'l2');
+    expect(dimensionFor(selected, OFFSET)).toBeNull();
+  });
+
+  it('removing a source removes its pair only', () => {
+    const r = removeItems(OFFSET, offsetIds('l'));
+    expect(offsetPairs(r)).toEqual([
+      ['m', 'm2'],
+      ['k', 'k2'],
+      ['q', 'q2'],
+    ]);
+    expect(constraintIds(r)).toEqual(['off', 'h']);
+  });
+
+  it('removing a copy removes its pair only', () => {
+    const r = removeItems(OFFSET, offsetIds('k2', 'q2'));
+    expect(offsetPairs(r)).toEqual([
+      ['l', 'l2'],
+      ['m', 'm2'],
+    ]);
+  });
+
+  it('removing a point removes the pairs of the curves using it', () => {
+    // b2 is a point of both l2 and m2.
+    const r = removeItems(OFFSET, offsetIds('b2'));
+    expect(offsetPairs(r)).toEqual([
+      ['k', 'k2'],
+      ['q', 'q2'],
+    ]);
+    expect(constraintIds(r)).toEqual(['off']);
+  });
+
+  it('removing a curve of the last pair removes the constraint', () => {
+    const r = removeItems(OFFSET, offsetIds('l', 'm2', 'k', 'q2'));
+    expect(offsetPairs(r)).toBeUndefined();
+    expect(constraintIds(r)).toEqual(['h']);
+  });
+
+  it('removing the constraint keeps the curves', () => {
+    const r = removeItems(OFFSET, offsetIds('off'));
+    expect(constraintIds(r)).toEqual(['h']);
+    expect(r.entities).toEqual(OFFSET.entities);
+  });
+
+  it('keeps an untouched constraint as it is; a reduced one is frozen and valid', () => {
+    expect(removeItems(OFFSET, offsetIds('h')).constraints[0]).toBe(OFFSET.constraints[0]);
+    const r = removeItems(OFFSET, offsetIds('l'));
+    const [c] = r.constraints;
+    expect(Object.isFrozen(c)).toBe(true);
+    expect(c?.kind === 'offset' && Object.isFrozen(c.pairs)).toBe(true);
+    expect(parseSketchData(r.entities, r.constraints).ok).toBe(true);
+  });
+});

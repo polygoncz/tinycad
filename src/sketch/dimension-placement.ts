@@ -168,6 +168,10 @@ export function movePlacement(
       const value = measureDraft(data, c);
       return value <= MIN ? current() : angularPlacement(frame, c, value, cursor);
     }
+    case 'offset': {
+      const frame = offsetFrame(geo, data, c);
+      return frame === null ? current() : linearPlacement(frame, cursor);
+    }
     default:
       return assertNever(c);
   }
@@ -175,8 +179,8 @@ export function movePlacement(
 
 /**
  * The placement a dimension without `placement` uses, in mm (proportional to the geometry, since
- * a pure function does not know the zoom). Linear: offset ±0.2 · value on the +y side (a vertical
- * distance on the left), along 0; radial: π/4 or the middle of the arc, 1.25 · radius; angular:
+ * a pure function does not know the zoom). Linear (an offset too): offset ±0.2 · value on the +y
+ * side (a vertical distance on the left), along 0; radial: π/4 or the middle of the arc, 1.25 · radius; angular:
  * half the shorter line (1 mm for a zero-length one), t 0.5.
  */
 export function defaultPlacement(c: DimensionConstraint, data: SketchData): DimensionPlacement {
@@ -191,7 +195,8 @@ export function defaultPlacement(c: DimensionConstraint, data: SketchData): Dime
     }
     case 'hDistance':
     case 'vDistance':
-    case 'pointLineDistance': {
+    case 'pointLineDistance':
+    case 'offset': {
       const value = measureDraft(data, c);
       // A zero-length line measures NaN: offset 0 keeps the stored placement valid.
       return { kind: 'linear', offset: Number.isFinite(value) ? 0.2 * value : 0, along: 0 };
@@ -261,6 +266,29 @@ function pointLineFrame(
   const s = dot(sub(p, p1), d) / dd;
   const foot: Vec2 = [p1[0] + s * d[0], p1[1] + s * d[1]];
   return { u: direction(foot, p), m: mid(foot, p) };
+}
+
+/**
+ * The linear frame of an offset dimension on its first pair (M35): a line pair like
+ * pointLineDistance from copy.p1 to the source line; a round pair along the ray from the centre at
+ * the default label angle of the source (π/4, the middle of an arc), from the source to the copy.
+ * null for a zero-length source line.
+ */
+function offsetFrame(
+  geo: Geometry,
+  data: SketchData,
+  c: Extract<DimensionConstraint, { kind: 'offset' }>,
+): LinearFrame | null {
+  const [pair] = c.pairs;
+  assert(pair !== undefined, 'dimension placement: an offset without pairs');
+  const copy = data.entities.find((e) => e.id === pair.copy);
+  if (copy?.kind === 'line') return pointLineFrame(geo, copy.p1, pair.source);
+  const source = geo.round(pair.source);
+  const copyRadius = geo.round(pair.copy).radius;
+  const ray: Vec2 = [Math.cos(source.angle), Math.sin(source.angle)];
+  const from = add(source.center, scale(ray, source.radius));
+  const to = add(source.center, scale(ray, copyRadius));
+  return { u: copyRadius < source.radius ? scale(ray, -1) : ray, m: mid(from, to) };
 }
 
 /** angle = atan2(c − centre), distance = |c − centre|; null at the centre. */
@@ -354,6 +382,7 @@ function geometry(data: SketchData): Geometry {
   };
 }
 
+const add = (a: Vec2, b: Vec2): Vec2 => [a[0] + b[0], a[1] + b[1]];
 const sub = (a: Vec2, b: Vec2): Vec2 => [a[0] - b[0], a[1] - b[1]];
 const scale = (a: Vec2, k: number): Vec2 => [a[0] * k, a[1] * k];
 const dot = (a: Vec2, b: Vec2): number => a[0] * b[0] + a[1] * b[1];

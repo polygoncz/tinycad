@@ -205,14 +205,8 @@ export function measureDraft(
       if (c.kind === 'vDistance') return Math.abs(b.y - a.y);
       return Math.hypot(b.x - a.x, b.y - a.y);
     }
-    case 'pointLineDistance': {
-      // |cross(p − p1, p2 − p1)| / |p2 − p1|: the distance to the infinite line.
-      const p = point(c.point);
-      const [p1, p2] = line(c.line);
-      const dx = p2.x - p1.x;
-      const dy = p2.y - p1.y;
-      return Math.abs((p.x - p1.x) * dy - (p.y - p1.y) * dx) / Math.hypot(dx, dy);
-    }
+    case 'pointLineDistance':
+      return pointLineDistance(point(c.point), line(c.line));
     case 'angle': {
       // The angle between the directions p1→p2 (each reversed by its flag), in [0, π].
       const [a1, a2] = line(c.a);
@@ -229,9 +223,24 @@ export function measureDraft(
       return radius(c.curve);
     case 'diameter':
       return 2 * radius(c.curve);
+    case 'offset': {
+      // The first pair: a line copy by its p1 from the source line, a round one by the radii.
+      const [pair] = c.pairs;
+      assert(pair !== undefined, 'measure: an offset without pairs');
+      const copy = data.entities.find((e) => e.id === pair.copy);
+      if (copy?.kind === 'line') return pointLineDistance(point(copy.p1), line(pair.source));
+      return Math.abs(radius(pair.copy) - radius(pair.source));
+    }
     default:
       return assertNever(c);
   }
+}
+
+/** |cross(p − p1, p2 − p1)| / |p2 − p1|: the distance to the infinite line (NaN for a zero length). */
+function pointLineDistance(p: SketchPoint, [p1, p2]: readonly [SketchPoint, SketchPoint]): number {
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  return Math.abs((p.x - p1.x) * dy - (p.y - p1.y) * dx) / Math.hypot(dx, dy);
 }
 
 /** A curve whose construction flag can be toggled: all but an xline (always construction). */
@@ -290,7 +299,7 @@ export function curvePoints(c: SketchCurve): readonly SketchEntityId[] {
  * Entity ids a constraint refers to: [a, b] for the constraints of two entities (coincident,
  * hAlign and vAlign included), [line] for horizontal and vertical, [point] for fix, [curve] for
  * radius, [point, curve] for pointOnCurve, [point, line] for midpoint, [a, b, axis] for
- * symmetric.
+ * symmetric, [source, copy, …] of every pair for offset.
  */
 export function constraintTargets(c: SketchConstraint): readonly SketchEntityId[] {
   switch (c.kind) {
@@ -322,6 +331,8 @@ export function constraintTargets(c: SketchConstraint): readonly SketchEntityId[
     case 'radius':
     case 'diameter':
       return [c.curve];
+    case 'offset':
+      return c.pairs.flatMap((p) => [p.source, p.copy]);
     default:
       return assertNever(c);
   }
@@ -332,8 +343,9 @@ export function constraintTargets(c: SketchConstraint): readonly SketchEntityId[
  * (1) selected constraints; (2) selected entities, with a point also the curves using it;
  * (2a) removed sources leave the sources of patterns, a pattern without sources goes; (2b) a
  * pattern goes with its axis or center; (3) points of removed curves that no remaining curve uses
- * and that are no center of a remaining pattern; (4) constraints on removed entities. Steps 2–3
- * repeat until nothing more goes (a removed curve empties a pattern, which frees its center).
+ * and that are no center of a remaining pattern; (4) constraints on removed entities, an offset
+ * loses only the pairs with a removed curve and goes with its last pair (M35). Steps 2–3 repeat
+ * until nothing more goes (a removed curve empties a pattern, which frees its center).
  */
 export function removeItems(data: SketchData, ids: readonly SketchItemId[]): SketchData {
   const selected = new Set<string>(ids);
@@ -370,14 +382,26 @@ export function removeItems(data: SketchData, ids: readonly SketchItemId[]): Ske
       Object.freeze({ ...e, sources: Object.freeze(e.sources.filter((s) => !removed.has(s))) }),
     ];
   });
+  const constraints = data.constraints.flatMap((c): SketchConstraint[] => {
+    if (selected.has(c.id)) return [];
+    if (c.kind === 'offset') return withoutRemovedPairs(c, removed);
+    return constraintTargets(c).some((t) => removed.has(t)) ? [] : [c];
+  });
   return Object.freeze({
     entities: Object.freeze(entities),
-    constraints: Object.freeze(
-      data.constraints.filter(
-        (c) => !selected.has(c.id) && !constraintTargets(c).some((t) => removed.has(t)),
-      ),
-    ),
+    constraints: Object.freeze(constraints),
   });
+}
+
+/** The offset without the pairs with a removed curve: itself when none, nothing when all. */
+function withoutRemovedPairs(
+  c: Extract<SketchConstraint, { kind: 'offset' }>,
+  removed: ReadonlySet<string>,
+): SketchConstraint[] {
+  const pairs = c.pairs.filter((p) => !removed.has(p.source) && !removed.has(p.copy));
+  if (pairs.length === c.pairs.length) return [c];
+  if (pairs.length === 0) return [];
+  return [Object.freeze({ ...c, pairs: Object.freeze(pairs) })];
 }
 
 /**
