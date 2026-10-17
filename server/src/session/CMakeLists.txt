@@ -36,4 +36,7 @@ target_include_directories(tinycad_session PUBLIC
   "${PROJECT_SOURCE_DIR}/src/storage/include"
   "${PROJECT_SOURCE_DIR}/src/regen/include")
 
+# The read model calls the Regenerator (contentVersion) and the face planes of regen (M45 task 2).
+target_link_libraries(tinycad_session PUBLIC tinycad_regen)
+
 tinycad_warnings(tinycad_session)

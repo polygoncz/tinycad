@@ -11,11 +11,16 @@ add_executable(tinycad_session_tests
   operation_codec_test.cpp
   feature_types_test.cpp
   fingerprint_test.cpp
-  recent_responses_test.cpp)
+  recent_responses_test.cpp
+  event_ring_test.cpp
+  mesh_cache_test.cpp
+  read_model_builder_test.cpp)
 target_compile_definitions(tinycad_session_tests PRIVATE
   TINYCAD_GOLDEN_DIR="${TINYCAD_GOLDEN_DIR}")
 target_link_libraries(tinycad_session_tests PRIVATE
-  tinycad_session tinycad_test_support GTest::gtest GTest::gtest_main)
+  tinycad_session tinycad_test_support GTest::gtest GTest::gtest_main
+  # testing.hpp: the built-in builders and the counting kernel of regen (M45 task 2).
+  tinycad_feature_builders tinycad_regen_testing)
 tinycad_warnings(tinycad_session_tests)
 
 gtest_discover_tests(tinycad_session_tests DISCOVERY_MODE PRE_TEST)
