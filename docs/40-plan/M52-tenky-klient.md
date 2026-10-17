@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 52
 aliases:
   - M52
@@ -24,12 +24,12 @@ specs:
 depends_on:
   - "[[M48-hlaseni-v-ui]]"
   - "[[M49-pravidla-validace-v-popisu]]"
-started:
-finished:
+started: 2026-10-17
+finished: 2026-10-18
 tags:
   - milnik
 created: 2026-10-17
-updated: 2026-10-17
+updated: 2026-10-18
 ---
 # M52 – Tenký klient
 
@@ -73,12 +73,12 @@ Dnes `RemoteDispatcher` každou změnu hned použije na zrcadlo TS handlery a po
 
 ## Úkoly
 
-- [ ] 1. Porty po M52, snímkový dokument, tenký `RemoteDispatcher` a rozpracované hodnoty dialogu; přechodový `anOpsSession` nad starým dvojníkem.
-- [ ] 2. Testy `interaction` a `sketcher` na `FakeOps` a `aSnapshotDocument`; přechodový adaptér pryč z testů.
-- [ ] 3. Mazání: handlery a paměťový dvojník `ops`, měnitelný model a serializace `document`, TS běžec `ops.script`, pravidla závislostí.
-- [ ] 4. Jeden `ToastStack` (N160, N170) a `noticeOfRefusal` bez undo/redo souběhu (N169).
-- [ ] 5. E2E latence a výpadku po M52, nový scénář stromu a undo pod latencí, měření bundlu, `test:e2e:full`.
-- [ ] 6. Specifikace 01, 03, 04, 10, 11, 13, 14, ADR 0031 a pojem (hlavní sezení).
+- [x] 1. Porty po M52, snímkový dokument, tenký `RemoteDispatcher` a rozpracované hodnoty dialogu; přechodový `anOpsSession` nad starým dvojníkem.
+- [x] 2. Testy `interaction` a `sketcher` na `FakeOps` a `aSnapshotDocument`; přechodový adaptér pryč z testů.
+- [x] 3. Mazání: handlery a paměťový dvojník `ops`, měnitelný model a serializace `document`, TS běžec `ops.script`, pravidla závislostí.
+- [x] 4. Jeden `ToastStack` (N160, N170) a `noticeOfRefusal` bez undo/redo souběhu (N169).
+- [x] 5. E2E latence a výpadku po M52, nový scénář stromu a undo pod latencí, měření bundlu, `test:e2e:full`.
+- [x] 6. Specifikace 01, 03, 04, 10, 11, 13, 14, ADR 0031 a pojem (hlavní sezení).
 
 ## Akceptační kritéria
 
@@ -325,4 +325,10 @@ export function createRemoteDispatcher(deps: RemoteDispatcherDeps): RemoteDispat
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+_Návrh Clauda (stopa B)._
+
+- Klient nemá handlery operací, `applyOperation` ani měnitelný dokument: dokument je snímek read modelu, jediný lokální stav změn jsou [[Rozpracované hodnoty dialogu|rozpracované hodnoty dialogu]] (N164). Z kódu interakcí se měnil jen editor featur; skicář a manipulátory beze změny díky `FeatureEditSession`.
+- Dočasný adaptér v úkolu 1 držel `npm run check` zelený po každém úkolu; ~33 testových souborů přešlo na `FakeOps`.
+- E2E odhalily ztrácení rozepsaného textu v panelu skici (watch na nové pole při každém snímku – po M52 častější, N177) a nestabilní e2e restartu z M48 (povolená 503 na `WatchSession`).
+- Odchylka od plánu: typy chyb importu (`DocumentLoadError`/`Issue`) zůstaly v `load-error.ts`, kód i spec 03 jim odpovídají.
+- Výsledek: −2 578 řádků src, −4 865 testů; `check:full` (5420 unit, 315 integračních, server) a `test:e2e:full` 213/213 zelené. Bundle téměř beze změny (2,68 MB gzip) – handlery byly malé, přínos je v jednodušším modelu.

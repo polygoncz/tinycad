@@ -16,20 +16,21 @@ milestones:
   - "[[M40-dokument-a-operace-v-cpp]]"
   - "[[M47-uklid-a-dokonceni]]"
   - "[[M49-pravidla-validace-v-popisu]]"
+  - "[[M52-tenky-klient]]"
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-17
+updated: 2026-10-18
 ---
 # 03 – `document`: doménový model
 
 > **Pojmy:** [[Dokument]], [[Part Studio]], [[Featura]], [[Schéma featury]], [[Parametr featury]], [[Rollback bar]], [[Neměnná data]]  
-> **Rozhodnutí:** [[0003-dokument-je-recept]], [[0004-data-oddelene-od-chovani]], [[0006-nemenna-data]]  
+> **Rozhodnutí:** [[0003-dokument-je-recept]], [[0004-data-oddelene-od-chovani]], [[0006-nemenna-data]], [[0011-programovani-proti-rozhranim]], [[0031-tenky-klient-bez-handleru|ADR 0031]]  
 > **Milník:** [[M02-dokument]]
 
 Popisuje, **co** uživatel vytvořil: recept ze seřazených featur. Neobsahuje žádnou geometrii ani logiku jejího výpočtu. Závisí jen na `core`.
 
-**Kde běží (od [[M47-uklid-a-dokonceni|M47]]):** autoritou je C++ dokument na serveru, knihovna `tinycad_document` v `server/src/document` (třída `Document` nad `shared_ptr<const …>`, [[Rozhodnutí nativního jádra|N17]]; hlavičky v `server/src/document/include/tinycad/document/`). Zápis v TS níže zůstává zápisem kontraktu, C++ ho implementuje beze změny chování (sdílené případy, [[13-testovani#Sdílené testovací případy]]). Modul `document` v klientovi drží optimistické zrcadlo dokumentu (`app/mirror-document.ts`, [[Rozhodnutí nativního jádra|N63]]): model, reference, schéma a registr, `validateAgainstSchema` a `checkParamRules` (generická kontrola a deklarativní pravidla v dialogu nad schématem z `FeatureTypeDescriptor`, [[14-protokol#Schéma featur]], [[#Vlastní pravidla]]), `evaluateParams` a `migrateFeatureData` pro handlery operací.
+**Kde běží (od [[M47-uklid-a-dokonceni|M47]]):** autoritou je C++ dokument na serveru, knihovna `tinycad_document` v `server/src/document` (třída `Document` nad `shared_ptr<const …>`, [[Rozhodnutí nativního jádra|N17]]; hlavičky v `server/src/document/include/tinycad/document/`). Zápis v TS níže zůstává zápisem kontraktu, C++ ho implementuje beze změny chování (sdílené případy, [[13-testovani#Sdílené testovací případy]]). **V klientovi (od [[M52-tenky-klient|M52]], [[0031-tenky-klient-bez-handleru|ADR 0031]]):** modul `document` nemá měnitelný model ani zapisovatele, jen **čtecí pohled** nad neměnnými snímky [[Read model|read modelu]] ([[#Dokument v klientovi: snímky read modelu]], [[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N165]]). Dál v něm jsou typy modelu, reference, počátek, `references.ts`, schéma a registr, `validateAgainstSchema` a `checkParamRules` (generická kontrola a deklarativní pravidla v dialogu nad schématem z `FeatureTypeDescriptor`, [[14-protokol#Schéma featur]], [[#Vlastní pravidla]]), `evaluateParams` a typy chyb importu (`load-error.ts`, [[#Serializace]]). `DocumentWriter`, `createDocument`, mutátory, `fromData`/`toData` a `migrateFeatureData` jsou od M52 jen **kontrakt C++** (`server/src/document`); níže zůstávají v zápisu TS, protože ho C++ implementuje a sdílené případy ho ověřují.
 
 ## Model
 
@@ -67,6 +68,8 @@ Všechno je **neměnné**. Změna parametru = nová instance `FeatureInstance` a
 
 ## Čtení a zápis: dvě rozhraní
 
+> Od [[M52-tenky-klient|M52]] je v TS jen `DocumentReader` a `DocumentEvents`; `DocumentWriter`, `CreateDocumentInit` a `createDocument` níže popisují kontrakt C++ (`server/src/document/include/tinycad/document/document.hpp`: `DocumentReader`, `DocumentWriter`, `Document`). Dokument klienta je [[#Dokument v klientovi: snímky read modelu]].
+
 ```ts
 export interface DocumentReader {
   readonly meta: DocumentMeta;
@@ -98,7 +101,7 @@ export interface CreateDocumentInit {
 export function createDocument(init: CreateDocumentInit): DocumentWriter;
 ```
 
-- `DocumentWriter` dostávají **jen handlery operací** v `ops`. Všichni ostatní pracují s `DocumentReader`. `createDocument` vrací `DocumentWriter` a `app` ho ostatním předává typovaný jako `DocumentReader`. Implementující třída (`CadDocument`) zůstává uvnitř modulu ([[0011-programovani-proti-rozhranim|ADR 0011]]). Přetypování zpět TypeScript nezakáže, hlídá to review.
+- `DocumentWriter` dostávají **jen handlery operací** v `ops` serveru (`server/src/ops`, sezení jim ho předá). Všichni ostatní pracují s `DocumentReader`. Implementující třída (`Document`) zůstává uvnitř knihovny ([[0011-programovani-proti-rozhranim|ADR 0011]]). Do M52 platilo totéž v TS (`createDocument` → `CadDocument` v `cad-document.ts`, `app` ho předával typovaný jako `DocumentReader`); v klientovi role „zapisovatel“ z ADR 0011 zanikla s handlery ([[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N165]]).
 - Mutátory hlídají invarianty a při porušení vyhodí výjimku (chyba programátora): unikátní `id`, `rollbackIndex` v rozsahu `0..features.length`, index v rozsahu, existující featura.
 - Posun [[Rollback bar|rollback baru]] (`r`) – stav ostatních featur (aktivní/za barem) se nikdy nemění ([[Q029 Posun rollback baru při změnách featur|Q029]]):
   - `insertFeature(i)`: `i <= r` → `r + 1`. Featura vložená na bar je aktivní.
@@ -111,6 +114,37 @@ export function createDocument(init: CreateDocumentInit): DocumentWriter;
 - Data vstupující do dokumentu (`createDocument`, `insertFeature`, `replaceFeature`) se zmrazí do hloubky bez zkratek – i mělce zmrazený objekt zvenku se zmrazí celý. Mutátory pak zmrazí jen nové pole a nové `studio`, jejichž prvky už zmrazené jsou.
 - `createDocument` kontroluje invarianty i u počátečního `studio` (výjimka). Data zvenku kontroluje `fromData` předem a vrací `Result`.
 - Mutátory **nevalidují parametry** featur. Neplatné parametry jsou legitimní stav dokumentu – featura pak při regeneraci skončí chybou (zčervená jako v Onshape).
+
+## Dokument v klientovi: snímky read modelu
+
+Od [[M52-tenky-klient|M52]] ([[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N165]]). Klient dokument nemění, jen nahrazuje snímek dalším read modelem ze serveru (`document/snapshot-document.ts`):
+
+```ts
+/** Dokument jednoho read modelu. */
+export interface DocumentSnapshot {
+  readonly meta: DocumentMeta;
+  readonly studio: PartStudioData;
+}
+
+export interface SnapshotDocument {
+  /** Čtecí pohled pro všechny; samostatný objekt, takže přetypování AppSession.doc nedosáhne na replace. */
+  readonly reader: DocumentReader;
+  /**
+   * Nahradí snímek. Featura stejná jako zobrazená (hluboká rovnost JSON) zůstane týž objekt,
+   * stejně tak bodies a celé studio; changed jen při skutečné změně meta nebo studia.
+   */
+  replace(next: DocumentSnapshot): void;
+}
+
+export function createSnapshotDocument(initial: DocumentSnapshot): SnapshotDocument;
+```
+
+- **Dvě tváře, jedna implementace:** `reader` je `DocumentReader` pro všechny (`AppSession.doc`, prezentační modely, skicář), `replace` má jen `app` – odběr `session.readModel` v `app/remote-session.ts`, zaregistrovaný před dispečerem, takže dokument ukazuje read model odpovědi dřív, než se vyřeší slib změny ([[11-ui#Kompoziční kořen (app)]]). `reader` je samostatný objekt, ne `SnapshotDocument` přetypovaný na čtení, takže přetypováním na `replace` nedosáhne.
+- `reader.feature`, `indexOf` a `bodyMeta` čtou aktuální snímek; `bodyMeta` bez metadat vrací jeden sdílený zmrazený `{}`. Snímek i pole jsou zmrazené do hloubky.
+- **Sdílení nezměněných částí:** featura hluboce rovná zobrazené (JSON) zůstane týž objekt, stejně tak `bodies` a celé `studio`, když se nic nezměnilo. Dialog a strom porovnávají identitou (přesun z `MirrorDocument.shared` do M52).
+- `changed` jen při skutečné změně `meta` nebo `studia`; změna jen jména vyšle `changed` s nezměněným `studio` (pravidlo `DocumentEvents` výše).
+- Snímek nemá invarianty mutátorů: jeho obsah zkontroloval server.
+- **Testy:** `aSnapshotDocument(options?: DocumentOptions): TestDocument` v `document/testing.ts` je tentýž objekt s `replace({ name?, studio? })`, kterým test skriptuje další read model (`TestDocument extends DocumentReader`). Používá ho i `FakeOps` ([[04-operace-a-historie#Testy]]).
 
 ## Reference na jiné entity
 
@@ -359,7 +393,7 @@ export function evaluateParams<P>(schema: FeatureSchema<P>, params: unknown, var
 - Kdo zná jen `FeatureSchema` bez typu (`Evaluated<unknown>`), přetypuje na `Evaluated<KonkrétníP>` až u pluginu, který typ zná.
 ## Serializace
 
-Serializaci a načítání dat zvenku (soubor SQLite, import `.tinycad.json`) dělá od [[M47-uklid-a-dokonceni|M47]] jen server (`server/src/document/serialize.cpp`, testy `server/test/document/serialize_test.cpp`). Klient dokument nenačítá ani neukládá: zrcadlo staví dokument z read modelu přes `createDocument`, takže `fromData` a `toData` z veřejného API TS modulu zmizely; zůstaly jen jako testovací pomůcka v `document/testing.ts` (běžec sdílených případů `ops.script`, testy `interaction`; M47 úkol 4, [[Rozhodnutí nativního jádra|N145]]). Pravidla níže jsou kontrakt C++ implementace.
+Serializaci a načítání dat zvenku (soubor SQLite, import `.tinycad.json`) dělá od [[M47-uklid-a-dokonceni|M47]] jen server (`server/src/document/serialize.cpp`, testy `server/test/document/serialize_test.cpp`). Klient dokument nenačítá ani neukládá: dokument klienta jsou snímky read modelu ([[#Dokument v klientovi: snímky read modelu]]). `fromData` a `toData` zmizely z veřejného API TS v M47 ([[Rozhodnutí nativního jádra|N145]]) a s `serialize.ts` v [[M52-tenky-klient|M52]] i z testovacích pomůcek (N165). Pravidla níže jsou kontrakt C++ implementace. V TS zůstaly jen typy `DocumentLoadIssue` a `DocumentLoadError` (`document/load-error.ts`): jsou to typy chyby importu, kterou server vrátí jako `INVALID_DOCUMENT` s jedním hlášením na problém a klient je jen zobrazí (`DocumentsCatalog.importFile` v `app/remote-documents-catalog.ts`, seznam dokumentů v `interaction`; [[14-protokol]]).
 
 ```ts
 export interface DocumentData {
@@ -385,7 +419,7 @@ export interface DocumentLoadError { readonly issues: readonly DocumentLoadIssue
 
 ### Migrace dat featur
 
-Migraci parametrů na aktuální verzi schématu používá `fromData` (na serveru) i `ops` (migrace při `apply`, [[04-operace-a-historie#Handler]], [[Q035 Migrace featur v záznamech logu|Q035]]), proto je exportovaná:
+Migraci parametrů na aktuální verzi schématu používá `fromData` i `ops` (migrace při `apply`, [[04-operace-a-historie#Handler]], [[Q035 Migrace featur v záznamech logu|Q035]]), proto je exportovaná. Od [[M52-tenky-klient|M52]] obojí jen na serveru (`serialize.hpp`, `server/src/ops/handlers/feature.cpp`); TS verze zmizela s handlery:
 
 ```ts
 export interface FeatureData { readonly type: string; readonly typeVersion: number; readonly params: unknown }
@@ -397,7 +431,7 @@ export function migrateFeatureData(schemas: RegistryReader<FeatureSchema>, data:
 
 ## Testy
 
-Testy modelu, referencí a schématu běží v obou jazycích (`test/unit/document/` a `server/test/document/`); testy serializace (`toData`, `fromData`) jen v C++.
+Testy referencí, schématu, validace a pravidel běží v obou jazycích (`test/unit/document/` a `server/test/document/`); testy mutátorů a serializace (`toData`, `fromData`) od [[M52-tenky-klient|M52]] jen v C++. V TS navíc `snapshot-document.test.ts`: čtení, `replace` se sdílením featur a `bodies`, `changed` jen při změně, přejmenování, `reader` nemá `replace`.
 
 - Invarianty mutátorů (duplicitní id, neexistující featura, indexy mimo rozsah).
 - Posun rollback baru pro vložení, smazání a přesun před barem, na baru a za barem.

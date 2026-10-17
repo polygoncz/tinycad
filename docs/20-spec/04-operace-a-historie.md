@@ -15,15 +15,16 @@ milestones:
   - "[[M46-klient-nad-read-modelem]]"
   - "[[M47-uklid-a-dokonceni]]"
   - "[[M51-inverze-a-mereni]]"
+  - "[[M52-tenky-klient]]"
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-17
+updated: 2026-10-18
 ---
 # 04 – `ops`: operace, log a undo/redo
 
 > **Pojmy:** [[Operace]], [[Handler operace]], [[Operační log]], [[Transakce]], [[Undo a redo]], [[Determinismus operací]]  
-> **Rozhodnutí:** [[0005-operacni-log]], [[Q005 Komprese transakce add a setParams|Q005]], [[Q029 Posun rollback baru při změnách featur|Q029]], [[Q030 Výjimka odběratele po změně dokumentu|Q030]], [[Q031 Inverze dávky operací|Q031]]  
+> **Rozhodnutí:** [[0005-operacni-log]], [[Q005 Komprese transakce add a setParams|Q005]], [[Q029 Posun rollback baru při změnách featur|Q029]], [[Q030 Výjimka odběratele po změně dokumentu|Q030]], [[Q031 Inverze dávky operací|Q031]], [[0031-tenky-klient-bez-handleru|ADR 0031]]  
 > **Milník:** [[M03-operace]]
 
 Jediná cesta, jak změnit dokument. Každá změna je **operace** – serializovatelný popis (data). Operace se aplikují přes dispečera a zapisují do **neměnného logu**. Undo/redo, ukládání i případná budoucí synchronizace stojí na tomto logu ([[0005-operacni-log|ADR 0005]]). Závisí na `core` a `document`.
@@ -32,7 +33,56 @@ Jediná cesta, jak změnit dokument. Každá změna je **operace** – serializo
 
 **Kde běží (od [[M47-uklid-a-dokonceni|M47]]):** dispečer, transakce, log, undo, přehrání, upcast a čtení záznamů implementuje C++ na serveru, knihovna `tinycad_ops` v `server/src/ops` (hlavičky `server/src/ops/include/tinycad/ops/`, [[M40-dokument-a-operace-v-cpp|M40]]); log na disk zapisuje úložiště SQLite ([[05-persistence]]). Zápis v TS níže zůstává zápisem kontraktu. Odchylky C++: dokument ani dispečer nemají události, `UndoManager` se napojí háčkem `onAppended` a logika výjimek odběratelů odpadá ([[Rozhodnutí nativního jádra|N21]]); `invert` a `apply` vrací chybu s cestou místo výjimky ([[Rozhodnutí nativního jádra|N80]]); zničení otevřené transakce ji zruší ([[Rozhodnutí nativního jádra|N81]]).
 
-V klientovi zůstává z `ops` jen to, co potřebuje optimistické zrcadlo dokumentu ([[Rozhodnutí nativního jádra|N63, N121]]): typy operací, `OP_VERSION`, registr a handlery, `applyOperation` a typy portů `OperationDispatcher`, `DispatchMeta`, `Transaction`, `UndoManager`, `LogEntry` (`ops/ports.ts`). Porty implementuje `app/remote-dispatcher.ts` nad sezením na serveru: změnu hned použije na zrcadlo TS handlery a pošle ji serveru, odpověď zrcadlo přestaví ([[14-protokol#Změny dokumentu]]). Paměťový dispečer, log, transakce a undo z této specifikace jsou v klientovi jen testovací dvojník portů v `ops/testing.ts` (`createOperationDispatcher`, `createOperationLog`, `createUndoManager`, `anOpsSession`) pro testy `interaction` a `sketcher`; produkční kód je importovat nesmí.
+**V klientovi (od [[M52-tenky-klient|M52]], [[0031-tenky-klient-bez-handleru|ADR 0031]], [[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N166]]):** `ops` = typy operací, `OP_VERSION` a porty `OperationDispatcher`, `DispatchMeta`, `Transaction`, `UndoManager` (`ops/ports.ts`). Handlery, registr, `applyOperation`, paměťový dispečer, log, transakce a undo z klienta zmizely (mění N96, N121, N145); všechno ostatní v této specifikaci (dispečer, transakce, log, undo, přehrání, upcast, handlery) je **kontrakt C++** a zápis v TS je jen zápis kontraktu. Porty implementuje `app/remote-dispatcher.ts` jako tenký dispečer: změnu jen pošle sezení a výsledek je slib „přijato / odmítnuto“ ([[#Porty v klientovi]], [[11-ui#Kompoziční kořen (app)]]). Testovací dvojník portů je `FakeOps` v `ops/testing.ts` ([[#Testy]]). Do M52 tu byl optimistický klient: TS handlery nad zrcadlem dokumentu a paměťový dvojník `anOpsSession` (N63, N121).
+
+## Porty v klientovi
+
+Od [[M52-tenky-klient|M52]] ([[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N163]]). Porty jsou asynchronní jen tam, kde na odpovědi záleží: změna vrací `Promise<boolean>`, `begin` a příznaky jsou synchronní. Z portů zmizely `events` (`applied`, `transaction`), `LogEntry`, `DispatchMeta.kind/target` a `UndoManager.stacks` – produkční kód je nečetl, historii dává `HistoryLog` ([[10-interakce]]).
+
+```ts
+export interface DispatchMeta {
+  /** Výchozí: op.type. */
+  readonly label?: string;
+}
+
+export interface OperationDispatcher {
+  /**
+   * Pošle operaci jako jeden záznam logu. true = server ji přijal (dokument už ukazuje read model
+   * odpovědi), false = odmítl (hlášení ukáže app). Během transakce vyhodí hned (chyba programátora).
+   */
+  dispatch(op: Operation, meta?: DispatchMeta): Promise<boolean>;
+  /** Zahájí transakci hned (BeginTransaction jde frontou). Jen jedna; druhý begin vyhodí. */
+  begin(label: string): Transaction;
+  readonly inTransaction: boolean;
+}
+
+export interface Transaction {
+  readonly label: string;
+  apply(op: Operation): Promise<boolean>;
+  /** Na serveru se vrátí při commitu i abortu, do logu nejde (Q018). */
+  applyTransient(op: Operation): Promise<boolean>;
+  /** Ukončí transakci hned (inTransaction = false); server zapíše nejvýš jeden záznam. */
+  commit(): Promise<boolean>;
+  abort(): Promise<boolean>;
+}
+
+export interface UndoManager extends Disposable {
+  /** Zásobník undo serveru není prázdný a neběží transakce. */
+  canUndo(): boolean;
+  canRedo(): boolean;
+  undo(): Promise<boolean>;
+  redo(): Promise<boolean>;
+  /** Jen při změně dvojice (canUndo, canRedo). */
+  readonly events: Subscribable<{ changed: { canUndo: boolean; canRedo: boolean } }>;
+}
+```
+
+- **Sliby nikdy neodmítají** kvůli chybě serveru: `false` a hlášení ukáže `app` (`onError` → `noticeOfRefusal`). Volající, kteří na výsledek nečekají, píšou `void ops.dispatch(op)` (ESLint `no-floating-promises`). Odmítnutí, které není `RemoteError`, je chyba programu a slib ho propustí (N176).
+- `true` znamená, že dokument (`AppSession.doc`) už ukazuje read model odpovědi – sezení ho zveřejní dřív, než slib vyřeší (N165).
+- **Ukončená transakce** (po `commit` nebo `abort`): další volání **vyhodí** (chyba programátora, jako dřív). **Ztracená transakce** (server ji ukončil: událost `lost`, odmítnutý `begin`, `NO_TRANSACTION` u kroku): další volání je **no-op vracející `false`** (N167).
+- `commit` a `abort` ukončí transakci lokálně hned; slučování kroků a zápis jednoho záznamu dělá server podle [[#Transakce]]. „Jeden záznam v logu“ proto klient netvrdí, tvrdí ho server a sdílené případy.
+- `canUndo`/`canRedo` čtou poslední read model a jsou `false` během transakce; `undo()` bez `canUndo` vyhodí.
+- Kompletní tabulka požadavků a reakcí na chyby je v [[11-ui#Kompoziční kořen (app)]] (*Tenký dispečer*).
 
 ## Operace
 
@@ -67,7 +117,7 @@ V tabulce znamená `pole: undefined` „pole z metadat vynechat“ (pseudokód).
 | `document.rename` (M19.2) | `name: string` (oříznuté, neprázdné) | `document.rename` s aktuálním jménem | `rename(name)` |
 | `batch` | `ops: readonly Operation[]` | viz [[#Dávka]] | – |
 
-Modul exportuje typy `FeatureAddOp`, `FeatureRemoveOp`, `FeatureSetParamsOp`, `FeatureRenameOp`, `FeatureSuppressOp`, `FeatureMoveOp`, `StudioSetRollbackOp`, `BodyRenameOp`, `BodySetVisibleOp`, `BodySetColorOp` (M15), `BodySetMaterialOp` (M24), `DocumentRenameOp` (M19.2), `BatchOp` a typového strážce `isDocumentRename(op): op is DocumentRenameOp` (M19.2; ověří i `name` jako řetězec, protože ho čtou i story nad neověřenými záznamy). Na `'document.rename'` se nikde neporovnává řetězec, používá se strážce (`undo`, `HistoryModel`, story). Konstruktory operací nejsou – operace je literál.
+Modul exportuje typy `FeatureAddOp`, `FeatureRemoveOp`, `FeatureSetParamsOp`, `FeatureRenameOp`, `FeatureSuppressOp`, `FeatureMoveOp`, `StudioSetRollbackOp`, `BodyRenameOp`, `BodySetVisibleOp`, `BodySetColorOp` (M15), `BodySetMaterialOp` (M24), `DocumentRenameOp` (M19.2), `BatchOp` a `OP_VERSION`. Typový strážce `isDocumentRename` (M19.2) je od [[M52-tenky-klient|M52]] jen v C++ (`server/src/ops/operation.hpp`, používá ho undo serveru); v TS zmizel s undo dvojníka a nikdo v klientovi záznamy logu nečte (historii dává server, `HistoryModel` čte texty z `HistoryLog`). Konstruktory operací nejsou – operace je literál.
 
 `setParams` nese **celé** parametry, ne patch. Inverze je pak triviální a operace nezávisí na předchozím stavu.
 
@@ -176,6 +226,8 @@ Odložené výjimky vyhodí volající (dispečer, transakce) **až po zápisu**
 
 ## Dispečer
 
+> Kontrakt C++ (`server/src/ops`). V TS zanikl v [[M52-tenky-klient|M52]]; porty klienta jsou v [[#Porty v klientovi]].
+
 ```ts
 export interface DispatchMeta {
   /** Výchozí: op.type. */
@@ -263,6 +315,8 @@ core::Result<std::optional<LogEntry>, WriteFailed> commit();
 
 ## Transakce
 
+> Pravidla níže platí pro transakci na serveru (C++). Klient transakci jen otevře, posílá kroky a ukončí ([[#Porty v klientovi]]); rozpracované hodnoty dialogu během letu kroků popisuje [[10-interakce#Rozpracované hodnoty a „poslední vyhrává“]].
+
 Dialog featury, tažení posuvníku nebo celé skicování nesmí v logu vytvořit stovky záznamů. Transakce aplikuje operace hned (dokument se mění, regenerace běží, uživatel vidí náhled), ale do logu zapíše **jeden** záznam až při potvrzení.
 
 ```ts
@@ -298,6 +352,8 @@ export interface Transaction {
 Komprese se omezuje na `merge` téhož typu ([[Q005 Komprese transakce add a setParams|Q005]]). Příklad – vytvoření kvádru přes dialog: `begin('Box')` → `feature.add` s výchozími parametry → 5× `feature.setParams` → `commit()`. Pět `setParams` se sloučí do jedné, v logu je jeden záznam `batch[feature.add, feature.setParams]`.
 
 ## Log
+
+> Kontrakt C++ (`server/src/ops`). V TS od [[M52-tenky-klient|M52]] jen port `UndoManager` bez zásobníků a záznamů ([[#Porty v klientovi]]).
 
 Log je **append-only**. Nic se z něj nemaže, ani při undo.
 
@@ -336,6 +392,8 @@ V paměti je celý log (pro naše velikosti dokumentů to stačí). Na serveru h
 **Panel historie** (M15, [[10-interakce#Historie úprav: `HistoryModel`]]) čte od [[M46-klient-nad-read-modelem|M46]] úzký port `HistoryLog` (záznamy s `opType` bez operací a zásobníky ze serveru, `app/remote-history.ts`, [[Rozhodnutí nativního jádra|N73]]): řádek = záznam (`label` je klíč překladu nebo typ operace, ADR 0014), stav vrácení se odvodí ze zásobníků, které server spočítá `rebuildUndoStacks`. Log se kvůli panelu nemění; s historií se přenáší i v souboru `.tinycad.json` ([[05-persistence#Export a import souboru]]).
 
 ## Undo / redo
+
+> Kontrakt C++ (`server/src/ops`). V TS od [[M52-tenky-klient|M52]] jen port `UndoManager` bez zásobníků a záznamů ([[#Porty v klientovi]]).
 
 Undo nemaže historii – připíše **inverzní operaci** jako nový záznam. Historie úprav tak zůstává kompletní (podobně jako mikroverze v Onshape).
 
@@ -435,7 +493,7 @@ export function parseLogEntry(handlers: OpHandlerRegistry, raw: unknown): Result
 
 ## Testy
 
-Od [[M47-uklid-a-dokonceni|M47]] běží v TS (`test/unit/ops/`) testy handlerů, `applyOperation` a testovacího dvojníka (dispečer, log, transakce, undo bez `rebuildUndoStacks`) a sdílené případy `ops` druhu `script` ([[13-testovani#Sdílené testovací případy]]). Celou sadu včetně přehrání, upcastu, `parseLogEntry`, `rebuildUndoStacks` a property testu přehrání implementuje C++ (`server/test/ops/`, property test 200 semínek vlastního generátoru, [[Rozhodnutí nativního jádra|N28, N82]]).
+Od [[M52-tenky-klient|M52]] zbývá v TS (`test/unit/ops/`) jen `OP_VERSION`, veřejné API modulu a `FakeOps`: testovací dvojník portů pro testy `interaction` a `sketcher` ([[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N166]]). `aFakeOps(options?)` nic neaplikuje, zaznamená odeslané změny (`sent`, `ops()`, `lastParams(featureId)`) a odpovídá skriptovaně (`answer`, `answerAll` s `{ ok?, document? }`; dokument `aSnapshotDocument` se nahradí dřív, než se slib vyřeší, jako u `RemoteSession`). Výchozí je **odpověď nepřijde, dokud ji test nepošle**, takže rozpracované hodnoty dialogu jsou v testech pravda. Stráže jako skutečný dispečer: `dispatch` a `begin` během transakce vyhodí, volání ukončené transakce vyhodí; `undo.setFlags` nastaví `canUndo`/`canRedo`. Testy handlerů, `applyOperation`, paměťového dvojníka a TS běžec sdílených případů `ops.script` (M47) M52 smazal; případy `test/shared-cases/ops/` zůstávají pro C++ ([[13-testovani#Sdílené testovací případy]]). Celou sadu níže včetně přehrání, upcastu, `parseLogEntry`, `rebuildUndoStacks` a property testu přehrání implementuje C++ (`server/test/ops/`, property test 200 semínek vlastního generátoru, [[Rozhodnutí nativního jádra|N28, N82]]).
 
 - Každý vestavěný handler: `invert` → `apply(op)` → `apply(inverze)` vrátí dokument do původního stavu (porovnání `toData`); `invert` dokument nezmění; `invert` na neexistující featuru vyhodí.
 - `applyOperation`: obalení inverze obnovou baru u add/remove/move před barem, na baru a za barem; bez obalení u `studio.setRollback`; dávka včetně vnořené a prázdné; atomičnost dávky při selhání podoperace; výjimka odběratele (beze změny vs. se změnou).

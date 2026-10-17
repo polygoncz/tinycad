@@ -13,18 +13,19 @@ milestones:
   - "[[M13-extrude-revolve]]"
   - "[[M14-topologicke-pojmenovani]]"
   - "[[M15-export-a-dokonceni]]"
+  - "[[M52-tenky-klient]]"
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-17
+updated: 2026-10-18
 ---
 # 10 – `interaction`: výběr, nástroje, akce
 
-> **Pojmy:** [[Výběr]], [[Nástroj]], [[Akce]], [[Transakce]], [[Rollback bar]], [[Prezentační model]]  
-> **Rozhodnutí:** [[0009-platformove-nezavisla-domena]], [[0010-prezentacni-model]], [[0011-programovani-proti-rozhranim]]  
+> **Pojmy:** [[Výběr]], [[Nástroj]], [[Akce]], [[Transakce]], [[Rollback bar]], [[Prezentační model]], [[Rozpracované hodnoty dialogu]]  
+> **Rozhodnutí:** [[0009-platformove-nezavisla-domena]], [[0010-prezentacni-model]], [[0011-programovani-proti-rozhranim]], [[0031-tenky-klient-bez-handleru|ADR 0031]]  
 > **Milník:** [[M09-interakce]]
 
-Převádí vstupy uživatele (myš, klávesnice, UI) na operace. **Nikdy nemění dokument přímo** – jen vytváří operace a posílá je dispečerovi nebo transakci. Závisí jen na `core`, `document`, `ops` a od M12 `sketch` (model skici a port řešiče).
+Převádí vstupy uživatele (myš, klávesnice, UI) na operace. **Nikdy nemění dokument přímo** – jen vytváří operace a posílá je dispečerovi nebo transakci. Od [[M52-tenky-klient|M52]] ([[0031-tenky-klient-bez-handleru|ADR 0031]]) se dokument změní až read modelem odpovědi serveru: porty vrací `Promise<boolean>` ([[04-operace-a-historie#Porty v klientovi]]) a volající, kteří na výsledek nečekají, píšou `void ops.dispatch(op)`. Strom, Prohlížeč a jméno dokumentu proto ukážou změnu až s odpovědí ([[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N168]]); jediný lokální stav změn jsou [[Rozpracované hodnoty dialogu|rozpracované hodnoty dialogu]] (níže). Závisí jen na `core`, `document`, `ops` a od M12 `sketch` (model skici a port řešiče).
 
 `interaction` je **prstenec 2** ([[0009-platformove-nezavisla-domena|ADR 0009]]): obsahuje logiku obrazovek jako [[Prezentační model|prezentační modely]] ([[0010-prezentacni-model|ADR 0010]]), ale nezná DOM, Vue ani Three.js. Viewport zná jen přes vlastní port `ViewportPort`.
 
@@ -429,21 +430,21 @@ export interface FeatureEditSession {   // vytváří ji jen FeatureEditor
   readonly featureId: FeatureId;
   readonly schema: FeatureSchema;
   readonly state: Observable<EditState>;
-  setParam(name: string, value: unknown): void;          // → tx.apply(feature.setParams)
+  setParam(name: string, value: unknown): void;          // → rozpracované hodnoty + tx.apply(feature.setParams) (M52, N164)
   setParams(patch: Readonly<Record<string, unknown>>): void;   // víc parametrů jednou operací (M12, skicář)
   removeRef(name: string, index: number): void;          // × u čipu: → setParam bez položky (M11)
   focusRefParam(name: string | null): void;
-  commit(): void;                                        // → tx.commit()
-  cancel(): void;                                        // → tx.abort()
+  commit(): void;                                        // → tx.commit(); session se zavře hned (M52)
+  cancel(): void;                                        // → tx.abort(); session se zavře hned (M52)
 }
 
 export interface EditState {
-  readonly params: Readonly<Record<string, unknown>>;    // aktuální hodnoty (z dokumentu)
+  readonly params: Readonly<Record<string, unknown>>;    // rozpracované hodnoty, dokud server nepřijme poslední odeslanou změnu; pak dokument (M52, N164)
   readonly issues: readonly ParamIssue[];                // evaluateParams(schema, params, NO_VARIABLES).issues
   readonly fields: readonly FieldState[];                // pořadí podle schema.params
   readonly activeRefParam: string | null;                // parametr typu bodies/topo/region, který přijímá výběr
   readonly open: boolean;                                // false po commit/cancel
-  readonly name: string;                                 // jméno featury z dokumentu (po zmizení featury poslední známé)
+  readonly name: string;                                 // jméno featury z dokumentu, před přijetím feature.add jméno z rozpracovaných hodnot, po zmizení featury poslední známé
 }
 
 export interface FieldState {
@@ -474,7 +475,7 @@ export interface FieldRef {
 
 **`create(type)`**
 1. Předpoklady (jinak výjimka, nic se nezmění): žádná otevřená session, dispečer není v transakci, typ je v `schemas`.
-2. `ops.begin(schema.label)`, pak `tx.apply(feature.add)` s `id = ids.next()`, `typeVersion = schema.version`, `params = schema.defaults()`, `suppressed: false`, `index = rollbackIndex`.
+2. `ops.begin(schema.label)`, pak `feature.add` přes `send` (viz [[#Rozpracované hodnoty a „poslední vyhrává“]]; rozpracované hodnoty začínají parametry a jménem nové featury, takže dialog je ukáže hned, ještě než featura dorazí v read modelu) s `id = ids.next()`, `typeVersion = schema.version`, `params = schema.defaults()`, `suppressed: false`, `index = rollbackIndex`.
    - **Předvýběr oblasti** (M19.2 D6, jako ve Fusion): s `regen` v deps, když první automaticky fokusovaný parametr (pravidlo bodu 5) je druhu `region` a poslední skica posledního stavu regenerace (`regen.state.get().sketches.at(-1)`) má právě jednu oblast, dostane `feature.add` rovnou `params = { ...defaults, [param]: [{ kind: 'region', sketch: <feature skici>, region: <jméno> }] }`. Je to pořád jedna operace `feature.add`, žádný další krok v transakci. Pravidlo je obecné podle druhu parametru (Vysunutí i Rotace), pluginy se nemění. `activeRefParam` zůstává na oblasti, další klik oblast přidá nebo odebere. Výběr roli nehraje: oblast ve výběru nikdy není. Bez `regen`, bez snapshotu nebo s jiným počtem oblastí se nepředvybírá nic.
 3. Jméno: `"<schema.label> <n>"`, kde `n` je nejmenší kladné číslo, pro které takové jméno ve studiu ještě není.
 4. Vložení na pozici baru posune bar za novou featuru samo (pravidlo mutátoru v [[03-dokument]]), takže nová featura je aktivní ([[Q068 Kam se vloží nová featura|Q068]]).
@@ -485,20 +486,36 @@ export interface FieldRef {
 2. `ops.begin('feature.edit')` – popisek transakce je klíč překladu ([[0014-preklady-vue-i18n-a-klice|ADR 0014]]), jméno featury do něj nepatří. Je-li `rollbackIndex !== index + 1`, `tx.applyTransient(studio.setRollback(index + 1))`: bar je během editace těsně za editovanou featurou, ať byla před barem, nebo za ním. Pozdější featury se nepřehrávají a náhled ukazuje model ve stavu editované featury ([[Q018 Rollback bar při editaci starší featury|Q018]]). Přechodná operace se při `commit` i `cancel` vrátí sama a do logu se nedostane ([[04-operace-a-historie]]).
 
 **Session**
-- `setParam(name, value)`: `name` musí být klíč `schema.params`, jinak výjimka. Nové `params = { ...params, [name]: value }` → `tx.apply(feature.setParams)` s `typeVersion: schema.version` ([[04-operace-a-historie#Migrace dat featur]]). Hodnota se **nekontroluje** před aplikací: neplatné parametry dokument unese, regenerace featuru označí chybou a `issues` je ukážou. `setParam` se stejnou hodnotou (`Object.is` u primitiv) nic neaplikuje. Selže-li handler, výjimka letí dál a session zůstává otevřená beze změny.
+- `setParam(name, value)`: `name` musí být klíč `schema.params`, jinak výjimka. Nové `params = { ...params, [name]: value }` (`params` = `EditState.params`, tedy i rozpracované hodnoty) → rozpracované hodnoty = nové `params`, `refresh()` (stav je vidět hned) → `send(feature.setParams)` s `typeVersion: schema.version` ([[04-operace-a-historie#Migrace dat featur]]). Hodnota se **nekontroluje** před odesláním: neplatné parametry dokument unese, regenerace featuru označí chybou a `issues` je ukážou. `setParam` se stejnou hodnotou (`Object.is` u primitiv) nic neodešle. Odmítnutí serveru session nezavře (viz níže).
 - `setParams(patch)` (M12): každý klíč musí být v `schema.params`, jinak výjimka a nic se neaplikuje; nové `params = { ...params, ...patch }` → **jedna** `feature.setParams`; když jsou všechny hodnoty `Object.is` shodné s aktuálními, nic. Jinak pravidla jako `setParam`.
 - `removeRef(name, index)` (M11): neznámý parametr → výjimka. Hodnota, která není pole, `index` mimo rozsah (nebo neceločíselný) a zavřená session → nic. Jinak `setParam(name, hodnota bez položky na index)`.
-- `params` čte session vždy z dokumentu (jediný zdroj pravdy), `issues` z `evaluateParams` se přepočítají po každé změně. Viditelnost polí se počítá z vyhodnocených parametrů, a když neprojdou, ze surových.
+- `params` čte session z rozpracovaných hodnot, a když žádné nejsou, z dokumentu (`readParams = draft?.params ?? doc.feature(id)?.params ?? prev?.params ?? {}`); `issues` z `evaluateParams` se přepočítají po každé změně. Viditelnost polí se počítá z vyhodnocených parametrů, a když neprojdou, ze surových.
 - `refs` (M11): pro každou položku hodnoty parametru druhu `bodies` jeden `FieldRef`; `body` z `bodyOfRef` (ověří tvar id přes `parseBodyId`, hodnota parametru smí být neplatná), `label` z `bodyRefLabel` v `ref-values` (interní, pravidla níže a [[Rozhodnutí noční rychloakce#M11 – Další entity|R25]]). Jména jsou z dokumentu, proto se otevřená session přepočítá i při `doc.events.changed`; nezměněné `refs` zůstávají týž objekt.
 - `bodyRefLabel(doc, body)`: featura původu v dokumentu chybí → `null`, i když těleso má jméno v metadatech (metadata smazané featury v dokumentu zůstávají, čip má ukázat „Chybí těleso“); jinak `userName` z metadat, jinak jméno featury původu (u `bodyId(f, n)` s příponou ` (n)`). Nečte poslední regeneraci: náhled booleanu nástroj z mapy těles odebere, ale čip v dialogu ho musí pojmenovat dál.
 - `focusRefParam(name)`: `name` musí být **viditelný** parametr druhu `bodies`, `topo`, `region`, (M12) `planes` nebo (M13) `axis`, jinak výjimka (i pro neznámé jméno). Když změna parametrů aktivní parametr skryje, `activeRefParam` se nastaví na `null`.
 - `hidden`, `group`, `refText` (M13): `hidden` přes `isParamVisible` z `document` při každém přepočtu; `refText` u `axis` – osa počátku → `{ key: <label z ORIGIN_AXES>, params: {} }`, entita skici → `{ key: 'field.sketchLine', params: { sketch: <jméno featury skici> } }`, featura skici chybí nebo neznámá osa → `{ key: 'field.missingRef', params: {} }`; `null` nebo chybějící hodnota → `null`; neplatná nenulová hodnota → `{ key: 'field.missingRef', params: {} }` (pole ji tak umí smazat). Nezměněné `FieldState` zůstává týž objekt (porovnávají se i nová pole). `null` zruší fokus. Stejné jméno znovu nevytvoří nový snapshot.
-- `commit()`: `tx.commit()` → session zavřená (`open: false`), `editor.current` → `null`. Celý dialog je v logu **jeden** záznam. `commit` je povolený i s `issues` (featura s chybou je v Onshape také platný stav).
-- `cancel()`: `tx.abort()` → dokument i log beze změny, session zavřená, `current` → `null`.
+- `commit()`: `tx.commit()` → session zavřená **hned** (`open: false`), `editor.current` → `null`; `Commit` jde frontou za kroky a server zapíše celý dialog jako **jeden** záznam ([[04-operace-a-historie#Transakce]]). `commit` je povolený i s `issues` (featura s chybou je v Onshape také platný stav). Odmítnutý `Commit` hlásí `app` a pošle `Abort` (N167); dialog je v tu chvíli už zavřený.
+- `cancel()`: `tx.abort()` → session zavřená hned, `current` → `null`; server vrátí dokument i log na stav před transakcí.
+- Pozdní odpovědi po zavření nic nemění (`open` = false).
 - Po zavření hodí každý příkaz výjimku – kromě `removeRef`, který nic neudělá (× u čipu může přijít z doznívajícího UI). Poslední snapshot má `open: false` a `activeRefParam: null`; `params` drží poslední známé hodnoty (po zrušeném `create` featura v dokumentu už není).
-- Session se zavře, až transakce opravdu skončí (`!ops.inTransaction`), i když odběratel při `commit`/`abort` vyhodí.
-- Selže-li hned po `begin` `feature.add` nebo přechodný posun baru, `FeatureEditor` transakci zruší a výjimku pošle dál; session nevznikne.
+- Session se zavře, až transakce opravdu skončí (`!ops.inTransaction`, po M52 synchronně v `commit`/`abort`), i když odběratel při zavření vyhodí (`closeAfter`).
+- Odmítnutý `feature.add` v `create` session nezavře: rozpracované hodnoty zůstanou, featura v dokumentu není, OK pošle `Commit` (server vrátí prázdný záznam nebo `NO_TRANSACTION`). Ztracená transakce (`onLost` v `app`) dialog zavře přes `features.current.get()?.cancel()`.
 - Během otevřené session jsou undo/redo zakázané (pravidlo transakcí, `UndoManager.canUndo()` vrací `false`).
+
+### Rozpracované hodnoty a „poslední vyhrává“
+
+Od [[M52-tenky-klient|M52]] ([[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N164]] ⚠). [[Rozpracované hodnoty dialogu]] jsou kopie parametrů, kterou `FeatureEditSession` drží od `setParam`/`setParams` (a v `create` od `feature.add`), dokud server nepřijme **poslední odeslanou** změnu session. Proč: dialog, manipulátor i skicář čtou parametry synchronně hned po zápisu (`applyPatch` skládá patch přes aktuální parametry, manipulátor bere výchozí hodnoty tažení ze `session.state`, `SketchSession` staví další krok z dat session); bez kopie by druhá rychlá změna poslala patch nad starými parametry a první hodnotu ztratila. Není to druhá implementace domény: kopie vzniká jen z patche dialogu (`{ ...params, ...patch }`), bez handleru. Veřejné typy `FeatureEditor`, `FeatureEditSession`, `EditState`, `FieldState` se nemění, mění se jen význam `EditState.params` a `name`.
+
+- **Odeslání** (`send`): každé `tx.apply` session (`feature.add` z `create`, `feature.setParams` z `setParam`/`setParams`) dostane pořadové číslo `n`. Když se slib odeslání `n` vyřeší:
+  - přijato a `n` je poslední odeslané → rozpracované hodnoty se zahodí a `EditState.params` čte dokument (ten už ukazuje read model odpovědi, protože ho sezení zveřejní dřív, než vyřeší slib – N165);
+  - přijato, ale mezitím se odeslalo další → nic (čeká se na poslední);
+  - odmítnuto → rozpracované hodnoty zůstanou do další přijaté změny nebo do konce session. Hlášení ukáže `app` (`noticeOfRefusal`). N65 (lokální skica po `SKETCH_NOT_SOLVED`) tak platí pro každou featuru.
+- **Přechodný posun baru** v `edit` (`tx.applyTransient(studio.setRollback)`) jde **mimo** `send`: není to hodnota uživatele, rozpracovaných hodnot se netýká.
+- `edit` začíná bez rozpracovaných hodnot a čte dokument.
+- `doc.events.changed` dál vyvolá `refresh` (jména v čipech); s rozpracovanými hodnotami se parametry nemění – vyhrávají nad dokumentem, bez nich vyhrává dokument.
+- Slučování tažení „poslední vyhrává“ dělá fronta změn sezení (čekající `apply` `setParams` téže featury nahradí novější, [[14-protokol#Změny dokumentu]]) a server v transakci ([[04-operace-a-historie#Transakce]]); session posílá každou změnu.
+- **Invarianty:** (a) `EditState.params` nikdy neukáže odpověď na jinou než poslední odeslanou změnu session; (b) dvě rychlé změny různých parametrů → druhý `feature.setParams` nese obě hodnoty; (c) po přijetí poslední změny `params` = parametry featury v dokumentu (read model); (d) odmítnutá poslední změna nechá rozpracované hodnoty.
+- **Krajní případy:** featura z dokumentu zmizí (ztracená transakce) – `prev` jako dřív; dokument se mění zvenku během session (undo je během transakce zakázané, druhá karta nepíše) – vyhrávají rozpracované hodnoty.
 
 Díky tomu je nástroj pro většinu featur triviální – `ToolDescriptor`, jehož `create()` vrací nástroj, který při aktivaci zavolá `ctx.features.create('box')` a skončí (je-li už otevřená jiná session, jen skončí). Interaktivní tvorbu tažením myší si plugin může dopsat jako vlastní `Tool`, který mezivýsledky posílá přes `FeatureEditSession.setParam` (z M13 vypuštěno, nápad v [[M15-export-a-dokonceni]], [[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R79]] ⚠).
 
@@ -727,7 +744,7 @@ export interface HudField {
 ### Testy
 
 - `manipulator-drag`: `linearParam` (kolmý paprsek, šikmý paprsek, rovnoběžný → `null`), `angularParam` (čtyři kvadranty, znaménko podle `axis`, z hrany → `null`), `unwrapDelta` přes ±π, `snapValue` (krok, `fine`, ořez, `−0`), tah přes 400° dá 400° (součet `unwrapDelta`). M19: `planarParam` (rovina XY shora i šikmo, báze u, v jiná než osy, z hrany → `null`), `pointParam` (bod na paprsku nejbližší k position).
-- `manipulator-controller` s `FakeViewport`, `FakeRegenStatus`, `anOpsSession` a testovacím deskriptorem: bez session, bez kotev, s `issues` → `[]`; hover; tah lineárního úchytu zapíše params (se Shift bez přichycení); `setParams` jen při změně hodnoty; Esc vrátí původní params včetně klíče, který úchyt přepíná; po commitu je v logu jedna položka; zmrazené kotvy (snapshot bez kotev během tahu tah nepřeruší); zavření session během tahu. M19: rovinný a bodový tah (bodový s rovinou ze stisku i po `viewChanged`); režimy (výchozí první, `setMode` přepne rámec a zruší pole, během tahu nic, nová session vrátí výchozí); `pickPoint` (klik na model zapíše patch, tah po modelu ne, klik mimo model nic, v režimu bez `picksPoint` jde klik dál); pole HUD (po tahu, po kliku bez pohybu, zmizí s úchytem, `dragging`, `displayScale`); `setValue` (ořez, bez přichycení, neznámý nebo neskalární úchyt nic).
+- `manipulator-controller` s `FakeViewport`, `FakeRegenStatus`, `FakeOps` (do M52 `anOpsSession`) a testovacím deskriptorem: bez session, bez kotev, s `issues` → `[]`; hover; tah lineárního úchytu zapíše params (se Shift bez přichycení); `setParams` jen při změně hodnoty; Esc vrátí původní params včetně klíče, který úchyt přepíná; po commitu je v logu jedna položka; zmrazené kotvy (snapshot bez kotev během tahu tah nepřeruší); zavření session během tahu. M19: rovinný a bodový tah (bodový s rovinou ze stisku i po `viewChanged`); režimy (výchozí první, `setMode` přepne rámec a zruší pole, během tahu nic, nová session vrátí výchozí); `pickPoint` (klik na model zapíše patch, tah po modelu ne, klik mimo model nic, v režimu bez `picksPoint` jde klik dál); pole HUD (po tahu, po kliku bez pohybu, zmizí s úchytem, `dragging`, `displayScale`); `setValue` (ořez, bez přichycení, neznámý nebo neskalární úchyt nic).
 - `tool-manager`: s úchytem pod kurzorem nástroj nedostane `move`, dostane jednou `leave`; levé `down` na úchytu nedojde k nástroji ani k `refPick`; Escape při tažení nedojde k nástroji; bez vrstev (`layers: []`) beze změny; vrstva, která událost zpracuje, ji nepustí dál; `leaveBelow: false` nepošle syntetický `leave`.
 
 ## Strom featur: `FeatureTreeModel`
@@ -755,8 +772,8 @@ export interface FeatureTreeModel {
   readonly rollbackIndex: Observable<number>;
   readonly errorCount: Observable<number>;                     // M19.2: počet řádků se stavem 'error' (draft se nepočítá)
   edit(id: FeatureId): void;                                   // → FeatureEditor.edit (skica → sketchEdit); při locked nic
-  rename(id: FeatureId, name: string): void;                   // → dispatch feature.rename; ukončí přejmenování; při locked jinak nic
-  moveRollbackBar(index: number): void;                        // → dispatch studio.setRollback; při locked nic
+  rename(id: FeatureId, name: string): void;                   // → dispatch feature.rename (nové jméno v řádku až s odpovědí, M52); ukončí přejmenování; při locked jinak nic
+  moveRollbackBar(index: number): void;                        // → dispatch studio.setRollback (bar se posune až s odpovědí, M52); při locked nic
   readonly renaming: Observable<FeatureId | null>;             // featura v režimu přejmenování (inline pole v Timeline)
   beginRename(id: FeatureId): void;                            // akce feature.rename; při locked nic
   cancelRename(): void;                                        // rename() režim také ukončí; beginRename neznámé featury → výjimka; zmizelá featura → id nesedí na žádný řádek
@@ -788,6 +805,7 @@ export function createFeatureTreeModel(deps: {
 - `rows` a `rollbackIndex` se přepočítají v jednom kroku, ale vyšlou se postupně (nejdřív `rows`). Odběratel jednoho proto nemá v callbacku číst druhé; Vue překresluje dávkově v mikroúloze, takže v UI nekonzistence nevznikne. Kdyby to vadilo jinde, sloučí se do jednoho `Observable<TreeSnapshot>`.
 - Nezměněný řádek se pozná porovnáním s řádkem na stejné pozici; po přesunu featury proto dostanou nový objekt i řádky, které se jen posunuly.
 - `rename` neznámé featury → výjimka. `rename`: jméno se ořízne, prázdné nebo stejné → nic. `moveRollbackBar`: stejný index → nic, mimo `0..features.length` → výjimka.
+- **Bez optimismu** ([[M52-tenky-klient|M52]], [[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N168]]): `rename`, `moveRollbackBar` a `move` operaci jen odešlou (`void ops.dispatch`); řádky a bar se změní až s read modelem odpovědi, mezitím čekání ukazuje `RegenUiState.busy`. Stráže nad starým dokumentem (stejné jméno, stejný index, nové porušení pořadí) zůstávají; co zastaralý read model propustí, odmítne server s hlášením.
 - `rename` a `moveRollbackBar` během otevřené transakce **mimo zámek** (transakce, kterou neotevřel `FeatureEditor`) hodí výjimku z dispečera. Transakci dialogu kryje zámek výše.
 - **Závislosti** (M11, nález 3 z [[Revize architektury 2026-10-13]]): strom při každém přepočtu po změně dokumentu spočítá `dependenciesOf(doc.studio, schemas)` z [[03-dokument#Id těles a závislosti|document]]; `dependents` je součástí porovnání nezměněného řádku. Pravidla závislostí jsou prezentační logika, proto tady a ne v handleru (`ops` by jinak potřeboval schémata).
 - `move(id, toIndex)`: neznámé id nebo `toIndex` mimo `0..features.length − 1` → výjimka; stejný index → `[]` a nic. Odmítne přesun, po kterém by v `orderViolations` byla dvojice, která tam teď není, a vrátí právě tato nová porušení (dokument ani log se nezmění). Porušení, která už v dokumentu jsou (data zvenku), jiný přesun neblokují. Jinak `dispatch(feature.move)`. Tažení featur v Timeline v M11 nevzniká, příkaz je připravený pro ně ([[Rozhodnutí noční rychloakce#M11 – Další entity|R17]] ⚠).
@@ -854,6 +872,7 @@ export function createBrowserModel(deps: {
 ```
 
 - Model se přepočítá při změně regenerace, výběru i dokumentu. Při změně se nejdřív vyšle `hidden`, pak `bodies`. Těleso, které po regeneraci zmizí, ze `hidden` vypadne (jeho metadata v dokumentu zůstávají).
+- **Bez optimismu** ([[M52-tenky-klient|M52]], [[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N168]]): `setVisible`, `setColor`, `setMaterial` a `rename` jen odešlou operaci (`void ops.dispatch`); řádek, oko i barva se změní až s read modelem odpovědi (`doc.events.changed`). Stráže nad starým dokumentem (shodná hodnota, zastaralý řádek) zůstávají; co zastaralý read model propustí, odmítne server s hlášením.
 - `setVisible`, `beginRename` a `rename` tělesa, které poslední regenerace nezná (zastaralý řádek v UI), nic neudělají; během otevřené transakce (dialog) také nic a shodná hodnota také nic. `rename` jméno ořízne, prázdné jméno smaže (vrátí automatické). `canEdit = !locked`; UI ovládací prvky (oko, přejmenování) zakáže podle `canEdit`; při `false` `setVisible`, `beginRename`, `rename`, od M15 `setColor` a od M24 `setMaterial` nic ([[Rozhodnutí noční rychloakce#M11 – Další entity|R14]] ⚠ – v M10 šlo skrývat i během dialogu).
 - Přejmenování (M11, [[Rozhodnutí noční rychloakce#M11 – Další entity|R28]]): stav režimu je v modelu, ne v komponentě (ADR 0010). `beginRename` → `renaming = body`; `cancelRename` a `rename` (vždy, i když nic nedispatchne) → `null`. Ztráta `canEdit` (otevření dialogu, režim jen pro čtení) přejmenování ukončí bez změny.
 - `select(body)`: je-li otevřená session s `activeRefParam` druhu `bodies`, přidá nebo odebere těleso v tomto parametru (`setParam`, stejné přepínání jako `refPick`) a výběr nemění; jinak `selection.set`/`toggle` (M11, [[Rozhodnutí noční rychloakce#M11 – Další entity|R19]]).
@@ -927,7 +946,7 @@ M19.2 ([[M19.2-ux-backlog|D5]]). Prezentační model jména dokumentu pro titule
 export interface DocumentNameModel {
   readonly name: Observable<string>;        // DocumentMeta.name; sleduje doc.events.changed (stejné jméno odběratele nebudí)
   readonly canRename: Observable<boolean>;  // = !locked (jen pro čtení, nebo otevřený dialog drží transakci a dispatch by vyhodil)
-  rename(name: string): boolean;            // ořízne mezery → dispatch document.rename; prázdné jméno nebo zámek → false a nic; stejné jméno → true bez operace
+  rename(name: string): boolean;            // ořízne mezery → void dispatch document.rename; true = odesláno (M52; nové jméno je v name až s odpovědí, odmítnutí hlásí app); prázdné jméno nebo zámek → false a nic; stejné jméno → true bez operace
   dispose(): void;
 }
 
@@ -939,6 +958,7 @@ export function createDocumentNameModel(deps: {
 ```
 
 - `canRename` nemá vlastní stav, odvozuje se ze zámku a mění se přesně s ním.
+- **Bez optimismu** ([[M52-tenky-klient|M52]], [[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N168]]): `rename` na odpověď nečeká, `true` znamená „odesláno“, ne „uloženo“. `name` sleduje jen dokument, takže titulek ukáže nové jméno až s read modelem odpovědi; na dobu odezvy je vidět staré jméno.
 - Záznam `document.rename` jde bez `label`, takže popisek v logu je typ operace (klíč přeloží `ui`).
 - `app` ho vystaví jako `AppSession.documentName` bez `dispose` ([[11-ui#Kompoziční kořen (app)]]).
 
@@ -1052,7 +1072,7 @@ export interface SketchSession {
   select(id: SketchItemId, opts?: { additive?: boolean }): void;   // bez additive = jen toto; additive = přepnout
   clearSelection(): void;
   clearEditingDimension(): void;
-  finish(): void;                                          // FeatureEditSession.commit → jeden záznam v logu
+  finish(): void;                                          // FeatureEditSession.commit → jeden záznam v logu (slučuje server)
   cancel(): void;                                          // FeatureEditSession.cancel → nic
 }
 
@@ -1111,7 +1131,7 @@ export const ORIGIN_POINT_ID = '__origin';                 // bod počátku v kr
 
 **`create` / `edit`:** předpoklady jako u `FeatureEditor` (žádná otevřená session, dispečer mimo transakci; jinak výjimka a nic se nezmění); `create` s rovinou, kterou `resolvePlane` nezná, → výjimka před vytvořením featury; `edit` featury jiného typu než `SKETCH_FEATURE_TYPE` → výjimka; `edit` čte rovinu z první položky parametru `plane` (`readRefOf(['plane', 'topo'], …)`, tedy i `TopoRef`, M14); skica s nevyřešitelnou rovinou → session featury se zruší a výjimka. Session hned spustí řešení aktuálních dat **bez zápisu** (jen `status` a `dof`; zápis by do logu dostal šum výpočtu). Když se `FeatureEditSession` zavře jinak (dispose session aplikace), `SketchSession` se zavře také.
 
-**Zápis změny** (`addGeometry`, `addConstraint`, `setDimension`, `remove`): příkazy běží **sériově** ve frontě; každý vezme aktuální data z dokumentu, sestaví nová, zavolá `solver.solve` a podle výsledku:
+**Zápis změny** (`addGeometry`, `addConstraint`, `setDimension`, `remove`): příkazy běží **sériově** ve frontě; každý vezme aktuální data skici ze stavu edit session (od [[M52-tenky-klient|M52]] to jsou [[Rozpracované hodnoty dialogu|rozpracované hodnoty]], dokud server nepřijme poslední zápis, pak read model – [[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N172]]; `SketchSession` se tím nezměnila, po přijetí převezme souřadnice serveru, [[Q097 Transakce a undo přes RPC|Q097]]), sestaví nová, zavolá `solver.solve` a podle výsledku:
 
 - `'ok'` → `FeatureEditSession.setParams({ entities: result.entities, constraints })`, `status`, `dof`, `message: null`, vrátí `true`. Výjimka: `addConstraint` (a kóta) vazby, která je v `redundant`, → nic, `message 'sketch.redundant'`, `false`. U `addGeometry` se nové vazby, které jsou v `redundant` (automatické vodorovné na snapu…), z dat vynechají a zbytek se zapíše. Od M26 jsou všechny vazby `addGeometry` automatické: při `'conflict'` se zkusí znovu bez sporných přidaných vazeb, pak jen s `fix` a `required`, nejvýš tři řešení na zápis ([[12-skicar#Snapper a auto-vazby (M26)]]).
 - `'conflict'` → nic, `message 'sketch.conflict'`, `false`; `'failed'` nebo odmítnutí řešiče → nic, `message 'sketch.solverFailed'`, `false`.
@@ -1277,13 +1297,14 @@ Akce registruje `createBuiltInActions` volané z `app` (undo, redo, smazat výb�
 - `SelectionModel`: `set` s duplicitami, `toggle` přidá/odebere, `clear`, žádná emise beze změny, vyčištění `face`/`edge` při nové generaci (`feature`/`body` zůstávají); `bindSelectionHighlight`.
 - `ToolManager`: výchozí nástroj po vytvoření, přepínání a deaktivace předchozího, neznámé id, `finish` (i uvnitř `activate`, i starý `ctx`), `Escape`, `unhandledKey`, přeposílání událostí jen aktivnímu nástroji, zakrytí nástrojem `refPick` podle `activeRefParam`.
 - `SelectTool` s `FakeViewport`: hover, `leave`, klik → `set`, Shift+klik → `toggle`, klik do prázdna → `clear`, tažení nad toleranci nic nevybere, pravé tlačítko ignoruje, `Escape`.
-- `FeatureEditSession` se skutečným dokumentem a dispečerem (paměťový dvojník z `ops/testing.ts`, [[Rozhodnutí nativního jádra|N121]]; jádro ani regenerace nejsou potřeba; `interaction` na `kernel` nesmí ani v testech). Živý náhled nad regenerací ověřují testy `app` nad falešným jádrem (`createFakeCore()`, `test/unit/app/remote-session.test.ts`) a e2e proti serveru; integrační test s `FakeKernel` zanikl s lokální regenerací v M47. Případy: create → `setParam` ×20 → commit = **jeden** záznam v logu; cancel = dokument i log beze změny; jméno `Box 2`; vložení na bar; edit featury před i za barem posune bar dočasně a po commit/cancel ho vrátí, v logu není `studio.setRollback`; neplatná hodnota → `issues`; druhá session → výjimka; příkazy po zavření → výjimka; undo zakázané během session.
+- **Dvojník portů** (od [[M52-tenky-klient|M52]], [[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N166]]): testy `interaction` a `sketcher` stojí na `aFakeOps(options?)` z `ops/testing.ts` ([[04-operace-a-historie#Testy]]) a `aSnapshotDocument` z `document/testing.ts`. Aserce na výsledek příkazu jsou aserce na odeslanou operaci (`ops.sent`, `ops.ops()`, `ops.lastParams(featureId)`); kde model reaguje na **změnu dokumentu** (řádky stromu, čipy, Prohlížeč), test skriptuje read model `ops.doc.replace({ studio })` nebo `ops.answer({ document })`. Odpověď nepřijde, dokud ji test nepošle. „Jeden záznam v logu“ klient netvrdí (slučuje server) – test ověří jeden `begin` a jeden `commit`; undo/redo přes `ops.undo.setFlags(…)` a `undo` v `sent`. Do M52 tu byl paměťový dvojník `anOpsSession` (N121).
+- `FeatureEditSession` na `FakeOps` (jádro ani regenerace nejsou potřeba; `interaction` na `kernel` nesmí ani v testech): invarianty (a)–(d) rozpracovaných hodnot, `create` (odeslané `begin` + `apply(feature.add)`, stav z rozpracovaných hodnot), `edit` s posunem baru (`applyTransient`), `commit`/`cancel` zavřou hned, pozdní odpověď po zavření nic. Živý náhled nad regenerací ověřují testy `app` nad falešným jádrem (`createFakeCore()`, `test/unit/app/remote-session.test.ts`) a e2e proti serveru; integrační test s `FakeKernel` zanikl s lokální regenerací v M47. Případy: create → `setParam` ×20 → commit = jeden `begin`, odeslané změny a jeden `commit`; cancel = `abort`; jméno `Box 2`; vložení na bar; edit featury před i za barem pošle přechodný posun baru (`applyTransient`), ne jako krok; neplatná hodnota → `issues`; druhá session → výjimka; příkazy po zavření → výjimka; undo zakázané během session.
 - `ActionRegistry`: zkratky včetně `Mod` a `Shift`, přesná shoda modifikátorů, velikost písmen, ignorování v textovém poli, zakázaná akce, neplatná a duplicitní zkratka, nový snapshot jen pro změněnou akci.
 - `FeatureTreeModel`: snapshot řádků po přidání featury, chybě regenerace, potlačení a posunu rollback baru; nový snapshot je nový objekt, nezměněný řádek zůstává identický; `selected`, `editing`; `rename` s mezerami a prázdné; `dependents`, `dependentsOf`, `move` (platný, odmítnutý, existující porušení) – M11.
 - `feature.delete` s potvrzením: bez závislých bez dotazu, se závislými dotaz s `n`, zamítnutí nic nesmaže (M11).
 - `BrowserModel`: jméno a viditelnost z metadat, operace přes dispečer a undo, neznámé těleso a otevřená transakce nic, `select` do aktivního parametru `bodies`, `canEdit` a přejmenování (`renaming`, `rename(null)`, ukončení ztrátou `canEdit`) (M11). `FeatureEditSession`: `refs` (jména, chybějící těleso, neplatná položka, přepočet po změně dokumentu) a `removeRef` (M11).
 - Režimy (M12): `ToolManager` přepne výchozí nástroj při změně režimu, odmítne nástroj mimo režim, `finish`/`Escape` vrací na výchozí nástroj režimu; `ActionRegistry` – stejná zkratka v disjunktních režimech, `handleKey` podle režimu, `enabled` ve snapshotu podle režimu; vestavěné akce nástrojů v obou režimech.
-- Skicář (M12, `FakeSolver`, `FakeViewport`): `create` (rovina, výchozí XY, neznámá rovina), `edit` (jiný typ → výjimka), první řešení bez zápisu, `addGeometry`/`addConstraint`/`setDimension`/`remove` pro `'ok'`, `'conflict'`, `'failed'`, redundantní vazba, vynechání redundantních automatických vazeb, sériová fronta, tažení (jeden rozpracovaný a jeden čekající cíl přes `hold`/`release`), výsledek po zavření zahozen, kresba a styly (`defined` u plně určené), `finish` = jeden záznam v logu, `cancel` = log beze změny; akce skicáře (povolení podle výběru); nástroje s `FakeViewport` (polyline s uzavřením, automatická vodorovná, snap na bod a na počátek, obdélník, kružnice, oblouk, kóta, tažení ve výběrovém nástroji); `toSketchDrawing`, `artifactDrawing`, `planeDrawing`; `FeatureEditSession.setParams`; `BrowserModel` roviny a skici; `FeatureTreeModel.edit` skici.
+- Skicář (M12, `FakeSolver`, `FakeViewport`): `create` (rovina, výchozí XY, neznámá rovina), `edit` (jiný typ → výjimka), první řešení bez zápisu, `addGeometry`/`addConstraint`/`setDimension`/`remove` pro `'ok'`, `'conflict'`, `'failed'`, redundantní vazba, vynechání redundantních automatických vazeb, sériová fronta, tažení (jeden rozpracovaný a jeden čekající cíl přes `hold`/`release`), výsledek po zavření zahozen, kresba a styly (`defined` u plně určené), `finish` = jeden `begin` a jeden `commit` s posledním `setParams` nesoucím očekávaná data, `cancel` = `abort`; akce skicáře (povolení podle výběru); nástroje s `FakeViewport` (polyline s uzavřením, automatická vodorovná, snap na bod a na počátek, obdélník, kružnice, oblouk, kóta, tažení ve výběrovém nástroji); `toSketchDrawing`, `artifactDrawing`, `planeDrawing`; `FeatureEditSession.setParams`; `BrowserModel` roviny a skici; `FeatureTreeModel.edit` skici.
 - M13: `FieldState.hidden`, `group`, `heading`, `refText`; `regionRefsOf`/`axisRefOf` (vnitřní v `interaction`: jediné čtení referencí oblastí a os, odmítnou prázdný `sketch` nebo `sketch` s `/`); `activeRefParam` a `focusRefParam` se skrytými parametry; `create` aktivuje první viditelný referenční parametr; `pickFilter` tabulky druhů pro `region` a `axis`; `refPick` – oblast (přidat, odebrat, `'sketch-edit'` ignorovat), osa počátku, úsečka skici, kružnice ignorovaná; `artifactDrawing` s konstrukčními čarami a oblastmi (díra), `axisDrawing`; `bindSelectionHighlight` s oblastmi dialogu; `BrowserModel` osy a oblasti; `ToolContext` bez `ops`, viewport nástroje bez `manipulators`, `events`, `sketches`, `project` a `setSelection` (typově, M20).
 - M15: `HistoryModel` (prázdný log; tři `do` v obráceném pořadí; undo → řádek `undo` s `target` a `do` `undone`; redo; undo + nové `do` → `abandoned`; prázdný log → `older` 0; 250 záznamů → 200 řádků, `total` 250 a `older` 50; nezměněné řádky `===`; log obnovený ze záznamů dá stejné řádky); `createFileActions` s `FakeFileExporter` (zákazy bez těles, se skrytými, s dialogem, v režimu skici; jen viditelná tělesa v pořadí; `running` zakáže obě akce; `idle`, `failed` a `dismiss`; `dispose`); `BrowserModel` barva (řádek, `setColor` a undo, `colors` jen pro tělesa poslední regenerace, zákazy, neplatná barva). M24: `BrowserModel` materiál stejnými případy jako barva (řádek s výchozím `'plastic'`, `setMaterial` a undo, `materials` bez výchozího, zákazy, neplatná hodnota, pořadí vyslání).
 - M19.2 (vlna 2): `HistoryModel` vynechá `document.rename` (žádný řádek, nezapočítá se, žádná nová emise); každá akce standardního pohledu zavolá `camera.setView` se svou hodnotou a zůstává povolená i s otevřeným dialogem.
