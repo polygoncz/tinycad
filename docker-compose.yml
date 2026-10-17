@@ -1,0 +1,41 @@
+# tinycad native core (ADR 0030): `docker compose up -d` starts the core and Envoy.
+# The browser (Vite on localhost:5173) talks gRPC-Web to Envoy on localhost:8080; Envoy talks
+# gRPC to the core inside the Compose network. The vcpkg binary cache of the image build is a
+# BuildKit cache mount with the id tinycad-vcpkg-cache (server/Dockerfile), shared by every
+# worktree on this Docker daemon.
+name: tinycad
+
+services:
+  core:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+      target: runtime
+    image: tinycad-core:dev
+    expose:
+      - '50051'
+    stop_grace_period: 10s
+    restart: unless-stopped
+
+  envoy:
+    image: envoyproxy/envoy:v1.39.4
+    command: ['envoy', '-c', '/etc/envoy/envoy.yaml', '--log-level', 'info']
+    volumes:
+      - ./envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
+    ports:
+      - '8080:8080'
+    depends_on:
+      - core
+    healthcheck:
+      # Envoy's admin /ready: the listener is up (the core's health is Envoy's active check).
+      # The image has bash but no curl, so the request goes through bash's /dev/tcp (HTTP/1.1:
+      # Envoy answers HTTP/1.0 with 426).
+      test:
+        - CMD
+        - bash
+        - -c
+        - "exec 3<>/dev/tcp/127.0.0.1/9901 && printf 'GET /ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q LIVE <&3"
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
