@@ -8,5 +8,11 @@
     // Node runs .ts configs natively and needs explicit extensions.
     "allowImportingTsExtensions": true
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "playwright.config.ts", "test/e2e/**/*.ts"]
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "playwright.config.ts",
+    "playwright.core.config.ts",
+    "test/e2e/**/*.ts"
+  ]
 }

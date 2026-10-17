@@ -26,6 +26,8 @@
     "cases:record": "node scripts/cases-record.mjs",
     "test:e2e": "playwright test --project=chrome",
     "test:e2e:full": "playwright test",
+    "pretest:e2e:core": "docker compose up -d --wait",
+    "test:e2e:core": "playwright test -c playwright.core.config.ts",
     "gen:proto": "node scripts/gen-proto.mjs",
     "check:proto": "buf lint server/proto && buf breaking server/proto --against '.git#branch=main,subdir=server/proto'",
     "check:server": "node scripts/check-server.mjs",

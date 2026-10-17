@@ -46,6 +46,7 @@ export default defineConfig(
   {
     ignores: [
       'dist/',
+      'dist-core/',
       'coverage/',
       'docs/',
       'scripts/',

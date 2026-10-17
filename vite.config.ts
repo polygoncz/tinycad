@@ -11,6 +11,8 @@ export default defineConfig({
   },
   // M39: with VITE_CORE_URL=/api the browser talks gRPC-Web to Envoy of docker-compose.yml through
   // the dev server (same origin, no CORS); Envoy listens on 8080 and forwards to tinycad-core.
+  // `vite preview` reuses this proxy (preview.proxy defaults to it): the e2e of
+  // playwright.core.config.ts.
   server: {
     proxy: {
       '/api': {
