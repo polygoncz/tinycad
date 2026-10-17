@@ -147,3 +147,10 @@ Zafixované hlavičky navíc: `server/src/session/include/tinycad/session/*.hpp`
 ### Schválení plánu M45 a M46 (hlavní sezení)
 
 - **N76 ⚠ – Návrhy plánovače M45/M46 přijaté:** doplňky kontraktu N56 (jen přidávají, `buf breaking` je pustí), optimistická kopie dokumentu v klientovi N63 (zužuje [[0030-nativni-jadro-pres-grpc|ADR 0030]] bod 9 – handlery operací zůstanou v klientovi i po M47), N65, N67 a N70 jako méně jisté chování k revizi, tlačítko importu z IndexedDB N71 zůstává (levné; nevím, jestli Pavel v IndexedDB dokumenty má). Proč: bez optimistické kopie by se musel přepsat dialog featur, skicář, strom i vykreslování najednou; s ní se mění jen adaptéry za porty.
+
+## M42 – Jádro OCCT nativně
+
+- **N77 ⚠ – 2D základ (Geom2d křivky, obálky, kontroly křivek) je zatím zdvojený** v `tinycad_kernel` a `tinycad_geometry`. Proč: `tinycad_geometry` ho veřejně nenabízí a stopy běžely souběžně; sloučit do veřejné pomocné knihovny při společné revizi architektury serveru.
+- **N78 – Výpisy OCCT (statistiky STEP překladače) ztlumené jednou za proces** na úroveň varování. Proč: zahlcovaly stdout při každém exportu; centrálně v `app` při M45.
+- **N79 – Výjimky OCCT převádí každá metoda jádra vlastním `try/catch`** (ne šablonou), `Build` u zaoblení a sražení a zápis STEP jako `OperationFailed`, ostatní `Internal` – stejně jako TS.
+
