@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: doing
 order: 39
 aliases:
   - M39
@@ -14,7 +14,7 @@ specs:
   - "[[12-skicar]]"
 depends_on:
   - "[[M38-zmrazeni-domeny]]"
-started:
+started: 2026-10-17
 finished:
 tags:
   - milnik
@@ -46,6 +46,25 @@ updated: 2026-10-17
 - `docker compose up` spustí jádro a Envoy jedním příkazem, build je reprodukovatelný.
 - Trim, extend, split, zaoblení a offset ve skicáři fungují přes server, e2e zelené.
 - Sdílené případy 2D geometrie projdou v C++.
+
+## Implementační plán
+
+Samostatný běh ([[Rozhodnutí nativního jádra]]). Dvě souběžné části ve vlastních worktree, sloučené hlavním sezením:
+
+### S. Server (`server/`, `docker-compose.yml`, `envoy/`)
+
+- **Soubory:** `server/CMakeLists.txt`, `CMakePresets.json`, `vcpkg.json` (baseline = nejnovější registr; grpc, protobuf, opencascade, nlohmann-json, gtest, sqlite3, eigen3 a boost pro planegcs), `server/Dockerfile` (vícestupňový: `deps` s vcpkg a binární cache, `build`, `runtime`), `server/src/geometry/` (knihovna 2D geometrie nad OCCT – přepis `src/kernel-occt` funkcí `curveIntersections`, `curveSegment`, `filletArc`, `offsetCurves` včetně kontrol vstupu a kódů chyb), `server/src/service/` (`GeometryService` přes gRPC, převod `Curve2` ↔ proto), `server/src/main.cpp`, `server/test/` (GoogleTest: spouštěč sdílených případů `geometry.*` nad `test/shared-cases/geometry/` se stejným porovnáním jako spec 13), `docker-compose.yml` (`core`, `envoy`; pojmenovaný sdílený svazek `tinycad-vcpkg-cache`), `envoy/envoy.yaml` (`grpc_web`, CORS pro `localhost:5173`, health check), `scripts/check-server.mjs` (build a GoogleTest v Dockeru).
+- **Hotovo když:** `docker compose up` spustí jádro a Envoy, 86 případů `geometry.*` zelených v C++, `grpcurl`/test volání přes Envoy funguje.
+
+### C. Klient (`src/protocol`, `src/remote`, nástroje)
+
+- **Soubory:** `buf.gen.yaml` (protobuf-es do `src/protocol/`, ne v gitu), `package.json` (`@bufbuild/buf`, `@bufbuild/protobuf`, `@bufbuild/protoc-gen-es`, `@connectrpc/connect`, `@connectrpc/connect-web`; skripty `gen:proto` před `typecheck`/`dev`/`build`/`test`, `check:proto` = `buf lint` + `buf breaking` proti `main`, `check:server`), `.gitignore`, `.dependency-cruiser.cjs` a [[01-architektura]] (moduly `protocol`, `remote` podle [[Q106 Moduly klienta pro gRPC|Q106]]), `src/remote/` (adaptér `SketchGeometry` nad `GeometryService` s jedním požadavkem v letu na metodu, převod `Curve2`, chyby → `KernelErrorCode`), `src/app` (volba adaptéru podle `VITE_CORE_URL`), `vite.config.ts` (proxy `/api` na Envoy).
+- **Testy:** adaptér proti falešnému transportu (jeden v letu, poslední vyhrává, chyby), převody tam a zpět.
+- **Hotovo když:** cílené testy zelené; celý `npm run check` při sloučení.
+
+### Společně (hlavní sezení)
+
+- E2E `test/e2e/m39.spec.ts` (trim a offset přes server) běží jen s `E2E_CORE=1` a spuštěným Compose.
 
 ## Co se naučíš
 
