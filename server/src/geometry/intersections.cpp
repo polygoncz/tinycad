@@ -11,11 +11,24 @@
 #include <cmath>
 #include <limits>
 
+#include "tinycad/occt2d/boxes.hpp"
+
 #include "algorithms.hpp"
-#include "geom2d.hpp"
 #include "touching.hpp"
 
 namespace tinycad::geometry::detail {
+
+using occt2d::boundedCurve;
+using occt2d::Box;
+using occt2d::boxOf;
+using occt2d::circleCurve;
+using occt2d::counterClockwise;
+using occt2d::Kind;
+using occt2d::kTurn;
+using occt2d::overlappingPairs;
+using occt2d::samePoint;
+using occt2d::scaleOf;
+using occt2d::wrap;
 
 namespace {
 

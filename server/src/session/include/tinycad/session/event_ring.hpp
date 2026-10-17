@@ -22,7 +22,7 @@
 #include <optional>
 #include <vector>
 
-#include "tinycad/v1/session.pb.h"
+#include "tinycad/session/session_event.hpp"
 
 namespace tinycad::session {
 
@@ -35,7 +35,7 @@ class EventRing {
    * Stores the event with seq = lastSeq() + 1 (the seq field of `event` is overwritten), drops the
    * oldest beyond capacity and wakes every waiter. Returns the seq.
    */
-  std::uint64_t append(tinycad::v1::SessionEvent event);
+  std::uint64_t append(SessionEvent event);
 
   /** 0 before the first event (OpenSessionResponse.event_seq). */
   [[nodiscard]] std::uint64_t lastSeq() const;
@@ -45,14 +45,14 @@ class EventRing {
    * `resync`: afterSeq is older than the oldest kept event minus one (evicted), or newer than
    * lastSeq() (a seq of another instance).
    */
-  [[nodiscard]] std::optional<std::vector<tinycad::v1::SessionEvent>> after(
+  [[nodiscard]] std::optional<std::vector<SessionEvent>> after(
       std::uint64_t afterSeq) const;
 
   /**
    * Blocks until an event with seq > afterSeq exists, close() was called or `deadline` passed
    * (the heartbeat interval of the caller); then returns after(afterSeq) (possibly empty).
    */
-  [[nodiscard]] std::optional<std::vector<tinycad::v1::SessionEvent>> waitAfter(
+  [[nodiscard]] std::optional<std::vector<SessionEvent>> waitAfter(
       std::uint64_t afterSeq, std::chrono::steady_clock::time_point deadline) const;
 
   /** Wakes every waiter for good: the document is being unloaded. waitAfter returns at once. */
@@ -63,7 +63,7 @@ class EventRing {
   std::size_t capacity_;
   mutable std::mutex mutex_;
   mutable std::condition_variable changed_;
-  std::deque<tinycad::v1::SessionEvent> events_;
+  std::deque<SessionEvent> events_;
   std::uint64_t lastSeq_ = 0;
   bool closed_ = false;
 };

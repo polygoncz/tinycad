@@ -14,6 +14,7 @@ milestones:
   - "[[M40-dokument-a-operace-v-cpp]]"
   - "[[M46-klient-nad-read-modelem]]"
   - "[[M47-uklid-a-dokonceni]]"
+  - "[[M51-inverze-a-mereni]]"
 tags:
   - spec
 created: 2026-10-12
@@ -221,6 +222,45 @@ Průběh `dispatch(op, meta)`:
 
 `kind` a `target` jsou v `DispatchMeta` veřejné, protože je potřebuje `UndoManager`. Kdokoli jiný je používat nemá – dispečer jen hlídá, aby záznam byl konzistentní.
 
+### Zápis před logem (server)
+
+Od [[M51-inverze-a-mereni|M51]] ([[Rozhodnutí nativního jádra|N155]]) má C++ dispečer port `EntryWriter` (`server/src/ops/include/tinycad/ops/dispatcher.hpp`): trvalý zápis záznamu **před** tím, než ho dispečer přidá do logu (write-ahead). Log je append-only, takže záznam, který už v něm je, nejde vzít zpět; když se zápis udělá dřív, při jeho selhání se log ani zásobníky undo vůbec nezmění a stačí vrátit dokument.
+
+```cpp
+class EntryWriter {
+ public:
+  virtual ~EntryWriter() = default;
+  /** entry.seq = log.lastSeq() + 1. Chyba = technický text; dispečer pak nic nepřidá. */
+  virtual core::Result<void, std::string> write(const LogEntry& entry) = 0;
+};
+
+struct WriteFailed {
+  std::string message;
+  /** false = inverze selhala a dokument je v neznámém stavu (volající ho musí znovu načíst). */
+  bool reverted = true;
+};
+
+/** Chyba dispatch, undo a redo: plochá struktura s druhem (N9). */
+struct DispatchError {
+  enum class Kind { Invalid, WriteFailed };
+  Kind kind;
+  std::string path;     // Invalid: cesta z OperationLoadError
+  std::string message;  // obou druhů
+  bool reverted;        // WriteFailed: WriteFailed::reverted
+};
+
+// OperationDispatcher
+void setWriter(EntryWriter* writer);  // jediný; nullptr = bez trvalého zápisu (testy, sdílené případy)
+core::Result<LogEntry, DispatchError> dispatch(const Operation& op, const DispatchMeta& meta = {});
+// Transaction
+core::Result<std::optional<LogEntry>, WriteFailed> commit();
+```
+
+- **`dispatch`** (i undo a redo, které jdou přes `dispatch`): po úspěšné aplikaci sestaví záznam, zapíše ho writerem a teprve pak ho přidá do logu a řekne posluchači (`UndoManager`). Zápis selže → aplikuje `entry.inverse`, log a posluchač nedotčené, `DispatchError{WriteFailed}`. Selže-li i inverze (chyba handleru), `reverted = false` a nic dalšího se nezkouší; volající (úložiště) dokument znovu načte ze souboru.
+- **`Transaction::commit`**: vrátí přechodné kroky (jako dřív) a vyřadí je z transakce, sestaví záznam a zapíše ho. Při selhání transakci **neukončí** (`ended()` = false): logované kroky zůstanou aplikované, přechodné zaniknou (jsou vrácené a nikdy se nelogují) a další `commit` nebo `abort` funguje jako obvykle. Prázdná transakce je úspěch bez zápisu (writer se nevolá). `abort` nic nezapisuje, beze změny.
+- Writer nesmí volat dispečer: po dobu zápisu platí stejná ochrana proti reentranci jako během aplikace (AssertionError).
+- Bez writeru se chování nemění. Writer nastavuje `PersistentDocument` ([[05-persistence#Zápis na serveru: `PersistentDocument`]]); testy `ops` používají falešný `FakeWriter` (`server/test/ops/testing.hpp`).
+
 ## Transakce
 
 Dialog featury, tažení posuvníku nebo celé skicování nesmí v logu vytvořit stovky záznamů. Transakce aplikuje operace hned (dokument se mění, regenerace běží, uživatel vidí náhled), ale do logu zapíše **jeden** záznam až při potvrzení.
@@ -330,7 +370,7 @@ Pravidla (jeden krok `step(stacks, entry)`, sdílený `rebuildUndoStacks` i živ
 Živý `UndoManager` poslouchá `log.appended` a volá tentýž `step`. Zásobníky tak z konstrukce odpovídají `rebuildUndoStacks(log.entries())` → undo funguje i po zavření a znovuotevření dokumentu.
 
 - `undo` při `!canUndo()` (prázdný zásobník nebo běžící transakce) vyhodí. Stejně `redo`.
-- Selže-li dispatch inverze, log se nezmění, a proto se nezmění ani zásobníky.
+- Selže-li dispatch inverze, log se nezmění, a proto se nezmění ani zásobníky. Totéž při selhání trvalého zápisu na serveru ([[#Zápis před logem (server)]]): záznam do logu nedojde, zásobníky se mění jen v `onAppended`.
 - `changed` se vyšle i při začátku a konci transakce, pokud se tím změní `canUndo`/`canRedo` (poslouchá `dispatcher.events.transaction`).
 - `dispose` odhlásí odběry.
 

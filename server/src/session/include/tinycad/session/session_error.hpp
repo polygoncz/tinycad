@@ -3,14 +3,12 @@
 // Errors of SessionService and DocumentService (spec 14 "Chyby", errors.proto; Q094 principle 4).
 //
 // Inside the session layer an expected failure is a value, SessionError (decision N10). Only the
-// gRPC adapters (session_service.hpp, document_service.hpp) turn it into a google.rpc.Status with
-// one ErrorDetail via toStatus(). The gRPC code is derived from the reason by the one table of
+// gRPC services of the rpc layer turn it into a google.rpc.Status with one ErrorDetail
+// (rpc::toStatus, decision N154). The gRPC code is derived from the reason by the one table of
 // errors.proto, so no caller picks a code by hand.
 //
 // A programmer error (TINYCAD_ASSERT, an exception out of a handler or a builder) is caught by the
-// adapter around the body of each RPC and reported as INTERNAL (internalStatusOfCurrentException).
-
-#include <grpcpp/support/status.h>
+// service around the body of each RPC and reported as INTERNAL.
 
 #include <string>
 #include <vector>
@@ -25,7 +23,7 @@ namespace tinycad::session {
 
 /**
  * The reasons of errors.proto the session layer produces (the KERNEL_* reasons belong to
- * GeometryService). gRPC code per reason (toStatus):
+ * GeometryService). gRPC code per reason (rpc::toStatus):
  * InvalidOperation, OperationIdReused, InvalidDocument → INVALID_ARGUMENT;
  * UnknownTarget, ReadOnly, TransactionOpen, NoTransaction, NothingToUndo, NothingToRedo,
  * SketchNotSolved, DocumentOpen → FAILED_PRECONDITION;
@@ -37,7 +35,7 @@ enum class ErrorReason {
   /**
    * Reserved: M41 ChangeErrorCode has no "unknown target" yet, so a handler refusing an unknown
    * feature comes back as InvalidOperation. With one writer per document (Q102) the client can
-   * only hit it after a STORAGE reload (N35); see the M45 plan.
+   * only hit it after a STORAGE reload (the fallback of N155); see the M45 plan.
    */
   UnknownTarget,
   ReadOnly,
@@ -92,15 +90,5 @@ SessionError fromLoadError(const storage::LoadError& error);
 
 /** SketchNotSolved with its issues ({ param: 'sketch', code: 'sketch.notSolved' }). */
 SessionError fromSketchNotSolved(const features::SketchNotSolved& error);
-
-/**
- * The google.rpc.Status of the error: code by the table above, message, and exactly one detail
- * of type tinycad.v1.ErrorDetail { reason, path, issues } (the serialized google.rpc.Status in
- * the grpc-status-details-bin trailer, as the M39 GeometryService does).
- */
-grpc::Status toStatus(const SessionError& error);
-
-/** Called from a catch (...) around the body of an RPC: INTERNAL with the exception text. */
-grpc::Status internalStatusOfCurrentException();
 
 }  // namespace tinycad::session

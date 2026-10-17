@@ -24,8 +24,7 @@ class IdleTimeoutTest : public RuntimeFixture {
                                    [this] { return "s" + std::to_string(++nextSession); },
                                    SessionConfig{}});
   document::DocumentId part = createDocument("Part");
-  v1::ReadModelOptions options;
-  v1::ChangeResult out;
+  ReadModelOptions options;
 
   SessionPtr open() {
     auto opened = manager->open(part, std::nullopt, "");
@@ -76,18 +75,18 @@ TEST_F(IdleTimeoutTest, WatchingAClosedSessionIsSessionNotFound) {
 TEST_F(IdleTimeoutTest, TheTimeoutOfTheWriterDropsItsTransactionAndFreesTheLease) {
   const SessionPtr writer = open();
   ASSERT_TRUE(writer->document().begin(writer->caller(), "T", {writer->recent(), key("b1")},
-                                       options, &out));
+                                       options));
   ASSERT_TRUE(writer->document().apply(writer->caller(), addBox("a", 0),
-                                       {writer->recent(), key("a1")}, options, &out));
+                                       {writer->recent(), key("a1")}, options));
   steadyNow += minutes(5);
   const SessionPtr reader = open();
   steadyNow += minutes(5);
 
   EXPECT_EQ(manager->reapIdle(), 1U);
   EXPECT_FALSE(reader->document().leaseHolder().has_value());
-  v1::ReadModel model;
-  ASSERT_TRUE(reader->document().readModel(reader->caller(), options, &model));
-  EXPECT_FALSE(model.session().has_transaction());
+  auto model = reader->document().readModel(reader->caller(), options);
+  ASSERT_TRUE(model.has_value());
+  EXPECT_FALSE(model->session.transactionLabel.has_value());
   EXPECT_TRUE(storedLog(part).empty());
   EXPECT_FALSE(reader->writable());
 

@@ -19,6 +19,7 @@ milestones:
   - "[[M16-vlastni-occt-build]]"
   - "[[M42-jadro-occt-nativne]]"
   - "[[M47-uklid-a-dokonceni]]"
+  - "[[M50-occt2d-a-vrstva-rpc]]"
 tags:
   - spec
 created: 2026-10-12
@@ -278,7 +279,7 @@ export interface SketchOps {
 
 ### Stav po M33
 
-> **Od M47 ([[Rozhodnutí nativního jádra|N15]]):** metody z *Stav po M33*, *Stav po M34* a *Stav po M35* nejsou v portu jádra. Implementuje je `tinycad_geometry` (`server/src/geometry`: `intersections.cpp`, `segment.cpp`, `fillet.cpp`, `offset.cpp`, `offset_chain.cpp`, sdílené `geom2d.cpp`, kontroly vstupu `validate.cpp`) za `GeometryService` a skicář je volá přes síť ([[14-protokol#`GeometryService`]]). Signatury níže jsou kontrakt těchto volání. Fake implementace z TS: [[06-geometricke-jadro v prohlížeči]].
+> **Od M47 ([[Rozhodnutí nativního jádra|N15]]):** metody z *Stav po M33*, *Stav po M34* a *Stav po M35* nejsou v portu jádra. Implementuje je `tinycad_geometry` (`server/src/geometry`: `intersections.cpp`, `segment.cpp`, `fillet.cpp`, `offset.cpp`, `offset_chain.cpp`, kontroly vstupu `validate.cpp`; 2D základ z `tinycad_occt2d`, viz [[#Společný 2D základ `tinycad_occt2d`]]) za `GeometryService` a skicář je volá přes síť ([[14-protokol#`GeometryService`]]). Signatury níže jsou kontrakt těchto volání. Fake implementace z TS: [[06-geometricke-jadro v prohlížeči]].
 
 Průsečíky a kusy křivek skici pro trim, extend a split ([[M33-trim-extend-split|M33]], [[12-skicar#Trim, extend, split (M33)]]). Data, ne handle:
 
@@ -298,7 +299,7 @@ export interface SketchOps {
 }
 ```
 
-- **`curveIntersections`:** vstup jako u `profileRegions` (kontrola jako `parseProfileRegionsInput`: id povinné a unikátní, nulové délky vynechané). Průsečíky i ve sdílených koncových bodech a tečné dotyky; překryv → oba konce společného úseku s `overlap`. Body se slučují do `1e-7 · max(1, |souřadnice|)`. Uzel uzavřeného splinu se hlásí jako samoprůsečík (`ta` první, `tb` poslední uzel). **Nehlásí se:** dvě shodné kružnice (překryv bez konců) a překryv se splinem. OCCT hlásí tečný dotyk jako krátký společný úsek; adaptér ho podle mezery uvnitř úseku převede na jeden bod. OCCT: `Geom2dAPI_InterCurveCurve` s předfiltrem obálek (jako oblasti), parametry přes `Geom2dAPI_ProjectPointOnCurve` (`InterCurveCurve` je nevrací), převedené na `t` ze spec 12. Kód: `server/src/geometry/intersections.cpp`, sdílená stavba 2D křivek a předfiltr obálek `server/src/geometry/geom2d.cpp`.
+- **`curveIntersections`:** vstup jako u `profileRegions` (kontrola jako `parseProfileRegionsInput`: id povinné a unikátní, nulové délky vynechané). Průsečíky i ve sdílených koncových bodech a tečné dotyky; překryv → oba konce společného úseku s `overlap`. Body se slučují do `1e-7 · max(1, |souřadnice|)`. Uzel uzavřeného splinu se hlásí jako samoprůsečík (`ta` první, `tb` poslední uzel). **Nehlásí se:** dvě shodné kružnice (překryv bez konců) a překryv se splinem. OCCT hlásí tečný dotyk jako krátký společný úsek; adaptér ho podle mezery uvnitř úseku převede na jeden bod. OCCT: `Geom2dAPI_InterCurveCurve` s předfiltrem obálek (jako oblasti), parametry přes `Geom2dAPI_ProjectPointOnCurve` (`InterCurveCurve` je nevrací), převedené na `t` ze spec 12. Kód: `server/src/geometry/intersections.cpp`, sdílená stavba 2D křivek a předfiltr obálek `server/src/occt2d` (`curves.cpp`, `boxes.cpp`).
 - **`curveSegment`:** křivka podle tvaru z `makeFace` (bez povinného id), `from < to` v definičním oboru (`t` ze spec 12; u kružnice `to < from + 2π` – celá otáčka by byl oblouk nulové délky), jinak `'invalid-input'`; parametr do `1e-9 · max(1, |mez|)` za mezí se posune na mez. Kontrola vstupu v `server/src/geometry/validate.cpp` (port `parseCurveSegmentInput`). Úsečka a oblouk přesně ze vzorců; spline `Geom2d_BSplineCurve::Segment(from, to)` (`segment.cpp`), uzly kusu přeškálované do `[0, 1]`. Body kusu leží na původní křivce (test vzorkuje).
 
 ### Stav po M34
@@ -444,6 +445,20 @@ OCCT 8.0.1 (nativní knihovny TK*)
 - Instance není bezpečná pro vlákna; volání serializuje vrstva sezení ([[Rozhodnutí nativního jádra|N13]], [[14-protokol#Vlákna a zámky serveru]]). Dlouhé operace (fillet) blokují další volání téhož dokumentu.
 - **Mapy podtvarů:** `TopExp::MapShapes` přímo (WASM build ho neměl). `SubShapeIndex` = pozice v mapě minus 1.
 - Algoritmy níže jsou port TS adaptéru `kernel-occt` (stejné kroky, stejné role a historie); odchylky nativního OCCT jsou uvedené u jednotlivých odrážek.
+
+### Společný 2D základ `tinycad_occt2d`
+
+Od [[M50-occt2d-a-vrstva-rpc|M50]] ([[Rozhodnutí nativního jádra|N77, N154]]) mají `tinycad_kernel` (rovinná plocha, oblasti skici) a `tinycad_geometry` (2D geometrie skicáře za `GeometryService`) jeden 2D základ nad OCCT, knihovnu `tinycad_occt2d` v `server/src/occt2d`. Dřív byl stejný kód dvakrát (`kernel/curves2d`, `geometry/geom2d` a dvě kopie kontroly křivek).
+
+| Hlavička | Obsah |
+|---|---|
+| `tinycad/occt2d/curves.hpp` | převody `core::Curve2` → Geom2d (`boundedCurve`, `splineCurve`, `circleCurve`), zpět `splineOf`, `compressKnots`; 2D pomůcky `dist`, `samePoint` (tolerance `kPointTolerance = 1e-7` relativně), `angleAround`, `onCircle`, `wrap`, `arcSweep`, `scaleOf`, `counterClockwise`, `startOf`/`endOf` |
+| `tinycad/occt2d/boxes.hpp` | obálky křivek `Box` (`boxOf`, `unionOf`, `boxesOverlap`, `inBox`) a předfiltr dvojic `overlappingPairs` (zametání podle x) |
+| `tinycad/occt2d/curve_checks.hpp` | kontrola jedné vstupní křivky `readCurve` s pravidly `CurveRules { idRequired, skipZeroLength }` → `Ok` / `Skip` / `Bad` a texty problémů s cestou; `knotsProblem` (sevřený uzlový vektor). Konstanty `kRadiusTolerance`, `kMaxSplineDegree = 25`, `kMinArcRadius` jsou jen tady. |
+
+- Knihovna je **interní**: její hlavičky nesou typy OCCT (`Handle(Geom2d_Curve)`), proto ji linkují jen `tinycad_kernel` a `tinycad_geometry`, a to `PRIVATE`. Veřejné hlavičky domény typy OCCT dál neznají ([[0030-nativni-jadro-pres-grpc|ADR 0030]]).
+- Kontroly vstupu zůstávají u volajících: `kernel/profile.cpp` (`validateFaceInput`, `parseProfileRegionsInput`) sbírá problémy do seznamu textů, `geometry/validate.cpp` do `Problems`, který je hodí jako `Failure 'invalid-input'`; jednu křivku obě kontrolují přes `readCurve`.
+- Mimo základ zůstávají algoritmy, které kopiemi nejsou: oblasti (`kernel/regions.cpp`) a průsečíky (`geometry/intersections.cpp`).
 
 ### Tessellace v adaptéru
 

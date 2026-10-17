@@ -55,6 +55,8 @@ class CountingKernel final : public kernel::GeometryKernel {
   [[nodiscard]] int calls(const std::string& method) const;
   /** Calls of every method except release (what a builder or the Regenerator asked the kernel). */
   [[nodiscard]] int modelingCalls() const;
+  /** Calls by method name so far (the table of the measurement, RegenerationMeasure). */
+  [[nodiscard]] const std::map<std::string, int>& counts() const { return counts_; }
   void resetCounts() {
     counts_.clear();
     booleanCalls_.clear();

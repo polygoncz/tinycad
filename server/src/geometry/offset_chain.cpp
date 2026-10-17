@@ -12,9 +12,18 @@
 #include <limits>
 #include <optional>
 
-#include "geom2d.hpp"
+#include "tinycad/occt2d/curves.hpp"
+
 
 namespace tinycad::geometry::detail {
+
+using occt2d::angleAround;
+using occt2d::dist;
+using occt2d::Kind;
+using occt2d::kTurn;
+using occt2d::splineCurve;
+using occt2d::splineOf;
+using occt2d::wrap;
 
 namespace {
 

@@ -25,6 +25,7 @@ modules:
 milestones:
   - "[[M00-zaklad-projektu]]"
   - "[[M47-uklid-a-dokonceni]]"
+  - "[[M50-occt2d-a-vrstva-rpc]]"
 tags:
   - spec
 created: 2026-10-12
@@ -42,7 +43,7 @@ Od [[M47-uklid-a-dokonceni|M47]] má tinycad dvě části: **prohlížeč** (Typ
 ## Principy
 
 1. **Dokument je recept, ne geometrie.** Ukládá se seznam featur s parametry. Geometrie je vždy odvozená přehráním (regenerací) a dá se kdykoli zahodit. ([[0003-dokument-je-recept|ADR 0003]])
-2. **Doména nezávisí na ničem vnějším.** V klientovi jsou model dokumentu, handlery operací a model skici čistý TypeScript bez Vue a Three.js; na serveru jsou knihovny domény (`server/src/document`, `ops`, `regen`, `features`) bez gRPC a OCCT stojí jen za portem `GeometryKernel`. Vnější svět je za porty (rozhraními) a adaptéry. ([[0001-jadro-v-cistem-ts|ADR 0001]])
+2. **Doména nezávisí na ničem vnějším.** V klientovi jsou model dokumentu, handlery operací a model skici čistý TypeScript bez Vue a Three.js; na serveru jsou knihovny domény (`server/src/document`, `ops`, `regen`, `features`, `storage`, `session`…) bez gRPC a OCCT stojí jen za portem `GeometryKernel`. **Doména serveru nezná protobuf:** `RuntimeDocument` vrací doménové výsledky (`session::ReadModel`, `ChangeResult`, `HistoryView`, `SessionEvent`) a na zprávy `tinycad.v1` je převádí jen vrstva `tinycad_rpc`; knihovny pod ní `tinycad_proto` ani gRPC nelinkují, takže hranici hlídá překladač ([[M50-occt2d-a-vrstva-rpc|M50]], [[Rozhodnutí nativního jádra|N53, N154]]). Vnější svět je za porty (rozhraními) a adaptéry. ([[0001-jadro-v-cistem-ts|ADR 0001]])
 3. **Data odděleně od chování.** Featury a operace jsou neměnná serializovatelná data. Chování (builder, handler) je registrované podle typu. ([[0004-data-oddelene-od-chovani|ADR 0004]])
 4. **Jediná cesta ke změně dokumentu je operace.** Nástroje i UI jen vyrábějí operace a posílají je dispečerovi. ([[0005-operacni-log|ADR 0005]])
 5. **Rozšiřitelnost přes registry a pluginy.** Nová featura = nový plugin, žádné `switch (type)` v jádru. (Open/closed princip.)
@@ -189,7 +190,9 @@ tinycad/
 ├─ server/                  nativní jádro tinycad-core (C++, CMake, vcpkg; ADR 0030)
 │  ├─ proto/tinycad/v1/     kontrakt gRPC (spec 14)
 │  ├─ src/<oblast>/         knihovny tinycad_<oblast>: core, document, ops, features, storage,
-│  │                        kernel, regen, geometry, sketch, solver-planegcs, service, session,
+│  │                        occt2d (interní 2D základ OCCT pro kernel a geometry), kernel, regen,
+│  │                        geometry, sketch, solver-planegcs, session (doména sezení bez protobufu),
+│  │                        rpc (služby gRPC, převody tinycad.v1, otisk požadavku, stavy chyb),
 │  │                        app (CoreServer, main), tools (tinycad-import); hlavičky v include/tinycad/
 │  ├─ test/<oblast>/        GoogleTest; test/shared-cases spouští sdílené případy
 │  └─ third_party/planegcs/ vendorovaný řešič
@@ -223,7 +226,7 @@ Klient má jeden kompoziční kořen v `app`, rozdělený na tenkou vrstvu prohl
 
 Ostatní moduly dostávají závislosti jako rozhraní v parametru `deps` tovární funkce (dependency injection bez frameworku, ručně; [[0011-programovani-proti-rozhranim|ADR 0011]]).
 
-Na serveru je kompoziční kořen třída `CoreServer` v `server/src/app/core_server.hpp`: registr schémat, handlery operací a buildery featur, katalog SQLite, `SessionManager` nad továrnami `OcctKernel` a `PlanegcsSolver`, tři služby gRPC a vlákno pro timeout nečinnosti ([[Rozhodnutí nativního jádra|N130]]). Knihovny domény jsou propojené přes abstraktní rozhraní (`GeometryKernel`, porty úložiště) stejně jako v TS ([[Rozhodnutí nativního jádra|N9]]).
+Na serveru je kompoziční kořen třída `CoreServer` v `server/src/app/core_server.hpp`: registr schémat, handlery operací a buildery featur, katalog SQLite, `SessionManager` nad továrnami `OcctKernel` a `PlanegcsSolver`, tři služby gRPC z `tinycad_rpc` (`SessionServiceImpl`, `DocumentServiceImpl`, `GeometryServiceImpl`) a vlákno pro timeout nečinnosti ([[Rozhodnutí nativního jádra|N130]]). Knihovny domény jsou propojené přes abstraktní rozhraní (`GeometryKernel`, porty úložiště) stejně jako v TS ([[Rozhodnutí nativního jádra|N9]]).
 
 ## Komunikace mezi vrstvami
 

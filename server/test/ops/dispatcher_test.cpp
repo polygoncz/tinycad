@@ -65,7 +65,7 @@ TEST(Dispatch, TellsTheListenerAboutEveryEntry) {
   auto tx = dispatcher.begin("t");
   ASSERT_TRUE(tx->apply(renameOp("b", "Y")));
   EXPECT_EQ(listener.seqs, (std::vector<std::int64_t>{1}));
-  tx->commit();
+  tx->commit().value();
   EXPECT_EQ(listener.seqs, (std::vector<std::int64_t>{1, 2}));
   dispatcher.setListener(nullptr);
 }
@@ -147,6 +147,114 @@ TEST(Dispatch, TheListenerMayDispatch) {
   EXPECT_TRUE(listener.result);
   EXPECT_EQ(log.lastSeq(), 2);
   dispatcher.setListener(nullptr);
+}
+
+// --- write-ahead (N155) ------------------------------------------------------------------------
+
+Json dataOf(const document::DocumentReader& doc) {
+  return document::documentDataJson(document::toData(doc));
+}
+
+TEST(DispatchWriteAhead, WritesTheEntryWithItsSeqBeforeItIsInTheLog) {
+  OpsSession s(twoFeatures());
+  FakeWriter writer;
+  s.dispatcher.setWriter(&writer);
+  FakeWriter other;
+  EXPECT_THROW(s.dispatcher.setWriter(&other), core::AssertionError);
+  ASSERT_TRUE(s.dispatcher.dispatch(renameOp("a", "X")));
+  ASSERT_TRUE(s.dispatcher.dispatch(renameOp("a", "Y")));
+  ASSERT_EQ(writer.written.size(), 2U);
+  EXPECT_EQ(writer.written[0].seq, 1);
+  EXPECT_EQ(writer.written[1].seq, 2);
+  EXPECT_EQ(ops::logEntryJson(writer.written[1]), ops::logEntryJson(*s.log.entry(2)));
+  s.dispatcher.setWriter(nullptr);
+}
+
+TEST(DispatchWriteAhead, ARefusedOperationIsNotWritten) {
+  OpsSession s(twoFeatures());
+  FakeWriter writer;
+  s.dispatcher.setWriter(&writer);
+  const auto result = s.dispatcher.dispatch(renameOp("zzz", "X"));
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error().kind, ops::DispatchError::Kind::Invalid);
+  EXPECT_EQ(writer.calls, 0);
+  s.dispatcher.setWriter(nullptr);
+}
+
+TEST(DispatchWriteAhead, AFailedWriteRevertsTheDocumentAndLeavesLogAndListenerUntouched) {
+  auto doc = aDocument(twoFeatures());
+  const ops::OpHandlerRegistry handlers(noSchemas());
+  ops::OperationLog log;
+  ops::OperationDispatcher dispatcher(*doc, handlers, log, [] { return 0.0; });
+  RecordingListener listener;
+  dispatcher.setListener(&listener);
+  FakeWriter writer;
+  dispatcher.setWriter(&writer);
+  ASSERT_TRUE(dispatcher.dispatch(renameOp("a", "X")));
+  const Json before = dataOf(*doc);
+  writer.failing = true;
+  const auto result = dispatcher.dispatch(removeOp("b"));
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error().kind, ops::DispatchError::Kind::WriteFailed);
+  EXPECT_TRUE(result.error().reverted);
+  EXPECT_FALSE(result.error().message.empty());
+  EXPECT_EQ(dataOf(*doc), before);
+  EXPECT_EQ(log.lastSeq(), 1);
+  EXPECT_EQ(listener.seqs, (std::vector<std::int64_t>{1}));
+  // The next write gets the seq the failed one would have had.
+  writer.failing = false;
+  const auto next = dispatcher.dispatch(removeOp("b"));
+  ASSERT_TRUE(next.has_value());
+  EXPECT_EQ(next->seq, 2);
+  EXPECT_EQ(writer.written.back().seq, 2);
+  EXPECT_EQ(listener.seqs, (std::vector<std::int64_t>{1, 2}));
+  dispatcher.setWriter(nullptr);
+  dispatcher.setListener(nullptr);
+}
+
+TEST(DispatchWriteAhead, WhenTheInverseFailsTooTheErrorSaysNotReverted) {
+  ops::OpHandlerRegistry handlers(noSchemas());
+  handlers.add(std::make_shared<BrokenInverseHandler>());
+  auto doc = aDocument({.name = "Old"});
+  ops::OperationLog log;
+  ops::OperationDispatcher dispatcher(*doc, handlers, log, [] { return 0.0; });
+  FakeWriter writer;
+  writer.failing = true;
+  dispatcher.setWriter(&writer);
+  const auto result = dispatcher.dispatch(BrokenInverseHandler::op("New"));
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error().kind, ops::DispatchError::Kind::WriteFailed);
+  EXPECT_FALSE(result.error().reverted);
+  EXPECT_EQ(log.lastSeq(), 0);
+  // The dispatcher is usable again (the reentrance flag is down).
+  EXPECT_FALSE(dispatcher.inTransaction());
+  writer.failing = false;
+  EXPECT_TRUE(dispatcher.dispatch(BrokenInverseHandler::op("Newer")));
+  dispatcher.setWriter(nullptr);
+}
+
+/** A writer that calls back into the dispatcher: reentrance. */
+class ReentrantWriter final : public ops::EntryWriter {
+ public:
+  explicit ReentrantWriter(ops::OperationDispatcher& dispatcher) : dispatcher_(dispatcher) {}
+  core::Result<void, std::string> write(const ops::LogEntry& /*entry*/) override {
+    (void)dispatcher_.dispatch(renameOp("b", "Z"));
+    return {};
+  }
+
+ private:
+  ops::OperationDispatcher& dispatcher_;
+};
+
+TEST(DispatchWriteAhead, AWriterCallingTheDispatcherIsReentrance) {
+  OpsSession s(twoFeatures());
+  ReentrantWriter writer(s.dispatcher);
+  s.dispatcher.setWriter(&writer);
+  EXPECT_THROW((void)s.dispatcher.dispatch(renameOp("a", "X")), core::AssertionError);
+  EXPECT_EQ(s.log.lastSeq(), 0);
+  s.dispatcher.setWriter(nullptr);
+  // The flag went down with the exception.
+  EXPECT_TRUE(s.dispatcher.dispatch(renameOp("a", "Y")));
 }
 
 }  // namespace

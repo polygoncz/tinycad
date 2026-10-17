@@ -13,6 +13,8 @@ milestones:
   - "[[M45-sezeni-pres-grpc]]"
   - "[[M46-klient-nad-read-modelem]]"
   - "[[M49-pravidla-validace-v-popisu]]"
+  - "[[M50-occt2d-a-vrstva-rpc]]"
+  - "[[M51-inverze-a-mereni]]"
 tags:
   - spec
 created: 2026-10-17
@@ -44,6 +46,28 @@ remote/ adaptéry  ── gRPC-Web ──► překlad na gRPC  ── gRPC ─�
 | `GeometryService` | žádný | 2D geometrie skicáře za portem `SketchGeometry` ([[Q096 Geometrie skici přes síť|Q096]]) |
 
 Soubory: `common.proto` (vektory, rovina, `ParamIssue`), `errors.proto` (`ErrorDetail`), `operations.proto`, `schema.proto` (`FeatureTypeDescriptor`), `read_model.proto`, `geometry.proto`, `session.proto` (obě služby s dokumenty a sezením).
+
+### Vrstva rpc na serveru
+
+Od [[M50-occt2d-a-vrstva-rpc|M50]] ([[Rozhodnutí nativního jádra|N53, N154]]) zná protobuf a gRPC na serveru jen knihovna `tinycad_rpc` (`server/src/rpc`) a kompoziční kořen `tinycad_app`. Doména pod ní (`session`, `storage`, `regen`, `geometry`…) `tinycad_proto` nelinkuje, takže `.pb.h` v ní nejde přeložit.
+
+```
+SessionServiceImpl / DocumentServiceImpl / GeometryServiceImpl      (tinycad_rpc)
+   │ request → doménové vstupy: operationToJson, readModelOptionsOf, operationKey (otisk)
+   ▼
+SessionManager → RuntimeDocument (zámek dokumentu)                  (tinycad_session)
+   │ vrací doménové výsledky: session::ReadModel, ChangeResult, HistoryView;
+   │ EventRing drží session::SessionEvent
+   ▼
+readModelToProto, changeResultToProto, historyToProto, sessionEventToProto,
+toStatus (SessionError → google.rpc.Status)                         (tinycad_rpc, mimo zámek)
+```
+
+- **Doménový read model** (`session/read_model.hpp`) drží jen sdílená neměnná data: `DocumentMeta`, `StudioPtr`, kopii `RegenResult` (stavy, `StatePtr`, kotvy, vstup), pro každé těleso `BodyPtr` s verzí obsahu a `shared_ptr<const MeshData>` (`nullptr`, když verzi klient uvedl v `known_meshes`) a pohled sezení. Pod zámkem dokumentu se dělá jen to, co potřebuje jádro nebo regenerátor (regenerace, verze obsahu, tessellace do `MeshCache`); `regen.input` zůstane jen tehdy, když ho `input_of` žádal.
+- **Převod do protobufu běží v RPC po návratu z `RuntimeDocument`**, tedy bez zámku dokumentu, a nikdy nevolá jádro. Vrstva navíc zámek zkrátí, ne prodlouží. Odpovědi jsou bajt po bajtu stejné jako před M50 (testy `grpc_*` beze změny).
+- `WatchSession` dělá `resync` a `heartbeat` sám; uložené události převádí `sessionEventToProto`.
+- `SessionServiceImpl` postaví popisy typů featur (`describeFeatureTypes`) jednou v konstruktoru z registru schémat.
+- Stavy chyb jsou v `rpc/status.hpp`: `toStatus` a `internalStatusOfCurrentException` pro sezení a dokumenty (`ERROR_REASON_UNSPECIFIED`), `geometryStatus` a `internalGeometryStatusOfCurrentException` pro `GeometryService` (`KERNEL_INTERNAL`).
 
 ## Čtyři zásady
 
@@ -100,7 +124,12 @@ Pravidla:
 - **Tažení** (manipulátor, posuvník): klient si mezi odpověďmi pamatuje jen **poslední** hodnotu a pošle ji s dalším `Apply` (stejný vzor jako adaptér `GeometryService`). `setParams` se v transakci slučuje už při `apply` (spec 04), takže v transakci zůstane jeden krok.
 - **Skica:** `Apply` s `feature.setParams` skici je potvrzení úpravy. Server skicu znovu vyřeší nativním planegcs **dřív, než operace vstoupí do dispečeru** (`SketchOperationSolver` v sezení, týká se `Dispatch`, `Apply` i `ApplyTransient`, `feature.add` skici a obojího uvnitř `batch`), a do dokumentu i do logu jde operace s **jeho** výsledkem. Přehrání logu, undo ani načtení proto řešič nepotřebují ([[Rozhodnutí nativního jádra|N47]]). Klient převezme souřadnice z read modelu vždy, bez prahu tolerance ([[Q097 Transakce a undo přes RPC|Q097]]). Když ji server nevyřeší, operace skončí `SKETCH_NOT_SOLVED`, dokument, transakce i log se nezmění a klient ponechá lokální skicu ([[Q103 Skica, kterou server nevyřeší|Q103]]): v jeho zrcadle dokumentu zůstane do dalšího přijatého `setParams` téže skici nebo do konce transakce; `Commit` zapíše poslední serverem přijatý stav ([[Rozhodnutí nativního jádra|N65]]).
 - **Validace jen na serveru.** Neplatná operace → `INVALID_OPERATION` s `path` a dokument beze změny. Neplatné parametry featury nejsou chyba RPC: změna platí a featura je v read modelu červená (`FeatureError` `INVALID_PARAMS`), jako dnes.
-- **Uloženo = odpověď.** `Dispatch`, `Commit`, `Undo` a `Redo` zapíšou záznam do SQLite v transakci databáze **před** odpovědí. Klient nepotřebuje stav „ukládá se“. Selhání zápisu → `STORAGE` a dokument v paměti se **znovu načte ze souboru** (ne inverze, [[Rozhodnutí nativního jádra|N35]]), takže log vždy odpovídá dokumentu. Otevřená transakce se tím zahodí: `Commit` zopakovaný po `STORAGE` skončí `NO_TRANSACTION` a klient to bere jako ztracenou transakci (obnoví read model a ukáže, že změna nebyla uložena).
+- **Uloženo = odpověď.** `Dispatch`, `Commit`, `Undo` a `Redo` zapíšou záznam do SQLite v transakci databáze **před** odpovědí. Klient nepotřebuje stav „ukládá se“. Selhání zápisu → `STORAGE` (`UNAVAILABLE`) a log ani zásobníky undo se nezmění, protože server záznam zapisuje **před** tím, než ho přidá do logu (write-ahead, od [[M51-inverze-a-mereni|M51]], [[Rozhodnutí nativního jádra|N155]], [[05-persistence#Zápis na serveru: `PersistentDocument`]]):
+  - `Dispatch`, `Undo`, `Redo`: server dokument vrátí inverzí operace; read model, generace i události jsou jako před požadavkem.
+  - `Commit`: transakce **zůstane otevřená** se svými kroky (přechodné kroky zaniknou), generace beze změny. Opakovaný `Commit` – se stejným `operation_id` podle tabulky [[#Chyby]], nebo s novým – ji zapíše; klient ji nemusí brát jako ztracenou. Klíč neúspěšného pokusu není uložený, takže opakování je nový pokus, ne „opakovaný požadavek“. Co s tím udělá klient, je jeho pravidlo ([[Rozhodnutí nativního jádra|N167]]: odmítnutý `Commit` → hlášení a `Abort`).
+  - Záloha: selže-li sama inverze (chyba handleru), dokument se znovu načte ze souboru, otevřená transakce zanikne a server to oznámí jako změnu (generace + 1, `changed` bez sezení); pak zopakovaný `Commit` skončí `NO_TRANSACTION`.
+
+  Do M51 se po každém `STORAGE` dokument znovu načítal ze souboru a transakce zanikla ([[Rozhodnutí nativního jádra|N35]]).
 - **Přejmenování dokumentu** je operace `document.rename` (`Dispatch`). `DocumentService.RenameDocument` otevřeného dokumentu jde přes jeho běhový dokument (druhý zapisovatel, serializovaný zámkem dokumentu; při otevřené transakci `DOCUMENT_OPEN`), zavřeného přímo do souboru ([[Rozhodnutí nativního jádra|N37]]). `DeleteDocument` otevřeného dokumentu skončí `DOCUMENT_OPEN`, jako dnes v prohlížeči ([[Rozhodnutí nativního jádra|N56]]).
 
 ### Idempotence
@@ -117,6 +146,7 @@ Z revize architektury po M44 ([[Rozhodnutí nativního jádra]] N106–N108):
 
 - **Pořadí zámků:** manager sezení → dokument → události. **Pod zámkem manageru se nikdy nečeká na zámek dokumentu ani nespouští OCCT** (načtení dokumentu a první regenerace běží mimo něj: vloží se rezervace, dokument se dosadí po načtení; uvolnění pronájmu s `Abort` až po uvolnění zámku manageru).
 - **Uvolnění běhového dokumentu výslovně zavře jeho kruhový buffer událostí**; `WatchSession` pak skončí `OK`. Při vypnutí serveru se nejdřív zavřou všechny buffery (`SessionManager::shutdown`), teprve potom `Server::Shutdown`.
+- **Převod read modelu do `tinycad.v1` běží mimo zámek dokumentu** (vrstva rpc, viz výše): `RuntimeDocument` vrací doménový read model ze sdílených neměnných dat a služba ho převede až po návratu.
 - Export STEP drží zámek celého procesu (globální stav `STEPControl_Writer`).
 - **Idempotence před řešením skici:** pořadí v běhovém dokumentu je otisk → hledání uloženého záznamu (`PersistentDocument::lookup`) → teprve potom opětovné řešení skici a změna. Opakovaný požadavek se tak nikdy znovu neřeší.
 - **Prázdný `Commit`** se do logu nezapíše, ale jeho `operation_id` si pamatuje sezení (`RecentResponses`), takže opakování vrátí úspěch, ne `NO_TRANSACTION`.
@@ -138,7 +168,7 @@ message ReadModel { DocumentView document = 1; RegenView regen = 2; SessionView 
 - **Vstup editované featury** ([[0025-vstupni-stav-editovane-featury|ADR 0025]]): s `input_of` read model nese `regen.input` (stav před featurou) se stejným pravidlem sítí. Bez něj `input` chybí. Odpovídá `RegenSnapshot.pick` z [[10-interakce]].
 - **Jména ploch a hran** ([[08-topologicke-pojmenovani]]): `BodyView.face_names[i]` je primární jméno plochy s indexem `i` (`SubShapeIndex.index` od 0, [[Rozhodnutí nativního jádra|N91]]) (první ze seřazených jmen, `NameTable::nameOfFace`), `''` = bez jména. Klient z nich staví `TopoNames` pro picking. Plocha s více jmény (sloučené plochy) je pro klienta dohledatelná jen podle primárního jména. Stejně `BodyView.edge_names[i]` je jméno hrany s indexem `i` (`nameOfEdge`, hrana má nejvýš jedno jméno), `''` = bez jména.
 - **Roviny ploch** (`BodyView.face_planes`, [[Rozhodnutí nativního jádra|N56]]): index plochy (jako u `face_names`) → rovina, jen rovinné plochy. Klient nemá jádro a skicu na ploše tělesa otevírá synchronně (`resolvePlane` skicáře, [[10-interakce]]).
-- **Generace** (`RegenView.generation`) je čítač změn běhového dokumentu: +1 po každé úspěšné, neopakované změně (i `BeginTransaction` a `Abort`) a po znovunačtení po `STORAGE`. Není to počet běhů regenerace, ty se dějí při každém read modelu a cache je zlevní ([[Rozhodnutí nativního jádra|N55]]).
+- **Generace** (`RegenView.generation`) je čítač změn běhového dokumentu: +1 po každé úspěšné, neopakované změně (i `BeginTransaction` a `Abort`) a po znovunačtení ze souboru, když po `STORAGE` selže inverze (záloha N155); samotné `STORAGE` generaci nemění. Není to počet běhů regenerace, ty se dějí při každém read modelu a cache je zlevní ([[Rozhodnutí nativního jádra|N55]]).
 - **Sítě na drátě** (`Mesh`): ploché pole little-endian (`float32` pozice, normály a body hran, `uint32` indexy a rozsahy), stejně jako `MeshData` ze [[06-geometricke-jadro|spec 06]]. Dekódované `bytes` může začínat na posunu, který není násobkem 4; pak se před `new Float32Array(...)` zkopíruje (`slice()`).
 - **Skici** (`SketchView`): rovina, vyřešené entity jako JSON ze [[12-skicar|spec 12]] včetně odvozených (zrcadlení, pole, písmena textu) a oblasti s obrysy (`Curve2`) pro vyplnění a picking ([[0028-geometrie-skici-v-jadre|ADR 0028]] bod 3).
 
@@ -184,7 +214,7 @@ Kód gRPC říká, **co může klient udělat**, `ErrorDetail.reason` říká, *
 | `UNAVAILABLE`, `DEADLINE_EXCEEDED` | zopakuje se stejným `operation_id` (exponenciální čekání, nejvýš 5×), pak ukáže „Server není dostupný“ |
 | `NOT_FOUND` (`SESSION_NOT_FOUND`) | otevře nové sezení a vyžádá read model |
 | `NOT_FOUND` (`DOCUMENT_NOT_FOUND`) | zpět na seznam dokumentů |
-| `FAILED_PRECONDITION` | neopakuje; obnoví read model (`UNKNOWN_TARGET`, `NOTHING_TO_UNDO`, `NO_TRANSACTION` po `STORAGE`) nebo ukáže chybu (`READ_ONLY`, `SKETCH_NOT_SOLVED`, `DOCUMENT_OPEN`) |
+| `FAILED_PRECONDITION` | neopakuje; obnoví read model (`UNKNOWN_TARGET`, `NOTHING_TO_UNDO`, `NO_TRANSACTION` po znovunačtení ze souboru) nebo ukáže chybu (`READ_ONLY`, `SKETCH_NOT_SOLVED`, `DOCUMENT_OPEN`) |
 | `INVALID_ARGUMENT`, `INTERNAL` | chyba programu, neopakuje, technický text do konzole |
 
 Chyby featur po regeneraci nejsou chyby RPC, jdou v `RegenView.statuses` (`FeatureError` s kódy ze [[07-regenerace#Stav featury|spec 07]]).
@@ -198,6 +228,7 @@ Chyby featur po regeneraci nejsou chyby RPC, jdou v `RegenView.statuses` (`Featu
 - **Sezení** (C++ integrační přes skutečný gRPC kanál): otevření, druhé sezení `writable = false` a `READ_ONLY`, timeout zahodí transakci a uvolní zámek, `SESSION_NOT_FOUND` po zavření, `resume_session_id` vrátí totéž sezení se zámkem, smazání otevřeného dokumentu `DOCUMENT_OPEN`.
 - **Idempotence:** dvakrát `Commit` se stejným id = jeden záznam; dvakrát `Apply` = jedno použití; stejné id s jinou operací = `OPERATION_ID_REUSED`; `Commit` zopakovaný po restartu serveru najde záznam v SQLite.
 - **Transakce a undo přes RPC:** dnešní testy spec 04 (50 změn = 1 záznam, abort, přechodné kroky, undo po znovuotevření) projdou proti `SessionService`.
+- **`STORAGE` (M51, N155):** `TestServer` otevírá běhové dokumenty přes `FailingCatalog` (`server().failures()`). `grpc_transactions_test.cpp`: `BeginTransaction`, dvakrát `Apply`, zápis selže → `Commit` = `STORAGE`, `session.transaction` dál nastavená, generace beze změny, opakovaný `Commit` s novým `operation_id` uspěje a uloží jeden záznam; `Dispatch` selže → read model jako před ním, opakování se stejným `operation_id` je nový pokus a uspěje. Na úrovni sezení totéž v `runtime_document_transactions_test.cpp` a `runtime_document_test.cpp` (žádná událost `changed`; generace + 1 jen po znovunačtení, když selže inverze).
 - **Sítě:** první read model nese všechny sítě; `known_meshes` se všemi verzemi → žádná síť; změna parametru jednoho tělesa → síť jen u něj; restart serveru → nové verze, klient sítě stáhne znovu.
 - **Stream:** připojení s `after_seq` dostane chybějící události; příliš staré `after_seq` → `resync`; `changed` přijde do sezení jen pro čtení.
 - **E2E** (Docker Compose, Playwright): dnešní sada e2e projde proti serveru, plus test s uměle zpožděnou sítí (150 ms) a s výpadkem spojení během tažení.

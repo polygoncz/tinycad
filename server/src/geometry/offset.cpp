@@ -32,11 +32,19 @@
 #include <optional>
 #include <set>
 
+#include "tinycad/occt2d/curves.hpp"
+
 #include "algorithms.hpp"
-#include "geom2d.hpp"
 #include "offset_chain.hpp"
 
 namespace tinycad::geometry::detail {
+
+using occt2d::CompressedKnots;
+using occt2d::compressKnots;
+using occt2d::dist;
+using occt2d::Kind;
+using occt2d::kTurn;
+using occt2d::scaleOf;
 
 namespace {
 

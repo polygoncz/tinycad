@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 51
 aliases:
   - M51
@@ -14,8 +14,8 @@ specs:
   - "[[13-testovani]]"
 depends_on:
   - "[[M50-occt2d-a-vrstva-rpc]]"
-started:
-finished:
+started: 2026-10-17
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-17
@@ -47,11 +47,11 @@ Proč je inverze křehčí než znovunačtení: spoléhá na to, že inverze han
 
 ## Úkoly
 
-- [ ] 1. Port `EntryWriter` v dispečeru: zápis před přidáním do logu, inverze při selhání; commit transakce při selhání nechá transakci otevřenou.
-- [ ] 2. `PersistentDocument` nad portem: `STORAGE` bez znovunačtení, záloha při selhání inverze, `ChangeError::reloaded`; `RuntimeDocument` zvýší generaci jen po znovunačtení.
-- [ ] 3. Testy s `FailingFile` a gRPC: zápis selže uprostřed transakce, `Commit` vrátí `STORAGE`, transakce zůstane otevřená, opakování uspěje.
-- [ ] 4. Měření výkonu regenerace v C++ (deska s 36 děrami a 4 zaobleními) jako test, který jen vypisuje; kontroly počtu volání jádra a živých handle, každá ověřená úmyslnou chybou.
-- [ ] 5. Spec 04, 05, 13, 14, čísla měření do vaultu a deník (hlavní sezení).
+- [x] 1. Port `EntryWriter` v dispečeru: zápis před přidáním do logu, inverze při selhání; commit transakce při selhání nechá transakci otevřenou.
+- [x] 2. `PersistentDocument` nad portem: `STORAGE` bez znovunačtení, záloha při selhání inverze, `ChangeError::reloaded`; `RuntimeDocument` zvýší generaci jen po znovunačtení.
+- [x] 3. Testy s `FailingFile` a gRPC: zápis selže uprostřed transakce, `Commit` vrátí `STORAGE`, transakce zůstane otevřená, opakování uspěje.
+- [x] 4. Měření výkonu regenerace v C++ (deska s 36 děrami a 4 zaobleními) jako test, který jen vypisuje; kontroly počtu volání jádra a živých handle, každá ověřená úmyslnou chybou.
+- [x] 5. Spec 04, 05, 13, 14, čísla měření do vaultu a deník (hlavní sezení).
 
 ## Akceptační kritéria
 
@@ -154,4 +154,9 @@ class OperationDispatcher {
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+_Návrh Clauda (stopa A)._
+
+- Zápis před logem: dispečer dostal port `EntryWriter`, záznam jde do SQLite dřív než do logu v paměti. Chyba zápisu u `dispatch`/`undo`/`redo` vrátí dokument inverzí, `commit` nechá transakci otevřenou (opakování uspěje); selže-li inverze, záloha je znovunačtení (N35 podle Pavla).
+- Měření regenerace v C++ (deska s 36 děrami): první regenerace 52–58 ms, plný přepočet 53–72 ms, přepočet z cache 12–17 ms se třemi voláními jádra – asi 2× rychlejší než WASM v M15. Každá kontrola měření ověřená úmyslnou chybou.
+- E2E restartu jádra z M48 se ukázalo nestabilní (503 na `WatchSession` během restartu v konzoli) – oprava v M52. Docker Desktop se během posledního kroku vypnul, spuštěn znovu.
+- `check:server` 1786, `check` 5857 / 332.
