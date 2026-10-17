@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 48
 aliases:
   - M48
@@ -15,8 +15,8 @@ specs:
   - "[[14-protokol]]"
 depends_on:
   - "[[M47-uklid-a-dokonceni]]"
-started:
-finished:
+started: 2026-10-17
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-17
@@ -34,12 +34,12 @@ updated: 2026-10-17
 
 ## Úkoly
 
-- [ ] 1. Kanál hlášení v `app`: `createNoticeCenter`, `noticeOfRefusal`, `AppSession.notices` a `dismissNotice`.
-- [ ] 2. Zdroje hlášení: ztracená transakce, odmítnutá a zahozená změna (včetně `SKETCH_NOT_SOLVED` a `READ_ONLY`), server nedostupný a obnovené spojení; `reportError` je už jen pro neočekávané chyby.
-- [ ] 3. Toast v `ui`: `ToastStack.vue` pro hlášení sezení i pro dnešní toast chyby zavření v `App.vue`, přístupnost, překlady.
-- [ ] 4. Úklid stavů, které serverová cesta nenastaví (N144): `RegenUiState.failed`, `KernelUiState 'failed'`, varování „export bez historie“.
-- [ ] 5. E2E: restart jádra uprostřed dialogu ukáže hlášení o ztracené transakci (samostatný sériový projekt Playwright).
-- [ ] 6. Spec 10, 11 a 14 a deník (hlavní sezení).
+- [x] 1. Kanál hlášení v `app`: `createNoticeCenter`, `noticeOfRefusal`, `AppSession.notices` a `dismissNotice`.
+- [x] 2. Zdroje hlášení: ztracená transakce, odmítnutá a zahozená změna (včetně `SKETCH_NOT_SOLVED` a `READ_ONLY`), server nedostupný a obnovené spojení; `reportError` je už jen pro neočekávané chyby.
+- [x] 3. Toast v `ui`: `ToastStack.vue` pro hlášení sezení i pro dnešní toast chyby zavření v `App.vue`, přístupnost, překlady.
+- [x] 4. Úklid stavů, které serverová cesta nenastaví (N144): `RegenUiState.failed`, `KernelUiState 'failed'`, varování „export bez historie“.
+- [x] 5. E2E: restart jádra uprostřed dialogu ukáže hlášení o ztracené transakci (samostatný sériový projekt Playwright).
+- [x] 6. Spec 10, 11 a 14 a deník (hlavní sezení).
 
 ## Akceptační kritéria
 
@@ -214,4 +214,8 @@ export function toastItemsOf(notices: readonly AppNotice[], t: (key: string, par
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+_Návrh Clauda (stopa B)._
+
+- Kanál `AppSession.notices` a `ToastStack`; hlášení ztráty transakce, zamítnuté změny (`noticeOfRefusal`), výpadku a obnovení spojení; nic z toho už nejde do `console.error`. Úklid stavů, které serverová cesta nenastaví (N144).
+- E2E restartu jádra uprostřed dialogu v samostatném sériovém projektu `restart`; ukázalo se, že tmpfs nepřežije restart kontejneru – e2e data přešla do anonymního svazku (N158).
+- `npm run check` zelený (5842 unit), `test:e2e` 104/104 dvakrát po sobě.
