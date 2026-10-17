@@ -791,3 +791,17 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
     },
   };
 }
+
+/**
+ * The tool with one hint for its whole work (M37, spec 10 "Nástroje"): shown on activation; the
+ * manager clears it on deactivation.
+ */
+export function withHint(tool: Tool, key: string): Tool {
+  return {
+    ...tool,
+    activate(ctx) {
+      tool.activate(ctx);
+      ctx.setHint({ key });
+    },
+  };
+}

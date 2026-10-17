@@ -20,6 +20,7 @@ import {
   inputValues,
   previewIds,
   previewPairs,
+  withHint,
 } from './common';
 import type { ToolMods } from './common';
 import { curveAt, idSource, unchanged } from './curve-pick';
@@ -89,7 +90,7 @@ export function createOffsetTool(sketches: SketchEditor): Tool {
     return { chain, distance: positive ? value : -value, data: picked.data };
   }
 
-  return clickTool(sketches, {
+  const tool = clickTool(sketches, {
     reset() {
       latest = null;
       hover = null;
@@ -136,6 +137,7 @@ export function createOffsetTool(sketches: SketchEditor): Tool {
       });
     },
   });
+  return withHint(tool, 'hint.offset.pick');
 }
 
 function requestOf(key: OffsetKey, result: readonly OffsetCurve2[]) {

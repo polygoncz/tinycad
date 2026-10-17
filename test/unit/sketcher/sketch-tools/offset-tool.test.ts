@@ -434,3 +434,16 @@ describe('the offset tool', () => {
     expect(rewrite).not.toHaveBeenCalled();
   });
 });
+
+describe('the offset tool: the hint HUD (M35)', () => {
+  it('shows its hint while active, also after a click', async () => {
+    const { viewport, manager } = await editing(RECT);
+    expect(manager.hint.get()).toEqual({ key: 'hint.offset.pick' });
+
+    await click(viewport, [50, -0.5]);
+    expect(manager.hint.get()).toEqual({ key: 'hint.offset.pick' });
+
+    manager.activate('sketch.select');
+    expect(manager.hint.get()).toBeNull();
+  });
+});

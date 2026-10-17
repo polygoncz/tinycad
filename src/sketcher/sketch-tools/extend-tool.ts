@@ -12,7 +12,7 @@ import type { Tool, ToolContext } from '@/interaction';
 import type { Vec2 } from '@/core';
 import type { SketchEditor } from '../sketch-editor';
 import type { SketchSession } from '../sketch-session';
-import { arcPoints, clearPreview, clickTool, previewPolyline } from './common';
+import { arcPoints, clearPreview, clickTool, previewPolyline, withHint } from './common';
 import { curveAt, idSource, unchanged } from './curve-pick';
 
 /** The id of the temporary carrier curve in the intersection request. */
@@ -70,7 +70,7 @@ export function createExtendTool(sketches: SketchEditor): Tool {
     return next;
   }
 
-  return clickTool(sketches, {
+  const tool = clickTool(sketches, {
     reset() {
       latest = null;
       hover = null;
@@ -107,6 +107,7 @@ export function createExtendTool(sketches: SketchEditor): Tool {
       });
     },
   });
+  return withHint(tool, 'hint.extend.pick');
 }
 
 function sameKey(a: ExtendKey, b: ExtendKey): boolean {

@@ -3,7 +3,7 @@
 // radius or distance last used in the session, and the tool itself: the kernel is asked
 // asynchronously for the geometry of the pair under the cursor (the last request wins), the
 // preview shows the new curve, a click writes the edit by SketchSession.rewrite and opens its
-// dimension.
+// dimension. The hint HUD (M35) asks for the first curve (or a corner), then for the second one.
 
 import type { Vec2 } from '@/core';
 import {
@@ -68,9 +68,16 @@ export interface CornerKey {
 /** The values remembered in a session: one for fillets, one for both chamfers. */
 export type MemoryKind = 'fillet' | 'chamfer';
 
+/** The hint keys of a tool (M35): before the first curve (or a corner) and after it. */
+export interface CornerHints {
+  readonly first: string;
+  readonly second: string;
+}
+
 /** What makes the fillet or chamfer tool. */
 export interface CornerToolSpec<K extends CornerKey, A> {
   readonly memory: MemoryKind;
+  readonly hints: CornerHints;
   /** The request of the pair with the value, or null when the tool offers nothing for it. */
   key(pair: PickedPair, value: number): K | null;
   /** Whether two keys ask the same (beyond the pair and the value, which are compared already). */
@@ -117,6 +124,13 @@ export function createCornerTool<K extends CornerKey, A>(
   let latest: Request<K, A> | null = null;
   /** The key of the last move, so a late answer draws the preview only where it belongs. */
   let hover: K | null = null;
+  /** The ctx of the activation, for the hint; null when inactive. */
+  let hintCtx: ToolContext | null = null;
+
+  /** The hint of the current step: the first curve or the second one. */
+  function showHint(): void {
+    hintCtx?.setHint({ key: first === null ? spec.hints.first : spec.hints.second });
+  }
 
   const same = (a: K, b: K): boolean => sameKey(a, b) && spec.sameRest(a, b);
 
@@ -153,11 +167,12 @@ export function createCornerTool<K extends CornerKey, A>(
     previewPairs(ctx, session, curvePairs(curve2(picked, pointsById({ entities, constraints }))));
   }
 
-  return clickTool(sketches, {
+  const tool = clickTool(sketches, {
     reset() {
       first = null;
       latest = null;
       hover = null;
+      showHint();
     },
     onMove(ctx, session, x, y) {
       const { key } = target(ctx, session, x, y);
@@ -180,10 +195,12 @@ export function createCornerTool<K extends CornerKey, A>(
       if (key === null) {
         // A curve starts a pair of two curves; anything else forgets the first one.
         first = under?.kind === 'edge' ? { id: under.edge.id, at: under.at } : null;
+        showHint();
         showFirst(ctx, session);
         return;
       }
       first = null;
+      showHint();
       clearPreview(ctx);
       const req = request(session, key);
       void req.answer.then(async (answer) => {
@@ -204,10 +221,25 @@ export function createCornerTool<K extends CornerKey, A>(
       if (!isPlainEscape(e) || first === null) return false;
       first = null;
       hover = null;
+      showHint();
       clearPreview(ctx);
       return true;
     },
   });
+
+  return {
+    ...tool,
+    activate(ctx) {
+      tool.activate(ctx);
+      hintCtx = ctx;
+      showHint();
+    },
+    deactivate() {
+      // Before the reset of clickTool: a deactivated tool shows no hint.
+      hintCtx = null;
+      tool.deactivate();
+    },
+  };
 }
 
 function sameKey(a: CornerKey, b: CornerKey): boolean {
