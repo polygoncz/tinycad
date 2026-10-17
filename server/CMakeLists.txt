@@ -21,6 +21,8 @@ include(TinycadWarnings)
 
 enable_testing()
 
+add_subdirectory(third_party/planegcs)
+
 add_subdirectory(src/proto)
 add_subdirectory(src/core)
 add_subdirectory(src/document)
@@ -28,6 +30,8 @@ add_subdirectory(src/features)
 add_subdirectory(src/ops)
 add_subdirectory(src/geometry)
 add_subdirectory(src/kernel)
+add_subdirectory(src/sketch)
+add_subdirectory(src/solver-planegcs)
 add_subdirectory(src/service)
 add_subdirectory(src/app)
 
@@ -38,3 +42,5 @@ add_subdirectory(test/ops)
 add_subdirectory(test/service)
 add_subdirectory(test/kernel)
 add_subdirectory(test/shared-cases)
+add_subdirectory(test/sketch)
+add_subdirectory(test/solver-planegcs)

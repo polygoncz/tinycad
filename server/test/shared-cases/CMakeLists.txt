@@ -13,3 +13,7 @@ target_link_libraries(tinycad_shared_cases_tests PRIVATE
 tinycad_warnings(tinycad_shared_cases_tests)
 
 gtest_discover_tests(tinycad_shared_cases_tests DISCOVERY_MODE PRE_TEST)
+
+# sketch.* (M44): the sketch model and the native planegcs adapter.
+target_sources(tinycad_shared_cases_tests PRIVATE sketch_cases_test.cpp)
+target_link_libraries(tinycad_shared_cases_tests PRIVATE tinycad_sketch tinycad_solver_planegcs)
