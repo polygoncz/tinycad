@@ -5,6 +5,7 @@ import {
   createDocument,
   createExtrudedBlock,
   extrudeArrowGrip,
+  holdsValue,
   paramInput,
   reloadWhenSaved,
   timelineFeature,
@@ -12,7 +13,8 @@ import {
 
 // The connection drops for 2 s in the middle of a drag (M46): the session repeats the changes
 // with the same operation_id (N86), the title bar says it is reconnecting, and once the network
-// is back the value of the release is what the core stores.
+// is back the value of the release is what the core stores. The dialog holds the entered value
+// meanwhile: an answer to an older step never overwrites it (N164).
 
 const OUTAGE_MS = 2000;
 
@@ -20,7 +22,7 @@ const OUTAGE_MS = 2000;
 // WebKit); the session repeats them (N86).
 test.use({
   allowedConsoleError:
-    /^Failed to load resource: (?:net::ERR_INTERNET_DISCONNECTED|WebKit encountered an internal error)$/,
+    /^Failed to load resource: (?:net::ERR_INTERNET_DISCONNECTED|WebKit encountered an internal error)(?: \(\S+\))?$/,
 });
 
 test('a 2 s outage during a drag: reconnecting is shown, the released value is stored', async ({
@@ -50,7 +52,7 @@ test('a 2 s outage during a drag: reconnecting is shown, the released value is s
   await page.mouse.up();
   const field = paramInput(page, 'Vzdálenost');
   const released = await field.inputValue();
-  await expect(page.getByRole('status', { name: 'Uloženo' })).toBeVisible();
+  await holdsValue(page, field, released, 0);
   await expect(page.getByText('Spojení se serverem přerušeno, obnovuji spojení…')).toHaveCount(0);
   await expect(field).toHaveValue(released);
   await confirmDialog(edit);

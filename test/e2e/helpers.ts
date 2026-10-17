@@ -337,3 +337,48 @@ export async function extrudeArrowGrip(page: Page): Promise<CanvasOffset> {
   const { dx, dy } = await isoCanvasOffset(page, BLOCK_MIN, BLOCK_MAX, [20, 10, 10]);
   return [dx, dy - 24];
 }
+
+/**
+ * Holds every unary call of the core `ms` before it goes on (route.continue, N72); the stream
+ * WatchSession is not delayed. A slow network for the tests of the thin client (M46, M52).
+ */
+export async function delayUnaryCalls(page: Page, ms: number): Promise<void> {
+  await page.route(
+    (url) => url.pathname.startsWith('/api/tinycad.v1.'),
+    async (route) => {
+      if (!route.request().url().endsWith('/WatchSession')) {
+        await new Promise((resolve) => setTimeout(resolve, ms));
+      }
+      await route.continue();
+    },
+  );
+}
+
+/** The rows of the history panel (newest first); the panel is opened first. */
+export async function historyRows(page: Page): Promise<Locator> {
+  const panel = page.getByRole('complementary', { name: 'Historie úprav' });
+  if ((await panel.count()) === 0) {
+    await page.getByRole('button', { name: 'Historie úprav', exact: true }).click();
+  }
+  return panel.getByRole('listitem');
+}
+
+/**
+ * The field keeps `value` while the page waits for "Uloženo" and for `forMs` after it: an answer
+ * to an older change never overwrites the entered value (N164).
+ */
+export async function holdsValue(
+  page: Page,
+  field: Locator,
+  value: string,
+  forMs: number,
+): Promise<void> {
+  const saved = page.getByRole('status', { name: 'Uloženo' });
+  let savedAt: number | null = null;
+  for (;;) {
+    expect(await field.inputValue()).toBe(value);
+    if (savedAt === null && (await saved.count()) === 1) savedAt = Date.now();
+    if (savedAt !== null && Date.now() - savedAt >= forMs) return;
+    await page.waitForTimeout(50);
+  }
+}

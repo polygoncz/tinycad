@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import type { Locator, Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import {
   clickCanvas,
   confirmDialog,
@@ -7,10 +7,13 @@ import {
   createExtrudedBlock,
   dimensionInput,
   dimensionValue,
+  delayUnaryCalls,
   dragOnCanvas,
   drawDimensionedRectangle,
   extrudeArrowGrip,
   fillParam,
+  historyRows,
+  holdsValue,
   openConstraintSection,
   openTool,
   paramInput,
@@ -20,35 +23,13 @@ import {
   toolbarButton,
 } from './helpers';
 
-// The client over a slow network (M46): every unary call of the core waits 150 ms before it
-// leaves the browser (the stream WatchSession does not). The optimistic mirror keeps the tools
-// synchronous (N63), so a drag and a dialog work as without a server; after the release the
-// result is the last value, not one of the answers still on the way, and the whole edit is one
-// entry of the log.
+// The thin client over a slow network (M46, M52): every unary call of the core waits 150 ms before
+// it leaves the browser (the stream WatchSession does not). The feature dialog holds the values the
+// user entered until the server takes the last change (N164), so a drag and quick edits stay at
+// the last value; everything else shows the change with the answer (N168). The whole edit is one
+// entry of the log (the server merges the steps of the transaction).
 
 const DELAY_MS = 150;
-
-/** Holds every unary call of the core DELAY_MS before it goes on (route.continue, N72). */
-async function delayUnaryCalls(page: Page): Promise<void> {
-  await page.route(
-    (url) => url.pathname.startsWith('/api/tinycad.v1.'),
-    async (route) => {
-      if (!route.request().url().endsWith('/WatchSession')) {
-        await new Promise((resolve) => setTimeout(resolve, DELAY_MS));
-      }
-      await route.continue();
-    },
-  );
-}
-
-/** The rows of the history panel (newest first); the panel is opened first. */
-async function historyRows(page: Page): Promise<Locator> {
-  const panel = page.getByRole('complementary', { name: 'Historie úprav' });
-  if ((await panel.count()) === 0) {
-    await page.getByRole('button', { name: 'Historie úprav', exact: true }).click();
-  }
-  return panel.getByRole('listitem');
-}
 
 /** The number in a param field of the open dialog ('.' or ',' as the decimal mark). */
 async function paramValue(page: Page, label: string): Promise<number> {
@@ -80,7 +61,7 @@ async function writesSettled(page: Page, writes: readonly number[]): Promise<voi
 }
 
 test.beforeEach(async ({ page }) => {
-  await delayUnaryCalls(page);
+  await delayUnaryCalls(page, DELAY_MS);
 });
 
 test('dragging the arrow of an extrude: the last value stays, one entry', async ({ page }) => {
@@ -97,8 +78,14 @@ test('dragging the arrow of an extrude: the last value stays, one entry', async 
   const dragged = await paramValue(page, 'Vzdálenost');
   expect(dragged).toBeGreaterThan(12);
 
-  // The answers of the drag come in after the release: the field keeps the last value.
-  await expect(page.getByRole('status', { name: 'Uloženo' })).toBeVisible();
+  // The answers of the drag come in after the release: the field keeps the last value, also for
+  // a second after the last answer (N164).
+  await holdsValue(
+    page,
+    paramInput(page, 'Vzdálenost'),
+    await paramInput(page, 'Vzdálenost').inputValue(),
+    1000,
+  );
   expect(await paramValue(page, 'Vzdálenost')).toBeCloseTo(dragged, 6);
   await confirmDialog(edit);
   await expect(rows).toHaveCount(3);

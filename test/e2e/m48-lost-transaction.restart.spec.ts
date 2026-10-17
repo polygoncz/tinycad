@@ -9,6 +9,13 @@ import { confirmDialog, createDocument, fillParam, openTool, timelineFeature } f
 
 const LOST = 'Server přerušil rozpracovanou úpravu. Dialog se zavřel a změna se neuložila.';
 
+// While the core restarts, Envoy answers the stream of the session with 503 and the browser
+// reports the failed request itself; the session opens it again (spec 14). Only that report.
+test.use({
+  allowedConsoleError:
+    /^Failed to load resource: the server responded with a status of 503 \(.*\) \(http:\/\/[^ ]+\/tinycad\.v1\.SessionService\/WatchSession\)$/,
+});
+
 test('a restart of the core in the middle of a dialog: the dialog closes with a toast', async ({
   page,
 }) => {
