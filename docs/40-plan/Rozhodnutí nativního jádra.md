@@ -359,3 +359,9 @@ Upřesnění hrubého plánu [[M52-tenky-klient|M52]] (plánovač 2026-10-17, po
 - **N170 – Jeden `ToastStack`** (N160): `AppShell` kreslí jediný zásobník s hlášeními sezení i s chybou zavření předchozího dokumentu (prop od `App.vue`); `App.vue` kreslí vlastní jen bez otevřeného dokumentu (seznam dokumentů).
 - **N171 – Pořadí úkolů M52 pro jednoho implementátora**, se zeleným `npm run check` po každém úkolu: nejdřív porty a tenký dispečer s přechodovým adaptérem `anOpsSession` nad starým paměťovým dvojníkem (testy se zatím jen přizpůsobí), pak přepis testů na `FakeOps`, pak mazání. Úkoly 2 (testy) a 4 (toast) mají disjunktní soubory a smí běžet souběžně ve dvou worktree; doporučuji postupně (přehled, N2).
 - **N172 – Skica posílá `setParams` po každé vyřešené úpravě jako dnes**, ne až při Hotovo. Proč: spec 14 bere `Apply` skici jako potvrzení úpravy (server ji znovu vyřeší a klient převezme jeho souřadnice, Q097), N65 drží lokální skicu jen pro odmítnutou úpravu a slučování v transakci i ve frontě drží jeden krok; `SketchSession` se proto v M52 nemění, mění se jen zdroj jejích dat (rozpracované hodnoty dialogu, N164).
+
+## M50 – occt2d a vrstva rpc
+
+- **N173 – Geometrická varianta stavu nečekané výjimky se jmenuje `internalGeometryStatusOfCurrentException`** (důvod `KERNEL_INTERNAL`), obecná zůstává `internalStatusOfCurrentException` (`UNSPECIFIED`); obě v `rpc/status`. Texty kontroly křivek bere `occt2d` z kopie v jádře (s čísly).
+- Tím je vyřešené N77 a N53 podle Pavla; N110-entry (`Change.entry` jako JSON) zůstává k pozdějšímu rozhodnutí.
+

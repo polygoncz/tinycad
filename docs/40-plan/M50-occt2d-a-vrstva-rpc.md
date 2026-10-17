@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 50
 aliases:
   - M50
@@ -13,8 +13,8 @@ specs:
   - "[[01-architektura]]"
 depends_on:
   - "[[M47-uklid-a-dokonceni]]"
-started:
-finished:
+started: 2026-10-17
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-17
@@ -45,11 +45,11 @@ Proč `occt2d` interní (jen `kernel` a `geometry`): její hlavičky nesou typy 
 
 ## Úkoly
 
-- [ ] 1. `tinycad_occt2d`: jeden 2D základ, `kernel` a `geometry` nad ním, kopie pryč (N77).
-- [ ] 2. Doménové výsledky sezení: `session/read_model.hpp`, `session/session_event.hpp`, `RuntimeDocument` a `EventRing` bez typů `tinycad.v1`.
-- [ ] 3. `tinycad_rpc`: služby, převody, stavy chyb a otisk požadavku přesunuté ze `session` a `service`; `session` bez `tinycad_proto`.
-- [ ] 4. Ověření: všechny sdílené případy, testy gRPC a e2e beze změny zelené; kontrola, že pod rpc nikdo nevidí `.pb.h`.
-- [ ] 5. Spec 01, 06, 14 a deník (hlavní sezení).
+- [x] 1. `tinycad_occt2d`: jeden 2D základ, `kernel` a `geometry` nad ním, kopie pryč (N77).
+- [x] 2. Doménové výsledky sezení: `session/read_model.hpp`, `session/session_event.hpp`, `RuntimeDocument` a `EventRing` bez typů `tinycad.v1`.
+- [x] 3. `tinycad_rpc`: služby, převody, stavy chyb a otisk požadavku přesunuté ze `session` a `service`; `session` bez `tinycad_proto`.
+- [x] 4. Ověření: všechny sdílené případy, testy gRPC a e2e beze změny zelené; kontrola, že pod rpc nikdo nevidí `.pb.h`.
+- [x] 5. Spec 01, 06, 14 a deník (hlavní sezení).
 
 ## Akceptační kritéria
 
@@ -236,4 +236,8 @@ std::vector<v1::FeatureTypeDescriptor> describeFeatureTypes(const document::Feat
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+_Návrh Clauda (stopa A)._
+
+- `tinycad_occt2d` (interní, jen kernel a geometry) nahradil obě kopie 2D základu; `tinycad_rpc` převzal `service` a gRPC části `session`. Doména (`session` a níž) protobuf nezná – hlídá to překladač (úmyslný include `.pb.h` neprojde).
+- Přesun `feature_types.cpp` jako čistý `git mv` v samostatném commitu: git při sloučení M49 sledoval přejmenování a `describeRule` přešel bez konfliktu (N148).
+- `check:server` 1769, `check` 5857 unit / 332 integračních, `test:e2e` 104 zelené.
