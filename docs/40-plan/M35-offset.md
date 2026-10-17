@@ -45,7 +45,7 @@ Pavel 2026-10-16: „Chtěl bych ještě dodělat do Sketch následující featu
 - [x] Kontrakt ([[12-skicar#Offset (M35)]], [[06-geometricke-jadro#Stav po M35]]), otázka Q095.
 - [ ] Jádro: `offsetCurves`.
 - [x] `sketch`: vazba a kóta `offset` (model, parse, edit, measure, poloha kóty).
-- [ ] Řešič planegcs: vazba `offset`.
+- [x] Řešič planegcs: vazba `offset`.
 - [ ] `sketch`: `chainOf`, `offsetEdit`, port; `app`.
 - [ ] `sketcher`: kóta offsetu v kresbě, nástroj, HUD nápověda nástrojů stopy A, e2e.
 - [ ] Spec podle skutečnosti.
@@ -98,5 +98,11 @@ Jak OCCT řeší ekvidistanty (spojování v rozích, zánik krátkých segment�
 ## Průběh stopy
 
 _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hlavní sezení to při sloučení přenese do deníku.)_
+
+**2026-10-17 – prototyp OCCT offsetu:** `BRepOffsetAPI_MakeOffset` funguje jen nad vlastní rovinnou plochou (ze samotného drátu selže i úsečka); úsečky a oblouky vychází přesně, spline jako `OffsetCurve` (aproximace nutná), hrany výstupu neseřazené. Celá zpráva v poznámkách stopy (`stopa-a-m35-prototyp-offset.md`).
+
+**Úkol 2 hotový** – `'offset'` na konci `DIMENSION_KINDS`, `placeDimension` ji nezná, rámec kóty oblouku v úhlu popisku zdroje.
+
+**Úkol 3 – řešič narazil na degeneraci:** tečný spoj úsečky a oblouku kopie je dvojnásobný kořen (`p2l_distance` + bod na kružnici `r ± d` mají rovnoběžné gradienty) → `redundant`, `dof 8`, body na 7e-5. Hlavní sezení zvolilo **tečnost v bodě** místo `p2l` v takovém spoji (podle současné polohy); zaoblený obdélník pak `dof 0` bez nadbytečnosti, body na 1e-7. Přijatá omezení: tečný spoj oblouk–oblouk dál degenerovaný; strana kopie může při velké změně originálu přeskočit (jako `pointLineDistance`). Spec 12 doplněna.
 
 ## Retrospektiva

@@ -5,6 +5,7 @@ import { DebugMode, GcsWrapper, SolveStatus, type SketchPrimitive } from '@salus
 import { bspline, type BSplineShape, type Vec2 } from '@/core';
 import { isPattern } from '@/sketch';
 import type {
+  SketchArc,
   SketchBSpline,
   SketchConstraint,
   SketchConstraintId,
@@ -490,11 +491,99 @@ function constraintPrimitives(
       throw new Error(`diameter of a ${curve.kind}`);
     }
     case 'offset':
-      throw new Error('offset: until task 3 of M35');
+      return c.pairs.flatMap((pair, i) =>
+        offsetPrimitives(`${c.id}:${String(i)}`, pair, c, entities),
+      );
   }
 }
 
 type Curve = SketchCurve;
+
+/** Relative tolerance of "the copy line is tangent to the copy arc in their shared point". */
+const TANGENT_TOLERANCE = 1e-6;
+
+type Offset = Extract<SketchConstraint, { readonly kind: 'offset' }>;
+
+/**
+ * One pair of an offset (M35, spec 12 "Vazba offset"), ids `<pair id>:a|b`.
+ *
+ * Lines: every end point of the copy at the distance from the source carrier line (unsigned: the
+ * side holds from the position for small steps only – a large change of the original may flip it
+ * over, like pointLineDistance; parallelism follows). An end point shared with the copy of an
+ * arc of the same offset, where the copy line is tangent to that arc now, gets a tangent in the
+ * point instead: there the distance would make a double root (the offset line touches the
+ * offset circle), a rank-deficient system with a redundancy and a slow convergence. A line
+ * tangent at both ends is then defined by the concentric arcs r ± d alone.
+ *
+ * Arcs and circles share the centre (the data), so only the radii: a signed difference whose
+ * order follows the current position like axisDistancePrimitive – the copy outside (or equal) →
+ * copy − source, inside → source − copy. Known limit: two copy arcs tangent in a shared point
+ * stay degenerate (a point on two tangent circles).
+ */
+function offsetPrimitives(
+  id: string,
+  pair: Offset['pairs'][number],
+  c: Offset,
+  entities: ReadonlyMap<SketchEntityId, SketchEntity>,
+): SketchPrimitive[] {
+  const source = curveOf(entities, pair.source);
+  const copy = curveOf(entities, pair.copy);
+  if (source.kind === 'line' && copy.kind === 'line') {
+    return (
+      [
+        [`${id}:a`, copy.p1],
+        [`${id}:b`, copy.p2],
+      ] as const
+    ).map(([pid, end]): SketchPrimitive => {
+      const arc = tangentCopyArc(c, copy, end, entities);
+      return arc === undefined
+        ? { id: pid, type: 'p2l_distance', p_id: end, l_id: source.id, distance: c.value }
+        : tangentAtEndPrimitive(pid, copy, arc, end, entities);
+    });
+  }
+  const rs = radiusOf(source, entities);
+  const rc = radiusOf(copy, entities);
+  const [from, to] = rc >= rs ? [source.id, copy.id] : [copy.id, source.id];
+  return [
+    {
+      id: `${id}:a`,
+      type: 'difference',
+      param1: { o_id: from, prop: 'radius' },
+      param2: { o_id: to, prop: 'radius' },
+      difference: c.value,
+    },
+  ];
+}
+
+/**
+ * The copy arc of the same offset that ends in `end` of the copy line and to which the line is
+ * tangent there now (its direction perpendicular to the radius); undefined if none.
+ */
+function tangentCopyArc(
+  c: Offset,
+  line: SketchLine,
+  end: SketchEntityId,
+  entities: ReadonlyMap<SketchEntityId, SketchEntity>,
+): SketchArc | undefined {
+  const along = direction(entities, line.p1, line.p2);
+  for (const { copy } of c.pairs) {
+    const arc = curveOf(entities, copy);
+    if (arc.kind !== 'arc' || (arc.start !== end && arc.end !== end)) continue;
+    const radius = direction(entities, arc.center, end);
+    const dot = along.x * radius.x + along.y * radius.y;
+    const scale = Math.hypot(along.x, along.y) * Math.hypot(radius.x, radius.y);
+    if (Math.abs(dot) <= TANGENT_TOLERANCE * scale) return arc;
+  }
+  return undefined;
+}
+
+/** The current radius of a circle or an arc (an arc: from its start point). */
+function radiusOf(c: Curve, entities: ReadonlyMap<SketchEntityId, SketchEntity>): number {
+  if (c.kind === 'circle') return c.radius;
+  if (c.kind !== 'arc') throw new Error(`offset of a ${c.kind}`);
+  const d = direction(entities, c.center, c.start);
+  return Math.hypot(d.x, d.y);
+}
 
 /**
  * hDistance/vDistance: the model value is unsigned, planegcs `difference` is signed
