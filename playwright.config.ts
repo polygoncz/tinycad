@@ -11,6 +11,8 @@ import { defineConfig } from '@playwright/test';
 const PORT = Number(process.env.E2E_PORT ?? 4173);
 const BASE_URL = `http://localhost:${String(PORT)}`;
 process.env.E2E_CORE_PORT ??= '18080';
+/** Specs that restart the core: only in the project `restart`. */
+const RESTART_SPECS = /\.restart\.spec\.ts$/;
 
 export default defineConfig({
   testDir: 'test/e2e',
@@ -33,13 +35,27 @@ export default defineConfig({
     locale: 'cs-CZ',
     trace: 'retain-on-failure',
   },
-  // `npm run test:e2e` runs only chrome (day-to-day work); `npm run test:e2e:full` runs both,
-  // when a milestone or a track is closed.
+  // `npm run test:e2e` runs chrome and restart (day-to-day work); `npm run test:e2e:full` runs
+  // all, when a milestone or a track is closed.
   projects: [
     // The installed Google Chrome, no downloaded Chromium.
-    { name: 'chrome', use: { channel: 'chrome' } },
-    // WebKit downloaded by `npx playwright install webkit`.
-    { name: 'webkit', use: { browserName: 'webkit' } },
+    { name: 'chrome', use: { channel: 'chrome' }, testIgnore: RESTART_SPECS },
+    // M48 (N152): the specs that restart the shared core, after every other project, so the
+    // restart never ends the sessions of a test running beside them.
+    {
+      name: 'restart',
+      use: { channel: 'chrome' },
+      testMatch: RESTART_SPECS,
+      dependencies: ['chrome'],
+    },
+    // WebKit downloaded by `npx playwright install webkit`. After restart in the full run: a
+    // restart while WebKit tests run would end their sessions (the projects share the core).
+    {
+      name: 'webkit',
+      use: { browserName: 'webkit' },
+      testIgnore: RESTART_SPECS,
+      dependencies: ['restart'],
+    },
   ],
   webServer: {
     // vite.config.ts points the proxy of /api at E2E_CORE_PORT (inherited from this process).

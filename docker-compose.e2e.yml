@@ -1,7 +1,8 @@
 # tinycad native core for the e2e tests (M46, decision N72): scripts/e2e-core.mjs starts it as
 # the Compose project tinycad-e2e-<E2E_PORT>, so every worktree (its own E2E_PORT) has its own
-# containers. The documents live in a tmpfs: they vanish with `down`, and the e2e never sees the
-# volume tinycad-data of docker-compose.yml (Pavel's documents). Envoy listens on E2E_CORE_PORT
+# containers. The documents live in an anonymous volume: they vanish with `down --volumes`, the e2e
+# never sees the volume tinycad-data of docker-compose.yml (Pavel's documents), and unlike a tmpfs
+# they survive `restart core` (M48: the restart of the core in the middle of a dialog). Envoy listens on E2E_CORE_PORT
 # (default 18080); the `vite preview` of playwright.config.ts forwards /api there.
 
 services:
@@ -21,12 +22,10 @@ services:
       TINYCAD_DATA_DIR: /data
       TINYCAD_SESSION_IDLE_SECONDS: '600'
     volumes:
-      # World-writable: the core runs as the non-root user tinycad (N103).
-      - type: tmpfs
+      # A new anonymous volume takes the ownership of /data in the image (the non-root user
+      # tinycad, N103).
+      - type: volume
         target: /data
-        tmpfs:
-          size: 268435456
-          mode: 01777
     stop_grace_period: 10s
 
   envoy:
