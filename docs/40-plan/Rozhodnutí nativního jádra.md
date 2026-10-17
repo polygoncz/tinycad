@@ -43,7 +43,7 @@ _(doplňuje se průběžně)_
 
 - **N3 ⚠ – Aplikace volí adaptér `SketchGeometry` podle `VITE_CORE_URL`.** Se serverem jde 2D geometrie přes `GeometryService`, bez něj dál přes WASM. Proč: do [[M46-klient-nad-read-modelem|M46]] má aplikace běžet i bez Dockeru (Roadmapa: „až do té doby aplikace běží“) a stávající e2e nemají záviset na Compose. E2E přes server běží s `E2E_CORE=1`.
 - **N4 – C++ kód z protobufu generuje CMake v kontejneru** (`protobuf_generate`, `grpc_cpp_plugin` z vcpkg), `buf generate` jen pro TS. Proč: verze `protoc` pro C++ musí sedět s knihovnou protobuf z vcpkg; přes buf by šlo o druhý zdroj pravdy.
-- **N5 – Sdílený pojmenovaný svazek `tinycad-vcpkg-cache`** pro binární cache vcpkg napříč worktree. Proč: souběžné stopy by jinak každá překládaly OCCT a gRPC (desítky minut).
+- **N5 – Sdílená binární cache vcpkg** jako BuildKit cache mount `id=tinycad-vcpkg-cache` (ne pojmenovaný svazek – build Dockeru svazek připojit nemůže), sdílená všemi worktree na jednom démonu. Proč: souběžné stopy by jinak každá překládaly OCCT a gRPC (první build ~28 min, další ~20 s).
 - **N6 ⚠ – Slučování požadavků `GeometryService` jen se stejným klíčem.** Jeden požadavek v letu na metodu zůstává, ale „poslední vyhrává“ jen mezi čekajícími voláními se stejným klíčem: `intersections` podle množiny id křivek, `offset` podle id řetězce a `closed`; `segment` a `fillet` se neslučují (fronta). Proč: implementátor M39 našel, že slučování podle spec 14 by nástrojům trim, split, zkosení a extend podstrčilo výsledek cizího volání (souběžné `segment`, `intersections` nástroje vedle bodů křížení celé skici). Spec 14 upravená.
 - **N7 – `remote` smí záviset na `kernel`** (`createKernelError`, `KernelErrorCode`), aby chyby přes síť vypadaly jako z WASM jádra. Doplněno k [[Q106 Moduly klienta pro gRPC|Q106]] a do [[01-architektura]].
 - **N8 – Vygenerovaný modul `src/protocol` má i vygenerovaný `index.ts`** (`scripts/gen-proto.mjs`), takže se do něj neimportuje hluboko; `gen:proto` běží jako pre-skript a snese souběžné spuštění v `run-p`.
@@ -101,3 +101,10 @@ Zafixované hlavičky navíc: `server/src/storage/include/tinycad/storage/{store
 
 - **N47 ⚠ – Opětovné řešení skici proběhne před dispečerem (`SketchOperationSolver`), ne v handleru `feature.setParams`.** Sezení (M45) pošle každou `Dispatch`/`Apply` operaci přes `SketchOperationSolver`, který u `setParams` a `feature.add` skici (i v dávce) nahradí `entities` řešením nativního planegcs, nebo vrátí `SKETCH_NOT_SOLVED`; do logu jde vyřešená operace. Proč: přehrání logu, undo i načtení pak řešič nepotřebují a zůstávají deterministické (handlery jsou čisté funkce); `ops` nezávisí na řešiči. ⚠ protože Q103 a hrubý plán M44.1 mluví o řešení „v handleru“.
 - **N48 – Klíč `sketch.notSolved` patří do `src/ui/i18n/{cs,en}.ts` vedle `sketch.solverFailed`.** Proč: hlášky skicáře jsou tam, ne v `messages` pluginu skici; je to UI, na které se pravidlo zmrazení domény nevztahuje.
+
+### Sloučení M39
+
+- **N49 ⚠ – `check:server` není součástí `npm run check`**, je samostatný a nový `npm run check:full` pouští obojí. Odchylka od [[0030-nativni-jadro-pres-grpc|ADR 0030]] bod 8. Proč: `check` by pak vyžadoval běžící Docker i pro práci jen na klientovi; při slučování milníků se pouští `check:full`.
+- **N50 – Triplet `arm64-linux-release`** (jen release build závislostí, poloviční čas) a staticky slinkovaná binárka v obrazu 206 MB.
+- **N51 – 2D geometrie má vlastní `ErrorCode`** (`InvalidInput`, `OperationFailed`, `Internal`) a výsledné typy (`CurveHit`, `FilletArc`, `OffsetCurve`) v `tinycad/geometry/geometry.hpp`, aby nezávisela na knihovně jádra.
+- **N52 – Envoy přijme cestu s předponou `/api` i bez ní** (Vite proxy předponu odstraňuje).

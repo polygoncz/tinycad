@@ -27,3 +27,4 @@ src/protocol/
 node_modules
 # Types the Claude Code engine lays beside a mod at load.
 .claude/skills/*/.claude-plugin/types/
+server/build/

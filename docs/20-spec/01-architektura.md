@@ -108,13 +108,15 @@ Prstence 1 a 2 se typují konfigurací `tsconfig.domain.json` bez knihovny `DOM`
 | `sketch` (M12) | `core` | – |
 | `solver-planegcs` (M12) | `core`, `sketch` | `@salusoft89/planegcs` ([[0016-planegcs-resic-vazeb\|ADR 0016]]) |
 | `text-opentype` (M37) | `core`, `sketch` | `opentype.js` ([[0029-text-ve-skice-pres-opentype\|ADR 0029]]) |
+| `protocol` (M39) | – (vygenerovaný z `server/proto` přes `npm run gen:proto`, i `index.ts`; není v gitu, ESLint a Prettier ho ignorují) | `@bufbuild/protobuf` |
+| `remote` (M39) | `core`, `kernel` (`createKernelError`, `KernelErrorCode`), `sketch` (porty a typy), `protocol` | `@bufbuild/protobuf`, `@connectrpc/connect`, `@connectrpc/connect-web` ([[Q106 Moduly klienta pro gRPC\|Q106]], [[14-protokol]]) |
 | `regen` | `core`, `document`, `kernel`, `sketch` | – |
 | `render` | `core`, `kernel` (jen typy: `MeshData`, `MeshOps`, `MeshQuality`, `ShapeHandle`, `BoundingBox`), `interaction` (jen typy: `ViewportPort`, události, `BodyId`, [[Q056 Odkud render bere BodyId\|Q056]]) | `three` (včetně `three/addons`) |
 | `interaction` | `core`, `document`, `ops`, `sketch` | – |
 | `sketcher` | `core`, `document`, `ops` (jen `ops/testing` v testech, pravidlo `sketcher-ops-only-in-tests`), `sketch`, `interaction` | – |
 | `plugin-api` | `core`, `document`, `regen`, `interaction` | – |
 | `features/*` | `core`, `document`, `ops`, `kernel`, `sketch`, `regen`, `interaction`, `plugin-api` | – |
-| `app` | vše kromě `ui` | – |
+| `app` | vše kromě `ui` (od M39 i `remote`; `protocol` jen přes `remote`) | – |
 | `ui` | `app`, `core`, typy z `document`, `interaction` a `sketcher`, hodnoty z `interaction/constants.ts` a `sketcher/constants.ts` | `vue`, `vue-i18n`, `@tabler/icons-webfont` ([[0014-preklady-vue-i18n-a-klice\|ADR 0014]], [[11-ui#Styl]]) |
 
 Důležité zákazy:
