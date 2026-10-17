@@ -215,7 +215,8 @@ class FeatureSchemaRegistryReader {
 
 class FeatureSchemaRegistry final : public FeatureSchemaRegistryReader {
  public:
-  /** Throws AssertionError: duplicate type, version < 1, version > 1 without migrate. */
+  /** Throws AssertionError: duplicate type, version < 1, version > 1 without migrate, and an
+   * invalid rule (no code, unknown param, param == other, a param that is not a reference list). */
   void add(FeatureSchemaPtr schema);
 
   [[nodiscard]] const FeatureSchema* find(std::string_view type) const override;

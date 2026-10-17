@@ -339,3 +339,8 @@ Upřesnění hrubých plánů z [[#Pavlova rozhodnutí sporných míst (2026-10-
 - **N159 – Projekt `restart` běží po `chrome` a WebKit v plném běhu až po něm**, aby restart jádra nepadl do souběžných testů.
 - **N160 – Hlášení zamítnuté změny bere u `reason: UNSPECIFIED` kód gRPC**; toast zůstává dole uprostřed; dva `ToastStack` (chyba zavření dokumentu a hlášení sezení) se mohou výjimečně překrýt – sloučit při M52.
 
+## M49 – Pravidla validace v popisu typů
+
+- **N161 – N67 je vyřešené pro všechna deklarativně popsatelná pravidla** (`boolean.sameBody` jako `DisjointRefs`); pravidla skici zůstávají jen na serveru a dialog je ukáže až ve stavu featury. Chyba pravidla potvrzení nezakáže (stejně jako obecné kódy).
+- **N162 – Běžec TS `schema` se nezapisuje** (`recorded: false`): `cases:record` by jinak přepsal případy výstupem bez kódů jen pro server; referencí zůstává C++ (N124).
+
