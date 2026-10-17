@@ -109,6 +109,7 @@ function aReadModel(init: ModelInit = {}): ReadModelData {
     document: {
       id: 'doc-1' as DocumentId, // test ids are trusted
       name: init.name ?? 'Part',
+      createdAt: 0,
       lastSeq: init.lastSeq ?? 0,
       studio,
     },

@@ -2,8 +2,14 @@
 // Public API of app (spec 11, "Kompoziční kořen (app)"). Everything else in this folder is internal.
 
 export { createAppSession } from './session';
-export { createDocumentList, openAppSession } from './browser';
-export type { DocumentListOptions, OpenAppSessionOptions } from './browser';
+export { createDocumentList, openAppSession, openBrowserMigration } from './browser';
+export type {
+  BrowserMigrationOptions,
+  DocumentListOptions,
+  OpenAppSessionOptions,
+} from './browser';
+// M46 (N71): the move of the documents of IndexedDB to the core, for the start screen.
+export type { BrowserMigration, MigrationFailure, MigrationReport } from './browser-migration';
 export { BUILT_IN_PLUGINS } from './plugins';
 export { BUILT_IN_OPERATION_TYPES } from './operation-types';
 export type { AppSession, AppSessionDeps, AppViewport } from './session';

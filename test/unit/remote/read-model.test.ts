@@ -57,6 +57,7 @@ describe('decodeReadModel', () => {
         document: {
           documentId: 'doc-7',
           name: 'Bracket',
+          createdAtMs: 1_700_000_000_000n,
           lastSeq: 12n,
           features: [
             {
@@ -85,6 +86,7 @@ describe('decodeReadModel', () => {
     expect(data.document).toEqual({
       id: 'doc-7',
       name: 'Bracket',
+      createdAt: 1_700_000_000_000,
       lastSeq: 12,
       studio: {
         features: [
