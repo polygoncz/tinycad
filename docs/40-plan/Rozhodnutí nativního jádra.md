@@ -261,3 +261,8 @@ Revize (`architecture-reviewer`) nad M39–M44 a pahýly M45 nenašla porušení
 - **N137 – Při latenci dialog vysunutí otevřený před odpovědí na dokončenou skicu oblast nepředvybere** (D6 z M19.2); přijato, předvýběr se dodatečně nedoplňuje.
 - **N138 – E2E: každý test zakládá svůj dokument přes `DocumentService` z Node** (`createDocument` vrací `{ id, name }`), vlastní Compose projekt podle `E2E_PORT` s daty v tmpfs; `test:e2e:core` a `playwright.core.config.ts` zanikly.
 
+## M47 úkol 3
+
+- **N139 – Mrtvý kód bez produkčního uživatele se maže** (úkol 4): `app/dispose-open-session.ts`, `app/page-lifecycle.ts`, `app/file-names.ts`, `DocumentInfo`, `test/integration/shared-cases/support/sort.ts`; popisky `source` se zmínkou o FakeKernel v případech `regen` se přepíšou. `AppSessionDeps` zmizel s lokální cestou (odkazoval na smazané typy). Plugin skici je bez typu parametrů (`features/*` nesmí záviset na `sketch`).
+- Výsledek úkolu 3: −35 963 řádků (src −12 428, test −23 455), `dist/` 28,68 → 5,67 MB syrově, 10,08 → 2,81 MB gzip; jediný WASM v prohlížeči je `planegcs` (484 kB, N120).
+
