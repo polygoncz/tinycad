@@ -254,21 +254,18 @@ function goldenDescriptors(): readonly FeatureTypeDescriptor[] {
 }
 
 describe('golden file of the descriptors of the core (N75)', () => {
-  it(
-    'gives the same visibility for every shared case schema.visibleWhen as in C++',
-    () => {
-      const schemas = new Map<string, FeatureSchema>(
-        goldenDescriptors().map((d) => [d.type, featureSchemaOf(d)]),
-      );
-      const cases = visibleWhenCases();
-      expect(cases.length).toBeGreaterThan(0);
-      for (const c of cases) {
-        const spec = schemas.get(c.type)?.params[c.param];
-        expect(spec, `${c.name}: ${c.type}.${c.param}`).toBeDefined();
-        expect(isParamVisible(spec ?? fail(), c.params), c.name).toBe(c.visible);
-      }
-    },
-  );
+  it('gives the same visibility for every shared case schema.visibleWhen as in C++', () => {
+    const schemas = new Map<string, FeatureSchema>(
+      goldenDescriptors().map((d) => [d.type, featureSchemaOf(d)]),
+    );
+    const cases = visibleWhenCases();
+    expect(cases.length).toBeGreaterThan(0);
+    for (const c of cases) {
+      const spec = schemas.get(c.type)?.params[c.param];
+      expect(spec, `${c.name}: ${c.type}.${c.param}`).toBeDefined();
+      expect(isParamVisible(spec ?? fail(), c.params), c.name).toBe(c.visible);
+    }
+  });
 });
 
 function fail(): never {

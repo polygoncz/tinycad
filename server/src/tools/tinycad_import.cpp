@@ -7,7 +7,7 @@
 // with DocumentService::importFile and the key 'import:<sha256 of the content>', so running the
 // tool again does not duplicate a document (storage::importKey, the same key ImportDocument uses,
 // N107). The default data directory is $TINYCAD_DATA_DIR, else
-// /data/documents (the Compose volume). Prints one line per file and exits with 1 when at least one
+// /data (the Compose volume, N61). Prints one line per file and exits with 1 when at least one
 // file failed:
 //
 //   docker compose run --rm --entrypoint tinycad-import -v ~/tinycad-export:/import core /import
@@ -109,7 +109,7 @@ int usage() {
 
 int main(int argc, char** argv) {
   const char* fromEnvironment = std::getenv("TINYCAD_DATA_DIR");
-  std::string dataDir = fromEnvironment != nullptr ? fromEnvironment : "/data/documents";
+  std::string dataDir = fromEnvironment != nullptr ? fromEnvironment : "/data";
   std::vector<std::string> arguments;
   for (int i = 1; i < argc; ++i) {
     const std::string argument = argv[i];
