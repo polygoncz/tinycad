@@ -142,7 +142,7 @@ Zafixované hlavičky navíc: `server/src/session/include/tinycad/session/*.hpp`
 - **N72 – E2E proti jednomu Compose s vlastním projektem a dočasnými daty; každý test ve vlastním dokumentu.** `docker-compose.e2e.yml` (`tinycad-e2e-<port>`, `tmpfs`, vlastní port Envoy), fixture vytvoří dokument přes `DocumentService`; testy seznamu tvrdí jen o svých dokumentech. Proč: workery sdílejí server (dřív měl každý svou IndexedDB) a e2e nesmí sahat na Pavlova data.
 - **N73 – Historie úprav přes úzký port `HistoryLog`** (záznamy bez operací s `opType`, zásobníky ze serveru) místo `OperationLogReader`. Jediná změna rozhraní `interaction` v M46. Proč: `LogEntryView` operace nenese a historie je nepotřebuje.
 - **N74 – `remote` smí navíc importovat `document` a `ops` (typy operací, `OP_VERSION`).** Upraví se `.dependency-cruiser.cjs` a tabulka ve [[01-architektura]]. Proč: převody read modelu a operací vrací doménové typy, které app předává portům beze změny.
-- **N75 – Zlatý soubor `test/shared-cases/schema/feature-types.json` s popisy typů ze serveru.** Zapíše ho C++ test M45, TS test M46 z něj staví schémata a pouští sdílené případy `schema.visibleWhen`. Proč: jediný způsob, jak ověřit převod popisu v obou jazycích na stejných datech bez běžícího serveru v unit testech.
+- **N75 – Zlatý soubor s popisy typů ze serveru** (původně `test/shared-cases/schema/feature-types.json`, podle N88 `test/golden/feature-types.json`). Zapíše ho C++ test M45, TS test M46 z něj staví schémata a pouští sdílené případy `schema.visibleWhen`. Proč: jediný způsob, jak ověřit převod popisu v obou jazycích na stejných datech bez běžícího serveru v unit testech.
 
 ### Schválení plánu M45 a M46 (hlavní sezení)
 
@@ -173,4 +173,12 @@ Zafixované hlavičky navíc: `server/src/session/include/tinycad/session/*.hpp`
 - **N88 – Zlatý soubor popisů typů je `test/golden/feature-types.json`**, ne v `test/shared-cases/schema/` (N75 upřesněno). Proč: kostra sdílených případů čte každý JSON v oblasti jako případ.
 - **N89 – `DocumentView.created_at_ms`** (jen přidané pole). Proč: zrcadlo dokumentu v klientovi potřebuje celé `DocumentMeta`.
 - **N90 – Typy klienta zvolené implementátorem úkolu 1 přijaté** (`PlaneData`, `AxisData`, `HistoryData`, `RemoteDocumentSummary`, `Timers`, `ReadModelView`); sítě se z `bytes` vždy kopírují do vlastního bufferu.
+
+## M45 úkol 1 a M46 úkol 4
+
+- **N91 – Index plochy a hrany v `face_names`, `edge_names` a `face_planes` je `SubShapeIndex.index` od 0**, ne `i + 1` (spec 14 a komentáře `.proto` opravené). Proč: `SubShapeIndex` je od 0 v TS i v C++, `i + 1` byl překlep návrhu.
+- **N92 – Stav ukládání `failed` při `offline` se řídí čekajícími změnami zrcadla** (fasáda, úkol 3), ne frontou sezení – fronta po vyčerpání pokusů změny vyřeší jako neúspěšné a `pending` klesne na 0, i když zrcadlo změny zahodilo. Zapojení v úkolu 5 M46.
+- **N93 – `retain` mezipaměti sítí nezahodí verze, které nese požadavek v letu** (`known_meshes`), jinak by server síť neposlal a klient by ji neměl. Zapojení v úkolu 5 M46.
+- **N94 – Klíč `body_id` z `.proto` se v JSON operace jmenuje `body`** (výjimka z pravidla „pole 1:1 v camelCase“, spec 04 a handlery M40 čtou `body`). Otisk požadavku přes OpenSSL `EVP_Digest` (`libcrypto` je v obrazu jako závislost gRPC).
+- **N95 – Zlatý soubor popisů typů zapisuje C++ test** (`TINYCAD_UPDATE_GOLDEN=1`), protobuf JSON se jmény polí z `.proto` ve tvaru `{ "feature_types": [...] }`; `test/golden/` je v `.dockerignore` výjimkou a v `.prettierignore`.
 
