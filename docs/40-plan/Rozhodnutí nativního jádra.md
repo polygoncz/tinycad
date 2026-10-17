@@ -182,3 +182,9 @@ Zafixované hlavičky navíc: `server/src/session/include/tinycad/session/*.hpp`
 - **N94 – Klíč `body_id` z `.proto` se v JSON operace jmenuje `body`** (výjimka z pravidla „pole 1:1 v camelCase“, spec 04 a handlery M40 čtou `body`). Otisk požadavku přes OpenSSL `EVP_Digest` (`libcrypto` je v obrazu jako závislost gRPC).
 - **N95 – Zlatý soubor popisů typů zapisuje C++ test** (`TINYCAD_UPDATE_GOLDEN=1`), protobuf JSON se jmény polí z `.proto` ve tvaru `{ "feature_types": [...] }`; `test/golden/` je v `.dockerignore` výjimkou a v `.prettierignore`.
 
+## M46 úkol 3
+
+- **N96 – `applyOperation` se exportuje z `ops`** (úkol 5) a fasáda klienta ho použije místo obchvatu přes jednorázový dispečer. Proč: `ops` v klientovi zůstává (N63); zmrazení dovoluje změnu API, kterou vyžaduje přechod na server. Spec 04 doplněna při úkolu 5.
+- **N97 – Fasáda nesloučí kroky transakce přes `merge`** (každý `apply` je krok s inverzí, aby šel odebrat právě odmítnutý krok); prozatímní záznam `commit` je `batch` nepřechodných kroků. Read model ze `refresh` při čekajících změnách se odloží do vyprázdnění fronty (jinak by se změna v letu použila dvakrát).
+- **N98 – Selhaný `begin` nechá lokální transakci otevřenou, její kroky skončí `NO_TRANSACTION` a zrcadlo se vrátí na základ; selhaný `commit` se jen nahlásí.** Doplní se do spec 14 při M46.
+
