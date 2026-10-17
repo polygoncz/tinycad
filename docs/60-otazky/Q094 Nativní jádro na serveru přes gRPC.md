@@ -81,6 +81,7 @@ Rozhodnuto po částech 2026-10-16, všechny body jsou uzavřené.
   - Klient si ponechá model skici v TS (`sketch`, `solver-planegcs`). Bod 3 tím není „jen DTO“.
   - Hrozí, že se TS a C++ model skici rozejdou. Zmírnění: sdílené testovací případy (skici ve formátu dokumentu) a obě sady testů ověřují stejný výsledek řešiče.
   - Obousměrný stream (a tedy WebSocket vedle gRPC-Web) není kvůli skice potřeba.
+  - Upřesnění 2026-10-17 ([[Q097 Transakce a undo přes RPC|Q097]]): „potvrzení úpravy“ je každé `Apply` se `setParams` skici (puštění myši), ne až „Hotovo“.
 - **Bod 2, úložiště (Pavel 2026-10-16, podle návrhu Clauda):** jeden **SQLite** soubor na dokument v Docker volume. Uvnitř je operační log ([[0005-operacni-log|ADR 0005]]): tabulka `operations`, do které se jen přidává (`seq`, `operation_id` s unikátním indexem jako klíč idempotence, data operace), a tabulka `snapshots` s občasným celým stavem dokumentu, aby se při otevření nemusel přehrávat celý log. Důvody: dokument je dál vidět jako soubor, transakce a WAL chrání proti pádu, operace i klíč idempotence se zapíšou atomicky, žádný kontejner navíc. Postgres až pro víc uživatelů.
   - `seq` zároveň slouží k navázání streamu `WatchSession` po výpadku.
   - `.tinycad.json` zůstává formátem pro import a export. IndexedDB přestává být zdrojem pravdy, mezipaměť v klientovi je mimo rozsah.
@@ -92,6 +93,8 @@ Rozhodnuto po částech 2026-10-16, všechny body jsou uzavřené.
   4. **Chyby** jako `google.rpc.Status`, v podrobnostech typovaný doménový kód (dnešní `KernelErrorCode`), ne text.
   - Stabilitu dělají tyto zásady, ne Envoy. Envoy je jen překladač gRPC-Web na gRPC, přidává timeouty a health checky.
 - **Bod 5, osud [[M16-vlastni-occt-build|M16]] (Pavel 2026-10-16, podle návrhu Clauda):** M16 nahradí série nativního jádra. Zatím se **nearchivuje**, jen se označí jako nahrazený. Do archivu se přesune, až vzniknou ADR a milníky série serveru, aby roadmapa nikdy neměla díru.
+
+**Navazující otázky (2026-10-17, z procházení kódu po M37):** [[Q096 Geometrie skici přes síť|Q096]] (port `SketchGeometry` od M30 volá OCCT), [[Q097 Transakce a undo přes RPC|Q097]], [[Q098 Schéma featur v klientovi|Q098]], [[Q099 Read model po regeneraci|Q099]].
 
 **Další krok:** při plánování série po M37 propsat rozhodnutí do specifikací ([[01-architektura]], [[06-geometricke-jadro]], [[05-persistence]]), napsat ADR, které nahradí [[0002-occt-wasm-ve-workeru|ADR 0002]] a [[0013-replicad-opencascadejs|ADR 0013]], a navrhnout `.proto`. Dnes se specifikace nemění, protože implementace je až do M37 dál WASM.
 
