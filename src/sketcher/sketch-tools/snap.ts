@@ -2,6 +2,7 @@
 // the data of the session, with the 6 px tolerance converted to mm at the cursor. Locating does
 // not mint ids, so the preview can call it on every move; placePoint mints them for a click.
 
+import { vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import { derivedOwner, snap } from '@/sketch';
 import type {
@@ -16,7 +17,7 @@ import type { ToolContext } from '@/interaction';
 import type { SketchSession } from '../sketch-session';
 import { splineOfControlPolygon } from '../sketch-drawing';
 import { EDIT_SKETCH_DRAWING_ID } from '../sketch-session';
-import { cursorAt, distance, newConstraintId, newEntityId } from './common';
+import { cursorAt, newConstraintId, newEntityId } from './common';
 
 /** Where a click lands: the result of the snapper (an existing point, the origin, a new point…). */
 export type SnapTarget = SnapResult;
@@ -79,7 +80,7 @@ export function snapToleranceAt(
 ): number | null {
   const at = cursorAt(ctx, session, x, y);
   const aside = cursorAt(ctx, session, x + SNAP_TOLERANCE_PX, y);
-  return at === null || aside === null ? null : distance(at, aside);
+  return at === null || aside === null ? null : vec2.dist(at, aside);
 }
 
 /**

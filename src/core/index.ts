@@ -24,8 +24,10 @@ export { mat4 } from './math/mat4';
 export type { Mat4 } from './math/mat4';
 export { quat } from './math/quat';
 export type { Quat } from './math/quat';
+export { mod2pi, TWO_PI, vec2 } from './math/vec2';
+export type { Vec2 } from './math/vec2';
 export { plane } from './math/plane';
-export type { Plane, Vec2 } from './math/plane';
+export type { Plane } from './math/plane';
 export { bspline } from './math/bspline';
 export type { BSplineShape } from './math/bspline';
 

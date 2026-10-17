@@ -1,7 +1,7 @@
 // The math of dragging a handle (spec 10, "Matematika tažení"): pure functions from a pointer ray
 // to the parameter of a linear, angular, planar or point handle, unwrapping across ±π and snapping.
 
-import { vec3 } from '@/core';
+import { TWO_PI, vec3 } from '@/core';
 import type { Vec3 } from '@/core';
 import type { HandleUnit } from './manipulators';
 
@@ -19,8 +19,6 @@ export interface Ray {
   readonly origin: Vec3;
   readonly direction: Vec3;
 }
-
-const TWO_PI = 2 * Math.PI;
 
 /**
  * The parameter t of the point of the line position + t·direction nearest to the ray; null for a

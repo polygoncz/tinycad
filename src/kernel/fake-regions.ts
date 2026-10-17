@@ -1,6 +1,7 @@
-import { assert, bspline, type Vec2 } from '@/core';
+import { assert, bspline, mod2pi, TWO_PI, type Vec2, vec2 } from '@/core';
 import type { IdentifiedCurve, ProfileCurve, ProfileRegion, ProfileRegions } from './profile';
-import { angleOf, cross, dist, dot, length, lerp, mod2pi, normalize, sub, TWO_PI } from './vec2';
+
+const { addScaled, angleOf, cross, dist, dot, length, normalize, sub } = vec2;
 
 // profileRegions of the FakeKernel (spec 06 "Stav po M30", spec 12 "Oblasti (profily)"): the
 // sketcher's region algorithm of M12–M29, moved here from sketch/regions.ts (ADR 0028). Closed
@@ -647,13 +648,13 @@ export function lineLine(
     const hi = Math.min(1, Math.max(tb0, tb1));
     if ((hi - lo) * len1 > tol) return 'overlap';
     if ((lo - hi) * len1 > tol) return [];
-    return [lerp(a0, d1, (lo + hi) / 2)];
+    return [addScaled(a0, d1, (lo + hi) / 2)];
   }
   const t = cross(w, d2) / denom;
   const u = cross(w, d1) / denom;
   const e1 = tol / len1;
   const e2 = tol / len2;
-  return t >= -e1 && t <= 1 + e1 && u >= -e2 && u <= 1 + e2 ? [lerp(a0, d1, t)] : [];
+  return t >= -e1 && t <= 1 + e1 && u >= -e2 && u <= 1 + e2 ? [addScaled(a0, d1, t)] : [];
 }
 
 export function lineRound(
@@ -664,7 +665,7 @@ export function lineRound(
   const d = sub(line.b, line.a);
   const len = length(d);
   const t0 = dot(sub(round.c, line.a), d) / (len * len);
-  const foot = lerp(line.a, d, t0);
+  const foot = addScaled(line.a, d, t0);
   const h2 = round.r * round.r - dot(sub(round.c, foot), sub(round.c, foot));
   const gap = dist(round.c, foot) - round.r;
   let params: number[];
@@ -677,7 +678,7 @@ export function lineRound(
   const e = tol / len;
   return params
     .filter((t) => t >= -e && t <= 1 + e)
-    .map((t) => lerp(line.a, d, t))
+    .map((t) => addScaled(line.a, d, t))
     .filter((p) => onRound(round, p, tol));
 }
 
@@ -698,10 +699,10 @@ export function roundRound(a: Round, b: Round, tol: number): readonly Vec2[] | '
   const along = (d * d + a.r * a.r - b.r * b.r) / (2 * d);
   const tangent = Math.abs(d - (a.r + b.r)) <= tol || Math.abs(d - Math.abs(a.r - b.r)) <= tol;
   const candidates: Vec2[] = tangent
-    ? [lerp(a.c, u, Math.sign(along) * a.r)]
+    ? [addScaled(a.c, u, Math.sign(along) * a.r)]
     : (() => {
         const h = Math.sqrt(Math.max(0, a.r * a.r - along * along));
-        const m = lerp(a.c, u, along);
+        const m = addScaled(a.c, u, along);
         return [
           [m[0] - u[1] * h, m[1] + u[0] * h],
           [m[0] + u[1] * h, m[1] - u[0] * h],

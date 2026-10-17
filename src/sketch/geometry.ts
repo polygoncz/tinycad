@@ -1,11 +1,12 @@
-import { assert, assertNever } from '@/core';
+import { assert, assertNever, vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import type { SketchCurve, SketchData, SketchEntity, SketchEntityId, SketchPoint } from './model';
-import { lerp, normalize, sub } from './vec2';
 import { patternCopies } from './patterns';
 import { pointsById } from './points';
 import { textCurves } from './text';
 import type { Curve2 } from './curve2';
+
+const { addScaled, normalize, sub } = vec2;
 
 export type { Curve2 } from './curve2';
 
@@ -86,13 +87,13 @@ export function curve2(
     case 'xline': {
       const p1 = at(curve.p1);
       const p1p2 = sub(at(curve.p2), p1);
-      const m = lerp(p1, p1p2, 0.5);
+      const m = addScaled(p1, p1p2, 0.5);
       // p1 ≠ p2 (parseSketchData), so the direction is defined.
       const d = normalize(p1p2);
       return {
         kind: 'line',
-        from: lerp(m, d, -XLINE_EXTENT),
-        to: lerp(m, d, XLINE_EXTENT),
+        from: addScaled(m, d, -XLINE_EXTENT),
+        to: addScaled(m, d, XLINE_EXTENT),
         id: curve.id,
       };
     }

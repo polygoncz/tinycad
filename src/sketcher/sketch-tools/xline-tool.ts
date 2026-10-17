@@ -10,6 +10,7 @@
 // replaces the automatic axis: 0/180° → a required horizontal, 90/270° → vertical, another angle
 // none.
 
+import { vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import { XLINE_EXTENT } from '@/sketch';
 import type { SketchData, SketchXLine } from '@/sketch';
@@ -27,7 +28,6 @@ import {
   clickTool,
   constrainPolar,
   constrainXY,
-  distance,
   inputValues,
   measurePolar,
   measureXY,
@@ -147,7 +147,7 @@ function xlineStep(
   angle: number | null,
 ): XLineStep {
   if (first === null) return { kind: 'first', target };
-  if (samePoint(first, target) || distance(first.at, target.at) <= MIN_LENGTH) {
+  if (samePoint(first, target) || vec2.dist(first.at, target.at) <= MIN_LENGTH) {
     return { kind: 'none' };
   }
   const side = sideAxis(data, first, target, infer);
@@ -173,7 +173,7 @@ function stepInferences(step: XLineStep): readonly { readonly kind: GlyphKind }[
 
 /** The line through p and q as one long pair, like curve2 of an xline (XLINE_EXTENT each way). */
 function extent(p: Vec2, q: Vec2): readonly Vec2[] {
-  const length = distance(p, q);
+  const length = vec2.dist(p, q);
   const d: Vec2 = [(q[0] - p[0]) / length, (q[1] - p[1]) / length];
   const m: Vec2 = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
   return [

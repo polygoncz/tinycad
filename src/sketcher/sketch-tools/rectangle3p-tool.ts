@@ -11,6 +11,7 @@
 // a required distance of ab, a locked height of bc; a locked angle replaces the automatic axis of
 // the side: 0/180° → a required horizontal, 90/270° → vertical, another angle none.
 
+import { vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import { rectangle3Shape, rectangleFrom3 } from '@/sketch';
 import type { SketchConstraint, SketchData, SketchEntityId } from '@/sketch';
@@ -28,7 +29,6 @@ import {
   clickTool,
   constrainPolar,
   constrainXY,
-  distance,
   distanceDimension,
   inputValues,
   leftNormal,
@@ -206,7 +206,7 @@ function rectangle3pStep(
   if (progress === null) return { kind: 'first', target };
   if (progress.kind === 'first') {
     const { a } = progress;
-    if (samePoint(a, target) || distance(a.at, target.at) <= MIN_LENGTH) return { kind: 'none' };
+    if (samePoint(a, target) || vec2.dist(a.at, target.at) <= MIN_LENGTH) return { kind: 'none' };
     const { target: b, axis } = sideAxis(data, a, target, infer);
     const length = values.get('length') ?? null;
     const angle = values.get('angle');

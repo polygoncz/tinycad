@@ -9,6 +9,7 @@
 import { curve2, extendEdit, isCurveEntity, paramRange, pointsById, samePoint } from '@/sketch';
 import type { Curve2, CurveHit, SketchData, SketchEntityId } from '@/sketch';
 import type { Tool, ToolContext } from '@/interaction';
+import { mod2pi, TWO_PI } from '@/core';
 import type { Vec2 } from '@/core';
 import type { SketchEditor } from '../sketch-editor';
 import type { SketchSession } from '../sketch-session';
@@ -23,8 +24,6 @@ const EXTEND_ID = '__extend';
  * which track B introduces with the construction line (M31); until then the same value here.
  */
 const XLINE_EXTENT = 1e5;
-
-const TWO_PI = 2 * Math.PI;
 
 /** An end of a line or an arc to extend: what the intersections are asked for. */
 interface ExtendKey {
@@ -200,9 +199,4 @@ function carrierOf(curve: Curve2, end: 'start' | 'end'): Carrier | null {
         ? arcPoints(center, radius, tipAngle, distance)
         : arcPoints(center, radius, tipAngle - distance, distance),
   };
-}
-
-function mod2pi(a: number): number {
-  const m = a % TWO_PI;
-  return m < 0 ? m + TWO_PI : m;
 }

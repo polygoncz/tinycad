@@ -1,4 +1,4 @@
-import { bspline, type Vec2 } from '@/core';
+import { bspline, mod2pi, TWO_PI, type Vec2, vec2 } from '@/core';
 import { lineLine, lineRound, onRound, roundRound, type Round } from './fake-regions';
 import type {
   CurveIntersection,
@@ -6,7 +6,8 @@ import type {
   IdentifiedCurve,
   ProfileCurve,
 } from './profile';
-import { angleOf, cross, dist, dot, lerp, mod2pi, sub, TWO_PI } from './vec2';
+
+const { addScaled, angleOf, cross, dist, dot, sub } = vec2;
 
 // curveIntersections and curveSegment of the FakeKernel (spec 06 "Stav po M33", spec 12 "Port a
 // parametr křivky"). Intersections of lines, arcs and circles come from the formulas of the
@@ -89,7 +90,7 @@ export function computeCurveSegment({ curve, from, to }: CurveSegmentInput): Pro
     case 'line': {
       const d = sub(curve.to, curve.from);
       const at = (t: number): Vec2 =>
-        t === 0 ? curve.from : t === 1 ? curve.to : lerp(curve.from, d, t);
+        t === 0 ? curve.from : t === 1 ? curve.to : addScaled(curve.from, d, t);
       return { kind: 'line', from: at(from), to: at(to), ...id };
     }
     case 'arc': {
@@ -196,7 +197,7 @@ function lineOverlapEnds(
   const hi = Math.min(1, Math.max(t0, t1));
   // An end of either line where it lies, so the shared ends are exact.
   const at = (t: number): Vec2 =>
-    t === 0 ? a.a : t === 1 ? a.b : t === t0 ? b.a : t === t1 ? b.b : lerp(a.a, d, t);
+    t === 0 ? a.a : t === 1 ? a.b : t === t0 ? b.a : t === t1 ? b.b : addScaled(a.a, d, t);
   return [at(lo), at(hi)];
 }
 
@@ -371,7 +372,7 @@ function evaluatorOf(c: Prepared): Evaluator {
   switch (c.kind) {
     case 'line': {
       const d = sub(c.b, c.a);
-      return (u) => ({ p: lerp(c.a, d, u), d });
+      return (u) => ({ p: addScaled(c.a, d, u), d });
     }
     case 'round': {
       const { c: center, r } = c.round;

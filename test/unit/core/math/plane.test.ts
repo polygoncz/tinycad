@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { plane, type Plane, type Vec2 } from '@/core/math/plane';
+import { plane, type Plane } from '@/core/math/plane';
+import type { Vec2 } from '@/core/math/vec2';
 import { vec3, type Vec3 } from '@/core/math/vec3';
 
 // Frames of the origin planes, table in spec 12 (Roviny a počátek).

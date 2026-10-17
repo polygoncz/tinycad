@@ -216,6 +216,31 @@ export const plane = {
 };
 ```
 
+**2D vektory (po sérii M30–M37):** `src/core/math/vec2.ts`, bez gl-matrix. Jediná implementace 2D vektorových pomůcek; dřív byla třikrát (`sketch/vec2.ts`, kopie v `kernel/vec2.ts`, protože `kernel` nesmí na `sketch`, a lokální funkce v `kernel-occt`, `sketcher`). Typ `Vec2` je tady, `plane` a `bspline` ho importují. Bez gl-matrix proto, že jde o pár řádků v horkých smyčkách oblastí a průsečíků a výsledky mají zůstat stejné jako u dřívějších kopií (`Math.hypot`). Dvě vědomé drobnosti při sjednocení: `normalize` nulového vektoru teď hází (dřív tiché `NaN`; volající mají úsečky už ověřené `parseSketchData`, takže nulu nedostanou) a `distanceToSegment` je vzorec z `bspline`, který nahradil skoro stejnou kopii v `sketch/curve-param.ts` (liší se nanejvýš v posledních bitech).
+
+```ts
+export type Vec2 = readonly [number, number];
+export const TWO_PI = 2 * Math.PI;
+export function mod2pi(angle: number): number;              // úhel do ⟨0, 2π), záporný se posune o 2π
+export const vec2 = {
+  add(a: Vec2, b: Vec2): Vec2,
+  sub(a: Vec2, b: Vec2): Vec2,                              // a − b
+  scale(v: Vec2, k: number): Vec2,
+  addScaled(origin: Vec2, d: Vec2, t: number): Vec2,        // origin + t·d (bod na přímce, ne lerp mezi dvěma body)
+  mid(a: Vec2, b: Vec2): Vec2,                              // (a + b) / 2
+  dot(a: Vec2, b: Vec2): number,
+  cross(a: Vec2, b: Vec2): number,                          // z-složka a × b: kladná, když b je proti směru hodinek od a
+  length(v: Vec2): number,                                  // Math.hypot
+  dist(a: Vec2, b: Vec2): number,                           // |a − b|
+  normalize(v: Vec2): Vec2,                                 // nulový vektor = výjimka (jako vec3.normalize)
+  angleOf(d: Vec2): number,                                 // atan2(y, x) v (−π, π⟩
+  distanceToSegment(p: Vec2, a: Vec2, b: Vec2): number,     // vzdálenost od úsečky ab (patka sevřená na úsečku); a = b → |p − a|
+};
+```
+
+- Jmenný prostor jako `vec3`; volající si smí funkce rozbalit (`const { sub, dot } = vec2;`), aby hustý geometrický kód zůstal čitelný.
+- `TWO_PI` a `mod2pi` patří k úhlům, ne k vektorům, proto jsou to samostatné exporty vedle `EPSILON`.
+
 **B-spline (M29, spliny skici):** `src/core/math/bspline.ts`, bez gl-matrix. Polynomiální (bez vah) sevřený (clamped) B-spline ve 2D: vyhodnocení (de Boor), 1. a 2. derivace, adaptivní tessellace a globální interpolace bodů (Piegl–Tiller). Jmenný prostor `bspline` s typem `BSplineShape { degree; poles: Vec2[]; knots }`; kontrakt a chování v [[12-skicar#Spliny (M29)]]. V `core` je proto, že ji kromě `sketch` (oblasti, kresba, nástroje) potřebuje i `FakeKernel` a `kernel` smí jen na `core` ([[Q087 Spline v řešiči a v jádře – zjištění z implementace|Q087]]).
 
 Rozsah roste podle potřeby, nic „do zásoby“.

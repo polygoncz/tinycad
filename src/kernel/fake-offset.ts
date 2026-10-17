@@ -1,8 +1,10 @@
+import { mod2pi, vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import { createKernelError } from './errors';
 import { meet, type Offset } from './fake-fillet';
 import type { IdentifiedCurve, OffsetCurve, OffsetCurvesInput } from './profile';
-import { angleOf, cross, dist, dot, lerp, mod2pi, normalize, sub } from './vec2';
+
+const { addScaled, angleOf, cross, dist, dot, normalize, sub } = vec2;
 
 // offsetCurves of the FakeKernel (spec 06 "Stav po M35"), analytically for lines, arcs and
 // circles: every curve's carrier is shifted to its right by the signed distance (a line moved
@@ -64,14 +66,19 @@ function shift(curve: Segment, right: number, tol: number): Shifted {
   if (curve.kind === 'line') {
     const d = normalize(sub(curve.to, curve.from));
     const n: Vec2 = [d[1], -d[0]];
-    const from = lerp(curve.from, n, right);
-    return { curve, carrier: { kind: 'line', p: from, d }, from, to: lerp(curve.to, n, right) };
+    const from = addScaled(curve.from, n, right);
+    return {
+      curve,
+      carrier: { kind: 'line', p: from, d },
+      from,
+      to: addScaled(curve.to, n, right),
+    };
   }
   // To the right of a counter-clockwise arc is away from its center.
   const rho = dist(curve.center, curve.from);
   const r = curve.ccw ? rho + right : rho - right;
   if (!(r > tol)) throw failure(`the arc ${curve.id} shrinks to nothing`);
-  const onCircle = (p: Vec2): Vec2 => lerp(curve.center, sub(p, curve.center), r / rho);
+  const onCircle = (p: Vec2): Vec2 => addScaled(curve.center, sub(p, curve.center), r / rho);
   return {
     curve,
     carrier: { kind: 'circle', c: curve.center, r },
@@ -87,7 +94,7 @@ function shift(curve: Segment, right: number, tol: number): Shifted {
 function cornerOf(a: Shifted | undefined, b: Shifted | undefined, tol: number): Vec2 {
   if (a === undefined || b === undefined) throw failure('a corner without its curves');
   if (dist(a.to, b.from) <= tol) return a.to;
-  const middle = lerp(a.to, sub(b.from, a.to), 0.5);
+  const middle = addScaled(a.to, sub(b.from, a.to), 0.5);
   let corner: Vec2 | undefined;
   for (const p of meet(a.carrier, b.carrier, middle, tol)) {
     if (corner === undefined || dist(p, middle) < dist(corner, middle)) corner = p;

@@ -1,4 +1,4 @@
-import { assert, assertNever } from '@/core';
+import { assert, assertNever, vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import { measureDraft } from './edit';
 import { pointsById } from './points';
@@ -15,6 +15,8 @@ import type {
   SketchEntity,
   SketchEntityId,
 } from './model';
+
+const { add, cross, dot, length, mid, scale, sub } = vec2;
 
 // Choosing the kind and the placement of a dimension from the cursor (spec 12 "Kóty (M28)",
 // "Výběr druhu"). Pure functions in plane coordinates (mm); the sketcher calls them on every move.
@@ -120,7 +122,7 @@ export function placeDimension(
       const frame = angleFrame(geo, target.a, target.b);
       if (frame === null) return null;
       const w = sub(cursor, frame.vertex);
-      if (len(w) <= MIN) return null;
+      if (length(w) <= MIN) return null;
       // w = α·d_a + β·d_b (Cramer's rule); the signs pick the quadrant.
       const det = cross(frame.da, frame.db);
       const alpha = cross(w, frame.db) / det;
@@ -164,7 +166,7 @@ export function movePlacement(
       return radialPlacement(geo.round(c.curve).center, cursor) ?? current();
     case 'angle': {
       const frame = angleFrame(geo, c.a, c.b);
-      if (frame === null || len(sub(cursor, frame.vertex)) <= MIN) return current();
+      if (frame === null || length(sub(cursor, frame.vertex)) <= MIN) return current();
       const value = measureDraft(data, c);
       return value <= MIN ? current() : angularPlacement(frame, c, value, cursor);
     }
@@ -209,7 +211,7 @@ export function defaultPlacement(c: DimensionConstraint, data: SketchData): Dime
     case 'angle': {
       const lengthOf = (id: SketchEntityId) => {
         const [p1, p2] = geo.line(id);
-        return len(sub(p2, p1));
+        return length(sub(p2, p1));
       };
       const radius = 0.5 * Math.min(lengthOf(c.a), lengthOf(c.b));
       // A zero-length line would give radius 0, which parseSketchData rejects once stored.
@@ -334,7 +336,7 @@ function offsetFrame(
 /** angle = atan2(c − centre), distance = |c − centre|; null at the centre. */
 function radialPlacement(center: Vec2, cursor: Vec2): RadialPlacement | null {
   const w = sub(cursor, center);
-  const distance = len(w);
+  const distance = length(w);
   if (distance <= MIN) return null;
   return { kind: 'radial', angle: Math.atan2(w[1], w[0]), distance };
 }
@@ -353,7 +355,7 @@ function angleFrame(geo: Geometry, a: SketchEntityId, b: SketchEntityId): AngleF
   const da = sub(a2, a1);
   const db = sub(b2, b1);
   const det = cross(da, db);
-  if (Math.abs(det) <= MIN * len(da) * len(db)) return null;
+  if (Math.abs(det) <= MIN * length(da) * length(db)) return null;
   const s = cross(sub(b1, a1), db) / det;
   return { vertex: [a1[0] + s * da[0], a1[1] + s * da[1]], da, db };
 }
@@ -373,7 +375,7 @@ function angularPlacement(
   const rayB = scale(frame.db, flags.reverseB === true ? -1 : 1);
   const towardsB = Math.sign(cross(rayA, rayB));
   const swept = Math.atan2(towardsB * cross(rayA, w), dot(rayA, w));
-  return { kind: 'angular', radius: len(w), t: Math.min(1, Math.max(0, swept / value)) };
+  return { kind: 'angular', radius: length(w), t: Math.min(1, Math.max(0, swept / value)) };
 }
 
 /** Centre, radius and the default label angle (π/4 for a circle, the middle of an arc). */
@@ -452,22 +454,18 @@ function lookup(data: SketchData): Lookup {
       let sweep = Math.atan2(end[1], end[0]) - from;
       if (sweep <= 0) sweep += 2 * Math.PI;
       const middle = from + sweep / 2;
-      return { center, radius: len(start), angle: Math.atan2(Math.sin(middle), Math.cos(middle)) };
+      return {
+        center,
+        radius: length(start),
+        angle: Math.atan2(Math.sin(middle), Math.cos(middle)),
+      };
     },
   };
 }
 
-const add = (a: Vec2, b: Vec2): Vec2 => [a[0] + b[0], a[1] + b[1]];
-const sub = (a: Vec2, b: Vec2): Vec2 => [a[0] - b[0], a[1] - b[1]];
-const scale = (a: Vec2, k: number): Vec2 => [a[0] * k, a[1] * k];
-const dot = (a: Vec2, b: Vec2): number => a[0] * b[0] + a[1] * b[1];
-const cross = (a: Vec2, b: Vec2): number => a[0] * b[1] - a[1] * b[0];
-const len = (a: Vec2): number => Math.hypot(a[0], a[1]);
-const mid = (a: Vec2, b: Vec2): Vec2 => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-
 /** The unit direction a→b; (1, 0) for a zero length (spec 12). */
 function direction(a: Vec2, b: Vec2): Vec2 {
   const d = sub(b, a);
-  const l = len(d);
+  const l = length(d);
   return l <= MIN ? [1, 0] : scale(d, 1 / l);
 }

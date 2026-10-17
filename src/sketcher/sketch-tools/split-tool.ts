@@ -6,20 +6,13 @@
 
 import { cutsOf, paramRange, pointAt, samePoint, splitEdit } from '@/sketch';
 import type { Curve2, CurveCut } from '@/sketch';
+import { vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import { CLICK_TOLERANCE_PX } from '@/interaction';
 import type { Tool, ToolContext } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
 import type { SketchSession } from '../sketch-session';
-import {
-  PREVIEW_OVERLAY_ID,
-  clearPreview,
-  clickTool,
-  cursorAt,
-  distance,
-  toWorld,
-  withHint,
-} from './common';
+import { PREVIEW_OVERLAY_ID, clearPreview, clickTool, cursorAt, toWorld, withHint } from './common';
 import { curveAt, idSource, isSpline, unchanged } from './curve-pick';
 import type { PickedCurve } from './curve-pick';
 
@@ -73,7 +66,7 @@ function splitTarget(
   const cuts =
     hits === null || tolerance === null ? [] : cutsOf(picked.data, picked.entity.id, hits);
   const near = cuts
-    .map((cut) => ({ cut, d: distance(cut.point, picked.cursor) }))
+    .map((cut) => ({ cut, d: vec2.dist(cut.point, picked.cursor) }))
     .filter(({ d }) => tolerance !== null && d <= tolerance)
     .sort((a, b) => a.d - b.d)[0];
   if (near !== undefined) return { picked, where: near.cut, point: near.cut.point };
@@ -91,7 +84,7 @@ function clickToleranceAt(
 ): number | null {
   const at = cursorAt(ctx, session, x, y);
   const aside = cursorAt(ctx, session, x + CLICK_TOLERANCE_PX, y);
-  return at === null || aside === null ? null : distance(at, aside);
+  return at === null || aside === null ? null : vec2.dist(at, aside);
 }
 
 function atEnd(curve: Curve2, point: Vec2): boolean {

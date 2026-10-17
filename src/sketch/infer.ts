@@ -1,10 +1,11 @@
-import { assert } from '@/core';
+import { assert, vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import { curvePoints } from './edit';
 import { pointsById } from './points';
 import { isLineCarrier } from './model';
 import type { SketchData, SketchEntity, SketchEntityId, SketchPoint } from './model';
-import { cross, dist, dot, length, sub } from './vec2';
+
+const { cross, dist, dot, length, sub } = vec2;
 
 // Angle and length constraints of a new line or radius, after the snapper has placed its points
 // (spec 12 "Snapper a auto-vazby (M26)"). Pure; the solver checks the candidates when written.

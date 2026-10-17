@@ -4,7 +4,7 @@
 // world coordinates with an optional guide line; ui projects them and edits the value
 // (SketchSession.setPatternParam).
 
-import { plane as planeMath } from '@/core';
+import { plane as planeMath, vec2 } from '@/core';
 import type { Plane, Vec2, Vec3 } from '@/core';
 import { circularStep, curvePoints, isPatternSource, patternParamsValid } from '@/sketch';
 import type {
@@ -16,6 +16,8 @@ import type {
   SketchLinearPattern,
   SketchPattern,
 } from '@/sketch';
+
+const { add, mid, scale, sub } = vec2;
 
 /** A parameter of a pattern: per direction of a linear pattern, or of a circular one. */
 export type PatternParam =
@@ -256,10 +258,6 @@ function arc(center: Vec2, radius: number, from: number, sweep: number): readonl
 }
 
 const unit = (angle: number): Vec2 => [Math.cos(angle), Math.sin(angle)];
-const add = (a: Vec2, b: Vec2): Vec2 => [a[0] + b[0], a[1] + b[1]];
-const sub = (a: Vec2, b: Vec2): Vec2 => [a[0] - b[0], a[1] - b[1]];
-const scale = (a: Vec2, k: number): Vec2 => [a[0] * k, a[1] * k];
-const mid = (a: Vec2, b: Vec2): Vec2 => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 
 const keyOf = (v: SketchPatternDimensionView): string => `${v.pattern}/${v.param}`;
 

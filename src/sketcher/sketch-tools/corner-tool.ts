@@ -5,6 +5,7 @@
 // preview shows the new curve, a click writes the edit by SketchSession.rewrite and opens its
 // dimension. The hint HUD (M35) asks for the first curve (or a corner), then for the second one.
 
+import { vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import {
   isCurveEntity,
@@ -32,15 +33,7 @@ import type { Tool, ToolContext } from '@/interaction';
 import { isPlainEscape } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
 import type { SketchSession } from '../sketch-session';
-import {
-  clearPreview,
-  clickTool,
-  curvePairs,
-  cursorAt,
-  distance,
-  previewIds,
-  previewPairs,
-} from './common';
+import { clearPreview, clickTool, curvePairs, cursorAt, previewIds, previewPairs } from './common';
 import { idSource, unchanged } from './curve-pick';
 import { entityAt } from './snap';
 
@@ -345,7 +338,7 @@ function sharedCorner(
       continue;
     }
     const p = points.get(end);
-    const d = p === undefined ? Infinity : distance([p.x, p.y], near);
+    const d = p === undefined ? Infinity : vec2.dist([p.x, p.y], near);
     if (best === null || d < best.d) best = { id: end, d };
   }
   return best?.id ?? null;
@@ -353,7 +346,7 @@ function sharedCorner(
 
 function distanceTo(e: FilletEdge, p: Vec2, data: SketchData): number {
   const c = curve2(e, pointsById(data));
-  return distance(pointAt(c, nearestParam(c, p)), p);
+  return vec2.dist(pointAt(c, nearestParam(c, p)), p);
 }
 
 // ---- The value last used in the session ----

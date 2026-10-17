@@ -1,5 +1,5 @@
 import { assert } from '../assert';
-import type { Vec2 } from './plane';
+import { vec2, type Vec2 } from './vec2';
 
 // Polynomial B-spline math (spec 02-core, spec 12 "Spliny (M29)", Q086, Q087): evaluation,
 // derivatives, tessellation and global interpolation (Piegl–Tiller, The NURBS Book). In core
@@ -45,7 +45,7 @@ function tessellate(curve: BSplineShape, tolerance: number): Vec2[] {
   const halve = (a: number, pa: Vec2, b: number, pb: Vec2, depth: number): void => {
     const m = (a + b) / 2;
     const pm = evaluate(curve, m);
-    if (depth < MAX_DEPTH && (depth < minDepth || distanceToChord(pm, pa, pb) > tolerance)) {
+    if (depth < MAX_DEPTH && (depth < minDepth || vec2.distanceToSegment(pm, pa, pb) > tolerance)) {
       halve(a, pa, m, pm, depth + 1);
       halve(m, pm, b, pb, depth + 1);
     } else {
@@ -90,10 +90,7 @@ function interpolate(points: readonly Vec2[]): {
   // Params from chord lengths (Piegl–Tiller eq. 9.5), normalised to 0..1.
   const chords: number[] = [];
   for (let i = 1; i < n; i++) {
-    const d = Math.hypot(
-      at(points, i)[0] - at(points, i - 1)[0],
-      at(points, i)[1] - at(points, i - 1)[1],
-    );
+    const d = vec2.dist(at(points, i), at(points, i - 1));
     if (d === 0)
       throw new RangeError(
         `bspline.interpolate: points ${String(i - 1)} and ${String(i)} are equal`,
@@ -278,15 +275,6 @@ function solve(matrix: readonly (readonly number[])[], rhs: readonly Vec2[]): Ve
     x[r] = [sx / d, sy / d];
   }
   return x;
-}
-
-function distanceToChord(p: Vec2, a: Vec2, b: Vec2): number {
-  const dx = b[0] - a[0];
-  const dy = b[1] - a[1];
-  const len2 = dx * dx + dy * dy;
-  if (len2 === 0) return Math.hypot(p[0] - a[0], p[1] - a[1]);
-  const s = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2));
-  return Math.hypot(p[0] - a[0] - s * dx, p[1] - a[1] - s * dy);
 }
 
 /** A malformed shape is a programming error: the data were checked by parseSketchData. */
