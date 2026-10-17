@@ -67,6 +67,10 @@ export function createSplineTool(sketches: SketchEditor, kind: SplineToolKind): 
     reset() {
       placed = [];
     },
+    hint() {
+      const tool = kind === 'bspline' ? 'spline' : 'fitSpline';
+      return `hint.${tool}.${placed.length === 0 ? 'first' : 'next'}`;
+    },
     onMove(ctx, session, x, y, mods) {
       const mode = snapMode(sketches, mods);
       const target = snapAt(ctx, session, x, y, { ...mode, pending: pendingOf(placed) });

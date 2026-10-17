@@ -61,6 +61,9 @@ export function createRectangleTool(sketches: SketchEditor): Tool {
     reset() {
       corner = null;
     },
+    hint() {
+      return corner === null ? 'hint.rectangle.first' : 'hint.rectangle.second';
+    },
     inputFields() {
       return corner === null ? XY_FIELDS : SIZE_FIELDS;
     },

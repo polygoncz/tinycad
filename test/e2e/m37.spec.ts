@@ -21,8 +21,8 @@ import {
 // fonts in the browser, in Czech: the Text tool writes "Text" on a construction baseline and gives
 // the string field of the panel the focus; the string, the font and the height changed in the
 // panel are in the exported document with matching outlines. "tinycad" engraved into the top face
-// of a box by an extrude that removes the letters. The hint HUD tells what the Text and the Mirror
-// tool wait for.
+// of a box by an extrude that removes the letters. The hint HUD tells what the Text, the Line and
+// the Mirror tool wait for.
 
 /** The parts of an exported document the tests read (persistence TinycadFile, spec 05). */
 interface ExportedDocument {
@@ -272,16 +272,18 @@ test('tinycad engraved into the top face of a box by an extrude that removes it'
 test('the hint HUD tells what the Text and the Mirror tool wait for', async ({ page }) => {
   const panel = await openSketchWithoutGrid(page);
 
-  // The Text tool waits for the start of the baseline; the line tool has no hint, so it goes.
+  // The Text tool waits for the start of the baseline; the line tool shows its own hint per step.
   // (The view does not have the focus after the menu of the family, so no Escape here.)
   await pickTextTool(page);
   const place = hint(page, 'Klikni na počátek účaří textu');
   await expect(place).toBeVisible();
   await pickVariant(page, 'Text', 'Úsečka');
   await expect(place).toHaveCount(0);
+  await expect(hint(page, 'Klikni na první bod úsečky')).toBeVisible();
 
   // A line, then the Mirror tool: first the sources, after Enter the axis.
   await clickCanvas(page, -160, -60);
+  await expect(hint(page, 'Klikni na další bod nebo napiš délku a úhel')).toBeVisible();
   await clickCanvas(page, -60, 50);
   await page.keyboard.press('Escape');
   await expect(panel.getByRole('status')).toHaveText('Stupně volnosti: 4');

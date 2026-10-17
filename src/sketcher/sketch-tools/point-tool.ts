@@ -29,6 +29,7 @@ export function createPointTool(sketches: SketchEditor): Tool {
       // No work in progress.
     },
     inputFields: () => XY_FIELDS,
+    hint: () => 'hint.point.place',
     constrain: constrainXY,
     measure: measureXY,
     onMove(ctx, session, x, y, mods) {

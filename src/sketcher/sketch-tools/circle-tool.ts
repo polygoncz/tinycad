@@ -58,6 +58,9 @@ export function createCircleTool(sketches: SketchEditor): Tool {
     reset() {
       center = null;
     },
+    hint() {
+      return center === null ? 'hint.circle.center' : 'hint.circle.rim';
+    },
     inputFields() {
       return center === null ? XY_FIELDS : DIAMETER_FIELDS;
     },

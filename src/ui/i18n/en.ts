@@ -353,6 +353,68 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'manipulator.field.label': 'Handle value',
 
   // The hint HUD of the tools (M37, spec 11 rule 8a): one sentence per tool step.
+  'hint.line.start': 'Click the first point of the line, or type x and y (Tab, Enter)',
+  'hint.line.next':
+    'Click the next point or type the length and angle (Tab, Enter); drag from the end for a tangent arc, Esc ends',
+  'hint.line.arc': 'Release at the end of the tangent arc, Esc cancels the arc',
+  'hint.xline.first':
+    'Click the first point of the construction line, or type x and y (Tab, Enter)',
+  'hint.xline.second':
+    'Click the second point of the construction line, or type the length and angle (Tab, Enter), Esc goes back',
+  'hint.point.place': 'Click to place a point, or type x and y (Tab, Enter)',
+  'hint.rectangle.first': 'Click the first corner of the rectangle, or type x and y (Tab, Enter)',
+  'hint.rectangle.second':
+    'Click the opposite corner, or type the width and height (Tab, Enter), Esc ends',
+  'hint.rectangleCenter.center': 'Click the center of the rectangle, or type x and y (Tab, Enter)',
+  'hint.rectangleCenter.corner':
+    'Click a corner, or type the width and height (Tab, Enter), Esc goes back',
+  'hint.rectangle3p.first': 'Click the first corner, or type x and y (Tab, Enter)',
+  'hint.rectangle3p.second':
+    'Click the second corner of the first side, or type the length and angle (Tab, Enter), Esc goes back',
+  'hint.rectangle3p.height': 'Click the height of the rectangle, or type it (Enter), Esc goes back',
+  'hint.circle.center': 'Click the center of the circle, or type x and y (Tab, Enter)',
+  'hint.circle.rim': 'Click the rim, or type the diameter (Enter), Esc ends',
+  'hint.circle2p.first': 'Click the first end of the diameter',
+  'hint.circle2p.second': 'Click the second end of the diameter, Esc goes back',
+  'hint.circle3p.first': 'Click the first point on the circle',
+  'hint.circle3p.second': 'Click the second point on the circle, Esc goes back',
+  'hint.circle3p.third': 'Click the third point on the circle, Esc goes back',
+  'hint.circle2t.first': 'Click the first tangent curve',
+  'hint.circle2t.second': 'Click the second tangent curve, Esc goes back',
+  'hint.circle2t.place': 'Click to place the circle (the cursor chooses it), Esc goes back',
+  'hint.circle3t.first': 'Click the first tangent curve',
+  'hint.circle3t.second': 'Click the second tangent curve, Esc goes back',
+  'hint.circle3t.third': 'Click the third tangent curve, Esc goes back',
+  'hint.arc.center': 'Click the center of the arc, or type x and y (Tab, Enter)',
+  'hint.arc.start':
+    'Click the start of the arc, or type the radius and angle (Tab, Enter), Esc ends',
+  'hint.arc.end':
+    'Click the end of the arc (counter-clockwise), or type the sweep (Enter), Esc ends',
+  'hint.arc3p.start': 'Click the start of the arc',
+  'hint.arc3p.end': 'Click the end of the arc, Esc goes back',
+  'hint.arc3p.through': 'Click a point on the arc, Esc goes back',
+  'hint.arcTangent.start': 'Click the end point of a line or an arc to continue from',
+  'hint.arcTangent.end': 'Click the end of the tangent arc, Esc goes back',
+  'hint.spline.first': 'Click the first control point of the spline',
+  'hint.spline.next':
+    'Click the next control point; Enter or a click on the last point ends, a click on the first closes, Esc cancels',
+  'hint.fitSpline.first': 'Click the first point of the spline',
+  'hint.fitSpline.next':
+    'Click the next point of the spline; Enter or a click on the last point ends, a click on the first closes, Esc cancels',
+  'hint.slot.first': 'Click the center of the first arc of the slot, or type x and y (Tab, Enter)',
+  'hint.slot.second':
+    'Click the center of the second arc, or type the length and angle (Tab, Enter), Esc goes back',
+  'hint.slotOverall.first': 'Click the first end point of the slot, or type x and y (Tab, Enter)',
+  'hint.slotOverall.second':
+    'Click the second end point, or type the length and angle (Tab, Enter), Esc goes back',
+  'hint.slotArc.center': 'Click the center of the slot arc, or type x and y (Tab, Enter)',
+  'hint.slotArc.start':
+    'Click the start of the slot axis, or type the radius and angle (Tab, Enter), Esc goes back',
+  'hint.slotArc.end': 'Click the end of the slot axis, or type the sweep (Enter), Esc goes back',
+  'hint.slot.width': 'Click the width of the slot, or type it (Enter), Esc goes back',
+  'hint.dimension.pick': 'Click a line, circle, arc or point to dimension',
+  'hint.dimension.second': 'Click the second point or curve, Esc goes back',
+  'hint.dimension.place': 'Click to place the dimension (the cursor chooses its kind), Esc cancels',
   'hint.mirror.sources': 'Select points and curves to mirror, Enter continues',
   'hint.mirror.axis': 'Click the mirror axis (a line or a construction line), Esc goes back',
   'hint.mirror.done': 'Mirrored. Select more points and curves, or Esc',

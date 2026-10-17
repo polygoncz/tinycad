@@ -54,6 +54,10 @@ export function createArc3pTool(sketches: SketchEditor): Tool {
       start = null;
       end = null;
     },
+    hint() {
+      if (start === null) return 'hint.arc3p.start';
+      return end === null ? 'hint.arc3p.end' : 'hint.arc3p.through';
+    },
     onMove(ctx, session, x, y, mods) {
       const mode = snapMode(sketches, mods);
       const cursor = snapAt(ctx, session, x, y, mode);

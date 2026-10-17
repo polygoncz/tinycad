@@ -43,6 +43,9 @@ export function createArcTangentTool(sketches: SketchEditor): Tool {
     reset() {
       start = null;
     },
+    hint() {
+      return start === null ? 'hint.arcTangent.start' : 'hint.arcTangent.end';
+    },
     onMove(ctx, session, x, y, mods) {
       const mode = snapMode(sketches, mods);
       const cursor = snapAt(ctx, session, x, y, mode);

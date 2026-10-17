@@ -189,6 +189,10 @@ export function createLineTool(sketches: SketchEditor): Tool {
     inputFields() {
       return chain === null ? XY_FIELDS : POLAR_FIELDS;
     },
+    hint() {
+      if (arc !== null) return 'hint.line.arc';
+      return chain === null ? 'hint.line.start' : 'hint.line.next';
+    },
     constrain(cursor, values) {
       return chain === null
         ? constrainXY(cursor, values)

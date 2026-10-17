@@ -1305,6 +1305,67 @@ export function derivedOwner(id: string): SketchEntityId | null;
 - **Úprava:** `SketchSession.setTextParams(id, p: Partial<TextParams>): Promise<boolean>` (`TextParams = { text; font; height }` ze `sketcher`) – ověří hodnoty (`textParamsValid` ze `sketch`, sdílené s parse), přepočítá `contours` přes `TextOutliner`, zapíše jedním `setParams` bez řešiče (fronta jako `toggleConstruction`); neplatné → `false`. Panel skici při výběru právě jednoho textu ukáže nad vazbami sekci „Text“ s poli Text, Písmo (výběr z `SKETCH_TEXT_FONTS` v `sketcher/constants.ts`, kopie `TEXT_FONTS` hlídaná testem; popisky `sketch.font.sans|serif|mono`) a Výška (mm, formát jako kóty, desetinná čárka i tečka). Enter nebo opuštění pole zapíše jen změněné pole, Esc vrátí. Panel jen parsuje (nečitelná výška nebo nezměněná hodnota se neodešle); o platnosti rozhodne `setTextParams` a jeho `false` pole vrátí. Nově vytvořený text (objeví se a stane se jediným výběrem) dá fokus poli Text s označeným obsahem; logika v `ui/sketch-text-panel.ts`. `SketchSession` dostane `TextOutliner` v závislostech jako `solver`; `app` ho vytvoří (`createOpentypeOutliner` s načítáním přes URL fontů).
 
 
+## HUD nápověda kreslicích nástrojů
+
+Doplnění po [[M37-text-ve-skice|M37]] (Pavel 2026-10-17): nápovědu v každém kroku mají všechny kreslicí nástroje a kóta, nejen nástroje polí, text a úprav. Mechanismus HUD je v [[10-interakce#Nástroje]].
+
+- **Kontrakt:** `ClickHandlers.hint?(): string | null` v `sketch-tools/common.ts` vrací klíč nápovědy aktuálního kroku (`null` = žádná). `clickTool` se na něj ptá stejně jako na `inputFields` ([[#Číselný vstup (M32)]]): při `activate`, po každém kroku (klik, Enter číselného vstupu, klávesa zpracovaná nástrojem, konec tahu), při nové session a při každém pohybu (krok změněný bez události, např. řetěz zrušený odmítnutým zápisem). Navíc při převzetí tahu (`onDragStart` → `true`) a při jeho zrušení Escem. Opakovaný klíč manažer znovu nehlásí. Bez `hint` `clickTool` nápovědu nemění, takže nástroje s vlastní nápovědou (`withHint`, rohové nástroje, pole) fungují dál.
+- **Texty:** jedna věta s klávesami v textu. Kde má krok číselný vstup, text ho zmiňuje: „(Tab, Enter)“ u dvou polí (Tab přepne pole, Enter potvrdí), „(Enter)“ u jednoho pole. „Esc zpět“ = nástroj zapomene rozpracovaný krok. „Esc ukončí“ = nástroj vlastní Esc nemá a Esc ho vypne (obdélník rohy, kružnice středem, oblouk středem; u úsečky Esc ukončí řetěz). Anglické texty v `en.ts` obdobně.
+
+| Nástroj | Krok | Klíč `hint.…` | Text (cs) |
+|---|---|---|---|
+| úsečka (`sketch.line`) | bez řetězu | `line.start` | Klikni na první bod úsečky, nebo napiš x a y (Tab, Enter) |
+|  | řetěz rozpracovaný | `line.next` | Klikni na další bod nebo napiš délku a úhel (Tab, Enter); tažením z konce tečný oblouk, Esc ukončí |
+|  | tah tečného oblouku (M27) | `line.arc` | Pusť myš na konci tečného oblouku, Esc oblouk zruší |
+| přímka (`sketch.xline`) | první bod | `xline.first` | Klikni na první bod přímky, nebo napiš x a y (Tab, Enter) |
+|  | druhý bod | `xline.second` | Klikni na druhý bod přímky, nebo napiš délku a úhel (Tab, Enter), Esc zpět |
+| bod (`sketch.point`) | jediný krok | `point.place` | Klikni pro bod, nebo napiš x a y (Tab, Enter) |
+| obdélník (`sketch.rectangle`) | první roh | `rectangle.first` | Klikni na první roh obdélníku, nebo napiš x a y (Tab, Enter) |
+|  | protější roh | `rectangle.second` | Klikni na protější roh, nebo napiš šířku a výšku (Tab, Enter), Esc ukončí |
+| obdélník středem | střed | `rectangleCenter.center` | Klikni na střed obdélníku, nebo napiš x a y (Tab, Enter) |
+|  | roh | `rectangleCenter.corner` | Klikni na roh, nebo napiš šířku a výšku (Tab, Enter), Esc zpět |
+| obdélník 3 body | první roh | `rectangle3p.first` | Klikni na první roh, nebo napiš x a y (Tab, Enter) |
+|  | druhý roh | `rectangle3p.second` | Klikni na druhý roh první strany, nebo napiš délku a úhel (Tab, Enter), Esc zpět |
+|  | výška | `rectangle3p.height` | Klikni pro výšku obdélníku, nebo ji napiš (Enter), Esc zpět |
+| kružnice (`sketch.circle`) | střed | `circle.center` | Klikni na střed kružnice, nebo napiš x a y (Tab, Enter) |
+|  | obvod | `circle.rim` | Klikni na obvod, nebo napiš průměr (Enter), Esc ukončí |
+| kružnice 2 body | první konec | `circle2p.first` | Klikni na první konec průměru |
+|  | druhý konec | `circle2p.second` | Klikni na druhý konec průměru, Esc zpět |
+| kružnice 3 body | 0 bodů | `circle3p.first` | Klikni na první bod na kružnici |
+|  | 1 bod | `circle3p.second` | Klikni na druhý bod na kružnici, Esc zpět |
+|  | 2 body | `circle3p.third` | Klikni na třetí bod na kružnici, Esc zpět |
+| kružnice 2 tečny | 0 křivek | `circle2t.first` | Klikni na první tečnou křivku |
+|  | 1 křivka | `circle2t.second` | Klikni na druhou tečnou křivku, Esc zpět |
+|  | 2 křivky, poloha | `circle2t.place` | Klikni pro polohu kružnice (volí ji kurzor), Esc zpět |
+| kružnice 3 tečny | 0 křivek | `circle3t.first` | Klikni na první tečnou křivku |
+|  | 1 křivka | `circle3t.second` | Klikni na druhou tečnou křivku, Esc zpět |
+|  | 2 křivky | `circle3t.third` | Klikni na třetí tečnou křivku, Esc zpět |
+| oblouk (`sketch.arc`) | střed | `arc.center` | Klikni na střed oblouku, nebo napiš x a y (Tab, Enter) |
+|  | začátek | `arc.start` | Klikni na začátek oblouku, nebo napiš poloměr a úhel (Tab, Enter), Esc ukončí |
+|  | konec | `arc.end` | Klikni na konec oblouku (proti směru hodinových ručiček), nebo napiš úhel rozevření (Enter), Esc ukončí |
+| oblouk 3 body | začátek | `arc3p.start` | Klikni na začátek oblouku |
+|  | konec | `arc3p.end` | Klikni na konec oblouku, Esc zpět |
+|  | bod na oblouku | `arc3p.through` | Klikni na bod na oblouku, Esc zpět |
+| tečný oblouk | navazující bod | `arcTangent.start` | Klikni na koncový bod úsečky nebo oblouku, na který oblouk naváže |
+|  | konec | `arcTangent.end` | Klikni na konec tečného oblouku, Esc zpět |
+| spline | 0 bodů | `spline.first` | Klikni na první řídicí bod splinu |
+|  | ≥ 1 bod | `spline.next` | Klikni na další řídicí bod; Enter nebo klik na poslední bod ukončí, klik na první uzavře, Esc zruší |
+| spline body | 0 bodů | `fitSpline.first` | Klikni na první bod splinu |
+|  | ≥ 1 bod | `fitSpline.next` | Klikni na další bod splinu; Enter nebo klik na poslední bod ukončí, klik na první uzavře, Esc zruší |
+| drážka (`sketch.slot`) | střed prvního oblouku | `slot.first` | Klikni na střed prvního oblouku drážky, nebo napiš x a y (Tab, Enter) |
+|  | střed druhého | `slot.second` | Klikni na střed druhého oblouku, nebo napiš délku a úhel (Tab, Enter), Esc zpět |
+| drážka celková | první krajní bod | `slotOverall.first` | Klikni na první krajní bod drážky, nebo napiš x a y (Tab, Enter) |
+|  | druhý krajní bod | `slotOverall.second` | Klikni na druhý krajní bod, nebo napiš délku a úhel (Tab, Enter), Esc zpět |
+| drážka oblouková | střed | `slotArc.center` | Klikni na střed oblouku drážky, nebo napiš x a y (Tab, Enter) |
+|  | začátek osy | `slotArc.start` | Klikni na začátek osy drážky, nebo napiš poloměr a úhel (Tab, Enter), Esc zpět |
+|  | konec osy | `slotArc.end` | Klikni na konec osy drážky, nebo napiš úhel rozevření (Enter), Esc zpět |
+| všechny drážky | šířka (sdílený klíč jako `hint.pattern.edit`) | `slot.width` | Klikni pro šířku drážky, nebo ji napiš (Enter), Esc zpět |
+| kóta (`sketch.dimension`) | bez cíle | `dimension.pick` | Klikni na úsečku, kružnici, oblouk nebo bod, který chceš okótovat |
+|  | bod čeká na druhou entitu | `dimension.second` | Klikni na druhý bod nebo křivku, Esc zpět |
+|  | kóta visí na myši | `dimension.place` | Klikni pro polohu kóty (druh volí kurzor), Esc zruší |
+
+- **Testy:** `common.test.ts` (mechanismus: aktivace, klik, Enter, klávesa nástroje, krok bez události, `null`, nástroj bez `hint` nápovědu nemění); `sketch-tools.test.ts` „the drawing tools: the hint HUD (M37)“ – tabulka scénářů přes `ToolManager.hint`, klíč po každé akci každého nástroje včetně Esc a tahu tečného oblouku; `i18n.test.ts` (klíče v cs i en); e2e `m37.spec.ts` (nápověda úsečky v obou krocích).
+
 ## Testy
 
 - `sketch`: `parseSketchData` pro každé pravidlo (platná data, každý druh chyby s `index`); `constraintFor` a `dimensionFor` pro platné i neplatné výběry; `measure`; `removeItems` (kaskáda bod → křivky → osiřelé body → vazby); `toggleConstruction`; `regionCurves` (M30: konstrukční křivky ne, id u všech, spline jako `bspline`); oblasti (do M29 `computeRegions`, od M30 kontraktová sada jádra `describeGeometryKernelContract`, proti fake i OCCT): obdélník (1 oblast, jméno z id 4 úseček, plocha), dva obdélníky vedle sebe se sdílenou hranou (2 oblasti), obdélník s kružnicí uvnitř (díra, 2 oblasti), kružnice v kružnici v kružnici, drážka z úseček a tečných oblouků (řazení při shodě úhlu), otevřená polyline (0), polyline s „ocáskem“ (prořezání), konstrukční úsečka uvnitř obdélníku (ignorována), křížící se úsečky (`crossing`), body spojené `coincident` (splynutí uzlů), stabilita jména po změně souřadnic a pořadí entit; `FakeSolver`.

@@ -134,6 +134,10 @@ export function createDimensionTool(sketches: SketchEditor): Tool {
 
   return clickTool(sketches, {
     reset,
+    hint() {
+      if (step.kind === 'idle') return 'hint.dimension.pick';
+      return step.kind === 'point' ? 'hint.dimension.second' : 'hint.dimension.place';
+    },
     onMove(ctx, session, x, y) {
       if (step.kind === 'hanging') preview(ctx, session, step.target, x, y);
     },

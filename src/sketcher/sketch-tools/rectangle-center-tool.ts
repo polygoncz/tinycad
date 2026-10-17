@@ -57,6 +57,9 @@ export function createRectangleCenterTool(sketches: SketchEditor): Tool {
     reset() {
       center = null;
     },
+    hint() {
+      return center === null ? 'hint.rectangleCenter.center' : 'hint.rectangleCenter.corner';
+    },
     inputFields() {
       return center === null ? XY_FIELDS : SIZE_FIELDS;
     },

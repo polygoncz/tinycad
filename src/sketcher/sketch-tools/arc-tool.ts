@@ -69,6 +69,10 @@ export function createArcTool(sketches: SketchEditor): Tool {
       start = null;
       radius = null;
     },
+    hint() {
+      if (center === null) return 'hint.arc.center';
+      return start === null ? 'hint.arc.start' : 'hint.arc.end';
+    },
     inputFields() {
       if (center === null) return XY_FIELDS;
       return start === null ? RADIAL_FIELDS : SWEEP_FIELDS;
