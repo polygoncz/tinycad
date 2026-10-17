@@ -1,0 +1,16 @@
+{
+  "kind": "ops.upcast",
+  "description": "An unknown operation type fails at type",
+  "source": "test/unit/ops/upcast.test.ts › upcastOperation › fails on an unknown type",
+  "input": {
+    "operation": {
+      "type": "nope",
+      "v": 1
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "type"
+    }
+  }
+}

@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadCases } from './case';
 import type { Area, CaseKind, CaseOutcome, LoadedCase, Tolerance } from './case';
-import { firstDifference, resolveTolerance } from './compare';
+import { firstDifference, pathOf, resolveTolerance } from './compare';
 import { isRecordMode, recordExpected } from './record';
 
 /** What a KindRunner gets next to the input. */
@@ -103,8 +103,29 @@ async function runCase(sharedCase: LoadedCase, runners: KindRunners, record: boo
   if (difference !== undefined) expect.fail(`${sharedCase.file}\n${difference}`);
 }
 
-/** The outcome as it would be read back from the file: through JSON. */
-function asJson(outcome: CaseOutcome): CaseOutcome {
+/**
+ * The outcome as it would be read back from the file: through JSON. A NaN or an infinity throws
+ * with its path (spec 13, Obálka): JSON.stringify would silently write it as null.
+ */
+export function asJson(outcome: CaseOutcome): CaseOutcome {
+  assertFinite(outcome, 'outcome');
   // JSON.parse of a stringified CaseOutcome is a CaseOutcome without undefined keys.
   return JSON.parse(JSON.stringify(outcome)) as CaseOutcome;
+}
+
+function assertFinite(value: unknown, path: string): void {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value))
+      throw new Error(`${path}: ${String(value)} is not a finite number`);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item: unknown, i) => {
+      assertFinite(item, `${path}[${String(i)}]`);
+    });
+    return;
+  }
+  if (typeof value === 'object' && value !== null) {
+    for (const [key, item] of Object.entries(value)) assertFinite(item, pathOf(path, key));
+  }
 }

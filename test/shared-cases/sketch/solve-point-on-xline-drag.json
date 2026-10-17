@@ -1,0 +1,135 @@
+{
+  "kind": "sketch.solve",
+  "description": "A dragged point on an xline stays on it outside the segment of its points",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – infinite line (xline, M31) › a point on an xline stays on it outside the segment p1p2",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "p",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "q",
+        "x": 10,
+        "y": 0
+      },
+      {
+        "kind": "xline",
+        "id": "X",
+        "p1": "p",
+        "p2": "q",
+        "construction": true
+      },
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 10,
+        "y": 7
+      },
+      {
+        "kind": "line",
+        "id": "ab",
+        "p1": "a",
+        "p2": "b"
+      },
+      {
+        "kind": "point",
+        "id": "m",
+        "x": 4,
+        "y": 0
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fp",
+        "point": "p"
+      },
+      {
+        "kind": "fix",
+        "id": "fq",
+        "point": "q"
+      },
+      {
+        "kind": "fix",
+        "id": "fa",
+        "point": "a"
+      },
+      {
+        "kind": "pointOnCurve",
+        "id": "on",
+        "point": "m",
+        "curve": "X"
+      }
+    ],
+    "drag": {
+      "point": "m",
+      "to": [
+        50,
+        3
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 3,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "p",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "q",
+          "x": 10,
+          "y": 0
+        },
+        {
+          "kind": "xline",
+          "id": "X",
+          "p1": "p",
+          "p2": "q",
+          "construction": true
+        },
+        {
+          "kind": "point",
+          "id": "a",
+          "x": 0,
+          "y": 5
+        },
+        {
+          "kind": "point",
+          "id": "b",
+          "x": 10,
+          "y": 7
+        },
+        {
+          "kind": "line",
+          "id": "ab",
+          "p1": "a",
+          "p2": "b"
+        },
+        {
+          "kind": "point",
+          "id": "m",
+          "x": 50,
+          "y": 0
+        }
+      ]
+    }
+  }
+}

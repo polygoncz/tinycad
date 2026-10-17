@@ -1,0 +1,23 @@
+{
+  "kind": "geometry.segment",
+  "description": "A circle over exactly one turn rejects with invalid-input",
+  "source": "src/kernel/testing.ts › input (spec 06 curveSegment) › a circle over exactly one turn rejects with invalid-input",
+  "input": {
+    "curve": {
+      "kind": "circle",
+      "center": [
+        0,
+        0
+      ],
+      "radius": 1,
+      "id": "c"
+    },
+    "from": 1,
+    "to": 7.283185307179586
+  },
+  "expected": {
+    "error": {
+      "code": "invalid-input"
+    }
+  }
+}

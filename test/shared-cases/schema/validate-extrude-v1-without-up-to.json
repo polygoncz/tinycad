@@ -1,0 +1,27 @@
+{
+  "kind": "schema.validate",
+  "description": "Data of version 1 without upTo stay valid (the hidden upTo is not required)",
+  "source": "test/unit/features/extrude/extrude.test.ts › extrudeSchema › data of version 1 without upTo stay valid (the hidden upTo is not required)",
+  "input": {
+    "type": "extrude",
+    "params": {
+      "regions": [
+        {
+          "kind": "region",
+          "sketch": "s1",
+          "region": "r1"
+        }
+      ],
+      "operation": "new",
+      "targets": [],
+      "endType": "blind",
+      "distance": 10,
+      "flip": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": []
+    }
+  }
+}

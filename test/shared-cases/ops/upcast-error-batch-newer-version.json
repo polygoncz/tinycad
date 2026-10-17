@@ -1,0 +1,17 @@
+{
+  "kind": "ops.upcast",
+  "description": "A batch of version 2 fails at v",
+  "source": "test/unit/ops/upcast.test.ts › upcastOperation › reports a batch without an ops array and a newer batch version",
+  "input": {
+    "operation": {
+      "type": "batch",
+      "v": 2,
+      "ops": []
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "v"
+    }
+  }
+}

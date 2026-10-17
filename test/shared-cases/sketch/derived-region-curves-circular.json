@@ -1,0 +1,169 @@
+{
+  "kind": "sketch.derived",
+  "description": "Region curves append the copies of a circular pattern",
+  "source": "test/unit/sketch/geometry.test.ts › regionCurves – copies of mirrors and patterns (M36) › appends the copies of a circular pattern",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "o",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "u",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "kind": "point",
+        "id": "c",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "e",
+        "x": 4,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "f",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "kind": "line",
+        "id": "ou",
+        "p1": "o",
+        "p2": "u",
+        "construction": true
+      },
+      {
+        "kind": "circle",
+        "id": "k",
+        "center": "c",
+        "radius": 0.5
+      },
+      {
+        "kind": "line",
+        "id": "ef",
+        "p1": "e",
+        "p2": "f"
+      },
+      {
+        "kind": "line",
+        "id": "cf",
+        "p1": "c",
+        "p2": "f",
+        "construction": true
+      },
+      {
+        "kind": "circularPattern",
+        "id": "cp",
+        "sources": [
+          "k"
+        ],
+        "center": "o",
+        "count": 4,
+        "angle": 6.283185307179586
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [
+        {
+          "kind": "point",
+          "id": "cp:1.c",
+          "x": 1.8369701987210297e-16,
+          "y": 3
+        },
+        {
+          "kind": "circle",
+          "id": "cp:1.k",
+          "center": "cp:1.c",
+          "radius": 0.5
+        },
+        {
+          "kind": "point",
+          "id": "cp:2.c",
+          "x": -3,
+          "y": 3.6739403974420594e-16
+        },
+        {
+          "kind": "circle",
+          "id": "cp:2.k",
+          "center": "cp:2.c",
+          "radius": 0.5
+        },
+        {
+          "kind": "point",
+          "id": "cp:3.c",
+          "x": -5.51091059616309e-16,
+          "y": -3
+        },
+        {
+          "kind": "circle",
+          "id": "cp:3.k",
+          "center": "cp:3.c",
+          "radius": 0.5
+        }
+      ],
+      "textCurves": [],
+      "regionCurves": [
+        {
+          "kind": "circle",
+          "center": [
+            3,
+            0
+          ],
+          "radius": 0.5,
+          "id": "k"
+        },
+        {
+          "kind": "line",
+          "from": [
+            4,
+            0
+          ],
+          "to": [
+            4,
+            2
+          ],
+          "id": "ef"
+        },
+        {
+          "kind": "circle",
+          "center": [
+            1.8369701987210297e-16,
+            3
+          ],
+          "radius": 0.5,
+          "id": "cp:1.k"
+        },
+        {
+          "kind": "circle",
+          "center": [
+            -3,
+            3.6739403974420594e-16
+          ],
+          "radius": 0.5,
+          "id": "cp:2.k"
+        },
+        {
+          "kind": "circle",
+          "center": [
+            -5.51091059616309e-16,
+            -3
+          ],
+          "radius": 0.5,
+          "id": "cp:3.k"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "kind": "document.load",
+  "description": "A transform of version 2 without the axis loads unchanged on version 3",
+  "source": "test/unit/features/transform/transform.test.ts › transformSchema.migrate › passes data of version 2 with an unknown or missing axis unchanged",
+  "input": {
+    "data": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "t1",
+            "type": "transform",
+            "typeVersion": 2,
+            "name": "Transform 1",
+            "suppressed": false,
+            "params": {
+              "bodies": [
+                {
+                  "kind": "body",
+                  "body": "b1/body"
+                }
+              ],
+              "pivot": "point",
+              "pivotPoint": [
+                4,
+                5,
+                6
+              ],
+              "translate": [
+                1,
+                2,
+                3
+              ],
+              "angle": 0.5
+            }
+          }
+        ],
+        "rollbackIndex": 1
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "data": {
+        "meta": {
+          "id": "doc1",
+          "name": "Test document",
+          "createdAt": 0
+        },
+        "studio": {
+          "features": [
+            {
+              "id": "t1",
+              "type": "transform",
+              "typeVersion": 3,
+              "name": "Transform 1",
+              "params": {
+                "bodies": [
+                  {
+                    "kind": "body",
+                    "body": "b1/body"
+                  }
+                ],
+                "pivot": "point",
+                "pivotPoint": [
+                  4,
+                  5,
+                  6
+                ],
+                "translate": [
+                  1,
+                  2,
+                  3
+                ],
+                "angle": 0.5
+              },
+              "suppressed": false
+            }
+          ],
+          "rollbackIndex": 1
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "kind": "document.load",
+  "description": "A feature id with '/' is a load issue",
+  "source": "test/unit/document/serialize.test.ts › fromData – broken data (Q026) › rejects a feature id with '/': it is the owner part of artifact ids",
+  "input": {
+    "data": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "a/b",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "a/b",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 10,
+              "depth": 10,
+              "height": 10
+            }
+          }
+        ],
+        "rollbackIndex": 1
+      }
+    }
+  },
+  "expected": {
+    "error": {
+      "issues": [
+        {
+          "path": "studio.features[0].id"
+        }
+      ]
+    }
+  }
+}

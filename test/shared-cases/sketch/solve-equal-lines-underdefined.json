@@ -1,0 +1,113 @@
+{
+  "kind": "sketch.solve",
+  "description": "Equal keeps the length of a free line equal to a fixed line and leaves its direction free",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "p",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "q",
+        "x": 6,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "L",
+        "p1": "p",
+        "p2": "q"
+      },
+      {
+        "kind": "point",
+        "id": "s",
+        "x": 0,
+        "y": 3
+      },
+      {
+        "kind": "point",
+        "id": "t",
+        "x": 2,
+        "y": 5
+      },
+      {
+        "kind": "line",
+        "id": "M",
+        "p1": "s",
+        "p2": "t"
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fix-p",
+        "point": "p"
+      },
+      {
+        "kind": "fix",
+        "id": "fix-q",
+        "point": "q"
+      },
+      {
+        "kind": "fix",
+        "id": "fix-s",
+        "point": "s"
+      },
+      {
+        "kind": "equal",
+        "id": "eL",
+        "a": "M",
+        "b": "L"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 1,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "p",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "q",
+          "x": 6,
+          "y": 0
+        },
+        {
+          "kind": "line",
+          "id": "L",
+          "p1": "p",
+          "p2": "q"
+        },
+        {
+          "kind": "point",
+          "id": "s",
+          "x": 0,
+          "y": 3
+        },
+        {
+          "kind": "point",
+          "id": "t",
+          "x": 5.300133956179033,
+          "y": 5.81221977209428
+        },
+        {
+          "kind": "line",
+          "id": "M",
+          "p1": "s",
+          "p2": "t"
+        }
+      ]
+    }
+  }
+}

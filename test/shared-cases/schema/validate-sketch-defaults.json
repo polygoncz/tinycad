@@ -1,0 +1,23 @@
+{
+  "kind": "schema.validate",
+  "description": "The defaults of sketch give no issues",
+  "source": "test/unit/features/sketch/sketch.test.ts › sketchSchema › defaults are an empty sketch on the origin plane XY and pass validation",
+  "input": {
+    "type": "sketch",
+    "params": {
+      "plane": [
+        {
+          "kind": "plane",
+          "plane": "origin/plane:xy"
+        }
+      ],
+      "entities": [],
+      "constraints": []
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": []
+    }
+  }
+}

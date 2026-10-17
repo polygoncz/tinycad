@@ -1,0 +1,23 @@
+{
+  "kind": "ops.upcast",
+  "description": "A valid feature.move of the current version passes unchanged",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › %s: a valid operation passes",
+  "input": {
+    "operation": {
+      "type": "feature.move",
+      "v": 1,
+      "featureId": "f1",
+      "toIndex": 0
+    }
+  },
+  "expected": {
+    "ok": {
+      "operation": {
+        "type": "feature.move",
+        "v": 1,
+        "featureId": "f1",
+        "toIndex": 0
+      }
+    }
+  }
+}

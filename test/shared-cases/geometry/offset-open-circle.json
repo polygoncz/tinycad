@@ -1,0 +1,25 @@
+{
+  "kind": "geometry.offset",
+  "description": "An open circle rejects with invalid-input",
+  "source": "src/kernel/testing.ts › input (spec 06 offsetCurves) › an open circle rejects with invalid-input",
+  "input": {
+    "chain": [
+      {
+        "kind": "circle",
+        "center": [
+          0,
+          0
+        ],
+        "radius": 1,
+        "id": "k"
+      }
+    ],
+    "closed": false,
+    "distance": 1
+  },
+  "expected": {
+    "error": {
+      "code": "invalid-input"
+    }
+  }
+}

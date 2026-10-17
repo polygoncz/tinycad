@@ -1,0 +1,35 @@
+{
+  "kind": "schema.validate",
+  "description": "Two planes are param.tooManyRefs",
+  "source": "test/unit/features/sketch/sketch.test.ts › sketchSchema › rejects no plane and two planes",
+  "input": {
+    "type": "sketch",
+    "params": {
+      "plane": [
+        {
+          "kind": "plane",
+          "plane": "origin/plane:xy"
+        },
+        {
+          "kind": "plane",
+          "plane": "origin/plane:xz"
+        }
+      ],
+      "entities": [],
+      "constraints": []
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "plane",
+          "code": "param.tooManyRefs",
+          "params": {
+            "max": 1
+          }
+        }
+      ]
+    }
+  }
+}

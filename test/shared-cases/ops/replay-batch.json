@@ -1,0 +1,199 @@
+{
+  "kind": "ops.replay",
+  "description": "Replay of a batch entry applies its operations in order",
+  "source": "test/unit/ops/transaction.test.ts › commit › makes a batch of add and merged setParams",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "a",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "A",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 10,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          {
+            "id": "b",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "B",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 10,
+              "depth": 10,
+              "height": 10
+            }
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    },
+    "entries": [
+      {
+        "seq": 1,
+        "kind": "do",
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "feature.add",
+              "v": 1,
+              "feature": {
+                "id": "c",
+                "type": "box",
+                "typeVersion": 1,
+                "name": "C",
+                "suppressed": false,
+                "params": {
+                  "origin": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "width": 10,
+                  "depth": 10,
+                  "height": 10
+                }
+              },
+              "index": 2
+            },
+            {
+              "type": "feature.setParams",
+              "v": 2,
+              "featureId": "c",
+              "typeVersion": 1,
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 6,
+                "depth": 10,
+                "height": 10
+              }
+            }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "feature.setParams",
+              "v": 2,
+              "featureId": "c",
+              "typeVersion": 1,
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 10,
+                "depth": 10,
+                "height": 10
+              }
+            },
+            {
+              "type": "feature.remove",
+              "v": 1,
+              "featureId": "c"
+            }
+          ]
+        },
+        "label": "Box",
+        "time": 0
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "document": {
+        "meta": {
+          "id": "doc1",
+          "name": "Test document",
+          "createdAt": 0
+        },
+        "studio": {
+          "features": [
+            {
+              "id": "a",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "A",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 10,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            },
+            {
+              "id": "b",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "B",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 10,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            },
+            {
+              "id": "c",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "C",
+              "suppressed": false,
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 6,
+                "depth": 10,
+                "height": 10
+              }
+            }
+          ],
+          "rollbackIndex": 3
+        }
+      }
+    }
+  }
+}

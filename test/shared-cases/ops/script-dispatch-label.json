@@ -1,0 +1,162 @@
+{
+  "kind": "ops.script",
+  "description": "A dispatch writes its label, the type of the operation by default",
+  "source": "test/unit/ops/dispatcher.test.ts › dispatch › uses the label from meta",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "a",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "A",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          {
+            "id": "b",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "B",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    },
+    "steps": [
+      {
+        "dispatch": {
+          "type": "feature.rename",
+          "v": 1,
+          "featureId": "a",
+          "name": "X"
+        },
+        "label": "Rename A"
+      },
+      {
+        "dispatch": {
+          "type": "feature.rename",
+          "v": 1,
+          "featureId": "a",
+          "name": "Y"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "document": {
+        "meta": {
+          "id": "doc1",
+          "name": "Test document",
+          "createdAt": 0
+        },
+        "studio": {
+          "features": [
+            {
+              "id": "a",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "Y",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 1,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            },
+            {
+              "id": "b",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "B",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 1,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            }
+          ],
+          "rollbackIndex": 2
+        }
+      },
+      "log": [
+        {
+          "kind": "do",
+          "op": {
+            "type": "feature.rename",
+            "v": 1,
+            "featureId": "a",
+            "name": "X"
+          },
+          "inverse": {
+            "type": "feature.rename",
+            "v": 1,
+            "featureId": "a",
+            "name": "A"
+          },
+          "label": "Rename A",
+          "time": 1,
+          "seq": 1
+        },
+        {
+          "kind": "do",
+          "op": {
+            "type": "feature.rename",
+            "v": 1,
+            "featureId": "a",
+            "name": "Y"
+          },
+          "inverse": {
+            "type": "feature.rename",
+            "v": 1,
+            "featureId": "a",
+            "name": "X"
+          },
+          "label": "feature.rename",
+          "time": 2,
+          "seq": 2
+        }
+      ],
+      "canUndo": true,
+      "canRedo": false
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "kind": "ops.upcast",
+  "description": "A valid feature.setParams of the current version passes unchanged",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › %s: a valid operation passes",
+  "input": {
+    "operation": {
+      "type": "feature.setParams",
+      "v": 2,
+      "featureId": "f1",
+      "typeVersion": 1,
+      "params": {
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "width": 20,
+        "depth": 10,
+        "height": 10
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "operation": {
+        "type": "feature.setParams",
+        "v": 2,
+        "featureId": "f1",
+        "typeVersion": 1,
+        "params": {
+          "origin": [
+            0,
+            0,
+            0
+          ],
+          "width": 20,
+          "depth": 10,
+          "height": 10
+        }
+      }
+    }
+  }
+}

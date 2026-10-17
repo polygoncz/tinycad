@@ -1,0 +1,116 @@
+{
+  "kind": "sketch.solve",
+  "description": "A line parallel to a fixed xline gets its direction",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – infinite line (xline, M31) › a line parallel to an xline gets its direction",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "p",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "q",
+        "x": 10,
+        "y": 0
+      },
+      {
+        "kind": "xline",
+        "id": "X",
+        "p1": "p",
+        "p2": "q",
+        "construction": true
+      },
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 10,
+        "y": 7
+      },
+      {
+        "kind": "line",
+        "id": "ab",
+        "p1": "a",
+        "p2": "b"
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fp",
+        "point": "p"
+      },
+      {
+        "kind": "fix",
+        "id": "fq",
+        "point": "q"
+      },
+      {
+        "kind": "fix",
+        "id": "fa",
+        "point": "a"
+      },
+      {
+        "kind": "parallel",
+        "id": "pa",
+        "a": "ab",
+        "b": "X"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 1,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "p",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "q",
+          "x": 10,
+          "y": 0
+        },
+        {
+          "kind": "xline",
+          "id": "X",
+          "p1": "p",
+          "p2": "q",
+          "construction": true
+        },
+        {
+          "kind": "point",
+          "id": "a",
+          "x": 0,
+          "y": 5
+        },
+        {
+          "kind": "point",
+          "id": "b",
+          "x": 10.000293196033777,
+          "y": 5
+        },
+        {
+          "kind": "line",
+          "id": "ab",
+          "p1": "a",
+          "p2": "b"
+        }
+      ]
+    }
+  }
+}

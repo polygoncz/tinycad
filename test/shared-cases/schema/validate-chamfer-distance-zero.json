@@ -1,0 +1,31 @@
+{
+  "kind": "schema.validate",
+  "description": "A distance of 0 is param.atOrBelowMin",
+  "source": "test/unit/features/chamfer/chamfer.test.ts › chamferSchema › rejects a distance of 0 and a reference of another kind",
+  "input": {
+    "type": "chamfer",
+    "params": {
+      "edges": [
+        {
+          "kind": "topo",
+          "body": "a/body",
+          "name": "e3"
+        }
+      ],
+      "distance": 0
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "distance",
+          "code": "param.atOrBelowMin",
+          "params": {
+            "min": 0
+          }
+        }
+      ]
+    }
+  }
+}

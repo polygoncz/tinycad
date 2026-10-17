@@ -1,0 +1,89 @@
+{
+  "kind": "sketch.solve",
+  "description": "A diameter of an arc holds its radius while an end point is dragged",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – M28 dimensions › diameter of an arc holds the radius while dragging an end point",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "ac",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "as",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "ae",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "kind": "arc",
+        "id": "A",
+        "center": "ac",
+        "start": "as",
+        "end": "ae"
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fc",
+        "point": "ac"
+      },
+      {
+        "kind": "diameter",
+        "id": "d",
+        "curve": "A",
+        "value": 6
+      }
+    ],
+    "drag": {
+      "point": "as",
+      "to": [
+        1,
+        5
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 2,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "ac",
+          "x": 6.002394806383131e-28,
+          "y": 7.525764885012963e-29
+        },
+        {
+          "kind": "point",
+          "id": "as",
+          "x": 0.5883484054145587,
+          "y": 2.9417420270727592
+        },
+        {
+          "kind": "point",
+          "id": "ae",
+          "x": 1.6819223789926365e-16,
+          "y": 3
+        },
+        {
+          "kind": "arc",
+          "id": "A",
+          "center": "ac",
+          "start": "as",
+          "end": "ae"
+        }
+      ]
+    }
+  }
+}

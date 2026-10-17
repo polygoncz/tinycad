@@ -1,0 +1,28 @@
+{
+  "kind": "schema.validate",
+  "description": "An unknown axis is param.unknownOption",
+  "source": "test/unit/features/cylinder/cylinder.test.ts › cylinderSchema › rejects an unknown axis",
+  "input": {
+    "type": "cylinder",
+    "params": {
+      "base": [
+        0,
+        0,
+        0
+      ],
+      "axis": "w",
+      "radius": 5,
+      "height": 10
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "axis",
+          "code": "param.unknownOption"
+        }
+      ]
+    }
+  }
+}

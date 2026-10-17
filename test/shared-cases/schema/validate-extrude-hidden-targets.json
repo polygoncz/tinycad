@@ -1,0 +1,28 @@
+{
+  "kind": "schema.validate",
+  "description": "A hidden invalid targets passes for a new body",
+  "source": "test/unit/features/extrude/extrude.test.ts › extrudeSchema › a hidden invalid targets passes validation for a new body",
+  "input": {
+    "type": "extrude",
+    "params": {
+      "regions": [
+        {
+          "kind": "region",
+          "sketch": "s1",
+          "region": "r1"
+        }
+      ],
+      "operation": "new",
+      "targets": "garbage",
+      "endType": "blind",
+      "distance": 10,
+      "upTo": [],
+      "flip": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": []
+    }
+  }
+}

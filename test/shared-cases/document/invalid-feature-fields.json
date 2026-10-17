@@ -1,0 +1,68 @@
+{
+  "kind": "document.load",
+  "description": "Every bad feature field is reported with its path",
+  "source": "test/unit/document/serialize.test.ts › fromData – broken data (Q026) › reports every bad feature field with its path",
+  "input": {
+    "data": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "a",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "a",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 10,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          {
+            "id": 7,
+            "type": "",
+            "typeVersion": 0,
+            "name": null,
+            "params": [],
+            "suppressed": "no"
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    }
+  },
+  "expected": {
+    "error": {
+      "issues": [
+        {
+          "path": "studio.features[1].id"
+        },
+        {
+          "path": "studio.features[1].name"
+        },
+        {
+          "path": "studio.features[1].params"
+        },
+        {
+          "path": "studio.features[1].suppressed"
+        },
+        {
+          "path": "studio.features[1].type"
+        },
+        {
+          "path": "studio.features[1].typeVersion"
+        }
+      ]
+    }
+  }
+}

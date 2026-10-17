@@ -1,0 +1,35 @@
+{
+  "kind": "schema.validate",
+  "description": "The defaults of transform with the references picked give no issues",
+  "source": "test/unit/features/transform/transform.test.ts › transformSchema › defaults pass validation once a body is picked; without one only tooFewRefs",
+  "input": {
+    "type": "transform",
+    "params": {
+      "bodies": [
+        {
+          "kind": "body",
+          "body": "b1/body"
+        }
+      ],
+      "pivot": "bodiesCenter",
+      "pivotPoint": [
+        0,
+        0,
+        0
+      ],
+      "translate": [
+        0,
+        0,
+        0
+      ],
+      "rx": 0,
+      "ry": 0,
+      "rz": 0
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": []
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "kind": "schema.validate",
+  "description": "An angle over a full turn is param.aboveMax",
+  "source": "test/unit/features/revolve/revolve.test.ts › revolveSchema › accepts a full turn and rejects 0 and more than a full turn",
+  "input": {
+    "type": "revolve",
+    "params": {
+      "regions": [
+        {
+          "kind": "region",
+          "sketch": "s1",
+          "region": "r1"
+        }
+      ],
+      "axis": {
+        "kind": "axis",
+        "axis": "origin/axis:z"
+      },
+      "operation": "new",
+      "targets": [],
+      "angle": 6.383185307179586,
+      "flip": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "angle",
+          "code": "param.aboveMax",
+          "params": {
+            "max": 6.283185307179586
+          }
+        }
+      ]
+    }
+  }
+}

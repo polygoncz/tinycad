@@ -1,0 +1,95 @@
+{
+  "kind": "sketch.solve",
+  "description": "Symmetry holds with a free axis while a point is dragged",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – M36 symmetric › holds with a free axis while a point is dragged",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "p",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "q",
+        "x": 10,
+        "y": 10
+      },
+      {
+        "kind": "line",
+        "id": "L",
+        "p1": "p",
+        "p2": "q"
+      },
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 3,
+        "y": 4
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 5,
+        "y": -1
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "symmetric",
+        "id": "s",
+        "a": "a",
+        "b": "b",
+        "axis": "L"
+      }
+    ],
+    "drag": {
+      "point": "a",
+      "to": [
+        -2,
+        6
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 6,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "p",
+          "x": -0.38349132555612586,
+          "y": 0.37686335896451634
+        },
+        {
+          "kind": "point",
+          "id": "q",
+          "x": 9.78223338308176,
+          "y": 10.22969374255481
+        },
+        {
+          "kind": "line",
+          "id": "L",
+          "p1": "p",
+          "p2": "q"
+        },
+        {
+          "kind": "point",
+          "id": "a",
+          "x": -1.9999999999999978,
+          "y": 5.999999999999999
+        },
+        {
+          "kind": "point",
+          "id": "b",
+          "x": 5.186378066425431,
+          "y": -1.4145944090487588
+        }
+      ]
+    }
+  }
+}

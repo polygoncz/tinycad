@@ -1,0 +1,572 @@
+{
+  "kind": "sketch.solve",
+  "description": "An outward offset of a rounded rectangle moves the lines and grows the arcs around the shared centres",
+  "source": "test/unit/solver-planegcs/solve-offset.test.ts › solveSketch – offset of a rounded rectangle › outward: the value moves the lines and grows the arcs around the shared centres",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "o1",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "kind": "point",
+        "id": "o2",
+        "x": 10,
+        "y": 2
+      },
+      {
+        "kind": "point",
+        "id": "o3",
+        "x": 10,
+        "y": 6
+      },
+      {
+        "kind": "point",
+        "id": "o4",
+        "x": 2,
+        "y": 6
+      },
+      {
+        "kind": "point",
+        "id": "b1",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b2",
+        "x": 10,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "r1",
+        "x": 12,
+        "y": 2
+      },
+      {
+        "kind": "point",
+        "id": "r2",
+        "x": 12,
+        "y": 6
+      },
+      {
+        "kind": "point",
+        "id": "t1",
+        "x": 10,
+        "y": 8
+      },
+      {
+        "kind": "point",
+        "id": "t2",
+        "x": 2,
+        "y": 8
+      },
+      {
+        "kind": "point",
+        "id": "l1",
+        "x": 0,
+        "y": 6
+      },
+      {
+        "kind": "point",
+        "id": "l2",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "kind": "line",
+        "id": "B",
+        "p1": "b1",
+        "p2": "b2"
+      },
+      {
+        "kind": "arc",
+        "id": "SE",
+        "center": "o2",
+        "start": "b2",
+        "end": "r1"
+      },
+      {
+        "kind": "line",
+        "id": "R",
+        "p1": "r1",
+        "p2": "r2"
+      },
+      {
+        "kind": "arc",
+        "id": "NE",
+        "center": "o3",
+        "start": "r2",
+        "end": "t1"
+      },
+      {
+        "kind": "line",
+        "id": "T",
+        "p1": "t1",
+        "p2": "t2"
+      },
+      {
+        "kind": "arc",
+        "id": "NW",
+        "center": "o4",
+        "start": "t2",
+        "end": "l1"
+      },
+      {
+        "kind": "line",
+        "id": "L",
+        "p1": "l1",
+        "p2": "l2"
+      },
+      {
+        "kind": "arc",
+        "id": "SW",
+        "center": "o1",
+        "start": "l2",
+        "end": "b1"
+      },
+      {
+        "kind": "point",
+        "id": "xb1",
+        "x": 2,
+        "y": -1
+      },
+      {
+        "kind": "point",
+        "id": "xb2",
+        "x": 10,
+        "y": -1
+      },
+      {
+        "kind": "point",
+        "id": "xr1",
+        "x": 13,
+        "y": 2
+      },
+      {
+        "kind": "point",
+        "id": "xr2",
+        "x": 13,
+        "y": 6
+      },
+      {
+        "kind": "point",
+        "id": "xt1",
+        "x": 10,
+        "y": 9
+      },
+      {
+        "kind": "point",
+        "id": "xt2",
+        "x": 2,
+        "y": 9
+      },
+      {
+        "kind": "point",
+        "id": "xl1",
+        "x": -1,
+        "y": 6
+      },
+      {
+        "kind": "point",
+        "id": "xl2",
+        "x": -1,
+        "y": 2
+      },
+      {
+        "kind": "line",
+        "id": "xB",
+        "p1": "xb1",
+        "p2": "xb2"
+      },
+      {
+        "kind": "arc",
+        "id": "xSE",
+        "center": "o2",
+        "start": "xb2",
+        "end": "xr1"
+      },
+      {
+        "kind": "line",
+        "id": "xR",
+        "p1": "xr1",
+        "p2": "xr2"
+      },
+      {
+        "kind": "arc",
+        "id": "xNE",
+        "center": "o3",
+        "start": "xr2",
+        "end": "xt1"
+      },
+      {
+        "kind": "line",
+        "id": "xT",
+        "p1": "xt1",
+        "p2": "xt2"
+      },
+      {
+        "kind": "arc",
+        "id": "xNW",
+        "center": "o4",
+        "start": "xt2",
+        "end": "xl1"
+      },
+      {
+        "kind": "line",
+        "id": "xL",
+        "p1": "xl1",
+        "p2": "xl2"
+      },
+      {
+        "kind": "arc",
+        "id": "xSW",
+        "center": "o1",
+        "start": "xl2",
+        "end": "xb1"
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fo1",
+        "point": "o1"
+      },
+      {
+        "kind": "fix",
+        "id": "fo2",
+        "point": "o2"
+      },
+      {
+        "kind": "fix",
+        "id": "fo3",
+        "point": "o3"
+      },
+      {
+        "kind": "fix",
+        "id": "fo4",
+        "point": "o4"
+      },
+      {
+        "kind": "fix",
+        "id": "fb2",
+        "point": "b2"
+      },
+      {
+        "kind": "fix",
+        "id": "fr2",
+        "point": "r2"
+      },
+      {
+        "kind": "fix",
+        "id": "ft2",
+        "point": "t2"
+      },
+      {
+        "kind": "fix",
+        "id": "fl2",
+        "point": "l2"
+      },
+      {
+        "kind": "tangent",
+        "id": "g1",
+        "a": "SE",
+        "b": "R"
+      },
+      {
+        "kind": "tangent",
+        "id": "g2",
+        "a": "NE",
+        "b": "T"
+      },
+      {
+        "kind": "tangent",
+        "id": "g3",
+        "a": "NW",
+        "b": "L"
+      },
+      {
+        "kind": "tangent",
+        "id": "g4",
+        "a": "SW",
+        "b": "B"
+      },
+      {
+        "kind": "offset",
+        "id": "off",
+        "pairs": [
+          {
+            "source": "B",
+            "copy": "xB"
+          },
+          {
+            "source": "SE",
+            "copy": "xSE"
+          },
+          {
+            "source": "R",
+            "copy": "xR"
+          },
+          {
+            "source": "NE",
+            "copy": "xNE"
+          },
+          {
+            "source": "T",
+            "copy": "xT"
+          },
+          {
+            "source": "NW",
+            "copy": "xNW"
+          },
+          {
+            "source": "L",
+            "copy": "xL"
+          },
+          {
+            "source": "SW",
+            "copy": "xSW"
+          }
+        ],
+        "value": 1.5
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 0,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "o1",
+          "x": 2,
+          "y": 2
+        },
+        {
+          "kind": "point",
+          "id": "o2",
+          "x": 10,
+          "y": 2
+        },
+        {
+          "kind": "point",
+          "id": "o3",
+          "x": 10,
+          "y": 6
+        },
+        {
+          "kind": "point",
+          "id": "o4",
+          "x": 2,
+          "y": 6
+        },
+        {
+          "kind": "point",
+          "id": "b1",
+          "x": 2,
+          "y": -1.6360715081912953e-21
+        },
+        {
+          "kind": "point",
+          "id": "b2",
+          "x": 10,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "r1",
+          "x": 12,
+          "y": 2
+        },
+        {
+          "kind": "point",
+          "id": "r2",
+          "x": 12,
+          "y": 6
+        },
+        {
+          "kind": "point",
+          "id": "t1",
+          "x": 10,
+          "y": 7.999999999999999
+        },
+        {
+          "kind": "point",
+          "id": "t2",
+          "x": 2,
+          "y": 8
+        },
+        {
+          "kind": "point",
+          "id": "l1",
+          "x": -1.0465675387833742e-19,
+          "y": 6
+        },
+        {
+          "kind": "point",
+          "id": "l2",
+          "x": 0,
+          "y": 2
+        },
+        {
+          "kind": "line",
+          "id": "B",
+          "p1": "b1",
+          "p2": "b2"
+        },
+        {
+          "kind": "arc",
+          "id": "SE",
+          "center": "o2",
+          "start": "b2",
+          "end": "r1"
+        },
+        {
+          "kind": "line",
+          "id": "R",
+          "p1": "r1",
+          "p2": "r2"
+        },
+        {
+          "kind": "arc",
+          "id": "NE",
+          "center": "o3",
+          "start": "r2",
+          "end": "t1"
+        },
+        {
+          "kind": "line",
+          "id": "T",
+          "p1": "t1",
+          "p2": "t2"
+        },
+        {
+          "kind": "arc",
+          "id": "NW",
+          "center": "o4",
+          "start": "t2",
+          "end": "l1"
+        },
+        {
+          "kind": "line",
+          "id": "L",
+          "p1": "l1",
+          "p2": "l2"
+        },
+        {
+          "kind": "arc",
+          "id": "SW",
+          "center": "o1",
+          "start": "l2",
+          "end": "b1"
+        },
+        {
+          "kind": "point",
+          "id": "xb1",
+          "x": 2,
+          "y": -1.5
+        },
+        {
+          "kind": "point",
+          "id": "xb2",
+          "x": 10,
+          "y": -1.5
+        },
+        {
+          "kind": "point",
+          "id": "xr1",
+          "x": 13.5,
+          "y": 1.9999999999999998
+        },
+        {
+          "kind": "point",
+          "id": "xr2",
+          "x": 13.5,
+          "y": 6
+        },
+        {
+          "kind": "point",
+          "id": "xt1",
+          "x": 10,
+          "y": 9.5
+        },
+        {
+          "kind": "point",
+          "id": "xt2",
+          "x": 2,
+          "y": 9.5
+        },
+        {
+          "kind": "point",
+          "id": "xl1",
+          "x": -1.5,
+          "y": 6
+        },
+        {
+          "kind": "point",
+          "id": "xl2",
+          "x": -1.5,
+          "y": 2
+        },
+        {
+          "kind": "line",
+          "id": "xB",
+          "p1": "xb1",
+          "p2": "xb2"
+        },
+        {
+          "kind": "arc",
+          "id": "xSE",
+          "center": "o2",
+          "start": "xb2",
+          "end": "xr1"
+        },
+        {
+          "kind": "line",
+          "id": "xR",
+          "p1": "xr1",
+          "p2": "xr2"
+        },
+        {
+          "kind": "arc",
+          "id": "xNE",
+          "center": "o3",
+          "start": "xr2",
+          "end": "xt1"
+        },
+        {
+          "kind": "line",
+          "id": "xT",
+          "p1": "xt1",
+          "p2": "xt2"
+        },
+        {
+          "kind": "arc",
+          "id": "xNW",
+          "center": "o4",
+          "start": "xt2",
+          "end": "xl1"
+        },
+        {
+          "kind": "line",
+          "id": "xL",
+          "p1": "xl1",
+          "p2": "xl2"
+        },
+        {
+          "kind": "arc",
+          "id": "xSW",
+          "center": "o1",
+          "start": "xl2",
+          "end": "xb1"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "kind": "geometry.fillet",
+  "description": "Near right of the corner chooses the center beyond the end of a",
+  "source": "src/kernel/testing.ts › centers (spec 06 Stav po M34) › near chooses among the possible centers",
+  "input": {
+    "a": {
+      "kind": "line",
+      "from": [
+        0,
+        0
+      ],
+      "to": [
+        10,
+        0
+      ],
+      "id": "a"
+    },
+    "b": {
+      "kind": "line",
+      "from": [
+        10,
+        0
+      ],
+      "to": [
+        10,
+        10
+      ],
+      "id": "b"
+    },
+    "radius": 2,
+    "near": [
+      11,
+      1
+    ]
+  },
+  "expected": {
+    "ok": {
+      "center": [
+        12,
+        2
+      ],
+      "pointA": [
+        12,
+        0
+      ],
+      "pointB": [
+        10,
+        2
+      ],
+      "ta": 1.2,
+      "tb": 0.2
+    }
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "kind": "sketch.solve",
+  "description": "A dragged point on a line may leave the segment and stays on the carrier line",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – M26 constraints › a point on a line may leave the segment: it stays on the whole carrier line",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "p",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "q",
+        "x": 10,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "L",
+        "p1": "p",
+        "p2": "q"
+      },
+      {
+        "kind": "point",
+        "id": "m",
+        "x": 4,
+        "y": 0
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fp",
+        "point": "p"
+      },
+      {
+        "kind": "pointOnCurve",
+        "id": "on",
+        "point": "m",
+        "curve": "L"
+      },
+      {
+        "kind": "fix",
+        "id": "fq",
+        "point": "q"
+      }
+    ],
+    "drag": {
+      "point": "m",
+      "to": [
+        20,
+        3
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 1,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "p",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "q",
+          "x": 10,
+          "y": 0
+        },
+        {
+          "kind": "line",
+          "id": "L",
+          "p1": "p",
+          "p2": "q"
+        },
+        {
+          "kind": "point",
+          "id": "m",
+          "x": 20,
+          "y": 0
+        }
+      ]
+    }
+  }
+}

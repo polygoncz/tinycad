@@ -1,0 +1,16 @@
+{
+  "kind": "ops.upcast",
+  "description": "A broken envelope: a version that is not whole",
+  "source": "test/unit/ops/upcast.test.ts › upcastOperation › reports a broken envelope %j at path %j",
+  "input": {
+    "operation": {
+      "type": "feature.rename",
+      "v": 1.5
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "v"
+    }
+  }
+}

@@ -1,0 +1,140 @@
+{
+  "kind": "sketch.derived",
+  "description": "A linear pattern in one direction copies with indices 1 to count minus 1",
+  "source": "test/unit/sketch/patterns.test.ts › patternCopies – linear pattern › copies along one direction with indices 1 … count − 1",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "ab",
+        "p1": "a",
+        "p2": "b"
+      },
+      {
+        "kind": "point",
+        "id": "o",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "u",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "kind": "line",
+        "id": "ou",
+        "p1": "o",
+        "p2": "u",
+        "construction": true
+      },
+      {
+        "kind": "linearPattern",
+        "id": "lp",
+        "sources": [
+          "ab"
+        ],
+        "direction1": {
+          "angle": 1.5707963267948966,
+          "count": 3,
+          "spacing": 4
+        }
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [
+        {
+          "kind": "point",
+          "id": "lp:1.a",
+          "x": 1.0000000000000002,
+          "y": 4
+        },
+        {
+          "kind": "point",
+          "id": "lp:1.b",
+          "x": 3.0000000000000004,
+          "y": 4
+        },
+        {
+          "kind": "line",
+          "id": "lp:1.ab",
+          "p1": "lp:1.a",
+          "p2": "lp:1.b"
+        },
+        {
+          "kind": "point",
+          "id": "lp:2.a",
+          "x": 1.0000000000000004,
+          "y": 8
+        },
+        {
+          "kind": "point",
+          "id": "lp:2.b",
+          "x": 3.0000000000000004,
+          "y": 8
+        },
+        {
+          "kind": "line",
+          "id": "lp:2.ab",
+          "p1": "lp:2.a",
+          "p2": "lp:2.b"
+        }
+      ],
+      "textCurves": [],
+      "regionCurves": [
+        {
+          "kind": "line",
+          "from": [
+            1,
+            0
+          ],
+          "to": [
+            3,
+            0
+          ],
+          "id": "ab"
+        },
+        {
+          "kind": "line",
+          "from": [
+            1.0000000000000002,
+            4
+          ],
+          "to": [
+            3.0000000000000004,
+            4
+          ],
+          "id": "lp:1.ab"
+        },
+        {
+          "kind": "line",
+          "from": [
+            1.0000000000000004,
+            8
+          ],
+          "to": [
+            3.0000000000000004,
+            8
+          ],
+          "id": "lp:2.ab"
+        }
+      ]
+    }
+  }
+}

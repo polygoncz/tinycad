@@ -80,7 +80,8 @@ function numbersMatch(
 
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 
-function pathOf(parent: string, key: string): string {
+/** The path of a key below its parent: `.key`, or `["key"]` when it is not an identifier. */
+export function pathOf(parent: string, key: string): string {
   return IDENTIFIER.test(key) ? `${parent}.${key}` : `${parent}[${JSON.stringify(key)}]`;
 }
 

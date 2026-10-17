@@ -1,0 +1,23 @@
+{
+  "kind": "schema.validate",
+  "description": "The defaults of chamfer with the references picked give no issues",
+  "source": "test/unit/features/chamfer/chamfer.test.ts › chamferSchema › defaults with one edge pass validation",
+  "input": {
+    "type": "chamfer",
+    "params": {
+      "edges": [
+        {
+          "kind": "topo",
+          "body": "a/body",
+          "name": "e3"
+        }
+      ],
+      "distance": 1
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": []
+    }
+  }
+}

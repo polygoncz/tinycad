@@ -1,0 +1,120 @@
+{
+  "kind": "sketch.solve",
+  "description": "A third dimension on the diagonal of a fully defined rectangle is a conflict",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – conflicts and redundancy › a third dimension on the diagonal is a conflict with its id",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 10,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "c",
+        "x": 10,
+        "y": 5
+      },
+      {
+        "kind": "point",
+        "id": "d",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "kind": "line",
+        "id": "ab",
+        "p1": "a",
+        "p2": "b"
+      },
+      {
+        "kind": "line",
+        "id": "bc",
+        "p1": "b",
+        "p2": "c"
+      },
+      {
+        "kind": "line",
+        "id": "cd",
+        "p1": "c",
+        "p2": "d"
+      },
+      {
+        "kind": "line",
+        "id": "da",
+        "p1": "d",
+        "p2": "a"
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "horizontal",
+        "id": "h1",
+        "line": "ab"
+      },
+      {
+        "kind": "vertical",
+        "id": "v1",
+        "line": "bc"
+      },
+      {
+        "kind": "horizontal",
+        "id": "h2",
+        "line": "cd"
+      },
+      {
+        "kind": "vertical",
+        "id": "v2",
+        "line": "da"
+      },
+      {
+        "kind": "distance",
+        "id": "W",
+        "a": "a",
+        "b": "b",
+        "value": 10
+      },
+      {
+        "kind": "distance",
+        "id": "H",
+        "a": "b",
+        "b": "c",
+        "value": 5
+      },
+      {
+        "kind": "fix",
+        "id": "fa",
+        "point": "a"
+      },
+      {
+        "kind": "distance",
+        "id": "diag",
+        "a": "a",
+        "b": "c",
+        "value": 30
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "conflict",
+      "dof": -1,
+      "conflicting": [
+        "H",
+        "W",
+        "diag",
+        "h1",
+        "v1"
+      ],
+      "redundant": [],
+      "entities": null
+    }
+  }
+}

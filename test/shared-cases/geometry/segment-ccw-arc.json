@@ -1,0 +1,47 @@
+{
+  "kind": "geometry.segment",
+  "description": "A piece of a counter-clockwise arc",
+  "source": "src/kernel/testing.ts › pieces (spec 06 Stav po M33) › a piece of a counter-clockwise arc",
+  "input": {
+    "curve": {
+      "kind": "arc",
+      "center": [
+        1,
+        1
+      ],
+      "from": [
+        6,
+        1
+      ],
+      "to": [
+        1,
+        6
+      ],
+      "ccw": true,
+      "id": "k"
+    },
+    "from": 0.39269908169872414,
+    "to": 0.7853981633974483
+  },
+  "expected": {
+    "ok": {
+      "curve": {
+        "kind": "arc",
+        "center": [
+          1,
+          1
+        ],
+        "from": [
+          5.619397662556434,
+          2.913417161825449
+        ],
+        "to": [
+          4.535533905932738,
+          4.535533905932738
+        ],
+        "ccw": true,
+        "id": "k"
+      }
+    }
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "kind": "sketch.solve",
+  "description": "A point on a control point spline takes 1 degree of freedom off the point",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – point on a spline › bspline › takes 1 degree of freedom off the point",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "p0",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "p1",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "kind": "point",
+        "id": "p2",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "p3",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "kind": "bspline",
+        "id": "S",
+        "degree": 3,
+        "poles": [
+          "p0",
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "knots": [
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "kind": "point",
+        "id": "q",
+        "x": 2,
+        "y": 0.625
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "pointOnCurve",
+        "id": "on",
+        "point": "q",
+        "curve": "S"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 9,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "p0",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "p1",
+          "x": 1,
+          "y": 1
+        },
+        {
+          "kind": "point",
+          "id": "p2",
+          "x": 3,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "p3",
+          "x": 4,
+          "y": 2
+        },
+        {
+          "kind": "bspline",
+          "id": "S",
+          "degree": 3,
+          "poles": [
+            "p0",
+            "p1",
+            "p2",
+            "p3"
+          ],
+          "knots": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "kind": "point",
+          "id": "q",
+          "x": 2,
+          "y": 0.625
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "kind": "ops.upcast",
+  "description": "Fails validation: body.setMaterial without body",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › %s: %j fails at %j",
+  "input": {
+    "operation": {
+      "type": "body.setMaterial",
+      "v": 1,
+      "material": "steel"
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "body"
+    }
+  }
+}

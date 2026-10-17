@@ -1,0 +1,75 @@
+{
+  "kind": "geometry.offset",
+  "description": "A chain starting with a clockwise arc keeps its side",
+  "source": "src/kernel/testing.ts › open chains (spec 06 Stav po M35) › a chain starting with a clockwise arc keeps its side",
+  "input": {
+    "chain": [
+      {
+        "kind": "arc",
+        "center": [
+          0,
+          0
+        ],
+        "from": [
+          0,
+          5
+        ],
+        "to": [
+          5,
+          0
+        ],
+        "ccw": false,
+        "id": "k"
+      },
+      {
+        "kind": "line",
+        "from": [
+          5,
+          0
+        ],
+        "to": [
+          5,
+          -5
+        ],
+        "id": "p"
+      }
+    ],
+    "closed": false,
+    "distance": 1
+  },
+  "expected": {
+    "ok": {
+      "curves": [
+        {
+          "kind": "arc",
+          "center": [
+            0,
+            0
+          ],
+          "from": [
+            1.2246467991473533e-15,
+            4
+          ],
+          "to": [
+            4,
+            -9.797174393178826e-16
+          ],
+          "ccw": false,
+          "source": "k"
+        },
+        {
+          "kind": "line",
+          "from": [
+            4,
+            -9.797174393178826e-16
+          ],
+          "to": [
+            4,
+            -5
+          ],
+          "source": "p"
+        }
+      ]
+    }
+  }
+}

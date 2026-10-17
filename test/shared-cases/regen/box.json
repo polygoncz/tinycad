@@ -1,0 +1,281 @@
+{
+  "kind": "regen",
+  "description": "A box 10 × 10 × 10 at the origin: one body with the six named faces",
+  "source": "test/integration/topo-scenarios.test.ts › topological naming scenarios (spec 08, OCCT) › 1: a fillet on a box edge survives a new height of the box",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "box",
+        "name": "box",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "f1",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "box.label 1",
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 10,
+              "depth": 10,
+              "height": 10
+            },
+            "suppressed": false
+          }
+        ],
+        "rollbackIndex": 1
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "statuses": {
+        "f1": {
+          "kind": "ok"
+        }
+      },
+      "bodies": [
+        {
+          "id": "f1/body",
+          "origin": "f1",
+          "lastModifiedBy": "f1",
+          "volume": 1000,
+          "bbox": {
+            "min": [
+              0,
+              0,
+              0
+            ],
+            "max": [
+              10,
+              10,
+              10
+            ]
+          },
+          "faces": [
+            {
+              "names": [
+                "f1/face:back"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  1,
+                  0
+                ],
+                "offset": 10
+              }
+            },
+            {
+              "names": [
+                "f1/face:bottom"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  -1
+                ],
+                "offset": 0
+              }
+            },
+            {
+              "names": [
+                "f1/face:front"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  -1,
+                  0
+                ],
+                "offset": 0
+              }
+            },
+            {
+              "names": [
+                "f1/face:left"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  -1,
+                  0,
+                  0
+                ],
+                "offset": 0
+              }
+            },
+            {
+              "names": [
+                "f1/face:right"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  1,
+                  0,
+                  0
+                ],
+                "offset": 10
+              }
+            },
+            {
+              "names": [
+                "f1/face:top"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  1
+                ],
+                "offset": 10
+              }
+            }
+          ],
+          "edges": [
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:bottom"
+              ],
+              "midpoint": [
+                5,
+                10,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:left"
+              ],
+              "midpoint": [
+                0,
+                10,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:right"
+              ],
+              "midpoint": [
+                10,
+                10,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:top"
+              ],
+              "midpoint": [
+                5,
+                10,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:front"
+              ],
+              "midpoint": [
+                5,
+                0,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:left"
+              ],
+              "midpoint": [
+                0,
+                5,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:right"
+              ],
+              "midpoint": [
+                10,
+                5,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f1/face:left"
+              ],
+              "midpoint": [
+                0,
+                0,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f1/face:right"
+              ],
+              "midpoint": [
+                10,
+                0,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f1/face:top"
+              ],
+              "midpoint": [
+                5,
+                0,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:left|f1/face:top"
+              ],
+              "midpoint": [
+                0,
+                5,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:right|f1/face:top"
+              ],
+              "midpoint": [
+                10,
+                5,
+                10
+              ]
+            }
+          ],
+          "vertexCount": 8
+        }
+      ],
+      "sketches": [],
+      "anchors": {
+        "f1": {}
+      }
+    }
+  },
+  "tolerance": {
+    "relative": 0.001
+  }
+}

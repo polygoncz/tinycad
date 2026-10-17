@@ -1,0 +1,106 @@
+{
+  "kind": "sketch.derived",
+  "description": "A mirror copies a point across a slanted axis",
+  "source": "test/unit/sketch/patterns.test.ts › patternCopies – mirror › mirrors across a slanted axis",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "ab",
+        "p1": "a",
+        "p2": "b"
+      },
+      {
+        "kind": "point",
+        "id": "o",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "u",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "kind": "line",
+        "id": "ou",
+        "p1": "o",
+        "p2": "u",
+        "construction": true
+      },
+      {
+        "kind": "point",
+        "id": "w",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "kind": "line",
+        "id": "ow",
+        "p1": "o",
+        "p2": "w"
+      },
+      {
+        "kind": "mirror",
+        "id": "m",
+        "sources": [
+          "a"
+        ],
+        "axis": "ow"
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [
+        {
+          "kind": "point",
+          "id": "m:1.a",
+          "x": -2.220446049250313e-16,
+          "y": 0.9999999999999998
+        }
+      ],
+      "textCurves": [],
+      "regionCurves": [
+        {
+          "kind": "line",
+          "from": [
+            1,
+            0
+          ],
+          "to": [
+            3,
+            0
+          ],
+          "id": "ab"
+        },
+        {
+          "kind": "line",
+          "from": [
+            0,
+            0
+          ],
+          "to": [
+            2,
+            2
+          ],
+          "id": "ow"
+        }
+      ]
+    }
+  }
+}

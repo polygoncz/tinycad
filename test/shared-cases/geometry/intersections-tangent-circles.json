@@ -1,0 +1,43 @@
+{
+  "kind": "geometry.intersections",
+  "description": "Tangent circles touch once",
+  "source": "src/kernel/testing.ts › intersections (spec 06 Stav po M33) › tangent circles touch once",
+  "input": {
+    "curves": [
+      {
+        "kind": "circle",
+        "center": [
+          0,
+          0
+        ],
+        "radius": 2,
+        "id": "c1"
+      },
+      {
+        "kind": "circle",
+        "center": [
+          0,
+          5
+        ],
+        "radius": 3,
+        "id": "c2"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "hits": [
+        {
+          "a": "c1",
+          "b": "c2",
+          "point": [
+            2.10734240172554e-8,
+            2
+          ],
+          "ta": 1.5707963162581846,
+          "tb": 4.712388987409165
+        }
+      ]
+    }
+  }
+}

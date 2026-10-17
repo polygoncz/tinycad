@@ -1,0 +1,45 @@
+{
+  "kind": "schema.validate",
+  "description": "A body that is a target and a tool is boolean.sameBody at its index in tools",
+  "source": "test/unit/features/boolean/boolean.test.ts › booleanSchema › rejects a body that is a target and a tool, at its index in tools",
+  "input": {
+    "type": "boolean",
+    "params": {
+      "op": "union",
+      "targets": [
+        {
+          "kind": "body",
+          "body": "a/body"
+        },
+        {
+          "kind": "body",
+          "body": "b/body"
+        }
+      ],
+      "tools": [
+        {
+          "kind": "body",
+          "body": "c/body"
+        },
+        {
+          "kind": "body",
+          "body": "b/body"
+        }
+      ],
+      "keepTools": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "tools",
+          "code": "boolean.sameBody",
+          "params": {
+            "index": 1
+          }
+        }
+      ]
+    }
+  }
+}

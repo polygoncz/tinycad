@@ -1,0 +1,35 @@
+{
+  "kind": "geometry.offset",
+  "description": "A circle outwards",
+  "source": "src/kernel/testing.ts › closed chains (spec 06 Stav po M35) › a circle outwards and inwards",
+  "input": {
+    "chain": [
+      {
+        "kind": "circle",
+        "center": [
+          1,
+          2
+        ],
+        "radius": 5,
+        "id": "k"
+      }
+    ],
+    "closed": true,
+    "distance": 1
+  },
+  "expected": {
+    "ok": {
+      "curves": [
+        {
+          "kind": "circle",
+          "center": [
+            1,
+            2
+          ],
+          "radius": 6,
+          "source": "k"
+        }
+      ]
+    }
+  }
+}

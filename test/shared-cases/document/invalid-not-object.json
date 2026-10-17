@@ -1,0 +1,17 @@
+{
+  "kind": "document.load",
+  "description": "Data that is not an object is a load issue at the root",
+  "source": "test/unit/document/serialize.test.ts › fromData – broken data (Q026) › rejects data that is not an object",
+  "input": {
+    "data": null
+  },
+  "expected": {
+    "error": {
+      "issues": [
+        {
+          "path": ""
+        }
+      ]
+    }
+  }
+}

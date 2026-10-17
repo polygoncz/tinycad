@@ -1,0 +1,29 @@
+{
+  "kind": "schema.validate",
+  "description": "The defaults of boolean with the references picked give no issues",
+  "source": "test/unit/features/boolean/boolean.test.ts › booleanSchema › defaults with one target and one tool pass validation",
+  "input": {
+    "type": "boolean",
+    "params": {
+      "op": "union",
+      "targets": [
+        {
+          "kind": "body",
+          "body": "a/body"
+        }
+      ],
+      "tools": [
+        {
+          "kind": "body",
+          "body": "b/body"
+        }
+      ],
+      "keepTools": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": []
+    }
+  }
+}

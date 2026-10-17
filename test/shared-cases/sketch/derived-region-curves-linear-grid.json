@@ -1,0 +1,176 @@
+{
+  "kind": "sketch.derived",
+  "description": "Region curves append the copies of a linear pattern in two directions",
+  "source": "test/unit/sketch/geometry.test.ts › regionCurves – copies of mirrors and patterns (M36) › appends the copies of a linear pattern in one and two directions",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "o",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "u",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "kind": "point",
+        "id": "c",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "e",
+        "x": 4,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "f",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "kind": "line",
+        "id": "ou",
+        "p1": "o",
+        "p2": "u",
+        "construction": true
+      },
+      {
+        "kind": "circle",
+        "id": "k",
+        "center": "c",
+        "radius": 0.5
+      },
+      {
+        "kind": "line",
+        "id": "ef",
+        "p1": "e",
+        "p2": "f"
+      },
+      {
+        "kind": "line",
+        "id": "cf",
+        "p1": "c",
+        "p2": "f",
+        "construction": true
+      },
+      {
+        "kind": "linearPattern",
+        "id": "lp",
+        "sources": [
+          "k"
+        ],
+        "direction1": {
+          "angle": 0,
+          "count": 2,
+          "spacing": 2
+        },
+        "direction2": {
+          "angle": 1.5707963267948966,
+          "count": 2,
+          "spacing": 2
+        }
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [
+        {
+          "kind": "point",
+          "id": "lp:0-1.c",
+          "x": 3,
+          "y": 2
+        },
+        {
+          "kind": "circle",
+          "id": "lp:0-1.k",
+          "center": "lp:0-1.c",
+          "radius": 0.5
+        },
+        {
+          "kind": "point",
+          "id": "lp:1-0.c",
+          "x": 5,
+          "y": 0
+        },
+        {
+          "kind": "circle",
+          "id": "lp:1-0.k",
+          "center": "lp:1-0.c",
+          "radius": 0.5
+        },
+        {
+          "kind": "point",
+          "id": "lp:1-1.c",
+          "x": 5,
+          "y": 2
+        },
+        {
+          "kind": "circle",
+          "id": "lp:1-1.k",
+          "center": "lp:1-1.c",
+          "radius": 0.5
+        }
+      ],
+      "textCurves": [],
+      "regionCurves": [
+        {
+          "kind": "circle",
+          "center": [
+            3,
+            0
+          ],
+          "radius": 0.5,
+          "id": "k"
+        },
+        {
+          "kind": "line",
+          "from": [
+            4,
+            0
+          ],
+          "to": [
+            4,
+            2
+          ],
+          "id": "ef"
+        },
+        {
+          "kind": "circle",
+          "center": [
+            3,
+            2
+          ],
+          "radius": 0.5,
+          "id": "lp:0-1.k"
+        },
+        {
+          "kind": "circle",
+          "center": [
+            5,
+            0
+          ],
+          "radius": 0.5,
+          "id": "lp:1-0.k"
+        },
+        {
+          "kind": "circle",
+          "center": [
+            5,
+            2
+          ],
+          "radius": 0.5,
+          "id": "lp:1-1.k"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "kind": "schema.validate",
+  "description": "An extra param is param.unexpected",
+  "source": "test/unit/features/boolean/boolean.test.ts › booleanSchema › rejects missing and unexpected params",
+  "input": {
+    "type": "boolean",
+    "params": {
+      "op": "union",
+      "targets": [
+        {
+          "kind": "body",
+          "body": "a/body"
+        }
+      ],
+      "tools": [
+        {
+          "kind": "body",
+          "body": "b/body"
+        }
+      ],
+      "keepTools": false,
+      "mode": 1
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "mode",
+          "code": "param.unexpected"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "kind": "ops.upcast",
+  "description": "A valid feature.remove of the current version passes unchanged",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › %s: a valid operation passes",
+  "input": {
+    "operation": {
+      "type": "feature.remove",
+      "v": 1,
+      "featureId": "f1"
+    }
+  },
+  "expected": {
+    "ok": {
+      "operation": {
+        "type": "feature.remove",
+        "v": 1,
+        "featureId": "f1"
+      }
+    }
+  }
+}

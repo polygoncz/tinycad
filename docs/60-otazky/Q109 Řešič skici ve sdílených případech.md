@@ -34,4 +34,6 @@ Případy řešiče ze [[Sdílený testovací případ|sdílených případů]] 
 
 **Varianta A (Pavel 2026-10-17, podle návrhu Clauda).**
 
-Upřesnění (Pavel 2026-10-17): planegcs v TS vrací jen DOF, reziduum vazeb ne. Platnost vazeb u DOF > 0 se proto ověří jako **pevný bod**: vyřešené entity jdou do řešiče znovu a výsledek se od nich nesmí lišit o víc než `length` a DOF musí zůstat stejný. Když vazby platí, řešič nemá čím hýbat. Nepotřebuje to druhou implementaci vazeb v testech ani v C++. Propsáno do [[13-testovani#Sdílené testovací případy]].
+Upřesnění (Pavel 2026-10-17): planegcs v TS vrací jen DOF, reziduum vazeb ne. Platnost vazeb u DOF > 0 se proto ověří jako **pevný bod**: vyřešené entity jdou do řešiče znovu a výsledek se od nich nesmí lišit o víc než `length` a DOF musí zůstat stejný. Když vazby platí, řešič nemá čím hýbat. Nepotřebuje to druhou implementaci vazeb v testech ani v C++.
+
+Upřesnění po revizi architektury M38 (Claude 2026-10-17, k potvrzení Pavlem): samotný pevný bod by nepoznal C++, které tažení ignoruje nebo zahodí pole entit. Při `dof` > 0 se proto porovnají i `entities` bez číselných hodnot a u tažení poloha taženého bodu. Propsáno do [[13-testovani#Sdílené testovací případy]].

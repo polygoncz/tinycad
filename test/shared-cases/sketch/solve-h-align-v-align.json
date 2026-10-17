@@ -1,0 +1,74 @@
+{
+  "kind": "sketch.solve",
+  "description": "hAlign gives two points the same y and vAlign the same x",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – M26 constraints › hAlign gives two points the same y, vAlign the same x",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 7,
+        "y": 3
+      },
+      {
+        "kind": "point",
+        "id": "c",
+        "x": 2,
+        "y": 9
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fa",
+        "point": "a"
+      },
+      {
+        "kind": "hAlign",
+        "id": "h",
+        "a": "a",
+        "b": "b"
+      },
+      {
+        "kind": "vAlign",
+        "id": "v",
+        "a": "c",
+        "b": "a"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 2,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "a",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "b",
+          "x": 7,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "c",
+          "x": 0,
+          "y": 9
+        }
+      ]
+    }
+  }
+}

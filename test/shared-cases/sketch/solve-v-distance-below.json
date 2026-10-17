@@ -1,0 +1,57 @@
+{
+  "kind": "sketch.solve",
+  "description": "vDistance keeps the free point below the fixed one when it starts below",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – M28 dimensions › vDistance keeps b above or below a and holds the value while dragging",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 1,
+        "y": -3
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fa",
+        "point": "a"
+      },
+      {
+        "kind": "vDistance",
+        "id": "v",
+        "a": "a",
+        "b": "b",
+        "value": 5
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 1,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "a",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "b",
+          "x": 1,
+          "y": -5
+        }
+      ]
+    }
+  }
+}

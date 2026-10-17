@@ -1,0 +1,86 @@
+{
+  "kind": "document.load",
+  "description": "A transform of version 1 loads as version 3: the pivot origin and rx from the angle about x",
+  "source": "test/unit/features/transform/transform.test.ts › transformSchema.migrate › fromData loads a feature of version %i as version 3",
+  "input": {
+    "data": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "t1",
+            "type": "transform",
+            "typeVersion": 1,
+            "name": "Transform 1",
+            "suppressed": false,
+            "params": {
+              "bodies": [
+                {
+                  "kind": "body",
+                  "body": "b1/body"
+                }
+              ],
+              "translate": [
+                1,
+                2,
+                3
+              ],
+              "axis": "x",
+              "angle": 0.5
+            }
+          }
+        ],
+        "rollbackIndex": 1
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "data": {
+        "meta": {
+          "id": "doc1",
+          "name": "Test document",
+          "createdAt": 0
+        },
+        "studio": {
+          "features": [
+            {
+              "id": "t1",
+              "type": "transform",
+              "typeVersion": 3,
+              "name": "Transform 1",
+              "params": {
+                "bodies": [
+                  {
+                    "kind": "body",
+                    "body": "b1/body"
+                  }
+                ],
+                "translate": [
+                  1,
+                  2,
+                  3
+                ],
+                "pivot": "origin",
+                "pivotPoint": [
+                  0,
+                  0,
+                  0
+                ],
+                "rx": 0.5,
+                "ry": 0,
+                "rz": 0
+              },
+              "suppressed": false
+            }
+          ],
+          "rollbackIndex": 1
+        }
+      }
+    }
+  }
+}

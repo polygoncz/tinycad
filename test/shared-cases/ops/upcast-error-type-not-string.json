@@ -1,0 +1,16 @@
+{
+  "kind": "ops.upcast",
+  "description": "A broken envelope: a type that is not a string",
+  "source": "test/unit/ops/upcast.test.ts › upcastOperation › reports a broken envelope %j at path %j",
+  "input": {
+    "operation": {
+      "type": 5,
+      "v": 1
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "type"
+    }
+  }
+}

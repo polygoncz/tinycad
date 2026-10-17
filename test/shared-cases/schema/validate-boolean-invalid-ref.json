@@ -1,0 +1,40 @@
+{
+  "kind": "schema.validate",
+  "description": "A malformed reference is param.invalidRef, the same body is then not checked",
+  "source": "test/unit/features/boolean/boolean.test.ts › booleanSchema › checks the same body only when both lists passed the shape checks",
+  "input": {
+    "type": "boolean",
+    "params": {
+      "op": "union",
+      "targets": [
+        {
+          "kind": "body",
+          "body": "a/body"
+        },
+        {
+          "kind": "body"
+        }
+      ],
+      "tools": [
+        {
+          "kind": "body",
+          "body": "a/body"
+        }
+      ],
+      "keepTools": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "targets",
+          "code": "param.invalidRef",
+          "params": {
+            "index": 1
+          }
+        }
+      ]
+    }
+  }
+}

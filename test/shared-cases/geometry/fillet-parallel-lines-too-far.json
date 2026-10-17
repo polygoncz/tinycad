@@ -1,0 +1,41 @@
+{
+  "kind": "geometry.fillet",
+  "description": "Parallel lines farther apart than 2r rejects with operation-failed",
+  "source": "src/kernel/testing.ts › no solution (spec 06 Stav po M34) › parallel lines farther apart than 2r rejects with operation-failed",
+  "input": {
+    "a": {
+      "kind": "line",
+      "from": [
+        0,
+        0
+      ],
+      "to": [
+        10,
+        0
+      ],
+      "id": "a"
+    },
+    "b": {
+      "kind": "line",
+      "from": [
+        0,
+        5
+      ],
+      "to": [
+        10,
+        5
+      ],
+      "id": "b"
+    },
+    "radius": 2,
+    "near": [
+      1,
+      1
+    ]
+  },
+  "expected": {
+    "error": {
+      "code": "operation-failed"
+    }
+  }
+}

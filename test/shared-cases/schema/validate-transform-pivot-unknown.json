@@ -1,0 +1,40 @@
+{
+  "kind": "schema.validate",
+  "description": "An unknown pivot is param.unknownOption",
+  "source": "test/unit/features/transform/transform.test.ts › transformSchema › rejects an unknown pivot",
+  "input": {
+    "type": "transform",
+    "params": {
+      "bodies": [
+        {
+          "kind": "body",
+          "body": "b1/body"
+        }
+      ],
+      "pivot": "centroid",
+      "pivotPoint": [
+        0,
+        0,
+        0
+      ],
+      "translate": [
+        0,
+        0,
+        0
+      ],
+      "rx": 0,
+      "ry": 0,
+      "rz": 0
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "pivot",
+          "code": "param.unknownOption"
+        }
+      ]
+    }
+  }
+}

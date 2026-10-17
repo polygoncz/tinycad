@@ -1,0 +1,27 @@
+{
+  "kind": "schema.validate",
+  "description": "The sketch data are checked only when entities and constraints are both present",
+  "source": "test/unit/features/sketch/sketch.test.ts › sketchSchema › checks the sketch data only when both entities and constraints are present",
+  "input": {
+    "type": "sketch",
+    "params": {
+      "plane": [
+        {
+          "kind": "plane",
+          "plane": "origin/plane:xy"
+        }
+      ],
+      "entities": 5
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "constraints",
+          "code": "param.missing"
+        }
+      ]
+    }
+  }
+}

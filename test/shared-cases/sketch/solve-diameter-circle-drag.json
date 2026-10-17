@@ -1,0 +1,58 @@
+{
+  "kind": "sketch.solve",
+  "description": "A diameter sets the radius of a circle to half and holds it while the centre is dragged",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – M28 dimensions › diameter of a circle sets the radius to half and holds it while dragging the center",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "c",
+        "x": 3,
+        "y": 4
+      },
+      {
+        "kind": "circle",
+        "id": "C",
+        "center": "c",
+        "radius": 1.7
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "diameter",
+        "id": "d",
+        "curve": "C",
+        "value": 6
+      }
+    ],
+    "drag": {
+      "point": "c",
+      "to": [
+        8,
+        -1
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 2,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "c",
+          "x": 8,
+          "y": -1
+        },
+        {
+          "kind": "circle",
+          "id": "C",
+          "center": "c",
+          "radius": 3
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "kind": "ops.upcast",
+  "description": "Fails validation: body.setColor without body",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › %s: %j fails at %j",
+  "input": {
+    "operation": {
+      "type": "body.setColor",
+      "v": 1,
+      "color": "#ff8800"
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "body"
+    }
+  }
+}

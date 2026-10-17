@@ -1,0 +1,137 @@
+{
+  "kind": "sketch.solve",
+  "description": "A point on a fixed spline and on a fixed line that crosses only the extension of the spline ends in a conflict",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – point on a spline › a second solve that sticks the point to an end can end in a conflict",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "p0",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "p1",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "kind": "point",
+        "id": "p2",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "p3",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "kind": "bspline",
+        "id": "S",
+        "degree": 3,
+        "poles": [
+          "p0",
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "knots": [
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "kind": "point",
+        "id": "l1",
+        "x": 4.5,
+        "y": -5
+      },
+      {
+        "kind": "point",
+        "id": "l2",
+        "x": 4.5,
+        "y": 10
+      },
+      {
+        "kind": "line",
+        "id": "L",
+        "p1": "l1",
+        "p2": "l2"
+      },
+      {
+        "kind": "point",
+        "id": "q",
+        "x": 4.4,
+        "y": 2.8
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "pointOnCurve",
+        "id": "on",
+        "point": "q",
+        "curve": "S"
+      },
+      {
+        "kind": "fix",
+        "id": "fix-p0",
+        "point": "p0"
+      },
+      {
+        "kind": "fix",
+        "id": "fix-p1",
+        "point": "p1"
+      },
+      {
+        "kind": "fix",
+        "id": "fix-p2",
+        "point": "p2"
+      },
+      {
+        "kind": "fix",
+        "id": "fix-p3",
+        "point": "p3"
+      },
+      {
+        "kind": "fix",
+        "id": "fix-l1",
+        "point": "l1"
+      },
+      {
+        "kind": "fix",
+        "id": "fix-l2",
+        "point": "l2"
+      },
+      {
+        "kind": "pointOnCurve",
+        "id": "onL",
+        "point": "q",
+        "curve": "L"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "conflict",
+      "dof": 0,
+      "conflicting": [
+        "fix-l1",
+        "fix-l2",
+        "fix-p3",
+        "on",
+        "onL"
+      ],
+      "redundant": [],
+      "entities": null
+    }
+  }
+}

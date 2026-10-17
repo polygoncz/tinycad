@@ -1,0 +1,94 @@
+{
+  "kind": "geometry.segment",
+  "description": "A piece of a spline from its start",
+  "source": "src/kernel/testing.ts › pieces (spec 06 Stav po M33) › a piece of a spline from an inner knot, and from the start",
+  "input": {
+    "curve": {
+      "kind": "bspline",
+      "degree": 3,
+      "poles": [
+        [
+          0,
+          0
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          -3
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          8,
+          -2
+        ],
+        [
+          10,
+          1
+        ]
+      ],
+      "knots": [
+        0,
+        0,
+        0,
+        0,
+        0.3333333333333333,
+        0.6666666666666666,
+        1,
+        1,
+        1,
+        1
+      ],
+      "id": "w"
+    },
+    "from": 0,
+    "to": 0.5
+  },
+  "expected": {
+    "ok": {
+      "curve": {
+        "kind": "bspline",
+        "degree": 3,
+        "poles": [
+          [
+            0,
+            0
+          ],
+          [
+            2,
+            5
+          ],
+          [
+            3.5,
+            -1.0000000000000002
+          ],
+          [
+            4.625,
+            0.125
+          ],
+          [
+            5,
+            0.5625000000000001
+          ]
+        ],
+        "knots": [
+          0,
+          0,
+          0,
+          0,
+          0.6666666666666666,
+          1,
+          1,
+          1,
+          1
+        ],
+        "id": "w"
+      }
+    }
+  }
+}

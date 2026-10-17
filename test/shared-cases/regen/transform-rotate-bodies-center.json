@@ -1,0 +1,322 @@
+{
+  "kind": "regen",
+  "description": "A box turned by 90° about z through the center of its bounding box: the center and the pivot anchor stay",
+  "source": "test/unit/features/transform/transform.test.ts › transformBuilder › bodiesCenter rotates about the center of the bounding box: the center stays",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "transform-rotate",
+        "name": "transform-rotate",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "f1",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "box.label 1",
+            "params": {
+              "origin": [
+                10,
+                0,
+                0
+              ],
+              "width": 2,
+              "depth": 2,
+              "height": 2
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f2",
+            "type": "transform",
+            "typeVersion": 3,
+            "name": "transform.label 1",
+            "params": {
+              "bodies": [
+                {
+                  "kind": "body",
+                  "body": "f1/body"
+                }
+              ],
+              "pivot": "bodiesCenter",
+              "pivotPoint": [
+                0,
+                0,
+                0
+              ],
+              "translate": [
+                0,
+                0,
+                0
+              ],
+              "rx": 0,
+              "ry": 0,
+              "rz": 1.5707963267948966
+            },
+            "suppressed": false
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "statuses": {
+        "f1": {
+          "kind": "ok"
+        },
+        "f2": {
+          "kind": "ok"
+        }
+      },
+      "bodies": [
+        {
+          "id": "f1/body",
+          "origin": "f1",
+          "lastModifiedBy": "f2",
+          "volume": 8,
+          "bbox": {
+            "min": [
+              10,
+              0,
+              0
+            ],
+            "max": [
+              12,
+              2,
+              2
+            ]
+          },
+          "faces": [
+            {
+              "names": [
+                "f1/face:back"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  -1,
+                  6.123233995736766e-17,
+                  0
+                ],
+                "offset": -10
+              }
+            },
+            {
+              "names": [
+                "f1/face:bottom"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  -1
+                ],
+                "offset": 0
+              }
+            },
+            {
+              "names": [
+                "f1/face:front"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  1,
+                  -6.123233995736766e-17,
+                  0
+                ],
+                "offset": 12
+              }
+            },
+            {
+              "names": [
+                "f1/face:left"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  -6.123233995736766e-17,
+                  -1,
+                  0
+                ],
+                "offset": -7.347880794884119e-16
+              }
+            },
+            {
+              "names": [
+                "f1/face:right"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  6.123233995736766e-17,
+                  1,
+                  0
+                ],
+                "offset": 2.000000000000001
+              }
+            },
+            {
+              "names": [
+                "f1/face:top"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  1
+                ],
+                "offset": 2
+              }
+            }
+          ],
+          "edges": [
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:bottom"
+              ],
+              "midpoint": [
+                10,
+                1,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:left"
+              ],
+              "midpoint": [
+                10,
+                0,
+                1
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:right"
+              ],
+              "midpoint": [
+                10,
+                2,
+                1
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:top"
+              ],
+              "midpoint": [
+                10,
+                1,
+                2
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:front"
+              ],
+              "midpoint": [
+                12,
+                1,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:left"
+              ],
+              "midpoint": [
+                11,
+                0,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:right"
+              ],
+              "midpoint": [
+                11,
+                2,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f1/face:left"
+              ],
+              "midpoint": [
+                12,
+                0,
+                1
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f1/face:right"
+              ],
+              "midpoint": [
+                12,
+                2,
+                1
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f1/face:top"
+              ],
+              "midpoint": [
+                12,
+                1,
+                2
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:left|f1/face:top"
+              ],
+              "midpoint": [
+                11,
+                0,
+                2
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:right|f1/face:top"
+              ],
+              "midpoint": [
+                11,
+                2,
+                2
+              ]
+            }
+          ],
+          "vertexCount": 8
+        }
+      ],
+      "sketches": [],
+      "anchors": {
+        "f1": {},
+        "f2": {
+          "pivot": {
+            "point": [
+              11,
+              1,
+              1
+            ]
+          }
+        }
+      }
+    }
+  },
+  "tolerance": {
+    "relative": 0.001
+  }
+}

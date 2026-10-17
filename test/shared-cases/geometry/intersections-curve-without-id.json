@@ -1,0 +1,37 @@
+{
+  "kind": "geometry.intersections",
+  "description": "A curve without id rejects with invalid-input",
+  "source": "src/kernel/testing.ts › input (spec 06 curveIntersections) › a curve without id rejects with invalid-input",
+  "input": {
+    "curves": [
+      {
+        "kind": "line",
+        "from": [
+          0,
+          0
+        ],
+        "to": [
+          1,
+          0
+        ],
+        "id": "p"
+      },
+      {
+        "kind": "line",
+        "from": [
+          0,
+          0
+        ],
+        "to": [
+          1,
+          1
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "error": {
+      "code": "invalid-input"
+    }
+  }
+}

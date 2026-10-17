@@ -1,0 +1,329 @@
+{
+  "kind": "regen",
+  "description": "Boolean intersect of two overlapping boxes keeps the id of the first box",
+  "source": "test/unit/features/boolean/boolean.test.ts › boolean plugin in the Regenerator › subtract of two blocks gives one body with the id of the first block",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "boolean-intersect",
+        "name": "boolean-intersect",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "f1",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "box.label 1",
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 10,
+              "depth": 10,
+              "height": 10
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f2",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "box.label 2",
+            "params": {
+              "origin": [
+                5,
+                5,
+                5
+              ],
+              "width": 10,
+              "depth": 10,
+              "height": 10
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f3",
+            "type": "boolean",
+            "typeVersion": 1,
+            "name": "boolean.label 1",
+            "params": {
+              "op": "intersect",
+              "targets": [
+                {
+                  "kind": "body",
+                  "body": "f1/body"
+                }
+              ],
+              "tools": [
+                {
+                  "kind": "body",
+                  "body": "f2/body"
+                }
+              ],
+              "keepTools": false
+            },
+            "suppressed": false
+          }
+        ],
+        "rollbackIndex": 3
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "statuses": {
+        "f1": {
+          "kind": "ok"
+        },
+        "f2": {
+          "kind": "ok"
+        },
+        "f3": {
+          "kind": "ok"
+        }
+      },
+      "bodies": [
+        {
+          "id": "f1/body",
+          "origin": "f1",
+          "lastModifiedBy": "f3",
+          "volume": 125,
+          "bbox": {
+            "min": [
+              5,
+              5,
+              5
+            ],
+            "max": [
+              10,
+              10,
+              10
+            ]
+          },
+          "faces": [
+            {
+              "names": [
+                "f1/face:back"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  1,
+                  0
+                ],
+                "offset": 10
+              }
+            },
+            {
+              "names": [
+                "f1/face:right"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  1,
+                  0,
+                  0
+                ],
+                "offset": 10
+              }
+            },
+            {
+              "names": [
+                "f1/face:top"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  1
+                ],
+                "offset": 10
+              }
+            },
+            {
+              "names": [
+                "f2/face:bottom"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  -1
+                ],
+                "offset": -5
+              }
+            },
+            {
+              "names": [
+                "f2/face:front"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  -1,
+                  0
+                ],
+                "offset": -5
+              }
+            },
+            {
+              "names": [
+                "f2/face:left"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  -1,
+                  0,
+                  0
+                ],
+                "offset": -5
+              }
+            }
+          ],
+          "edges": [
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:right"
+              ],
+              "midpoint": [
+                10,
+                10,
+                7.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:top"
+              ],
+              "midpoint": [
+                7.5,
+                10,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f2/face:bottom"
+              ],
+              "midpoint": [
+                7.5,
+                10,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f2/face:left"
+              ],
+              "midpoint": [
+                5,
+                10,
+                7.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:right|f1/face:top"
+              ],
+              "midpoint": [
+                10,
+                7.5,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:right|f2/face:bottom"
+              ],
+              "midpoint": [
+                10,
+                7.5,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:right|f2/face:front"
+              ],
+              "midpoint": [
+                10,
+                5,
+                7.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f2/face:front"
+              ],
+              "midpoint": [
+                7.5,
+                5,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f2/face:left"
+              ],
+              "midpoint": [
+                5,
+                7.5,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:bottom|f2/face:front"
+              ],
+              "midpoint": [
+                7.5,
+                5,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:bottom|f2/face:left"
+              ],
+              "midpoint": [
+                5,
+                7.5,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:front|f2/face:left"
+              ],
+              "midpoint": [
+                5,
+                5,
+                7.5
+              ]
+            }
+          ],
+          "vertexCount": 8
+        }
+      ],
+      "sketches": [],
+      "anchors": {
+        "f1": {},
+        "f2": {},
+        "f3": {}
+      }
+    }
+  },
+  "tolerance": {
+    "relative": 0.001
+  }
+}

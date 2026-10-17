@@ -1,0 +1,27 @@
+{
+  "kind": "schema.validate",
+  "description": "A missing param is param.missing",
+  "source": "test/unit/features/box/box.test.ts › boxSchema › rejects params that are not an object, missing and unexpected params",
+  "input": {
+    "type": "box",
+    "params": {
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "depth": 10,
+      "height": 10
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "width",
+          "code": "param.missing"
+        }
+      ]
+    }
+  }
+}

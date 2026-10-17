@@ -1,0 +1,34 @@
+{
+  "kind": "ops.upcast",
+  "description": "An error inside a batch has the path ops[i]",
+  "source": "test/unit/ops/upcast.test.ts › upcastOperation › reports errors inside a batch with a composed path",
+  "input": {
+    "operation": {
+      "type": "batch",
+      "v": 1,
+      "ops": [
+        {
+          "type": "feature.rename",
+          "v": 1,
+          "featureId": "a",
+          "name": "x"
+        },
+        {
+          "type": "feature.rename",
+          "v": 1,
+          "featureId": "a",
+          "name": "y"
+        },
+        {
+          "type": "feature.rename",
+          "v": 0
+        }
+      ]
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "ops[2].v"
+    }
+  }
+}

@@ -1,0 +1,182 @@
+{
+  "kind": "sketch.solve",
+  "description": "A fixed point coincident with the end of a fit point spline pulls the end of the curve to it",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – splines › a point coincident with the end of a fitSpline lies on the end of the curve",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "f0",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "f1",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "kind": "point",
+        "id": "f2",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "f3",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "kind": "fitSpline",
+        "id": "F",
+        "degree": 3,
+        "fit": [
+          "f0",
+          "f1",
+          "f2",
+          "f3"
+        ],
+        "params": [
+          0,
+          0.24025307335204216,
+          0.620126536676021,
+          1
+        ],
+        "poles": [
+          [
+            0,
+            0
+          ],
+          [
+            0.9846500352828186,
+            3.3252906740954153
+          ],
+          [
+            4.06564641782601,
+            -3.125290674095415
+          ],
+          [
+            4,
+            2
+          ]
+        ],
+        "knots": [
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "kind": "point",
+        "id": "x",
+        "x": 9,
+        "y": 9
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fx",
+        "point": "x"
+      },
+      {
+        "kind": "coincident",
+        "id": "c",
+        "a": "x",
+        "b": "f3"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 6,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "f0",
+          "x": -0.004313257070195802,
+          "y": -0.007038034122164105
+        },
+        {
+          "kind": "point",
+          "id": "f1",
+          "x": 1.0569134096574786,
+          "y": 1.0771732830686298
+        },
+        {
+          "kind": "point",
+          "id": "f2",
+          "x": 4.1760763777074015,
+          "y": 1.643325725860463
+        },
+        {
+          "kind": "point",
+          "id": "f3",
+          "x": 9,
+          "y": 9
+        },
+        {
+          "kind": "fitSpline",
+          "id": "F",
+          "degree": 3,
+          "fit": [
+            "f0",
+            "f1",
+            "f2",
+            "f3"
+          ],
+          "params": [
+            0,
+            0.24025307335204216,
+            0.620126536676021,
+            1
+          ],
+          "poles": [
+            [
+              -0.004313257070195802,
+              -0.007038034122164105
+            ],
+            [
+              0.9676167167950326,
+              3.298079392257825
+            ],
+            [
+              4.039441726468118,
+              -3.1670500317937664
+            ],
+            [
+              9,
+              9
+            ]
+          ],
+          "knots": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "kind": "point",
+          "id": "x",
+          "x": 9,
+          "y": 9
+        }
+      ]
+    }
+  }
+}

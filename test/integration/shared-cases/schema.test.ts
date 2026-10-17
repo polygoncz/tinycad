@@ -3,33 +3,11 @@
 // isParamVisible over the schema of the plugin. The cases pin the seven predicates of today for
 // the declarative VisibleWhen of the C++ core.
 
-import { createFeatureSchemaRegistry, isParamVisible } from '@/document';
-import { booleanPlugin } from '@/features/boolean';
-import { boxPlugin } from '@/features/box';
-import { chamferPlugin } from '@/features/chamfer';
-import { cylinderPlugin } from '@/features/cylinder';
-import { extrudePlugin } from '@/features/extrude';
-import { filletPlugin } from '@/features/fillet';
-import { revolvePlugin } from '@/features/revolve';
-import { sketchPlugin } from '@/features/sketch';
-import { transformPlugin } from '@/features/transform';
+import { isParamVisible } from '@/document';
+import { builtInSchemas } from './support/plugins';
 import { describeSharedCases } from './support/runner';
 
-// The plugins directly: app (BUILT_IN_PLUGINS) needs the DOM types.
-const schemas = createFeatureSchemaRegistry();
-for (const plugin of [
-  boxPlugin,
-  cylinderPlugin,
-  booleanPlugin,
-  sketchPlugin,
-  extrudePlugin,
-  revolvePlugin,
-  filletPlugin,
-  chamferPlugin,
-  transformPlugin,
-]) {
-  schemas.register(plugin.schema);
-}
+const schemas = builtInSchemas();
 
 describeSharedCases('schema', {
   'schema.visibleWhen': {

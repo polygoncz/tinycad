@@ -1,0 +1,93 @@
+{
+  "kind": "sketch.solve",
+  "description": "pointLineDistance holds the distance to a fixed line while the point is dragged",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – M28 dimensions › pointLineDistance holds the distance to the line while dragging",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "p",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "q",
+        "x": 10,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "L",
+        "p1": "p",
+        "p2": "q"
+      },
+      {
+        "kind": "point",
+        "id": "x",
+        "x": 3,
+        "y": 2
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fp",
+        "point": "p"
+      },
+      {
+        "kind": "fix",
+        "id": "fq",
+        "point": "q"
+      },
+      {
+        "kind": "pointLineDistance",
+        "id": "d",
+        "point": "x",
+        "line": "L",
+        "value": 4
+      }
+    ],
+    "drag": {
+      "point": "x",
+      "to": [
+        6,
+        9
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 1,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "p",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "q",
+          "x": 10,
+          "y": 0
+        },
+        {
+          "kind": "line",
+          "id": "L",
+          "p1": "p",
+          "p2": "q"
+        },
+        {
+          "kind": "point",
+          "id": "x",
+          "x": 6,
+          "y": 4
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "kind": "sketch.derived",
+  "description": "A mirror copies a line across the axis with its points first and derived ids of index 1",
+  "source": "test/unit/sketch/patterns.test.ts › patternCopies – mirror › mirrors a line across the axis: points before the curve, derived ids with index 1",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "ab",
+        "p1": "a",
+        "p2": "b"
+      },
+      {
+        "kind": "point",
+        "id": "o",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "u",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "kind": "line",
+        "id": "ou",
+        "p1": "o",
+        "p2": "u",
+        "construction": true
+      },
+      {
+        "kind": "mirror",
+        "id": "m",
+        "sources": [
+          "ab"
+        ],
+        "axis": "ou"
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [
+        {
+          "kind": "point",
+          "id": "m:1.a",
+          "x": -1,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "m:1.b",
+          "x": -3,
+          "y": 0
+        },
+        {
+          "kind": "line",
+          "id": "m:1.ab",
+          "p1": "m:1.a",
+          "p2": "m:1.b"
+        }
+      ],
+      "textCurves": [],
+      "regionCurves": [
+        {
+          "kind": "line",
+          "from": [
+            1,
+            0
+          ],
+          "to": [
+            3,
+            0
+          ],
+          "id": "ab"
+        },
+        {
+          "kind": "line",
+          "from": [
+            -1,
+            0
+          ],
+          "to": [
+            -3,
+            0
+          ],
+          "id": "m:1.ab"
+        }
+      ]
+    }
+  }
+}

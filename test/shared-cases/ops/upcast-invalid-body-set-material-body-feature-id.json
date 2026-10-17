@@ -1,0 +1,18 @@
+{
+  "kind": "ops.upcast",
+  "description": "Fails validation: body.setMaterial with a feature id instead of a body id",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › %s: %j fails at %j",
+  "input": {
+    "operation": {
+      "type": "body.setMaterial",
+      "v": 1,
+      "body": "f1",
+      "material": "steel"
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "body"
+    }
+  }
+}

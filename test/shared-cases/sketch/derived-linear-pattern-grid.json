@@ -1,0 +1,115 @@
+{
+  "kind": "sketch.derived",
+  "description": "A linear pattern in two directions copies a grid with indices i-j without 0-0",
+  "source": "test/unit/sketch/patterns.test.ts › patternCopies – linear pattern › copies a grid with two directions: indices i-j without 0-0, i major",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "ab",
+        "p1": "a",
+        "p2": "b"
+      },
+      {
+        "kind": "point",
+        "id": "o",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "u",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "kind": "line",
+        "id": "ou",
+        "p1": "o",
+        "p2": "u",
+        "construction": true
+      },
+      {
+        "kind": "linearPattern",
+        "id": "lp",
+        "sources": [
+          "a"
+        ],
+        "direction1": {
+          "angle": 0,
+          "count": 2,
+          "spacing": 10
+        },
+        "direction2": {
+          "angle": 1.5707963267948966,
+          "count": 3,
+          "spacing": 5
+        }
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [
+        {
+          "kind": "point",
+          "id": "lp:0-1.a",
+          "x": 1.0000000000000002,
+          "y": 5
+        },
+        {
+          "kind": "point",
+          "id": "lp:0-2.a",
+          "x": 1.0000000000000007,
+          "y": 10
+        },
+        {
+          "kind": "point",
+          "id": "lp:1-0.a",
+          "x": 11,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "lp:1-1.a",
+          "x": 11,
+          "y": 5
+        },
+        {
+          "kind": "point",
+          "id": "lp:1-2.a",
+          "x": 11,
+          "y": 10
+        }
+      ],
+      "textCurves": [],
+      "regionCurves": [
+        {
+          "kind": "line",
+          "from": [
+            1,
+            0
+          ],
+          "to": [
+            3,
+            0
+          ],
+          "id": "ab"
+        }
+      ]
+    }
+  }
+}

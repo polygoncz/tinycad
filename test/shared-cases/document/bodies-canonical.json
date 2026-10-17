@@ -1,0 +1,84 @@
+{
+  "kind": "document.load",
+  "description": "hidden false, empty entries, plastic and an empty map are dropped (canonical form)",
+  "source": "test/unit/document/serialize.test.ts › fromData – body metadata (M11) › drops hidden: false, empty entries and an empty map (canonical form)",
+  "input": {
+    "data": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "a",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "a",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 10,
+              "depth": 10,
+              "height": 10
+            }
+          }
+        ],
+        "rollbackIndex": 1,
+        "bodies": {
+          "a/body": {
+            "hidden": false
+          },
+          "a/body:2": {},
+          "a/body:3": {
+            "material": "plastic",
+            "name": "Kept"
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "data": {
+        "meta": {
+          "id": "doc1",
+          "name": "Test document",
+          "createdAt": 0
+        },
+        "studio": {
+          "features": [
+            {
+              "id": "a",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "a",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 10,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            }
+          ],
+          "rollbackIndex": 1,
+          "bodies": {
+            "a/body:3": {
+              "name": "Kept"
+            }
+          }
+        }
+      }
+    }
+  }
+}

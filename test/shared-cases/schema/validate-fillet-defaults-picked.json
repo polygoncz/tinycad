@@ -1,0 +1,23 @@
+{
+  "kind": "schema.validate",
+  "description": "The defaults of fillet with the references picked give no issues",
+  "source": "test/unit/features/fillet/fillet.test.ts › filletSchema › defaults with one edge pass validation",
+  "input": {
+    "type": "fillet",
+    "params": {
+      "edges": [
+        {
+          "kind": "topo",
+          "body": "a/body",
+          "name": "e3"
+        }
+      ],
+      "radius": 1
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": []
+    }
+  }
+}

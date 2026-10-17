@@ -1,0 +1,17 @@
+{
+  "kind": "ops.upcast",
+  "description": "Fails validation: feature.remove with an empty featureId",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › %s: %j fails at %j",
+  "input": {
+    "operation": {
+      "type": "feature.remove",
+      "v": 1,
+      "featureId": ""
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "featureId"
+    }
+  }
+}

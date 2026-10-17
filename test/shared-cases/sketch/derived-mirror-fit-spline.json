@@ -1,0 +1,160 @@
+{
+  "kind": "sketch.derived",
+  "description": "A mirror copies a construction fit point spline with its fit points and stored poles",
+  "source": "test/unit/sketch/patterns.test.ts › patternCopies – mirror › mirrors a fit point spline: fit points and stored poles, params and knots unchanged",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "ab",
+        "p1": "a",
+        "p2": "b"
+      },
+      {
+        "kind": "point",
+        "id": "o",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "u",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "kind": "line",
+        "id": "ou",
+        "p1": "o",
+        "p2": "u",
+        "construction": true
+      },
+      {
+        "kind": "point",
+        "id": "f0",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "kind": "point",
+        "id": "f1",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "kind": "fitSpline",
+        "id": "fs",
+        "degree": 1,
+        "fit": [
+          "f0",
+          "f1"
+        ],
+        "params": [
+          0,
+          1
+        ],
+        "poles": [
+          [
+            1,
+            1
+          ],
+          [
+            4,
+            2
+          ]
+        ],
+        "knots": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "construction": true
+      },
+      {
+        "kind": "mirror",
+        "id": "m",
+        "sources": [
+          "fs"
+        ],
+        "axis": "ou"
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [
+        {
+          "kind": "point",
+          "id": "m:1.f0",
+          "x": -1,
+          "y": 1
+        },
+        {
+          "kind": "point",
+          "id": "m:1.f1",
+          "x": -4,
+          "y": 2
+        },
+        {
+          "kind": "fitSpline",
+          "id": "m:1.fs",
+          "degree": 1,
+          "fit": [
+            "m:1.f0",
+            "m:1.f1"
+          ],
+          "params": [
+            0,
+            1
+          ],
+          "poles": [
+            [
+              -1,
+              1
+            ],
+            [
+              -4,
+              2
+            ]
+          ],
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "construction": true
+        }
+      ],
+      "textCurves": [],
+      "regionCurves": [
+        {
+          "kind": "line",
+          "from": [
+            1,
+            0
+          ],
+          "to": [
+            3,
+            0
+          ],
+          "id": "ab"
+        }
+      ]
+    }
+  }
+}

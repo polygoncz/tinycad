@@ -1,0 +1,45 @@
+{
+  "kind": "schema.validate",
+  "description": "Every invalid param is reported, not just the first",
+  "source": "test/unit/document/validate.test.ts › validateAgainstSchema – params object › reports every invalid param, not just the first",
+  "input": {
+    "type": "box",
+    "params": {
+      "origin": [
+        0
+      ],
+      "width": 0,
+      "height": "x",
+      "extra": true
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "depth",
+          "code": "param.missing"
+        },
+        {
+          "param": "extra",
+          "code": "param.unexpected"
+        },
+        {
+          "param": "height",
+          "code": "param.wrongType"
+        },
+        {
+          "param": "origin",
+          "code": "param.wrongType"
+        },
+        {
+          "param": "width",
+          "code": "param.atOrBelowMin",
+          "params": {
+            "min": 0
+          }
+        }
+      ]
+    }
+  }
+}

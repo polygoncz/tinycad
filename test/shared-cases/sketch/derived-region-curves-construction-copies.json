@@ -1,0 +1,155 @@
+{
+  "kind": "sketch.derived",
+  "description": "Copies of construction curves and the pattern entities are left out of the region curves",
+  "source": "test/unit/sketch/geometry.test.ts › regionCurves – copies of mirrors and patterns (M36) › skips the copies of construction curves and the pattern entities themselves",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "o",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "u",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "kind": "point",
+        "id": "c",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "e",
+        "x": 4,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "f",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "kind": "line",
+        "id": "ou",
+        "p1": "o",
+        "p2": "u",
+        "construction": true
+      },
+      {
+        "kind": "circle",
+        "id": "k",
+        "center": "c",
+        "radius": 0.5
+      },
+      {
+        "kind": "line",
+        "id": "ef",
+        "p1": "e",
+        "p2": "f"
+      },
+      {
+        "kind": "line",
+        "id": "cf",
+        "p1": "c",
+        "p2": "f",
+        "construction": true
+      },
+      {
+        "kind": "mirror",
+        "id": "m",
+        "sources": [
+          "cf",
+          "c"
+        ],
+        "axis": "ou"
+      },
+      {
+        "kind": "linearPattern",
+        "id": "lp",
+        "sources": [
+          "cf"
+        ],
+        "direction1": {
+          "angle": 0,
+          "count": 2,
+          "spacing": 1
+        }
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [
+        {
+          "kind": "point",
+          "id": "m:1.c",
+          "x": -3,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "m:1.f",
+          "x": -4,
+          "y": 2
+        },
+        {
+          "kind": "line",
+          "id": "m:1.cf",
+          "p1": "m:1.c",
+          "p2": "m:1.f",
+          "construction": true
+        },
+        {
+          "kind": "point",
+          "id": "lp:1.c",
+          "x": 4,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "lp:1.f",
+          "x": 5,
+          "y": 2
+        },
+        {
+          "kind": "line",
+          "id": "lp:1.cf",
+          "p1": "lp:1.c",
+          "p2": "lp:1.f",
+          "construction": true
+        }
+      ],
+      "textCurves": [],
+      "regionCurves": [
+        {
+          "kind": "circle",
+          "center": [
+            3,
+            0
+          ],
+          "radius": 0.5,
+          "id": "k"
+        },
+        {
+          "kind": "line",
+          "from": [
+            4,
+            0
+          ],
+          "to": [
+            4,
+            2
+          ],
+          "id": "ef"
+        }
+      ]
+    }
+  }
+}

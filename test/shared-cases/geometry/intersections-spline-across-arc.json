@@ -1,0 +1,85 @@
+{
+  "kind": "geometry.intersections",
+  "description": "A spline across a clockwise arc: the hits lie on both at their parameters",
+  "source": "src/kernel/testing.ts › intersections (spec 06 Stav po M33) › a spline across an arc lies on both at its parameters",
+  "input": {
+    "curves": [
+      {
+        "kind": "arc",
+        "center": [
+          0,
+          0
+        ],
+        "from": [
+          -5,
+          0
+        ],
+        "to": [
+          5,
+          0
+        ],
+        "ccw": false,
+        "id": "k"
+      },
+      {
+        "kind": "bspline",
+        "degree": 3,
+        "poles": [
+          [
+            -6,
+            0
+          ],
+          [
+            -2,
+            9
+          ],
+          [
+            2,
+            -3
+          ],
+          [
+            6,
+            6
+          ]
+        ],
+        "knots": [
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ],
+        "id": "sp"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "hits": [
+        {
+          "a": "k",
+          "b": "sp",
+          "point": [
+            -4.099107468766455,
+            2.863095869771578
+          ],
+          "ta": 0.6096971140451082,
+          "tb": 0.15840771093612874
+        },
+        {
+          "a": "k",
+          "b": "sp",
+          "point": [
+            3.9736108697256878,
+            3.0348668267319177
+          ],
+          "ta": 2.4893460454054654,
+          "tb": 0.8311342391438075
+        }
+      ]
+    }
+  }
+}

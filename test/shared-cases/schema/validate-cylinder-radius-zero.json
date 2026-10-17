@@ -1,0 +1,31 @@
+{
+  "kind": "schema.validate",
+  "description": "A radius of 0 is param.atOrBelowMin",
+  "source": "test/unit/features/cylinder/cylinder.test.ts › cylinderSchema › rejects a zero or negative %s",
+  "input": {
+    "type": "cylinder",
+    "params": {
+      "base": [
+        0,
+        0,
+        0
+      ],
+      "axis": "z",
+      "radius": 0,
+      "height": 10
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "radius",
+          "code": "param.atOrBelowMin",
+          "params": {
+            "min": 0
+          }
+        }
+      ]
+    }
+  }
+}

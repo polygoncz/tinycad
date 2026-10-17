@@ -1,0 +1,36 @@
+{
+  "kind": "schema.validate",
+  "description": "A distance of 0 is param.atOrBelowMin",
+  "source": "test/unit/features/extrude/extrude.test.ts › extrudeSchema › rejects a distance that is not positive and an unknown option",
+  "input": {
+    "type": "extrude",
+    "params": {
+      "regions": [
+        {
+          "kind": "region",
+          "sketch": "s1",
+          "region": "r1"
+        }
+      ],
+      "operation": "new",
+      "targets": [],
+      "endType": "blind",
+      "distance": 0,
+      "upTo": [],
+      "flip": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "distance",
+          "code": "param.atOrBelowMin",
+          "params": {
+            "min": 0
+          }
+        }
+      ]
+    }
+  }
+}

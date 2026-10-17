@@ -1,0 +1,110 @@
+{
+  "kind": "sketch.solve",
+  "description": "A control point spline adds only its control points: 2 degrees of freedom each",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – splines › a bspline adds only its control points: dof = 2 · control points",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "p0",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "p1",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "kind": "point",
+        "id": "p2",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "p3",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "kind": "bspline",
+        "id": "S",
+        "degree": 3,
+        "poles": [
+          "p0",
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "knots": [
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ]
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 8,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "p0",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "p1",
+          "x": 1,
+          "y": 1
+        },
+        {
+          "kind": "point",
+          "id": "p2",
+          "x": 3,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "p3",
+          "x": 4,
+          "y": 2
+        },
+        {
+          "kind": "bspline",
+          "id": "S",
+          "degree": 3,
+          "poles": [
+            "p0",
+            "p1",
+            "p2",
+            "p3"
+          ],
+          "knots": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    }
+  }
+}

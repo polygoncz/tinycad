@@ -1,0 +1,237 @@
+{
+  "kind": "ops.replay",
+  "description": "Replay of the body metadata, the rollback bar and the document name",
+  "source": "test/unit/ops/handlers/handlers.test.ts › body metadata handlers (M11) › undo and redo through the dispatcher bring the metadata back",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "b1",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "Box 1",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 10,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          {
+            "id": "b2",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "Box 2",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 10,
+              "depth": 10,
+              "height": 10
+            }
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    },
+    "entries": [
+      {
+        "seq": 1,
+        "kind": "do",
+        "op": {
+          "type": "body.rename",
+          "v": 1,
+          "body": "b1/body",
+          "name": "Base"
+        },
+        "inverse": {
+          "type": "body.rename",
+          "v": 1,
+          "body": "b1/body",
+          "name": ""
+        },
+        "label": "body.rename",
+        "time": 0
+      },
+      {
+        "seq": 2,
+        "kind": "do",
+        "op": {
+          "type": "body.setVisible",
+          "v": 1,
+          "body": "b2/body",
+          "visible": false
+        },
+        "inverse": {
+          "type": "body.setVisible",
+          "v": 1,
+          "body": "b2/body",
+          "visible": true
+        },
+        "label": "body.setVisible",
+        "time": 0
+      },
+      {
+        "seq": 3,
+        "kind": "do",
+        "op": {
+          "type": "body.setColor",
+          "v": 1,
+          "body": "b1/body",
+          "color": "#ff8800"
+        },
+        "inverse": {
+          "type": "body.setColor",
+          "v": 1,
+          "body": "b1/body",
+          "color": null
+        },
+        "label": "body.setColor",
+        "time": 0
+      },
+      {
+        "seq": 4,
+        "kind": "do",
+        "op": {
+          "type": "body.setMaterial",
+          "v": 1,
+          "body": "b1/body",
+          "material": "steel"
+        },
+        "inverse": {
+          "type": "body.setMaterial",
+          "v": 1,
+          "body": "b1/body",
+          "material": "plastic"
+        },
+        "label": "body.setMaterial",
+        "time": 0
+      },
+      {
+        "seq": 5,
+        "kind": "do",
+        "op": {
+          "type": "body.setMaterial",
+          "v": 1,
+          "body": "b2/body",
+          "material": "plastic"
+        },
+        "inverse": {
+          "type": "body.setMaterial",
+          "v": 1,
+          "body": "b2/body",
+          "material": "plastic"
+        },
+        "label": "body.setMaterial",
+        "time": 0
+      },
+      {
+        "seq": 6,
+        "kind": "do",
+        "op": {
+          "type": "studio.setRollback",
+          "v": 1,
+          "index": 1
+        },
+        "inverse": {
+          "type": "studio.setRollback",
+          "v": 1,
+          "index": 2
+        },
+        "label": "studio.setRollback",
+        "time": 0
+      },
+      {
+        "seq": 7,
+        "kind": "do",
+        "op": {
+          "type": "document.rename",
+          "v": 1,
+          "name": "Part"
+        },
+        "inverse": {
+          "type": "document.rename",
+          "v": 1,
+          "name": "Test document"
+        },
+        "label": "document.rename",
+        "time": 0
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "document": {
+        "meta": {
+          "id": "doc1",
+          "name": "Part",
+          "createdAt": 0
+        },
+        "studio": {
+          "features": [
+            {
+              "id": "b1",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "Box 1",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 10,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            },
+            {
+              "id": "b2",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "Box 2",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 10,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            }
+          ],
+          "rollbackIndex": 1,
+          "bodies": {
+            "b1/body": {
+              "name": "Base",
+              "color": "#ff8800",
+              "material": "steel"
+            },
+            "b2/body": {
+              "hidden": true
+            }
+          }
+        }
+      }
+    }
+  }
+}

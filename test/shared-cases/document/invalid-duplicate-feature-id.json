@@ -1,0 +1,62 @@
+{
+  "kind": "document.load",
+  "description": "A duplicate feature id is a load issue at the second feature",
+  "source": "test/unit/document/serialize.test.ts › fromData – broken data (Q026) › reports duplicate feature ids",
+  "input": {
+    "data": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "a",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "a",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          {
+            "id": "a",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "a",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 2,
+              "depth": 10,
+              "height": 10
+            }
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    }
+  },
+  "expected": {
+    "error": {
+      "issues": [
+        {
+          "path": "studio.features[1].id"
+        }
+      ]
+    }
+  }
+}

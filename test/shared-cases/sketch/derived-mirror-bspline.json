@@ -1,0 +1,202 @@
+{
+  "kind": "sketch.derived",
+  "description": "A mirror copies a control point spline by its poles with the knots unchanged",
+  "source": "test/unit/sketch/patterns.test.ts › patternCopies – mirror › mirrors a control point spline by its poles, knots unchanged",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "ab",
+        "p1": "a",
+        "p2": "b"
+      },
+      {
+        "kind": "point",
+        "id": "o",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "u",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "kind": "line",
+        "id": "ou",
+        "p1": "o",
+        "p2": "u",
+        "construction": true
+      },
+      {
+        "kind": "point",
+        "id": "p0",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "kind": "point",
+        "id": "p1",
+        "x": 2,
+        "y": 3
+      },
+      {
+        "kind": "point",
+        "id": "p2",
+        "x": 4,
+        "y": 1
+      },
+      {
+        "kind": "bspline",
+        "id": "sp",
+        "degree": 2,
+        "poles": [
+          "p0",
+          "p1",
+          "p2"
+        ],
+        "knots": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "kind": "mirror",
+        "id": "m",
+        "sources": [
+          "sp"
+        ],
+        "axis": "ou"
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [
+        {
+          "kind": "point",
+          "id": "m:1.p0",
+          "x": -1,
+          "y": 1
+        },
+        {
+          "kind": "point",
+          "id": "m:1.p1",
+          "x": -2,
+          "y": 3
+        },
+        {
+          "kind": "point",
+          "id": "m:1.p2",
+          "x": -4,
+          "y": 1
+        },
+        {
+          "kind": "bspline",
+          "id": "m:1.sp",
+          "degree": 2,
+          "poles": [
+            "m:1.p0",
+            "m:1.p1",
+            "m:1.p2"
+          ],
+          "knots": [
+            0,
+            0,
+            0,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "textCurves": [],
+      "regionCurves": [
+        {
+          "kind": "line",
+          "from": [
+            1,
+            0
+          ],
+          "to": [
+            3,
+            0
+          ],
+          "id": "ab"
+        },
+        {
+          "kind": "bspline",
+          "degree": 2,
+          "poles": [
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              3
+            ],
+            [
+              4,
+              1
+            ]
+          ],
+          "knots": [
+            0,
+            0,
+            0,
+            1,
+            1,
+            1
+          ],
+          "id": "sp"
+        },
+        {
+          "kind": "bspline",
+          "degree": 2,
+          "poles": [
+            [
+              -1,
+              1
+            ],
+            [
+              -2,
+              3
+            ],
+            [
+              -4,
+              1
+            ]
+          ],
+          "knots": [
+            0,
+            0,
+            0,
+            1,
+            1,
+            1
+          ],
+          "id": "m:1.sp"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "kind": "schema.validate",
+  "description": "The defaults of revolve alone ask for the references to pick",
+  "source": "test/unit/features/revolve/revolve.test.ts › revolveSchema › defaults alone ask for a region and an axis (R24)",
+  "input": {
+    "type": "revolve",
+    "params": {
+      "regions": [],
+      "axis": null,
+      "operation": "new",
+      "targets": [],
+      "angle": 6.283185307179586,
+      "flip": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "axis",
+          "code": "param.tooFewRefs",
+          "params": {
+            "min": 1
+          }
+        },
+        {
+          "param": "regions",
+          "code": "param.tooFewRefs",
+          "params": {
+            "min": 1
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "kind": "schema.validate",
+  "description": "Version 2 params with an unknown axis report the old and the missing params",
+  "source": "test/unit/features/transform/transform.test.ts › transformSchema.migrate › fromData loads a feature of version 2 with an unknown axis, validate reports it",
+  "input": {
+    "type": "transform",
+    "params": {
+      "bodies": [
+        {
+          "kind": "body",
+          "body": "b1/body"
+        }
+      ],
+      "pivot": "point",
+      "pivotPoint": [
+        4,
+        5,
+        6
+      ],
+      "translate": [
+        1,
+        2,
+        3
+      ],
+      "axis": "w",
+      "angle": 0.5
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "angle",
+          "code": "param.unexpected"
+        },
+        {
+          "param": "axis",
+          "code": "param.unexpected"
+        },
+        {
+          "param": "rx",
+          "code": "param.missing"
+        },
+        {
+          "param": "ry",
+          "code": "param.missing"
+        },
+        {
+          "param": "rz",
+          "code": "param.missing"
+        }
+      ]
+    }
+  }
+}

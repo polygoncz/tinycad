@@ -1,0 +1,359 @@
+{
+  "kind": "regen",
+  "description": "A rectangle on XZ turned a full turn about the origin axis Z: a tube with 4 faces, volume 750π",
+  "source": "test/integration/revolve-scenario.test.ts › revolve scenario (rectangle on XZ, OCCT) › a full turn about the origin axis Z gives a tube with 4 faces and the volume 750π",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "revolve-origin-axis",
+        "name": "revolve-origin-axis",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "f1",
+            "type": "sketch",
+            "typeVersion": 1,
+            "name": "sketch.label 1",
+            "params": {
+              "plane": [
+                {
+                  "kind": "plane",
+                  "plane": "origin/plane:xz"
+                }
+              ],
+              "entities": [
+                {
+                  "kind": "point",
+                  "id": "a",
+                  "x": 5,
+                  "y": 0
+                },
+                {
+                  "kind": "point",
+                  "id": "b",
+                  "x": 10,
+                  "y": 0
+                },
+                {
+                  "kind": "point",
+                  "id": "c",
+                  "x": 10,
+                  "y": 10
+                },
+                {
+                  "kind": "point",
+                  "id": "d",
+                  "x": 5,
+                  "y": 10
+                },
+                {
+                  "kind": "line",
+                  "id": "ab",
+                  "p1": "a",
+                  "p2": "b"
+                },
+                {
+                  "kind": "line",
+                  "id": "bc",
+                  "p1": "b",
+                  "p2": "c"
+                },
+                {
+                  "kind": "line",
+                  "id": "cd",
+                  "p1": "c",
+                  "p2": "d"
+                },
+                {
+                  "kind": "line",
+                  "id": "da",
+                  "p1": "d",
+                  "p2": "a"
+                },
+                {
+                  "kind": "point",
+                  "id": "p",
+                  "x": 0,
+                  "y": 0
+                },
+                {
+                  "kind": "point",
+                  "id": "q",
+                  "x": 0,
+                  "y": 10
+                },
+                {
+                  "kind": "line",
+                  "id": "pq",
+                  "p1": "p",
+                  "p2": "q",
+                  "construction": true
+                }
+              ],
+              "constraints": [
+                {
+                  "kind": "horizontal",
+                  "id": "h1",
+                  "line": "ab"
+                },
+                {
+                  "kind": "vertical",
+                  "id": "v1",
+                  "line": "bc"
+                },
+                {
+                  "kind": "horizontal",
+                  "id": "h2",
+                  "line": "cd"
+                },
+                {
+                  "kind": "vertical",
+                  "id": "v2",
+                  "line": "da"
+                }
+              ]
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f2",
+            "type": "revolve",
+            "typeVersion": 1,
+            "name": "revolve.label 1",
+            "params": {
+              "regions": [
+                {
+                  "kind": "region",
+                  "sketch": "f1",
+                  "region": "ab,bc,cd,da"
+                }
+              ],
+              "axis": {
+                "kind": "axis",
+                "axis": "origin/axis:z"
+              },
+              "operation": "new",
+              "targets": [],
+              "angle": 6.283185307179586,
+              "flip": false
+            },
+            "suppressed": false
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "statuses": {
+        "f1": {
+          "kind": "ok"
+        },
+        "f2": {
+          "kind": "ok"
+        }
+      },
+      "bodies": [
+        {
+          "id": "f2/body",
+          "origin": "f2",
+          "lastModifiedBy": "f2",
+          "volume": 2355.9503626073742,
+          "bbox": {
+            "min": [
+              -10,
+              -10,
+              0
+            ],
+            "max": [
+              10,
+              10,
+              10
+            ]
+          },
+          "faces": [
+            {
+              "names": [
+                "f2/face:side:ab"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  -1
+                ],
+                "offset": 0
+              }
+            },
+            {
+              "names": [
+                "f2/face:side:bc"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f2/face:side:cd"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  1
+                ],
+                "offset": 10
+              }
+            },
+            {
+              "names": [
+                "f2/face:side:da"
+              ],
+              "surface": "cylinder"
+            }
+          ],
+          "edges": [
+            {
+              "names": [
+                "edge:f2/face:side:ab|f2/face:side:bc"
+              ],
+              "midpoint": [
+                -10,
+                1.2246467991473533e-15,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:ab|f2/face:side:da"
+              ],
+              "midpoint": [
+                -5,
+                6.123233995736766e-16,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:bc|f2/face:side:bc"
+              ],
+              "midpoint": [
+                10,
+                0,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:bc|f2/face:side:cd"
+              ],
+              "midpoint": [
+                -10,
+                1.2246467991473533e-15,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:cd|f2/face:side:da"
+              ],
+              "midpoint": [
+                -5,
+                6.123233995736766e-16,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:da|f2/face:side:da"
+              ],
+              "midpoint": [
+                5,
+                0,
+                5
+              ]
+            }
+          ],
+          "vertexCount": 4
+        }
+      ],
+      "sketches": [
+        {
+          "id": "f1/sketch",
+          "owner": "f1",
+          "regions": [
+            "ab,bc,cd,da"
+          ],
+          "outlines": [
+            {
+              "name": "ab,bc,cd,da",
+              "outer": [
+                {
+                  "kind": "line",
+                  "from": [
+                    5,
+                    0
+                  ],
+                  "to": [
+                    10,
+                    0
+                  ],
+                  "id": "ab"
+                },
+                {
+                  "kind": "line",
+                  "from": [
+                    10,
+                    0
+                  ],
+                  "to": [
+                    10,
+                    10
+                  ],
+                  "id": "bc"
+                },
+                {
+                  "kind": "line",
+                  "from": [
+                    10,
+                    10
+                  ],
+                  "to": [
+                    5,
+                    10
+                  ],
+                  "id": "cd"
+                },
+                {
+                  "kind": "line",
+                  "from": [
+                    5,
+                    10
+                  ],
+                  "to": [
+                    5,
+                    0
+                  ],
+                  "id": "da"
+                }
+              ],
+              "holes": [],
+              "area": 50.000000000000014
+            }
+          ]
+        }
+      ],
+      "anchors": {
+        "f1": {},
+        "f2": {}
+      }
+    }
+  },
+  "tolerance": {
+    "relative": 0.001
+  }
+}

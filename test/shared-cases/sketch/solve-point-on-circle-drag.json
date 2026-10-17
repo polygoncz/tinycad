@@ -1,0 +1,124 @@
+{
+  "kind": "sketch.solve",
+  "description": "A dragged point on a circle lies on the circle",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – M26 constraints › a point on a circle lies on it",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "o",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "circle",
+        "id": "C",
+        "center": "o",
+        "radius": 5
+      },
+      {
+        "kind": "point",
+        "id": "as",
+        "x": 5,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "ae",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "kind": "arc",
+        "id": "A",
+        "center": "o",
+        "start": "as",
+        "end": "ae"
+      },
+      {
+        "kind": "point",
+        "id": "m",
+        "x": 1,
+        "y": 1
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fo",
+        "point": "o"
+      },
+      {
+        "kind": "fix",
+        "id": "fs",
+        "point": "as"
+      },
+      {
+        "kind": "radius",
+        "id": "rc",
+        "curve": "C",
+        "value": 5
+      },
+      {
+        "kind": "pointOnCurve",
+        "id": "on",
+        "point": "m",
+        "curve": "C"
+      }
+    ],
+    "drag": {
+      "point": "m",
+      "to": [
+        0,
+        -9
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 2,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "o",
+          "x": 7.801724782338828e-34,
+          "y": -5.863959753623676e-34
+        },
+        {
+          "kind": "circle",
+          "id": "C",
+          "center": "o",
+          "radius": 5
+        },
+        {
+          "kind": "point",
+          "id": "as",
+          "x": 5,
+          "y": -1.0245660132247721e-35
+        },
+        {
+          "kind": "point",
+          "id": "ae",
+          "x": -1.3650249169474511e-17,
+          "y": 5
+        },
+        {
+          "kind": "arc",
+          "id": "A",
+          "center": "o",
+          "start": "as",
+          "end": "ae"
+        },
+        {
+          "kind": "point",
+          "id": "m",
+          "x": 3.6688943597800296e-16,
+          "y": -5
+        }
+      ]
+    }
+  }
+}

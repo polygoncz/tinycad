@@ -1,0 +1,346 @@
+{
+  "kind": "regen",
+  "description": "A chamfer 1 on the top front edge of a box: 7 faces, the new one named after the edge",
+  "source": "test/integration/topo-scenarios.test.ts › topological naming scenarios (spec 08, OCCT) › a chamfer on a box edge makes 7 faces, one named after the edge",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "chamfer",
+        "name": "chamfer",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "f1",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "box.label 1",
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 10,
+              "depth": 10,
+              "height": 10
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f2",
+            "type": "chamfer",
+            "typeVersion": 1,
+            "name": "chamfer.label 1",
+            "params": {
+              "edges": [
+                {
+                  "kind": "topo",
+                  "body": "f1/body",
+                  "name": "edge:f1/face:front|f1/face:top"
+                }
+              ],
+              "distance": 1
+            },
+            "suppressed": false
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "statuses": {
+        "f1": {
+          "kind": "ok"
+        },
+        "f2": {
+          "kind": "ok"
+        }
+      },
+      "bodies": [
+        {
+          "id": "f1/body",
+          "origin": "f1",
+          "lastModifiedBy": "f2",
+          "volume": 995,
+          "bbox": {
+            "min": [
+              0,
+              0,
+              0
+            ],
+            "max": [
+              10,
+              10,
+              10
+            ]
+          },
+          "faces": [
+            {
+              "names": [
+                "f1/face:back"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  1,
+                  0
+                ],
+                "offset": 10
+              }
+            },
+            {
+              "names": [
+                "f1/face:bottom"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  -1
+                ],
+                "offset": 0
+              }
+            },
+            {
+              "names": [
+                "f1/face:front"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  -1,
+                  0
+                ],
+                "offset": 0
+              }
+            },
+            {
+              "names": [
+                "f1/face:left"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  -1,
+                  0,
+                  0
+                ],
+                "offset": 0
+              }
+            },
+            {
+              "names": [
+                "f1/face:right"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  1,
+                  0,
+                  0
+                ],
+                "offset": 10
+              }
+            },
+            {
+              "names": [
+                "f1/face:top"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  1
+                ],
+                "offset": 10
+              }
+            },
+            {
+              "names": [
+                "f2/face:chamfer:edge:f1/face:front|f1/face:top"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  -0.7071067811865475,
+                  0.7071067811865475
+                ],
+                "offset": 6.363961030678927
+              }
+            }
+          ],
+          "edges": [
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:bottom"
+              ],
+              "midpoint": [
+                5,
+                10,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:left"
+              ],
+              "midpoint": [
+                0,
+                10,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:right"
+              ],
+              "midpoint": [
+                10,
+                10,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:top"
+              ],
+              "midpoint": [
+                5,
+                10,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:front"
+              ],
+              "midpoint": [
+                5,
+                0,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:left"
+              ],
+              "midpoint": [
+                0,
+                5,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:right"
+              ],
+              "midpoint": [
+                10,
+                5,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f1/face:left"
+              ],
+              "midpoint": [
+                0,
+                0,
+                4.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f1/face:right"
+              ],
+              "midpoint": [
+                10,
+                0,
+                4.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f2/face:chamfer:edge:f1/face:front|f1/face:top"
+              ],
+              "midpoint": [
+                5,
+                0,
+                9
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:left|f1/face:top"
+              ],
+              "midpoint": [
+                0,
+                5.5,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:left|f2/face:chamfer:edge:f1/face:front|f1/face:top"
+              ],
+              "midpoint": [
+                0,
+                0.5000000000000009,
+                9.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:right|f1/face:top"
+              ],
+              "midpoint": [
+                10,
+                5.5,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:right|f2/face:chamfer:edge:f1/face:front|f1/face:top"
+              ],
+              "midpoint": [
+                10,
+                0.5000000000000009,
+                9.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f2/face:chamfer:edge:f1/face:front|f1/face:top"
+              ],
+              "midpoint": [
+                5,
+                1,
+                10
+              ]
+            }
+          ],
+          "vertexCount": 10
+        }
+      ],
+      "sketches": [],
+      "anchors": {
+        "f1": {},
+        "f2": {}
+      }
+    }
+  },
+  "tolerance": {
+    "relative": 0.001
+  }
+}

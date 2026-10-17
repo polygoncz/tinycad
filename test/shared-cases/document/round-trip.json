@@ -1,0 +1,153 @@
+{
+  "kind": "document.load",
+  "description": "A valid document with body metadata loads unchanged",
+  "source": "test/unit/document/serialize.test.ts › toData / fromData round trip › fromData(toData(doc)) is equivalent and toData → fromData → toData is the identity",
+  "input": {
+    "data": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "a",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "a",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          {
+            "id": "b",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "b",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 2,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          {
+            "id": "c",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "c",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 3,
+              "depth": 10,
+              "height": 10
+            }
+          }
+        ],
+        "rollbackIndex": 2,
+        "bodies": {
+          "a/body": {
+            "name": "Base",
+            "hidden": true,
+            "color": "#ff8800",
+            "material": "steel"
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "data": {
+        "meta": {
+          "id": "doc1",
+          "name": "Test document",
+          "createdAt": 0
+        },
+        "studio": {
+          "features": [
+            {
+              "id": "a",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "a",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 1,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            },
+            {
+              "id": "b",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "b",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 2,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            },
+            {
+              "id": "c",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "c",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 3,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            }
+          ],
+          "rollbackIndex": 2,
+          "bodies": {
+            "a/body": {
+              "name": "Base",
+              "hidden": true,
+              "color": "#ff8800",
+              "material": "steel"
+            }
+          }
+        }
+      }
+    }
+  }
+}

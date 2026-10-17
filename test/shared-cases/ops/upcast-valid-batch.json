@@ -1,0 +1,59 @@
+{
+  "kind": "ops.upcast",
+  "description": "A batch of current operations, nested, passes unchanged",
+  "source": "test/unit/ops/upcast.test.ts › upcastOperation › upcasts a batch recursively",
+  "input": {
+    "operation": {
+      "type": "batch",
+      "v": 1,
+      "ops": [
+        {
+          "type": "feature.rename",
+          "v": 1,
+          "featureId": "f1",
+          "name": ""
+        },
+        {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "feature.suppress",
+              "v": 1,
+              "featureId": "f1",
+              "suppressed": true
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "operation": {
+        "type": "batch",
+        "v": 1,
+        "ops": [
+          {
+            "type": "feature.rename",
+            "v": 1,
+            "featureId": "f1",
+            "name": ""
+          },
+          {
+            "type": "batch",
+            "v": 1,
+            "ops": [
+              {
+                "type": "feature.suppress",
+                "v": 1,
+                "featureId": "f1",
+                "suppressed": true
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

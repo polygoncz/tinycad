@@ -1,0 +1,41 @@
+{
+  "kind": "schema.validate",
+  "description": "The same body twice in one list is param.duplicateRef",
+  "source": "test/unit/features/boolean/boolean.test.ts › booleanSchema › rejects the same body twice in one list with param.duplicateRef",
+  "input": {
+    "type": "boolean",
+    "params": {
+      "op": "union",
+      "targets": [
+        {
+          "kind": "body",
+          "body": "a/body"
+        },
+        {
+          "kind": "body",
+          "body": "a/body"
+        }
+      ],
+      "tools": [
+        {
+          "kind": "body",
+          "body": "b/body"
+        }
+      ],
+      "keepTools": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "targets",
+          "code": "param.duplicateRef",
+          "params": {
+            "index": 1
+          }
+        }
+      ]
+    }
+  }
+}

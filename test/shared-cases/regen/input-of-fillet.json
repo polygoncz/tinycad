@@ -1,0 +1,572 @@
+{
+  "kind": "regen",
+  "description": "The input of a fillet being edited is the box before it: six faces, no fillet face",
+  "source": "test/unit/regen/regenerator-input.test.ts › Regenerator.run – input of a feature › is the state after the previous feature for a feature in the middle (same object)",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "fillet",
+        "name": "fillet",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "f1",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "box.label 1",
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 10,
+              "depth": 10,
+              "height": 10
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f2",
+            "type": "fillet",
+            "typeVersion": 1,
+            "name": "fillet.label 1",
+            "params": {
+              "edges": [
+                {
+                  "kind": "topo",
+                  "body": "f1/body",
+                  "name": "edge:f1/face:front|f1/face:top"
+                }
+              ],
+              "radius": 1
+            },
+            "suppressed": false
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    },
+    "inputOf": "f2"
+  },
+  "expected": {
+    "ok": {
+      "statuses": {
+        "f1": {
+          "kind": "ok"
+        },
+        "f2": {
+          "kind": "ok"
+        }
+      },
+      "bodies": [
+        {
+          "id": "f1/body",
+          "origin": "f1",
+          "lastModifiedBy": "f2",
+          "volume": 997.8531678751001,
+          "bbox": {
+            "min": [
+              0,
+              -2.220446049250313e-16,
+              0
+            ],
+            "max": [
+              10,
+              10,
+              10
+            ]
+          },
+          "faces": [
+            {
+              "names": [
+                "f1/face:back"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  1,
+                  0
+                ],
+                "offset": 10
+              }
+            },
+            {
+              "names": [
+                "f1/face:bottom"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  -1
+                ],
+                "offset": 0
+              }
+            },
+            {
+              "names": [
+                "f1/face:front"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  -1,
+                  0
+                ],
+                "offset": 0
+              }
+            },
+            {
+              "names": [
+                "f1/face:left"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  -1,
+                  0,
+                  0
+                ],
+                "offset": 0
+              }
+            },
+            {
+              "names": [
+                "f1/face:right"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  1,
+                  0,
+                  0
+                ],
+                "offset": 10
+              }
+            },
+            {
+              "names": [
+                "f1/face:top"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  1
+                ],
+                "offset": 10
+              }
+            },
+            {
+              "names": [
+                "f2/face:fillet:edge:f1/face:front|f1/face:top"
+              ],
+              "surface": "cylinder"
+            }
+          ],
+          "edges": [
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:bottom"
+              ],
+              "midpoint": [
+                5,
+                10,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:left"
+              ],
+              "midpoint": [
+                0,
+                10,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:right"
+              ],
+              "midpoint": [
+                10,
+                10,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:top"
+              ],
+              "midpoint": [
+                5,
+                10,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:front"
+              ],
+              "midpoint": [
+                5,
+                0,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:left"
+              ],
+              "midpoint": [
+                0,
+                5,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:right"
+              ],
+              "midpoint": [
+                10,
+                5,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f1/face:left"
+              ],
+              "midpoint": [
+                0,
+                0,
+                4.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f1/face:right"
+              ],
+              "midpoint": [
+                10,
+                0,
+                4.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f2/face:fillet:edge:f1/face:front|f1/face:top"
+              ],
+              "midpoint": [
+                5,
+                -2.220446049250313e-16,
+                9
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:left|f1/face:top"
+              ],
+              "midpoint": [
+                0,
+                5.5,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:left|f2/face:fillet:edge:f1/face:front|f1/face:top"
+              ],
+              "midpoint": [
+                0,
+                0.2928932188134521,
+                9.707106781186548
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:right|f1/face:top"
+              ],
+              "midpoint": [
+                10,
+                5.5,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:right|f2/face:fillet:edge:f1/face:front|f1/face:top"
+              ],
+              "midpoint": [
+                10,
+                0.2928932188134521,
+                9.707106781186548
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f2/face:fillet:edge:f1/face:front|f1/face:top"
+              ],
+              "midpoint": [
+                5,
+                0.9999999999999997,
+                10
+              ]
+            }
+          ],
+          "vertexCount": 10
+        }
+      ],
+      "sketches": [],
+      "anchors": {
+        "f1": {},
+        "f2": {}
+      },
+      "input": {
+        "feature": "f2",
+        "bodies": [
+          {
+            "id": "f1/body",
+            "origin": "f1",
+            "lastModifiedBy": "f1",
+            "volume": 1000,
+            "bbox": {
+              "min": [
+                0,
+                0,
+                0
+              ],
+              "max": [
+                10,
+                10,
+                10
+              ]
+            },
+            "faces": [
+              {
+                "names": [
+                  "f1/face:back"
+                ],
+                "surface": "plane",
+                "plane": {
+                  "normal": [
+                    0,
+                    1,
+                    0
+                  ],
+                  "offset": 10
+                }
+              },
+              {
+                "names": [
+                  "f1/face:bottom"
+                ],
+                "surface": "plane",
+                "plane": {
+                  "normal": [
+                    0,
+                    0,
+                    -1
+                  ],
+                  "offset": 0
+                }
+              },
+              {
+                "names": [
+                  "f1/face:front"
+                ],
+                "surface": "plane",
+                "plane": {
+                  "normal": [
+                    0,
+                    -1,
+                    0
+                  ],
+                  "offset": 0
+                }
+              },
+              {
+                "names": [
+                  "f1/face:left"
+                ],
+                "surface": "plane",
+                "plane": {
+                  "normal": [
+                    -1,
+                    0,
+                    0
+                  ],
+                  "offset": 0
+                }
+              },
+              {
+                "names": [
+                  "f1/face:right"
+                ],
+                "surface": "plane",
+                "plane": {
+                  "normal": [
+                    1,
+                    0,
+                    0
+                  ],
+                  "offset": 10
+                }
+              },
+              {
+                "names": [
+                  "f1/face:top"
+                ],
+                "surface": "plane",
+                "plane": {
+                  "normal": [
+                    0,
+                    0,
+                    1
+                  ],
+                  "offset": 10
+                }
+              }
+            ],
+            "edges": [
+              {
+                "names": [
+                  "edge:f1/face:back|f1/face:bottom"
+                ],
+                "midpoint": [
+                  5,
+                  10,
+                  0
+                ]
+              },
+              {
+                "names": [
+                  "edge:f1/face:back|f1/face:left"
+                ],
+                "midpoint": [
+                  0,
+                  10,
+                  5
+                ]
+              },
+              {
+                "names": [
+                  "edge:f1/face:back|f1/face:right"
+                ],
+                "midpoint": [
+                  10,
+                  10,
+                  5
+                ]
+              },
+              {
+                "names": [
+                  "edge:f1/face:back|f1/face:top"
+                ],
+                "midpoint": [
+                  5,
+                  10,
+                  10
+                ]
+              },
+              {
+                "names": [
+                  "edge:f1/face:bottom|f1/face:front"
+                ],
+                "midpoint": [
+                  5,
+                  0,
+                  0
+                ]
+              },
+              {
+                "names": [
+                  "edge:f1/face:bottom|f1/face:left"
+                ],
+                "midpoint": [
+                  0,
+                  5,
+                  0
+                ]
+              },
+              {
+                "names": [
+                  "edge:f1/face:bottom|f1/face:right"
+                ],
+                "midpoint": [
+                  10,
+                  5,
+                  0
+                ]
+              },
+              {
+                "names": [
+                  "edge:f1/face:front|f1/face:left"
+                ],
+                "midpoint": [
+                  0,
+                  0,
+                  5
+                ]
+              },
+              {
+                "names": [
+                  "edge:f1/face:front|f1/face:right"
+                ],
+                "midpoint": [
+                  10,
+                  0,
+                  5
+                ]
+              },
+              {
+                "names": [
+                  "edge:f1/face:front|f1/face:top"
+                ],
+                "midpoint": [
+                  5,
+                  0,
+                  10
+                ]
+              },
+              {
+                "names": [
+                  "edge:f1/face:left|f1/face:top"
+                ],
+                "midpoint": [
+                  0,
+                  5,
+                  10
+                ]
+              },
+              {
+                "names": [
+                  "edge:f1/face:right|f1/face:top"
+                ],
+                "midpoint": [
+                  10,
+                  5,
+                  10
+                ]
+              }
+            ],
+            "vertexCount": 8
+          }
+        ],
+        "sketches": []
+      }
+    }
+  },
+  "tolerance": {
+    "relative": 0.001
+  }
+}

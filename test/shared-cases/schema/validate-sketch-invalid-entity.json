@@ -1,0 +1,86 @@
+{
+  "kind": "schema.validate",
+  "description": "An invalid entity is sketch.invalidEntity at entities with its index",
+  "source": "test/unit/features/sketch/sketch.test.ts › sketchSchema › turns invalid entities into issues at entities with the index",
+  "input": {
+    "type": "sketch",
+    "params": {
+      "plane": [
+        {
+          "kind": "plane",
+          "plane": "origin/plane:xy"
+        }
+      ],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "a",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "b",
+          "x": 10,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "c",
+          "x": 10,
+          "y": 5
+        },
+        {
+          "kind": "point",
+          "id": "d",
+          "x": 0,
+          "y": 5
+        },
+        {
+          "kind": "line",
+          "id": "ab",
+          "p1": "a",
+          "p2": "b"
+        },
+        {
+          "kind": "line",
+          "id": "bc",
+          "p1": "b",
+          "p2": "c"
+        },
+        {
+          "kind": "line",
+          "id": "cd",
+          "p1": "c",
+          "p2": "d"
+        },
+        {
+          "kind": "line",
+          "id": "da",
+          "p1": "d",
+          "p2": "a"
+        },
+        {
+          "kind": "line",
+          "id": "bad",
+          "p1": "a",
+          "p2": "a"
+        }
+      ],
+      "constraints": []
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "entities",
+          "code": "sketch.invalidEntity",
+          "params": {
+            "index": 8
+          }
+        }
+      ]
+    }
+  }
+}

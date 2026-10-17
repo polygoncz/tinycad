@@ -1,0 +1,21 @@
+{
+  "kind": "ops.upcast",
+  "description": "A valid document.rename of the current version passes unchanged",
+  "source": "test/unit/ops/handlers/document.test.ts › document.rename (M19.2, D5) › validate: a valid operation passes",
+  "input": {
+    "operation": {
+      "type": "document.rename",
+      "v": 1,
+      "name": "Díl"
+    }
+  },
+  "expected": {
+    "ok": {
+      "operation": {
+        "type": "document.rename",
+        "v": 1,
+        "name": "Díl"
+      }
+    }
+  }
+}

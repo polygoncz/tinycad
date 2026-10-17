@@ -1,0 +1,36 @@
+{
+  "kind": "sketch.derived",
+  "description": "A sketch of points and construction curves has no region curves",
+  "source": "test/unit/sketch/geometry.test.ts › regionCurves › gives nothing for a sketch with only points or construction curves",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "l",
+        "p1": "a",
+        "p2": "b",
+        "construction": true
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [],
+      "textCurves": [],
+      "regionCurves": []
+    }
+  }
+}

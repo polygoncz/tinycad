@@ -1,0 +1,23 @@
+{
+  "kind": "schema.validate",
+  "description": "A small positive width passes",
+  "source": "test/unit/features/box/box.test.ts › boxSchema › accepts a small positive size",
+  "input": {
+    "type": "box",
+    "params": {
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "width": 1e-9,
+      "depth": 10,
+      "height": 10
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": []
+    }
+  }
+}

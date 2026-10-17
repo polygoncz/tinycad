@@ -1,0 +1,137 @@
+{
+  "kind": "sketch.solve",
+  "description": "A rectangle of horizontal and vertical sides without dimensions has 4 degrees of freedom",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – degrees of freedom › a rectangle without dimensions has 4 degrees of freedom",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 10,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "c",
+        "x": 10,
+        "y": 5
+      },
+      {
+        "kind": "point",
+        "id": "d",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "kind": "line",
+        "id": "ab",
+        "p1": "a",
+        "p2": "b"
+      },
+      {
+        "kind": "line",
+        "id": "bc",
+        "p1": "b",
+        "p2": "c"
+      },
+      {
+        "kind": "line",
+        "id": "cd",
+        "p1": "c",
+        "p2": "d"
+      },
+      {
+        "kind": "line",
+        "id": "da",
+        "p1": "d",
+        "p2": "a"
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "horizontal",
+        "id": "h1",
+        "line": "ab"
+      },
+      {
+        "kind": "vertical",
+        "id": "v1",
+        "line": "bc"
+      },
+      {
+        "kind": "horizontal",
+        "id": "h2",
+        "line": "cd"
+      },
+      {
+        "kind": "vertical",
+        "id": "v2",
+        "line": "da"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 4,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "a",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "b",
+          "x": 10,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "c",
+          "x": 10,
+          "y": 5
+        },
+        {
+          "kind": "point",
+          "id": "d",
+          "x": 0,
+          "y": 5
+        },
+        {
+          "kind": "line",
+          "id": "ab",
+          "p1": "a",
+          "p2": "b"
+        },
+        {
+          "kind": "line",
+          "id": "bc",
+          "p1": "b",
+          "p2": "c"
+        },
+        {
+          "kind": "line",
+          "id": "cd",
+          "p1": "c",
+          "p2": "d"
+        },
+        {
+          "kind": "line",
+          "id": "da",
+          "p1": "d",
+          "p2": "a"
+        }
+      ]
+    }
+  }
+}

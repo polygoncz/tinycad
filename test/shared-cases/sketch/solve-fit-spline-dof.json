@@ -1,0 +1,158 @@
+{
+  "kind": "sketch.solve",
+  "description": "A fit point spline has 2 degrees of freedom per fit point",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – splines › a fitSpline has 2 degrees of freedom per fit point",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "f0",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "f1",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "kind": "point",
+        "id": "f2",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "f3",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "kind": "fitSpline",
+        "id": "F",
+        "degree": 3,
+        "fit": [
+          "f0",
+          "f1",
+          "f2",
+          "f3"
+        ],
+        "params": [
+          0,
+          0.24025307335204216,
+          0.620126536676021,
+          1
+        ],
+        "poles": [
+          [
+            0,
+            0
+          ],
+          [
+            0.9846500352828186,
+            3.3252906740954153
+          ],
+          [
+            4.06564641782601,
+            -3.125290674095415
+          ],
+          [
+            4,
+            2
+          ]
+        ],
+        "knots": [
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ]
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 8,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "f0",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "f1",
+          "x": 1,
+          "y": 1
+        },
+        {
+          "kind": "point",
+          "id": "f2",
+          "x": 3,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "f3",
+          "x": 4,
+          "y": 2
+        },
+        {
+          "kind": "fitSpline",
+          "id": "F",
+          "degree": 3,
+          "fit": [
+            "f0",
+            "f1",
+            "f2",
+            "f3"
+          ],
+          "params": [
+            0,
+            0.24025307335204216,
+            0.620126536676021,
+            1
+          ],
+          "poles": [
+            [
+              0,
+              0
+            ],
+            [
+              0.9846500352828186,
+              3.3252906740954153
+            ],
+            [
+              4.06564641782601,
+              -3.125290674095415
+            ],
+            [
+              4,
+              2
+            ]
+          ],
+          "knots": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    }
+  }
+}

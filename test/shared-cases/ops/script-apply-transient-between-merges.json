@@ -1,0 +1,196 @@
+{
+  "kind": "ops.script",
+  "description": "Logged steps around a transient one still merge into one entry on commit",
+  "source": "test/unit/ops/transaction.test.ts › merging steps on apply (ADR 0025) › commit still merges logged steps around a transient one into one entry",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "a",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "A",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          {
+            "id": "b",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "B",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    },
+    "steps": [
+      {
+        "begin": "Edit"
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 2,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "applyTransient": {
+          "type": "studio.setRollback",
+          "v": 1,
+          "index": 0
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 3,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "commit": true
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "document": {
+        "meta": {
+          "id": "doc1",
+          "name": "Test document",
+          "createdAt": 0
+        },
+        "studio": {
+          "features": [
+            {
+              "id": "a",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "A",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 3,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            },
+            {
+              "id": "b",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "B",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 1,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            }
+          ],
+          "rollbackIndex": 2
+        }
+      },
+      "log": [
+        {
+          "kind": "do",
+          "op": {
+            "type": "feature.setParams",
+            "v": 2,
+            "featureId": "a",
+            "typeVersion": 1,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 3,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          "inverse": {
+            "type": "feature.setParams",
+            "v": 2,
+            "featureId": "a",
+            "typeVersion": 1,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          "label": "Edit",
+          "time": 5,
+          "seq": 1
+        }
+      ],
+      "canUndo": true,
+      "canRedo": false
+    }
+  }
+}

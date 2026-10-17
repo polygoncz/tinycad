@@ -1,0 +1,65 @@
+{
+  "kind": "geometry.offset",
+  "description": "An L to the right of its direction: the outer corner sharp",
+  "source": "src/kernel/testing.ts › open chains (spec 06 Stav po M35) › an L to the right of its direction: the outer corner sharp",
+  "input": {
+    "chain": [
+      {
+        "kind": "line",
+        "from": [
+          0,
+          0
+        ],
+        "to": [
+          10,
+          0
+        ],
+        "id": "h"
+      },
+      {
+        "kind": "line",
+        "from": [
+          10,
+          0
+        ],
+        "to": [
+          10,
+          5
+        ],
+        "id": "v"
+      }
+    ],
+    "closed": false,
+    "distance": 1
+  },
+  "expected": {
+    "ok": {
+      "curves": [
+        {
+          "kind": "line",
+          "from": [
+            0,
+            -1
+          ],
+          "to": [
+            11,
+            -1
+          ],
+          "source": "h"
+        },
+        {
+          "kind": "line",
+          "from": [
+            11,
+            -1
+          ],
+          "to": [
+            11,
+            5
+          ],
+          "source": "v"
+        }
+      ]
+    }
+  }
+}

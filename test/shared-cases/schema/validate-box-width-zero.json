@@ -1,0 +1,31 @@
+{
+  "kind": "schema.validate",
+  "description": "A width of 0 is param.atOrBelowMin",
+  "source": "test/unit/features/box/box.test.ts › boxSchema › rejects a zero or negative %s",
+  "input": {
+    "type": "box",
+    "params": {
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "width": 0,
+      "depth": 10,
+      "height": 10
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "width",
+          "code": "param.atOrBelowMin",
+          "params": {
+            "min": 0
+          }
+        }
+      ]
+    }
+  }
+}

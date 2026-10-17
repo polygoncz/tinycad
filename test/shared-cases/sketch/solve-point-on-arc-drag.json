@@ -1,0 +1,124 @@
+{
+  "kind": "sketch.solve",
+  "description": "A dragged point on an arc lies on its whole circle, also outside the arc",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – M26 constraints › a point on an arc lies on its whole circle, also outside the arc",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "o",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "circle",
+        "id": "C",
+        "center": "o",
+        "radius": 5
+      },
+      {
+        "kind": "point",
+        "id": "as",
+        "x": 5,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "ae",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "kind": "arc",
+        "id": "A",
+        "center": "o",
+        "start": "as",
+        "end": "ae"
+      },
+      {
+        "kind": "point",
+        "id": "m",
+        "x": 1,
+        "y": 1
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fo",
+        "point": "o"
+      },
+      {
+        "kind": "fix",
+        "id": "fs",
+        "point": "as"
+      },
+      {
+        "kind": "radius",
+        "id": "rc",
+        "curve": "C",
+        "value": 5
+      },
+      {
+        "kind": "pointOnCurve",
+        "id": "on",
+        "point": "m",
+        "curve": "A"
+      }
+    ],
+    "drag": {
+      "point": "m",
+      "to": [
+        -9,
+        0
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 2,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "o",
+          "x": -5.32903958419427e-34,
+          "y": 3.7688369268278013e-35
+        },
+        {
+          "kind": "circle",
+          "id": "C",
+          "center": "o",
+          "radius": 5
+        },
+        {
+          "kind": "point",
+          "id": "as",
+          "x": 5,
+          "y": 6.622828012479665e-36
+        },
+        {
+          "kind": "point",
+          "id": "ae",
+          "x": 4.876625336994724e-16,
+          "y": 5
+        },
+        {
+          "kind": "arc",
+          "id": "A",
+          "center": "o",
+          "start": "as",
+          "end": "ae"
+        },
+        {
+          "kind": "point",
+          "id": "m",
+          "x": -5,
+          "y": 3.6688943597446887e-16
+        }
+      ]
+    }
+  }
+}

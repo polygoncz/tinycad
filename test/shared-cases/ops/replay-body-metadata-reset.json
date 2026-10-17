@@ -1,0 +1,138 @@
+{
+  "kind": "ops.replay",
+  "description": "Renaming to an empty name, showing and the default color drop the body metadata (canonical form)",
+  "source": "test/unit/ops/handlers/handlers.test.ts › body metadata handlers (M11) › rename keeps hidden and setVisible keeps the name",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "b1",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "Box 1",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 10,
+              "depth": 10,
+              "height": 10
+            }
+          }
+        ],
+        "rollbackIndex": 1,
+        "bodies": {
+          "b1/body": {
+            "name": "Base",
+            "hidden": true,
+            "color": "#00ff00",
+            "material": "steel"
+          }
+        }
+      }
+    },
+    "entries": [
+      {
+        "seq": 1,
+        "kind": "do",
+        "op": {
+          "type": "body.rename",
+          "v": 1,
+          "body": "b1/body",
+          "name": ""
+        },
+        "inverse": {
+          "type": "body.rename",
+          "v": 1,
+          "body": "b1/body",
+          "name": "Base"
+        },
+        "label": "body.rename",
+        "time": 0
+      },
+      {
+        "seq": 2,
+        "kind": "do",
+        "op": {
+          "type": "body.setVisible",
+          "v": 1,
+          "body": "b1/body",
+          "visible": true
+        },
+        "inverse": {
+          "type": "body.setVisible",
+          "v": 1,
+          "body": "b1/body",
+          "visible": false
+        },
+        "label": "body.setVisible",
+        "time": 0
+      },
+      {
+        "seq": 3,
+        "kind": "do",
+        "op": {
+          "type": "body.setColor",
+          "v": 1,
+          "body": "b1/body",
+          "color": null
+        },
+        "inverse": {
+          "type": "body.setColor",
+          "v": 1,
+          "body": "b1/body",
+          "color": "#00ff00"
+        },
+        "label": "body.setColor",
+        "time": 0
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "document": {
+        "meta": {
+          "id": "doc1",
+          "name": "Test document",
+          "createdAt": 0
+        },
+        "studio": {
+          "features": [
+            {
+              "id": "b1",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "Box 1",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 10,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            }
+          ],
+          "rollbackIndex": 1,
+          "bodies": {
+            "b1/body": {
+              "material": "steel"
+            }
+          }
+        }
+      }
+    }
+  }
+}

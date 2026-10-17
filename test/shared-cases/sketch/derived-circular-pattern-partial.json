@@ -1,0 +1,90 @@
+{
+  "kind": "sketch.derived",
+  "description": "A circular pattern spreads a smaller angle over count minus 1 steps",
+  "source": "test/unit/sketch/patterns.test.ts › patternCopies – circular pattern › spreads a smaller angle over count − 1 steps, the last instance at the angle",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "ab",
+        "p1": "a",
+        "p2": "b"
+      },
+      {
+        "kind": "point",
+        "id": "o",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "u",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "kind": "line",
+        "id": "ou",
+        "p1": "o",
+        "p2": "u",
+        "construction": true
+      },
+      {
+        "kind": "circularPattern",
+        "id": "cp",
+        "sources": [
+          "a"
+        ],
+        "center": "o",
+        "count": 3,
+        "angle": 1.5707963267948966
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [
+        {
+          "kind": "point",
+          "id": "cp:1.a",
+          "x": 0.7071067811865476,
+          "y": 0.7071067811865475
+        },
+        {
+          "kind": "point",
+          "id": "cp:2.a",
+          "x": 6.123233995736766e-17,
+          "y": 1
+        }
+      ],
+      "textCurves": [],
+      "regionCurves": [
+        {
+          "kind": "line",
+          "from": [
+            1,
+            0
+          ],
+          "to": [
+            3,
+            0
+          ],
+          "id": "ab"
+        }
+      ]
+    }
+  }
+}
