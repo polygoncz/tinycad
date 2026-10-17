@@ -1,11 +1,14 @@
 #include "tinycad/storage/document_service.hpp"
 
+#include <openssl/evp.h>
+
+#include <array>
 #include <utility>
 
 #include "snapshot.hpp"
+#include "tinycad/core/text.hpp"
 #include "tinycad/ops/log.hpp"
 #include "tinycad_file.hpp"
-#include "trim.hpp"
 
 namespace tinycad::storage {
 
@@ -82,6 +85,22 @@ std::string safeFileName(const std::string& name) {
 
 }  // namespace
 
+OperationKey importKey(std::string_view content) {
+  std::array<unsigned char, EVP_MAX_MD_SIZE> digest{};
+  unsigned int length = 0;
+  const int ok =
+      EVP_Digest(content.data(), content.size(), digest.data(), &length, EVP_sha256(), nullptr);
+  TINYCAD_ASSERT(ok == 1, "OpenSSL SHA-256 failed");
+  static constexpr char kHex[] = "0123456789abcdef";
+  std::string hex;
+  hex.reserve(2 * length);
+  for (unsigned int i = 0; i < length; ++i) {
+    hex.push_back(kHex[digest[i] >> 4]);
+    hex.push_back(kHex[digest[i] & 0x0f]);
+  }
+  return OperationKey{"import:" + hex, hex};
+}
+
 DocumentService::DocumentService(const Dependencies& deps) : deps_(deps) {}
 
 ServiceResult<std::vector<DocumentSummary>> DocumentService::list() {
@@ -94,7 +113,7 @@ ServiceResult<std::vector<DocumentSummary>> DocumentService::list() {
 
 ServiceResult<DocumentSummary> DocumentService::create(const std::string& name,
                                                        const OperationKey& key) {
-  const std::string trimmed = trimName(name);
+  const std::string trimmed = core::trimJs(name);
   if (trimmed.empty()) return core::fail(serviceError(ServiceErrorCode::InvalidName, "empty name"));
   if (auto before = createdBefore(deps_.catalog, key)) return *before;
 
@@ -108,7 +127,7 @@ ServiceResult<DocumentSummary> DocumentService::create(const std::string& name,
 ServiceResult<DocumentSummary> DocumentService::rename(const DocumentId& id,
                                                        const std::string& name,
                                                        const OperationKey& key) {
-  const std::string trimmed = trimName(name);
+  const std::string trimmed = core::trimJs(name);
   if (trimmed.empty()) return core::fail(serviceError(ServiceErrorCode::InvalidName, "empty name"));
 
   auto file = deps_.catalog.open(id);

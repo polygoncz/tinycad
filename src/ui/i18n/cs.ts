@@ -209,6 +209,8 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'sketch.conflict': 'Vazba je v rozporu s ostatními',
   'sketch.redundant': 'Vazba už platí',
   'sketch.solverFailed': 'Skicu se nepodařilo vyřešit',
+  // SKETCH_NOT_SOLVED of the core (Q103, N48): the server did not solve the sketch.
+  'sketch.notSolved': 'Server skicu nevyřešil, zůstává lokální verze.',
   'sketch.planeMissing': 'Rovina skici chybí, vyberte novou',
   // The numeric input while drawing (M32): the labels of the fields.
   'sketch.input.x': 'X',

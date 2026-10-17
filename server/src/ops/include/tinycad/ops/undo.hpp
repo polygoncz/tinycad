@@ -5,6 +5,7 @@
 // as an Undo entry, redo its op again as a Redo entry. document.rename stays out of undo (M19.2).
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "tinycad/core/result.hpp"
@@ -20,17 +21,26 @@ struct UndoStacks {
   friend bool operator==(const UndoStacks&, const UndoStacks&) = default;
 };
 
+/** An undo or redo entry of a stored log that does not target the top of its stack. */
+struct CorruptUndoLog {
+  /** The seq of the broken entry. */
+  std::int64_t seq = 0;
+  /** Technical text; never compared. */
+  std::string message;
+};
+
 /**
- * The stacks from entry metadata (pure). An undo or redo entry that does not target the top of
- * its stack is a corrupt log: AssertionError with its seq.
+ * The stacks from entry metadata (pure). The log comes from outside (a file, an import), so an
+ * undo or redo entry that does not target the top of its stack is a failure, not a bug (N108).
  */
-UndoStacks rebuildUndoStacks(const std::vector<LogEntry>& entries);
+core::Result<UndoStacks, CorruptUndoLog> rebuildUndoStacks(const std::vector<LogEntry>& entries);
 
 class UndoManager final : private LogListener {
  public:
   /**
    * Rebuilds the stacks from the log and becomes the listener of the dispatcher, which keeps them
-   * up to date (decision N21). Both must outlive the manager.
+   * up to date (decision N21). Both must outlive the manager. Precondition: rebuildUndoStacks of
+   * the log succeeds (the loader checks it first); a corrupt log throws AssertionError.
    */
   UndoManager(OperationDispatcher& dispatcher, const OperationLog& log);
   ~UndoManager() override;

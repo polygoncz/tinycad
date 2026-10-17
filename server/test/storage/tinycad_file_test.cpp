@@ -250,7 +250,7 @@ TEST(ParseTinycadFileWithHistory, ARoundTripKeepsTheStateAndTheUndoStacks) {
   ASSERT_TRUE(checked.has_value());
   EXPECT_TRUE(document::sameStudio(*checked->state.studio, *history.session->doc->studio()));
   EXPECT_EQ(entriesJson(checked->entries), entriesJson(history.session->log.entries()));
-  EXPECT_EQ(ops::rebuildUndoStacks(checked->entries), history.session->undo.stacks());
+  EXPECT_EQ(ops::rebuildUndoStacks(checked->entries).value(), history.session->undo.stacks());
   EXPECT_EQ(checked->base.studio->features.size(), 1U);
 }
 
@@ -259,7 +259,7 @@ TEST(ParseTinycadFileWithHistory, ReadsTheFileTsWrote) {
   ASSERT_TRUE(checked.has_value());
   EXPECT_EQ(checked->entries.size(), 30U);
   const Json stacks = readFixture("bracket-history.stacks.json");
-  const ops::UndoStacks rebuilt = ops::rebuildUndoStacks(checked->entries);
+  const ops::UndoStacks rebuilt = ops::rebuildUndoStacks(checked->entries).value();
   EXPECT_EQ(rebuilt.undo, stacks["undo"].get<std::vector<std::int64_t>>());
   EXPECT_EQ(rebuilt.redo, stacks["redo"].get<std::vector<std::int64_t>>());
 }

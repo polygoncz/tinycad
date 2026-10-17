@@ -128,6 +128,33 @@ TEST_F(IdempotenceTest, TheSameIdWithAnotherFingerprintIsOperationIdReused) {
   EXPECT_EQ(storedSeqs(), std::vector<std::int64_t>{1});
 }
 
+TEST_F(IdempotenceTest, LookupFindsTheStoredEntryWithoutApplyingAnything) {
+  auto doc = open();
+  auto missing = doc->lookup({"op-1", "fp-1"});
+  ASSERT_TRUE(missing.has_value());
+  EXPECT_FALSE(missing->has_value());
+
+  const Json written =
+      *doc->dispatch(testing::renameOp("a", "B"), "x", {"op-1", "fp-1"}).value().entry;
+  auto found = doc->lookup({"op-1", "fp-1"});
+  ASSERT_TRUE(found.has_value());
+  ASSERT_TRUE(found->has_value());
+  EXPECT_TRUE((*found)->repeated);
+  EXPECT_EQ(*(*found)->entry, written);
+  EXPECT_EQ(storedSeqs(), std::vector<std::int64_t>{1});
+
+  auto reused = doc->lookup({"op-1", "other"});
+  ASSERT_FALSE(reused.has_value());
+  EXPECT_EQ(reused.error().code, ChangeErrorCode::OperationIdReused);
+}
+
+TEST_F(IdempotenceTest, LookupAfterReopeningTheFileFindsTheEntry) {
+  { ASSERT_TRUE(open()->dispatch(testing::renameOp("a", "B"), "x", {"op-1", "fp-1"})); }
+  auto found = open()->lookup({"op-1", "fp-1"});
+  ASSERT_TRUE(found.has_value());
+  EXPECT_TRUE(found->has_value());
+}
+
 // --- DocumentService ----------------------------------------------------------------------
 
 TEST_F(IdempotenceTest, CreateWithTheSameKeyGivesTheSameDocument) {
@@ -161,6 +188,13 @@ TEST_F(IdempotenceTest, ImportWithTheSameKeyGivesTheSameDocument) {
   const auto second = service.importFile(file, {"import:abc", "abc"}).value();
   EXPECT_EQ(second.id, first.id);
   EXPECT_EQ(service.list().value().size(), 2U);
+}
+
+TEST(ImportKey, IsTheSha256OfTheContentWithTheImportPrefix) {
+  const OperationKey key = importKey("abc");
+  EXPECT_EQ(key.fingerprint, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+  EXPECT_EQ(key.id, "import:" + key.fingerprint);
+  EXPECT_NE(importKey("abd").id, key.id);
 }
 
 TEST_F(IdempotenceTest, RenameWithTheSameKeyIsOneEntry) {
