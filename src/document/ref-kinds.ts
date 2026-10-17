@@ -4,9 +4,10 @@ import type { EntityRef } from './refs';
 import type { ParamIssue, ParamSpec, RefParamKind, RefParamSpec } from './schema';
 
 // The table of reference kinds of document (M20, D5): what each reference kind of ParamSpec
-// holds and how its value is checked. Pure data and functions; referencesOf and
-// validateAgainstSchema only read it, so a new reference kind is one entry here (and one in the
-// table of interaction), and a missing entry is a type error. Internal to document.
+// holds, how its value is checked and what makes two references the same. Pure data and
+// functions; referencesOf, validateAgainstSchema and checkParamRules only read it, so a new
+// reference kind is one entry here (and one in the table of interaction), and a missing entry is
+// a type error. Internal to document.
 
 /** An issue without the param key; the caller adds it. */
 export type ParamProblem = Omit<ParamIssue, 'param'>;
@@ -127,26 +128,37 @@ function checkRefs(
 }
 
 /**
+ * The key (refKey) of one item of a reference param, read by the kinds of the param; undefined
+ * when the item is not a valid reference of those kinds. checkParamRules (rules.ts) compares two
+ * lists by it.
+ */
+export function refKeyOf(spec: RefParamSpec, item: unknown): string | undefined {
+  const ref = readRefOf(rulesOf(spec).refKinds, item);
+  return ref === undefined ? undefined : refKey(ref);
+}
+
+/**
  * What makes two references the same (spec 03): body for body, body + name for topo, sketch +
  * region for region, plane for plane, axis for axis, sketch + entity for a sketch entity (M13;
  * an axis param holds one reference, so it never has duplicates, but the switch stays exhaustive).
- * Extra fields of the raw data are ignored, readRef keeps only these.
+ * Extra fields of the raw data are ignored, readRef keeps only these. The kind is part of the key
+ * (as in C++ ref_kinds.cpp), so references of two kinds never collide when a rule compares lists.
  * JSON of a tuple, so no separator character inside a name can make two keys collide.
  */
 function refKey(ref: EntityRef): string {
   switch (ref.kind) {
     case 'body':
-      return JSON.stringify([ref.body]);
+      return JSON.stringify(['body', ref.body]);
     case 'topo':
-      return JSON.stringify([ref.body, ref.name]);
+      return JSON.stringify(['topo', ref.body, ref.name]);
     case 'region':
-      return JSON.stringify([ref.sketch, ref.region]);
+      return JSON.stringify(['region', ref.sketch, ref.region]);
     case 'plane':
-      return JSON.stringify([ref.plane]);
+      return JSON.stringify(['plane', ref.plane]);
     case 'axis':
-      return JSON.stringify([ref.axis]);
+      return JSON.stringify(['axis', ref.axis]);
     case 'sketchEntity':
-      return JSON.stringify([ref.sketch, ref.entity]);
+      return JSON.stringify(['sketchEntity', ref.sketch, ref.entity]);
     default:
       return assertNever(ref);
   }

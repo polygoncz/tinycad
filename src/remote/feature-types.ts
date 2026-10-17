@@ -1,20 +1,23 @@
 // FeatureTypeDescriptor of the core (schema.proto, spec 14 "Schéma featur", Q098, Q105) →
 // FeatureSchema of document (N67): the params with a ParamSpec of the same shape as the schemas of
 // the plugins, visibleWhen as a function over the data, defaults() a copy of the defaults and
-// validate the generic validateAgainstSchema. No migrate: the server migrates features; the rules
-// of a feature beyond the generic ones come back as a red feature in the read model.
+// validate the generic validateAgainstSchema plus the declarative rules of the descriptor
+// (checkParamRules, M49), so the dialog reports the same codes as the server. No migrate: the
+// server migrates features; a rule that cannot be data (the sketch, spec 03) comes back as a red
+// feature in the read model only.
 
 import { toJson } from '@bufbuild/protobuf';
 import type { JsonValue } from '@bufbuild/protobuf';
 import { ListValueSchema } from '@bufbuild/protobuf/wkt';
 import type { Vec3 } from '@/core';
-import { validateAgainstSchema } from '@/document';
-import type { FeatureSchema, ParamSchema, ParamSpec } from '@/document';
+import { checkParamRules, validateAgainstSchema } from '@/document';
+import type { FeatureSchema, ParamRule, ParamSchema, ParamSpec } from '@/document';
 import { TopoParam_Entity } from '@/protocol';
 import type {
   FeatureTypeDescriptor,
   NumberParam,
   ParamDescriptor,
+  ParamRule as ParamRuleDescriptor,
   RefListParam,
   VisibleWhen,
 } from '@/protocol';
@@ -24,8 +27,10 @@ type Params = Readonly<Record<string, unknown>>;
 
 /**
  * The schema of a feature type from its descriptor. Frozen; `icon` only when not empty, `group`
- * of a param only when not empty, bounds and `integer` only when set. A param without a kind is a
- * broken answer: RemoteError INTERNAL.
+ * of a param only when not empty, bounds and `integer` only when set. validate = the generic
+ * checks + the rules of the descriptor; a rule of an unknown kind is left out (forward
+ * compatibility, schema.proto: the server still reports it). A param without a kind is a broken
+ * answer: RemoteError INTERNAL.
  */
 export function featureSchemaOf(descriptor: FeatureTypeDescriptor): FeatureSchema {
   return decoding(`descriptor of '${descriptor.type}'`, () => {
@@ -33,6 +38,7 @@ export function featureSchemaOf(descriptor: FeatureTypeDescriptor): FeatureSchem
     for (const param of descriptor.params) params[param.key] = paramSpecOf(param);
     const frozen: ParamSchema = Object.freeze(params);
     const defaults = descriptor.defaults ?? {};
+    const rules = Object.freeze(descriptor.rules.flatMap(paramRuleOf));
     return Object.freeze({
       type: descriptor.type,
       version: descriptor.version,
@@ -40,7 +46,10 @@ export function featureSchemaOf(descriptor: FeatureTypeDescriptor): FeatureSchem
       ...(descriptor.icon === '' ? {} : { icon: descriptor.icon }),
       params: frozen,
       defaults: (): unknown => structuredClone(defaults),
-      validate: (raw: unknown) => validateAgainstSchema(frozen, raw),
+      validate: (raw: unknown) => {
+        const issues = validateAgainstSchema(frozen, raw);
+        return [...issues, ...checkParamRules(frozen, rules, raw, issues)];
+      },
     });
   });
 }
@@ -80,6 +89,18 @@ export function visibleWhenOf(data: VisibleWhen): (params: Params) => boolean {
     }
     case undefined:
       return () => true;
+  }
+}
+
+/** A rule of the descriptor as data of document; none for a kind this client does not know. */
+function paramRuleOf(rule: ParamRuleDescriptor): readonly ParamRule[] {
+  switch (rule.rule.case) {
+    case 'disjointRefs': {
+      const { param, other } = rule.rule.value;
+      return [Object.freeze({ kind: 'disjointRefs', code: rule.code, param, other })];
+    }
+    case undefined:
+      return [];
   }
 }
 

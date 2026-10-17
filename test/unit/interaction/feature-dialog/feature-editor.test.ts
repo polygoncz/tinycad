@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
-import { createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
+import { checkParamRules, createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
 import { aFeature, bodyId, ORIGIN_AXIS_IDS, toData } from '@/document/testing';
-import type { FeatureId, FeatureSchema, ParamSchema, TopoName, TopoRef } from '@/document';
+import type {
+  FeatureId,
+  FeatureSchema,
+  ParamRule,
+  ParamSchema,
+  TopoName,
+  TopoRef,
+} from '@/document';
 import type { DocumentOptions, ParamSchemaOf } from '@/document/testing';
 import type { BatchOp, FeatureAddOp, Operation } from '@/ops';
 import { OP_VERSION } from '@/ops';
@@ -525,6 +532,43 @@ describe('FeatureEditSession', () => {
     const state = session.state.get();
     expect(state.issues).toBe(before.issues);
     expect(state.fields[0]).toBe(before.fields[0]);
+  });
+
+  it('an issue of a declarative rule shows at its field like a generic one (M49)', () => {
+    // The boolean as the client builds it from FeatureTypeDescriptor: the generic checks and the
+    // rule boolean.sameBody (remote/featureSchemaOf).
+    const params: ParamSchema = {
+      targets: { kind: 'bodies', label: 'boolean.targets', min: 1 },
+      tools: { kind: 'bodies', label: 'boolean.tools', min: 1 },
+    };
+    const rules: readonly ParamRule[] = [
+      { kind: 'disjointRefs', code: 'boolean.sameBody', param: 'tools', other: 'targets' },
+    ];
+    const boolean: FeatureSchema = {
+      type: 'boolean',
+      version: 1,
+      label: 'boolean.label',
+      params,
+      defaults: () => ({ targets: [], tools: [] }),
+      validate: (raw) => {
+        const issues = validateAgainstSchema(params, raw);
+        return [...issues, ...checkParamRules(params, rules, raw, issues)];
+      },
+    };
+    const { log, editor } = setup({}, EN, boolean);
+    const session = editor.create('boolean');
+    const a = { kind: 'body', body: bodyId(fid('a')) };
+    const b = { kind: 'body', body: bodyId(fid('b')) };
+    session.setParams({ targets: [a], tools: [b, a] });
+
+    const state = session.state.get();
+    const issue = { param: 'tools', code: 'boolean.sameBody', params: { index: 1 } };
+    expect(state.issues).toEqual([issue]);
+    expect(state.fields[1]?.issue).toEqual(issue);
+    expect(state.fields[0]?.issue).toBeNull();
+    // The same as a generic issue: the dialog shows it, the server decides (commit allowed).
+    session.commit();
+    expect(log.entries()).toHaveLength(1);
   });
 
   it('commit is allowed with issues', () => {
