@@ -1,0 +1,34 @@
+{
+  "kind": "schema.validate",
+  "description": "Up to face with one face passes, the hidden distance and flip are not checked",
+  "source": "test/unit/features/extrude/extrude.test.ts › extrudeSchema › up to face needs exactly one face, the hidden distance and flip are not checked",
+  "input": {
+    "type": "extrude",
+    "params": {
+      "regions": [
+        {
+          "kind": "region",
+          "sketch": "s1",
+          "region": "r1"
+        }
+      ],
+      "operation": "new",
+      "targets": [],
+      "endType": "upToFace",
+      "distance": -1,
+      "upTo": [
+        {
+          "kind": "topo",
+          "body": "b/body",
+          "name": "b/face:bottom"
+        }
+      ],
+      "flip": "yes"
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": []
+    }
+  }
+}

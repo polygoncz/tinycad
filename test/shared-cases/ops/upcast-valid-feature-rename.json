@@ -1,0 +1,23 @@
+{
+  "kind": "ops.upcast",
+  "description": "A valid feature.rename of the current version passes unchanged",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › %s: a valid operation passes",
+  "input": {
+    "operation": {
+      "type": "feature.rename",
+      "v": 1,
+      "featureId": "f1",
+      "name": ""
+    }
+  },
+  "expected": {
+    "ok": {
+      "operation": {
+        "type": "feature.rename",
+        "v": 1,
+        "featureId": "f1",
+        "name": ""
+      }
+    }
+  }
+}

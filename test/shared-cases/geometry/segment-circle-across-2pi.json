@@ -1,0 +1,39 @@
+{
+  "kind": "geometry.segment",
+  "description": "A piece of a circle across 2π is a counter-clockwise arc",
+  "source": "src/kernel/testing.ts › pieces (spec 06 Stav po M33) › a piece of a circle is a counter-clockwise arc, also across 2π",
+  "input": {
+    "curve": {
+      "kind": "circle",
+      "center": [
+        1,
+        2
+      ],
+      "radius": 5,
+      "id": "c"
+    },
+    "from": 4.71238898038469,
+    "to": 7.853981633974483
+  },
+  "expected": {
+    "ok": {
+      "curve": {
+        "kind": "arc",
+        "center": [
+          1,
+          2
+        ],
+        "from": [
+          0.9999999999999991,
+          -3
+        ],
+        "to": [
+          1.0000000000000016,
+          7
+        ],
+        "ccw": true,
+        "id": "c"
+      }
+    }
+  }
+}

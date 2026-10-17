@@ -1,0 +1,113 @@
+{
+  "kind": "sketch.solve",
+  "description": "A line and an arc without a shared point move to touch each other",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – M27 tangent arcs › a line tangent to an arc without a shared point stays tangent_la",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "l1",
+        "x": 10,
+        "y": 10
+      },
+      {
+        "kind": "point",
+        "id": "l2",
+        "x": 30,
+        "y": 10
+      },
+      {
+        "kind": "line",
+        "id": "l",
+        "p1": "l1",
+        "p2": "l2"
+      },
+      {
+        "kind": "point",
+        "id": "ac",
+        "x": 100,
+        "y": 100
+      },
+      {
+        "kind": "point",
+        "id": "as",
+        "x": 110,
+        "y": 100
+      },
+      {
+        "kind": "point",
+        "id": "ae",
+        "x": 100,
+        "y": 110
+      },
+      {
+        "kind": "arc",
+        "id": "a",
+        "center": "ac",
+        "start": "as",
+        "end": "ae"
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "tangent",
+        "id": "t",
+        "a": "l",
+        "b": "a"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 8,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "l1",
+          "x": 10.852908178832287,
+          "y": 5.100280659742061
+        },
+        {
+          "kind": "point",
+          "id": "l2",
+          "x": 28.94990495193118,
+          "y": 21.363157062833032
+        },
+        {
+          "kind": "line",
+          "id": "l",
+          "p1": "l1",
+          "p2": "l2"
+        },
+        {
+          "kind": "point",
+          "id": "ac",
+          "x": 99.89238318543907,
+          "y": 98.80951207732268
+        },
+        {
+          "kind": "point",
+          "id": "as",
+          "x": 110.0087442476912,
+          "y": 99.99336621722884
+        },
+        {
+          "kind": "point",
+          "id": "ae",
+          "x": 100.00043136356157,
+          "y": 108.99433398826372
+        },
+        {
+          "kind": "arc",
+          "id": "a",
+          "center": "ac",
+          "start": "as",
+          "end": "ae"
+        }
+      ]
+    }
+  }
+}

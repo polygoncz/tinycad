@@ -1,0 +1,59 @@
+{
+  "kind": "geometry.fillet",
+  "description": "A touching point beyond the end of an arc: t is the angle from its from in its direction, in [0, 2π)",
+  "source": "src/kernel/testing.ts › centers (spec 06 Stav po M34) › a touching point beyond the end of an arc: t is the angle from its from in its direction, in [0, 2π)",
+  "input": {
+    "a": {
+      "kind": "line",
+      "from": [
+        -10,
+        0
+      ],
+      "to": [
+        10,
+        0
+      ],
+      "id": "x"
+    },
+    "b": {
+      "kind": "arc",
+      "center": [
+        0,
+        0
+      ],
+      "from": [
+        0,
+        5
+      ],
+      "to": [
+        -5,
+        0
+      ],
+      "ccw": true,
+      "id": "k"
+    },
+    "radius": 2,
+    "near": [
+      2.2,
+      1.8
+    ]
+  },
+  "expected": {
+    "ok": {
+      "center": [
+        2.23606797749979,
+        2
+      ],
+      "pointA": [
+        2.23606797749979,
+        0
+      ],
+      "pointB": [
+        3.7267799624996494,
+        3.333333333333333
+      ],
+      "ta": 0.6118033988749895,
+      "tb": 5.442116636611656
+    }
+  }
+}

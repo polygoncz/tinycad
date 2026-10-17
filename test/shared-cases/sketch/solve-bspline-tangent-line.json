@@ -1,0 +1,146 @@
+{
+  "kind": "sketch.solve",
+  "description": "A line tangent at the start of a control point spline follows its end tangent",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – splines › a line tangent at the start of a bspline follows the end tangent",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "p0",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "p1",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "kind": "point",
+        "id": "p2",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "p3",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "kind": "bspline",
+        "id": "S",
+        "degree": 3,
+        "poles": [
+          "p0",
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "knots": [
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "kind": "point",
+        "id": "q",
+        "x": -3,
+        "y": 1
+      },
+      {
+        "kind": "line",
+        "id": "L",
+        "p1": "q",
+        "p2": "p0"
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fq",
+        "point": "q"
+      },
+      {
+        "kind": "tangent",
+        "id": "t",
+        "a": "S",
+        "b": "L"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 7,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "p0",
+          "x": 0.09049786770091461,
+          "y": 0.8096541734372558
+        },
+        {
+          "kind": "point",
+          "id": "p1",
+          "x": 0.9250350392901246,
+          "y": 0.7582544719892923
+        },
+        {
+          "kind": "point",
+          "id": "p2",
+          "x": 3,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "p3",
+          "x": 4,
+          "y": 2
+        },
+        {
+          "kind": "bspline",
+          "id": "S",
+          "degree": 3,
+          "poles": [
+            "p0",
+            "p1",
+            "p2",
+            "p3"
+          ],
+          "knots": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "kind": "point",
+          "id": "q",
+          "x": -3,
+          "y": 1
+        },
+        {
+          "kind": "line",
+          "id": "L",
+          "p1": "q",
+          "p2": "p0"
+        }
+      ]
+    }
+  }
+}

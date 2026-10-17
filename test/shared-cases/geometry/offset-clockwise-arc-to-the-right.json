@@ -1,0 +1,51 @@
+{
+  "kind": "geometry.offset",
+  "description": "A single clockwise arc: to the right is inwards",
+  "source": "src/kernel/testing.ts › open chains (spec 06 Stav po M35) › a single clockwise arc: to the right is inwards",
+  "input": {
+    "chain": [
+      {
+        "kind": "arc",
+        "center": [
+          0,
+          0
+        ],
+        "from": [
+          0,
+          5
+        ],
+        "to": [
+          5,
+          0
+        ],
+        "ccw": false,
+        "id": "k"
+      }
+    ],
+    "closed": false,
+    "distance": 1
+  },
+  "expected": {
+    "ok": {
+      "curves": [
+        {
+          "kind": "arc",
+          "center": [
+            0,
+            0
+          ],
+          "from": [
+            2.4492935982947064e-16,
+            4
+          ],
+          "to": [
+            4,
+            0
+          ],
+          "ccw": false,
+          "source": "k"
+        }
+      ]
+    }
+  }
+}

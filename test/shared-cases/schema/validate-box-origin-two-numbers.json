@@ -1,0 +1,27 @@
+{
+  "kind": "schema.validate",
+  "description": "An origin of two numbers is param.wrongType",
+  "source": "test/unit/features/box/box.test.ts › boxSchema › rejects origin %j",
+  "input": {
+    "type": "box",
+    "params": {
+      "origin": [
+        0,
+        0
+      ],
+      "width": 10,
+      "depth": 10,
+      "height": 10
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "origin",
+          "code": "param.wrongType"
+        }
+      ]
+    }
+  }
+}

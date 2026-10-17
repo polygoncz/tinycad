@@ -1,0 +1,18 @@
+{
+  "kind": "ops.upcast",
+  "description": "Fails validation: feature.suppress with an empty featureId",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › %s: %j fails at %j",
+  "input": {
+    "operation": {
+      "type": "feature.suppress",
+      "v": 1,
+      "featureId": "",
+      "suppressed": true
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "featureId"
+    }
+  }
+}

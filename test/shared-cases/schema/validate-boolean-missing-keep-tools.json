@@ -1,0 +1,33 @@
+{
+  "kind": "schema.validate",
+  "description": "A missing keepTools is param.missing",
+  "source": "test/unit/features/boolean/boolean.test.ts › booleanSchema › rejects missing and unexpected params",
+  "input": {
+    "type": "boolean",
+    "params": {
+      "op": "union",
+      "targets": [
+        {
+          "kind": "body",
+          "body": "a/body"
+        }
+      ],
+      "tools": [
+        {
+          "kind": "body",
+          "body": "b/body"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "keepTools",
+          "code": "param.missing"
+        }
+      ]
+    }
+  }
+}

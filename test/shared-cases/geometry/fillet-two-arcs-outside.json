@@ -1,0 +1,64 @@
+{
+  "kind": "geometry.fillet",
+  "description": "Two arcs, the fillet outside both",
+  "source": "src/kernel/testing.ts › centers (spec 06 Stav po M34) › two arcs, the fillet outside both",
+  "input": {
+    "a": {
+      "kind": "arc",
+      "center": [
+        0,
+        0
+      ],
+      "from": [
+        5,
+        0
+      ],
+      "to": [
+        0,
+        5
+      ],
+      "ccw": true,
+      "id": "a"
+    },
+    "b": {
+      "kind": "arc",
+      "center": [
+        8,
+        0
+      ],
+      "from": [
+        12,
+        0
+      ],
+      "to": [
+        4,
+        0
+      ],
+      "ccw": true,
+      "id": "b"
+    },
+    "radius": 2,
+    "near": [
+      5,
+      5
+    ]
+  },
+  "expected": {
+    "ok": {
+      "center": [
+        4.812500000000001,
+        5.083290641897234
+      ],
+      "pointA": [
+        3.4375000000000004,
+        3.6309218870694524
+      ],
+      "pointB": [
+        5.875,
+        3.3888604279314896
+      ],
+      "ta": 0.8127555613686601,
+      "tb": 2.130871633021478
+    }
+  }
+}

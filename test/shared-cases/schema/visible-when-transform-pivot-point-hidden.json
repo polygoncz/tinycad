@@ -1,0 +1,17 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Transform pivotPoint is hidden for the pivot origin",
+  "source": "test/unit/features/transform/transform.test.ts › shows pivotPoint only for the pivot point",
+  "input": {
+    "type": "transform",
+    "param": "pivotPoint",
+    "params": {
+      "pivot": "origin"
+    }
+  },
+  "expected": {
+    "ok": {
+      "visible": false
+    }
+  }
+}

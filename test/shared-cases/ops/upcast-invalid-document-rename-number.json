@@ -1,0 +1,17 @@
+{
+  "kind": "ops.upcast",
+  "description": "Fails validation: document.rename with a name that is a number",
+  "source": "test/unit/ops/handlers/document.test.ts › document.rename (M19.2, D5) › validate: name %s fails at name",
+  "input": {
+    "operation": {
+      "type": "document.rename",
+      "v": 1,
+      "name": 7
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "name"
+    }
+  }
+}

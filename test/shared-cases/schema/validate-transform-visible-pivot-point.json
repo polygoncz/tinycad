@@ -1,0 +1,36 @@
+{
+  "kind": "schema.validate",
+  "description": "A visible invalid pivotPoint is param.wrongType",
+  "source": "test/unit/features/transform/transform.test.ts › transformSchema › does not check a hidden pivotPoint, checks a visible one",
+  "input": {
+    "type": "transform",
+    "params": {
+      "bodies": [
+        {
+          "kind": "body",
+          "body": "b1/body"
+        }
+      ],
+      "pivot": "point",
+      "pivotPoint": "nowhere",
+      "translate": [
+        0,
+        0,
+        0
+      ],
+      "rx": 0,
+      "ry": 0,
+      "rz": 0
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "pivotPoint",
+          "code": "param.wrongType"
+        }
+      ]
+    }
+  }
+}

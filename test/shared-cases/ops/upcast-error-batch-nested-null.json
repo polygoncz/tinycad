@@ -1,0 +1,25 @@
+{
+  "kind": "ops.upcast",
+  "description": "A null inside a nested batch has the path ops[0].ops[0]",
+  "source": "test/unit/ops/upcast.test.ts › upcastOperation › reports nested batch and non-object sub-operation paths",
+  "input": {
+    "operation": {
+      "type": "batch",
+      "v": 1,
+      "ops": [
+        {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            null
+          ]
+        }
+      ]
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "ops[0].ops[0]"
+    }
+  }
+}

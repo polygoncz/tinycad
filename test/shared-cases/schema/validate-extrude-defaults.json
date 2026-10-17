@@ -1,0 +1,30 @@
+{
+  "kind": "schema.validate",
+  "description": "The defaults of extrude alone ask for the references to pick",
+  "source": "test/unit/features/extrude/extrude.test.ts › extrudeSchema › defaults with a picked region pass validation, alone they ask for a region",
+  "input": {
+    "type": "extrude",
+    "params": {
+      "regions": [],
+      "operation": "new",
+      "targets": [],
+      "endType": "blind",
+      "distance": 10,
+      "upTo": [],
+      "flip": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "regions",
+          "code": "param.tooFewRefs",
+          "params": {
+            "min": 1
+          }
+        }
+      ]
+    }
+  }
+}

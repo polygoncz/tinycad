@@ -1,0 +1,159 @@
+{
+  "kind": "sketch.derived",
+  "description": "Points shared by two sources of a linear pattern stay shared in the copy",
+  "source": "test/unit/sketch/patterns.test.ts › patternCopies – linear pattern › keeps points shared by two sources shared in the copy",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "ab",
+        "p1": "a",
+        "p2": "b"
+      },
+      {
+        "kind": "point",
+        "id": "o",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "u",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "kind": "line",
+        "id": "ou",
+        "p1": "o",
+        "p2": "u",
+        "construction": true
+      },
+      {
+        "kind": "point",
+        "id": "c",
+        "x": 3,
+        "y": 2
+      },
+      {
+        "kind": "line",
+        "id": "bc",
+        "p1": "b",
+        "p2": "c"
+      },
+      {
+        "kind": "linearPattern",
+        "id": "lp",
+        "sources": [
+          "ab",
+          "bc"
+        ],
+        "direction1": {
+          "angle": 0,
+          "count": 2,
+          "spacing": 5
+        }
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [
+        {
+          "kind": "point",
+          "id": "lp:1.a",
+          "x": 6,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "lp:1.b",
+          "x": 8,
+          "y": 0
+        },
+        {
+          "kind": "line",
+          "id": "lp:1.ab",
+          "p1": "lp:1.a",
+          "p2": "lp:1.b"
+        },
+        {
+          "kind": "point",
+          "id": "lp:1.c",
+          "x": 8,
+          "y": 2
+        },
+        {
+          "kind": "line",
+          "id": "lp:1.bc",
+          "p1": "lp:1.b",
+          "p2": "lp:1.c"
+        }
+      ],
+      "textCurves": [],
+      "regionCurves": [
+        {
+          "kind": "line",
+          "from": [
+            1,
+            0
+          ],
+          "to": [
+            3,
+            0
+          ],
+          "id": "ab"
+        },
+        {
+          "kind": "line",
+          "from": [
+            3,
+            0
+          ],
+          "to": [
+            3,
+            2
+          ],
+          "id": "bc"
+        },
+        {
+          "kind": "line",
+          "from": [
+            6,
+            0
+          ],
+          "to": [
+            8,
+            0
+          ],
+          "id": "lp:1.ab"
+        },
+        {
+          "kind": "line",
+          "from": [
+            8,
+            0
+          ],
+          "to": [
+            8,
+            2
+          ],
+          "id": "lp:1.bc"
+        }
+      ]
+    }
+  }
+}

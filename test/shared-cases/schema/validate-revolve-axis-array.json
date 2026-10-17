@@ -1,0 +1,37 @@
+{
+  "kind": "schema.validate",
+  "description": "An array as the axis is param.invalidRef",
+  "source": "test/unit/document/validate.test.ts › validateAgainstSchema – axis (M13) › an array instead of an object is param.invalidRef",
+  "input": {
+    "type": "revolve",
+    "params": {
+      "regions": [
+        {
+          "kind": "region",
+          "sketch": "s1",
+          "region": "r1"
+        }
+      ],
+      "axis": [
+        {
+          "kind": "axis",
+          "axis": "origin/axis:z"
+        }
+      ],
+      "operation": "new",
+      "targets": [],
+      "angle": 6.283185307179586,
+      "flip": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "axis",
+          "code": "param.invalidRef"
+        }
+      ]
+    }
+  }
+}

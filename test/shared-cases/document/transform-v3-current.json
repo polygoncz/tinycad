@@ -1,0 +1,93 @@
+{
+  "kind": "document.load",
+  "description": "A transform of the current version 3 loads unchanged",
+  "source": "test/unit/document/serialize.test.ts › fromData – migration › keeps features that are already current unchanged",
+  "input": {
+    "data": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "t1",
+            "type": "transform",
+            "typeVersion": 3,
+            "name": "Transform 1",
+            "suppressed": false,
+            "params": {
+              "bodies": [
+                {
+                  "kind": "body",
+                  "body": "b1/body"
+                }
+              ],
+              "pivot": "bodiesCenter",
+              "pivotPoint": [
+                0,
+                0,
+                0
+              ],
+              "translate": [
+                0,
+                0,
+                5
+              ],
+              "rx": 0,
+              "ry": 0.25,
+              "rz": 0
+            }
+          }
+        ],
+        "rollbackIndex": 1
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "data": {
+        "meta": {
+          "id": "doc1",
+          "name": "Test document",
+          "createdAt": 0
+        },
+        "studio": {
+          "features": [
+            {
+              "id": "t1",
+              "type": "transform",
+              "typeVersion": 3,
+              "name": "Transform 1",
+              "params": {
+                "bodies": [
+                  {
+                    "kind": "body",
+                    "body": "b1/body"
+                  }
+                ],
+                "pivot": "bodiesCenter",
+                "pivotPoint": [
+                  0,
+                  0,
+                  0
+                ],
+                "translate": [
+                  0,
+                  0,
+                  5
+                ],
+                "rx": 0,
+                "ry": 0.25,
+                "rz": 0
+              },
+              "suppressed": false
+            }
+          ],
+          "rollbackIndex": 1
+        }
+      }
+    }
+  }
+}

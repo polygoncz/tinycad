@@ -1,0 +1,58 @@
+{
+  "kind": "geometry.intersections",
+  "description": "A spline crossing itself is a hit of the spline with itself, ta < tb",
+  "source": "src/kernel/testing.ts › intersections (spec 06 Stav po M33) › a spline crossing itself is a hit of the spline with itself, ta < tb",
+  "input": {
+    "curves": [
+      {
+        "kind": "bspline",
+        "degree": 3,
+        "poles": [
+          [
+            0,
+            0
+          ],
+          [
+            15,
+            10
+          ],
+          [
+            -5,
+            10
+          ],
+          [
+            10,
+            0
+          ]
+        ],
+        "knots": [
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ],
+        "id": "sp"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "hits": [
+        {
+          "a": "sp",
+          "b": "sp",
+          "point": [
+            4.999999999999998,
+            4.285714285714283
+          ],
+          "ta": 0.1726731646460113,
+          "tb": 0.8273268353539887
+        }
+      ]
+    }
+  }
+}

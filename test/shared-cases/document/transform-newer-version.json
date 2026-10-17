@@ -1,0 +1,36 @@
+{
+  "kind": "document.load",
+  "description": "A transform of version 4, newer than its schema, is a load issue",
+  "source": "test/unit/document/serialize.test.ts › fromData – migration › reports a feature newer than its schema (Q025: should not happen)",
+  "input": {
+    "data": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "t1",
+            "type": "transform",
+            "typeVersion": 4,
+            "name": "Transform 1",
+            "suppressed": false,
+            "params": {}
+          }
+        ],
+        "rollbackIndex": 1
+      }
+    }
+  },
+  "expected": {
+    "error": {
+      "issues": [
+        {
+          "path": "studio.features[0].typeVersion"
+        }
+      ]
+    }
+  }
+}

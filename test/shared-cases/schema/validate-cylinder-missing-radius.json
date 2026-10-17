@@ -1,0 +1,27 @@
+{
+  "kind": "schema.validate",
+  "description": "A missing radius is param.missing",
+  "source": "test/unit/features/cylinder/cylinder.test.ts › cylinderSchema › rejects params that are not an object, missing and unexpected params",
+  "input": {
+    "type": "cylinder",
+    "params": {
+      "base": [
+        0,
+        0,
+        0
+      ],
+      "axis": "z",
+      "height": 10
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "radius",
+          "code": "param.missing"
+        }
+      ]
+    }
+  }
+}

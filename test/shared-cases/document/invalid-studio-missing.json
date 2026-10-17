@@ -1,0 +1,23 @@
+{
+  "kind": "document.load",
+  "description": "Data without studio is a load issue at studio",
+  "source": "test/unit/document/serialize.test.ts › fromData – broken data (Q026) › reports a missing studio or features array",
+  "input": {
+    "data": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      }
+    }
+  },
+  "expected": {
+    "error": {
+      "issues": [
+        {
+          "path": "studio"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,191 @@
+{
+  "kind": "sketch.solve",
+  "description": "A drag with pattern entities holds the constraints",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – M36 mirror and patterns › a drag with them holds the constraints and counts the same dof",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "p",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "q",
+        "x": 10,
+        "y": 10
+      },
+      {
+        "kind": "line",
+        "id": "L",
+        "p1": "p",
+        "p2": "q"
+      },
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 3,
+        "y": 4
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 5,
+        "y": -1
+      },
+      {
+        "kind": "point",
+        "id": "c",
+        "x": 20,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "ab",
+        "p1": "a",
+        "p2": "b"
+      },
+      {
+        "kind": "mirror",
+        "id": "m",
+        "sources": [
+          "ab"
+        ],
+        "axis": "L"
+      },
+      {
+        "kind": "linearPattern",
+        "id": "lp",
+        "sources": [
+          "a",
+          "ab"
+        ],
+        "direction1": {
+          "angle": 0,
+          "count": 3,
+          "spacing": 5
+        },
+        "direction2": {
+          "angle": 1.5707963267948966,
+          "count": 2,
+          "spacing": 4
+        }
+      },
+      {
+        "kind": "circularPattern",
+        "id": "cp",
+        "sources": [
+          "ab"
+        ],
+        "center": "c",
+        "count": 4,
+        "angle": 3.141592653589793
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "symmetric",
+        "id": "s",
+        "a": "a",
+        "b": "b",
+        "axis": "L"
+      }
+    ],
+    "drag": {
+      "point": "a",
+      "to": [
+        -2,
+        6
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 8,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "p",
+          "x": -0.38349132555612564,
+          "y": 0.37686335896451645
+        },
+        {
+          "kind": "point",
+          "id": "q",
+          "x": 9.782233383081762,
+          "y": 10.22969374255481
+        },
+        {
+          "kind": "line",
+          "id": "L",
+          "p1": "p",
+          "p2": "q"
+        },
+        {
+          "kind": "point",
+          "id": "a",
+          "x": -1.9999999999999978,
+          "y": 5.999999999999999
+        },
+        {
+          "kind": "point",
+          "id": "b",
+          "x": 5.186378066425431,
+          "y": -1.4145944090487597
+        },
+        {
+          "kind": "point",
+          "id": "c",
+          "x": 20,
+          "y": 0
+        },
+        {
+          "kind": "line",
+          "id": "ab",
+          "p1": "a",
+          "p2": "b"
+        },
+        {
+          "kind": "mirror",
+          "id": "m",
+          "sources": [
+            "ab"
+          ],
+          "axis": "L"
+        },
+        {
+          "kind": "linearPattern",
+          "id": "lp",
+          "sources": [
+            "a",
+            "ab"
+          ],
+          "direction1": {
+            "angle": 0,
+            "count": 3,
+            "spacing": 5
+          },
+          "direction2": {
+            "angle": 1.5707963267948966,
+            "count": 2,
+            "spacing": 4
+          }
+        },
+        {
+          "kind": "circularPattern",
+          "id": "cp",
+          "sources": [
+            "ab"
+          ],
+          "center": "c",
+          "count": 4,
+          "angle": 3.141592653589793
+        }
+      ]
+    }
+  }
+}

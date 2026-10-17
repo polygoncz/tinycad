@@ -1,0 +1,19 @@
+{
+  "kind": "ops.upcast",
+  "description": "feature.setParams version 3 is newer than supported and fails at v",
+  "source": "test/unit/ops/upcast.test.ts › upcastOperation › fails on a newer version",
+  "input": {
+    "operation": {
+      "type": "feature.setParams",
+      "v": 3,
+      "featureId": "a",
+      "typeVersion": 1,
+      "params": {}
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "v"
+    }
+  }
+}

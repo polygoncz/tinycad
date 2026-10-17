@@ -1,0 +1,34 @@
+{
+  "kind": "schema.validate",
+  "description": "keepTools that is not a boolean is param.wrongType",
+  "source": "test/unit/features/boolean/boolean.test.ts › booleanSchema › rejects an unknown op and a keepTools that is not a boolean",
+  "input": {
+    "type": "boolean",
+    "params": {
+      "op": "union",
+      "targets": [
+        {
+          "kind": "body",
+          "body": "a/body"
+        }
+      ],
+      "tools": [
+        {
+          "kind": "body",
+          "body": "b/body"
+        }
+      ],
+      "keepTools": "yes"
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "keepTools",
+          "code": "param.wrongType"
+        }
+      ]
+    }
+  }
+}

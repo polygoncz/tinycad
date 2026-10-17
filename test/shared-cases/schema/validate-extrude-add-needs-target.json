@@ -1,0 +1,36 @@
+{
+  "kind": "schema.validate",
+  "description": "An extrude that adds needs a target",
+  "source": "test/unit/features/extrude/extrude.test.ts › extrudeSchema › a change of the model needs a target",
+  "input": {
+    "type": "extrude",
+    "params": {
+      "regions": [
+        {
+          "kind": "region",
+          "sketch": "s1",
+          "region": "r1"
+        }
+      ],
+      "operation": "add",
+      "targets": [],
+      "endType": "blind",
+      "distance": 10,
+      "upTo": [],
+      "flip": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "targets",
+          "code": "param.tooFewRefs",
+          "params": {
+            "min": 1
+          }
+        }
+      ]
+    }
+  }
+}

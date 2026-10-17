@@ -1,0 +1,13 @@
+{
+  "kind": "ops.upcast",
+  "description": "A broken envelope: an array instead of an operation",
+  "source": "test/unit/ops/upcast.test.ts › upcastOperation › reports a broken envelope %j at path %j",
+  "input": {
+    "operation": []
+  },
+  "expected": {
+    "error": {
+      "path": ""
+    }
+  }
+}

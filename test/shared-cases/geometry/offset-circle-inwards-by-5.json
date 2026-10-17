@@ -1,0 +1,25 @@
+{
+  "kind": "geometry.offset",
+  "description": "A circle of radius 5 inwards by 5 rejects with operation-failed",
+  "source": "src/kernel/testing.ts › closed chains (spec 06 Stav po M35) › a circle inwards by 5 (its radius or more) rejects with operation-failed",
+  "input": {
+    "chain": [
+      {
+        "kind": "circle",
+        "center": [
+          0,
+          0
+        ],
+        "radius": 5,
+        "id": "k"
+      }
+    ],
+    "closed": true,
+    "distance": -5
+  },
+  "expected": {
+    "error": {
+      "code": "operation-failed"
+    }
+  }
+}

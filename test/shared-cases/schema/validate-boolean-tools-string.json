@@ -1,0 +1,29 @@
+{
+  "kind": "schema.validate",
+  "description": "Tools that are not a list are param.wrongType",
+  "source": "test/unit/features/boolean/boolean.test.ts › booleanSchema › checks the same body only when both lists passed the shape checks",
+  "input": {
+    "type": "boolean",
+    "params": {
+      "op": "union",
+      "targets": [
+        {
+          "kind": "body",
+          "body": "a/body"
+        }
+      ],
+      "tools": "a",
+      "keepTools": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "tools",
+          "code": "param.wrongType"
+        }
+      ]
+    }
+  }
+}

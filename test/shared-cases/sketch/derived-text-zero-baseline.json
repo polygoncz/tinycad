@@ -1,0 +1,92 @@
+{
+  "kind": "sketch.derived",
+  "description": "A text on a zero-length baseline has no curves",
+  "source": "test/unit/sketch/text.test.ts › textCurves › gives no curves for a zero-length baseline",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "t.p1",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "kind": "point",
+        "id": "t.p2",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "kind": "line",
+        "id": "t.bl",
+        "p1": "t.p1",
+        "p2": "t.p2",
+        "construction": true
+      },
+      {
+        "kind": "text",
+        "id": "t",
+        "text": "a",
+        "font": "sans",
+        "height": 10,
+        "baseline": "t.bl",
+        "contours": [
+          {
+            "char": 0,
+            "code": 97,
+            "segments": [
+              [
+                [
+                  0,
+                  0
+                ],
+                [
+                  1,
+                  0
+                ]
+              ],
+              [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  1
+                ]
+              ],
+              [
+                [
+                  1,
+                  1
+                ],
+                [
+                  0,
+                  1
+                ]
+              ],
+              [
+                [
+                  0,
+                  1
+                ],
+                [
+                  0,
+                  0
+                ]
+              ]
+            ]
+          }
+        ]
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [],
+      "textCurves": [],
+      "regionCurves": []
+    }
+  }
+}

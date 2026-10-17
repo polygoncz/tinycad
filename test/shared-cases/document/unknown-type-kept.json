@@ -1,0 +1,97 @@
+{
+  "kind": "document.load",
+  "description": "A feature of an unknown type is kept unchanged",
+  "source": "test/unit/document/serialize.test.ts › fromData – unknown feature types › keeps them unchanged and does not break the document",
+  "input": {
+    "data": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "b1",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "Box 1",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 10,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          {
+            "id": "p1",
+            "type": "plugin.thing",
+            "typeVersion": 7,
+            "name": "Thing",
+            "suppressed": false,
+            "params": {
+              "anything": [
+                1,
+                "two",
+                null
+              ]
+            }
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "data": {
+        "meta": {
+          "id": "doc1",
+          "name": "Test document",
+          "createdAt": 0
+        },
+        "studio": {
+          "features": [
+            {
+              "id": "b1",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "Box 1",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 10,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            },
+            {
+              "id": "p1",
+              "type": "plugin.thing",
+              "typeVersion": 7,
+              "name": "Thing",
+              "params": {
+                "anything": [
+                  1,
+                  "two",
+                  null
+                ]
+              },
+              "suppressed": false
+            }
+          ],
+          "rollbackIndex": 2
+        }
+      }
+    }
+  }
+}

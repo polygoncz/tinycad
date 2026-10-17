@@ -1,0 +1,168 @@
+{
+  "kind": "regen",
+  "description": "A deleted box leaves the fillet with UNRESOLVED_REFERENCE at edges; the other cylinder stays",
+  "source": "test/integration/topo-scenarios.test.ts › topological naming scenarios (spec 08, OCCT) › 4: a deleted box leaves the fillet unresolved, the other cylinder stays",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "fillet",
+        "name": "fillet",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "f2",
+            "type": "fillet",
+            "typeVersion": 1,
+            "name": "fillet.label 1",
+            "params": {
+              "edges": [
+                {
+                  "kind": "topo",
+                  "body": "f1/body",
+                  "name": "edge:f1/face:front|f1/face:top"
+                }
+              ],
+              "radius": 1
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f3",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 1",
+            "params": {
+              "base": [
+                20,
+                0,
+                0
+              ],
+              "axis": "z",
+              "radius": 2,
+              "height": 5
+            },
+            "suppressed": false
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "statuses": {
+        "f2": {
+          "kind": "error",
+          "code": "UNRESOLVED_REFERENCE",
+          "issues": [
+            {
+              "param": "edges",
+              "code": "param.unresolvedRef"
+            }
+          ]
+        },
+        "f3": {
+          "kind": "ok"
+        }
+      },
+      "bodies": [
+        {
+          "id": "f3/body",
+          "origin": "f3",
+          "lastModifiedBy": "f3",
+          "volume": 62.82534288018218,
+          "bbox": {
+            "min": [
+              18,
+              -2,
+              0
+            ],
+            "max": [
+              22,
+              2,
+              5
+            ]
+          },
+          "faces": [
+            {
+              "names": [
+                "f3/face:bottom"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  -1
+                ],
+                "offset": 0
+              }
+            },
+            {
+              "names": [
+                "f3/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f3/face:top"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  1
+                ],
+                "offset": 5
+              }
+            }
+          ],
+          "edges": [
+            {
+              "names": [
+                "edge:f3/face:bottom|f3/face:side"
+              ],
+              "midpoint": [
+                18,
+                2.4492935982947064e-16,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f3/face:side|f3/face:side"
+              ],
+              "midpoint": [
+                22,
+                -4.898587196589414e-16,
+                2.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f3/face:side|f3/face:top"
+              ],
+              "midpoint": [
+                18,
+                2.4492935982947064e-16,
+                5
+              ]
+            }
+          ],
+          "vertexCount": 2
+        }
+      ],
+      "sketches": [],
+      "anchors": {
+        "f3": {}
+      }
+    }
+  },
+  "tolerance": {
+    "relative": 0.001
+  }
+}

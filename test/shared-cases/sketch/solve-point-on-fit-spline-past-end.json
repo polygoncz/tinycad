@@ -1,0 +1,204 @@
+{
+  "kind": "sketch.solve",
+  "description": "A point on a fixed fit point spline dragged past its end stops at the end of the curve",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – point on a spline › fitSpline › dragged past an end it stops at the end of the curve",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "f0",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "f1",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "kind": "point",
+        "id": "f2",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "f3",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "kind": "fitSpline",
+        "id": "F",
+        "degree": 3,
+        "fit": [
+          "f0",
+          "f1",
+          "f2",
+          "f3"
+        ],
+        "params": [
+          0,
+          0.24025307335204216,
+          0.620126536676021,
+          1
+        ],
+        "poles": [
+          [
+            0,
+            0
+          ],
+          [
+            0.9846500352828186,
+            3.3252906740954153
+          ],
+          [
+            4.06564641782601,
+            -3.125290674095415
+          ],
+          [
+            4,
+            2
+          ]
+        ],
+        "knots": [
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "kind": "point",
+        "id": "q",
+        "x": 2.393861169915811,
+        "y": 0.3250000000000002
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "pointOnCurve",
+        "id": "on",
+        "point": "q",
+        "curve": "F"
+      },
+      {
+        "kind": "fix",
+        "id": "fix-f0",
+        "point": "f0"
+      },
+      {
+        "kind": "fix",
+        "id": "fix-f1",
+        "point": "f1"
+      },
+      {
+        "kind": "fix",
+        "id": "fix-f2",
+        "point": "f2"
+      },
+      {
+        "kind": "fix",
+        "id": "fix-f3",
+        "point": "f3"
+      }
+    ],
+    "drag": {
+      "point": "q",
+      "to": [
+        10,
+        10
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 1,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "f0",
+          "x": -3.0333396624098965e-33,
+          "y": 7.029644297013411e-33
+        },
+        {
+          "kind": "point",
+          "id": "f1",
+          "x": 1,
+          "y": 1
+        },
+        {
+          "kind": "point",
+          "id": "f2",
+          "x": 3,
+          "y": -6.162975822039155e-33
+        },
+        {
+          "kind": "point",
+          "id": "f3",
+          "x": 4,
+          "y": 2
+        },
+        {
+          "kind": "fitSpline",
+          "id": "F",
+          "degree": 3,
+          "fit": [
+            "f0",
+            "f1",
+            "f2",
+            "f3"
+          ],
+          "params": [
+            0,
+            0.24025307335204216,
+            0.620126536676021,
+            1
+          ],
+          "poles": [
+            [
+              -2.359264181874364e-33,
+              9.67779797054586e-33
+            ],
+            [
+              0.9846500352828189,
+              3.3252906740954153
+            ],
+            [
+              4.06564641782601,
+              -3.125290674095415
+            ],
+            [
+              4,
+              2
+            ]
+          ],
+          "knots": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "kind": "point",
+          "id": "q",
+          "x": 4,
+          "y": 2
+        }
+      ]
+    }
+  }
+}

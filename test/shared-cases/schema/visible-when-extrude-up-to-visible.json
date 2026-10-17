@@ -1,0 +1,17 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Extrude upTo is visible for the end type upToFace",
+  "source": "test/unit/features/extrude/extrude.test.ts › extrude param visibility › upTo for endType upToFace visible: true",
+  "input": {
+    "type": "extrude",
+    "param": "upTo",
+    "params": {
+      "endType": "upToFace"
+    }
+  },
+  "expected": {
+    "ok": {
+      "visible": true
+    }
+  }
+}

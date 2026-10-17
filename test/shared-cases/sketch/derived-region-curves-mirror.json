@@ -1,0 +1,156 @@
+{
+  "kind": "sketch.derived",
+  "description": "Region curves append the copies of a mirror after the curves of the data",
+  "source": "test/unit/sketch/geometry.test.ts › regionCurves – copies of mirrors and patterns (M36) › appends the copies of a mirror after the curves of the data, with derived ids",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "o",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "u",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "kind": "point",
+        "id": "c",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "e",
+        "x": 4,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "f",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "kind": "line",
+        "id": "ou",
+        "p1": "o",
+        "p2": "u",
+        "construction": true
+      },
+      {
+        "kind": "circle",
+        "id": "k",
+        "center": "c",
+        "radius": 0.5
+      },
+      {
+        "kind": "line",
+        "id": "ef",
+        "p1": "e",
+        "p2": "f"
+      },
+      {
+        "kind": "line",
+        "id": "cf",
+        "p1": "c",
+        "p2": "f",
+        "construction": true
+      },
+      {
+        "kind": "mirror",
+        "id": "m",
+        "sources": [
+          "k",
+          "ef"
+        ],
+        "axis": "ou"
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [
+        {
+          "kind": "point",
+          "id": "m:1.c",
+          "x": -3,
+          "y": 0
+        },
+        {
+          "kind": "circle",
+          "id": "m:1.k",
+          "center": "m:1.c",
+          "radius": 0.5
+        },
+        {
+          "kind": "point",
+          "id": "m:1.e",
+          "x": -4,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "m:1.f",
+          "x": -4,
+          "y": 2
+        },
+        {
+          "kind": "line",
+          "id": "m:1.ef",
+          "p1": "m:1.e",
+          "p2": "m:1.f"
+        }
+      ],
+      "textCurves": [],
+      "regionCurves": [
+        {
+          "kind": "circle",
+          "center": [
+            3,
+            0
+          ],
+          "radius": 0.5,
+          "id": "k"
+        },
+        {
+          "kind": "line",
+          "from": [
+            4,
+            0
+          ],
+          "to": [
+            4,
+            2
+          ],
+          "id": "ef"
+        },
+        {
+          "kind": "circle",
+          "center": [
+            -3,
+            0
+          ],
+          "radius": 0.5,
+          "id": "m:1.k"
+        },
+        {
+          "kind": "line",
+          "from": [
+            -4,
+            0
+          ],
+          "to": [
+            -4,
+            2
+          ],
+          "id": "m:1.ef"
+        }
+      ]
+    }
+  }
+}

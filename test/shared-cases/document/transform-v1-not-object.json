@@ -1,0 +1,39 @@
+{
+  "kind": "document.load",
+  "description": "A transform of version 1 whose params are not an object is a load issue",
+  "source": "test/unit/features/transform/transform.test.ts › transformSchema.migrate › throws for data of version %i that are not an object",
+  "input": {
+    "data": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "t1",
+            "type": "transform",
+            "typeVersion": 1,
+            "name": "Transform 1",
+            "suppressed": false,
+            "params": [
+              1,
+              2
+            ]
+          }
+        ],
+        "rollbackIndex": 1
+      }
+    }
+  },
+  "expected": {
+    "error": {
+      "issues": [
+        {
+          "path": "studio.features[0].params"
+        }
+      ]
+    }
+  }
+}

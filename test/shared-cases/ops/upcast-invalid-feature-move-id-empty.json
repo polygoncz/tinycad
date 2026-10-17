@@ -1,0 +1,18 @@
+{
+  "kind": "ops.upcast",
+  "description": "Fails validation: feature.move with an empty featureId",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › %s: %j fails at %j",
+  "input": {
+    "operation": {
+      "type": "feature.move",
+      "v": 1,
+      "featureId": "",
+      "toIndex": 0
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "featureId"
+    }
+  }
+}

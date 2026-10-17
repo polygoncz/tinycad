@@ -1,0 +1,57 @@
+{
+  "kind": "sketch.solve",
+  "description": "hDistance keeps the free point on the left when it starts on the left",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – M28 dimensions › hDistance keeps b on the left when it is on the left, + when level",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": -3,
+        "y": 1
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fa",
+        "point": "a"
+      },
+      {
+        "kind": "hDistance",
+        "id": "h",
+        "a": "a",
+        "b": "b",
+        "value": 5
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 1,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "a",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "b",
+          "x": -5,
+          "y": 1
+        }
+      ]
+    }
+  }
+}

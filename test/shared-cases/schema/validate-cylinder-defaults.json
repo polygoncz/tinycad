@@ -1,0 +1,23 @@
+{
+  "kind": "schema.validate",
+  "description": "The defaults of cylinder give no issues",
+  "source": "test/unit/features/cylinder/cylinder.test.ts › cylinderSchema › defaults are base [0,0,0], axis z, radius 5, height 10 and pass validation",
+  "input": {
+    "type": "cylinder",
+    "params": {
+      "base": [
+        0,
+        0,
+        0
+      ],
+      "axis": "z",
+      "radius": 5,
+      "height": 10
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": []
+    }
+  }
+}

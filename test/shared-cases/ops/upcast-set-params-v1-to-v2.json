@@ -1,0 +1,28 @@
+{
+  "kind": "ops.upcast",
+  "description": "feature.setParams version 1 becomes version 2 with typeVersion 1 (Q035)",
+  "source": "test/unit/ops/upcast.test.ts › upcastOperation › upcasts feature.setParams version 1 to 2 with typeVersion 1 (Q035)",
+  "input": {
+    "operation": {
+      "type": "feature.setParams",
+      "v": 1,
+      "featureId": "a",
+      "params": {
+        "size": 2
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "operation": {
+        "type": "feature.setParams",
+        "v": 2,
+        "featureId": "a",
+        "params": {
+          "size": 2
+        },
+        "typeVersion": 1
+      }
+    }
+  }
+}

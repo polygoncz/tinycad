@@ -1,0 +1,38 @@
+{
+  "kind": "schema.validate",
+  "description": "A revolve that adds needs a target",
+  "source": "test/unit/features/revolve/revolve.test.ts › revolveSchema › asks for a target only for an operation other than new",
+  "input": {
+    "type": "revolve",
+    "params": {
+      "regions": [
+        {
+          "kind": "region",
+          "sketch": "s1",
+          "region": "r1"
+        }
+      ],
+      "axis": {
+        "kind": "axis",
+        "axis": "origin/axis:z"
+      },
+      "operation": "add",
+      "targets": [],
+      "angle": 6.283185307179586,
+      "flip": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "targets",
+          "code": "param.tooFewRefs",
+          "params": {
+            "min": 1
+          }
+        }
+      ]
+    }
+  }
+}

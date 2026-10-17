@@ -1,0 +1,31 @@
+{
+  "kind": "schema.validate",
+  "description": "A radius of 0 is param.atOrBelowMin",
+  "source": "test/unit/features/fillet/fillet.test.ts › filletSchema › rejects a radius of 0 and a reference of another kind",
+  "input": {
+    "type": "fillet",
+    "params": {
+      "edges": [
+        {
+          "kind": "topo",
+          "body": "a/body",
+          "name": "e3"
+        }
+      ],
+      "radius": 0
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "radius",
+          "code": "param.atOrBelowMin",
+          "params": {
+            "min": 0
+          }
+        }
+      ]
+    }
+  }
+}

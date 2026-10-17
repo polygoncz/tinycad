@@ -1,0 +1,25 @@
+{
+  "kind": "schema.validate",
+  "description": "The defaults of chamfer alone ask for the references to pick",
+  "source": "test/unit/features/chamfer/chamfer.test.ts › chamferSchema › defaults alone ask for an edge (R24)",
+  "input": {
+    "type": "chamfer",
+    "params": {
+      "edges": [],
+      "distance": 1
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "edges",
+          "code": "param.tooFewRefs",
+          "params": {
+            "min": 1
+          }
+        }
+      ]
+    }
+  }
+}

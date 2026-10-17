@@ -1,0 +1,45 @@
+{
+  "kind": "document.load",
+  "description": "The feature id 'origin' is a load issue",
+  "source": "test/unit/document/serialize.test.ts › fromData – broken data (Q026) › rejects the feature id 'origin': it is the reserved owner of the origin planes (M12)",
+  "input": {
+    "data": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "origin",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "origin",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 10,
+              "depth": 10,
+              "height": 10
+            }
+          }
+        ],
+        "rollbackIndex": 1
+      }
+    }
+  },
+  "expected": {
+    "error": {
+      "issues": [
+        {
+          "path": "studio.features[0].id"
+        }
+      ]
+    }
+  }
+}

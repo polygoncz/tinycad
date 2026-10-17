@@ -1,0 +1,18 @@
+{
+  "kind": "ops.upcast",
+  "description": "Fails validation: feature.rename with an empty featureId",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › %s: %j fails at %j",
+  "input": {
+    "operation": {
+      "type": "feature.rename",
+      "v": 1,
+      "featureId": "",
+      "name": ""
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "featureId"
+    }
+  }
+}

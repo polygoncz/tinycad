@@ -1,0 +1,55 @@
+{
+  "kind": "sketch.derived",
+  "description": "An xline is left out of the region curves",
+  "source": "test/unit/sketch/geometry.test.ts › regionCurves – infinite line (xline, M31) › leaves an xline out",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 4,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "ab",
+        "p1": "a",
+        "p2": "b"
+      },
+      {
+        "kind": "xline",
+        "id": "x",
+        "p1": "a",
+        "p2": "b",
+        "construction": true
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [],
+      "textCurves": [],
+      "regionCurves": [
+        {
+          "kind": "line",
+          "from": [
+            0,
+            0
+          ],
+          "to": [
+            4,
+            0
+          ],
+          "id": "ab"
+        }
+      ]
+    }
+  }
+}

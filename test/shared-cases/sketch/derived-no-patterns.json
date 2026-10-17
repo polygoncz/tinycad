@@ -1,0 +1,67 @@
+{
+  "kind": "sketch.derived",
+  "description": "A sketch without patterns and texts has no copies and no letter curves",
+  "source": "test/unit/sketch/patterns.test.ts › patternCopies – order and sharing › returns nothing without patterns and frozen copies",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "ab",
+        "p1": "a",
+        "p2": "b"
+      },
+      {
+        "kind": "point",
+        "id": "o",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "u",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "kind": "line",
+        "id": "ou",
+        "p1": "o",
+        "p2": "u",
+        "construction": true
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [],
+      "textCurves": [],
+      "regionCurves": [
+        {
+          "kind": "line",
+          "from": [
+            1,
+            0
+          ],
+          "to": [
+            3,
+            0
+          ],
+          "id": "ab"
+        }
+      ]
+    }
+  }
+}

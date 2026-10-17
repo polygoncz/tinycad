@@ -1,0 +1,31 @@
+{
+  "kind": "geometry.intersections",
+  "description": "An arc alone has no intersections",
+  "source": "src/kernel/testing.ts › intersections (spec 06 Stav po M33) › curves apart, no curves, a curve alone: no intersections",
+  "input": {
+    "curves": [
+      {
+        "kind": "arc",
+        "center": [
+          0,
+          0
+        ],
+        "from": [
+          5,
+          0
+        ],
+        "to": [
+          -5,
+          0
+        ],
+        "ccw": true,
+        "id": "k"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "hits": []
+    }
+  }
+}

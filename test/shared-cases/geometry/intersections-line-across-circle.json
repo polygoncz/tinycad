@@ -1,0 +1,56 @@
+{
+  "kind": "geometry.intersections",
+  "description": "A circle has t = atan2(p − center) in [0, 2π)",
+  "source": "src/kernel/testing.ts › intersections (spec 06 Stav po M33) › a circle has t = atan2(p − center) in [0, 2π)",
+  "input": {
+    "curves": [
+      {
+        "kind": "line",
+        "from": [
+          4,
+          -10
+        ],
+        "to": [
+          4,
+          10
+        ],
+        "id": "l"
+      },
+      {
+        "kind": "circle",
+        "center": [
+          1,
+          0
+        ],
+        "radius": 5,
+        "id": "c"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "hits": [
+        {
+          "a": "l",
+          "b": "c",
+          "point": [
+            3.9999999999999987,
+            -4.000000000000001
+          ],
+          "ta": 0.29999999999999993,
+          "tb": 5.355890089177974
+        },
+        {
+          "a": "l",
+          "b": "c",
+          "point": [
+            4,
+            3.9999999999999996
+          ],
+          "ta": 0.7,
+          "tb": 0.9272952180016123
+        }
+      ]
+    }
+  }
+}

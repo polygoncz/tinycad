@@ -1,0 +1,171 @@
+{
+  "kind": "sketch.solve",
+  "description": "A dragged fit point moves the stored poles so the spline passes through all fit points",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – splines › a dragged fit point: the spline passes through it and through the other fit points",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "f0",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "f1",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "kind": "point",
+        "id": "f2",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "f3",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "kind": "fitSpline",
+        "id": "F",
+        "degree": 3,
+        "fit": [
+          "f0",
+          "f1",
+          "f2",
+          "f3"
+        ],
+        "params": [
+          0,
+          0.24025307335204216,
+          0.620126536676021,
+          1
+        ],
+        "poles": [
+          [
+            0,
+            0
+          ],
+          [
+            0.9846500352828186,
+            3.3252906740954153
+          ],
+          [
+            4.06564641782601,
+            -3.125290674095415
+          ],
+          [
+            4,
+            2
+          ]
+        ],
+        "knots": [
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ]
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "f0fix",
+        "point": "f0"
+      }
+    ],
+    "drag": {
+      "point": "f1",
+      "to": [
+        2,
+        3
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 6,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "f0",
+          "x": 9.62964972193618e-35,
+          "y": 1.3481509610710651e-33
+        },
+        {
+          "kind": "point",
+          "id": "f1",
+          "x": 2,
+          "y": 3
+        },
+        {
+          "kind": "point",
+          "id": "f2",
+          "x": 3.7880891961557266,
+          "y": 1.5761783923114518
+        },
+        {
+          "kind": "point",
+          "id": "f3",
+          "x": 3.947336657414112,
+          "y": 1.8946733148282224
+        },
+        {
+          "kind": "fitSpline",
+          "id": "F",
+          "degree": 3,
+          "fit": [
+            "f0",
+            "f1",
+            "f2",
+            "f3"
+          ],
+          "params": [
+            0,
+            0.24025307335204216,
+            0.620126536676021,
+            1
+          ],
+          "poles": [
+            [
+              -5.2963073470648986e-33,
+              1.5407439555097887e-33
+            ],
+            [
+              3.2514414555911233,
+              7.858873514712025
+            ],
+            [
+              4.503994001690003,
+              -2.248595506367431
+            ],
+            [
+              3.947336657414112,
+              1.8946733148282224
+            ]
+          ],
+          "knots": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    }
+  }
+}

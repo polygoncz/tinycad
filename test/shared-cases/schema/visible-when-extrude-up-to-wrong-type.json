@@ -1,0 +1,18 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Extrude upTo is hidden for an end type that is not a string",
+  "input": {
+    "type": "extrude",
+    "param": "upTo",
+    "params": {
+      "endType": [
+        "upToFace"
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "visible": false
+    }
+  }
+}

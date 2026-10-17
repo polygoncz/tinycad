@@ -1,0 +1,30 @@
+{
+  "kind": "schema.validate",
+  "description": "A body reference as an edge is param.invalidRef",
+  "source": "test/unit/features/fillet/fillet.test.ts › filletSchema › rejects a radius of 0 and a reference of another kind",
+  "input": {
+    "type": "fillet",
+    "params": {
+      "edges": [
+        {
+          "kind": "body",
+          "body": "a/body"
+        }
+      ],
+      "radius": 1
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "edges",
+          "code": "param.invalidRef",
+          "params": {
+            "index": 0
+          }
+        }
+      ]
+    }
+  }
+}

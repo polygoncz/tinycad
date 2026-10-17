@@ -1,0 +1,28 @@
+{
+  "kind": "geometry.offset",
+  "description": "A line of zero length rejects with invalid-input",
+  "source": "src/kernel/testing.ts › input (spec 06 offsetCurves) › a line of zero length rejects with invalid-input",
+  "input": {
+    "chain": [
+      {
+        "kind": "line",
+        "from": [
+          1,
+          0
+        ],
+        "to": [
+          1,
+          0
+        ],
+        "id": "p"
+      }
+    ],
+    "closed": false,
+    "distance": 1
+  },
+  "expected": {
+    "error": {
+      "code": "invalid-input"
+    }
+  }
+}

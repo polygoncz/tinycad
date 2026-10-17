@@ -1,0 +1,314 @@
+{
+  "kind": "sketch.derived",
+  "description": "textCurves includes construction texts in entity order, regionCurves leaves them out",
+  "source": "test/unit/sketch/text.test.ts › textCurves › includes construction texts and all texts in entity order",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "u.p1",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "u.p2",
+        "x": 10,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "u.bl",
+        "p1": "u.p1",
+        "p2": "u.p2",
+        "construction": true
+      },
+      {
+        "kind": "text",
+        "id": "u",
+        "text": "a",
+        "font": "sans",
+        "height": 10,
+        "baseline": "u.bl",
+        "contours": [
+          {
+            "char": 0,
+            "code": 97,
+            "segments": [
+              [
+                [
+                  0.4999999999999999,
+                  0
+                ],
+                [
+                  5.5,
+                  0
+                ]
+              ],
+              [
+                [
+                  5.5,
+                  0
+                ],
+                [
+                  5.5,
+                  5
+                ]
+              ],
+              [
+                [
+                  5.5,
+                  5
+                ],
+                [
+                  0.4999999999999999,
+                  5
+                ]
+              ],
+              [
+                [
+                  0.4999999999999999,
+                  5
+                ],
+                [
+                  0.4999999999999999,
+                  0
+                ]
+              ]
+            ]
+          }
+        ],
+        "construction": true
+      },
+      {
+        "kind": "point",
+        "id": "v.p1",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "v.p2",
+        "x": 10,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "v.bl",
+        "p1": "v.p1",
+        "p2": "v.p2",
+        "construction": true
+      },
+      {
+        "kind": "text",
+        "id": "v",
+        "text": "b",
+        "font": "sans",
+        "height": 10,
+        "baseline": "v.bl",
+        "contours": [
+          {
+            "char": 0,
+            "code": 98,
+            "segments": [
+              [
+                [
+                  0.4999999999999999,
+                  0
+                ],
+                [
+                  5.5,
+                  0
+                ]
+              ],
+              [
+                [
+                  5.5,
+                  0
+                ],
+                [
+                  5.5,
+                  5
+                ]
+              ],
+              [
+                [
+                  5.5,
+                  5
+                ],
+                [
+                  0.4999999999999999,
+                  5
+                ]
+              ],
+              [
+                [
+                  0.4999999999999999,
+                  5
+                ],
+                [
+                  0.4999999999999999,
+                  0
+                ]
+              ]
+            ]
+          }
+        ]
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [],
+      "textCurves": [
+        {
+          "kind": "line",
+          "from": [
+            0.4999999999999999,
+            0
+          ],
+          "to": [
+            5.5,
+            0
+          ],
+          "id": "u:0-97.0.0"
+        },
+        {
+          "kind": "line",
+          "from": [
+            5.5,
+            0
+          ],
+          "to": [
+            5.5,
+            5
+          ],
+          "id": "u:0-97.0.1"
+        },
+        {
+          "kind": "line",
+          "from": [
+            5.5,
+            5
+          ],
+          "to": [
+            0.4999999999999999,
+            5
+          ],
+          "id": "u:0-97.0.2"
+        },
+        {
+          "kind": "line",
+          "from": [
+            0.4999999999999999,
+            5
+          ],
+          "to": [
+            0.4999999999999999,
+            0
+          ],
+          "id": "u:0-97.0.3"
+        },
+        {
+          "kind": "line",
+          "from": [
+            0.4999999999999999,
+            0
+          ],
+          "to": [
+            5.5,
+            0
+          ],
+          "id": "v:0-98.0.0"
+        },
+        {
+          "kind": "line",
+          "from": [
+            5.5,
+            0
+          ],
+          "to": [
+            5.5,
+            5
+          ],
+          "id": "v:0-98.0.1"
+        },
+        {
+          "kind": "line",
+          "from": [
+            5.5,
+            5
+          ],
+          "to": [
+            0.4999999999999999,
+            5
+          ],
+          "id": "v:0-98.0.2"
+        },
+        {
+          "kind": "line",
+          "from": [
+            0.4999999999999999,
+            5
+          ],
+          "to": [
+            0.4999999999999999,
+            0
+          ],
+          "id": "v:0-98.0.3"
+        }
+      ],
+      "regionCurves": [
+        {
+          "kind": "line",
+          "from": [
+            0.4999999999999999,
+            0
+          ],
+          "to": [
+            5.5,
+            0
+          ],
+          "id": "v:0-98.0.0"
+        },
+        {
+          "kind": "line",
+          "from": [
+            5.5,
+            0
+          ],
+          "to": [
+            5.5,
+            5
+          ],
+          "id": "v:0-98.0.1"
+        },
+        {
+          "kind": "line",
+          "from": [
+            5.5,
+            5
+          ],
+          "to": [
+            0.4999999999999999,
+            5
+          ],
+          "id": "v:0-98.0.2"
+        },
+        {
+          "kind": "line",
+          "from": [
+            0.4999999999999999,
+            5
+          ],
+          "to": [
+            0.4999999999999999,
+            0
+          ],
+          "id": "v:0-98.0.3"
+        }
+      ]
+    }
+  }
+}

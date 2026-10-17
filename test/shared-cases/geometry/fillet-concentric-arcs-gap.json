@@ -1,0 +1,51 @@
+{
+  "kind": "geometry.fillet",
+  "description": "Concentric arcs whose gap does not fit the radius rejects with operation-failed",
+  "source": "src/kernel/testing.ts › no solution (spec 06 Stav po M34) › concentric arcs whose gap does not fit the radius rejects with operation-failed",
+  "input": {
+    "a": {
+      "kind": "arc",
+      "center": [
+        0,
+        0
+      ],
+      "from": [
+        3,
+        0
+      ],
+      "to": [
+        0,
+        3
+      ],
+      "ccw": true,
+      "id": "a"
+    },
+    "b": {
+      "kind": "arc",
+      "center": [
+        0,
+        0
+      ],
+      "from": [
+        7,
+        0
+      ],
+      "to": [
+        0,
+        7
+      ],
+      "ccw": true,
+      "id": "b"
+    },
+    "radius": 1,
+    "near": [
+      1,
+      1
+    ]
+  },
+  "expected": {
+    "error": {
+      "code": "operation-failed"
+    }
+  }
+}

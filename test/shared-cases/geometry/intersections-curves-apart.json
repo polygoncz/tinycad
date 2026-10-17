@@ -1,0 +1,35 @@
+{
+  "kind": "geometry.intersections",
+  "description": "A line and a circle apart have no intersections",
+  "source": "src/kernel/testing.ts › intersections (spec 06 Stav po M33) › curves apart, no curves, a curve alone: no intersections",
+  "input": {
+    "curves": [
+      {
+        "kind": "line",
+        "from": [
+          0,
+          0
+        ],
+        "to": [
+          1,
+          0
+        ],
+        "id": "p"
+      },
+      {
+        "kind": "circle",
+        "center": [
+          5,
+          5
+        ],
+        "radius": 1,
+        "id": "c"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "hits": []
+    }
+  }
+}

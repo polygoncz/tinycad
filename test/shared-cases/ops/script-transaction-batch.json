@@ -1,0 +1,334 @@
+{
+  "kind": "ops.script",
+  "description": "A transaction of an add and merged setParams writes one batch entry",
+  "source": "test/unit/ops/transaction.test.ts › commit › makes a batch of add and merged setParams",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "a",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "A",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          {
+            "id": "b",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "B",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    },
+    "steps": [
+      {
+        "begin": "Box"
+      },
+      {
+        "apply": {
+          "type": "feature.add",
+          "v": 1,
+          "feature": {
+            "id": "c",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "C",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          "index": 2
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "c",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 2,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "c",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 3,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "c",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 4,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "c",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 5,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "c",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 6,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "commit": true
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "document": {
+        "meta": {
+          "id": "doc1",
+          "name": "Test document",
+          "createdAt": 0
+        },
+        "studio": {
+          "features": [
+            {
+              "id": "a",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "A",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 1,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            },
+            {
+              "id": "b",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "B",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 1,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            },
+            {
+              "id": "c",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "C",
+              "suppressed": false,
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 6,
+                "depth": 10,
+                "height": 10
+              }
+            }
+          ],
+          "rollbackIndex": 3
+        }
+      },
+      "log": [
+        {
+          "kind": "do",
+          "op": {
+            "type": "batch",
+            "v": 1,
+            "ops": [
+              {
+                "type": "feature.add",
+                "v": 1,
+                "feature": {
+                  "id": "c",
+                  "type": "box",
+                  "typeVersion": 1,
+                  "name": "C",
+                  "suppressed": false,
+                  "params": {
+                    "origin": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "width": 1,
+                    "depth": 10,
+                    "height": 10
+                  }
+                },
+                "index": 2
+              },
+              {
+                "type": "feature.setParams",
+                "v": 2,
+                "featureId": "c",
+                "typeVersion": 1,
+                "params": {
+                  "origin": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "width": 6,
+                  "depth": 10,
+                  "height": 10
+                }
+              }
+            ]
+          },
+          "inverse": {
+            "type": "batch",
+            "v": 1,
+            "ops": [
+              {
+                "type": "feature.setParams",
+                "v": 2,
+                "featureId": "c",
+                "typeVersion": 1,
+                "params": {
+                  "origin": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "width": 1,
+                  "depth": 10,
+                  "height": 10
+                }
+              },
+              {
+                "type": "batch",
+                "v": 1,
+                "ops": [
+                  {
+                    "type": "feature.remove",
+                    "v": 1,
+                    "featureId": "c"
+                  },
+                  {
+                    "type": "studio.setRollback",
+                    "v": 1,
+                    "index": 2
+                  }
+                ]
+              }
+            ]
+          },
+          "label": "Box",
+          "time": 8,
+          "seq": 1
+        }
+      ],
+      "canUndo": true,
+      "canRedo": false
+    }
+  }
+}

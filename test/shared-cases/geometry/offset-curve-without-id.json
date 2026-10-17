@@ -1,0 +1,27 @@
+{
+  "kind": "geometry.offset",
+  "description": "A curve without id rejects with invalid-input",
+  "source": "src/kernel/testing.ts › input (spec 06 offsetCurves) › a curve without id rejects with invalid-input",
+  "input": {
+    "chain": [
+      {
+        "kind": "line",
+        "from": [
+          0,
+          0
+        ],
+        "to": [
+          10,
+          0
+        ]
+      }
+    ],
+    "closed": false,
+    "distance": 1
+  },
+  "expected": {
+    "error": {
+      "code": "invalid-input"
+    }
+  }
+}

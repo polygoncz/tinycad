@@ -1,0 +1,28 @@
+{
+  "kind": "document.load",
+  "description": "Body metadata null that is not an object is a load issue",
+  "source": "test/unit/document/serialize.test.ts › fromData – body metadata (M11) › reports bodies %j that is not an object",
+  "input": {
+    "data": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [],
+        "rollbackIndex": 0,
+        "bodies": null
+      }
+    }
+  },
+  "expected": {
+    "error": {
+      "issues": [
+        {
+          "path": "studio.bodies"
+        }
+      ]
+    }
+  }
+}

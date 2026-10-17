@@ -1,0 +1,322 @@
+{
+  "kind": "regen",
+  "description": "A box moved by (10, 20, 30): the same id and names, last modified by the transform",
+  "source": "test/unit/features/transform/transform.test.ts › transformBuilder › translates a box: the bbox moves, id, origin and names stay, lastModifiedBy is the transform",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "transform-translate",
+        "name": "transform-translate",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "f1",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "box.label 1",
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 2,
+              "depth": 4,
+              "height": 6
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f2",
+            "type": "transform",
+            "typeVersion": 3,
+            "name": "transform.label 1",
+            "params": {
+              "bodies": [
+                {
+                  "kind": "body",
+                  "body": "f1/body"
+                }
+              ],
+              "pivot": "bodiesCenter",
+              "pivotPoint": [
+                0,
+                0,
+                0
+              ],
+              "translate": [
+                10,
+                20,
+                30
+              ],
+              "rx": 0,
+              "ry": 0,
+              "rz": 0
+            },
+            "suppressed": false
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "statuses": {
+        "f1": {
+          "kind": "ok"
+        },
+        "f2": {
+          "kind": "ok"
+        }
+      },
+      "bodies": [
+        {
+          "id": "f1/body",
+          "origin": "f1",
+          "lastModifiedBy": "f2",
+          "volume": 48,
+          "bbox": {
+            "min": [
+              10,
+              20,
+              30
+            ],
+            "max": [
+              12,
+              24,
+              36
+            ]
+          },
+          "faces": [
+            {
+              "names": [
+                "f1/face:back"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  1,
+                  0
+                ],
+                "offset": 24
+              }
+            },
+            {
+              "names": [
+                "f1/face:bottom"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  -1
+                ],
+                "offset": -30
+              }
+            },
+            {
+              "names": [
+                "f1/face:front"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  -1,
+                  0
+                ],
+                "offset": -20
+              }
+            },
+            {
+              "names": [
+                "f1/face:left"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  -1,
+                  0,
+                  0
+                ],
+                "offset": -10
+              }
+            },
+            {
+              "names": [
+                "f1/face:right"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  1,
+                  0,
+                  0
+                ],
+                "offset": 12
+              }
+            },
+            {
+              "names": [
+                "f1/face:top"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  1
+                ],
+                "offset": 36
+              }
+            }
+          ],
+          "edges": [
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:bottom"
+              ],
+              "midpoint": [
+                11,
+                24,
+                30
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:left"
+              ],
+              "midpoint": [
+                10,
+                24,
+                33
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:right"
+              ],
+              "midpoint": [
+                12,
+                24,
+                33
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:top"
+              ],
+              "midpoint": [
+                11,
+                24,
+                36
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:front"
+              ],
+              "midpoint": [
+                11,
+                20,
+                30
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:left"
+              ],
+              "midpoint": [
+                10,
+                22,
+                30
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:right"
+              ],
+              "midpoint": [
+                12,
+                22,
+                30
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f1/face:left"
+              ],
+              "midpoint": [
+                10,
+                20,
+                33
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f1/face:right"
+              ],
+              "midpoint": [
+                12,
+                20,
+                33
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f1/face:top"
+              ],
+              "midpoint": [
+                11,
+                20,
+                36
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:left|f1/face:top"
+              ],
+              "midpoint": [
+                10,
+                22,
+                36
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:right|f1/face:top"
+              ],
+              "midpoint": [
+                12,
+                22,
+                36
+              ]
+            }
+          ],
+          "vertexCount": 8
+        }
+      ],
+      "sketches": [],
+      "anchors": {
+        "f1": {},
+        "f2": {
+          "pivot": {
+            "point": [
+              1,
+              2,
+              3
+            ]
+          }
+        }
+      }
+    }
+  },
+  "tolerance": {
+    "relative": 0.001
+  }
+}

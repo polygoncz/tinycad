@@ -1,0 +1,31 @@
+{
+  "kind": "schema.validate",
+  "description": "A negative height is param.atOrBelowMin",
+  "source": "test/unit/features/box/box.test.ts › boxSchema › rejects a zero or negative %s",
+  "input": {
+    "type": "box",
+    "params": {
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "width": 10,
+      "depth": 10,
+      "height": -1
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "height",
+          "code": "param.atOrBelowMin",
+          "params": {
+            "min": 0
+          }
+        }
+      ]
+    }
+  }
+}

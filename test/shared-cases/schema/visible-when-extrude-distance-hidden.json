@@ -1,0 +1,17 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Extrude distance is hidden for the end type upToFace",
+  "source": "test/unit/features/extrude/extrude.test.ts › extrude param visibility › distance for endType upToFace visible: false",
+  "input": {
+    "type": "extrude",
+    "param": "distance",
+    "params": {
+      "endType": "upToFace"
+    }
+  },
+  "expected": {
+    "ok": {
+      "visible": false
+    }
+  }
+}

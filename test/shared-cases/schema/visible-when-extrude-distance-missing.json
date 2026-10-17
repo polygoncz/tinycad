@@ -1,0 +1,14 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Extrude distance is visible without an end type (equals_none over a missing param)",
+  "input": {
+    "type": "extrude",
+    "param": "distance",
+    "params": {}
+  },
+  "expected": {
+    "ok": {
+      "visible": true
+    }
+  }
+}

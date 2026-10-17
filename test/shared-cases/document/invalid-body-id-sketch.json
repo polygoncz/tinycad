@@ -1,0 +1,50 @@
+{
+  "kind": "document.load",
+  "description": "A body metadata key a/sketch that is not a body id is a load issue",
+  "source": "test/unit/document/serialize.test.ts › fromData – body metadata (M11) › reports the key %j that is not a body id",
+  "input": {
+    "data": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "a",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "a",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 10,
+              "depth": 10,
+              "height": 10
+            }
+          }
+        ],
+        "rollbackIndex": 1,
+        "bodies": {
+          "a/sketch": {
+            "name": "x"
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "error": {
+      "issues": [
+        {
+          "path": "studio.bodies['a/sketch']"
+        }
+      ]
+    }
+  }
+}

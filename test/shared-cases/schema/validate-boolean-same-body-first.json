@@ -1,0 +1,45 @@
+{
+  "kind": "schema.validate",
+  "description": "Only the first tool that is also a target is reported",
+  "source": "test/unit/features/boolean/boolean.test.ts › booleanSchema › reports only the first tool that is also a target",
+  "input": {
+    "type": "boolean",
+    "params": {
+      "op": "union",
+      "targets": [
+        {
+          "kind": "body",
+          "body": "a/body"
+        },
+        {
+          "kind": "body",
+          "body": "b/body"
+        }
+      ],
+      "tools": [
+        {
+          "kind": "body",
+          "body": "a/body"
+        },
+        {
+          "kind": "body",
+          "body": "b/body"
+        }
+      ],
+      "keepTools": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "tools",
+          "code": "boolean.sameBody",
+          "params": {
+            "index": 0
+          }
+        }
+      ]
+    }
+  }
+}

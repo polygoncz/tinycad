@@ -1,0 +1,47 @@
+{
+  "kind": "geometry.segment",
+  "description": "A piece of a clockwise arc runs clockwise from its from",
+  "source": "src/kernel/testing.ts › pieces (spec 06 Stav po M33) › a piece of a clockwise arc runs clockwise from its from",
+  "input": {
+    "curve": {
+      "kind": "arc",
+      "center": [
+        0,
+        0
+      ],
+      "from": [
+        0,
+        5
+      ],
+      "to": [
+        5,
+        0
+      ],
+      "ccw": false,
+      "id": "k"
+    },
+    "from": 0,
+    "to": 0.7853981633974483
+  },
+  "expected": {
+    "ok": {
+      "curve": {
+        "kind": "arc",
+        "center": [
+          0,
+          0
+        ],
+        "from": [
+          0,
+          5
+        ],
+        "to": [
+          3.5355339059327378,
+          3.5355339059327373
+        ],
+        "ccw": false,
+        "id": "k"
+      }
+    }
+  }
+}

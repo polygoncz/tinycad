@@ -1,0 +1,28 @@
+{
+  "kind": "ops.upcast",
+  "description": "Fails validation: feature.setParams with a featureId that is a number",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › %s: %j fails at %j",
+  "input": {
+    "operation": {
+      "type": "feature.setParams",
+      "v": 2,
+      "featureId": 1,
+      "typeVersion": 1,
+      "params": {
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "width": 20,
+        "depth": 10,
+        "height": 10
+      }
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "featureId"
+    }
+  }
+}

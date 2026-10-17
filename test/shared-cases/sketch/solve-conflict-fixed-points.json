@@ -1,0 +1,111 @@
+{
+  "kind": "sketch.solve",
+  "description": "A dimension between two fixed points with a wrong value is a conflict without suffixed fix ids",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – conflicts and redundancy › a dimension between two fixed points with a wrong value is a conflict",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 10,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "c",
+        "x": 10,
+        "y": 5
+      },
+      {
+        "kind": "point",
+        "id": "d",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "kind": "line",
+        "id": "ab",
+        "p1": "a",
+        "p2": "b"
+      },
+      {
+        "kind": "line",
+        "id": "bc",
+        "p1": "b",
+        "p2": "c"
+      },
+      {
+        "kind": "line",
+        "id": "cd",
+        "p1": "c",
+        "p2": "d"
+      },
+      {
+        "kind": "line",
+        "id": "da",
+        "p1": "d",
+        "p2": "a"
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "horizontal",
+        "id": "h1",
+        "line": "ab"
+      },
+      {
+        "kind": "vertical",
+        "id": "v1",
+        "line": "bc"
+      },
+      {
+        "kind": "horizontal",
+        "id": "h2",
+        "line": "cd"
+      },
+      {
+        "kind": "vertical",
+        "id": "v2",
+        "line": "da"
+      },
+      {
+        "kind": "fix",
+        "id": "fa",
+        "point": "a"
+      },
+      {
+        "kind": "fix",
+        "id": "fb",
+        "point": "b"
+      },
+      {
+        "kind": "distance",
+        "id": "W",
+        "a": "a",
+        "b": "b",
+        "value": 12
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "conflict",
+      "dof": 1,
+      "conflicting": [
+        "W",
+        "fa",
+        "fb"
+      ],
+      "redundant": [
+        "fb"
+      ],
+      "entities": null
+    }
+  }
+}

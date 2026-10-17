@@ -1,0 +1,98 @@
+{
+  "kind": "sketch.solve",
+  "description": "Two points become symmetric about a fixed axis",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – M36 symmetric › makes two points symmetric about a fixed axis",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "p",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "q",
+        "x": 10,
+        "y": 10
+      },
+      {
+        "kind": "line",
+        "id": "L",
+        "p1": "p",
+        "p2": "q"
+      },
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 3,
+        "y": 4
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 5,
+        "y": -1
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fp",
+        "point": "p"
+      },
+      {
+        "kind": "fix",
+        "id": "fq",
+        "point": "q"
+      },
+      {
+        "kind": "symmetric",
+        "id": "s",
+        "a": "a",
+        "b": "b",
+        "axis": "L"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 2,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "p",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "q",
+          "x": 10,
+          "y": 10
+        },
+        {
+          "kind": "line",
+          "id": "L",
+          "p1": "p",
+          "p2": "q"
+        },
+        {
+          "kind": "point",
+          "id": "a",
+          "x": 2.4652929041716445,
+          "y": 4.4184346192149375
+        },
+        {
+          "kind": "point",
+          "id": "b",
+          "x": 4.4184346192149375,
+          "y": 2.465292904171644
+        }
+      ]
+    }
+  }
+}

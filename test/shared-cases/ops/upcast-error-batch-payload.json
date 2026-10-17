@@ -1,0 +1,51 @@
+{
+  "kind": "ops.upcast",
+  "description": "A broken payload inside a nested batch has the ops[i] prefix",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › reports a broken payload inside a batch with the ops[i] prefix",
+  "input": {
+    "operation": {
+      "type": "batch",
+      "v": 1,
+      "ops": [
+        {
+          "type": "feature.remove",
+          "v": 1,
+          "featureId": "f1"
+        },
+        {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "feature.add",
+              "v": 1,
+              "feature": {
+                "id": "f1",
+                "type": "box",
+                "typeVersion": 0,
+                "name": "Box 1",
+                "suppressed": false,
+                "params": {
+                  "origin": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "width": 10,
+                  "depth": 10,
+                  "height": 10
+                }
+              },
+              "index": 0
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "ops[1].ops[0].feature.typeVersion"
+    }
+  }
+}

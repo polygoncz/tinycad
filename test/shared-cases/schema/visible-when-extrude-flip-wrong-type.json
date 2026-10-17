@@ -1,0 +1,16 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Extrude flip is hidden for an end type that is not a string",
+  "input": {
+    "type": "extrude",
+    "param": "flip",
+    "params": {
+      "endType": true
+    }
+  },
+  "expected": {
+    "ok": {
+      "visible": false
+    }
+  }
+}

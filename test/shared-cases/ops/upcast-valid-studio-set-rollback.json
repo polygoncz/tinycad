@@ -1,0 +1,21 @@
+{
+  "kind": "ops.upcast",
+  "description": "A valid studio.setRollback of the current version passes unchanged",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › %s: a valid operation passes",
+  "input": {
+    "operation": {
+      "type": "studio.setRollback",
+      "v": 1,
+      "index": 0
+    }
+  },
+  "expected": {
+    "ok": {
+      "operation": {
+        "type": "studio.setRollback",
+        "v": 1,
+        "index": 0
+      }
+    }
+  }
+}

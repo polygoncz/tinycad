@@ -1,0 +1,124 @@
+{
+  "kind": "sketch.solve",
+  "description": "An angle dimension (both flags, clockwise from a to b) holds the value and the quadrant while the free end is dragged",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – M28 dimensions › angle stays in its quadrant › both flags, clockwise from a to b",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a1",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "a2",
+        "x": 10,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "A",
+        "p1": "a1",
+        "p2": "a2"
+      },
+      {
+        "kind": "point",
+        "id": "b1",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b2",
+        "x": 5,
+        "y": -5
+      },
+      {
+        "kind": "line",
+        "id": "B",
+        "p1": "b1",
+        "p2": "b2"
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fa1",
+        "point": "a1"
+      },
+      {
+        "kind": "fix",
+        "id": "fa2",
+        "point": "a2"
+      },
+      {
+        "kind": "fix",
+        "id": "fb1",
+        "point": "b1"
+      },
+      {
+        "kind": "angle",
+        "id": "g",
+        "a": "A",
+        "b": "B",
+        "value": 0.9853981633974482,
+        "reverseA": true,
+        "reverseB": true
+      }
+    ],
+    "drag": {
+      "point": "b2",
+      "to": [
+        15,
+        -15
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 1,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "a1",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "a2",
+          "x": 10,
+          "y": 0
+        },
+        {
+          "kind": "line",
+          "id": "A",
+          "p1": "a1",
+          "p2": "a2"
+        },
+        {
+          "kind": "point",
+          "id": "b1",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "b2",
+          "x": 11.487319887706734,
+          "y": -17.328595022336476
+        },
+        {
+          "kind": "line",
+          "id": "B",
+          "p1": "b1",
+          "p2": "b2"
+        }
+      ]
+    }
+  }
+}

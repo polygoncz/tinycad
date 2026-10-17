@@ -1,0 +1,17 @@
+{
+  "kind": "ops.upcast",
+  "description": "An upcast feature.setParams version 1 without params fails at params",
+  "source": "test/unit/ops/upcast.test.ts › upcastOperation › validates an upcast feature.setParams version 1",
+  "input": {
+    "operation": {
+      "type": "feature.setParams",
+      "v": 1,
+      "featureId": "a"
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "params"
+    }
+  }
+}

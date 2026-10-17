@@ -1,0 +1,14 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Extrude flip is hidden without an end type (equals_any over a missing param)",
+  "input": {
+    "type": "extrude",
+    "param": "flip",
+    "params": {}
+  },
+  "expected": {
+    "ok": {
+      "visible": false
+    }
+  }
+}

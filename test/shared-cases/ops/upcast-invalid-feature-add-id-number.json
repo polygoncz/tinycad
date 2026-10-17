@@ -1,0 +1,34 @@
+{
+  "kind": "ops.upcast",
+  "description": "Fails validation: feature.add with a feature id that is a number",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › %s: %j fails at %j",
+  "input": {
+    "operation": {
+      "type": "feature.add",
+      "v": 1,
+      "feature": {
+        "id": 3,
+        "type": "box",
+        "typeVersion": 1,
+        "name": "Box 1",
+        "suppressed": false,
+        "params": {
+          "origin": [
+            0,
+            0,
+            0
+          ],
+          "width": 10,
+          "depth": 10,
+          "height": 10
+        }
+      },
+      "index": 0
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "feature.id"
+    }
+  }
+}

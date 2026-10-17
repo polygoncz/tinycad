@@ -1,0 +1,19 @@
+{
+  "kind": "schema.validate",
+  "description": "Params that are not an object are param.wrongType at the empty param",
+  "source": "test/unit/document/validate.test.ts › validateAgainstSchema – params object › rejects params that are not an object",
+  "input": {
+    "type": "box",
+    "params": null
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "",
+          "code": "param.wrongType"
+        }
+      ]
+    }
+  }
+}

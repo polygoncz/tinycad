@@ -1,0 +1,57 @@
+{
+  "kind": "geometry.segment",
+  "description": "A spline outside its knots rejects with invalid-input",
+  "source": "src/kernel/testing.ts › input (spec 06 curveSegment) › a spline outside its knots rejects with invalid-input",
+  "input": {
+    "curve": {
+      "kind": "bspline",
+      "degree": 3,
+      "poles": [
+        [
+          0,
+          0
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          -3
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          8,
+          -2
+        ],
+        [
+          10,
+          1
+        ]
+      ],
+      "knots": [
+        0,
+        0,
+        0,
+        0,
+        0.3333333333333333,
+        0.6666666666666666,
+        1,
+        1,
+        1,
+        1
+      ],
+      "id": "w"
+    },
+    "from": 0.5,
+    "to": 1.5
+  },
+  "expected": {
+    "error": {
+      "code": "invalid-input"
+    }
+  }
+}

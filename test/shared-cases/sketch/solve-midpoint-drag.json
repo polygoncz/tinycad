@@ -1,0 +1,87 @@
+{
+  "kind": "sketch.solve",
+  "description": "A midpoint stays in the middle of its line when the end of the line is dragged",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – M26 constraints › a midpoint stays in the middle of its line",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "p",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "q",
+        "x": 10,
+        "y": 0
+      },
+      {
+        "kind": "line",
+        "id": "L",
+        "p1": "p",
+        "p2": "q"
+      },
+      {
+        "kind": "point",
+        "id": "m",
+        "x": 3,
+        "y": 2
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fp",
+        "point": "p"
+      },
+      {
+        "kind": "midpoint",
+        "id": "mid",
+        "point": "m",
+        "line": "L"
+      }
+    ],
+    "drag": {
+      "point": "q",
+      "to": [
+        8,
+        6
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 2,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "p",
+          "x": -3.6159518696421497e-31,
+          "y": 4.818873089957583e-31
+        },
+        {
+          "kind": "point",
+          "id": "q",
+          "x": 8,
+          "y": 6
+        },
+        {
+          "kind": "line",
+          "id": "L",
+          "p1": "p",
+          "p2": "q"
+        },
+        {
+          "kind": "point",
+          "id": "m",
+          "x": 4,
+          "y": 3
+        }
+      ]
+    }
+  }
+}

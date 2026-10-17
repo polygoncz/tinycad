@@ -1,0 +1,23 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Extrude flip is visible for the end type blind, among the other params",
+  "source": "test/unit/features/extrude/extrude.test.ts › extrude param visibility › flip for endType blind visible: true",
+  "input": {
+    "type": "extrude",
+    "param": "flip",
+    "params": {
+      "regions": [],
+      "operation": "new",
+      "targets": [],
+      "endType": "blind",
+      "distance": 10,
+      "upTo": [],
+      "flip": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "visible": true
+    }
+  }
+}

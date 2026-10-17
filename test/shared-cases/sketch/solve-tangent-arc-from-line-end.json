@@ -1,0 +1,151 @@
+{
+  "kind": "sketch.solve",
+  "description": "An arc from the end of a line tangent to it solves ok and keeps the tangent",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – M27 tangent arcs › an arc tangent to a line from its end point solves ok, the tangent kept",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "l1",
+        "x": 10,
+        "y": 10
+      },
+      {
+        "kind": "point",
+        "id": "l2",
+        "x": 30,
+        "y": 10
+      },
+      {
+        "kind": "line",
+        "id": "l",
+        "p1": "l1",
+        "p2": "l2"
+      },
+      {
+        "kind": "point",
+        "id": "ac",
+        "x": 100,
+        "y": 100
+      },
+      {
+        "kind": "point",
+        "id": "as",
+        "x": 110,
+        "y": 100
+      },
+      {
+        "kind": "point",
+        "id": "ae",
+        "x": 100,
+        "y": 110
+      },
+      {
+        "kind": "arc",
+        "id": "a",
+        "center": "ac",
+        "start": "as",
+        "end": "ae"
+      },
+      {
+        "kind": "point",
+        "id": "c",
+        "x": 30,
+        "y": 20
+      },
+      {
+        "kind": "point",
+        "id": "e",
+        "x": 40,
+        "y": 20
+      },
+      {
+        "kind": "arc",
+        "id": "T",
+        "center": "c",
+        "start": "l2",
+        "end": "e"
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "tangent",
+        "id": "t",
+        "a": "T",
+        "b": "l"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 11,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "l1",
+          "x": 10,
+          "y": 10
+        },
+        {
+          "kind": "point",
+          "id": "l2",
+          "x": 30,
+          "y": 10
+        },
+        {
+          "kind": "line",
+          "id": "l",
+          "p1": "l1",
+          "p2": "l2"
+        },
+        {
+          "kind": "point",
+          "id": "ac",
+          "x": 100,
+          "y": 100
+        },
+        {
+          "kind": "point",
+          "id": "as",
+          "x": 110,
+          "y": 100
+        },
+        {
+          "kind": "point",
+          "id": "ae",
+          "x": 100,
+          "y": 110
+        },
+        {
+          "kind": "arc",
+          "id": "a",
+          "center": "ac",
+          "start": "as",
+          "end": "ae"
+        },
+        {
+          "kind": "point",
+          "id": "c",
+          "x": 30,
+          "y": 20
+        },
+        {
+          "kind": "point",
+          "id": "e",
+          "x": 40,
+          "y": 20
+        },
+        {
+          "kind": "arc",
+          "id": "T",
+          "center": "c",
+          "start": "l2",
+          "end": "e"
+        }
+      ]
+    }
+  }
+}

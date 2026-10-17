@@ -1,0 +1,249 @@
+{
+  "kind": "geometry.offset",
+  "description": "A clockwise rounded rectangle outwards",
+  "source": "src/kernel/testing.ts › closed chains (spec 06 Stav po M35) › a clockwise rounded rectangle outwards",
+  "input": {
+    "chain": [
+      {
+        "kind": "arc",
+        "center": [
+          2,
+          2
+        ],
+        "from": [
+          2,
+          0
+        ],
+        "to": [
+          0,
+          2
+        ],
+        "ccw": false,
+        "id": "bl"
+      },
+      {
+        "kind": "line",
+        "from": [
+          0,
+          2
+        ],
+        "to": [
+          0,
+          4
+        ],
+        "id": "l"
+      },
+      {
+        "kind": "arc",
+        "center": [
+          2,
+          4
+        ],
+        "from": [
+          0,
+          4
+        ],
+        "to": [
+          2,
+          6
+        ],
+        "ccw": false,
+        "id": "tl"
+      },
+      {
+        "kind": "line",
+        "from": [
+          2,
+          6
+        ],
+        "to": [
+          8,
+          6
+        ],
+        "id": "t"
+      },
+      {
+        "kind": "arc",
+        "center": [
+          8,
+          4
+        ],
+        "from": [
+          8,
+          6
+        ],
+        "to": [
+          10,
+          4
+        ],
+        "ccw": false,
+        "id": "tr"
+      },
+      {
+        "kind": "line",
+        "from": [
+          10,
+          4
+        ],
+        "to": [
+          10,
+          2
+        ],
+        "id": "r"
+      },
+      {
+        "kind": "arc",
+        "center": [
+          8,
+          2
+        ],
+        "from": [
+          10,
+          2
+        ],
+        "to": [
+          8,
+          0
+        ],
+        "ccw": false,
+        "id": "br"
+      },
+      {
+        "kind": "line",
+        "from": [
+          8,
+          0
+        ],
+        "to": [
+          2,
+          0
+        ],
+        "id": "b"
+      }
+    ],
+    "closed": true,
+    "distance": 1
+  },
+  "expected": {
+    "ok": {
+      "curves": [
+        {
+          "kind": "arc",
+          "center": [
+            2,
+            2
+          ],
+          "from": [
+            2,
+            -1
+          ],
+          "to": [
+            -1,
+            2.0000000000000004
+          ],
+          "ccw": false,
+          "source": "bl"
+        },
+        {
+          "kind": "line",
+          "from": [
+            -1,
+            2.0000000000000004
+          ],
+          "to": [
+            -1,
+            4
+          ],
+          "source": "l"
+        },
+        {
+          "kind": "arc",
+          "center": [
+            2,
+            4
+          ],
+          "from": [
+            -1,
+            4
+          ],
+          "to": [
+            2.000000000000001,
+            7
+          ],
+          "ccw": false,
+          "source": "tl"
+        },
+        {
+          "kind": "line",
+          "from": [
+            2.000000000000001,
+            7
+          ],
+          "to": [
+            8,
+            7
+          ],
+          "source": "t"
+        },
+        {
+          "kind": "arc",
+          "center": [
+            8,
+            4
+          ],
+          "from": [
+            8,
+            7
+          ],
+          "to": [
+            11,
+            3.999999999999999
+          ],
+          "ccw": false,
+          "source": "tr"
+        },
+        {
+          "kind": "line",
+          "from": [
+            11,
+            3.999999999999999
+          ],
+          "to": [
+            11,
+            2
+          ],
+          "source": "r"
+        },
+        {
+          "kind": "arc",
+          "center": [
+            8,
+            2
+          ],
+          "from": [
+            11,
+            2
+          ],
+          "to": [
+            7.999999999999999,
+            -1
+          ],
+          "ccw": false,
+          "source": "br"
+        },
+        {
+          "kind": "line",
+          "from": [
+            7.999999999999999,
+            -1
+          ],
+          "to": [
+            2,
+            -1
+          ],
+          "source": "b"
+        }
+      ]
+    }
+  }
+}

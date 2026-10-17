@@ -1,0 +1,23 @@
+{
+  "kind": "schema.validate",
+  "description": "The defaults of box give no issues",
+  "source": "test/unit/features/box/box.test.ts › boxSchema › defaults pass validation",
+  "input": {
+    "type": "box",
+    "params": {
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "width": 10,
+      "depth": 10,
+      "height": 10
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": []
+    }
+  }
+}

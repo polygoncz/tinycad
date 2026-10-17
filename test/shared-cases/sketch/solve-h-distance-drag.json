@@ -1,0 +1,64 @@
+{
+  "kind": "sketch.solve",
+  "description": "hDistance holds the horizontal distance while the point is dragged",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – M28 dimensions › hDistance moves b to the value on its side and holds it while dragging",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 3,
+        "y": 1
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fa",
+        "point": "a"
+      },
+      {
+        "kind": "hDistance",
+        "id": "h",
+        "a": "a",
+        "b": "b",
+        "value": 5
+      }
+    ],
+    "drag": {
+      "point": "b",
+      "to": [
+        9,
+        4
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 1,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "a",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "b",
+          "x": 5,
+          "y": 4
+        }
+      ]
+    }
+  }
+}

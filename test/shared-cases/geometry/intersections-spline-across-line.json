@@ -1,0 +1,74 @@
+{
+  "kind": "geometry.intersections",
+  "description": "A spline across a line: t of the spline is its knot parameter",
+  "source": "src/kernel/testing.ts › intersections (spec 06 Stav po M33) › a spline across a line: t of the spline is its knot parameter",
+  "input": {
+    "curves": [
+      {
+        "kind": "bspline",
+        "degree": 2,
+        "poles": [
+          [
+            0,
+            -4
+          ],
+          [
+            5,
+            8
+          ],
+          [
+            10,
+            -4
+          ]
+        ],
+        "knots": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ],
+        "id": "sp"
+      },
+      {
+        "kind": "line",
+        "from": [
+          -2,
+          0
+        ],
+        "to": [
+          18,
+          0
+        ],
+        "id": "l"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "hits": [
+        {
+          "a": "sp",
+          "b": "l",
+          "point": [
+            2.113248654051871,
+            0
+          ],
+          "ta": 0.2113248654051871,
+          "tb": 0.20566243270259355
+        },
+        {
+          "a": "sp",
+          "b": "l",
+          "point": [
+            7.886751345948131,
+            0
+          ],
+          "ta": 0.788675134594813,
+          "tb": 0.4943375672974065
+        }
+      ]
+    }
+  }
+}

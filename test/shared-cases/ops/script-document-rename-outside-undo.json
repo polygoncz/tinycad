@@ -1,0 +1,180 @@
+{
+  "kind": "ops.script",
+  "description": "document.rename stays out of undo: undo reverts the step before and keeps the name",
+  "source": "test/unit/ops/undo.test.ts › document.rename stays out of undo (M19.2, D5) › leaves canUndo and the stacks as they were; undo reverts the step before, not the name",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "a",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "A",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          {
+            "id": "b",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "B",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    },
+    "steps": [
+      {
+        "dispatch": {
+          "type": "feature.rename",
+          "v": 1,
+          "featureId": "a",
+          "name": "X"
+        }
+      },
+      {
+        "dispatch": {
+          "type": "document.rename",
+          "v": 1,
+          "name": "Part"
+        }
+      },
+      {
+        "undo": true
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "document": {
+        "meta": {
+          "id": "doc1",
+          "name": "Part",
+          "createdAt": 0
+        },
+        "studio": {
+          "features": [
+            {
+              "id": "a",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "A",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 1,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            },
+            {
+              "id": "b",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "B",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 1,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            }
+          ],
+          "rollbackIndex": 2
+        }
+      },
+      "log": [
+        {
+          "kind": "do",
+          "op": {
+            "type": "feature.rename",
+            "v": 1,
+            "featureId": "a",
+            "name": "X"
+          },
+          "inverse": {
+            "type": "feature.rename",
+            "v": 1,
+            "featureId": "a",
+            "name": "A"
+          },
+          "label": "feature.rename",
+          "time": 1,
+          "seq": 1
+        },
+        {
+          "kind": "do",
+          "op": {
+            "type": "document.rename",
+            "v": 1,
+            "name": "Part"
+          },
+          "inverse": {
+            "type": "document.rename",
+            "v": 1,
+            "name": "Test document"
+          },
+          "label": "document.rename",
+          "time": 2,
+          "seq": 2
+        },
+        {
+          "kind": "undo",
+          "op": {
+            "type": "feature.rename",
+            "v": 1,
+            "featureId": "a",
+            "name": "A"
+          },
+          "inverse": {
+            "type": "feature.rename",
+            "v": 1,
+            "featureId": "a",
+            "name": "X"
+          },
+          "label": "feature.rename",
+          "time": 3,
+          "target": 1,
+          "seq": 3
+        }
+      ],
+      "canUndo": false,
+      "canRedo": true
+    }
+  }
+}

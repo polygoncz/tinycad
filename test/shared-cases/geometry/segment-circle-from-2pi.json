@@ -1,0 +1,23 @@
+{
+  "kind": "geometry.segment",
+  "description": "A circle from 2π rejects with invalid-input",
+  "source": "src/kernel/testing.ts › input (spec 06 curveSegment) › a circle from 2π rejects with invalid-input",
+  "input": {
+    "curve": {
+      "kind": "circle",
+      "center": [
+        0,
+        0
+      ],
+      "radius": 1,
+      "id": "c"
+    },
+    "from": 6.283185307179586,
+    "to": 9.42477796076938
+  },
+  "expected": {
+    "error": {
+      "code": "invalid-input"
+    }
+  }
+}

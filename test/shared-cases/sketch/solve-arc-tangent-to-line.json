@@ -1,0 +1,128 @@
+{
+  "kind": "sketch.solve",
+  "description": "An arc around a fixed centre tangent to a fixed line grows to touch it",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – positions › an arc tangent to a line touches it",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "p",
+        "x": -5,
+        "y": -3
+      },
+      {
+        "kind": "point",
+        "id": "q",
+        "x": 5,
+        "y": -3
+      },
+      {
+        "kind": "line",
+        "id": "L",
+        "p1": "p",
+        "p2": "q"
+      },
+      {
+        "kind": "point",
+        "id": "ac",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "as",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "ae",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "kind": "arc",
+        "id": "A",
+        "center": "ac",
+        "start": "as",
+        "end": "ae"
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fp",
+        "point": "p"
+      },
+      {
+        "kind": "fix",
+        "id": "fq",
+        "point": "q"
+      },
+      {
+        "kind": "fix",
+        "id": "fc",
+        "point": "ac"
+      },
+      {
+        "kind": "tangent",
+        "id": "t",
+        "a": "L",
+        "b": "A"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 2,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "p",
+          "x": -5,
+          "y": -3
+        },
+        {
+          "kind": "point",
+          "id": "q",
+          "x": 5,
+          "y": -3
+        },
+        {
+          "kind": "line",
+          "id": "L",
+          "p1": "p",
+          "p2": "q"
+        },
+        {
+          "kind": "point",
+          "id": "ac",
+          "x": 1.369402060842809e-20,
+          "y": 1.3556360053011957e-20
+        },
+        {
+          "kind": "point",
+          "id": "as",
+          "x": 2.9998294436952566,
+          "y": -0.031989197238997714
+        },
+        {
+          "kind": "point",
+          "id": "ae",
+          "x": -0.0016789090944161684,
+          "y": 2.9999995302106717
+        },
+        {
+          "kind": "arc",
+          "id": "A",
+          "center": "ac",
+          "start": "as",
+          "end": "ae"
+        }
+      ]
+    }
+  }
+}

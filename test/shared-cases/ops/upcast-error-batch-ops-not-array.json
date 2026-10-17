@@ -1,0 +1,17 @@
+{
+  "kind": "ops.upcast",
+  "description": "A batch whose ops is not an array fails at ops",
+  "source": "test/unit/ops/upcast.test.ts › upcastOperation › reports a batch without an ops array and a newer batch version",
+  "input": {
+    "operation": {
+      "type": "batch",
+      "v": 1,
+      "ops": 3
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "ops"
+    }
+  }
+}

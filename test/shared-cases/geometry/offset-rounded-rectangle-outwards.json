@@ -1,0 +1,249 @@
+{
+  "kind": "geometry.offset",
+  "description": "A rounded rectangle outwards: arcs around the same centers, tangent joins",
+  "source": "src/kernel/testing.ts › closed chains (spec 06 Stav po M35) › a rounded rectangle outwards: arcs around the same centers, tangent joins",
+  "input": {
+    "chain": [
+      {
+        "kind": "line",
+        "from": [
+          2,
+          0
+        ],
+        "to": [
+          8,
+          0
+        ],
+        "id": "b"
+      },
+      {
+        "kind": "arc",
+        "center": [
+          8,
+          2
+        ],
+        "from": [
+          8,
+          0
+        ],
+        "to": [
+          10,
+          2
+        ],
+        "ccw": true,
+        "id": "br"
+      },
+      {
+        "kind": "line",
+        "from": [
+          10,
+          2
+        ],
+        "to": [
+          10,
+          4
+        ],
+        "id": "r"
+      },
+      {
+        "kind": "arc",
+        "center": [
+          8,
+          4
+        ],
+        "from": [
+          10,
+          4
+        ],
+        "to": [
+          8,
+          6
+        ],
+        "ccw": true,
+        "id": "tr"
+      },
+      {
+        "kind": "line",
+        "from": [
+          8,
+          6
+        ],
+        "to": [
+          2,
+          6
+        ],
+        "id": "t"
+      },
+      {
+        "kind": "arc",
+        "center": [
+          2,
+          4
+        ],
+        "from": [
+          2,
+          6
+        ],
+        "to": [
+          0,
+          4
+        ],
+        "ccw": true,
+        "id": "tl"
+      },
+      {
+        "kind": "line",
+        "from": [
+          0,
+          4
+        ],
+        "to": [
+          0,
+          2
+        ],
+        "id": "l"
+      },
+      {
+        "kind": "arc",
+        "center": [
+          2,
+          2
+        ],
+        "from": [
+          0,
+          2
+        ],
+        "to": [
+          2,
+          0
+        ],
+        "ccw": true,
+        "id": "bl"
+      }
+    ],
+    "closed": true,
+    "distance": 1
+  },
+  "expected": {
+    "ok": {
+      "curves": [
+        {
+          "kind": "line",
+          "from": [
+            1.9999999999999996,
+            -1
+          ],
+          "to": [
+            8,
+            -1
+          ],
+          "source": "b"
+        },
+        {
+          "kind": "arc",
+          "center": [
+            8,
+            2
+          ],
+          "from": [
+            8,
+            -1
+          ],
+          "to": [
+            11,
+            1.9999999999999993
+          ],
+          "ccw": true,
+          "source": "br"
+        },
+        {
+          "kind": "line",
+          "from": [
+            11,
+            1.9999999999999993
+          ],
+          "to": [
+            11,
+            4
+          ],
+          "source": "r"
+        },
+        {
+          "kind": "arc",
+          "center": [
+            8,
+            4
+          ],
+          "from": [
+            11,
+            4
+          ],
+          "to": [
+            8.000000000000002,
+            7
+          ],
+          "ccw": true,
+          "source": "tr"
+        },
+        {
+          "kind": "line",
+          "from": [
+            8.000000000000002,
+            7
+          ],
+          "to": [
+            2,
+            7
+          ],
+          "source": "t"
+        },
+        {
+          "kind": "arc",
+          "center": [
+            2,
+            4
+          ],
+          "from": [
+            2,
+            7
+          ],
+          "to": [
+            -1,
+            4.000000000000001
+          ],
+          "ccw": true,
+          "source": "tl"
+        },
+        {
+          "kind": "line",
+          "from": [
+            -1,
+            4.000000000000001
+          ],
+          "to": [
+            -1,
+            2
+          ],
+          "source": "l"
+        },
+        {
+          "kind": "arc",
+          "center": [
+            2,
+            2
+          ],
+          "from": [
+            -1,
+            2
+          ],
+          "to": [
+            1.9999999999999996,
+            -1
+          ],
+          "ccw": true,
+          "source": "bl"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,154 @@
+{
+  "kind": "regen",
+  "description": "A line crossing the spline is the crossing warning of the sketch, without regions",
+  "source": "test/integration/sketch-spline.test.ts › sketch with a spline (OCCT, real solver) › a spline crossing a line is the crossing warning of the sketch, without regions",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "sketch-spline-crossing",
+        "name": "sketch-spline-crossing",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "f1",
+            "type": "sketch",
+            "typeVersion": 1,
+            "name": "sketch.label 1",
+            "params": {
+              "plane": [
+                {
+                  "kind": "plane",
+                  "plane": "origin/plane:xy"
+                }
+              ],
+              "entities": [
+                {
+                  "kind": "point",
+                  "id": "a",
+                  "x": 0,
+                  "y": 0
+                },
+                {
+                  "kind": "point",
+                  "id": "b",
+                  "x": 40,
+                  "y": 0
+                },
+                {
+                  "kind": "point",
+                  "id": "c",
+                  "x": 40,
+                  "y": 20
+                },
+                {
+                  "kind": "point",
+                  "id": "d",
+                  "x": 0,
+                  "y": 20
+                },
+                {
+                  "kind": "point",
+                  "id": "p",
+                  "x": -12,
+                  "y": 16
+                },
+                {
+                  "kind": "point",
+                  "id": "q",
+                  "x": -12,
+                  "y": 4
+                },
+                {
+                  "kind": "line",
+                  "id": "ab",
+                  "p1": "a",
+                  "p2": "b"
+                },
+                {
+                  "kind": "line",
+                  "id": "bc",
+                  "p1": "b",
+                  "p2": "c"
+                },
+                {
+                  "kind": "line",
+                  "id": "cd",
+                  "p1": "c",
+                  "p2": "d"
+                },
+                {
+                  "kind": "bspline",
+                  "id": "s",
+                  "degree": 3,
+                  "poles": [
+                    "d",
+                    "p",
+                    "q",
+                    "a"
+                  ],
+                  "knots": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "kind": "point",
+                  "id": "e",
+                  "x": 10,
+                  "y": 10
+                },
+                {
+                  "kind": "point",
+                  "id": "w",
+                  "x": -30,
+                  "y": 10
+                },
+                {
+                  "kind": "line",
+                  "id": "ew",
+                  "p1": "e",
+                  "p2": "w"
+                }
+              ],
+              "constraints": []
+            },
+            "suppressed": false
+          }
+        ],
+        "rollbackIndex": 1
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "statuses": {
+        "f1": {
+          "kind": "warning"
+        }
+      },
+      "bodies": [],
+      "sketches": [
+        {
+          "id": "f1/sketch",
+          "owner": "f1",
+          "regions": [],
+          "outlines": []
+        }
+      ],
+      "anchors": {
+        "f1": {}
+      }
+    }
+  },
+  "tolerance": {
+    "relative": 0.001
+  }
+}

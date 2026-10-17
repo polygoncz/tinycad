@@ -1,0 +1,31 @@
+{
+  "kind": "schema.validate",
+  "description": "A sketch entity as the axis passes",
+  "source": "test/unit/features/revolve/revolve.test.ts › revolveSchema › defaults with a region and an axis pass validation",
+  "input": {
+    "type": "revolve",
+    "params": {
+      "regions": [
+        {
+          "kind": "region",
+          "sketch": "s1",
+          "region": "r1"
+        }
+      ],
+      "axis": {
+        "kind": "sketchEntity",
+        "sketch": "s1",
+        "entity": "c"
+      },
+      "operation": "new",
+      "targets": [],
+      "angle": 6.283185307179586,
+      "flip": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": []
+    }
+  }
+}

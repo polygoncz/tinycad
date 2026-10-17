@@ -1,0 +1,419 @@
+{
+  "kind": "ops.script",
+  "description": "Undo of a committed transaction reverts it in one step, redo brings it back",
+  "source": "test/unit/ops/transaction.test.ts › applyTransient › replaying the log after commit gives the live document",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "a",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "A",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          {
+            "id": "b",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "B",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    },
+    "steps": [
+      {
+        "begin": "Drag"
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 2,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 3,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.rename",
+          "v": 1,
+          "featureId": "b",
+          "name": "Wide"
+        }
+      },
+      {
+        "commit": true
+      },
+      {
+        "undo": true
+      },
+      {
+        "redo": true
+      },
+      {
+        "undo": true
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "document": {
+        "meta": {
+          "id": "doc1",
+          "name": "Test document",
+          "createdAt": 0
+        },
+        "studio": {
+          "features": [
+            {
+              "id": "a",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "A",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 1,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            },
+            {
+              "id": "b",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "B",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 1,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            }
+          ],
+          "rollbackIndex": 2
+        }
+      },
+      "log": [
+        {
+          "kind": "do",
+          "op": {
+            "type": "batch",
+            "v": 1,
+            "ops": [
+              {
+                "type": "feature.setParams",
+                "v": 2,
+                "featureId": "a",
+                "typeVersion": 1,
+                "params": {
+                  "origin": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "width": 3,
+                  "depth": 10,
+                  "height": 10
+                }
+              },
+              {
+                "type": "feature.rename",
+                "v": 1,
+                "featureId": "b",
+                "name": "Wide"
+              }
+            ]
+          },
+          "inverse": {
+            "type": "batch",
+            "v": 1,
+            "ops": [
+              {
+                "type": "feature.rename",
+                "v": 1,
+                "featureId": "b",
+                "name": "B"
+              },
+              {
+                "type": "feature.setParams",
+                "v": 2,
+                "featureId": "a",
+                "typeVersion": 1,
+                "params": {
+                  "origin": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "width": 1,
+                  "depth": 10,
+                  "height": 10
+                }
+              }
+            ]
+          },
+          "label": "Drag",
+          "time": 5,
+          "seq": 1
+        },
+        {
+          "kind": "undo",
+          "op": {
+            "type": "batch",
+            "v": 1,
+            "ops": [
+              {
+                "type": "feature.rename",
+                "v": 1,
+                "featureId": "b",
+                "name": "B"
+              },
+              {
+                "type": "feature.setParams",
+                "v": 2,
+                "featureId": "a",
+                "typeVersion": 1,
+                "params": {
+                  "origin": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "width": 1,
+                  "depth": 10,
+                  "height": 10
+                }
+              }
+            ]
+          },
+          "inverse": {
+            "type": "batch",
+            "v": 1,
+            "ops": [
+              {
+                "type": "feature.setParams",
+                "v": 2,
+                "featureId": "a",
+                "typeVersion": 1,
+                "params": {
+                  "origin": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "width": 3,
+                  "depth": 10,
+                  "height": 10
+                }
+              },
+              {
+                "type": "feature.rename",
+                "v": 1,
+                "featureId": "b",
+                "name": "Wide"
+              }
+            ]
+          },
+          "label": "Drag",
+          "time": 6,
+          "target": 1,
+          "seq": 2
+        },
+        {
+          "kind": "redo",
+          "op": {
+            "type": "batch",
+            "v": 1,
+            "ops": [
+              {
+                "type": "feature.setParams",
+                "v": 2,
+                "featureId": "a",
+                "typeVersion": 1,
+                "params": {
+                  "origin": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "width": 3,
+                  "depth": 10,
+                  "height": 10
+                }
+              },
+              {
+                "type": "feature.rename",
+                "v": 1,
+                "featureId": "b",
+                "name": "Wide"
+              }
+            ]
+          },
+          "inverse": {
+            "type": "batch",
+            "v": 1,
+            "ops": [
+              {
+                "type": "feature.rename",
+                "v": 1,
+                "featureId": "b",
+                "name": "B"
+              },
+              {
+                "type": "feature.setParams",
+                "v": 2,
+                "featureId": "a",
+                "typeVersion": 1,
+                "params": {
+                  "origin": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "width": 1,
+                  "depth": 10,
+                  "height": 10
+                }
+              }
+            ]
+          },
+          "label": "Drag",
+          "time": 7,
+          "target": 1,
+          "seq": 3
+        },
+        {
+          "kind": "undo",
+          "op": {
+            "type": "batch",
+            "v": 1,
+            "ops": [
+              {
+                "type": "feature.rename",
+                "v": 1,
+                "featureId": "b",
+                "name": "B"
+              },
+              {
+                "type": "feature.setParams",
+                "v": 2,
+                "featureId": "a",
+                "typeVersion": 1,
+                "params": {
+                  "origin": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "width": 1,
+                  "depth": 10,
+                  "height": 10
+                }
+              }
+            ]
+          },
+          "inverse": {
+            "type": "batch",
+            "v": 1,
+            "ops": [
+              {
+                "type": "feature.setParams",
+                "v": 2,
+                "featureId": "a",
+                "typeVersion": 1,
+                "params": {
+                  "origin": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "width": 3,
+                  "depth": 10,
+                  "height": 10
+                }
+              },
+              {
+                "type": "feature.rename",
+                "v": 1,
+                "featureId": "b",
+                "name": "Wide"
+              }
+            ]
+          },
+          "label": "Drag",
+          "time": 8,
+          "target": 1,
+          "seq": 4
+        }
+      ],
+      "canUndo": false,
+      "canRedo": true
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "kind": "ops.upcast",
+  "description": "Fails validation: body.rename with a sketch id instead of a body id",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › %s: %j fails at %j",
+  "input": {
+    "operation": {
+      "type": "body.rename",
+      "v": 1,
+      "body": "f1/sketch",
+      "name": ""
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "body"
+    }
+  }
+}

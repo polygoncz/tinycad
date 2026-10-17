@@ -1,0 +1,253 @@
+{
+  "kind": "ops.script",
+  "description": "Undo of feature.remove brings back the feature and the rollback bar",
+  "source": "test/unit/ops/undo.test.ts › undo / redo › undo of feature.remove brings back the feature and the rollback bar",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "a",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "A",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          {
+            "id": "b",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "B",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    },
+    "steps": [
+      {
+        "dispatch": {
+          "type": "studio.setRollback",
+          "v": 1,
+          "index": 1
+        }
+      },
+      {
+        "dispatch": {
+          "type": "feature.remove",
+          "v": 1,
+          "featureId": "a"
+        }
+      },
+      {
+        "undo": true
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "document": {
+        "meta": {
+          "id": "doc1",
+          "name": "Test document",
+          "createdAt": 0
+        },
+        "studio": {
+          "features": [
+            {
+              "id": "a",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "A",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 1,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            },
+            {
+              "id": "b",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "B",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 1,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            }
+          ],
+          "rollbackIndex": 1
+        }
+      },
+      "log": [
+        {
+          "kind": "do",
+          "op": {
+            "type": "studio.setRollback",
+            "v": 1,
+            "index": 1
+          },
+          "inverse": {
+            "type": "studio.setRollback",
+            "v": 1,
+            "index": 2
+          },
+          "label": "studio.setRollback",
+          "time": 1,
+          "seq": 1
+        },
+        {
+          "kind": "do",
+          "op": {
+            "type": "feature.remove",
+            "v": 1,
+            "featureId": "a"
+          },
+          "inverse": {
+            "type": "batch",
+            "v": 1,
+            "ops": [
+              {
+                "type": "feature.add",
+                "v": 1,
+                "feature": {
+                  "id": "a",
+                  "type": "box",
+                  "typeVersion": 1,
+                  "name": "A",
+                  "params": {
+                    "origin": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "width": 1,
+                    "depth": 10,
+                    "height": 10
+                  },
+                  "suppressed": false
+                },
+                "index": 0
+              },
+              {
+                "type": "studio.setRollback",
+                "v": 1,
+                "index": 1
+              }
+            ]
+          },
+          "label": "feature.remove",
+          "time": 2,
+          "seq": 2
+        },
+        {
+          "kind": "undo",
+          "op": {
+            "type": "batch",
+            "v": 1,
+            "ops": [
+              {
+                "type": "feature.add",
+                "v": 1,
+                "feature": {
+                  "id": "a",
+                  "type": "box",
+                  "typeVersion": 1,
+                  "name": "A",
+                  "params": {
+                    "origin": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "width": 1,
+                    "depth": 10,
+                    "height": 10
+                  },
+                  "suppressed": false
+                },
+                "index": 0
+              },
+              {
+                "type": "studio.setRollback",
+                "v": 1,
+                "index": 1
+              }
+            ]
+          },
+          "inverse": {
+            "type": "batch",
+            "v": 1,
+            "ops": [
+              {
+                "type": "studio.setRollback",
+                "v": 1,
+                "index": 1
+              },
+              {
+                "type": "batch",
+                "v": 1,
+                "ops": [
+                  {
+                    "type": "feature.remove",
+                    "v": 1,
+                    "featureId": "a"
+                  },
+                  {
+                    "type": "studio.setRollback",
+                    "v": 1,
+                    "index": 0
+                  }
+                ]
+              }
+            ]
+          },
+          "label": "feature.remove",
+          "time": 3,
+          "target": 2,
+          "seq": 3
+        }
+      ],
+      "canUndo": true,
+      "canRedo": true
+    }
+  }
+}

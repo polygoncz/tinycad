@@ -1,0 +1,31 @@
+{
+  "kind": "schema.validate",
+  "description": "Entities that are not an array give one issue with index -1",
+  "source": "test/unit/features/sketch/sketch.test.ts › sketchSchema › a field that is not an array gives one issue with index -1",
+  "input": {
+    "type": "sketch",
+    "params": {
+      "plane": [
+        {
+          "kind": "plane",
+          "plane": "origin/plane:xy"
+        }
+      ],
+      "entities": {},
+      "constraints": []
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "entities",
+          "code": "sketch.invalidEntity",
+          "params": {
+            "index": -1
+          }
+        }
+      ]
+    }
+  }
+}

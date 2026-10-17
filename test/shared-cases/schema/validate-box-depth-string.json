@@ -1,0 +1,28 @@
+{
+  "kind": "schema.validate",
+  "description": "A depth that is a string is param.wrongType",
+  "source": "test/unit/document/validate.test.ts › validateAgainstSchema – each ParamSpec kind › %s: finite number within min/max",
+  "input": {
+    "type": "box",
+    "params": {
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "width": 10,
+      "depth": "10",
+      "height": 10
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "depth",
+          "code": "param.wrongType"
+        }
+      ]
+    }
+  }
+}

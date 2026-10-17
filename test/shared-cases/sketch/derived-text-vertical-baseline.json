@@ -1,0 +1,190 @@
+{
+  "kind": "sketch.derived",
+  "description": "Letter outlines turn with the baseline: x along p1 to p2, y to the left",
+  "source": "test/unit/sketch/text.test.ts › textCurves › turns the outlines with the baseline: x along p1 → p2, y to the left",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "t.p1",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "kind": "point",
+        "id": "t.p2",
+        "x": 1,
+        "y": 4
+      },
+      {
+        "kind": "line",
+        "id": "t.bl",
+        "p1": "t.p1",
+        "p2": "t.p2",
+        "construction": true
+      },
+      {
+        "kind": "text",
+        "id": "t",
+        "text": "a",
+        "font": "sans",
+        "height": 10,
+        "baseline": "t.bl",
+        "contours": [
+          {
+            "char": 0,
+            "code": 97,
+            "segments": [
+              [
+                [
+                  0,
+                  0
+                ],
+                [
+                  1,
+                  0
+                ]
+              ],
+              [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  1
+                ]
+              ],
+              [
+                [
+                  1,
+                  1
+                ],
+                [
+                  0,
+                  1
+                ]
+              ],
+              [
+                [
+                  0,
+                  1
+                ],
+                [
+                  0,
+                  0
+                ]
+              ]
+            ]
+          }
+        ]
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [],
+      "textCurves": [
+        {
+          "kind": "line",
+          "from": [
+            1,
+            1
+          ],
+          "to": [
+            1,
+            2
+          ],
+          "id": "t:0-97.0.0"
+        },
+        {
+          "kind": "line",
+          "from": [
+            1,
+            2
+          ],
+          "to": [
+            0,
+            2
+          ],
+          "id": "t:0-97.0.1"
+        },
+        {
+          "kind": "line",
+          "from": [
+            0,
+            2
+          ],
+          "to": [
+            0,
+            1
+          ],
+          "id": "t:0-97.0.2"
+        },
+        {
+          "kind": "line",
+          "from": [
+            0,
+            1
+          ],
+          "to": [
+            1,
+            1
+          ],
+          "id": "t:0-97.0.3"
+        }
+      ],
+      "regionCurves": [
+        {
+          "kind": "line",
+          "from": [
+            1,
+            1
+          ],
+          "to": [
+            1,
+            2
+          ],
+          "id": "t:0-97.0.0"
+        },
+        {
+          "kind": "line",
+          "from": [
+            1,
+            2
+          ],
+          "to": [
+            0,
+            2
+          ],
+          "id": "t:0-97.0.1"
+        },
+        {
+          "kind": "line",
+          "from": [
+            0,
+            2
+          ],
+          "to": [
+            0,
+            1
+          ],
+          "id": "t:0-97.0.2"
+        },
+        {
+          "kind": "line",
+          "from": [
+            0,
+            1
+          ],
+          "to": [
+            1,
+            1
+          ],
+          "id": "t:0-97.0.3"
+        }
+      ]
+    }
+  }
+}

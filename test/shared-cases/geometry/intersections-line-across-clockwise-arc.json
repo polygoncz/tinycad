@@ -1,0 +1,64 @@
+{
+  "kind": "geometry.intersections",
+  "description": "A clockwise arc measures t from its from in its own direction",
+  "source": "src/kernel/testing.ts › intersections (spec 06 Stav po M33) › a clockwise arc measures t from its from in its own direction",
+  "input": {
+    "curves": [
+      {
+        "kind": "line",
+        "from": [
+          -10,
+          3
+        ],
+        "to": [
+          10,
+          3
+        ],
+        "id": "l"
+      },
+      {
+        "kind": "arc",
+        "center": [
+          0,
+          0
+        ],
+        "from": [
+          -5,
+          0
+        ],
+        "to": [
+          5,
+          0
+        ],
+        "ccw": false,
+        "id": "k"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "hits": [
+        {
+          "a": "l",
+          "b": "k",
+          "point": [
+            -4,
+            3
+          ],
+          "ta": 0.3,
+          "tb": 0.6435011087932843
+        },
+        {
+          "a": "l",
+          "b": "k",
+          "point": [
+            4,
+            2.999999999999999
+          ],
+          "ta": 0.7,
+          "tb": 2.498091544796509
+        }
+      ]
+    }
+  }
+}

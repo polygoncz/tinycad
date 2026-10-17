@@ -1,0 +1,86 @@
+{
+  "kind": "document.load",
+  "description": "A transform of version 1 about z loads as version 3 with the pivot origin and rz",
+  "source": "test/unit/features/transform/transform.test.ts › transformSchema.migrate › version 1 goes through version 2: the pivot origin and rx from the angle about x",
+  "input": {
+    "data": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "t1",
+            "type": "transform",
+            "typeVersion": 1,
+            "name": "Transform 1",
+            "suppressed": false,
+            "params": {
+              "bodies": [
+                {
+                  "kind": "body",
+                  "body": "b1/body"
+                }
+              ],
+              "translate": [
+                1,
+                2,
+                3
+              ],
+              "axis": "z",
+              "angle": 1.5707963267948966
+            }
+          }
+        ],
+        "rollbackIndex": 1
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "data": {
+        "meta": {
+          "id": "doc1",
+          "name": "Test document",
+          "createdAt": 0
+        },
+        "studio": {
+          "features": [
+            {
+              "id": "t1",
+              "type": "transform",
+              "typeVersion": 3,
+              "name": "Transform 1",
+              "params": {
+                "bodies": [
+                  {
+                    "kind": "body",
+                    "body": "b1/body"
+                  }
+                ],
+                "translate": [
+                  1,
+                  2,
+                  3
+                ],
+                "pivot": "origin",
+                "pivotPoint": [
+                  0,
+                  0,
+                  0
+                ],
+                "rx": 0,
+                "ry": 0,
+                "rz": 1.5707963267948966
+              },
+              "suppressed": false
+            }
+          ],
+          "rollbackIndex": 1
+        }
+      }
+    }
+  }
+}

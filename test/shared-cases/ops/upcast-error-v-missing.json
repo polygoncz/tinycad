@@ -1,0 +1,15 @@
+{
+  "kind": "ops.upcast",
+  "description": "A broken envelope: an operation without v",
+  "source": "test/unit/ops/upcast.test.ts › upcastOperation › reports a broken envelope %j at path %j",
+  "input": {
+    "operation": {
+      "type": "feature.rename"
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "v"
+    }
+  }
+}

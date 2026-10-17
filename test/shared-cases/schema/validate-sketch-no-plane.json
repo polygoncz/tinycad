@@ -1,0 +1,26 @@
+{
+  "kind": "schema.validate",
+  "description": "No plane is param.tooFewRefs",
+  "source": "test/unit/features/sketch/sketch.test.ts › sketchSchema › rejects no plane and two planes",
+  "input": {
+    "type": "sketch",
+    "params": {
+      "plane": [],
+      "entities": [],
+      "constraints": []
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "plane",
+          "code": "param.tooFewRefs",
+          "params": {
+            "min": 1
+          }
+        }
+      ]
+    }
+  }
+}

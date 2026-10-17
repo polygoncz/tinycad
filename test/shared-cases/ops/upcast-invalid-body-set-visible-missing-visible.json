@@ -1,0 +1,17 @@
+{
+  "kind": "ops.upcast",
+  "description": "Fails validation: body.setVisible without visible",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › %s: %j fails at %j",
+  "input": {
+    "operation": {
+      "type": "body.setVisible",
+      "v": 1,
+      "body": "f1/body:2"
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "visible"
+    }
+  }
+}

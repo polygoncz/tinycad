@@ -1,0 +1,1053 @@
+{
+  "kind": "ops.script",
+  "description": "50 setParams of one feature in a transaction are one log entry",
+  "source": "test/unit/ops/transaction.test.ts › commit › compresses 50 setParams of one feature into one entry",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "a",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "A",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          {
+            "id": "b",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "B",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    },
+    "steps": [
+      {
+        "begin": "Drag"
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 2,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 3,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 4,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 5,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 6,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 7,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 8,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 9,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 10,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 11,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 12,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 13,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 14,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 15,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 16,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 17,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 18,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 19,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 20,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 21,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 22,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 23,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 24,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 25,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 26,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 27,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 28,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 29,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 30,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 31,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 32,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 33,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 34,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 35,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 36,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 37,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 38,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 39,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 40,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 41,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 42,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 43,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 44,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 45,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 46,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 47,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 48,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 49,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 50,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "apply": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "a",
+          "typeVersion": 1,
+          "params": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "width": 51,
+            "depth": 10,
+            "height": 10
+          }
+        }
+      },
+      {
+        "commit": true
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "document": {
+        "meta": {
+          "id": "doc1",
+          "name": "Test document",
+          "createdAt": 0
+        },
+        "studio": {
+          "features": [
+            {
+              "id": "a",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "A",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 51,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            },
+            {
+              "id": "b",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "B",
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 1,
+                "depth": 10,
+                "height": 10
+              },
+              "suppressed": false
+            }
+          ],
+          "rollbackIndex": 2
+        }
+      },
+      "log": [
+        {
+          "kind": "do",
+          "op": {
+            "type": "feature.setParams",
+            "v": 2,
+            "featureId": "a",
+            "typeVersion": 1,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 51,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          "inverse": {
+            "type": "feature.setParams",
+            "v": 2,
+            "featureId": "a",
+            "typeVersion": 1,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 1,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          "label": "Drag",
+          "time": 52,
+          "seq": 1
+        }
+      ],
+      "canUndo": true,
+      "canRedo": false
+    }
+  }
+}

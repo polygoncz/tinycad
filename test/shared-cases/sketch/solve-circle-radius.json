@@ -1,0 +1,56 @@
+{
+  "kind": "sketch.solve",
+  "description": "A radius dimension sets the radius of a circle around a fixed centre",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – positions › a circle gets its radius",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "c",
+        "x": 3,
+        "y": 4
+      },
+      {
+        "kind": "circle",
+        "id": "C",
+        "center": "c",
+        "radius": 1.7
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "f",
+        "point": "c"
+      },
+      {
+        "kind": "radius",
+        "id": "r",
+        "curve": "C",
+        "value": 2.5
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 0,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "c",
+          "x": 3,
+          "y": 4
+        },
+        {
+          "kind": "circle",
+          "id": "C",
+          "center": "c",
+          "radius": 2.5
+        }
+      ]
+    }
+  }
+}

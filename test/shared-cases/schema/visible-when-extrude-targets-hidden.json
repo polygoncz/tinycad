@@ -1,0 +1,17 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Extrude targets are hidden for the operation new",
+  "source": "test/unit/features/extrude/extrude.test.ts › extrude param visibility › targets for operation new visible: false",
+  "input": {
+    "type": "extrude",
+    "param": "targets",
+    "params": {
+      "operation": "new"
+    }
+  },
+  "expected": {
+    "ok": {
+      "visible": false
+    }
+  }
+}

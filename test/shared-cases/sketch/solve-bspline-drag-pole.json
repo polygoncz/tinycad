@@ -1,0 +1,117 @@
+{
+  "kind": "sketch.solve",
+  "description": "A dragged control point of a spline follows the target and the rest stays",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – splines › a dragged control point follows the target, the rest stays",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "p0",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "p1",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "kind": "point",
+        "id": "p2",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "p3",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "kind": "bspline",
+        "id": "S",
+        "degree": 3,
+        "poles": [
+          "p0",
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "knots": [
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ]
+      }
+    ],
+    "constraints": [],
+    "drag": {
+      "point": "p1",
+      "to": [
+        5,
+        5
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 8,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "p0",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "p1",
+          "x": 5,
+          "y": 5
+        },
+        {
+          "kind": "point",
+          "id": "p2",
+          "x": 3,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "p3",
+          "x": 4,
+          "y": 2
+        },
+        {
+          "kind": "bspline",
+          "id": "S",
+          "degree": 3,
+          "poles": [
+            "p0",
+            "p1",
+            "p2",
+            "p3"
+          ],
+          "knots": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    }
+  }
+}

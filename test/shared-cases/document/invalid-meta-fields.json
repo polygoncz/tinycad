@@ -1,0 +1,32 @@
+{
+  "kind": "document.load",
+  "description": "Bad meta fields are reported with their paths",
+  "source": "test/unit/document/serialize.test.ts › fromData – broken data (Q026) › reports bad meta fields with their paths",
+  "input": {
+    "data": {
+      "meta": {
+        "id": "",
+        "name": 3
+      },
+      "studio": {
+        "features": [],
+        "rollbackIndex": 0
+      }
+    }
+  },
+  "expected": {
+    "error": {
+      "issues": [
+        {
+          "path": "meta.createdAt"
+        },
+        {
+          "path": "meta.id"
+        },
+        {
+          "path": "meta.name"
+        }
+      ]
+    }
+  }
+}

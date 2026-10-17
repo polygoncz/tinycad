@@ -1,0 +1,79 @@
+{
+  "kind": "sketch.solve",
+  "description": "An offset circle follows the radius of its source and has no degree of freedom",
+  "source": "test/unit/solver-planegcs/solve-offset.test.ts › solveSketch – offset of a circle › the copy follows the source radius and has no degree of freedom",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "o",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "circle",
+        "id": "C",
+        "center": "o",
+        "radius": 5
+      },
+      {
+        "kind": "circle",
+        "id": "K",
+        "center": "o",
+        "radius": 6
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "fix",
+        "id": "fo",
+        "point": "o"
+      },
+      {
+        "kind": "radius",
+        "id": "r",
+        "curve": "C",
+        "value": 8
+      },
+      {
+        "kind": "offset",
+        "id": "off",
+        "pairs": [
+          {
+            "source": "C",
+            "copy": "K"
+          }
+        ],
+        "value": 1
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 0,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "o",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "circle",
+          "id": "C",
+          "center": "o",
+          "radius": 8
+        },
+        {
+          "kind": "circle",
+          "id": "K",
+          "center": "o",
+          "radius": 9
+        }
+      ]
+    }
+  }
+}

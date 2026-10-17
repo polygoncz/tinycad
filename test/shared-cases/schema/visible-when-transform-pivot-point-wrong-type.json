@@ -1,0 +1,18 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Transform pivotPoint is hidden for a pivot that is not a string",
+  "input": {
+    "type": "transform",
+    "param": "pivotPoint",
+    "params": {
+      "pivot": [
+        "point"
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "visible": false
+    }
+  }
+}

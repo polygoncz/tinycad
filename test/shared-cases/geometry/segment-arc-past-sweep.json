@@ -1,0 +1,31 @@
+{
+  "kind": "geometry.segment",
+  "description": "An arc past its sweep rejects with invalid-input",
+  "source": "src/kernel/testing.ts › input (spec 06 curveSegment) › an arc past its sweep rejects with invalid-input",
+  "input": {
+    "curve": {
+      "kind": "arc",
+      "center": [
+        0,
+        0
+      ],
+      "from": [
+        5,
+        0
+      ],
+      "to": [
+        -5,
+        0
+      ],
+      "ccw": true,
+      "id": "k"
+    },
+    "from": 0,
+    "to": 3.241592653589793
+  },
+  "expected": {
+    "error": {
+      "code": "invalid-input"
+    }
+  }
+}

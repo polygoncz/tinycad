@@ -1,0 +1,206 @@
+{
+  "kind": "sketch.derived",
+  "description": "Quadratic and cubic Bezier segments of a letter become exact clamped B-splines",
+  "source": "test/unit/sketch/text.test.ts › textCurves › turns quadratic and cubic Bézier segments into exact clamped B-splines",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "t.p1",
+        "x": 10,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "t.p2",
+        "x": 10,
+        "y": 10
+      },
+      {
+        "kind": "line",
+        "id": "t.bl",
+        "p1": "t.p1",
+        "p2": "t.p2",
+        "construction": true
+      },
+      {
+        "kind": "text",
+        "id": "t",
+        "text": "a",
+        "font": "sans",
+        "height": 10,
+        "baseline": "t.bl",
+        "contours": [
+          {
+            "char": 0,
+            "code": 97,
+            "segments": [
+              [
+                [
+                  0,
+                  0
+                ],
+                [
+                  1,
+                  2
+                ],
+                [
+                  2,
+                  0
+                ]
+              ],
+              [
+                [
+                  2,
+                  0
+                ],
+                [
+                  2,
+                  -1
+                ],
+                [
+                  0.5,
+                  -3
+                ],
+                [
+                  0,
+                  0
+                ]
+              ]
+            ]
+          }
+        ]
+      }
+    ],
+    "constraints": []
+  },
+  "expected": {
+    "ok": {
+      "copies": [],
+      "textCurves": [
+        {
+          "kind": "bspline",
+          "degree": 2,
+          "poles": [
+            [
+              10,
+              0
+            ],
+            [
+              8,
+              1
+            ],
+            [
+              10,
+              2
+            ]
+          ],
+          "knots": [
+            0,
+            0,
+            0,
+            1,
+            1,
+            1
+          ],
+          "id": "t:0-97.0.0"
+        },
+        {
+          "kind": "bspline",
+          "degree": 3,
+          "poles": [
+            [
+              10,
+              2
+            ],
+            [
+              11,
+              2
+            ],
+            [
+              13,
+              0.5
+            ],
+            [
+              10,
+              0
+            ]
+          ],
+          "knots": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1
+          ],
+          "id": "t:0-97.0.1"
+        }
+      ],
+      "regionCurves": [
+        {
+          "kind": "bspline",
+          "degree": 2,
+          "poles": [
+            [
+              10,
+              0
+            ],
+            [
+              8,
+              1
+            ],
+            [
+              10,
+              2
+            ]
+          ],
+          "knots": [
+            0,
+            0,
+            0,
+            1,
+            1,
+            1
+          ],
+          "id": "t:0-97.0.0"
+        },
+        {
+          "kind": "bspline",
+          "degree": 3,
+          "poles": [
+            [
+              10,
+              2
+            ],
+            [
+              11,
+              2
+            ],
+            [
+              13,
+              0.5
+            ],
+            [
+              10,
+              0
+            ]
+          ],
+          "knots": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1
+          ],
+          "id": "t:0-97.0.1"
+        }
+      ]
+    }
+  }
+}

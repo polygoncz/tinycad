@@ -1,0 +1,15 @@
+{
+  "kind": "geometry.offset",
+  "description": "No curves rejects with invalid-input",
+  "source": "src/kernel/testing.ts › input (spec 06 offsetCurves) › no curves rejects with invalid-input",
+  "input": {
+    "chain": [],
+    "closed": false,
+    "distance": 1
+  },
+  "expected": {
+    "error": {
+      "code": "invalid-input"
+    }
+  }
+}

@@ -477,6 +477,14 @@ describe('extrude param visibility', () => {
     },
   );
 
+  // Spec 14 VisibleWhen, equals_none: a value of another type hides, a missing param shows.
+  it('targets and distance hide for a value of another type and show for a missing one', () => {
+    expect(isParamVisible(targets(), { operation: 0 })).toBe(false);
+    expect(isParamVisible(targets(), {})).toBe(true);
+    expect(isParamVisible(paramOf('distance'), { endType: 0 })).toBe(false);
+    expect(isParamVisible(paramOf('distance'), {})).toBe(true);
+  });
+
   it('other params are always visible', () => {
     for (const key of ['regions', 'operation', 'endType']) {
       expect(isParamVisible(paramOf(key), {}), key).toBe(true);

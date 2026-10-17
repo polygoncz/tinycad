@@ -1,0 +1,34 @@
+{
+  "kind": "schema.validate",
+  "description": "An unknown boolean op is param.unknownOption",
+  "source": "test/unit/features/boolean/boolean.test.ts › booleanSchema › rejects an unknown op and a keepTools that is not a boolean",
+  "input": {
+    "type": "boolean",
+    "params": {
+      "op": "xor",
+      "targets": [
+        {
+          "kind": "body",
+          "body": "a/body"
+        }
+      ],
+      "tools": [
+        {
+          "kind": "body",
+          "body": "b/body"
+        }
+      ],
+      "keepTools": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "op",
+          "code": "param.unknownOption"
+        }
+      ]
+    }
+  }
+}

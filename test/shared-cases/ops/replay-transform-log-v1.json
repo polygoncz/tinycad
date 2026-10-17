@@ -1,0 +1,216 @@
+{
+  "kind": "ops.replay",
+  "description": "A log of transform version 1 replays to version 3 with the pivot origin",
+  "source": "test/unit/features/transform/transform.test.ts › transform plugin in the Regenerator › a log of version 1 replays to version 3 with the pivot origin and builds as before",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "doc1",
+        "name": "Test document",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [],
+        "rollbackIndex": 0
+      }
+    },
+    "entries": [
+      {
+        "seq": 1,
+        "kind": "do",
+        "op": {
+          "type": "feature.add",
+          "v": 1,
+          "feature": {
+            "id": "b1",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "Box 1",
+            "suppressed": false,
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 2,
+              "depth": 10,
+              "height": 10
+            }
+          },
+          "index": 0
+        },
+        "inverse": {
+          "type": "feature.remove",
+          "v": 1,
+          "featureId": "b1"
+        },
+        "label": "old",
+        "time": 0
+      },
+      {
+        "seq": 2,
+        "kind": "do",
+        "op": {
+          "type": "feature.add",
+          "v": 1,
+          "feature": {
+            "id": "t1",
+            "type": "transform",
+            "name": "T",
+            "suppressed": false,
+            "typeVersion": 1,
+            "params": {
+              "bodies": [
+                {
+                  "kind": "body",
+                  "body": "b1/body"
+                }
+              ],
+              "translate": [
+                0,
+                0,
+                0
+              ],
+              "axis": "z",
+              "angle": 0
+            }
+          },
+          "index": 1
+        },
+        "inverse": {
+          "type": "feature.remove",
+          "v": 1,
+          "featureId": "t1"
+        },
+        "label": "old",
+        "time": 0
+      },
+      {
+        "seq": 3,
+        "kind": "do",
+        "op": {
+          "type": "feature.setParams",
+          "v": 2,
+          "featureId": "t1",
+          "typeVersion": 1,
+          "params": {
+            "bodies": [
+              {
+                "kind": "body",
+                "body": "b1/body"
+              }
+            ],
+            "translate": [
+              0,
+              0,
+              0
+            ],
+            "axis": "z",
+            "angle": 1.5707963267948966
+          }
+        },
+        "inverse": {
+          "type": "feature.remove",
+          "v": 1,
+          "featureId": "t1"
+        },
+        "label": "old",
+        "time": 0
+      },
+      {
+        "seq": 4,
+        "kind": "do",
+        "op": {
+          "type": "feature.setParams",
+          "v": 1,
+          "featureId": "t1",
+          "params": {
+            "bodies": [
+              {
+                "kind": "body",
+                "body": "b1/body"
+              }
+            ],
+            "translate": [
+              10,
+              0,
+              0
+            ],
+            "axis": "z",
+            "angle": 1.5707963267948966
+          }
+        },
+        "inverse": {
+          "type": "feature.remove",
+          "v": 1,
+          "featureId": "t1"
+        },
+        "label": "old",
+        "time": 0
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "document": {
+        "meta": {
+          "id": "doc1",
+          "name": "Test document",
+          "createdAt": 0
+        },
+        "studio": {
+          "features": [
+            {
+              "id": "b1",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "Box 1",
+              "suppressed": false,
+              "params": {
+                "origin": [
+                  0,
+                  0,
+                  0
+                ],
+                "width": 2,
+                "depth": 10,
+                "height": 10
+              }
+            },
+            {
+              "id": "t1",
+              "type": "transform",
+              "name": "T",
+              "suppressed": false,
+              "typeVersion": 3,
+              "params": {
+                "bodies": [
+                  {
+                    "kind": "body",
+                    "body": "b1/body"
+                  }
+                ],
+                "translate": [
+                  10,
+                  0,
+                  0
+                ],
+                "pivot": "origin",
+                "pivotPoint": [
+                  0,
+                  0,
+                  0
+                ],
+                "rx": 0,
+                "ry": 0,
+                "rz": 1.5707963267948966
+              }
+            }
+          ],
+          "rollbackIndex": 2
+        }
+      }
+    }
+  }
+}

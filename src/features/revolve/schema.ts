@@ -28,6 +28,14 @@ export interface RevolveParams {
 }
 
 /**
+ * The equals_none test of VisibleWhen (spec 14) over an unchecked value: a missing param shows,
+ * a value of another type than the options hides.
+ */
+function noneOf(value: unknown, ...options: readonly string[]): boolean {
+  return value === undefined || (typeof value === 'string' && !options.includes(value));
+}
+
+/**
  * Whether the angle leaves room for a direction: at a full turn both directions give the same
  * solid, so flip is hidden and the builder ignores it. Takes unchecked values (visibleWhen).
  */
@@ -57,7 +65,7 @@ const params: ParamSchemaOf<RevolveParams> = Object.freeze<ParamSchemaOf<Revolve
     label: 'revolve.targets',
     min: 1,
     group: 'revolve.group.merge',
-    visibleWhen: (p) => p['operation'] !== 'new',
+    visibleWhen: (p) => noneOf(p['operation'], 'new'),
   }),
   angle: Object.freeze<ParamSpec>({
     kind: 'angle',

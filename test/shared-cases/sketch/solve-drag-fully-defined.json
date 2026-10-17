@@ -1,0 +1,163 @@
+{
+  "kind": "sketch.solve",
+  "description": "Nothing moves when a point of a fully defined rectangle is dragged",
+  "source": "test/unit/solver-planegcs/solve.test.ts › solveSketch – drag › in a fully defined sketch nothing moves",
+  "input": {
+    "entities": [
+      {
+        "kind": "point",
+        "id": "a",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "b",
+        "x": 10,
+        "y": 0
+      },
+      {
+        "kind": "point",
+        "id": "c",
+        "x": 10,
+        "y": 5
+      },
+      {
+        "kind": "point",
+        "id": "d",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "kind": "line",
+        "id": "ab",
+        "p1": "a",
+        "p2": "b"
+      },
+      {
+        "kind": "line",
+        "id": "bc",
+        "p1": "b",
+        "p2": "c"
+      },
+      {
+        "kind": "line",
+        "id": "cd",
+        "p1": "c",
+        "p2": "d"
+      },
+      {
+        "kind": "line",
+        "id": "da",
+        "p1": "d",
+        "p2": "a"
+      }
+    ],
+    "constraints": [
+      {
+        "kind": "horizontal",
+        "id": "h1",
+        "line": "ab"
+      },
+      {
+        "kind": "vertical",
+        "id": "v1",
+        "line": "bc"
+      },
+      {
+        "kind": "horizontal",
+        "id": "h2",
+        "line": "cd"
+      },
+      {
+        "kind": "vertical",
+        "id": "v2",
+        "line": "da"
+      },
+      {
+        "kind": "distance",
+        "id": "W",
+        "a": "a",
+        "b": "b",
+        "value": 10
+      },
+      {
+        "kind": "distance",
+        "id": "H",
+        "a": "b",
+        "b": "c",
+        "value": 5
+      },
+      {
+        "kind": "fix",
+        "id": "fa",
+        "point": "a"
+      }
+    ],
+    "drag": {
+      "point": "c",
+      "to": [
+        20,
+        20
+      ]
+    }
+  },
+  "expected": {
+    "ok": {
+      "status": "ok",
+      "dof": 0,
+      "conflicting": [],
+      "redundant": [],
+      "entities": [
+        {
+          "kind": "point",
+          "id": "a",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "b",
+          "x": 10,
+          "y": 0
+        },
+        {
+          "kind": "point",
+          "id": "c",
+          "x": 10,
+          "y": 5
+        },
+        {
+          "kind": "point",
+          "id": "d",
+          "x": 0,
+          "y": 5
+        },
+        {
+          "kind": "line",
+          "id": "ab",
+          "p1": "a",
+          "p2": "b"
+        },
+        {
+          "kind": "line",
+          "id": "bc",
+          "p1": "b",
+          "p2": "c"
+        },
+        {
+          "kind": "line",
+          "id": "cd",
+          "p1": "c",
+          "p2": "d"
+        },
+        {
+          "kind": "line",
+          "id": "da",
+          "p1": "d",
+          "p2": "a"
+        }
+      ]
+    }
+  }
+}

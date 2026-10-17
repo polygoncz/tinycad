@@ -1,0 +1,46 @@
+{
+  "kind": "geometry.intersections",
+  "description": "A line tangent to a circle touches it once",
+  "source": "src/kernel/testing.ts › intersections (spec 06 Stav po M33) › a line tangent to a circle touches it once",
+  "input": {
+    "curves": [
+      {
+        "kind": "circle",
+        "center": [
+          0,
+          0
+        ],
+        "radius": 5,
+        "id": "c"
+      },
+      {
+        "kind": "line",
+        "from": [
+          -10,
+          5
+        ],
+        "to": [
+          10,
+          5
+        ],
+        "id": "l"
+      }
+    ]
+  },
+  "expected": {
+    "ok": {
+      "hits": [
+        {
+          "a": "c",
+          "b": "l",
+          "point": [
+            3.061616997868383e-16,
+            5
+          ],
+          "ta": 1.5707963267948966,
+          "tb": 0.5
+        }
+      ]
+    }
+  }
+}

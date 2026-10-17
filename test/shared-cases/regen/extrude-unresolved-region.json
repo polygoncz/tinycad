@@ -1,0 +1,151 @@
+{
+  "kind": "regen",
+  "description": "A rectangle without its line ab bounds no region: the extrude is UNRESOLVED_REFERENCE at regions",
+  "source": "test/integration/extrude-scenario.test.ts › extrude scenario (rectangle, real solver, FakeKernel) › a deleted line of the rectangle leaves the extrude with an unresolved region",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "extrude-unresolved",
+        "name": "extrude-unresolved",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "f1",
+            "type": "sketch",
+            "typeVersion": 1,
+            "name": "sketch.label 1",
+            "params": {
+              "plane": [
+                {
+                  "kind": "plane",
+                  "plane": "origin/plane:xy"
+                }
+              ],
+              "entities": [
+                {
+                  "kind": "point",
+                  "id": "a",
+                  "x": 0,
+                  "y": 0
+                },
+                {
+                  "kind": "point",
+                  "id": "b",
+                  "x": 40,
+                  "y": 0
+                },
+                {
+                  "kind": "point",
+                  "id": "c",
+                  "x": 40,
+                  "y": 20
+                },
+                {
+                  "kind": "point",
+                  "id": "d",
+                  "x": 0,
+                  "y": 20
+                },
+                {
+                  "kind": "line",
+                  "id": "bc",
+                  "p1": "b",
+                  "p2": "c"
+                },
+                {
+                  "kind": "line",
+                  "id": "cd",
+                  "p1": "c",
+                  "p2": "d"
+                },
+                {
+                  "kind": "line",
+                  "id": "da",
+                  "p1": "d",
+                  "p2": "a"
+                }
+              ],
+              "constraints": [
+                {
+                  "kind": "vertical",
+                  "id": "v1",
+                  "line": "bc"
+                },
+                {
+                  "kind": "horizontal",
+                  "id": "h2",
+                  "line": "cd"
+                },
+                {
+                  "kind": "vertical",
+                  "id": "v2",
+                  "line": "da"
+                }
+              ]
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f2",
+            "type": "extrude",
+            "typeVersion": 1,
+            "name": "extrude.label 1",
+            "params": {
+              "regions": [
+                {
+                  "kind": "region",
+                  "sketch": "f1",
+                  "region": "ab,bc,cd,da"
+                }
+              ],
+              "operation": "new",
+              "targets": [],
+              "endType": "blind",
+              "distance": 10,
+              "upTo": [],
+              "flip": false
+            },
+            "suppressed": false
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "statuses": {
+        "f1": {
+          "kind": "ok"
+        },
+        "f2": {
+          "kind": "error",
+          "code": "UNRESOLVED_REFERENCE",
+          "issues": [
+            {
+              "param": "regions",
+              "code": "param.unresolvedRef"
+            }
+          ]
+        }
+      },
+      "bodies": [],
+      "sketches": [
+        {
+          "id": "f1/sketch",
+          "owner": "f1",
+          "regions": [],
+          "outlines": []
+        }
+      ],
+      "anchors": {
+        "f1": {}
+      }
+    }
+  },
+  "tolerance": {
+    "relative": 0.001
+  }
+}

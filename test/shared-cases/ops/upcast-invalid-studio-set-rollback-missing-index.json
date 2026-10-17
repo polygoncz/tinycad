@@ -1,0 +1,16 @@
+{
+  "kind": "ops.upcast",
+  "description": "Fails validation: studio.setRollback without index",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › %s: %j fails at %j",
+  "input": {
+    "operation": {
+      "type": "studio.setRollback",
+      "v": 1
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "index"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "kind": "ops.upcast",
+  "description": "Fails validation: feature.setParams without params",
+  "source": "test/unit/ops/handlers/validate.test.ts › validate of built-in handlers › %s: %j fails at %j",
+  "input": {
+    "operation": {
+      "type": "feature.setParams",
+      "v": 2,
+      "featureId": "f1",
+      "typeVersion": 1
+    }
+  },
+  "expected": {
+    "error": {
+      "path": "params"
+    }
+  }
+}
