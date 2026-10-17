@@ -59,7 +59,7 @@ Sérii milníků s malým průnikem dotčených souborů lze implementovat soub�
 - `npm run dev` – vývojový server Vite (http://localhost:5173), `npm run build` – produkční build.
 - `npm run typecheck` – `vue-tsc -b` nad všemi projekty: `tsconfig.domain.json` (prstence 1 a 2 bez DOM, ADR 0009), `tsconfig.app.json` (prohlížeč), `tsconfig.test.json` (testy v Node), `tsconfig.test-idb.json` (testy adaptéru IndexedDB, s typy DOM), `tsconfig.test-app.json` (testy `app` a `ui`, s typy DOM), `tsconfig.node.json` (konfigurace nástrojů).
 - `npm run lint:deps` – hranice modulů (dependency-cruiser, `.dependency-cruiser.cjs`). Tabulka modulů v něm musí odpovídat tabulce v `docs/20-spec/01-architektura.md`.
-- `npm test` – unit testy (Vitest, projekt `unit`), `npm run test:integration` – integrační testy v `test/integration/`, `npm run test:e2e` – Playwright v `test/e2e/`.
+- `npm test` – unit testy (Vitest, projekt `unit`), `npm run test:integration` – integrační testy v `test/integration/`, `npm run test:e2e` – Playwright v `test/e2e/`, jen Chrome, 4 workery. Během práce na milníku spouštěj jen jeho spec (`npm run test:e2e -- m37`); `npm run test:e2e:full` (Chrome i WebKit) až při uzavření milníku a slučování stopy.
 - `npm run format` – Prettier + `eslint --fix` nad celým projektem (vault v `docs/` se neformátuje).
 - `npx depcruise src --config .dependency-cruiser.cjs --output-type dot | dot -T svg > deps.svg` – graf závislostí modulů (potřebuje Graphviz).
 - Hook `scripts/code-format.mjs` po každé úpravě `src/**/*.{ts,vue}` spustí Prettier a `eslint --fix`.

@@ -29,7 +29,7 @@ Vždy dodržuj `docs/00-meta/Konvence vaultu.md` (sekce „Pravidla pro Clauda�
 
 ## konec
 
-1. Projdi úkoly a akceptační kritéria. U každého kritéria uveď, čím je splněné (test, příkaz, výstup). Pokud existuje `package.json`, spusť `npm run check` a ukaž výsledek. Když něco chybí, **nekonči milník** a vypiš, co zbývá.
+1. Projdi úkoly a akceptační kritéria. U každého kritéria uveď, čím je splněné (test, příkaz, výstup). Pokud existuje `package.json`, spusť `npm run check` a `npm run test:e2e:full` (e2e v Chrome i WebKitu; během práce stačí `npm run test:e2e`, jen Chrome) a ukaž výsledek. Když něco chybí, **nekonči milník** a vypiš, co zbývá.
 2. Ověř, že otázky s `decide_by` na tento milník jsou `answered` nebo `dropped`. Otevřené vypiš a zeptej se.
 3. Zkontroluj, že odchylky implementace jsou propsané do specifikací (`updated`, případně `status` specifikace → `implemented`).
 4. Nastav `status: done` a `finished: <dnes>`.

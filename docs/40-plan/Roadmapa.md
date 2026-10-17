@@ -7,7 +7,7 @@ aliases:
 tags:
   - plan
 created: 2026-10-12
-updated: 2026-10-15
+updated: 2026-10-17
 ---
 # Roadmapa
 
@@ -105,7 +105,7 @@ Pavel 2026-10-15 chtěl zkusit, jestli milníky může dělat víc agentů soub�
 Pravidla:
 1. Kontrakty sdílených typů jsou zafixované předem ve spec 12; stopa přidává jen své členy unií a větve `switch`.
 2. Ve vaultu stopa mění jen **svůj milník**, **svou sekci spec 12** a své odstavce ve spec 06, 09, 10, 11. Deník nepíše – průběh zapisuje do sekce *Průběh stopy* ve svém milníku; do deníku ho přenese hlavní sezení při sloučení. Nové otázky zakládá s dalším volným číslem po kontrole `ls docs/60-otazky` v `main` a hned je hlásí.
-3. Stopa commituje na svou větev, do `main` neslučuje. Před sloučením si natáhne `main`, vyřeší konflikty a spustí `npm run check` a e2e. Sloučení dělá hlavní sezení, po jednom.
+3. Stopa commituje na svou větev, do `main` neslučuje. Před sloučením si natáhne `main`, vyřeší konflikty a spustí `npm run check` a `npm run test:e2e:full`. Sloučení dělá hlavní sezení, po jednom.
 4. Retrospektiva série zhodnotí, jestli se souběh vyplatil (čas, konflikty, kvalita).
 
 **Zhodnocení (2026-10-16):** série M25–M29 je celá v `main`. Souběh zrychlil práci zhruba dvakrát (4½ milníku za ~2 h 10 min), bez regrese po sloučení; nejtěžší pro Pavla byla ztráta přehledu (vznikl panel `/stopy`). Pavel: pokračovat i v dalších sériích. Podrobnosti v [[Souběžné stopy agentů#Zhodnocení první série (M25–M29, 2026-10-15 a 16)]], postup je skill `/stopa`.
