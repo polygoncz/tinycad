@@ -107,4 +107,6 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 
 **Úkol 1 hotový.** OCCT: otevřený řetězec začínající obloukem po směru hodinových ručiček dává stranu opačně (adaptér ověří a případně `-d`); ostrý roh vedle splinu `GeomAbs_Intersection` tiše rozbije – hlavní sezení zvolilo zálohu `GeomAbs_Arc` (zaoblené vypouklé rohy celého řetězce) místo chyby; `PointsToBSpline` dá stupeň 3 jen přes `Init`. Spec 06 doplněna.
 
+**Úkoly 4 a 5 (bez HUD nápovědy) hotové.** Nástroj Odsadit (ikona `box-padding`), kresba kóty `offset` podle `offsetFrame`, pole číselného vstupu „Vzdálenost“, e2e `m35.spec.ts` (offset ven, změna kóty, vysunutí rámečku; offset dovnitř). `npm run check` 7828 unit + 42 integračních, e2e 180/180. HUD nápověda čeká na M37 v `main`.
+
 ## Retrospektiva

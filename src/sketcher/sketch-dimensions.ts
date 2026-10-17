@@ -193,14 +193,8 @@ function shapeOf(byId: Entities, c: DimensionConstraint): Shape | null {
     }
     case 'pointLineDistance':
       return pointLineShape(byId, c.point, c.line);
-    case 'offset': {
-      // Provisional until M35 task 5 (the drawing of an offset dimension): a line pair is drawn
-      // like pointLineDistance of copy.p1 from the source, a round pair is not drawn.
-      const [pair] = c.pairs;
-      const copy = pair === undefined ? undefined : byId.get(pair.copy);
-      if (pair === undefined || copy?.kind !== 'line') return null;
-      return pointLineShape(byId, copy.p1, pair.source);
-    }
+    case 'offset':
+      return offsetShape(byId, c);
     case 'radius':
     case 'diameter':
       return roundOf(byId, c.curve);
@@ -229,6 +223,54 @@ function pointLineShape(byId: Entities, pointId: string, lineId: string): Shape 
   if (len(d) <= MIN) return null;
   const foot = add(line[0], scale(d, dot(sub(p, line[0]), d) / dot(d, d)));
   return { kind: 'linear', a: foot, b: p, u: direction(foot, p), m: mid(foot, p) };
+}
+
+/**
+ * An offset dimension on its first pair (spec 12, "Offset (M35)"), like offsetFrame of sketch: a
+ * line pair from the foot of the perpendicular of copy.p1 on the source line to copy.p1; a round
+ * pair along the ray from the centre at the default label angle of the source (π/4 for a circle,
+ * the middle of an arc), from the point on the source to the point on the copy.
+ */
+function offsetShape(
+  byId: Entities,
+  c: Extract<DimensionConstraint, { kind: 'offset' }>,
+): Shape | null {
+  const [pair] = c.pairs;
+  if (pair === undefined) return null;
+  const copy = byId.get(pair.copy);
+  if (copy?.kind === 'line') return pointLineShape(byId, copy.p1, pair.source);
+  const source = roundOf(byId, pair.source);
+  const angle = labelAngle(byId, pair.source);
+  const copyRound = roundOf(byId, pair.copy);
+  if (source === null || angle === null || copyRound === null) return null;
+  const ray: Vec2 = [Math.cos(angle), Math.sin(angle)];
+  const a = add(source.center, scale(ray, source.radius));
+  const b = add(source.center, scale(ray, copyRound.radius));
+  return {
+    kind: 'linear',
+    a,
+    b,
+    u: copyRound.radius < source.radius ? scale(ray, -1) : ray,
+    m: mid(a, b),
+  };
+}
+
+/** The default label angle of a circle (π/4) or an arc (the middle of its counter-clockwise sweep). */
+function labelAngle(byId: Entities, id: string): number | null {
+  const entity = byId.get(id);
+  if (entity?.kind === 'circle') return Math.PI / 4;
+  if (entity?.kind !== 'arc') return null;
+  const center = pointOf(byId, entity.center);
+  const start = pointOf(byId, entity.start);
+  const end = pointOf(byId, entity.end);
+  if (center === null || start === null || end === null) return null;
+  const s = sub(start, center);
+  const e = sub(end, center);
+  const from = Math.atan2(s[1], s[0]);
+  let sweep = Math.atan2(e[1], e[0]) - from;
+  if (sweep <= 0) sweep += 2 * Math.PI;
+  const middle = from + sweep / 2;
+  return Math.atan2(Math.sin(middle), Math.cos(middle));
 }
 
 /** The geometry in world coordinates; null when the placement does not fit the shape. */

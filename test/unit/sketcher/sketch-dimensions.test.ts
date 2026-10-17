@@ -176,6 +176,91 @@ describe('dimensionViews: linear dimensions', () => {
   });
 });
 
+describe('dimensionViews: offset dimensions (M35)', () => {
+  const h = Math.SQRT1_2;
+
+  it('a line pair: like pointLineDistance from copy.p1 to the source line', () => {
+    const d = only(
+      [
+        ...LINES,
+        { kind: 'point', id: 'c1', x: 0, y: 2 },
+        { kind: 'point', id: 'c2', x: 10, y: 2 },
+        { kind: 'line', id: 'lc', p1: 'c1', p2: 'c2' },
+      ],
+      { kind: 'offset', id: 'o', pairs: [{ source: 'la', copy: 'lc' }], value: 2 },
+    );
+    expect(d.kind).toBe('offset');
+    expect(d.placement).toEqual({ kind: 'linear', offset: 0.4, along: 0 });
+    const g = geometryOf(d, 'linear');
+    expectClose(g.from, [0, 0, 0]);
+    expectClose(g.to, [0, 2, 0]);
+    // u = (0, 1), n = (−1, 0).
+    expectClose(g.lineFrom, [-0.4, 0, 0]);
+    expectClose(g.lineTo, [-0.4, 2, 0]);
+    expectClose(g.label, [-0.4, 1, 0]);
+  });
+
+  it('a circle pair: linear from the source to the copy along the ray at π/4', () => {
+    const d = only(
+      [
+        { kind: 'point', id: 'c', x: 0, y: 0 },
+        { kind: 'circle', id: 'k', center: 'c', radius: 2 },
+        { kind: 'circle', id: 'kc', center: 'c', radius: 3 },
+      ],
+      { kind: 'offset', id: 'o', pairs: [{ source: 'k', copy: 'kc' }], value: 1 },
+    );
+    expect(d.placement).toEqual({ kind: 'linear', offset: 0.2, along: 0 });
+    const g = geometryOf(d, 'linear');
+    expectClose(g.from, [2 * h, 2 * h, 0]);
+    expectClose(g.to, [3 * h, 3 * h, 0]);
+    // u = the ray, n = (−h, h).
+    expectClose(g.lineFrom, [2 * h - 0.2 * h, 2 * h + 0.2 * h, 0]);
+    expectClose(g.lineTo, [3 * h - 0.2 * h, 3 * h + 0.2 * h, 0]);
+    expectClose(g.label, [2.5 * h - 0.2 * h, 2.5 * h + 0.2 * h, 0]);
+  });
+
+  it('an arc pair inwards: along the ray through the middle of the source, towards the centre', () => {
+    const d = only(
+      [
+        { kind: 'point', id: 'o', x: 0, y: 0 },
+        { kind: 'point', id: 's', x: 3, y: 0 },
+        { kind: 'point', id: 'e', x: 0, y: 3 },
+        { kind: 'arc', id: 'a', center: 'o', start: 's', end: 'e' },
+        { kind: 'point', id: 's2', x: 2, y: 0 },
+        { kind: 'point', id: 'e2', x: 0, y: 2 },
+        { kind: 'arc', id: 'ac', center: 'o', start: 's2', end: 'e2' },
+      ],
+      {
+        kind: 'offset',
+        id: 'o1',
+        pairs: [{ source: 'a', copy: 'ac' }],
+        value: 1,
+        placement: { kind: 'linear', offset: 0.5, along: 0.25 },
+      },
+    );
+    const g = geometryOf(d, 'linear');
+    expectClose(g.from, [3 * h, 3 * h, 0]);
+    expectClose(g.to, [2 * h, 2 * h, 0]);
+    // u = −ray = (−h, −h), n = (h, −h); m at 2.5 along the ray.
+    expectClose(g.lineFrom, [3.5 * h, 2.5 * h, 0]);
+    expectClose(g.lineTo, [2.5 * h, 1.5 * h, 0]);
+    expectClose(g.label, [2.5 * h + 0.5 * h - 0.25 * h, 2.5 * h - 0.5 * h - 0.25 * h, 0]);
+  });
+
+  it('an offset with a missing copy is left out', () => {
+    const sketch = data(
+      [
+        { kind: 'point', id: 'c', x: 0, y: 0 },
+        { kind: 'circle', id: 'k', center: 'c', radius: 2 },
+        { kind: 'circle', id: 'kc', center: 'c', radius: 3 },
+      ],
+      [{ kind: 'offset', id: 'o', pairs: [{ source: 'k', copy: 'kc' }], value: 1 }],
+    );
+    const entities = sketch.entities.filter((e) => e.id !== 'kc');
+    expect(dimensionViews(XY, entities, sketch.constraints, [], [])).toEqual([]);
+  });
+});
+
 describe('dimensionViews: radial dimensions', () => {
   it('a radius of a circle without placement: at π/4, the label at 1.25 · r', () => {
     const r1 = views().find((d) => d.id === 'r1');

@@ -242,9 +242,9 @@ async function answerOf<K extends CornerKey, A>(
 
 /**
  * Ids for the edit of the preview: only the shape of the edit is used, nothing of it is written,
- * so the ids need not come from the generator of the tool context.
+ * so the ids need not come from the generator of the tool context. Also used by the offset tool.
  */
-function previewIds(): IdSource {
+export function previewIds(): IdSource {
   let n = 0;
   const next = (): string => `__preview${String(++n)}`;
   return {
@@ -264,7 +264,7 @@ function newCurves(before: SketchData, after: SketchData): readonly Vec2[] {
 }
 
 /** The whole curve as pairs of points (a polyline). */
-function curvePairs(c: Curve2): readonly Vec2[] {
+export function curvePairs(c: Curve2): readonly Vec2[] {
   const [lo, hi] = paramRange(c);
   const points = piecePolyline(c, lo, hi);
   return points.slice(1).flatMap((p, i) => {
