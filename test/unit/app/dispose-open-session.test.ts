@@ -1,15 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createSequentialIdGenerator } from '@/core';
-import type { DocumentId } from '@/document';
-import { createMemoryDocumentStore } from '@/persistence';
-import type { DocumentStore } from '@/persistence';
-import { createManualScheduler } from '@/persistence/testing';
-import { createFakeSolver, createFakeTextOutliner } from '@/sketch/testing';
 import { disposeOpenSession } from '@/app/dispose-open-session';
-import { BUILT_IN_PLUGINS, createAppSession } from '@/app/index';
-import { aKernelFactory, FakeAppViewport, settle } from '@/app/testing';
-
-const DOC = 'doc1' as DocumentId; // test value
+import { settle } from '@/app/testing';
 
 /** A session part whose flush the test settles by hand; calls are recorded in `log`. */
 function aSession(log: string[]) {
@@ -75,71 +66,4 @@ describe('disposeOpenSession', () => {
     expect(log.at(-1)).toBe('storage.dispose');
     expect(errors).toEqual([failure]);
   });
-
-  it('with a real session the storage is released after the queue is written', async () => {
-    const memory = createMemoryDocumentStore({ now: () => 0 });
-    const gated = aGatedAppendStore(memory);
-    const session = await createAppSession({
-      plugins: BUILT_IN_PLUGINS,
-      store: gated.store,
-      docId: DOC,
-      createKernel: aKernelFactory().create,
-      viewport: new FakeAppViewport(),
-      scheduler: createManualScheduler(),
-      now: () => 0,
-      monotonic: () => 0,
-      ids: createSequentialIdGenerator('f'),
-      translate: (key) => key,
-      confirm: () => true,
-      readOnly: false,
-      solver: createFakeSolver(),
-      text: createFakeTextOutliner(),
-      download: () => undefined,
-      theme: 'light',
-    });
-    await settle();
-    const edit = session.features.create('box');
-    edit.commit();
-    let released = false;
-    disposeOpenSession({
-      session,
-      viewport: { dispose: () => undefined },
-      afterFlush: {
-        dispose: () => {
-          released = true;
-        },
-      },
-      onError: (e) => {
-        throw e;
-      },
-    });
-    await settle();
-    expect(released).toBe(false);
-    gated.release();
-    await settle();
-    expect(released).toBe(true);
-    const stored = await memory.load(DOC);
-    expect(stored?.entries.length).toBeGreaterThan(0);
-  });
 });
-
-/** A store whose appendEntries waits until `release` is called. */
-function aGatedAppendStore(inner: DocumentStore): { store: DocumentStore; release: () => void } {
-  let release = (): void => undefined;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  return {
-    store: {
-      listDocuments: () => inner.listDocuments(),
-      createDocument: (meta, initial) => inner.createDocument(meta, initial),
-      deleteDocument: (id) => inner.deleteDocument(id),
-      appendEntries: (id, entries) => gate.then(() => inner.appendEntries(id, entries)),
-      saveSnapshot: (id, snapshot) => inner.saveSnapshot(id, snapshot),
-      load: (id) => inner.load(id),
-    },
-    release: () => {
-      release();
-    },
-  };
-}

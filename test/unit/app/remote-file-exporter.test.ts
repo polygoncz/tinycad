@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ObservableValue } from '@/core';
 import type { DocumentId } from '@/document';
-import type { DownloadFile } from '@/app/file-exporter';
+import type { DownloadFile } from '@/app/app-session';
 import { createRemoteFileExporter } from '@/app/remote-file-exporter';
 
 // A test id; real ones come from the catalog of the server.

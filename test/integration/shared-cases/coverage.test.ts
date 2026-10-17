@@ -1,18 +1,18 @@
 // The coverage metatest of the shared cases (M38, task 6; spec 13, Sdílené testovací případy):
 // the cases are the specification of the C++ core, so what they must cover is checked here, not
 // by reading them. The required sets come from the code wherever it has them at runtime
-// (OP_VERSION, the built-in plugins, CASE_KINDS, the visibleWhen of the schemas); where a TS union
+// (OP_VERSION, the feature types of the core, CASE_KINDS, the visibleWhen of the schemas); where a TS union
 // is all there is, a `satisfies Record<…, true>` object keeps the list exhaustive at compile time.
 // A new op type, feature, error code or constraint kind without a case fails here.
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { OP_VERSION } from '@/ops';
-import type { FeatureError, FeatureStatus } from '@/regen';
+import type { FeatureErrorData, FeatureStatusData } from '@/remote';
 import type { SketchConstraint } from '@/sketch';
-import { CASE_KINDS, loadCases } from './support/case';
+import { areaOfKind, CASE_KINDS, loadCases } from './support/case';
 import type { Area, LoadedCase } from './support/case';
-import { BUILT_IN_FEATURE_PLUGINS } from './support/plugins';
+import { builtInFeatureTypes, builtInSchemas } from './support/schemas';
 
 /**
  * Every FeatureError code. STALE_VERSION is listed (the object must be exhaustive) but not
@@ -24,20 +24,16 @@ const FEATURE_ERROR_CODES = {
   KERNEL: true,
   UNKNOWN_TYPE: true,
   STALE_VERSION: false,
-} as const satisfies Record<FeatureError['code'], boolean>;
+} as const satisfies Record<FeatureErrorData['code'], boolean>;
 
-/**
- * Every kind of FeatureStatus. pending is listed (the object must be exhaustive) but not
- * required: only the UI shows it before the first regeneration.
- */
+/** Every kind of the status of a feature the core reports. */
 const FEATURE_STATUS_KINDS = {
   ok: true,
   warning: true,
   error: true,
   suppressed: true,
   rolledBack: true,
-  pending: false,
-} as const satisfies Record<FeatureStatus['kind'], boolean>;
+} as const satisfies Record<FeatureStatusData['kind'], boolean>;
 
 /**
  * The codes of the generic validation (validateAgainstSchema and the reference kinds, spec 03).
@@ -88,6 +84,17 @@ const CONSTRAINT_KINDS = {
 /** The derived entities of sketch.derived (spec 13): patterns and text. */
 const DERIVED_ENTITY_KINDS = ['mirror', 'linearPattern', 'circularPattern', 'text'] as const;
 
+/**
+ * The kinds only the C++ core runs (N124): it is the reference implementation of the shared cases.
+ * The client keeps the runners of what it runs itself: the handlers of the optimistic mirror
+ * (ops.script) and the solver of the sketch.
+ */
+const ONLY_IN_CPP: ReadonlySet<string> = new Set(
+  CASE_KINDS.filter(
+    (k) => k === 'ops.upcast' || k === 'ops.replay' || !['ops', 'sketch'].includes(areaOfKind(k)),
+  ),
+);
+
 const cases: Readonly<Record<Area, readonly LoadedCase[]>> = {
   ops: loadCases('ops', { requireExpected: true }),
   document: loadCases('document', { requireExpected: true }),
@@ -103,13 +110,18 @@ describe('shared cases coverage', () => {
     expect(missing(CASE_KINDS, covered)).toEqual([]);
   });
 
-  it('every kind of CASE_KINDS has a runner file that handles it', () => {
+  it('every kind of CASE_KINDS run in TS has a runner file that handles it', () => {
     const handled = new Set(
       readdirSync(RUNNERS_DIR)
         .filter((entry) => entry.endsWith('.test.ts'))
         .flatMap((entry) => kindsHandledBy(readFileSync(new URL(entry, RUNNERS_DIR), 'utf8'))),
     );
-    expect(missing(CASE_KINDS, handled)).toEqual([]);
+    expect(
+      missing(
+        CASE_KINDS.filter((k) => !ONLY_IN_CPP.has(k)),
+        handled,
+      ),
+    ).toEqual([]);
   });
 
   // The scan of a runner file must be able to fail: only a KindRunner key of describeSharedCases.
@@ -168,7 +180,7 @@ describe('shared cases coverage', () => {
     expect(missing(required(FEATURE_ERROR_CODES), covered)).toEqual([]);
   });
 
-  it('every FeatureStatus kind but pending is a status of a regen case', () => {
+  it('every kind of the status of a feature is a status of a regen case', () => {
     const covered = new Set<string>();
     for (const c of ofKind('regen', 'regen')) {
       for (const status of Object.values(recordAt(okOf(c), 'statuses'))) {
@@ -236,11 +248,13 @@ describe('shared cases coverage', () => {
   });
 
   it('every visibleWhen of a built-in schema has a visible, hidden, missing and wrong-type case', () => {
-    const wanted = BUILT_IN_FEATURE_PLUGINS.flatMap(({ schema }) =>
-      Object.entries(schema.params)
-        .filter(([, spec]) => spec.visibleWhen !== undefined)
-        .flatMap(([param]) => VISIBILITY_VARIANTS.map((v) => `${schema.type}.${param} ${v}`)),
-    );
+    const wanted = builtInSchemas()
+      .all()
+      .flatMap((schema) =>
+        Object.entries(schema.params)
+          .filter(([, spec]) => spec.visibleWhen !== undefined)
+          .flatMap(([param]) => VISIBILITY_VARIANTS.map((v) => `${schema.type}.${param} ${v}`)),
+      );
     expect(wanted).not.toEqual([]);
     const covered = new Set(visibilityVariants(ofKind('schema', 'schema.visibleWhen')));
     expect(missing(wanted, covered)).toEqual([]);
@@ -358,10 +372,6 @@ function ofKind(area: Area, kind: LoadedCase['kind']): readonly LoadedCase[] {
 /** The ok output of a case, undefined for an error case. */
 function okOf(c: LoadedCase): unknown {
   return c.expected !== undefined && 'ok' in c.expected ? c.expected.ok : undefined;
-}
-
-function builtInFeatureTypes(): readonly string[] {
-  return BUILT_IN_FEATURE_PLUGINS.map((p) => p.schema.type);
 }
 
 /** The keys marked true: the codes a case must cover. */

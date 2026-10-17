@@ -41,7 +41,6 @@
     "@tabler/icons-webfont": "^3.49.0",
     "gl-matrix": "^3.4.4",
     "opentype.js": "2.0.0",
-    "replicad-opencascadejs": "1.1.0",
     "three": "~0.186.1",
     "vue": "^3.5.43",
     "vue-i18n": "^11.4.14"
@@ -59,7 +58,6 @@
     "eslint": "^10.12.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-vue": "^10.11.1",
-    "fake-indexeddb": "^6.2.5",
     "fast-check": "^4.10.2",
     "npm-run-all2": "^9.0.3",
     "prettier": "^3.9.10",

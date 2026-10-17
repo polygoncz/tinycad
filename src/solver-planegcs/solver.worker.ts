@@ -8,7 +8,7 @@ import { createSolverWorkerImpl } from './worker-impl';
 
 // tsconfig.app.json types `self` as Window (lib DOM, not WebWorker), whose postMessage wants a
 // targetOrigin. The options form exists on both Window and DedicatedWorkerGlobalScope, so this
-// small adapter fits MessageEndpoint without a cast or another lib (as in the OCCT worker).
+// small adapter fits MessageEndpoint without a cast or another lib.
 const endpoint: MessageEndpoint = {
   postMessage: (msg, transfer) => {
     self.postMessage(msg, { transfer });

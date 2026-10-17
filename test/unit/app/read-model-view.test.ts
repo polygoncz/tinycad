@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { ObservableValue } from '@/core';
 import type { BodyId, FeatureId, PlaneId, TopoName } from '@/document';
 import type { RegenSnapshot } from '@/interaction';
-import type { MeshQuality } from '@/kernel';
+import type { MeshQuality, ShapeHandle } from '@/kernel';
 import { decodeReadModel } from '@/remote';
 import type { ReadModelData } from '@/remote';
 import { aBodyView, aReadModel, aSketchView, listValue } from '@/remote/testing';
 import type { ReadModelOverrides } from '@/remote/testing';
-import { createReadModelView } from '@/app/read-model-view';
+import { createReadModelView, previewBodies } from '@/app/read-model-view';
 import type { ReadModelView } from '@/app/read-model-view';
 import { createVersionMeshes } from '@/app/version-meshes';
 import type { VersionMeshes } from '@/app/version-meshes';
@@ -463,5 +463,53 @@ describe('createReadModelView', () => {
     await settle();
     expect(h.viewport.syncs).toEqual([]);
     expect(h.published).toEqual([]);
+  });
+});
+
+describe('previewBodies', () => {
+  // Handles and ids of the tests are created by a cast at one place.
+  const handle = (n: number): ShapeHandle => n as ShapeHandle;
+  const a = 'a/body' as BodyId;
+  const b = 'b/body' as BodyId;
+  const c = 'c/body' as BodyId;
+
+  it('takes the bodies of the result that the input does not have', () => {
+    expect(
+      previewBodies(
+        [
+          { id: a, shape: handle(1) },
+          { id: b, shape: handle(2) },
+        ],
+        [{ id: a, shape: handle(1) }],
+      ),
+    ).toEqual([{ id: b, shape: handle(2) }]);
+  });
+
+  it('takes a body the feature changed: the same id with another handle', () => {
+    expect(previewBodies([{ id: a, shape: handle(5) }], [{ id: a, shape: handle(1) }])).toEqual([
+      { id: a, shape: handle(5) },
+    ]);
+  });
+
+  it('leaves out a body the feature consumed and keeps the order of the result', () => {
+    expect(
+      previewBodies(
+        [
+          { id: c, shape: handle(3) },
+          { id: b, shape: handle(2) },
+        ],
+        [
+          { id: a, shape: handle(1) },
+          { id: b, shape: handle(9) },
+        ],
+      ),
+    ).toEqual([
+      { id: c, shape: handle(3) },
+      { id: b, shape: handle(2) },
+    ]);
+  });
+
+  it('nothing changed: an empty preview', () => {
+    expect(previewBodies([{ id: a, shape: handle(1) }], [{ id: a, shape: handle(1) }])).toEqual([]);
   });
 });

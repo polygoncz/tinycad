@@ -1,7 +1,7 @@
 {
   // Tests of the composition root (app) and of ui (which sees AppSession): Node under Vitest with fakes, but app's own code names
   // DOM types (HTMLElement of mountViewport) and imports render, whose viewport uses the DOM.
-  // Kept apart so the other tests stay without DOM, like tsconfig.test-idb.json.
+  // Kept apart so the other tests stay without DOM.
   // vite/client: app's browser.ts reads import.meta.env.DEV (verify in development, spec 11).
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
