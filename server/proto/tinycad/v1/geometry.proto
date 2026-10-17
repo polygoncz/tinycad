@@ -1,0 +1,122 @@
+// Stateless 2D geometry of the sketch (spec 14 "GeometryService", Q096; spec 12 "Port a parametr
+// křivky", ADR 0028).
+//
+// The port SketchGeometry of the sketcher stays as it is; app implements it with a client of this
+// service. No session, no document: curves in, data out, so every call can be retried freely.
+// The adapter keeps at most one request in flight per method and sends the newest state after
+// the answer (Q096). Errors: KERNEL_INVALID_INPUT (a curve without an id, from >= to),
+// KERNEL_OPERATION_FAILED (no fillet of that radius, an impossible offset), KERNEL_INTERNAL.
+
+syntax = "proto3";
+
+package tinycad.v1;
+
+import "tinycad/v1/common.proto";
+
+service GeometryService {
+  // All intersections of the curves, ordered by a, b (the order of the input), ta.
+  rpc Intersections(IntersectionsRequest) returns (IntersectionsResponse);
+  // The piece of a curve between the parameters from < to, of the same kind (a circle gives an arc).
+  rpc Segment(SegmentRequest) returns (SegmentResponse);
+  // The fillet arc of a radius between two curves (each a line or an arc), nearest to `near`.
+  rpc Fillet(FilletRequest) returns (FilletResponse);
+  // The offset of a joined chain of curves.
+  rpc Offset(OffsetRequest) returns (OffsetResponse);
+}
+
+// A 2D curve of a sketch (sketch Curve2). `id` is the id of the sketch entity.
+message Curve2 {
+  string id = 1;
+  oneof kind {
+    Line2 line = 2;
+    Arc2 arc = 3;
+    Circle2 circle = 4;
+    BSpline2 bspline = 5;
+  }
+}
+
+message Line2 {
+  Vec2 from = 1;
+  Vec2 to = 2;
+}
+
+message Arc2 {
+  Vec2 center = 1;
+  Vec2 from = 2;
+  Vec2 to = 3;
+  bool ccw = 4;
+}
+
+message Circle2 {
+  Vec2 center = 1;
+  double radius = 2;
+}
+
+// A clamped polynomial B-spline (core BSplineShape, M29).
+message BSpline2 {
+  uint32 degree = 1;
+  repeated Vec2 poles = 2;
+  repeated double knots = 3;
+}
+
+message IntersectionsRequest {
+  // Every curve needs a unique id.
+  repeated Curve2 curves = 1;
+}
+
+// An intersection of the curves a and b in `point` with their parameters t (spec 12).
+message CurveHit {
+  string a = 1;
+  string b = 2;
+  Vec2 point = 3;
+  double ta = 4;
+  double tb = 5;
+  // An end of the common stretch of two overlapping curves.
+  bool overlap = 6;
+}
+
+message IntersectionsResponse {
+  repeated CurveHit hits = 1;
+}
+
+message SegmentRequest {
+  Curve2 curve = 1;
+  double from = 2;
+  double to = 3;
+}
+
+message SegmentResponse {
+  Curve2 curve = 1;
+}
+
+message FilletRequest {
+  Curve2 a = 1;
+  Curve2 b = 2;
+  double radius = 3;
+  Vec2 near = 4;
+}
+
+message FilletResponse {
+  Vec2 center = 1;
+  Vec2 point_a = 2;
+  Vec2 point_b = 3;
+  double ta = 4;
+  double tb = 5;
+}
+
+message OffsetRequest {
+  // Oriented along the chain and joined; distance != 0 (closed > 0 outwards, open > 0 to the right).
+  repeated Curve2 chain = 1;
+  bool closed = 2;
+  double distance = 3;
+}
+
+message OffsetCurve {
+  Curve2 curve = 1;
+  // Id of the input curve it comes from; empty for a join.
+  string source = 2;
+}
+
+message OffsetResponse {
+  repeated OffsetCurve curves = 1;
+}

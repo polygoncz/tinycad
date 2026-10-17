@@ -1,0 +1,184 @@
+---
+type: spec
+status: draft
+order: 14
+aliases:
+  - Protokol
+  - Spec 14
+  - gRPC kontrakt
+modules:
+  - server
+milestones:
+  - "[[M39-kostra-serveru]]"
+  - "[[M45-sezeni-pres-grpc]]"
+  - "[[M46-klient-nad-read-modelem]]"
+tags:
+  - spec
+created: 2026-10-17
+updated: 2026-10-17
+---
+# 14 – Protokol klienta a nativního jádra
+
+> **Pojmy:** [[Sezení]], [[Read model]], [[Idempotentní požadavek]], [[Operace]], [[Transakce]], [[Port a adaptér]]  
+> **Rozhodnutí:** [[0030-nativni-jadro-pres-grpc|ADR 0030]], [[Q094 Nativní jádro na serveru přes gRPC|Q094]], [[Q096 Geometrie skici přes síť|Q096]], [[Q097 Transakce a undo přes RPC|Q097]], [[Q098 Schéma featur v klientovi|Q098]], [[Q099 Read model po regeneraci|Q099]], [[Q100 Verze sítí v mezipaměti klienta|Q100]], [[Q101 Operace v kontraktu proto|Q101]], [[Q102 Sezení pro více karet|Q102]], [[Q104 Nástroje pro kontrakt a C++ server|Q104]], [[Q105 Viditelnost parametru jako data|Q105]]  
+> **Milník:** [[M39-kostra-serveru]] (kostra a `GeometryService`), [[M45-sezeni-pres-grpc]] (`SessionService`), [[M46-klient-nad-read-modelem]] (klient)
+
+Kontrakt mezi prohlížečem a nativním C++ jádrem `tinycad-core`. Zdrojem pravdy o **syntaxi** jsou soubory `server/proto/tinycad/v1/*.proto` (balík `tinycad.v1`, kontrola `buf lint` a `buf breaking`). Tato specifikace říká **proč** a **jak se to chová**: sémantiku volání, invarianty a testy. Ukázky níže jsou zkrácené.
+
+## Přehled
+
+```
+Prohlížeč                         Envoy (grpc_web)            tinycad-core (C++)
+──────────                        ────────────────            ──────────────────
+remote/ adaptéry  ── gRPC-Web ──► překlad na gRPC  ── gRPC ─► DocumentService
+  SketchGeometry                  timeouty, health            SessionService ── běhový dokument ── SQLite soubor
+  sezení, read model                                          GeometryService (bezstavová)
+```
+
+| Služba | Stav na serveru | K čemu |
+|---|---|---|
+| `DocumentService` | katalog dokumentů | seznam, vytvoření, přejmenování, smazání, import a export `.tinycad.json` |
+| `SessionService` | [[Sezení]] nad běhovým dokumentem | otevření, operace, transakce, undo, read model, události, STEP |
+| `GeometryService` | žádný | 2D geometrie skicáře za portem `SketchGeometry` ([[Q096 Geometrie skici přes síť|Q096]]) |
+
+Soubory: `common.proto` (vektory, rovina, `ParamIssue`), `errors.proto` (`ErrorDetail`), `operations.proto`, `schema.proto` (`FeatureTypeDescriptor`), `read_model.proto`, `geometry.proto`, `session.proto` (obě služby s dokumenty a sezením).
+
+## Čtyři zásady
+
+Z [[Q094 Nativní jádro na serveru přes gRPC|Q094]]. Stabilitu „odkudkoli“ dělají ony, ne Envoy.
+
+1. **Sezení nezávislé na spojení.** Jádro drží dokument pod `session_id`, ne pod TCP spojením. Výpadek sítě nic nezavře.
+2. **Idempotentní změny.** Každý měnící požadavek nese `operation_id` ([[Idempotentní požadavek]]).
+3. **Navazovaný stream.** Události mají `seq`, klient se po výpadku připojí s posledním přijatým.
+4. **Typované chyby.** `google.rpc.Status` a v podrobnostech `ErrorDetail` s doménovým kódem, ne text.
+
+## Pravidla tvaru kontraktu
+
+- **Každé RPC má vlastní request a response** (pravidlo `buf lint` STANDARD). Sdílený obsah je ve vnitřní zprávě (`ChangeResult`, `DocumentSummary`). Proč: kontrakt žije dlouho a každé volání se pak dá rozšířit o pole, aniž by se změnila ostatní.
+- **Čísla polí se nikdy nemění ani nerecyklují.** Zrušené pole dostane `reserved`. Hlídá to `buf breaking` proti `main` v `npm run check`.
+- **Žádné verze `v` na drátě.** Klient posílá vždy aktuální verzi zprávy, vývoj řeší protobuf (nové pole, nová zpráva v `oneof`). Verze `v` a `upcast` zůstávají jen v logu na disku ([[Q101 Operace v kontraktu proto|Q101]]).
+- Id jsou řetězce ve stejném tvaru jako v TS doméně (`FeatureId`, `BodyId` podle [[0015-artefakty-a-identita-telesa|ADR 0015]]). Jednotky mm a radiány ([[01-architektura#Souřadnice a jednotky]]).
+- Dynamická data (parametry featur, entity skici) jsou `google.protobuf.Struct` / `ListValue`. Jejich tvar určuje [[Schéma featury|schéma featury]], ne `.proto`.
+
+## Sezení
+
+```proto
+rpc OpenSession(OpenSessionRequest) returns (OpenSessionResponse);
+// → session_id, feature_types, read_model (session.writable), event_seq
+rpc CloseSession(CloseSessionRequest) returns (CloseSessionResponse);   // idempotentní
+```
+
+- **Běhový dokument:** dokument je v paměti jádra nejvýš jednou. První `OpenSession` ho načte ze SQLite (snapshot + zbytek logu, [[05-persistence]]), poslední zavřené sezení ho uvolní.
+- **Zámek pro zápis** ([[Q102 Sezení pro více karet|Q102]]): dostane ho sezení, které dokument otevřelo jako první a zámek je volný. Ostatní mají `writable = false` a každá změna skončí `READ_ONLY`. Sezení jen pro čtení zůstane jen pro čtení až do zavření (jako dnešní `doc-lock`).
+- **Konec sezení:** `CloseSession`, nebo **timeout nečinnosti** (výchozí 10 min bez RPC a bez otevřeného `WatchSession`). Otevřená transakce se zahodí jako `Abort`, zámek se uvolní. Další volání se zaniklým `session_id` → `SESSION_NOT_FOUND` a klient otevře nové sezení.
+- **Restart serveru** zahodí všechna sezení i otevřené transakce. Zapsané záznamy logu přežijí (SQLite). Klient dostane `SESSION_NOT_FOUND`, otevře sezení znovu a pokračuje. Rozpracovaná transakce je pryč, stejně jako dnes při pádu karty.
+- `feature_types` jsou všechny typy featur, které jádro zná ([[#Schéma featur]]). Klient je drží po dobu sezení.
+
+## Změny dokumentu
+
+Rozhraní kopíruje `OperationDispatcher`, `Transaction` a `UndoManager` ze [[04-operace-a-historie|spec 04]] ([[Q097 Transakce a undo přes RPC|Q097]]):
+
+| RPC | Dnes | Záznam v logu | Chyby navíc |
+|---|---|---|---|
+| `Dispatch(op, label)` | `dispatcher.dispatch` | 1 | `TRANSACTION_OPEN` |
+| `BeginTransaction(label)` | `dispatcher.begin` | – | `TRANSACTION_OPEN` |
+| `Apply(op)` | `tx.apply` | – (při `Commit`) | `NO_TRANSACTION` |
+| `ApplyTransient(op)` | `tx.applyTransient` | nikdy | `NO_TRANSACTION` |
+| `Commit` | `tx.commit` | 0 nebo 1 | `NO_TRANSACTION` |
+| `Abort` | `tx.abort` | – | `NO_TRANSACTION` |
+| `Undo`, `Redo` | `undo.undo`, `undo.redo` | 1 | `NOTHING_TO_UNDO`, `NOTHING_TO_REDO`, `TRANSACTION_OPEN` |
+
+Všechny vrací `ChangeResult { entry, read_model }`: zapsaný záznam (`LogEntryView`, u `Commit` prázdné transakce chybí) a read model **po regeneraci** ([[Q099 Read model po regeneraci|Q099]]).
+
+Pravidla:
+
+- **Jedna změna v letu na sezení.** Klient pošle další měnící požadavek až po odpovědi na předchozí. Server zpracovává požadavky sezení sériově. Proč: pořadí operací je pak dané a nemusí se řešit na serveru.
+- **Tažení** (manipulátor, posuvník): klient si mezi odpověďmi pamatuje jen **poslední** hodnotu a pošle ji s dalším `Apply` (stejný vzor jako adaptér `GeometryService`). `setParams` se v transakci slučuje už při `apply` (spec 04), takže v transakci zůstane jeden krok.
+- **Skica:** `Apply` s `feature.setParams` skici je potvrzení úpravy. Server skicu znovu vyřeší nativním planegcs a uloží **svůj** výsledek; klient převezme souřadnice z read modelu ([[Q097 Transakce a undo přes RPC|Q097]]). Když ji server nevyřeší: [[Q103 Skica, kterou server nevyřeší|Q103]] (návrh `SKETCH_NOT_SOLVED`, dokument beze změny).
+- **Validace jen na serveru.** Neplatná operace → `INVALID_OPERATION` s `path` a dokument beze změny. Neplatné parametry featury nejsou chyba RPC: změna platí a featura je v read modelu červená (`FeatureError` `INVALID_PARAMS`), jako dnes.
+- **Uloženo = odpověď.** `Dispatch`, `Commit`, `Undo` a `Redo` zapíšou záznam do SQLite v transakci databáze **před** odpovědí. Klient nepotřebuje stav „ukládá se“. Selhání zápisu → `STORAGE` a dokument v paměti se vrátí (inverze), takže log vždy odpovídá dokumentu.
+- **Přejmenování dokumentu** je operace `document.rename` (`Dispatch`), mimo otevřený dokument `DocumentService.RenameDocument`.
+
+### Idempotence
+
+- `operation_id` je UUID od klienta, jedno na požadavek. Opakování po chybě sítě nebo `UNAVAILABLE` posílá **totéž** id.
+- **Trvale** (SQLite, unikátní index na `operation_id` v tabulce `operations`): `Dispatch`, `Commit`, `Undo`, `Redo`, `CreateDocument`, `ImportDocument`, `RenameDocument`. Opakování vrátí uložený záznam a **aktuální** read model.
+- **V paměti sezení** (posledních 64 odpovědí): `BeginTransaction`, `Apply`, `ApplyTransient`, `Abort`. Do logu nejdou, takže po restartu serveru zaniknou spolu s transakcí.
+- Stejné `operation_id` s jiným obsahem požadavku → `OPERATION_ID_REUSED`.
+
+## Read model a sítě
+
+```proto
+message ReadModelOptions {
+  repeated string known_meshes = 1;   // content_version sítí, které klient drží
+  string input_of = 2;                // featura editovaná v dialogu (ADR 0025)
+}
+message ReadModel { DocumentView document = 1; RegenView regen = 2; SessionView session = 3; }
+```
+
+- **Vždy celý** [[Read model|read model]], nikdy rozdíl. Klient předchozí nahradí. Je malý: featury s parametry, metadata těles, stavy featur, tělesa bez sítí, skici, roviny, osy, kotvy, `can_undo`, `can_redo`, transakce ([[Q099 Read model po regeneraci|Q099]]).
+- **Sítě podle verze** ([[Q100 Verze sítí v mezipaměti klienta|Q100]]): každé `BodyView` nese `content_version`, neprůhledný řetězec `<epocha procesu>.<n>`. Mění se, kdykoli builder tělesu dá nový tvar, a je jedinečný i přes restart serveru. `mesh` je vyplněné, právě když verze není v `known_meshes`. Klient drží mezipaměť `content_version → síť` a zahodí verze, které v posledním read modelu nevidí. `content_version` nahrazuje dnešní identitu `ShapeHandle` v `SceneSync` ([[09-vykreslovani]]).
+- **Kvalita tessellace** je pevná pro sezení (`OpenSessionRequest.mesh_quality`).
+- **Vstup editované featury** ([[0025-vstupni-stav-editovane-featury|ADR 0025]]): s `input_of` read model nese `regen.input` (stav před featurou) se stejným pravidlem sítí. Bez něj `input` chybí. Odpovídá `RegenSnapshot.pick` z [[10-interakce]].
+- **Jména ploch a hran** ([[08-topologicke-pojmenovani]]): `BodyView.face_names[i]` je jméno plochy s indexem `i + 1`, `''` = bez jména. Klient z nich staví `TopoNames` pro picking.
+- **Sítě na drátě** (`Mesh`): ploché pole little-endian (`float32` pozice, normály a body hran, `uint32` indexy a rozsahy), stejně jako `MeshData` ze [[06-geometricke-jadro|spec 06]]. Dekódované `bytes` může začínat na posunu, který není násobkem 4; pak se před `new Float32Array(...)` zkopíruje (`slice()`).
+- **Skici** (`SketchView`): rovina, vyřešené entity jako JSON ze [[12-skicar|spec 12]] včetně odvozených (zrcadlení, pole, písmena textu) a oblasti s obrysy (`Curve2`) pro vyplnění a picking ([[0028-geometrie-skici-v-jadre|ADR 0028]] bod 3).
+
+## Události: `WatchSession`
+
+```proto
+rpc WatchSession(WatchSessionRequest) returns (stream WatchSessionResponse);   // after_seq
+// SessionEvent { seq; oneof { changed, regen_progress, resync, heartbeat } }
+```
+
+- Serverový stream, protože gRPC-Web klientský ani obousměrný stream neumí. Klient ho drží otevřený po celou dobu sezení. Otevřený stream zároveň brání timeoutu nečinnosti.
+- `seq` událostí roste o 1 v rámci běhového dokumentu (není to `seq` logu, protože i `Apply` v transakci vytvoří novou generaci bez záznamu). Server drží posledních 256 událostí. Klient se po výpadku připojí s `after_seq` posledního přijatého; když server tak staré události nemá, pošle nejdřív `resync` a klient si vyžádá `GetReadModel`.
+- `changed { generation, last_seq, by_session_id }`: existuje nová generace read modelu. Sezení, které změnu udělalo, ji už má v odpovědi a vlastní událost ignoruje (`by_session_id`). Ostatní (karta jen pro čtení) zavolají `GetReadModel`.
+- `regen_progress`: stav featury během běžící regenerace (dnešní `featureDone`), jen pro ukazatel průběhu.
+- `heartbeat` po 30 s ticha, aby proxy spojení nezavřela.
+
+## Schéma featur
+
+`FeatureTypeDescriptor` v `OpenSessionResponse.feature_types` je deklarativní část [[Schéma featury|schématu]] z C++ pluginu ([[Q098 Schéma featur v klientovi|Q098]]): `type`, `version`, `label` a `icon` (klíče), parametry v pořadí dialogu a výchozí parametry (`defaults`, klient je vloží do `feature.add`).
+
+- `ParamDescriptor.spec` je `oneof` přes druhy dnešního `ParamSpec` (`length`, `angle`, `number`, `boolean`, `enumeration` pro `enum`, `point`, `data`, `bodies`, `topo`, `region`, `planes`, `axis`). Meze slouží jen poli v dialogu, rozhoduje server.
+- **`VisibleWhen`** ([[Q105 Viditelnost parametru jako data|Q105]]): `{ param, equals_any | equals_none | less_than }` nad neověřenými parametry. Hodnota jiného typu, než test čeká, znamená „skryto“; chybějící parametr u `equals_none` znamená „viditelné“. Vyhodnocuje klient (dialog) i server (validace), jedna funkce na každé straně a společné testovací případy.
+- Klientská půlka [[Plugin featury|pluginu featury]] drží jen `tools`, `manipulators` a `messages` a páruje se s popisem podle `type`. Typ bez klientské půlky má dialog ze schématu a žádné nástroje navíc.
+
+## `GeometryService`
+
+Čtyři bezstavová volání přesně podle portu `SketchGeometry` ([[12-skicar]], [[Q096 Geometrie skici přes síť|Q096]]): `Intersections`, `Segment`, `Fillet`, `Offset`. Křivky `Curve2` (`line`, `arc`, `circle`, `bspline` s `id`) dovnitř, data ven, žádné `session_id`.
+
+- Adaptér v klientovi drží **nejvýš jeden požadavek v letu na metodu**. Přijde-li mezitím nový, zapamatuje si jen poslední a pošle ho po odpovědi. Starší čekající volání se vyřeší výsledkem toho posledního (nástroje už dnes používají „poslední požadavek vyhrává“).
+- Chyby: `KERNEL_INVALID_INPUT`, `KERNEL_OPERATION_FAILED`, `KERNEL_INTERNAL`. Adaptér je převede na odmítnutý `Promise` s `KernelErrorCode` jako dnes.
+
+## Chyby
+
+Kód gRPC říká, **co může klient udělat**, `ErrorDetail.reason` říká, **co se stalo** (tabulka v `errors.proto`). Text `Status.message` je jen technický, UI překládá `reason` a `issues` ([[0014-preklady-vue-i18n-a-klice|ADR 0014]]).
+
+| Kód gRPC | Klient |
+|---|---|
+| `UNAVAILABLE`, `DEADLINE_EXCEEDED` | zopakuje se stejným `operation_id` (exponenciální čekání, nejvýš 5×), pak ukáže „Server není dostupný“ |
+| `NOT_FOUND` (`SESSION_NOT_FOUND`) | otevře nové sezení a vyžádá read model |
+| `FAILED_PRECONDITION` | neopakuje; obnoví read model (`UNKNOWN_TARGET`, `NOTHING_TO_UNDO`) nebo ukáže chybu |
+| `INVALID_ARGUMENT`, `INTERNAL` | chyba programu, neopakuje, technický text do konzole |
+
+Chyby featur po regeneraci nejsou chyby RPC, jdou v `RegenView.statuses` (`FeatureError` s kódy ze [[07-regenerace#Stav featury|spec 07]]).
+
+## Testy
+
+- **Kontrakt:** `buf lint` a `buf breaking` proti `main` v `npm run check` (krok `check:proto`).
+- **Převody:** každá zpráva `Operation` ↔ JSON operace spec 04 tam a zpět (C++), `ParamDescriptor` ↔ `ParamSpec` (TS), `Mesh` ↔ `MeshData` včetně posunu, který není násobkem 4 (TS).
+- **`VisibleWhen`:** sedm dnešních predikátů jako sdílené případy, stejný výsledek v C++ a v TS, včetně chybějícího parametru a hodnoty jiného typu.
+- **Sezení** (C++ integrační přes skutečný gRPC kanál): otevření, druhé sezení `writable = false` a `READ_ONLY`, timeout zahodí transakci a uvolní zámek, `SESSION_NOT_FOUND` po zavření.
+- **Idempotence:** dvakrát `Commit` se stejným id = jeden záznam; dvakrát `Apply` = jedno použití; stejné id s jinou operací = `OPERATION_ID_REUSED`; `Commit` zopakovaný po restartu serveru najde záznam v SQLite.
+- **Transakce a undo přes RPC:** dnešní testy spec 04 (50 změn = 1 záznam, abort, přechodné kroky, undo po znovuotevření) projdou proti `SessionService`.
+- **Sítě:** první read model nese všechny sítě; `known_meshes` se všemi verzemi → žádná síť; změna parametru jednoho tělesa → síť jen u něj; restart serveru → nové verze, klient sítě stáhne znovu.
+- **Stream:** připojení s `after_seq` dostane chybějící události; příliš staré `after_seq` → `resync`; `changed` přijde do sezení jen pro čtení.
+- **E2E** (Docker Compose, Playwright): dnešní sada e2e projde proti serveru, plus test s uměle zpožděnou sítí (150 ms) a s výpadkem spojení během tažení.
+
+## Otevřené otázky
+
+Otázky jsou samostatné poznámky v `60-otazky/` a odkazují sem. Novou otázku založ šablonou *Otázka*.
+
+![[otazky.base#Otázky k této poznámce]]

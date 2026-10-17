@@ -1,0 +1,123 @@
+// The declarative half of a feature schema, sent to the client as data (spec 14 "Schéma featur",
+// Q098, Q105).
+//
+// The source is the C++ plugin of the feature type; validate, defaults and migrate run only on the
+// server. The client draws the feature dialog and the timeline from this: labels are translation
+// keys, the texts stay in the TypeScript messages of the plugin (ADR 0014). Bounds are a comfort
+// for the input field only, the server's answer decides.
+
+syntax = "proto3";
+
+package tinycad.v1;
+
+import "google/protobuf/struct.proto";
+import "tinycad/v1/common.proto";
+
+message FeatureTypeDescriptor {
+  // Registry key, 'box'.
+  string type = 1;
+  // Version of the schema; features of a lower type_version are migrated by the server.
+  uint32 version = 2;
+  // Translation key of the display name, 'box.label'.
+  string label = 3;
+  // Tabler icon name, 'box'; empty = a generic icon.
+  string icon = 4;
+  // The params in the order of the dialog.
+  repeated ParamDescriptor params = 5;
+  // Params of a new feature (FeatureSchema.defaults()), the client puts them in feature.add.
+  google.protobuf.Struct defaults = 6;
+}
+
+message ParamDescriptor {
+  string key = 1;
+  // Translation key of the field, 'box.width'.
+  string label = 2;
+  // Translation key of the section heading; empty = no section.
+  string group = 3;
+  // Unset = always visible. A hidden param is neither required nor checked.
+  VisibleWhen visible_when = 4;
+
+  oneof spec {
+    NumberParam length = 10;
+    NumberParam angle = 11;
+    NumberParam number = 12;
+    BooleanParam boolean = 13;
+    EnumParam enumeration = 14; // kind 'enum' (enum is a C++ keyword)
+    PointParam point = 15;
+    DataParam data = 16;
+    RefListParam bodies = 17;
+    TopoParam topo = 18;
+    RefListParam region = 19;
+    RefListParam planes = 20;
+    AxisParam axis = 21;
+  }
+}
+
+// Bounds are inclusive unless marked exclusive (Q050).
+message NumberParam {
+  double default_value = 1;
+  optional double min = 2;
+  optional double max = 3;
+  bool exclusive_min = 4;
+  bool exclusive_max = 5;
+  // Only for 'number'.
+  bool integer = 6;
+}
+
+message BooleanParam {
+  bool default_value = 1;
+}
+
+message EnumParam {
+  string default_value = 1;
+  repeated EnumOption options = 2;
+}
+
+message EnumOption {
+  string value = 1;
+  // Translation key.
+  string label = 2;
+}
+
+message PointParam {
+  Vec3 default_value = 1;
+}
+
+// Any JSON without a form field (the sketch); the schema's own validate checks it.
+message DataParam {}
+
+// An array of references; min and max count them (unset = 0..∞).
+message RefListParam {
+  optional uint32 min = 1;
+  optional uint32 max = 2;
+}
+
+message TopoParam {
+  enum Entity {
+    ENTITY_UNSPECIFIED = 0;
+    ENTITY_FACE = 1;
+    ENTITY_EDGE = 2;
+    ENTITY_VERTEX = 3;
+  }
+  Entity entity = 1;
+  optional uint32 min = 2;
+  optional uint32 max = 3;
+}
+
+// A single reference (AxisRef | SketchEntityRef), empty as null.
+message AxisParam {}
+
+// When a param applies (Q105): a test of the value of another param, over UNCHECKED params. A
+// value of a different type than the test expects (a string for less_than) makes the param hidden,
+// like the predicates of today (flipApplies takes unknown).
+message VisibleWhen {
+  string param = 1;
+  oneof test {
+    // The value equals one of these (pivot == 'point').
+    google.protobuf.ListValue equals_any = 2;
+    // The value equals none of these (operation != 'new'; also visible when the param is missing).
+    google.protobuf.ListValue equals_none = 3;
+    // The value is a number below this (revolve: angle < 2π − 1e-9).
+    double less_than = 4;
+  }
+}

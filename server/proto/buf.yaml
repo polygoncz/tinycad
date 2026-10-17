@@ -1,0 +1,10 @@
+# buf (https://buf.build): lint and breaking-change check of the tinycad protocol (spec 14).
+version: v2
+modules:
+  - path: .
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE

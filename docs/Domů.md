@@ -36,6 +36,7 @@ Odspodu nahoru, tak jak se staví. U každé vrstvy je napsáno, proč existuje.
 - [[11-ui|plugin-api, app, ui]]: [[Plugin featury|pluginy]], [[Kompoziční kořen|kompoziční kořen]] a Vue.
 - [[12-skicar|Skicář]]: 2D skica s vazbami.
 - [[13-testovani|Testování]]: jak je to všechno ověřené.
+- [[14-protokol|Protokol]]: gRPC kontrakt mezi prohlížečem a nativním jádrem (série M38–M47).
 
 Další rozcestníky: [[Glosář]] (všechny pojmy), [[Rozhodnutí]] (ADR).
 

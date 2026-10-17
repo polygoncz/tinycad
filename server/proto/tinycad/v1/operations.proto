@@ -1,0 +1,122 @@
+// Operations on the wire (spec 14 "Operace", Q101; the set of operations is spec 04).
+//
+// One message per type of operation in a oneof. The wire format is not the storage format: the
+// server converts an Operation to the JSON operation of spec 04 ({ type, v, ... }) and the log in
+// SQLite stays that JSON with `v` and upcast (ADR 0005). So a new version of an operation is a new
+// field or a new message here, and an upcast in the log, never a renumbered field.
+//
+// Params of features stay dynamic (google.protobuf.Struct): their shape is given by the schema of
+// the feature type (FeatureTypeDescriptor), not by this file.
+
+syntax = "proto3";
+
+package tinycad.v1;
+
+import "google/protobuf/struct.proto";
+
+message Operation {
+  oneof op {
+    FeatureAdd feature_add = 1;
+    FeatureRemove feature_remove = 2;
+    FeatureSetParams feature_set_params = 3;
+    FeatureRename feature_rename = 4;
+    FeatureSuppress feature_suppress = 5;
+    FeatureMove feature_move = 6;
+    StudioSetRollback studio_set_rollback = 7;
+    BodyRename body_rename = 8;
+    BodySetVisible body_set_visible = 9;
+    BodySetColor body_set_color = 10;
+    BodySetMaterial body_set_material = 11;
+    DocumentRename document_rename = 12;
+    Batch batch = 13;
+  }
+}
+
+// A feature as data (document FeatureInstance). The id is made by the client before the
+// operation (spec 04 "Determinismus").
+message FeatureInstance {
+  string id = 1;
+  string type = 2;
+  uint32 type_version = 3;
+  string name = 4;
+  bool suppressed = 5;
+  google.protobuf.Struct params = 6;
+}
+
+message FeatureAdd {
+  FeatureInstance feature = 1;
+  uint32 index = 2;
+}
+
+message FeatureRemove {
+  string feature_id = 1;
+}
+
+// Whole new params, not a patch (spec 04). For a sketch the server solves the sketch again
+// with its own planegcs before it applies the operation (Q094 point 1, Q097).
+message FeatureSetParams {
+  string feature_id = 1;
+  uint32 type_version = 2;
+  google.protobuf.Struct params = 3;
+}
+
+message FeatureRename {
+  string feature_id = 1;
+  string name = 2;
+}
+
+message FeatureSuppress {
+  string feature_id = 1;
+  bool suppressed = 2;
+}
+
+message FeatureMove {
+  string feature_id = 1;
+  uint32 to_index = 2;
+}
+
+message StudioSetRollback {
+  uint32 index = 1;
+}
+
+message BodyRename {
+  string body_id = 1;
+  // '' clears the name.
+  string name = 2;
+}
+
+message BodySetVisible {
+  string body_id = 1;
+  bool visible = 2;
+}
+
+message BodySetColor {
+  string body_id = 1;
+  // '#rrggbb' in lower case; unset = the default colour.
+  optional string color = 2;
+}
+
+enum BodyMaterial {
+  BODY_MATERIAL_UNSPECIFIED = 0;
+  BODY_MATERIAL_PLASTIC = 1;
+  BODY_MATERIAL_ALUMINIUM = 2;
+  BODY_MATERIAL_STEEL = 3;
+  BODY_MATERIAL_BRASS = 4;
+  BODY_MATERIAL_GLASS = 5;
+  BODY_MATERIAL_RUBBER = 6;
+}
+
+message BodySetMaterial {
+  string body_id = 1;
+  // UNSPECIFIED is refused as INVALID_OPERATION.
+  BodyMaterial material = 2;
+}
+
+message DocumentRename {
+  // Trimmed, not empty.
+  string name = 1;
+}
+
+message Batch {
+  repeated Operation ops = 1;
+}

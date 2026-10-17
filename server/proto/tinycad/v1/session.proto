@@ -1,0 +1,349 @@
+// Documents and sessions (spec 14; Q094 principles 1–3, Q097, Q099, Q102).
+//
+// A session is one client (one browser tab) working with one open document. The document lives
+// in the core once (a document runtime); every session over it has its own session_id. At most one
+// session of a document holds the edit lease and may change it (spec 05 "Jeden zapisovatel na
+// dokument"); the others read and watch. A session does not belong to a connection: a network
+// failure closes nothing. It ends with CloseSession or after an idle timeout (no RPC and no open
+// WatchSession for the configured time); an open transaction then ends as Abort and the lease is
+// released.
+//
+// Idempotence (Q094 principle 2): every request that changes something carries `operation_id`,
+// a UUID made by the client. The client sends one change at a time per session and repeats a
+// request after a failure with the SAME operation_id until it gets an answer. The server answers a
+// repeated id with the result of the first execution, without executing it again; the id of a
+// committed log entry is stored with it in SQLite, so this holds across a server restart.
+
+syntax = "proto3";
+
+package tinycad.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tinycad/v1/operations.proto";
+import "tinycad/v1/read_model.proto";
+import "tinycad/v1/schema.proto";
+
+// ---- documents ----------------------------------------------------------------------------------
+
+// The list of documents for the start screen (Q019) and whole files (.tinycad.json, spec 05).
+service DocumentService {
+  rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse);
+  rpc CreateDocument(CreateDocumentRequest) returns (CreateDocumentResponse);
+  // Appends document.rename to the log of the document, open or not.
+  rpc RenameDocument(RenameDocumentRequest) returns (RenameDocumentResponse);
+  // Idempotent: deleting a missing document succeeds.
+  rpc DeleteDocument(DeleteDocumentRequest) returns (DeleteDocumentResponse);
+  // A .tinycad.json file with its history becomes a new document; INVALID_DOCUMENT when it does
+  // not load.
+  rpc ImportDocument(ImportDocumentRequest) returns (ImportDocumentResponse);
+  rpc ExportDocument(ExportDocumentRequest) returns (ExportDocumentResponse);
+}
+
+message DocumentSummary {
+  string document_id = 1;
+  string name = 2;
+  google.protobuf.Timestamp created = 3;
+  google.protobuf.Timestamp updated = 4;
+}
+
+message ListDocumentsRequest {}
+
+message ListDocumentsResponse {
+  // Most recently updated first.
+  repeated DocumentSummary documents = 1;
+}
+
+message CreateDocumentRequest {
+  string operation_id = 1;
+  string name = 2;
+}
+
+message CreateDocumentResponse {
+  DocumentSummary document = 1;
+}
+
+message RenameDocumentRequest {
+  string operation_id = 1;
+  string document_id = 2;
+  string name = 3;
+}
+
+message RenameDocumentResponse {
+  DocumentSummary document = 1;
+}
+
+message DeleteDocumentRequest {
+  string document_id = 1;
+}
+
+message DeleteDocumentResponse {}
+
+message ImportDocumentRequest {
+  string operation_id = 1;
+  // The UTF-8 JSON of the file.
+  bytes content = 2;
+}
+
+message ImportDocumentResponse {
+  DocumentSummary document = 1;
+}
+
+message ExportDocumentRequest {
+  string document_id = 1;
+}
+
+message ExportDocumentResponse {
+  bytes content = 1;
+  // Suggested file name ('Bracket.tinycad.json').
+  string file_name = 2;
+}
+
+// ---- sessions -----------------------------------------------------------------------------------
+
+service SessionService {
+  rpc OpenSession(OpenSessionRequest) returns (OpenSessionResponse);
+  // Idempotent: closing an unknown or closed session succeeds.
+  rpc CloseSession(CloseSessionRequest) returns (CloseSessionResponse);
+
+  // The read model now; for a read-only session after a WatchSession event, and after a reconnect.
+  rpc GetReadModel(GetReadModelRequest) returns (GetReadModelResponse);
+
+  // One change outside a transaction, one log entry (OperationDispatcher.dispatch).
+  rpc Dispatch(DispatchRequest) returns (DispatchResponse);
+
+  // Transaction (spec 04, Q097): applied at once with regeneration, one log entry at Commit.
+  rpc BeginTransaction(BeginTransactionRequest) returns (BeginTransactionResponse);
+  rpc Apply(ApplyRequest) returns (ApplyResponse);
+  // Undone at Commit and Abort, never in the log (the rollback bar while editing a feature).
+  rpc ApplyTransient(ApplyTransientRequest) returns (ApplyTransientResponse);
+  // result.entry is unset for an empty transaction.
+  rpc Commit(CommitRequest) returns (CommitResponse);
+  rpc Abort(AbortRequest) returns (AbortResponse);
+
+  // Undo and redo append a log entry (ADR 0005).
+  rpc Undo(UndoRequest) returns (UndoResponse);
+  rpc Redo(RedoRequest) returns (RedoResponse);
+
+  // The log for the history panel, from from_seq on, and the undo stacks.
+  rpc GetHistory(GetHistoryRequest) returns (GetHistoryResponse);
+
+  // STEP of the visible bodies of the final state.
+  rpc ExportStep(ExportStepRequest) returns (ExportStepResponse);
+
+  // Events of the document for this session (server stream; gRPC-Web has no client stream).
+  rpc WatchSession(WatchSessionRequest) returns (stream WatchSessionResponse);
+}
+
+message MeshQuality {
+  double linear_deflection = 1;
+  double angular_deflection = 2;
+}
+
+message OpenSessionRequest {
+  string document_id = 1;
+  // Tessellation of every mesh of the session; unset = the server default.
+  MeshQuality mesh_quality = 2;
+  ReadModelOptions read = 3;
+}
+
+message OpenSessionResponse {
+  string session_id = 1;
+  // All feature types the core knows (Q098).
+  repeated FeatureTypeDescriptor feature_types = 2;
+  // read_model.session.writable says whether this session got the edit lease.
+  ReadModel read_model = 3;
+  // seq of the last event of the document; WatchSession continues after it.
+  uint64 event_seq = 4;
+}
+
+message CloseSessionRequest {
+  string session_id = 1;
+}
+
+message CloseSessionResponse {}
+
+message GetReadModelRequest {
+  string session_id = 1;
+  ReadModelOptions read = 2;
+}
+
+message GetReadModelResponse {
+  ReadModel read_model = 1;
+}
+
+message DispatchRequest {
+  string session_id = 1;
+  string operation_id = 2;
+  Operation op = 3;
+  // Label of the log entry (translation key or text); empty = the type of the operation.
+  string label = 4;
+  ReadModelOptions read = 5;
+}
+
+message BeginTransactionRequest {
+  string session_id = 1;
+  string operation_id = 2;
+  string label = 3;
+  ReadModelOptions read = 4;
+}
+
+message ApplyRequest {
+  string session_id = 1;
+  string operation_id = 2;
+  Operation op = 3;
+  ReadModelOptions read = 4;
+}
+
+message ApplyTransientRequest {
+  string session_id = 1;
+  string operation_id = 2;
+  Operation op = 3;
+  ReadModelOptions read = 4;
+}
+
+message CommitRequest {
+  string session_id = 1;
+  string operation_id = 2;
+  ReadModelOptions read = 3;
+}
+
+message AbortRequest {
+  string session_id = 1;
+  string operation_id = 2;
+  ReadModelOptions read = 3;
+}
+
+message UndoRequest {
+  string session_id = 1;
+  string operation_id = 2;
+  ReadModelOptions read = 3;
+}
+
+message RedoRequest {
+  string session_id = 1;
+  string operation_id = 2;
+  ReadModelOptions read = 3;
+}
+
+// The result of every change: the log entry it wrote (if any) and the read model after the
+// change and its regeneration (Q099: the result travels in the answer, not in the stream). Each
+// RPC wraps it in its own response, so one of them can grow without touching the others.
+message ChangeResult {
+  LogEntryView entry = 1;
+  ReadModel read_model = 2;
+}
+
+message DispatchResponse {
+  ChangeResult result = 1;
+}
+
+message BeginTransactionResponse {
+  ChangeResult result = 1;
+}
+
+message ApplyResponse {
+  ChangeResult result = 1;
+}
+
+message ApplyTransientResponse {
+  ChangeResult result = 1;
+}
+
+message CommitResponse {
+  ChangeResult result = 1;
+}
+
+message AbortResponse {
+  ChangeResult result = 1;
+}
+
+message UndoResponse {
+  ChangeResult result = 1;
+}
+
+message RedoResponse {
+  ChangeResult result = 1;
+}
+
+// A log entry for the client (ops LogEntry without the operations themselves).
+message LogEntryView {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_DO = 1;
+    KIND_UNDO = 2;
+    KIND_REDO = 3;
+  }
+  uint64 seq = 1;
+  Kind kind = 2;
+  // seq of the original 'do' entry for undo and redo; 0 for do.
+  uint64 target = 3;
+  string label = 4;
+  google.protobuf.Timestamp time = 5;
+  // The type of the operation ('feature.setParams', 'batch'), for the icon in the history panel.
+  string op_type = 6;
+}
+
+message GetHistoryRequest {
+  string session_id = 1;
+  // 1 = from the beginning.
+  uint64 from_seq = 2;
+}
+
+message GetHistoryResponse {
+  repeated LogEntryView entries = 1;
+  // seq of the original 'do' entries, the top at the end (rebuildUndoStacks).
+  repeated uint64 undo_stack = 2;
+  repeated uint64 redo_stack = 3;
+}
+
+message ExportStepRequest {
+  string session_id = 1;
+}
+
+message ExportStepResponse {
+  bytes content = 1;
+  string file_name = 2;
+}
+
+message WatchSessionRequest {
+  string session_id = 1;
+  // The last event seq the client got (OpenSessionResponse.event_seq at first).
+  uint64 after_seq = 2;
+}
+
+message WatchSessionResponse {
+  SessionEvent event = 1;
+}
+
+// Events of the document (Q094 principle 3). `seq` grows by 1 per event of the document runtime;
+// after a reconnect the server sends the events after `after_seq` it still keeps. When it no
+// longer has them it sends `resync` first and the client reads the read model again.
+message SessionEvent {
+  uint64 seq = 1;
+  oneof event {
+    // A new generation of the read model exists (a change of any session, an undo, a commit). The
+    // session that made the change already has it in its answer and ignores its own.
+    Changed changed = 2;
+    // Progress of a running regeneration (RegenEvents.featureDone), for a progress indicator.
+    RegenProgress regen_progress = 3;
+    Resync resync = 4;
+    // Sent when nothing else was sent for a while, so proxies keep the stream open.
+    Heartbeat heartbeat = 5;
+  }
+
+  message Changed {
+    uint64 generation = 1;
+    uint64 last_seq = 2;
+    string by_session_id = 3;
+  }
+
+  message RegenProgress {
+    uint64 generation = 1;
+    string feature_id = 2;
+    FeatureStatus status = 3;
+  }
+
+  message Resync {}
+
+  message Heartbeat {}
+}

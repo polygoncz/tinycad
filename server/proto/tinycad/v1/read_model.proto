@@ -1,0 +1,213 @@
+// The read model (spec 14 "Read model", Q094 point 3, Q099, Q100).
+//
+// After every change the client gets the whole small read model: the document (features, rollback
+// bar, metadata of bodies), the result of the last regeneration (statuses, bodies, sketches,
+// planes, axes, anchors) and the state of the session (undo, transaction). It is a snapshot, not a
+// diff: the client replaces its previous one.
+//
+// Meshes are the exception. Every body carries `content_version`, an opaque string the server
+// changes whenever the shape changes, unique within the server process and across its restarts.
+// A mesh travels only with a body whose version the client did not list in `known_meshes` of the
+// request (Q100). The client keeps meshes by version; versions it no longer sees in a read model
+// it may drop.
+
+syntax = "proto3";
+
+package tinycad.v1;
+
+import "google/protobuf/struct.proto";
+import "tinycad/v1/common.proto";
+import "tinycad/v1/geometry.proto";
+import "tinycad/v1/operations.proto";
+
+// What the client says about itself when it asks for a read model (in every request that returns
+// one).
+message ReadModelOptions {
+  // content_version of every mesh the client holds.
+  repeated string known_meshes = 1;
+  // The feature whose input the dialog edits (ADR 0025); unset = none. Then `input` is filled.
+  string input_of = 2;
+}
+
+message ReadModel {
+  DocumentView document = 1;
+  RegenView regen = 2;
+  SessionView session = 3;
+}
+
+// ---- document -------------------------------------------------------------------------------
+
+message DocumentView {
+  string document_id = 1;
+  string name = 2;
+  // seq of the last log entry; 0 for an empty log.
+  uint64 last_seq = 3;
+  repeated FeatureInstance features = 4;
+  uint32 rollback_index = 5;
+  // Metadata of bodies by BodyId (spec 03 "Metadata těles"); a body without metadata is absent.
+  map<string, BodyMeta> body_meta = 6;
+}
+
+message BodyMeta {
+  string name = 1;
+  bool hidden = 2;
+  optional string color = 3;
+  BodyMaterial material = 4;
+}
+
+// ---- regeneration -----------------------------------------------------------------------------
+
+message RegenView {
+  // Grows by 1 with each finished regeneration of the document.
+  uint64 generation = 1;
+  // Every feature of the studio, by FeatureId.
+  map<string, FeatureStatus> statuses = 2;
+  // The final state (on the rollback bar), in the order of the state.
+  StateView final = 3;
+  // The state before the feature ReadModelOptions.input_of; unset without it.
+  InputView input = 4;
+  // Anchors of manipulators by FeatureId (ok and warning features before the bar, ADR 0021).
+  map<string, FeatureAnchors> anchors = 5;
+  double duration_ms = 6;
+}
+
+message InputView {
+  string feature_id = 1;
+  StateView state = 2;
+}
+
+message StateView {
+  repeated BodyView bodies = 1;
+  repeated SketchView sketches = 2;
+  repeated PlaneView planes = 3;
+  repeated AxisView axes = 4;
+}
+
+message FeatureStatus {
+  oneof kind {
+    Ok ok = 1;
+    Warning warning = 2;
+    FeatureError error = 3;
+    Suppressed suppressed = 4;
+    RolledBack rolled_back = 5;
+  }
+  message Ok {}
+  message Warning {
+    string message = 1;
+  }
+  message Suppressed {}
+  message RolledBack {}
+}
+
+message FeatureError {
+  enum Code {
+    CODE_UNSPECIFIED = 0;
+    CODE_INVALID_PARAMS = 1;
+    CODE_UNRESOLVED_REFERENCE = 2;
+    CODE_KERNEL = 3;
+    CODE_UNKNOWN_TYPE = 4;
+    CODE_STALE_VERSION = 5;
+  }
+  Code code = 1;
+  // Technical text (details in the UI only).
+  string message = 2;
+  // What the UI translates (ADR 0014).
+  repeated ParamIssue issues = 3;
+}
+
+message BodyView {
+  string body_id = 1;
+  // The feature that coined the id (Body.origin) and the last one that changed the shape.
+  string origin = 2;
+  string last_modified_by = 3;
+  // Changes with the shape (Q099); the key of the mesh cache of the client.
+  string content_version = 4;
+  // Topological names (spec 08) by index of the subshape: face_names[i] is the name of the face
+  // with SubShapeIndex.index i + 1; '' = no name. The order of faces and edges is that of Mesh.
+  repeated string face_names = 5;
+  repeated string edge_names = 6;
+  // Only when the client does not know content_version.
+  Mesh mesh = 7;
+}
+
+// A tessellated body (kernel MeshData). Arrays are little-endian: positions, normals and
+// edge_positions float32 xyz; indices, face_ranges and edge_ranges uint32. A decoded `bytes` may
+// start at an offset that is not a multiple of 4; then it is copied before it is viewed as a
+// typed array (Q099).
+message Mesh {
+  bytes positions = 1;
+  bytes normals = 2;
+  // Triangles, counter-clockwise from outside.
+  bytes indices = 3;
+  // Triples [faceIndex, firstTriangle, triangleCount].
+  bytes face_ranges = 4;
+  // Edge polylines, points one after another.
+  bytes edge_positions = 5;
+  // Triples [edgeIndex, firstPoint, pointCount].
+  bytes edge_ranges = 6;
+}
+
+message SketchView {
+  string sketch_id = 1;
+  string feature_id = 2;
+  Plane plane = 3;
+  // The solved entities of the sketch for drawing, as the JSON of spec 12 (SketchEntity[]); the
+  // derived ones (mirror, pattern, text) included.
+  google.protobuf.ListValue entities = 4;
+  // The regions in the order of the artifact (fill and picking, ADR 0028 point 3).
+  repeated RegionView regions = 5;
+}
+
+message RegionView {
+  // Ids of the boundary curves, sorted, joined by ','.
+  string name = 1;
+  // Counter-clockwise, the curves oriented along the loop.
+  repeated Curve2 outer = 2;
+  // Each clockwise.
+  repeated Loop holes = 3;
+  double area = 4;
+}
+
+message Loop {
+  repeated Curve2 curves = 1;
+}
+
+message PlaneView {
+  string plane_id = 1;
+  string owner = 2;
+  Plane plane = 3;
+}
+
+message AxisView {
+  string axis_id = 1;
+  string owner = 2;
+  Vec3 origin = 3;
+  // Unit length.
+  Vec3 direction = 4;
+}
+
+message FeatureAnchors {
+  map<string, Anchor> anchors = 1;
+}
+
+message Anchor {
+  Vec3 point = 1;
+  // Unit length; unset = a point only.
+  Vec3 direction = 2;
+}
+
+// ---- session ----------------------------------------------------------------------------------
+
+message SessionView {
+  // false: another session holds the edit lease; changes are refused with READ_ONLY.
+  bool writable = 1;
+  bool can_undo = 2;
+  bool can_redo = 3;
+  // The open transaction of this document, if any (of this session or, read-only, of the writer).
+  TransactionView transaction = 4;
+}
+
+message TransactionView {
+  // Translation key or text of the transaction ('Box 1: height').
+  string label = 1;
+}

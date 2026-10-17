@@ -36,7 +36,7 @@ Jediná entita až do M10 je **kvádr (Box)**. Druhá entita v M11 je zkouška r
 | [[M13-extrude-revolve\|M13]] | Extrude a Revolve | `features/*` | tělesa ze skici |
 | [[M14-topologicke-pojmenovani\|M14]] | Topologické pojmenování | `regen`, `kernel-occt` | fillet, chamfer, skica na ploše, stabilní reference |
 | [[M15-export-a-dokonceni\|M15]] | Export a dokončení | `kernel-occt`, `ui` | STEP export, import/export dokumentu |
-| [[M16-vlastni-occt-build\|M16]] | Vlastní OCCT build | `kernel-occt` | vlastní C++ modul přes Emscripten místo předpřipraveného buildu |
+| [[M16-vlastni-occt-build\|M16]] | Vlastní OCCT build | `kernel-occt` | ~~vlastní C++ modul přes Emscripten~~ – archivováno 2026-10-17, nahradila ho série nativního jádra ([[0030-nativni-jadro-pres-grpc\|ADR 0030]]) |
 | [[M17-kamera-a-view-cube\|M17]] | Kamera a view cube | `core`, `render`, `app`, `ui` | kamera bez ořezávání, vlastní ovládání, view cube jako v Onshape |
 | [[M17.1-rezim-otaceni\|M17.1]] | Režim otáčení | `render`, `app`, `ui` | turntable (Z nahoru) jako výchozí, volná rotace přepínatelná u view cube |
 | [[M18-manipulatory\|M18]] | Manipulátory | `regen`, `interaction`, `plugin-api`, `render`, `app`, `ui`, `features/*` | úchyty ve viewportu: posun a rotace Transformace, vzdálenost Extrude; obecná abstrakce přes kotvy z regenerace ([[0021-manipulatory-kotvy-z-regenerace\|ADR 0021]]) |
@@ -61,6 +61,16 @@ Jediná entita až do M10 je **kvádr (Box)**. Druhá entita v M11 je zkouška r
 | [[M35-offset\|M35]] | Offset | `kernel`, `kernel-occt`, `sketch`, `sketcher` | ekvidistanta křivky a řetězce v OCCT |
 | [[M36-zrcadleni-a-pole\|M36]] | Zrcadlení a pole | `sketch`, `solver-planegcs`, `sketcher`, `render`, `ui` | parametrické zrcadlení, lineární a kruhové pole s vynesenými kótami ([[Q089 Parametrické zrcadlení a pole ve skice\|Q089]]) |
 | [[M37-text-ve-skice\|M37]] | Text ve skice | `sketch`, `features/*`, `sketcher`, `render`, `ui` | text jako obrysy písmen přes opentype.js ([[0029-text-ve-skice-pres-opentype\|ADR 0029]]) |
+| [[M38-zmrazeni-domeny\|M38]] | Zmrazení domény | `document`, `ops`, `regen`, `kernel`, `sketch`, `features/*` | TS doména zmrazená, sdílené testovací případy (JSON) jako specifikace C++ jádra |
+| [[M39-kostra-serveru\|M39]] | Kostra serveru a GeometryService | `server`, `app`, `sketcher` | `server/` (CMake, vcpkg, OCCT 8.0), Docker Compose s Envoy, `.proto` → C++ a TS, 2D geometrie skicáře přes gRPC |
+| [[M40-dokument-a-operace-v-cpp\|M40]] | Dokument a operace v C++ | `server` | model dokumentu, schémata, operace, log, transakce, undo |
+| [[M41-persistence-sqlite\|M41]] | Persistence v SQLite | `server` | SQLite soubor na dokument, idempotence, `DocumentService` |
+| [[M42-jadro-occt-nativne\|M42]] | Jádro OCCT nativně | `server` | port `GeometryKernel` nad OCCT 8.0, tessellace, STEP, paměťový test |
+| [[M43-regenerace-v-cpp\|M43]] | Regenerace a featury v C++ | `server` | Regenerator, pojmenování, buildery, `content_version` |
+| [[M44-skica-na-serveru\|M44]] | Skica na serveru | `server`, `sketch`, `sketcher` | model skici, nativní planegcs, server jako autorita skici |
+| [[M45-sezeni-pres-grpc\|M45]] | Sezení přes gRPC | `server` | `SessionService`: sezení, zámek, transakce, read model, `WatchSession` |
+| [[M46-klient-nad-read-modelem\|M46]] | Klient nad read modelem | `remote`, `app`, `interaction`, `render`, `ui`, `features/*` | prohlížeč proti serveru, e2e přes Docker Compose |
+| [[M47-uklid-a-dokonceni\|M47]] | Úklid a dokončení | `app`, `ui` a odstraněné moduly | bez WASM a domény v klientovi, specifikace serverové verze |
 
 **Noční rychloakce 2026-10-14:** [[M11-dalsi-entity|M11]]–[[M15-export-a-dokonceni|M15]] implementovány bez průběžného schvalování, rozhodnutí v [[Rozhodnutí noční rychloakce]]. M16 se tehdy nedělal – předpřipravený build stačil na celou první verzi. Pavel 2026-10-14 ho vrátil do plánu za M21 kvůli zásobníku Emscriptenu (A7 z [[Revize kódu 2026-10-14|revize kódu]]).
 
@@ -82,13 +92,18 @@ Rozšíření skicáře II (po M29):
   stopa A: M30 ─► M33 ─► M34 ─► M35
   stopa B: M31 ─► M32
   stopa C: M36 ─► M37 (po sloučení M30)
+
+Nativní jádro (po M37):
+  M38 ─► M39 ─► M40 ─┬─► M41 ──────────────────┐
+                     │                         ├─► M45 ─► M46 ─► M47
+              M39 ───┴─► M42 ─► M43 ─► M44 ────┘
 ```
 
 M4 (persistence) a M5 (port jádra) na sobě nezávisí – pořadí lze prohodit. Persistence je dřív, protože ověří formát logu, dokud je čerstvý.
 
 Milník `MNN.X` je neplánovaná úprava mezi dvěma milníky ([[Konvence vaultu#Principy|konvence]]); M10.1 nese opravy z revize architektury po M10.
 
-M16 (vlastní OCCT build) technicky potřebuje jen M7. Dlouho byl na konci, protože předpřipravený build stačí; od 2026-10-14 je zařazený za M21 kvůli zásobníku Emscriptenu a od 2026-10-15 za režimy zobrazení M22–M24 (Pavel chce teď pracovat na zobrazování). Přesune se dřív, pokud mu bude chybět API ([[0013-replicad-opencascadejs|ADR 0013]]).
+M16 (vlastní OCCT build) je od 2026-10-17 v archivu, nahradila ho série nativního jádra ([[#Nativní jádro (M38–M47)]]). Technicky potřeboval jen M7. Dlouho byl na konci, protože předpřipravený build stačí; od 2026-10-14 je zařazený za M21 kvůli zásobníku Emscriptenu a od 2026-10-15 za režimy zobrazení M22–M24 (Pavel chce teď pracovat na zobrazování). Přesune se dřív, pokud mu bude chybět API ([[0013-replicad-opencascadejs|ADR 0013]]).
 
 **Rozšíření skicáře (M25–M29)**, naplánované 2026-10-15 po M24: glyfy vazeb → snapper a auto-vazby → oblouky a kružnice → kóty → spliny. Glyfy jsou první, protože bez nich nejde vidět, co snapper a nové nástroje vytvořily; spliny poslední, protože jako jediné sahají až do jádra. Předpřipravený OCCT build má `Geom2d_BSplineCurve`, takže M29 na M16 nečeká. Přehled v [[12-skicar#Rozšíření skicáře (M25–M29)]].
 
@@ -132,6 +147,29 @@ Souběžné stopy podle metodiky [[Souběžné stopy agentů]] (pravidla 1–4 j
 Sdílené kontrakty jsou zafixované (2026-10-16) v [[12-skicar#Sdílené kontrakty série II]]: kdo přidává které členy unií, nekonečná přímka, vazba symetrie, `regionCurves` a odvozená id, id nástrojů a akcí. Port jádra M30 je v [[12-skicar#Geometrie skici v jádře (M30)]] a [[06-geometricke-jadro#Stav po M30]], implementační plán v [[M30-geometrie-skici-v-occt#Implementační plán]]. Stopa A smí jako jediná měnit `kernel`, `kernel-occt` a builder skici.
 
 **Zhodnocení série II (2026-10-17):** M30–M37 celé v `main` – 8 milníků za ~6½ h práce, bez regrese, e2e 136 → 186. Pavel: „v pohodě“, pokračovat; nejtěžší přehled o stavu a zkoušení výsledku. Nová pravidla v metodice: stopa si před sloučením natáhne `main`; hlavní checkout jen dispečer (drobná vylepšení souběžně se stopami ve vlastní session a worktree); hlášení po sloučení s „co zkusit“. Podrobnosti v [[Souběžné stopy agentů#Zhodnocení druhé série (M30–M37, 2026-10-16 a 17)]].
+
+## Nativní jádro (M38–M47)
+
+Naplánováno 2026-10-17 po sérii M30–M37 podle [[Q094 Nativní jádro na serveru přes gRPC|Q094]] a navazujících otázek [[Q096 Geometrie skici přes síť|Q096]]–[[Q106 Moduly klienta pro gRPC|Q106]]. Rozhodnutí shrnuje [[0030-nativni-jadro-pres-grpc|ADR 0030]] (navržené), kontrakt je [[14-protokol|spec 14]] a soubory `server/proto/tinycad/v1/*.proto`. Dokument, operace, regenerace a OCCT se přepíšou **naráz** do C++ jádra `tinycad-core`; prohlížeč s ním mluví přes gRPC-Web a Envoy v Docker Compose. [[M16-vlastni-occt-build|M16]] je archivovaný.
+
+Proč toto pořadí:
+- **M38 první:** přepis naráz potřebuje pevný cíl. Zmrazená TS doména a sdílené testovací případy (JSON) jsou specifikace, proti které se C++ ověřuje od prvního dne.
+- **M39 jako svislý řez:** bezstavová `GeometryService` projde celým stackem (vcpkg, `.proto`, Envoy, gRPC-Web, adaptér za portem) bez doménového stavu. Hned je co spustit a riziko „dlouho nic nefunguje“ se zmenší.
+- **Odspodu nahoru jako v M0–M10:** dokument a operace (M40) → persistence (M41) a jádro (M42) → regenerace (M43) → skica (M44) → služba sezení (M45) → klient (M46). Každá vrstva je hotová a otestovaná v C++, než na ní stojí další.
+- **M47 až na konec:** WASM a TS doména zůstávají v klientovi, dokud M46 nepřepne aplikaci na server. Až do té doby aplikace běží.
+
+**Souběžné stopy** (metodika [[Souběžné stopy agentů]]) po sloučení M40, průnik souborů je malý:
+
+| Stopa | Milníky | Poznámka |
+|---|---|---|
+| A – úložiště | [[M41-persistence-sqlite\|M41]] | `server/src/storage/`, jen nad modelem z M40 |
+| B – geometrie | [[M42-jadro-occt-nativne\|M42]] → [[M43-regenerace-v-cpp\|M43]] → [[M44-skica-na-serveru\|M44]] | `server/src/kernel/`, `regen/`, `sketch/` |
+
+Sdílené kontrakty stop (rozhraní C++ modelu dokumentu a portu jádra) se zafixují při startu M40. M45 začne po sloučení obou stop.
+
+**Pravidlo zmrazení (od startu M38):** `document`, `ops`, `regen`, `kernel`, `kernel-occt`, `persistence` a `features/*` v `src/` se mění jen kvůli chybám. Nová funkce domény počká na server. Kód se ze `src/` odstraní až v [[M47-uklid-a-dokonceni|M47]].
+
+**Otevřené před startem:** [[Q106 Moduly klienta pro gRPC|Q106]] do M39, [[Q103 Skica, kterou server nevyřeší|Q103]] do M44.
 
 ## Jak pracovat s milníkem
 

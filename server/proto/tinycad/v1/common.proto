@@ -1,0 +1,43 @@
+// Shared value types of the tinycad protocol (spec 14).
+//
+// Units are millimetres and radians, the coordinate system is right-handed with Z up (spec 01,
+// "Souřadnice a jednotky"). Ids are the same strings as in the TypeScript domain: FeatureId,
+// BodyId ('<owner>/body[:n]', ADR 0015), SketchId, PlaneId, AxisId.
+
+syntax = "proto3";
+
+package tinycad.v1;
+
+message Vec2 {
+  double x = 1;
+  double y = 2;
+}
+
+message Vec3 {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+}
+
+// A plane with its frame (core Plane): origin, unit normal and unit x direction in the plane.
+message Plane {
+  Vec3 origin = 1;
+  Vec3 normal = 2;
+  Vec3 x_dir = 3;
+}
+
+// A problem with one param of a feature (document ParamIssue, ADR 0014): `code` is a translation
+// key ('param.atOrBelowMin'), `values` fill its placeholders ({ min: 0 }).
+message ParamIssue {
+  // Key of the param, '' for the params as a whole.
+  string param = 1;
+  string code = 2;
+  map<string, ParamIssueValue> values = 3;
+}
+
+message ParamIssueValue {
+  oneof value {
+    string text = 1;
+    double number = 2;
+  }
+}

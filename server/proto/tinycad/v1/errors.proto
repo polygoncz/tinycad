@@ -1,0 +1,70 @@
+// Errors (spec 14, "Chyby"; Q094 principle 4).
+//
+// Every failed RPC ends with a google.rpc.Status: the gRPC code says what kind of failure it is
+// (what the client may do about it), the first detail of type ErrorDetail says which domain error
+// it is (what the UI shows). The message of the Status is a technical text for the log only; the
+// UI translates `reason` and `issues`, never the text (ADR 0014).
+//
+// | reason                      | gRPC code           | the client                                  |
+// |-----------------------------|---------------------|---------------------------------------------|
+// | INVALID_OPERATION           | INVALID_ARGUMENT    | bug of the client; shows the technical text |
+// | UNKNOWN_TARGET              | FAILED_PRECONDITION | the document moved on; refreshes            |
+// | READ_ONLY                   | FAILED_PRECONDITION | the document is edited in another tab       |
+// | TRANSACTION_OPEN            | FAILED_PRECONDITION | bug of the client                           |
+// | NO_TRANSACTION              | FAILED_PRECONDITION | bug of the client, or the session timed out |
+// | NOTHING_TO_UNDO / _REDO     | FAILED_PRECONDITION | refreshes canUndo / canRedo                 |
+// | OPERATION_ID_REUSED         | INVALID_ARGUMENT    | bug of the client (same id, other request)  |
+// | SKETCH_NOT_SOLVED           | FAILED_PRECONDITION | keeps the local sketch, shows the issue     |
+// | SESSION_NOT_FOUND           | NOT_FOUND           | opens a new session (server restart)        |
+// | DOCUMENT_NOT_FOUND          | NOT_FOUND           | back to the list of documents               |
+// | INVALID_DOCUMENT            | INVALID_ARGUMENT    | import refused, shows `issues` / the path   |
+// | KERNEL_INVALID_INPUT        | INVALID_ARGUMENT    | GeometryService: as a rejected port call    |
+// | KERNEL_OPERATION_FAILED     | FAILED_PRECONDITION | GeometryService: as a rejected port call    |
+// | KERNEL_INTERNAL             | INTERNAL            | GeometryService: as a rejected port call    |
+// | STORAGE                     | UNAVAILABLE         | retries with the same operation_id          |
+//
+// Errors of features after a regeneration are not RPC errors: the change succeeded, the feature
+// is red. They travel in the read model as FeatureStatus (read_model.proto).
+
+syntax = "proto3";
+
+package tinycad.v1;
+
+import "tinycad/v1/common.proto";
+
+enum ErrorReason {
+  ERROR_REASON_UNSPECIFIED = 0;
+  // The operation failed its validate (shape of the payload, spec 04 "Validace při zápisu").
+  ERROR_REASON_INVALID_OPERATION = 1;
+  // The operation names a feature or a log entry that is not there (invert threw, spec 04).
+  ERROR_REASON_UNKNOWN_TARGET = 2;
+  // The session does not hold the edit lease (spec 05 "Jeden zapisovatel na dokument").
+  ERROR_REASON_READ_ONLY = 3;
+  ERROR_REASON_TRANSACTION_OPEN = 4;
+  ERROR_REASON_NO_TRANSACTION = 5;
+  ERROR_REASON_NOTHING_TO_UNDO = 6;
+  ERROR_REASON_NOTHING_TO_REDO = 7;
+  // The operation_id was used before for a different request (Q094 principle 2).
+  ERROR_REASON_OPERATION_ID_REUSED = 8;
+  // The server's solver did not solve the sketch of a feature.setParams (Q094 point 1, Q103).
+  ERROR_REASON_SKETCH_NOT_SOLVED = 9;
+  ERROR_REASON_SESSION_NOT_FOUND = 10;
+  ERROR_REASON_DOCUMENT_NOT_FOUND = 11;
+  ERROR_REASON_INVALID_DOCUMENT = 12;
+  // KernelErrorCode of spec 06 ('invalid-input', 'operation-failed', 'internal'); 'unknown-handle'
+  // cannot reach a client, handles never leave the server.
+  ERROR_REASON_KERNEL_INVALID_INPUT = 13;
+  ERROR_REASON_KERNEL_OPERATION_FAILED = 14;
+  ERROR_REASON_KERNEL_INTERNAL = 15;
+  // SQLite failed; nothing was written, the request may be retried.
+  ERROR_REASON_STORAGE = 16;
+}
+
+// The domain detail of a google.rpc.Status.
+message ErrorDetail {
+  ErrorReason reason = 1;
+  // Path in the request that is wrong ('op.set_params.feature_id', 'ops[2].v'), when known.
+  string path = 2;
+  // Translatable problems (INVALID_OPERATION, SKETCH_NOT_SOLVED, INVALID_DOCUMENT).
+  repeated ParamIssue issues = 3;
+}

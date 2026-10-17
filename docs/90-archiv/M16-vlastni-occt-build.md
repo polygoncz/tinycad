@@ -16,7 +16,7 @@ finished:
 tags:
   - milnik
 created: 2026-10-13
-updated: 2026-10-15
+updated: 2026-10-17
 ---
 # M16 – Vlastní OCCT build
 
@@ -29,6 +29,8 @@ updated: 2026-10-15
 **Návrat do plánu (Pavel 2026-10-14):** po [[M21-vstupni-stav-editovane-featury|M21]], kvůli zásobníku Emscriptenu (A7). Od 2026-10-15 až po režimech zobrazení [[M22-rezimy-zobrazeni|M22]]–[[M24-realisticke-zobrazeni|M24]].
 
 **Nahrazený (2026-10-16):** po M37 ho nahradí série nativního C++ jádra na serveru přes gRPC ([[Q094 Nativní jádro na serveru přes gRPC|Q094]]). Do archivu se přesune, až vzniknou ADR a milníky té série.
+
+**Archivováno 2026-10-17:** vzniklo [[0030-nativni-jadro-pres-grpc|ADR 0030]] a milníky [[M38-zmrazeni-domeny|M38]]–[[M47-uklid-a-dokonceni|M47]]. Úkoly kolem úniku paměti a výjimek ([[Q054 Únik paměti v OCCT buildu|Q054]], [[Q055 Pád WASM jádra|Q055]]) převzal [[M42-jadro-occt-nativne|M42]].
 
 **Navazuje na:** [[M07-kernel-occt]]. Technicky stačí hotové M7, v roadmapě je zařazený až za [[M15-export-a-dokonceni|M15]]. Dřív se vyplatí, pokud předpřipravenému buildu bude chybět třída (např. pro [[M14-topologicke-pojmenovani|M14]]) nebo když bude pomalé počítání map podtvarů ([[0013-replicad-opencascadejs#Důsledky|ADR 0013]]).
 
