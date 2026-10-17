@@ -393,6 +393,31 @@ describe('RemoteSession calls', () => {
     session.dispose();
   });
 
+  // E2E M46: a GetReadModel answered after a change took a newer read model put back the
+  // document without the change (the dialog of a new feature then lost its feature).
+  it('refresh drops a read model older than the one the session has by then', async () => {
+    const { core, session } = await setup();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    core.respond('getReadModel', async () => {
+      await gate;
+      return { readModel: aReadModel({ document: { name: 'Stale' }, regen: { generation: 1n } }) };
+    });
+    core.respond('dispatch', {
+      result: { readModel: aReadModel({ document: { name: 'Fresh' }, regen: { generation: 2n } }) },
+    });
+    const refreshed = session.refresh();
+    await flush();
+    await session.change({ kind: 'dispatch', op: rename('x') });
+    expect(session.readModel.get().document.name).toBe('Fresh');
+    release();
+    await refreshed;
+    expect(session.readModel.get().document.name).toBe('Fresh');
+    session.dispose();
+  });
+
   it('refresh after SESSION_NOT_FOUND opens a new session and reads again', async () => {
     const { core, session } = await setup();
     core.respond('getReadModel', sessionNotFound());

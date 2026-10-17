@@ -148,6 +148,12 @@ class RemoteSessionImpl implements RemoteSession {
     return this.queue.enqueue(request);
   }
 
+  /**
+   * GetReadModel runs beside the queue of changes, so its answer may come after the answer of a
+   * change the server handled later: a read model of an older generation than the one published
+   * by then is dropped (it would put back the document without that change). The same generation
+   * is taken (the same document, maybe another input_of).
+   */
   async refresh(): Promise<void> {
     const res = await this.call((sessionId) =>
       this.client.getReadModel(
@@ -155,7 +161,9 @@ class RemoteSessionImpl implements RemoteSession {
         this.callOptions(),
       ),
     );
-    this.readModelValue.set(decodeAnswer(res.readModel));
+    const model = decodeAnswer(res.readModel);
+    if (model.regen.generation < this.readModelValue.get().regen.generation) return;
+    this.readModelValue.set(model);
   }
 
   async history(fromSeq: number): Promise<HistoryData> {

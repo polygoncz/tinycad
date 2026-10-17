@@ -1,16 +1,44 @@
+import { randomUUID } from 'node:crypto';
+import { documentService } from './core';
 import { expect } from './fixtures';
 import type { Locator, Page } from '@playwright/test';
 
 // Steps shared by the e2e scenarios. Elements are found only by their roles and accessible
 // names (spec 11, "Přístupnost").
 
-/** From the document list to an open, empty document. */
-export async function createDocument(page: Page): Promise<void> {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Nový', exact: true }).click();
-  await expect(page).toHaveURL(/#\/d\//);
-  // The toolbar is there once the session is open.
+/** A document of one test on the core of the run. */
+export interface ServerDocument {
+  readonly id: string;
+  readonly name: string;
+}
+
+/**
+ * A new empty document on the core, made from Node over DocumentService (N72): the workers share
+ * the core, so every test works in its own document, named uniquely unless `name` says otherwise.
+ */
+export async function createServerDocument(name?: string): Promise<ServerDocument> {
+  const { document } = await documentService().createDocument({
+    operationId: randomUUID(),
+    name: name ?? `e2e ${randomUUID().slice(0, 8)}`,
+  });
+  if (document === undefined) throw new Error('CreateDocument answered no document');
+  return { id: document.documentId, name: document.name };
+}
+
+/** The route of the document in the app. */
+export function documentRoute(doc: ServerDocument): string {
+  return `/#/d/${doc.id}`;
+}
+
+/**
+ * A new empty document of this test (createServerDocument), open in the page. Resolves once the
+ * session is open and writable (the toolbar is enabled).
+ */
+export async function createDocument(page: Page, name?: string): Promise<ServerDocument> {
+  const doc = await createServerDocument(name);
+  await page.goto(documentRoute(doc));
   await expect(page.getByRole('button', { name: 'Kvádr', exact: true })).toBeEnabled();
+  return doc;
 }
 
 /** The input of a param field of the open dialog, named by its label. */
@@ -30,7 +58,7 @@ export function timelineFeature(page: Page, name: string): Locator {
   return page.getByRole('button', { name, exact: true });
 }
 
-/** Reloads the page once the log is in IndexedDB (the green dot of the title bar). */
+/** Reloads the page once the core has confirmed every change (the green dot of the title bar). */
 export async function reloadWhenSaved(page: Page): Promise<void> {
   await expect(page.getByRole('status', { name: 'Uloženo' })).toBeVisible();
   await page.reload();

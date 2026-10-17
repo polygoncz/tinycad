@@ -12,14 +12,10 @@ import {
   toolbarButton,
 } from './helpers';
 
-// The sketcher's 2D geometry through the native core (M39, N3): the app is built with
-// VITE_CORE_URL=/api, so trim and offset ask GeometryService of tinycad-core over gRPC-Web (the
-// preview server forwards /api to Envoy). Each test records the calls of GeometryService the page
-// makes and checks they happened and succeeded: the result in the sketch then comes from the
-// server, not from the WASM kernel. Runs only with E2E_CORE=1 and Compose up
-// (`npm run test:e2e:core`, playwright.core.config.ts); the default e2e run skips it.
-
-test.skip(process.env.E2E_CORE !== '1', 'needs the native core: npm run test:e2e:core');
+// The sketcher's 2D geometry through the native core (M39; since M46 the only path, N68): trim
+// and offset ask GeometryService of tinycad-core over gRPC-Web (the preview server forwards /api
+// to Envoy). Each test records the calls of GeometryService the page makes and checks they
+// happened and succeeded: the result in the sketch comes from the server.
 
 /** The path prefix of GeometryService calls (gRPC-Web: /<package>.<service>/<method>). */
 const GEOMETRY_SERVICE = '/api/tinycad.v1.GeometryService/';

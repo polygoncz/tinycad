@@ -128,9 +128,10 @@ test('the delete button of a document is reachable from the keyboard', async ({
   page,
   browserName,
 }) => {
-  await createDocument(page);
+  const doc = await createDocument(page);
   await page.getByRole('button', { name: 'Dokumenty', exact: true }).click();
-  const card = page.getByRole('article');
+  // Other workers have their documents in the list too (N72): the card of this test's one.
+  const card = page.getByRole('article').filter({ has: page.getByText(doc.name, { exact: true }) });
   await expect(card).toHaveCount(1);
   const remove = card.getByRole('button', { name: 'Smazat dokument', exact: true });
   await expect(remove).toHaveCSS('opacity', '0');

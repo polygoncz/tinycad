@@ -12,7 +12,6 @@
     "vite.config.ts",
     "vitest.config.ts",
     "playwright.config.ts",
-    "playwright.core.config.ts",
     "test/e2e/**/*.ts"
   ]
 }

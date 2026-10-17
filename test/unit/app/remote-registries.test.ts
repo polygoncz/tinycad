@@ -21,6 +21,17 @@ describe('createRemoteRegistries', () => {
     expect(registries.schemas.all().map((s) => s.type)).toEqual(['box', 'thing']);
   });
 
+  // E2E M46: the core describes transform at version 3; the registry of document asks every
+  // schema above version 1 for migrate, which the descriptors have not (the core migrates).
+  it('registers a type of a version above 1, whose features the core has migrated already', () => {
+    const transform = featureSchemaOf(aFeatureTypeDescriptor({ type: 'transform', version: 3 }));
+    const registries = createRemoteRegistries([transform], []);
+    const schema = registries.schemas.get('transform');
+    expect(schema.version).toBe(3);
+    expect(schema.params).toBe(transform.params);
+    expect(() => schema.migrate?.(2, {})).toThrow(/core/);
+  });
+
   it('gives a type without a client half a schema but no tool', () => {
     const registries = createRemoteRegistries([serverType('thing')], []);
     expect(registries.schemas.has('thing')).toBe(true);
