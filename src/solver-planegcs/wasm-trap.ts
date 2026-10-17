@@ -1,5 +1,4 @@
-// Recognising a WASM abort (ADR 0016, "OOM"). Internal to solver-planegcs; the same check as in
-// kernel-occt, which another adapter must not import.
+// Recognising a WASM abort (ADR 0016, "OOM"). Internal to solver-planegcs.
 
 /**
  * True when the WASM machine itself failed, so the module instance is dead and must be

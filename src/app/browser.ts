@@ -2,8 +2,7 @@
 // native core is the only path: it builds what createRemoteAppSession takes as deps – the
 // gRPC-Web transport to the core, the three.js viewport, the planegcs solver worker (M12), the
 // text outliner over the bundled fonts (M37), timers and the sessionStorage of the session (N70) –
-// and releases them again. The document list and the move of the documents of IndexedDB (N71) go
-// over DocumentService too. Only the e2e test covers this file; the parts with logic are tested
+// and releases them again. The document list goes over DocumentService too. Only the e2e test covers this file; the parts with logic are tested
 // in Node.
 
 import { createRandomIdGenerator, DisposableStore } from '@/core';
@@ -12,8 +11,6 @@ import type { DocumentId } from '@/document';
 import { createDocumentListModel, HANDLE_VISIBILITY, MANIPULATOR_GLYPHS } from '@/interaction';
 import type { ConfirmRequest, DocumentListModel } from '@/interaction';
 import type { MeshOps } from '@/kernel';
-import type { DocumentStore } from '@/persistence';
-import { createIdbDocumentStore } from '@/persistence/idb';
 import type { FeaturePlugin } from '@/plugin-api';
 import { createCoreTransport, createRemoteDocuments, createRemoteSketchGeometry } from '@/remote';
 import type { SessionResumeStore, Timers } from '@/remote';
@@ -21,13 +18,10 @@ import { createViewport } from '@/render';
 import { createPlanegcsSolver } from '@/solver-planegcs';
 import type { TextFontId } from '@/sketch';
 import { createOpentypeOutliner, fontUrl } from '@/text-opentype';
-import { createBrowserMigration } from './browser-migration';
-import type { BrowserMigration } from './browser-migration';
-import type { DownloadFile } from './file-exporter';
+import type { AppSession, DownloadFile } from './app-session';
 import { createRemoteAppSession } from './remote-session';
 import { createRemoteDocumentsCatalog } from './remote-documents-catalog';
 import { paletteOf } from './view-settings';
-import type { AppSession } from './session';
 
 export interface OpenAppSessionOptions {
   readonly docId: DocumentId;
@@ -153,35 +147,6 @@ export function createDocumentList(opts: DocumentListOptions): DocumentListModel
     }),
     confirm: opts.confirm,
   });
-}
-
-/** What openBrowserMigration needs from ui. */
-export interface BrowserMigrationOptions {
-  /** The plugins the logs stored in the browser are replayed with. */
-  readonly plugins: readonly FeaturePlugin[];
-}
-
-/**
- * The move of the documents stored in IndexedDB to the core (N71): the start screen offers it
- * while count() > 0. IndexedDB is not deleted. Holds nothing between calls.
- */
-export function openBrowserMigration(opts: BrowserMigrationOptions): BrowserMigration {
-  return createBrowserMigration({
-    documents: createRemoteDocuments(coreTransport(), () => crypto.randomUUID()),
-    withStore,
-    plugins: opts.plugins,
-  });
-}
-
-/** A store worker for one call over IndexedDB, terminated after it; rejects without IndexedDB. */
-async function withStore<T>(call: (store: DocumentStore) => Promise<T>): Promise<T> {
-  if (typeof indexedDB === 'undefined') throw new Error('IndexedDB is not available');
-  const store = createIdbDocumentStore();
-  try {
-    return await call(store);
-  } finally {
-    store.dispose();
-  }
 }
 
 /** The core behind Envoy: '/api' (the Vite proxy) unless VITE_CORE_URL says otherwise (N68). */

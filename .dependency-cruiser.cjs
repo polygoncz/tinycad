@@ -19,10 +19,7 @@ const modules = {
   core: { npm: ['gl-matrix'] },
   document: { deps: ['core'] },
   ops: { deps: ['core', 'document'] },
-  persistence: { deps: ['core', 'document', 'ops'] },
-  'persistence/idb': { deps: ['core', 'document', 'ops', 'persistence'] },
   kernel: { deps: ['core'] },
-  'kernel-occt': { deps: ['core', 'kernel'], npm: ['replicad-opencascadejs'] },
   // M12: sketch data model, regions and the ConstraintSolver port (ADR 0017).
   sketch: { deps: ['core'] },
   // M12: solver adapter in a worker (ADR 0016); only app imports it.
@@ -38,31 +35,24 @@ const modules = {
     deps: ['core', 'document', 'ops', 'kernel', 'sketch', 'protocol'],
     npm: ['@bufbuild/protobuf', '@connectrpc/connect', '@connectrpc/connect-web'],
   },
-  regen: { deps: ['core', 'document', 'kernel', 'sketch'] },
   render: { deps: ['core'], types: ['kernel', 'interaction'], npm: ['three'] },
   interaction: { deps: ['core', 'document', 'ops', 'sketch'] },
   // M20: the sketcher over interaction (ADR 0024); interaction never imports it. ops only for
   // the tests (anOpsSession of ops/testing.ts); the rule sketcher-ops-only-in-tests keeps its
   // production code off ops/index.ts.
   sketcher: { deps: ['core', 'document', 'ops', 'sketch', 'interaction'] },
-  'plugin-api': { deps: ['core', 'document', 'regen', 'interaction'] },
-  'features/*': {
-    deps: ['core', 'document', 'ops', 'kernel', 'sketch', 'regen', 'interaction', 'plugin-api'],
-  },
+  'plugin-api': { deps: ['core', 'interaction'] },
+  'features/*': { deps: ['core', 'document', 'interaction', 'plugin-api'] },
   app: {
     deps: [
       'core',
       'document',
       'ops',
-      'persistence',
-      'persistence/idb',
       'kernel',
-      'kernel-occt',
       'sketch',
       'solver-planegcs',
       'text-opentype',
       'remote',
-      'regen',
       'render',
       'interaction',
       'sketcher',
@@ -93,17 +83,15 @@ const DATA_ENTRY_MODULES = { interaction: ['mode'], sketcher: [] };
 
 const SPEC = 'see docs/20-spec/01-architektura.md';
 
-/** Regex matching every file of a module (persistence excludes its idb adapter). */
+/** Regex matching every file of a module. */
 function ownFiles(/** @type {string} */ name) {
   if (name === 'features/*') return '^src/features/[^/]+/';
-  if (name === 'persistence') return '^src/persistence/(?!idb/)';
   return `^src/${name}/`;
 }
 
 /** Regex matching the unit tests of a module: everything under test/unit/<module>/ (ADR 0023). */
 function testFiles(/** @type {string} */ name) {
   if (name === 'features/*') return '^test/unit/features/([^/]+)/';
-  if (name === 'persistence') return '^test/unit/persistence/(?!idb/)';
   return `^test/unit/${name}/`;
 }
 
@@ -156,7 +144,7 @@ function testCodeOf(/** @type {string} */ name) {
 }
 
 /**
- * Vite asset import with a query (`replicad-opencascadejs/wasm?url`, spec 06 "Vite").
+ * Vite asset import with a query (the planegcs `.wasm?url` of the solver worker, ADR 0016).
  * enhanced-resolve takes the query as part of the package exports subpath and cannot resolve
  * it; Vite resolves it at build time (a wrong path fails `vite build`).
  */
@@ -270,7 +258,7 @@ module.exports = {
         'Import another module only through its index.ts (ADR 0008). ' +
         'Deep imports bypass the public API.',
       // The unit tests of a module (test/unit/<module>/) count as the module (ADR 0023).
-      from: { path: '^(?:src|test/unit)/(features/[^/]+|persistence/idb|[^/]+)/' },
+      from: { path: '^(?:src|test/unit)/(features/[^/]+|[^/]+)/' },
       to: {
         path: '^src/[^/]+/.+',
         pathNot: [
@@ -289,7 +277,7 @@ module.exports = {
         'through its index.ts or testing.ts (ADR 0008, ADR 0023).',
       from: { path: '^test/(?:integration|e2e)/' },
       to: {
-        path: '^src/(features/[^/]+|persistence/idb|[^/]+)/.+',
+        path: '^src/(features/[^/]+|[^/]+)/.+',
         pathNot: [
           '/index\\.ts$',
           '/testing\\.ts$',
@@ -381,7 +369,7 @@ module.exports = {
       conditionNames: ['import', 'require', 'node', 'default', 'types'],
     },
     reporterOptions: {
-      dot: { collapsePattern: '^src/(features/[^/]+|persistence/idb|[^/]+)/' },
+      dot: { collapsePattern: '^src/(features/[^/]+|[^/]+)/' },
     },
   },
 };

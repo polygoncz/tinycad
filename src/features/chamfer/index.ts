@@ -2,19 +2,16 @@
 // Public API of features/chamfer. Everything else in this folder is internal.
 
 import type { FeaturePlugin } from '@/plugin-api';
-import { chamferBuilder } from './builder';
 import { chamferMessages } from './messages';
-import { chamferSchema } from './schema';
-import type { ChamferParams } from './schema';
+import type { ChamferParams } from './params';
 import { chamferTool } from './tool';
 
-export type { ChamferParams } from './schema';
+export type { ChamferParams } from './params';
 
 export const chamferPlugin: FeaturePlugin<ChamferParams> = Object.freeze<
   FeaturePlugin<ChamferParams>
 >({
-  schema: chamferSchema,
-  builder: chamferBuilder,
+  type: 'chamfer',
   tools: Object.freeze([chamferTool]),
   messages: chamferMessages,
 });

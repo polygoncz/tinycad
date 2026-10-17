@@ -276,10 +276,6 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'documents.error.rename': 'The document could not be renamed: {error}',
   'documents.import': 'Import',
   'documents.importError': 'The file is not a valid tinycad document',
-  'documents.migrate': 'Move documents from the browser ({count})',
-  'documents.migrating': 'Moving documents… {done} of {total}',
-  'documents.migrated': 'Documents moved: {count}',
-  'documents.migrateFailed': 'Documents not moved: {count}',
 
   // File menu and export (M15).
   'titleBar.file': 'File',

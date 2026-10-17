@@ -2,19 +2,16 @@
 // Public API of features/revolve. Everything else in this folder is internal.
 
 import type { FeaturePlugin } from '@/plugin-api';
-import { revolveBuilder } from './builder';
 import { revolveMessages } from './messages';
-import { revolveSchema } from './schema';
-import type { RevolveParams } from './schema';
+import type { RevolveParams } from './params';
 import { revolveTool } from './tool';
 
-export type { RevolveParams } from './schema';
+export type { RevolveParams } from './params';
 
 export const revolvePlugin: FeaturePlugin<RevolveParams> = Object.freeze<
   FeaturePlugin<RevolveParams>
 >({
-  schema: revolveSchema,
-  builder: revolveBuilder,
+  type: 'revolve',
   tools: Object.freeze([revolveTool]),
   messages: revolveMessages,
 });

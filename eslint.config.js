@@ -10,10 +10,8 @@ const platformIndependent = [
   'src/core/**/*.ts',
   'src/document/**/*.ts',
   'src/ops/**/*.ts',
-  'src/persistence/**/*.ts',
   'src/kernel/**/*.ts',
   'src/sketch/**/*.ts',
-  'src/regen/**/*.ts',
   'src/plugin-api/**/*.ts',
   'src/features/**/*.ts',
   'src/interaction/**/*.ts',
@@ -101,7 +99,6 @@ export default defineConfig(
   },
   {
     files: platformIndependent,
-    ignores: ['src/persistence/idb/**'],
     rules: {
       'no-restricted-globals': ['error', ...platformGlobals],
     },
@@ -112,7 +109,7 @@ export default defineConfig(
     // functions. core keeps its small utility classes (Emitter, …) as an exception.
     // Re-exports (`export { Foo } from './foo'`) are not detected here; the
     // architecture-reviewer subagent covers them.
-    files: ['src/*/index.ts', 'src/features/*/index.ts', 'src/persistence/idb/index.ts'],
+    files: ['src/*/index.ts', 'src/features/*/index.ts'],
     ignores: ['src/core/index.ts'],
     rules: {
       'no-restricted-syntax': [

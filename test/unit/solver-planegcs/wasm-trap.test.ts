@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isWasmTrap } from '@/solver-planegcs/wasm-trap';
 
-// Recognising a WASM abort (ADR 0016, "OOM"; M19.1): the same check as in kernel-occt, so the
-// same cases.
+// Recognising a WASM abort (ADR 0016, "OOM"; M19.1).
 
 /**
  * A WebAssembly.RuntimeError like the one an abort throws. Built through the global at run

@@ -1,17 +1,42 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { createSequentialIdGenerator } from '@/core';
-import type { DocumentId } from '@/document';
-import { createMemoryDocumentStore } from '@/persistence';
 import type { FeaturePlugin } from '@/plugin-api';
-import { createManualScheduler } from '@/persistence/testing';
-import { createFakeSolver, createFakeTextOutliner } from '@/sketch/testing';
-import { BUILT_IN_PLUGINS, createAppSession } from '@/app/index';
-import { aKernelFactory, FakeAppViewport } from '@/app/testing';
+import { featureSchemaOf } from '@/remote';
+import { aFeatureTypeDescriptor } from '@/remote/testing';
+import { BUILT_IN_PLUGINS } from '@/app/index';
+import { createRemoteRegistries } from '@/app/remote-registries';
+
+// The golden file of the feature types the C++ core describes (N75, N88).
+const GOLDEN = join(import.meta.dirname, '../../golden/feature-types.json');
+
+/** A descriptor of the golden file, read as plain JSON: only its type and labels matter here. */
+interface GoldenType {
+  readonly type: string;
+  readonly [key: string]: unknown;
+}
+
+function goldenTypes(): readonly GoldenType[] {
+  // The file is written by the C++ tests: { feature_types: [ FeatureTypeDescriptor as JSON ] }.
+  const json = JSON.parse(readFileSync(GOLDEN, 'utf8')) as { feature_types: GoldenType[] };
+  return json.feature_types;
+}
+
+/** Every `label` in a descriptor: the type, its params and the options of its enums. */
+function labelsOf(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(labelsOf);
+  if (typeof value !== 'object' || value === null) return [];
+  return Object.entries(value).flatMap(([key, inner]) =>
+    key === 'label' && typeof inner === 'string' ? [inner] : labelsOf(inner),
+  );
+}
+
+const sorted = (types: readonly string[]): string[] => [...types].sort();
 
 describe('BUILT_IN_PLUGINS', () => {
   it('is frozen and has the nine plugins in toolbar order', () => {
     expect(Object.isFrozen(BUILT_IN_PLUGINS)).toBe(true);
-    expect(BUILT_IN_PLUGINS.map((p) => p.schema.type)).toEqual([
+    expect(BUILT_IN_PLUGINS.map((p) => p.type)).toEqual([
       'box',
       'cylinder',
       'transform',
@@ -24,58 +49,36 @@ describe('BUILT_IN_PLUGINS', () => {
     ]);
   });
 
-  it('opens a session together (complete registries, no clashing keys)', async () => {
-    const session = await createAppSession({
-      plugins: BUILT_IN_PLUGINS,
-      store: createMemoryDocumentStore({ now: () => 0 }),
-      docId: 'doc1' as DocumentId, // test value
-      createKernel: aKernelFactory().create,
-      viewport: new FakeAppViewport(),
-      scheduler: createManualScheduler(),
-      now: () => 0,
-      monotonic: () => 0,
-      ids: createSequentialIdGenerator('f'),
-      translate: (key) => key,
-      confirm: () => true,
-      readOnly: false,
-      solver: createFakeSolver(),
-      text: createFakeTextOutliner(),
-      download: () => undefined,
-      theme: 'light',
-    });
-    const items = () => session.toolbar.groups.get().flatMap((g) => g.items);
-    const model = items();
-    expect(model.map((i) => i.id)).toEqual(
-      expect.arrayContaining([
-        'box',
-        'cylinder',
-        'transform',
-        'boolean',
-        'sketch',
-        'extrude',
-        'revolve',
-        'fillet',
-        'chamfer',
-      ]),
+  // N123: a feature type of the core without a client half, or a plugin without a type of the
+  // core, fails here.
+  it('has a plugin for every feature type of the core and no other', () => {
+    expect(sorted(BUILT_IN_PLUGINS.map((p) => p.type))).toEqual(
+      sorted(goldenTypes().map((t) => t.type)),
     );
-    const sketch = model.find((i) => i.id === 'sketch');
-    if (sketch === undefined) expect.fail('No sketch tool');
-    session.toolbar.run(sketch);
-    expect(session.mode.get()).toBe('sketch');
-    // No two buttons of one mode share a shortcut (tools of disjoint modes may: C is the cylinder
-    // in the model and the circle in the sketch, spec 10 "Režim").
-    for (const shown of [model, items()]) {
-      const shortcuts = shown.flatMap((i) => (i.shortcut === null ? [] : [i.shortcut]));
-      expect(new Set(shortcuts).size).toBe(shortcuts.length);
-    }
-    session.dispose();
   });
 
-  // ADR 0014: every plugin checks its own dictionary; this checks all of them at once.
-  it.each(BUILT_IN_PLUGINS.map((p) => [p.schema.type, p] as const))(
-    '%s has a cs and an en text for every label',
-    (_type, plugin) => {
-      const keys = labelKeys(plugin);
+  it('registers together (no clashing tool or message key, unique shortcuts)', () => {
+    // The params do not matter to the registries, only the types.
+    const schemas = goldenTypes().map(({ type }) =>
+      featureSchemaOf(aFeatureTypeDescriptor({ type })),
+    );
+    const registries = createRemoteRegistries(schemas, BUILT_IN_PLUGINS);
+    const tools = registries.tools.all();
+    for (const plugin of BUILT_IN_PLUGINS) {
+      for (const tool of plugin.tools ?? []) expect(tools).toContain(tool);
+    }
+    const shortcuts = tools.flatMap((t) => (t.shortcut === undefined ? [] : [t.shortcut]));
+    expect(new Set(shortcuts).size).toBe(shortcuts.length);
+  });
+
+  // ADR 0014: every plugin checks its own dictionary; this checks all of them at once against the
+  // labels of the core.
+  it.each(goldenTypes().map((t) => [t.type, t] as const))(
+    '%s has a cs and an en text for every label of the core and of its tools',
+    (type, descriptor) => {
+      const plugin: FeaturePlugin | undefined = BUILT_IN_PLUGINS.find((p) => p.type === type);
+      if (plugin === undefined) expect.fail(`No plugin of '${type}'`);
+      const keys = [...labelsOf(descriptor), ...(plugin.tools ?? []).map((t) => t.label)];
       expect(keys.length).toBeGreaterThan(0);
       const missing = (lang: 'cs' | 'en'): string[] =>
         keys.filter((key) => plugin.messages?.[lang][key] === undefined);
@@ -84,13 +87,3 @@ describe('BUILT_IN_PLUGINS', () => {
     },
   );
 });
-
-/** Label keys of the schema, its params, their enum options and the tools. */
-function labelKeys(plugin: FeaturePlugin): string[] {
-  const params = Object.values(plugin.schema.params).flatMap((spec) => [
-    spec.label,
-    ...(spec.kind === 'enum' ? spec.options.map((o) => o.label) : []),
-  ]);
-  const tools = (plugin.tools ?? []).map((t) => t.label);
-  return [plugin.schema.label, ...params, ...tools];
-}

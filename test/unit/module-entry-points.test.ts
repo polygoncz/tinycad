@@ -14,7 +14,7 @@ function moduleDirs(): string[] {
   const plugins = readdirSync(join(srcDir, 'features'), { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => `features/${e.name}`);
-  return [...top.filter((m) => m !== 'features'), ...plugins, 'persistence/idb'];
+  return [...top.filter((m) => m !== 'features'), ...plugins];
 }
 
 describe('module entry points', () => {

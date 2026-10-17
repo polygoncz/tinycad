@@ -1,14 +1,14 @@
-// The read model → the ports of the view (replaces regen-pipeline on the server path, D3 of M19.1
+// The read model → the ports of the view (D3 of M19.1
 // kept): meshes into VersionMeshes, viewport.syncLayers, then RegenStatusPort, the drawings of the
 // sketches, RegenUiState, afterSync and the first fitAll; resolvePlane and planeOfSketch for the
 // sketcher. Every body is shown under the handle of its content_version (N66), so the view swaps
 // exactly the meshes whose version changed. While a feature dialog is open (ADR 0025) and the read
 // model carries the input of its feature, the main layer shows the input and the preview what the
-// feature made or changed, as previewBodies does today.
+// feature made or changed (previewBodies).
 
 import { ObservableValue } from '@/core';
 import type { Disposable, Observable, Plane } from '@/core';
-import type { FeatureId, PlaneRef, TopoName, TopoRef } from '@/document';
+import type { BodyId, FeatureId, PlaneRef, TopoName, TopoRef } from '@/document';
 import type {
   FeatureAnchors,
   FeatureHealth,
@@ -28,17 +28,24 @@ import type {
 } from '@/remote';
 import { parseSketchData } from '@/sketch';
 import { artifactDrawing } from '@/sketcher';
-import { previewBodies } from './regen-pipeline';
-import type { RegenPipelineDeps, RegenUiState, ShownBody } from './regen-pipeline';
+import type { ShapeHandle } from '@/kernel';
+import type { BodyLayer, CameraController, Viewport } from '@/render';
+import type { RegenUiState } from './app-session';
 import type { VersionMeshes } from './version-meshes';
 
 export interface ReadModelViewDeps {
   readonly meshes: VersionMeshes;
-  readonly viewport: RegenPipelineDeps['viewport'];
+  readonly viewport: {
+    readonly bodies: Pick<BodyLayer, 'reset'>;
+    /** M21: the pickable bodies and the result of the edited feature over them, in one swap. */
+    readonly syncLayers: Viewport['syncLayers'];
+    readonly camera: Pick<CameraController, 'fitAll'>;
+    readonly sketches: SketchPort;
+  };
   /** The open feature dialog: with one the view shows the input of its feature (ADR 0025). */
-  readonly features: RegenPipelineDeps['features'];
+  readonly features: { readonly current: Observable<{ readonly featureId: FeatureId } | null> };
   /** The open sketch session: its sketch is drawn by the sketcher, not by the view. */
-  readonly sketches: RegenPipelineDeps['sketches'];
+  readonly sketches: { readonly current: Observable<{ readonly featureId: FeatureId } | null> };
   /** Changes queued and in flight (RemoteSession.pending): RegenUiState.busy. */
   readonly pending: Observable<number>;
   readonly afterSync: () => void;
@@ -53,6 +60,22 @@ export interface ReadModelView extends RegenStatusPort, Disposable {
   resolvePlane(ref: PlaneRef | TopoRef): Plane | undefined;
   /** The plane of the sketch of a feature in the final state. */
   planeOfSketch(featureId: FeatureId): Plane | undefined;
+}
+
+/** A body as the body layers take it. */
+export type ShownBody = { readonly id: BodyId; readonly shape: ShapeHandle };
+
+/**
+ * The preview of an edited feature (ADR 0025): the bodies of the result that the input does not
+ * have with the same id and handle, that is what the feature made or changed, in the order of the
+ * result. A body the feature consumed is not in the result, so it is not previewed.
+ */
+export function previewBodies(
+  result: readonly ShownBody[],
+  input: readonly ShownBody[],
+): ShownBody[] {
+  const inInput = new Map(input.map((b) => [b.id, b.shape]));
+  return result.filter((b) => inInput.get(b.id) !== b.shape);
 }
 
 const EMPTY_SNAPSHOT: RegenSnapshot = Object.freeze({
