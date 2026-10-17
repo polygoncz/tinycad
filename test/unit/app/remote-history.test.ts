@@ -10,6 +10,7 @@ function aReadModel(lastSeq: number): ReadModelData {
     document: {
       id: 'doc-1' as DocumentId, // test ids are trusted
       name: 'Part',
+      createdAt: 0,
       lastSeq,
       studio: { features: [], rollbackIndex: 0 },
     },

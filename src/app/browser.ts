@@ -1,8 +1,10 @@
-// openAppSession (spec 11, "Kompoziční kořen (app)"): the thin browser layer. It builds what
-// createAppSession takes as deps – the OCCT kernel worker, the IndexedDB store, the Web Lock
-// (Q038), the three.js viewport, the planegcs solver worker (M12) and the text outliner over the
-// bundled fonts (M37) – and releases them again. Only the e2e test covers it; the
-// parts with logic (documents.ts, doc-lock.ts) are tested in Node.
+// openAppSession (spec 11, "Kompoziční kořen (app)"): the thin browser layer. Since M46 (N68) the
+// native core is the only path: it builds what createRemoteAppSession takes as deps – the
+// gRPC-Web transport to the core, the three.js viewport, the planegcs solver worker (M12), the
+// text outliner over the bundled fonts (M37), timers and the sessionStorage of the session (N70) –
+// and releases them again. The document list and the move of the documents of IndexedDB (N71) go
+// over DocumentService too. Only the e2e test covers this file; the parts with logic are tested
+// in Node.
 
 import { createRandomIdGenerator, DisposableStore } from '@/core';
 import type { Disposable, IdGenerator } from '@/core';
@@ -10,21 +12,20 @@ import type { DocumentId } from '@/document';
 import { createDocumentListModel, HANDLE_VISIBILITY, MANIPULATOR_GLYPHS } from '@/interaction';
 import type { ConfirmRequest, DocumentListModel } from '@/interaction';
 import type { MeshOps } from '@/kernel';
-import { createOcctKernel } from '@/kernel-occt';
-import type { DocumentStore, Scheduler } from '@/persistence';
+import type { DocumentStore } from '@/persistence';
 import { createIdbDocumentStore } from '@/persistence/idb';
 import type { FeaturePlugin } from '@/plugin-api';
-import { createCoreTransport, createRemoteSketchGeometry } from '@/remote';
+import { createCoreTransport, createRemoteDocuments, createRemoteSketchGeometry } from '@/remote';
+import type { SessionResumeStore, Timers } from '@/remote';
 import { createViewport } from '@/render';
 import { createPlanegcsSolver } from '@/solver-planegcs';
-import type { SketchGeometry, TextFontId } from '@/sketch';
+import type { TextFontId } from '@/sketch';
 import { createOpentypeOutliner, fontUrl } from '@/text-opentype';
-import { acquireDocumentLock } from './doc-lock';
-import { disposeOpenSession } from './dispose-open-session';
-import { createDocumentCatalog } from './documents';
+import { createBrowserMigration } from './browser-migration';
+import type { BrowserMigration } from './browser-migration';
 import type { DownloadFile } from './file-exporter';
-import { flushOnPageHide } from './page-lifecycle';
-import { createAppSession } from './session';
+import { createRemoteAppSession } from './remote-session';
+import { createRemoteDocumentsCatalog } from './remote-documents-catalog';
 import { paletteOf } from './view-settings';
 import type { AppSession } from './session';
 
@@ -42,77 +43,72 @@ export interface OpenAppSessionOptions {
 }
 
 /**
- * Opens the document in this tab. Without the document lock (another tab has it) the session
- * is read-only. Rejects like createAppSession; everything made so far is released then.
- * close waits for the final save of the session, then releases the viewport, the store and the
- * lock; dispose returns at once: it releases the viewport, the store and the lock follow when the
- * safety flush of the session has settled.
+ * Opens the document in this tab over the core. Read-only when another tab holds it (Q102).
+ * Rejects like createRemoteAppSession; everything made so far is released then. close waits for
+ * the empty queue of changes and closes the session on the core, then releases the viewport and
+ * the solver; dispose returns at once. The page going away (pagehide) closes the session best
+ * effort with keepalive (N70); a reload resumes it through sessionStorage if the close got lost.
  */
 export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSession> {
-  // The lock and the store, plus `screen` with the viewport: disposed last, it goes first.
-  const lifetime = new DisposableStore();
+  // The viewport and the solver: disposed after the session.
+  const screen = new DisposableStore();
   try {
-    // Before loading (spec 05): the lock decides whether this tab may write.
-    const lock = lifetime.add(await acquireDocumentLock(navigator.locks, opts.docId));
-    const store = lifetime.add(createIdbDocumentStore());
-    // dispose releases the viewport (and the solver) before the store and the lock, which wait
-    // for the flush.
-    const screen = lifetime.add(new DisposableStore());
-    // The worker starts on the first solve; released together with the viewport, after the
-    // session, so no sketch session outlives it.
+    const transport = coreTransport();
+    // The worker starts on the first solve.
     const solver = screen.add(createPlanegcsSolver());
     const viewport = screen.add(
       createViewport({
-        meshes: NO_KERNEL_YET,
+        meshes: NO_MESHES_YET,
         palette: paletteOf(opts.theme),
         // render may take only types from interaction, so the values come from here (M20).
         manipulatorGlyphs: MANIPULATOR_GLYPHS,
         handleVisibility: HANDLE_VISIBILITY,
       }),
     );
-    const session = await createAppSession({
+    const session = await createRemoteAppSession({
       plugins: opts.plugins,
-      store,
+      transport,
       docId: opts.docId,
-      createKernel: createOcctKernel,
       viewport,
-      scheduler: TIMER_SCHEDULER,
+      timers: TIMERS,
+      resume: sessionResume(opts.docId),
+      newOperationId: () => crypto.randomUUID(),
       now: Date.now,
-      // Not unbound: performance.now needs `performance` as `this`.
-      monotonic: () => performance.now(),
       ids: randomIds(),
       translate: opts.translate,
       confirm: opts.confirm,
-      readOnly: !lock.held,
       solver,
       // M37: the bundled fonts are fetched on the first text in each of them.
       text: createOpentypeOutliner(loadFont),
-      ...remoteGeometry(),
+      // N68: the geometry of the sketch always over GeometryService of the core.
+      geometry: createRemoteSketchGeometry(transport),
       download: opts.download,
       theme: opts.theme,
-      // Replay the whole log on every open while developing (spec 05, "verify").
-      verify: import.meta.env.DEV,
     });
 
-    // Q034: a reload right after a change must not lose the queue waiting for the delayed flush.
-    const pageHide = flushOnPageHide({
-      page: window,
-      document,
-      flush: () => session.flush(),
-      onError: (error) => {
-        console.error(error);
-      },
-    });
+    // N70: closing the tab or a reload closes the session (the lock goes at once); a page
+    // restored from the back-forward cache has a closed session, so it loads again.
+    const onPageHide = (): void => {
+      session.dispose();
+      screen.dispose();
+    };
+    const onPageShow = (e: PageTransitionEvent): void => {
+      if (e.persisted) window.location.reload();
+    };
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('pageshow', onPageShow);
+    const unbindPage = (): void => {
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('pageshow', onPageShow);
+    };
 
-    // Reverse order of creation: the viewport, then the store, then the lock.
     let closing: Promise<void> | null = null;
     async function close(): Promise<void> {
-      // The session saves for the last time itself; the page must not flush it any more.
-      pageHide.dispose();
+      unbindPage();
       try {
         await session.close();
       } finally {
-        lifetime.dispose();
+        screen.dispose();
       }
     }
     return Object.freeze({
@@ -122,27 +118,22 @@ export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSe
         return closing;
       },
       dispose() {
-        pageHide.dispose();
-        disposeOpenSession({
-          session,
-          viewport: screen,
-          afterFlush: lifetime,
-          onError: (error) => {
-            console.error(error);
-          },
-        });
+        unbindPage();
+        try {
+          session.dispose();
+        } finally {
+          screen.dispose();
+        }
       },
     });
   } catch (e) {
-    lifetime.dispose();
+    screen.dispose();
     throw e;
   }
 }
 
 /** What createDocumentList needs from ui. */
 export interface DocumentListOptions {
-  /** The plugins of the sessions: an imported file is checked and a renamed log replayed with them. */
-  readonly plugins: readonly FeaturePlugin[];
   /** Translation of keys: the name of a new document (ADR 0014). */
   readonly translate: (key: string) => string;
   /** Asks the user a yes/no question (deleting a document); ui shows the dialog. */
@@ -150,32 +141,64 @@ export interface DocumentListOptions {
 }
 
 /**
- * The model of the DocumentList (Q019, M20 A3.5) over the IndexedDB store: a store worker per
- * call of the catalog, the Web Lock of a document for deleting and renaming (refused when the
- * document is open in another tab). Holds nothing between calls, so it needs no dispose.
+ * The model of the DocumentList (Q019, M20 A3.5) over DocumentService of the core (N68): the
+ * server refuses deleting a document open in a session. Holds nothing between calls, so it needs
+ * no dispose.
  */
 export function createDocumentList(opts: DocumentListOptions): DocumentListModel {
   return createDocumentListModel({
-    catalog: createDocumentCatalog({
-      withStore,
-      locks: navigator.locks,
-      plugins: opts.plugins,
-      ids: randomIds(),
-      now: Date.now,
+    catalog: createRemoteDocumentsCatalog({
+      documents: createRemoteDocuments(coreTransport(), () => crypto.randomUUID()),
       translate: opts.translate,
     }),
     confirm: opts.confirm,
   });
 }
 
-/** A store worker for one call of the document list, terminated after it. */
+/** What openBrowserMigration needs from ui. */
+export interface BrowserMigrationOptions {
+  /** The plugins the logs stored in the browser are replayed with. */
+  readonly plugins: readonly FeaturePlugin[];
+}
+
+/**
+ * The move of the documents stored in IndexedDB to the core (N71): the start screen offers it
+ * while count() > 0. IndexedDB is not deleted. Holds nothing between calls.
+ */
+export function openBrowserMigration(opts: BrowserMigrationOptions): BrowserMigration {
+  return createBrowserMigration({
+    documents: createRemoteDocuments(coreTransport(), () => crypto.randomUUID()),
+    withStore,
+    plugins: opts.plugins,
+  });
+}
+
+/** A store worker for one call over IndexedDB, terminated after it; rejects without IndexedDB. */
 async function withStore<T>(call: (store: DocumentStore) => Promise<T>): Promise<T> {
+  if (typeof indexedDB === 'undefined') throw new Error('IndexedDB is not available');
   const store = createIdbDocumentStore();
   try {
     return await call(store);
   } finally {
     store.dispose();
   }
+}
+
+/** The core behind Envoy: '/api' (the Vite proxy) unless VITE_CORE_URL says otherwise (N68). */
+function coreTransport(): ReturnType<typeof createCoreTransport> {
+  return createCoreTransport(import.meta.env.VITE_CORE_URL || '/api');
+}
+
+/** The session id of the document in this tab, kept across a reload (N70). */
+function sessionResume(docId: DocumentId): SessionResumeStore {
+  const key = `tinycad.session.${docId}`;
+  return {
+    load: () => sessionStorage.getItem(key),
+    save: (id) => {
+      if (id === null) sessionStorage.removeItem(key);
+      else sessionStorage.setItem(key, id);
+    },
+  };
 }
 
 /**
@@ -189,22 +212,12 @@ async function loadFont(font: TextFontId): Promise<ArrayBuffer> {
   return response.arrayBuffer();
 }
 
-/**
- * M39 (N3): with VITE_CORE_URL set (e.g. '/api' through the Vite proxy to Envoy) the sketch
- * geometry goes over GeometryService of the native core; without it the WASM kernel answers, so
- * the app still runs without Docker.
- */
-function remoteGeometry(): { readonly geometry?: SketchGeometry } {
-  const url = import.meta.env.VITE_CORE_URL;
-  return url ? { geometry: createRemoteSketchGeometry(createCoreTransport(url)) } : {};
-}
-
 /** Ids of Q002 from the crypto random source (Q022). */
 function randomIds(): IdGenerator {
   return createRandomIdGenerator((bytes) => crypto.getRandomValues(bytes));
 }
 
-const TIMER_SCHEDULER: Scheduler = {
+const TIMERS: Timers = {
   schedule(fn, ms): Disposable {
     const handle = setTimeout(fn, ms);
     return {
@@ -216,9 +229,9 @@ const TIMER_SCHEDULER: Scheduler = {
 };
 
 /**
- * MeshOps the viewport is created with. app hands it the real kernel through bodies.reset
- * before the first sync (spec 11, "Jádro startuje na pozadí"), so this is never called.
+ * MeshOps the viewport is created with. The session hands it the meshes by content version
+ * through bodies.reset before the first sync (N66), so this is never called.
  */
-const NO_KERNEL_YET: MeshOps = {
-  tessellate: () => Promise.reject(new Error('The viewport has no kernel yet')),
+const NO_MESHES_YET: MeshOps = {
+  tessellate: () => Promise.reject(new Error('The viewport has no meshes yet')),
 };

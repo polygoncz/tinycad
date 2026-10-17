@@ -213,11 +213,23 @@ describe('RemoteSession.change', () => {
     core.respond('beginTransaction', first.answer);
     void session.change({ kind: 'begin', label: 'Edit' });
     const applied = session.change({ kind: 'apply', op: rename('a') });
+    await flush();
     setRead({ knownMeshes: ['v1'], inputOf: 'f1' as FeatureId }); // a test id
     first.release();
     await applied;
     expect(core.requests('beginTransaction')[0]?.read).toMatchObject({ knownMeshes: [] });
     expect(core.requests('apply')[0]?.read).toMatchObject({ knownMeshes: ['v1'], inputOf: 'f1' });
+    session.dispose();
+  });
+
+  // E2E M46: the feature dialog begins its transaction before it is the open dialog, so a begin
+  // sent at once went without input_of, and its answer replaced the input of the refresh.
+  it('a change goes after the synchronous code that queued it: it reads the options set there', async () => {
+    const { core, session, setRead } = await setup();
+    const begun = session.change({ kind: 'begin', label: 'Edit' });
+    setRead({ knownMeshes: [], inputOf: 'f1' as FeatureId }); // a test id
+    await begun;
+    expect(core.requests('beginTransaction')[0]?.read?.inputOf).toBe('f1');
     session.dispose();
   });
 
@@ -390,6 +402,31 @@ describe('RemoteSession calls', () => {
     await session.refresh();
     expect(session.readModel.get().document.name).toBe('New');
     expect(core.requests('getReadModel')[0]?.read?.knownMeshes).toEqual(['v1', 'v2']);
+    session.dispose();
+  });
+
+  // E2E M46: a GetReadModel answered after a change took a newer read model put back the
+  // document without the change (the dialog of a new feature then lost its feature).
+  it('refresh drops a read model older than the one the session has by then', async () => {
+    const { core, session } = await setup();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    core.respond('getReadModel', async () => {
+      await gate;
+      return { readModel: aReadModel({ document: { name: 'Stale' }, regen: { generation: 1n } }) };
+    });
+    core.respond('dispatch', {
+      result: { readModel: aReadModel({ document: { name: 'Fresh' }, regen: { generation: 2n } }) },
+    });
+    const refreshed = session.refresh();
+    await flush();
+    await session.change({ kind: 'dispatch', op: rename('x') });
+    expect(session.readModel.get().document.name).toBe('Fresh');
+    release();
+    await refreshed;
+    expect(session.readModel.get().document.name).toBe('Fresh');
     session.dispose();
   });
 

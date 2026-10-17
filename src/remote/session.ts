@@ -148,6 +148,12 @@ class RemoteSessionImpl implements RemoteSession {
     return this.queue.enqueue(request);
   }
 
+  /**
+   * GetReadModel runs beside the queue of changes, so its answer may come after the answer of a
+   * change the server handled later: a read model of an older generation than the one published
+   * by then is dropped (it would put back the document without that change). The same generation
+   * is taken (the same document, maybe another input_of).
+   */
   async refresh(): Promise<void> {
     const res = await this.call((sessionId) =>
       this.client.getReadModel(
@@ -155,7 +161,9 @@ class RemoteSessionImpl implements RemoteSession {
         this.callOptions(),
       ),
     );
-    this.readModelValue.set(decodeAnswer(res.readModel));
+    const model = decodeAnswer(res.readModel);
+    if (model.regen.generation < this.readModelValue.get().regen.generation) return;
+    this.readModelValue.set(model);
   }
 
   async history(fromSeq: number): Promise<HistoryData> {
@@ -198,8 +206,14 @@ class RemoteSessionImpl implements RemoteSession {
 
   // ---- internal ------------------------------------------------------------------------------
 
-  /** Sends one change to the current session; a failure of the call is the outcome. */
+  /**
+   * Sends one change to the current session; a failure of the call is the outcome. The call goes
+   * after the synchronous code that queued the change: the request reads its read options when it
+   * is sent, and that code may set them in the same step (the feature dialog begins its
+   * transaction before it is the open dialog, whose feature is input_of).
+   */
   private async send(change: QueuedChange): Promise<ChangeSent> {
+    await Promise.resolve();
     const { sessionId, epoch } = this;
     try {
       const result = await this.retrier.run(() => this.rpcOf(change, sessionId));

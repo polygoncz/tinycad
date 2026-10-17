@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ObservableValue } from '@/core';
+import { RemoteError } from '@/remote';
 import type { ConnectionState } from '@/remote';
 import { createConnectionState } from '@/app/connection-state';
 
@@ -43,6 +44,27 @@ describe('createConnectionState', () => {
     h.connection.set(connection);
     h.pending.set(pending);
     expect(h.state.persistence.get()).toBe(status);
+  });
+
+  it('is failed offline after the mirror dropped a change for the outage, until online (N92)', () => {
+    const h = setup();
+    h.connection.set('retrying');
+    h.pending.set(1);
+    h.connection.set('offline');
+    h.state.changeDropped(new RemoteError({ code: 'UNAVAILABLE', message: 'down' }));
+    h.pending.set(0);
+    expect(h.state.persistence.get()).toBe('failed');
+    expect(h.state.persistenceError.get()).toBe('down');
+    h.connection.set('online');
+    h.connection.set('offline');
+    expect(h.state.persistence.get()).toBe('saved');
+  });
+
+  it('a change refused by the server (not the outage) is no failure of saving', () => {
+    const h = setup();
+    h.connection.set('offline');
+    h.state.changeDropped(new RemoteError({ code: 'FAILED_PRECONDITION', message: 'refused' }));
+    expect(h.state.persistence.get()).toBe('saved');
   });
 
   it('shows the text of the last error only while the state calls for it', () => {

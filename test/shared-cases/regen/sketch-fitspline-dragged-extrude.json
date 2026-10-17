@@ -1,0 +1,498 @@
+{
+  "kind": "regen",
+  "description": "A fitSpline whose fit point was dragged to [-10, 15] by the solver still closes the profile; it extrudes with the spline side face:side:s",
+  "source": "test/integration/sketch-spline.test.ts › sketch with a spline (OCCT, real solver) › a dragged fit point keeps the spline through all fit points; the data still extrude",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "sketch-fitspline-dragged-extrude",
+        "name": "sketch-fitspline-dragged-extrude",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "f1",
+            "type": "sketch",
+            "typeVersion": 1,
+            "name": "sketch.label 1",
+            "params": {
+              "plane": [
+                {
+                  "kind": "plane",
+                  "plane": "origin/plane:xy"
+                }
+              ],
+              "entities": [
+                {
+                  "kind": "point",
+                  "id": "a",
+                  "x": 0.06666255745049125,
+                  "y": -0.016665639362622272
+                },
+                {
+                  "kind": "point",
+                  "id": "b",
+                  "x": 40,
+                  "y": 0
+                },
+                {
+                  "kind": "point",
+                  "id": "c",
+                  "x": 40,
+                  "y": 20
+                },
+                {
+                  "kind": "point",
+                  "id": "d",
+                  "x": -2.1947791343243055,
+                  "y": 20.548694783581077
+                },
+                {
+                  "kind": "point",
+                  "id": "f",
+                  "x": -10,
+                  "y": 15
+                },
+                {
+                  "kind": "point",
+                  "id": "g",
+                  "x": -8.591848508201272,
+                  "y": 6.6479621270503175
+                },
+                {
+                  "kind": "line",
+                  "id": "ab",
+                  "p1": "a",
+                  "p2": "b"
+                },
+                {
+                  "kind": "line",
+                  "id": "bc",
+                  "p1": "b",
+                  "p2": "c"
+                },
+                {
+                  "kind": "line",
+                  "id": "cd",
+                  "p1": "c",
+                  "p2": "d"
+                },
+                {
+                  "kind": "fitSpline",
+                  "id": "s",
+                  "degree": 3,
+                  "fit": [
+                    "d",
+                    "f",
+                    "g",
+                    "a"
+                  ],
+                  "params": [
+                    0,
+                    0.33981137949147966,
+                    0.6601886205085203,
+                    1
+                  ],
+                  "poles": [
+                    [
+                      -2.1947791343243055,
+                      20.548694783581077
+                    ],
+                    [
+                      -15.257504724494472,
+                      18.611682509719166
+                    ],
+                    [
+                      -11.333125382918896,
+                      3.578447349790681
+                    ],
+                    [
+                      0.06666255745049125,
+                      -0.016665639362622272
+                    ]
+                  ],
+                  "knots": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                    1,
+                    1,
+                    1
+                  ]
+                }
+              ],
+              "constraints": []
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f2",
+            "type": "extrude",
+            "typeVersion": 1,
+            "name": "extrude.label 1",
+            "params": {
+              "regions": [
+                {
+                  "kind": "region",
+                  "sketch": "f1",
+                  "region": "ab,bc,cd,s"
+                }
+              ],
+              "operation": "new",
+              "targets": [],
+              "endType": "blind",
+              "distance": 10,
+              "upTo": [],
+              "flip": false
+            },
+            "suppressed": false
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "statuses": {
+        "f1": {
+          "kind": "ok"
+        },
+        "f2": {
+          "kind": "ok"
+        }
+      },
+      "bodies": [
+        {
+          "id": "f2/body",
+          "origin": "f2",
+          "lastModifiedBy": "f2",
+          "volume": 9719.604382739197,
+          "bbox": {
+            "min": [
+              -10.381826575898208,
+              -0.01666573936262227,
+              -1e-7
+            ],
+            "max": [
+              40.0000001,
+              20.548694883581078,
+              10.0000001
+            ]
+          },
+          "faces": [
+            {
+              "names": [
+                "f2/face:end"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  1
+                ],
+                "offset": 10
+              }
+            },
+            {
+              "names": [
+                "f2/face:side:ab"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0.0004173364656854308,
+                  -0.9999999129151335,
+                  0
+                ],
+                "offset": 0.01669345862741723
+              }
+            },
+            {
+              "names": [
+                "f2/face:side:bc"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  1,
+                  0,
+                  0
+                ],
+                "offset": 40
+              }
+            },
+            {
+              "names": [
+                "f2/face:side:cd"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0.013002755518810857,
+                  0.9999154606010041,
+                  0
+                ],
+                "offset": 20.518419432772518
+              }
+            },
+            {
+              "names": [
+                "f2/face:side:s"
+              ],
+              "surface": "other"
+            },
+            {
+              "names": [
+                "f2/face:start"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  -1
+                ],
+                "offset": 0
+              }
+            }
+          ],
+          "edges": [
+            {
+              "names": [
+                "edge:f2/face:end|f2/face:side:ab"
+              ],
+              "midpoint": [
+                20.033331278725246,
+                -0.008332819681311136,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:end|f2/face:side:bc"
+              ],
+              "midpoint": [
+                40,
+                10,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:end|f2/face:side:cd"
+              ],
+              "midpoint": [
+                18.902610432837847,
+                20.27434739179054,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:end|f2/face:side:s"
+              ],
+              "midpoint": [
+                -10.23750086238924,
+                10.8878023403435,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:ab|f2/face:side:bc"
+              ],
+              "midpoint": [
+                40,
+                0,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:ab|f2/face:side:s"
+              ],
+              "midpoint": [
+                0.06666255745049125,
+                -0.016665639362622272,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:ab|f2/face:start"
+              ],
+              "midpoint": [
+                20.033331278725246,
+                -0.008332819681311136,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:bc|f2/face:side:cd"
+              ],
+              "midpoint": [
+                40,
+                20,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:bc|f2/face:start"
+              ],
+              "midpoint": [
+                40,
+                10,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:cd|f2/face:side:s"
+              ],
+              "midpoint": [
+                -2.1947791343243055,
+                20.548694783581077,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:cd|f2/face:start"
+              ],
+              "midpoint": [
+                18.902610432837847,
+                20.27434739179054,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:s|f2/face:start"
+              ],
+              "midpoint": [
+                -10.23750086238924,
+                10.8878023403435,
+                0
+              ]
+            }
+          ],
+          "vertexCount": 8
+        }
+      ],
+      "sketches": [
+        {
+          "id": "f1/sketch",
+          "owner": "f1",
+          "regions": [
+            "ab,bc,cd,s"
+          ],
+          "outlines": [
+            {
+              "name": "ab,bc,cd,s",
+              "outer": [
+                {
+                  "kind": "line",
+                  "from": [
+                    0.06666255745049125,
+                    -0.016665639362622272
+                  ],
+                  "to": [
+                    40,
+                    0
+                  ],
+                  "id": "ab"
+                },
+                {
+                  "kind": "line",
+                  "from": [
+                    40,
+                    0
+                  ],
+                  "to": [
+                    40,
+                    20
+                  ],
+                  "id": "bc"
+                },
+                {
+                  "kind": "line",
+                  "from": [
+                    40,
+                    20
+                  ],
+                  "to": [
+                    -2.1947791343243055,
+                    20.548694783581077
+                  ],
+                  "id": "cd"
+                },
+                {
+                  "kind": "bspline",
+                  "degree": 3,
+                  "poles": [
+                    [
+                      -2.1947791343243055,
+                      20.548694783581077
+                    ],
+                    [
+                      -15.257504724494472,
+                      18.611682509719166
+                    ],
+                    [
+                      -11.333125382918896,
+                      3.578447349790681
+                    ],
+                    [
+                      0.06666255745049125,
+                      -0.016665639362622272
+                    ]
+                  ],
+                  "knots": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                    1,
+                    1,
+                    1
+                  ],
+                  "id": "s"
+                }
+              ],
+              "holes": [],
+              "area": 972.0310615431681
+            }
+          ]
+        }
+      ],
+      "anchors": {
+        "f1": {},
+        "f2": {
+          "base": {
+            "point": [
+              14.809086762050896,
+              10.266014572109228,
+              0
+            ],
+            "direction": [
+              0,
+              0,
+              1
+            ]
+          }
+        }
+      }
+    }
+  },
+  "tolerance": {
+    "relative": 0.001
+  }
+}

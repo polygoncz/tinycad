@@ -36,6 +36,18 @@ static_resources:
                           expose_headers: grpc-status,grpc-message,grpc-status-details-bin
                           max_age: '1728000'
                       routes:
+                        # WatchSession is a server stream for the whole session (spec 14): no
+                        # route timeout (0s); the heartbeat every 30 s keeps it under
+                        # stream_idle_timeout.
+                        - match: { path: '/api/tinycad.v1.SessionService/WatchSession' }
+                          route:
+                            cluster: core
+                            prefix_rewrite: '/tinycad.v1.SessionService/WatchSession'
+                            timeout: 0s
+                        - match: { path: '/tinycad.v1.SessionService/WatchSession' }
+                          route:
+                            cluster: core
+                            timeout: 0s
                         # The Vite proxy forwards /api/<service>/<method>; the prefix is dropped.
                         - match: { prefix: '/api/' }
                           route:

@@ -26,6 +26,8 @@ Značka **⚠ k revizi** = rozhodnutí, u kterého si nejsem jistý nebo které 
 
 - **Plány M45 a M46 (2026-10-17), k revizi:** N56 (tři doplňky `.proto`), N63 (optimistické zrcadlo dokumentu v klientovi – v klientovi zůstanou TS handlery operací i po M47), N65 (lokální skica při `SKETCH_NOT_SOLVED` jen do konce transakce), N67 (vlastní pravidla validace featur se v dialogu u pole neukážou), N70 (spadlá karta drží zámek až 10 min), N71 (tlačítko přenosu z IndexedDB místo jen `tinycad-import`).
 
+- **Plán M47 (2026-10-17), k revizi:** N120 (planegcs WASM v klientovi zůstává), N121 (paměťový dispečer, log a undo zůstanou jako testovací dvojník v `ops/testing.ts`), N124 (TS běžce sdílených případů jen `ops` a `sketch`, záznam nových případů jádra ručně), N126 (přenos z IndexedDB zmizí s `persistence`).
+
 _(doplňuje se průběžně)_
 
 ## Obecné
@@ -216,4 +218,46 @@ Revize (`architecture-reviewer`) nad M39–M44 a pahýly M45 nenašla porušení
 
 - **N111 – Fillet a Chamfer sdílí jednu funkci `buildDressup`**, `NameTable` si jména seřadí sám, `#k` řadí `std::stable_sort` (porovnání s tolerancí není striktní uspořádání). Spouštěč případů `regen` bere nové `OcctKernel` na každý případ.
 - **N112 – Property test regenerace ověřuje `liveHandleCount == ownedHandleCount`** a 0 handle po zničení Regeneratoru místo počtu handle v cache (cache není zvenku vidět). Stačí: únik i předčasné uvolnění se projeví.
+
+## Úklid z revize a M44.1
+
+- **N113 – Limit hloubky vnořeného `batch` 64 jen při načítání (`upcastOperation`)**, ne při aplikaci. Proč: transakce a inverze zanořují o 1–3 úrovně hlouběji než operace zvenku; jedna mez by porušila pravidlo M19.1 „co se zapíše, jde přečíst“. Operace ze sítě omezuje protobuf (rekurze 100).
+- **N114 – Jádro, 2D geometrie i řešič propouští `AssertionError` a `bad_alloc`**; ostatní výjimky knihoven OCCT a planegcs převádí na chybu jako hodnotu.
+- **N115 – `sketch_solve.hpp` zůstává v `features/include`, implementace v `tinycad_feature_builders`**; sezení linkuje `tinycad_feature_builders`. Přesun patří k revizi struktury (N110). Hlavička builderů je v `include-builders/` (N109).
+- **N116 – Souběžné buildy C++ v Dockeru (8 GB RAM) s nejvýš `-j3` na agenta.** Proč: při `-j6` čtyř souběžných buildů padal kompilátor na nedostatek paměti.
+- **N117 – Čtení logu a souborů nekopíruje surový JSON před kontrolou** (kopie v nlohmann je rekurzivní; 100 000 vnořených `batch` shodilo server na přetečení zásobníku). Nalezeno při implementaci N113.
+
+## M45 úkoly 2 a 3
+
+- **N118 – `regen_progress` jen při regeneraci po změně a jen za skutečně přestavěné featury.** Proč: regenerace běží při každém read modelu (i `GetReadModel` a opakování) a hlásila by i featury z cache; kruhový buffer 256 událostí by se točil a čtenáři by dostávali `resync`. Implementuje úkol 4.
+- **N119 – `RuntimeDocument::commit` bere `StepKey` (paměť sezení + klíč)** místo `OperationKey`, aby si prázdný `Commit` pamatovalo sezení (N107); `SessionManager::shutdown()` přidaný do kontraktu (N106). Zámek pro zápis má v běhovém dokumentu vlastní listový zámek, takže `open` pod zámkem manageru nikdy nečeká na běžící změnu; rezervace dokumentu (`nullptr`) platí po dobu načítání i uvolnění.
+
+
+## Plán M47 – úklid a dokončení
+
+- **N120 ⚠ – Z prohlížeče zmizí jen OCCT WASM; planegcs WASM, worker řešiče a `core/rpc` zůstávají**, stejně jako tři fonty Noto (text ve skice, [[0029-text-ve-skice-pres-opentype|ADR 0029]]) a ikony Tabler. Žádné fonty se neodebírají. Proč: řešič skici zůstává v klientovi ([[0030-nativni-jadro-pres-grpc|ADR 0030]] bod 5); ⚠ protože zužuje cíl M47 „z prohlížeče zmizí WASM“.
+- **N121 ⚠ – `ops` v klientovi po M47:** veřejné API jsou typy operací, `OP_VERSION`, registr a handlery, `applyOperation` a typy portů (`OperationDispatcher`, `DispatchMeta`, `Transaction`, `UndoManager`, `LogEntry` v `ops/ports.ts`). Paměťový dispečer, log, transakce a undo se nemažou, ale přesunou se z `index.ts` do `ops/testing.ts` jako testovací dvojník portů; mažou se `replay`, `upcast`, `parse-entry`, `load-error` a `rebuildUndoStacks`. Proč: ≈50 testů `interaction` a `sketcher` staví scénu přes `anOpsSession` a fasádu z `app` v prstenci 1 použít nejde; do bundlu se `testing.ts` nedostane. ⚠ protože poznámka M47 (N63) počítala se smazáním dispečera, transakcí a undo – z produkce zmizí, kód zůstane.
+- **N122 – Modul `kernel` zůstává pod stejným jménem jako typy pro `render` a `remote`** (`MeshData`, `MeshQuality`, `ShapeHandle`, `BoundingBox`, `MeshOps`, typy oblastí profilu, chyby jádra, `validateMeshData`); `GeometryKernel`, parsery vstupů, `isRigidMotion`, `FakeKernel` a kontraktová sada zmizí. Proč: přejmenování by sáhlo do ~25 souborů `render` bez přínosu.
+- **N123 – `FeaturePlugin` = `{ type, tools?, manipulators?, messages? }`.** Z `features/*` zůstanou nástroje, manipulátory, zprávy, typy parametrů s pomůckami (`params.ts`) a typy kotev (`anchors.ts`); buildery, objekty schémat a `registerPlugin` zmizí. Soulad hlídá test „typy `BUILT_IN_PLUGINS` = typy zlatého souboru popisů“ místo `plugins-parity.test.ts`. Proč: schéma přichází ze serveru (N67), plugin dává jen to, co server neumí.
+- **N124 ⚠ – Referenční implementace sdílených případů je po M47 C++.** V TS zůstanou běžce `ops` (druh `script` a handlery nad dvojníkem z N121), `sketch` (řešič a odvozené entity jsou v klientovi) a metatest pokrytí; `geometry`, `regen`, `schema`, `schema-validate` a `document` (s `fromData`/`toData`, pokud je úklid exportů smaže) zmizí. Viditelnost parametrů v TS dál ověřuje test `remote/feature-types` přes `featureSchemaOf`. `cases:record` zapisuje jen `ops` a `sketch`; `expected` nových případů `regen` a `geometry` se zapisuje ručně podle výstupu C++. ⚠ protože záznamový režim C++ je odložený (formát JSON z nlohmann by přepsal celé soubory) a nové případy jádra se tak píšou pracněji.
+- **N125 – Měření před a po sérii, ne před a po M47.** „Před“ = commit `main` těsně před sloučením M46 (lokální cesta s WASM, bez serveru), „po“ = konec M47 proti Compose; skript `scripts/measure-startup.mjs` jde stejným scénářem přes UI (nový dokument a kvádr), medián z 5 studených načtení, a k tomu velikosti `dist/assets`. Proč: po M46 už bundler nezapojenou lokální cestu nebalí, rozdíl před a po M47 by byl skoro nulový.
+- **N126 ⚠ – Tlačítko přenosu z IndexedDB (N71) zmizí s `persistence`.** Dokumenty z prohlížeče jde po M47 přenést jen z checkoutu před M47 (tlačítko nebo export a `tinycad-import`). Proč: čtení IndexedDB je jediný důvod držet `persistence` a `persistence/idb`; ⚠ protože nevím, jestli Pavel v IndexedDB dokumenty má – uzavření M47 to zapíše do deníku.
+- **N127 – Integrační scénáře se před smazáním převedou na sdílené případy `regen`.** Co nemá obdobu v C++ testech ani v případech (topologické pojmenování, regrese oblastí skici, splinu a textu), se zapíše ještě TS regenerací přes `cases:record` a ověří v C++; případ, který v C++ neprojde, je nález, ne úprava `expected`. Proč: integrační testy jsou u některých regresí jediný zápis chování a po smazání TS regenerace by se nedaly zaznamenat.
+- **N128 – Specifikace 05, 06 a 07 popisují C++ verzi; TS zápis signatur zůstává jako zápis kontraktu.** Části jen o prohlížeči (adaptér IndexedDB a worker, služba s frontou, worker a volba WASM buildu OCCT, Vite, TS `FakeKernel`) se přesunou do archivní poznámky na spec v `90-archiv/`, nemažou se. Proč: vault nic nemaže a specifikace má popisovat, co běží; přepis signatur do C++ by byl práce bez přínosu, hlavičky jsou v `server/src/*/include`.
+- **N129 – Pořadí M47: 1 ∥ 2 → 3 → 4 ∥ 5 ∥ 6 → 7.** Mazání modulů (3) je jeden úkol, protože mazané moduly se navzájem importují a každý mezikrok musí projít `typecheck`; zúžení `ops`/`kernel`/`document` (4), e2e a konfigurace (5) a specifikace (6, hlavní sezení) se soubory nekříží.
+
+## M45 úkoly 4 a 5, M46 úkol 5
+
+- **N130 – Server je sestavený ve třídě `CoreServer` (knihovna `tinycad_app`)**, `main.cpp` jen čte prostředí, signály a ztlumí výpisy OCCT jednou za proces (N78 přesunuto ze `step.cpp`). Pořadí vypnutí: reaper → zdraví → `SessionManager::shutdown()` → `Server::Shutdown` → zničení manageru. Envoy má pro `WatchSession` trasu s `timeout: 0s` (jinak by stream ukončil timeout trasy 30 s).
+- **N131 – `ImportDocument` bere `importKey(content)`**: stejný soubor s jiným `operation_id` vrátí týž dokument, `OPERATION_ID_REUSED` u importu nenastane. `tinycad-import` má výchozí adresář `/data`.
+- **N132 – `WatchSession` se na zrušení klientem ptá nejméně po 200 ms**; zavřené sezení s dál načteným dokumentem stream neukončí (klient stream ruší sám). `regen_progress` (N118) zrcadlí ukazatele featur cache Regeneratoru – čistší by byl příznak „z cache“ v `featureDone`, k revizi (N110).
+- **N133 – `check:server` staví s `CMAKE_BUILD_PARALLEL_LEVEL=3`** (proměnná prostředí ji přepíše), N116. Dva gRPC harnessy v jednom testovacím binárním souboru: `TestServer` (sezení) a `DocumentsTestServer` (dokumenty).
+- **N134 ⚠ – Klient: výklad N92** – `failed` = `offline` a změny ve frontě nebo změna zahozená s opakovatelnou chybou; vynuluje se při `online`, `flush()` pak odmítne. Ztráta transakce a `SKETCH_NOT_SOLVED` se zatím hlásí jen do konzole – `AppSession` nemá kanál dočasných hlášení (`notice`), doplní se po M46. `pagehide` zavře sezení s `keepalive` (neodeslané změny ve frontě zaniknou), obnovení z bfcache = reload.
+
+## M46 úkol 6 (e2e proti Compose)
+
+- **N135 ⚠ – Navázané sezení s otevřenou transakcí z předchozí stránky zruší klient `Abort`em** před sestavením (`NO_TRANSACTION` se toleruje). Atomičtější by bylo zrušit ji na serveru při `OpenSession` s `resume_session_id` – k revizi.
+- **N136 – Klient zahodí read model se starší `regen.generation`** (stejnou přijme) a změnu odešle až po mikrotasku, aby nesla `input_of` dialogu otevřeného tímtéž kódem. Obojí našly e2e (výběr špatného tělesa, zaoblení zasažené vlastní hranou).
+- **N137 – Při latenci dialog vysunutí otevřený před odpovědí na dokončenou skicu oblast nepředvybere** (D6 z M19.2); přijato, předvýběr se dodatečně nedoplňuje.
+- **N138 – E2E: každý test zakládá svůj dokument přes `DocumentService` z Node** (`createDocument` vrací `{ id, name }`), vlastní Compose projekt podle `E2E_PORT` s daty v tmpfs; `test:e2e:core` a `playwright.core.config.ts` zanikly.
 

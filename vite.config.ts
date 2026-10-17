@@ -9,14 +9,14 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
-  // M39: with VITE_CORE_URL=/api the browser talks gRPC-Web to Envoy of docker-compose.yml through
-  // the dev server (same origin, no CORS); Envoy listens on 8080 and forwards to tinycad-core.
-  // `vite preview` reuses this proxy (preview.proxy defaults to it): the e2e of
-  // playwright.core.config.ts.
+  // The browser talks gRPC-Web to Envoy through the dev server under /api (same origin, no CORS;
+  // N68); Envoy of docker-compose.yml listens on 8080 and forwards to tinycad-core. `vite preview`
+  // reuses this proxy (preview.proxy defaults to it): the e2e point it at Envoy of
+  // docker-compose.e2e.yml with E2E_CORE_PORT (playwright.config.ts, N72).
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: `http://localhost:${process.env.E2E_CORE_PORT ?? '8080'}`,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },

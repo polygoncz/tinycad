@@ -67,6 +67,34 @@ TEST(RequestFingerprint, IsIndependentOfTheOrderParamsWereWritten) {
   EXPECT_EQ(requestFingerprint(a), requestFingerprint(b));
 }
 
+TEST(RequestFingerprint, IsTheSha256OfTheCanonicalJsonWithTheOperationOfSpec04) {
+  // N107: proto field names, the operation as the JSON of spec 04, keys sorted, no white space.
+  EXPECT_EQ(requestFingerprint(aDispatch()),
+            sha256Hex(R"({"label":"Rename","op":{"featureId":"f1","name":"Base",)"
+                      R"("type":"feature.rename","v":1}})"));
+}
+
+TEST(RequestFingerprint, WritesWholeNumbersOfParamsAsIntegers) {
+  v1::ApplyRequest request;
+  request.set_operation_id("op-1");
+  auto* setParams = request.mutable_op()->mutable_feature_set_params();
+  setParams->set_feature_id("f1");
+  setParams->set_type_version(1);
+  (*setParams->mutable_params()->mutable_fields())["width"].set_number_value(2);
+  (*setParams->mutable_params()->mutable_fields())["depth"].set_number_value(0.5);
+  EXPECT_EQ(requestFingerprint(request),
+            sha256Hex(R"({"op":{"featureId":"f1","params":{"depth":0.5,"width":2},)"
+                      R"("type":"feature.setParams","typeVersion":1,"v":2}})"));
+}
+
+TEST(RequestFingerprint, AnOperationTheCodecRefusesStillHasAFingerprint) {
+  v1::ApplyRequest empty;
+  empty.mutable_op();
+  v1::ApplyRequest other;
+  EXPECT_EQ(requestFingerprint(empty).size(), 64u);
+  EXPECT_NE(requestFingerprint(empty), requestFingerprint(other));
+}
+
 TEST(RequestFingerprint, DoesNotChangeTheRequest) {
   const v1::DispatchRequest request = aDispatch();
   (void)requestFingerprint(request);

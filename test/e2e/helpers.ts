@@ -1,16 +1,44 @@
+import { randomUUID } from 'node:crypto';
+import { documentService } from './core';
 import { expect } from './fixtures';
 import type { Locator, Page } from '@playwright/test';
 
 // Steps shared by the e2e scenarios. Elements are found only by their roles and accessible
 // names (spec 11, "Přístupnost").
 
-/** From the document list to an open, empty document. */
-export async function createDocument(page: Page): Promise<void> {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Nový', exact: true }).click();
-  await expect(page).toHaveURL(/#\/d\//);
-  // The toolbar is there once the session is open.
+/** A document of one test on the core of the run. */
+export interface ServerDocument {
+  readonly id: string;
+  readonly name: string;
+}
+
+/**
+ * A new empty document on the core, made from Node over DocumentService (N72): the workers share
+ * the core, so every test works in its own document, named uniquely unless `name` says otherwise.
+ */
+export async function createServerDocument(name?: string): Promise<ServerDocument> {
+  const { document } = await documentService().createDocument({
+    operationId: randomUUID(),
+    name: name ?? `e2e ${randomUUID().slice(0, 8)}`,
+  });
+  if (document === undefined) throw new Error('CreateDocument answered no document');
+  return { id: document.documentId, name: document.name };
+}
+
+/** The route of the document in the app. */
+export function documentRoute(doc: ServerDocument): string {
+  return `/#/d/${doc.id}`;
+}
+
+/**
+ * A new empty document of this test (createServerDocument), open in the page. Resolves once the
+ * session is open and writable (the toolbar is enabled).
+ */
+export async function createDocument(page: Page, name?: string): Promise<ServerDocument> {
+  const doc = await createServerDocument(name);
+  await page.goto(documentRoute(doc));
   await expect(page.getByRole('button', { name: 'Kvádr', exact: true })).toBeEnabled();
+  return doc;
 }
 
 /** The input of a param field of the open dialog, named by its label. */
@@ -30,7 +58,7 @@ export function timelineFeature(page: Page, name: string): Locator {
   return page.getByRole('button', { name, exact: true });
 }
 
-/** Reloads the page once the log is in IndexedDB (the green dot of the title bar). */
+/** Reloads the page once the core has confirmed every change (the green dot of the title bar). */
 export async function reloadWhenSaved(page: Page): Promise<void> {
   await expect(page.getByRole('status', { name: 'Uloženo' })).toBeVisible();
   await page.reload();
@@ -149,6 +177,21 @@ export async function openTool(page: Page, tool: string, feature: string): Promi
   return dialog;
 }
 
+/**
+ * Opens the edit dialog of a feature by a double click in the Timeline and waits until the view
+ * shows the input of the feature (ADR 0025): the app reads the model again with input_of once the
+ * dialog is open, and until that answer is in, the view still shows the result of the feature, so
+ * a pick would hit it.
+ */
+export async function editFeatureWithInput(page: Page, name: string): Promise<Locator> {
+  const inputRead = page.waitForResponse((r) => r.url().endsWith('/GetReadModel'));
+  await timelineFeature(page, name).dblclick();
+  const dialog = page.getByRole('dialog', { name, exact: true });
+  await expect(dialog).toBeVisible();
+  await inputRead;
+  return dialog;
+}
+
 /** OK of the feature dialog; the dialog closes. */
 export async function confirmDialog(dialog: Locator): Promise<void> {
   await dialog.getByRole('button', { name: 'OK', exact: true }).click();
@@ -218,4 +261,79 @@ export async function pickVariant(page: Page, shown: string, variant: string): P
   await expect(menu).toBeVisible();
   await menu.getByRole('menuitem', { name: new RegExp(`^${variant}( |$)`) }).click();
   await expect(menu).toBeHidden();
+}
+
+/** A point on the canvas in px from its centre (x right, y down). */
+export type CanvasOffset = readonly [dx: number, dy: number];
+
+/** The page coordinates of a point px from the canvas centre. */
+export async function canvasPoint(page: Page, [dx, dy]: CanvasOffset): Promise<CanvasOffset> {
+  const box = await page.locator('canvas').first().boundingBox();
+  if (box === null) throw new Error('the canvas is not visible');
+  return [box.x + box.width / 2 + dx, box.y + box.height / 2 + dy];
+}
+
+/** Drags with the left button in `steps` moves between two points px from the canvas centre. */
+export async function dragOnCanvas(
+  page: Page,
+  from: CanvasOffset,
+  to: CanvasOffset,
+  steps = 20,
+): Promise<void> {
+  const [x0, y0] = await canvasPoint(page, from);
+  const [x1, y1] = await canvasPoint(page, to);
+  await page.mouse.move(x0, y0);
+  await page.mouse.down();
+  await page.mouse.move(x1, y1, { steps });
+  await page.mouse.up();
+}
+
+/** The bounds of the block of createExtrudedBlock, mm. */
+const BLOCK_MIN: Point3 = [0, 0, 0];
+const BLOCK_MAX: Point3 = [40, 20, 10];
+
+/**
+ * In an empty document: a rectangle 40 × 20 mm from the origin (Skica 1) extruded 10 mm
+ * (Vysunutí 1), then "Zobrazit vše" (F), so isoCanvasOffset knows where the block is. Resolves
+ * once the core has confirmed it.
+ */
+export async function createExtrudedBlock(page: Page): Promise<void> {
+  const panel = await drawDimensionedRectangle(page, 'Skica 1');
+  for (const [label, value] of [
+    ['Vodorovná vzdálenost 1', '40'],
+    ['Svislá vzdálenost 1', '20'],
+  ] as const) {
+    const input = await dimensionInput(panel, label);
+    await input.fill(value);
+    await input.press('Enter');
+  }
+  await panel.getByRole('button', { name: 'Hotovo', exact: true }).click();
+  await expect(panel).toHaveCount(0);
+  // The extrude preselects the region of the last read model (D6 of M19.2).
+  await expect(page.getByRole('status', { name: 'Uloženo' })).toBeVisible();
+  const extrude = await openTool(page, 'Vysunutí', 'Vysunutí 1');
+  await fillParam(page, 'Vzdálenost', '10');
+  await confirmDialog(extrude);
+  await expect(page.getByText('Tělesa: 1')).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Uloženo' })).toBeVisible();
+  // The sketch left the camera looking along its normal: back to the iso view, then fitted. The
+  // camera eases into each view, so each gets time to settle.
+  await page.getByRole('navigation').getByRole('button', { name: 'Zobrazit', exact: true }).click();
+  await page
+    .getByRole('menu')
+    .getByRole('menuitem', { name: /^Izometrický( |$)/ })
+    .click();
+  await page.waitForTimeout(600);
+  await page.keyboard.press('f');
+  await page.waitForTimeout(600);
+}
+
+/**
+ * Where to grab the arrow of the distance of the extrude of createExtrudedBlock while its dialog
+ * is open: the arrow stands on the middle of the top face, (20, 10, 10), points up (+z) and its
+ * shaft starts 14 px from that point (interaction MANIPULATOR_GLYPHS).
+ */
+export async function extrudeArrowGrip(page: Page): Promise<CanvasOffset> {
+  const { dx, dy } = await isoCanvasOffset(page, BLOCK_MIN, BLOCK_MAX, [20, 10, 10]);
+  return [dx, dy - 24];
 }

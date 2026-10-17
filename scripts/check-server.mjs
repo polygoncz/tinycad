@@ -24,6 +24,9 @@ const result = spawnSync(
     'tinycad-core:build',
     '--progress',
     'plain',
+    // At most -j3 by default: parallel builds of several worktrees share 8 GB of RAM (N116).
+    '--build-arg',
+    `CMAKE_BUILD_PARALLEL_LEVEL=${process.env.CMAKE_BUILD_PARALLEL_LEVEL ?? '3'}`,
     '.',
   ],
   { cwd: ROOT, stdio: 'inherit', env: { ...process.env, DOCKER_BUILDKIT: '1' } },

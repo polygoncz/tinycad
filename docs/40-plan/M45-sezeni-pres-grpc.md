@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 45
 aliases:
   - M45
@@ -13,8 +13,8 @@ specs:
 depends_on:
   - "[[M41-persistence-sqlite]]"
   - "[[M44.1-builder-skici-na-serveru]]"
-started:
-finished:
+started: 2026-10-17
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-17
@@ -34,11 +34,11 @@ updated: 2026-10-17
 
 ## Úkoly
 
-- [ ] 1. Kostra `tinycad_session`, doplňky kontraktu, chyby, převod operací a popisy typů featur
-- [ ] 2. Read model, mezipaměť sítí a kruhový buffer událostí (souběžně s 3)
-- [ ] 3. Běhový dokument, sezení, zámek, idempotence a timeout nečinnosti (souběžně s 2)
-- [ ] 4. gRPC `SessionService` s `WatchSession` a integrační testy přes kanál (souběžně s 5)
-- [ ] 5. gRPC `DocumentService`, zapojení v `main.cpp`, svazek dat v Compose (souběžně s 4)
+- [x] 1. Kostra `tinycad_session`, doplňky kontraktu, chyby, převod operací a popisy typů featur
+- [x] 2. Read model, mezipaměť sítí a kruhový buffer událostí (souběžně s 3)
+- [x] 3. Běhový dokument, sezení, zámek, idempotence a timeout nečinnosti (souběžně s 2)
+- [x] 4. gRPC `SessionService` s `WatchSession` a integrační testy přes kanál (souběžně s 5)
+- [x] 5. gRPC `DocumentService`, zapojení v `main.cpp`, svazek dat v Compose (souběžně s 4)
 
 Úkol 1 jde první a sám (založí všechny soubory s pahýly, N30, a změní `.proto`, na kterém stojí i TS). Úkoly 2 a 3 pak běží souběžně, po jejich sloučení souběžně 4 a 5.
 
@@ -132,4 +132,9 @@ Návrh stavové gRPC služby: sezení nezávislé na spojení, idempotence trval
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+_Návrh Clauda (samostatný běh)._
+
+- Pět úkolů, z toho úkol 1 souběžně s M41/M43 a úkoly 2∥3 a 4∥5 ve dvojicích; slučování ručně (pahýly z úkolu 3 nahradily verze z úkolu 2 a M44.1, dva gRPC harnessy přejmenováním).
+- Před úkoly 2–5 revize architektury serveru našla chyby souběhu, které by se v gRPC projevily zaseknutím (nekončící `WatchSession`, vypnutí čekající na heartbeat, jedna regenerace blokující všechna sezení) – pravidla zámků zapsaná do spec 14 dřív, než se implementovala (N106).
+- Výsledek: `SessionService`, `DocumentService`, `WatchSession`, idempotence trvalá i v paměti, server složený v `CoreServer`, data ve svazku Compose; 1717 testů C++, integrační testy přes skutečný gRPC kanál včetně restartu serveru.
+- Přerušení limitem použití uprostřed úkolů 4 a 5 M45 a úkolu 5 M46 – agenti po obnovení pokračovali, kde skončili.

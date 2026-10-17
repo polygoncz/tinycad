@@ -41,7 +41,10 @@ std::optional<EntryKind> kindOf(const Json* v) {
 /** upcastOperation with the paths under `prefix` ('op', 'inverse'). */
 core::Result<Operation, OperationLoadError> operation(const OpHandlerRegistry& handlers,
                                                       const Json* raw, const std::string& prefix) {
-  auto result = upcastOperation(handlers, raw == nullptr ? Json() : *raw);
+  // Both branches lvalues: a prvalue would copy the raw operation, and copying recurses, which a
+  // deeply nested operation from outside must not reach (N113).
+  static const Json missing;
+  auto result = upcastOperation(handlers, raw != nullptr ? *raw : missing);
   if (result) return result;
   const std::string& path = result.error().path;
   return core::fail(

@@ -7,7 +7,8 @@
 //
 // Conversions: DocumentSummary ms → google.protobuf.Timestamp; ImportDocument.content bytes →
 // UTF-8 text; ServiceError / SessionError → toStatus (fromServiceError). Idempotent requests
-// (CreateDocument, ImportDocument, RenameDocument) take operationKey(request) (N57); a missing
+// (CreateDocument, RenameDocument) take operationKey(request) (N57); ImportDocument takes
+// storage::importKey(content) like tinycad-import (N107, the same file never duplicates); a missing
 // operation_id → InvalidOperation 'operation_id'. Every body in try/catch → INTERNAL.
 
 #include <grpcpp/grpcpp.h>

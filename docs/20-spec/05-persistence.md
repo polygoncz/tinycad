@@ -240,7 +240,7 @@ Tvar chyby rozhodla [[Q033 Tvar chyby při načtení dokumentu|Q033]]. Chyba I/O
 - Záznam: mezera v `seq` → `path: 'seq'`, výjimka handleru při přehrání → `path: 'op'` se zprávou výjimky.
 - `base` musí mít navíc `atSeq === 0`, jinak `snapshot` s `which: 'base'` a `path: 'atSeq'`. Vadný base je chyba dat, ne porušení determinismu.
 
-Známé omezení: `target` undo/redo záznamů, který neodpovídá zásobníku, `loadDocument` nezachytí. Vyhodí až `rebuildUndoStacks` v `createUndoManager`. `parseLogEntry` kontroluje jen tvar (spec 04).
+Známé omezení (TS verze): `target` undo/redo záznamů, který neodpovídá zásobníku, `loadDocument` nezachytí. Vyhodí až `rebuildUndoStacks` v `createUndoManager`. `parseLogEntry` kontroluje jen tvar (spec 04). **Server (C++) od úklidu po M44** ([[Rozhodnutí nativního jádra]] N108): `rebuildUndoStacks` vrací chybu a `loadDocument` ji hlásí jako `LoadError` záznamu s cestou `target`; načítání logu nekopíruje surový JSON (kopie v nlohmann je rekurzivní) a `batch` vnořený hlouběji než 64 odmítne (N113).
 
 Featury a parametry uvnitř záznamů se migrují až při `apply` během přehrání ([[04-operace-a-historie#Migrace dat featur]], [[Q035 Migrace featur v záznamech logu|Q035]]); `parseLogEntry` schémata nepotřebuje. Selhání migrace je chyba `entry` jako každá jiná výjimka handleru (bod 4). Registr `handlers` musí vzniknout se **stejnými** `schemas`, jaké dostane `loadDocument` (`createOpHandlerRegistry({ schemas })`): dva různé registry schémat by migrovaly snapshot a záznamy jinak; nic to nehlídá, kompoziční kořen má jediný registr.
 

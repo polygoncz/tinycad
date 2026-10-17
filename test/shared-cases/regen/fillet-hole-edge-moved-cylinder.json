@@ -1,0 +1,412 @@
+{
+  "kind": "regen",
+  "description": "The fillet on the top edge of a hole resolves its edge again after the cylinder of the hole moved to x = 4",
+  "source": "test/integration/topo-scenarios.test.ts › topological naming scenarios (spec 08, OCCT) › 3: a fillet on an edge of a hole survives moving the cylinder",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "fillet-hole-edge-moved-cylinder",
+        "name": "fillet-hole-edge-moved-cylinder",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "f1",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "box.label 1",
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 10,
+              "depth": 10,
+              "height": 10
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f2",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 1",
+            "params": {
+              "base": [
+                4,
+                5,
+                -1
+              ],
+              "axis": "z",
+              "radius": 2,
+              "height": 12
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f3",
+            "type": "boolean",
+            "typeVersion": 1,
+            "name": "boolean.label 1",
+            "params": {
+              "op": "subtract",
+              "targets": [
+                {
+                  "kind": "body",
+                  "body": "f1/body"
+                }
+              ],
+              "tools": [
+                {
+                  "kind": "body",
+                  "body": "f2/body"
+                }
+              ],
+              "keepTools": false
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f4",
+            "type": "fillet",
+            "typeVersion": 1,
+            "name": "fillet.label 1",
+            "params": {
+              "edges": [
+                {
+                  "kind": "topo",
+                  "body": "f1/body",
+                  "name": "edge:f1/face:top|f2/face:side"
+                }
+              ],
+              "radius": 0.5
+            },
+            "suppressed": false
+          }
+        ],
+        "rollbackIndex": 4
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "statuses": {
+        "f1": {
+          "kind": "ok"
+        },
+        "f2": {
+          "kind": "ok"
+        },
+        "f3": {
+          "kind": "ok"
+        },
+        "f4": {
+          "kind": "ok"
+        }
+      },
+      "bodies": [
+        {
+          "id": "f1/body",
+          "origin": "f1",
+          "lastModifiedBy": "f4",
+          "volume": 873.6372689693659,
+          "bbox": {
+            "min": [
+              0,
+              0,
+              0
+            ],
+            "max": [
+              10,
+              10,
+              10
+            ]
+          },
+          "faces": [
+            {
+              "names": [
+                "f1/face:back"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  1,
+                  0
+                ],
+                "offset": 10
+              }
+            },
+            {
+              "names": [
+                "f1/face:bottom"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  -1
+                ],
+                "offset": 0
+              }
+            },
+            {
+              "names": [
+                "f1/face:front"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  -1,
+                  0
+                ],
+                "offset": 0
+              }
+            },
+            {
+              "names": [
+                "f1/face:left"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  -1,
+                  0,
+                  0
+                ],
+                "offset": 0
+              }
+            },
+            {
+              "names": [
+                "f1/face:right"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  1,
+                  0,
+                  0
+                ],
+                "offset": 10
+              }
+            },
+            {
+              "names": [
+                "f1/face:top"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  1
+                ],
+                "offset": 10
+              }
+            },
+            {
+              "names": [
+                "f2/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f4/face:fillet:edge:f1/face:top|f2/face:side"
+              ],
+              "surface": "torus"
+            }
+          ],
+          "edges": [
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:bottom"
+              ],
+              "midpoint": [
+                5,
+                10,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:left"
+              ],
+              "midpoint": [
+                0,
+                10,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:right"
+              ],
+              "midpoint": [
+                10,
+                10,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:top"
+              ],
+              "midpoint": [
+                5,
+                10,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:front"
+              ],
+              "midpoint": [
+                5,
+                0,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:left"
+              ],
+              "midpoint": [
+                0,
+                5,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:right"
+              ],
+              "midpoint": [
+                10,
+                5,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f2/face:side"
+              ],
+              "midpoint": [
+                2,
+                5,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f1/face:left"
+              ],
+              "midpoint": [
+                0,
+                0,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f1/face:right"
+              ],
+              "midpoint": [
+                10,
+                0,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f1/face:top"
+              ],
+              "midpoint": [
+                5,
+                0,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:left|f1/face:top"
+              ],
+              "midpoint": [
+                0,
+                5,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:right|f1/face:top"
+              ],
+              "midpoint": [
+                10,
+                5,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f4/face:fillet:edge:f1/face:top|f2/face:side"
+              ],
+              "midpoint": [
+                1.5,
+                5,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side|f2/face:side"
+              ],
+              "midpoint": [
+                6,
+                4.999999999999999,
+                4.75
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side|f4/face:fillet:edge:f1/face:top|f2/face:side"
+              ],
+              "midpoint": [
+                2,
+                5,
+                9.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f4/face:fillet:edge:f1/face:top|f2/face:side|f4/face:fillet:edge:f1/face:top|f2/face:side"
+              ],
+              "midpoint": [
+                6.146446609406726,
+                5,
+                9.853553390593273
+              ]
+            }
+          ],
+          "vertexCount": 11
+        }
+      ],
+      "sketches": [],
+      "anchors": {
+        "f1": {},
+        "f2": {},
+        "f3": {},
+        "f4": {}
+      }
+    }
+  },
+  "tolerance": {
+    "relative": 0.001
+  }
+}

@@ -282,6 +282,16 @@ TEST(ApplyMigration, FeatureAddAndSetParamsMigrateOldFeatureData) {
   EXPECT_EQ(failedAdd.error().path, "feature.params");
 }
 
+TEST(ApplyMigration, FeatureAddRefusesATypeVersionAboveTheIntRange) {
+  const auto doc = aDocument();
+  Json op = addOp(*aFeature({.id = "a"}), 0);
+  op["feature"]["typeVersion"] = 4294967296.0;
+  const auto failed = ops::applyOperation(*doc, handlers(), op);
+  ASSERT_FALSE(failed.has_value());
+  EXPECT_EQ(failed.error().path, "feature.typeVersion");
+  EXPECT_TRUE(doc->studio()->features.empty());
+}
+
 TEST(ApplyMigration, FeatureAddOnTheCurrentVersionKeepsTheData) {
   const auto doc = aDocument();
   const auto f = aFeature({.id = "a", .params = Json{{"size", 3}}});

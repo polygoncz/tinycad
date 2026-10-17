@@ -153,12 +153,16 @@ BodyMetaMap readBodies(const Json* raw, IssueList& issues) {
   return bodies;
 }
 
-FeaturePtr readFeature(const Json& raw, const std::string& path,
-                       const FeatureSchemaRegistryReader& schemas, IssueList& issues) {
+FeaturePtr readFeatureInto(const Json& raw, const std::string& path,
+                           const FeatureSchemaRegistryReader& schemas, IssueList& issues) {
   if (!raw.is_object()) {
     issues.at(path, "Must be an object");
     return nullptr;
   }
+  // `path` is empty when the feature is read on its own (readFeature).
+  const auto under = [&path](const std::string& key) {
+    return path.empty() ? key : path + "." + key;
+  };
   const Json* id = field(raw, "id");
   const Json* type = field(raw, "type");
   const Json* typeVersion = field(raw, "typeVersion");
@@ -174,19 +178,19 @@ FeaturePtr readFeature(const Json& raw, const std::string& path,
   const bool nameOk = isString(name);
   const bool paramsOk = params != nullptr && isJsonObject(*params);
   const bool suppressedOk = isBool(suppressed);
-  if (!idOk) issues.at(path + ".id", "Must be a non-empty string without '/', other than 'origin'");
-  if (!typeOk) issues.at(path + ".type", "Must be a non-empty string");
-  if (!versionOk) issues.at(path + ".typeVersion", "Must be a whole number >= 1");
-  if (!nameOk) issues.at(path + ".name", "Must be a string");
-  if (!paramsOk) issues.at(path + ".params", "Must be a plain JSON object");
-  if (!suppressedOk) issues.at(path + ".suppressed", "Must be true or false");
+  if (!idOk) issues.at(under("id"), "Must be a non-empty string without '/', other than 'origin'");
+  if (!typeOk) issues.at(under("type"), "Must be a non-empty string");
+  if (!versionOk) issues.at(under("typeVersion"), "Must be a whole number >= 1");
+  if (!nameOk) issues.at(under("name"), "Must be a string");
+  if (!paramsOk) issues.at(under("params"), "Must be a plain JSON object");
+  if (!suppressedOk) issues.at(under("suppressed"), "Must be true or false");
   if (!idOk || !typeOk || !versionOk || !nameOk || !paramsOk || !suppressedOk) return nullptr;
 
   const FeatureData data{str(type), static_cast<int>(core::numberOf(*typeVersion)), *params};
   auto migrated = migrateFeatureData(schemas, data);
   if (!migrated) {
     // Paths of the migration issues are made relative to the document.
-    issues.at(path + "." + migrated.error().path, migrated.error().message);
+    issues.at(under(migrated.error().path), migrated.error().message);
     return nullptr;
   }
   auto feature = std::make_shared<FeatureInstance>();
@@ -215,7 +219,7 @@ std::optional<PartStudioData> readStudio(const Json* raw,
   std::set<FeatureId> seen;
   for (std::size_t i = 0; i < rawFeatures->size(); ++i) {
     const std::string path = "studio.features[" + std::to_string(i) + "]";
-    FeaturePtr f = readFeature((*rawFeatures)[i], path, schemas, issues);
+    FeaturePtr f = readFeatureInto((*rawFeatures)[i], path, schemas, issues);
     if (!f) continue;
     if (!seen.insert(f->id).second) {
       issues.at(path + ".id", "Duplicate feature id '" + f->id.str() + "'");
@@ -244,6 +248,8 @@ Json bodyMetaJson(const BodyMeta& meta) {
   return out;
 }
 
+}  // namespace
+
 Json featureJson(const FeatureInstance& f) {
   return {{"id", f.id.str()},
           {"type", f.type},
@@ -253,7 +259,13 @@ Json featureJson(const FeatureInstance& f) {
           {"suppressed", f.suppressed}};
 }
 
-}  // namespace
+core::Result<FeaturePtr, DocumentLoadError> readFeature(
+    const Json& raw, const FeatureSchemaRegistryReader& schemas) {
+  IssueList issues;
+  FeaturePtr feature = readFeatureInto(raw, "", schemas, issues);
+  if (!feature) return core::fail(std::move(issues).error());
+  return feature;
+}
 
 DocumentData toData(const DocumentReader& doc) { return DocumentData{doc.meta(), doc.studio()}; }
 

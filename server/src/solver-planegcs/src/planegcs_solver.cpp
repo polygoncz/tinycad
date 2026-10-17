@@ -3,9 +3,13 @@
 
 #include "tinycad/solver_planegcs/planegcs_solver.hpp"
 
+#include <exception>
+#include <new>
+
 #include "gcs_wrapper.hpp"
 #include "primitives.hpp"
 #include "read_back.hpp"
+#include "tinycad/core/result.hpp"
 
 namespace tinycad::solver_planegcs {
 
@@ -63,7 +67,10 @@ Solved solveOnce(const sketch::Sketch& sketch, const std::optional<sketch::Drag>
  * A point on a spline has a free curve parameter, which planegcs cannot keep in [0, 1]. When it
  * leaves the range, the sketch is solved once more with every such parameter fixed at the end it
  * passed (spec 12, Spliny, Bod na splinu). The dof is the one of the first solve; a conflict or
- * failure of the second one is the result. Any exception is a failed solve.
+ * failure of the second one is the result. What planegcs, Eigen and the wrapper throw for a sketch
+ * they cannot take (std::runtime_error and other std::exception) is a failed solve; a bug
+ * (core::AssertionError), running out of memory (std::bad_alloc) and anything else propagate
+ * (N108).
  */
 sketch::SolveResult PlanegcsSolver::solve(const sketch::Sketch& sketch,
                                           const std::optional<sketch::Drag>& drag) {
@@ -74,7 +81,11 @@ sketch::SolveResult PlanegcsSolver::solve(const sketch::Sketch& sketch,
     if (second.status == SolveStatus::Failed) return second;
     second.dof = first.result.dof;
     return second;
-  } catch (...) {
+  } catch (const core::AssertionError&) {
+    throw;
+  } catch (const std::bad_alloc&) {
+    throw;
+  } catch (const std::exception&) {
     return failed();
   }
 }

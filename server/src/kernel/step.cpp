@@ -1,8 +1,5 @@
 #include <BRep_Builder.hxx>
 #include <IFSelect_ReturnStatus.hxx>
-#include <Message.hxx>
-#include <Message_Messenger.hxx>
-#include <Message_Printer.hxx>
 #include <STEPControl_StepModelType.hxx>
 #include <STEPControl_Writer.hxx>
 #include <Standard_Failure.hxx>
@@ -64,23 +61,22 @@ TopoDS_Shape shapeToWrite(const std::vector<const ShapeEntry*>& entries) {
 }
 
 /**
- * The STEP translator reports every transfer and write ("Statistics on Transfer", "Step File
- * Name … Write Done") as info messages of the process-wide default messenger, which prints them
- * to stdout. Once per process, its printers are raised to warnings, so a server log keeps only
- * real problems. Process-wide on purpose: the messages do not go through the writer.
+ * Serializes every STEP export of the process (N106, spec 14 "Vlákna a zámky serveru"): the STEP
+ * translator keeps process-wide state – the static parameters of Interface_Static
+ * (write.step.schema, write.step.unit) and the shared protocol and session of the XSControl
+ * library – that is not thread safe, so two sessions exporting at once could corrupt each other.
+ * One export at a time is cheap compared to that; other kernel calls do not take it.
  */
-void quietInfoMessages() {
-  static std::once_flag once;
-  std::call_once(once, [] {
-    for (const Handle(Message_Printer) & printer : Message::DefaultMessenger()->Printers()) {
-      printer->SetTraceLevel(Message_Warning);
-    }
-  });
+std::mutex& stepMutex() {
+  static std::mutex mutex;
+  return mutex;
 }
 
 /** STEPControl_Writer: AP214 and mm are the defaults of write.step.schema and write.step.unit. */
+// The info messages of the translator (transfer statistics) go to the process-wide messenger,
+// which tinycad-core quiets once at start (N78, src/app/main.cpp).
 void writeFile(const TopoDS_Shape& shape, const std::filesystem::path& path) {
-  quietInfoMessages();
+  const std::scoped_lock lock(stepMutex());
   try {
     STEPControl_Writer writer;
     const IFSelect_ReturnStatus transferred = writer.Transfer(shape, STEPControl_AsIs);

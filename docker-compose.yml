@@ -14,6 +14,14 @@ services:
     image: tinycad-core:dev
     expose:
       - '50051'
+    environment:
+      # The document catalog on the volume below and the idle timeout of a session (N61).
+      TINYCAD_DATA_DIR: /data
+      TINYCAD_SESSION_IDLE_SECONDS: '600'
+    volumes:
+      # Documents survive `docker compose restart` and image rebuilds. A new named volume takes
+      # the ownership of /data in the image (the non-root user tinycad, N103).
+      - tinycad-data:/data
     stop_grace_period: 10s
     restart: unless-stopped
 
@@ -39,3 +47,7 @@ services:
       timeout: 3s
       retries: 5
     restart: unless-stopped
+
+volumes:
+  # The SQLite documents of the core (TINYCAD_DATA_DIR).
+  tinycad-data:

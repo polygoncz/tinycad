@@ -5,20 +5,17 @@
 //
 // A directory means every '*.tinycad.json' directly in it (not recursive). Each file is imported
 // with DocumentService::importFile and the key 'import:<sha256 of the content>', so running the
-// tool again does not duplicate a document. The default data directory is $TINYCAD_DATA_DIR, else
-// /data/documents (the Compose volume). Prints one line per file and exits with 1 when at least one
+// tool again does not duplicate a document (storage::importKey, the same key ImportDocument uses,
+// N107). The default data directory is $TINYCAD_DATA_DIR, else
+// /data (the Compose volume, N61). Prints one line per file and exits with 1 when at least one
 // file failed:
 //
 //   docker compose run --rm --entrypoint tinycad-import -v ~/tinycad-export:/import core /import
 //
 // (--entrypoint: the image starts tinycad-core by default; the data volume comes with M45.)
 
-#include <openssl/sha.h>
-
 #include <algorithm>
-#include <array>
 #include <chrono>
-#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -40,19 +37,6 @@ namespace fs = std::filesystem;
 using namespace tinycad;
 
 constexpr std::string_view FILE_SUFFIX = ".tinycad.json";
-
-std::string sha256Hex(const std::string& content) {
-  std::array<unsigned char, SHA256_DIGEST_LENGTH> digest{};
-  // OpenSSL takes bytes; std::string holds them as char.
-  SHA256(reinterpret_cast<const unsigned char*>(content.data()), content.size(), digest.data());
-  std::string hex;
-  for (const unsigned char byte : digest) {
-    std::array<char, 3> pair{};
-    std::snprintf(pair.data(), pair.size(), "%02x", byte);
-    hex += pair.data();
-  }
-  return hex;
-}
 
 /** A random UUID v4, the id of a new document. */
 std::string uuidV4() {
@@ -125,7 +109,7 @@ int usage() {
 
 int main(int argc, char** argv) {
   const char* fromEnvironment = std::getenv("TINYCAD_DATA_DIR");
-  std::string dataDir = fromEnvironment != nullptr ? fromEnvironment : "/data/documents";
+  std::string dataDir = fromEnvironment != nullptr ? fromEnvironment : "/data";
   std::vector<std::string> arguments;
   for (int i = 1; i < argc; ++i) {
     const std::string argument = argv[i];
@@ -152,8 +136,7 @@ int main(int argc, char** argv) {
       failed = true;
       continue;
     }
-    const std::string digest = sha256Hex(content);
-    auto imported = service.importFile(content, {"import:" + digest, digest});
+    auto imported = service.importFile(content, storage::importKey(content));
     if (!imported) {
       std::cout << "chyba " << file.string() << ": " << describe(imported.error()) << '\n';
       failed = true;
