@@ -1,7 +1,7 @@
 import { assert } from '@/core';
 import type { ApplyResult } from './apply';
 import { throwCollected } from './errors';
-import type { LogEntry, Transaction } from './ports';
+import type { LogEntry, Transaction } from './legacy-ports';
 import type { OpHandlerRegistry } from './op-handler';
 import { OP_VERSION } from './operation';
 import type { BatchOp, Operation } from './operation';

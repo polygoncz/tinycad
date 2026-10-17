@@ -9,7 +9,7 @@ import {
 } from '@/document';
 import type { FeatureId, FeatureSchema, ParamSchema } from '@/document';
 import { aFeature } from '@/document/testing';
-import type { Operation } from '@/ops';
+import type { Operation, OperationDispatcher } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE, parseSketchData, patternCopies } from '@/sketch';
 import type {
@@ -83,6 +83,38 @@ const SKETCH = data(
 );
 
 /** An open session on the sketch 's1' (on `plane`), after the first solve. */
+/**
+ * The dispatcher of the transitional anOpsSession that also records every operation it sends,
+ * transaction steps included (until the test moves to FakeOps, M52 task 2).
+ */
+function recording(inner: OperationDispatcher, applied: Operation[]): OperationDispatcher {
+  return {
+    dispatch(op, meta) {
+      const sent = inner.dispatch(op, meta);
+      applied.push(op);
+      return sent;
+    },
+    begin(label) {
+      const tx = inner.begin(label);
+      const step = (op: Operation, send: (op: Operation) => Promise<boolean>) => {
+        const sent = send(op);
+        applied.push(op);
+        return sent;
+      };
+      return {
+        label: tx.label,
+        apply: (op) => step(op, (o) => tx.apply(o)),
+        applyTransient: (op) => step(op, (o) => tx.applyTransient(o)),
+        commit: () => tx.commit(),
+        abort: () => tx.abort(),
+      };
+    },
+    get inTransaction() {
+      return inner.inTransaction;
+    },
+  };
+}
+
 async function editing(
   plane: Plane = XY,
   opts: {
@@ -105,9 +137,10 @@ async function editing(
     },
   });
   const ops = anOpsSession({ schemas, features: [feature] });
+  const applied: Operation[] = [];
   const editor = createFeatureEditor({
     doc: ops.doc,
-    ops: ops.dispatcher,
+    ops: recording(ops.dispatcher, applied),
     schemas,
     ids: createSequentialIdGenerator('f'),
     translate: (key) => key,
@@ -123,8 +156,6 @@ async function editing(
     resolvePlane: () => plane,
     planeOfSketch: () => plane,
   });
-  const applied: Operation[] = [];
-  ops.dispatcher.events.on('applied', ({ op }) => applied.push(op));
   const session = sketches.edit(fid('s1'));
   await settle();
   return { ...ops, solver, viewport, session, applied };

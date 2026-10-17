@@ -6,7 +6,7 @@ import { applyOperation } from '@/ops/apply';
 import { createOperationDispatcher } from '@/ops/dispatcher';
 import { createOpHandlerRegistry } from '@/ops/handler';
 import { createOperationLog } from '@/ops/log';
-import type { LogEntry } from '@/ops/ports';
+import type { LogEntry } from '@/ops/legacy-ports';
 import type {
   BatchOp,
   BodySetColorOp,
@@ -373,19 +373,19 @@ describe('applyOperation – validation on write (D1)', () => {
     expectRejected(
       doc,
       () => {
-        tx.apply(setParams({ size: undefined }));
+        void tx.apply(setParams({ size: undefined }));
       },
       /params/,
     );
     expectRejected(
       doc,
       () => {
-        tx.applyTransient(setParams({ size: Number.NaN }));
+        void tx.applyTransient(setParams({ size: Number.NaN }));
       },
       /params/,
     );
     expect(dispatcher.inTransaction).toBe(true);
-    expect(tx.commit()).toBeNull();
+    void tx.commit();
     expect(log.lastSeq).toBe(0);
   });
 

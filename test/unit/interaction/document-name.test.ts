@@ -32,7 +32,7 @@ describe('createDocumentNameModel (M19.2, D5)', () => {
     const { model, dispatcher } = setup();
     let calls = 0;
     model.name.subscribe(() => calls++);
-    dispatcher.dispatch(renameTo('Part'));
+    void dispatcher.dispatch(renameTo('Part'));
     expect(model.name.get()).toBe('Part');
     expect(calls).toBe(1);
   });
@@ -42,7 +42,7 @@ describe('createDocumentNameModel (M19.2, D5)', () => {
     let calls = 0;
     model.name.subscribe(() => calls++);
     const bar: StudioSetRollbackOp = { type: 'studio.setRollback', v: 1, index: 0 };
-    dispatcher.dispatch(bar);
+    void dispatcher.dispatch(bar);
     expect(calls).toBe(0);
   });
 
@@ -101,7 +101,7 @@ describe('createDocumentNameModel (M19.2, D5)', () => {
   it('dispose stops following the document', () => {
     const { model, dispatcher } = setup();
     model.dispose();
-    dispatcher.dispatch(renameTo('Part'));
+    void dispatcher.dispatch(renameTo('Part'));
     expect(model.name.get()).toBe('Untitled');
   });
 });

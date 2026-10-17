@@ -28,6 +28,7 @@ describe('document public API', () => {
         'checkParamRules',
         'createDocument',
         'createFeatureSchemaRegistry',
+        'createSnapshotDocument',
         'dependenciesOf',
         'evaluateParams',
         'isBodyColor',

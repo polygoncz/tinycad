@@ -369,16 +369,16 @@ describe('body metadata handlers (M11)', () => {
 
   it('undo and redo through the dispatcher bring the metadata back', () => {
     const { doc, dispatcher, undo } = anOpsSession({ features: [aFeature({ id: 'a' })] });
-    dispatcher.dispatch(rename('Base'));
-    dispatcher.dispatch(setVisible(false));
+    void dispatcher.dispatch(rename('Base'));
+    void dispatcher.dispatch(setVisible(false));
     expect(doc.bodyMeta(a)).toEqual({ name: 'Base', hidden: true });
-    undo.undo();
+    void undo.undo();
     expect(doc.bodyMeta(a)).toEqual({ name: 'Base' });
-    undo.undo();
+    void undo.undo();
     expect(doc.bodyMeta(a)).toEqual({});
     expect('bodies' in doc.studio).toBe(false);
-    undo.redo();
-    undo.redo();
+    void undo.redo();
+    void undo.redo();
     expect(doc.bodyMeta(a)).toEqual({ name: 'Base', hidden: true });
   });
 });

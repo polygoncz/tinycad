@@ -2,7 +2,7 @@
 // and the undo stacks of GetHistory. The history changes only with a new log entry, and every
 // answer that wrote one (and every refresh after a change elsewhere) brings a read model with a
 // new lastSeq, so the history is loaded again when lastSeq changes. The one source of the undo
-// stacks of the client: the remote dispatcher reads them here too (UndoManager.stacks).
+// stacks of the client (canUndo and canRedo come from the read model, app/remote-dispatcher.ts).
 
 import { Emitter } from '@/core';
 import type { Disposable, Subscribable, Unsubscribe } from '@/core';

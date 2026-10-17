@@ -1,6 +1,7 @@
 // The feature dialog (spec 10, "Dialog featury"): create or edit a feature in one
 // transaction with a live preview, then OK (commit) or Cancel (abort). The whole dialog
-// is one log entry; the document stays the only source of the params.
+// is one log entry. The document (the read model of the server) is the source of the params,
+// except for the values the user entered and the server has not taken yet (N164).
 
 import { ObservableValue, assert } from '@/core';
 import type { IdGenerator, Observable, RegistryReader } from '@/core';
@@ -16,6 +17,7 @@ import { NO_VARIABLES, evaluateParams, isParamVisible } from '@/document';
 import type {
   FeatureAddOp,
   FeatureSetParamsOp,
+  Operation,
   OperationDispatcher,
   StudioSetRollbackOp,
   Transaction,
@@ -60,7 +62,10 @@ export interface FeatureEditSession {
 }
 
 export interface EditState {
-  /** Current values (from the document). */
+  /**
+   * Current values: what the user entered while the server has not taken the last change sent by
+   * this session (N164), otherwise the feature in the document.
+   */
   readonly params: Readonly<Record<string, unknown>>;
   /** The issues of evaluateParams(schema, params) (M20). */
   readonly issues: readonly ParamIssue[];
@@ -129,23 +134,12 @@ export function createFeatureEditor(deps: {
     assert(!ops.inTransaction, `${what}: a transaction is running`);
   }
 
-  /** Begins the transaction and runs `start` in it; a failing start aborts it again. */
-  function begin(label: string, start: (tx: Transaction) => void): Transaction {
-    const tx = ops.begin(label);
-    try {
-      start(tx);
-    } catch (e) {
-      tx.abort();
-      throw e;
-    }
-    return tx;
-  }
-
   function open(
     mode: FeatureEditSession['mode'],
     featureId: FeatureId,
     schema: FeatureSchema,
     tx: Transaction,
+    add: FeatureAddOp | null,
   ): FeatureEditSession {
     const session = createSession({
       doc,
@@ -154,6 +148,7 @@ export function createFeatureEditor(deps: {
       mode,
       featureId,
       schema,
+      add,
       onClose: () => {
         current.set(null);
       },
@@ -198,17 +193,15 @@ export function createFeatureEditor(deps: {
         suppressed: false,
       };
       // The label of the transaction stays the key, translated only when shown (ADR 0014).
-      const tx = begin(schema.label, (t) => {
-        // Inserting at the bar moves the bar behind the new feature (Q068).
-        const add: FeatureAddOp = {
-          type: 'feature.add',
-          v: OP_VERSION['feature.add'],
-          feature,
-          index: doc.studio.rollbackIndex,
-        };
-        t.apply(add);
-      });
-      return open('create', feature.id, schema, tx);
+      const tx = ops.begin(schema.label);
+      // Inserting at the bar moves the bar behind the new feature (Q068).
+      const add: FeatureAddOp = {
+        type: 'feature.add',
+        v: OP_VERSION['feature.add'],
+        feature,
+        index: doc.studio.rollbackIndex,
+      };
+      return open('create', feature.id, schema, tx, add);
     },
     edit(featureId) {
       checkCanOpen('edit');
@@ -216,23 +209,30 @@ export function createFeatureEditor(deps: {
       assert(feature !== undefined, `edit: unknown feature '${featureId}'`);
       const schema = schemas.get(feature.type);
       // A translation key; the feature name does not belong in it (ADR 0014).
-      const tx = begin('feature.edit', (t) => {
-        // The bar sits right behind the edited feature for the session only (Q018).
-        const index = doc.indexOf(featureId) + 1;
-        if (doc.studio.rollbackIndex === index) return;
+      const tx = ops.begin('feature.edit');
+      // The bar sits right behind the edited feature for the session only (Q018); not a value of
+      // the user, so it does not touch the entered values.
+      const index = doc.indexOf(featureId) + 1;
+      if (doc.studio.rollbackIndex !== index) {
         const move: StudioSetRollbackOp = {
           type: 'studio.setRollback',
           v: OP_VERSION['studio.setRollback'],
           index,
         };
-        t.applyTransient(move);
-      });
-      return open('edit', featureId, schema, tx);
+        void tx.applyTransient(move);
+      }
+      return open('edit', featureId, schema, tx, null);
     },
   };
 }
 
 const NO_PARAMS: Readonly<Record<string, unknown>> = Object.freeze({});
+
+/** The values the user entered and the server has not taken yet (N164). */
+interface Draft {
+  readonly params: Readonly<Record<string, unknown>>;
+  readonly name: string | null;
+}
 
 function createSession(deps: {
   doc: DocumentReader;
@@ -241,11 +241,37 @@ function createSession(deps: {
   mode: FeatureEditSession['mode'];
   featureId: FeatureId;
   schema: FeatureSchema;
+  /** The feature.add of create, sent at once: its params and name are the first entered values. */
+  add: FeatureAddOp | null;
   onClose: () => void;
 }): FeatureEditSession {
-  const { doc, ops, tx, mode, featureId, schema, onClose } = deps;
+  const { doc, ops, tx, mode, featureId, schema, add, onClose } = deps;
   let activeRefParam: string | null = null;
   let open = true;
+  let draft: Draft | null =
+    add === null
+      ? null
+      : {
+          params: isRecord(add.feature.params) ? add.feature.params : NO_PARAMS,
+          name: add.feature.name,
+        };
+  /** The number of the last change this session sent. */
+  let lastSent = 0;
+
+  /**
+   * Sends the change; when the server takes the last one sent, the entered values go and the
+   * state reads the document again (which already shows the read model of that answer, N165).
+   * An answer to an older change or a refusal leaves them.
+   */
+  function send(op: Operation): void {
+    const n = ++lastSent;
+    void tx.apply(op).then((ok) => {
+      if (open && ok && n === lastSent) {
+        draft = null;
+        refresh();
+      }
+    });
+  }
 
   /**
    * FieldState.refs: the chips of the kind (the table of reference kinds, M20), null for a kind
@@ -268,13 +294,14 @@ function createSession(deps: {
   // snapshot follows every change of it while the session is open.
   const unsubscribeDoc = doc.events.on('changed', refresh);
 
-  /** The name of the feature in the document; the last known one once it is gone. */
+  /** The name of the feature in the document, the entered one, the last known one once it is gone. */
   function readName(prev: EditState | null): string {
-    return doc.feature(featureId)?.name ?? prev?.name ?? '';
+    return doc.feature(featureId)?.name ?? draft?.name ?? prev?.name ?? '';
   }
 
-  /** The params of the feature in the document; the last known ones once it is gone. */
+  /** The entered params, those of the feature in the document, the last known ones once it is gone. */
   function readParams(prev: EditState | null): Readonly<Record<string, unknown>> {
+    if (draft !== null) return draft.params;
     const params = doc.feature(featureId)?.params;
     if (params === undefined) return prev?.params ?? NO_PARAMS;
     return isRecord(params) ? params : NO_PARAMS;
@@ -395,22 +422,26 @@ function createSession(deps: {
       (name) => Object.hasOwn(params, name) && Object.is(params[name], patch[name]),
     );
     if (same) return;
+    const next = Object.freeze({ ...params, ...patch });
     const op: FeatureSetParamsOp = {
       type: 'feature.setParams',
       v: OP_VERSION['feature.setParams'],
       featureId,
       // The params are written in the shape of this schema version (Q035).
       typeVersion: schema.version,
-      params: { ...params, ...patch },
+      params: next,
     };
-    // A failing handler throws here, before anything changed: the session stays as it was.
-    tx.apply(op);
+    // The entered values are visible at once, before the answer (N164).
+    draft = { params: next, name: readName(state.get()) };
     refresh();
+    send(op);
   }
 
   function setParam(name: string, value: unknown): void {
     applyPatch('setParam', { [name]: value });
   }
+
+  if (add !== null) send(add);
 
   return {
     mode,
@@ -447,13 +478,13 @@ function createSession(deps: {
     commit() {
       checkOpen('commit');
       closeAfter(() => {
-        tx.commit();
+        void tx.commit();
       });
     },
     cancel() {
       checkOpen('cancel');
       closeAfter(() => {
-        tx.abort();
+        void tx.abort();
       });
     },
   };

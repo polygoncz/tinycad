@@ -1,19 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
 import { checkParamRules, createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
-import { aFeature, bodyId, ORIGIN_AXIS_IDS, toData } from '@/document/testing';
+import { aFeature, bodyId, ORIGIN_AXIS_IDS } from '@/document/testing';
 import type {
+  BodyId,
+  BodyMeta,
   FeatureId,
+  FeatureInstance,
   FeatureSchema,
   ParamRule,
   ParamSchema,
   TopoName,
   TopoRef,
 } from '@/document';
-import type { DocumentOptions, ParamSchemaOf } from '@/document/testing';
-import type { BatchOp, FeatureAddOp, Operation } from '@/ops';
+import type { DocumentOptions, ParamSchemaOf, TestDocument } from '@/document/testing';
+import type { FeatureAddOp, FeatureSetParamsOp, StudioSetRollbackOp } from '@/ops';
 import { OP_VERSION } from '@/ops';
-import { anOpsSession } from '@/ops/testing';
+import { aFakeOps } from '@/ops/testing';
+import type { FakeOps, FakeOpsOptions } from '@/ops/testing';
 import { createFeatureEditor } from '@/interaction/feature-dialog/feature-editor';
 import type { EditState } from '@/interaction/feature-dialog/feature-editor';
 import type { RegenSketch } from '@/interaction/regen-status-port';
@@ -57,27 +61,46 @@ const EN = (key: string): string => (key === 'box.label' ? 'Box' : key);
 
 /** `translate: null` leaves it out of the deps. */
 function setup(
-  init: DocumentOptions = {},
+  init: FakeOpsOptions = {},
   translate: ((key: string) => string) | null = EN,
   schema: FeatureSchema = BOX,
 ) {
   const schemas = createFeatureSchemaRegistry();
   schemas.register(schema);
-  // The handlers migrate with the same schemas, as in the app (Q035).
-  const session = anOpsSession({ ...init, schemas });
+  const ops = aFakeOps(init);
   const editor = createFeatureEditor({
-    doc: session.doc,
-    ops: session.dispatcher,
+    doc: ops.doc,
+    ops,
     schemas,
     ids: createSequentialIdGenerator('new'),
     ...(translate === null ? {} : { translate }),
   });
-  return { ...session, editor };
+  return { ops, doc: ops.doc, editor };
 }
 
-/** Every op of the log, batches flattened. */
-function loggedOps(ops: readonly Operation[]): readonly Operation[] {
-  return ops.flatMap((op) => (op.type === 'batch' ? loggedOps((op as BatchOp).ops) : [op]));
+/** The feature of the feature.add sent; throws when none was. */
+function added(ops: FakeOps): FeatureInstance {
+  const add = ops.ops().find((op): op is FeatureAddOp => op.type === 'feature.add');
+  if (add === undefined) throw new Error('no feature.add sent');
+  return add.feature;
+}
+
+/** The feature.setParams sent, in order. */
+function setParamsSent(ops: FakeOps): readonly FeatureSetParamsOp[] {
+  return ops.ops().filter((op): op is FeatureSetParamsOp => op.type === 'feature.setParams');
+}
+
+/** The studio of the document with `feature` in place of the one with its id (or appended). */
+function withFeature(ops: FakeOps, feature: FeatureInstance) {
+  const features = ops.doc.studio.features;
+  const at = features.findIndex((f) => f.id === feature.id);
+  const next = at === -1 ? [...features, feature] : features.with(at, feature);
+  return { ...ops.doc.studio, features: next, rollbackIndex: next.length };
+}
+
+/** A read model of the server with new metadata of one body. */
+function setBodyMeta(doc: TestDocument, body: BodyId, meta: BodyMeta): void {
+  doc.replace({ studio: { ...doc.studio, bodies: { ...doc.studio.bodies, [body]: meta } } });
 }
 
 describe('FeatureEditor observables', () => {
@@ -92,24 +115,39 @@ describe('FeatureEditor observables', () => {
 });
 
 describe('FeatureEditor.create', () => {
-  it('adds the feature with defaults at the rollback bar and opens a session', () => {
-    const { doc, editor } = setup();
+  it('begins a transaction, sends the feature with defaults at the bar and opens a session', () => {
+    const { ops, doc, editor } = setup();
     const session = editor.create('box');
 
     expect(session.mode).toBe('create');
     expect(session.featureId).toBe('new1');
     expect(session.schema).toBe(BOX);
     expect(editor.current.get()).toBe(session);
-    expect(doc.feature(fid('new1'))).toEqual({
-      id: 'new1',
-      type: 'box',
-      typeVersion: 1,
-      name: 'Box 1',
-      params: { width: 10, height: 20, targets: [] },
-      suppressed: false,
-    });
+    expect(ops.sent).toEqual([
+      // The label of the transaction stays the key, translated only when shown (ADR 0014).
+      { kind: 'begin', label: 'box.label' },
+      {
+        kind: 'apply',
+        op: {
+          type: 'feature.add',
+          v: OP_VERSION['feature.add'],
+          feature: {
+            id: 'new1',
+            type: 'box',
+            typeVersion: 1,
+            name: 'Box 1',
+            params: { width: 10, height: 20, targets: [] },
+            suppressed: false,
+          },
+          index: 0,
+        },
+      },
+    ]);
+    // The document changes with the answer of the server only; the state shows the entered values.
+    expect(doc.feature(fid('new1'))).toBeUndefined();
     const state = session.state.get();
     expect(state.open).toBe(true);
+    expect(state.name).toBe('Box 1');
     expect(state.params).toEqual({ width: 10, height: 20, targets: [] });
     expect(state.issues).toEqual([]);
     // The first reference param takes the selection right away (R19).
@@ -134,39 +172,42 @@ describe('FeatureEditor.create', () => {
     expect(Object.isFrozen(state.issues)).toBe(true);
   });
 
-  it('create -> setParam x20 -> commit writes one entry batch[feature.add, feature.setParams]', () => {
-    const { log, editor } = setup();
+  it('create -> setParam x20 -> commit: every step sent, the last carries the last value', () => {
+    const { ops, editor } = setup();
     const session = editor.create('box');
     for (let i = 1; i <= 20; i++) session.setParam('width', i);
     session.commit();
 
-    const entries = log.entries();
-    expect(entries).toHaveLength(1);
-    const [entry] = entries;
-    // The label of the transaction stays the key, translated only when shown (ADR 0014).
-    expect(entry?.label).toBe('box.label');
-    expect(entry?.op.type).toBe('batch');
-    const ops = (entry?.op as BatchOp).ops; // asserted to be a batch just above
-    expect(ops.map((op) => op.type)).toEqual(['feature.add', 'feature.setParams']);
-    expect(ops[1]).toMatchObject({ params: { width: 20, height: 20, targets: [] } });
+    expect(ops.sent.map((c) => c.kind)).toEqual([
+      'begin',
+      'apply',
+      ...Array<string>(20).fill('apply'),
+      'commit',
+    ]);
+    expect(setParamsSent(ops).at(-1)?.params).toEqual({ width: 20, height: 20, targets: [] });
   });
 
-  it('cancel leaves the document and the log unchanged', () => {
-    const { doc, log, editor } = setup({ features: [aBox('a')] });
-    const before = toData(doc);
+  it('cancel sends an abort and the document stays', () => {
+    const { ops, doc, editor } = setup({ features: [aBox('a')] });
+    const before = doc.studio;
     const session = editor.create('box');
     session.setParam('width', 5);
     session.cancel();
 
-    expect(toData(doc)).toEqual(before);
-    expect(log.entries()).toEqual([]);
+    expect(ops.sent.at(-1)).toEqual({ kind: 'abort' });
+    expect(doc.studio).toBe(before);
   });
 
-  it('names the feature with the smallest free number', () => {
-    const { doc, editor } = setup();
+  it('names the feature with the smallest free number of the document', () => {
+    const { ops, editor } = setup();
     editor.create('box').commit();
+    ops.answerAll({ document: { studio: withFeature(ops, added(ops)) } });
     editor.create('box').commit();
-    expect(doc.studio.features.map((f) => f.name)).toEqual(['Box 1', 'Box 2']);
+    const names = ops
+      .ops()
+      .filter((op): op is FeatureAddOp => op.type === 'feature.add')
+      .map((op) => op.feature.name);
+    expect(names).toEqual(['Box 1', 'Box 2']);
   });
 
   it('the state carries the generated name for the title of the dialog', () => {
@@ -174,47 +215,47 @@ describe('FeatureEditor.create', () => {
     const session = editor.create('box');
     expect(session.state.get().name).toBe('Box 2');
     session.cancel();
-    // The feature is gone from the document; the last snapshot keeps its name.
+    // The feature never reached the document; the last snapshot keeps its name.
     expect(session.state.get().name).toBe('Box 2');
   });
 
   it('names the feature in the language of translate', () => {
     const cs = (key: string): string => (key === 'box.label' ? 'Kvádr' : key);
-    const { doc, editor } = setup({}, cs);
-    editor.create('box').commit();
-    expect(doc.feature(fid('new1'))?.name).toBe('Kvádr 1');
+    const { ops, editor } = setup({}, cs);
+    editor.create('box');
+    expect(added(ops).name).toBe('Kvádr 1');
   });
 
   it('names the feature by the key without translate', () => {
-    const { doc, log, editor } = setup({}, null);
-    editor.create('box').commit();
-    expect(doc.feature(fid('new1'))?.name).toBe('box.label 1');
-    expect(log.entries()[0]?.label).toBe('box.label');
+    const { ops, editor } = setup({}, null);
+    editor.create('box');
+    expect(added(ops).name).toBe('box.label 1');
+    expect(ops.sent[0]).toEqual({ kind: 'begin', label: 'box.label' });
   });
 
   it('fills the gap after a removed name', () => {
-    const { doc, editor } = setup({ features: [aBox('b2', 'Box 2')] });
-    editor.create('box').commit();
-    expect(doc.feature(fid('new1'))?.name).toBe('Box 1');
+    const { ops, editor } = setup({ features: [aBox('b2', 'Box 2')] });
+    editor.create('box');
+    expect(added(ops).name).toBe('Box 1');
   });
 
-  it('inserts at the rollback bar in the middle and moves the bar behind the new feature', () => {
-    const { doc, editor } = setup({ features: [aBox('a'), aBox('b')], rollbackIndex: 1 });
-    editor.create('box').commit();
-    expect(doc.studio.features.map((f) => f.id)).toEqual(['a', 'new1', 'b']);
-    expect(doc.studio.rollbackIndex).toBe(2);
+  it('inserts at the rollback bar in the middle', () => {
+    const { ops, editor } = setup({ features: [aBox('a'), aBox('b')], rollbackIndex: 1 });
+    editor.create('box');
+    expect(ops.ops()[0]).toMatchObject({ type: 'feature.add', index: 1 });
   });
 
   it('throws for an unknown type and changes nothing', () => {
-    const { dispatcher, editor } = setup();
+    const { ops, editor } = setup();
     expect(() => editor.create('cylinder')).toThrow();
-    expect(dispatcher.inTransaction).toBe(false);
+    expect(ops.inTransaction).toBe(false);
+    expect(ops.sent).toEqual([]);
     expect(editor.current.get()).toBeNull();
   });
 
   it('throws while the dispatcher is in a transaction', () => {
-    const { dispatcher, editor } = setup();
-    dispatcher.begin('other');
+    const { ops, editor } = setup();
+    ops.begin('other');
     expect(() => editor.create('box')).toThrow();
     expect(editor.current.get()).toBeNull();
   });
@@ -225,6 +266,109 @@ describe('FeatureEditor.create', () => {
     expect(() => editor.create('box')).toThrow();
     expect(() => editor.edit(fid('a'))).toThrow();
     expect(editor.current.get()).toBe(first);
+  });
+
+  it('the server takes the feature.add: the state reads the feature of the document', async () => {
+    const { ops, editor } = setup();
+    const session = editor.create('box');
+    ops.answer();
+    // The server stores the feature as it likes (here another name); the document wins then.
+    ops.answer({ document: { studio: withFeature(ops, { ...added(ops), name: 'Server box' }) } });
+    await Promise.resolve();
+    expect(session.state.get().name).toBe('Server box');
+    expect(session.state.get().params).toBe(ops.doc.feature(fid('new1'))?.params);
+  });
+
+  it('a refused feature.add keeps the entered values; OK still sends the commit', async () => {
+    const { ops, doc, editor } = setup();
+    const session = editor.create('box');
+    ops.answer();
+    ops.answer({ ok: false });
+    await Promise.resolve();
+    expect(doc.feature(fid('new1'))).toBeUndefined();
+    expect(session.state.get().params).toEqual({ width: 10, height: 20, targets: [] });
+    session.commit();
+    expect(ops.sent.at(-1)).toEqual({ kind: 'commit' });
+    expect(editor.current.get()).toBeNull();
+  });
+});
+
+describe('FeatureEditSession entered values (N164)', () => {
+  /** Edit of 'a' (width 1, height 2) with the bar behind it: begin is the only change sent. */
+  function editing() {
+    const s = setup({ features: [aBox('a')] });
+    const session = s.editor.edit(fid('a'));
+    s.ops.answer(); // begin
+    return { ...s, session };
+  }
+
+  const serverBox = (params: BoxParams): FeatureInstance => ({ ...aBox('a'), params });
+
+  it('(b) two quick changes of different params: the second setParams carries both', () => {
+    const { ops, session } = editing();
+    session.setParam('width', 5);
+    session.setParam('height', 6);
+    expect(setParamsSent(ops).map((op) => op.params)).toEqual([
+      { width: 5, height: 2, targets: [] },
+      { width: 5, height: 6, targets: [] },
+    ]);
+    expect(session.state.get().params).toEqual({ width: 5, height: 6, targets: [] });
+  });
+
+  it('(a) the answer to an older change does not overwrite a field with a newer value', async () => {
+    const { ops, session } = editing();
+    session.setParam('width', 5);
+    session.setParam('height', 6);
+    ops.answer({
+      document: { studio: withFeature(ops, serverBox({ width: 5, height: 2, targets: [] })) },
+    });
+    await Promise.resolve();
+    expect(session.state.get().params).toEqual({ width: 5, height: 6, targets: [] });
+  });
+
+  it('(c) after the server takes the last change the state reads the document', async () => {
+    const { ops, session } = editing();
+    session.setParam('width', 5);
+    session.setParam('height', 6);
+    ops.answer();
+    // The server normalizes the value: the read model wins once the last change is taken.
+    ops.answer({
+      document: { studio: withFeature(ops, serverBox({ width: 5, height: 6.5, targets: [] })) },
+    });
+    await Promise.resolve();
+    expect(session.state.get().params).toEqual({ width: 5, height: 6.5, targets: [] });
+    expect(session.state.get().params).toBe(ops.doc.feature(fid('a'))?.params);
+  });
+
+  it('(d) a refused last change keeps the entered values, even when the document changes', async () => {
+    const { ops, session } = editing();
+    session.setParam('width', 5);
+    ops.answer({ ok: false });
+    await Promise.resolve();
+    ops.doc.replace({ name: 'Other' });
+    expect(session.state.get().params).toEqual({ width: 5, height: 2, targets: [] });
+    // The next change taken drops them.
+    session.setParam('height', 3);
+    ops.answer({
+      document: { studio: withFeature(ops, serverBox({ width: 5, height: 3, targets: [] })) },
+    });
+    await Promise.resolve();
+    expect(session.state.get().params).toBe(ops.doc.feature(fid('a'))?.params);
+  });
+
+  it('commit and cancel close at once; a late answer changes nothing', async () => {
+    const { ops, editor, session } = editing();
+    session.setParam('width', 5);
+    session.commit();
+    expect(editor.current.get()).toBeNull();
+    expect(ops.inTransaction).toBe(false);
+    const closed = session.state.get();
+    expect(closed.open).toBe(false);
+    ops.answerAll({
+      document: { studio: withFeature(ops, serverBox({ width: 7, height: 2, targets: [] })) },
+    });
+    await Promise.resolve();
+    expect(session.state.get()).toBe(closed);
   });
 });
 
@@ -325,52 +469,51 @@ describe('FeatureEditor.create preselects the only region (D6 of M19.2)', () => 
     const schemas = createFeatureSchemaRegistry();
     schemas.register(EXT);
     schemas.register(BOX);
-    const session = anOpsSession({ schemas });
+    const ops = aFakeOps();
     const regen = new FakeRegenStatus();
     if (sketches !== null) regen.publish(new Map(), [], sketches);
     const selection = createSelectionModel({ regen });
     const editor = createFeatureEditor({
-      doc: session.doc,
-      ops: session.dispatcher,
+      doc: ops.doc,
+      ops,
       schemas,
       ids: createSequentialIdGenerator('new'),
       ...(withPorts ? { regen } : {}),
     });
-    return { ...session, editor, selection };
+    return { ops, editor, selection };
   }
 
   it('fills the region param when the last sketch has exactly one region', () => {
-    const { editor, doc } = setupWith([sketch('s0', ['a', 'b']), sketch('s1', ['r1'])]);
+    const { editor, ops } = setupWith([sketch('s0', ['a', 'b']), sketch('s1', ['r1'])]);
     const session = editor.create('ext');
     const profile = [{ kind: 'region', sketch: 's1', region: 'r1' }];
-    expect(doc.feature(session.featureId)?.params).toEqual({ profile, distance: 10 });
+    expect(ops.lastParams(session.featureId)).toEqual({ profile, distance: 10 });
     expect(session.state.get().params['profile']).toEqual(profile);
     expect(session.state.get().issues).toEqual([]);
     // The focus stays on the region, so another click adds or removes one.
     expect(session.state.get().activeRefParam).toBe('profile');
   });
 
-  it('after the preselection the commit writes one feature.add', () => {
-    const { editor, log } = setupWith([sketch('s1', ['r1'])]);
+  it('after the preselection the commit sends one feature.add', () => {
+    const { editor, ops } = setupWith([sketch('s1', ['r1'])]);
     editor.create('ext').commit();
-    const ops = loggedOps(log.entries().map((e) => e.op));
-    expect(log.entries()).toHaveLength(1);
-    expect(ops.map((op) => op.type)).toEqual(['feature.add']);
+    expect(ops.ops().map((op) => op.type)).toEqual(['feature.add']);
+    expect(ops.sent.map((c) => c.kind)).toEqual(['begin', 'apply', 'commit']);
   });
 
   it('does not preselect with two regions in the last sketch', () => {
-    const { editor, doc } = setupWith([sketch('s0', ['r0']), sketch('s1', ['r1', 'r2'])]);
+    const { editor, ops } = setupWith([sketch('s0', ['r0']), sketch('s1', ['r1', 'r2'])]);
     const session = editor.create('ext');
-    expect(doc.feature(session.featureId)?.params).toEqual({ profile: [], distance: 10 });
+    expect(ops.lastParams(session.featureId)).toEqual({ profile: [], distance: 10 });
   });
 
   // The sketch just finished stays selected; a selection never holds a region, so it does not
   // stand in the way (the case of e2e m13: Finish, then Extrude).
   it('preselects with something else selected', () => {
-    const { editor, doc, selection } = setupWith([sketch('s1', ['r1'])]);
+    const { editor, ops, selection } = setupWith([sketch('s1', ['r1'])]);
     selection.set([{ kind: 'feature', feature: fid('x') }]);
     const session = editor.create('ext');
-    expect(doc.feature(session.featureId)?.params).toEqual({
+    expect(ops.lastParams(session.featureId)).toEqual({
       profile: [{ kind: 'region', sketch: 's1', region: 'r1' }],
       distance: 10,
     });
@@ -384,9 +527,9 @@ describe('FeatureEditor.create preselects the only region (D6 of M19.2)', () => 
   });
 
   it('does not preselect for a feature whose first reference param is not a region', () => {
-    const { editor, doc } = setupWith([sketch('s1', ['r1'])]);
+    const { editor, ops } = setupWith([sketch('s1', ['r1'])]);
     const session = editor.create('box');
-    expect(doc.feature(session.featureId)?.params).toEqual({ width: 10, height: 20, targets: [] });
+    expect(ops.lastParams(session.featureId)).toEqual({ width: 10, height: 20, targets: [] });
   });
 });
 
@@ -409,18 +552,16 @@ describe('FeatureEditor.edit', () => {
     expect(session.state.get().name).toBe('Box 7');
   });
 
-  it('labels the entry with the key feature.edit, without the feature name (ADR 0014)', () => {
-    const { log, editor } = setup({ features: [aBox('a', 'Box 7')] });
-    const session = editor.edit(fid('a'));
-    session.setParam('width', 3);
-    session.commit();
-    expect(log.entries().map((e) => e.label)).toEqual(['feature.edit']);
+  it('labels the transaction with the key feature.edit, without the feature name (ADR 0014)', () => {
+    const { ops, editor } = setup({ features: [aBox('a', 'Box 7')] });
+    editor.edit(fid('a'));
+    expect(ops.sent).toEqual([{ kind: 'begin', label: 'feature.edit' }]);
   });
 
   it('throws for an unknown feature and changes nothing', () => {
-    const { dispatcher, editor } = setup();
+    const { ops, editor } = setup();
     expect(() => editor.edit(fid('nope'))).toThrow();
-    expect(dispatcher.inTransaction).toBe(false);
+    expect(ops.inTransaction).toBe(false);
     expect(editor.current.get()).toBeNull();
   });
 
@@ -431,54 +572,53 @@ describe('FeatureEditor.edit', () => {
   ])('a feature $where', ({ bar }) => {
     const features = [aBox('a'), aBox('b'), aBox('c')];
 
-    it('moves the bar to index + 1 during the session and back after commit', () => {
-      const { doc, log, editor } = setup({ features, rollbackIndex: bar });
+    const move: StudioSetRollbackOp = {
+      type: 'studio.setRollback',
+      v: OP_VERSION['studio.setRollback'],
+      index: 2,
+    };
+
+    it('moves the bar to index + 1 by a transient step, then the change and commit', () => {
+      const { ops, editor } = setup({ features, rollbackIndex: bar });
       const session = editor.edit(fid('b'));
-      expect(doc.studio.rollbackIndex).toBe(2);
       session.setParam('width', 9);
       session.commit();
 
-      expect(doc.studio.rollbackIndex).toBe(bar);
-      expect(doc.feature(fid('b'))?.params).toMatchObject({ width: 9 });
-      const ops = loggedOps(log.entries().map((e) => e.op));
-      expect(ops.map((op) => op.type)).toEqual(['feature.setParams']);
+      expect(ops.sent.map((c) => c.kind)).toEqual(['begin', 'applyTransient', 'apply', 'commit']);
+      expect(ops.sent[1]).toEqual({ kind: 'applyTransient', op: move });
+      expect(ops.lastParams(fid('b'))).toMatchObject({ width: 9 });
     });
 
-    it('moves the bar back after cancel and logs nothing', () => {
-      const { doc, log, editor } = setup({ features, rollbackIndex: bar });
-      const before = toData(doc);
+    it('the transient step does not touch the entered values; cancel sends an abort', () => {
+      const { ops, editor } = setup({ features, rollbackIndex: bar });
       const session = editor.edit(fid('b'));
+      ops.answerAll({ document: { studio: { ...ops.doc.studio, rollbackIndex: 2 } } });
+      expect(session.state.get().params).toEqual({ width: 1, height: 2, targets: [] });
       session.setParam('width', 9);
       session.cancel();
-
-      expect(toData(doc)).toEqual(before);
-      expect(log.entries()).toEqual([]);
+      expect(ops.sent.map((c) => c.kind)).toEqual(['begin', 'applyTransient', 'apply', 'abort']);
     });
   });
 
   it('applies no transient op when the bar is already at index + 1', () => {
-    const { doc, dispatcher, editor } = setup({
+    const { ops, editor } = setup({
       features: [aBox('a'), aBox('b'), aBox('c')],
       rollbackIndex: 2,
     });
-    const applied: Operation[] = [];
-    dispatcher.events.on('applied', ({ op }) => applied.push(op));
     const session = editor.edit(fid('b'));
-    expect(applied).toEqual([]);
     session.cancel();
-    expect(applied).toEqual([]);
-    expect(doc.studio.rollbackIndex).toBe(2);
+    expect(ops.ops()).toEqual([]);
   });
 });
 
 describe('FeatureEditSession', () => {
-  it('setParam applies the new params and updates the state', () => {
-    const { doc, editor } = setup();
+  it('setParam sends the new params and updates the state at once', () => {
+    const { ops, editor } = setup();
     const session = editor.create('box');
     const before = session.state.get();
     session.setParam('height', 7);
 
-    expect(doc.feature(fid('new1'))?.params).toEqual({ width: 10, height: 7, targets: [] });
+    expect(ops.lastParams(fid('new1'))).toEqual({ width: 10, height: 7, targets: [] });
     const state = session.state.get();
     expect(state).not.toBe(before);
     expect(state.params).toEqual({ width: 10, height: 7, targets: [] });
@@ -491,28 +631,27 @@ describe('FeatureEditSession', () => {
   it('setParam sends the version of the schema with the params (Q035)', () => {
     // Version 3: the op must carry the schema version, not a constant 1.
     const v3: FeatureSchema<BoxParams> = { ...BOX, version: 3, migrate: () => BOX.defaults() };
-    const { doc, log, editor } = setup({}, EN, v3);
+    const { ops, editor } = setup({}, EN, v3);
     const session = editor.create('box');
     session.setParam('width', 5);
     session.commit();
 
-    const ops = loggedOps(log.entries().map((e) => e.op));
-    expect(ops.find((op) => op.type === 'feature.setParams')).toEqual({
+    expect(added(ops).typeVersion).toBe(3);
+    expect(setParamsSent(ops)[0]).toEqual({
       type: 'feature.setParams',
       v: OP_VERSION['feature.setParams'],
       featureId: 'new1',
       typeVersion: 3,
       params: { width: 5, height: 20, targets: [] },
     });
-    expect(doc.feature(fid('new1'))).toMatchObject({ typeVersion: 3, params: { width: 5 } });
   });
 
-  it('an invalid value is applied and shows in issues and FieldState.issue', () => {
-    const { doc, editor } = setup();
+  it('an invalid value is sent and shows in issues and FieldState.issue', () => {
+    const { ops, editor } = setup();
     const session = editor.create('box');
     session.setParam('width', -1);
 
-    expect(doc.feature(fid('new1'))?.params).toMatchObject({ width: -1 });
+    expect(ops.lastParams(fid('new1'))).toMatchObject({ width: -1 });
     const state = session.state.get();
     const issue = { param: 'width', code: 'param.atOrBelowMin', params: { min: 0 } };
     expect(state.issues).toEqual([issue]);
@@ -555,7 +694,7 @@ describe('FeatureEditSession', () => {
         return [...issues, ...checkParamRules(params, rules, raw, issues)];
       },
     };
-    const { log, editor } = setup({}, EN, boolean);
+    const { ops, editor } = setup({}, EN, boolean);
     const session = editor.create('boolean');
     const a = { kind: 'body', body: bodyId(fid('a')) };
     const b = { kind: 'body', body: bodyId(fid('b')) };
@@ -568,15 +707,15 @@ describe('FeatureEditSession', () => {
     expect(state.fields[0]?.issue).toBeNull();
     // The same as a generic issue: the dialog shows it, the server decides (commit allowed).
     session.commit();
-    expect(log.entries()).toHaveLength(1);
+    expect(ops.sent.at(-1)).toEqual({ kind: 'commit' });
   });
 
   it('commit is allowed with issues', () => {
-    const { log, editor } = setup();
+    const { ops, editor } = setup();
     const session = editor.create('box');
     session.setParam('width', -1);
     session.commit();
-    expect(log.entries()).toHaveLength(1);
+    expect(ops.sent.at(-1)).toEqual({ kind: 'commit' });
   });
 
   it('setParam of an unknown param throws', () => {
@@ -587,38 +726,15 @@ describe('FeatureEditSession', () => {
     }).toThrow();
   });
 
-  it('setParam with the same value applies nothing and emits nothing', () => {
-    const { dispatcher, editor } = setup();
+  it('setParam with the same value sends nothing and emits nothing', () => {
+    const { ops, editor } = setup();
     const session = editor.create('box');
-    const applied: Operation[] = [];
-    dispatcher.events.on('applied', ({ op }) => applied.push(op));
+    const sent = ops.sent.length;
     let emits = 0;
     session.state.subscribe(() => emits++);
     session.setParam('width', 10);
-    expect(applied).toEqual([]);
+    expect(ops.sent).toHaveLength(sent);
     expect(emits).toBe(0);
-  });
-
-  it('a failing handler leaves the session open and unchanged', () => {
-    const { doc, editor } = setup();
-    const session = editor.create('box');
-    const before = session.state.get();
-    const studioBefore = doc.studio;
-    // Freezing the new params reads the getter, so the document mutator throws before any change.
-    const poisoned = {
-      get boom(): never {
-        throw new Error('boom');
-      },
-    };
-    expect(() => {
-      session.setParam('targets', poisoned);
-    }).toThrow('boom');
-
-    expect(doc.studio).toBe(studioBefore);
-    expect(session.state.get()).toBe(before);
-    expect(editor.current.get()).toBe(session);
-    session.setParam('width', 3);
-    expect(session.state.get().params).toMatchObject({ width: 3 });
   });
 
   it('focusRefParam marks the active field; null clears it', () => {
@@ -718,14 +834,8 @@ describe('FeatureEditSession', () => {
   );
 
   it('undo is disabled during the session', () => {
-    const { dispatcher, undo, editor } = setup();
-    const add: FeatureAddOp = {
-      type: 'feature.add',
-      v: OP_VERSION['feature.add'],
-      feature: aBox('a'),
-      index: 0,
-    };
-    dispatcher.dispatch(add);
+    const { ops, editor } = setup({ features: [aBox('a')], canUndo: true });
+    const { undo } = ops;
     expect(undo.canUndo()).toBe(true);
     const session = editor.edit(fid('a'));
     expect(undo.canUndo()).toBe(false);
@@ -736,17 +846,15 @@ describe('FeatureEditSession', () => {
 
 describe('FeatureEditSession.setParams (M12)', () => {
   it('applies several params with one feature.setParams', () => {
-    const { dispatcher, editor } = setup({ features: [aBox('a')] });
+    const { ops, editor } = setup({ features: [aBox('a')] });
     const session = editor.edit(fid('a'));
-    const applied: Operation[] = [];
-    dispatcher.events.on('applied', ({ op }) => applied.push(op));
     let emits = 0;
     session.state.subscribe(() => emits++);
 
     session.setParams({ width: 5, height: 6 });
 
-    expect(applied).toHaveLength(1);
-    expect(applied[0]).toMatchObject({
+    expect(ops.ops()).toHaveLength(1);
+    expect(ops.ops()[0]).toMatchObject({
       type: 'feature.setParams',
       featureId: 'a',
       typeVersion: 1,
@@ -756,46 +864,46 @@ describe('FeatureEditSession.setParams (M12)', () => {
     expect(emits).toBe(1);
   });
 
-  it('create -> setParams -> commit writes one entry batch[feature.add, feature.setParams]', () => {
-    const { log, editor } = setup();
+  it('create -> setParams -> commit: the last setParams carries all values, then commit', () => {
+    const { ops, editor } = setup();
     const session = editor.create('box');
     session.setParams({ width: 1 });
     session.setParams({ width: 2, height: 3 });
     session.commit();
 
-    const entries = log.entries();
-    expect(entries).toHaveLength(1);
-    const ops = (entries[0]?.op as BatchOp).ops; // the entry of create is a batch
-    expect(ops.map((op) => op.type)).toEqual(['feature.add', 'feature.setParams']);
-    expect(ops[1]).toMatchObject({ params: { width: 2, height: 3, targets: [] } });
+    expect(ops.ops().map((op) => op.type)).toEqual([
+      'feature.add',
+      'feature.setParams',
+      'feature.setParams',
+    ]);
+    expect(ops.lastParams(fid('new1'))).toEqual({ width: 2, height: 3, targets: [] });
+    expect(ops.sent.at(-1)).toEqual({ kind: 'commit' });
   });
 
-  it('an unknown key throws and applies nothing', () => {
-    const { dispatcher, editor } = setup();
+  it('an unknown key throws and sends nothing', () => {
+    const { ops, editor } = setup();
     const session = editor.create('box');
-    const applied: Operation[] = [];
-    dispatcher.events.on('applied', ({ op }) => applied.push(op));
+    const sent = ops.sent.length;
     const before = session.state.get();
 
     expect(() => {
       session.setParams({ width: 3, depth: 1 });
     }).toThrow();
-    expect(applied).toEqual([]);
+    expect(ops.sent).toHaveLength(sent);
     expect(session.state.get()).toBe(before);
   });
 
-  it('applies nothing when all values are the same', () => {
-    const { dispatcher, editor } = setup();
+  it('sends nothing when all values are the same', () => {
+    const { ops, editor } = setup();
     const session = editor.create('box');
-    const applied: Operation[] = [];
-    dispatcher.events.on('applied', ({ op }) => applied.push(op));
+    const sent = ops.sent.length;
     let emits = 0;
     session.state.subscribe(() => emits++);
 
     session.setParams({ width: 10, height: 20 });
     session.setParams({});
 
-    expect(applied).toEqual([]);
+    expect(ops.sent).toHaveLength(sent);
     expect(emits).toBe(0);
   });
 
@@ -875,7 +983,7 @@ describe('FeatureEditSession reference chips (FieldState.refs)', () => {
   it('follows a change of the body metadata in the document', () => {
     const { doc, session } = withTargets([{ kind: 'body', body: A }]);
     const before = session.state.get();
-    doc.setBodyMeta(A, { name: 'Base' });
+    setBodyMeta(doc, A, { name: 'Base' });
     const state = session.state.get();
     expect(state.fields[2]?.refs).toEqual([
       { index: 0, body: A, label: 'Base', text: null, missing: false },
@@ -888,7 +996,7 @@ describe('FeatureEditSession reference chips (FieldState.refs)', () => {
     const before = session.state.get();
     let emits = 0;
     session.state.subscribe(() => emits++);
-    doc.setBodyMeta(bodyId(fid('b')), { hidden: true });
+    setBodyMeta(doc, bodyId(fid('b')), { hidden: true });
     expect(session.state.get()).toBe(before);
     expect(emits).toBe(0);
   });
@@ -897,7 +1005,7 @@ describe('FeatureEditSession reference chips (FieldState.refs)', () => {
     const { doc, session } = withTargets([{ kind: 'body', body: A }]);
     session.commit();
     const closed = session.state.get();
-    doc.setBodyMeta(A, { name: 'Base' });
+    setBodyMeta(doc, A, { name: 'Base' });
     expect(session.state.get()).toBe(closed);
   });
 });
@@ -1005,11 +1113,11 @@ describe('FeatureEditSession topo chips (FieldState.refs, D5 of M19.1)', () => {
   });
 
   it('removeRef removes one of two edges and the chips follow', () => {
-    const { doc, session } = withParams({ edges: [E1, E2] });
+    const { ops, session } = withParams({ edges: [E1, E2] });
 
     session.removeRef('edges', 0);
 
-    expect(doc.feature(fid('new1'))?.params).toMatchObject({ edges: [E2] });
+    expect(ops.lastParams(fid('new1'))).toMatchObject({ edges: [E2] });
     expect(refsOf(session, 'edges')).toEqual([
       {
         index: 0,
@@ -1025,7 +1133,7 @@ describe('FeatureEditSession topo chips (FieldState.refs, D5 of M19.1)', () => {
     const { doc, session } = withParams({ edges: [E1, E2] });
     const before = session.state.get().fields[0];
     session.setParam('faces', [topo('a/face:top')]);
-    doc.setBodyMeta(A, { name: 'Base' });
+    setBodyMeta(doc, A, { name: 'Base' });
     expect(session.state.get().fields[0]).toBe(before);
   });
 
@@ -1049,13 +1157,13 @@ describe('FeatureEditSession.removeRef', () => {
   }
 
   it('removes the item at the index through setParam', () => {
-    const { doc, session } = withTargets([
+    const { ops, session } = withTargets([
       { kind: 'body', body: A },
       'junk',
       { kind: 'body', body: B },
     ]);
     session.removeRef('targets', 1);
-    expect(doc.feature(fid('new1'))?.params).toMatchObject({
+    expect(ops.lastParams(fid('new1'))).toMatchObject({
       targets: [
         { kind: 'body', body: A },
         { kind: 'body', body: B },
@@ -1066,25 +1174,24 @@ describe('FeatureEditSession.removeRef', () => {
   });
 
   it('an index out of range or a non-array value does nothing', () => {
-    const { dispatcher, session } = withTargets([{ kind: 'body', body: A }]);
-    const applied: Operation[] = [];
-    dispatcher.events.on('applied', ({ op }) => applied.push(op));
+    const { ops, session } = withTargets([{ kind: 'body', body: A }]);
+    const before = ops.ops().length;
     session.removeRef('targets', 1);
     session.removeRef('targets', -1);
     session.removeRef('targets', 0.5);
+    expect(ops.ops()).toHaveLength(before);
     session.setParam('targets', 'junk');
-    applied.length = 0;
     session.removeRef('targets', 0);
-    expect(applied).toEqual([]);
+    expect(ops.ops()).toHaveLength(before + 1);
   });
 
   it('does nothing once the session is closed', () => {
-    const { doc, session } = withTargets([{ kind: 'body', body: A }]);
+    const { ops, session } = withTargets([{ kind: 'body', body: A }]);
     session.commit();
     expect(() => {
       session.removeRef('targets', 0);
     }).not.toThrow();
-    expect(doc.feature(fid('new1'))?.params).toMatchObject({
+    expect(ops.lastParams(fid('new1'))).toMatchObject({
       targets: [{ kind: 'body', body: A }],
     });
   });

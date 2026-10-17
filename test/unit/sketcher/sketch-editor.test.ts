@@ -19,7 +19,7 @@ import type {
   TopoRef,
 } from '@/document';
 import { aFeature } from '@/document/testing';
-import type { BatchOp, FeatureSetParamsOp, Operation } from '@/ops';
+import type { BatchOp, FeatureSetParamsOp, Operation, OperationDispatcher } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE, parseSketchData } from '@/sketch';
 import type {
@@ -143,6 +143,38 @@ const LINE = data([
   { kind: 'line', id: 'pq', p1: 'p', p2: 'q' },
 ]);
 
+/**
+ * The dispatcher of the transitional anOpsSession that also records every operation it sends,
+ * transaction steps included (until the test moves to FakeOps, M52 task 2).
+ */
+function recording(inner: OperationDispatcher, applied: Operation[]): OperationDispatcher {
+  return {
+    dispatch(op, meta) {
+      const sent = inner.dispatch(op, meta);
+      applied.push(op);
+      return sent;
+    },
+    begin(label) {
+      const tx = inner.begin(label);
+      const step = (op: Operation, send: (op: Operation) => Promise<boolean>) => {
+        const sent = send(op);
+        applied.push(op);
+        return sent;
+      };
+      return {
+        label: tx.label,
+        apply: (op) => step(op, (o) => tx.apply(o)),
+        applyTransient: (op) => step(op, (o) => tx.applyTransient(o)),
+        commit: () => tx.commit(),
+        abort: () => tx.abort(),
+      };
+    },
+    get inTransaction() {
+      return inner.inTransaction;
+    },
+  };
+}
+
 function setup(
   opts: {
     features?: Parameters<typeof aSketch>[];
@@ -160,9 +192,10 @@ function setup(
     ...(opts.features ?? []).map((args) => aSketch(...args)),
   ];
   const ops = anOpsSession({ schemas, features });
+  const applied: Operation[] = [];
   const editor = createFeatureEditor({
     doc: ops.doc,
-    ops: ops.dispatcher,
+    ops: recording(ops.dispatcher, applied),
     schemas,
     ids: createSequentialIdGenerator('f'),
     translate: (key) => (key === 'sketch.label' ? 'Sketch' : key),
@@ -178,8 +211,6 @@ function setup(
     resolvePlane,
     planeOfSketch: opts.planeOfSketch ?? (() => undefined),
   });
-  const applied: Operation[] = [];
-  ops.dispatcher.events.on('applied', ({ op }) => applied.push(op));
   return { ...ops, editor, solver: fake, viewport, sketches, applied };
 }
 

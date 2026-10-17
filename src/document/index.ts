@@ -42,6 +42,8 @@ export { dependenciesOf, orderViolations } from './references';
 export type { OrderViolation } from './references';
 
 export { createDocument } from './cad-document';
+export { createSnapshotDocument } from './snapshot-document';
+export type { DocumentSnapshot, SnapshotDocument } from './snapshot-document';
 
 export { createFeatureSchemaRegistry, isParamVisible } from './schema';
 export type {

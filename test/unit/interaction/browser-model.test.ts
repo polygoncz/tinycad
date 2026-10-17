@@ -359,7 +359,7 @@ describe('BrowserModel.setVisible', () => {
     const s = setup();
     s.regen.publish(new Map(), BODIES);
     s.browser.setVisible(B1, false);
-    s.undo.undo();
+    void s.undo.undo();
     expect(s.doc.bodyMeta(B1)).toEqual({});
     expect(s.browser.hidden.get().size).toBe(0);
     expect(s.browser.bodies.get()[0]?.visible).toBe(true);
@@ -470,10 +470,10 @@ describe('BrowserModel colors (M15)', () => {
     s.regen.publish(new Map(), BODIES);
     s.browser.setColor(B1, '#abcdef');
     s.browser.setColor(B1, '#123456');
-    s.undo.undo();
+    void s.undo.undo();
     expect(s.doc.bodyMeta(B1)).toEqual({ color: '#abcdef' });
     expect(s.browser.bodies.get()[0]?.color).toBe('#abcdef');
-    s.undo.undo();
+    void s.undo.undo();
     expect(s.browser.colors.get().size).toBe(0);
     expect(s.browser.bodies.get()[0]?.color).toBeNull();
   });
@@ -616,10 +616,10 @@ describe('BrowserModel materials (M24)', () => {
     s.regen.publish(new Map(), BODIES);
     s.browser.setMaterial(B1, 'steel');
     s.browser.setMaterial(B1, 'glass');
-    s.undo.undo();
+    void s.undo.undo();
     expect(s.doc.bodyMeta(B1)).toEqual({ material: 'steel' });
     expect(s.browser.bodies.get()[0]?.material).toBe('steel');
-    s.undo.undo();
+    void s.undo.undo();
     expect(s.browser.materials.get().size).toBe(0);
     expect(s.browser.bodies.get()[0]?.material).toBe('plastic');
   });
@@ -717,7 +717,7 @@ describe('BrowserModel.rename', () => {
     s.regen.publish(new Map(), BODIES);
     s.browser.rename(B1, 'Base');
     s.browser.rename(B1, 'Plate');
-    s.undo.undo();
+    void s.undo.undo();
     expect(s.browser.bodies.get()[0]?.userName).toBe('Base');
   });
 
@@ -1125,7 +1125,7 @@ describe('BrowserModel sketches (M12)', () => {
       featureId: fid('s2'),
       name: 'Profile',
     };
-    s.dispatcher.dispatch(op);
+    void s.dispatcher.dispatch(op);
     const rows = s.browser.sketches.get();
     expect(rows.map((r) => r.name)).toEqual(['Sketch 1', 'Profile']);
     expect(rows[0]).toBe(before[0]);

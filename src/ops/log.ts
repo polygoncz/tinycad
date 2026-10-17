@@ -1,6 +1,6 @@
 import { assert, Emitter } from '@/core';
 import type { Subscribable } from '@/core';
-import type { LogEntry } from './ports';
+import type { LogEntry } from './legacy-ports';
 
 /** Read role of the log (ADR 0011): UndoManager and the tests. */
 export interface OperationLogReader {

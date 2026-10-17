@@ -3,9 +3,10 @@
 // the production bundle.
 
 import { createDocument } from './cad-document';
-import type { DocumentWriter } from './document';
+import type { DocumentReader, DocumentWriter } from './document';
 import type { Evaluated } from './evaluate';
-import type { DocumentId, DocumentMeta, FeatureId, FeatureInstance } from './model';
+import type { DocumentId, DocumentMeta, FeatureId, FeatureInstance, PartStudioData } from './model';
+import { createSnapshotDocument } from './snapshot-document';
 
 // Parts of the model only tests use since the core owns minting ids, origin axis ids in
 // feature params and serialization (M47): kept here, outside the public API.
@@ -64,6 +65,40 @@ export function aDocument(options: DocumentOptions = {}): DocumentWriter {
     meta: { id: 'doc1' as DocumentId, name: 'Test document', createdAt: 0, ...options.meta },
     studio: { features, rollbackIndex: options.rollbackIndex ?? features.length },
   });
+}
+
+/** A document of a test: the reader and a way to script the next read model. */
+export interface TestDocument extends DocumentReader {
+  /** The next snapshot: the given parts replace those of the current one (createSnapshotDocument). */
+  replace(next: { readonly name?: string; readonly studio?: PartStudioData }): void;
+}
+
+/** A snapshot document with the given features; meta as aDocument. */
+export function aSnapshotDocument(options: DocumentOptions = {}): TestDocument {
+  const features = options.features ?? [];
+  const snapshots = createSnapshotDocument({
+    meta: { id: 'doc1' as DocumentId, name: 'Test document', createdAt: 0, ...options.meta },
+    studio: { features, rollbackIndex: options.rollbackIndex ?? features.length },
+  });
+  const { reader } = snapshots;
+  return {
+    get meta() {
+      return reader.meta;
+    },
+    get studio() {
+      return reader.studio;
+    },
+    feature: (id) => reader.feature(id),
+    indexOf: (id) => reader.indexOf(id),
+    bodyMeta: (body) => reader.bodyMeta(body),
+    events: reader.events,
+    replace(next) {
+      snapshots.replace({
+        meta: next.name === undefined ? reader.meta : { ...reader.meta, name: next.name },
+        studio: next.studio ?? reader.studio,
+      });
+    },
+  };
 }
 
 /**

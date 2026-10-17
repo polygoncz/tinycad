@@ -4,8 +4,8 @@
 // Connecting = 'starting', online = 'ready', retrying = 'restarting', offline = 'unavailable' (the
 // four connection states are all the kernel states there are, N153); changes in flight = 'pending', retrying = 'error', given up with unconfirmed changes = 'failed'.
 // N92: the queue of the session settles every change it gave up on as failed and its `pending`
-// drops to 0, while the mirror dropped those changes; so 'failed' follows the changes of the
-// mirror that were dropped for the outage (changeDropped with a retryable error) until the
+// drops to 0, while the dispatcher reported those changes as refused; so 'failed' follows the
+// changes that were dropped for the outage (changeDropped with a retryable error) until the
 // connection is back.
 
 import { ObservableValue } from '@/core';
@@ -34,7 +34,7 @@ export interface ConnectionUiState extends Disposable {
   /** A request of the session failed (a ChangeOutcome error, a failed refresh): its text. */
   noteError(error: unknown): void;
   /**
-   * The mirror dropped a change the server refused (RemoteDispatcher onError): its text, and with
+   * A change the server refused (RemoteDispatcher onError): its text, and with
    * a retryable error (the outage) 'failed' while offline, until the connection is back (N92).
    */
   changeDropped(error: unknown): void;

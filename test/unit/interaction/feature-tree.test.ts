@@ -129,7 +129,7 @@ function addFeature(s: ReturnType<typeof setup>, id: string, index: number): voi
     feature: aBox(id),
     index,
   };
-  s.dispatcher.dispatch(op);
+  void s.dispatcher.dispatch(op);
 }
 
 function suppress(s: ReturnType<typeof setup>, id: string): void {
@@ -139,7 +139,7 @@ function suppress(s: ReturnType<typeof setup>, id: string): void {
     featureId: fid(id),
     suppressed: true,
   };
-  s.dispatcher.dispatch(op);
+  void s.dispatcher.dispatch(op);
 }
 
 const ok = { kind: 'ok' } as const;
@@ -506,7 +506,7 @@ describe('FeatureTreeModel dependencies', () => {
       typeVersion: 1,
       params: using('b'),
     };
-    s.dispatcher.dispatch(op);
+    void s.dispatcher.dispatch(op);
     const after = s.tree.rows.get();
     expect(after.map((r) => r.dependents)).toEqual([0, 1, 0, 0]);
     expect(after[0]).not.toBe(before[0]);

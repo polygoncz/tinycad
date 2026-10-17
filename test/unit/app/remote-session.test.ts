@@ -24,8 +24,10 @@ const REASON = {
   UNSPECIFIED: 0,
   INVALID_OPERATION: 1,
   READ_ONLY: 3,
+  NO_TRANSACTION: 5,
   SKETCH_NOT_SOLVED: 9,
   SESSION_NOT_FOUND: 10,
+  STORAGE: 16,
 } as const;
 type ReadModel = ReturnType<typeof aReadModel>;
 
@@ -144,7 +146,6 @@ async function setup({ writable = true, bodies, opened: first }: SetupOptions = 
     timers: createManualTimers(),
     resume: { load: () => null, save: () => undefined },
     newOperationId: () => `op-${String(++next)}`,
-    now: () => 1_000_000,
     ids: createSequentialIdGenerator('n'),
     translate: (key) => key,
     confirm: () => true,
@@ -201,15 +202,53 @@ describe('createRemoteAppSession', () => {
     expect(session.persistence.get()).toBe('saved');
   });
 
-  it('a change from the dialog is in the document at once, the server data after the answer', async () => {
+  it('a change from the dialog: the dialog shows the entered value, the document the answer (N164)', async () => {
     const { core, session } = await setup();
     core.respond('apply', { result: { readModel: model(21, 2) } });
     const edit = session.features.edit(F1);
+    const shown: unknown[] = [];
+    edit.state.subscribe(() => shown.push(edit.state.get().params['size']));
     edit.setParam('size', 20);
-    expect(sizeOf(session)).toBe(20);
     expect(edit.state.get().params['size']).toBe(20);
+    expect(sizeOf(session)).toBe(10);
     await flush();
     expect(sizeOf(session)).toBe(21);
+    // N165: the promise of the change resolves after the document shows the answer, so the dialog
+    // never falls back to the document of before (10).
+    expect(shown).toEqual([20, 21]);
+  });
+
+  it('the dialog creates a feature: it is in the document only with the answer', async () => {
+    const { core, session } = await setup();
+    const answer = held<{ result: { readModel: ReadModel } }>();
+    core.respond('apply', () => answer.promise);
+    const edit = session.features.create('thing');
+    await flush();
+    const added = core.requests('apply')[0]?.op?.op;
+    expect(added?.case).toBe('featureAdd');
+    expect(session.doc.feature(edit.featureId)).toBeUndefined();
+    expect(edit.state.get().params).toEqual({ size: 10 });
+    const withNew = aReadModel({
+      document: {
+        documentId: DOC,
+        features: [
+          ...(model(10, 2).document?.features ?? []),
+          {
+            id: edit.featureId,
+            type: 'thing',
+            typeVersion: 1,
+            name: 'Thing 2',
+            suppressed: false,
+            params: { size: 10 },
+          },
+        ],
+        rollbackIndex: 2,
+      },
+      regen: { generation: 2n },
+    });
+    answer.release({ result: { readModel: withNew } });
+    await flush();
+    expect(session.doc.feature(edit.featureId)?.name).toBe('Thing 2');
   });
 
   // The review after M46/M47: one ordering rule for read models (N136), in the session.
@@ -277,16 +316,36 @@ describe('createRemoteAppSession', () => {
     expect(consoleError).not.toHaveBeenCalled();
   });
 
-  it('SKETCH_NOT_SOLVED of a setParams: the notice sketch.notSolved, the local value stays (N63)', async () => {
+  it('SKETCH_NOT_SOLVED of a setParams: the notice sketch.notSolved, the entered value stays (N65, N164)', async () => {
     const { core, session } = await setup();
     const edit = session.features.edit(F1);
     await flush();
     core.respond('apply', aCoreError(Code.FailedPrecondition, REASON.SKETCH_NOT_SOLVED));
     edit.setParam('size', 30);
     await flush();
-    expect(sizeOf(session)).toBe(30);
+    expect(edit.state.get().params['size']).toBe(30);
+    expect(sizeOf(session)).toBe(10);
     expect(noticeKeys(session)).toEqual(['sketch.notSolved']);
     expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('STORAGE of a Commit: the notice and an Abort; the next change goes through (N167)', async () => {
+    const { core, session } = await setup();
+    const edit = session.features.edit(F1);
+    await flush();
+    core.respond('commit', aCoreError(Code.Internal, REASON.STORAGE));
+    core.respond('abort', aCoreError(Code.FailedPrecondition, REASON.NO_TRANSACTION));
+    edit.commit();
+    expect(session.features.current.get()).toBeNull();
+    await flush();
+    expect(core.calls).toContain('abort');
+    expect(session.notices.get().map((n) => [n.key, n.params])).toEqual([
+      ['notice.changeRejected', { reason: 'STORAGE' }],
+    ]);
+    expect(session.documentName.rename('Bracket')).toBe(true);
+    await flush();
+    expect(core.requests('dispatch')).toHaveLength(1);
+    expect(session.notices.get()).toHaveLength(1);
   });
 
   it('READ_ONLY: the notice notice.readOnly (N146, N153)', async () => {

@@ -1,6 +1,6 @@
 import { assert, DisposableStore, Emitter } from '@/core';
 import type { OperationLogReader } from './log';
-import type { LogEntry, OperationDispatcher, UndoManager } from './ports';
+import type { LogEntry, OperationDispatcher, UndoManager } from './legacy-ports';
 import { isDocumentRename } from './operation';
 
 interface Stacks {

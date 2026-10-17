@@ -1,7 +1,7 @@
 // The sources of the notices of a session (spec 11, N151): what the session of the core says by
 // itself – a transaction lost on the server, the connection given up and back. They read only the
-// RemoteSession (its events and connection), never the mirror, so they stay when M52 removes it;
-// the refusals of changes go through noticeOfRefusal from the dispatcher.
+// RemoteSession (its events and connection); the refusals of changes go through noticeOfRefusal
+// from the dispatcher.
 
 import type { Unsubscribe } from '@/core';
 import type { RemoteSession } from '@/remote';

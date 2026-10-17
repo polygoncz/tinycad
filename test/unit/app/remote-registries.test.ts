@@ -79,8 +79,13 @@ describe('createRemoteRegistries', () => {
     });
   });
 
-  it('builds the handlers of the operations over the schemas of the server', () => {
+  it('has no handlers of operations: the server applies them (ADR 0031)', () => {
     const registries = createRemoteRegistries([serverType('box')], [boxPlugin]);
-    expect(registries.handlers.get('feature.add')).toBeDefined();
+    expect(Object.keys(registries).sort()).toEqual([
+      'manipulators',
+      'messages',
+      'schemas',
+      'tools',
+    ]);
   });
 });

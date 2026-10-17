@@ -6,7 +6,7 @@ import type { OperationLog } from './log';
 import type { OpHandlerRegistry } from './op-handler';
 import type { Operation } from './operation';
 import { throwCollected } from './errors';
-import type { LogEntry, OperationDispatcher } from './ports';
+import type { LogEntry, OperationDispatcher } from './legacy-ports';
 import { createTransaction } from './transaction';
 
 export function createOperationDispatcher(deps: {

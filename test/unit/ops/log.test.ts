@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createOperationLog } from '@/ops/log';
-import type { LogEntry } from '@/ops/ports';
+import type { LogEntry } from '@/ops/legacy-ports';
 import type { Operation } from '@/ops/operation';
 
 const op: Operation = { type: 'studio.setRollback', v: 1 };

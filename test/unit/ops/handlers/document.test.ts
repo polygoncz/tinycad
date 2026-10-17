@@ -50,11 +50,12 @@ describe('document.rename (M19.2, D5)', () => {
   });
 
   it('goes through the dispatcher as a log entry with the op type as label', () => {
-    const { doc, dispatcher } = anOpsSession({ meta: { name: 'Old' } });
-    const entry = dispatcher.dispatch(renameTo('New'));
+    const { doc, dispatcher, log } = anOpsSession({ meta: { name: 'Old' } });
+    void dispatcher.dispatch(renameTo('New'));
+    const [entry] = log.entries();
     expect(doc.meta.name).toBe('New');
     expect(entry).toMatchObject({ kind: 'do', op: renameTo('New'), inverse: renameTo('Old') });
-    expect(entry.label).toBe('document.rename');
+    expect(entry?.label).toBe('document.rename');
   });
 
   it('validate: a valid operation passes', () => {

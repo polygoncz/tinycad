@@ -8,7 +8,7 @@ const refuse = (): never => {
   throw new Error('The document is open read-only (open in another tab)');
 };
 
-/** A dispatcher that refuses every change; reading and its events stay. */
+/** A dispatcher that refuses every change at once (throws, sends nothing). */
 export function refuseChanges(inner: OperationDispatcher): OperationDispatcher {
   return {
     dispatch: refuse,
@@ -16,16 +16,14 @@ export function refuseChanges(inner: OperationDispatcher): OperationDispatcher {
     get inTransaction() {
       return inner.inTransaction;
     },
-    events: inner.events,
   };
 }
 
-/** Undo of a read-only tab: nothing to undo or redo, both refuse; the stacks stay readable. */
+/** Undo of a read-only tab: nothing to undo or redo, both refuse at once. */
 export function refuseUndo(inner: UndoManager): UndoManager {
   return {
     canUndo: () => false,
     canRedo: () => false,
-    stacks: () => inner.stacks(),
     undo: refuse,
     redo: refuse,
     events: inner.events,

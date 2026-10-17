@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { Emitter } from '@/core';
 import { OP_VERSION } from '@/ops';
-import type { DocumentRenameOp, StudioSetRollbackOp, UndoManager } from '@/ops';
-import { anOpsSession, createOperationLog, createUndoManager } from '@/ops/testing';
-import type { OperationLogReader } from '@/ops/testing';
+import type { DocumentRenameOp, StudioSetRollbackOp } from '@/ops';
+import { createOpHandlerRegistry } from '@/ops';
+import { createFeatureSchemaRegistry } from '@/document';
+import { aDocument } from '@/document/testing';
+import { createOperationDispatcher, createOperationLog, createUndoManager } from '@/ops/testing';
+import type { LegacyUndoManager as UndoManager, OperationLogReader } from '@/ops/testing';
 import { HISTORY_LIMIT, createHistoryModel } from '@/interaction/history-model';
 import type { HistoryLog, HistoryRow } from '@/interaction/history-model';
 
@@ -42,8 +45,21 @@ function historyLogOf(log: OperationLogReader, undo: UndoManager): HistoryLog {
   };
 }
 
+/** The in-memory log, dispatcher and undo of before M52 (until M52 task 2). */
+function legacySession() {
+  const log = createOperationLog();
+  let clock = 0;
+  const dispatcher = createOperationDispatcher({
+    doc: aDocument(),
+    handlers: createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() }),
+    log,
+    now: () => ++clock,
+  });
+  return { log, dispatcher, undo: createUndoManager({ dispatcher, log }) };
+}
+
 function setup() {
-  const ops = anOpsSession();
+  const ops = legacySession();
   const history = createHistoryModel({ log: historyLogOf(ops.log, ops.undo) });
   const doOp = (label: string): void => {
     ops.dispatcher.dispatch(BAR, { kind: 'do', label });

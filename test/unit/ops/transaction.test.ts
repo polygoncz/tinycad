@@ -5,7 +5,7 @@ import { aDocument, aFeature, toData } from '@/document/testing';
 import { createOperationDispatcher } from '@/ops/dispatcher';
 import { createOpHandlerRegistry } from '@/ops/handler';
 import { createOperationLog } from '@/ops/log';
-import type { LogEntry } from '@/ops/ports';
+import type { LogEntry } from '@/ops/legacy-ports';
 import type {
   FeatureAddOp,
   FeatureRemoveOp,
