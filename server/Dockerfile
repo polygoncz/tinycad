@@ -70,6 +70,10 @@ RUN --mount=type=cache,id=tinycad-vcpkg-cache,target=/var/cache/vcpkg \
 
 FROM deps AS build
 
+# Compile jobs of the build below; empty = Ninja's default. Several builds at once on an 8 GB
+# Docker VM pass 3 (--build-arg CMAKE_BUILD_PARALLEL_LEVEL=3, decision N116).
+ARG CMAKE_BUILD_PARALLEL_LEVEL=
+
 COPY server/ /src/server/
 COPY test/shared-cases/ /src/test/shared-cases/
 COPY test/golden/ /src/test/golden/
@@ -85,7 +89,14 @@ FROM ubuntu:${UBUNTU_VERSION} AS runtime
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
- && useradd --system --no-create-home tinycad
+ && useradd --system --no-create-home tinycad \
+ && mkdir -p /data \
+ && chown tinycad:tinycad /data
+
+# The document catalog (decision N61). Compose mounts the named volume tinycad-data here; a new
+# volume copies the ownership of this directory, so the non-root user can write it (N103). The
+# variable also points tinycad-import at the same catalog.
+ENV TINYCAD_DATA_DIR=/data
 
 COPY --from=build /src/server/build/docker/src/app/tinycad-core /usr/local/bin/tinycad-core
 # One-off import of documents exported from the browser (M41, decision N38):

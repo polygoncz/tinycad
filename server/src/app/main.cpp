@@ -1,43 +1,54 @@
-// tinycad-core: the gRPC server of the native core (ADR 0030, spec 14). Listens on
-// TINYCAD_CORE_ADDRESS (0.0.0.0:50051 by default) with the standard health service
-// (grpc.health.v1, used by Envoy) and shuts down gracefully on SIGTERM or SIGINT: no new calls,
-// the calls in flight get a few seconds to finish.
+// tinycad-core: the gRPC server of the native core (ADR 0030, spec 14). Reads the environment,
+// quiets the info messages of OCCT, starts the composed server (core_server.hpp) and shuts it
+// down gracefully on SIGTERM or SIGINT.
+//
+// Environment (decision N61):
+//   TINYCAD_CORE_ADDRESS          listen address, default 0.0.0.0:50051
+//   TINYCAD_DATA_DIR              the document catalog (one SQLite file per document), default /data
+//   TINYCAD_SESSION_IDLE_SECONDS  idle timeout of a session, default 600
 
-#include <grpcpp/grpcpp.h>
-#include <grpcpp/health_check_service_interface.h>
-
-#include <chrono>
+#include <Message.hxx>
+#include <Message_Messenger.hxx>
+#include <Message_Printer.hxx>
 #include <pthread.h>
 #include <signal.h>
 
+#include <chrono>
 #include <csignal>
 #include <cstdlib>
 #include <iostream>
-#include <random>
-#include <sstream>
 #include <string>
 
-#include "tinycad/service/geometry_service.hpp"
+#include "core_server.hpp"
 
 namespace {
 
-constexpr auto kShutdownGrace = std::chrono::seconds(5);
-
-/**
- * The epoch of this server process: a random id that changes with every start. Later
- * milestones hand it to clients so they notice a restart (sessions and mesh versions are lost).
- */
-std::string makeEpoch() {
-  std::random_device device;
-  std::mt19937_64 engine(device());
-  std::ostringstream text;
-  text << std::hex << engine();
-  return text.str();
+std::string environment(const char* name, const std::string& fallback) {
+  const char* value = std::getenv(name);
+  return value != nullptr && *value != '\0' ? value : fallback;
 }
 
-std::string listenAddress() {
-  const char* value = std::getenv("TINYCAD_CORE_ADDRESS");
-  return value != nullptr && *value != '\0' ? value : "0.0.0.0:50051";
+/** TINYCAD_SESSION_IDLE_SECONDS; a missing or unusable value keeps the default of 600 s. */
+std::chrono::seconds idleTimeout() {
+  const std::string text = environment("TINYCAD_SESSION_IDLE_SECONDS", "600");
+  try {
+    const long seconds = std::stol(text);
+    if (seconds > 0) return std::chrono::seconds(seconds);
+  } catch (const std::exception&) {
+  }
+  std::cerr << "tinycad-core: TINYCAD_SESSION_IDLE_SECONDS '" << text << "' ignored, using 600\n";
+  return std::chrono::seconds(600);
+}
+
+/**
+ * Decision N78: OCCT reports every STEP transfer and write ("Statistics on Transfer", "Write
+ * Done") as info messages of the process-wide default messenger, which prints them to stdout.
+ * Raised once per process to warnings, so the server log keeps only real problems.
+ */
+void quietOcctInfoMessages() {
+  for (const Handle(Message_Printer) & printer : Message::DefaultMessenger()->Printers()) {
+    printer->SetTraceLevel(Message_Warning);
+  }
 }
 
 }  // namespace
@@ -51,27 +62,24 @@ int main() {
   sigaddset(&signals, SIGINT);
   pthread_sigmask(SIG_BLOCK, &signals, nullptr);
 
-  const std::string epoch = makeEpoch();
-  const std::string address = listenAddress();
+  quietOcctInfoMessages();
 
-  tinycad::service::GeometryServiceImpl geometry;
-  grpc::EnableDefaultHealthCheckService(true);
-  grpc::ServerBuilder builder;
-  builder.AddListeningPort(address, grpc::InsecureServerCredentials());
-  builder.RegisterService(&geometry);
-  const std::unique_ptr<grpc::Server> server = builder.BuildAndStart();
+  tinycad::app::CoreConfig config;
+  config.address = environment("TINYCAD_CORE_ADDRESS", "0.0.0.0:50051");
+  config.dataDir = environment("TINYCAD_DATA_DIR", "/data");
+  config.idleTimeout = idleTimeout();
+
+  const std::unique_ptr<tinycad::app::CoreServer> server = tinycad::app::CoreServer::start(config);
   if (!server) {
-    std::cerr << "tinycad-core: cannot listen on " << address << '\n';
+    std::cerr << "tinycad-core: cannot listen on " << config.address << '\n';
     return EXIT_FAILURE;
   }
-  server->GetHealthCheckService()->SetServingStatus("tinycad.v1.GeometryService", true);
-  std::cout << "tinycad-core listening on " << address << ", epoch " << epoch << std::endl;
+  std::cout << "tinycad-core listening on " << config.address << ", data in "
+            << config.dataDir.string() << std::endl;
 
   int received = 0;
   sigwait(&signals, &received);
   std::cout << "tinycad-core: signal " << received << ", shutting down" << std::endl;
-  server->GetHealthCheckService()->Shutdown();
-  server->Shutdown(std::chrono::system_clock::now() + kShutdownGrace);
-  server->Wait();
+  server->shutdown();
   return EXIT_SUCCESS;
 }
