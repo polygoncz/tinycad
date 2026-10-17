@@ -166,3 +166,11 @@ Zafixované hlavičky navíc: `server/src/session/include/tinycad/session/*.hpp`
 - **N84 – planegcs a adaptér řešiče se překládají s `-ffp-contract=off`.** Proč: WebAssembly nemá fused multiply-add; bez toho by GCC na arm64 slučoval `a*b+c` a výsledky by se od klienta lišily víc.
 - **N85 ⚠ – Řešič „bit po bitu jako WASM“ nejde zaručit v plném rozsahu.** Numericky chaotické mezní případy (tečna úsečky a oblouku při tažení) se mohou lišit stavem `ok`/`failed`; sdílené případy jsou zelené. Podle [[Q103 Skica, kterou server nevyřeší|Q103]] platí výsledek serveru.
 
+## M46 – úkol 1 (základy klienta, souběžně s M45)
+
+- **N86 – Selhaný `fetch` je `UNAVAILABLE`** (connect-web ho hlásí jako `Unknown` s příčinou `TypeError`), takže se opakuje se stejným `operation_id`. Proč: jinak by výpadek sítě (e2e `setOffline`) klient neopakoval.
+- **N87 – Schéma featury z `FeatureTypeDescriptor` má `migrate`, který odmítne.** Proč: registr vyžaduje `migrate` u verze > 1 (transform v3); data ze serveru jsou vždy v aktuální verzi, migruje jen server.
+- **N88 – Zlatý soubor popisů typů je `test/golden/feature-types.json`**, ne v `test/shared-cases/schema/` (N75 upřesněno). Proč: kostra sdílených případů čte každý JSON v oblasti jako případ.
+- **N89 – `DocumentView.created_at_ms`** (jen přidané pole). Proč: zrcadlo dokumentu v klientovi potřebuje celé `DocumentMeta`.
+- **N90 – Typy klienta zvolené implementátorem úkolu 1 přijaté** (`PlaneData`, `AxisData`, `HistoryData`, `RemoteDocumentSummary`, `Timers`, `ReadModelView`); sítě se z `bytes` vždy kopírují do vlastního bufferu.
+

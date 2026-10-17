@@ -46,6 +46,8 @@ message DocumentView {
   uint32 rollback_index = 5;
   // Metadata of bodies by BodyId (spec 03 "Metadata těles"); a body without metadata is absent.
   map<string, BodyMeta> body_meta = 6;
+  // DocumentMeta.createdAt in ms since the epoch (the client mirror needs the whole meta, N89).
+  int64 created_at_ms = 7;
 }
 
 message BodyMeta {
