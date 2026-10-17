@@ -212,3 +212,8 @@ Revize (`architecture-reviewer`) nad M39–M44 a pahýly M45 nenašla porušení
 - **N109 – Levné úklidy hned:** `tinycad_session` linkuje `tinycad_storage` (ne include cesty), solver a jádro se skládají v `app`; `as<T>()` v modelu skici s assertem; limit hloubky vnořených `batch`; `trimJs` do `core`; `document::featureJson`/`readFeature` místo kopií v `ops`; hlavička builderů ve vlastním include adresáři `tinycad_feature_builders`.
 - **N110 ⚠ – Na společnou revizi s Pavlem odloženo:** sloučení 2D základu (N77 – `tinycad_geometry` do `tinycad_kernel`, nebo knihovna `occt2d`), vrstva „runtime“ (`PersistentDocument` + `RuntimeDocument` mimo `storage`), read model psaný rovnou do protobufu (N53), `Change.entry` jako JSON mezi knihovnami, přejmenování `OperationLoadError`. Návrh struktury je v revizi; zatím se nic nepřesouvá.
 
+## M43 – Regenerace v C++
+
+- **N111 – Fillet a Chamfer sdílí jednu funkci `buildDressup`**, `NameTable` si jména seřadí sám, `#k` řadí `std::stable_sort` (porovnání s tolerancí není striktní uspořádání). Spouštěč případů `regen` bere nové `OcctKernel` na každý případ.
+- **N112 – Property test regenerace ověřuje `liveHandleCount == ownedHandleCount`** a 0 handle po zničení Regeneratoru místo počtu handle v cache (cache není zvenku vidět). Stačí: únik i předčasné uvolnění se projeví.
+
