@@ -4,7 +4,7 @@
 // everyone reads, only op handlers (server/src/ops) write. The session hands the DocumentWriter
 // out as a `const DocumentReader&`.
 //
-// No events (decision N18): the server has no document subscribers; whoever changes the document
+// No events (decision N21): the server has no document subscribers; whoever changes the document
 // (the dispatcher, M40) tells the next layer itself. The TS machinery for subscriber exceptions
 // (deferred errors, AggregateError) therefore has no C++ counterpart.
 

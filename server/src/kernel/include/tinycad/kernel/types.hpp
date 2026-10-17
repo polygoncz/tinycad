@@ -16,7 +16,7 @@ namespace tinycad::kernel {
 using core::Vec3;
 
 /**
- * Opaque id of a shape living inside the kernel (decision N11). Positive, never reused within one
+ * Opaque id of a shape living inside the kernel (decision N14). Positive, never reused within one
  * kernel instance (a growing counter), so a released handle always fails with UnknownHandle.
  */
 enum class ShapeHandle : std::uint64_t {};

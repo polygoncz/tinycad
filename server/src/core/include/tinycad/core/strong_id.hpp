@@ -1,7 +1,7 @@
 #pragma once
 
 // A string id that cannot be mixed up with another kind of id: the C++ mirror of Brand<string, …>
-// in src/core/brand.ts (decision N16). Construction is explicit, so the one trusted place that
+// in src/core/brand.ts (decision N19). Construction is explicit, so the one trusted place that
 // mints an id (bodyId(), fromData after the shape check, …) stays visible, like the casts in TS.
 
 #include <compare>

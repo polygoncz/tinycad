@@ -4,7 +4,7 @@
 // stored in the params of a sketch feature. Coordinates are already solved, so regeneration never
 // needs the solver.
 //
-// Plain OOP (decisions N6, N20): a small class hierarchy per TS union. The base class carries
+// Plain OOP (decisions N9, N23): a small class hierarchy per TS union. The base class carries
 // `kind` and `id`; code switches on kind() and reads the concrete type with as<T>(). Objects are
 // immutable after construction and shared as shared_ptr<const …>; a change (the solver moving a
 // point) makes a new object. A JSON round trip keeps every field of the TS shape (sketch.hpp).

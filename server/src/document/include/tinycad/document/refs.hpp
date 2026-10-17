@@ -34,7 +34,7 @@ std::string_view refKindName(RefKind kind);
 
 /**
  * Any reference (BodyRef | TopoRef | SketchRegionRef | PlaneRef | AxisRef | SketchEntityRef in TS).
- * KISS (N6): one plain struct with `kind`; only the fields of the kind are set:
+ * KISS (N9): one plain struct with `kind`; only the fields of the kind are set:
  *
  *   Body          { kind: "body", body }
  *   Topo          { kind: "topo", body, name }

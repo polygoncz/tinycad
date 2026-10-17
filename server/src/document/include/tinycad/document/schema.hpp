@@ -5,7 +5,7 @@
 // (M43). The declarative part (ParamSpec) is also what the server sends to the client as
 // FeatureTypeDescriptor (spec 14 "Schéma featur", server/proto/tinycad/v1/schema.proto).
 //
-// Difference to TS (decision N17, Q105): `visibleWhen` is DATA (VisibleWhen), not a predicate,
+// Difference to TS (decision N20, Q105): `visibleWhen` is DATA (VisibleWhen), not a predicate,
 // so it can cross the wire and the client and the server evaluate the same thing.
 
 #include <memory>
@@ -47,7 +47,7 @@ struct VisibleWhen {
 
 // ---------------------------------------------------------------------------------------------
 // ParamSpec: the kinds of the TS ParamSpec (and of the proto oneof ParamDescriptor.spec).
-// KISS (N6): one plain struct with `kind`; only the fields of the kind are meaningful.
+// KISS (N9): one plain struct with `kind`; only the fields of the kind are meaningful.
 
 enum class ParamKind {
   // Plain values

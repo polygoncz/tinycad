@@ -1,13 +1,13 @@
 #pragma once
 
 // The document model (spec 03 "Model", src/document/model.ts): a recipe, an ordered list of
-// features (ADR 0003). Immutable values with structural sharing (decision N14):
+// features (ADR 0003). Immutable values with structural sharing (decision N17):
 //
 // - FeatureInstance is shared as FeaturePtr = shared_ptr<const FeatureInstance>. A change makes a
 //   new FeatureInstance; the untouched features of the next PartStudioData are the SAME pointers.
 //   Pointer identity is what the regeneration cache keys on (spec 07, M43), like object identity
 //   in TS.
-// - Feature params stay dynamic JSON (decision N15): their shape is given by the feature schema,
+// - Feature params stay dynamic JSON (decision N18): their shape is given by the feature schema,
 //   not by C++ types, exactly like google.protobuf.Struct on the wire (spec 14).
 // - A whole PartStudioData is shared as StudioPtr; a document change replaces it, so a reader
 //   (regen, storage) holding a StudioPtr keeps a consistent snapshot for free.

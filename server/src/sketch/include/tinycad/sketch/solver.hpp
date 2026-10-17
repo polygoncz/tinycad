@@ -2,7 +2,7 @@
 
 // The constraint solver port (spec 12 "Řešič vazeb", ADR 0016, src/sketch/solver.ts). The planegcs
 // adapter is the class PlanegcsSolver in tinycad_solver_planegcs (server/src/solver-planegcs,
-// decision N21). Synchronous like the kernel (N10); a failed solve is a status, never an exception.
+// decision N24). Synchronous like the kernel (N13); a failed solve is a status, never an exception.
 
 #include <optional>
 #include <vector>

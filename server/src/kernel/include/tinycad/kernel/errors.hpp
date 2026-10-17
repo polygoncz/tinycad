@@ -1,7 +1,7 @@
 #pragma once
 
 // Kernel errors (spec 06 "Chyby", src/kernel/errors.ts). In TS a rejected Promise with `code`;
-// here the error half of KernelResult (decision N10). An OCCT exception (Standard_Failure) never
+// here the error half of KernelResult (decision N13). An OCCT exception (Standard_Failure) never
 // leaves an implementation: it becomes OperationFailed or Internal per method (spec 06 Kontrakt).
 
 #include <string>

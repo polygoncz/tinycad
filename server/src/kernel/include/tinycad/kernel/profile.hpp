@@ -5,7 +5,7 @@
 //
 // The 2D-only functions of the TS SketchOps (curveIntersections, curveSegment, filletArc,
 // offsetCurves) are NOT part of the C++ port: they are the library tinycad_geometry of M39
-// behind GeometryService, and no feature builder uses them (decision N12).
+// behind GeometryService, and no feature builder uses them (decision N15).
 
 #include <string>
 #include <vector>

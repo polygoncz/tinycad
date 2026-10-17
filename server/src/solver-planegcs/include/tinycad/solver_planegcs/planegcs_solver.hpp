@@ -2,7 +2,7 @@
 
 // The planegcs adapter of ConstraintSolver (spec 12 "Řešič vazeb", Adaptér; src/solver-planegcs).
 // planegcs is vendored in server/third_party/planegcs from Salusoft89/planegcs v1.3.0 – the same
-// C++ sources as the WASM build the client uses, so results match the shared cases (decision N21).
+// C++ sources as the WASM build the client uses, so results match the shared cases (decision N24).
 
 #include <optional>
 

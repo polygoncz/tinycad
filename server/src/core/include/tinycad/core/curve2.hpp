@@ -3,9 +3,9 @@
 // The 2D curve shared by geometry (M39), kernel (ProfileCurve) and sketch (Curve2).
 // TypeScript has two structurally equal types (src/sketch/curve2.ts, src/kernel/profile.ts
 // ProfileCurve, ADR 0017); C++ has no structural typing, so the one type lives in core and kernel
-// and sketch alias it (decision N9 in docs/40-plan/Rozhodnutí nativního jádra.md).
+// and sketch alias it (decision N12 in docs/40-plan/Rozhodnutí nativního jádra.md).
 //
-// KISS (N6): one plain struct with a `kind` and a switch, not a std::variant. Only the fields of
+// KISS (N9): one plain struct with a `kind` and a switch, not a std::variant. Only the fields of
 // the kind are meaningful; the others keep their defaults. The named constructors fill the right
 // ones.
 

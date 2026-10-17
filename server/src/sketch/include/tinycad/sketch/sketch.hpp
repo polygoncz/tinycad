@@ -3,7 +3,7 @@
 // A parsed, immutable sketch and everything derived from it (spec 12 "Kontrola dat", "Křivky pro
 // oblasti a odvozená id", "Zrcadlení a pole (M36)", "Text ve skice (M37)"; src/sketch/parse.ts,
 // geometry.ts, patterns.ts, text.ts). One class instead of free functions over SketchData
-// (decision N6): the parsed entities, the lookup by id and the derived curves belong together.
+// (decision N9): the parsed entities, the lookup by id and the derived curves belong together.
 // Derived ids are byte-for-byte those of TS (shared cases sketch.derived).
 
 #include <optional>

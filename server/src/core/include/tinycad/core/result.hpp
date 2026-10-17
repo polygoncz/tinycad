@@ -1,6 +1,6 @@
 #pragma once
 
-// Expected failures and programmer errors (decision N7 in docs/40-plan/Rozhodnutí nativního
+// Expected failures and programmer errors (decision N10 in docs/40-plan/Rozhodnutí nativního
 // jádra.md), the C++ mirror of src/core/result.ts and src/core/assert.ts:
 //
 // - An expected failure (broken data from outside, an operation OCCT cannot do, a sketch the

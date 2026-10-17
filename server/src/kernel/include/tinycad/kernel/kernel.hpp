@@ -1,7 +1,7 @@
 #pragma once
 
 // The GeometryKernel port in C++ (spec 06, ADR 0011, src/kernel/kernel.ts), segregated by
-// capability like the TS interfaces. Differences to TS (decisions N10–N13 in
+// capability like the TS interfaces. Differences to TS (decisions N13–N16 in
 // docs/40-plan/Rozhodnutí nativního jádra.md):
 //
 // - SYNCHRONOUS. TS needed Promises because OCCT lived in a worker; here the kernel runs in the
