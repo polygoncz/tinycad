@@ -1022,6 +1022,7 @@ export function patternOfCopy(id: string): SketchEntityId | null;
   - Zdroje = předvýběr bodů a křivek při aktivaci, nebo klikání (klik přepíná zdroj, výběr ukazuje zdroje); pole, kopie a jiné položky se do zdrojů nedostanou. Enter bez zdrojů nic.
   - Zdroje jsou body a křivky **výběru session** v pořadí výběru (nástroj je nedrží zvlášť); aktivace výběr zúží na ně. Esc ve zdrojích zruší celý výběr. Ikony: `flip-horizontal` (zrcadlení), `grid-dots` (lineární), `rotate-360` (kruhové). Skupiny lišty: `history, select, draw, modify, constrain, finish, view`.
   - Zrcadlení: po Enter klik na úsečku (ne zdroj) zapíše `mirror`. Kruhové pole: po Enter klik na bod skici (ne zdroj; počátek není entita) zapíše `circularPattern` s `count = 4`, `angle = 2π`. Lineární pole: Enter rovnou zapíše `linearPattern` s `direction1 = { angle: 0, count: 3, spacing }`, kde `spacing = 1,5 ×` šířka obálky definičních bodů zdrojů ve směru x (kružnice ± poloměr), nebo 10 mm při šířce ≤ 1e-9.
+  - **HUD nápověda** (M37, [[10-interakce#Nástroje]]) po krocích: zdroje `hint.mirror.sources` „Vyber body a křivky ke zrcadlení, Enter pokračuje“, `hint.linearPattern.sources` „Vyber body a křivky pro pole, Enter vytvoří pole“, `hint.circularPattern.sources` „Vyber body a křivky pro pole, Enter pokračuje“; osa `hint.mirror.axis` „Klikni na osu zrcadlení (úsečka nebo přímka), Esc zpět“; střed `hint.circularPattern.center` „Klikni na bod středu pole, Esc zpět“; po zápisu pole (výběr = nové pole) `hint.pattern.edit` „Klikni na kótu pole a změň počet, rozteč nebo úhel, nebo vyber další zdroje“ (u zrcadlení `hint.mirror.done` „Zrcadleno. Vyber další body a křivky, nebo Esc“). Anglicky obdobně.
   - Zápis = `addGeometry` s jedinou novou entitou (id z generátoru, bez vazeb); nové pole je pak vybrané (jeho vynesené kóty se ukážou) a nástroj začne znovu. Esc v kroku osy nebo středu vrátí ke zdrojům, ve zdrojích zruší výběr zdrojů, pak deaktivuje nástroj jako ostatní.
 - **Oblasti** (úkol 5, po sloučení M30): `regionCurves` přidá nekonstrukční kopie křivek z `patternCopies` jako `Curve2` s odvozeným id; jména ploch pak `face:side:<pole>:<index>.<zdroj>`. Pořadí: křivky dat, pak kopie v pořadí `patternCopies` (na jménech oblastí nezáleží, jsou to seřazená id). `pointsById` se kvůli cyklu `geometry → patterns → geometry` přesunul do `sketch/points.ts` (veřejné API beze změny).
 
@@ -1197,6 +1198,59 @@ export interface ChamferRequest { readonly corner: SketchEntityId; readonly a: S
 **Lišta:** v jediné rodině `modify` (jako trim, ne vlastní rodina – šířka lišty) ve skupině `modify`, za `sketch.split`: `sketch.fillet` (ikona `border-radius`), `sketch.chamfer` (`join-bevel`), `sketch.chamferAngle` (`angle`), bez klávesové zkratky; popisky Zaoblit, Srazit, Srazit s úhlem / Fillet, Chamfer, Chamfer with angle. `sketch.chamferAngle` je nové id stopy A (doplněno k [[#Id nástrojů, akcí a rodin]]).
 
 **Testy:** jádro – kontraktová sada `filletArc` (dvě kolmé úsečky, úsečky pod 60°, úsečka–oblouk zvenku i zevnitř, oblouk–oblouk, nesousedící úsečky – body dotyku na prodloužení, výběr podle `near`, příliš velký poloměr → `'operation-failed'`); `sketch` – `cornerOf`, `filletEdit` a `chamferEdit` (obě varianty) pro obdélník: oblouk tečný, kóty obdélníku přežijí přes virtuální roh, výsledek projde `parseSketchData` a body jsou před křivkami; `sketcher` – nástroje s fake portem; e2e – zaoblit roh obdélníku, změnit kótu poloměru (tvar drží, roh zůstává zakótovaný), srazit roh, vysunout.
+
+## Text ve skice (M37)
+
+Rozhodnuto v [[0029-text-ve-skice-pres-opentype|ADR 0029]] a [[Q091 Fonty pro text ve skice|Q091]] (Pavel 2026-10-16): přibalené OFL fonty, **obrysy písmen uložené v datech** v lokálních souřadnicích textu; regenerace font nepotřebuje. Verze schématu skici zůstává 1.
+
+```ts
+// sketch/model.ts – člen SketchEntity, ne SketchCurve (jako pole, M36)
+export type TextFontId = 'sans' | 'serif' | 'mono';
+export const TEXT_FONTS: readonly TextFontId[];          // zmrazené, v tomto pořadí (výběr v panelu)
+/** Úsek obrysu v lokálních souřadnicích textu (mm): 2 póly = úsečka, 3 = kvadratická, 4 = kubická Bézierova křivka. */
+export type TextSegment = readonly Vec2[];
+/** Jedna uzavřená smyčka jednoho písmene; konec posledního úseku = začátek prvního. */
+export interface TextContour {
+  readonly char: number;     // index znaku v [...text] (kódové body, ne UTF-16)
+  readonly code: number;     // kódový bod toho znaku (kontrola souladu s text)
+  readonly segments: readonly TextSegment[];
+}
+export interface SketchText {
+  readonly kind: 'text'; readonly id: SketchEntityId;
+  readonly text: string;               // 1 … MAX_TEXT_LENGTH kódových bodů, jeden řádek, bez řídicích znaků
+  readonly font: TextFontId;
+  readonly height: number;             // mm, > 0: velikost písma (em), jako font-size
+  readonly baseline: SketchEntityId;   // úsečka (po M31 i xline): počátek účaří = p1, směr p1 → p2; délka nehraje roli
+  readonly contours: readonly TextContour[];   // vypočtené skicářem z text, font, height (TextOutliner)
+  readonly construction?: true;
+}
+export const MAX_TEXT_LENGTH = 200;
+
+// sketch/text.ts
+/** Port: obrysy písmen; implementuje adaptér text-opentype (opentype.js + přibalené fonty), testy FakeTextOutliner. */
+export interface TextOutliner {
+  outline(p: { readonly text: string; readonly font: TextFontId; readonly height: number }): Promise<readonly TextContour[]>;
+  /** Šířka účaří (posun za posledním znakem) v mm – délka kotevní úsečky nového textu. */
+  advance(p: { readonly text: string; readonly font: TextFontId; readonly height: number }): Promise<number>;
+}
+/** Křivky textů skici ve skutečné poloze (Curve2 line/bspline) s odvozenými id; čistá funkce bez fontu. */
+export function textCurves(data: SketchData): readonly Curve2[];
+/** Id entity, ze které odvozená křivka pochází (kopie pole i písmeno textu), jinak null; nahrazuje patternOfCopy v picku. */
+export function derivedOwner(id: string): SketchEntityId | null;
+```
+
+- **Lokální souřadnice:** x podél účaří od `p1` kotevní úsečky, y kolmo vlevo (nahoru pro vodorovnou úsečku zleva doprava), mm. `textCurves` je převede: `P = p1 + x·û + y·(−û.y, û.x)`, `û` = jednotkový směr `p1 → p2`; úsečka nulové délky → žádné křivky (jako zrcadlení, M36). Tah kotvy tedy font nepotřebuje.
+- **Úsek → `Curve2`:** 2 póly → `line`; 3 nebo 4 póly → `bspline` stupně 2 nebo 3 s uzly `[0…0, 1…1]` (Bézierova křivka je přesně B-spline, [[M29-spliny|M29]]).
+- **Odvozené id:** `<id textu>:<char>-<code>.<smyčka>.<úsek>` (smyčka a úsek = pořadí v rámci znaku). Změna jiného znaku, posunutí nebo otočení kotvy id nemění; změna znaku na indexu nebo vložení před něj ho změní (reference na to písmeno se rozpadne, ostatní přežijí). `derivedOwner` uzná kopie polí (M36) i písmena textu (gramatika písmene je podmnožinou gramatiky kopie, proto se písmeno zkouší první; vlastník = předpona; pick používá jen `derivedOwner`). Co je křivka, rozhoduje jediný predikát `isCurveEntity` (`sketch/model.ts`: bod, pole ani text ne); `sketcher` a adaptér řešiče vlastní kopie nemají. `textCurves` vrací křivky všech textů i konstrukčních (kresba pozná styl přes vlastníka), `regionCurves` jen nekonstrukčních. Typ `Curve2` žije v `sketch/curve2.ts` (kvůli cyklu `geometry ↔ text`), veřejné API beze změny. Jedna kotevní úsečka smí nést víc textů.
+- **Kontrola dat** (`sketch.invalidEntity`): `text` neprázdný řetězec nejvýš `MAX_TEXT_LENGTH` kódových bodů bez řídicích znaků (`\p{Cc}`); `font` z `TEXT_FONTS`; `height > 0` konečné; `baseline` vede na úsečku; `contours` pole, každá smyčka s `char` v rozsahu, `code === [...text][char].codePointAt(0)`, ≥ 1 úsek, každý úsek 2–4 konečné body, smyčka uzavřená (do 1e-9 · max(1, |souřadnice|)) a navazující (konec úseku = začátek dalšího). Znak bez smyček (mezera) je v pořádku. Vazby na text nesmějí odkazovat; text není zdrojem pole (`isPatternSource` → false).
+- **Mazání a editace:** smazání kotevní úsečky (nebo jejího bodu) smaže text; smazání textu kotevní úsečku nemaže. `toggleConstruction` přepíná i text (konstrukční text se kreslí čárkovaně a oblasti netvoří). `constraintFor`/`dimensionFor` s textem → `null`.
+- **Oblasti:** `regionCurves` přidá křivky nekonstrukčních textů z `textCurves` (za kopie polí); díry písmen (o, a, B) řeší jádro. Jména ploch `face:side:<text>:<char>-<code>.<smyčka>.<úsek>`.
+- **Řešič:** text do řešiče nevstupuje; kotevní úsečka je běžná entita (vazby a kóty na ni jdou).
+- **Kresba a výběr:** kresba editované i regenerované skice přidá `textCurves` stylem textu; pick odvozeného id se přeloží `derivedOwner` na id textu (klik na písmeno vybere text). Snapper text ignoruje. Glyfy text nemá.
+- **Adaptér `text-opentype`** (prstenec 3, jako `solver-planegcs`; závisí na `core`, `sketch`; npm `opentype.js`; jen `app` ho importuje): `createOpentypeOutliner(loadFont: (font: TextFontId) => Promise<ArrayBuffer>): TextOutliner` – font se načte a naparsuje při prvním použití a drží v cache. Obrys: rozložení přes `font.forEachGlyph(text, 0, 0, height, { kerning: true, features: {} })` (posuny a kerning GPOS jako `getPath`, bez ligatur, takže glyfy odpovídají kódovým bodům 1:1, jinak `Error`) a pro každý glyf `glyph.getPath(x, 0, height)` → příkazy M/L/Q/C/Z; souřadnice y se převrátí (opentype má y dolů). Smyčka končí na `Z`, dalším `M` nebo konci cesty; úsek se všemi póly shodnými se vynechá, prázdná smyčka také, neuzavřená dostane uzavírací úsečku. Načtení fontu, které selže, se do cache neuloží (další volání zkusí znovu). Adaptér fonty sám nenačítá; `text-opentype` exportuje `fontUrl(font): string` (`new URL('./fonts/…', import.meta.url)`), `app` z něj načte data přes `fetch`. Fonty: soubory `.ttf` (podmnožina latinky s českou diakritikou, licence OFL v `LICENSE` vedle) v `src/text-opentype/fonts/`; prohlížeč je načte přes `fontUrl` (doslovné `new URL('./fonts/…', import.meta.url)`, Vite je přibalí do `dist/assets`), Node testy přes `fs`. Znak, který font nemá, dá glyf `.notdef` (obdélník s dírou; fonty jsou ořezané `pyftsubset … --layout-features=kern --no-hinting --notdef-outline` na U+0020–007E, U+00A0–017F a pár typografických znaků) – žádná chyba.
+- **Nástroj Text** (`sketch.text`, skupina `draw` v rodině `line` za bodem – lišta nesmí přibýt tlačítkem, Vazby musí při 1280 px zůstat v liště; bez zkratky; nápověda `hint.text.place` „Klikni na počátek účaří textu“): klik (přes snapper) = počátek účaří; zápis přes `addDrawn` (režim konstrukce M31); zapíše kotevní konstrukční úsečku vodorovně délky `advance` a text `"Text"`, font `sans`, výška 10 mm (obrysy přes `TextOutliner` před zápisem), bez vazeb (snapper jen přichytí polohu nebo znovu použije existující bod, `pointOnCurve` ani `fix` nevzniknou); text se vybere a panel dá fokus poli řetězce. Esc deaktivuje. Nástroj bere outliner z `SketchEditor.text: TextOutliner` (jako `gridStep()`), protože obrysy a `advance` potřebuje před zápisem. Selhání outlineru (font se nenačetl) nic nezapíše – přibalené fonty to v praxi vylučují, hláška zatím není.
+- **Úprava:** `SketchSession.setTextParams(id, p: Partial<TextParams>): Promise<boolean>` (`TextParams = { text; font; height }` ze `sketcher`) – ověří hodnoty (`textParamsValid` ze `sketch`, sdílené s parse), přepočítá `contours` přes `TextOutliner`, zapíše jedním `setParams` bez řešiče (fronta jako `toggleConstruction`); neplatné → `false`. Panel skici při výběru právě jednoho textu ukáže nad vazbami sekci „Text“ s poli Text, Písmo (výběr z `SKETCH_TEXT_FONTS` v `sketcher/constants.ts`, kopie `TEXT_FONTS` hlídaná testem; popisky `sketch.font.sans|serif|mono`) a Výška (mm, formát jako kóty, desetinná čárka i tečka). Enter nebo opuštění pole zapíše jen změněné pole, Esc vrátí. Panel jen parsuje (nečitelná výška nebo nezměněná hodnota se neodešle); o platnosti rozhodne `setTextParams` a jeho `false` pole vrátí. Nově vytvořený text (objeví se a stane se jediným výběrem) dá fokus poli Text s označeným obsahem; logika v `ui/sketch-text-panel.ts`. `SketchSession` dostane `TextOutliner` v závislostech jako `solver`; `app` ho vytvoří (`createOpentypeOutliner` s načítáním přes URL fontů).
+
 
 ## Testy
 

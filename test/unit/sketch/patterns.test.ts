@@ -368,3 +368,17 @@ describe('patternOfCopy', () => {
     expect(patternOfCopy('__poles:sp')).toBeNull();
   });
 });
+
+describe('patternCopies – mirror across an xline (after M31)', () => {
+  it('mirrors across the infinite line like across a line', () => {
+    const data = sketch([
+      ...BASE,
+      { kind: 'xline', id: 'x', p1: 'o', p2: 'u', construction: true },
+      { kind: 'mirror', id: 'm', sources: ['ab'], axis: 'x' },
+    ]);
+    const copies = patternCopies(data);
+    expect(ids(copies)).toEqual(['m:1.a', 'm:1.b', 'm:1.ab']);
+    expectPoint(copies, 'm:1.a', -1, 0);
+    expectPoint(copies, 'm:1.b', -3, 0);
+  });
+});

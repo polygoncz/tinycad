@@ -83,6 +83,7 @@ export type {
   ToolContext,
   ToolDescriptor,
   ToolFeatures,
+  ToolHint,
   ToolRegistry,
   ToolViewport,
 } from './tools';

@@ -18,7 +18,11 @@
 // constraints" above it is SketchEditor.showAllConstraints, next to the grid snap. A new dimension
 // opens the section before its field takes the focus (focusNewDimension).
 // M28: the field of an angle shows and takes degrees (the model keeps radians, ../sketch-dimensions).
-import { computed, nextTick, useId, useTemplateRef, watch } from 'vue';
+// M37 (spec 12, "Text ve skice"): with exactly one text selected, the section "Text" edits its
+// string, font and height (../sketch-text-panel): Enter or leaving a field commits a changed valid
+// value through setTextParams, Esc and anything not committed show the value of the text again.
+// A text the Text tool has just written and selected gets the focus of its string field.
+import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { SketchConstraintRow, SketchSession } from '@/sketcher';
 import { useObservable } from '../composables/use-observable';
@@ -26,6 +30,15 @@ import { useSession } from '../composables/use-session';
 import { isAdditive } from '../item-actions';
 import { dimensionUnit, fromShownValue, toShownValue } from '../sketch-dimensions';
 import { constraintRowLabel, focusNewDimension, toggleShowAllConstraints } from '../sketch-panel';
+import {
+  createNewTextFocus,
+  selectedText,
+  textCommit,
+  textFieldText,
+  textFontLabel,
+} from '../sketch-text-panel';
+import type { TextField } from '../sketch-text-panel';
+import { SKETCH_TEXT_FONTS } from '@/sketcher/constants';
 import { formatDimension } from './params/field-values';
 import NumericInput from './params/NumericInput.vue';
 
@@ -109,6 +122,55 @@ watch(
   },
   { immediate: true },
 );
+
+// The section "Text": the typed values are local strings (pure UI state), set from the text
+// whenever one of its values changes.
+const text = computed(() => selectedText(state.value));
+const textSectionId = useId();
+const textValueId = useId();
+const textFontId = useId();
+const textHeightId = useId();
+const drafts = ref<Record<TextField, string>>({ text: '', font: '', height: '' });
+watch(
+  () => [text.value?.id, text.value?.text, text.value?.font, text.value?.height],
+  () => {
+    revert('text');
+    revert('font');
+    revert('height');
+  },
+  { immediate: true },
+);
+
+/** The field shows the value of the selected text again. */
+function revert(field: TextField): void {
+  const current = text.value;
+  drafts.value[field] = current === null ? '' : textFieldText(field, current);
+}
+
+/** A changed valid value goes to the session; otherwise, or when refused, the field reverts. */
+async function commit(field: TextField): Promise<void> {
+  const current = text.value;
+  if (current === null) return;
+  const params = textCommit(field, drafts.value[field], current);
+  if (params === null || !(await props.sketch.setTextParams(current.id, params))) revert(field);
+}
+
+// The Text tool selects the text it wrote; its string field then takes the focus with the text
+// selected, so typing replaces it (spec 12, "Nástroj Text").
+const textValue = useTemplateRef<HTMLInputElement>('textValue');
+const newTextFocus = createNewTextFocus(state.value);
+// Sync: the tracker reads every state of the session, also two in one tick (write, then select).
+watch(
+  state,
+  async (s) => {
+    if (newTextFocus(s) === null) return;
+    // After the tick the section and its field exist.
+    await nextTick();
+    textValue.value?.focus();
+    textValue.value?.select();
+  },
+  { flush: 'sync' },
+);
 </script>
 
 <template>
@@ -166,6 +228,47 @@ watch(
         {{ t('sketchPanel.showConstraints') }}
       </button>
     </div>
+
+    <section v-if="text !== null" class="text" :aria-labelledby="textSectionId">
+      <h3 :id="textSectionId" class="section">{{ t('sketch.text.section') }}</h3>
+      <div class="text-row">
+        <label :for="textValueId" class="text-label">{{ t('sketch.text.value') }}</label>
+        <span class="text-field">
+          <input
+            :id="textValueId"
+            ref="textValue"
+            v-model="drafts.text"
+            type="text"
+            @change="commit('text')"
+            @keydown.escape="revert('text')"
+          />
+        </span>
+      </div>
+      <div class="text-row">
+        <label :for="textFontId" class="text-label">{{ t('sketch.text.font') }}</label>
+        <span class="text-field">
+          <select :id="textFontId" v-model="drafts.font" @change="commit('font')">
+            <option v-for="font in SKETCH_TEXT_FONTS" :key="font" :value="font">
+              {{ textFontLabel(t, font) }}
+            </option>
+          </select>
+        </span>
+      </div>
+      <div class="text-row">
+        <label :for="textHeightId" class="text-label">{{ t('sketch.text.height') }}</label>
+        <span class="text-field">
+          <input
+            :id="textHeightId"
+            v-model="drafts.height"
+            type="text"
+            inputmode="decimal"
+            @change="commit('height')"
+            @keydown.escape="revert('height')"
+          />
+          <span class="unit">mm</span>
+        </span>
+      </div>
+    </section>
 
     <details ref="section">
       <summary class="section">{{ t('sketchPanel.constraints') }}</summary>
@@ -343,6 +446,47 @@ watch(
   font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+}
+.text {
+  margin: 0 0 6px;
+}
+.text-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 14px;
+}
+.text-label {
+  width: 56px;
+  color: var(--text-secondary);
+}
+.text-field {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  height: var(--field-height);
+  padding: 0 8px;
+  border-radius: var(--radius-control);
+  background: var(--field-bg);
+  border: 0.5px solid var(--field-border);
+}
+.text-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.text-field input,
+.text-field select {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+}
+.unit {
+  color: var(--text-tertiary);
 }
 .constraints {
   margin: 0;

@@ -41,6 +41,20 @@ export interface ToolContext {
   readonly features: ToolFeatures;
   /** The tool is done → ToolManager switches to the default tool. */
   finish(): void;
+  /**
+   * The hint of the current step (M37, the HUD at the top of the viewport); null = none. Like
+   * finish it belongs to the activation: a call after deactivate is ignored.
+   */
+  setHint(hint: ToolHint | null): void;
+}
+
+/**
+ * The hint of a tool step (M37) as the translation key `hint.<tool>.<step>` with its parameters;
+ * ui translates it.
+ */
+export interface ToolHint {
+  readonly key: string;
+  readonly params?: Readonly<Record<string, string | number>>;
 }
 
 export interface ToolDescriptor {

@@ -91,6 +91,7 @@ function setup() {
     ids: createSequentialIdGenerator(),
     features: aFeatureEditorStub(),
     finish: () => finished++,
+    setHint: () => undefined,
   });
   const pointer = (e: ViewPointerEvent): void => tool.onPointer?.(e);
   const click = (x: number, y: number, opts: { shift?: boolean } = {}): void => {

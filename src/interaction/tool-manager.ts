@@ -1,6 +1,6 @@
 // ToolManager (spec 10, "Nástroje"): exactly one tool is active and gets the viewport
-// events. Every activation gets its own ctx whose finish is bound to that activation,
-// so a stale tool cannot switch tools any more. With a mode (M12) only the tools of the current
+// events. Every activation gets its own ctx whose finish and setHint are bound to that activation,
+// so a stale tool can neither switch tools nor show its hint any more. With a mode (M12) only the tools of the current
 // mode can be active and each mode has its own default tool. Layers of input (M20, A4.3) come
 // before the tool in their order; app composes them (manipulators → refPick → the active tool).
 
@@ -10,12 +10,17 @@ import type { InputLayer } from './input-layer';
 import { isPlainEscape } from './key-events';
 import type { Mode } from './mode';
 import { toolModes } from './constants';
-import type { Tool, ToolContext, ToolDescriptor } from './tools';
+import type { Tool, ToolContext, ToolDescriptor, ToolHint } from './tools';
 import type { ViewKeyEvent, ViewPointerEvent, ViewportEvents } from './viewport-port';
 
 export interface ToolManager {
   /** Id of the active tool. */
   readonly active: Observable<string>;
+  /**
+   * The hint of the active tool's current step (M37); null = none. Switching or deactivating
+   * the tool resets it, an equal hint (same key and params) is not emitted again.
+   */
+  readonly hint: Observable<ToolHint | null>;
   /**
    * Deactivates the previous tool. An unknown id or a tool outside the current mode throws, the
    * active tool stays.
@@ -36,7 +41,7 @@ interface Activation {
 
 export function createToolManager(deps: {
   registry: RegistryReader<ToolDescriptor>;
-  ctx: Omit<ToolContext, 'finish'>;
+  ctx: Omit<ToolContext, 'finish' | 'setHint'>;
   /** Pointer and key events of the viewport; the tools get them only through the manager. */
   viewportEvents: Subscribable<ViewportEvents>;
   /** The default tool of the mode 'model'. */
@@ -74,6 +79,11 @@ export function createToolManager(deps: {
   const defaultToolId = (): string => defaultIdOf(mode);
 
   const active = new ObservableValue<string>(defaultToolId());
+  const hint = new ObservableValue<ToolHint | null>(null);
+
+  function setHint(next: ToolHint | null): void {
+    if (!sameHint(hint.get(), next)) hint.set(next === null ? null : frozenHint(next));
+  }
   let current: Activation | null = null;
   let disposed = false;
 
@@ -89,6 +99,7 @@ export function createToolManager(deps: {
       activation = activateTool(id, descriptor.create());
     } catch (error) {
       current = null;
+      setHint(null);
       if (id !== defaultToolId()) restoreDefault(error);
       throw error;
     }
@@ -102,6 +113,9 @@ export function createToolManager(deps: {
       ...deps.ctx,
       finish: () => {
         finish(activation);
+      },
+      setHint: (next: ToolHint | null) => {
+        if (activation === current) setHint(next);
       },
     });
     current = activation;
@@ -139,6 +153,7 @@ export function createToolManager(deps: {
     if (current?.id === id) return;
     current?.tool.deactivate();
     current = null;
+    setHint(null);
     start(id);
   }
 
@@ -205,6 +220,7 @@ export function createToolManager(deps: {
 
   return {
     active: active.asObservable(),
+    hint: hint.asObservable(),
     activate(id) {
       if (disposed) throw new Error('ToolManager is disposed');
       // Throws for an unknown id first, then for a tool of another mode.
@@ -220,6 +236,26 @@ export function createToolManager(deps: {
       const last = current;
       current = null;
       last?.tool.deactivate();
+      setHint(null);
     },
   };
+}
+
+/** Same key and same params; missing params equal empty ones. */
+function sameHint(a: ToolHint | null, b: ToolHint | null): boolean {
+  if (a === null || b === null) return a === b;
+  if (a.key !== b.key) return false;
+  const pa = a.params ?? {};
+  const pb = b.params ?? {};
+  const keys = Object.keys(pa);
+  return keys.length === Object.keys(pb).length && keys.every((k) => pa[k] === pb[k]);
+}
+
+/** A frozen copy: the caller's object never becomes the published hint. */
+function frozenHint(h: ToolHint): ToolHint {
+  return Object.freeze(
+    h.params === undefined
+      ? { key: h.key }
+      : { key: h.key, params: Object.freeze({ ...h.params }) },
+  );
 }

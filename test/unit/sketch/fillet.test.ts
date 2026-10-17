@@ -13,7 +13,7 @@ import type { FilletRequest } from '@/sketch/fillet';
 import { samePoint } from '@/sketch/curve-param';
 import { curve2 } from '@/sketch/geometry';
 import { pointsById } from '@/sketch/points';
-import { isPattern } from '@/sketch/model';
+import { isCurveEntity } from '@/sketch/model';
 import type { Curve2 } from '@/sketch/geometry';
 import type {
   SketchArc,
@@ -57,7 +57,7 @@ function entity(data: SketchData, name: string): SketchEntity | undefined {
 
 function curveOf(data: SketchData, name: string): Curve2 {
   const c = entity(data, name);
-  if (c === undefined || c.kind === 'point' || isPattern(c)) throw new Error(`no curve ${name}`);
+  if (c === undefined || !isCurveEntity(c)) throw new Error(`no curve ${name}`);
   return curve2(c, pointsById(data));
 }
 

@@ -6,7 +6,11 @@ import type { FeatureSchema, ParamSchema } from '@/document';
 import { anOpsSession } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE, isPattern, parseSketchData } from '@/sketch';
 import type { SketchData, SketchEntityId, SketchPattern } from '@/sketch';
-import { createFakeSketchGeometry, createFakeSolver } from '@/sketch/testing';
+import {
+  createFakeSketchGeometry,
+  createFakeSolver,
+  createFakeTextOutliner,
+} from '@/sketch/testing';
 import {
   SELECT_TOOL,
   createFeatureEditor,
@@ -19,6 +23,7 @@ import type {
   PickResult,
   SketchDrawing,
   ToolContext,
+  ToolManager,
   ViewPointerEvent,
 } from '@/interaction';
 import { FakeRegenStatus, FakeViewport } from '@/interaction/testing';
@@ -151,6 +156,7 @@ async function patterning(
     features: editor,
     solver,
     geometry: createFakeSketchGeometry(),
+    text: createFakeTextOutliner(),
     viewport,
     resolvePlane: () => ({ origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, 0, 1] }),
     planeOfSketch: () => undefined,
@@ -158,7 +164,7 @@ async function patterning(
   const registry = createToolRegistry();
   registry.register(SELECT_TOOL);
   for (const t of createSketchTools({ sketches })) registry.register(t);
-  const ctx: Omit<ToolContext, 'finish'> = {
+  const ctx: Omit<ToolContext, 'finish' | 'setHint'> = {
     viewport,
     selection: createSelectionModel({ regen: new FakeRegenStatus() }),
     doc: ops.doc,
@@ -277,6 +283,28 @@ describe('the mirror tool', () => {
     await click(viewport, ON_PQ);
     expect(selectionOf(session)).toEqual(['pq']);
     expect(newPatternsOf(session)).toHaveLength(1);
+  });
+
+  it('takes an xline as the axis (after M31)', async () => {
+    // The vertical xline x = 150 through o and u, clicked far from both points.
+    const sketch = data(
+      [
+        ...SKETCH.entities,
+        { kind: 'point', id: 'u', x: 150, y: 60 },
+        { kind: 'xline', id: 'xl', p1: 'o', p2: 'u', construction: true },
+      ],
+      SKETCH.constraints,
+    );
+    const { viewport, session } = await patterning('sketch.mirror', {
+      preselect: ['pq'],
+      sketch,
+    });
+
+    await key(viewport, 'Enter');
+    await click(viewport, [150, 200]);
+
+    const [mirror] = newPatternsOf(session);
+    expect(mirror).toEqual({ kind: 'mirror', id: mirror?.id, sources: ['pq'], axis: 'xl' });
   });
 
   it('in the axis step a point, a circle, a source line or nothing write nothing', async () => {
@@ -403,5 +431,72 @@ describe('the linear pattern tool', () => {
     await key(viewport, 'Enter');
     await key(viewport, 'Enter');
     expect(newPatternsOf(session)).toHaveLength(1);
+  });
+});
+
+describe('the pattern tools: the hint HUD (M37)', () => {
+  const hintOf = (manager: ToolManager): string | null => manager.hint.get()?.key ?? null;
+
+  it('mirror: sources → axis → done; Escape in the axis step and a source click go back', async () => {
+    const { viewport, manager } = await patterning('sketch.mirror', { preselect: ['pq'] });
+    expect(hintOf(manager)).toBe('hint.mirror.sources');
+
+    await key(viewport, 'Enter');
+    expect(hintOf(manager)).toBe('hint.mirror.axis');
+    await key(viewport, 'Escape');
+    expect(hintOf(manager)).toBe('hint.mirror.sources');
+
+    await key(viewport, 'Enter');
+    await click(viewport, ON_AB);
+    expect(hintOf(manager)).toBe('hint.mirror.done');
+
+    await click(viewport, ON_PQ);
+    expect(hintOf(manager)).toBe('hint.mirror.sources');
+  });
+
+  it('a click that writes nothing in the axis step keeps the hint', async () => {
+    const { viewport, manager } = await patterning('sketch.mirror', { preselect: ['pq'] });
+    await key(viewport, 'Enter');
+    await click(viewport, AT_M);
+    expect(hintOf(manager)).toBe('hint.mirror.axis');
+  });
+
+  it('Enter without sources keeps the sources hint', async () => {
+    const { viewport, manager } = await patterning('sketch.circularPattern');
+    await key(viewport, 'Enter');
+    expect(hintOf(manager)).toBe('hint.circularPattern.sources');
+  });
+
+  it('circular: sources → centre → edit; Escape after the write goes back to the sources', async () => {
+    const { viewport, manager } = await patterning('sketch.circularPattern', {
+      preselect: ['pq'],
+    });
+    expect(hintOf(manager)).toBe('hint.circularPattern.sources');
+
+    await key(viewport, 'Enter');
+    expect(hintOf(manager)).toBe('hint.circularPattern.center');
+    await click(viewport, AT_O);
+    expect(hintOf(manager)).toBe('hint.pattern.edit');
+
+    await key(viewport, 'Escape');
+    expect(hintOf(manager)).toBe('hint.circularPattern.sources');
+  });
+
+  it('linear: sources → edit at once; a source click goes back to the sources', async () => {
+    const { viewport, manager } = await patterning('sketch.linearPattern', { preselect: ['pq'] });
+    expect(hintOf(manager)).toBe('hint.linearPattern.sources');
+
+    await key(viewport, 'Enter');
+    expect(hintOf(manager)).toBe('hint.pattern.edit');
+
+    await click(viewport, ON_K);
+    expect(hintOf(manager)).toBe('hint.linearPattern.sources');
+  });
+
+  it('the hint goes when the tool ends', async () => {
+    const { viewport, manager } = await patterning('sketch.mirror');
+    await key(viewport, 'Escape');
+    expect(manager.active.get()).toBe('sketch.select');
+    expect(manager.hint.get()).toBeNull();
   });
 });

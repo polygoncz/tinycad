@@ -7,7 +7,7 @@ import type { Observable, Plane } from '@/core';
 import { ORIGIN_PLANES, ORIGIN_PLANE_IDS, samePlaneRef } from '@/document';
 import type { FeatureId, PlaneRef, TopoRef } from '@/document';
 import { SKETCH_FEATURE_TYPE, SKETCH_PARAM } from '@/sketch';
-import type { ConstraintSolver, SketchGeometry } from '@/sketch';
+import type { ConstraintSolver, SketchGeometry, TextOutliner } from '@/sketch';
 import type { FeatureEditSession, FeatureEditor, Mode, ViewportPort } from '@/interaction';
 import { frozenRef, planeRefOf } from './plane-ref';
 import { openSketchSession } from './sketch-session';
@@ -46,6 +46,8 @@ export interface SketchEditor {
   setShowAllConstraints(on: boolean): void;
   /** The current step of the grid in mm (deps.gridStep); the tools read it on every snap. */
   gridStep(): number;
+  /** M37: deps.text, the letter outlines the Text tool writes a new text with. */
+  readonly text: TextOutliner;
 }
 
 export interface SketchEditorDeps {
@@ -54,6 +56,12 @@ export interface SketchEditorDeps {
   readonly solver: ConstraintSolver;
   /** M30: handed to every SketchSession (spec 12 "Geometrie skici v jádře"). */
   readonly geometry: SketchGeometry;
+  /**
+   * M37: the letter outlines of a text (spec 12 "Text ve skice"), handed to every SketchSession
+   * (setTextParams) and to the Text tool; tests createFakeTextOutliner, the browser
+   * createOpentypeOutliner.
+   */
+  readonly text: TextOutliner;
   /**
    * The edited sketch is drawn under EDIT_SKETCH_DRAWING_ID; screenToRay places a dragged
    * dimension label in the plane (M28); the overlay shows the snap guides of the drawing tools
@@ -105,6 +113,7 @@ export function createSketchEditor(deps: SketchEditorDeps): SketchEditor {
       showAllConstraints: showAllConstraints.asObservable(),
       solver,
       geometry: deps.geometry,
+      text: deps.text,
       viewport,
       // The mode goes back even if a subscriber of current throws; its error goes on after.
       onClose: () => {
@@ -178,5 +187,6 @@ export function createSketchEditor(deps: SketchEditorDeps): SketchEditor {
     gridStep() {
       return gridStep();
     },
+    text: deps.text,
   };
 }

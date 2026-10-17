@@ -33,3 +33,14 @@ export const SKETCH_DRAW_ACTION_GROUP = 'sketch.draw';
 
 /** The id of the default tool of the sketch mode (spec 10, "Nástroje a akce skicáře"). */
 export const SKETCH_SELECT_TOOL_ID = 'sketch.select';
+
+/**
+ * The fonts of a text in the order of the font field of the panel (M37, spec 12 "Text ve skice"):
+ * a copy of TEXT_FONTS of sketch, which this file may not import (sketcher-constants-only-data);
+ * a test keeps them equal. The label of a font is `t('sketch.font.<id>')`.
+ */
+export const SKETCH_TEXT_FONTS: readonly ('sans' | 'serif' | 'mono')[] = Object.freeze([
+  'sans',
+  'serif',
+  'mono',
+]);

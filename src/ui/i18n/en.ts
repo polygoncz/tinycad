@@ -146,6 +146,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'tool.rectangle3p': '3-point rectangle',
   'tool.point': 'Point',
   'tool.xline': 'Construction line',
+  'tool.text': 'Text',
   'tool.circle': 'Circle',
   'tool.circle2p': '2-point circle',
   'tool.circle3p': '3-point circle',
@@ -216,6 +217,14 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'sketch.input.diameter': 'Diameter',
   'sketch.input.radius': 'Radius',
   'sketch.input.sweep': 'Sweep',
+  // The section of a selected text in the panel (M37) and the labels of its fonts.
+  'sketch.text.section': 'Text',
+  'sketch.text.value': 'Text',
+  'sketch.text.font': 'Font',
+  'sketch.text.height': 'Height',
+  'sketch.font.sans': 'Sans',
+  'sketch.font.serif': 'Serif',
+  'sketch.font.mono': 'Mono',
   'sketchPanel.constraints': 'Constraints',
   'sketchPanel.remove': 'Remove {name}',
   'sketchPanel.gridSnap': 'Snap to grid',
@@ -339,6 +348,18 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
 
   // The value field of the manipulator HUD (M19), its aria-label.
   'manipulator.field.label': 'Handle value',
+
+  // The hint HUD of the tools (M37, spec 11 rule 8a): one sentence per tool step.
+  'hint.mirror.sources': 'Select points and curves to mirror, Enter continues',
+  'hint.mirror.axis': 'Click the mirror axis (a line or a construction line), Esc goes back',
+  'hint.mirror.done': 'Mirrored. Select more points and curves, or Esc',
+  'hint.linearPattern.sources':
+    'Select points and curves for the pattern, Enter creates the pattern',
+  'hint.circularPattern.sources': 'Select points and curves for the pattern, Enter continues',
+  'hint.circularPattern.center': 'Click the center point of the pattern, Esc goes back',
+  'hint.pattern.edit':
+    'Click a pattern dimension to change the count, spacing or angle, or select more sources',
+  'hint.text.place': 'Click the start of the baseline of the text',
 
   // Labels of the built-in operations in the history panel: the dispatcher writes the op type
   // as the label of an entry without one. feature.rename and feature.suppress are above (actions).

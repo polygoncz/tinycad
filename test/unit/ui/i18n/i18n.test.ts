@@ -85,6 +85,8 @@ const SKETCH_KEYS = [
   'tool.rectangle3p',
   'tool.point',
   'tool.xline',
+  'tool.text',
+  'hint.text.place',
   'tool.circle',
   'tool.arc',
   'tool.spline',

@@ -4,6 +4,7 @@ import { createActionRegistry, createToolbarModel } from '@/interaction';
 import type { Mode } from '@/interaction';
 import { GEOMETRIC_CONSTRAINT_KINDS } from '@/sketch';
 import { SKETCH_ACTION_IDS, sketchConstraintActionId } from '@/sketcher/constants';
+import { createFakeTextOutliner } from '@/sketch/testing';
 import { createSketchActions } from '@/sketcher/sketch-actions';
 import type { SketchEditor } from '@/sketcher/sketch-editor';
 import type { SketchSession } from '@/sketcher/sketch-session';
@@ -26,6 +27,7 @@ function setup() {
     showAllConstraints: new ObservableValue(false).asObservable(),
     setShowAllConstraints: () => expect.fail('setShowAllConstraints is not expected'),
     gridStep: () => expect.fail('gridStep is not expected'),
+    text: createFakeTextOutliner(),
   };
   const registry = createActionRegistry({ mode: mode.asObservable() });
   createSketchActions({ registry, sketches, ids: createSequentialIdGenerator('c') });

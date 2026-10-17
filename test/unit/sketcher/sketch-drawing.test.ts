@@ -6,7 +6,7 @@ import type { PlaneId } from '@/document';
 import type { SketchDrawingCurve } from '@/interaction';
 import { parseSketchData } from '@/sketch';
 import type { Curve2, SketchData, SketchItemId, SketchRegion } from '@/sketch';
-import { rectangleData } from '@/sketch/testing';
+import { rectangleData, textData } from '@/sketch/testing';
 import {
   ORIGIN_POINT_ID,
   artifactDrawing,
@@ -616,5 +616,90 @@ describe('copies of patterns (M36)', () => {
       ['m:1.ac', 'construction'],
     ]);
     expect(drawing.points).toEqual([]);
+  });
+});
+
+/** The text 'ab' (two square letters of the fake outliner) on its construction baseline (M37). */
+const TEXT = textData({ text: 'ab' });
+const LETTERS = ['0-97', '1-98'].flatMap((letter) =>
+  [0, 1, 2, 3].map((segment) => `t:${letter}.0.${String(segment)}`),
+);
+
+describe('texts (M37)', () => {
+  it('draws the letter curves after the data with derived ids, in the style of the text', () => {
+    const drawing = toSketchDrawing(XY, TEXT, (id) => (id === 't.bl' ? 'construction' : 'normal'));
+
+    expect(drawing.curves.map((c) => c.id)).toEqual(['t.bl', ...LETTERS]);
+    expect(drawing.curves.slice(1).every((c) => c.style === 'normal')).toBe(true);
+    // The first segment of 'a': the fake square from x = 0.5 on the baseline from [0, 0].
+    const first = drawing.curves[1];
+    expect(first).toMatchObject({ kind: 'line', id: 't:0-97.0.0', style: 'normal' });
+    if (first?.kind !== 'line') throw new Error('not a line');
+    expect(first.from[0]).toBeCloseTo(0.5, 12);
+    expect(first.to[0]).toBeCloseTo(5.5, 12);
+    expect(drawing.points.map((p) => p.id)).toEqual(['t.p1', 't.p2']);
+  });
+
+  it('draws a construction text dashed; a selected or hovered one so, construction too', () => {
+    const construction = textData({ text: 'ab', construction: true });
+    const plain = toSketchDrawing(XY, construction, normal);
+    expect(plain.curves.slice(1).every((c) => c.style === 'construction')).toBe(true);
+
+    for (const style of ['selected', 'hover'] as const) {
+      const drawing = toSketchDrawing(XY, construction, (id) => (id === 't' ? style : 'normal'));
+      expect(drawing.curves.slice(1).every((c) => c.style === style)).toBe(true);
+    }
+  });
+
+  it('a letter curve is never styled by its own id', () => {
+    const seen: string[] = [];
+    toSketchDrawing(XY, TEXT, (id) => {
+      seen.push(id);
+      return 'normal';
+    });
+
+    expect(seen.some((id) => id.includes(':'))).toBe(false);
+  });
+
+  it('draws a Bézier segment as a polyline without a control polygon', () => {
+    const curved = textData({
+      text: 'a',
+      contours: [
+        {
+          char: 0,
+          code: 97,
+          segments: [
+            [
+              [0, 0],
+              [1, 2],
+              [2, 0],
+            ],
+            [
+              [2, 0],
+              [0, 0],
+            ],
+          ],
+        },
+      ],
+    });
+
+    const drawing = toSketchDrawing(XY, curved, normal);
+
+    expect(drawing.curves.map((c) => [c.id, c.kind])).toEqual([
+      ['t.bl', 'line'],
+      ['t:0-97.0.0', 'polyline'],
+      ['t:0-97.0.1', 'line'],
+    ]);
+  });
+
+  it('the regenerated sketch draws the letters too, a construction text dashed', () => {
+    const drawing = artifactDrawing(XY, TEXT.entities, []);
+    expect(drawing.curves.map((c) => [c.id, c.style])).toEqual([
+      ['t.bl', 'construction'],
+      ...LETTERS.map((id) => [id, 'normal']),
+    ]);
+
+    const construction = artifactDrawing(XY, textData({ construction: true }).entities, []);
+    expect(construction.curves.slice(1).every((c) => c.style === 'construction')).toBe(true);
   });
 });

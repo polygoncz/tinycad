@@ -7,10 +7,12 @@ import type { Plane, Vec2, Vec3 } from '@/core';
 import {
   SPLINE_TOLERANCE,
   curve2,
-  isPattern,
+  derivedOwner,
+  isCurveEntity,
   patternCopies,
   patternOfCopy,
   pointsById,
+  textCurves,
 } from '@/sketch';
 import type {
   Curve2,
@@ -21,6 +23,7 @@ import type {
   SketchItemId,
   SketchPoint,
   SketchRegion,
+  SketchText,
 } from '@/sketch';
 import type {
   SketchDrawing,
@@ -69,7 +72,9 @@ const AXIS_Z_LIMIT = 0.9;
  * after a bspline its control polygon (controlPolygonId) in the style 'construction' (the poles
  * are points of the sketch, the poles of a fitSpline are not drawn); then the copies of the
  * patterns (patternCopies, M36) drawn like their sources, in the style of their pattern when it is
- * 'selected' or 'hover' (styleOf is never asked for the id of a copy); `origin` adds the point
+ * 'selected' or 'hover' (styleOf is never asked for the id of a copy); then the letter curves of
+ * the texts (textCurves, M37) in the style of their text, 'construction' for a construction text
+ * unless the text is 'selected' or 'hover' (no control polygons); `origin` adds the point
  * ORIGIN_POINT_ID at [0, 0] in the style 'normal' after the points of the sketch; `editing` marks
  * the drawing of the sketch edited in the sketcher (SketchDrawing.editing). Frozen.
  */
@@ -81,18 +86,23 @@ export function toSketchDrawing(
 ): SketchDrawing {
   const copies = patternCopies(data);
   const points = pointsById({ entities: [...data.entities, ...copies], constraints: [] });
+  /** A derived curve (a copy, a letter) in the style of its owner when it is selected or hovered. */
+  const derivedStyle = (owner: SketchEntityId, construction: boolean): SketchStyle => {
+    const ofOwner = styleOf(owner);
+    if (ofOwner === 'selected' || ofOwner === 'hover') return ofOwner;
+    return construction ? 'construction' : ofOwner;
+  };
   const style = (e: SketchPoint | SketchCurve): SketchStyle => {
     const pattern = patternOfCopy(e.id);
     if (pattern === null) return styleOf(e.id);
-    const ofPattern = styleOf(pattern);
-    if (ofPattern === 'selected' || ofPattern === 'hover') return ofPattern;
-    return e.kind !== 'point' && e.construction === true ? 'construction' : ofPattern;
+    return derivedStyle(pattern, e.kind !== 'point' && e.construction === true);
   };
   const entities = [...data.entities.filter(isGeometry), ...copies];
-  const curves = entities.filter(isCurve).flatMap((c) => {
+  const curves = entities.filter(isCurveEntity).flatMap((c) => {
     const curve = drawingCurve(c.id, curve2(c, points), style(c));
     return c.kind === 'bspline' ? [curve, controlPolygon(c.id, c.poles, points)] : [curve];
   });
+  curves.push(...letterDrawings(data, (t) => derivedStyle(t.id, t.construction === true)));
   const drawn: SketchDrawingPoint[] = entities.flatMap((e) =>
     e.kind === 'point' ? [Object.freeze({ id: e.id, at: vec2(e.x, e.y), style: style(e) })] : [],
   );
@@ -108,7 +118,8 @@ export function toSketchDrawing(
  * The curves of a regenerated sketch without points: non-construction ones in the style 'normal',
  * construction ones in the style 'construction' (M13, R74: a construction line can be the axis of
  * Revolve), then the curves of the copies of the patterns (patternCopies, M36) styled the same
- * way, and `regions` (the outlines of the kernel, SketchArtifact.outlines, M30) as polygons
+ * way, then the letter curves of the texts (textCurves, M37) styled by their text, and `regions`
+ * (the outlines of the kernel, SketchArtifact.outlines, M30) as polygons
  * named like the regions, in their order (M13). Frozen.
  */
 export function artifactDrawing(
@@ -120,10 +131,13 @@ export function artifactDrawing(
   const copies = patternCopies(data);
   const points = pointsById({ entities: [...entities, ...copies], constraints: [] });
   const curves = [...entities, ...copies]
-    .filter(isCurve)
+    .filter(isCurveEntity)
     .map((c) =>
       drawingCurve(c.id, curve2(c, points), c.construction === true ? 'construction' : 'normal'),
     );
+  curves.push(
+    ...letterDrawings(data, (t) => (t.construction === true ? 'construction' : 'normal')),
+  );
   return Object.freeze({
     plane,
     curves: Object.freeze(curves),
@@ -170,10 +184,32 @@ export function axisDrawing(
   return freezeDrawing(frame, [line], []);
 }
 
-const isCurve = (e: SketchEntity): e is SketchCurve => e.kind !== 'point' && !isPattern(e);
+/**
+ * A point or a curve: what a drawing shows of the data as it is (a pattern shows through its
+ * copies, a text through its letter curves).
+ */
+const isGeometry = (e: SketchEntity): e is SketchPoint | SketchCurve =>
+  e.kind === 'point' || isCurveEntity(e);
 
-/** A point or a curve: what a drawing shows of the data (a pattern shows through its copies). */
-const isGeometry = (e: SketchEntity): e is SketchPoint | SketchCurve => !isPattern(e);
+/**
+ * The letter curves of the texts of the data (textCurves, M37) under their derived ids, each in
+ * the style `styleOf` gives its text.
+ */
+function letterDrawings(
+  data: SketchData,
+  styleOf: (text: SketchText) => SketchStyle,
+): SketchDrawingCurve[] {
+  const texts = new Map<string, SketchText>();
+  for (const e of data.entities) if (e.kind === 'text') texts.set(e.id, e);
+  return textCurves(data).map((curve) => {
+    // textCurves names every curve '<text>:<letter>', so the id and its text are always there.
+    const id = curve.id ?? '';
+    const owner = derivedOwner(id);
+    const text = owner === null ? undefined : texts.get(owner);
+    assert(text !== undefined, `letterDrawings: '${id}' is no letter of a text`);
+    return drawingCurve(id, curve, styleOf(text));
+  });
+}
 
 /** The polyline through the pole points of a bspline, in the style 'construction' (M29). */
 function controlPolygon(
