@@ -1,6 +1,5 @@
 node_modules/
 dist/
-dist-core/
 coverage/
 # Playwright (e2e) output
 test-results/

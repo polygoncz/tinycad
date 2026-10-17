@@ -1,8 +1,8 @@
 // The history panel (spec 10, "Historie úprav: HistoryModel", M15): the operation log as a
 // read-only timeline, newest first. The log is append-only and undo appends the inverse, so
 // "Undo" and "Redo" show as rows of their own and a 'do' says whether it is still in effect.
-// The status comes from the undo stacks of the log port (N73: the server computes them, the
-// local path with rebuildUndoStacks, the same rule as UndoManager).
+// The status comes from the undo stacks of the log port (N73: the server computes them by the
+// same rule as UndoManager).
 // M19.2 (D5): document.rename is outside undo, so it is no step of the history either; its
 // entries are left out of the rows and of the counts.
 
@@ -11,7 +11,7 @@ import type { Disposable, Observable, Subscribable } from '@/core';
 
 /**
  * One entry of the log for the history panel (N73): without the operations, with their type.
- * The server sends exactly this (LogEntryView); the local path maps a LogEntry onto it.
+ * The server sends exactly this (LogEntryView).
  */
 export interface HistoryEntry {
   readonly seq: number;

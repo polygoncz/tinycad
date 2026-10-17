@@ -35,7 +35,7 @@ Sérii milníků s malým průnikem dotčených souborů lze implementovat soub�
 ## Konvence kódu
 
 - **Kód, identifikátory, komentáře v kódu, commit zprávy:** anglicky. **Vault:** česky.
-- TypeScript `strict`, žádné `any` (výjimka jen v adaptéru OCCT, izolovaná a okomentovaná).
+- TypeScript `strict`, žádné `any`.
 - Každý modul v `src/` má veřejné API jen přes svůj `index.ts`. Hluboké importy do cizího modulu jsou zakázané. Pomůcky pro testy (buildery `aFeature()`, `aDocument()`…) jsou v `testing.ts` modulu a smí je importovat jen testy. Testy leží mimo `src/` v `test/unit/<modul>/` se zrcadlovou strukturou (`src/interaction/foo.ts` → `test/unit/interaction/foo.test.ts`), importují přes `@/`; integrační v `test/integration/`, e2e v `test/e2e/` (ADR 0023).
 - Pravidla závislostí mezi moduly jsou v `docs/20-spec/01-architektura.md` a vynucuje je dependency-cruiser (`npm run lint:deps`).
 - Doménová data jsou **neměnná** (immutable). Změna = nový objekt.
@@ -55,14 +55,17 @@ Sérii milníků s malým průnikem dotčených souborů lze implementovat soub�
 
 - `node scripts/claude-guard.selftest.mjs` – test hooku `claude-guard` (co blokuje a co ne); spustit po každé úpravě hooku.
 - `node scripts/vault-lint.mjs` – kontrola celého vaultu (od M0 i jako `npm run lint:vault` v `npm run check`).
-- `npm run check` – vše, co musí projít před dokončením úkolu: `typecheck` + `lint` + `lint:deps` + `lint:vault` + `test` + `test:integration`, souběžně (`run-p`); typecheck je inkrementální a Prettier s cache, ESLint záměrně bez cache (typově informovaná pravidla).
-- `npm run check:server` – build C++ jádra v Dockeru a GoogleTest (sdílené případy); `npm run check:full` = `check` + `check:server`, při slučování milníků série nativního jádra. Docker Desktop musí běžet.
-- `docker compose up -d --build` – jádro `tinycad-core` a Envoy (gRPC-Web na :8080); od M46 aplikace běží **jen proti serveru**, `npm run dev` proto potřebuje běžící Compose (`VITE_CORE_URL` jen přepíše výchozí `/api`). E2E (`npm run test:e2e`, `test:e2e:full`) si zvednou vlastní Compose projekt `tinycad-e2e-<E2E_PORT>` s daty v tmpfs (souběžné běhy: nastavit `E2E_PORT` i `E2E_CORE_PORT`, `E2E_KEEP_CORE=1` ho nechá běžet).
-- `npm run gen:proto` – TS z `server/proto` do `src/protocol/` (běží samo před `dev`, `typecheck`, `test`…).
-- `npm run dev` – vývojový server Vite (http://localhost:5173), `npm run build` – produkční build.
-- `npm run typecheck` – `vue-tsc -b` nad všemi projekty: `tsconfig.domain.json` (prstence 1 a 2 bez DOM, ADR 0009), `tsconfig.app.json` (prohlížeč), `tsconfig.test.json` (testy v Node), `tsconfig.test-idb.json` (testy adaptéru IndexedDB, s typy DOM), `tsconfig.test-app.json` (testy `app` a `ui`, s typy DOM), `tsconfig.node.json` (konfigurace nástrojů).
+- `npm run check` – vše, co musí projít před dokončením úkolu: `check:proto` (`buf lint` a `buf breaking` proti `main`) + `typecheck` + `lint` + `lint:deps` + `lint:vault` + `test` + `test:integration`, souběžně (`run-p`); typecheck je inkrementální a Prettier s cache, ESLint záměrně bez cache (typově informovaná pravidla). Docker nepotřebuje.
+- `npm run check:server` – build C++ jádra v Dockeru (stage `build` v `server/Dockerfile`) a GoogleTest včetně sdílených případů; `npm run check:full` = `check` + `check:server`, při slučování milníků série nativního jádra. Docker Desktop musí běžet.
+- `docker compose up -d --build` – jádro `tinycad-core` (OCCT, SQLite v pojmenovaném svazku `tinycad-data`) a Envoy (gRPC-Web na :8080). Aplikace běží **jen proti serveru**: `npm run dev` proto potřebuje běžící Compose (Vite přeposílá `/api` na Envoy; `VITE_CORE_URL` jen přepíše výchozí `/api`).
+- `npm run gen:proto` – TS z `server/proto` do `src/protocol/` (běží samo před `dev`, `typecheck`, `lint`, `lint:deps`, `test`, `test:integration`).
+- `npm run dev` – vývojový server Vite (http://localhost:5173), `npm run build` – produkční build (typecheck + `vite build`).
+- `npm run typecheck` – `vue-tsc -b` nad všemi projekty: `tsconfig.domain.json` (prstence 1 a 2 bez DOM, ADR 0009), `tsconfig.app.json` (prohlížeč), `tsconfig.test.json` (testy v Node), `tsconfig.test-app.json` (testy `app` a `ui`, s typy DOM), `tsconfig.node.json` (konfigurace nástrojů).
 - `npm run lint:deps` – hranice modulů (dependency-cruiser, `.dependency-cruiser.cjs`). Tabulka modulů v něm musí odpovídat tabulce v `docs/20-spec/01-architektura.md`.
-- `npm test` – unit testy (Vitest, projekt `unit`), `npm run test:integration` – integrační testy v `test/integration/`, `npm run test:e2e` – Playwright v `test/e2e/`, jen Chrome, 4 workery. Během práce na milníku spouštěj jen jeho spec (`npm run test:e2e -- m37`); `npm run test:e2e:full` (Chrome i WebKit) až při uzavření milníku a slučování stopy.
+- `npm test` – unit testy (Vitest, projekt `unit`), `npm run test:integration` – integrační testy v `test/integration/`: TS běžce sdílených případů `ops` a `sketch` (`test/shared-cases/`) a `remote` proti zlatému souboru popisů featur. Referenční implementace ostatních sdílených případů je C++ (`check:server`).
+- `npm run cases:record` – zapíše výstup TS do `expected` sdílených případů `ops` a `sketch`; `expected` nových případů `regen` a `geometry` se zapisuje ručně podle výstupu C++.
+- `npm run test:e2e` – Playwright v `test/e2e/` proti produkčnímu buildu (`vite preview`), jen Chrome, 4 workery (`E2E_WORKERS`). Potřebuje běžící Docker: sada si sama zvedne vlastní Compose projekt `tinycad-e2e-<E2E_PORT>` (`docker-compose.e2e.yml`, data v tmpfs) a po běhu ho smaže; každý test si založí vlastní dokument. Souběžné běhy (víc worktree) nastaví jedinečné `E2E_PORT` (port `vite preview`, výchozí 4173) i `E2E_CORE_PORT` (port Envoy, výchozí 18080), např. `E2E_PORT=4411 E2E_CORE_PORT=18411 npm run test:e2e`; `E2E_KEEP_CORE=1` nechá Compose projekt po běhu běžet. Během práce na milníku spouštěj jen jeho spec (`npm run test:e2e -- m37`); `npm run test:e2e:full` (Chrome i WebKit) až při uzavření milníku a slučování stopy.
+- `npm run measure -- --url http://localhost:4173` – velikost `dist/` a medián studeného startu aplikace v Chrome (`scripts/measure-startup.mjs`, N125); aplikace musí na URL už běžet (`npm run build && npx vite preview` proti Compose), `--runs 0` jen velikost bundlu.
 - `npm run format` – Prettier + `eslint --fix` nad celým projektem (vault v `docs/` se neformátuje).
 - `npx depcruise src --config .dependency-cruiser.cjs --output-type dot | dot -T svg > deps.svg` – graf závislostí modulů (potřebuje Graphviz).
 - Hook `scripts/code-format.mjs` po každé úpravě `src/**/*.{ts,vue}` spustí Prettier a `eslint --fix`.

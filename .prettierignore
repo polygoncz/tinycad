@@ -2,7 +2,6 @@
 docs/
 .obsidian/
 dist/
-dist-core/
 coverage/
 package-lock.json
 # Hand-written notes and tooling outside the app code.

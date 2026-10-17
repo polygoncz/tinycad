@@ -2,8 +2,8 @@ import { expect, test } from './fixtures';
 import type { Page } from '@playwright/test';
 import { createDocument, paramInput, timelineFeature } from './helpers';
 
-// Smoke test of M10 (Ú11): the whole path click → operation → log → regeneration in the
-// worker → rendering → undo, persistence across a reload, an invalid param and the read-only
+// Smoke test of M10 (Ú11): the whole path click → operation → log → regeneration on the
+// server → rendering → undo, persistence across a reload, an invalid param and the read-only
 // second tab. Runs against the production build (playwright.config.ts) in Czech. Elements are
 // found only by their roles and accessible names (spec 11, "Přístupnost").
 
@@ -35,7 +35,7 @@ test('box, undo, redo and reload keep the document and its body', async ({ page 
   await expect(timelineFeature(page, 'Kvádr 1')).toBeVisible();
   await expect(page.getByText('Tělesa: 1')).toBeVisible();
 
-  // Reload only after the log is in IndexedDB (the green dot of the title bar).
+  // Reload only after the server has saved the log (the green dot of the title bar).
   await expect(page.getByRole('status', { name: 'Uloženo' })).toBeVisible();
   await page.reload();
 

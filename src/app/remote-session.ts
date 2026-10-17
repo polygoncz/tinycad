@@ -1,7 +1,7 @@
 // createRemoteAppSession (spec 11, "Kompoziční kořen (app)"; M46, N63–N70): the AppSession over a
-// session of the native core. It wires the same models as wireSession of the local path, with
-// the parts of M46 in place of the local document, dispatcher, undo, persistence, kernel and
-// regeneration: the optimistic mirror and the remote dispatcher, the read model view with the
+// session of the native core. It wires the models of the session over the parts of M46, which
+// stand in for a local document, dispatcher, undo, persistence, kernel and regeneration: the
+// optimistic mirror and the remote dispatcher, the read model view with the
 // meshes by content_version, the history and the export of the server, and the connection
 // mapped onto the kernel and save states. It knows no DOM: the transport, the viewport, the timers
 // and the resume store come in as deps, so it runs in Node over createFakeCore().
@@ -223,7 +223,7 @@ function wireRemoteSession(
   );
   const regenStatus = view;
 
-  // 3. Services and models, as wireSession.
+  // 3. Services and models.
   const selection = lifetime.add(createSelectionModel({ regen: regenStatus }));
   const features = createFeatureEditor({
     doc,
