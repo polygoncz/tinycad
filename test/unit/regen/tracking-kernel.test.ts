@@ -148,6 +148,7 @@ describe('createTrackingKernel', () => {
       'makeBox',
       'makeCylinder',
       'makeFace',
+      'offsetCurves',
       'profileRegions',
       'revolve',
       'topology',
@@ -191,6 +192,18 @@ describe('createTrackingKernel', () => {
     } as const;
     expect(await kernel.filletArc(params)).toEqual(await real.filletArc(params));
     expect(real.callCount('filletArc')).toBe(2);
+    expect(owned.size).toBe(0);
+  });
+
+  it('passes offsetCurves through and owns nothing (M35)', async () => {
+    const { real, owned, kernel } = setup();
+    const params = {
+      curves: [{ kind: 'line', from: [0, 0], to: [10, 0], id: 'p' }],
+      closed: false,
+      distance: 2,
+    } as const;
+    expect(await kernel.offsetCurves(params)).toEqual(await real.offsetCurves(params));
+    expect(real.callCount('offsetCurves')).toBe(2);
     expect(owned.size).toBe(0);
   });
 

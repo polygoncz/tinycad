@@ -146,6 +146,7 @@ describe('endOnFatal', () => {
       curveIntersections: (p) => fake.curveIntersections(p),
       curveSegment: (p) => fake.curveSegment(p),
       filletArc: (p) => fake.filletArc(p),
+      offsetCurves: (p) => fake.offsetCurves(p),
       extrude: (s, d, l) => fake.extrude(s, d, l),
       revolve: (s, a, angle) => fake.revolve(s, a, angle),
       tessellate: (s, q) => fake.tessellate(s, q),

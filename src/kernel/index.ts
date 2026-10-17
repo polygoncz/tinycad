@@ -34,6 +34,7 @@ export type {
 export {
   parseCurveSegmentInput,
   parseFilletArcInput,
+  parseOffsetCurvesInput,
   parseProfileRegionsInput,
   validateFaceInput,
 } from './profile';
@@ -43,6 +44,8 @@ export type {
   FilletArc,
   FilletArcInput,
   IdentifiedCurve,
+  OffsetCurve,
+  OffsetCurvesInput,
   ProfileCurve,
   ProfileLoop,
   ProfileRegion,

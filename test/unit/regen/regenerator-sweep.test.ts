@@ -122,6 +122,7 @@ function withRelease(
     curveIntersections: (p) => fake.curveIntersections(p),
     curveSegment: (p) => fake.curveSegment(p),
     filletArc: (p) => fake.filletArc(p),
+    offsetCurves: (p) => fake.offsetCurves(p),
     extrude: (profile, direction, distance) => fake.extrude(profile, direction, distance),
     revolve: (profile, axis, angle) => fake.revolve(profile, axis, angle),
     tessellate: (shape, q) => fake.tessellate(shape, q),

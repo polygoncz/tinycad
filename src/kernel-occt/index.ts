@@ -53,6 +53,7 @@ export async function createOcctKernel(): Promise<
     curveIntersections: (p) => client.curveIntersections(p),
     curveSegment: (p) => client.curveSegment(p),
     filletArc: (p) => client.filletArc(p),
+    offsetCurves: (p) => client.offsetCurves(p),
     extrude: (profile, direction, distance) => client.extrude(profile, direction, distance),
     revolve: (profile, axis, angle) => client.revolve(profile, axis, angle),
     fillet: (shape, edges, radius) => client.fillet(shape, edges, radius),

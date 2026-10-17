@@ -31,6 +31,7 @@ export function createTrackingKernel(
     curveIntersections: (p) => kernel.curveIntersections(p),
     curveSegment: (p) => kernel.curveSegment(p),
     filletArc: (p) => kernel.filletArc(p),
+    offsetCurves: (p) => kernel.offsetCurves(p),
     extrude: (profile, direction, distance) =>
       kernel.extrude(profile, direction, distance).then(track),
     revolve: (profile, axis, angle) => kernel.revolve(profile, axis, angle).then(track),

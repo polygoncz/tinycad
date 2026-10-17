@@ -5,7 +5,8 @@ import { err, ok, plane, type Plane, type Result, type Vec2, type Vec3 } from '@
 // the regions of SketchOps.profileRegions and the check of its input (spec 06, "Stav po M30").
 // Since M33 the intersections of SketchOps.curveIntersections and the check of the curveSegment
 // input (spec 06, "Stav po M33"). Since M34 the fillet center of SketchOps.filletArc and the
-// check of its input (spec 06, "Stav po M34").
+// check of its input (spec 06, "Stav po M34"). Since M35 the offset curves of
+// SketchOps.offsetCurves and the check of its input (spec 06, "Stav po M35").
 
 /**
  * 2D curve in a plane; the same shape as Curve2 from sketch (kernel does not depend on sketch).
@@ -113,6 +114,21 @@ export interface FilletArcInput {
   readonly b: FilletCurve;
   readonly radius: number;
   readonly near: Vec2;
+}
+
+/**
+ * A curve of the offset of a chain (M35, spec 06 "Stav po M35"): `source` is the id of the input
+ * curve it comes from; a join (a spline's loop cut off) has none.
+ */
+export type OffsetCurve = ProfileCurve & { readonly source?: string };
+
+/** The input of offsetCurves after the check (M35). */
+export interface OffsetCurvesInput {
+  /** Oriented along the chain, each ending where the next starts (the last at the first when closed). */
+  readonly curves: readonly IdentifiedCurve[];
+  readonly closed: boolean;
+  /** Finite, ≠ 0: closed > 0 outwards, open > 0 to the right of the direction of travel. */
+  readonly distance: number;
 }
 
 /** Spec 06: tolerance of plane.isOrthonormal for the face plane. */
@@ -265,6 +281,7 @@ interface CurveRules {
 
 const FACE_CURVE: CurveRules = { idRequired: false, zeroLength: 'reject' };
 const REGION_CURVE: CurveRules = { idRequired: true, zeroLength: 'skip' };
+const CHAIN_CURVE: CurveRules = { idRequired: true, zeroLength: 'reject' };
 
 /**
  * Checks `p` against the profileRegions contract (spec 06, M30) and returns a fresh copy of its
@@ -382,6 +399,67 @@ export function parseFilletArcInput(p: unknown): Result<FilletArcInput, readonly
     // A getter that throws, a proxy… – input outside the types is still just invalid.
     return err([...errors, `cannot read input: ${e instanceof Error ? e.message : String(e)}`]);
   }
+}
+
+/**
+ * Checks `p` against the offsetCurves contract (spec 06, M35) and returns a fresh copy of it, or
+ * every error found: a non-empty chain of curves as makeFace takes them, each with an id, every
+ * curve ending where the next one starts (the last at the first when `closed`, within the
+ * tolerance of makeFace); a circle only alone and closed; a finite `distance` ≠ 0. Reads `p`
+ * synchronously and never throws.
+ */
+export function parseOffsetCurvesInput(p: unknown): Result<OffsetCurvesInput, readonly string[]> {
+  const errors: string[] = [];
+  try {
+    if (!isObject(p)) return err(['input must be an object']);
+    const value: unknown = Reflect.get(p, 'curves');
+    const closed: unknown = Reflect.get(p, 'closed');
+    const distance: unknown = Reflect.get(p, 'distance');
+    if (typeof closed !== 'boolean') errors.push('closed must be a boolean');
+    if (typeof distance !== 'number' || !Number.isFinite(distance) || distance === 0) {
+      errors.push('distance must be finite and not 0');
+    }
+    if (!Array.isArray(value)) return err([...errors, 'curves must be an array']);
+    const items: readonly unknown[] = value;
+    if (items.length === 0) return err([...errors, 'curves must not be empty']);
+    const curves: IdentifiedCurve[] = [];
+    items.forEach((item, i) => {
+      const curve = readCurve(item, `curves[${String(i)}]`, errors, CHAIN_CURVE);
+      if (curve !== undefined && curve !== null && curve.id !== undefined) {
+        curves.push({ ...curve, id: curve.id });
+      }
+    });
+    if (
+      errors.length > 0 ||
+      curves.length !== items.length ||
+      typeof closed !== 'boolean' ||
+      typeof distance !== 'number'
+    ) {
+      return err(errors.length > 0 ? errors : ['invalid input']);
+    }
+    const chainError = chainProblem(curves, closed);
+    return chainError === undefined ? ok({ curves, closed, distance }) : err([chainError]);
+  } catch (e) {
+    // A getter that throws, a proxy… – input outside the types is still just invalid.
+    return err([...errors, `cannot read input: ${e instanceof Error ? e.message : String(e)}`]);
+  }
+}
+
+/** Why the curves do not form a chain (offsetCurves), or undefined when they do. */
+function chainProblem(curves: readonly ProfileCurve[], closed: boolean): string | undefined {
+  if (curves.some((c) => c.kind === 'circle')) {
+    if (curves.length > 1) return 'a circle must be the only curve of its chain';
+    return closed ? undefined : 'a circle is a closed chain';
+  }
+  const joints = closed ? curves.length : curves.length - 1;
+  for (let i = 0; i < joints; i++) {
+    const end = endOf(curves[i]);
+    const next = startOf(curves[(i + 1) % curves.length]);
+    if (end === undefined || next === undefined || !samePoint(end, next)) {
+      return `curves[${String(i)}]: its end must lie on the start of the next curve${closed ? ' (closed chain)' : ''}`;
+    }
+  }
+  return undefined;
 }
 
 /** A line or an arc as makeFace takes it; undefined (and an error) for anything else. */

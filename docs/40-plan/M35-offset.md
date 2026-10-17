@@ -43,7 +43,7 @@ Pavel 2026-10-16: „Chtěl bych ještě dodělat do Sketch následující featu
 ## Úkoly
 
 - [x] Kontrakt ([[12-skicar#Offset (M35)]], [[06-geometricke-jadro#Stav po M35]]), otázka Q095.
-- [ ] Jádro: `offsetCurves`.
+- [x] Jádro: `offsetCurves`.
 - [x] `sketch`: vazba a kóta `offset` (model, parse, edit, measure, poloha kóty).
 - [x] Řešič planegcs: vazba `offset`.
 - [ ] `sketch`: `chainOf`, `offsetEdit`, port; `app`.
@@ -104,5 +104,7 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 **Úkol 2 hotový** – `'offset'` na konci `DIMENSION_KINDS`, `placeDimension` ji nezná, rámec kóty oblouku v úhlu popisku zdroje.
 
 **Úkol 3 – řešič narazil na degeneraci:** tečný spoj úsečky a oblouku kopie je dvojnásobný kořen (`p2l_distance` + bod na kružnici `r ± d` mají rovnoběžné gradienty) → `redundant`, `dof 8`, body na 7e-5. Hlavní sezení zvolilo **tečnost v bodě** místo `p2l` v takovém spoji (podle současné polohy); zaoblený obdélník pak `dof 0` bez nadbytečnosti, body na 1e-7. Přijatá omezení: tečný spoj oblouk–oblouk dál degenerovaný; strana kopie může při velké změně originálu přeskočit (jako `pointLineDistance`). Spec 12 doplněna.
+
+**Úkol 1 hotový.** OCCT: otevřený řetězec začínající obloukem po směru hodinových ručiček dává stranu opačně (adaptér ověří a případně `-d`); ostrý roh vedle splinu `GeomAbs_Intersection` tiše rozbije – hlavní sezení zvolilo zálohu `GeomAbs_Arc` (zaoblené vypouklé rohy celého řetězce) místo chyby; `PointsToBSpline` dá stupeň 3 jen přes `Init`. Spec 06 doplněna.
 
 ## Retrospektiva

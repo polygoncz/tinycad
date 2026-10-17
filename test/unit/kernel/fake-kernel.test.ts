@@ -674,6 +674,78 @@ describe('FakeKernel filletArc (M34)', () => {
   });
 });
 
+describe('FakeKernel offsetCurves (M35)', () => {
+  const P = { kind: 'line', from: [0, 0], to: [10, 0], id: 'p' } as const;
+
+  it('counts the calls and an injected failure wins', async () => {
+    const kernel = createFakeKernel();
+    kernel.failNext('offsetCurves', 'internal', 'bang');
+    const failed = await rejection(
+      kernel.offsetCurves({ curves: [P], closed: false, distance: 1 }),
+    );
+    expect(kernelErrorCode(failed)).toBe('internal');
+    expect(await kernel.offsetCurves({ curves: [P], closed: false, distance: 1 })).toEqual([
+      { kind: 'line', from: [0, -1], to: [10, -1], source: 'p' },
+    ]);
+    expect(kernel.callCount('offsetCurves')).toBe(2);
+  });
+
+  it('a spline rejects with operation-failed (the FakeKernel does not offset splines)', async () => {
+    const spline = {
+      kind: 'bspline',
+      degree: 3,
+      poles: [
+        [0, 0],
+        [3, 4],
+        [7, -4],
+        [10, 0],
+      ],
+      knots: [0, 0, 0, 0, 1, 1, 1, 1],
+      id: 's',
+    } as const;
+    const failed = await rejection(
+      createFakeKernel().offsetCurves({ curves: [spline], closed: false, distance: 1 }),
+    );
+    expect(kernelErrorCode(failed)).toBe('operation-failed');
+  });
+
+  it('a curve that would vanish rejects with operation-failed (the FakeKernel drops none)', async () => {
+    // A pentagon with the short side (10, 0)–(10, 1): 0.6 inwards it vanishes (spec 06 M35).
+    const corners = [
+      [0, 0],
+      [10, 0],
+      [10, 1],
+      [5, 1.5],
+      [0, 6],
+    ] as const;
+    const curves = corners.map((from, i) => ({
+      kind: 'line' as const,
+      from,
+      to: corners[(i + 1) % corners.length] ?? from,
+      id: `e${String(i)}`,
+    }));
+    const kernel = createFakeKernel();
+    expect(await kernel.offsetCurves({ curves, closed: true, distance: -0.2 })).toHaveLength(5);
+    const failed = await rejection(kernel.offsetCurves({ curves, closed: true, distance: -0.6 }));
+    expect(kernelErrorCode(failed)).toBe('operation-failed');
+  });
+
+  it('an arc shrinking to nothing rejects with operation-failed', async () => {
+    const arc = {
+      kind: 'arc',
+      center: [0, 0],
+      from: [2, 0],
+      to: [0, 2],
+      ccw: true,
+      id: 'k',
+    } as const;
+    const failed = await rejection(
+      createFakeKernel().offsetCurves({ curves: [arc], closed: false, distance: -2 }),
+    );
+    expect(kernelErrorCode(failed)).toBe('operation-failed');
+  });
+});
+
 describe('FakeKernel curveIntersections and curveSegment (M33)', () => {
   const P = { kind: 'line', from: [0, 0], to: [10, 0], id: 'p' } as const;
   const Q = { kind: 'line', from: [4, -2], to: [4, 8], id: 'q' } as const;
