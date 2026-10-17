@@ -22,9 +22,11 @@ add_executable(tinycad_regen_tests
   regenerator_anchors_test.cpp
   regenerator_input_test.cpp
   regenerator_sweep_test.cpp
-  content_version_test.cpp)
+  content_version_test.cpp
+  regenerator_property_test.cpp)
 target_link_libraries(tinycad_regen_tests PRIVATE
-  tinycad_regen_testing tinycad_regen GTest::gtest GTest::gtest_main)
+  tinycad_regen_testing tinycad_regen tinycad_regen_describe tinycad_test_support
+  tinycad_feature_builders GTest::gtest GTest::gtest_main)
 tinycad_warnings(tinycad_regen_tests)
 
 gtest_discover_tests(tinycad_regen_tests DISCOVERY_MODE PRE_TEST)
