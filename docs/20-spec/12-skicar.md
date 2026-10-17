@@ -1198,6 +1198,59 @@ export interface ChamferRequest { readonly corner: SketchEntityId; readonly a: S
 
 **Testy:** jádro – kontraktová sada `filletArc` (dvě kolmé úsečky, úsečky pod 60°, úsečka–oblouk zvenku i zevnitř, oblouk–oblouk, nesousedící úsečky – body dotyku na prodloužení, výběr podle `near`, příliš velký poloměr → `'operation-failed'`); `sketch` – `cornerOf`, `filletEdit` a `chamferEdit` (obě varianty) pro obdélník: oblouk tečný, kóty obdélníku přežijí přes virtuální roh, výsledek projde `parseSketchData` a body jsou před křivkami; `sketcher` – nástroje s fake portem; e2e – zaoblit roh obdélníku, změnit kótu poloměru (tvar drží, roh zůstává zakótovaný), srazit roh, vysunout.
 
+## Offset (M35)
+
+Rozhodnuto 2026-10-17 se stopou A ([[M35-offset|M35]], [[Q095 Asociativita offsetu ve skice|Q095]]): **asociativní vazba `offset`** (jako Onshape, jedna kóta `d`), rohy ven **ostré** (prodloužení do průsečíku), klik vybere **celý řetězec**. Geometrii offsetu počítá jádro (`BRepOffsetAPI_MakeOffset`, prototyp v *Průběhu stopy* M35); vazba pak drží vztah v řešiči.
+
+### Řetězec
+
+`chainOf(data, curve): Chain | null` (`sketch/offset.ts`, čistá funkce): od křivky přes koncové body, ve kterých se potkávají **právě dvě** křivky (`isCurveEntity`, ne `xline`, ne kopie pole ani text), oběma směry. `Chain = { curves: readonly { id; reversed: boolean }[]; closed: boolean }` – křivky v pořadí průchodu, `reversed` = křivka jde proti svému směru (`p1→p2`, `start→end`, póly). Kružnice je řetězec sama o sobě (`closed`). Konstrukční křivka do řetězce nekonstrukční nejde a naopak.
+
+### Port
+
+```ts
+// kernel: SketchOps (spec 06 „Stav po M35“)
+offsetCurves(p: { readonly curves: readonly ProfileCurve[]; readonly closed: boolean; readonly distance: number }): Promise<readonly OffsetCurve[]>;
+export type OffsetCurve = ProfileCurve & { readonly source?: string };   // id vstupní křivky, ze které vznikla; bez source = spoj (smyčka splinu)
+
+// sketch/geometry-port.ts
+SketchGeometry.offset(chain: readonly Curve2[], closed: boolean, distance: number): Promise<readonly OffsetCurve2[]>;   // OffsetCurve2 = Curve2 & { source?: string }
+```
+
+- Vstup = křivky řetězce **orientované podél průchodu** (s id). `distance ≠ 0`: uzavřený řetězec `> 0` ven, `< 0` dovnitř; otevřený `> 0` vpravo ve směru průchodu (normála roviny +z).
+- Výstup = křivky offsetu **v pořadí průchodu, navazující** (konec jedné = začátek další, u uzavřeného i poslední → první). Úsečka → úsečka, oblouk → oblouk (stejný střed), kružnice → kružnice, ostrý roh ven = prodloužení do průsečíku, roh dovnitř = oříznutí; hrana, která dovnitř zanikne, ve výstupu není. Spline → **kubický** B-spline aproximovaný v toleranci `1e-4 · měřítko` (`Geom2dAPI_PointsToBSpline`, stupeň 3; data skici jiný stupeň neunesou), kusy jednoho splinu sloučené. Offset nemožný (kružnice dovnitř o poloměr a víc, vše zaniklo) → `'operation-failed'`.
+
+### Vazba `offset` (rezervovaný druh stopy A)
+
+```ts
+// sketch/model.ts – SketchConstraint, a kóta (DimensionKind 'offset')
+| {
+    readonly kind: 'offset';
+    readonly id: SketchConstraintId;
+    /** Páry zdroj → kopie: úsečka → úsečka, oblouk → oblouk se stejným středem (týž bod), kružnice → kružnice se stejným středem. */
+    readonly pairs: readonly { readonly source: SketchEntityId; readonly copy: SketchEntityId }[];
+    readonly value: number;              // d > 0
+    readonly placement?: LinearPlacement;
+  }
+```
+
+- **Parse:** `pairs` neprázdné; každá křivka nejvýš jednou (ve všech párech dohromady); kopie není zdroj; druhy podle komentáře; oblouk/kružnice kopie má **týž bod středu** jako zdroj; `value > 0`; jinak `sketch.invalidConstraint`. Spline v páru není (jeho offset je „zapečený“).
+- **Kóta:** `isDimension` ji bere (nový `DimensionKind` `'offset'`); `measure` = vzdálenost prvního páru (úsečka: vzdálenost bodu `copy.p1` od přímky zdroje; oblouk/kružnice: |r_kopie − r_zdroj|). Výchozí poloha a `placeDimension`/`movePlacement` jako lineární kóta `pointLineDistance` (úsečka) nebo radiální rozdíl podél spojnice středu (oblouk) na prvním páru; kreslí ji `sketch-dimensions.ts` jako lineární kótu mezi zdrojem a kopií.
+- **Řešič (planegcs):** pro každý pár úseček `p2l_distance(copy.p1, source) = d` a `p2l_distance(copy.p2, source) = d` (strana drží z polohy); oblouk/kružnice: `difference(source.radius, copy.radius) = ±d` (znaménko podle současné polohy jako `axisDistancePrimitive`; soustřednost dává sdílený střed). Rovnoběžnost úseček z toho plyne, rohy offsetu drží sdílené body kopií.
+- **Edit:** `constraintTargets` = všechny zdroje a kopie; smazání zdroje nebo kopie odebere pár, prázdné `pairs` → vazba zmizí. `constraintFor`/`dimensionFor` ji nevytvářejí (vzniká jen nástrojem).
+
+### Úprava dat (`offsetEdit`)
+
+`offsetEdit(data, req: { chain: Chain; distance: number; result: readonly OffsetCurve2[] }, ids): SketchEdit | null` – nové křivky z `result`: navazující kopie **sdílejí** koncové body (nové body, před křivkami); oblouk/kružnice kopie ze zdroje oblouku/kružnice použije **bod středu zdroje**; spline jako `bspline` s novými póly. Vazba `offset` s páry pro úsečky, oblouky a kružnice, jejichž kopie je téhož druhu (jinak pár není – zapečeno), `value = |distance|`, `edit` = její id (otevře se k úpravě). `added` = { vazba `offset` } (při konfliktu zapečený offset bez vazby). Kopie přebírají `construction` zdroje. Prázdný výsledek → `null`.
+
+### Nástroj (`sketch.offset`)
+
+V rodině `modify` za `sketch.chamferAngle`, ikona Tabler (ověřit, např. `line-dashed`/`vector-bezier-2` – vybrat existující „offset“), popisek Odsadit / Offset, bez zkratky. Klik na křivku (výběr přes `curve-pick`) vybere řetězec (`chainOf`), strana podle kurzoru: uzavřený – kurzor uvnitř obrysu řetězce = dovnitř; otevřený – kurzor vpravo/vlevo od nejbližší křivky řetězce ve směru průchodu. Vzdálenost: poslední v session (jako zaoblení), první = 10 % menšího rozměru obálky řetězce, zaokrouhleno na 2 platné číslice; s číselným vstupem ([[#Číselný vstup (M32)]]) pole „Vzdálenost“. Náhled offsetu asynchronně přes `geometry.offset`, poslední vyhrává. Klik zapíše `offsetEdit` → `rewrite(…, { edit })`.
+
+**HUD nápověda** (mechanismus M37, `ToolContext.setHint`): M35 doplní klíče `hint.<nástroj>.<krok>` všem nástrojům stopy A – trim, extend, split, fillet, chamfer, chamferAngle, offset.
+
+**Testy:** jádro – kontraktová sada `offsetCurves` (obdélník ven ostré rohy / dovnitř, zaoblený obdélník ven i dovnitř, L otevřený vpravo/vlevo, úsečka, oblouk, kružnice, kružnice dovnitř o poloměr → `'operation-failed'`; zánik krátké hrany a spline jen OCCT adaptér: kubický, body v toleranci od ekvidistanty); `sketch` – `chainOf` (obdélník uzavřený, L otevřený, T se zastaví, kružnice, konstrukční), parse/edit/measure vazby `offset`, `offsetEdit` (sdílené body, středy, páry, zapečený spline, výsledek projde `parseSketchData`); planegcs – offset obdélníku: změna kóty `d` posune všechny strany, změna šířky originálu kopie sleduje; zaoblený obdélník; `sketcher` – nástroj s fake portem, kóta offsetu v kresbě; e2e – offset obdélníku ven, změna kóty, vysunutí oblasti mezi (obdélník s dírou), offset dovnitř.
+
 ## Testy
 
 - `sketch`: `parseSketchData` pro každé pravidlo (platná data, každý druh chyby s `index`); `constraintFor` a `dimensionFor` pro platné i neplatné výběry; `measure`; `removeItems` (kaskáda bod → křivky → osiřelé body → vazby); `toggleConstruction`; `regionCurves` (M30: konstrukční křivky ne, id u všech, spline jako `bspline`); oblasti (do M29 `computeRegions`, od M30 kontraktová sada jádra `describeGeometryKernelContract`, proti fake i OCCT): obdélník (1 oblast, jméno z id 4 úseček, plocha), dva obdélníky vedle sebe se sdílenou hranou (2 oblasti), obdélník s kružnicí uvnitř (díra, 2 oblasti), kružnice v kružnici v kružnici, drážka z úseček a tečných oblouků (řazení při shodě úhlu), otevřená polyline (0), polyline s „ocáskem“ (prořezání), konstrukční úsečka uvnitř obdélníku (ignorována), křížící se úsečky (`crossing`), body spojené `coincident` (splynutí uzlů), stabilita jména po změně souřadnic a pořadí entit; `FakeSolver`.
