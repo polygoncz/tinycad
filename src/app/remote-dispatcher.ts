@@ -15,7 +15,7 @@ import { assert, DisposableStore, Emitter } from '@/core';
 import type { Disposable, Subscribable } from '@/core';
 import { createDocument } from '@/document';
 import type { DocumentWriter, FeatureId } from '@/document';
-import { createOperationDispatcher, createOperationLog, OP_VERSION } from '@/ops';
+import { applyOperation, OP_VERSION } from '@/ops';
 import type {
   BatchOp,
   DispatchMeta,
@@ -70,21 +70,11 @@ interface Applied {
 
 /**
  * Applies one operation to `doc` with the handlers, exactly as ops applies it (validation, batch
- * inverses, restoring the rollback bar), and returns its inverse. applyOperation is internal to
- * ops, so a dispatcher over a throwaway log does it: it writes its entry exactly when the document
- * changed, which tells a failing handler (throws, nothing changed) from a throwing subscriber
- * (the operation holds, the exception is deferred).
+ * inverses, restoring the rollback bar), and returns its inverse; exceptions of subscribers thrown
+ * after the document changed are deferred (N96).
  */
 function applyLocally(doc: DocumentWriter, handlers: OpHandlerRegistry, op: Operation): Applied {
-  const log = createOperationLog();
-  const once = createOperationDispatcher({ doc, handlers, log, now: () => 0 });
-  try {
-    return { inverse: once.dispatch(op).inverse, deferred: [] };
-  } catch (e) {
-    const entry = log.entries()[0];
-    if (entry === undefined) throw e;
-    return { inverse: entry.inverse, deferred: [e] };
-  }
+  return applyOperation(doc, handlers, op);
 }
 
 /** Throws what was collected: one error as is, more as AggregateError. */
@@ -544,7 +534,7 @@ class RemoteDispatcher implements OperationDispatcher {
   private rebuild(): void {
     const base = this.base;
     const doc = createDocument({
-      meta: { id: base.id, name: base.name, createdAt: this.mirror.meta.createdAt },
+      meta: { id: base.id, name: base.name, createdAt: base.createdAt },
       studio: base.studio,
     });
     for (const item of [...this.pending]) {

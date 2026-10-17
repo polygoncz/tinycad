@@ -18,12 +18,6 @@ import type {
 } from '@/document';
 import type { ReadModelData } from '@/remote';
 
-/**
- * The read model carries no createdAt yet (DocumentView.created_at_ms of N89 is not decoded into
- * ReadModelData), so the mirror has a fixed one. Nothing in the client reads it.
- */
-const UNKNOWN_CREATED_AT = 0;
-
 /** Deep equality of plain JSON data (features, params, body metadata). */
 function sameJson(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
@@ -89,7 +83,8 @@ export class MirrorDocument implements DocumentReader {
     if (
       studio === current.studio &&
       data.name === current.meta.name &&
-      data.id === current.meta.id
+      data.id === current.meta.id &&
+      data.createdAt === current.meta.createdAt
     ) {
       return;
     }
@@ -106,7 +101,7 @@ export class MirrorDocument implements DocumentReader {
 
   private static documentOf(data: ReadModelData['document']): DocumentWriter {
     return createDocument({
-      meta: { id: data.id, name: data.name, createdAt: UNKNOWN_CREATED_AT },
+      meta: { id: data.id, name: data.name, createdAt: data.createdAt },
       studio: data.studio,
     });
   }

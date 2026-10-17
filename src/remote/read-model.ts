@@ -126,6 +126,8 @@ export interface ReadModelData {
   readonly document: {
     readonly id: DocumentId;
     readonly name: string;
+    /** ms since epoch, when the document was created (DocumentView.created_at_ms, N89). */
+    readonly createdAt: number;
     /** seq of the last log entry; 0 for an empty log. */
     readonly lastSeq: number;
     /** Features, rollback index and body metadata in the canonical form of spec 03. */
@@ -186,6 +188,7 @@ export function decodeReadModel(msg: ReadModel): ReadModelData {
       document: Object.freeze({
         id: document.documentId as DocumentId, // the id of the catalog of the server (spec 14)
         name: document.name,
+        createdAt: Number(document.createdAtMs),
         lastSeq: Number(document.lastSeq),
         studio: Object.freeze({
           features: Object.freeze(document.features.map(decodeFeature)),

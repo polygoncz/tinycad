@@ -11,6 +11,7 @@ function aDocumentData(studio: Partial<PartStudioData> = {}, name = 'Part'): Doc
   return {
     id: 'doc-1' as DocumentId, // test ids are trusted
     name,
+    createdAt: 0,
     lastSeq: 0,
     studio: { features, rollbackIndex: features.length, ...studio },
   };
@@ -24,6 +25,11 @@ function setup(data: DocumentData = aDocumentData()) {
 }
 
 describe('MirrorDocument', () => {
+  it('takes createdAt of the read model into its meta (N89)', () => {
+    const { mirror } = setup({ ...aDocumentData(), createdAt: 1_700_000_000_000 });
+    expect(mirror.meta.createdAt).toBe(1_700_000_000_000);
+  });
+
   it('reads the document of the read model', () => {
     const box = aFeature({ id: 'f1' });
     const { mirror } = setup(aDocumentData({ features: [box] }, 'Bracket'));

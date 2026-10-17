@@ -9,11 +9,13 @@
 // (revize U3, U11): the list that fails to load shows its error and Try again instead of an
 // endless "Loading…"; the delete button stays in the tab order (hidden by opacity only); one date
 // formatter for the whole list. M19.2 (D5): Rename next to Delete turns the name of the card into
-// a text field; Enter or leaving it renames, Esc cancels; the list loads again.
+// a text field; Enter or leaving it renames, Esc cancels; the list loads again. M46 (N68, N71):
+// the documents are on the core; while the browser still has documents in IndexedDB, a button
+// above the list moves them there (app's openBrowserMigration; IndexedDB stays).
 import { computed, nextTick, onMounted, ref, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { createDocumentList } from '@/app';
-import type { OpenAppSessionOptions } from '@/app';
+import { createDocumentList, openBrowserMigration } from '@/app';
+import type { MigrationReport, OpenAppSessionOptions } from '@/app';
 import type { DocumentId } from '@/document';
 import type { DocumentCatalogEntry } from '@/interaction';
 import { useObservable } from '../composables/use-observable';
@@ -21,7 +23,7 @@ import { updatedFormatter } from '../document-list';
 import { docHash } from '../route';
 import ThemeLocaleToggles from './ThemeLocaleToggles.vue';
 
-// The plugins of the sessions: the file is checked against their registries.
+// The plugins of the sessions: the logs stored in the browser are replayed with them (N71).
 const props = defineProps<{ plugins: OpenAppSessionOptions['plugins'] }>();
 
 const { t, locale } = useI18n();
@@ -29,7 +31,6 @@ const { t, locale } = useI18n();
 // M20 (A3.5): loading, busy, the error, the confirmation of a delete and the rename are the
 // model's; the component draws them, reads the chosen file and opens the returned ids.
 const model = createDocumentList({
-  plugins: props.plugins,
   translate: (key) => t(key),
   // The browser's own dialog (R16), like deleting a feature with dependents.
   confirm: ({ key, params }) => globalThis.confirm(t(key, params)),
@@ -49,6 +50,35 @@ const fileInput = useTemplateRef<HTMLInputElement>('fileInput');
 const nameText = ref('');
 // A ref inside v-for is an array; only the edited card has the field.
 const nameInputs = useTemplateRef<HTMLInputElement[]>('nameInput');
+
+// N71: the documents of IndexedDB; 0 hides the button.
+const migration = openBrowserMigration({ plugins: props.plugins });
+const browserCount = ref(0);
+// The progress of a running move, null otherwise.
+const migrating = ref<{ readonly done: number; readonly total: number } | null>(null);
+const migrationReport = ref<MigrationReport | null>(null);
+
+async function migrate(): Promise<void> {
+  if (migrating.value !== null || busy.value) return;
+  migrationReport.value = null;
+  migrating.value = { done: 0, total: browserCount.value };
+  try {
+    const report = await migration.run((done, total) => {
+      migrating.value = { done, total };
+    });
+    migrationReport.value = report;
+    // Everything moved: the button goes; a repeat would create no duplicates anyway.
+    if (report.failures.length === 0) browserCount.value = 0;
+  } catch (e) {
+    migrationReport.value = {
+      migrated: 0,
+      failures: [{ name: '', error: e instanceof Error ? e.message : String(e) }],
+    };
+  } finally {
+    migrating.value = null;
+  }
+  await model.load();
+}
 
 function retry(): void {
   void model.retry();
@@ -98,6 +128,9 @@ async function importChosen(e: Event): Promise<void> {
 
 onMounted(() => {
   void model.load();
+  void migration.count().then((count) => {
+    browserCount.value = count;
+  });
 });
 </script>
 
@@ -122,6 +155,33 @@ onMounted(() => {
         <i class="ti ti-plus" aria-hidden="true" /> {{ t('documents.new') }}
       </button>
     </header>
+
+    <div v-if="browserCount > 0 || migrationReport !== null" class="migration">
+      <button
+        v-if="browserCount > 0"
+        type="button"
+        class="migrate"
+        :disabled="busy || migrating !== null"
+        @click="migrate"
+      >
+        <i class="ti ti-cloud-upload" aria-hidden="true" />
+        {{ t('documents.migrate', { count: browserCount }) }}
+      </button>
+      <p v-if="migrating !== null" class="migration-status" role="status">
+        {{ t('documents.migrating', { done: migrating.done, total: migrating.total }) }}
+      </p>
+      <p v-else-if="migrationReport !== null" class="migration-status" role="status">
+        {{ t('documents.migrated', { count: migrationReport.migrated }) }}
+      </p>
+      <p
+        v-if="migrationReport !== null && migrationReport.failures.length > 0"
+        class="error"
+        role="alert"
+        :title="migrationReport.failures.map((f) => `${f.name}: ${f.error}`).join('\n')"
+      >
+        {{ t('documents.migrateFailed', { count: migrationReport.failures.length }) }}
+      </p>
+    </div>
 
     <p v-if="error !== null" class="error" role="alert" :title="actionError?.detail ?? undefined">
       {{ error }}
@@ -252,6 +312,34 @@ onMounted(() => {
 }
 .file-input {
   display: none;
+}
+.migration {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.migrate {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--field-height);
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--control-hover);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 500;
+}
+.migrate:disabled {
+  opacity: 0.6;
+}
+.migration-status {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
 }
 .error {
   margin: 0 0 12px;

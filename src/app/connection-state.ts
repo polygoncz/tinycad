@@ -3,10 +3,15 @@
 // PersistenceStatus the title bar and the banner already show, so ui gets only new texts.
 // Connecting = 'starting', online = 'ready', retrying = 'restarting', offline = 'unavailable';
 // changes in flight = 'pending', retrying = 'error', given up with unconfirmed changes = 'failed'.
+// N92: the queue of the session settles every change it gave up on as failed and its `pending`
+// drops to 0, while the mirror dropped those changes; so 'failed' follows the changes of the
+// mirror that were dropped for the outage (changeDropped with a retryable error) until the
+// connection is back.
 
 import { ObservableValue } from '@/core';
 import type { Disposable, Observable } from '@/core';
 import type { PersistenceStatus } from '@/persistence';
+import { isRetryable } from '@/remote';
 import type { ConnectionState, RemoteSession } from '@/remote';
 import type { KernelUiState } from './kernel-supervisor';
 
@@ -27,11 +32,18 @@ export interface ConnectionUiState extends Disposable {
   readonly persistenceError: Observable<string | null>;
   /** A request of the session failed (a ChangeOutcome error, a failed refresh): its text. */
   noteError(error: unknown): void;
+  /**
+   * The mirror dropped a change the server refused (RemoteDispatcher onError): its text, and with
+   * a retryable error (the outage) 'failed' while offline, until the connection is back (N92).
+   */
+  changeDropped(error: unknown): void;
 }
 
 export function createConnectionState(deps: ConnectionStateDeps): ConnectionUiState {
   const { session } = deps;
   let lastError: string | null = null;
+  /** A change was dropped for the outage since the connection was last online (N92). */
+  let unsaved = false;
   const kernel = new ObservableValue<KernelUiState>(kernelOf(session.connection.get()));
   const kernelError = new ObservableValue<string | null>(null);
   const persistence = new ObservableValue<PersistenceStatus>('saved');
@@ -39,7 +51,8 @@ export function createConnectionState(deps: ConnectionStateDeps): ConnectionUiSt
 
   function update(): void {
     const connection = session.connection.get();
-    const status = persistenceOf(connection, session.pending.get());
+    if (connection === 'online') unsaved = false;
+    const status = persistenceOf(connection, session.pending.get(), unsaved);
     kernel.set(kernelOf(connection));
     persistence.set(status);
     kernelError.set(connection === 'offline' ? lastError : null);
@@ -61,6 +74,10 @@ export function createConnectionState(deps: ConnectionStateDeps): ConnectionUiSt
     persistence: persistence.asObservable(),
     persistenceError: persistenceError.asObservable(),
     noteError,
+    changeDropped(error) {
+      if (isRetryable(error)) unsaved = true;
+      noteError(error);
+    },
     retryKernel() {
       session.refresh().catch((error: unknown) => {
         noteError(error);
@@ -87,11 +104,15 @@ function kernelOf(connection: ConnectionState): KernelUiState {
 
 /**
  * Retrying is 'error' whatever is in flight (a retried request always is); offline with changes
- * still queued is 'failed' (they are not on the server); otherwise changes queued or in flight
- * are 'pending'.
+ * still queued or dropped for the outage is 'failed' (they are not on the server, N92); otherwise
+ * changes queued or in flight are 'pending'.
  */
-function persistenceOf(connection: ConnectionState, pending: number): PersistenceStatus {
+function persistenceOf(
+  connection: ConnectionState,
+  pending: number,
+  unsaved: boolean,
+): PersistenceStatus {
   if (connection === 'retrying') return 'error';
-  if (connection === 'offline') return pending > 0 ? 'failed' : 'saved';
+  if (connection === 'offline') return pending > 0 || unsaved ? 'failed' : 'saved';
   return pending > 0 ? 'pending' : 'saved';
 }

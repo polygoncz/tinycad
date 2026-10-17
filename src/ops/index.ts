@@ -23,6 +23,9 @@ export type { OpHandler, OpHandlerRegistry } from './handler';
 export { createOperationLog } from './log';
 export type { LogEntry, OperationLog, OperationLogReader } from './log';
 export { replayLog } from './replay';
+// N96: the optimistic mirror of the client (app) applies operations without a log.
+export { applyOperation } from './apply';
+export type { ApplyResult } from './apply';
 export { createOperationDispatcher } from './dispatcher';
 export type { DispatchMeta, OperationDispatcher } from './dispatcher';
 export type { Transaction } from './transaction';
