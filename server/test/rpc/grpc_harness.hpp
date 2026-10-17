@@ -21,15 +21,20 @@
 
 #include "google/rpc/status.pb.h"
 #include "session/runtime_testing.hpp"
-#include "tinycad/session/document_service.hpp"
-#include "tinycad/session/feature_types.hpp"
-#include "tinycad/session/operation_codec.hpp"
+#include "tinycad/rpc/document_service.hpp"
+#include "tinycad/rpc/feature_types.hpp"
+#include "tinycad/rpc/operation_codec.hpp"
 #include "tinycad/session/session_manager.hpp"
-#include "tinycad/session/session_service.hpp"
+#include "tinycad/rpc/session_service.hpp"
 #include "tinycad/v1/errors.pb.h"
 #include "tinycad/v1/session.grpc.pb.h"
 
 namespace tinycad::session::testing {
+
+using rpc::describeFeatureTypes;
+using rpc::DocumentServiceImpl;
+using rpc::operationFromJson;
+using rpc::SessionServiceImpl;
 
 /** The answer of one unary call. */
 template <class Response>
@@ -355,8 +360,8 @@ class TestServer {
         [this] { return SteadyTime(std::chrono::milliseconds(steadyMs_.load())); },
         [this, run] { return "r" + std::to_string(run) + "-s" + std::to_string(++sessionIds_); },
         config_});
-    next->sessionService = std::make_unique<SessionServiceImpl>(
-        *next->manager, describeFeatureTypes(registries.schemas));
+    next->sessionService =
+        std::make_unique<SessionServiceImpl>(*next->manager, registries.schemas);
     next->documentService = std::make_unique<DocumentServiceImpl>(*next->manager);
 
     grpc::ServerBuilder builder;

@@ -16,12 +16,12 @@
 #include "tinycad/session/session_manager.hpp"
 #include "tinycad/v1/session.grpc.pb.h"
 
-namespace tinycad::session {
+namespace tinycad::rpc {
 
 class DocumentServiceImpl final : public tinycad::v1::DocumentService::Service {
  public:
   /** `manager` must outlive the service. */
-  explicit DocumentServiceImpl(SessionManager& manager);
+  explicit DocumentServiceImpl(session::SessionManager& manager);
 
   grpc::Status ListDocuments(grpc::ServerContext* context,
                              const tinycad::v1::ListDocumentsRequest* request,
@@ -44,7 +44,7 @@ class DocumentServiceImpl final : public tinycad::v1::DocumentService::Service {
                               tinycad::v1::ExportDocumentResponse* response) override;
 
  private:
-  SessionManager& manager_;
+  session::SessionManager& manager_;
 };
 
-}  // namespace tinycad::session
+}  // namespace tinycad::rpc

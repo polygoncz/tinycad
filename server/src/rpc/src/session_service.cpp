@@ -1,4 +1,4 @@
-#include "tinycad/session/session_service.hpp"
+#include "tinycad/rpc/session_service.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -7,13 +7,23 @@
 #include <string>
 #include <utility>
 
-#include "read_model_proto.hpp"
-#include "tinycad/session/fingerprint.hpp"
-#include "tinycad/session/operation_codec.hpp"
+#include "tinycad/rpc/feature_types.hpp"
+#include "tinycad/rpc/fingerprint.hpp"
+#include "tinycad/rpc/operation_codec.hpp"
+#include "tinycad/rpc/read_model_proto.hpp"
+#include "tinycad/rpc/status.hpp"
 
-namespace tinycad::session {
+namespace tinycad::rpc {
 
 namespace v1 = tinycad::v1;
+using session::ChangeResult;
+using session::ErrorReason;
+using session::EventRing;
+using session::SessionError;
+using session::SessionEvent;
+using session::SessionPtr;
+using session::SessionResult;
+using session::StepKey;
 
 namespace {
 
@@ -61,9 +71,9 @@ constexpr std::chrono::milliseconds kCancelPoll{200};
 
 }  // namespace
 
-SessionServiceImpl::SessionServiceImpl(SessionManager& manager,
-                                       std::vector<v1::FeatureTypeDescriptor> featureTypes)
-    : manager_(manager), featureTypes_(std::move(featureTypes)) {}
+SessionServiceImpl::SessionServiceImpl(session::SessionManager& manager,
+                                       const document::FeatureSchemaRegistryReader& schemas)
+    : manager_(manager), featureTypes_(describeFeatureTypes(schemas)) {}
 
 // --- sessions -------------------------------------------------------------------------------
 
@@ -332,4 +342,4 @@ grpc::Status SessionServiceImpl::WatchSession(
   });
 }
 
-}  // namespace tinycad::session
+}  // namespace tinycad::rpc

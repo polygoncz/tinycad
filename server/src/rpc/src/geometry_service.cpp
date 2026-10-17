@@ -1,9 +1,9 @@
-#include "tinycad/service/geometry_service.hpp"
+#include "tinycad/rpc/geometry_service.hpp"
 
 #include "convert.hpp"
-#include "status.hpp"
+#include "tinycad/rpc/status.hpp"
 
-namespace tinycad::service {
+namespace tinycad::rpc {
 
 namespace v1 = tinycad::v1;
 using geometry::ErrorCode;
@@ -38,7 +38,7 @@ grpc::Status GeometryServiceImpl::Intersections(grpc::ServerContext* /*context*/
     }
     return grpc::Status::OK;
   } catch (...) {
-    return internalStatusOfCurrentException();
+    return internalGeometryStatusOfCurrentException();
   }
 }
 
@@ -54,7 +54,7 @@ grpc::Status GeometryServiceImpl::Segment(grpc::ServerContext* /*context*/,
     toProto(*piece, *response->mutable_curve());
     return grpc::Status::OK;
   } catch (...) {
-    return internalStatusOfCurrentException();
+    return internalGeometryStatusOfCurrentException();
   }
 }
 
@@ -77,7 +77,7 @@ grpc::Status GeometryServiceImpl::Fillet(grpc::ServerContext* /*context*/,
     response->set_tb(arc->tb);
     return grpc::Status::OK;
   } catch (...) {
-    return internalStatusOfCurrentException();
+    return internalGeometryStatusOfCurrentException();
   }
 }
 
@@ -97,8 +97,8 @@ grpc::Status GeometryServiceImpl::Offset(grpc::ServerContext* /*context*/,
     }
     return grpc::Status::OK;
   } catch (...) {
-    return internalStatusOfCurrentException();
+    return internalGeometryStatusOfCurrentException();
   }
 }
 
-}  // namespace tinycad::service
+}  // namespace tinycad::rpc

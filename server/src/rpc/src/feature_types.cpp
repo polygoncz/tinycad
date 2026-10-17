@@ -1,4 +1,4 @@
-#include "tinycad/session/feature_types.hpp"
+#include "tinycad/rpc/feature_types.hpp"
 
 #include <cstdint>
 #include <string>
@@ -6,7 +6,7 @@
 #include "struct_json.hpp"
 #include "tinycad/core/json.hpp"
 
-namespace tinycad::session {
+namespace tinycad::rpc {
 
 namespace v1 = tinycad::v1;
 using document::ParamKind;
@@ -152,4 +152,4 @@ std::vector<v1::FeatureTypeDescriptor> describeFeatureTypes(
   return out;
 }
 
-}  // namespace tinycad::session
+}  // namespace tinycad::rpc

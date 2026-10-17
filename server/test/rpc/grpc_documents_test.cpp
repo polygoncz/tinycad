@@ -10,7 +10,7 @@
 #include <string>
 
 #include "google/rpc/status.pb.h"
-#include "session/grpc_documents_harness.hpp"
+#include "rpc/grpc_documents_harness.hpp"
 #include "tinycad/core/json.hpp"
 #include "tinycad/v1/errors.pb.h"
 

@@ -5,10 +5,10 @@
 #include <grpcpp/grpcpp.h>
 
 #include "google/rpc/status.pb.h"
-#include "tinycad/service/geometry_service.hpp"
+#include "tinycad/rpc/geometry_service.hpp"
 #include "tinycad/v1/errors.pb.h"
 
-namespace tinycad::service {
+namespace tinycad::rpc {
 namespace {
 
 namespace v1 = tinycad::v1;
@@ -135,4 +135,4 @@ TEST(GeometryService, SegmentThroughAGrpcChannel) {
 }
 
 }  // namespace
-}  // namespace tinycad::service
+}  // namespace tinycad::rpc

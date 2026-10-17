@@ -2,7 +2,7 @@
 // the same shape: check the wire fields, call the catalog methods of the SessionManager, fill the
 // response; an expected failure becomes toStatus, a programmer error INTERNAL.
 
-#include "tinycad/session/document_service.hpp"
+#include "tinycad/rpc/document_service.hpp"
 
 #include <google/protobuf/util/time_util.h>
 
@@ -10,12 +10,15 @@
 #include <cstdint>
 #include <string>
 
-#include "tinycad/session/fingerprint.hpp"
+#include "tinycad/rpc/fingerprint.hpp"
+#include "tinycad/rpc/status.hpp"
 #include "tinycad/session/session_error.hpp"
 
-namespace tinycad::session {
+namespace tinycad::rpc {
 
 namespace v1 = tinycad::v1;
+using session::ErrorReason;
+using session::fromServiceError;
 
 namespace {
 
@@ -43,7 +46,7 @@ grpc::Status serviceFailure(const storage::ServiceError& error) {
 
 }  // namespace
 
-DocumentServiceImpl::DocumentServiceImpl(SessionManager& manager) : manager_(manager) {}
+DocumentServiceImpl::DocumentServiceImpl(session::SessionManager& manager) : manager_(manager) {}
 
 grpc::Status DocumentServiceImpl::ListDocuments(grpc::ServerContext* /*context*/,
                                                 const v1::ListDocumentsRequest* /*request*/,
@@ -133,4 +136,4 @@ grpc::Status DocumentServiceImpl::ExportDocument(grpc::ServerContext* /*context*
   }
 }
 
-}  // namespace tinycad::session
+}  // namespace tinycad::rpc

@@ -1,4 +1,4 @@
-#include "tinycad/session/operation_codec.hpp"
+#include "tinycad/rpc/operation_codec.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -10,9 +10,12 @@
 #include "tinycad/core/result.hpp"
 #include "tinycad/ops/operation.hpp"
 
-namespace tinycad::session {
+namespace tinycad::rpc {
 
 namespace v1 = tinycad::v1;
+using session::ErrorReason;
+using session::SessionError;
+using session::SessionResult;
 using core::Json;
 
 namespace {
@@ -274,4 +277,4 @@ void logEntryView(const Json& entry, v1::LogEntryView* out) {
   out->set_op_type(ops::typeOf(entry.at("op")));
 }
 
-}  // namespace tinycad::session
+}  // namespace tinycad::rpc

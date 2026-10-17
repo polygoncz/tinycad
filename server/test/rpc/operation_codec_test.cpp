@@ -1,7 +1,7 @@
 // tinycad.v1.Operation ↔ the JSON operation of spec 04 (spec 14 "Testy": every Operation ↔
 // JSON operation and back, N27), the feature and log entry views.
 
-#include "tinycad/session/operation_codec.hpp"
+#include "tinycad/rpc/operation_codec.hpp"
 
 #include <gtest/gtest.h>
 #include <google/protobuf/util/message_differencer.h>
@@ -13,11 +13,12 @@
 
 #include "tinycad/ops/operation.hpp"
 
-namespace tinycad::session {
+namespace tinycad::rpc {
 namespace {
 
 namespace v1 = tinycad::v1;
 using core::Json;
+using session::ErrorReason;
 using google::protobuf::util::MessageDifferencer;
 
 /** One JSON operation of each of the 13 types, with the current `v` (OP_VERSION). */
@@ -216,4 +217,4 @@ TEST(LogEntryView, ConvertsUndoAndRedoWithTheirTarget) {
 }
 
 }  // namespace
-}  // namespace tinycad::session
+}  // namespace tinycad::rpc

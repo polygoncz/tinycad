@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <limits>
 
-namespace tinycad::service {
+namespace tinycad::rpc {
 
 namespace v1 = tinycad::v1;
 using core::Curve2;
@@ -44,6 +44,24 @@ void toProto(const Curve2& curve, v1::Curve2& out) {
       for (const auto& p : curve.poles) toProto(p, *spline->add_poles());
       for (double k : curve.knots) spline->add_knots(k);
       break;
+    }
+  }
+}
+
+void issueToProto(const document::ParamIssue& issue, v1::ParamIssue* out) {
+  out->set_param(issue.param);
+  out->set_code(issue.code);
+  if (!issue.params.is_object()) return;
+  auto& values = *out->mutable_values();
+  for (const auto& item : issue.params.items()) {
+    v1::ParamIssueValue& value = values[item.key()];
+    if (item.value().is_number()) {
+      value.set_number(item.value().get<double>());
+    } else if (item.value().is_string()) {
+      value.set_text(item.value().get<std::string>());
+    } else {
+      // Not produced by the domain today; keep the text rather than lose the value.
+      value.set_text(item.value().dump());
     }
   }
 }
@@ -116,4 +134,4 @@ std::optional<std::vector<Curve2>> CurveReader::readAll(
   return out;
 }
 
-}  // namespace tinycad::service
+}  // namespace tinycad::rpc

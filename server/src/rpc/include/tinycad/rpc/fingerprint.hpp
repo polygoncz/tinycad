@@ -26,7 +26,7 @@
 
 #include "tinycad/storage/store.hpp"
 
-namespace tinycad::session {
+namespace tinycad::rpc {
 
 /** Hex SHA-256 of the canonical JSON of the request without session_id, operation_id and read. */
 std::string requestFingerprint(const google::protobuf::Message& request);
@@ -37,4 +37,4 @@ storage::OperationKey operationKey(const google::protobuf::Message& request);
 /** Hex SHA-256 of bytes (ImportDocument content; the key 'import:<sha256>' of N38 and N71). */
 std::string sha256Hex(std::string_view bytes);
 
-}  // namespace tinycad::session
+}  // namespace tinycad::rpc

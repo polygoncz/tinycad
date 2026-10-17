@@ -5,7 +5,7 @@
 
 #include "tinycad/core/result.hpp"
 
-namespace tinycad::session {
+namespace tinycad::rpc {
 
 using core::Json;
 namespace pb = google::protobuf;
@@ -74,4 +74,4 @@ void listOfJson(const Json& json, pb::ListValue* out) {
   for (const auto& item : json) valueOfJson(item, out->add_values());
 }
 
-}  // namespace tinycad::session
+}  // namespace tinycad::rpc

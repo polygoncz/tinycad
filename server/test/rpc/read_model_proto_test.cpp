@@ -2,7 +2,7 @@
 // the conversion of the domain read model of read_model_builder_test.cpp, byte for byte what the
 // client reads (meshes, names and planes of faces, sketches, document view, statuses).
 
-#include "read_model_proto.hpp"
+#include "tinycad/rpc/read_model_proto.hpp"
 
 #include <gtest/gtest.h>
 
@@ -16,10 +16,20 @@
 
 #include "session/testing.hpp"
 
-namespace tinycad::session::test {
+namespace tinycad::rpc {
 namespace {
 
 namespace v1 = tinycad::v1;
+using session::ReadModelInput;
+using session::ReadModelOptions;
+using session::test::aDocumentJson;
+using session::test::aFeatureJson;
+using session::test::boxJson;
+using session::test::cylinderJson;
+using session::test::Json;
+using session::test::optionsWith;
+using session::test::StudioFixture;
+using session::test::testQuality;
 
 /** The read model of the document in the tinycad.v1 form. */
 v1::ReadModel protoOf(StudioFixture& s, const document::DocumentReader& doc,
@@ -305,4 +315,4 @@ TEST(ReadModelProto, NoTransactionMeansNoTransactionView) {
 }
 
 }  // namespace
-}  // namespace tinycad::session::test
+}  // namespace tinycad::rpc

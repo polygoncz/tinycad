@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 
-#include "session/grpc_harness.hpp"
+#include "rpc/grpc_harness.hpp"
 
 namespace tinycad::session {
 namespace {

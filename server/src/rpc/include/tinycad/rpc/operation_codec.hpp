@@ -18,7 +18,7 @@
 #include "tinycad/v1/operations.pb.h"
 #include "tinycad/v1/session.pb.h"
 
-namespace tinycad::session {
+namespace tinycad::rpc {
 
 /**
  * tinycad.v1.Operation → the JSON operation of spec 04 with the CURRENT `v` of its type (the
@@ -30,7 +30,7 @@ namespace tinycad::session {
  * Errors: empty oneof (at any depth) → InvalidOperation 'op' / 'op.batch.ops[i]';
  * BODY_MATERIAL_UNSPECIFIED → InvalidOperation 'op.body_set_material.material'.
  */
-SessionResult<core::Json> operationToJson(const tinycad::v1::Operation& op);
+session::SessionResult<core::Json> operationToJson(const tinycad::v1::Operation& op);
 
 /**
  * The inverse, for the round-trip tests (spec 14 "Testy": every Operation ↔ JSON operation and
@@ -49,4 +49,4 @@ void featureToProto(const document::FeatureInstance& feature, tinycad::v1::Featu
  */
 void logEntryView(const core::Json& entry, tinycad::v1::LogEntryView* out);
 
-}  // namespace tinycad::session
+}  // namespace tinycad::rpc

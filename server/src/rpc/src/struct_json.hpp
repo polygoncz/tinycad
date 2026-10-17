@@ -1,6 +1,6 @@
 #pragma once
 
-// google.protobuf.Struct / Value / ListValue ↔ core::Json (internal to tinycad_session): the
+// google.protobuf.Struct / Value / ListValue ↔ core::Json (internal to tinycad_rpc): the
 // dynamic data of the contract (feature params, defaults, VisibleWhen values, sketch entities)
 // is JSON in the domain and Struct on the wire (spec 14 "Pravidla tvaru kontraktu").
 //
@@ -11,7 +11,7 @@
 
 #include "tinycad/core/json.hpp"
 
-namespace tinycad::session {
+namespace tinycad::rpc {
 
 core::Json jsonOfValue(const google::protobuf::Value& value);
 /** Always a JSON object (empty for an unset Struct). */
@@ -25,4 +25,4 @@ void structOfJson(const core::Json& json, google::protobuf::Struct* out);
 /** Precondition: `json` is an array (TINYCAD_ASSERT). */
 void listOfJson(const core::Json& json, google::protobuf::ListValue* out);
 
-}  // namespace tinycad::session
+}  // namespace tinycad::rpc

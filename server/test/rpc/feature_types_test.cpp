@@ -6,7 +6,7 @@
 // The golden file is rewritten with TINYCAD_UPDATE_GOLDEN=1 (for example after the sketch schema
 // of M44.1 joins registerBuiltInSchemas); otherwise a difference fails.
 
-#include "tinycad/session/feature_types.hpp"
+#include "tinycad/rpc/feature_types.hpp"
 
 #include <gtest/gtest.h>
 #include <google/protobuf/util/json_util.h>
@@ -22,7 +22,7 @@
 #include "tinycad/features/builtin.hpp"
 #include "tinycad/v1/session.pb.h"
 
-namespace tinycad::session {
+namespace tinycad::rpc {
 namespace {
 
 namespace v1 = tinycad::v1;
@@ -297,4 +297,4 @@ TEST(FeatureTypesGolden, MatchesTheSharedFile) {
 }
 
 }  // namespace
-}  // namespace tinycad::session
+}  // namespace tinycad::rpc

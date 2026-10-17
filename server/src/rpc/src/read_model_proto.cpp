@@ -1,4 +1,4 @@
-#include "read_model_proto.hpp"
+#include "tinycad/rpc/read_model_proto.hpp"
 
 #include <bit>
 #include <cmath>
@@ -8,15 +8,22 @@
 #include <utility>
 #include <vector>
 
+#include "convert.hpp"
 #include "struct_json.hpp"
 #include "tinycad/core/curve2.hpp"
 #include "tinycad/regen/face_plane.hpp"
 #include "tinycad/regen/names.hpp"
-#include "tinycad/session/operation_codec.hpp"
+#include "tinycad/rpc/operation_codec.hpp"
 
-namespace tinycad::session {
+namespace tinycad::rpc {
 
 namespace v1 = tinycad::v1;
+using session::BodyView;
+using session::ChangeResult;
+using session::HistoryView;
+using session::ReadModel;
+using session::ReadModelOptions;
+using session::SessionEvent;
 
 namespace {
 
@@ -28,67 +35,10 @@ void vec3ToProto(const core::Vec3& v, v1::Vec3* out) {
   out->set_z(v[2]);
 }
 
-void vec2ToProto(const core::Vec2& v, v1::Vec2* out) {
-  out->set_x(v[0]);
-  out->set_y(v[1]);
-}
-
 void planeToProto(const core::Plane& plane, v1::Plane* out) {
   vec3ToProto(plane.origin, out->mutable_origin());
   vec3ToProto(plane.xDir, out->mutable_x_dir());
   vec3ToProto(plane.normal, out->mutable_normal());
-}
-
-/** The same mapping as toProto of tinycad_service (internal there). */
-void curveToProto(const core::Curve2& curve, v1::Curve2* out) {
-  out->set_id(curve.id);
-  switch (curve.kind) {
-    case core::Curve2::Kind::Line: {
-      auto* line = out->mutable_line();
-      vec2ToProto(curve.from, line->mutable_from());
-      vec2ToProto(curve.to, line->mutable_to());
-      break;
-    }
-    case core::Curve2::Kind::Arc: {
-      auto* arc = out->mutable_arc();
-      vec2ToProto(curve.center, arc->mutable_center());
-      vec2ToProto(curve.from, arc->mutable_from());
-      vec2ToProto(curve.to, arc->mutable_to());
-      arc->set_ccw(curve.ccw);
-      break;
-    }
-    case core::Curve2::Kind::Circle: {
-      auto* circle = out->mutable_circle();
-      vec2ToProto(curve.center, circle->mutable_center());
-      circle->set_radius(curve.radius);
-      break;
-    }
-    case core::Curve2::Kind::BSpline: {
-      auto* spline = out->mutable_bspline();
-      spline->set_degree(static_cast<std::uint32_t>(curve.degree));
-      for (const auto& p : curve.poles) vec2ToProto(p, spline->add_poles());
-      for (double k : curve.knots) spline->add_knots(k);
-      break;
-    }
-  }
-}
-
-/** ParamIssue.params (an object of strings and numbers) → ParamIssue.values, as toStatus does. */
-void issueToProto(const document::ParamIssue& issue, v1::ParamIssue* out) {
-  out->set_param(issue.param);
-  out->set_code(issue.code);
-  if (!issue.params.is_object()) return;
-  auto& values = *out->mutable_values();
-  for (const auto& item : issue.params.items()) {
-    v1::ParamIssueValue& value = values[item.key()];
-    if (item.value().is_number()) {
-      value.set_number(item.value().get<double>());
-    } else if (item.value().is_string()) {
-      value.set_text(item.value().get<std::string>());
-    } else {
-      value.set_text(item.value().dump());
-    }
-  }
 }
 
 // ---- meshes on the wire ----------------------------------------------------------------------
@@ -229,10 +179,10 @@ void sketchToProto(const regen::SketchArtifact& sketch, v1::SketchView* out) {
   for (const auto& region : sketch.outlines) {
     v1::RegionView* view = out->add_regions();
     view->set_name(region.name);
-    for (const auto& curve : region.outer) curveToProto(curve, view->add_outer());
+    for (const auto& curve : region.outer) toProto(curve, *view->add_outer());
     for (const auto& hole : region.holes) {
       v1::Loop* loop = view->add_holes();
-      for (const auto& curve : hole) curveToProto(curve, loop->add_curves());
+      for (const auto& curve : hole) toProto(curve, *loop->add_curves());
     }
     view->set_area(region.area);
   }
@@ -362,4 +312,4 @@ ReadModelOptions readModelOptionsOf(const v1::ReadModelOptions& options) {
   return out;
 }
 
-}  // namespace tinycad::session
+}  // namespace tinycad::rpc

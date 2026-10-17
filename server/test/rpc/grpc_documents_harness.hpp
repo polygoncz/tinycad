@@ -13,13 +13,16 @@
 #include <string>
 
 #include "session/runtime_testing.hpp"
-#include "tinycad/session/document_service.hpp"
-#include "tinycad/session/feature_types.hpp"
+#include "tinycad/rpc/document_service.hpp"
+#include "tinycad/rpc/feature_types.hpp"
 #include "tinycad/session/session_manager.hpp"
-#include "tinycad/session/session_service.hpp"
+#include "tinycad/rpc/session_service.hpp"
 #include "tinycad/v1/session.grpc.pb.h"
 
 namespace tinycad::session::testing {
+
+using rpc::DocumentServiceImpl;
+using rpc::SessionServiceImpl;
 
 class DocumentsTestServer {
  public:
@@ -89,8 +92,8 @@ class DocumentsTestServer {
         *running->runtime, *running->documents, [this] { return steadyNow; },
         [this] { return "s" + std::to_string(++nextSession_); }, SessionConfig{}});
     running->documentService = std::make_unique<DocumentServiceImpl>(*running->manager);
-    running->sessionService = std::make_unique<SessionServiceImpl>(
-        *running->manager, describeFeatureTypes(registries.schemas));
+    running->sessionService =
+        std::make_unique<SessionServiceImpl>(*running->manager, registries.schemas);
     grpc::ServerBuilder builder;
     builder.RegisterService(running->documentService.get());
     builder.RegisterService(running->sessionService.get());

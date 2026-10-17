@@ -1,15 +1,15 @@
 #pragma once
 
 // The domain results of the session layer → the tinycad.v1 messages (spec 14 "Read model a
-// sítě", "Události", decisions N53, N154). Pure conversion of shared immutable data: it runs
-// after RuntimeDocument returned, outside the document lock, and never calls the kernel.
+// sítě", "Události", decisions N53, N154). Pure conversion of shared immutable data: it runs in
+// the RPC after RuntimeDocument returned, outside the document lock, and never calls the kernel.
 
 #include "tinycad/session/read_model.hpp"
 #include "tinycad/session/session_event.hpp"
 #include "tinycad/v1/read_model.pb.h"
 #include "tinycad/v1/session.pb.h"
 
-namespace tinycad::session {
+namespace tinycad::rpc {
 
 /**
  * Fills `out` (cleared first):
@@ -26,18 +26,18 @@ namespace tinycad::session {
  *   in artifact order: name, outer, holes, area); planes; axes.
  * - session: writable, can_undo, can_redo, transaction.
  */
-void readModelToProto(const ReadModel& model, tinycad::v1::ReadModel* out);
+void readModelToProto(const session::ReadModel& model, tinycad::v1::ReadModel* out);
 
 /** entry (LogEntryView, unset when none) and the read model. */
-void changeResultToProto(const ChangeResult& change, tinycad::v1::ChangeResult* out);
+void changeResultToProto(const session::ChangeResult& change, tinycad::v1::ChangeResult* out);
 
 /** LogEntryViews and the undo and redo stacks. */
-void historyToProto(const HistoryView& history, tinycad::v1::GetHistoryResponse* out);
+void historyToProto(const session::HistoryView& history, tinycad::v1::GetHistoryResponse* out);
 
 /** A stored event: seq and `changed` or `regen_progress` (Resync and Heartbeat are rpc only). */
-void sessionEventToProto(const SessionEvent& event, tinycad::v1::SessionEvent* out);
+void sessionEventToProto(const session::SessionEvent& event, tinycad::v1::SessionEvent* out);
 
 /** known_meshes as a set, input_of '' → nullopt. */
-ReadModelOptions readModelOptionsOf(const tinycad::v1::ReadModelOptions& options);
+session::ReadModelOptions readModelOptionsOf(const tinycad::v1::ReadModelOptions& options);
 
-}  // namespace tinycad::session
+}  // namespace tinycad::rpc

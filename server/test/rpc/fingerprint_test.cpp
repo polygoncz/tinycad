@@ -1,12 +1,12 @@
 // The request fingerprint of idempotence (spec 14 "Idempotence", N57).
 
-#include "tinycad/session/fingerprint.hpp"
+#include "tinycad/rpc/fingerprint.hpp"
 
 #include <gtest/gtest.h>
 
 #include "tinycad/v1/session.pb.h"
 
-namespace tinycad::session {
+namespace tinycad::rpc {
 namespace {
 
 namespace v1 = tinycad::v1;
@@ -113,4 +113,4 @@ TEST(OperationKey, ARequestWithoutOperationIdIsAProgrammerError) {
 }
 
 }  // namespace
-}  // namespace tinycad::session
+}  // namespace tinycad::rpc

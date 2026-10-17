@@ -1,40 +1,20 @@
-# tinycad_session_tests: the unit tests of the session layer and (M45 tasks 4 and 5) the
-# integration tests through a real in-process gRPC channel, grpc_*_test.cpp (decision N25).
+# tinycad_session_tests: the unit tests of the session layer (domain only, decision N154; the gRPC
+# services and their integration tests are in test/rpc).
 include(GoogleTest)
-
-# The golden files shared with the TypeScript tests (N75, N88): test/golden of the repository.
-set(TINYCAD_GOLDEN_DIR "${PROJECT_SOURCE_DIR}/../test/golden"
-    CACHE PATH "Folder with the golden files shared with TS (test/golden)")
 
 add_executable(tinycad_session_tests
   session_error_test.cpp
-  operation_codec_test.cpp
-  feature_types_test.cpp
-  fingerprint_test.cpp
   recent_responses_test.cpp
   event_ring_test.cpp
   mesh_cache_test.cpp
   read_model_builder_test.cpp
-  read_model_proto_test.cpp
   runtime_document_test.cpp
   runtime_document_transactions_test.cpp
   session_manager_test.cpp
-  idle_timeout_test.cpp
-  grpc_documents_test.cpp
-  grpc_session_test.cpp
-  grpc_idempotence_test.cpp
-  grpc_transactions_test.cpp
-  grpc_meshes_test.cpp
-  grpc_watch_test.cpp)
-target_compile_definitions(tinycad_session_tests PRIVATE
-  TINYCAD_GOLDEN_DIR="${TINYCAD_GOLDEN_DIR}"
-  # grpc_documents_test.cpp imports the .tinycad.json files of the storage tests (M41).
-  TINYCAD_STORAGE_FIXTURES="${PROJECT_SOURCE_DIR}/test/storage/fixtures")
+  idle_timeout_test.cpp)
 # runtime_testing.hpp includes test/storage/failing_file.hpp (the failing store of M41) and builds
 # the real kernel and solver (N45); the session library itself gets only their factories (N109).
-target_include_directories(tinycad_session_tests PRIVATE "${PROJECT_SOURCE_DIR}/test"
-  # read_model_proto_test.cpp: the internal conversion of the read model (until the rpc layer).
-  "${PROJECT_SOURCE_DIR}/src/session/src")
+target_include_directories(tinycad_session_tests PRIVATE "${PROJECT_SOURCE_DIR}/test")
 target_link_libraries(tinycad_session_tests PRIVATE
   tinycad_session tinycad_kernel tinycad_solver_planegcs tinycad_test_support GTest::gtest
   GTest::gtest_main

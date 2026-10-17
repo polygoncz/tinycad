@@ -26,11 +26,11 @@
 #include "tinycad/document/schema.hpp"
 #include "tinycad/ops/handler.hpp"
 #include "tinycad/regen/builder.hpp"
-#include "tinycad/service/geometry_service.hpp"
-#include "tinycad/session/document_service.hpp"
+#include "tinycad/rpc/document_service.hpp"
+#include "tinycad/rpc/geometry_service.hpp"
+#include "tinycad/rpc/session_service.hpp"
 #include "tinycad/session/runtime_document.hpp"
 #include "tinycad/session/session_manager.hpp"
-#include "tinycad/session/session_service.hpp"
 #include "tinycad/storage/document_service.hpp"
 #include "tinycad/storage/store.hpp"
 
@@ -91,9 +91,9 @@ class CoreServer {
   std::unique_ptr<session::RuntimeDocument::Dependencies> runtime_;
   std::unique_ptr<session::SessionManager> manager_;
 
-  service::GeometryServiceImpl geometryService_;
-  std::unique_ptr<session::SessionServiceImpl> sessionService_;
-  std::unique_ptr<session::DocumentServiceImpl> documentService_;
+  rpc::GeometryServiceImpl geometryService_;
+  std::unique_ptr<rpc::SessionServiceImpl> sessionService_;
+  std::unique_ptr<rpc::DocumentServiceImpl> documentService_;
   std::unique_ptr<grpc::Server> server_;
   int port_ = 0;
 

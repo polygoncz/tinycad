@@ -14,7 +14,7 @@
 #include "tinycad/document/schema.hpp"
 #include "tinycad/v1/schema.pb.h"
 
-namespace tinycad::session {
+namespace tinycad::rpc {
 
 /**
  * One schema → its descriptor: type, version, label and icon (keys, no texts), params in the
@@ -32,4 +32,4 @@ void describeFeatureType(const document::FeatureSchema& schema,
 std::vector<tinycad::v1::FeatureTypeDescriptor> describeFeatureTypes(
     const document::FeatureSchemaRegistryReader& schemas);
 
-}  // namespace tinycad::session
+}  // namespace tinycad::rpc

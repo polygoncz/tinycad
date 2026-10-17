@@ -1,4 +1,4 @@
-#include "tinycad/session/fingerprint.hpp"
+#include "tinycad/rpc/fingerprint.hpp"
 
 #include <openssl/evp.h>
 
@@ -14,10 +14,10 @@
 
 #include "tinycad/core/json.hpp"
 #include "tinycad/core/result.hpp"
-#include "tinycad/session/operation_codec.hpp"
+#include "tinycad/rpc/operation_codec.hpp"
 #include "tinycad/v1/operations.pb.h"
 
-namespace tinycad::session {
+namespace tinycad::rpc {
 
 namespace pb = google::protobuf;
 
@@ -111,4 +111,4 @@ storage::OperationKey operationKey(const pb::Message& request) {
   return {request.GetReflection()->GetString(request, field), requestFingerprint(request)};
 }
 
-}  // namespace tinycad::session
+}  // namespace tinycad::rpc

@@ -6,7 +6,7 @@
 #include "tinycad/geometry/geometry.hpp"
 #include "tinycad/v1/geometry.grpc.pb.h"
 
-namespace tinycad::service {
+namespace tinycad::rpc {
 
 class GeometryServiceImpl final : public tinycad::v1::GeometryService::Service {
  public:
@@ -24,4 +24,4 @@ class GeometryServiceImpl final : public tinycad::v1::GeometryService::Service {
   geometry::Geometry2d geometry_;
 };
 
-}  // namespace tinycad::service
+}  // namespace tinycad::rpc

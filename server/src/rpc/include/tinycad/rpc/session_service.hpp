@@ -2,12 +2,14 @@
 
 // The gRPC adapter of tinycad.v1.SessionService (spec 14): request → SessionManager /
 // RuntimeDocument → response, SessionError → google.rpc.Status (toStatus). No domain logic here;
-// every method has the same shape:
+// the domain results (session::ReadModel, ChangeResult…) are converted into the response after
+// RuntimeDocument returned, so outside the document lock (decision N154). Every method has the
+// same shape:
 //
 //   try {
 //     find the session (SessionNotFound)            – every RPC but OpenSession and CloseSession
 //     convert the request (operationToJson, operationKey / StepKey)
-//     call the RuntimeDocument, fill the response
+//     call the RuntimeDocument, convert its result into the response (read_model_proto.hpp)
 //   } catch (...) { return internalStatusOfCurrentException(); }
 //
 // A missing operation_id on a changing RPC → InvalidOperation 'operation_id'. Synchronous gRPC
@@ -17,20 +19,22 @@
 
 #include <vector>
 
+#include "tinycad/document/schema.hpp"
 #include "tinycad/session/session_manager.hpp"
 #include "tinycad/v1/schema.pb.h"
 #include "tinycad/v1/session.grpc.pb.h"
 
-namespace tinycad::session {
+namespace tinycad::rpc {
 
 class SessionServiceImpl final : public tinycad::v1::SessionService::Service {
  public:
   /**
-   * `manager` must outlive the service; `featureTypes` = describeFeatureTypes of the server's
-   * schema registry, sent with every OpenSessionResponse (Q098).
+   * `manager` must outlive the service. The descriptors of every type of `schemas` (the server's
+   * one schema registry, describeFeatureTypes) are built once here and sent with every
+   * OpenSessionResponse (Q098).
    */
-  SessionServiceImpl(SessionManager& manager,
-                     std::vector<tinycad::v1::FeatureTypeDescriptor> featureTypes);
+  SessionServiceImpl(session::SessionManager& manager,
+                     const document::FeatureSchemaRegistryReader& schemas);
 
   /**
    * SessionManager::open (resume_session_id, N56) → session_id, feature_types, the read model of
@@ -87,8 +91,8 @@ class SessionServiceImpl final : public tinycad::v1::SessionService::Service {
                             grpc::ServerWriter<tinycad::v1::WatchSessionResponse>* writer) override;
 
  private:
-  SessionManager& manager_;
+  session::SessionManager& manager_;
   std::vector<tinycad::v1::FeatureTypeDescriptor> featureTypes_;
 };
 
-}  // namespace tinycad::session
+}  // namespace tinycad::rpc
