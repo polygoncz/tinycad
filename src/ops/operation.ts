@@ -107,8 +107,8 @@ export interface BodySetMaterialOp extends Operation {
 }
 
 /**
- * Name of the document (M19.2, D5). Metadata outside undo: UndoManager skips its 'do' entries,
- * the log, replay and snapshots carry it like any other change.
+ * Name of the document (M19.2, D5). Metadata outside undo: the UndoManager of the server
+ * (server/src/ops/undo.cpp) skips its 'do' entries; its log carries it like any other change.
  */
 export interface DocumentRenameOp extends Operation {
   readonly type: 'document.rename';
@@ -117,9 +117,9 @@ export interface DocumentRenameOp extends Operation {
 }
 
 /**
- * The operation renames the document (M19.2, D5). The one test of the rule "the name is outside
- * undo" for undo, the history panel and the stores; checks the name too, because a store reads
- * entries no handler has validated.
+ * The operation renames the document (M19.2, D5): the test of the rule "the name is outside
+ * undo" of the client (the in-memory undo of ops/testing.ts); the server has its own
+ * (server/src/ops). Checks the name too, so it can be given any operation.
  */
 export function isDocumentRename(op: Operation): op is DocumentRenameOp {
   return op.type === 'document.rename' && 'name' in op && typeof op.name === 'string';

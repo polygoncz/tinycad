@@ -281,6 +281,21 @@ describe('RemoteSession.change', () => {
     session.dispose();
   });
 
+  it('stays retrying while any call retries: another call that succeeds does not flicker it', async () => {
+    const { core, timers, session, connection } = await setup();
+    core.respond('dispatch', unavailable());
+    core.respond('getHistory', {});
+    const outcome = session.change({ kind: 'dispatch', op: rename('a') });
+    await flush();
+    expect(session.connection.get()).toBe('retrying');
+    await session.history(1);
+    expect(session.connection.get()).toBe('retrying');
+    timers.advance(200);
+    expect(await outcome).toMatchObject({ ok: true });
+    expect(connection).toEqual(['retrying', 'online']);
+    session.dispose();
+  });
+
   it('SESSION_NOT_FOUND in a transaction: a new session, lost, the steps fail', async () => {
     const { core, session, saved, lost } = await setup();
     core.respond('beginTransaction', {
@@ -427,6 +442,53 @@ describe('RemoteSession calls', () => {
     release();
     await refreshed;
     expect(session.readModel.get().document.name).toBe('Fresh');
+    session.dispose();
+  });
+
+  // The review after M46/M47: one ordering rule for every read model, not only for refresh.
+  it('an answer to a change older than the published read model is not published', async () => {
+    const { core, session } = await setup();
+    const change = held();
+    core.respond('dispatch', async () => {
+      await change.answer();
+      return { result: { readModel: aReadModel({ regen: { generation: 1n } }) } };
+    });
+    core.respond('getReadModel', {
+      readModel: aReadModel({ document: { name: 'G2' }, regen: { generation: 2n } }),
+    });
+    const outcome = session.change({ kind: 'dispatch', op: rename('x') });
+    await flush();
+    await session.refresh();
+    change.release();
+    expect(await outcome).toMatchObject({ ok: true });
+    expect(session.readModel.get().document.name).toBe('G2');
+    session.dispose();
+  });
+
+  it('a read model of the same generation is published (another input_of)', async () => {
+    const { core, session } = await setup();
+    core.respond('getReadModel', {
+      readModel: aReadModel({ document: { name: 'Same' }, regen: { generation: 1n } }),
+    });
+    await session.refresh();
+    expect(session.readModel.get().document.name).toBe('Same');
+    session.dispose();
+  });
+
+  it('a new session resets the order: its lower generation is published (a restart)', async () => {
+    const { core, session } = await setup();
+    core.respond('dispatch', { result: { readModel: aReadModel({ regen: { generation: 9n } }) } });
+    await session.change({ kind: 'dispatch', op: rename('a') });
+    core.respond('getReadModel', sessionNotFound(), {
+      readModel: aReadModel({ document: { name: 'After' }, regen: { generation: 2n } }),
+    });
+    core.respond('openSession', {
+      sessionId: 'session-2',
+      readModel: aReadModel({ document: { name: 'Restarted' }, regen: { generation: 1n } }),
+    });
+    await session.refresh();
+    expect(session.readModel.get().document.name).toBe('After');
+    expect(session.readModel.get().regen.generation).toBe(2);
     session.dispose();
   });
 

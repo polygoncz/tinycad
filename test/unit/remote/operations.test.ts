@@ -19,7 +19,7 @@ import type {
   StudioSetRollbackOp,
 } from '@/ops';
 import { BodyMaterial, OperationSchema } from '@/protocol';
-import { operationFromProto, operationToProto } from '@/remote';
+import { operationFromProto, operationToProto } from '@/remote/testing';
 
 const F = 'f1' as FeatureId; // an id as the tests of ops write it
 const B = 'f1/body' as BodyId; // an id as the tests of ops write it

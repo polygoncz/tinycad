@@ -3,9 +3,9 @@
 
 /**
  * A plain JSON value: null, a string, a boolean, a finite number, an array of JSON values
- * without holes or a plain JSON object. IndexedDB stores structured clones, so Map, Date, class
- * instances, undefined or NaN could otherwise slip into the document and break the JSON round
- * trip. Linear in the size of the value and without allocations: it runs on every drag step of
+ * without holes or a plain JSON object. Operations go to the server as JSON
+ * (google.protobuf.Struct, spec 14), so Map, Date, class instances, undefined or NaN could
+ * otherwise slip into the mirror of the document and break the JSON round trip. Linear in the size of the value and without allocations: it runs on every drag step of
  * a sketch.
  */
 export function isJsonValue(v: unknown): boolean {

@@ -1,7 +1,8 @@
 import { Code, ConnectError } from '@connectrpc/connect';
 import { describe, expect, it } from 'vitest';
 import { ErrorDetailSchema, ErrorReason } from '@/protocol';
-import { isRetryable, RemoteError, toRemoteError } from '@/remote';
+import { isRetryable, RemoteError } from '@/remote';
+import { toRemoteError } from '@/remote/testing';
 import type { RemoteErrorReason } from '@/remote';
 
 /** A failed RPC as the server sends it: a status with one ErrorDetail. */

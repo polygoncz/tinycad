@@ -5,6 +5,6 @@
 export type { BoundingBox, MeshData, MeshQuality, ShapeHandle } from './types';
 export type { MeshOps } from './kernel';
 export type { ProfileCurve, ProfileLoop, ProfileRegion } from './profile';
-export { createKernelError, kernelErrorCode } from './errors';
+export { createKernelError } from './errors';
 export type { KernelErrorCode } from './errors';
 export { validateMeshData } from './mesh';

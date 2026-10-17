@@ -1,6 +1,6 @@
 import { create } from '@bufbuild/protobuf';
 import { describe, expect, it } from 'vitest';
-import { kernelErrorCode } from '@/kernel';
+import { kernelErrorCode } from '@/kernel/testing';
 import { Curve2Schema, CurveHitSchema, FilletResponseSchema, OffsetCurveSchema } from '@/protocol';
 import type { Curve2, CurveHit, FilletArc, OffsetCurve2 } from '@/sketch';
 import {

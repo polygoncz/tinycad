@@ -10,7 +10,7 @@ import type { JsonValue } from '@bufbuild/protobuf';
 import { createFeatureSchemaRegistry } from '@/document';
 import type { FeatureSchema, FeatureSchemaRegistry } from '@/document';
 import { FeatureTypeDescriptorSchema } from '@/protocol';
-import { featureSchemaOf } from '@/remote';
+import { featureSchemaOf } from '@/remote/testing';
 
 // Written by the C++ tests (N88, N95).
 const GOLDEN = join(import.meta.dirname, '../../../golden/feature-types.json');

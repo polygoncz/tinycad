@@ -209,7 +209,7 @@ describe('createRemoteAppSession', () => {
   // E2E M46: a reload whose CloseSession got lost resumes the session with the transaction of
   // the dialog of the page before; this page has no dialog, so every begin failed.
   it('aborts the transaction a resumed session still has open, before anything else', async () => {
-    const resumed = model(99, 3, { transaction: 'feature.edit' });
+    const resumed = model(99, 1, { transaction: 'feature.edit' });
     const { core, session } = await setup({ opened: resumed });
     expect(core.calls.filter((c) => c !== 'watchSession').slice(0, 2)).toEqual([
       'openSession',

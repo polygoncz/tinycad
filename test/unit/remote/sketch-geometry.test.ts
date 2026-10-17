@@ -1,7 +1,7 @@
 import { create } from '@bufbuild/protobuf';
 import { Code, ConnectError, createRouterTransport } from '@connectrpc/connect';
 import { describe, expect, it } from 'vitest';
-import { kernelErrorCode } from '@/kernel';
+import { kernelErrorCode } from '@/kernel/testing';
 import type { KernelErrorCode } from '@/kernel';
 import {
   ErrorDetailSchema,

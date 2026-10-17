@@ -2,8 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { FeaturePlugin } from '@/plugin-api';
-import { featureSchemaOf } from '@/remote';
-import { aFeatureTypeDescriptor } from '@/remote/testing';
+import { aFeatureTypeDescriptor, featureSchemaOf } from '@/remote/testing';
 import { BUILT_IN_PLUGINS } from '@/app/index';
 import { createRemoteRegistries } from '@/app/remote-registries';
 
