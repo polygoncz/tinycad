@@ -1,0 +1,15 @@
+{
+  // Recommended extensions for tinycad (VS Code offers them when the folder opens).
+  "recommendations": [
+    "anthropic.claude-code",
+    "vue.volar",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "vitest.explorer",
+    // C++ of the native core; needs npm run setup:clangd once (server/.clangd).
+    "llvm-vs-code-extensions.vscode-clangd",
+    "bufbuild.vscode-buf"
+  ],
+  // Its IntelliSense conflicts with clangd.
+  "unwantedRecommendations": ["ms-vscode.cpptools"]
+}

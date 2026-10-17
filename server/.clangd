@@ -1,0 +1,6 @@
+# clangd for the native core: the compilation database comes from npm run setup:clangd
+# (scripts/setup-clangd.mjs), generated in the Docker image with the host paths.
+CompileFlags:
+  CompilationDatabase: build/clangd
+  # GCC-only flags of the Linux build that the host clang does not know.
+  Remove: [-ffp-contract=*, -fno-fat-lto-objects, -flto=*]
