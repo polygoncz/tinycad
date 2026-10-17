@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 38
 aliases:
   - M38
@@ -18,7 +18,7 @@ specs:
 depends_on:
   - "[[M37-text-ve-skice]]"
 started: 2026-10-17
-finished:
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-17
@@ -119,4 +119,15 @@ Jak z existující sady testů udělat jazykově nezávislou specifikaci (golden
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+_Návrh Clauda, Pavel doplní nebo upraví._
+
+**Co bylo jinak, než se čekalo**
+- „Exportér z dnešních testů“ z hrubého plánu nešel postavit: tvrzení jsou kód, ne data. Rekordér (vstupy z testů, výstupy zaznamenané z TS, revize v git diffu) byl jednodušší a pevnější ([[Q107 Výstupy sdílených případů|Q107]]).
+- Případy našly chybu ještě před C++ (predikáty `equals_none`) a hlavně **díry ve specifikaci**: nedosažitelné kódy chyb, `KERNEL` jinde, než říkal plán, chybějící výstup `inputOf`, pořadí, které doména neurčuje. Kontrakt C++ jádra je teď přesnější než specifikace.
+- Port `GeometryKernel` nemá objem a planegcs nevrací reziduum. Obojí se vyřešilo bez změny zmrazené domény (objem ze sítě, pevný bod řešiče).
+- Revize architektury hledala hlavně **co C++ nezopakuje**: pořadí z OCCT, spoléhání na stabilní řazení, `NaN` jako `null`. U golden testů pro druhý jazyk je to hlavní riziko, ne chyba TS.
+
+**Co se osvědčilo**
+- Souběžné úkoly 2–5 jako čtyři subagenti ve worktree místo celých stop: kostra zafixovaná předem v úkolu 1, každý úkol vlastní složka, sloučení bez konfliktu. Na jeden milník lehčí než `/stopa`.
+- Metatest pokrytí odvozený z kódu (`satisfies Record<…>`) udělal z akceptačního kritéria test. Každá kontrola ověřená úmyslně odebraným případem.
+- Implementátoři vracející „díry ve spec“ jako otázky místo tichého rozhodnutí.
