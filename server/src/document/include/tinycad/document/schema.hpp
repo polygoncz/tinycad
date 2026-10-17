@@ -17,6 +17,7 @@
 #include "tinycad/core/math.hpp"
 #include "tinycad/core/result.hpp"
 #include "tinycad/document/model.hpp"
+#include "tinycad/document/param_rule.hpp"
 
 namespace tinycad::document {
 
@@ -147,6 +148,15 @@ Json issueJson(const ParamIssue& issue);
  */
 std::vector<ParamIssue> validateAgainstSchema(const ParamSchema& schema, const Json& params);
 
+/**
+ * The declarative rules of a feature type (param_rule.hpp, M49, N148): appends their issues to
+ * `issues`, in the order of the rules. Precondition: `issues` holds exactly
+ * validateAgainstSchema(schema, params) (a rule skips params the generic checks reported). Never
+ * throws, whatever `params` is. Implemented in M49 (src/document/rules.cpp).
+ */
+void checkParamRules(const ParamSchema& schema, const ParamRules& rules, const Json& params,
+                     std::vector<ParamIssue>& issues);
+
 // ---------------------------------------------------------------------------------------------
 // FeatureSchema and its registry
 
@@ -163,9 +173,21 @@ class FeatureSchema {
   /** Tabler icon name; "" = generic icon. */
   [[nodiscard]] virtual const std::string& icon() const = 0;
   [[nodiscard]] virtual const ParamSchema& params() const = 0;
+  /**
+   * The declarative rules beyond the generic checks (param_rule.hpp, M49, N148), sent to the
+   * client in FeatureTypeDescriptor.rules. validate() must report them too (BuiltInSchema does it
+   * by checkParamRules). Default: none.
+   */
+  [[nodiscard]] virtual const ParamRules& rules() const {
+    static const ParamRules none;
+    return none;
+  }
   /** Params of a new feature (a JSON object). */
   [[nodiscard]] virtual Json defaults() const = 0;
-  /** Takes unchecked params. Usually validateAgainstSchema + own rules. Never throws. */
+  /**
+   * Takes unchecked params. Usually validateAgainstSchema + checkParamRules(rules()) + rules that
+   * cannot be data (the sketch). Never throws.
+   */
   [[nodiscard]] virtual std::vector<ParamIssue> validate(const Json& params) const = 0;
   [[nodiscard]] virtual bool hasMigrate() const { return false; }
   /**
