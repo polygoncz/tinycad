@@ -1,0 +1,39 @@
+{
+  "kind": "schema.validate",
+  "description": "A body that is a target and a tool is not boolean.sameBody while tools hold a malformed reference (DisjointRefs skips a param the generic checks reported)",
+  "input": {
+    "type": "boolean",
+    "params": {
+      "op": "union",
+      "targets": [
+        {
+          "kind": "body",
+          "body": "a/body"
+        }
+      ],
+      "tools": [
+        {
+          "kind": "body",
+          "body": "a/body"
+        },
+        {
+          "kind": "body"
+        }
+      ],
+      "keepTools": false
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "tools",
+          "code": "param.invalidRef",
+          "params": {
+            "index": 1
+          }
+        }
+      ]
+    }
+  }
+}

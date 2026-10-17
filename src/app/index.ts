@@ -12,6 +12,7 @@ export type {
   KernelUiState,
   RegenUiState,
 } from './app-session';
+export type { AppNotice, NoticeKind, NoticeParams } from './notices';
 export type { ViewSettings } from './view-settings';
 export type { PluginMessages } from '@/plugin-api';
 export {

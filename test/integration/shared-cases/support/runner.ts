@@ -48,6 +48,19 @@ export interface SharedCasesOptions {
   readonly root?: string;
   /** The timeout of one case in ms (slow kinds such as regen over OCCT). */
   readonly timeout?: number;
+  /**
+   * false: the C++ core is the reference of these kinds and the TS output is not complete (schema,
+   * N124, N150), so the record mode compares them instead of writing expected. Default true.
+   */
+  readonly recorded?: boolean;
+}
+
+/** Whether the cases of a runner file are written instead of compared (record mode, `recorded`). */
+export function recordsCases(
+  options: SharedCasesOptions,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): boolean {
+  return isRecordMode(env) && options.recorded !== false;
 }
 
 /**
@@ -60,7 +73,7 @@ export function describeSharedCases(
   runners: KindRunners,
   options: SharedCasesOptions = {},
 ): void {
-  const record = isRecordMode();
+  const record = recordsCases(options);
   const cases = loadCases(area, {
     requireExpected: !record,
     ...(options.root === undefined ? {} : { root: options.root }),

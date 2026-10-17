@@ -3,18 +3,20 @@
 // (#/d/<id>). An empty hash shows the DocumentList; a change of the hash closes the old session
 // (awaiting its final save) and opens the new one through the DocumentSwitcher. The session
 // reaches the components only through AppShell's provideSession (rule 5).
-import { onMounted, onUnmounted } from 'vue';
+import { computed, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { openAppSession } from '@/app';
 import type { AppSession, OpenAppSessionOptions } from '@/app';
 import AppShell from './components/AppShell.vue';
 import DocumentList from './components/DocumentList.vue';
+import ToastStack from './components/ToastStack.vue';
 import { createDocumentSwitcher } from './document-switcher';
 import { downloadFile } from './download';
 import { addPluginMessages } from './i18n/i18n';
 import { useUiI18n } from './i18n/use-ui-i18n';
 import { parseDocHash } from './route';
 import { useTheme } from './theme/use-theme';
+import { closeErrorToasts } from './toasts';
 
 const props = defineProps<{ plugins: OpenAppSessionOptions['plugins'] }>();
 
@@ -48,6 +50,10 @@ const switcher = createDocumentSwitcher<AppSession>({
   },
 });
 const view = switcher.view;
+// The error of closing the previous document: a toast until dismissed (M48: through ToastStack).
+const closeToasts = computed(() =>
+  closeErrorToasts(view.value.closeError, (key, params) => t(key, { ...params })),
+);
 
 function onHashChange(): void {
   // show never rejects: failures of open and close end up in the view.
@@ -111,18 +117,7 @@ function hotPromise(data: unknown, key: string): Promise<unknown> | null {
     </div>
   </div>
 
-  <div v-if="view.closeError !== null" class="toast" role="alert">
-    <i class="ti ti-alert-triangle error-icon" aria-hidden="true" />
-    <span>{{ t('app.closeError', { error: view.closeError }) }}</span>
-    <button
-      type="button"
-      class="dismiss"
-      :title="t('app.dismiss')"
-      @click="switcher.dismissCloseError()"
-    >
-      <i class="ti ti-x" aria-hidden="true" />
-    </button>
-  </div>
+  <ToastStack :items="closeToasts" @dismiss="switcher.dismissCloseError()" />
 </template>
 
 <style>
@@ -186,37 +181,5 @@ body {
   color: var(--text-primary);
   font: inherit;
   font-weight: 500;
-}
-.toast {
-  position: fixed;
-  left: 50%;
-  bottom: 64px;
-  z-index: 200;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 560px;
-  padding: 8px 10px 8px 12px;
-  border-radius: var(--radius-panel);
-  background: var(--panel-bg);
-  backdrop-filter: var(--panel-blur);
-  -webkit-backdrop-filter: var(--panel-blur);
-  border: 0.5px solid var(--panel-border);
-  box-shadow: var(--panel-shadow);
-}
-.toast .error-icon {
-  font-size: 16px;
-}
-.dismiss {
-  display: inline-flex;
-  border: none;
-  background: none;
-  padding: 2px;
-  border-radius: var(--radius-row);
-  color: var(--text-secondary);
-}
-.dismiss:hover {
-  background: var(--control-hover);
 }
 </style>

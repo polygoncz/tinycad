@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { create, fromJson } from '@bufbuild/protobuf';
+import { create, fromBinary, fromJson, toBinary } from '@bufbuild/protobuf';
 import type { JsonValue } from '@bufbuild/protobuf';
 import { describe, expect, it } from 'vitest';
 import { isParamVisible, validateAgainstSchema } from '@/document';
@@ -18,6 +18,8 @@ import {
 const SHARED_CASES = join(import.meta.dirname, '../../shared-cases/schema');
 // The golden file written by the C++ tests (N88, N95).
 const GOLDEN = join(import.meta.dirname, '../../golden/feature-types.json');
+
+type PlainRules = NonNullable<NonNullable<Parameters<typeof aFeatureTypeDescriptor>[0]>['rules']>;
 
 /** One descriptor with a param of every kind of ParamDescriptor.spec. */
 const EVERY_KIND = aFeatureTypeDescriptor({
@@ -149,6 +151,63 @@ describe('featureSchemaOf', () => {
     ]) {
       expect(schema.validate(raw)).toEqual(validateAgainstSchema(schema.params, raw));
     }
+  });
+
+  describe('rules of the descriptor (M49)', () => {
+    const bodiesParam = (key: string) => ({
+      key,
+      label: `boolean.${key}`,
+      spec: { case: 'bodies' as const, value: { min: 1 } },
+    });
+    const withRules = (rules: PlainRules) =>
+      featureSchemaOf(
+        aFeatureTypeDescriptor({
+          type: 'boolean',
+          params: [bodiesParam('targets'), bodiesParam('tools')],
+          defaults: { targets: [], tools: [] },
+          rules,
+        }),
+      );
+    const body = (id: string) => ({ kind: 'body', body: id });
+    const same = { targets: [body('a/body')], tools: [body('b/body'), body('a/body')] };
+
+    it('validate adds the issue of a disjoint_refs rule with its code and index', () => {
+      const s = withRules([
+        {
+          code: 'boolean.sameBody',
+          rule: { case: 'disjointRefs', value: { param: 'tools', other: 'targets' } },
+        },
+      ]);
+      expect(s.validate(same)).toEqual([
+        { param: 'tools', code: 'boolean.sameBody', params: { index: 1 } },
+      ]);
+      // The generic issues first; a rule skips a list they reported.
+      expect(s.validate({ ...same, extra: 1 }).map((i) => i.code)).toEqual([
+        'param.unexpected',
+        'boolean.sameBody',
+      ]);
+      expect(s.validate({ ...same, targets: [] }).map((i) => i.code)).toEqual(['param.tooFewRefs']);
+    });
+
+    it('ignores a rule of a kind this client does not know', () => {
+      const s = withRules([{ code: 'future.rule' }]);
+      expect(s.validate(same)).toEqual([]);
+    });
+
+    it('a rule arriving in binary with an unknown kind decodes to no case and is ignored', () => {
+      // A newer server: field 11 of ParamRule is a kind this client was not generated with.
+      const descriptor = aFeatureTypeDescriptor({
+        params: [bodiesParam('targets'), bodiesParam('tools')],
+      });
+      const bytes = toBinary(FeatureTypeDescriptorSchema, descriptor);
+      // FeatureTypeDescriptor.rules (7) = ParamRule { code (1): 'x', 11: {} }.
+      const rule = [0x0a, 0x01, 0x78, 0x5a, 0x00];
+      const withUnknown = new Uint8Array([...bytes, 0x3a, rule.length, ...rule]);
+      const decoded = fromBinary(FeatureTypeDescriptorSchema, withUnknown);
+      expect(decoded.rules).toHaveLength(1);
+      expect(decoded.rules[0]?.rule.case).toBeUndefined();
+      expect(featureSchemaOf(decoded).validate(same)).toEqual([]);
+    });
   });
 
   it('refuses a param without a kind as a broken answer', () => {

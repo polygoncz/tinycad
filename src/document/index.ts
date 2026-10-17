@@ -54,6 +54,8 @@ export type {
   RefParamSpec,
 } from './schema';
 export { validateAgainstSchema } from './validate';
+export { checkParamRules } from './rules';
+export type { ParamRule } from './rules';
 export { NO_VARIABLES, evaluateParams } from './evaluate';
 export type { Evaluated } from './evaluate';
 export { isJsonObject } from './json';

@@ -1,5 +1,6 @@
 import { Code } from '@connectrpc/connect';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
 import type { DocumentId, FeatureId } from '@/document';
 import {
@@ -19,7 +20,13 @@ import { FakeAppViewport } from '@/app/testing';
 
 // Values of ErrorReason of errors.proto: tests of app may not import protocol, so the fake core
 // gets the numbers (in the domain of the enum, so they type-check).
-const REASON = { UNSPECIFIED: 0, SESSION_NOT_FOUND: 10 } as const;
+const REASON = {
+  UNSPECIFIED: 0,
+  INVALID_OPERATION: 1,
+  READ_ONLY: 3,
+  SKETCH_NOT_SOLVED: 9,
+  SESSION_NOT_FOUND: 10,
+} as const;
 type ReadModel = ReturnType<typeof aReadModel>;
 
 const DOC = 'doc-1' as DocumentId; // an id of the catalog of the fake core
@@ -74,9 +81,19 @@ const NO_GEOMETRY: SketchGeometry = new Proxy({} as SketchGeometry, {
 });
 
 const opened: AppSession[] = [];
+// M48: nothing of a known kind goes to the console any more (N153); the notices show it.
+let consoleError: MockInstance<typeof console.error>;
+beforeEach(() => {
+  consoleError = vi.spyOn(console, 'error');
+});
 afterEach(() => {
   for (const session of opened.splice(0)) session.dispose();
+  consoleError.mockRestore();
 });
+
+function noticeKeys(session: AppSession): readonly string[] {
+  return session.notices.get().map((n) => n.key);
+}
 
 interface SetupOptions {
   readonly writable?: boolean;
@@ -256,6 +273,52 @@ describe('createRemoteAppSession', () => {
     expect(session.features.current.get()).toBeNull();
     expect(sizeOf(session)).toBe(10);
     expect(core.requests('openSession')).toHaveLength(2);
+    expect(noticeKeys(session)).toEqual(['notice.transactionLost']);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('SKETCH_NOT_SOLVED of a setParams: the notice sketch.notSolved, the local value stays (N63)', async () => {
+    const { core, session } = await setup();
+    const edit = session.features.edit(F1);
+    await flush();
+    core.respond('apply', aCoreError(Code.FailedPrecondition, REASON.SKETCH_NOT_SOLVED));
+    edit.setParam('size', 30);
+    await flush();
+    expect(sizeOf(session)).toBe(30);
+    expect(noticeKeys(session)).toEqual(['sketch.notSolved']);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('READ_ONLY: the notice notice.readOnly (N146, N153)', async () => {
+    const { core, session } = await setup();
+    core.respond('dispatch', aCoreError(Code.FailedPrecondition, REASON.READ_ONLY));
+    session.documentName.rename('Bracket');
+    await flush();
+    expect(session.doc.meta.name).toBe('Document');
+    expect(noticeKeys(session)).toEqual(['notice.readOnly']);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('another refusal: notice.changeRejected with the reason', async () => {
+    const { core, session } = await setup();
+    core.respond('dispatch', aCoreError(Code.InvalidArgument, REASON.INVALID_OPERATION));
+    session.documentName.rename('Bracket');
+    await flush();
+    expect(session.notices.get().map((n) => [n.key, n.params])).toEqual([
+      ['notice.changeRejected', { reason: 'INVALID_OPERATION' }],
+    ]);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('dismissNotice removes the notice', async () => {
+    const { core, session } = await setup();
+    core.respond('dispatch', aCoreError(Code.FailedPrecondition, REASON.READ_ONLY));
+    session.documentName.rename('Bracket');
+    await flush();
+    const [notice] = session.notices.get();
+    if (notice === undefined) throw new Error('expected a notice');
+    session.dismissNotice(notice.id);
+    expect(session.notices.get()).toEqual([]);
   });
 
   it('opening and closing a dialog reads the model again with and without input_of', async () => {
@@ -296,6 +359,9 @@ describe('createRemoteAppSession', () => {
     expect(session.persistence.get()).toBe('failed');
     expect(session.doc.meta.name).toBe('Document');
     await expect(session.flush()).rejects.toThrow(/not saved/);
+    // The title bar and serverUnavailable show it; the dropped change itself is no notice.
+    expect(noticeKeys(session)).toEqual(['notice.serverUnavailable']);
+    expect(consoleError).not.toHaveBeenCalled();
   });
 
   it('keeps the mesh a request in flight says it has (N93)', async () => {

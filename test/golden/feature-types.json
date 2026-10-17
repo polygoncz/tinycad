@@ -167,6 +167,15 @@
           "label": "boolean.keepTools"
         }
       ],
+      "rules": [
+        {
+          "code": "boolean.sameBody",
+          "disjoint_refs": {
+            "other": "targets",
+            "param": "tools"
+          }
+        }
+      ],
       "type": "boolean",
       "version": 1
     },

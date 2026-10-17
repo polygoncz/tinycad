@@ -131,6 +131,19 @@ void describeParam(const document::ParamEntry& entry, v1::ParamDescriptor* out) 
   }
 }
 
+/** A declarative rule (param_rule.hpp, M49): the code and the oneof by its kind. */
+void describeRule(const document::ParamRule& rule, v1::ParamRule* out) {
+  out->set_code(rule.code);
+  switch (rule.kind) {
+    case document::ParamRule::Kind::DisjointRefs: {
+      auto* disjoint = out->mutable_disjoint_refs();
+      disjoint->set_param(rule.param);
+      disjoint->set_other(rule.other);
+      break;
+    }
+  }
+}
+
 }  // namespace
 
 void describeFeatureType(const document::FeatureSchema& schema, v1::FeatureTypeDescriptor* out) {
@@ -141,6 +154,7 @@ void describeFeatureType(const document::FeatureSchema& schema, v1::FeatureTypeD
   out->set_icon(schema.icon());
   for (const auto& entry : schema.params()) describeParam(entry, out->add_params());
   structOfJson(schema.defaults(), out->mutable_defaults());
+  for (const auto& rule : schema.rules()) describeRule(rule, out->add_rules());
 }
 
 std::vector<v1::FeatureTypeDescriptor> describeFeatureTypes(

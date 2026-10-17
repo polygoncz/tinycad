@@ -333,3 +333,14 @@ Upřesnění hrubých plánů z [[#Pavlova rozhodnutí sporných míst (2026-10-
 - **N156 – Měření regenerace v C++ je gtest `RegenerationMeasure`** nad dokumentem sdíleného případu `boolean-plate-36-holes-fillet` (žádná druhá kopie modelu): první regenerace, tessellace, plný přepočet, přepočet z cache, medián ze 3, výpis na `std::cout`; ověřuje jen počty (featury bez chyby, těleso a plochy, volání jádra přes počítací dekorátor, `liveHandleCount`), každou kontrolu úmyslnou chybou. Běží v `check:server`; čísla jdou do spec 13.
 - **N157 – Hlavní sezení přijímá N150 a N152**; chování klientské fronty změn po `STORAGE` (opakovaný `Commit` po M51 uspěje místo `NO_TRANSACTION`) se ověří a upraví v [[M52-tenky-klient|M52]].
 
+## M48 – Hlášení v UI
+
+- **N158 – E2E data v anonymním svazku místo tmpfs** (upřesňuje N72): obsah tmpfs nepřežije restart kontejneru, který potřebuje e2e restartu jádra; `down --volumes` svazek smaže, `tinycad-data` se dál nesdílí.
+- **N159 – Projekt `restart` běží po `chrome` a WebKit v plném běhu až po něm**, aby restart jádra nepadl do souběžných testů.
+- **N160 – Hlášení zamítnuté změny bere u `reason: UNSPECIFIED` kód gRPC**; toast zůstává dole uprostřed; dva `ToastStack` (chyba zavření dokumentu a hlášení sezení) se mohou výjimečně překrýt – sloučit při M52.
+
+## M49 – Pravidla validace v popisu typů
+
+- **N161 – N67 je vyřešené pro všechna deklarativně popsatelná pravidla** (`boolean.sameBody` jako `DisjointRefs`); pravidla skici zůstávají jen na serveru a dialog je ukáže až ve stavu featury. Chyba pravidla potvrzení nezakáže (stejně jako obecné kódy).
+- **N162 – Běžec TS `schema` se nezapisuje** (`recorded: false`): `cases:record` by jinak přepsal případy výstupem bez kódů jen pro server; referencí zůstává C++ (N124).
+

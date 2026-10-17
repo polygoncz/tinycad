@@ -61,6 +61,52 @@ TEST(FeatureSchemaRegistry, RejectsAVersionBelow1) {
   EXPECT_THROW(registry.add(schema("box", 0)), core::AssertionError);
 }
 
+std::shared_ptr<TestSchema> schemaWithRule(document::ParamRule rule) {
+  return std::make_shared<TestSchema>(
+      "boolean", 1,
+      document::ParamSchema{{"targets", {.kind = ParamKind::Bodies, .label = "t"}},
+                            {"tools", {.kind = ParamKind::Topo, .label = "o"}},
+                            {"axis", {.kind = ParamKind::Axis, .label = "a"}},
+                            {"size", {.kind = ParamKind::Length, .label = "s"}}},
+      nullptr, document::ParamRules{std::move(rule)});
+}
+
+document::ParamRule disjoint(std::string param, std::string other, std::string code = "x.same") {
+  return {.kind = document::ParamRule::Kind::DisjointRefs,
+          .code = std::move(code),
+          .param = std::move(param),
+          .other = std::move(other)};
+}
+
+TEST(FeatureSchemaRegistry, AcceptsARuleOverTwoReferenceListsOfTheSchema) {
+  FeatureSchemaRegistry registry;
+  registry.add(schemaWithRule(disjoint("tools", "targets")));
+  EXPECT_EQ(registry.get("boolean").rules().size(), 1U);
+}
+
+TEST(FeatureSchemaRegistry, RejectsARuleOverAnUnknownParam) {
+  FeatureSchemaRegistry registry;
+  EXPECT_THROW(registry.add(schemaWithRule(disjoint("tools", "bodies"))), core::AssertionError);
+  EXPECT_THROW(registry.add(schemaWithRule(disjoint("bodies", "targets"))), core::AssertionError);
+}
+
+TEST(FeatureSchemaRegistry, RejectsADisjointRefsRuleOverAnAxisOrAPlainValue) {
+  FeatureSchemaRegistry registry;
+  EXPECT_THROW(registry.add(schemaWithRule(disjoint("axis", "targets"))), core::AssertionError);
+  EXPECT_THROW(registry.add(schemaWithRule(disjoint("tools", "size"))), core::AssertionError);
+}
+
+TEST(FeatureSchemaRegistry, RejectsARuleOverTheSameParamTwice) {
+  FeatureSchemaRegistry registry;
+  EXPECT_THROW(registry.add(schemaWithRule(disjoint("tools", "tools"))), core::AssertionError);
+}
+
+TEST(FeatureSchemaRegistry, RejectsARuleWithoutCode) {
+  FeatureSchemaRegistry registry;
+  EXPECT_THROW(registry.add(schemaWithRule(disjoint("tools", "targets", ""))),
+               core::AssertionError);
+}
+
 ParamSpec withVisibility(VisibleWhen when) {
   ParamSpec spec{.kind = ParamKind::Boolean, .label = "x.flip", .defaultValue = false};
   spec.visibleWhen = std::move(when);

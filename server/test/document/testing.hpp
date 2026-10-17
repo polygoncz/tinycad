@@ -72,29 +72,33 @@ inline std::unique_ptr<document::Document> aDocument(DocumentOptions options = {
 }
 
 /**
- * A feature schema for tests: the given params, validate = validateAgainstSchema, an optional
- * migrate (then any version). Stands in for the plugins, which tests of document and ops do not
- * depend on.
+ * A feature schema for tests: the given params, validate = validateAgainstSchema + the given
+ * rules (checkParamRules), an optional migrate (then any version). Stands in for the plugins,
+ * which tests of document and ops do not depend on.
  */
 class TestSchema final : public document::FeatureSchema {
  public:
   using Migrate = std::function<core::Result<core::Json, std::string>(int, const core::Json&)>;
 
   TestSchema(std::string type, int version, document::ParamSchema params = {},
-             Migrate migrate = nullptr)
+             Migrate migrate = nullptr, document::ParamRules rules = {})
       : type_(std::move(type)),
         version_(version),
         params_(std::move(params)),
-        migrate_(std::move(migrate)) {}
+        migrate_(std::move(migrate)),
+        rules_(std::move(rules)) {}
 
   [[nodiscard]] const std::string& type() const override { return type_; }
   [[nodiscard]] int version() const override { return version_; }
   [[nodiscard]] const std::string& label() const override { return type_; }
   [[nodiscard]] const std::string& icon() const override { return icon_; }
   [[nodiscard]] const document::ParamSchema& params() const override { return params_; }
+  [[nodiscard]] const document::ParamRules& rules() const override { return rules_; }
   [[nodiscard]] core::Json defaults() const override { return core::Json::object(); }
   [[nodiscard]] std::vector<document::ParamIssue> validate(const core::Json& raw) const override {
-    return document::validateAgainstSchema(params_, raw);
+    auto issues = document::validateAgainstSchema(params_, raw);
+    document::checkParamRules(params_, rules_, raw, issues);
+    return issues;
   }
   [[nodiscard]] bool hasMigrate() const override { return static_cast<bool>(migrate_); }
   [[nodiscard]] core::Result<core::Json, std::string> migrate(int fromVersion,
@@ -108,6 +112,7 @@ class TestSchema final : public document::FeatureSchema {
   std::string icon_;
   document::ParamSchema params_;
   Migrate migrate_;
+  document::ParamRules rules_;
 };
 
 /** The ids of the features in order. */

@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 49
 aliases:
   - M49
@@ -15,8 +15,8 @@ specs:
   - "[[13-testovani]]"
 depends_on:
   - "[[M47-uklid-a-dokonceni]]"
-started:
-finished:
+started: 2026-10-17
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-17
@@ -45,11 +45,11 @@ Prošla se všechna `server/src/features/*/schema.cpp`. Nad rámec `validateAgai
 
 ## Úkoly
 
-- [ ] 1. C++: `checkParamRules` (druh `DisjointRefs`), pravidla v `BuiltInSchema`, boolean bez vlastního `validate`, kontrola pravidel v registru.
-- [ ] 2. Kontrakt: `schema.proto` (`FeatureTypeDescriptor.rules`, zprávy `ParamRule` a `DisjointRefs`, jen přidaná pole), převod `describeRule`, zlatý soubor `test/golden/feature-types.json`.
-- [ ] 3. Klient: `document/rules.ts` (stejné vyhodnocení), `remote/feature-types.ts` (`validate` = obecná kontrola + pravidla), dialog ukáže kód u pole.
-- [ ] 4. Sdílené případy: běžec TS `schema.validate` a `schema.visibleWhen` nad zlatým souborem; kódy jen serverových pravidel se z očekávání odfiltrují; metatest pokrytí pravidel.
-- [ ] 5. Spec 03, 13 a 14 a deník (hlavní sezení).
+- [x] 1. C++: `checkParamRules` (druh `DisjointRefs`), pravidla v `BuiltInSchema`, boolean bez vlastního `validate`, kontrola pravidel v registru.
+- [x] 2. Kontrakt: `schema.proto` (`FeatureTypeDescriptor.rules`, zprávy `ParamRule` a `DisjointRefs`, jen přidaná pole), převod `describeRule`, zlatý soubor `test/golden/feature-types.json`.
+- [x] 3. Klient: `document/rules.ts` (stejné vyhodnocení), `remote/feature-types.ts` (`validate` = obecná kontrola + pravidla), dialog ukáže kód u pole.
+- [x] 4. Sdílené případy: běžec TS `schema.validate` a `schema.visibleWhen` nad zlatým souborem; kódy jen serverových pravidel se z očekávání odfiltrují; metatest pokrytí pravidel.
+- [x] 5. Spec 03, 13 a 14 a deník (hlavní sezení).
 
 ## Akceptační kritéria
 
@@ -184,4 +184,9 @@ export function checkParamRules(
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+_Návrh Clauda (stopa C)._
+
+- Jediné deklarativně popsatelné vlastní pravidlo byl `boolean.sameBody` → druh `DisjointRefs`; `BooleanSchema` přišel o vlastní `validate`, kontrola skici zůstala jen na serveru.
+- `FeatureTypeDescriptor.rules` (jen přidané pole), klient vyhodnocuje pravidla stejnými kódy (`src/document/rules.ts`); TS znovu spouští všech 103 případů `schema` (N150) s vyřazením kódů jen pro server.
+- Klíč reference v TS nově obsahuje druh (shoda s C++).
+- `check` (5813 unit, 332 integračních), `check:server` 1747, `test:e2e` 103 zelené.
