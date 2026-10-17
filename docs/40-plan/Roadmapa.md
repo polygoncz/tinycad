@@ -179,7 +179,7 @@ Pravidla série:
 - Každá stopa ověřuje svou část proti sdíleným případům z [[M38-zmrazeni-domeny|M38]]: A `ops.*`, `document.load`, `schema.*`; B `geometry.*` (už M39), `regen`; C `sketch.solve`, `sketch.derived`.
 - M45 začne po sloučení všech tří stop. [[M46-klient-nad-read-modelem|M46]] se nedělí (Pavel 2026-10-17), jde po M45.
 
-**Pravidlo zmrazení (od startu M38):** `document`, `ops`, `regen`, `kernel`, `kernel-occt`, `persistence` a `features/*` v `src/` se mění jen kvůli chybám. Nová funkce domény počká na server. Kód se ze `src/` odstraní až v [[M47-uklid-a-dokonceni|M47]].
+**Pravidlo zmrazení (od startu M38) skončilo s M47** (2026-10-17): doména je v C++ (`server/src/`), z `src/` zmizely `kernel-occt`, `regen`, `persistence` a buildery featur; v klientovi zůstává zrcadlo (`document`, handlery `ops`) a model skici. Série běžela jako samostatný běh bez průběžného schvalování, rozhodnutí v [[Rozhodnutí nativního jádra]].
 
 **Otázky série:** všechny rozhodnuté (2026-10-17), naposledy [[Q103 Skica, kterou server nevyřeší|Q103]] a [[Q106 Moduly klienta pro gRPC|Q106]].
 

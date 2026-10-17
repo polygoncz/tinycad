@@ -19,8 +19,19 @@ Značka **⚠ k revizi** = rozhodnutí, u kterého si nejsem jistý nebo které 
 
 ## Shrnutí pro revizi
 
+**Výsledek (2026-10-17):** série M38–M47 hotová v `main`. Aplikace běží jen proti C++ jádru za gRPC; e2e proti Docker Compose zelené v Chrome i WebKitu; bundle prohlížeče 10,1 → 2,8 MB gzip, WASM OCCT z prohlížeče pryč. Nejdůležitější ⚠ na projití:
+
+- **N63/N76** – handlery operací a model dokumentu zůstávají v klientovi (optimistické zrcadlo), zužuje [[0030-nativni-jadro-pres-grpc|ADR 0030]] bod 9.
+- **N110** – struktura knihoven serveru (zdvojený 2D základ N77, vrstva runtime, read model rovnou do protobufu) na společnou revizi.
+- **N124** – referencí sdílených případů je C++; nové případy regenerace a geometrie se píšou ručně (C++ nemá režim záznamu).
+- **N120, N126** – planegcs WASM v prohlížeči zůstává; tlačítko přenosu z IndexedDB zmizelo s `persistence` (dokumenty z IndexedDB jde přenést jen z checkoutu před M47 nebo exportem a `tinycad-import`).
+- **N134, N144** – chybí kanál dočasných hlášení v UI (ztráta transakce, `SKETCH_NOT_SOLVED` jen do konzole).
+- **N135, N85, N143, N142** – Abort transakce při reloadu z klienta, řešič nejde zaručit bit po bitu jako WASM, řazení jmen UTF-8 vs UTF-16, chybí měření výkonu regenerace.
+- **N3/N68, N49** – server je jediná cesta aplikace; `check:server` mimo `npm run check` (`check:full`).
+
+
 - **Revize architektury serveru po M44:** návrh struktury knihoven a odložené body jsou v N110.
-- **Pavel 2026-10-17: návrh a architekturu serveru projdeme spolu po sérii** (třídy, hranice knihoven v `server/src/`, porty). Do té doby platí OOP a KISS (N12) a strukturální rozhodnutí jsou v seznamu níže.
+- **Pavel 2026-10-17: návrh a architekturu serveru projdeme spolu po sérii** (třídy, hranice knihoven v `server/src/`, porty). Do té doby platí OOP a KISS (N9) a strukturální rozhodnutí jsou v seznamu níže.
 
 - **Plány M41, M43, M44.1 (2026-10-17), k revizi:** N35 (STORAGE → znovunačtení místo inverze), N37 (gRPC `DocumentService` do M45), N38 (migrace z IndexedDB jen existujícím exportem a `tinycad-import`), N47 (řešení skici před dispečerem, ne v handleru).
 
