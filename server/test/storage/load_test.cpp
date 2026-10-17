@@ -516,6 +516,23 @@ TEST(LoadDocumentErrors, AnExceptionWhileReplayingIsABugAndPropagates) {
                core::AssertionError);
 }
 
+TEST(LoadDocumentErrors, ADeeplyNestedEntryIsAnEntryErrorNotAStackOverflow) {
+  auto s = aStoredSession(2);
+  // Built by moves: copying a value this deep would recurse (N113).
+  Json op = testing::renameOp("a", "deep");
+  for (int i = 0; i < 100'000; ++i) {
+    Json outer = testing::batchOp(Json::array());
+    outer["ops"].push_back(std::move(op));
+    op = std::move(outer);
+  }
+  s.stored.entries[1].entry["op"] = std::move(op);
+  const LoadError error = loadError(s.stored);
+  EXPECT_EQ(error.kind, LoadError::Kind::Entry);
+  EXPECT_EQ(error.seq, 2);
+  ASSERT_EQ(error.issues.size(), 1U);
+  EXPECT_TRUE(error.issues[0].path.starts_with("op.ops[0]"));
+}
+
 TEST(LoadDocumentErrors, AnUndoEntryOffTheTopOfTheStackIsAnEntryErrorAtTarget) {
   auto s = aStoredSession(2);
   ASSERT_TRUE(s.session->undo.undo().has_value());
