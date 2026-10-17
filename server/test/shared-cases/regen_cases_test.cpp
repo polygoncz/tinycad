@@ -88,8 +88,9 @@ INSTANTIATE_TEST_SUITE_P(Regen, RegenSharedCase, ::testing::ValuesIn(caseNames("
                            return name;
                          });
 
-// All 39 cases in one run, the 15 with a sketch of M44.1 too (N46): nothing is skipped.
-TEST(RegenSharedCases, AreAllThirtyNineFound) { EXPECT_EQ(caseNames("regen").size(), 39U); }
+// All 48 cases in one run (39 of M43, the 15 with a sketch of M44.1 among them, N46; 9 converted
+// from the integration scenarios in M47, N127): nothing is skipped.
+TEST(RegenSharedCases, AreAllFortyEightFound) { EXPECT_EQ(caseNames("regen").size(), 48U); }
 
 }  // namespace
 }  // namespace tinycad::testing

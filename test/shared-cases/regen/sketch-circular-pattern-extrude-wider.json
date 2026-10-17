@@ -1,0 +1,719 @@
+{
+  "kind": "regen",
+  "description": "The circular pattern of the hole widened to 3π/2: the copies move (the last one to [0, -15]) and keep the names of their side faces",
+  "source": "test/integration/sketch-pattern-regions.test.ts › a circular pattern of holes in a sketch, extruded (M36, OCCT) › names the side faces of the copied holes by their derived ids and keeps them when the angle changes",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "sketch-circular-pattern-extrude-wider",
+        "name": "sketch-circular-pattern-extrude-wider",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "f1",
+            "type": "sketch",
+            "typeVersion": 1,
+            "name": "sketch.label 1",
+            "params": {
+              "plane": [
+                {
+                  "kind": "plane",
+                  "plane": "origin/plane:xy"
+                }
+              ],
+              "entities": [
+                {
+                  "kind": "point",
+                  "id": "a",
+                  "x": -30,
+                  "y": -30
+                },
+                {
+                  "kind": "point",
+                  "id": "b",
+                  "x": 30,
+                  "y": -30
+                },
+                {
+                  "kind": "point",
+                  "id": "c",
+                  "x": 30,
+                  "y": 30
+                },
+                {
+                  "kind": "point",
+                  "id": "d",
+                  "x": -30,
+                  "y": 30
+                },
+                {
+                  "kind": "point",
+                  "id": "o",
+                  "x": 0,
+                  "y": 0
+                },
+                {
+                  "kind": "point",
+                  "id": "h",
+                  "x": 15,
+                  "y": 0
+                },
+                {
+                  "kind": "line",
+                  "id": "ab",
+                  "p1": "a",
+                  "p2": "b"
+                },
+                {
+                  "kind": "line",
+                  "id": "bc",
+                  "p1": "b",
+                  "p2": "c"
+                },
+                {
+                  "kind": "line",
+                  "id": "cd",
+                  "p1": "c",
+                  "p2": "d"
+                },
+                {
+                  "kind": "line",
+                  "id": "da",
+                  "p1": "d",
+                  "p2": "a"
+                },
+                {
+                  "kind": "circle",
+                  "id": "k",
+                  "center": "h",
+                  "radius": 3
+                },
+                {
+                  "kind": "circularPattern",
+                  "id": "cp",
+                  "sources": [
+                    "k"
+                  ],
+                  "center": "o",
+                  "count": 4,
+                  "angle": 4.71238898038469
+                }
+              ],
+              "constraints": []
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f2",
+            "type": "extrude",
+            "typeVersion": 1,
+            "name": "extrude.label 1",
+            "params": {
+              "regions": [
+                {
+                  "kind": "region",
+                  "sketch": "f1",
+                  "region": "ab,bc,cd,cp:1.k,cp:2.k,cp:3.k,da,k"
+                }
+              ],
+              "operation": "new",
+              "targets": [],
+              "endType": "blind",
+              "distance": 5,
+              "upTo": [],
+              "flip": false
+            },
+            "suppressed": false
+          }
+        ],
+        "rollbackIndex": 2
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "statuses": {
+        "f1": {
+          "kind": "ok"
+        },
+        "f2": {
+          "kind": "ok"
+        }
+      },
+      "bodies": [
+        {
+          "id": "f2/body",
+          "origin": "f2",
+          "lastModifiedBy": "f2",
+          "volume": 17434.57191334957,
+          "bbox": {
+            "min": [
+              -30,
+              -30,
+              0
+            ],
+            "max": [
+              30,
+              30,
+              5
+            ]
+          },
+          "faces": [
+            {
+              "names": [
+                "f2/face:end"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  1
+                ],
+                "offset": 5
+              }
+            },
+            {
+              "names": [
+                "f2/face:side:ab"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  -1,
+                  0
+                ],
+                "offset": 30
+              }
+            },
+            {
+              "names": [
+                "f2/face:side:bc"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  1,
+                  0,
+                  0
+                ],
+                "offset": 30
+              }
+            },
+            {
+              "names": [
+                "f2/face:side:cd"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  1,
+                  0
+                ],
+                "offset": 30
+              }
+            },
+            {
+              "names": [
+                "f2/face:side:cp:1.k"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f2/face:side:cp:2.k"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f2/face:side:cp:3.k"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f2/face:side:da"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  -1,
+                  0,
+                  0
+                ],
+                "offset": 30
+              }
+            },
+            {
+              "names": [
+                "f2/face:side:k"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f2/face:start"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  -1
+                ],
+                "offset": 0
+              }
+            }
+          ],
+          "edges": [
+            {
+              "names": [
+                "edge:f2/face:end|f2/face:side:ab"
+              ],
+              "midpoint": [
+                0,
+                -30,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:end|f2/face:side:bc"
+              ],
+              "midpoint": [
+                30,
+                0,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:end|f2/face:side:cd"
+              ],
+              "midpoint": [
+                0,
+                30,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:end|f2/face:side:cp:1.k"
+              ],
+              "midpoint": [
+                -2.999999999999999,
+                15,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:end|f2/face:side:cp:2.k"
+              ],
+              "midpoint": [
+                -18,
+                2.204364238465236e-15,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:end|f2/face:side:cp:3.k"
+              ],
+              "midpoint": [
+                -3.0000000000000027,
+                -15,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:end|f2/face:side:da"
+              ],
+              "midpoint": [
+                -30,
+                0,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:end|f2/face:side:k"
+              ],
+              "midpoint": [
+                12,
+                3.6739403974420594e-16,
+                5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:ab|f2/face:side:bc"
+              ],
+              "midpoint": [
+                30,
+                -30,
+                2.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:ab|f2/face:side:da"
+              ],
+              "midpoint": [
+                -30,
+                -30,
+                2.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:ab|f2/face:start"
+              ],
+              "midpoint": [
+                0,
+                -30,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:bc|f2/face:side:cd"
+              ],
+              "midpoint": [
+                30,
+                30,
+                2.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:bc|f2/face:start"
+              ],
+              "midpoint": [
+                30,
+                0,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:cd|f2/face:side:da"
+              ],
+              "midpoint": [
+                -30,
+                30,
+                2.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:cd|f2/face:start"
+              ],
+              "midpoint": [
+                0,
+                30,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:cp:1.k|f2/face:side:cp:1.k"
+              ],
+              "midpoint": [
+                3.000000000000001,
+                15,
+                2.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:cp:1.k|f2/face:start"
+              ],
+              "midpoint": [
+                -2.999999999999999,
+                15,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:cp:2.k|f2/face:side:cp:2.k"
+              ],
+              "midpoint": [
+                -12,
+                1.83697019872103e-15,
+                2.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:cp:2.k|f2/face:start"
+              ],
+              "midpoint": [
+                -18,
+                2.204364238465236e-15,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:cp:3.k|f2/face:side:cp:3.k"
+              ],
+              "midpoint": [
+                2.9999999999999973,
+                -15,
+                2.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:cp:3.k|f2/face:start"
+              ],
+              "midpoint": [
+                -3.0000000000000027,
+                -15,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:da|f2/face:start"
+              ],
+              "midpoint": [
+                -30,
+                0,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:k|f2/face:side:k"
+              ],
+              "midpoint": [
+                18,
+                0,
+                2.5
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side:k|f2/face:start"
+              ],
+              "midpoint": [
+                12,
+                3.6739403974420594e-16,
+                0
+              ]
+            }
+          ],
+          "vertexCount": 16
+        }
+      ],
+      "sketches": [
+        {
+          "id": "f1/sketch",
+          "owner": "f1",
+          "regions": [
+            "ab,bc,cd,cp:1.k,cp:2.k,cp:3.k,da,k",
+            "cp:1.k",
+            "cp:2.k",
+            "cp:3.k",
+            "k"
+          ],
+          "outlines": [
+            {
+              "name": "ab,bc,cd,cp:1.k,cp:2.k,cp:3.k,da,k",
+              "outer": [
+                {
+                  "kind": "line",
+                  "from": [
+                    -30,
+                    -30
+                  ],
+                  "to": [
+                    30,
+                    -30
+                  ],
+                  "id": "ab"
+                },
+                {
+                  "kind": "line",
+                  "from": [
+                    30,
+                    -30
+                  ],
+                  "to": [
+                    30,
+                    30
+                  ],
+                  "id": "bc"
+                },
+                {
+                  "kind": "line",
+                  "from": [
+                    30,
+                    30
+                  ],
+                  "to": [
+                    -30,
+                    30
+                  ],
+                  "id": "cd"
+                },
+                {
+                  "kind": "line",
+                  "from": [
+                    -30,
+                    30
+                  ],
+                  "to": [
+                    -30,
+                    -30
+                  ],
+                  "id": "da"
+                }
+              ],
+              "holes": [
+                [
+                  {
+                    "kind": "circle",
+                    "center": [
+                      9.18485099360515e-16,
+                      15
+                    ],
+                    "radius": 3,
+                    "id": "cp:1.k"
+                  }
+                ],
+                [
+                  {
+                    "kind": "circle",
+                    "center": [
+                      -15,
+                      1.83697019872103e-15
+                    ],
+                    "radius": 3,
+                    "id": "cp:2.k"
+                  }
+                ],
+                [
+                  {
+                    "kind": "circle",
+                    "center": [
+                      -2.7554552980815444e-15,
+                      -15
+                    ],
+                    "radius": 3,
+                    "id": "cp:3.k"
+                  }
+                ],
+                [
+                  {
+                    "kind": "circle",
+                    "center": [
+                      15,
+                      0
+                    ],
+                    "radius": 3,
+                    "id": "k"
+                  }
+                ]
+              ],
+              "area": 3486.9026644707683
+            },
+            {
+              "name": "cp:1.k",
+              "outer": [
+                {
+                  "kind": "circle",
+                  "center": [
+                    9.18485099360515e-16,
+                    15
+                  ],
+                  "radius": 3,
+                  "id": "cp:1.k"
+                }
+              ],
+              "holes": [],
+              "area": 28.274333882308138
+            },
+            {
+              "name": "cp:2.k",
+              "outer": [
+                {
+                  "kind": "circle",
+                  "center": [
+                    -15,
+                    1.83697019872103e-15
+                  ],
+                  "radius": 3,
+                  "id": "cp:2.k"
+                }
+              ],
+              "holes": [],
+              "area": 28.274333882308138
+            },
+            {
+              "name": "cp:3.k",
+              "outer": [
+                {
+                  "kind": "circle",
+                  "center": [
+                    -2.7554552980815444e-15,
+                    -15
+                  ],
+                  "radius": 3,
+                  "id": "cp:3.k"
+                }
+              ],
+              "holes": [],
+              "area": 28.274333882308138
+            },
+            {
+              "name": "k",
+              "outer": [
+                {
+                  "kind": "circle",
+                  "center": [
+                    15,
+                    0
+                  ],
+                  "radius": 3,
+                  "id": "k"
+                }
+              ],
+              "holes": [],
+              "area": 28.274333882308138
+            }
+          ]
+        }
+      ],
+      "anchors": {
+        "f1": {},
+        "f2": {
+          "base": {
+            "point": [
+              0,
+              0,
+              0
+            ],
+            "direction": [
+              0,
+              0,
+              1
+            ]
+          }
+        }
+      }
+    }
+  },
+  "tolerance": {
+    "relative": 0.001
+  }
+}

@@ -1,0 +1,2680 @@
+{
+  "kind": "regen",
+  "description": "A 200 × 200 plate minus 36 cylinders in one boolean, its 4 vertical edges filleted: one body with 46 faces",
+  "source": "test/integration/perf.test.ts › performance of regeneration and tessellation (OCCT, plate with 36 holes) › regenerates, tessellates and rebuilds from the cache",
+  "input": {
+    "document": {
+      "meta": {
+        "id": "boolean-plate-36-holes-fillet",
+        "name": "boolean-plate-36-holes-fillet",
+        "createdAt": 0
+      },
+      "studio": {
+        "features": [
+          {
+            "id": "f1",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "box.label 1",
+            "params": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "width": 200,
+              "depth": 200,
+              "height": 20
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f2",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 1",
+            "params": {
+              "base": [
+                25,
+                25,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f3",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 2",
+            "params": {
+              "base": [
+                25,
+                55,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f4",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 3",
+            "params": {
+              "base": [
+                25,
+                85,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f5",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 4",
+            "params": {
+              "base": [
+                25,
+                115,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f6",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 5",
+            "params": {
+              "base": [
+                25,
+                145,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f7",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 6",
+            "params": {
+              "base": [
+                25,
+                175,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f8",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 7",
+            "params": {
+              "base": [
+                55,
+                25,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f9",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 8",
+            "params": {
+              "base": [
+                55,
+                55,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f10",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 9",
+            "params": {
+              "base": [
+                55,
+                85,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f11",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 10",
+            "params": {
+              "base": [
+                55,
+                115,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f12",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 11",
+            "params": {
+              "base": [
+                55,
+                145,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f13",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 12",
+            "params": {
+              "base": [
+                55,
+                175,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f14",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 13",
+            "params": {
+              "base": [
+                85,
+                25,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f15",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 14",
+            "params": {
+              "base": [
+                85,
+                55,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f16",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 15",
+            "params": {
+              "base": [
+                85,
+                85,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f17",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 16",
+            "params": {
+              "base": [
+                85,
+                115,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f18",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 17",
+            "params": {
+              "base": [
+                85,
+                145,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f19",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 18",
+            "params": {
+              "base": [
+                85,
+                175,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f20",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 19",
+            "params": {
+              "base": [
+                115,
+                25,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f21",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 20",
+            "params": {
+              "base": [
+                115,
+                55,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f22",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 21",
+            "params": {
+              "base": [
+                115,
+                85,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f23",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 22",
+            "params": {
+              "base": [
+                115,
+                115,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f24",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 23",
+            "params": {
+              "base": [
+                115,
+                145,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f25",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 24",
+            "params": {
+              "base": [
+                115,
+                175,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f26",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 25",
+            "params": {
+              "base": [
+                145,
+                25,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f27",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 26",
+            "params": {
+              "base": [
+                145,
+                55,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f28",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 27",
+            "params": {
+              "base": [
+                145,
+                85,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f29",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 28",
+            "params": {
+              "base": [
+                145,
+                115,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f30",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 29",
+            "params": {
+              "base": [
+                145,
+                145,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f31",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 30",
+            "params": {
+              "base": [
+                145,
+                175,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f32",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 31",
+            "params": {
+              "base": [
+                175,
+                25,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f33",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 32",
+            "params": {
+              "base": [
+                175,
+                55,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f34",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 33",
+            "params": {
+              "base": [
+                175,
+                85,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f35",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 34",
+            "params": {
+              "base": [
+                175,
+                115,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f36",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 35",
+            "params": {
+              "base": [
+                175,
+                145,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f37",
+            "type": "cylinder",
+            "typeVersion": 1,
+            "name": "cylinder.label 36",
+            "params": {
+              "base": [
+                175,
+                175,
+                -5
+              ],
+              "axis": "z",
+              "radius": 4,
+              "height": 40
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f38",
+            "type": "boolean",
+            "typeVersion": 1,
+            "name": "boolean.label 1",
+            "params": {
+              "op": "subtract",
+              "targets": [
+                {
+                  "kind": "body",
+                  "body": "f1/body"
+                }
+              ],
+              "tools": [
+                {
+                  "kind": "body",
+                  "body": "f2/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f3/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f4/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f5/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f6/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f7/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f8/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f9/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f10/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f11/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f12/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f13/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f14/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f15/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f16/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f17/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f18/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f19/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f20/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f21/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f22/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f23/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f24/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f25/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f26/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f27/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f28/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f29/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f30/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f31/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f32/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f33/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f34/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f35/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f36/body"
+                },
+                {
+                  "kind": "body",
+                  "body": "f37/body"
+                }
+              ],
+              "keepTools": false
+            },
+            "suppressed": false
+          },
+          {
+            "id": "f39",
+            "type": "fillet",
+            "typeVersion": 1,
+            "name": "fillet.label 1",
+            "params": {
+              "edges": [
+                {
+                  "kind": "topo",
+                  "body": "f1/body",
+                  "name": "edge:f1/face:front|f1/face:left"
+                },
+                {
+                  "kind": "topo",
+                  "body": "f1/body",
+                  "name": "edge:f1/face:back|f1/face:left"
+                },
+                {
+                  "kind": "topo",
+                  "body": "f1/body",
+                  "name": "edge:f1/face:front|f1/face:right"
+                },
+                {
+                  "kind": "topo",
+                  "body": "f1/body",
+                  "name": "edge:f1/face:back|f1/face:right"
+                }
+              ],
+              "radius": 5
+            },
+            "suppressed": false
+          }
+        ],
+        "rollbackIndex": 39
+      }
+    }
+  },
+  "expected": {
+    "ok": {
+      "statuses": {
+        "f1": {
+          "kind": "ok"
+        },
+        "f2": {
+          "kind": "ok"
+        },
+        "f3": {
+          "kind": "ok"
+        },
+        "f4": {
+          "kind": "ok"
+        },
+        "f5": {
+          "kind": "ok"
+        },
+        "f6": {
+          "kind": "ok"
+        },
+        "f7": {
+          "kind": "ok"
+        },
+        "f8": {
+          "kind": "ok"
+        },
+        "f9": {
+          "kind": "ok"
+        },
+        "f10": {
+          "kind": "ok"
+        },
+        "f11": {
+          "kind": "ok"
+        },
+        "f12": {
+          "kind": "ok"
+        },
+        "f13": {
+          "kind": "ok"
+        },
+        "f14": {
+          "kind": "ok"
+        },
+        "f15": {
+          "kind": "ok"
+        },
+        "f16": {
+          "kind": "ok"
+        },
+        "f17": {
+          "kind": "ok"
+        },
+        "f18": {
+          "kind": "ok"
+        },
+        "f19": {
+          "kind": "ok"
+        },
+        "f20": {
+          "kind": "ok"
+        },
+        "f21": {
+          "kind": "ok"
+        },
+        "f22": {
+          "kind": "ok"
+        },
+        "f23": {
+          "kind": "ok"
+        },
+        "f24": {
+          "kind": "ok"
+        },
+        "f25": {
+          "kind": "ok"
+        },
+        "f26": {
+          "kind": "ok"
+        },
+        "f27": {
+          "kind": "ok"
+        },
+        "f28": {
+          "kind": "ok"
+        },
+        "f29": {
+          "kind": "ok"
+        },
+        "f30": {
+          "kind": "ok"
+        },
+        "f31": {
+          "kind": "ok"
+        },
+        "f32": {
+          "kind": "ok"
+        },
+        "f33": {
+          "kind": "ok"
+        },
+        "f34": {
+          "kind": "ok"
+        },
+        "f35": {
+          "kind": "ok"
+        },
+        "f36": {
+          "kind": "ok"
+        },
+        "f37": {
+          "kind": "ok"
+        },
+        "f38": {
+          "kind": "ok"
+        },
+        "f39": {
+          "kind": "ok"
+        }
+      },
+      "bodies": [
+        {
+          "id": "f1/body",
+          "origin": "f1",
+          "lastModifiedBy": "f39",
+          "volume": 763383.2304268423,
+          "bbox": {
+            "min": [
+              -8.881784197001252e-16,
+              -8.881784197001252e-16,
+              0
+            ],
+            "max": [
+              200,
+              200,
+              20
+            ]
+          },
+          "faces": [
+            {
+              "names": [
+                "f1/face:back"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  1,
+                  0
+                ],
+                "offset": 200
+              }
+            },
+            {
+              "names": [
+                "f1/face:bottom"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  -1
+                ],
+                "offset": 0
+              }
+            },
+            {
+              "names": [
+                "f1/face:front"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  -1,
+                  0
+                ],
+                "offset": 0
+              }
+            },
+            {
+              "names": [
+                "f1/face:left"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  -1,
+                  0,
+                  0
+                ],
+                "offset": 0
+              }
+            },
+            {
+              "names": [
+                "f1/face:right"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  1,
+                  0,
+                  0
+                ],
+                "offset": 200
+              }
+            },
+            {
+              "names": [
+                "f1/face:top"
+              ],
+              "surface": "plane",
+              "plane": {
+                "normal": [
+                  0,
+                  0,
+                  1
+                ],
+                "offset": 20
+              }
+            },
+            {
+              "names": [
+                "f10/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f11/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f12/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f13/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f14/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f15/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f16/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f17/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f18/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f19/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f2/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f20/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f21/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f22/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f23/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f24/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f25/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f26/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f27/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f28/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f29/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f3/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f30/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f31/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f32/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f33/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f34/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f35/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f36/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f37/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f39/face:fillet:edge:f1/face:back|f1/face:left"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f39/face:fillet:edge:f1/face:back|f1/face:right"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f39/face:fillet:edge:f1/face:front|f1/face:left"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f39/face:fillet:edge:f1/face:front|f1/face:right"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f4/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f5/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f6/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f7/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f8/face:side"
+              ],
+              "surface": "cylinder"
+            },
+            {
+              "names": [
+                "f9/face:side"
+              ],
+              "surface": "cylinder"
+            }
+          ],
+          "edges": [
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:bottom"
+              ],
+              "midpoint": [
+                100,
+                200,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f1/face:top"
+              ],
+              "midpoint": [
+                100,
+                200,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f39/face:fillet:edge:f1/face:back|f1/face:left"
+              ],
+              "midpoint": [
+                4.999999999999999,
+                200,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:back|f39/face:fillet:edge:f1/face:back|f1/face:right"
+              ],
+              "midpoint": [
+                195,
+                200,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:front"
+              ],
+              "midpoint": [
+                100,
+                0,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:left"
+              ],
+              "midpoint": [
+                0,
+                100,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f1/face:right"
+              ],
+              "midpoint": [
+                200,
+                100,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f10/face:side"
+              ],
+              "midpoint": [
+                51,
+                85,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f11/face:side"
+              ],
+              "midpoint": [
+                51,
+                115,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f12/face:side"
+              ],
+              "midpoint": [
+                51,
+                145,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f13/face:side"
+              ],
+              "midpoint": [
+                51,
+                175,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f14/face:side"
+              ],
+              "midpoint": [
+                81,
+                25,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f15/face:side"
+              ],
+              "midpoint": [
+                81,
+                55,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f16/face:side"
+              ],
+              "midpoint": [
+                81,
+                85,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f17/face:side"
+              ],
+              "midpoint": [
+                81,
+                115,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f18/face:side"
+              ],
+              "midpoint": [
+                81,
+                145,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f19/face:side"
+              ],
+              "midpoint": [
+                81,
+                175,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f2/face:side"
+              ],
+              "midpoint": [
+                21,
+                25,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f20/face:side"
+              ],
+              "midpoint": [
+                111,
+                25,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f21/face:side"
+              ],
+              "midpoint": [
+                111,
+                55,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f22/face:side"
+              ],
+              "midpoint": [
+                111,
+                85,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f23/face:side"
+              ],
+              "midpoint": [
+                111,
+                115,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f24/face:side"
+              ],
+              "midpoint": [
+                111,
+                145,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f25/face:side"
+              ],
+              "midpoint": [
+                111,
+                175,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f26/face:side"
+              ],
+              "midpoint": [
+                141,
+                25,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f27/face:side"
+              ],
+              "midpoint": [
+                141,
+                55,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f28/face:side"
+              ],
+              "midpoint": [
+                141,
+                85,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f29/face:side"
+              ],
+              "midpoint": [
+                141,
+                115,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f3/face:side"
+              ],
+              "midpoint": [
+                21,
+                55,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f30/face:side"
+              ],
+              "midpoint": [
+                141,
+                145,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f31/face:side"
+              ],
+              "midpoint": [
+                141,
+                175,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f32/face:side"
+              ],
+              "midpoint": [
+                171,
+                25,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f33/face:side"
+              ],
+              "midpoint": [
+                171,
+                55,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f34/face:side"
+              ],
+              "midpoint": [
+                171,
+                85,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f35/face:side"
+              ],
+              "midpoint": [
+                171,
+                115,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f36/face:side"
+              ],
+              "midpoint": [
+                171,
+                145,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f37/face:side"
+              ],
+              "midpoint": [
+                171,
+                175,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f39/face:fillet:edge:f1/face:back|f1/face:left"
+              ],
+              "midpoint": [
+                1.4644660940672614,
+                198.53553390593274,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f39/face:fillet:edge:f1/face:back|f1/face:right"
+              ],
+              "midpoint": [
+                198.53553390593274,
+                198.53553390593274,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f39/face:fillet:edge:f1/face:front|f1/face:left"
+              ],
+              "midpoint": [
+                1.4644660940672605,
+                1.4644660940672622,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f39/face:fillet:edge:f1/face:front|f1/face:right"
+              ],
+              "midpoint": [
+                198.53553390593274,
+                1.4644660940672614,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f4/face:side"
+              ],
+              "midpoint": [
+                21,
+                85,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f5/face:side"
+              ],
+              "midpoint": [
+                21,
+                115,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f6/face:side"
+              ],
+              "midpoint": [
+                21,
+                145,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f7/face:side"
+              ],
+              "midpoint": [
+                21,
+                175,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f8/face:side"
+              ],
+              "midpoint": [
+                51,
+                25,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:bottom|f9/face:side"
+              ],
+              "midpoint": [
+                51,
+                55,
+                0
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f1/face:top"
+              ],
+              "midpoint": [
+                100,
+                0,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f39/face:fillet:edge:f1/face:front|f1/face:left"
+              ],
+              "midpoint": [
+                4.999999999999999,
+                -8.881784197001252e-16,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:front|f39/face:fillet:edge:f1/face:front|f1/face:right"
+              ],
+              "midpoint": [
+                195,
+                -8.881784197001252e-16,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:left|f1/face:top"
+              ],
+              "midpoint": [
+                0,
+                100,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:left|f39/face:fillet:edge:f1/face:back|f1/face:left"
+              ],
+              "midpoint": [
+                -8.881784197001252e-16,
+                195,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:left|f39/face:fillet:edge:f1/face:front|f1/face:left"
+              ],
+              "midpoint": [
+                -8.881784197001252e-16,
+                4.999999999999999,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:right|f1/face:top"
+              ],
+              "midpoint": [
+                200,
+                100,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:right|f39/face:fillet:edge:f1/face:back|f1/face:right"
+              ],
+              "midpoint": [
+                200,
+                195,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:right|f39/face:fillet:edge:f1/face:front|f1/face:right"
+              ],
+              "midpoint": [
+                200,
+                4.999999999999999,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f10/face:side"
+              ],
+              "midpoint": [
+                51,
+                85,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f11/face:side"
+              ],
+              "midpoint": [
+                51,
+                115,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f12/face:side"
+              ],
+              "midpoint": [
+                51,
+                145,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f13/face:side"
+              ],
+              "midpoint": [
+                51,
+                175,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f14/face:side"
+              ],
+              "midpoint": [
+                81,
+                25,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f15/face:side"
+              ],
+              "midpoint": [
+                81,
+                55,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f16/face:side"
+              ],
+              "midpoint": [
+                81,
+                85,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f17/face:side"
+              ],
+              "midpoint": [
+                81,
+                115,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f18/face:side"
+              ],
+              "midpoint": [
+                81,
+                145,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f19/face:side"
+              ],
+              "midpoint": [
+                81,
+                175,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f2/face:side"
+              ],
+              "midpoint": [
+                21,
+                25,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f20/face:side"
+              ],
+              "midpoint": [
+                111,
+                25,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f21/face:side"
+              ],
+              "midpoint": [
+                111,
+                55,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f22/face:side"
+              ],
+              "midpoint": [
+                111,
+                85,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f23/face:side"
+              ],
+              "midpoint": [
+                111,
+                115,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f24/face:side"
+              ],
+              "midpoint": [
+                111,
+                145,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f25/face:side"
+              ],
+              "midpoint": [
+                111,
+                175,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f26/face:side"
+              ],
+              "midpoint": [
+                141,
+                25,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f27/face:side"
+              ],
+              "midpoint": [
+                141,
+                55,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f28/face:side"
+              ],
+              "midpoint": [
+                141,
+                85,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f29/face:side"
+              ],
+              "midpoint": [
+                141,
+                115,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f3/face:side"
+              ],
+              "midpoint": [
+                21,
+                55,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f30/face:side"
+              ],
+              "midpoint": [
+                141,
+                145,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f31/face:side"
+              ],
+              "midpoint": [
+                141,
+                175,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f32/face:side"
+              ],
+              "midpoint": [
+                171,
+                25,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f33/face:side"
+              ],
+              "midpoint": [
+                171,
+                55,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f34/face:side"
+              ],
+              "midpoint": [
+                171,
+                85,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f35/face:side"
+              ],
+              "midpoint": [
+                171,
+                115,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f36/face:side"
+              ],
+              "midpoint": [
+                171,
+                145,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f37/face:side"
+              ],
+              "midpoint": [
+                171,
+                175,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f39/face:fillet:edge:f1/face:back|f1/face:left"
+              ],
+              "midpoint": [
+                1.4644660940672614,
+                198.53553390593274,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f39/face:fillet:edge:f1/face:back|f1/face:right"
+              ],
+              "midpoint": [
+                198.53553390593274,
+                198.53553390593274,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f39/face:fillet:edge:f1/face:front|f1/face:left"
+              ],
+              "midpoint": [
+                1.4644660940672605,
+                1.4644660940672622,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f39/face:fillet:edge:f1/face:front|f1/face:right"
+              ],
+              "midpoint": [
+                198.53553390593274,
+                1.4644660940672614,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f4/face:side"
+              ],
+              "midpoint": [
+                21,
+                85,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f5/face:side"
+              ],
+              "midpoint": [
+                21,
+                115,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f6/face:side"
+              ],
+              "midpoint": [
+                21,
+                145,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f7/face:side"
+              ],
+              "midpoint": [
+                21,
+                175,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f8/face:side"
+              ],
+              "midpoint": [
+                51,
+                25,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f1/face:top|f9/face:side"
+              ],
+              "midpoint": [
+                51,
+                55,
+                20
+              ]
+            },
+            {
+              "names": [
+                "edge:f10/face:side|f10/face:side"
+              ],
+              "midpoint": [
+                59,
+                85,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f11/face:side|f11/face:side"
+              ],
+              "midpoint": [
+                59,
+                115,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f12/face:side|f12/face:side"
+              ],
+              "midpoint": [
+                59,
+                144.99999999999997,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f13/face:side|f13/face:side"
+              ],
+              "midpoint": [
+                59,
+                174.99999999999997,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f14/face:side|f14/face:side"
+              ],
+              "midpoint": [
+                89,
+                25,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f15/face:side|f15/face:side"
+              ],
+              "midpoint": [
+                89,
+                55,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f16/face:side|f16/face:side"
+              ],
+              "midpoint": [
+                89,
+                84.99999999999999,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f17/face:side|f17/face:side"
+              ],
+              "midpoint": [
+                89,
+                114.99999999999999,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f18/face:side|f18/face:side"
+              ],
+              "midpoint": [
+                89,
+                145,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f19/face:side|f19/face:side"
+              ],
+              "midpoint": [
+                89,
+                175,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f2/face:side|f2/face:side"
+              ],
+              "midpoint": [
+                29,
+                25,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f20/face:side|f20/face:side"
+              ],
+              "midpoint": [
+                119,
+                25,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f21/face:side|f21/face:side"
+              ],
+              "midpoint": [
+                119,
+                55,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f22/face:side|f22/face:side"
+              ],
+              "midpoint": [
+                119,
+                85,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f23/face:side|f23/face:side"
+              ],
+              "midpoint": [
+                119,
+                115,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f24/face:side|f24/face:side"
+              ],
+              "midpoint": [
+                119,
+                145,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f25/face:side|f25/face:side"
+              ],
+              "midpoint": [
+                119,
+                175,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f26/face:side|f26/face:side"
+              ],
+              "midpoint": [
+                149,
+                25,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f27/face:side|f27/face:side"
+              ],
+              "midpoint": [
+                149,
+                55,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f28/face:side|f28/face:side"
+              ],
+              "midpoint": [
+                149,
+                84.99999999999999,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f29/face:side|f29/face:side"
+              ],
+              "midpoint": [
+                149,
+                114.99999999999999,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f3/face:side|f3/face:side"
+              ],
+              "midpoint": [
+                29,
+                55,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f30/face:side|f30/face:side"
+              ],
+              "midpoint": [
+                149,
+                145,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f31/face:side|f31/face:side"
+              ],
+              "midpoint": [
+                149,
+                175,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f32/face:side|f32/face:side"
+              ],
+              "midpoint": [
+                179,
+                25,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f33/face:side|f33/face:side"
+              ],
+              "midpoint": [
+                179,
+                55,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f34/face:side|f34/face:side"
+              ],
+              "midpoint": [
+                179,
+                85,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f35/face:side|f35/face:side"
+              ],
+              "midpoint": [
+                179,
+                115,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f36/face:side|f36/face:side"
+              ],
+              "midpoint": [
+                179,
+                145,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f37/face:side|f37/face:side"
+              ],
+              "midpoint": [
+                179,
+                175,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f4/face:side|f4/face:side"
+              ],
+              "midpoint": [
+                29,
+                85,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f5/face:side|f5/face:side"
+              ],
+              "midpoint": [
+                29,
+                115,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f6/face:side|f6/face:side"
+              ],
+              "midpoint": [
+                29,
+                145,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f7/face:side|f7/face:side"
+              ],
+              "midpoint": [
+                29,
+                175,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f8/face:side|f8/face:side"
+              ],
+              "midpoint": [
+                59,
+                25,
+                10
+              ]
+            },
+            {
+              "names": [
+                "edge:f9/face:side|f9/face:side"
+              ],
+              "midpoint": [
+                59,
+                55,
+                10
+              ]
+            }
+          ],
+          "vertexCount": 88
+        }
+      ],
+      "sketches": [],
+      "anchors": {
+        "f1": {},
+        "f2": {},
+        "f3": {},
+        "f4": {},
+        "f5": {},
+        "f6": {},
+        "f7": {},
+        "f8": {},
+        "f9": {},
+        "f10": {},
+        "f11": {},
+        "f12": {},
+        "f13": {},
+        "f14": {},
+        "f15": {},
+        "f16": {},
+        "f17": {},
+        "f18": {},
+        "f19": {},
+        "f20": {},
+        "f21": {},
+        "f22": {},
+        "f23": {},
+        "f24": {},
+        "f25": {},
+        "f26": {},
+        "f27": {},
+        "f28": {},
+        "f29": {},
+        "f30": {},
+        "f31": {},
+        "f32": {},
+        "f33": {},
+        "f34": {},
+        "f35": {},
+        "f36": {},
+        "f37": {},
+        "f38": {},
+        "f39": {}
+      }
+    }
+  },
+  "tolerance": {
+    "relative": 0.001
+  }
+}
