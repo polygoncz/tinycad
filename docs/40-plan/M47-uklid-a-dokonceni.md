@@ -43,6 +43,8 @@ updated: 2026-10-17
 - [ ] Přepsat specifikace 01, 05, 06, 07, 09, 10, 11, 12 na serverovou verzi.
 - [ ] Retrospektiva série a poznatek do `70-poznatky/` (vykuchání jádra do služby: co bylo těžké).
 
+> **Dopad plánu M46 (2026-10-17, [[Rozhodnutí nativního jádra|N63, N67, N68, N71, N73]]):** z `ops` zůstanou typy operací, `OP_VERSION`, handlery a `applyOperation` (optimistické zrcadlo dokumentu v klientovi); odstraní se log, dispečer, transakce, undo, přehrání, upcast a čtení záznamů. Smazat i nezapojenou lokální cestu z M46 (`app/session.ts` s jádrem, `doc-lock`, `documents.ts`, `open-document.ts`, `kernel-supervisor`, `regen-pipeline` a jejich testy), tlačítko přenosu z IndexedDB a zúžit `FeaturePlugin` na `tools`, `manipulators` a `messages`.
+
 ## Akceptační kritéria
 
 - Klient neobsahuje OCCT ani doménu kromě modelu skici.

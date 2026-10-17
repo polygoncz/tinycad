@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 42
 aliases:
   - M42
@@ -12,8 +12,8 @@ specs:
   - "[[08-topologicke-pojmenovani]]"
 depends_on:
   - "[[M39-kostra-serveru]]"
-started:
-finished:
+started: 2026-10-17
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-17
@@ -33,11 +33,11 @@ updated: 2026-10-17
 
 ## Úkoly
 
-- [ ] 1. Kostra knihovny, tabulka tvarů, `makeBox`, dotazy a životnost handle
-- [ ] 2. Válec, transformace, boolean, topologie a tessellace (souběžně)
-- [ ] 3. Plocha skici, vysunutí a rotace s rolemi (souběžně)
-- [ ] 4. Oblasti skici `profileRegions` (souběžně)
-- [ ] 5. Zaoblení, sražení, STEP a paměťový test
+- [x] 1. Kostra knihovny, tabulka tvarů, `makeBox`, dotazy a životnost handle
+- [x] 2. Válec, transformace, boolean, topologie a tessellace (souběžně)
+- [x] 3. Plocha skici, vysunutí a rotace s rolemi (souběžně)
+- [x] 4. Oblasti skici `profileRegions` (souběžně)
+- [x] 5. Zaoblení, sražení, STEP a paměťový test
 
 Úkol 1 jde první a sám: založí všechny zdrojové soubory s pahýly, takže úkoly 2–5 mění každý jen své soubory (N30). Úkoly 2, 3 a 4 běží souběžně (tři subagenti `implementer`), 5 hned, jak se uvolní místo (potřebuje jen úkol 1).
 
@@ -97,4 +97,9 @@ Nativní OCCT a rozdíly proti WASM buildu (výjimky místo pastí, plné API be
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+_Návrh Clauda (samostatný běh, stopa B)._
+
+- Celý milník jeden implementátor ve stopě B, souběžně se stopami A a C; žádný konflikt souborů.
+- GoogleTest port kontraktové sady: 196 testů jádra zelených nad OCCT 8.0.1 bez jediné odchylky od chování TS (role při rotaci o 2π, šev válce u zaoblení, STEP v mm/AP214). `profileRegions` na mřížce 1860 úseček 19 ms (TS ~110 ms).
+- Paměťový test (200 kol) drží RSS pod 20 MB po zahřátí – [[Q054 Únik paměti v OCCT buildu|Q054]] a [[Q055 Pád WASM jádra|Q055]] v nativním jádře nenastávají.
+- Dluh: 2D základ (Geom2d křivky, obálky, kontroly) je zdvojený mezi `tinycad_kernel` a `tinycad_geometry` (N77), ztlumení výpisů OCCT jednou za proces (N78).
