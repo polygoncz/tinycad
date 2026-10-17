@@ -55,6 +55,30 @@ async function paramValue(page: Page, label: string): Promise<number> {
   return Number((await paramInput(page, label).inputValue()).replace(',', '.'));
 }
 
+/** The times of the requests of the page that change the document (Apply of a transaction). */
+function recordChanges(page: Page): readonly number[] {
+  const times: number[] = [];
+  page.on('request', (request) => {
+    if (request.url().endsWith('/tinycad.v1.SessionService/Apply')) times.push(Date.now());
+  });
+  return times;
+}
+
+/**
+ * The sketch has written the drag and the core confirmed it: saved, and no Apply for a second.
+ * The sketcher writes a drag step once its solver answered, which in WebKit takes most of a
+ * second, so the green dot alone may still be the state from before the last step.
+ */
+async function writesSettled(page: Page, writes: readonly number[]): Promise<void> {
+  await expect
+    .poll(async () => {
+      const saved = await page.getByRole('status', { name: 'Uloženo' }).count();
+      const last = writes.at(-1) ?? 0;
+      return saved === 1 && writes.length > 0 && Date.now() - last > 1000;
+    })
+    .toBe(true);
+}
+
 test.beforeEach(async ({ page }) => {
   await delayUnaryCalls(page);
 });
@@ -108,8 +132,9 @@ test('dragging a point in a sketch: the point stays where it was let go, one ent
 
   // Its free corner dragged to (160, −120) px: width / height = 4 / 3. Any answer of the drag
   // taken over after the release would put the corner back on the way (a ratio above 4 / 3).
+  const writes = recordChanges(page);
   await dragOnCanvas(page, [120, -80], [160, -120]);
-  await expect(page.getByRole('status', { name: 'Uloženo' })).toBeVisible();
+  await writesSettled(page, writes);
 
   // The dimensions of the bottom and the right edge take the lengths of the sketch.
   await toolbarButton(page, 'Kóta').click();

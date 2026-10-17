@@ -16,6 +16,13 @@ import {
 
 const OUTAGE_MS = 2000;
 
+// The browser itself reports every request that fails while the network is away (Chrome,
+// WebKit); the session repeats them (N86).
+test.use({
+  allowedConsoleError:
+    /^Failed to load resource: (?:net::ERR_INTERNET_DISCONNECTED|WebKit encountered an internal error)$/,
+});
+
 test('a 2 s outage during a drag: reconnecting is shown, the released value is stored', async ({
   page,
   context,
