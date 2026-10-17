@@ -15,6 +15,7 @@ add_executable(tinycad_session_tests
   event_ring_test.cpp
   mesh_cache_test.cpp
   read_model_builder_test.cpp
+  read_model_proto_test.cpp
   runtime_document_test.cpp
   runtime_document_transactions_test.cpp
   session_manager_test.cpp
@@ -31,7 +32,9 @@ target_compile_definitions(tinycad_session_tests PRIVATE
   TINYCAD_STORAGE_FIXTURES="${PROJECT_SOURCE_DIR}/test/storage/fixtures")
 # runtime_testing.hpp includes test/storage/failing_file.hpp (the failing store of M41) and builds
 # the real kernel and solver (N45); the session library itself gets only their factories (N109).
-target_include_directories(tinycad_session_tests PRIVATE "${PROJECT_SOURCE_DIR}/test")
+target_include_directories(tinycad_session_tests PRIVATE "${PROJECT_SOURCE_DIR}/test"
+  # read_model_proto_test.cpp: the internal conversion of the read model (until the rpc layer).
+  "${PROJECT_SOURCE_DIR}/src/session/src")
 target_link_libraries(tinycad_session_tests PRIVATE
   tinycad_session tinycad_kernel tinycad_solver_planegcs tinycad_test_support GTest::gtest
   GTest::gtest_main

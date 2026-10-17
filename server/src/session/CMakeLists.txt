@@ -16,6 +16,7 @@ add_library(tinycad_session STATIC
   src/recent_responses.cpp
   src/event_ring.cpp
   src/read_model_builder.cpp
+  src/read_model_proto.cpp
   src/runtime_document.cpp
   src/session_manager.cpp
   src/session_service.cpp

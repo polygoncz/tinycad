@@ -108,9 +108,9 @@ class GrpcDocumentsTest : public ::testing::Test {
   }
 
   static std::string nameInReadModel(const SessionPtr& session) {
-    v1::ReadModel model;
-    EXPECT_TRUE(session->document().readModel(session->caller(), {}, &model));
-    return model.document().name();
+    auto model = session->document().readModel(session->caller(), {});
+    EXPECT_TRUE(model.has_value());
+    return model ? model->meta.name : std::string();
   }
 };
 
@@ -190,15 +190,14 @@ TEST_F(GrpcDocumentsTest, RenamingAnOpenDocumentGoesThroughItsSession) {
   EXPECT_EQ(nameInReadModel(session), "Bracket");
   const auto changes = changedOf(session->document());
   ASSERT_EQ(changes.size(), 1U);
-  EXPECT_EQ(changes[0].by_session_id(), "");
+  EXPECT_EQ(changes[0].bySessionId, "");
 }
 
 TEST_F(GrpcDocumentsTest, RenamingAnOpenDocumentDuringATransactionIsDocumentOpen) {
   const auto part = created("Part", "op-1");
   const SessionPtr session = openSession(part.document_id());
-  v1::ChangeResult change;
   ASSERT_TRUE(session->document().begin(session->caller(), "T",
-                                        StepKey{session->recent(), key("step-1")}, {}, &change));
+                                        StepKey{session->recent(), key("step-1")}, {}));
 
   v1::RenameDocumentResponse out;
   const grpc::Status status = rename(part.document_id(), "Bracket", "op-2", &out);

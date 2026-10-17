@@ -20,8 +20,8 @@ class RuntimeDocumentTest : public RuntimeFixture {
   Caller writer = callerOf("s1");
   Caller reader = callerOf("s2");
   RecentResponses writerRecent;
-  v1::ReadModelOptions options;
-  v1::ChangeResult out;
+  ReadModelOptions options;
+  ChangeResult out;
 
   void SetUp() override { ASSERT_TRUE(doc->acquireLease(writer.session)); }
 
@@ -31,11 +31,18 @@ class RuntimeDocumentTest : public RuntimeFixture {
 
   /** dispatch by the writer; fails the test on an error. */
   void dispatch(const Json& op, const std::string& operationId) {
-    auto done = doc->dispatch(writer, op, "", key(operationId), options, &out);
-    ASSERT_TRUE(done.has_value()) << done.error().message;
+    ASSERT_TRUE(keep(doc->dispatch(writer, op, "", key(operationId), options)));
   }
 
-  static ErrorReason reasonOf(const SessionResult<void>& result) {
+  /** A successful change is kept in `out`; false (with the message) for an error. */
+  ::testing::AssertionResult keep(SessionResult<ChangeResult> result) {
+    if (!result) return ::testing::AssertionFailure() << result.error().message;
+    out = std::move(*result);
+    return ::testing::AssertionSuccess();
+  }
+
+  template <class T>
+  static ErrorReason reasonOf(const SessionResult<T>& result) {
     EXPECT_FALSE(result.has_value());
     return result ? ErrorReason::Internal : result.error().reason;
   }
@@ -74,49 +81,50 @@ TEST_F(RuntimeDocumentTest, ReleasingTheLeaseByAnotherSessionDoesNothing) {
 TEST_F(RuntimeDocumentTest, EveryChangeOfASessionWithoutTheLeaseIsReadOnly) {
   RecentResponses recent;
   const StepKey readerStep{recent, key("r1")};
-  EXPECT_EQ(reasonOf(doc->dispatch(reader, addBox("a", 0), "", key("r1"), options, &out)),
+  EXPECT_EQ(reasonOf(doc->dispatch(reader, addBox("a", 0), "", key("r1"), options)),
             ErrorReason::ReadOnly);
-  EXPECT_EQ(reasonOf(doc->begin(reader, "T", readerStep, options, &out)), ErrorReason::ReadOnly);
-  EXPECT_EQ(reasonOf(doc->apply(reader, addBox("a", 0), readerStep, options, &out)),
+  EXPECT_EQ(reasonOf(doc->begin(reader, "T", readerStep, options)), ErrorReason::ReadOnly);
+  EXPECT_EQ(reasonOf(doc->apply(reader, addBox("a", 0), readerStep, options)),
             ErrorReason::ReadOnly);
-  EXPECT_EQ(reasonOf(doc->applyTransient(reader, setRollback(0), readerStep, options, &out)),
+  EXPECT_EQ(reasonOf(doc->applyTransient(reader, setRollback(0), readerStep, options)),
             ErrorReason::ReadOnly);
-  EXPECT_EQ(reasonOf(doc->commit(reader, readerStep, options, &out)), ErrorReason::ReadOnly);
-  EXPECT_EQ(reasonOf(doc->abort(reader, readerStep, options, &out)), ErrorReason::ReadOnly);
-  EXPECT_EQ(reasonOf(doc->undo(reader, key("r1"), options, &out)), ErrorReason::ReadOnly);
-  EXPECT_EQ(reasonOf(doc->redo(reader, key("r1"), options, &out)), ErrorReason::ReadOnly);
+  EXPECT_EQ(reasonOf(doc->commit(reader, readerStep, options)), ErrorReason::ReadOnly);
+  EXPECT_EQ(reasonOf(doc->abort(reader, readerStep, options)), ErrorReason::ReadOnly);
+  EXPECT_EQ(reasonOf(doc->undo(reader, key("r1"), options)), ErrorReason::ReadOnly);
+  EXPECT_EQ(reasonOf(doc->redo(reader, key("r1"), options)), ErrorReason::ReadOnly);
   EXPECT_TRUE(storedLog(id).empty());
   EXPECT_TRUE(changedOf(*doc).empty());
   EXPECT_EQ(recent.size(), 0U);
 }
 
 TEST_F(RuntimeDocumentTest, TheReadModelSaysWhetherTheCallerMayWrite) {
-  v1::ReadModel model;
-  ASSERT_TRUE(doc->readModel(writer, options, &model));
-  EXPECT_TRUE(model.session().writable());
-  ASSERT_TRUE(doc->readModel(reader, options, &model));
-  EXPECT_FALSE(model.session().writable());
-  EXPECT_EQ(model.document().document_id(), id.str());
-  EXPECT_EQ(model.document().name(), "Part");
+  auto model = doc->readModel(writer, options);
+  ASSERT_TRUE(model.has_value());
+  EXPECT_TRUE(model->session.writable);
+  model = doc->readModel(reader, options);
+  ASSERT_TRUE(model.has_value());
+  EXPECT_FALSE(model->session.writable);
+  EXPECT_EQ(model->meta.id, id);
+  EXPECT_EQ(model->meta.name, "Part");
 }
 
 TEST_F(RuntimeDocumentTest, ReleasingTheLeaseWithAnOpenTransactionAbortsIt) {
-  ASSERT_TRUE(doc->begin(writer, "T", step("b1"), options, &out));
-  ASSERT_TRUE(doc->apply(writer, addBox("a", 0), step("a1"), options, &out));
+  ASSERT_TRUE(keep(doc->begin(writer, "T", step("b1"), options)));
+  ASSERT_TRUE(keep(doc->apply(writer, addBox("a", 0), step("a1"), options)));
   const auto changesBefore = changedOf(*doc).size();
 
   doc->releaseLease(writer.session);
   EXPECT_FALSE(doc->leaseHolder().has_value());
   const auto changes = changedOf(*doc);
   ASSERT_EQ(changes.size(), changesBefore + 1);
-  EXPECT_EQ(changes.back().by_session_id(), "s1");
+  EXPECT_EQ(changes.back().bySessionId, "s1");
 
   ASSERT_TRUE(doc->acquireLease(reader.session));
-  v1::ReadModel model;
-  ASSERT_TRUE(doc->readModel(reader, options, &model));
-  EXPECT_FALSE(model.session().has_transaction());
+  auto model = doc->readModel(reader, options);
+  ASSERT_TRUE(model.has_value());
+  EXPECT_FALSE(model->session.transactionLabel.has_value());
   RecentResponses recent;
-  EXPECT_EQ(reasonOf(doc->commit(reader, StepKey{recent, key("c1")}, options, &out)),
+  EXPECT_EQ(reasonOf(doc->commit(reader, StepKey{recent, key("c1")}, options)),
             ErrorReason::NoTransaction);
   EXPECT_TRUE(storedLog(id).empty());
 }
@@ -125,27 +133,27 @@ TEST_F(RuntimeDocumentTest, ReleasingTheLeaseWithAnOpenTransactionAbortsIt) {
 
 TEST_F(RuntimeDocumentTest, DispatchWritesTheEntryAndAnswersWithItAndTheReadModel) {
   dispatch(addBox("a", 0), "op-1");
-  ASSERT_TRUE(out.has_entry());
-  EXPECT_EQ(out.entry().seq(), 1U);
-  EXPECT_EQ(out.entry().kind(), v1::LogEntryView::KIND_DO);
-  EXPECT_EQ(out.entry().op_type(), "feature.add");
-  EXPECT_EQ(out.read_model().document().last_seq(), 1U);
-  EXPECT_EQ(out.read_model().regen().generation(), 1U);
-  EXPECT_TRUE(out.read_model().session().writable());
-  EXPECT_TRUE(out.read_model().session().can_undo());
+  ASSERT_TRUE(out.entry.has_value());
+  EXPECT_EQ(out.entry->at("seq"), 1U);
+  EXPECT_EQ(out.entry->at("kind"), "do");
+  EXPECT_EQ(out.entry->at("op").at("type"), "feature.add");
+  EXPECT_EQ(out.readModel.lastSeq, 1);
+  EXPECT_EQ(out.readModel.generation, 1U);
+  EXPECT_TRUE(out.readModel.session.writable);
+  EXPECT_TRUE(out.readModel.session.canUndo);
   EXPECT_EQ(storedLog(id).size(), 1U);
 
   const auto changes = changedOf(*doc);
   ASSERT_EQ(changes.size(), 1U);
-  EXPECT_EQ(changes[0].generation(), 1U);
-  EXPECT_EQ(changes[0].last_seq(), 1U);
-  EXPECT_EQ(changes[0].by_session_id(), "s1");
+  EXPECT_EQ(changes[0].generation, 1U);
+  EXPECT_EQ(changes[0].lastSeq, 1);
+  EXPECT_EQ(changes[0].bySessionId, "s1");
 }
 
 TEST_F(RuntimeDocumentTest, AnInvalidOperationChangesNothing) {
   dispatch(addBox("a", 0), "op-1");
   const auto seqBefore = doc->events().lastSeq();
-  auto invalid = doc->dispatch(writer, setWidth("zzz", 5), "", key("op-2"), options, &out);
+  auto invalid = doc->dispatch(writer, setWidth("zzz", 5), "", key("op-2"), options);
   ASSERT_FALSE(invalid.has_value());
   EXPECT_EQ(invalid.error().reason, ErrorReason::InvalidOperation);
   EXPECT_FALSE(invalid.error().path.empty());
@@ -155,21 +163,21 @@ TEST_F(RuntimeDocumentTest, AnInvalidOperationChangesNothing) {
 
 TEST_F(RuntimeDocumentTest, TheRegenerationReportsProgressWithTheGenerationOfTheChange) {
   dispatch(addBox("a", 0), "op-1");
-  std::vector<v1::SessionEvent::RegenProgress> progress;
+  std::vector<SessionEvent> progress;
   for (const auto& event : eventsOf(*doc)) {
-    if (event.has_regen_progress()) progress.push_back(event.regen_progress());
+    if (event.kind == SessionEvent::Kind::RegenProgress) progress.push_back(event);
   }
   ASSERT_FALSE(progress.empty());
-  EXPECT_EQ(progress.back().feature_id(), "a");
-  EXPECT_EQ(progress.back().generation(), 1U);
-  EXPECT_TRUE(progress.back().status().has_ok());
+  EXPECT_EQ(progress.back().featureId.str(), "a");
+  EXPECT_EQ(progress.back().generation, 1U);
+  EXPECT_EQ(progress.back().status.kind, regen::FeatureStatusKind::Ok);
 }
 
 /** The feature ids of the regen_progress events with seq > afterSeq, in order. */
 std::vector<std::string> progressAfter(RuntimeDocument& doc, std::uint64_t afterSeq) {
   std::vector<std::string> ids;
-  for (const auto& event : doc.events().after(afterSeq).value_or(std::vector<v1::SessionEvent>{})) {
-    if (event.has_regen_progress()) ids.push_back(event.regen_progress().feature_id());
+  for (const auto& event : doc.events().after(afterSeq).value_or(std::vector<SessionEvent>{})) {
+    if (event.kind == SessionEvent::Kind::RegenProgress) ids.push_back(event.featureId.str());
   }
   return ids;
 }
@@ -190,9 +198,8 @@ TEST_F(RuntimeDocumentTest, ProgressReportsOnlyTheFeaturesTheChangeRebuilt) {
 TEST_F(RuntimeDocumentTest, AReadModelWithoutAChangeReportsNoProgress) {
   dispatch(addBox("a", 0), "op-1");
   const auto seq = doc->events().lastSeq();
-  v1::ReadModel model;
-  ASSERT_TRUE(doc->readModel(writer, options, &model));
-  ASSERT_TRUE(doc->readModel(reader, options, &model));
+  ASSERT_TRUE(doc->readModel(writer, options));
+  ASSERT_TRUE(doc->readModel(reader, options));
   dispatch(addBox("a", 0), "op-1");  // a repeated request is no change either
   EXPECT_EQ(doc->events().lastSeq(), seq);
 }
@@ -211,9 +218,8 @@ TEST_F(RuntimeDocumentTest, MovingTheRollbackBarBackRebuildsNothing) {
 
 TEST_F(RuntimeDocumentTest, TheEventSeqOfAReadModelIsTheLastSeqAtTheSameMoment) {
   dispatch(addBox("a", 0), "op-1");
-  v1::ReadModel model;
   std::uint64_t eventSeq = 0;
-  ASSERT_TRUE(doc->readModel(reader, options, &model, &eventSeq));
+  ASSERT_TRUE(doc->readModel(reader, options, &eventSeq));
   EXPECT_EQ(eventSeq, doc->events().lastSeq());
   EXPECT_GT(eventSeq, 0U);
 }
@@ -222,12 +228,12 @@ TEST_F(RuntimeDocumentTest, TheEventSeqOfAReadModelIsTheLastSeqAtTheSameMoment) 
 
 TEST_F(RuntimeDocumentTest, DispatchTwiceWithTheSameKeyIsOneEntryAndOneChange) {
   dispatch(addBox("a", 0), "op-1");
-  const v1::LogEntryView first = out.entry();
+  const Json first = *out.entry;
   const auto seqAfterFirst = changedOf(*doc).size();
 
   // Not applied again: a second feature.add of 'a' would fail with a duplicate id.
   dispatch(addBox("a", 0), "op-1");
-  EXPECT_EQ(out.entry().SerializeAsString(), first.SerializeAsString());
+  EXPECT_EQ(*out.entry, first);
   EXPECT_EQ(storedLog(id).size(), 1U);
   EXPECT_EQ(changedOf(*doc).size(), seqAfterFirst);
 }
@@ -235,80 +241,78 @@ TEST_F(RuntimeDocumentTest, DispatchTwiceWithTheSameKeyIsOneEntryAndOneChange) {
 TEST_F(RuntimeDocumentTest, TheSameIdWithAnotherFingerprintIsOperationIdReused) {
   dispatch(addBox("a", 0), "op-1");
   const auto seqBefore = doc->events().lastSeq();
-  auto reused = doc->dispatch(writer, addBox("b", 1), "", key("op-1", "other"), options, &out);
+  auto reused = doc->dispatch(writer, addBox("b", 1), "", key("op-1", "other"), options);
   EXPECT_EQ(reasonOf(reused), ErrorReason::OperationIdReused);
   EXPECT_EQ(doc->events().lastSeq(), seqBefore);
   EXPECT_EQ(storedLog(id).size(), 1U);
 }
 
 TEST_F(RuntimeDocumentTest, CommitTwiceWithTheSameKeyIsOneEntry) {
-  ASSERT_TRUE(doc->begin(writer, "Box", step("b1"), options, &out));
-  ASSERT_TRUE(doc->apply(writer, addBox("a", 0), step("a1"), options, &out));
-  ASSERT_TRUE(doc->commit(writer, step("c1"), options, &out));
-  const v1::LogEntryView first = out.entry();
+  ASSERT_TRUE(keep(doc->begin(writer, "Box", step("b1"), options)));
+  ASSERT_TRUE(keep(doc->apply(writer, addBox("a", 0), step("a1"), options)));
+  ASSERT_TRUE(keep(doc->commit(writer, step("c1"), options)));
+  const Json first = *out.entry;
   const auto changes = changedOf(*doc).size();
 
   // The transaction is gone; the repeat still finds the stored entry.
-  ASSERT_TRUE(doc->commit(writer, step("c1"), options, &out));
-  EXPECT_EQ(out.entry().SerializeAsString(), first.SerializeAsString());
+  ASSERT_TRUE(keep(doc->commit(writer, step("c1"), options)));
+  EXPECT_EQ(*out.entry, first);
   EXPECT_EQ(storedLog(id).size(), 1U);
   EXPECT_EQ(changedOf(*doc).size(), changes);
 }
 
 TEST_F(RuntimeDocumentTest, AnEmptyCommitIsRememberedByTheSession) {
-  ASSERT_TRUE(doc->begin(writer, "Nothing", step("b1"), options, &out));
-  ASSERT_TRUE(doc->commit(writer, step("c1"), options, &out));
-  EXPECT_FALSE(out.has_entry());
+  ASSERT_TRUE(keep(doc->begin(writer, "Nothing", step("b1"), options)));
+  ASSERT_TRUE(keep(doc->commit(writer, step("c1"), options)));
+  EXPECT_FALSE(out.entry.has_value());
   const auto changes = changedOf(*doc).size();
 
-  auto again = doc->commit(writer, step("c1"), options, &out);
-  ASSERT_TRUE(again.has_value()) << again.error().message;
-  EXPECT_FALSE(out.has_entry());
+  ASSERT_TRUE(keep(doc->commit(writer, step("c1"), options)));
+  EXPECT_FALSE(out.entry.has_value());
   EXPECT_EQ(changedOf(*doc).size(), changes);
-  EXPECT_EQ(reasonOf(doc->commit(writer, step("c2"), options, &out)), ErrorReason::NoTransaction);
+  EXPECT_EQ(reasonOf(doc->commit(writer, step("c2"), options)), ErrorReason::NoTransaction);
   EXPECT_TRUE(storedLog(id).empty());
 }
 
 // --- in-memory idempotence of transaction steps (N58) -------------------------------------
 
 TEST_F(RuntimeDocumentTest, ApplyTwiceWithTheSameKeyIsAppliedOnce) {
-  ASSERT_TRUE(doc->begin(writer, "Box", step("b1"), options, &out));
-  ASSERT_TRUE(doc->apply(writer, addBox("a", 0), step("a1"), options, &out));
+  ASSERT_TRUE(keep(doc->begin(writer, "Box", step("b1"), options)));
+  ASSERT_TRUE(keep(doc->apply(writer, addBox("a", 0), step("a1"), options)));
   const auto changes = changedOf(*doc).size();
   // A second feature.add of 'a' would fail: the repeat is answered without applying it.
-  auto again = doc->apply(writer, addBox("a", 0), step("a1"), options, &out);
-  ASSERT_TRUE(again.has_value()) << again.error().message;
-  EXPECT_FALSE(out.has_entry());
+  ASSERT_TRUE(keep(doc->apply(writer, addBox("a", 0), step("a1"), options)));
+  EXPECT_FALSE(out.entry.has_value());
   EXPECT_EQ(changedOf(*doc).size(), changes);
 
-  ASSERT_TRUE(doc->commit(writer, step("c1"), options, &out));
+  ASSERT_TRUE(keep(doc->commit(writer, step("c1"), options)));
   const auto log = storedLog(id);
   ASSERT_EQ(log.size(), 1U);
   EXPECT_EQ(log[0].at("op"), addBox("a", 0));
 }
 
 TEST_F(RuntimeDocumentTest, BeginAndAbortTwiceWithTheSameKeyAreOneStepEach) {
-  ASSERT_TRUE(doc->begin(writer, "T", step("b1"), options, &out));
-  ASSERT_TRUE(doc->begin(writer, "T", step("b1"), options, &out));
-  ASSERT_TRUE(doc->abort(writer, step("x1"), options, &out));
-  ASSERT_TRUE(doc->abort(writer, step("x1"), options, &out));
+  ASSERT_TRUE(keep(doc->begin(writer, "T", step("b1"), options)));
+  ASSERT_TRUE(keep(doc->begin(writer, "T", step("b1"), options)));
+  ASSERT_TRUE(keep(doc->abort(writer, step("x1"), options)));
+  ASSERT_TRUE(keep(doc->abort(writer, step("x1"), options)));
   EXPECT_EQ(changedOf(*doc).size(), 2U);
 }
 
 TEST_F(RuntimeDocumentTest, AStepIdWithAnotherOperationIsOperationIdReused) {
-  ASSERT_TRUE(doc->begin(writer, "Box", step("b1"), options, &out));
-  ASSERT_TRUE(doc->apply(writer, addBox("a", 0), step("a1", "fp-a"), options, &out));
-  EXPECT_EQ(reasonOf(doc->apply(writer, addBox("b", 1), step("a1", "fp-b"), options, &out)),
+  ASSERT_TRUE(keep(doc->begin(writer, "Box", step("b1"), options)));
+  ASSERT_TRUE(keep(doc->apply(writer, addBox("a", 0), step("a1", "fp-a"), options)));
+  EXPECT_EQ(reasonOf(doc->apply(writer, addBox("b", 1), step("a1", "fp-b"), options)),
             ErrorReason::OperationIdReused);
 }
 
 TEST_F(RuntimeDocumentTest, AFailedStepIsNotRememberedAndRunsAgainOnRetry) {
-  ASSERT_TRUE(doc->begin(writer, "T", step("b1"), options, &out));
-  EXPECT_EQ(reasonOf(doc->apply(writer, setWidth("a", 5), step("a1"), options, &out)),
+  ASSERT_TRUE(keep(doc->begin(writer, "T", step("b1"), options)));
+  EXPECT_EQ(reasonOf(doc->apply(writer, setWidth("a", 5), step("a1"), options)),
             ErrorReason::InvalidOperation);
   // The document moved on (now 'a' exists): the retry of the failed step succeeds.
-  ASSERT_TRUE(doc->apply(writer, addBox("a", 0), step("a0"), options, &out));
-  auto retry = doc->apply(writer, setWidth("a", 5), step("a1"), options, &out);
+  ASSERT_TRUE(keep(doc->apply(writer, addBox("a", 0), step("a0"), options)));
+  auto retry = doc->apply(writer, setWidth("a", 5), step("a1"), options);
   EXPECT_TRUE(retry.has_value());
 }
 
@@ -316,26 +320,26 @@ TEST_F(RuntimeDocumentTest, AFailedStepIsNotRememberedAndRunsAgainOnRetry) {
 
 TEST_F(RuntimeDocumentTest, AFailedWriteReloadsTheDocumentAndDropsTheTransaction) {
   dispatch(addBox("a", 0), "op-1");
-  ASSERT_TRUE(doc->begin(writer, "Drag", step("b1"), options, &out));
-  ASSERT_TRUE(doc->apply(writer, setWidth("a", 20), step("a1"), options, &out));
-  const auto generationBefore = changedOf(*doc).back().generation();
+  ASSERT_TRUE(keep(doc->begin(writer, "Drag", step("b1"), options)));
+  ASSERT_TRUE(keep(doc->apply(writer, setWidth("a", 20), step("a1"), options)));
+  const auto generationBefore = changedOf(*doc).back().generation;
 
   fail->append = true;
-  EXPECT_EQ(reasonOf(doc->commit(writer, step("c1"), options, &out)), ErrorReason::Storage);
+  EXPECT_EQ(reasonOf(doc->commit(writer, step("c1"), options)), ErrorReason::Storage);
   fail->append = false;
 
   const auto changes = changedOf(*doc);
-  EXPECT_EQ(changes.back().generation(), generationBefore + 1);
-  EXPECT_EQ(changes.back().by_session_id(), "");
+  EXPECT_EQ(changes.back().generation, generationBefore + 1);
+  EXPECT_EQ(changes.back().bySessionId, "");
   EXPECT_EQ(storedLog(id).size(), 1U);
   EXPECT_EQ(storedParams(id, "a").at("width"), 10);
 
   // The transaction is gone with the reload: the retried Commit is NoTransaction.
-  EXPECT_EQ(reasonOf(doc->commit(writer, step("c1"), options, &out)), ErrorReason::NoTransaction);
-  v1::ReadModel model;
-  ASSERT_TRUE(doc->readModel(writer, options, &model));
-  EXPECT_FALSE(model.session().has_transaction());
-  EXPECT_EQ(model.document().last_seq(), 1U);
+  EXPECT_EQ(reasonOf(doc->commit(writer, step("c1"), options)), ErrorReason::NoTransaction);
+  auto model = doc->readModel(writer, options);
+  ASSERT_TRUE(model.has_value());
+  EXPECT_FALSE(model->session.transactionLabel.has_value());
+  EXPECT_EQ(model->lastSeq, 1);
 
   // The document equals the file: the next change continues from it.
   dispatch(setWidth("a", 30), "op-3");
@@ -360,7 +364,7 @@ TEST_F(RuntimeDocumentTest, RenameWritesTheEntryWithoutALeaseAndAnnouncesItToEve
   EXPECT_EQ(stored(id)->document().meta().name, "New name");
   const auto changes = changedOf(*doc);
   ASSERT_EQ(changes.size(), 1U);
-  EXPECT_EQ(changes[0].by_session_id(), "");
+  EXPECT_EQ(changes[0].bySessionId, "");
 
   // Repeated: the same summary, no second entry.
   ASSERT_TRUE(doc->rename("  New name ", key("rename-1")));
@@ -368,11 +372,11 @@ TEST_F(RuntimeDocumentTest, RenameWritesTheEntryWithoutALeaseAndAnnouncesItToEve
 }
 
 TEST_F(RuntimeDocumentTest, RenameIsRefusedWhileATransactionIsOpenAndForAnEmptyName) {
-  ASSERT_TRUE(doc->begin(writer, "T", step("b1"), options, &out));
+  ASSERT_TRUE(keep(doc->begin(writer, "T", step("b1"), options)));
   auto open = doc->rename("Other", key("rename-1"));
   ASSERT_FALSE(open.has_value());
   EXPECT_EQ(open.error().reason, ErrorReason::DocumentOpen);
-  ASSERT_TRUE(doc->abort(writer, step("x1"), options, &out));
+  ASSERT_TRUE(keep(doc->abort(writer, step("x1"), options)));
 
   auto empty = doc->rename(" \t", key("rename-2"));
   ASSERT_FALSE(empty.has_value());
@@ -386,19 +390,18 @@ TEST_F(RuntimeDocumentTest, RenameIsRefusedWhileATransactionIsOpenAndForAnEmptyN
 TEST_F(RuntimeDocumentTest, HistoryListsTheEntriesAndTheUndoStacks) {
   dispatch(addBox("a", 0), "op-1");
   dispatch(addBox("b", 1), "op-2");
-  ASSERT_TRUE(doc->undo(writer, key("op-3"), options, &out));
-  v1::GetHistoryResponse history;
-  doc->history(1, &history);
-  ASSERT_EQ(history.entries_size(), 3);
-  EXPECT_EQ(history.entries(2).kind(), v1::LogEntryView::KIND_UNDO);
-  EXPECT_EQ(history.entries(2).target(), 2U);
-  ASSERT_EQ(history.undo_stack_size(), 1);
-  EXPECT_EQ(history.undo_stack(0), 1U);
-  ASSERT_EQ(history.redo_stack_size(), 1);
-  EXPECT_EQ(history.redo_stack(0), 2U);
+  ASSERT_TRUE(keep(doc->undo(writer, key("op-3"), options)));
+  HistoryView history = doc->history(1);
+  ASSERT_EQ(history.entries.size(), 3U);
+  EXPECT_EQ(history.entries[2].at("kind"), "undo");
+  EXPECT_EQ(history.entries[2].at("target"), 2);
+  ASSERT_EQ(history.undoStack.size(), 1U);
+  EXPECT_EQ(history.undoStack[0], 1);
+  ASSERT_EQ(history.redoStack.size(), 1U);
+  EXPECT_EQ(history.redoStack[0], 2);
 
-  doc->history(3, &history);
-  EXPECT_EQ(history.entries_size(), 1);
+  history = doc->history(3);
+  EXPECT_EQ(history.entries.size(), 1U);
 }
 
 TEST_F(RuntimeDocumentTest, ExportStepWritesTheVisibleBodies) {
@@ -464,12 +467,12 @@ TEST_F(RuntimeDocumentTest, ASketchTheServerCannotSolveIsRefusedAndChangesNothin
   const Json add{
       {"type", "feature.add"}, {"v", 1}, {"feature", circleSketch("s", 2.5)}, {"index", 0}};
   dispatch(add, "op-1");
-  ASSERT_TRUE(doc->begin(writer, "Edit sketch", step("b1"), options, &out));
+  ASSERT_TRUE(keep(doc->begin(writer, "Edit sketch", step("b1"), options)));
   const auto seqBefore = doc->events().lastSeq();
 
   const Json edit{{"type", "feature.setParams"}, {"v", 2},         {"featureId", "s"},
                   {"typeVersion", 1},            {"params", conflictingSketchParams()}};
-  auto refused = doc->apply(writer, edit, step("a1"), options, &out);
+  auto refused = doc->apply(writer, edit, step("a1"), options);
   ASSERT_FALSE(refused.has_value());
   EXPECT_EQ(refused.error().reason, ErrorReason::SketchNotSolved);
   ASSERT_EQ(refused.error().issues.size(), 1U);
@@ -477,8 +480,8 @@ TEST_F(RuntimeDocumentTest, ASketchTheServerCannotSolveIsRefusedAndChangesNothin
   EXPECT_EQ(doc->events().lastSeq(), seqBefore);
 
   // The transaction is still open and empty: the commit writes nothing.
-  ASSERT_TRUE(doc->commit(writer, step("c1"), options, &out));
-  EXPECT_FALSE(out.has_entry());
+  ASSERT_TRUE(keep(doc->commit(writer, step("c1"), options)));
+  EXPECT_FALSE(out.entry.has_value());
   EXPECT_EQ(storedLog(id).size(), 1U);
 }
 

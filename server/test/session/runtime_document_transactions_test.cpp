@@ -18,8 +18,8 @@ class RuntimeTransactionsTest : public RuntimeFixture {
   std::unique_ptr<RuntimeDocument> doc = openRuntime(id);
   Caller writer = callerOf("s1");
   RecentResponses recent{1000};
-  v1::ReadModelOptions options;
-  v1::ChangeResult out;
+  ReadModelOptions options;
+  ChangeResult out;
   int nextKey = 0;
 
   void SetUp() override {
@@ -31,27 +31,26 @@ class RuntimeTransactionsTest : public RuntimeFixture {
   StepKey step() { return {recent, key(nextId())}; }
 
   void dispatch(const Json& op) {
-    auto done = doc->dispatch(writer, op, "", key(nextId()), options, &out);
-    ASSERT_TRUE(done.has_value()) << done.error().message;
+    ASSERT_TRUE(keep(doc->dispatch(writer, op, "", key(nextId()), options)));
   }
   void begin(const std::string& label = "T") {
-    auto done = doc->begin(writer, label, step(), options, &out);
-    ASSERT_TRUE(done.has_value()) << done.error().message;
+    ASSERT_TRUE(keep(doc->begin(writer, label, step(), options)));
   }
-  void apply(const Json& op) {
-    auto done = doc->apply(writer, op, step(), options, &out);
-    ASSERT_TRUE(done.has_value()) << done.error().message;
-  }
+  void apply(const Json& op) { ASSERT_TRUE(keep(doc->apply(writer, op, step(), options))); }
   void applyTransient(const Json& op) {
-    auto done = doc->applyTransient(writer, op, step(), options, &out);
-    ASSERT_TRUE(done.has_value()) << done.error().message;
+    ASSERT_TRUE(keep(doc->applyTransient(writer, op, step(), options)));
   }
-  void commit() {
-    auto done = doc->commit(writer, step(), options, &out);
-    ASSERT_TRUE(done.has_value()) << done.error().message;
+  void commit() { ASSERT_TRUE(keep(doc->commit(writer, step(), options))); }
+
+  /** A successful change is kept in `out`; false (with the message) for an error. */
+  ::testing::AssertionResult keep(SessionResult<ChangeResult> result) {
+    if (!result) return ::testing::AssertionFailure() << result.error().message;
+    out = std::move(*result);
+    return ::testing::AssertionSuccess();
   }
 
-  static ErrorReason reasonOf(const SessionResult<void>& result) {
+  template <class T>
+  static ErrorReason reasonOf(const SessionResult<T>& result) {
     EXPECT_FALSE(result.has_value());
     return result ? ErrorReason::Internal : result.error().reason;
   }
@@ -64,8 +63,8 @@ TEST_F(RuntimeTransactionsTest, FiftyAppliesOfOneFeatureAreOneEntry) {
   for (int width = 1; width <= 50; ++width) apply(setWidth("a", width));
   EXPECT_EQ(storedLog(id).size(), 1U);  // nothing written during the transaction
   commit();
-  ASSERT_TRUE(out.has_entry());
-  EXPECT_EQ(out.entry().label(), "Drag");
+  ASSERT_TRUE(out.entry.has_value());
+  EXPECT_EQ(out.entry->at("label"), "Drag");
   const auto log = storedLog(id);
   ASSERT_EQ(log.size(), 2U);
   EXPECT_EQ(log[1].at("op"), setWidth("a", 50));
@@ -85,15 +84,15 @@ TEST_F(RuntimeTransactionsTest, AddAndMergedSetParamsCommitAsOneBatch) {
 TEST_F(RuntimeTransactionsTest, AnEmptyTransactionWritesNothing) {
   begin();
   commit();
-  EXPECT_FALSE(out.has_entry());
+  EXPECT_FALSE(out.entry.has_value());
   EXPECT_EQ(storedLog(id).size(), 1U);
 }
 
 TEST_F(RuntimeTransactionsTest, TheReadModelShowsTheOpenTransaction) {
   begin("Box 1: width");
-  EXPECT_EQ(out.read_model().session().transaction().label(), "Box 1: width");
+  EXPECT_EQ(*out.readModel.session.transactionLabel, "Box 1: width");
   commit();
-  EXPECT_FALSE(out.read_model().session().has_transaction());
+  EXPECT_FALSE(out.readModel.session.transactionLabel.has_value());
 }
 
 // --- abort and transient steps ------------------------------------------------------------
@@ -102,8 +101,7 @@ TEST_F(RuntimeTransactionsTest, AbortRestoresTheDocumentAndWritesNothing) {
   begin();
   apply(setWidth("a", 20));
   apply(removeFeature("b"));
-  auto aborted = doc->abort(writer, step(), options, &out);
-  ASSERT_TRUE(aborted.has_value());
+  ASSERT_TRUE(keep(doc->abort(writer, step(), options)));
   EXPECT_EQ(storedLog(id).size(), 1U);
 
   // The next change starts from the restored document: 'a' had width 10 and 'b' exists.
@@ -128,7 +126,7 @@ TEST_F(RuntimeTransactionsTest, TransientStepsAreRevertedAtCommitAndNeverStored)
 TEST_F(RuntimeTransactionsTest, TransientStepsAreRevertedAtAbort) {
   begin("Edit");
   applyTransient(setRollback(0));
-  ASSERT_TRUE(doc->abort(writer, step(), options, &out));
+  ASSERT_TRUE(keep(doc->abort(writer, step(), options)));
   dispatch(renameFeature("a", "A"));
   EXPECT_EQ(stored(id)->document().studio()->rollbackIndex, 2);
   EXPECT_EQ(storedLog(id).size(), 2U);
@@ -138,30 +136,29 @@ TEST_F(RuntimeTransactionsTest, TransientStepsAreRevertedAtAbort) {
 
 TEST_F(RuntimeTransactionsTest, BeginDispatchUndoAndRedoDuringATransactionAreTransactionOpen) {
   begin();
-  EXPECT_EQ(reasonOf(doc->begin(writer, "x", step(), options, &out)), ErrorReason::TransactionOpen);
-  EXPECT_EQ(reasonOf(doc->dispatch(writer, renameFeature("a", "X"), "", key(nextId()), options,
-                                   &out)),
+  EXPECT_EQ(reasonOf(doc->begin(writer, "x", step(), options)), ErrorReason::TransactionOpen);
+  EXPECT_EQ(reasonOf(doc->dispatch(writer, renameFeature("a", "X"), "", key(nextId()), options)),
             ErrorReason::TransactionOpen);
-  EXPECT_EQ(reasonOf(doc->undo(writer, key(nextId()), options, &out)),
+  EXPECT_EQ(reasonOf(doc->undo(writer, key(nextId()), options)),
             ErrorReason::TransactionOpen);
-  EXPECT_EQ(reasonOf(doc->redo(writer, key(nextId()), options, &out)),
+  EXPECT_EQ(reasonOf(doc->redo(writer, key(nextId()), options)),
             ErrorReason::TransactionOpen);
   EXPECT_EQ(storedLog(id).size(), 1U);
 }
 
 TEST_F(RuntimeTransactionsTest, StepsWithoutATransactionAreNoTransaction) {
-  EXPECT_EQ(reasonOf(doc->apply(writer, setWidth("a", 2), step(), options, &out)),
+  EXPECT_EQ(reasonOf(doc->apply(writer, setWidth("a", 2), step(), options)),
             ErrorReason::NoTransaction);
-  EXPECT_EQ(reasonOf(doc->applyTransient(writer, setRollback(0), step(), options, &out)),
+  EXPECT_EQ(reasonOf(doc->applyTransient(writer, setRollback(0), step(), options)),
             ErrorReason::NoTransaction);
-  EXPECT_EQ(reasonOf(doc->commit(writer, step(), options, &out)), ErrorReason::NoTransaction);
-  EXPECT_EQ(reasonOf(doc->abort(writer, step(), options, &out)), ErrorReason::NoTransaction);
+  EXPECT_EQ(reasonOf(doc->commit(writer, step(), options)), ErrorReason::NoTransaction);
+  EXPECT_EQ(reasonOf(doc->abort(writer, step(), options)), ErrorReason::NoTransaction);
 }
 
 TEST_F(RuntimeTransactionsTest, AFailingApplyLeavesTheTransactionOpenAndUnchanged) {
   begin();
   apply(setWidth("a", 20));
-  EXPECT_EQ(reasonOf(doc->apply(writer, setWidth("zzz", 1), step(), options, &out)),
+  EXPECT_EQ(reasonOf(doc->apply(writer, setWidth("zzz", 1), step(), options)),
             ErrorReason::InvalidOperation);
   commit();
   EXPECT_EQ(storedLog(id).back().at("op"), setWidth("a", 20));
@@ -171,46 +168,46 @@ TEST_F(RuntimeTransactionsTest, AFailingApplyLeavesTheTransactionOpenAndUnchange
 
 TEST_F(RuntimeTransactionsTest, UndoAndRedoWalkTheLogAndTheReadModelFollows) {
   dispatch(setWidth("a", 20));
-  EXPECT_TRUE(out.read_model().session().can_undo());
-  EXPECT_FALSE(out.read_model().session().can_redo());
+  EXPECT_TRUE(out.readModel.session.canUndo);
+  EXPECT_FALSE(out.readModel.session.canRedo);
 
-  ASSERT_TRUE(doc->undo(writer, key(nextId()), options, &out));
-  EXPECT_EQ(out.entry().kind(), v1::LogEntryView::KIND_UNDO);
-  EXPECT_EQ(out.entry().target(), 2U);
-  EXPECT_TRUE(out.read_model().session().can_redo());
+  ASSERT_TRUE(keep(doc->undo(writer, key(nextId()), options)));
+  EXPECT_EQ(out.entry->at("kind"), "undo");
+  EXPECT_EQ(out.entry->at("target"), 2);
+  EXPECT_TRUE(out.readModel.session.canRedo);
   EXPECT_EQ(storedParams(id, "a").at("width"), 10);
 
-  ASSERT_TRUE(doc->redo(writer, key(nextId()), options, &out));
-  EXPECT_EQ(out.entry().kind(), v1::LogEntryView::KIND_REDO);
-  EXPECT_EQ(out.entry().target(), 2U);
-  EXPECT_FALSE(out.read_model().session().can_redo());
+  ASSERT_TRUE(keep(doc->redo(writer, key(nextId()), options)));
+  EXPECT_EQ(out.entry->at("kind"), "redo");
+  EXPECT_EQ(out.entry->at("target"), 2);
+  EXPECT_FALSE(out.readModel.session.canRedo);
   EXPECT_EQ(storedParams(id, "a").at("width"), 20);
   EXPECT_EQ(storedLog(id).size(), 4U);
 }
 
 TEST_F(RuntimeTransactionsTest, NothingToUndoAndNothingToRedo) {
-  EXPECT_EQ(reasonOf(doc->redo(writer, key(nextId()), options, &out)), ErrorReason::NothingToRedo);
-  ASSERT_TRUE(doc->undo(writer, key(nextId()), options, &out));
-  EXPECT_EQ(reasonOf(doc->undo(writer, key(nextId()), options, &out)), ErrorReason::NothingToUndo);
+  EXPECT_EQ(reasonOf(doc->redo(writer, key(nextId()), options)), ErrorReason::NothingToRedo);
+  ASSERT_TRUE(keep(doc->undo(writer, key(nextId()), options)));
+  EXPECT_EQ(reasonOf(doc->undo(writer, key(nextId()), options)), ErrorReason::NothingToUndo);
   EXPECT_EQ(storedLog(id).size(), 2U);
 }
 
 TEST_F(RuntimeTransactionsTest, UndoAndRedoContinueAfterTheDocumentIsOpenedAgain) {
   dispatch(setWidth("a", 20));
   dispatch(setWidth("a", 30));
-  ASSERT_TRUE(doc->undo(writer, key(nextId()), options, &out));
+  ASSERT_TRUE(keep(doc->undo(writer, key(nextId()), options)));
   doc.reset();
 
   // A new runtime document over the same file (a restart of the server).
   doc = openRuntime(id);
   ASSERT_TRUE(doc->acquireLease(writer.session));
-  ASSERT_TRUE(doc->undo(writer, key(nextId()), options, &out));
-  EXPECT_EQ(out.entry().target(), 2U);
+  ASSERT_TRUE(keep(doc->undo(writer, key(nextId()), options)));
+  EXPECT_EQ(out.entry->at("target"), 2);
   EXPECT_EQ(storedParams(id, "a").at("width"), 10);
-  ASSERT_TRUE(doc->redo(writer, key(nextId()), options, &out));
-  EXPECT_EQ(out.entry().target(), 2U);
-  ASSERT_TRUE(doc->redo(writer, key(nextId()), options, &out));
-  EXPECT_EQ(out.entry().target(), 3U);
+  ASSERT_TRUE(keep(doc->redo(writer, key(nextId()), options)));
+  EXPECT_EQ(out.entry->at("target"), 2);
+  ASSERT_TRUE(keep(doc->redo(writer, key(nextId()), options)));
+  EXPECT_EQ(out.entry->at("target"), 3);
   EXPECT_EQ(storedParams(id, "a").at("width"), 30);
 }
 

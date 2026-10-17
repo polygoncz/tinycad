@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "read_model_proto.hpp"
 #include "tinycad/session/fingerprint.hpp"
 #include "tinycad/session/operation_codec.hpp"
 
@@ -29,8 +30,14 @@ grpc::Status guarded(Body body) {
   }
 }
 
-grpc::Status statusOf(const SessionResult<void>& result) {
-  return result ? grpc::Status::OK : toStatus(result.error());
+/**
+ * The answer to a change: converted into `out` after RuntimeDocument returned, so outside the
+ * document lock (N154).
+ */
+grpc::Status answer(const SessionResult<ChangeResult>& result, v1::ChangeResult* out) {
+  if (!result) return toStatus(result.error());
+  changeResultToProto(*result, out);
+  return grpc::Status::OK;
 }
 
 /** The idempotence key of a changing request; a missing operation_id is the client's bug. */
@@ -70,13 +77,14 @@ grpc::Status SessionServiceImpl::OpenSession(grpc::ServerContext* /*context*/,
     const SessionPtr& session = opened->session;
 
     std::uint64_t eventSeq = 0;
-    auto read = session->document().readModel(session->caller(), request->read(),
-                                              response->mutable_read_model(), &eventSeq);
+    auto read = session->document().readModel(session->caller(),
+                                              readModelOptionsOf(request->read()), &eventSeq);
     if (!read) {
       // A new session nobody will ever use must not keep the lease (a resumed one stays).
       if (!opened->resumed) manager_.close(session->id().str());
       return toStatus(read.error());
     }
+    readModelToProto(*read, response->mutable_read_model());
     response->set_session_id(session->id().str());
     response->set_event_seq(eventSeq);
     for (const v1::FeatureTypeDescriptor& type : featureTypes_) {
@@ -101,8 +109,11 @@ grpc::Status SessionServiceImpl::GetReadModel(grpc::ServerContext* /*context*/,
   return guarded([&] {
     auto session = manager_.find(request->session_id());
     if (!session) return toStatus(session.error());
-    return statusOf((*session)->document().readModel((*session)->caller(), request->read(),
-                                                     response->mutable_read_model()));
+    auto read =
+        (*session)->document().readModel((*session)->caller(), readModelOptionsOf(request->read()));
+    if (!read) return toStatus(read.error());
+    readModelToProto(*read, response->mutable_read_model());
+    return grpc::Status::OK;
   });
 }
 
@@ -118,9 +129,9 @@ grpc::Status SessionServiceImpl::Dispatch(grpc::ServerContext* /*context*/,
     if (!key) return toStatus(key.error());
     auto op = operationToJson(request->op());
     if (!op) return toStatus(op.error());
-    return statusOf((*session)->document().dispatch((*session)->caller(), *op, request->label(),
-                                                    *key, request->read(),
-                                                    response->mutable_result()));
+    return answer((*session)->document().dispatch((*session)->caller(), *op, request->label(),
+                                                  *key, readModelOptionsOf(request->read())),
+                  response->mutable_result());
   });
 }
 
@@ -134,8 +145,9 @@ grpc::Status SessionServiceImpl::Commit(grpc::ServerContext* /*context*/,
     if (!key) return toStatus(key.error());
     // StepKey: an empty commit is remembered by the session (N107, N119).
     const StepKey step{(*session)->recent(), *key};
-    return statusOf((*session)->document().commit((*session)->caller(), step, request->read(),
-                                                  response->mutable_result()));
+    return answer((*session)->document().commit((*session)->caller(), step,
+                                                readModelOptionsOf(request->read())),
+                  response->mutable_result());
   });
 }
 
@@ -147,8 +159,9 @@ grpc::Status SessionServiceImpl::Undo(grpc::ServerContext* /*context*/,
     if (!session) return toStatus(session.error());
     auto key = keyOf(*request, request->operation_id());
     if (!key) return toStatus(key.error());
-    return statusOf((*session)->document().undo((*session)->caller(), *key, request->read(),
-                                                response->mutable_result()));
+    return answer((*session)->document().undo((*session)->caller(), *key,
+                                              readModelOptionsOf(request->read())),
+                  response->mutable_result());
   });
 }
 
@@ -160,8 +173,9 @@ grpc::Status SessionServiceImpl::Redo(grpc::ServerContext* /*context*/,
     if (!session) return toStatus(session.error());
     auto key = keyOf(*request, request->operation_id());
     if (!key) return toStatus(key.error());
-    return statusOf((*session)->document().redo((*session)->caller(), *key, request->read(),
-                                                response->mutable_result()));
+    return answer((*session)->document().redo((*session)->caller(), *key,
+                                              readModelOptionsOf(request->read())),
+                  response->mutable_result());
   });
 }
 
@@ -176,8 +190,9 @@ grpc::Status SessionServiceImpl::BeginTransaction(grpc::ServerContext* /*context
     auto key = keyOf(*request, request->operation_id());
     if (!key) return toStatus(key.error());
     const StepKey step{(*session)->recent(), *key};
-    return statusOf((*session)->document().begin((*session)->caller(), request->label(), step,
-                                                 request->read(), response->mutable_result()));
+    return answer((*session)->document().begin((*session)->caller(), request->label(), step,
+                                               readModelOptionsOf(request->read())),
+                  response->mutable_result());
   });
 }
 
@@ -192,8 +207,9 @@ grpc::Status SessionServiceImpl::Apply(grpc::ServerContext* /*context*/,
     auto op = operationToJson(request->op());
     if (!op) return toStatus(op.error());
     const StepKey step{(*session)->recent(), *key};
-    return statusOf((*session)->document().apply((*session)->caller(), *op, step,
-                                                 request->read(), response->mutable_result()));
+    return answer((*session)->document().apply((*session)->caller(), *op, step,
+                                               readModelOptionsOf(request->read())),
+                  response->mutable_result());
   });
 }
 
@@ -208,8 +224,9 @@ grpc::Status SessionServiceImpl::ApplyTransient(grpc::ServerContext* /*context*/
     auto op = operationToJson(request->op());
     if (!op) return toStatus(op.error());
     const StepKey step{(*session)->recent(), *key};
-    return statusOf((*session)->document().applyTransient(
-        (*session)->caller(), *op, step, request->read(), response->mutable_result()));
+    return answer((*session)->document().applyTransient((*session)->caller(), *op, step,
+                                                        readModelOptionsOf(request->read())),
+                  response->mutable_result());
   });
 }
 
@@ -222,8 +239,9 @@ grpc::Status SessionServiceImpl::Abort(grpc::ServerContext* /*context*/,
     auto key = keyOf(*request, request->operation_id());
     if (!key) return toStatus(key.error());
     const StepKey step{(*session)->recent(), *key};
-    return statusOf((*session)->document().abort((*session)->caller(), step, request->read(),
-                                                 response->mutable_result()));
+    return answer((*session)->document().abort((*session)->caller(), step,
+                                               readModelOptionsOf(request->read())),
+                  response->mutable_result());
   });
 }
 
@@ -238,7 +256,7 @@ grpc::Status SessionServiceImpl::GetHistory(grpc::ServerContext* /*context*/,
     // uint64 on the wire; anything beyond int64 asks for entries that do not exist.
     const std::uint64_t from =
         std::min<std::uint64_t>(request->from_seq(), static_cast<std::uint64_t>(INT64_MAX));
-    (*session)->document().history(static_cast<std::int64_t>(from), response);
+    historyToProto((*session)->document().history(static_cast<std::int64_t>(from)), response);
     return grpc::Status::OK;
   });
 }
@@ -272,9 +290,9 @@ grpc::Status SessionServiceImpl::WatchSession(
 
     std::uint64_t afterSeq = request->after_seq();
     Clock::time_point lastWrite = Clock::now();
-    const auto send = [&](v1::SessionEvent event) {
+    const auto send = [&](const v1::SessionEvent& event) {
       v1::WatchSessionResponse response;
-      *response.mutable_event() = std::move(event);
+      *response.mutable_event() = event;
       lastWrite = Clock::now();
       return writer->Write(response);
     };
@@ -287,12 +305,14 @@ grpc::Status SessionServiceImpl::WatchSession(
         afterSeq = events.lastSeq();
         resync.set_seq(afterSeq);
         resync.mutable_resync();
-        if (!send(std::move(resync))) return grpc::Status::OK;
+        if (!send(resync)) return grpc::Status::OK;
         continue;
       }
-      for (v1::SessionEvent& event : *pending) {
-        afterSeq = event.seq();
-        if (!send(std::move(event))) return grpc::Status::OK;
+      for (const SessionEvent& stored : *pending) {
+        afterSeq = stored.seq;
+        v1::SessionEvent event;
+        sessionEventToProto(stored, &event);
+        if (!send(event)) return grpc::Status::OK;
       }
       // The document was unloaded: the stream ends, the client reconnects (SESSION_NOT_FOUND).
       if (events.closed()) return grpc::Status::OK;
@@ -305,7 +325,7 @@ grpc::Status SessionServiceImpl::WatchSession(
         v1::SessionEvent beat;
         beat.set_seq(afterSeq);
         beat.mutable_heartbeat();
-        if (!send(std::move(beat))) return grpc::Status::OK;
+        if (!send(beat)) return grpc::Status::OK;
       }
     }
     return grpc::Status::OK;

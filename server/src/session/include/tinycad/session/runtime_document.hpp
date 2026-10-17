@@ -17,6 +17,9 @@
 // (4) PersistentDocument call, (5) generation + 1 and a `changed` event, (6) regeneration and the
 // read model of the caller into the ChangeResult. A repeated request skips 3–5 and answers with
 // the stored entry (durable) or none (transaction steps) and the CURRENT read model (spec 14).
+//
+// Results are domain data (read_model.hpp, decision N154): the rpc layer converts them into the
+// tinycad.v1 messages after the call returned, outside the document lock.
 
 #include <cstddef>
 #include <cstdint>
@@ -32,12 +35,11 @@
 #include "tinycad/regen/builder.hpp"
 #include "tinycad/regen/regenerator.hpp"
 #include "tinycad/session/event_ring.hpp"
+#include "tinycad/session/read_model.hpp"
 #include "tinycad/session/recent_responses.hpp"
 #include "tinycad/session/session_error.hpp"
 #include "tinycad/sketch/solver.hpp"
 #include "tinycad/storage/store.hpp"
-#include "tinycad/v1/read_model.pb.h"
-#include "tinycad/v1/session.pb.h"
 
 namespace tinycad::ops {
 class OpHandlerRegistry;
@@ -121,44 +123,35 @@ class RuntimeDocument {
 
   // --- changes (spec 14 "Změny dokumentu"); a caller without the lease → ReadOnly -----------
   //
-  // Each fills `out` with the log entry (LogEntryView; unset when none) and the read model of the
-  // caller after the change (ReadModelOptions of the request). Errors leave the document, the
-  // transaction, the log, the generation and the events unchanged (except Storage, N35: the
-  // document was reloaded from the file, generation + 1 and `changed`, an open transaction is
-  // gone – a retried Commit then answers NoTransaction).
+  // Each returns the log entry (nullopt when none) and the read model of the caller after the
+  // change (ReadModelOptions of the request). Errors leave the document, the transaction, the
+  // log, the generation and the events unchanged (except Storage, N35: the document was reloaded
+  // from the file, generation + 1 and `changed`, an open transaction is gone – a retried Commit
+  // then answers NoTransaction).
 
   /** OperationDispatcher::dispatch; label '' = the op type. Durable idempotence (N34). */
-  SessionResult<void> dispatch(const Caller& caller, const core::Json& op, const std::string& label,
-                               const storage::OperationKey& key,
-                               const tinycad::v1::ReadModelOptions& options,
-                               tinycad::v1::ChangeResult* out);
-  SessionResult<void> begin(const Caller& caller, const std::string& label, const StepKey& step,
-                            const tinycad::v1::ReadModelOptions& options,
-                            tinycad::v1::ChangeResult* out);
-  SessionResult<void> apply(const Caller& caller, const core::Json& op, const StepKey& step,
-                            const tinycad::v1::ReadModelOptions& options,
-                            tinycad::v1::ChangeResult* out);
-  SessionResult<void> applyTransient(const Caller& caller, const core::Json& op,
-                                     const StepKey& step,
-                                     const tinycad::v1::ReadModelOptions& options,
-                                     tinycad::v1::ChangeResult* out);
+  SessionResult<ChangeResult> dispatch(const Caller& caller, const core::Json& op,
+                                       const std::string& label, const storage::OperationKey& key,
+                                       const ReadModelOptions& options);
+  SessionResult<ChangeResult> begin(const Caller& caller, const std::string& label,
+                                    const StepKey& step, const ReadModelOptions& options);
+  SessionResult<ChangeResult> apply(const Caller& caller, const core::Json& op, const StepKey& step,
+                                    const ReadModelOptions& options);
+  SessionResult<ChangeResult> applyTransient(const Caller& caller, const core::Json& op,
+                                             const StepKey& step, const ReadModelOptions& options);
   /**
    * An empty transaction: success without entry (spec 04). Durable idempotence for a written
    * entry; an empty commit writes nothing, so its key is remembered in `step.recent` and a retry
    * succeeds again instead of NoTransaction (N107).
    */
-  SessionResult<void> commit(const Caller& caller, const StepKey& step,
-                             const tinycad::v1::ReadModelOptions& options,
-                             tinycad::v1::ChangeResult* out);
-  SessionResult<void> abort(const Caller& caller, const StepKey& step,
-                            const tinycad::v1::ReadModelOptions& options,
-                            tinycad::v1::ChangeResult* out);
-  SessionResult<void> undo(const Caller& caller, const storage::OperationKey& key,
-                           const tinycad::v1::ReadModelOptions& options,
-                           tinycad::v1::ChangeResult* out);
-  SessionResult<void> redo(const Caller& caller, const storage::OperationKey& key,
-                           const tinycad::v1::ReadModelOptions& options,
-                           tinycad::v1::ChangeResult* out);
+  SessionResult<ChangeResult> commit(const Caller& caller, const StepKey& step,
+                                     const ReadModelOptions& options);
+  SessionResult<ChangeResult> abort(const Caller& caller, const StepKey& step,
+                                    const ReadModelOptions& options);
+  SessionResult<ChangeResult> undo(const Caller& caller, const storage::OperationKey& key,
+                                   const ReadModelOptions& options);
+  SessionResult<ChangeResult> redo(const Caller& caller, const storage::OperationKey& key,
+                                   const ReadModelOptions& options);
 
   /**
    * RenameDocument of DocumentService for an OPEN document (N37): document.rename dispatched
@@ -177,10 +170,10 @@ class RuntimeDocument {
    * events().lastSeq() at the same moment (OpenSessionResponse.event_seq: WatchSession after it
    * misses no change made after this read model).
    */
-  SessionResult<void> readModel(const Caller& caller, const tinycad::v1::ReadModelOptions& options,
-                                tinycad::v1::ReadModel* out, std::uint64_t* eventSeq = nullptr);
-  /** GetHistory: LogEntryViews with seq >= fromSeq (1 = all) and the undo and redo stacks. */
-  void history(std::int64_t fromSeq, tinycad::v1::GetHistoryResponse* out);
+  SessionResult<ReadModel> readModel(const Caller& caller, const ReadModelOptions& options,
+                                     std::uint64_t* eventSeq = nullptr);
+  /** GetHistory: the log entries with seq >= fromSeq (1 = all) and the undo and redo stacks. */
+  HistoryView history(std::int64_t fromSeq);
   /** ExportStep: GeometryKernel::exportStep of the bodies of the final state not hidden in body meta. */
   SessionResult<StepFile> exportStep();
 
