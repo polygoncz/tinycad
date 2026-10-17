@@ -1,6 +1,6 @@
 ---
 type: adr
-status: proposed
+status: accepted
 number: 30
 aliases:
   - ADR 0030
@@ -21,7 +21,7 @@ updated: 2026-10-17
 ---
 # 0030 – Nativní jádro `tinycad-core` přes gRPC
 
-- **Stav:** Navrženo (`status: proposed`), čeká na Pavlovo schválení. Po schválení dostanou [[0002-occt-wasm-ve-workeru|ADR 0002]] a [[0013-replicad-opencascadejs|ADR 0013]] `status: superseded`.
+- **Stav:** Přijato (`status: accepted`, Pavel 2026-10-17). [[0002-occt-wasm-ve-workeru|ADR 0002]] a [[0013-replicad-opencascadejs|ADR 0013]] jsou tím nahrazené (`status: superseded`). Do konce [[M46-klient-nad-read-modelem|M46]] ale WASM verze dál běží.
 - **Datum:** 2026-10-17
 - **Nahrazuje:** [[0002-occt-wasm-ve-workeru|ADR 0002]] (OCCT ve WASM ve Web Workeru) a [[0013-replicad-opencascadejs|ADR 0013]] (build `replicad-opencascadejs`)
 - **Souvisí:** [[14-protokol]], [[Q094 Nativní jádro na serveru přes gRPC|Q094]], [[Q096 Geometrie skici přes síť|Q096]]–[[Q105 Viditelnost parametru jako data|Q105]]

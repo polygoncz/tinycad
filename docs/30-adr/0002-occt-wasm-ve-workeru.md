@@ -1,6 +1,6 @@
 ---
 type: adr
-status: accepted
+status: superseded
 number: 2
 aliases:
   - ADR 0002
@@ -13,11 +13,11 @@ supersedes:
 tags:
   - adr
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-17
 ---
 # 0002 – OpenCascade ve WASM, ve Web Workeru, za portem
 
-- **Stav:** Přijato (`status: accepted`)
+- **Stav:** Nahrazeno (`status: superseded`) – 2026-10-17 ho nahradilo [[0030-nativni-jadro-pres-grpc|ADR 0030]] (nativní jádro přes gRPC). Platí pro WASM verzi, dokud ji [[M47-uklid-a-dokonceni|M47]] neodstraní.
 - **Datum:** 2026-10-12
 - **Souvisí:** [[06-geometricke-jadro]], [[02-core]]
 

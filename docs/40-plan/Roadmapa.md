@@ -150,7 +150,7 @@ Sdílené kontrakty jsou zafixované (2026-10-16) v [[12-skicar#Sdílené kontra
 
 ## Nativní jádro (M38–M47)
 
-Naplánováno 2026-10-17 po sérii M30–M37 podle [[Q094 Nativní jádro na serveru přes gRPC|Q094]] a navazujících otázek [[Q096 Geometrie skici přes síť|Q096]]–[[Q106 Moduly klienta pro gRPC|Q106]]. Rozhodnutí shrnuje [[0030-nativni-jadro-pres-grpc|ADR 0030]] (navržené), kontrakt je [[14-protokol|spec 14]] a soubory `server/proto/tinycad/v1/*.proto`. Dokument, operace, regenerace a OCCT se přepíšou **naráz** do C++ jádra `tinycad-core`; prohlížeč s ním mluví přes gRPC-Web a Envoy v Docker Compose. [[M16-vlastni-occt-build|M16]] je archivovaný.
+Naplánováno 2026-10-17 po sérii M30–M37 podle [[Q094 Nativní jádro na serveru přes gRPC|Q094]] a navazujících otázek [[Q096 Geometrie skici přes síť|Q096]]–[[Q106 Moduly klienta pro gRPC|Q106]]. Rozhodnutí shrnuje [[0030-nativni-jadro-pres-grpc|ADR 0030]] (přijaté 2026-10-17), kontrakt je [[14-protokol|spec 14]] a soubory `server/proto/tinycad/v1/*.proto`. Dokument, operace, regenerace a OCCT se přepíšou **naráz** do C++ jádra `tinycad-core`; prohlížeč s ním mluví přes gRPC-Web a Envoy v Docker Compose. [[M16-vlastni-occt-build|M16]] je archivovaný.
 
 Proč toto pořadí:
 - **M38 první:** přepis naráz potřebuje pevný cíl. Zmrazená TS doména a sdílené testovací případy (JSON) jsou specifikace, proti které se C++ ověřuje od prvního dne.

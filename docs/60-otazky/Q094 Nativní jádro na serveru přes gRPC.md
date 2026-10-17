@@ -98,7 +98,7 @@ Rozhodnuto po částech 2026-10-16, všechny body jsou uzavřené.
 
 **Další krok:** při plánování série po M37 propsat rozhodnutí do specifikací ([[01-architektura]], [[06-geometricke-jadro]], [[05-persistence]]), napsat ADR, které nahradí [[0002-occt-wasm-ve-workeru|ADR 0002]] a [[0013-replicad-opencascadejs|ADR 0013]], a navrhnout `.proto`. Dnes se specifikace nemění, protože implementace je až do M37 dál WASM.
 
-**Stav 2026-10-17:** `.proto` je navržené (`server/proto/tinycad/v1/`, [[14-protokol|spec 14]]), ADR je [[0030-nativni-jadro-pres-grpc|ADR 0030]] (navržené) a série je rozepsaná v [[Roadmapa#Nativní jádro (M38–M47)]]. Další upřesnění: [[Q100 Verze sítí v mezipaměti klienta|Q100]]–[[Q106 Moduly klienta pro gRPC|Q106]]. Specifikace se přepíšou v milnících série.
+**Stav 2026-10-17:** `.proto` je navržené (`server/proto/tinycad/v1/`, [[14-protokol|spec 14]]), ADR je [[0030-nativni-jadro-pres-grpc|ADR 0030]] (přijaté 2026-10-17) a série je rozepsaná v [[Roadmapa#Nativní jádro (M38–M47)]]. Další upřesnění: [[Q100 Verze sítí v mezipaměti klienta|Q100]]–[[Q106 Moduly klienta pro gRPC|Q106]]. Specifikace se přepíšou v milnících série.
 
 
 _(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace. Zásadní rozhodnutí → nové ADR, které nahradí [[0002-occt-wasm-ve-workeru|ADR 0002]] a [[0013-replicad-opencascadejs|ADR 0013]].)_
