@@ -194,6 +194,7 @@ const SKETCH_KEYS = [
   'sketch.conflict',
   'sketch.redundant',
   'sketch.solverFailed',
+  'sketch.notSolved',
   'sketchPanel.constraints',
   'sketchPanel.remove',
   'browser.origin',
