@@ -6,6 +6,7 @@
 // radius infers equal with the last circle or arc (inferRadius); Ctrl/Cmd turns the automatic
 // constraints off. The click and the preview of a move share one step (arc3pStep).
 
+import { vec2 } from '@/core';
 import { arcFrom3, inferRadius } from '@/sketch';
 import type { ArcFit, SketchConstraint, SketchData, SketchEntityId } from '@/sketch';
 import type { Tool, ToolContext } from '@/interaction';
@@ -17,7 +18,6 @@ import {
   addDrawn,
   clearPreview,
   clickTool,
-  distance,
   lastRound,
   MIN_LENGTH,
   newConstraintId,
@@ -121,7 +121,7 @@ function arc3pStep(
   const { start, end } = picked;
   if (start === null) return { kind: 'start', target };
   if (end === null) {
-    if (samePoint(start, target) || distance(start.at, target.at) <= MIN_LENGTH) {
+    if (samePoint(start, target) || vec2.dist(start.at, target.at) <= MIN_LENGTH) {
       return { kind: 'none' };
     }
     return { kind: 'end', target };

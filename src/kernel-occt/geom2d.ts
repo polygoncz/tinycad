@@ -1,8 +1,11 @@
 import type { Geom2d_BSplineCurve, Geom2d_Curve } from 'replicad-opencascadejs';
+import { vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import type { IdentifiedCurve, ProfileCurve } from '@/kernel';
 import { compressKnots } from './face';
 import type { Occt } from './occt';
+
+const { dist } = vec2;
 
 // 2D curves of a sketch as OCCT Geom2d curves and the bounding box prefilter of their pairs:
 // shared by the regions (regions.ts, M30) and the intersections and pieces of curves
@@ -176,8 +179,4 @@ export function overlappingPairs(boxes: readonly Box[]): readonly (readonly [num
     }
   }
   return pairs;
-}
-
-export function dist(a: Vec2, b: Vec2): number {
-  return Math.hypot(a[0] - b[0], a[1] - b[1]);
 }

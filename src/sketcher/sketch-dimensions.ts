@@ -2,7 +2,7 @@
 // (M28)", "Kresba"): what a dimension measures, where it stands (its placement, stored or default)
 // and the world points to draw it from. ui projects the points and adds the arrows and the text.
 
-import { plane as planeMath } from '@/core';
+import { plane as planeMath, vec2 } from '@/core';
 import type { Plane, Vec2, Vec3 } from '@/core';
 import { defaultPlacement, isDimension, isLineCarrier, linearSpan } from '@/sketch';
 import type {
@@ -21,6 +21,8 @@ import type {
   SketchItemId,
   SketchPoint,
 } from '@/sketch';
+
+const { add, cross, dot, length, scale, sub } = vec2;
 
 /** Where a dimension is drawn, in world coordinates (spec 12, "Kresba"). */
 export type DimensionGeometry =
@@ -195,7 +197,8 @@ function shapeOf(data: SketchData, byId: Entities, c: DimensionConstraint): Shap
       const db = sub(b[1], b[0]);
       const det = cross(da, db);
       // Parallel lines (or a zero-length one) have no vertex.
-      if (Math.abs(det) <= MIN * len(da) * len(db) || len(da) <= MIN || len(db) <= MIN) return null;
+      if (Math.abs(det) <= MIN * length(da) * length(db) || length(da) <= MIN || length(db) <= MIN)
+        return null;
       const s = cross(sub(b[0], a[0]), db) / det;
       return { kind: 'angular', vertex: add(a[0], scale(da, s)), da, db };
     }
@@ -324,18 +327,12 @@ function roundOf(byId: Entities, id: string): Extract<Shape, { kind: 'radial' }>
     const start = pointOf(byId, entity.start);
     // defaultPlacement reads the end of an arc too.
     if (center === null || start === null || pointOf(byId, entity.end) === null) return null;
-    return { kind: 'radial', center, radius: len(sub(start, center)) };
+    return { kind: 'radial', center, radius: length(sub(start, center)) };
   }
   return null;
 }
 
 const xy = (p: SketchPoint): Vec2 => [p.x, p.y];
-const add = (a: Vec2, b: Vec2): Vec2 => [a[0] + b[0], a[1] + b[1]];
-const sub = (a: Vec2, b: Vec2): Vec2 => [a[0] - b[0], a[1] - b[1]];
-const scale = (a: Vec2, k: number): Vec2 => [a[0] * k, a[1] * k];
-const dot = (a: Vec2, b: Vec2): number => a[0] * b[0] + a[1] * b[1];
-const cross = (a: Vec2, b: Vec2): number => a[0] * b[1] - a[1] * b[0];
-const len = (a: Vec2): number => Math.hypot(a[0], a[1]);
 
 function sameView(a: SketchDimensionView, b: SketchDimensionView): boolean {
   return (

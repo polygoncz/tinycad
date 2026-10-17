@@ -22,6 +22,7 @@
 // locked angle of a straight axis replaces its automatic axis: 0/180° → horizontal, 90/270° →
 // vertical (required), another angle none. The sweep and the angle of an arc slot have none.
 
+import { vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import {
   arcSlotFrom,
@@ -61,7 +62,6 @@ import {
   constrainRadial,
   constrainSweep,
   constrainXY,
-  distance,
   distanceDimension,
   inputValues,
   leftNormal,
@@ -213,7 +213,7 @@ function measureStep(
     return new Map([['width', width]]);
   }
   if (picked.length === 2) return measureSweep(first, second, at);
-  return new Map([['width', 2 * Math.abs(distance(first, at) - distance(first, second))]]);
+  return new Map([['width', 2 * Math.abs(vec2.dist(first, at) - vec2.dist(first, second))]]);
 }
 
 /**
@@ -242,8 +242,8 @@ function constrainArcWidth(
   width: number | undefined,
 ): Vec2 {
   if (width === undefined) return cursor;
-  const radius = distance(center, start);
-  const d = distance(center, cursor);
+  const radius = vec2.dist(center, start);
+  const d = vec2.dist(center, cursor);
   const towards = d <= MIN_LENGTH ? start : cursor;
   const size = d <= MIN_LENGTH ? radius : d;
   const r = d >= radius ? radius + width / 2 : radius - width / 2;
@@ -271,7 +271,11 @@ function slotStep(
   if (first === undefined) return axisStep(target, values);
   if (second === undefined) {
     const from = picked[0]?.target;
-    if (from === undefined || samePoint(from, target) || distance(first, target.at) <= MIN_LENGTH) {
+    if (
+      from === undefined ||
+      samePoint(from, target) ||
+      vec2.dist(first, target.at) <= MIN_LENGTH
+    ) {
       return { kind: 'none' };
     }
     if (kind === 'arc') return axisStep(target, values);
@@ -285,7 +289,7 @@ function slotStep(
   if (kind === 'arc' && third === undefined) {
     // The end is always a new point: projecting an existing point would move it.
     const end = project(first, second, target.at);
-    if (end === null || distance(end, second) <= MIN_LENGTH) return { kind: 'none' };
+    if (end === null || vec2.dist(end, second) <= MIN_LENGTH) return { kind: 'none' };
     // No inferences of the snap: they hold at the cursor, not at the projected end (spec 12).
     return axisStep(freeTarget(end), values);
   }
@@ -351,7 +355,7 @@ function previewSlot(
     }
     const from = angle(first, second);
     const sweep = ccwSweep(from, angle(first, end));
-    previewPolyline(ctx, session, arcPoints(first, distance(first, second), from, sweep));
+    previewPolyline(ctx, session, arcPoints(first, vec2.dist(first, second), from, sweep));
     return;
   }
   if (step.kind !== 'slot') {
@@ -369,9 +373,9 @@ function outline(fit: SlotFitOf): readonly Vec2[] {
     return [r1, ...ccwArc(c2, radius, r2, l2), ...ccwArc(c1, radius, l1, r1)];
   }
   const { center, start, end, half, innerStart, innerEnd, outerStart, outerEnd } = fit.fit;
-  const inner = ccwArc(center, distance(center, innerStart), innerStart, innerEnd);
+  const inner = ccwArc(center, vec2.dist(center, innerStart), innerStart, innerEnd);
   return [
-    ...ccwArc(center, distance(center, outerStart), outerStart, outerEnd),
+    ...ccwArc(center, vec2.dist(center, outerStart), outerStart, outerEnd),
     ...ccwArc(end, half, outerEnd, innerEnd),
     ...inner.toReversed(),
     ...ccwArc(start, half, innerStart, outerStart),
@@ -482,9 +486,9 @@ const angle = (center: Vec2, p: Vec2): number => Math.atan2(p[1] - center[1], p[
 
 /** The cursor projected onto the circle around center through start; null on the centre. */
 function project(center: Vec2, start: Vec2, cursor: Vec2): Vec2 | null {
-  const d = distance(center, cursor);
+  const d = vec2.dist(center, cursor);
   if (d <= MIN_LENGTH) return null;
-  const r = distance(center, start);
+  const r = vec2.dist(center, start);
   return [
     center[0] + ((cursor[0] - center[0]) * r) / d,
     center[1] + ((cursor[1] - center[1]) * r) / d,

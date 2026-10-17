@@ -8,6 +8,7 @@
 // rim in the direction of the cursor). A locked diameter becomes a required diameter dimension of
 // the circle and replaces the automatic equal.
 
+import { vec2 } from '@/core';
 import { inferRadius } from '@/sketch';
 import type { SketchConstraint, SketchData, SketchEntityId } from '@/sketch';
 import type { Tool } from '@/interaction';
@@ -21,7 +22,6 @@ import {
   clickTool,
   constrainPolar,
   constrainXY,
-  distance,
   inputValues,
   lastRound,
   measureXY,
@@ -69,7 +69,7 @@ export function createCircleTool(sketches: SketchEditor): Tool {
     },
     measure(at) {
       if (center === null) return measureXY(at);
-      return new Map([['diameter', 2 * distance(center.at, at)]]);
+      return new Map([['diameter', 2 * vec2.dist(center.at, at)]]);
     },
     onMove(ctx, session, x, y, mods) {
       const mode = snapMode(sketches, mods);
@@ -79,7 +79,7 @@ export function createCircleTool(sketches: SketchEditor): Tool {
       const step = circleStep(sessionData(session, []), center, target, mode.infer, diameter);
       previewInference(session, target.at, stepInferences(step), target.guides);
       if (center === null) return;
-      previewPolyline(ctx, session, circlePoints(center.at, distance(center.at, target.at)));
+      previewPolyline(ctx, session, circlePoints(center.at, vec2.dist(center.at, target.at)));
     },
     onClick(ctx, session, x, y, mods) {
       const mode = snapMode(sketches, mods);
@@ -135,9 +135,9 @@ function circleStep(
   diameter: number | null,
 ): CircleStep {
   if (center === null) return { kind: 'center', target };
-  const radius = diameter === null ? distance(center.at, target.at) : diameter / 2;
+  const radius = diameter === null ? vec2.dist(center.at, target.at) : diameter / 2;
   // A rim on the centre has no direction, even with an entered diameter.
-  if (distance(center.at, target.at) <= MIN_LENGTH) return { kind: 'none' };
+  if (vec2.dist(center.at, target.at) <= MIN_LENGTH) return { kind: 'none' };
   const round = infer ? inferRadius(radius, data, lastRound(data)) : null;
   // A locked diameter is exact (M32): it replaces the automatic equal.
   const [equal] = withoutLocked(round === null ? [] : [{ kind: 'equal', with: round }], {

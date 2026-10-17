@@ -17,6 +17,7 @@
 // A locked angle drops the automatic direction (axis, parallel, perpendicular, tangent), a locked
 // length the automatic equal, so the entered values are exact.
 
+import { vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import { endTangent, inferLine, measure } from '@/sketch';
 import type {
@@ -42,7 +43,6 @@ import {
   clickTool,
   constrainPolar,
   constrainXY,
-  distance,
   distanceDimension,
   existingLine,
   inputValues,
@@ -360,7 +360,7 @@ function lineStep(
     const closing = { ...target, inferred: [] };
     return lineTo(data, chain, closing, first, { infer, axis: null, close: true, values });
   }
-  if (distance(last.at, target.at) <= MIN_LENGTH) return NO_STEP;
+  if (vec2.dist(last.at, target.at) <= MIN_LENGTH) return NO_STEP;
   const { inferred, axis } = alignmentWith(target.inferred, last.id);
   const to = { id: target.point, at: target.at };
   return lineTo(data, chain, { ...target, inferred }, to, { infer, axis, close: false, values });

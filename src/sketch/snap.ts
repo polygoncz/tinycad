@@ -1,12 +1,13 @@
 import type { Vec2 } from '@/core';
-import { assertNever, bspline } from '@/core';
+import { assertNever, bspline, mod2pi, vec2 } from '@/core';
 import { SPLINE_TOLERANCE, curve2 } from './geometry';
 import { pointsById } from './points';
 import type { Curve2 } from './geometry';
 import { isCurveEntity } from './model';
 import { patternCopies } from './patterns';
 import type { SketchData, SketchEntity, SketchEntityId, SketchPoint } from './model';
-import { angleOf, dist, dot, length, lerp, mod2pi, sub } from './vec2';
+
+const { addScaled, angleOf, dist, dot, length, sub } = vec2;
 
 // The snapper of the sketcher tools (spec 12 "Snapper a auto-vazby (M26)"): where a click lands in
 // plane coordinates (mm) and which constraints the new point gets. Pure and synchronous, so it
@@ -247,13 +248,13 @@ function onSegment(p: Vec2, from: Vec2, to: Vec2): Vec2 {
   const d = sub(to, from);
   const len2 = dot(d, d);
   const t = len2 === 0 ? 0 : Math.min(1, Math.max(0, dot(sub(p, from), d) / len2));
-  return lerp(from, d, t);
+  return addScaled(from, d, t);
 }
 
 /** The projection on the whole line through from and to (from ≠ to), not clamped. */
 function onCarrier(p: Vec2, from: Vec2, to: Vec2): Vec2 {
   const d = sub(to, from);
-  return lerp(from, d, dot(sub(p, from), d) / dot(d, d));
+  return addScaled(from, d, dot(sub(p, from), d) / dot(d, d));
 }
 
 /** The nearest projection on the segments of the polyline; the first segment wins a tie. */
@@ -278,11 +279,11 @@ function onPolyline(p: Vec2, polyline: readonly Vec2[]): Vec2 | null {
 function onCircle(p: Vec2, center: Vec2, radius: number): Vec2 | null {
   const v = sub(p, center);
   const l = length(v);
-  return l === 0 ? null : lerp(center, v, radius / l);
+  return l === 0 ? null : addScaled(center, v, radius / l);
 }
 
 function midpointOf(l: { readonly from: Vec2; readonly to: Vec2 }): Vec2 {
-  return lerp(l.from, sub(l.to, l.from), 0.5);
+  return addScaled(l.from, sub(l.to, l.from), 0.5);
 }
 
 /** The nearest multiple of the step in both coordinates; −0 becomes 0. */

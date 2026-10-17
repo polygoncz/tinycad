@@ -2,6 +2,7 @@
 // tests in this and other modules. dependency-cruiser allows importing it only from *.test.ts, so
 // it never reaches the production bundle.
 
+import { vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import {
   arcAngle,
@@ -335,7 +336,7 @@ function filletArc(a: Curve2, b: Curve2, radius: number, near: Vec2): FilletArc 
     offsets(cb, radius).flatMap((ob) => offsetsMeet(oa, ob, near)),
   );
   const center = centres.reduce<Vec2 | null>(
-    (best, p) => (best === null || distance(p, near) < distance(best, near) ? p : best),
+    (best, p) => (best === null || vec2.dist(p, near) < vec2.dist(best, near) ? p : best),
     null,
   );
   if (center === null) throw new Error('FakeSketchGeometry: no fillet (operation-failed)');
@@ -409,7 +410,7 @@ function project(c: Carrier, p: Vec2): Vec2 {
     const s = (p[0] - c.point[0]) * c.dir[0] + (p[1] - c.point[1]) * c.dir[1];
     return [c.point[0] + c.dir[0] * s, c.point[1] + c.dir[1] * s];
   }
-  const d = distance(p, c.center);
+  const d = vec2.dist(p, c.center);
   if (d === 0) throw new Error('FakeSketchGeometry: a fillet centre in the centre of an arc');
   return [
     c.center[0] + ((p[0] - c.center[0]) * c.radius) / d,
@@ -425,10 +426,6 @@ function carrierParam(c: Curve2, p: Vec2): number {
   }
   if (c.kind === 'arc') return arcAngle(c, p);
   throw new Error(`FakeSketchGeometry: no fillet of a ${c.kind}`);
-}
-
-function distance(a: Vec2, b: Vec2): number {
-  return Math.hypot(a[0] - b[0], a[1] - b[1]);
 }
 
 /**

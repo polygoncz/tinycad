@@ -1,4 +1,4 @@
-import { assert } from '@/core';
+import { assert, vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import { nearestParam, paramRange, pointAt, samePoint } from './curve-param';
 import { curve2 } from './geometry';
@@ -17,7 +17,8 @@ import type {
 import { coordinatesOf, endIds, findCurve, newPoints, rebuild } from './trim';
 import type { IdSource, SketchEdit } from './trim';
 import { isCurveEntity } from './model';
-import { dist, dot, length } from './vec2';
+
+const { dist, dot, length } = vec2;
 
 // Fillet and chamfer between two sketch curves (spec 12 "Zaoblení a sražení ve skice (M34)"):
 // pure functions over the data rules of trim (M33). The geometry comes in the request: the

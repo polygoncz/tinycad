@@ -5,6 +5,7 @@
 // (inferRadius, automatic); Ctrl/Cmd turns that inference off. The click and the preview of a
 // move share one step (circle3pStep), so the preview shows exactly the constraints the click adds.
 
+import { vec2 } from '@/core';
 import { circleFrom3, inferRadius } from '@/sketch';
 import type { CircleFit, SketchData, SketchEntityId } from '@/sketch';
 import { isPlainEscape } from '@/interaction';
@@ -16,7 +17,6 @@ import {
   circlePoints,
   clearPreview,
   clickTool,
-  distance,
   lastRound,
   previewInference,
   previewPairs,
@@ -106,7 +106,7 @@ function circle3pStep(
   infer: boolean,
 ): Circle3pStep {
   const coincident = picked.some(
-    (p) => samePoint(p, target) || distance(p.at, target.at) <= MIN_LENGTH,
+    (p) => samePoint(p, target) || vec2.dist(p.at, target.at) <= MIN_LENGTH,
   );
   if (coincident) return { kind: 'none' };
   const [a, b] = picked;

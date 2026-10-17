@@ -1,7 +1,9 @@
+import { mod2pi, TWO_PI, vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import { createKernelError } from './errors';
 import type { FilletArc, FilletArcInput, FilletCurve } from './profile';
-import { angleOf, cross, dist, dot, length, lerp, mod2pi, normalize, sub, TWO_PI } from './vec2';
+
+const { addScaled, angleOf, cross, dist, dot, length, normalize, sub } = vec2;
 
 // filletArc of the FakeKernel (spec 06 "Stav po M34"), analytically: the possible centers are
 // the intersections of the curves parallel to both carriers at the distance `radius` (lines
@@ -47,7 +49,7 @@ function offsetsOf(c: FilletCurve, radius: number, tol: number): readonly Offset
   if (c.kind === 'line') {
     const d = normalize(sub(c.to, c.from));
     const n: Vec2 = [d[1], -d[0]];
-    return [1, -1].map((s) => ({ kind: 'line', p: lerp(c.from, n, s * radius), d }));
+    return [1, -1].map((s) => ({ kind: 'line', p: addScaled(c.from, n, s * radius), d }));
   }
   const rho = dist(c.center, c.from);
   const radii = [rho + radius, Math.abs(rho - radius)].filter((r) => r > tol);
@@ -74,19 +76,19 @@ function lineLine(a: LineOffset, b: LineOffset, near: Vec2, tol: number): readon
   const w = sub(b.p, a.p);
   if (Math.abs(denominator) <= PARALLEL) {
     // Parallel: one line when b passes through a, otherwise no common point.
-    return Math.abs(cross(a.d, w)) <= tol ? [lerp(a.p, a.d, dot(sub(near, a.p), a.d))] : [];
+    return Math.abs(cross(a.d, w)) <= tol ? [addScaled(a.p, a.d, dot(sub(near, a.p), a.d))] : [];
   }
-  return [lerp(a.p, a.d, cross(w, b.d) / denominator)];
+  return [addScaled(a.p, a.d, cross(w, b.d) / denominator)];
 }
 
 function lineCircle(l: LineOffset, c: CircleOffset, tol: number): readonly Vec2[] {
   const along = dot(sub(c.c, l.p), l.d);
-  const foot = lerp(l.p, l.d, along);
+  const foot = addScaled(l.p, l.d, along);
   const h = dist(c.c, foot);
   if (h > c.r + tol) return [];
   if (Math.abs(h - c.r) <= tol) return [foot];
   const half = Math.sqrt(c.r * c.r - h * h);
-  return [lerp(foot, l.d, -half), lerp(foot, l.d, half)];
+  return [addScaled(foot, l.d, -half), addScaled(foot, l.d, half)];
 }
 
 function circleCircle(a: CircleOffset, b: CircleOffset, near: Vec2, tol: number): readonly Vec2[] {
@@ -96,17 +98,17 @@ function circleCircle(a: CircleOffset, b: CircleOffset, near: Vec2, tol: number)
     // Concentric: one circle when the radii agree, otherwise no common point.
     if (Math.abs(a.r - b.r) > tol) return [];
     const toward = sub(near, a.c);
-    return [lerp(a.c, length(toward) > tol ? normalize(toward) : [1, 0], a.r)];
+    return [addScaled(a.c, length(toward) > tol ? normalize(toward) : [1, 0], a.r)];
   }
   if (d > a.r + b.r + tol || d < Math.abs(a.r - b.r) - tol) return [];
   const u = normalize(between);
   const along = (d * d + a.r * a.r - b.r * b.r) / (2 * d);
-  const foot = lerp(a.c, u, along);
+  const foot = addScaled(a.c, u, along);
   // Touching circles: one point.
   if (Math.abs(d - a.r - b.r) <= tol || Math.abs(d - Math.abs(a.r - b.r)) <= tol) return [foot];
   const h = Math.sqrt(Math.max(0, a.r * a.r - along * along));
   const n: Vec2 = [-u[1], u[0]];
-  return [lerp(foot, n, h), lerp(foot, n, -h)];
+  return [addScaled(foot, n, h), addScaled(foot, n, -h)];
 }
 
 /**
@@ -118,7 +120,7 @@ function projection(c: FilletCurve, p: Vec2): readonly [Vec2, number] {
   if (c.kind === 'line') {
     const d = sub(c.to, c.from);
     const t = dot(sub(p, c.from), d) / dot(d, d);
-    return [lerp(c.from, d, t), t];
+    return [addScaled(c.from, d, t), t];
   }
   const rho = dist(c.center, c.from);
   const angle = angleOf(sub(p, c.center));

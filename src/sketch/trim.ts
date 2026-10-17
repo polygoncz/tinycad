@@ -1,4 +1,4 @@
-import { assert, assertNever } from '@/core';
+import { assert, assertNever, mod2pi, TWO_PI } from '@/core';
 import type { Vec2 } from '@/core';
 import { nearestParam, paramRange, pointAt, samePoint } from './curve-param';
 import { constraintTargets, curvePoints, removeItems } from './edit';
@@ -16,7 +16,6 @@ import type {
   SketchEntityId,
   SketchPoint,
 } from './model';
-import { TWO_PI, mod2pi } from './vec2';
 
 // Trim, extend and split of sketch curves (spec 12 "Trim, extend, split (M33)"): pure functions
 // that rearrange the entities and constraints of the sketch around the intersections the kernel

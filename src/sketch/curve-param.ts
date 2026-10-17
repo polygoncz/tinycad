@@ -1,8 +1,9 @@
-import { assertNever, bspline } from '@/core';
+import { assertNever, bspline, mod2pi, TWO_PI, vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import { SPLINE_TOLERANCE } from './geometry';
 import type { Curve2 } from './geometry';
-import { TWO_PI, angleOf, dist, dot, mod2pi, sub } from './vec2';
+
+const { angleOf, dist, dot, sub } = vec2;
 
 // The parameter t of a sketch curve (spec 12 "Port a parametr křivky", M33), the same in the
 // kernel and here: a line [0, 1] from `from` to `to`; an arc the angle from `from` in the
@@ -191,7 +192,7 @@ function splinePiece(c: Spline, from: number, to: number): Vec2[] {
   const halve = (a: number, pa: Vec2, b: number, pb: Vec2, depth: number): void => {
     const m = (a + b) / 2;
     const pm = pointAt(c, m);
-    if (depth < MAX_DEPTH && (depth < minDepth || distanceToChord(pm, pa, pb) > tolerance)) {
+    if (depth < MAX_DEPTH && (depth < minDepth || vec2.distanceToSegment(pm, pa, pb) > tolerance)) {
       halve(a, pa, m, pm, depth + 1);
       halve(m, pm, b, pb, depth + 1);
     } else {
@@ -207,14 +208,6 @@ function splinePiece(c: Spline, from: number, to: number): Vec2[] {
     pa = pb;
   }
   return out;
-}
-
-function distanceToChord(p: Vec2, a: Vec2, b: Vec2): number {
-  const d = sub(b, a);
-  const len2 = dot(d, d);
-  if (len2 === 0) return dist(p, a);
-  const s = Math.max(0, Math.min(1, dot(sub(p, a), d) / len2));
-  return dist(p, [a[0] + s * d[0], a[1] + s * d[1]]);
 }
 
 function knot(c: Spline, i: number): number {

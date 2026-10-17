@@ -1,7 +1,7 @@
 // Shared parts of the sketcher tools (spec 10, "Nástroje a akce skicáře"): the open session,
 // clicks, the cursor in plane coordinates and the preview overlay.
 
-import { plane as planeMath } from '@/core';
+import { plane as planeMath, vec2 } from '@/core';
 import type { Vec2, Vec3 } from '@/core';
 import { isPattern, paramRange, piecePolyline } from '@/sketch';
 import type {
@@ -195,7 +195,7 @@ export function constrainPolar(
 /** The `length` and the `angle` (in [0, 2π)) from `from` to `at`. */
 export function measurePolar(from: Vec2, at: Vec2): ReadonlyMap<string, number> {
   return new Map([
-    ['length', distance(from, at)],
+    ['length', vec2.dist(from, at)],
     ['angle', directionOf(from, at)],
   ]);
 }
@@ -212,7 +212,7 @@ export function constrainRadial(
 /** The `radius` and the `angle` (in [0, 2π)) from `center` to `at` (RADIAL_FIELDS). */
 export function measureRadial(center: Vec2, at: Vec2): ReadonlyMap<string, number> {
   return new Map([
-    ['radius', distance(center, at)],
+    ['radius', vec2.dist(center, at)],
     ['angle', directionOf(center, at)],
   ]);
 }
@@ -257,7 +257,7 @@ export function constrainSweep(
   const sweep = values.get('sweep');
   if (sweep === undefined) return cursor;
   if (sweep <= 0) return start;
-  const r = distance(center, start);
+  const r = vec2.dist(center, start);
   const to = angleAt(center, start) + sweep;
   return [center[0] + r * Math.cos(to), center[1] + r * Math.sin(to)];
 }
@@ -268,13 +268,13 @@ export function constrainSweep(
  */
 export function measureSweep(center: Vec2, start: Vec2, at: Vec2): ReadonlyMap<string, number> {
   const sweep =
-    distance(center, at) <= MIN_LENGTH ? 0 : ccwSweep(angleAt(center, start), angleAt(center, at));
+    vec2.dist(center, at) <= MIN_LENGTH ? 0 : ccwSweep(angleAt(center, start), angleAt(center, at));
   return new Map([['sweep', sweep]]);
 }
 
 /** The unit left normal of the line a → b, or null for a ≈ b. */
 export function leftNormal(a: Vec2, b: Vec2): Vec2 | null {
-  const d = distance(a, b);
+  const d = vec2.dist(a, b);
   if (d <= MIN_LENGTH) return null;
   return [-(b[1] - a[1]) / d, (b[0] - a[0]) / d];
 }
@@ -379,10 +379,6 @@ export function cursorAt(
 
 export const toWorld = (session: SketchSession, v: Vec2): Vec3 =>
   planeMath.toWorld(session.plane.get(), v);
-
-export function distance(a: Vec2, b: Vec2): number {
-  return Math.hypot(b[0] - a[0], b[1] - a[1]);
-}
 
 /** Lines between consecutive points as overlay pairs (a polyline). */
 function polylinePairs(points: readonly Vec3[]): readonly Vec3[] {

@@ -1,4 +1,5 @@
 import type { Geom2d_Curve, gp_Pnt2d, gp_Vec2d } from 'replicad-opencascadejs';
+import { vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import type { IdentifiedCurve, ProfileCurve, ProfileRegion, ProfileRegions } from '@/kernel';
 import {
@@ -7,7 +8,6 @@ import {
   circleCurve,
   coordinatesOf,
   counterClockwise,
-  dist,
   endOf,
   inBox,
   overlappingPairs,
@@ -16,6 +16,8 @@ import {
   type Box,
 } from './geom2d';
 import type { Occt } from './occt';
+
+const { dist } = vec2;
 
 // profileRegions of the OCCT adapter (spec 06 "Stav po M30", spec 12 "Oblasti (profily)"; M30
 // task 2, way b of the prototype): the contract algorithm of the FakeKernel, with the geometry

@@ -1,10 +1,13 @@
 import type { Geom2d_Curve, Geom2dAPI_InterCurveCurve } from 'replicad-opencascadejs';
+import { vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import { createKernelError, type FilletArc, type FilletArcInput } from '@/kernel';
 import { sharesPiece, touchingPoint } from './curves';
-import { circleCurve, coordinatesOf, dist } from './geom2d';
+import { circleCurve, coordinatesOf } from './geom2d';
 import type { Occt } from './occt';
 import { isWasmTrap } from './wasm-trap';
+
+const { dist } = vec2;
 
 // filletArc of the OCCT adapter (spec 06 "Stav po M34"): the possible centers are the
 // intersections (Geom2dAPI_InterCurveCurve) of the Geom2d_OffsetCurve of both carriers at

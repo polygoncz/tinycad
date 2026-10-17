@@ -1,3 +1,4 @@
+import { vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import { curve2 } from './geometry';
 import { pointsById } from './points';
@@ -11,7 +12,8 @@ import type {
   SketchEntityId,
   SketchLine,
 } from './model';
-import { cross, dist, dot, length, lerp, sub } from './vec2';
+
+const { addScaled, cross, dist, dot, length, sub } = vec2;
 
 // Initial positions of new circles and arcs (spec 12 "Oblouky a kružnice (M27)"), and of the
 // rectangles and slots of M31 with their topology. Only an estimate: the constraints of the tool
@@ -223,7 +225,7 @@ export function rectangleFrom3(p1: Vec2, p2: Vec2, p3: Vec2): RectCorners | null
   if (n === null) return null;
   const h = dot(sub(p3, p2), n);
   if (Math.abs(h) <= EPS) return null;
-  return [p1, p2, lerp(p2, n, h), lerp(p1, n, h)];
+  return [p1, p2, addScaled(p2, n, h), addScaled(p1, n, h)];
 }
 
 /**
@@ -259,7 +261,7 @@ export function slotFromEnds(e1: Vec2, e2: Vec2, width: Vec2): SlotFit | null {
   const r = Math.abs(dot(sub(width, e1), n));
   if (r <= EPS || dist(e1, e2) - 2 * r <= EPS) return null;
   const d: Vec2 = [n[1], -n[0]];
-  return slotFit(lerp(e1, d, r), lerp(e2, d, -r), n, r);
+  return slotFit(addScaled(e1, d, r), addScaled(e2, d, -r), n, r);
 }
 
 /**
@@ -295,13 +297,13 @@ export function arcSlotFrom(center: Vec2, start: Vec2, end: Vec2, width: Vec2): 
   return {
     center,
     start,
-    end: lerp(center, e, radius),
+    end: addScaled(center, e, radius),
     radius,
     half,
-    innerStart: lerp(center, s, radius - half),
-    innerEnd: lerp(center, e, radius - half),
-    outerStart: lerp(center, s, radius + half),
-    outerEnd: lerp(center, e, radius + half),
+    innerStart: addScaled(center, s, radius - half),
+    innerEnd: addScaled(center, e, radius - half),
+    outerStart: addScaled(center, s, radius + half),
+    outerEnd: addScaled(center, e, radius + half),
   };
 }
 
@@ -504,10 +506,10 @@ function slotFit(c1: Vec2, c2: Vec2, n: Vec2, r: number): SlotFit {
     c1,
     c2,
     radius: r,
-    l1: lerp(c1, n, r),
-    l2: lerp(c2, n, r),
-    r2: lerp(c2, n, -r),
-    r1: lerp(c1, n, -r),
+    l1: addScaled(c1, n, r),
+    l2: addScaled(c2, n, r),
+    r2: addScaled(c2, n, -r),
+    r1: addScaled(c1, n, -r),
   };
 }
 

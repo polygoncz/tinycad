@@ -11,6 +11,7 @@
 // A locked radius becomes a required radius dimension of the arc and replaces the automatic equal;
 // the angles have no dimension.
 
+import { vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import { inferRadius } from '@/sketch';
 import type { SketchConstraint, SketchData, SketchEntityId } from '@/sketch';
@@ -25,7 +26,6 @@ import {
   constrainRadial,
   constrainSweep,
   constrainXY,
-  distance,
   inputValues,
   lastRound,
   measureRadial,
@@ -105,7 +105,7 @@ export function createArcTool(sketches: SketchEditor): Tool {
       previewPolyline(
         ctx,
         session,
-        arcPoints(center.at, distance(center.at, start.at), from, sweep),
+        arcPoints(center.at, vec2.dist(center.at, start.at), from, sweep),
       );
     },
     onClick(ctx, session, x, y, mods) {
@@ -186,15 +186,15 @@ function arcStep(
   const { center, start } = picked;
   if (center === null) return { kind: 'center', target };
   if (start === null) {
-    if (samePoint(center, target) || distance(center.at, target.at) <= MIN_LENGTH) {
+    if (samePoint(center, target) || vec2.dist(center.at, target.at) <= MIN_LENGTH) {
       return { kind: 'none' };
     }
     return { kind: 'start', target };
   }
   // The end is always a new point: projecting an existing point would move it.
   const at = project(center.at, start.at, target.at);
-  if (at === null || distance(at, start.at) <= MIN_LENGTH) return { kind: 'none' };
-  const round = infer ? inferRadius(distance(center.at, start.at), data, lastRound(data)) : null;
+  if (at === null || vec2.dist(at, start.at) <= MIN_LENGTH) return { kind: 'none' };
+  const round = infer ? inferRadius(vec2.dist(center.at, start.at), data, lastRound(data)) : null;
   // A locked radius is exact (M32): it replaces the automatic equal.
   const [equal] = withoutLocked(round === null ? [] : [{ kind: 'equal', with: round }], {
     direction: false,
@@ -221,9 +221,9 @@ const angle = (center: Vec2, p: Vec2): number => Math.atan2(p[1] - center[1], p[
 
 /** The cursor projected onto the circle around center through start; null on the centre. */
 function project(center: Vec2, start: Vec2, cursor: Vec2): Vec2 | null {
-  const d = distance(center, cursor);
+  const d = vec2.dist(center, cursor);
   if (d <= MIN_LENGTH) return null;
-  const r = distance(center, start);
+  const r = vec2.dist(center, start);
   return [
     center[0] + ((cursor[0] - center[0]) * r) / d,
     center[1] + ((cursor[1] - center[1]) * r) / d,

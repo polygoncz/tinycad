@@ -4,7 +4,7 @@ import type {
   TopoDS_Face,
   TopoDS_Shape,
 } from 'replicad-opencascadejs';
-import { bspline, type Plane, type Vec2 } from '@/core';
+import { bspline, type Plane, type Vec2, vec2 } from '@/core';
 import {
   createKernelError,
   kernelErrorCode,
@@ -13,9 +13,11 @@ import {
   type OffsetCurvesInput,
 } from '@/kernel';
 import { wireOf, type IdEdge } from './face';
-import { coordinatesOf, dist, splineCurve } from './geom2d';
+import { coordinatesOf, splineCurve } from './geom2d';
 import { mapSubShapes, type Occt } from './occt';
 import { indexOfSame } from './shape-entry';
+
+const { dist } = vec2;
 
 // offsetCurves of the OCCT adapter (spec 06 "Stav po M35", prototype in M35): the chain as a
 // wire on its own planar face (BRepBuilderAPI_MakeFace(gp_Pln, wire, true): from the wire alone

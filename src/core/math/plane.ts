@@ -1,8 +1,8 @@
+import type { Vec2 } from './vec2';
 import { vec3, type Vec3 } from './vec3';
 
-// Plane frame and 2D vectors for the sketcher (spec 02-core, M12). No gl-matrix here:
+// Plane frame for the sketcher (spec 02-core, M12). No gl-matrix here:
 // the vec3 facade is enough. Results are fresh readonly tuples, so no freezing is needed.
-export type Vec2 = readonly [number, number];
 
 /** Plane frame: origin, unit x axis and unit normal, mutually perpendicular. Axis y = normal × xDir. */
 export interface Plane {

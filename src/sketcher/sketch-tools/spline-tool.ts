@@ -7,7 +7,7 @@
 // on the first one with a required coincident. The click and the preview of a move share one step
 // (splineStep), so the preview shows exactly what the click does.
 
-import { bspline } from '@/core';
+import { bspline, vec2 } from '@/core';
 import type { BSplineShape, Vec2 } from '@/core';
 import { SPLINE_TOLERANCE } from '@/sketch';
 import type { SketchConstraint, SketchData, SketchEntity } from '@/sketch';
@@ -19,7 +19,6 @@ import {
   addDrawn,
   clearPreview,
   clickTool,
-  distance,
   MIN_LENGTH,
   newConstraintId,
   newEntityId,
@@ -139,9 +138,9 @@ function splineStep(
   if (target.point === first.id) {
     if (placed.length < MIN_CLOSE_POINTS) return NONE;
     // The closing point lies on the first one: a fit spline cannot have it on the last as well.
-    return kind === 'fitSpline' && distance(first.at, last.at) <= MIN_LENGTH ? NONE : CLOSE;
+    return kind === 'fitSpline' && vec2.dist(first.at, last.at) <= MIN_LENGTH ? NONE : CLOSE;
   }
-  if (distance(target.at, last.at) <= tolerance) return END;
+  if (vec2.dist(target.at, last.at) <= tolerance) return END;
   // The points of a spline are distinct.
   if (placed.some((p) => p.id === target.point)) return NONE;
   return { kind: 'add', target };
