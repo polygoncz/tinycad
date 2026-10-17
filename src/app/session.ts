@@ -3,7 +3,7 @@
 // scheduler come in as deps – so it runs in Node with FakeKernel, MemoryDocumentStore and a fake
 // viewport. openAppSession (browser) builds the real ones and calls this.
 
-import { DisposableStore } from '@/core';
+import { DisposableStore, Emitter } from '@/core';
 import type { Disposable, IdGenerator, Observable, Unsubscribe, Vec3 } from '@/core';
 import type {
   BodyId,
@@ -40,6 +40,7 @@ import type {
   FeatureEditor,
   FeatureTreeModel,
   FileActions,
+  HistoryLog,
   HistoryModel,
   ManipulatorHud,
   Mode,
@@ -50,8 +51,8 @@ import type {
   ViewKeyEvent,
   ViewportPort,
 } from '@/interaction';
-import { createOperationDispatcher, createUndoManager } from '@/ops';
-import type { OperationLog } from '@/ops';
+import { createOperationDispatcher, createUndoManager, rebuildUndoStacks } from '@/ops';
+import type { OperationLog, OperationLogReader } from '@/ops';
 import { exportDocument } from '@/persistence';
 import type { DocumentStore, PersistenceStatus, Scheduler } from '@/persistence';
 import type { FeaturePlugin, PluginMessages } from '@/plugin-api';
@@ -513,7 +514,8 @@ function wireSession(
   const browserView = lifetime.add(bindBrowserView(browser, viewport));
 
   // 7. Edit history and export (M15).
-  const history = lifetime.add(createHistoryModel({ log }));
+  const historyLog = lifetime.add(createHistoryLog(log));
+  const history = lifetime.add(createHistoryModel({ log: historyLog }));
   // M19.2: the name of the document (title bar); `ops` refuses changes when read-only, `locked`
   // says so in advance.
   const documentName = lifetime.add(createDocumentNameModel({ doc, ops, locked }));
@@ -646,6 +648,31 @@ function wireSession(
   // Last: everything the kernel's onReady and the regeneration call into exists now.
   supervisor.start();
   return session;
+}
+
+/**
+ * The history port over the local operation log (N73): the entries without their operations and
+ * the stacks by the rule of UndoManager; `changed` after every appended entry.
+ */
+function createHistoryLog(log: OperationLogReader): HistoryLog & Disposable {
+  const emitter = new Emitter<{ changed: undefined }>();
+  const off = log.events.on('appended', () => {
+    emitter.emit('changed', undefined);
+  });
+  return {
+    entries: () =>
+      log.entries().map((entry) => ({
+        seq: entry.seq,
+        kind: entry.kind,
+        ...(entry.target === undefined ? {} : { target: entry.target }),
+        label: entry.label,
+        time: entry.time,
+        opType: entry.op.type,
+      })),
+    stacks: () => rebuildUndoStacks(log.entries()),
+    events: emitter.asSubscribable(),
+    dispose: off,
+  };
 }
 
 /** Errors with nobody to hand them to (a regeneration bug, a failed save or kernel start). */
