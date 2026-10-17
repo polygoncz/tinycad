@@ -169,7 +169,7 @@ Sdílené kontrakty stop (rozhraní C++ modelu dokumentu a portu jádra) se zafi
 
 **Pravidlo zmrazení (od startu M38):** `document`, `ops`, `regen`, `kernel`, `kernel-occt`, `persistence` a `features/*` v `src/` se mění jen kvůli chybám. Nová funkce domény počká na server. Kód se ze `src/` odstraní až v [[M47-uklid-a-dokonceni|M47]].
 
-**Otevřené před startem:** [[Q106 Moduly klienta pro gRPC|Q106]] do M39, [[Q103 Skica, kterou server nevyřeší|Q103]] do M44.
+**Otázky série:** všechny rozhodnuté (2026-10-17), naposledy [[Q103 Skica, kterou server nevyřeší|Q103]] a [[Q106 Moduly klienta pro gRPC|Q106]].
 
 ## Jak pracovat s milníkem
 

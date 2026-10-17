@@ -33,11 +33,11 @@ updated: 2026-10-17
 
 ## Úkoly
 
-- [ ] Rozhodnout [[Q103 Skica, kterou server nevyřeší|Q103]] (odmítnutí a tolerance souřadnic).
+- [ ] Chování podle [[Q103 Skica, kterou server nevyřeší|Q103]]: nevyřešená skica → `SKETCH_NOT_SOLVED` a dokument beze změny; vyřešená se uloží v řešení serveru a klient ho převezme bez tolerance.
 - [ ] Model skici v C++: entity, vazby, validace, `regionCurves`, odvozené entity (zrcadlení, pole, písmena textu z uložených obrysů).
 - [ ] planegcs ze zdrojů (vendorovaný, LGPL), adaptér řešiče stejný jako v `solver-planegcs`.
 - [ ] Builder skici (oblasti, plochy, artefakt pro `SketchView`).
-- [ ] Opětovné řešení v handleru `feature.setParams` skici, chyba `SKETCH_NOT_SOLVED`.
+- [ ] Opětovné řešení v handleru `feature.setParams` skici, chyba `SKETCH_NOT_SOLVED` (klíč `sketch.notSolved` i v `messages` skicáře).
 - [ ] Sdílené případy řešiče a skic z M38 zelené v C++ i v TS.
 
 ## Akceptační kritéria

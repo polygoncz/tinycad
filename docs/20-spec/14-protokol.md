@@ -21,6 +21,7 @@ updated: 2026-10-17
 
 > **Pojmy:** [[Sezení]], [[Read model]], [[Idempotentní požadavek]], [[Operace]], [[Transakce]], [[Port a adaptér]]  
 > **Rozhodnutí:** [[0030-nativni-jadro-pres-grpc|ADR 0030]], [[Q094 Nativní jádro na serveru přes gRPC|Q094]], [[Q096 Geometrie skici přes síť|Q096]], [[Q097 Transakce a undo přes RPC|Q097]], [[Q098 Schéma featur v klientovi|Q098]], [[Q099 Read model po regeneraci|Q099]], [[Q100 Verze sítí v mezipaměti klienta|Q100]], [[Q101 Operace v kontraktu proto|Q101]], [[Q102 Sezení pro více karet|Q102]], [[Q104 Nástroje pro kontrakt a C++ server|Q104]], [[Q105 Viditelnost parametru jako data|Q105]]  
+> **Moduly klienta:** `src/protocol` (vygenerovaný kód, ne v gitu) a `src/remote` (adaptéry), [[Q106 Moduly klienta pro gRPC|Q106]]  
 > **Milník:** [[M39-kostra-serveru]] (kostra a `GeometryService`), [[M45-sezeni-pres-grpc]] (`SessionService`), [[M46-klient-nad-read-modelem]] (klient)
 
 Kontrakt mezi prohlížečem a nativním C++ jádrem `tinycad-core`. Zdrojem pravdy o **syntaxi** jsou soubory `server/proto/tinycad/v1/*.proto` (balík `tinycad.v1`, kontrola `buf lint` a `buf breaking`). Tato specifikace říká **proč** a **jak se to chová**: sémantiku volání, invarianty a testy. Ukázky níže jsou zkrácené.
@@ -94,7 +95,7 @@ Pravidla:
 
 - **Jedna změna v letu na sezení.** Klient pošle další měnící požadavek až po odpovědi na předchozí. Server zpracovává požadavky sezení sériově. Proč: pořadí operací je pak dané a nemusí se řešit na serveru.
 - **Tažení** (manipulátor, posuvník): klient si mezi odpověďmi pamatuje jen **poslední** hodnotu a pošle ji s dalším `Apply` (stejný vzor jako adaptér `GeometryService`). `setParams` se v transakci slučuje už při `apply` (spec 04), takže v transakci zůstane jeden krok.
-- **Skica:** `Apply` s `feature.setParams` skici je potvrzení úpravy. Server skicu znovu vyřeší nativním planegcs a uloží **svůj** výsledek; klient převezme souřadnice z read modelu ([[Q097 Transakce a undo přes RPC|Q097]]). Když ji server nevyřeší: [[Q103 Skica, kterou server nevyřeší|Q103]] (návrh `SKETCH_NOT_SOLVED`, dokument beze změny).
+- **Skica:** `Apply` s `feature.setParams` skici je potvrzení úpravy. Server skicu znovu vyřeší nativním planegcs a uloží **svůj** výsledek; klient převezme souřadnice z read modelu vždy, bez prahu tolerance ([[Q097 Transakce a undo přes RPC|Q097]]). Když ji server nevyřeší, operace skončí `SKETCH_NOT_SOLVED`, dokument se nezmění a klient ponechá lokální skicu ([[Q103 Skica, kterou server nevyřeší|Q103]]).
 - **Validace jen na serveru.** Neplatná operace → `INVALID_OPERATION` s `path` a dokument beze změny. Neplatné parametry featury nejsou chyba RPC: změna platí a featura je v read modelu červená (`FeatureError` `INVALID_PARAMS`), jako dnes.
 - **Uloženo = odpověď.** `Dispatch`, `Commit`, `Undo` a `Redo` zapíšou záznam do SQLite v transakci databáze **před** odpovědí. Klient nepotřebuje stav „ukládá se“. Selhání zápisu → `STORAGE` a dokument v paměti se vrátí (inverze), takže log vždy odpovídá dokumentu.
 - **Přejmenování dokumentu** je operace `document.rename` (`Dispatch`), mimo otevřený dokument `DocumentService.RenameDocument`.

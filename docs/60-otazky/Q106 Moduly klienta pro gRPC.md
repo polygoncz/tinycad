@@ -1,10 +1,10 @@
 ---
 type: question
-status: open
+status: answered
 area: "[[01-architektura]]"
 decide_by: "[[M39-kostra-serveru]]"
 proposal: "Vygenerovaný kód v novém modulu src/protocol (prstenec 3, generovaný při buildu, ne v gitu); adaptéry portů nad ním v novém modulu src/remote, který importuje jen app."
-decision: ""
+decision: "Dva nové moduly v prstenci 3: src/protocol (jen kód vygenerovaný buf generate, ne v gitu) a src/remote (adaptéry portů a klient connect-web); protocol importuje jen remote, remote jen app."
 tags:
   - otazka
 created: 2026-10-17
@@ -31,4 +31,10 @@ Klient dostane kód vygenerovaný z `.proto` (protobuf-es, [[Q104 Nástroje pro 
 
 ## Rozhodnutí
 
-_(Až se rozhodne: vyplnit sem, nastavit `status: answered` a `decision`, rozhodnutí propsat do specifikace.)_
+**Varianta A, kód se generuje (Pavel 2026-10-17, podle návrhu Clauda).**
+
+- `src/protocol/`: jen výstup `buf generate` (protobuf-es, `tinycad/v1/*_pb.ts`). Smí ho importovat jen `remote`. ESLint i Prettier ho ignorují.
+- `src/remote/`: adaptéry portů (`createRemoteSketchGeometry`, později sezení a read model), klient `@connectrpc/connect-web` a převody zpráv ↔ doménové typy. Smí importovat `core`, `sketch` (porty a typy), `protocol` a balíky `@bufbuild/protobuf`, `@connectrpc/*`; sám ho importuje jen `app`.
+- Vygenerovaný kód **není v gitu** (`.gitignore`). Skript `npm run gen:proto` (`buf generate` přes dev závislosti `@bufbuild/buf` a `@bufbuild/protoc-gen-es`, bez Dockeru) běží před `typecheck`, `dev` a `build`.
+
+Do [[01-architektura]] (tabulka modulů a prstenců) a `.dependency-cruiser.cjs` se to propíše v [[M39-kostra-serveru|M39]], až moduly vzniknou.
