@@ -18,7 +18,12 @@ add_executable(tinycad_session_tests
   runtime_document_test.cpp
   runtime_document_transactions_test.cpp
   session_manager_test.cpp
-  idle_timeout_test.cpp)
+  idle_timeout_test.cpp
+  grpc_session_test.cpp
+  grpc_idempotence_test.cpp
+  grpc_transactions_test.cpp
+  grpc_meshes_test.cpp
+  grpc_watch_test.cpp)
 target_compile_definitions(tinycad_session_tests PRIVATE
   TINYCAD_GOLDEN_DIR="${TINYCAD_GOLDEN_DIR}")
 # runtime_testing.hpp includes test/storage/failing_file.hpp (the failing store of M41) and builds

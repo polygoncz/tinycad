@@ -165,6 +165,50 @@ TEST_F(RuntimeDocumentTest, TheRegenerationReportsProgressWithTheGenerationOfThe
   EXPECT_TRUE(progress.back().status().has_ok());
 }
 
+/** The feature ids of the regen_progress events with seq > afterSeq, in order. */
+std::vector<std::string> progressAfter(RuntimeDocument& doc, std::uint64_t afterSeq) {
+  std::vector<std::string> ids;
+  for (const auto& event : doc.events().after(afterSeq).value_or(std::vector<v1::SessionEvent>{})) {
+    if (event.has_regen_progress()) ids.push_back(event.regen_progress().feature_id());
+  }
+  return ids;
+}
+
+TEST_F(RuntimeDocumentTest, ProgressReportsOnlyTheFeaturesTheChangeRebuilt) {
+  dispatch(addBox("a", 0), "op-1");
+  dispatch(addBox("b", 1), "op-2");
+  const auto seq = doc->events().lastSeq();
+  dispatch(addBox("c", 2), "op-3");
+  // 'a' and 'b' come from the cache of the Regenerator: no progress for them (N118).
+  EXPECT_EQ(progressAfter(*doc, seq), std::vector<std::string>{"c"});
+
+  const auto beforeEdit = doc->events().lastSeq();
+  dispatch(setWidth("b", 20), "op-4");
+  EXPECT_EQ(progressAfter(*doc, beforeEdit), (std::vector<std::string>{"b", "c"}));
+}
+
+TEST_F(RuntimeDocumentTest, AReadModelWithoutAChangeReportsNoProgress) {
+  dispatch(addBox("a", 0), "op-1");
+  const auto seq = doc->events().lastSeq();
+  v1::ReadModel model;
+  ASSERT_TRUE(doc->readModel(writer, options, &model));
+  ASSERT_TRUE(doc->readModel(reader, options, &model));
+  dispatch(addBox("a", 0), "op-1");  // a repeated request is no change either
+  EXPECT_EQ(doc->events().lastSeq(), seq);
+}
+
+TEST_F(RuntimeDocumentTest, MovingTheRollbackBarBackRebuildsNothing) {
+  dispatch(addBox("a", 0), "op-1");
+  dispatch(addBox("b", 1), "op-2");
+  const auto seq = doc->events().lastSeq();
+  dispatch(setRollback(1), "op-3");
+  EXPECT_TRUE(progressAfter(*doc, seq).empty());
+  const auto back = doc->events().lastSeq();
+  dispatch(setRollback(2), "op-4");
+  // 'b' stayed in the cache behind the bar: moving the bar forward takes it from there.
+  EXPECT_TRUE(progressAfter(*doc, back).empty());
+}
+
 TEST_F(RuntimeDocumentTest, TheEventSeqOfAReadModelIsTheLastSeqAtTheSameMoment) {
   dispatch(addBox("a", 0), "op-1");
   v1::ReadModel model;

@@ -1,6 +1,7 @@
 #include "tinycad/session/runtime_document.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <mutex>
 #include <utility>
 #include <vector>
@@ -30,16 +31,48 @@ SessionError operationIdReused(const storage::OperationKey& key) {
 }
 
 /**
- * Forwards RegenObserver::featureDone as regen_progress events (spec 14 "Události"). The event
- * carries the change counter of the runtime document (N55), not the run count of the Regenerator.
+ * Forwards RegenObserver::featureDone as regen_progress events (spec 14 "Události"), but only
+ * during the regeneration right after a change and only for the features that run builds anew
+ * (N118): a regeneration runs for every read model, and reporting the features taken from the
+ * cache would spin the ring of 256 events and push readers into `resync`. The event carries the
+ * change counter of the runtime document (N55), not the run count of the Regenerator.
+ *
+ * Which features a run builds anew is the Regenerator's cache rule (spec 07, cache step 1): the
+ * first position whose FeaturePtr differs from the cached one, up to the rollback bar. The
+ * Regenerator does not tell, so this class mirrors the feature pointers of its cache: before a
+ * run expect() computes the rebuilt features, after a successful run ran() records what the cache
+ * holds now (a run that throws leaves the Regenerator's cache, and so the mirror, unchanged).
  */
 class ProgressEvents final : public regen::RegenObserver {
  public:
   ProgressEvents(EventRing& events, const std::uint64_t& generation)
       : events_(events), generation_(generation) {}
 
+  /** A change happened: the next run reports its rebuilt features. */
+  void changeHappened() { afterChange_ = true; }
+
+  /** Before a run of `studio`. */
+  void expect(const document::PartStudioData& studio) {
+    rebuilt_.clear();
+    if (!afterChange_) return;
+    afterChange_ = false;
+    const std::size_t rollback = rollbackOf(studio);
+    for (std::size_t i = firstChanged(studio); i < rollback; ++i) {
+      rebuilt_.push_back(studio.features[i]->id);
+    }
+  }
+
+  /** After a successful run of `studio`: the cache keeps positions 0..max(k, rollback)-1. */
+  void ran(const document::PartStudioData& studio) {
+    const std::size_t kept = std::max(firstChanged(studio), rollbackOf(studio));
+    cached_.assign(studio.features.begin(),
+                   studio.features.begin() + static_cast<std::ptrdiff_t>(kept));
+    rebuilt_.clear();
+  }
+
   void featureDone(int /*runGeneration*/, const document::FeatureId& feature,
                    const regen::FeatureStatus& status) override {
+    if (std::ranges::find(rebuilt_, feature) == rebuilt_.end()) return;
     v1::SessionEvent event;
     auto* progress = event.mutable_regen_progress();
     progress->set_generation(generation_);
@@ -49,8 +82,26 @@ class ProgressEvents final : public regen::RegenObserver {
   }
 
  private:
+  static std::size_t rollbackOf(const document::PartStudioData& studio) {
+    const int count = static_cast<int>(studio.features.size());
+    return static_cast<std::size_t>(std::max(0, std::min(studio.rollbackIndex, count)));
+  }
+
+  /** Cache step 1: the first position whose feature is not the cached pointer. */
+  [[nodiscard]] std::size_t firstChanged(const document::PartStudioData& studio) const {
+    std::size_t k = 0;
+    while (k < studio.features.size() && k < cached_.size() &&
+           studio.features[k] == cached_[k]) {
+      ++k;
+    }
+    return k;
+  }
+
   EventRing& events_;
   const std::uint64_t& generation_;
+  bool afterChange_ = false;
+  std::vector<document::FeaturePtr> cached_;
+  std::vector<document::FeatureId> rebuilt_;
 };
 
 }  // namespace
@@ -140,6 +191,7 @@ struct RuntimeDocument::Impl {
   /** Step 5: generation + 1 and the `changed` event. */
   void changed(const std::string& bySession) {
     ++generation;
+    progress.changeHappened();
     v1::SessionEvent event;
     auto* changedEvent = event.mutable_changed();
     changedEvent->set_generation(generation);
@@ -153,13 +205,22 @@ struct RuntimeDocument::Impl {
     return transactionLabel;
   }
 
+  /** Every run of the Regenerator goes through here, so the progress mirror stays in step. */
+  regen::RegenResult regenerate(const document::PartStudioData& studio,
+                                const regen::RunOptions& run = {}) {
+    progress.expect(studio);
+    regen::RegenResult result = regenerator->run(studio, run);
+    progress.ran(studio);
+    return result;
+  }
+
   /** Step 6: regeneration with the input_of of the request, then the read model of the caller. */
   SessionResult<void> readModel(const Caller& caller, const v1::ReadModelOptions& options,
                                 v1::ReadModel* out) {
     regen::RunOptions run;
     if (!options.input_of().empty()) run.inputOf = document::FeatureId(options.input_of());
     const document::StudioPtr studio = doc->document().studio();
-    const regen::RegenResult result = regenerator->run(*studio, run);
+    const regen::RegenResult result = regenerate(*studio, run);
     meshes->retain(ReadModelBuilder::liveVersions(result, *regenerator));
     const ReadModelInput input{doc->document(),     doc->log().lastSeq(),
                                generation,          result,
@@ -252,7 +313,7 @@ SessionResult<std::unique_ptr<RuntimeDocument>> RuntimeDocument::open(
 
   auto impl = std::make_unique<Impl>(id, deps, std::move(*doc));
   // The first regeneration: a broken builder shows as a feature status, not as a failed open.
-  (void)impl->regenerator->run(*impl->doc->document().studio());
+  (void)impl->regenerate(*impl->doc->document().studio());
   // The constructor is private: no make_unique.
   return std::unique_ptr<RuntimeDocument>(new RuntimeDocument(std::move(impl)));
 }
@@ -438,7 +499,7 @@ void RuntimeDocument::history(std::int64_t fromSeq, v1::GetHistoryResponse* out)
 SessionResult<StepFile> RuntimeDocument::exportStep() {
   const std::lock_guard lock(impl_->mutex);
   const document::DocumentReader& doc = impl_->doc->document();
-  const regen::RegenResult result = impl_->regenerator->run(*doc.studio());
+  const regen::RegenResult result = impl_->regenerate(*doc.studio());
   std::vector<kernel::ShapeHandle> shapes;
   for (const regen::BodyPtr& body : result.finalState->bodies()) {
     if (!doc.bodyMeta(body->bodyId()).hidden) shapes.push_back(body->shape());
