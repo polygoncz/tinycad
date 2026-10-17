@@ -9,12 +9,12 @@ import type { Curve2, CurvePiece } from '@/sketch';
 import type { Tool, ToolContext } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
 import type { SketchSession } from '../sketch-session';
-import { clearPreview, clickTool, previewPolyline } from './common';
+import { clearPreview, clickTool, previewPolyline, withHint } from './common';
 import { curveAt, idSource, isSpline, unchanged } from './curve-pick';
 import type { PickedCurve } from './curve-pick';
 
 export function createTrimTool(sketches: SketchEditor): Tool {
-  return clickTool(sketches, {
+  const tool = clickTool(sketches, {
     reset() {
       // Nothing in progress: every click stands alone.
     },
@@ -34,6 +34,7 @@ export function createTrimTool(sketches: SketchEditor): Tool {
       void trim(ctx, session, target.picked, target.piece);
     },
   });
+  return withHint(tool, 'hint.trim.pick');
 }
 
 /** The curve under the cursor and its piece there; null without a curve or without the hits. */

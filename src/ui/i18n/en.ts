@@ -163,6 +163,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'tool.fillet': 'Fillet',
   'tool.chamfer': 'Chamfer',
   'tool.chamferAngle': 'Chamfer with angle',
+  'tool.offset': 'Offset',
   'tool.slot': 'Center slot',
   'tool.slotOverall': 'Overall slot',
   'tool.slotArc': 'Arc slot',
@@ -197,6 +198,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'sketch.constraint.pointLineDistance': 'Distance to line',
   'sketch.constraint.angle': 'Angle',
   'sketch.constraint.diameter': 'Diameter',
+  'sketch.constraint.offset': 'Offset',
   'sketch.patternParam.count': 'Count',
   'sketch.patternParam.length': 'Spacing',
   'sketch.patternParam.angle': 'Angle',
@@ -217,6 +219,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'sketch.input.diameter': 'Diameter',
   'sketch.input.radius': 'Radius',
   'sketch.input.sweep': 'Sweep',
+  'sketch.input.distance': 'Distance',
   // The section of a selected text in the panel (M37) and the labels of its fonts.
   'sketch.text.section': 'Text',
   'sketch.text.value': 'Text',
@@ -360,6 +363,17 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'hint.pattern.edit':
     'Click a pattern dimension to change the count, spacing or angle, or select more sources',
   'hint.text.place': 'Click the start of the baseline of the text',
+  'hint.trim.pick': 'Click the piece of a curve between intersections to remove it',
+  'hint.extend.pick': 'Click near the end of a line or an arc to extend it to the nearest curve',
+  'hint.split.pick': 'Click a curve where to split it (it snaps to a nearby intersection)',
+  'hint.fillet.first': 'Click a corner, or the first line or arc',
+  'hint.fillet.second': 'Click the second line or arc, Esc goes back',
+  'hint.chamfer.first': 'Click a corner, or the first line or arc',
+  'hint.chamfer.second': 'Click the second line or arc sharing a corner, Esc goes back',
+  'hint.chamferAngle.first': 'Click a corner near the reference line, or the reference line',
+  'hint.chamferAngle.second': 'Click the second line or arc sharing a corner, Esc goes back',
+  'hint.offset.pick':
+    'Click a curve (its whole chain is offset), the side follows the cursor; you can type the distance',
 
   // Labels of the built-in operations in the history panel: the dispatcher writes the op type
   // as the label of an entry without one. feature.rename and feature.suppress are above (actions).

@@ -3,6 +3,7 @@ import type { Vec2 } from '@/core';
 import {
   defaultPlacement,
   dimensionTarget,
+  linearSpan,
   movePlacement,
   placeDimension,
 } from '@/sketch/dimension-placement';
@@ -520,5 +521,170 @@ describe('infinite lines (xline, M31) in dimensions', () => {
     expect(
       placeDimension({ kind: 'lines', a: xid('x'), b: xid('lb') }, at(5, 1), XDATA),
     ).toMatchObject({ kind: 'angle', a: 'x', b: 'lb', value: close(Math.PI / 4) });
+  });
+});
+
+describe('offset dimension (M35)', () => {
+  /**
+   * Line l (0,0)→(10,0) and its copy l2 (0,−2)→(10,−2); zero-length line ln at (30,0); circle k
+   * (r 2) and its copy k2 (r 3) around o (50,0); arc q (r 4, from 0 to π/2) and its copy q2
+   * (r 5.5) around o.
+   */
+  const ODATA = sketch([
+    { kind: 'point', id: 'a', x: 0, y: 0 },
+    { kind: 'point', id: 'b', x: 10, y: 0 },
+    { kind: 'line', id: 'l', p1: 'a', p2: 'b' },
+    { kind: 'point', id: 'a2', x: 0, y: -2 },
+    { kind: 'point', id: 'b2', x: 10, y: -2 },
+    { kind: 'line', id: 'l2', p1: 'a2', p2: 'b2' },
+    { kind: 'point', id: 'n1', x: 30, y: 0 },
+    { kind: 'point', id: 'n2', x: 30, y: 0 },
+    { kind: 'line', id: 'ln', p1: 'n1', p2: 'n2' },
+    { kind: 'point', id: 'o', x: 50, y: 0 },
+    { kind: 'circle', id: 'k', center: 'o', radius: 2 },
+    { kind: 'circle', id: 'k2', center: 'o', radius: 3 },
+    { kind: 'point', id: 's', x: 54, y: 0 },
+    { kind: 'point', id: 't', x: 50, y: 4 },
+    { kind: 'arc', id: 'q', center: 'o', start: 's', end: 't' },
+    { kind: 'point', id: 's2', x: 55.5, y: 0 },
+    { kind: 'point', id: 't2', x: 50, y: 5.5 },
+    { kind: 'arc', id: 'q2', center: 'o', start: 's2', end: 't2' },
+  ]);
+
+  /** An offset dimension of the pair source → copy. */
+  function offsetDim(
+    source: string,
+    copy: string,
+    extra: Readonly<Record<string, unknown>> = {},
+  ): DimensionConstraint {
+    const [c] = sketch(ODATA.entities, [
+      { kind: 'offset', id: 'off', pairs: [{ source, copy }], value: 2, ...extra },
+    ]).constraints;
+    assert(c?.kind === 'offset');
+    return c;
+  }
+
+  /** The point at distance r from o (50,0) in direction π/4. */
+  const diagonal = (r: number): Vec2 => [50 + r * Math.SQRT1_2, r * Math.SQRT1_2];
+
+  it.each<[string, DimensionConstraint, unknown]>([
+    ['a line pair: 0.2 · value', offsetDim('l', 'l2'), lin(0.4, 0)],
+    ['a circle pair', offsetDim('k', 'k2'), lin(0.2, 0)],
+    ['an arc pair', offsetDim('q', 'q2'), lin(0.3, 0)],
+    ['a zero-length source line: offset 0', offsetDim('ln', 'l2'), lin(0, 0)],
+  ])('defaultPlacement – %s', (_name, c, expected) => {
+    expect(defaultPlacement(c, ODATA)).toEqual(expected);
+  });
+
+  it.each<[string, DimensionConstraint, Vec2, unknown]>([
+    // From the foot (0,0) to copy.p1 (0,−2): u = (0,−1), n = (1,0), the middle (0,−1).
+    ['a line pair: on the dimension line', offsetDim('l', 'l2'), [5, -1], lin(5, 0)],
+    ['a line pair: along it', offsetDim('l', 'l2'), [3, -4], lin(3, 3)],
+    // Along the ray from o at π/4: from radius 2 to 3, the middle at 2.5.
+    ['a circle pair: along the ray', offsetDim('k', 'k2'), diagonal(4), lin(0, 1.5)],
+    [
+      'a circle pair: beside the ray',
+      offsetDim('k', 'k2'),
+      [diagonal(2.5)[0] - Math.SQRT1_2, diagonal(2.5)[1] + Math.SQRT1_2],
+      lin(1, 0),
+    ],
+    ['an inward circle pair: u towards o', offsetDim('k2', 'k'), diagonal(4), lin(0, -1.5)],
+    // The middle of the arc is π/4; from radius 4 to 5.5, the middle at 4.75.
+    ['an arc pair: along its middle ray', offsetDim('q', 'q2'), diagonal(6), lin(0, 1.25)],
+  ])('movePlacement – %s', (_name, c, cursor, expected) => {
+    expect(movePlacement(c, cursor, ODATA)).toEqual(expected);
+  });
+
+  const span = (from: Vec2, to: Vec2, u: Vec2, m: Vec2): unknown => ({
+    from: from.map(close),
+    to: to.map(close),
+    u: u.map(close),
+    m: m.map(close),
+  });
+
+  it.each<[string, DimensionConstraint, unknown]>([
+    // From the foot (0,0) of copy.p1 on the source to copy.p1 (0,−2).
+    ['a line pair', offsetDim('l', 'l2'), span([0, 0], [0, -2], [0, -1], [0, -1])],
+    [
+      'a circle pair: along the π/4 ray, source → copy',
+      offsetDim('k', 'k2'),
+      span(diagonal(2), diagonal(3), [Math.SQRT1_2, Math.SQRT1_2], diagonal(2.5)),
+    ],
+    [
+      'an inward circle pair: u towards o',
+      offsetDim('k2', 'k'),
+      span(diagonal(3), diagonal(2), [-Math.SQRT1_2, -Math.SQRT1_2], diagonal(2.5)),
+    ],
+    [
+      'an arc pair: along its middle ray',
+      offsetDim('q', 'q2'),
+      span(diagonal(4), diagonal(5.5), [Math.SQRT1_2, Math.SQRT1_2], diagonal(4.75)),
+    ],
+    ['a zero-length source line', offsetDim('ln', 'l2'), null],
+  ])('linearSpan – %s', (_name, c, expected) => {
+    expect(linearSpan(c, ODATA)).toEqual(expected);
+  });
+
+  it('movePlacement keeps the current placement for a zero-length source line', () => {
+    expect(movePlacement(offsetDim('ln', 'l2'), [5, 5], ODATA)).toEqual(lin(0, 0));
+    const placement = { kind: 'linear', offset: 3, along: 1 };
+    expect(movePlacement(offsetDim('ln', 'l2', { placement }), [5, 5], ODATA)).toEqual(placement);
+  });
+});
+
+describe('linearSpan', () => {
+  it.each<[string, Record<string, unknown>, unknown]>([
+    [
+      'a distance: a → b',
+      { kind: 'distance', a: 'e', b: 'f', value: 10 },
+      { from: [20, 0], to: [26, 8], u: [close(0.6), close(0.8)], m: [23, 4] },
+    ],
+    [
+      'a horizontal distance: along x',
+      { kind: 'hDistance', a: 'e', b: 'f', value: 6 },
+      { from: [20, 0], to: [26, 8], u: [1, 0], m: [23, 4] },
+    ],
+    [
+      'a vertical distance: along y',
+      { kind: 'vDistance', a: 'e', b: 'f', value: 8 },
+      { from: [20, 0], to: [26, 8], u: [0, 1], m: [23, 4] },
+    ],
+    [
+      'a point–line distance: from the foot to the point',
+      { kind: 'pointLineDistance', point: 'z', line: 'ab', value: 5 },
+      { from: [5, 0], to: [5, 5], u: [0, 1], m: [5, 2.5] },
+    ],
+    ['a radius is not linear', { kind: 'radius', curve: 'k', value: 3 }, null],
+    ['an angle is not linear', { kind: 'angle', a: 'la', b: 'lb', value: 1 }, null],
+  ])('%s', (_name, c, expected) => {
+    expect(linearSpan(dim(c), DATA)).toEqual(expected);
+  });
+
+  it('is null when a referenced entity is missing or of a wrong kind', () => {
+    const empty: SketchData = { entities: [], constraints: [] };
+    expect(linearSpan(dim({ kind: 'distance', a: 'e', b: 'f', value: 10 }), empty)).toBeNull();
+    expect(
+      linearSpan(dim({ kind: 'pointLineDistance', point: 'z', line: 'ab', value: 5 }), empty),
+    ).toBeNull();
+    const pointOnly: SketchData = {
+      entities: DATA.entities.filter((x) => x.id !== 'ab'),
+      constraints: [],
+    };
+    expect(
+      linearSpan(dim({ kind: 'pointLineDistance', point: 'z', line: 'ab', value: 5 }), pointOnly),
+    ).toBeNull();
+  });
+
+  it('is null for an offset whose pair does not resolve', () => {
+    const [c] = sketch(
+      [
+        { kind: 'point', id: 'o', x: 0, y: 0 },
+        { kind: 'circle', id: 'k', center: 'o', radius: 2 },
+        { kind: 'circle', id: 'k2', center: 'o', radius: 3 },
+      ],
+      [{ kind: 'offset', id: 'off', pairs: [{ source: 'k', copy: 'k2' }], value: 1 }],
+    ).constraints;
+    assert(c?.kind === 'offset');
+    expect(linearSpan(c, { entities: [], constraints: [] })).toBeNull();
   });
 });

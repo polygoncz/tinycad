@@ -168,6 +168,10 @@ export function movePlacement(
       const value = measureDraft(data, c);
       return value <= MIN ? current() : angularPlacement(frame, c, value, cursor);
     }
+    case 'offset': {
+      const frame = offsetFrame(geo, data, c);
+      return frame === null ? current() : linearPlacement(frame, cursor);
+    }
     default:
       return assertNever(c);
   }
@@ -175,8 +179,8 @@ export function movePlacement(
 
 /**
  * The placement a dimension without `placement` uses, in mm (proportional to the geometry, since
- * a pure function does not know the zoom). Linear: offset ±0.2 · value on the +y side (a vertical
- * distance on the left), along 0; radial: π/4 or the middle of the arc, 1.25 · radius; angular:
+ * a pure function does not know the zoom). Linear (an offset too): offset ±0.2 · value on the +y
+ * side (a vertical distance on the left), along 0; radial: π/4 or the middle of the arc, 1.25 · radius; angular:
  * half the shorter line (1 mm for a zero-length one), t 0.5.
  */
 export function defaultPlacement(c: DimensionConstraint, data: SketchData): DimensionPlacement {
@@ -191,7 +195,8 @@ export function defaultPlacement(c: DimensionConstraint, data: SketchData): Dime
     }
     case 'hDistance':
     case 'vDistance':
-    case 'pointLineDistance': {
+    case 'pointLineDistance':
+    case 'offset': {
       const value = measureDraft(data, c);
       // A zero-length line measures NaN: offset 0 keeps the stored placement valid.
       return { kind: 'linear', offset: Number.isFinite(value) ? 0.2 * value : 0, along: 0 };
@@ -215,52 +220,115 @@ export function defaultPlacement(c: DimensionConstraint, data: SketchData): Dime
   }
 }
 
+/**
+ * The measured span of a linear dimension: from A to B, the measured direction u (unit) and the
+ * middle m. distance, hDistance, vDistance: from a to b, u = a→b, x or y; pointLineDistance: from
+ * the foot of the perpendicular on the line to the point; offset: on its first pair (offsetFrame).
+ * The frame the placement (offset, along) is measured in, so the sketcher draws the dimension
+ * from it. null for a radial or angular dimension, a referenced entity missing or of a wrong kind
+ * and a zero-length line of a point–line or offset dimension.
+ */
+export function linearSpan(c: DimensionConstraint, data: SketchData): LinearSpan | null {
+  const geo = lookup(data);
+  switch (c.kind) {
+    case 'distance':
+    case 'hDistance':
+    case 'vDistance': {
+      const a = geo.point(c.a);
+      const b = geo.point(c.b);
+      return a === null || b === null ? null : linearFrame(c.kind, a, b);
+    }
+    case 'pointLineDistance':
+      return pointLineFrame(geo, c.point, c.line);
+    case 'offset':
+      return c.pairs.length === 0 ? null : offsetFrame(geo, data, c);
+    case 'radius':
+    case 'diameter':
+    case 'angle':
+      return null;
+    default:
+      return assertNever(c);
+  }
+}
+
 /** The draft with its measured value, or null when the value is degenerate. */
 function withValue<D extends DimensionDraft>(draft: D, data: SketchData): D | null {
   const value = measureDraft(data, draft);
   return value > MIN ? { ...draft, value } : null;
 }
 
-/** The measured direction u (unit) and the middle m of a linear dimension. */
-interface LinearFrame {
+/** The measured span from A to B, its direction u (unit) and its middle m (linearSpan). */
+export interface LinearSpan {
+  readonly from: Vec2;
+  readonly to: Vec2;
   readonly u: Vec2;
   readonly m: Vec2;
 }
 
 /** offset = (c − m)·n with n = (−u.y, u.x), along = (c − m)·u. */
-function linearPlacement(frame: LinearFrame, cursor: Vec2): LinearPlacement {
+function linearPlacement(frame: LinearSpan, cursor: Vec2): LinearPlacement {
   const { u, m } = frame;
   const w = sub(cursor, m);
   return { kind: 'linear', offset: dot(w, [-u[1], u[0]]), along: dot(w, u) };
 }
 
-function linearFrame(kind: LinearKind, a: Vec2, b: Vec2): LinearFrame {
+function linearFrame(kind: LinearKind, a: Vec2, b: Vec2): LinearSpan {
   switch (kind) {
     case 'distance':
-      return { u: direction(a, b), m: mid(a, b) };
+      return { from: a, to: b, u: direction(a, b), m: mid(a, b) };
     case 'hDistance':
-      return { u: [1, 0], m: mid(a, b) };
+      return { from: a, to: b, u: [1, 0], m: mid(a, b) };
     case 'vDistance':
-      return { u: [0, 1], m: mid(a, b) };
+      return { from: a, to: b, u: [0, 1], m: mid(a, b) };
     default:
       return assertNever(kind);
   }
 }
 
-/** A = the foot of the perpendicular from the point on the line, B = the point; null for a zero-length line. */
+/**
+ * A = the foot of the perpendicular from the point on the line, B = the point; null for a
+ * zero-length line (or an entity the lookup does not resolve).
+ */
 function pointLineFrame(
-  geo: Geometry,
+  geo: Lookup,
   pointId: SketchEntityId,
   lineId: SketchEntityId,
-): LinearFrame | null {
+): LinearSpan | null {
   const p = geo.point(pointId);
-  const [p1, p2] = geo.line(lineId);
+  const line = geo.line(lineId);
+  if (p === null || line === null) return null;
+  const [p1, p2] = line;
   const d = sub(p2, p1);
   const dd = dot(d, d);
   if (Math.sqrt(dd) <= MIN) return null;
   const s = dot(sub(p, p1), d) / dd;
   const foot: Vec2 = [p1[0] + s * d[0], p1[1] + s * d[1]];
-  return { u: direction(foot, p), m: mid(foot, p) };
+  return { from: foot, to: p, u: direction(foot, p), m: mid(foot, p) };
+}
+
+/**
+ * The linear frame of an offset dimension on its first pair (M35): a line pair like
+ * pointLineDistance from copy.p1 to the source line; a round pair along the ray from the centre at
+ * the default label angle of the source (π/4, the middle of an arc), from the source to the copy.
+ * null for a zero-length source line (or an entity the lookup does not resolve).
+ */
+function offsetFrame(
+  geo: Lookup,
+  data: SketchData,
+  c: Extract<DimensionConstraint, { kind: 'offset' }>,
+): LinearSpan | null {
+  const [pair] = c.pairs;
+  assert(pair !== undefined, 'dimension placement: an offset without pairs');
+  const copyLine = data.entities.find((e) => e.id === pair.copy);
+  if (copyLine?.kind === 'line') return pointLineFrame(geo, copyLine.p1, pair.source);
+  const source = geo.round(pair.source);
+  const copy = geo.round(pair.copy);
+  if (source === null || copy === null) return null;
+  const copyRadius = copy.radius;
+  const ray: Vec2 = [Math.cos(source.angle), Math.sin(source.angle)];
+  const from = add(source.center, scale(ray, source.radius));
+  const to = add(source.center, scale(ray, copyRadius));
+  return { from, to, u: copyRadius < source.radius ? scale(ray, -1) : ray, m: mid(from, to) };
 }
 
 /** angle = atan2(c − centre), distance = |c − centre|; null at the centre. */
@@ -308,43 +376,78 @@ function angularPlacement(
   return { kind: 'angular', radius: len(w), t: Math.min(1, Math.max(0, swept / value)) };
 }
 
-/** Coordinates of the referenced entities; a missing or wrong entity is a programming error. */
-interface Geometry {
+/** Centre, radius and the default label angle (π/4 for a circle, the middle of an arc). */
+interface Round {
+  readonly center: Vec2;
+  readonly radius: number;
+  readonly angle: number;
+}
+
+/** Coordinates of the referenced entities; null for a missing entity or one of a wrong kind. */
+interface Lookup {
+  point(id: SketchEntityId): Vec2 | null;
+  line(id: SketchEntityId): readonly [Vec2, Vec2] | null;
+  round(id: SketchEntityId): Round | null;
+}
+
+/**
+ * Like Lookup, but a missing or wrong entity is a programming error (the placement functions get
+ * valid data); the frames accept either.
+ */
+interface Geometry extends Lookup {
   point(id: SketchEntityId): Vec2;
   line(id: SketchEntityId): readonly [Vec2, Vec2];
-  /** Centre, radius and the default label angle (π/4 for a circle, the middle of an arc). */
-  round(id: SketchEntityId): {
-    readonly center: Vec2;
-    readonly radius: number;
-    readonly angle: number;
-  };
+  round(id: SketchEntityId): Round;
 }
 
 function geometry(data: SketchData): Geometry {
+  const geo = lookup(data);
+  return {
+    point(id) {
+      const p = geo.point(id);
+      assert(p !== null, `dimension placement: missing point '${id}'`);
+      return p;
+    },
+    line(id) {
+      const l = geo.line(id);
+      assert(l !== null, `dimension placement: '${id}' is not a line`);
+      return l;
+    },
+    round(id) {
+      const r = geo.round(id);
+      assert(r !== null, `dimension placement: '${id}' is not round`);
+      return r;
+    },
+  };
+}
+
+function lookup(data: SketchData): Lookup {
   const points = pointsById(data);
   const entity = (id: SketchEntityId) => data.entities.find((e) => e.id === id);
-  const point = (id: SketchEntityId): Vec2 => {
+  const point = (id: SketchEntityId): Vec2 | null => {
     const p = points.get(id);
-    assert(p !== undefined, `dimension placement: missing point '${id}'`);
-    return [p.x, p.y];
+    return p === undefined ? null : [p.x, p.y];
   };
   return {
     point,
     line(id) {
       const l = entity(id);
-      assert(l !== undefined && isLineCarrier(l), `dimension placement: '${id}' is not a line`);
-      return [point(l.p1), point(l.p2)];
+      if (l === undefined || !isLineCarrier(l)) return null;
+      const p1 = point(l.p1);
+      const p2 = point(l.p2);
+      return p1 === null || p2 === null ? null : [p1, p2];
     },
     round(id) {
       const curve = entity(id);
-      assert(
-        curve?.kind === 'circle' || curve?.kind === 'arc',
-        `dimension placement: '${id}' is not round`,
-      );
+      if (curve?.kind !== 'circle' && curve?.kind !== 'arc') return null;
       const center = point(curve.center);
+      if (center === null) return null;
       if (curve.kind === 'circle') return { center, radius: curve.radius, angle: Math.PI / 4 };
-      const start = sub(point(curve.start), center);
-      const end = sub(point(curve.end), center);
+      const startPoint = point(curve.start);
+      const endPoint = point(curve.end);
+      if (startPoint === null || endPoint === null) return null;
+      const start = sub(startPoint, center);
+      const end = sub(endPoint, center);
       const from = Math.atan2(start[1], start[0]);
       let sweep = Math.atan2(end[1], end[0]) - from;
       if (sweep <= 0) sweep += 2 * Math.PI;
@@ -354,6 +457,7 @@ function geometry(data: SketchData): Geometry {
   };
 }
 
+const add = (a: Vec2, b: Vec2): Vec2 => [a[0] + b[0], a[1] + b[1]];
 const sub = (a: Vec2, b: Vec2): Vec2 => [a[0] - b[0], a[1] - b[1]];
 const scale = (a: Vec2, k: number): Vec2 => [a[0] * k, a[1] * k];
 const dot = (a: Vec2, b: Vec2): number => a[0] * b[0] + a[1] * b[1];

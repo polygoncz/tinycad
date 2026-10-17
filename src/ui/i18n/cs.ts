@@ -164,6 +164,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'tool.fillet': 'Zaoblit',
   'tool.chamfer': 'Srazit',
   'tool.chamferAngle': 'Srazit s úhlem',
+  'tool.offset': 'Odsadit',
   'tool.slot': 'Drážka středy',
   'tool.slotOverall': 'Drážka celková',
   'tool.slotArc': 'Oblouková drážka',
@@ -198,6 +199,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'sketch.constraint.pointLineDistance': 'Vzdálenost od přímky',
   'sketch.constraint.angle': 'Úhel',
   'sketch.constraint.diameter': 'Průměr',
+  'sketch.constraint.offset': 'Odsazení',
   'sketch.patternParam.count': 'Počet',
   'sketch.patternParam.length': 'Rozteč',
   'sketch.patternParam.angle': 'Úhel',
@@ -218,6 +220,7 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'sketch.input.diameter': 'Průměr',
   'sketch.input.radius': 'Poloměr',
   'sketch.input.sweep': 'Úhel oblouku',
+  'sketch.input.distance': 'Vzdálenost',
   // The section of a selected text in the panel (M37) and the labels of its fonts.
   'sketch.text.section': 'Text',
   'sketch.text.value': 'Text',
@@ -359,6 +362,18 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'hint.pattern.edit':
     'Klikni na kótu pole a změň počet, rozteč nebo úhel, nebo vyber další zdroje',
   'hint.text.place': 'Klikni na počátek účaří textu',
+  'hint.trim.pick': 'Klikni na část křivky mezi průsečíky, kterou chceš odstranit',
+  'hint.extend.pick':
+    'Klikni u konce úsečky nebo oblouku, který chceš prodloužit k nejbližší křivce',
+  'hint.split.pick': 'Klikni na křivku v místě dělení (u průsečíku se k němu přichytí)',
+  'hint.fillet.first': 'Klikni na roh nebo na první úsečku či oblouk',
+  'hint.fillet.second': 'Klikni na druhou úsečku nebo oblouk, Esc zpět',
+  'hint.chamfer.first': 'Klikni na roh nebo na první úsečku či oblouk',
+  'hint.chamfer.second': 'Klikni na druhou úsečku nebo oblouk se společným rohem, Esc zpět',
+  'hint.chamferAngle.first': 'Klikni na roh u referenční úsečky, nebo na referenční úsečku',
+  'hint.chamferAngle.second': 'Klikni na druhou úsečku nebo oblouk se společným rohem, Esc zpět',
+  'hint.offset.pick':
+    'Klikni na křivku (odsadí se celý řetězec), strana podle kurzoru; vzdálenost můžeš napsat',
 
   // Labels of the built-in operations in the history panel: the dispatcher writes the op type
   // as the label of an entry without one. feature.rename and feature.suppress are above (actions).

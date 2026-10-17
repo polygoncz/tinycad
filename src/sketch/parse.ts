@@ -84,9 +84,12 @@ const DEFINING_POINT_FIELDS: Readonly<Record<string, readonly string[]>> = {
 /**
  * Fields of each constraint kind besides `kind` and `id`; a ref field lists the entity kind it
  * needs. Pair kinds (equal, tangent) need an extra rule on the combination, see pairAllowed;
- * pointOnCurve and midpoint one on the point, see definesCurve.
+ * pointOnCurve and midpoint one on the point, see definesCurve; `pairs` (offset, M35) is a list
+ * of curve pairs, see offsetPairsValid.
  */
-const CONSTRAINT_FIELDS: Readonly<Record<string, Readonly<Record<string, Target | 'value'>>>> = {
+const CONSTRAINT_FIELDS: Readonly<
+  Record<string, Readonly<Record<string, Target | 'value' | 'pairs'>>>
+> = {
   coincident: { a: 'point', b: 'point' },
   horizontal: { line: 'carrier' },
   vertical: { line: 'carrier' },
@@ -107,6 +110,7 @@ const CONSTRAINT_FIELDS: Readonly<Record<string, Readonly<Record<string, Target 
   angle: { a: 'carrier', b: 'carrier', value: 'value' },
   radius: { curve: 'round', value: 'value' },
   diameter: { curve: 'round', value: 'value' },
+  offset: { pairs: 'pairs', value: 'value' },
 };
 
 /** The placement kind of each dimension kind (spec 12 "Kóty (M28)"); placement is optional. */
@@ -118,6 +122,7 @@ const PLACEMENT_KIND: Readonly<Record<DimensionKind, DimensionPlacement['kind']>
   angle: 'angular',
   radius: 'radial',
   diameter: 'radial',
+  offset: 'linear',
 };
 
 /** Optional flags of an angle: absent or `true`, like `construction`. */
@@ -460,6 +465,10 @@ function constraintValid(
       if (!isFiniteNumber(v) || v <= 0) return false;
       continue;
     }
+    if (need === 'pairs') {
+      if (!offsetPairsValid(v, targets)) return false;
+      continue;
+    }
     const target = typeof v === 'string' ? targets.get(v) : undefined;
     const targetKind = target?.kind;
     if (typeof targetKind !== 'string') return false;
@@ -474,7 +483,7 @@ function constraintValid(
   if (kind === 'equal' || kind === 'tangent') return pairAllowed(kind, refKinds);
   if (kind === 'pointLineDistance' && isEndOf(item.point, item.line, targets)) return false;
   const kindsMatch = Object.values(fields)
-    .filter((need) => need !== 'value')
+    .filter((need) => need !== 'value' && need !== 'pairs')
     .every((need, i) => matches(need, refKinds[i]));
   if (!kindsMatch) return false;
   if (kind === 'symmetric') {
@@ -493,6 +502,28 @@ function constraintValid(
     return target !== undefined && !definesCurve(point, target);
   }
   return true;
+}
+
+/**
+ * The pairs of an offset (M35): a non-empty list of { source, copy }; every curve at most once in
+ * all pairs (so a copy is no source); line → line, arc → arc or circle → circle with the same
+ * centre point. A spline has no pair (its offset is baked).
+ */
+function offsetPairsValid(v: unknown, targets: ReadonlyMap<string, Fields>): boolean {
+  if (!Array.isArray(v) || v.length === 0) return false;
+  const seen = new Set<unknown>();
+  return (v as readonly unknown[]).every((pair) => {
+    if (!isRecord(pair) || !hasExactly(pair, ['source', 'copy'], [])) return false;
+    const { source, copy } = pair;
+    if (seen.has(source) || seen.has(copy) || source === copy) return false;
+    seen.add(source);
+    seen.add(copy);
+    const s = typeof source === 'string' ? targets.get(source) : undefined;
+    const c = typeof copy === 'string' ? targets.get(copy) : undefined;
+    if (s === undefined || c === undefined || s.kind !== c.kind) return false;
+    if (s.kind === 'line') return true;
+    return (s.kind === 'arc' || s.kind === 'circle') && s.center === c.center;
+  });
 }
 
 /** Whether the point id is one of the defining points of the (raw) curve. */
@@ -567,7 +598,7 @@ function lineAtSplineEnd(pair: readonly Fields[]): boolean {
   return ends.includes(line.p1) || ends.includes(line.p2);
 }
 
-function matches(need: Target | 'value', kind: string | undefined): boolean {
+function matches(need: Target | 'value' | 'pairs', kind: string | undefined): boolean {
   if (kind === undefined) return false;
   if (need === 'round') return ROUND.has(kind);
   if (need === 'curve') return CURVE.has(kind);

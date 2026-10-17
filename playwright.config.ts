@@ -15,6 +15,8 @@ export default defineConfig({
   // Tests in one file run in order; files run in parallel. Every test has its own browser
   // context, so IndexedDB never leaks between workers. E2E_WORKERS overrides the default.
   workers: Number(process.env.E2E_WORKERS ?? 4),
+  // Per port too, so two runs in one checkout never delete each other's traces.
+  outputDir: `test-results/${String(PORT)}`,
   forbidOnly: true,
   retries: 0,
   reporter: 'list',

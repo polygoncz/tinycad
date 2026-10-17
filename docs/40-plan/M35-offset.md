@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 35
 aliases:
   - M35
@@ -15,8 +15,8 @@ specs:
   - "[[06-geometricke-jadro]]"
 depends_on:
   - "[[M30-geometrie-skici-v-occt]]"
-started:
-finished:
+started: 2026-10-17
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-16
@@ -25,9 +25,7 @@ updated: 2026-10-16
 # M35 – Offset
 **Cíl:** nástroj Odsazení (offset): z vybrané křivky nebo řetězce křivek vznikne ekvidistanta ve zvolené vzdálenosti, počítaná v OCCT.
 
-> Hrubý plán – před zahájením upřesnit. Sdílené typy jsou zafixované v [[12-skicar#Sdílené kontrakty série II]].
-
-**Specifikace:** [[12-skicar]], [[06-geometricke-jadro]]
+**Specifikace:** [[12-skicar#Offset (M35)]], [[06-geometricke-jadro#Stav po M35]], [[12-skicar#Sdílené kontrakty série II]]
 
 **Navazuje na:** [[M30-geometrie-skici-v-occt|M30]] (stopa A, po [[M34-zaobleni-a-srazeni-ve-skice|M34]]). Milník série *Rozšíření skicáře II* (M30–M37), viz [[12-skicar#Rozšíření skicáře II (M30–M37)]] a [[Roadmapa#Rozšíření skicáře II (M30–M37)]].
 
@@ -35,12 +33,55 @@ updated: 2026-10-16
 
 Pavel 2026-10-16: „Chtěl bych ještě dodělat do Sketch následující feature: obdélník zadaný středem a jedním krajním bodem, obdélník zadaný třemi body, možnost zadat bod, zadávat text, Construction Line, fillet a chamfer mezi dvěma hranami, trim, extend, split, offset, slot, mirror, linear a circular pattern.“
 
-## Úkoly (orientačně)
+## Rozhodnutí při startu (Pavel 2026-10-17)
 
-- [ ] Port: offset řetězce (`BRepOffsetAPI_MakeOffset` nad drátem, `Geom2d_OffsetCurve`), výstup jako `Curve2` – úsečky, oblouky, spline (ekvidistanta splinu se aproximuje).
-- [ ] Výběr řetězce: klik na křivku vybere navazující řetězec (jako Onshape), strana podle polohy myši, vzdálenost z kóty ve viewportu.
-- [ ] Rozhodnout, jestli offset zůstane asociativní (vazba „odsazení“) nebo vzniknou jen nové entity s kótou vzdálenosti; nová otázka při startu.
-- [ ] Spec 12, e2e.
+- [[Q095 Asociativita offsetu ve skice|Q095]]: **asociativní vazba `offset`** s jednou kótou `d` pro úsečky, oblouky a kružnice; offset splinu zapečený.
+- Rohy offsetu ven **ostré** (prodloužení do průsečíku).
+- Klik vybere **celý řetězec** (přes body, kde se potkávají právě dvě křivky).
+- Dispečer: offset do rodiny `modify`; HUD nápověda (M37) pro všechny nástroje stopy A v tomto milníku.
+
+## Úkoly
+
+- [x] Kontrakt ([[12-skicar#Offset (M35)]], [[06-geometricke-jadro#Stav po M35]]), otázka Q095.
+- [x] Jádro: `offsetCurves`.
+- [x] `sketch`: vazba a kóta `offset` (model, parse, edit, measure, poloha kóty).
+- [x] Řešič planegcs: vazba `offset`.
+- [x] `sketch`: `chainOf`, `offsetEdit`, port; `app`.
+- [x] `sketcher`: kóta offsetu v kresbě, nástroj, HUD nápověda nástrojů stopy A, e2e.
+- [x] Spec podle skutečnosti.
+
+## Implementační plán
+
+Jeden úkol = jedno spuštění `implementer`. 1 ‖ 2, pak 3 ‖ 4, pak 5 (po natažení `main` s M37 kvůli `setHint`).
+
+### 1. Jádro: `offsetCurves`
+
+- **Soubory:** `src/kernel/profile.ts` (`OffsetCurve`, kontrola vstupu `parseOffsetCurvesInput`), `kernel.ts`, nový `kernel/fake-offset.ts`, `fake-kernel.ts`, `testing.ts`, `index.ts`; `kernel-occt/offset.ts` (podle prototypu: vlastní plocha, `GeomAbs_Intersection`, řetězení, `source` z `Generated`, spline přes `PointsToBSpline` stupně 3), napojení `occt-kernel-impl.ts`, `client.ts`, `protocol.ts`, `worker-impl.ts`; `regen/tracking-kernel.ts`, `app/testing.ts`, fake jádra v testech.
+- **Testy:** spec 12 *Testy* (jádro) – kontraktová sada fake i OCCT, test adaptéru (zánik hrany, spline).
+- **Hotovo když:** `npm run check` zelený.
+
+### 2. `sketch`: vazba a kóta `offset`
+
+- **Soubory:** `src/sketch/model.ts` (člen `SketchConstraint`, `DimensionKind` `'offset'` – pozor na `DIMENSION_KINDS` a místa, která je vyčerpávají), `parse.ts`, `edit.ts` (`constraintTargets`, `removeItems` po párech, `measure`), `dimension-placement.ts` (výchozí poloha, `placeDimension`/`movePlacement` pro `offset`), `index.ts`.
+- **Testy:** parse každého pravidla, `removeItems` (zdroj, kopie, poslední pár), `measure` (úsečka, oblouk), poloha kóty.
+- **Hotovo když:** `npm run check` zelený (vyčerpávající `switch` ve `sketcher`/`solver-planegcs` doplní minimálně – řešič `throw` „until task 3“, kresba kóty dočasně jako `pointLineDistance` prvního páru, pokud jinak neprojde typecheck; uvést ve výstupu).
+
+### 3. Řešič planegcs: vazba `offset`
+
+- **Soubory:** `src/solver-planegcs/solve.ts` (primitiva podle spec 12), testy `test/unit/solver-planegcs/`.
+- **Testy:** offset obdélníku – změna `d` posune všechny strany, změna šířky originálu kopie sleduje; zaoblený obdélník; kružnice.
+- **Hotovo když:** `npm run check` zelený.
+
+### 4. `sketch`: řetězec a úprava dat; `app`
+
+- **Soubory:** nový `src/sketch/offset.ts` (`chainOf`, `offsetEdit`, `Chain`), `geometry-port.ts` (`OffsetCurve2`, `SketchGeometry.offset`), `testing.ts` (fake `offset` pro úsečky), `index.ts`; `src/app/sketch-geometry.ts` (`offset` → `offsetCurves`).
+- **Testy:** spec 12 *Testy* (`sketch`); výsledek projde `parseSketchData`, body před křivkami.
+- **Hotovo když:** `npm run check` zelený.
+
+### 5. `sketcher`: kóta, nástroj, nápověda, e2e
+
+- **Soubory:** `sketch-dimensions.ts` (kresba kóty `offset`), nový `sketch-tools/offset-tool.ts`, `sketch-tools.ts` (rodina `modify` za `sketch.chamferAngle`), i18n; `setHint` + klíče `hint.*` pro trim, extend, split, fillet, chamfer, chamferAngle, offset; e2e `test/e2e/m35.spec.ts`.
+- **Hotovo když:** `npm run check` a `npm run test:e2e` zelené.
 
 ## Akceptační kritéria
 
@@ -58,4 +99,33 @@ Jak OCCT řeší ekvidistanty (spojování v rozích, zánik krátkých segment�
 
 _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hlavní sezení to při sloučení přenese do deníku.)_
 
+**2026-10-17 – prototyp OCCT offsetu:** `BRepOffsetAPI_MakeOffset` funguje jen nad vlastní rovinnou plochou (ze samotného drátu selže i úsečka); úsečky a oblouky vychází přesně, spline jako `OffsetCurve` (aproximace nutná), hrany výstupu neseřazené. Celá zpráva v poznámkách stopy (`stopa-a-m35-prototyp-offset.md`).
+
+**Úkol 2 hotový** – `'offset'` na konci `DIMENSION_KINDS`, `placeDimension` ji nezná, rámec kóty oblouku v úhlu popisku zdroje.
+
+**Úkol 3 – řešič narazil na degeneraci:** tečný spoj úsečky a oblouku kopie je dvojnásobný kořen (`p2l_distance` + bod na kružnici `r ± d` mají rovnoběžné gradienty) → `redundant`, `dof 8`, body na 7e-5. Hlavní sezení zvolilo **tečnost v bodě** místo `p2l` v takovém spoji (podle současné polohy); zaoblený obdélník pak `dof 0` bez nadbytečnosti, body na 1e-7. Přijatá omezení: tečný spoj oblouk–oblouk dál degenerovaný; strana kopie může při velké změně originálu přeskočit (jako `pointLineDistance`). Spec 12 doplněna.
+
+**Úkol 1 hotový.** OCCT: otevřený řetězec začínající obloukem po směru hodinových ručiček dává stranu opačně (adaptér ověří a případně `-d`); ostrý roh vedle splinu `GeomAbs_Intersection` tiše rozbije – hlavní sezení zvolilo zálohu `GeomAbs_Arc` (zaoblené vypouklé rohy celého řetězce) místo chyby; `PointsToBSpline` dá stupeň 3 jen přes `Init`. Spec 06 doplněna.
+
+**Úkoly 4 a 5 (bez HUD nápovědy) hotové.** Nástroj Odsadit (ikona `box-padding`), kresba kóty `offset` podle `offsetFrame`, pole číselného vstupu „Vzdálenost“, e2e `m35.spec.ts` (offset ven, změna kóty, vysunutí rámečku; offset dovnitř). `npm run check` 7828 unit + 42 integračních, e2e 180/180. HUD nápověda čeká na M37 v `main`.
+
+**Architektonická revize:** bez závažných porušení. Opraveno: rámec lineární kóty jen v `sketch` (`linearSpan`, kresba ho převádí), sdílené pomůcky nástrojů `previewIds`/`curvePairs` v `common.ts`. Spec 12 výslovně uvádí, že HUD nápověda ještě v kódu není.
+
+**2026-10-17 – natažen `main` s M37 a zrychleným e2e.** Konflikty sčítací (text × offset v `sketch/edit.ts`, `index.ts`, `testing.ts`, testy, i18n, spec 12); `isCurveEntity` je teď v `sketch/model.ts` a vylučuje i text – offset přes něj. HUD nápověda pro trim, extend, split, fillet, chamfer, chamferAngle a offset (10 klíčů `hint.*`). `npm run check` 8068 unit + 44 integračních, plné e2e (Chrome i WebKit) 186/186.
+
 ## Retrospektiva
+
+_(Návrh stopy, Pavel doplní nebo upraví.)_
+
+**Splnění kritérií:** offset obdélníku se zaoblením dovnitř i ven dá správný uzavřený tvar (kontraktová sada `offsetCurves`, řešič: zaoblený obdélník `dof 0` bez nadbytečnosti); offset splinu je kubický B-spline v toleranci `1e-4 · měřítko` (test adaptéru OCCT). Asociativita: změna kóty `d` i originálu kopii posune (planegcs testy, e2e `m35.spec.ts`).
+
+**Co bylo jinak, než se čekalo:**
+- Asociativní offset nepotřeboval nové primitivum řešiče, ale narazil na **degeneraci tečných spojů** (dvojnásobný kořen) – vyřešeno tečností v bodě místo vzdálenosti; spoj dvou oblouků zůstává omezením.
+- `BRepOffsetAPI_MakeOffset` je silný, ale plný pastí: jen nad vlastní plochou, neseřazené hrany, opačná strana u řetězce začínajícího obloukem po směru hodinových ručiček, tiché selhání ostrého rohu vedle splinu (záloha se zaoblenými rohy).
+- Data skici unesou jen kubický spline – aproximace musela jít přes `PointsToBSpline` (`ApproxCurve` stupeň nedodrží).
+
+**Co se osvědčilo:**
+- Prototyp OCCT před kontraktem (třetí milník po sobě) – zjištění o vlastní ploše a straně ušetřila implementaci slepé uličky.
+- Rozdělení na jádro / data / řešič / nástroj se souběhem 1 ‖ 2 a 3 ‖ 4 – každý kus testovatelný zvlášť, řešič se skutečným planegcs dřív, než existoval nástroj.
+- Úkol 5 rozdělený kvůli závislosti na jiné stopě (HUD nápověda až po M37) – nic nečekalo zbytečně.
+

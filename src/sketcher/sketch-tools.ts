@@ -18,6 +18,7 @@ import { createLineTool } from './sketch-tools/line-tool';
 import { createPointTool } from './sketch-tools/point-tool';
 import { createRectangleCenterTool } from './sketch-tools/rectangle-center-tool';
 import { createMirrorTool } from './sketch-tools/mirror-tool';
+import { createOffsetTool } from './sketch-tools/offset-tool';
 import { createCircularPatternTool, createLinearPatternTool } from './sketch-tools/pattern-tool';
 import { createRectangleTool } from './sketch-tools/rectangle-tool';
 import { createRectangle3pTool } from './sketch-tools/rectangle3p-tool';
@@ -310,6 +311,16 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       modes: SKETCH,
       family: 'modify',
       create: () => createChamferTool(sketches, 'angle'),
+    }),
+    // Offset (M35), no shortcut; the Tabler icon of a box with a padding line inside.
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.offset',
+      label: 'tool.offset',
+      icon: 'box-padding',
+      group: 'modify',
+      modes: SKETCH,
+      family: 'modify',
+      create: () => createOffsetTool(sketches),
     }),
     // Mirror and patterns (M36), no shortcut; Tabler icons of a flip, a grid of dots and a full turn.
     Object.freeze<ToolDescriptor>({

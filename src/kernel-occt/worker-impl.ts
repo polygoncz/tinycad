@@ -59,6 +59,7 @@ export function createOcctWorkerImpl(
     curveIntersections: (p) => onKernel((k) => k.curveIntersections(p)),
     curveSegment: (p) => onKernel((k) => k.curveSegment(p)),
     filletArc: (p) => onKernel((k) => k.filletArc(p)),
+    offsetCurves: (p) => onKernel((k) => k.offsetCurves(p)),
     extrude: (profile, direction, distance) =>
       onKernel((k) => k.extrude(profile, direction, distance)),
     revolve: (profile, axis, angle) => onKernel((k) => k.revolve(profile, axis, angle)),

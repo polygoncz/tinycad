@@ -15,6 +15,7 @@ import {
   type GeometryKernel,
   type MeshData,
   type MeshQuality,
+  type OffsetCurve,
   type ProfileCurve,
   type ProfileLoop,
   type ProfileRegions,
@@ -24,6 +25,7 @@ import {
   type TopologySummary,
   parseCurveSegmentInput,
   parseFilletArcInput,
+  parseOffsetCurvesInput,
   parseProfileRegionsInput,
   validateFaceInput,
 } from '@/kernel';
@@ -32,6 +34,7 @@ import { dressupResult, type DressupKind } from './dressup';
 import { filletArcOf } from './fillet';
 import { copyFaceInput, faceResult } from './face';
 import { collectHistory } from './history';
+import { offsetCurvesOf } from './offset';
 import { hasSolid, toKernelError, type Occt } from './occt';
 import {
   createShapeEntry,
@@ -254,6 +257,23 @@ export class OcctKernelImpl implements GeometryKernel {
           throw createKernelError('invalid-input', `filletArc: ${parsed.error.join('; ')}`);
         }
         return filletArcOf(this.oc, parsed.value);
+      },
+    );
+  }
+
+  offsetCurves(p: {
+    readonly curves: readonly ProfileCurve[];
+    readonly closed: boolean;
+    readonly distance: number;
+  }): Promise<readonly OffsetCurve[]> {
+    // parseOffsetCurvesInput reads the input synchronously into a fresh copy and never throws.
+    return this.run(
+      () => parseOffsetCurvesInput(p),
+      (parsed) => {
+        if (!parsed.ok) {
+          throw createKernelError('invalid-input', `offsetCurves: ${parsed.error.join('; ')}`);
+        }
+        return offsetCurvesOf(this.oc, parsed.value);
       },
     );
   }

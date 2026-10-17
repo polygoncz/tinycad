@@ -2,6 +2,7 @@ import type { Mat4, Plane, Vec2, Vec3 } from '@/core';
 import type {
   CurveIntersection,
   FilletArc,
+  OffsetCurve,
   ProfileCurve,
   ProfileLoop,
   ProfileRegions,
@@ -92,6 +93,19 @@ export interface SketchOps {
     readonly radius: number;
     readonly near: Vec2;
   }): Promise<FilletArc>;
+  /**
+   * M35: the offset of a chain of curves (spec 06 "Stav po M35"): the curves oriented along the
+   * chain and joined end to start (the last to the first when `closed`; a circle alone),
+   * `distance` ≠ 0 (closed > 0 outwards, open > 0 to the right of the direction of travel). The
+   * result runs along the chain, joined, each curve with the id of its input as `source`; sharp
+   * corners outwards, vanished curves left out, a spline as a cubic B-spline. No handle, no side
+   * effects; an impossible offset rejects with 'operation-failed'.
+   */
+  offsetCurves(p: {
+    readonly curves: readonly ProfileCurve[];
+    readonly closed: boolean;
+    readonly distance: number;
+  }): Promise<readonly OffsetCurve[]>;
 }
 
 /** An axis: a point and a direction (need not be unit length). */

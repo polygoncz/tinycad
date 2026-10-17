@@ -4,13 +4,14 @@
 
 import { plane as planeMath } from '@/core';
 import type { Plane, Vec2, Vec3 } from '@/core';
-import { defaultPlacement, isDimension, isLineCarrier } from '@/sketch';
+import { defaultPlacement, isDimension, isLineCarrier, linearSpan } from '@/sketch';
 import type {
   AngularPlacement,
   DimensionConstraint,
   DimensionKind,
   DimensionPlacement,
   LinearPlacement,
+  LinearSpan,
   RadialPlacement,
   SketchConstraint,
   SketchConstraintDraft,
@@ -157,7 +158,7 @@ function drawnDimension(
   byId: Entities,
   c: DimensionConstraint,
 ): { readonly placement: DimensionPlacement; readonly geometry: DimensionGeometry } | null {
-  const shape = shapeOf(byId, c);
+  const shape = shapeOf(data, byId, c);
   // defaultPlacement reads the referenced entities: only once they are known to exist.
   if (shape === null) return null;
   const placement = c.placement ?? defaultPlacement(c, data);
@@ -167,39 +168,21 @@ function drawnDimension(
 
 /** The plane geometry a dimension is laid out from. */
 type Shape =
-  /** The measured direction u (unit) from A to B, and the middle m of the measured span. */
-  | {
-      readonly kind: 'linear';
-      readonly a: Vec2;
-      readonly b: Vec2;
-      readonly u: Vec2;
-      readonly m: Vec2;
-    }
+  /** The measured span of sketch (linearSpan): from A to B, direction u, middle m. */
+  | ({ readonly kind: 'linear' } & LinearSpan)
   | { readonly kind: 'radial'; readonly center: Vec2; readonly radius: number }
   /** The directions p1→p2 of the lines and their intersection. */
   | { readonly kind: 'angular'; readonly vertex: Vec2; readonly da: Vec2; readonly db: Vec2 };
 
-function shapeOf(byId: Entities, c: DimensionConstraint): Shape | null {
+function shapeOf(data: SketchData, byId: Entities, c: DimensionConstraint): Shape | null {
   switch (c.kind) {
     case 'distance':
     case 'hDistance':
-    case 'vDistance': {
-      const a = pointOf(byId, c.a);
-      const b = pointOf(byId, c.b);
-      if (a === null || b === null) return null;
-      const u: Vec2 =
-        c.kind === 'distance' ? direction(a, b) : c.kind === 'hDistance' ? [1, 0] : [0, 1];
-      return { kind: 'linear', a, b, u, m: mid(a, b) };
-    }
-    case 'pointLineDistance': {
-      const p = pointOf(byId, c.point);
-      const line = lineOf(byId, c.line);
-      if (p === null || line === null) return null;
-      const d = sub(line[1], line[0]);
-      // A zero-length line has no foot of the perpendicular.
-      if (len(d) <= MIN) return null;
-      const foot = add(line[0], scale(d, dot(sub(p, line[0]), d) / dot(d, d)));
-      return { kind: 'linear', a: foot, b: p, u: direction(foot, p), m: mid(foot, p) };
+    case 'vDistance':
+    case 'pointLineDistance':
+    case 'offset': {
+      const span = linearSpan(c, data);
+      return span === null ? null : { kind: 'linear', ...span };
     }
     case 'radius':
     case 'diameter':
@@ -231,8 +214,8 @@ function geometryOf(
     const g = linearGeometry(shape, placement);
     return {
       kind: 'linear',
-      from: world(shape.a),
-      to: world(shape.b),
+      from: world(shape.from),
+      to: world(shape.to),
       lineFrom: world(g.lineFrom),
       lineTo: world(g.lineTo),
       label: world(g.label),
@@ -269,12 +252,12 @@ function linearGeometry(
   shape: Extract<Shape, { kind: 'linear' }>,
   p: LinearPlacement,
 ): { readonly lineFrom: Vec2; readonly lineTo: Vec2; readonly label: Vec2 } {
-  const { a, b, u, m } = shape;
+  const { from, to, u, m } = shape;
   const n: Vec2 = [-u[1], u[0]];
   const onLine = (q: Vec2): Vec2 => add(q, scale(n, dot(sub(m, q), n) + p.offset));
   return {
-    lineFrom: onLine(a),
-    lineTo: onLine(b),
+    lineFrom: onLine(from),
+    lineTo: onLine(to),
     label: add(m, add(scale(n, p.offset), scale(u, p.along))),
   };
 }
@@ -353,14 +336,6 @@ const scale = (a: Vec2, k: number): Vec2 => [a[0] * k, a[1] * k];
 const dot = (a: Vec2, b: Vec2): number => a[0] * b[0] + a[1] * b[1];
 const cross = (a: Vec2, b: Vec2): number => a[0] * b[1] - a[1] * b[0];
 const len = (a: Vec2): number => Math.hypot(a[0], a[1]);
-const mid = (a: Vec2, b: Vec2): Vec2 => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-
-/** The unit direction a→b; (1, 0) for a zero length (spec 12). */
-function direction(a: Vec2, b: Vec2): Vec2 {
-  const d = sub(b, a);
-  const l = len(d);
-  return l <= MIN ? [1, 0] : scale(d, 1 / l);
-}
 
 function sameView(a: SketchDimensionView, b: SketchDimensionView): boolean {
   return (

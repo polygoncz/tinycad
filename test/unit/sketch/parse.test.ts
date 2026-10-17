@@ -863,6 +863,128 @@ describe('parseSketchData – symmetric (M36)', () => {
   });
 });
 
+/**
+ * Line l a→b and its copy l2 a2→b2 (2 below); a second line m b→c and its copy m2 b2→c2;
+ * circles k (r 2) and k2 (r 3) around o, k3 (r 3) around o2; arcs q (r 4) and q2 (r 5) around o,
+ * q3 (r 5) around o2; a spline sp and an xline xl.
+ */
+const OFFSET_ENTITIES: readonly unknown[] = [
+  P('a', 0, 0),
+  P('b', 10, 0),
+  { kind: 'line', id: 'l', p1: 'a', p2: 'b' },
+  P('a2', 0, -2),
+  P('b2', 10, -2),
+  { kind: 'line', id: 'l2', p1: 'a2', p2: 'b2' },
+  P('c', 10, 10),
+  P('c2', 12, 10),
+  { kind: 'line', id: 'm', p1: 'b', p2: 'c' },
+  { kind: 'line', id: 'm2', p1: 'b2', p2: 'c2' },
+  P('o', 50, 0),
+  P('o2', 80, 0),
+  { kind: 'circle', id: 'k', center: 'o', radius: 2 },
+  { kind: 'circle', id: 'k2', center: 'o', radius: 3 },
+  { kind: 'circle', id: 'k3', center: 'o2', radius: 3 },
+  P('s', 54, 0),
+  P('t', 50, 4),
+  { kind: 'arc', id: 'q', center: 'o', start: 's', end: 't' },
+  P('s2', 55, 0),
+  P('t2', 50, 5),
+  { kind: 'arc', id: 'q2', center: 'o', start: 's2', end: 't2' },
+  P('s3', 85, 0),
+  P('t3', 80, 5),
+  { kind: 'arc', id: 'q3', center: 'o2', start: 's3', end: 't3' },
+  { kind: 'bspline', id: 'sp', degree: 1, poles: ['a', 'c'], knots: [0, 0, 1, 1] },
+  { kind: 'xline', id: 'xl', p1: 'a', p2: 'c', construction: true },
+];
+
+function offsetIssues(constraints: unknown): readonly SketchIssue[] {
+  const r = parseSketchData(OFFSET_ENTITIES, constraints);
+  return r.ok ? [] : r.error;
+}
+
+const offset = (pairs: unknown, extra: Readonly<Record<string, unknown>> = {}) => ({
+  kind: 'offset',
+  id: 'x',
+  pairs,
+  value: 2,
+  ...extra,
+});
+
+describe('parseSketchData – offset (M35)', () => {
+  it.each([
+    ['a line pair', [{ source: 'l', copy: 'l2' }]],
+    ['a circle pair around the same centre', [{ source: 'k', copy: 'k2' }]],
+    ['an arc pair around the same centre', [{ source: 'q', copy: 'q2' }]],
+    [
+      'several pairs',
+      [
+        { source: 'l', copy: 'l2' },
+        { source: 'm', copy: 'm2' },
+        { source: 'q', copy: 'q2' },
+      ],
+    ],
+  ])('accepts %s', (_name, pairs) => {
+    expect(offsetIssues([offset(pairs)])).toEqual([]);
+  });
+
+  it('accepts a linear placement', () => {
+    const placement = { kind: 'linear', offset: 1, along: -2 };
+    expect(offsetIssues([offset([{ source: 'l', copy: 'l2' }], { placement })])).toEqual([]);
+  });
+
+  it.each([
+    ['no pairs', offset([])],
+    ['pairs not a list', offset({ source: 'l', copy: 'l2' })],
+    ['a pair not a record', offset(['l'])],
+    ['a pair without a copy', offset([{ source: 'l' }])],
+    ['a pair with an extra field', offset([{ source: 'l', copy: 'l2', side: 1 }])],
+    ['the copy = the source', offset([{ source: 'l', copy: 'l' }])],
+    [
+      'a source twice',
+      offset([
+        { source: 'l', copy: 'l2' },
+        { source: 'l', copy: 'm2' },
+      ]),
+    ],
+    [
+      'a copy that is a source of another pair',
+      offset([
+        { source: 'l', copy: 'l2' },
+        { source: 'l2', copy: 'm2' },
+      ]),
+    ],
+    [
+      'a copy twice',
+      offset([
+        { source: 'l', copy: 'm2' },
+        { source: 'm', copy: 'm2' },
+      ]),
+    ],
+    ['a line → a circle', offset([{ source: 'l', copy: 'k' }])],
+    ['a circle → an arc', offset([{ source: 'k', copy: 'q2' }])],
+    ['an arc → a circle', offset([{ source: 'q', copy: 'k2' }])],
+    ['a circle around another centre', offset([{ source: 'k', copy: 'k3' }])],
+    ['an arc around another centre', offset([{ source: 'q', copy: 'q3' }])],
+    ['a spline', offset([{ source: 'sp', copy: 'l2' }])],
+    ['an xline', offset([{ source: 'xl', copy: 'l2' }])],
+    ['a point', offset([{ source: 'a', copy: 'a2' }])],
+    ['a missing curve', offset([{ source: 'l', copy: 'zz' }])],
+    ['value 0', offset([{ source: 'l', copy: 'l2' }], { value: 0 })],
+    ['a negative value', offset([{ source: 'l', copy: 'l2' }], { value: -2 })],
+    ['a value not finite', offset([{ source: 'l', copy: 'l2' }], { value: Infinity })],
+    ['no value', { kind: 'offset', id: 'x', pairs: [{ source: 'l', copy: 'l2' }] }],
+    [
+      'a radial placement',
+      offset([{ source: 'l', copy: 'l2' }], {
+        placement: { kind: 'radial', angle: 0, distance: 1 },
+      }),
+    ],
+    ['an extra field', offset([{ source: 'l', copy: 'l2' }], { line: 'l' })],
+  ])('reports %s', (_name, bad) => {
+    expect(offsetIssues([{ kind: 'fix', id: 'f', point: 'a' }, bad])).toEqual([constraintIssue(1)]);
+  });
+});
+
 describe('parseSketchData – text (M37)', () => {
   /** A closed square loop of character `char` (code `code`) from x0, side 1, made of lines. */
   const square = (char: number, code: number, x0 = 0) => ({

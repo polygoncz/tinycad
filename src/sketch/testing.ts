@@ -22,7 +22,7 @@ import type {
 } from './model';
 import { parseSketchData } from './parse';
 import type { ConstraintSolver, SolveInput, SolveResult } from './solver';
-import type { CurveHit, FilletArc, SketchGeometry } from './geometry-port';
+import type { CurveHit, FilletArc, OffsetCurve2, SketchGeometry } from './geometry-port';
 import type { TextOutliner } from './text';
 
 export interface FakeSolver extends ConstraintSolver {
@@ -157,8 +157,9 @@ function deepFreeze<T>(value: T): T {
 /**
  * The SketchGeometry of tests (M33): analytic intersections of lines, arcs and circles and pieces
  * of them, with the parameter t of spec 12 (curve-param.ts), and fillet arcs of lines and arcs
- * (M34). A spline is not supported: any call with one rejects, like a failing kernel. Every curve
- * of `intersections` needs a unique id.
+ * (M34), and offsets of chains of lines with sharp corners (M35). A spline is not supported: any
+ * call with one rejects, like a failing kernel; an offset of an arc or a circle rejects too. Every
+ * curve of `intersections` needs a unique id.
  */
 export function createFakeSketchGeometry(): SketchGeometry {
   return Object.freeze({
@@ -195,6 +196,8 @@ export function createFakeSketchGeometry(): SketchGeometry {
       }),
     fillet: (a: Curve2, b: Curve2, radius: number, near: Vec2) =>
       settle(() => filletArc(a, b, radius, near)),
+    offset: (chain: readonly Curve2[], closed: boolean, distance: number) =>
+      settle(() => lineOffset(chain, closed, distance)),
   });
 }
 
@@ -426,6 +429,57 @@ function carrierParam(c: Curve2, p: Vec2): number {
 
 function distance(a: Vec2, b: Vec2): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1]);
+}
+
+/**
+ * The offset of a chain of lines (spec 06 "Stav po M35") analytically: every line moved to its
+ * right by the signed distance (closed > 0 outwards: the right of a counter-clockwise loop),
+ * neighbours meeting in the intersection of their carriers (a sharp corner; parallel neighbours
+ * in the moved end). Rejects anything but lines, a bad distance and a line that vanishes.
+ */
+function lineOffset(
+  chain: readonly Curve2[],
+  closed: boolean,
+  distance: number,
+): readonly OffsetCurve2[] {
+  if (!(Number.isFinite(distance) && distance !== 0)) {
+    throw new Error('FakeSketchGeometry: bad offset distance');
+  }
+  const lines = chain.filter((c): c is Extract<Curve2, { kind: 'line' }> => c.kind === 'line');
+  if (lines.length === 0 || lines.length !== chain.length) {
+    throw new Error('FakeSketchGeometry: offsets only chains of lines');
+  }
+  const area = lines.reduce((sum, l) => sum + (l.from[0] * l.to[1] - l.to[0] * l.from[1]) / 2, 0);
+  const right = closed && area < 0 ? -distance : distance;
+  const moved = lines.map((l) => {
+    const d: Vec2 = [l.to[0] - l.from[0], l.to[1] - l.from[1]];
+    const len = Math.hypot(...d);
+    const n: Vec2 = [(d[1] / len) * right, (-d[0] / len) * right];
+    const from: Vec2 = [l.from[0] + n[0], l.from[1] + n[1]];
+    return { line: l, from, to: [l.to[0] + n[0], l.to[1] + n[1]] as Vec2, d };
+  });
+  type Moved = (typeof moved)[number];
+  const corner = (a: Moved, b: Moved): Vec2 => {
+    const denom = a.d[0] * b.d[1] - a.d[1] * b.d[0];
+    if (Math.abs(denom) <= 1e-12 * Math.hypot(...a.d) * Math.hypot(...b.d)) return a.to;
+    const w: Vec2 = [b.from[0] - a.from[0], b.from[1] - a.from[1]];
+    const s = (w[0] * b.d[1] - w[1] * b.d[0]) / denom;
+    return [a.from[0] + a.d[0] * s, a.from[1] + a.d[1] * s];
+  };
+  const n = moved.length;
+  return Object.freeze(
+    moved.map((m, i): OffsetCurve2 => {
+      const prev = i > 0 ? moved[i - 1] : closed ? moved[n - 1] : undefined;
+      const next = i < n - 1 ? moved[i + 1] : closed ? moved[0] : undefined;
+      const from = prev === undefined ? m.from : corner(prev, m);
+      const to = next === undefined ? m.to : corner(m, next);
+      if ((to[0] - from[0]) * m.d[0] + (to[1] - from[1]) * m.d[1] <= 0) {
+        throw new Error('FakeSketchGeometry: a line of the offset vanishes (operation-failed)');
+      }
+      const source = m.line.id === undefined ? {} : { source: m.line.id };
+      return Object.freeze({ kind: 'line', from, to, ...source });
+    }),
+  );
 }
 
 /** Advance of one character of the fake outliner, as a fraction of the height. */

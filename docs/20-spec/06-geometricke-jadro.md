@@ -306,6 +306,21 @@ SketchOps.filletArc(p: { readonly a: ProfileCurve; readonly b: ProfileCurve; rea
 - Nekonečně mnoho středů (rovnoběžky přesně `2r` od sebe, kolineární úsečky, soustředné oblouky s mezerou `2r`) → bod společné ekvidistanty nejbližší `near`; při shodě vzdáleností první nalezený. `t` bodu dotyku mimo oblouk = úhel od `from` ve směru oblouku v `[0, 2π)`.
 - OCCT: `Geom2d_OffsetCurve(±radius)` nosné geometrie – úsečka jako `Geom2d_TrimmedCurve(Geom2d_Line)` na `±1e6 · měřítko` kolem `from` (`InterCurveCurve` na ekvidistantě nekonečné přímky vyhodí výjimku; střed dál než tato mez → `'operation-failed'`, fake ho najde – mimo kontrakt), oblouk jako `Geom2d_Circle`; průsečíky `Geom2dAPI_InterCurveCurve` (tečný dotyk hlášený jako úsek jako v M33), body dotyku `Geom2dAPI_ProjectPointOnCurve`. Degenerovaná ekvidistanta oblouku (`|ρ − r|` v toleranci) se vynechá. Kód `kernel-occt/fillet.ts`. Fake: analyticky (`kernel/fake-fillet.ts`). Kontrola vstupu `parseFilletArcInput` z `kernel`.
 
+### Stav po M35
+
+Ekvidistanta řetězce křivek skici ([[M35-offset|M35]], [[12-skicar#Offset (M35)]]):
+
+```ts
+export type OffsetCurve = ProfileCurve & { readonly source?: string };
+SketchOps.offsetCurves(p: { readonly curves: readonly ProfileCurve[]; readonly closed: boolean; readonly distance: number }): Promise<readonly OffsetCurve[]>;
+```
+
+- Vstup: křivky řetězce s id, orientované a navazující (konec jedné = začátek další do tolerance `makeFace`, u `closed` i poslední → první; kružnice jen samotná), `distance` konečné ≠ 0, jinak `'invalid-input'`. Strana: uzavřený `> 0` ven, otevřený `> 0` vpravo ve směru průchodu.
+- Výstup: navazující křivky v pořadí průchodu, `source` = id vstupu (spoj bez `source`); ostré rohy ven (prodloužení), zaniklé hrany vynechané, spline → kubický B-spline v toleranci `1e-4 · měřítko`. Nemožný offset → `'operation-failed'`.
+- OCCT (prototyp M35): `BRepOffsetAPI_MakeOffset(face, GeomAbs_Intersection, isOpenResult = !closed)` nad **vlastní rovinnou plochou** `BRepBuilderAPI_MakeFace(gp_Pln, drát, true)` (ze samotného drátu selže i úsečka; uzavřený drát s `isOpenResult = true` dává nesmysl), `Perform(distance)`; hrany výstupu nejsou seřazené (a mohou být `REVERSED`) → vlastní řetězení; `source` z `Generated(vstupní hrana)` (vstupní hrany z `MakeWire.Edge()` jako `face.ts`); spline kusy (`GeomAbs_OffsetCurve`) přes pcurve na vlastní ploše → body → `Geom2dAPI_PointsToBSpline(…, 3, 3, …)` (`Geom2dConvert_ApproxCurve` stupeň 3 nedodrží). `IsDone() = false` → `'operation-failed'`.
+- Upřesnění z implementace (úkol 1 M35): výsledek běží ve směru vstupu, uzavřený začíná kusem první vstupní křivky; měřítko tolerance `max(1, |d|, |souřadnice|)`, spoje výstupu do `1e-6 · měřítko`; kružnice s `closed: false` → `'invalid-input'`. OCCT u otevřeného řetězce začínajícího obloukem po směru hodinových ručiček dá stranu opačně (hrana se staví proti směru) → adaptér stranu ověří na výsledku a případně spočítá s `-d`. Řetězení: hrany výstupu v jejich směru (oblouk `ccw` podle `Axis().Direction().Z()`, `OffsetCurve` vzorkováním přes `BRepAdaptor_Curve`), hladově podle koncových bodů. Spline: kusy se stejným `source` sloučené, vzorky do `Geom2dAPI_PointsToBSpline.Init(body, 3, 3, C2, tol)` (konstruktor s pěti argumenty stupeň 3 nedá), uzly do `[0, 1]`, krajní póly přesně do spojů. **Ostrý roh vedle splinu** `GeomAbs_Intersection` nezvládne (vrátí `IsDone()`, ale zahodí hrany) → adaptér použije výsledek `GeomAbs_Arc` (zaoblené jsou pak **všechny** vypouklé rohy řetězce, spoje bez `source`); selže, jen když selže i ten. Smyčka splinu (`d` > poloměr křivosti) dá vloženou úsečku se `source` splinu (není přesná ekvidistanta).
+- Fake: úsečky, oblouky a kružnice analyticky (průsečíky sousedních ekvidistant, bez zániku hran); spline a zánik → `'operation-failed'` (kontraktová sada je nezkouší).
+
 ### Kontrakt (platí pro každou implementaci)
 
 Ověřuje ho kontraktová sada ([[#Testy]]), spuštěná pro `FakeKernel` v M5 a pro OCCT v M7.

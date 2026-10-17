@@ -68,7 +68,7 @@ function idOf(c: ProfileCurve): { readonly id?: string } {
 }
 
 /** An edge of the face built from a curve with an entity id; the holder owns the edge. */
-interface IdEdge {
+export interface IdEdge {
   readonly edge: TopoDS_Edge;
   readonly id: string;
 }
@@ -139,10 +139,10 @@ export function faceShape(oc: Occt, input: FaceInput, idEdges?: IdEdge[]): TopoD
   using frame = new oc.gp_Ax3(origin, normal, xDir);
   using pln = new oc.gp_Pln(frame);
 
-  using outer = wire(oc, plane, input.outer, idEdges);
+  using outer = wireOf(oc, plane, input.outer, idEdges);
   using maker = new oc.BRepBuilderAPI_MakeFace(pln, outer, true);
   for (const loop of input.holes) {
-    using hole = wire(oc, plane, loop, idEdges);
+    using hole = wireOf(oc, plane, loop, idEdges);
     maker.Add(hole);
   }
   if (!maker.IsDone()) {
@@ -168,9 +168,10 @@ export function faceShape(oc: Occt, input: FaceInput, idEdges?: IdEdge[]): TopoD
 
 /**
  * New wire of the loop; the caller owns it. For a curve with an id, the edge as it is in the
- * wire (MakeWire.Edge(), possibly a copy with merged vertices) goes to `idEdges`.
+ * wire (MakeWire.Edge(), possibly a copy with merged vertices) goes to `idEdges`. Also the
+ * chain of offsetCurves (offset.ts), which need not be closed.
  */
-function wire(oc: Occt, plane: Plane, loop: ProfileLoop, idEdges?: IdEdge[]): TopoDS_Wire {
+export function wireOf(oc: Occt, plane: Plane, loop: ProfileLoop, idEdges?: IdEdge[]): TopoDS_Wire {
   using maker = new oc.BRepBuilderAPI_MakeWire();
   for (const c of loop) {
     using e = edge(oc, plane, c);

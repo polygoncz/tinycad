@@ -50,7 +50,7 @@ Od [[M15-export-a-dokonceni|M15]] ([[Rozhodnutí noční rychloakce#M15 – Expo
 
 ## Konvence
 
-- Test leží vedle kódu: `foo.ts` → `foo.test.ts`. Integrační testy v `tests/`.
+- Testy leží mimo `src/` se zrcadlovou strukturou ([[0023-testy-mimo-zdrojaky|ADR 0023]]): `src/<modul>/foo.ts` → `test/unit/<modul>/foo.test.ts`, importy přes `@/`. Integrační testy v `test/integration/`, e2e v `test/e2e/`.
 - Testovací data (featury, dokumenty) přes malé buildery: `aBox({ height: 20 })`, `aDocument().with(aBox()).build()`.
 - ID v testech ze `SequentialIdGenerator` → čitelné snapshoty.
 - Žádné mockovací frameworky pro porty – vlastní fake implementace (`FakeKernel`, `MemoryDocumentStore`), které jsou samy ověřené kontraktovými testy.

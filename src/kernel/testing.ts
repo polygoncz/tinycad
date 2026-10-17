@@ -15,6 +15,7 @@ import type { Axis, BooleanOp, GeometryKernel } from './kernel';
 import type {
   CurveIntersection,
   FilletArc,
+  OffsetCurve,
   ProfileCurve,
   ProfileLoop,
   ProfileRegions,
@@ -518,6 +519,11 @@ export function describeGeometryKernelContract(
               near: [0, 0],
             }),
         ],
+        [
+          'offsetCurves',
+          (k: GeometryKernel) =>
+            k.offsetCurves({ curves: [seg('p', [0, 0], [1, 0])], closed: false, distance: 0 }),
+        ],
         ['extrude', (k: GeometryKernel) => k.extrude(UNKNOWN, [0, 0, 1], 5)],
         ['revolve', (k: GeometryKernel) => k.revolve(UNKNOWN, Z_AXIS, TURN)],
         ['fillet', (k: GeometryKernel) => k.fillet(UNKNOWN, [0], 1)],
@@ -554,6 +560,7 @@ export function describeGeometryKernelContract(
             radius: 0.1,
             near: [0.1, 0.1],
           }),
+          kernel.offsetCurves({ curves: [seg('p', [0, 0], [1, 0])], closed: false, distance: 1 }),
           kernel.extrude(profile, [0, 0, 1], 5),
           kernel.revolve(profile, Z_AXIS, TURN),
           kernel.fillet(shape, [0], 0.5),
@@ -931,6 +938,10 @@ export function describeGeometryKernelContract(
 
     describe('filletArc (M34)', () => {
       describeFilletArc(() => kernel);
+    });
+
+    describe('offsetCurves (M35)', () => {
+      describeOffsetCurves(() => kernel);
     });
 
     describe('extrude', () => {
@@ -3340,6 +3351,271 @@ function describeFilletArc(kernelOf: () => GeometryKernel): void {
       Reflect.set(near, 1, -1);
       Reflect.set(params, 'radius', 1);
       expectPoint2Close((await found).center, [8, 2], 'center');
+    });
+  });
+}
+
+// --- offsetCurves (M35) ------------------------------------------------------------------------
+// Spec 06 "Stav po M35", spec 12 "Offset (M35)": the curves in order, with their source, points
+// within LOOP_POINT_TOLERANCE · max(1, |coordinate|). Only lines, arcs and circles without
+// vanishing curves: the FakeKernel neither offsets splines nor drops curves (the OCCT adapter
+// test covers both).
+
+type OffsetParams = Parameters<GeometryKernel['offsetCurves']>[0];
+
+const offsetLine = (source: string, from: Vec2, to: Vec2): OffsetCurve => ({
+  kind: 'line',
+  from,
+  to,
+  source,
+});
+const offsetArc = (
+  source: string,
+  center: Vec2,
+  from: Vec2,
+  to: Vec2,
+  ccw = true,
+): OffsetCurve => ({ kind: 'arc', center, from, to, ccw, source });
+
+/** The same curves in the same order: kind, source and every point. */
+function expectOffsetClose(actual: readonly OffsetCurve[], expected: readonly OffsetCurve[]): void {
+  const labels = (curves: readonly OffsetCurve[]): string[] =>
+    curves.map((c) => `${c.kind}:${c.source ?? '-'}`);
+  expect(labels(actual), 'kinds and sources in order').toEqual(labels(expected));
+  expected.forEach((e, i) => {
+    // The sources are compared above; expectCurveClose compares the geometry (and no id).
+    expectCurveClose(actual[i], e);
+  });
+}
+
+/** Rounded rectangle 10 × 6 with corner radius 2, counter-clockwise from (2, 0). */
+const ROUNDED = [
+  seg('b', [2, 0], [8, 0]),
+  ccwArc('br', [8, 2], [8, 0], [10, 2]),
+  seg('r', [10, 2], [10, 4]),
+  ccwArc('tr', [8, 4], [10, 4], [8, 6]),
+  seg('t', [8, 6], [2, 6]),
+  ccwArc('tl', [2, 4], [2, 6], [0, 4]),
+  seg('l', [0, 4], [0, 2]),
+  ccwArc('bl', [2, 2], [0, 2], [2, 0]),
+];
+
+/** ROUNDED offset by d (> −2): the lines moved, the arcs of radius 2 + d around the same centers. */
+function roundedOffset(d: number): OffsetCurve[] {
+  return [
+    offsetLine('b', [2, -d], [8, -d]),
+    offsetArc('br', [8, 2], [8, -d], [10 + d, 2]),
+    offsetLine('r', [10 + d, 2], [10 + d, 4]),
+    offsetArc('tr', [8, 4], [10 + d, 4], [8, 6 + d]),
+    offsetLine('t', [8, 6 + d], [2, 6 + d]),
+    offsetArc('tl', [2, 4], [2, 6 + d], [-d, 4]),
+    offsetLine('l', [-d, 4], [-d, 2]),
+    offsetArc('bl', [2, 2], [-d, 2], [2, -d]),
+  ];
+}
+
+/** The same chain run the other way: every curve reversed, in reverse order. */
+function reversedChain<C extends ProfileCurve>(curves: readonly C[]): C[] {
+  return [...curves].reverse().map((c): C => {
+    if (c.kind === 'line') return { ...c, from: c.to, to: c.from };
+    if (c.kind === 'arc') return { ...c, from: c.to, to: c.from, ccw: !c.ccw };
+    return c;
+  });
+}
+
+function describeOffsetCurves(kernelOf: () => GeometryKernel): void {
+  const offsetOf = (p: OffsetParams): Promise<readonly OffsetCurve[]> =>
+    callWithoutThrow(() => kernelOf().offsetCurves(p));
+
+  describe('closed chains (spec 06 Stav po M35)', () => {
+    it('a rectangle outwards: sharp corners, the curves in the order of the chain', async () => {
+      expectOffsetClose(await offsetOf({ curves: RECT, closed: true, distance: 1 }), [
+        offsetLine('ab', [-1, -1], [11, -1]),
+        offsetLine('bc', [11, -1], [11, 6]),
+        offsetLine('cd', [11, 6], [-1, 6]),
+        offsetLine('da', [-1, 6], [-1, -1]),
+      ]);
+    });
+
+    it('a rectangle inwards', async () => {
+      expectOffsetClose(await offsetOf({ curves: RECT, closed: true, distance: -1 }), [
+        offsetLine('ab', [1, 1], [9, 1]),
+        offsetLine('bc', [9, 1], [9, 4]),
+        offsetLine('cd', [9, 4], [1, 4]),
+        offsetLine('da', [1, 4], [1, 1]),
+      ]);
+    });
+
+    it('a clockwise rectangle: > 0 is still outwards, the result runs clockwise', async () => {
+      expectOffsetClose(
+        await offsetOf({ curves: reversedChain(RECT), closed: true, distance: 1 }),
+        [
+          offsetLine('da', [-1, -1], [-1, 6]),
+          offsetLine('cd', [-1, 6], [11, 6]),
+          offsetLine('bc', [11, 6], [11, -1]),
+          offsetLine('ab', [11, -1], [-1, -1]),
+        ],
+      );
+    });
+
+    it('a rounded rectangle outwards: arcs around the same centers, tangent joins', async () => {
+      expectOffsetClose(
+        await offsetOf({ curves: ROUNDED, closed: true, distance: 1 }),
+        roundedOffset(1),
+      );
+    });
+
+    it('a rounded rectangle inwards', async () => {
+      expectOffsetClose(
+        await offsetOf({ curves: ROUNDED, closed: true, distance: -1 }),
+        roundedOffset(-1),
+      );
+    });
+
+    it('a clockwise rounded rectangle outwards', async () => {
+      expectOffsetClose(
+        await offsetOf({ curves: reversedChain(ROUNDED), closed: true, distance: 1 }),
+        reversedChain(roundedOffset(1)),
+      );
+    });
+
+    it('a circle outwards and inwards', async () => {
+      const circle = ring('k', [1, 2], 5);
+      expectOffsetClose(await offsetOf({ curves: [circle], closed: true, distance: 1 }), [
+        { kind: 'circle', center: [1, 2], radius: 6, source: 'k' },
+      ]);
+      expectOffsetClose(await offsetOf({ curves: [circle], closed: true, distance: -2 }), [
+        { kind: 'circle', center: [1, 2], radius: 3, source: 'k' },
+      ]);
+    });
+
+    it.each([5, 6])(
+      'a circle inwards by %d (its radius or more) rejects with operation-failed',
+      async (d) => {
+        const p = { curves: [ring('k', [0, 0], 5)], closed: true, distance: -d };
+        expect(await rejectionCode(() => kernelOf().offsetCurves(p))).toBe('operation-failed');
+      },
+    );
+  });
+
+  describe('open chains (spec 06 Stav po M35)', () => {
+    const L = [seg('h', [0, 0], [10, 0]), seg('v', [10, 0], [10, 5])];
+
+    it('an L to the right of its direction: the outer corner sharp', async () => {
+      expectOffsetClose(await offsetOf({ curves: L, closed: false, distance: 1 }), [
+        offsetLine('h', [0, -1], [11, -1]),
+        offsetLine('v', [11, -1], [11, 5]),
+      ]);
+    });
+
+    it('an L to the left of its direction: the inner corner cut', async () => {
+      expectOffsetClose(await offsetOf({ curves: L, closed: false, distance: -1 }), [
+        offsetLine('h', [0, 1], [9, 1]),
+        offsetLine('v', [9, 1], [9, 5]),
+      ]);
+    });
+
+    it('a single line', async () => {
+      expectOffsetClose(
+        await offsetOf({ curves: [seg('p', [0, 0], [10, 0])], closed: false, distance: 2 }),
+        [offsetLine('p', [0, -2], [10, -2])],
+      );
+    });
+
+    it('a single counter-clockwise arc: to the right is outwards', async () => {
+      const arc = ccwArc('k', [0, 0], [5, 0], [0, 5]);
+      expectOffsetClose(await offsetOf({ curves: [arc], closed: false, distance: 1 }), [
+        offsetArc('k', [0, 0], [6, 0], [0, 6]),
+      ]);
+      expectOffsetClose(await offsetOf({ curves: [arc], closed: false, distance: -1 }), [
+        offsetArc('k', [0, 0], [4, 0], [0, 4]),
+      ]);
+    });
+
+    it('a single clockwise arc: to the right is inwards', async () => {
+      const arc = { ...ccwArc('k', [0, 0], [0, 5], [5, 0]), ccw: false };
+      expectOffsetClose(await offsetOf({ curves: [arc], closed: false, distance: 1 }), [
+        offsetArc('k', [0, 0], [0, 4], [4, 0], false),
+      ]);
+    });
+
+    it('an L turning right: to the right is its inner side', async () => {
+      const curves = [seg('h', [0, 0], [10, 0]), seg('v', [10, 0], [10, -5])];
+      expectOffsetClose(await offsetOf({ curves, closed: false, distance: 1 }), [
+        offsetLine('h', [0, -1], [9, -1]),
+        offsetLine('v', [9, -1], [9, -5]),
+      ]);
+    });
+
+    it('a chain starting with a clockwise arc keeps its side', async () => {
+      const arc = { ...ccwArc('k', [0, 0], [0, 5], [5, 0]), ccw: false };
+      const curves = [arc, seg('p', [5, 0], [5, -5])];
+      expectOffsetClose(await offsetOf({ curves, closed: false, distance: 1 }), [
+        offsetArc('k', [0, 0], [0, 4], [4, 0], false),
+        offsetLine('p', [4, 0], [4, -5]),
+      ]);
+    });
+
+    it('a line and a tangent arc: the join is the common point of both offsets', async () => {
+      const curves = [seg('p', [0, 0], [5, 0]), ccwArc('k', [5, 3], [5, 0], [8, 3])];
+      expectOffsetClose(await offsetOf({ curves, closed: false, distance: 1 }), [
+        offsetLine('p', [0, -1], [5, -1]),
+        offsetArc('k', [5, 3], [5, -1], [9, 3]),
+      ]);
+      expectOffsetClose(await offsetOf({ curves, closed: false, distance: -1 }), [
+        offsetLine('p', [0, 1], [5, 1]),
+        offsetArc('k', [5, 3], [5, 1], [7, 3]),
+      ]);
+    });
+  });
+
+  describe('input (spec 06 offsetCurves)', () => {
+    const p = seg('p', [0, 0], [10, 0]);
+    const q = seg('q', [10, 0], [10, 5]);
+    const apart = seg('q', [11, 0], [11, 5]);
+
+    it.each([
+      ['no curves', { curves: [], closed: false, distance: 1 }],
+      ['distance 0', { curves: [p], closed: false, distance: 0 }],
+      ['an infinite distance', { curves: [p], closed: false, distance: Number.POSITIVE_INFINITY }],
+      ['a NaN distance', { curves: [p], closed: false, distance: Number.NaN }],
+      ['a curve without id', { curves: [line([0, 0], [10, 0])], closed: false, distance: 1 }],
+      ['a line of zero length', { curves: [seg('p', [1, 0], [1, 0])], closed: false, distance: 1 }],
+      ['curves that do not join', { curves: [p, apart], closed: false, distance: 1 }],
+      ['a closed chain that does not close', { curves: [p, q], closed: true, distance: 1 }],
+      [
+        'a circle with another curve',
+        { curves: [ring('k', [0, 0], 1), p], closed: true, distance: 1 },
+      ],
+      ['an open circle', { curves: [ring('k', [0, 0], 1)], closed: false, distance: 1 }],
+    ] satisfies [string, OffsetParams][])(
+      '%s rejects with invalid-input',
+      async (_name, params) => {
+        expect(await rejectionCode(() => kernelOf().offsetCurves(params))).toBe('invalid-input');
+      },
+    );
+
+    it('offsetCurves(null) and a closed that is not a boolean reject instead of throwing', async () => {
+      // Outside the types on purpose.
+      const params = null as unknown as OffsetParams;
+      expect(await rejectionCode(() => kernelOf().offsetCurves(params))).toBe('invalid-input');
+      const notBoolean = { curves: [p], closed: 'no', distance: 1 } as unknown as OffsetParams;
+      expect(await rejectionCode(() => kernelOf().offsetCurves(notBoolean))).toBe('invalid-input');
+    });
+
+    it('creates no handle', async () => {
+      await offsetOf({ curves: [p, q], closed: false, distance: 1 });
+      expect(await kernelOf().liveHandleCount()).toBe(0);
+    });
+
+    it('changing the input right after the call, before await, does not change the result', async () => {
+      const curves = [seg('p', [0, 0], [10, 0])];
+      const params = { curves, closed: false, distance: 2 };
+      const found = callWithoutThrow(() => kernelOf().offsetCurves(params));
+      // The inputs are readonly; the test writes into them on purpose.
+      Reflect.set(params, 'distance', 5);
+      curves.push(seg('q', [10, 0], [10, 5]));
+      expectOffsetClose(await found, [offsetLine('p', [0, -2], [10, -2])]);
     });
   });
 }

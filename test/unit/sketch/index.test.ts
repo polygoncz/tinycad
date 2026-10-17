@@ -5,6 +5,7 @@ import type {
   CurveHit,
   FilletArc,
   FilletEdge,
+  OffsetCurve2,
   SketchArc,
   SketchConstraint,
   SketchConstraintDraft,
@@ -40,6 +41,8 @@ describe('sketch public API', () => {
         'constraintTargets',
         'curvePoints',
         'curve2',
+        'chainCurves',
+        'chainOf',
         'chamferEdit',
         'cornerOf',
         'crossingPoints',
@@ -55,6 +58,7 @@ describe('sketch public API', () => {
         'filletEdit',
         'isFilletEdge',
         'nearestParam',
+        'offsetEdit',
         'paramRange',
         'pieceAt',
         'piecePolyline',
@@ -70,6 +74,7 @@ describe('sketch public API', () => {
         'isCurveEntity',
         'isPattern',
         'isPatternSource',
+        'linearSpan',
         'measure',
         'movePlacement',
         'parseSketchData',
@@ -143,6 +148,7 @@ describe('sketch public API', () => {
       'angle',
       'radius',
       'diameter',
+      'offset',
     ]);
     expect(Object.isFrozen(sketch.DIMENSION_KINDS)).toBe(true);
     expect(sketch.isDimension({ kind: 'angle' })).toBe(true);
@@ -201,8 +207,18 @@ describe('sketch public API', () => {
     >();
   });
 
-  it('SketchGeometry has the intersections and pieces of M33 and the fillet of M34 (spec 12)', () => {
-    expectTypeOf<keyof SketchGeometry>().toEqualTypeOf<'intersections' | 'segment' | 'fillet'>();
+  it('SketchGeometry has the intersections and pieces of M33, the fillet of M34 and the offset of M35 (spec 12)', () => {
+    expectTypeOf<keyof SketchGeometry>().toEqualTypeOf<
+      'intersections' | 'segment' | 'fillet' | 'offset'
+    >();
+    expectTypeOf<SketchGeometry['offset']>().toEqualTypeOf<
+      (
+        chain: readonly Curve2[],
+        closed: boolean,
+        distance: number,
+      ) => Promise<readonly OffsetCurve2[]>
+    >();
+    expectTypeOf<OffsetCurve2>().toEqualTypeOf<Curve2 & { readonly source?: string }>();
     expectTypeOf<SketchGeometry['fillet']>().toEqualTypeOf<
       (a: Curve2, b: Curve2, radius: number, near: readonly [number, number]) => Promise<FilletArc>
     >();

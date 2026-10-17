@@ -20,6 +20,7 @@ interface FilletKey extends CornerKey {
 export function createFilletTool(sketches: SketchEditor): Tool {
   return createCornerTool<FilletKey, FilletArc>(sketches, {
     memory: 'fillet',
+    hints: { first: 'hint.fillet.first', second: 'hint.fillet.second' },
     key(pair, radius) {
       const near = pair.clickedCorner ? insideCorner(pair, radius) : pair.near;
       return near === null ? null : { pair, value: radius, near };

@@ -164,7 +164,7 @@ async function editing(
   await settle();
   manager.activate(toolId);
   const rewrite = vi.spyOn(session, 'rewrite');
-  return { viewport, session, rewrite };
+  return { viewport, session, rewrite, manager };
 }
 
 /** Lets the port and solver answers (microtasks) and the queue settle. */
@@ -216,6 +216,7 @@ const SILENT: SketchGeometry = {
   intersections: () => new Promise<never>(() => undefined),
   segment: () => new Promise<never>(() => undefined),
   fillet: () => new Promise<never>(() => undefined),
+  offset: () => new Promise<never>(() => undefined),
 };
 
 describe('the trim tool', () => {
@@ -382,6 +383,7 @@ describe('the extend tool', () => {
           : fake.intersections(curves),
       segment: (curve, from, to) => fake.segment(curve, from, to),
       fillet: (a, b, radius, near) => fake.fillet(a, b, radius, near),
+      offset: (chain, closed, distance) => fake.offset(chain, closed, distance),
     };
     const { viewport, session, rewrite } = await editing(LINE_CIRCLE, 'sketch.extend', geometry);
     await move(viewport, [35, 0]);
@@ -574,6 +576,7 @@ function splineGeometry(): SketchGeometry & { readonly segments: [number, number
       return Promise.resolve(bezierPiece(curve, from, to));
     },
     fillet: () => Promise.reject(new Error('fillet is not used here')),
+    offset: () => Promise.reject(new Error('offset is not used here')),
   };
 }
 
@@ -598,3 +601,20 @@ function bezierPiece(c: Curve2, from: number, to: number): Curve2 {
   const [piece] = split(tail, from === 1 ? 0 : (to - from) / (1 - from));
   return { kind: 'bspline', degree: c.degree, poles: piece, knots: c.knots };
 }
+
+describe('the trim, extend and split tools: the hint HUD (M35)', () => {
+  it.each([
+    ['sketch.trim', 'hint.trim.pick'],
+    ['sketch.extend', 'hint.extend.pick'],
+    ['sketch.split', 'hint.split.pick'],
+  ])('%s shows %s while active, also after a click', async (tool, key) => {
+    const { viewport, manager } = await editing(CROSS, tool);
+    expect(manager.hint.get()).toEqual({ key });
+
+    await click(viewport, [20, 50]);
+    expect(manager.hint.get()).toEqual({ key });
+
+    manager.activate('sketch.select');
+    expect(manager.hint.get()).toBeNull();
+  });
+});

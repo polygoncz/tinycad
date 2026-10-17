@@ -10,6 +10,7 @@ describe('kernel public API', () => {
       'kernelErrorCode',
       'parseCurveSegmentInput',
       'parseFilletArcInput',
+      'parseOffsetCurvesInput',
       'parseProfileRegionsInput',
       'validateFaceInput',
       'validateMeshData',

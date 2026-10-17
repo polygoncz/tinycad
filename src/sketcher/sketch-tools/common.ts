@@ -3,8 +3,10 @@
 
 import { plane as planeMath } from '@/core';
 import type { Vec2, Vec3 } from '@/core';
-import { isPattern } from '@/sketch';
+import { isPattern, paramRange, piecePolyline } from '@/sketch';
 import type {
+  Curve2,
+  IdSource,
   SketchConstraint,
   SketchConstraintId,
   SketchData,
@@ -404,6 +406,30 @@ export function previewPairs(
   ctx.viewport.overlay.set(PREVIEW_OVERLAY_ID, [shape]);
 }
 
+/**
+ * Ids for the edit of the preview: only the shape of the edit is used, nothing of it is written,
+ * so the ids need not come from the generator of the tool context. Used by the fillet, chamfer and offset tools.
+ */
+export function previewIds(): IdSource {
+  let n = 0;
+  const next = (): string => `__preview${String(++n)}`;
+  return {
+    // Branding a local id that never leaves the preview (the trusted ids come from ctx.ids).
+    entity: () => next() as SketchEntityId,
+    constraint: () => next() as SketchConstraintId,
+  };
+}
+
+/** The whole curve as pairs of points (a polyline). */
+export function curvePairs(c: Curve2): readonly Vec2[] {
+  const [lo, hi] = paramRange(c);
+  const points = piecePolyline(c, lo, hi);
+  return points.slice(1).flatMap((p, i) => {
+    const prev = points[i];
+    return prev === undefined ? [] : [prev, p];
+  });
+}
+
 /** Sets the preview: a closed or open polyline through the plane points. */
 export function previewPolyline(
   ctx: ToolContext,
@@ -762,6 +788,20 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
       const handled = handlers.onKey?.(c, session, e) ?? false;
       if (handled) restart(c, session);
       return handled;
+    },
+  };
+}
+
+/**
+ * The tool with one hint for its whole work (M37, spec 10 "Nástroje"): shown on activation; the
+ * manager clears it on deactivation.
+ */
+export function withHint(tool: Tool, key: string): Tool {
+  return {
+    ...tool,
+    activate(ctx) {
+      tool.activate(ctx);
+      ctx.setHint({ key });
     },
   };
 }

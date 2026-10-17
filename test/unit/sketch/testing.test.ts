@@ -445,4 +445,61 @@ describe('createFakeSketchGeometry', () => {
       await expect(geometry.fillet(a, circle, 1, [0, 1])).rejects.toThrow();
     });
   });
+
+  describe('offset', () => {
+    const rect: Curve2[] = [
+      line('ab', [0, 0], [10, 0]),
+      line('bc', [10, 0], [10, 5]),
+      line('cd', [10, 5], [0, 5]),
+      line('da', [0, 5], [0, 0]),
+    ];
+
+    it('offsets a closed chain of lines outwards and inwards with sharp corners', async () => {
+      expect(await geometry.offset(rect, true, 1)).toEqual([
+        { kind: 'line', from: [-1, -1], to: [11, -1], source: 'ab' },
+        { kind: 'line', from: [11, -1], to: [11, 6], source: 'bc' },
+        { kind: 'line', from: [11, 6], to: [-1, 6], source: 'cd' },
+        { kind: 'line', from: [-1, 6], to: [-1, -1], source: 'da' },
+      ]);
+      const inwards = await geometry.offset(rect, true, -1);
+      expect(inwards.map((c) => (c.kind === 'line' ? c.from : null))).toEqual([
+        [1, 1],
+        [9, 1],
+        [9, 4],
+        [1, 4],
+      ]);
+      // A clockwise loop goes outwards too.
+      const clockwise = [...rect]
+        .reverse()
+        .map((c): Curve2 => (c.kind === 'line' ? { ...c, from: c.to, to: c.from } : c));
+      const out = await geometry.offset(clockwise, true, 1);
+      expect(out[0]).toEqual({ kind: 'line', from: [-1, -1], to: [-1, 6], source: 'da' });
+    });
+
+    it('offsets an open chain to the right of its direction, the ends moved', async () => {
+      const l = [line('l1', [0, 0], [10, 0]), line('l2', [10, 0], [10, 5])];
+      expect(await geometry.offset(l, false, 1)).toEqual([
+        { kind: 'line', from: [0, -1], to: [11, -1], source: 'l1' },
+        { kind: 'line', from: [11, -1], to: [11, 5], source: 'l2' },
+      ]);
+      const left = await geometry.offset(l, false, -1);
+      expect(left[0]).toEqual({ kind: 'line', from: [0, 1], to: [9, 1], source: 'l1' });
+    });
+
+    it('rejects arcs, circles, a zero distance and a vanishing line', async () => {
+      const circle: Curve2 = { kind: 'circle', center: [0, 0], radius: 1, id: 'c' };
+      await expect(geometry.offset([circle], true, 1)).rejects.toThrow();
+      const k: Curve2 = {
+        kind: 'arc',
+        center: [0, 0],
+        from: [1, 0],
+        to: [0, 1],
+        ccw: true,
+        id: 'k',
+      };
+      await expect(geometry.offset([k], false, 1)).rejects.toThrow();
+      await expect(geometry.offset(rect, true, 0)).rejects.toThrow();
+      await expect(geometry.offset(rect, true, -3)).rejects.toThrow();
+    });
+  });
 });

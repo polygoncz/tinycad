@@ -11,7 +11,15 @@ import { CLICK_TOLERANCE_PX } from '@/interaction';
 import type { Tool, ToolContext } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
 import type { SketchSession } from '../sketch-session';
-import { PREVIEW_OVERLAY_ID, clearPreview, clickTool, cursorAt, distance, toWorld } from './common';
+import {
+  PREVIEW_OVERLAY_ID,
+  clearPreview,
+  clickTool,
+  cursorAt,
+  distance,
+  toWorld,
+  withHint,
+} from './common';
 import { curveAt, idSource, isSpline, unchanged } from './curve-pick';
 import type { PickedCurve } from './curve-pick';
 
@@ -23,7 +31,7 @@ interface SplitTarget {
 }
 
 export function createSplitTool(sketches: SketchEditor): Tool {
-  return clickTool(sketches, {
+  const tool = clickTool(sketches, {
     reset() {
       // Nothing in progress: every click stands alone.
     },
@@ -44,6 +52,7 @@ export function createSplitTool(sketches: SketchEditor): Tool {
       void split(ctx, session, target);
     },
   });
+  return withHint(tool, 'hint.split.pick');
 }
 
 /**

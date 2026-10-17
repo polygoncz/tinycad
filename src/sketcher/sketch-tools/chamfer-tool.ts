@@ -28,7 +28,7 @@ import type {
 import type { Tool } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
 import { createCornerTool } from './corner-tool';
-import type { CornerKey, PickedPair } from './corner-tool';
+import type { CornerHints, CornerKey, PickedPair } from './corner-tool';
 
 /** The variant: two distances (sketch.chamfer) or a distance and an angle (sketch.chamferAngle). */
 export type ChamferVariant = 'distances' | 'angle';
@@ -38,6 +38,12 @@ const CHAMFER_ANGLE = Math.PI / 4;
 
 /** The id of the temporary circle (corner, d) and of the ray in the intersection requests. */
 const CHAMFER_ID = '__chamfer';
+
+/** The hint keys of the variants (M35). */
+const HINTS: Readonly<Record<ChamferVariant, CornerHints>> = {
+  distances: { first: 'hint.chamfer.first', second: 'hint.chamfer.second' },
+  angle: { first: 'hint.chamferAngle.first', second: 'hint.chamferAngle.second' },
+};
 
 interface ChamferKey extends CornerKey {
   readonly corner: SketchEntityId;
@@ -51,6 +57,7 @@ interface ChamferPoints {
 export function createChamferTool(sketches: SketchEditor, variant: ChamferVariant): Tool {
   return createCornerTool<ChamferKey, ChamferPoints>(sketches, {
     memory: 'chamfer',
+    hints: HINTS[variant],
     key(pair, distance) {
       // Only in a corner; the angle is dimensioned against a line only.
       const { corner } = pair;

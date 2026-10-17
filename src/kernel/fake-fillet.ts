@@ -13,8 +13,11 @@ const FORMULA_TOLERANCE = 1e-9;
 /** Unit directions whose cross product is below this are parallel. */
 const PARALLEL = 1e-12;
 
-/** A carrier of a curve shifted by the radius: a line (point, unit direction) or a circle. */
-type Offset =
+/**
+ * A carrier of a curve shifted by the radius: a line (point, unit direction) or a circle. Also
+ * the carriers of offsetCurves (fake-offset.ts).
+ */
+export type Offset =
   | { readonly kind: 'line'; readonly p: Vec2; readonly d: Vec2 }
   | { readonly kind: 'circle'; readonly c: Vec2; readonly r: number };
 
@@ -51,8 +54,11 @@ function offsetsOf(c: FilletCurve, radius: number, tol: number): readonly Offset
   return radii.map((r) => ({ kind: 'circle', c: c.center, r }));
 }
 
-/** The common points of two offsets; where they coincide, the point of them nearest `near`. */
-function meet(a: Offset, b: Offset, near: Vec2, tol: number): readonly Vec2[] {
+/**
+ * The common points of two offsets; where they coincide, the point of them nearest `near`. Also
+ * the corners of offsetCurves (fake-offset.ts).
+ */
+export function meet(a: Offset, b: Offset, near: Vec2, tol: number): readonly Vec2[] {
   if (a.kind === 'line' && b.kind === 'line') return lineLine(a, b, near, tol);
   if (a.kind === 'line' && b.kind === 'circle') return lineCircle(a, b, tol);
   if (a.kind === 'circle' && b.kind === 'line') return lineCircle(b, a, tol);

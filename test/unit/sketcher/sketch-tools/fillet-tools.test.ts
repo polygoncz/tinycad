@@ -23,6 +23,7 @@ import type {
   PickResult,
   SketchDrawing,
   ToolContext,
+  ToolManager,
   ViewPointerEvent,
 } from '@/interaction';
 import { FakeRegenStatus, FakeViewport } from '@/interaction/testing';
@@ -236,6 +237,7 @@ function countingGeometry(): SketchGeometry & { readonly fillets: number } {
       fillets += 1;
       return fake.fillet(a, b, radius, near);
     },
+    offset: (chain, closed, distance) => fake.offset(chain, closed, distance),
     get fillets() {
       return fillets;
     },
@@ -425,6 +427,7 @@ describe('the fillet tool', () => {
             fake.fillet(a, b, radius, near).then(resolve, reject);
           });
         }),
+      offset: (chain, closed, distance) => fake.offset(chain, closed, distance),
     };
     const { viewport } = await editing(RECT, 'sketch.fillet', geometry);
     await move(viewport, [100, 0]);
@@ -566,5 +569,51 @@ describe('the chamfer tools', () => {
 
     expect(viewport.overlayShapes.has(PREVIEW)).toBe(false);
     expect(rewrite).not.toHaveBeenCalled();
+  });
+});
+
+describe('the fillet and chamfer tools: the hint HUD (M35)', () => {
+  const hintOf = (manager: ToolManager): string | null => manager.hint.get()?.key ?? null;
+
+  it.each([
+    ['sketch.fillet', 'fillet'],
+    ['sketch.chamfer', 'chamfer'],
+    ['sketch.chamferAngle', 'chamferAngle'],
+  ])('%s: the first curve, then the second one; Escape goes back', async (tool, name) => {
+    const { viewport, manager } = await editing(RECT, tool);
+    expect(hintOf(manager)).toBe(`hint.${name}.first`);
+
+    await click(viewport, [50, 0]);
+    expect(hintOf(manager)).toBe(`hint.${name}.second`);
+
+    viewport.emitKey({ key: 'Escape', mods: NO_MODS, inTextField: false });
+    expect(hintOf(manager)).toBe(`hint.${name}.first`);
+
+    manager.activate('sketch.select');
+    expect(manager.hint.get()).toBeNull();
+  });
+
+  it('after the second curve the hint of the first one is back', async () => {
+    const { viewport, manager, rewrite } = await editing(RECT, 'sketch.fillet');
+    await click(viewport, [50, 0]);
+    await click(viewport, [100, 20]);
+
+    expect(rewrite).toHaveBeenCalledTimes(1);
+    expect(hintOf(manager)).toBe('hint.fillet.first');
+  });
+
+  it('a click on a corner keeps the hint of the first curve', async () => {
+    const { viewport, manager } = await editing(RECT, 'sketch.chamfer');
+    await click(viewport, [100, 0]);
+
+    expect(hintOf(manager)).toBe('hint.chamfer.first');
+  });
+
+  it('a click off any curve forgets the first one: the hint of the first curve', async () => {
+    const { viewport, manager } = await editing(RECT, 'sketch.fillet');
+    await click(viewport, [50, 0]);
+    await click(viewport, [50, 20]);
+
+    expect(hintOf(manager)).toBe('hint.fillet.first');
   });
 });

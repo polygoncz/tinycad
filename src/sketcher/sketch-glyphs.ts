@@ -118,6 +118,7 @@ export function isGlyphConstraint(c: SketchConstraint): c is GlyphConstraint {
     case 'angle':
     case 'radius':
     case 'diameter':
+    case 'offset':
       return false;
     default:
       return assertNever(c);
