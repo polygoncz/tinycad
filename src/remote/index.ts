@@ -5,10 +5,8 @@
 
 export { createCoreTransport } from './transport';
 export { createRemoteSketchGeometry } from './sketch-geometry';
-export { isRetryable, RemoteError, toRemoteError } from './errors';
+export { isRetryable, RemoteError } from './errors';
 export type { RemoteErrorCode, RemoteErrorInit, RemoteErrorReason } from './errors';
-export { operationFromProto, operationToProto } from './operations';
-export { decodeReadModel } from './read-model';
 export type {
   AnchorData,
   AxisData,
@@ -23,7 +21,6 @@ export type {
   SketchViewData,
   StateData,
 } from './read-model';
-export { featureSchemaOf, visibleWhenOf } from './feature-types';
 export { openRemoteSession } from './session';
 export type {
   ChangeOutcome,

@@ -10,13 +10,14 @@
 
 import { ObservableValue } from '@/core';
 import type { Disposable, Observable } from '@/core';
-import type { PersistenceStatus } from '@/persistence';
 import { isRetryable } from '@/remote';
 import type { ConnectionState, RemoteSession } from '@/remote';
-import type { KernelUiState } from './kernel-supervisor';
+import type { KernelUiState, PersistenceStatus } from './app-session';
 
 export interface ConnectionStateDeps {
   readonly session: Pick<RemoteSession, 'connection' | 'pending' | 'refresh'>;
+  /** A read-only tab saves nothing: its persistence stays 'saved' (AppSession.persistence). */
+  readonly readOnly: boolean;
   /** A failed retryKernel (refresh), besides the text it leaves in the state. */
   readonly reportError: (error: unknown) => void;
 }
@@ -52,7 +53,9 @@ export function createConnectionState(deps: ConnectionStateDeps): ConnectionUiSt
   function update(): void {
     const connection = session.connection.get();
     if (connection === 'online') unsaved = false;
-    const status = persistenceOf(connection, session.pending.get(), unsaved);
+    const status = deps.readOnly
+      ? 'saved'
+      : persistenceOf(connection, session.pending.get(), unsaved);
     kernel.set(kernelOf(connection));
     persistence.set(status);
     kernelError.set(connection === 'offline' ? lastError : null);

@@ -12,7 +12,7 @@ import { createOpHandlerRegistry } from '@/ops';
 import type { OpHandlerRegistry } from '@/ops';
 import type { FeaturePlugin, PluginMessages } from '@/plugin-api';
 
-/** The registries of PluginRegistries without the builders: the server regenerates. */
+/** The registries of a session; no builders, the server regenerates. */
 export interface RemoteRegistries {
   /** One schema per feature type of the server, in its order. */
   readonly schemas: FeatureSchemaRegistry;
@@ -41,7 +41,7 @@ export function createRemoteRegistries(
   const manipulators = createManipulatorRegistry();
   const known: FeaturePlugin[] = [];
   for (const plugin of plugins) {
-    const { type } = plugin.schema;
+    const { type } = plugin;
     if (!schemas.has(type)) {
       console.warn(`The core does not know the feature type '${type}'; its plugin is skipped`);
       continue;
@@ -77,8 +77,8 @@ function mergeMessages(plugins: readonly FeaturePlugin[]): PluginMessages {
   const en: Record<string, string> = {};
   for (const plugin of plugins) {
     if (plugin.messages === undefined) continue;
-    addMessages(cs, plugin.messages.cs, plugin.schema.type);
-    addMessages(en, plugin.messages.en, plugin.schema.type);
+    addMessages(cs, plugin.messages.cs, plugin.type);
+    addMessages(en, plugin.messages.en, plugin.type);
   }
   return Object.freeze({ cs: Object.freeze(cs), en: Object.freeze(en) });
 }

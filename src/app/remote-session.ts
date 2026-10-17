@@ -1,7 +1,7 @@
 // createRemoteAppSession (spec 11, "Kompoziční kořen (app)"; M46, N63–N70): the AppSession over a
-// session of the native core. It wires the same models as wireSession of the local path, with
-// the parts of M46 in place of the local document, dispatcher, undo, persistence, kernel and
-// regeneration: the optimistic mirror and the remote dispatcher, the read model view with the
+// session of the native core. It wires the models of the session over the parts of M46, which
+// stand in for a local document, dispatcher, undo, persistence, kernel and regeneration: the
+// optimistic mirror and the remote dispatcher, the read model view with the
 // meshes by content_version, the history and the export of the server, and the connection
 // mapped onto the kernel and save states. It knows no DOM: the transport, the viewport, the timers
 // and the resume store come in as deps, so it runs in Node over createFakeCore().
@@ -30,11 +30,9 @@ import {
 } from '@/interaction';
 import type { ConfirmRequest, ViewKeyEvent } from '@/interaction';
 import type { MeshQuality } from '@/kernel';
-import type { UndoManager } from '@/ops';
 import type { FeaturePlugin } from '@/plugin-api';
 import { createRemoteDocuments, openRemoteSession } from '@/remote';
 import type {
-  RemoteError,
   RemoteSession,
   RemoteSessionOptions,
   RetryPolicy,
@@ -50,15 +48,15 @@ import {
   SKETCH_TOOLBAR,
 } from '@/sketcher';
 import { createConnectionState } from './connection-state';
-import type { DownloadFile } from './file-exporter';
 import { MirrorDocument } from './mirror-document';
-import { refuseChanges } from './read-only';
+import { queueEmpty } from './queue-empty';
+import { refuseChanges, refuseUndo } from './read-only';
 import { createReadModelView } from './read-model-view';
 import { createRemoteDispatcher } from './remote-dispatcher';
 import { createRemoteFileExporter } from './remote-file-exporter';
 import { RemoteHistory } from './remote-history';
 import { createRemoteRegistries } from './remote-registries';
-import type { AppSession, AppViewport } from './session';
+import type { AppSession, AppViewport, DownloadFile } from './app-session';
 import { createVersionMeshes } from './version-meshes';
 import type { VersionMeshes } from './version-meshes';
 import { createViewSettings } from './view-settings';
@@ -180,15 +178,19 @@ function wireRemoteSession(
   // Q102: the core decides who writes; the second tab of a document is read-only.
   const readOnly = !session.readModel.get().session.writable;
 
-  // 1. The document: the mirror of the read model, changed by the remote dispatcher only.
-  const doc = new MirrorDocument(session.readModel.get().document);
-  const connection = lifetime.add(createConnectionState({ session, reportError }));
+  // 1. The document: the mirror of the read model, changed by the remote dispatcher only; the
+  // rest gets its reader (ADR 0011). The history is the one source of the undo stacks.
+  const mirror = new MirrorDocument(session.readModel.get().document);
+  const doc = mirror.reader;
+  const connection = lifetime.add(createConnectionState({ session, readOnly, reportError }));
+  const historyLog = lifetime.add(new RemoteHistory(session));
   const remote = createRemoteDispatcher({
-    mirror: doc,
+    mirror,
     session,
+    history: historyLog,
     handlers,
     now: deps.now,
-    onError: (error: RemoteError) => {
+    onError: (error) => {
       // N92: a change dropped for the outage makes saving 'failed' while offline.
       connection.changeDropped(error);
       reportError(error);
@@ -200,7 +202,7 @@ function wireRemoteSession(
       reportError(new Error('The open transaction ended on the server; the dialog was closed'));
     },
   });
-  lifetime.add(remote.undo);
+  lifetime.add(remote);
   // Q038, Q102: everything that changes the document goes through `ops`, undo and redo too.
   const ops = readOnly ? refuseChanges(remote) : remote;
   const undo = readOnly ? refuseUndo(remote.undo) : remote.undo;
@@ -224,7 +226,7 @@ function wireRemoteSession(
   );
   const regenStatus = view;
 
-  // 3. Services and models, as wireSession.
+  // 3. Services and models.
   const selection = lifetime.add(createSelectionModel({ regen: regenStatus }));
   const features = createFeatureEditor({
     doc,
@@ -369,7 +371,6 @@ function wireRemoteSession(
   const browserView = lifetime.add(bindBrowserView(browser, viewport));
 
   // 6. Edit history and export from the server.
-  const historyLog = lifetime.add(new RemoteHistory(session));
   const history = lifetime.add(createHistoryModel({ log: historyLog }));
   const documentName = lifetime.add(createDocumentNameModel({ doc, ops, locked }));
   const exporter = createRemoteFileExporter({
@@ -443,7 +444,7 @@ function wireRemoteSession(
 
   /** Waits for the empty queue; rejects when changes were given up for an outage (N92). */
   async function flush(): Promise<void> {
-    await queueEmpty(session);
+    await queueEmpty(session.pending);
     if (connection.persistence.get() === 'failed') {
       throw new Error(
         `Changes were not saved: the core is unreachable (${connection.persistenceError.get() ?? 'offline'})`,
@@ -515,35 +516,6 @@ function wireRemoteSession(
       return closing;
     },
     dispose,
-  };
-}
-
-/** Resolves once no change of the session is queued or in flight. */
-function queueEmpty(session: Pick<RemoteSession, 'pending'>): Promise<void> {
-  const { pending } = session;
-  if (pending.get() === 0) return Promise.resolve();
-  return new Promise((resolve) => {
-    const off = pending.subscribe(() => {
-      if (pending.get() !== 0) return;
-      off();
-      resolve();
-    });
-  });
-}
-
-/** Undo of a read-only tab: nothing to undo or redo, both refuse (Q038). */
-function refuseUndo(inner: UndoManager): UndoManager {
-  const refuse = (): never => {
-    throw new Error('The document is open read-only (open in another tab)');
-  };
-  return {
-    canUndo: () => false,
-    canRedo: () => false,
-    stacks: () => inner.stacks(),
-    undo: refuse,
-    redo: refuse,
-    events: inner.events,
-    dispose: () => undefined,
   };
 }
 

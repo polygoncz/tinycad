@@ -7,11 +7,6 @@
     "types": ["node"]
   },
   "include": ["test/unit/**/*.test.ts", "test/integration/**/*.ts"],
-  // Need lib DOM: IndexedDB types (tsconfig.test-idb.json), app and render's viewport
-  // (tsconfig.test-app.json).
-  "exclude": [
-    "test/unit/persistence/idb/**/*.test.ts",
-    "test/unit/app/**/*.test.ts",
-    "test/unit/ui/**/*.test.ts"
-  ]
+  // Need lib DOM: app and render's viewport (tsconfig.test-app.json).
+  "exclude": ["test/unit/app/**/*.test.ts", "test/unit/ui/**/*.test.ts"]
 }

@@ -2,7 +2,7 @@ import { assert, createRegistry } from '@/core';
 import type { Registry, Vec3 } from '@/core';
 
 // The data half of a feature type (ADR 0004): params, defaults, validation, migration.
-// Geometry is computed by the FeatureBuilder in regen.
+// Geometry is computed by the builder of the feature on the server (server/src/features).
 
 /**
  * Bounds of a numeric param, inclusive unless marked exclusive (Q050):

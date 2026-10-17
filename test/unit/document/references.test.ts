@@ -2,7 +2,7 @@ import { createRegistry } from '@/core';
 import type { RegistryReader } from '@/core';
 import { describe, expect, it } from 'vitest';
 import type { FeatureId, FeatureInstance, PartStudioData } from '@/document/model';
-import { dependenciesOf, dependentsOf, orderViolations, referencesOf } from '@/document/references';
+import { dependenciesOf, orderViolations, referencesOf } from '@/document/references';
 import { ORIGIN_AXIS_IDS, ORIGIN_PLANE_IDS } from '@/document/origin';
 import { bodyId } from '@/document/refs';
 import type {
@@ -265,23 +265,6 @@ describe('dependenciesOf', () => {
   it('returns frozen dependency lists', () => {
     const deps = dependenciesOf(studioOf(op('a'), op('b', bodyRef('a'))), schemas);
     for (const list of deps.values()) expect(Object.isFrozen(list)).toBe(true);
-  });
-});
-
-describe('dependentsOf', () => {
-  const studio = studioOf(op('a'), op('b', bodyRef('a')), op('c'), op('d', topoRef('a', 'F1')));
-  const deps = dependenciesOf(studio, schemas);
-
-  it('lists the features that depend on the id, in map order', () => {
-    expect(dependentsOf(deps, fid('a'))).toEqual(['b', 'd']);
-  });
-
-  it('gives [] for a feature nobody depends on', () => {
-    expect(dependentsOf(deps, fid('c'))).toEqual([]);
-  });
-
-  it('returns a frozen list', () => {
-    expect(Object.isFrozen(dependentsOf(deps, fid('a')))).toBe(true);
   });
 });
 

@@ -1,5 +1,8 @@
-// Test-only entry point of ops: a ready-made session (document + handlers + log +
-// dispatcher + undo). dependency-cruiser allows importing it only from *.test.ts.
+// Test-only entry point of ops: the in-memory double of the ports (dispatcher, log, transaction,
+// undo; N121) and a ready-made session over it, for tests of interaction and the sketcher.
+// dependency-cruiser allows importing it only from tests, so it never reaches the bundle. In
+// production the server keeps the log and undo (server/src/ops) and app implements the ports over
+// it (app/remote-dispatcher.ts).
 
 import type { RegistryReader } from '@/core';
 import { createFeatureSchemaRegistry } from '@/document';
@@ -7,13 +10,17 @@ import type { DocumentWriter, FeatureSchema } from '@/document';
 import { aDocument } from '@/document/testing';
 import type { DocumentOptions } from '@/document/testing';
 import { createOperationDispatcher } from './dispatcher';
-import type { OperationDispatcher } from './dispatcher';
 import { createOpHandlerRegistry } from './handler';
 import type { OpHandlerRegistry } from './handler';
 import { createOperationLog } from './log';
 import type { OperationLog } from './log';
+import type { OperationDispatcher, UndoManager } from './ports';
 import { createUndoManager } from './undo';
-import type { UndoManager } from './undo';
+
+export { createOperationDispatcher } from './dispatcher';
+export { createOperationLog } from './log';
+export type { OperationLog, OperationLogReader } from './log';
+export { createUndoManager } from './undo';
 
 export interface OpsSession {
   readonly doc: DocumentWriter;

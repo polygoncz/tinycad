@@ -1,6 +1,6 @@
-// A failed GeometryService call → the rejection a kernel call gives (spec 14 "GeometryService" and
-// "Chyby", errors.proto): an Error whose code kernelErrorCode reads, so the sketcher sees the same
-// as with the WASM kernel.
+// A failed GeometryService call → the rejection of a kernel call (spec 14 "GeometryService" and
+// "Chyby", errors.proto): an Error from createKernelError, whose `code` is the KernelErrorCode of
+// spec 06 the server's kernel reported.
 
 import { Code, ConnectError } from '@connectrpc/connect';
 import { createKernelError } from '@/kernel';

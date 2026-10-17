@@ -1,7 +1,7 @@
 // The read model of the core (read_model.proto, spec 14 "Read model a sítě", Q099) → plain frozen
-// data of the domain: the document as PartStudioData, the result of the regeneration with the
-// statuses in the shape of regen FeatureStatus, bodies with their meshes, sketches, planes and
-// axes, and the state of the session. app hands these values to the ports of interaction, render
+// data of the domain: the document as PartStudioData, the result of the regeneration of the
+// server (server/src/regen) with the statuses of its features, bodies with their meshes, sketches,
+// planes and axes, and the state of the session. app hands these values to the ports of interaction, render
 // and the sketcher unchanged; the domain never sees a protobuf message (Q106).
 
 import { toJson } from '@bufbuild/protobuf';
@@ -20,6 +20,7 @@ import type {
   PlaneId,
   SketchId,
 } from '@/document';
+import { validateMeshData } from '@/kernel';
 import type { MeshData, ProfileLoop, ProfileRegion } from '@/kernel';
 import { FeatureError_Code, LogEntryView_Kind } from '@/protocol';
 import type {
@@ -43,7 +44,7 @@ import { curveFromProto } from './curves';
 import { decoding, issueFromProto } from './errors';
 import { bodyId, featureFromProto, featureId, materialFromProto } from './operations';
 
-/** The error of a feature, in the shape of regen FeatureError. */
+/** The error of a feature (FeatureError of read_model.proto, regen::FeatureError of the server). */
 export interface FeatureErrorData {
   readonly code:
     'INVALID_PARAMS' | 'UNRESOLVED_REFERENCE' | 'KERNEL' | 'UNKNOWN_TYPE' | 'STALE_VERSION';
@@ -53,7 +54,7 @@ export interface FeatureErrorData {
   readonly issues?: readonly ParamIssue[];
 }
 
-/** The status of a feature after the regeneration, in the shape of regen FeatureStatus. */
+/** The status of a feature after the regeneration of the server (FeatureStatus of read_model.proto). */
 export type FeatureStatusData =
   | { readonly kind: 'ok' }
   | { readonly kind: 'warning'; readonly message: string }
@@ -230,9 +231,13 @@ export function decodeReadModel(msg: ReadModel): ReadModelData {
   });
 }
 
-/** The message Mesh → MeshData; every array is copied into its own ArrayBuffer. */
+/**
+ * The message Mesh → MeshData; every array is copied into its own ArrayBuffer. A mesh that fails
+ * validateMeshData is a broken answer: render relies on its structure (index bounds, strictly
+ * increasing face ranges searched binarily).
+ */
 export function decodeMesh(mesh: Mesh): MeshData {
-  return Object.freeze({
+  const data: MeshData = Object.freeze({
     positions: floats(mesh.positions, 'positions'),
     normals: floats(mesh.normals, 'normals'),
     indices: uints(mesh.indices, 'indices'),
@@ -240,6 +245,13 @@ export function decodeMesh(mesh: Mesh): MeshData {
     edgePositions: floats(mesh.edgePositions, 'edge_positions'),
     edgeRanges: uints(mesh.edgeRanges, 'edge_ranges'),
   });
+  const problems = validateMeshData(data);
+  if (problems.length > 0) {
+    // The first few say enough; a broken mesh may have a problem per vertex.
+    const shown = problems.slice(0, 3).join('; ');
+    throw new BrokenAnswer(`invalid mesh (${String(problems.length)} problems): ${shown}`);
+  }
+  return data;
 }
 
 /** The message LogEntryView → LogEntryData; a kind UNSPECIFIED is a broken answer. */

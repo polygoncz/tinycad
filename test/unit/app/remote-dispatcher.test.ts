@@ -7,9 +7,9 @@ import type {
   FeatureId,
   FeatureInstance,
   FeatureSchema,
-  ParamSchemaOf,
   PartStudioData,
 } from '@/document';
+import type { ParamSchemaOf } from '@/document/testing';
 import { aFeature } from '@/document/testing';
 import { createFeatureEditor } from '@/interaction';
 import { createOpHandlerRegistry, OP_VERSION } from '@/ops';
@@ -150,8 +150,6 @@ class FakeRemoteSession implements RemoteSession {
   /** Every change ever requested, oldest first. */
   readonly sent: ChangeRequest[] = [];
   private readonly open: { resolve: (outcome: ChangeOutcome) => void }[] = [];
-  stacks: HistoryData['stacks'] = { undo: [], redo: [] };
-  readonly historyCalls: number[] = [];
 
   constructor(initial: ReadModelData) {
     this.model = new ObservableValue(initial);
@@ -178,6 +176,17 @@ class FakeRemoteSession implements RemoteSession {
     return flush();
   }
 
+  /**
+   * Answers the oldest change with a read model the session does not publish: a newer one came
+   * first (N136).
+   */
+  answerUnpublished(model: ReadModelData): Promise<void> {
+    const next = this.open.shift();
+    if (next === undefined) throw new Error('nothing to answer');
+    next.resolve({ ok: true, entry: null, readModel: model });
+    return flush();
+  }
+
   /** Refuses the oldest change. */
   refuse(reason: RemoteErrorReason): Promise<void> {
     const next = this.open.shift();
@@ -186,6 +195,16 @@ class FakeRemoteSession implements RemoteSession {
       ok: false,
       error: new RemoteError({ code: 'FAILED_PRECONDITION', reason, message: reason }),
     });
+    return flush();
+  }
+
+  /** Refuses the `count` oldest changes with one outcome, as the queue answers a coalesced pair. */
+  refuseAll(count: number, reason: RemoteErrorReason): Promise<void> {
+    const outcome: ChangeOutcome = {
+      ok: false,
+      error: new RemoteError({ code: 'FAILED_PRECONDITION', reason, message: reason }),
+    };
+    for (const next of this.open.splice(0, count)) next.resolve(outcome);
     return flush();
   }
 
@@ -199,9 +218,8 @@ class FakeRemoteSession implements RemoteSession {
     return Promise.resolve();
   }
 
-  history(fromSeq: number): Promise<HistoryData> {
-    this.historyCalls.push(fromSeq);
-    return Promise.resolve({ entries: [], stacks: this.stacks });
+  history(): Promise<HistoryData> {
+    return Promise.reject(new Error('the dispatcher reads the stacks from RemoteHistory'));
   }
 
   exportStep(): Promise<{ readonly content: Uint8Array; readonly fileName: string }> {
@@ -220,25 +238,32 @@ class FakeRemoteSession implements RemoteSession {
 function setup(init: ModelInit = {}) {
   const initial = aReadModel(init);
   const session = new FakeRemoteSession(initial);
-  const mirror = new MirrorDocument(initial.document);
+  const control = new MirrorDocument(initial.document);
+  const mirror = control.reader;
+  const history = { stacks: (): HistoryData['stacks'] => ({ undo: [], redo: [] }) };
   const schemas = createFeatureSchemaRegistry();
   schemas.register(BOX);
   schemas.register(SKETCH);
   const handlers = createOpHandlerRegistry({ schemas });
-  const errors: RemoteError[] = [];
+  const errors: Error[] = [];
   let lost = 0;
   let clock = 100;
   const dispatcher = createRemoteDispatcher({
-    mirror,
+    mirror: control,
     session,
+    history,
     handlers,
     now: () => ++clock,
     onError: (e) => errors.push(e),
     onLost: () => lost++,
   });
   const paramsOf = (id: string): unknown => mirror.feature(fid(id))?.params;
-  return { session, mirror, schemas, dispatcher, errors, lost: () => lost, paramsOf };
+  return { session, mirror, history, schemas, dispatcher, errors, lost: () => lost, paramsOf };
 }
+
+/** The reason of each reported RemoteError; 'client' for an error of the client. */
+const reasons = (errors: readonly Error[]): string[] =>
+  errors.map((e) => (e instanceof RemoteError ? e.reason : 'client'));
 
 const ops = (session: FakeRemoteSession): (Operation | string)[] =>
   session.sent.map((r) => ('op' in r ? r.op : r.kind));
@@ -300,7 +325,7 @@ describe('createRemoteDispatcher: dispatch', () => {
     await session.refuse('INVALID_OPERATION');
     expect(paramsOf('a')).toEqual({ width: 2 });
     expect(paramsOf('b')).toEqual({ width: 1 });
-    expect(errors.map((e) => e.reason)).toEqual(['INVALID_OPERATION']);
+    expect(reasons(errors)).toEqual(['INVALID_OPERATION']);
   });
 
   it('a pending change that no longer applies on the new base is dropped and reported', async () => {
@@ -310,7 +335,9 @@ describe('createRemoteDispatcher: dispatch', () => {
     // The server removed the feature with the first answer (e.g. another rule).
     await session.answer(aReadModel({ features: [], lastSeq: 1 }));
     expect(mirror.studio.features).toEqual([]);
-    expect(errors.map((e) => e.reason)).toEqual(['INVALID_OPERATION']);
+    // An error of the client: the server has not answered that change yet.
+    expect(reasons(errors)).toEqual(['client']);
+    expect(errors[0]?.message).toMatch(/no longer applies/);
     // Its own later answer does not report it again.
     await session.refuse('UNKNOWN_TARGET');
     expect(errors).toHaveLength(1);
@@ -333,6 +360,40 @@ describe('createRemoteDispatcher: dispatch', () => {
     // Drained: the newer read model is taken.
     expect(paramsOf('a')).toEqual({ width: 1 });
     expect(paramsOf('b')).toEqual({ width: 9 });
+  });
+});
+
+describe('createRemoteDispatcher: read models the session publishes', () => {
+  // The review after M46/M47: a refresh of G2 answered before the change of G1 (N136).
+  it('an answer the session did not publish is not the base: the newer published one is', async () => {
+    const { session, dispatcher, paramsOf } = setup({ features: [aBox('a', 1), aBox('b', 1)] });
+    dispatcher.dispatch(setParams('a', { width: 2 }));
+    // G2: the change and a change of another tab.
+    session.model.set(aReadModel({ features: [aBox('a', 2), aBox('b', 9)], lastSeq: 2 }));
+    await session.answerUnpublished(aReadModel({ features: [aBox('a', 2), aBox('b', 1)] }));
+    expect(paramsOf('a')).toEqual({ width: 2 });
+    expect(paramsOf('b')).toEqual({ width: 9 });
+  });
+
+  it('a later change stays on top of the newer published read model', async () => {
+    const { session, dispatcher, paramsOf } = setup({ features: [aBox('a', 1), aBox('b', 1)] });
+    dispatcher.dispatch(setParams('a', { width: 2 }));
+    dispatcher.dispatch(setParams('b', { width: 3 }));
+    session.model.set(aReadModel({ features: [aBox('a', 2), aBox('b', 1)], name: 'G2' }));
+    await session.answerUnpublished(aReadModel({ features: [aBox('a', 1), aBox('b', 1)] }));
+    expect(paramsOf('a')).toEqual({ width: 2 });
+    expect(paramsOf('b')).toEqual({ width: 3 });
+  });
+
+  it('both changes of a coalesced pair refused: onError once', async () => {
+    const { session, dispatcher, errors, paramsOf } = setup({ features: [aBox('a', 1)] });
+    const tx = dispatcher.begin('drag');
+    tx.apply(setParams('a', { width: 2 }));
+    tx.apply(setParams('a', { width: 3 }));
+    await session.answer(aReadModel({ features: [aBox('a', 1)] }));
+    await session.refuseAll(2, 'INVALID_OPERATION');
+    expect(reasons(errors)).toEqual(['INVALID_OPERATION']);
+    expect(paramsOf('a')).toEqual({ width: 1 });
   });
 });
 
@@ -443,7 +504,7 @@ describe('createRemoteDispatcher: transactions', () => {
     tx.apply(setParams('s', { x: 1 }));
     await session.answer(aReadModel({ features: [aSketch('s', 0)] }));
     await session.refuse('SKETCH_NOT_SOLVED');
-    expect(errors.map((e) => e.reason)).toEqual(['SKETCH_NOT_SOLVED']);
+    expect(reasons(errors)).toEqual(['SKETCH_NOT_SOLVED']);
     expect(paramsOf('s')).toEqual({ x: 1 });
     // Another answer (a refresh) keeps the layer.
     session.model.set(aReadModel({ features: [aSketch('s', 0)], name: 'Renamed' }));
@@ -558,19 +619,27 @@ describe('createRemoteDispatcher: read-only and undo', () => {
     ]);
   });
 
-  it('stacks come from the history of the server', async () => {
-    const { session, dispatcher } = setup({ lastSeq: 2 });
-    session.stacks = { undo: [1], redo: [2] };
-    session.model.set(aReadModel({ lastSeq: 3 }));
-    await flush();
-    expect(dispatcher.undo.stacks()).toEqual({ undo: [1], redo: [2] });
-    expect(session.historyCalls).toEqual([3, 4]);
+  it('stacks are those of the history (RemoteHistory), copied', () => {
+    const { dispatcher, history } = setup({ lastSeq: 2 });
+    history.stacks = () => ({ undo: [1], redo: [2] });
+    const stacks = dispatcher.undo.stacks();
+    expect(stacks).toEqual({ undo: [1], redo: [2] });
+    expect(stacks).not.toBe(history.stacks());
   });
 
-  it('stops following the session after dispose', () => {
+  it('stops following the session after dispose', async () => {
+    const { session, dispatcher, paramsOf } = setup({ features: [aBox('a', 1)] });
+    dispatcher.dispatch(setParams('a', { width: 2 }));
+    dispatcher.dispose();
+    session.model.set(aReadModel({ features: [aBox('a', 7)] }));
+    await session.answer(aReadModel({ features: [aBox('a', 8)] }));
+    expect(paramsOf('a')).toEqual({ width: 2 });
+  });
+
+  it('dispose of its undo does nothing: the dispatcher owns the subscriptions', () => {
     const { session, dispatcher, paramsOf } = setup({ features: [aBox('a', 1)] });
     dispatcher.undo.dispose();
     session.model.set(aReadModel({ features: [aBox('a', 7)] }));
-    expect(paramsOf('a')).toEqual({ width: 1 });
+    expect(paramsOf('a')).toEqual({ width: 7 });
   });
 });

@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Records the shared test cases (spec 13, Sdílené testovací případy; Q107): runs the shared-case
 // runners of the integration project with CASES_RECORD=1, so they write the output of the TS
-// domain into `expected` of test/shared-cases/**/*.json instead of comparing it.
+// domain into `expected` of test/shared-cases/**/*.json instead of comparing it. Since M47 the TS
+// runners cover only the kinds ops and sketch (N124); `expected` of new regen and geometry cases
+// is written by hand from the output of the C++ core.
 //
 // Usage: npm run cases:record [-- <extra vitest args>]
 //

@@ -17,7 +17,7 @@ updated: 2026-10-17
 ---
 # 0002 – OpenCascade ve WASM, ve Web Workeru, za portem
 
-- **Stav:** Nahrazeno (`status: superseded`) – 2026-10-17 ho nahradilo [[0030-nativni-jadro-pres-grpc|ADR 0030]] (nativní jádro přes gRPC). Platí pro WASM verzi, dokud ji [[M47-uklid-a-dokonceni|M47]] neodstraní.
+- **Stav:** Nahrazeno (`status: superseded`) – 2026-10-17 ho nahradilo [[0030-nativni-jadro-pres-grpc|ADR 0030]] (nativní jádro přes gRPC). Platilo pro WASM verzi, kterou odstranil [[M47-uklid-a-dokonceni|M47]] (kód zůstává v historii gitu, popis v [[06-geometricke-jadro v prohlížeči]]).
 - **Datum:** 2026-10-12
 - **Souvisí:** [[06-geometricke-jadro]], [[02-core]]
 

@@ -1,8 +1,13 @@
 import { Code, ConnectError, createClient } from '@connectrpc/connect';
 import { describe, expect, it } from 'vitest';
 import { DocumentService, ErrorReason, SessionService } from '@/protocol';
-import { decodeReadModel, toRemoteError } from '@/remote';
-import { aCoreError, aReadModel, createFakeCore } from '@/remote/testing';
+import {
+  aCoreError,
+  aReadModel,
+  createFakeCore,
+  decodeReadModel,
+  toRemoteError,
+} from '@/remote/testing';
 
 function clients() {
   const core = createFakeCore();

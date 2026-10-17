@@ -1,7 +1,7 @@
 // The regeneration status port (spec 10, "Port stavu regenerace"): interaction must not know
-// regen, yet the feature tree shows regeneration errors and the selection of subshapes is
-// follows a regeneration by topological names. So interaction defines its own port and app feeds
-// it from RegenState (Q063, R102). Suppression and the rollback bar are not here: interaction reads
+// the read model of the server, yet the feature tree shows regeneration errors and the selection
+// of subshapes follows a regeneration by topological names. So interaction defines its own port
+// and app feeds it from the read model (Q063, R102, app/read-model-view.ts). Suppression and the rollback bar are not here: interaction reads
 // them from the document directly, so they show at once, not after a regeneration.
 
 import type { Observable, Vec3 } from '@/core';
@@ -26,7 +26,8 @@ export interface RegenBody {
 
 /**
  * Topological names of a body of the last regeneration (M14, spec 08). A narrow interface
- * defined here so interaction does not know regen; regen's NameTable fits it structurally.
+ * defined here so interaction does not know the read model; app builds it from the face and edge
+ * names of a body of the read model (spec 14, the NameTable of server/src/regen).
  */
 export interface TopoNames {
   nameOfFace(index: number): TopoName | undefined;
@@ -57,7 +58,8 @@ export interface RegenSketch {
 
 /**
  * An anchor of a manipulator (M18, ADR 0021): a point and an optional unit direction in world
- * coordinates. Structurally the same as regen's Anchor, so app passes it on unchanged.
+ * coordinates. Structurally the same as AnchorData of the read model, so app passes it on
+ * unchanged.
  */
 export interface Anchor {
   readonly point: Vec3;

@@ -276,10 +276,6 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'documents.error.rename': 'Dokument se nepodařilo přejmenovat: {error}',
   'documents.import': 'Importovat',
   'documents.importError': 'Soubor není platný dokument tinycad',
-  'documents.migrate': 'Přenést dokumenty z prohlížeče ({count})',
-  'documents.migrating': 'Přenáším dokumenty… {done} z {total}',
-  'documents.migrated': 'Přeneseno dokumentů: {count}',
-  'documents.migrateFailed': 'Nepodařilo se přenést dokumentů: {count}',
 
   // File menu and export (M15).
   'titleBar.file': 'Soubor',

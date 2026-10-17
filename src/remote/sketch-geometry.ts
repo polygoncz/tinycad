@@ -1,6 +1,6 @@
 // The SketchGeometry port of the sketcher over GeometryService of the native core (spec 14
-// "GeometryService", Q096, M39): the same port the WASM kernel implements in app, so the sketcher
-// does not know which one answers.
+// "GeometryService", Q096, M39): the sketcher asks the port and does not know that the server's
+// OCCT kernel (server/src/service) answers.
 
 import { createClient } from '@connectrpc/connect';
 import type { Transport } from '@connectrpc/connect';

@@ -32,6 +32,12 @@ import type {
 } from '@/protocol';
 import type { Timers } from './session-contract';
 
+// Conversions the client uses only inside remote; tests of other modules check data with them.
+export { toRemoteError } from './errors';
+export { featureSchemaOf, visibleWhenOf } from './feature-types';
+export { operationFromProto, operationToProto } from './operations';
+export { decodeReadModel } from './read-model';
+
 // ---- builders ----------------------------------------------------------------------------------
 
 /** The plain init object of a message (not a message itself), so overrides spread over defaults. */

@@ -2,12 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { ObservableValue } from '@/core';
 import type { BodyId, FeatureId, PlaneId, TopoName } from '@/document';
 import type { RegenSnapshot } from '@/interaction';
-import type { MeshQuality } from '@/kernel';
-import { decodeReadModel } from '@/remote';
+import type { MeshQuality, ShapeHandle } from '@/kernel';
 import type { ReadModelData } from '@/remote';
-import { aBodyView, aReadModel, aSketchView, listValue } from '@/remote/testing';
+import { aBodyView, aReadModel, aSketchView, decodeReadModel, listValue } from '@/remote/testing';
 import type { ReadModelOverrides } from '@/remote/testing';
-import { createReadModelView } from '@/app/read-model-view';
+import { createReadModelView, previewBodies } from '@/app/read-model-view';
 import type { ReadModelView } from '@/app/read-model-view';
 import { createVersionMeshes } from '@/app/version-meshes';
 import type { VersionMeshes } from '@/app/version-meshes';
@@ -185,15 +184,17 @@ describe('createReadModelView', () => {
     await expect(h.meshes.tessellate(h.meshes.handleOf('vBox'), QUALITY)).rejects.toThrow();
   });
 
-  it('drops a read model of an older generation', async () => {
+  // The session orders read models (N136) and starts again after a restart of the server, when
+  // the generation may drop: the view shows whatever it is given.
+  it('shows a read model of a lower generation too (the session decides the order)', async () => {
     const h = setup();
     h.view.show(twoBodies(3));
     await settle();
-    h.view.show(twoBodies(2, { box: 'old', cyl: 'old2' }));
+    h.view.show(twoBodies(1, { box: 'vBox2', cyl: 'vCyl2' }));
     await settle();
-    expect(h.viewport.syncs).toHaveLength(1);
-    expect(h.published).toHaveLength(1);
-    expect(h.meshes.versions()).toEqual(['vBox', 'vCyl']);
+    expect(h.viewport.syncs).toHaveLength(2);
+    expect(h.published).toHaveLength(2);
+    expect(h.meshes.versions()).toEqual(['vBox2', 'vCyl2']);
   });
 
   it('publishes only the newest of two syncs under way', async () => {
@@ -363,6 +364,19 @@ describe('createReadModelView', () => {
     expect(h.errors).toHaveLength(1);
   });
 
+  it('a drawn sketch whose next version it cannot read is removed, not left stale', async () => {
+    const h = setup();
+    h.view.show(
+      readModel({ regen: { final: { sketches: [aSketchView({ entities: SKETCH_ENTITIES })] } } }),
+    );
+    await settle();
+    expect([...h.viewport.sketchDrawings.keys()]).toEqual(['f2/sketch']);
+    h.view.show(readModel({ regen: { final: { sketches: [aSketchView()] } } }));
+    await settle();
+    expect(h.viewport.sketchDrawings.size).toBe(0);
+    expect(h.errors).toHaveLength(1);
+  });
+
   it('keeps RegenUiState, afterSync and the first view', async () => {
     const h = setup();
     expect(h.view.ui.get()).toEqual({ busy: false, bodyCount: 0, lastMs: null, failed: null });
@@ -463,5 +477,53 @@ describe('createReadModelView', () => {
     await settle();
     expect(h.viewport.syncs).toEqual([]);
     expect(h.published).toEqual([]);
+  });
+});
+
+describe('previewBodies', () => {
+  // Handles and ids of the tests are created by a cast at one place.
+  const handle = (n: number): ShapeHandle => n as ShapeHandle;
+  const a = 'a/body' as BodyId;
+  const b = 'b/body' as BodyId;
+  const c = 'c/body' as BodyId;
+
+  it('takes the bodies of the result that the input does not have', () => {
+    expect(
+      previewBodies(
+        [
+          { id: a, shape: handle(1) },
+          { id: b, shape: handle(2) },
+        ],
+        [{ id: a, shape: handle(1) }],
+      ),
+    ).toEqual([{ id: b, shape: handle(2) }]);
+  });
+
+  it('takes a body the feature changed: the same id with another handle', () => {
+    expect(previewBodies([{ id: a, shape: handle(5) }], [{ id: a, shape: handle(1) }])).toEqual([
+      { id: a, shape: handle(5) },
+    ]);
+  });
+
+  it('leaves out a body the feature consumed and keeps the order of the result', () => {
+    expect(
+      previewBodies(
+        [
+          { id: c, shape: handle(3) },
+          { id: b, shape: handle(2) },
+        ],
+        [
+          { id: a, shape: handle(1) },
+          { id: b, shape: handle(9) },
+        ],
+      ),
+    ).toEqual([
+      { id: c, shape: handle(3) },
+      { id: b, shape: handle(2) },
+    ]);
+  });
+
+  it('nothing changed: an empty preview', () => {
+    expect(previewBodies([{ id: a, shape: handle(1) }], [{ id: a, shape: handle(1) }])).toEqual([]);
   });
 });

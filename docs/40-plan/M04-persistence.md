@@ -16,7 +16,7 @@ finished: 2026-10-13
 tags:
   - milnik
 created: 2026-10-12
-updated: 2026-10-13
+updated: 2026-10-17
 ---
 # M4 – Persistence
 
@@ -62,13 +62,13 @@ Každý úkol dělá zvlášť subagent `implementer` (TDD, `npm run check`). Ko
 
 ### Ú3 `IdbDocumentStore`
 - **Soubory:** `src/persistence/idb/idb-store.ts` (`createIdbStoreImpl`), `protocol.ts`, `client.ts`, `persistence.worker.ts`, `index.ts` (`createIdbDocumentStore`), `idb-store.test.ts`. Nová dev závislost `fake-indexeddb` (jen testy).
-- **Kontrakt:** [[05-persistence#Adaptér IndexedDB a worker]], [[05-persistence#Schéma IndexedDB]], kontrakt portu jako v Ú2.
+- **Kontrakt:** [[05-persistence v prohlížeči#Adaptér IndexedDB a worker]], [[05-persistence v prohlížeči#Schéma IndexedDB]], kontrakt portu jako v Ú2.
 - **Testy:** stejná kontraktová sada z `persistence/testing.ts`, kde `factory` vytvoří čerstvou `fake-indexeddb` (`new IDBFactory()`), `MessageChannel`, `serveRpc` na jednom portu a `createDocumentStoreClient` na druhém. Navíc: chybový kód přežije RPC.
 - **Hotovo když:** sada projde pro oba story, `npm run check` (včetně `lint:deps`: `idb` importuje jen `core`, `document`, `ops`, `persistence`) projde.
 
 ### Ú4 `PersistenceService`
 - **Soubory:** `src/persistence/service.ts`, `service.test.ts`, `createManualScheduler()` v `testing.ts`.
-- **Kontrakt:** [[05-persistence#Služba na hlavním vlákně]].
+- **Kontrakt:** [[05-persistence v prohlížeči#Služba na hlavním vlákně]].
 - **Testy:** viz [[05-persistence#Testy]] (`PersistenceService`), nad `MemoryDocumentStore`, skutečným logem a dispečerem z `ops` (`anOpsSession`). Chyba zápisu se simuluje obalem storu, který vybrané volání odmítne.
 - **Hotovo když:** testy a `npm run check` projdou.
 

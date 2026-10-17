@@ -1,19 +1,16 @@
-// FeatureTypeDescriptor → FeatureSchema (M46 task 1, N67) against the schemas of the plugins of
-// today: descriptors of box and extrude written by hand as the core describes them (spec 14
-// "Schéma featur") give the same ParamSpec as boxSchema and extrudeSchema, and the visibleWhen of
-// extrude gives the same visibility over the shared cases schema.visibleWhen. Until M45 writes the
-// golden file of the core (N75, test/unit/remote/feature-types.test.ts) this is the check that the
-// conversion matches the schemas the C++ descriptors are made from. An integration test because
-// the unit tests of remote may not import feature plugins (spec 01).
+// FeatureTypeDescriptor → FeatureSchema (M46 task 1, N67) against the golden file of the core
+// (N75): descriptors of box and extrude written by hand as spec 14 "Schéma featur" describes them
+// give the same ParamSpec, defaults and validation as the descriptors the C++ core writes, and the
+// visibleWhen of extrude gives the same visibility over the shared cases schema.visibleWhen. Since
+// M47 the TS schemas of the plugins are gone (N123), so the golden file is the reference.
 
 import { describe, expect, it } from 'vitest';
 import { isParamVisible } from '@/document';
 import type { FeatureSchema, ParamSpec } from '@/document';
 import { TopoParam_Entity } from '@/protocol';
-import { featureSchemaOf } from '@/remote';
-import { aFeatureTypeDescriptor, listValue } from '@/remote/testing';
+import { aFeatureTypeDescriptor, featureSchemaOf, listValue } from '@/remote/testing';
 import { loadCases } from './shared-cases/support/case';
-import { builtInSchemas } from './shared-cases/support/plugins';
+import { builtInSchemas } from './shared-cases/support/schemas';
 
 const BOX = aFeatureTypeDescriptor({
   type: 'box',
@@ -148,11 +145,11 @@ describe.each([
   const today = schemas.get(type);
   const remote = featureSchemaOf(descriptor);
 
-  it('gives the ParamSpec, defaults and metadata of the plugin of today', () => {
+  it('gives the ParamSpec, defaults and metadata of the descriptor of the core', () => {
     expect(shapeOf(remote)).toEqual(shapeOf(today));
   });
 
-  it('validates like the plugin of today', () => {
+  it('validates like the descriptor of the core', () => {
     for (const raw of [today.defaults(), {}, { width: 0 }, { endType: 'upToFace' }, 7]) {
       expect(remote.validate(raw)).toEqual(today.validate(raw));
     }

@@ -1,6 +1,6 @@
 import { assert } from '../assert';
 
-// 2D vectors (spec 02-core "2D vektory"): the one implementation for sketch, kernel, kernel-occt
+// 2D vectors (spec 02-core "2D vektory"): the one implementation for sketch, kernel
 // and sketcher. No gl-matrix here: a few lines in the hot loops of regions and intersections, and
 // the results stay exactly those of the former copies (Math.hypot).
 export type Vec2 = readonly [number, number];

@@ -19,7 +19,7 @@ export default mergeConfig(
           extends: true,
           test: {
             name: 'integration',
-            // Slow tests with real adapters (OCCT WASM, …).
+            // Shared cases (spec 13) and tests across modules (remote).
             include: ['test/integration/**/*.test.ts'],
             environment: 'node',
           },

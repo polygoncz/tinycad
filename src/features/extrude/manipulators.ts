@@ -1,12 +1,12 @@
 import { vec3 } from '@/core';
 import type { Vec3 } from '@/core';
 import type { Handle, ManipulatorDescriptor, ManipulatorFrame } from '@/interaction';
-import type { ExtrudeAnchors } from './builder';
-import { flipApplies } from './schema';
-import type { ExtrudeParams } from './schema';
+import type { ExtrudeAnchors } from './anchors';
+import { flipApplies } from './params';
+import type { ExtrudeParams } from './params';
 
 // The manipulator of the extrude (M18, ADR 0021): one arrow that drags the distance. It stands
-// on the end face, base + d·distance; the base and the sketch normal come from the builder as
+// on the end face, base + d·distance; the base and the sketch normal come from the core as
 // the anchor 'base' (only for 'blind' and 'symmetric'). The direction d comes from the live
 // params (spec 07, the anchor is minimal): against the normal for 'blind' with flip, else along
 // it. A symmetric extrude ends half the distance in front of the sketch, so there the arrow

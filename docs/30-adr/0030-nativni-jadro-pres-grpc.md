@@ -65,3 +65,13 @@ Předpřipravený WASM build měl známé dluhy, které měl řešit [[M16-vlast
 - − Vývoj potřebuje Docker a C++ toolchain. Build OCCT přes vcpkg trvá napoprvé desítky minut, binární cache vcpkg se drží ve volume.
 - − Testy vyšších vrstev v klientovi přijdou o `FakeKernel` pod regenerací: klient regeneraci nemá, testuje se proti falešnému `SessionService` (fake read model).
 - Specifikace [[01-architektura]], [[05-persistence]], [[06-geometricke-jadro]], [[07-regenerace]], [[09-vykreslovani]], [[10-interakce]], [[11-ui]] a [[12-skicar]] se přepíšou postupně v milnících, které je mění. Do té doby popisují WASM verzi, která běží.
+
+## Dodatek k bodu 9 (M47, 2026-10-17)
+
+Bod 9 se zúžil. [[M47-uklid-a-dokonceni|M47]] z prohlížeče odstranil `kernel-occt` (OCCT WASM a worker), `regen`, `persistence` včetně `persistence/idb` a buildery a objekty schémat featur. Modul `ops` ale v klientovi **zůstává**, jen menší:
+
+- **Proč zůstává** ([[Rozhodnutí nativního jádra|N63, N76]]): klient drží optimistické zrcadlo dokumentu (`app/mirror-document.ts`), které nepotvrzené změny použije lokálně TS handlery operací. Dialog featury, skicář i strom tak čtou dokument hned po `apply` a server zůstává autoritou.
+- **Co z `ops` v klientovi je** ([[Rozhodnutí nativního jádra|N121]]): typy operací, `OP_VERSION`, registr a handlery, `applyOperation` a typy portů (`OperationDispatcher`, `DispatchMeta`, `Transaction`, `UndoManager`, `LogEntry`). Porty implementuje `app/remote-dispatcher.ts` nad serverem. Paměťový dispečer, log, transakce a undo jsou jen testovací dvojník v `ops/testing.ts`; přehrání logu, upcast a čtení záznamů jsou jen v C++ (`server/src/ops`).
+- **Co dál zůstává z domény:** model dokumentu (`document`) pro zrcadlo, model skici s řešičem a text (bod 5) a modul `kernel` jen jako typy sítí a chyb pro `render` a `remote` ([[Rozhodnutí nativního jádra|N122]]). Z WASM v prohlížeči zbyl jen planegcs ([[Rozhodnutí nativního jádra|N120]]).
+
+Specifikace z posledního bodu *Důsledků* popisují od M47 serverovou verzi; části jen o prohlížeči jsou v archivních poznámkách ([[05-persistence v prohlížeči]], [[06-geometricke-jadro v prohlížeči]], [[07-regenerace v prohlížeči]]).

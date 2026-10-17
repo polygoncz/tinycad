@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ORIGIN_AXIS_IDS, ORIGIN_PLANE_IDS, parseSketchId, sketchId } from '@/document';
+import { ORIGIN_PLANE_IDS, parseSketchId, sketchId } from '@/document';
+import { aFeature, ORIGIN_AXIS_IDS } from '@/document/testing';
 import type {
   BodyId,
   FeatureId,
@@ -9,7 +10,6 @@ import type {
   SketchId,
   TopoName,
 } from '@/document';
-import { aFeature } from '@/document/testing';
 import { anOpsSession } from '@/ops/testing';
 import { rectangleData } from '@/sketch/testing';
 import {

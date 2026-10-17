@@ -8,7 +8,7 @@ decision: "PersistenceService nezná DOM; pagehide a visibilitychange napojí ap
 tags:
   - otazka
 created: 2026-10-13
-updated: 2026-10-13
+updated: 2026-10-17
 ---
 # Q034 Uložení při zavírání stránky
 
@@ -33,4 +33,4 @@ Návrh: **1**, viz [[Kompoziční kořen|kompoziční kořen]].
 
 ## Rozhodnutí
 
-2026-10-13: **Varianta 1.** `PersistenceService` nabízí jen `flush()`, na `pagehide` a `visibilitychange` (hidden) ho napojí `app` (M10). Propsáno do [[05-persistence#Služba na hlavním vlákně]] a [[01-architektura#Kompoziční kořen]].
+2026-10-13: **Varianta 1.** `PersistenceService` nabízí jen `flush()`, na `pagehide` a `visibilitychange` (hidden) ho napojí `app` (M10). Propsáno do [[05-persistence v prohlížeči#Služba na hlavním vlákně]] a [[01-architektura#Kompoziční kořen]].

@@ -1,22 +1,10 @@
 import { assert } from '@/core';
 import type { ApplyResult } from './apply';
 import { throwCollected } from './errors';
-import type { LogEntry } from './log';
+import type { LogEntry, Transaction } from './ports';
 import type { OpHandlerRegistry } from './op-handler';
 import { OP_VERSION } from './operation';
 import type { BatchOp, Operation } from './operation';
-
-export interface Transaction {
-  readonly label: string;
-  /** Applies at once and remembers the op with its inverse. */
-  apply(op: Operation): void;
-  /** Applies at once; reverted on both commit and abort, never logged (spec 04, Q018). */
-  applyTransient(op: Operation): void;
-  /** Writes one entry; an empty transaction writes nothing and returns null. */
-  commit(): LogEntry | null;
-  /** Applies the inverses in reverse order, writes nothing. */
-  abort(): void;
-}
 
 interface Step {
   readonly op: Operation;

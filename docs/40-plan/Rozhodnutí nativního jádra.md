@@ -19,8 +19,19 @@ Značka **⚠ k revizi** = rozhodnutí, u kterého si nejsem jistý nebo které 
 
 ## Shrnutí pro revizi
 
+**Výsledek (2026-10-17):** série M38–M47 hotová v `main`. Aplikace běží jen proti C++ jádru za gRPC; e2e proti Docker Compose zelené v Chrome i WebKitu; bundle prohlížeče 10,1 → 2,8 MB gzip, WASM OCCT z prohlížeče pryč. Nejdůležitější ⚠ na projití:
+
+- **N63/N76** – handlery operací a model dokumentu zůstávají v klientovi (optimistické zrcadlo), zužuje [[0030-nativni-jadro-pres-grpc|ADR 0030]] bod 9.
+- **N110** – struktura knihoven serveru (zdvojený 2D základ N77, vrstva runtime, read model rovnou do protobufu) na společnou revizi.
+- **N124** – referencí sdílených případů je C++; nové případy regenerace a geometrie se píšou ručně (C++ nemá režim záznamu).
+- **N120, N126** – planegcs WASM v prohlížeči zůstává; tlačítko přenosu z IndexedDB zmizelo s `persistence` (dokumenty z IndexedDB jde přenést jen z checkoutu před M47 nebo exportem a `tinycad-import`).
+- **N134, N144** – chybí kanál dočasných hlášení v UI (ztráta transakce, `SKETCH_NOT_SOLVED` jen do konzole).
+- **N135, N85, N143, N142** – Abort transakce při reloadu z klienta, řešič nejde zaručit bit po bitu jako WASM, řazení jmen UTF-8 vs UTF-16, chybí měření výkonu regenerace.
+- **N3/N68, N49** – server je jediná cesta aplikace; `check:server` mimo `npm run check` (`check:full`).
+
+
 - **Revize architektury serveru po M44:** návrh struktury knihoven a odložené body jsou v N110.
-- **Pavel 2026-10-17: návrh a architekturu serveru projdeme spolu po sérii** (třídy, hranice knihoven v `server/src/`, porty). Do té doby platí OOP a KISS (N12) a strukturální rozhodnutí jsou v seznamu níže.
+- **Pavel 2026-10-17: návrh a architekturu serveru projdeme spolu po sérii** (třídy, hranice knihoven v `server/src/`, porty). Do té doby platí OOP a KISS (N9) a strukturální rozhodnutí jsou v seznamu níže.
 
 - **Plány M41, M43, M44.1 (2026-10-17), k revizi:** N35 (STORAGE → znovunačtení místo inverze), N37 (gRPC `DocumentService` do M45), N38 (migrace z IndexedDB jen existujícím exportem a `tinycad-import`), N47 (řešení skici před dispečerem, ne v handleru).
 
@@ -260,4 +271,31 @@ Revize (`architecture-reviewer`) nad M39–M44 a pahýly M45 nenašla porušení
 - **N136 – Klient zahodí read model se starší `regen.generation`** (stejnou přijme) a změnu odešle až po mikrotasku, aby nesla `input_of` dialogu otevřeného tímtéž kódem. Obojí našly e2e (výběr špatného tělesa, zaoblení zasažené vlastní hranou).
 - **N137 – Při latenci dialog vysunutí otevřený před odpovědí na dokončenou skicu oblast nepředvybere** (D6 z M19.2); přijato, předvýběr se dodatečně nedoplňuje.
 - **N138 – E2E: každý test zakládá svůj dokument přes `DocumentService` z Node** (`createDocument` vrací `{ id, name }`), vlastní Compose projekt podle `E2E_PORT` s daty v tmpfs; `test:e2e:core` a `playwright.core.config.ts` zanikly.
+
+## M47 úkol 3
+
+- **N139 – Mrtvý kód bez produkčního uživatele se maže** (úkol 4): `app/dispose-open-session.ts`, `app/page-lifecycle.ts`, `app/file-names.ts`, `DocumentInfo`, `test/integration/shared-cases/support/sort.ts`; popisky `source` se zmínkou o FakeKernel v případech `regen` se přepíšou. `AppSessionDeps` zmizel s lokální cestou (odkazoval na smazané typy). Plugin skici je bez typu parametrů (`features/*` nesmí záviset na `sketch`).
+- Výsledek úkolu 3: −35 963 řádků (src −12 428, test −23 455), `dist/` 28,68 → 5,67 MB syrově, 10,08 → 2,81 MB gzip; jediný WASM v prohlížeči je `planegcs` (484 kB, N120).
+
+## M47 úkol 5
+
+- **N140 – Akceptační `rg` úkolu 5 vynechává `spikes/`** a hledá `E2E_CORE\b` a `playwright\.core` (jinak by chytil živou `E2E_CORE_PORT` a balíček `playwright-core`). Historický spike `spikes/m07-occt/` k [[0013-replicad-opencascadejs|ADR 0013]] zůstává jako záznam.
+
+## M47 úkol 6 (specifikace)
+
+- **N141 – TS `regionCurves` v `sketch` zůstává** (používají ho sdílené případy `sketch.derived`, model skici v klientovi je podle ADR 0030 bod 5 dál TS).
+- **N142 ⚠ – Měření výkonu regenerace po sérii neexistuje** (TS perf test zmizel s regenerací, C++ ho nemá); deska s 36 děrami zůstala jako případ správnosti `boolean-plate-36-holes-fillet`. Doplnit C++ měření je kandidát na další práci.
+- **N143 ⚠ – C++ řadí jména po bajtech UTF-8, spec 13 říká kódové jednotky UTF-16**; liší se jen u ne-ASCII jmen (id jsou ASCII). Spec 06 to uvádí; sjednotit při revizi.
+- **N144 – Stavy UI, které serverová cesta nenastaví** (`RegenUiState.failed`, `KernelUiState 'failed'`, varování „export bez historie“), zůstávají v typech a specifikace 10 a 11 to uvádějí; úklid patří k návrhu kanálu hlášení (N134).
+
+## M47 úkol 4
+
+- **N145 – Exporty, které používají jen testy, se přesunuly do `testing.ts` modulu místo smazání** (`document`: `fromData`, `toData`, `bodyId`, `ORIGIN_AXIS_IDS`, `ParamSchemaOf`; `ops`: paměťový dispečer, log a undo podle N121). Proč: běžec `ops.script` a ~15 testů `interaction` a `sketcher` je potřebují a mají zůstat beze změny. `OpHandler.upcast` zmizel s `upcastOperation`; `kernelErrorCode` a `validateMeshData` zůstávají ve veřejném API (inventura, N122). Úkol 4: −10 276 řádků.
+
+## Revize klienta po M46/M47
+
+Revize (`architecture-reviewer`) nad `src/remote`, `src/app` a zúženými moduly: produkční kód neimportuje `testing.ts`, do Vue neprosakují doménové objekty, tabulka závislostí sedí. Opraveno 13 ze 14 nálezů (jedno pravidlo pořadí read modelů v sezení, ověření sítí ze serveru, zrcadlo s oddělenou čtecí fasádou `reader` a úzkým `MirrorControl` pro dispečera, jeden zdroj zásobníků undo, karta jen pro čtení drží „uloženo“, stav spojení nebliká, zastaralé komentáře, `kernelErrorCode` a pomůcky převodů do `testing.ts`, `plugin-api` závisí jen na `interaction`).
+
+- **N146 ⚠ – Karta, která po novém sezení přišla o zámek (`writable = false`), dál ukazuje úpravy jako povolené**; každou změnu odmítne server `READ_ONLY` a zrcadlo ji zahodí přes `onError`. Proč neopraveno: `readOnly` je v kontraktu `AppSession` (spec 11) a v `createEditLock` hodnota, ne Observable – změna by sáhla do `interaction` a `TitleBar.vue`. Patří k návrhu kanálu hlášení (N134).
+- **N147 – `kernelErrorCode` ve veřejném API `kernel` není** (jen `kernel/testing.ts`), upřesňuje N145; `validateMeshData` ve veřejném API zůstává (používá ho `remote`).
 

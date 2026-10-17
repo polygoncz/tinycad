@@ -1,29 +1,14 @@
 import { assert, DisposableStore, Emitter } from '@/core';
-import type { Disposable, Subscribable } from '@/core';
-import type { OperationDispatcher } from './dispatcher';
-import type { LogEntry, OperationLogReader } from './log';
+import type { OperationLogReader } from './log';
+import type { LogEntry, OperationDispatcher, UndoManager } from './ports';
 import { isDocumentRename } from './operation';
-
-export interface UndoManager extends Disposable {
-  /** The undo stack is not empty and no transaction is running. */
-  canUndo(): boolean;
-  canRedo(): boolean;
-  /** Current stacks (seq of the original 'do' entries, top at the end). Copies. */
-  stacks(): { readonly undo: readonly number[]; readonly redo: readonly number[] };
-  /** Takes the top of the undo stack and dispatches its inverse as an 'undo' entry. */
-  undo(): void;
-  /** Takes the top of the redo stack and dispatches its op again as a 'redo' entry. */
-  redo(): void;
-  /** Emitted only when the pair (canUndo, canRedo) changes. */
-  readonly events: Subscribable<{ changed: { canUndo: boolean; canRedo: boolean } }>;
-}
 
 interface Stacks {
   readonly undo: readonly number[];
   readonly redo: readonly number[];
 }
 
-/** One step shared by rebuildUndoStacks and the live manager. Pure; throws on a corrupt log. */
+/** One step of the stacks over a log entry. Pure; throws on a corrupt log. */
 function step(stacks: Stacks, entry: LogEntry): Stacks {
   const { undo, redo } = stacks;
   switch (entry.kind) {
@@ -52,15 +37,6 @@ function step(stacks: Stacks, entry: LogEntry): Stacks {
   }
 }
 
-/** Stacks from entry metadata (seq of the original 'do' entries, top at the end). Pure. */
-export function rebuildUndoStacks(entries: readonly LogEntry[]): {
-  undo: number[];
-  redo: number[];
-} {
-  const { undo, redo } = entries.reduce<Stacks>(step, { undo: [], redo: [] });
-  return { undo: [...undo], redo: [...redo] };
-}
-
 /** Stacks are computed from the log on creation, then kept up to date from log.appended. */
 export function createUndoManager(deps: {
   dispatcher: OperationDispatcher;
@@ -69,7 +45,7 @@ export function createUndoManager(deps: {
   const { dispatcher, log } = deps;
   const emitter = new Emitter<{ changed: { canUndo: boolean; canRedo: boolean } }>();
   const subscriptions = new DisposableStore();
-  let current: Stacks = rebuildUndoStacks(log.entries());
+  let current: Stacks = log.entries().reduce<Stacks>(step, { undo: [], redo: [] });
 
   const canUndo = (): boolean => current.undo.length > 0 && !dispatcher.inTransaction;
   const canRedo = (): boolean => current.redo.length > 0 && !dispatcher.inTransaction;

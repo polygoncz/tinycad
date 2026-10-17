@@ -1,4 +1,3 @@
-import { assert } from '@/core';
 import type { RegistryReader } from '@/core';
 import { migrateFeatureData } from '@/document';
 import type {
@@ -127,15 +126,6 @@ function setParamsHandler(schemas: Schemas): OpHandler<FeatureSetParamsOp> {
     },
     // Same feature: the later params win; the inverse of the first op still restores the start.
     merge: (prev, next) => (prev.featureId === next.featureId ? next : null),
-    // Version 1 had no typeVersion. It existed only while every feature schema had version 1,
-    // so 1 is right: the version of an operation carrying feature data goes up before any
-    // schema leaves version 1 (Q035).
-    upcast: (fromVersion, raw) => {
-      assert(fromVersion === 1, `feature.setParams: no upcast from version ${String(fromVersion)}`);
-      // upcastOperation passes an object only and validates the result right after.
-      const old = raw as FeatureSetParamsOp;
-      return { ...old, v: OP_VERSION['feature.setParams'], typeVersion: 1 };
-    },
     validate: validateShape({
       featureId: nonEmptyString,
       typeVersion: wholeNumber(1),

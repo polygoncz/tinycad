@@ -3,7 +3,7 @@ import * as pluginApi from '@/plugin-api';
 
 // Guards the public API: a value export removed or added by accident shows up here.
 describe('plugin-api public API', () => {
-  it('exports exactly the runtime values of spec 11', () => {
-    expect(Object.keys(pluginApi).sort()).toEqual(['registerPlugin']);
+  it('exports no runtime values, only types (spec 11)', () => {
+    expect(Object.keys(pluginApi)).toEqual([]);
   });
 });

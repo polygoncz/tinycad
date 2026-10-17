@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { DocumentWriter, FeatureId } from '@/document';
-import { createFeatureSchemaRegistry, toData } from '@/document';
-import { aDocument, aFeature } from '@/document/testing';
+import { createFeatureSchemaRegistry } from '@/document';
+import { aDocument, aFeature, toData } from '@/document/testing';
 import { applyOperation } from '@/ops/apply';
 import { createOperationDispatcher } from '@/ops/dispatcher';
 import { createOpHandlerRegistry } from '@/ops/handler';
 import { createOperationLog } from '@/ops/log';
-import type { LogEntry } from '@/ops/log';
+import type { LogEntry } from '@/ops/ports';
 import type {
   BatchOp,
   BodySetColorOp,
@@ -19,7 +19,6 @@ import type {
   Operation,
   StudioSetRollbackOp,
 } from '@/ops/operation';
-import { replayLog } from '@/ops/replay';
 import { anOpsSession } from '@/ops/testing';
 import { createUndoManager } from '@/ops/undo';
 
@@ -412,25 +411,6 @@ describe('applyOperation – validation on write (D1)', () => {
     );
     expect(log.lastSeq).toBe(1);
     expect(undo.stacks()).toEqual({ undo: [1], redo: [] });
-  });
-
-  it('replaying a log entry with a bad operation throws', () => {
-    const doc = aDocument({ features: [aFeature({ id: 'b' })] });
-    const entry: LogEntry = {
-      seq: 1,
-      kind: 'do',
-      op: setParams({ size: Number.POSITIVE_INFINITY }),
-      inverse: setParams({ size: 1 }),
-      label: 'Broken',
-      time: 0,
-    };
-    expectRejected(
-      doc,
-      () => {
-        replayLog(doc, handlers, [entry]);
-      },
-      /params/,
-    );
   });
 
   it.each([

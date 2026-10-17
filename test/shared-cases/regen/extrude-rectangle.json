@@ -1,7 +1,7 @@
 {
   "kind": "regen",
   "description": "A 40 × 20 rectangle on XY extruded by 10 into a new body",
-  "source": "test/integration/extrude-scenario.test.ts › extrude scenario (rectangle, real solver, FakeKernel) › extrudes the region of the rectangle into one body 40 × 20 × 10",
+  "source": "test/integration/extrude-scenario.test.ts › extrude scenario (rectangle, real solver) › extrudes the region of the rectangle into one body 40 × 20 × 10",
   "input": {
     "document": {
       "meta": {

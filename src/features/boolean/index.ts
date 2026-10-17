@@ -2,19 +2,16 @@
 // Public API of features/boolean. Everything else in this folder is internal.
 
 import type { FeaturePlugin } from '@/plugin-api';
-import { booleanBuilder } from './builder';
 import { booleanMessages } from './messages';
-import { booleanSchema } from './schema';
-import type { BooleanParams } from './schema';
+import type { BooleanParams } from './params';
 import { booleanTool } from './tool';
 
-export type { BooleanParams } from './schema';
+export type { BooleanParams } from './params';
 
 export const booleanPlugin: FeaturePlugin<BooleanParams> = Object.freeze<
   FeaturePlugin<BooleanParams>
 >({
-  schema: booleanSchema,
-  builder: booleanBuilder,
+  type: 'boolean',
   tools: Object.freeze([booleanTool]),
   messages: booleanMessages,
 });

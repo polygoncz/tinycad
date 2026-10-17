@@ -6,7 +6,7 @@ import {
   ORIGIN,
   parseBodyId,
 } from '@/document';
-import type { OperationLoadError } from '../load-error';
+import type { OperationLoadError } from '../op-handler';
 
 // Small shape checks for validate of the built-in handlers (Q032). Only the shape of the
 // payload, never its relation to the document (that is apply's job during replay).

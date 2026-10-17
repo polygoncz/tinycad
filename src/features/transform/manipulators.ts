@@ -8,14 +8,14 @@ import type {
   ManipulatorMode,
   Patch,
 } from '@/interaction';
-import { AXIS, inverseRotationOf, rotationOf } from './builder';
-import type { TransformAnchors } from './builder';
-import type { TransformParams } from './schema';
+import type { TransformAnchors } from './anchors';
+import { AXIS, inverseRotationOf, rotationOf } from './params';
+import type { TransformParams } from './params';
 
 // The manipulator of the transform (M18, ADR 0021; M19 in the style of Fusion, ADR 0022). All
 // handles stand where the pivot ends up, c = p + translate, which is also the center of the
 // frame. The pivot p comes from the live params (the origin or pivotPoint), only the center of
-// the bodies comes from the builder as the anchor 'pivot' (spec 07, the anchor is minimal).
+// the bodies comes from the core as the anchor 'pivot' (spec 07, the anchor is minimal).
 //
 // - Move (free, move): arrows, squares and the center point drag translate along the world axes.
 // - Rotate (free as quarter circles, rotate as full circles): one arc per angle, in the gimbal
@@ -204,7 +204,7 @@ function rotate(r: Mat4, v: Vec3): Vec3 {
 
 const ORIGIN: Vec3 = Object.freeze<Vec3>([0, 0, 0]);
 
-/** The pivot p of the builder; undefined for 'bodiesCenter' before the first good build. */
+/** The pivot p of the core; undefined for 'bodiesCenter' before the first good build. */
 function pivotOf(params: TransformParams, anchors: TransformAnchors): Vec3 | undefined {
   switch (params.pivot) {
     case 'origin':

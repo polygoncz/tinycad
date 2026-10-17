@@ -1,37 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { createDocument, createFeatureSchemaRegistry } from '@/document';
 import type { DocumentId } from '@/document';
-import { createOperationDispatcher, createOperationLog, createOpHandlerRegistry } from '@/ops';
+import { createOpHandlerRegistry } from '@/ops';
+import { anOpsSession, createOperationDispatcher, createOperationLog } from '@/ops/testing';
 import type { DocumentRenameOp, OperationDispatcher } from '@/ops';
-import { createMemoryDocumentStore } from '@/persistence';
-import { createManualScheduler } from '@/persistence/testing';
-import { storeNewDocument } from '@/app/open-document';
-import { createSessionPersistence, refuseChanges } from '@/app/read-only';
-import { settle } from '@/app/testing';
+import { refuseChanges, refuseUndo } from '@/app/read-only';
 
 // Branded ids are created by a cast at one place in tests.
 const DOC = 'doc1' as DocumentId;
-
-async function setup(readOnly: boolean) {
-  const store = createMemoryDocumentStore({ now: () => 0 });
-  const doc = await storeNewDocument(store, DOC, { translate: (k) => k, now: () => 0 });
-  const log = createOperationLog();
-  const schemas = createFeatureSchemaRegistry();
-  const dispatcher = createOperationDispatcher({
-    doc,
-    handlers: createOpHandlerRegistry({ schemas }),
-    log,
-    now: () => 0,
-  });
-  const scheduler = createManualScheduler();
-  const persistence = createSessionPersistence({ readOnly, store, log, doc, scheduler });
-  const rename = (name: string): void => {
-    const op: DocumentRenameOp = { type: 'document.rename', v: 1, name };
-    dispatcher.dispatch(op);
-  };
-  const appends = vi.spyOn(store, 'appendEntries');
-  return { persistence, rename, appends, scheduler };
-}
 
 describe('refuseChanges', () => {
   function inner(): OperationDispatcher {
@@ -59,36 +35,19 @@ describe('refuseChanges', () => {
   });
 });
 
-describe('createSessionPersistence', () => {
-  it('with the lock: a change is pending, then saved after the delay', async () => {
-    const { persistence, rename, appends, scheduler } = await setup(false);
-    expect(persistence.status.get()).toBe('saved');
-    rename('Other');
-    expect(persistence.status.get()).toBe('pending');
-    scheduler.advance(1000);
-    await settle();
-    expect(appends).toHaveBeenCalledTimes(1);
-    expect(persistence.status.get()).toBe('saved');
-    expect(persistence.error.get()).toBeNull();
-  });
-
-  it('with the lock: release writes the queue with one last flush', async () => {
-    const { persistence, rename, appends } = await setup(false);
-    rename('Other');
-    persistence.release(() => undefined);
-    await settle();
-    expect(appends).toHaveBeenCalledTimes(1);
-  });
-
-  it('read-only: always saved, no error, flush and release write nothing', async () => {
-    const { persistence, rename, appends, scheduler } = await setup(true);
-    rename('Other');
-    expect(persistence.status.get()).toBe('saved');
-    expect(persistence.error.get()).toBeNull();
-    await expect(persistence.flush()).resolves.toBeUndefined();
-    scheduler.advance(10_000);
-    persistence.release(() => undefined);
-    await settle();
-    expect(appends).not.toHaveBeenCalled();
+describe('refuseUndo', () => {
+  it('cannot undo or redo and both refuse; the stacks and events stay', () => {
+    const { undo } = anOpsSession();
+    const guarded = refuseUndo(undo);
+    expect(guarded.canUndo()).toBe(false);
+    expect(guarded.canRedo()).toBe(false);
+    expect(() => {
+      guarded.undo();
+    }).toThrow(/read-only/);
+    expect(() => {
+      guarded.redo();
+    }).toThrow(/read-only/);
+    expect(guarded.stacks()).toEqual(undo.stacks());
+    expect(guarded.events).toBe(undo.events);
   });
 });

@@ -93,9 +93,10 @@ export interface ManipulatorFrame {
 }
 
 /**
- * A is the type of the anchors the builder of the same plugin returns (M20, ADR 0021): the plugin
- * links the two through FeaturePlugin<P, A>, so reading an anchor the builder does not return is a
- * type error. Anchors the builder returns only sometimes are optional in A.
+ * A is the type of the anchors the builder of the feature computes on the server (M20, ADR 0021,
+ * server/src/features/<type>/builder.cpp) and the read model brings: the plugin names it through
+ * FeaturePlugin<P, A>, so reading an anchor A does not declare is a type error. Anchors the
+ * builder returns only sometimes are optional in A.
  */
 export interface ManipulatorDescriptor<P = unknown, A extends FeatureAnchors = FeatureAnchors> {
   /** The feature type. */

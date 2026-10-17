@@ -1,14 +1,13 @@
-// The read model → the ports of the view (replaces regen-pipeline on the server path, D3 of M19.1
-// kept): meshes into VersionMeshes, viewport.syncLayers, then RegenStatusPort, the drawings of the
+// The read model → the ports of the view (D3 of M19.1 kept): meshes into VersionMeshes, viewport.syncLayers, then RegenStatusPort, the drawings of the
 // sketches, RegenUiState, afterSync and the first fitAll; resolvePlane and planeOfSketch for the
 // sketcher. Every body is shown under the handle of its content_version (N66), so the view swaps
 // exactly the meshes whose version changed. While a feature dialog is open (ADR 0025) and the read
 // model carries the input of its feature, the main layer shows the input and the preview what the
-// feature made or changed, as previewBodies does today.
+// feature made or changed (previewBodies).
 
 import { ObservableValue } from '@/core';
 import type { Disposable, Observable, Plane } from '@/core';
-import type { FeatureId, PlaneRef, TopoName, TopoRef } from '@/document';
+import type { BodyId, FeatureId, PlaneRef, TopoName, TopoRef } from '@/document';
 import type {
   FeatureAnchors,
   FeatureHealth,
@@ -28,17 +27,24 @@ import type {
 } from '@/remote';
 import { parseSketchData } from '@/sketch';
 import { artifactDrawing } from '@/sketcher';
-import { previewBodies } from './regen-pipeline';
-import type { RegenPipelineDeps, RegenUiState, ShownBody } from './regen-pipeline';
+import type { ShapeHandle } from '@/kernel';
+import type { BodyLayer, CameraController, Viewport } from '@/render';
+import type { RegenUiState } from './app-session';
 import type { VersionMeshes } from './version-meshes';
 
 export interface ReadModelViewDeps {
   readonly meshes: VersionMeshes;
-  readonly viewport: RegenPipelineDeps['viewport'];
+  readonly viewport: {
+    readonly bodies: Pick<BodyLayer, 'reset'>;
+    /** M21: the pickable bodies and the result of the edited feature over them, in one swap. */
+    readonly syncLayers: Viewport['syncLayers'];
+    readonly camera: Pick<CameraController, 'fitAll'>;
+    readonly sketches: SketchPort;
+  };
   /** The open feature dialog: with one the view shows the input of its feature (ADR 0025). */
-  readonly features: RegenPipelineDeps['features'];
+  readonly features: { readonly current: Observable<{ readonly featureId: FeatureId } | null> };
   /** The open sketch session: its sketch is drawn by the sketcher, not by the view. */
-  readonly sketches: RegenPipelineDeps['sketches'];
+  readonly sketches: { readonly current: Observable<{ readonly featureId: FeatureId } | null> };
   /** Changes queued and in flight (RemoteSession.pending): RegenUiState.busy. */
   readonly pending: Observable<number>;
   readonly afterSync: () => void;
@@ -47,12 +53,28 @@ export interface ReadModelViewDeps {
 
 export interface ReadModelView extends RegenStatusPort, Disposable {
   readonly ui: Observable<RegenUiState>;
-  /** A new read model; one of an older generation than the shown one is dropped. */
+  /** A new read model, as the session published it (the session orders them, N136). */
   show(readModel: ReadModelData): void;
   /** A plane of the final state by id, or the plane of a planar face of a body (facePlanes). */
   resolvePlane(ref: PlaneRef | TopoRef): Plane | undefined;
   /** The plane of the sketch of a feature in the final state. */
   planeOfSketch(featureId: FeatureId): Plane | undefined;
+}
+
+/** A body as the body layers take it. */
+export type ShownBody = { readonly id: BodyId; readonly shape: ShapeHandle };
+
+/**
+ * The preview of an edited feature (ADR 0025): the bodies of the result that the input does not
+ * have with the same id and handle, that is what the feature made or changed, in the order of the
+ * result. A body the feature consumed is not in the result, so it is not previewed.
+ */
+export function previewBodies(
+  result: readonly ShownBody[],
+  input: readonly ShownBody[],
+): ShownBody[] {
+  const inInput = new Map(input.map((b) => [b.id, b.shape]));
+  return result.filter((b) => inInput.get(b.id) !== b.shape);
 }
 
 const EMPTY_SNAPSHOT: RegenSnapshot = Object.freeze({
@@ -72,7 +94,7 @@ const EMPTY_SNAPSHOT: RegenSnapshot = Object.freeze({
 export function createReadModelView(deps: ReadModelViewDeps): ReadModelView {
   const { meshes, viewport, reportError } = deps;
   let disposed = false;
-  /** The last read model show() accepted; its generation is the floor for the next one. */
+  /** The last read model show() got: closing a dialog shows its final state again. */
   let latest: ReadModelData | null = null;
   /** The read model of the last published snapshot: the planes of the sketcher come from it. */
   let published: ReadModelData | null = null;
@@ -208,7 +230,6 @@ export function createReadModelView(deps: ReadModelViewDeps): ReadModelView {
     ui: ui.asObservable(),
     show(readModel) {
       if (disposed) return;
-      if (latest !== null && readModel.regen.generation < latest.regen.generation) return;
       latest = readModel;
       render(readModel);
     },
@@ -218,7 +239,8 @@ export function createReadModelView(deps: ReadModelViewDeps): ReadModelView {
       if (ref.kind === 'plane') return final.planes.find((p) => p.id === ref.plane)?.plane;
       const body = final.bodies.find((b) => b.id === ref.body);
       if (body === undefined) return undefined;
-      // The face with the smallest index of the name, as regen's planeOfRef.
+      // The face with the smallest index of the name, as planeOfRef of the server
+      // (server/src/regen/include/tinycad/regen/face_plane.hpp).
       const [index] = namesOf(body).faces(ref.name);
       return index === undefined ? undefined : body.facePlanes.get(index);
     },
@@ -241,7 +263,7 @@ function versionsOf(readModel: ReadModelData): string[] {
   return [...final.bodies, ...(input?.state.bodies ?? [])].map((b) => b.contentVersion);
 }
 
-/** The snapshot of the port, as regen-status-adapter makes it from a RegenResult. */
+/** The snapshot of the RegenStatusPort from the regeneration of the read model. */
 function snapshotOf(
   readModel: ReadModelData,
   shown: ReadModelData['regen']['input'],
@@ -359,10 +381,13 @@ function createSketchDrawings(
     const shown = new Set<string>();
     for (const sketch of last) {
       if (sketch.featureId === edited) continue;
-      shown.add(sketch.sketchId);
-      if (drawn.get(sketch.sketchId) === sketch) continue;
+      if (drawn.get(sketch.sketchId) === sketch) {
+        shown.add(sketch.sketchId);
+        continue;
+      }
       // The entities of the read model are unchecked JSON of spec 12: parsed, so the drawing gets
-      // typed entities; a sketch the client cannot read is reported, not drawn.
+      // typed entities; a sketch the client cannot read is reported and not drawn (an older
+      // drawing of it goes below, it would show a stale sketch).
       const parsed = parseSketchData(sketch.entities, []);
       if (!parsed.ok) {
         reportError(
@@ -370,6 +395,7 @@ function createSketchDrawings(
         );
         continue;
       }
+      shown.add(sketch.sketchId);
       drawn.set(sketch.sketchId, sketch);
       port.set(
         sketch.sketchId,

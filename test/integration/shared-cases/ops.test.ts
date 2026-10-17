@@ -1,53 +1,23 @@
-// The runner of the shared cases ops.upcast, ops.replay and ops.script (spec 13, Druhy případů;
-// spec 04): loading operations of any version, replaying a stored log into a document and a
-// session script of dispatch, transactions and undo/redo. The cases pin the operation contract
-// for the C++ core.
+// The runner of the shared cases ops.script (spec 13, Druhy případů; spec 04): a session script of
+// dispatch, transactions and undo/redo over the handlers the optimistic mirror of the client runs
+// (N63). The C++ core is the reference (N124): ops.upcast and ops.replay run only there, because
+// loading and replaying stored logs is the core's alone.
 
-import { fromData, toData } from '@/document';
+import { fromData, toData } from '@/document/testing';
 import type { DocumentWriter } from '@/document';
-import {
-  createOperationDispatcher,
-  createOperationLog,
-  createOpHandlerRegistry,
-  createUndoManager,
-  parseLogEntry,
-  replayLog,
-  upcastOperation,
-} from '@/ops';
+import { createOpHandlerRegistry } from '@/ops';
+import { createOperationDispatcher, createOperationLog, createUndoManager } from '@/ops/testing';
 import type { LogEntry, Operation, Transaction } from '@/ops';
 import type { CaseOutcome } from './support/case';
-import { builtInSchemas } from './support/plugins';
+import { builtInSchemas } from './support/schemas';
 import { describeSharedCases } from './support/runner';
 
-// The handlers migrate the feature data of feature.add and feature.setParams with these schemas
-// (Q035).
+// The handlers check the feature data of feature.add and feature.setParams with the schemas of the
+// core (Q035, N67).
 const schemas = builtInSchemas();
 const handlers = createOpHandlerRegistry({ schemas });
 
 describeSharedCases('ops', {
-  'ops.upcast': {
-    run(input) {
-      const result = upcastOperation(handlers, field(input, 'operation'));
-      // The path only: the message differs in C++ (spec 13, Obálka).
-      return result.ok
-        ? { ok: { operation: result.value } }
-        : { error: { path: result.error.path } };
-    },
-  },
-  'ops.replay': {
-    run(input) {
-      const doc = loadDocument(field(input, 'document'));
-      const entries = arrayField(input, 'entries').map((raw, i) => {
-        const parsed = parseLogEntry(handlers, raw);
-        if (!parsed.ok) {
-          throw new Error(`entries[${String(i)}].${parsed.error.path}: ${parsed.error.message}`);
-        }
-        return parsed.value;
-      });
-      replayLog(doc, handlers, entries);
-      return { ok: { document: toData(doc) } };
-    },
-  },
   'ops.script': {
     run(input) {
       return runScript(loadDocument(field(input, 'document')), arrayField(input, 'steps'));
