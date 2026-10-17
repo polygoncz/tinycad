@@ -111,6 +111,21 @@ Stav `src/` k plánu (před M46 úkoly 5 a 6). Soubory, které M46 přidá (`rem
 
 Časy na localhostu skoro nic neříkají (bez omezení sítě); srovnatelná je hlavně velikost a přenesené bajty. Resource Timing nevidí požadavky workerů, proto se srovnává `network` (odchylka od kontraktu úkolu 2).
 
+## Měření „po“ (úkol 7)
+
+Stejný skript na `28af2f2` (M47 úkoly 1–6), aplikace proti izolovanému jádru v Compose (data v tmpfs), Chrome headless, 5 běhů, medián:
+
+| Metrika | Před (`27c8e83`) | Po (`28af2f2`) |
+|---|---|---|
+| úvodní obrazovka | 98,9 ms | 204,8 ms |
+| nový dokument → povolená lišta | 158,7 ms (start OCCT ve WASM) | 188,8 ms (dokument a sezení na serveru; první studený běh 976 ms) |
+| OK kvádru → těleso | 116,8 ms | 66,3 ms |
+| přeneseno sítí | 23,98 MB | 1,04 MB |
+| `dist/` syrově / gzip | 28,68 / 10,08 MB | 5,67 / 2,81 MB |
+| z toho WASM | 23,46 / 7,42 MB | 0,48 / 0,17 MB (jen `planegcs`, načte se až ve skicáři) |
+
+Časy na localhostu jsou dolní mez (síť nic nestojí, souběžně běžely kontroly); na skutečné síti přibude round trip na krok. Úvodní obrazovka pomalejší bez zřejmé příčiny v kódu (`index.js` +120 kB kvůli klientovi gRPC) – spíš šum souběhu. Rozhodující je přenos: 24 → 1 MB.
+
 ## Implementační plán
 
 Úkoly 1–5 = jedno spuštění subagenta `implementer` (Opus). Úkol 6 a 7 dělá hlavní sezení (implementer vault nemění). Pro všechny:
@@ -208,4 +223,13 @@ Jak dotáhnout velký přepis do konce: inventura, záchrana testů před smazá
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+_Návrh Clauda (samostatný běh)._
+
+- Pořadí 1 ∥ 2 → 3 → 4 ∥ 5 ∥ 6 → 7 fungovalo: scénáře převedené na sdílené případy (9 nových, 48 `regen`, v C++ zelené beze změny) a měření „před“ běžely ještě během e2e M46; mazání až po zelených e2e proti serveru.
+- Smazáno ~46 000 řádků TS (úkol 3 −35 963, úkol 4 −10 276), z prohlížeče zmizel WASM OCCT, `kernel-occt`, `regen`, `persistence` a buildery featur; přeneseno při otevření 24 → 1 MB.
+- Úklid exportů narazil na testy, které mají zůstat beze změny – exporty jen pro testy se přesunuly do `testing.ts` (N145), ne smazaly.
+- Specifikace 01, 03–13 popisují serverovou verzi, části jen o prohlížeči jsou ve čtyřech archivních poznámkách v `90-archiv/`.
+- Revize klienta po M46/M47 našla pořadí read modelů hlídané na čtyřech místech různými pravidly, zrcadlo s `writer()` pro každého čtenáře a dvojí `GetHistory` – opraveno před uzavřením.
+- Výsledek: `check:full` zelený, `test:e2e:full` 206/206 proti serveru.
+
+Obecný poznatek: [[Vyjmutí jádra z prohlížeče do služby]].
