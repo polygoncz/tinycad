@@ -150,7 +150,7 @@ rpc WatchSession(WatchSessionRequest) returns (stream WatchSessionResponse);   /
 
 Čtyři bezstavová volání přesně podle portu `SketchGeometry` ([[12-skicar]], [[Q096 Geometrie skici přes síť|Q096]]): `Intersections`, `Segment`, `Fillet`, `Offset`. Křivky `Curve2` (`line`, `arc`, `circle`, `bspline` s `id`) dovnitř, data ven, žádné `session_id`.
 
-- Adaptér v klientovi drží **nejvýš jeden požadavek v letu na metodu**. Přijde-li mezitím nový, zapamatuje si jen poslední a pošle ho po odpovědi. Starší čekající volání se vyřeší výsledkem toho posledního (nástroje už dnes používají „poslední požadavek vyhrává“).
+- Adaptér v klientovi drží **nejvýš jeden požadavek v letu na metodu**. Čekající volání se slučují („poslední vyhrává“, starší se vyřeší výsledkem posledního) **jen se stejným klíčem**: `Intersections` podle množiny id křivek, `Offset` podle id řetězce a `closed`. `Segment` a `Fillet` se neslučují, jen čekají ve frontě. Proč: nástroje (trim, split, zkosení, extend) volají port souběžně se svými argumenty a musí dostat výsledek svých argumentů ([[Rozhodnutí nativního jádra]] N6).
 - Chyby: `KERNEL_INVALID_INPUT`, `KERNEL_OPERATION_FAILED`, `KERNEL_INTERNAL`. Adaptér je převede na odmítnutý `Promise` s `KernelErrorCode` jako dnes.
 
 ## Chyby
