@@ -292,3 +292,10 @@ Revize (`architecture-reviewer`) nad M39–M44 a pahýly M45 nenašla porušení
 
 - **N145 – Exporty, které používají jen testy, se přesunuly do `testing.ts` modulu místo smazání** (`document`: `fromData`, `toData`, `bodyId`, `ORIGIN_AXIS_IDS`, `ParamSchemaOf`; `ops`: paměťový dispečer, log a undo podle N121). Proč: běžec `ops.script` a ~15 testů `interaction` a `sketcher` je potřebují a mají zůstat beze změny. `OpHandler.upcast` zmizel s `upcastOperation`; `kernelErrorCode` a `validateMeshData` zůstávají ve veřejném API (inventura, N122). Úkol 4: −10 276 řádků.
 
+## Revize klienta po M46/M47
+
+Revize (`architecture-reviewer`) nad `src/remote`, `src/app` a zúženými moduly: produkční kód neimportuje `testing.ts`, do Vue neprosakují doménové objekty, tabulka závislostí sedí. Opraveno 13 ze 14 nálezů (jedno pravidlo pořadí read modelů v sezení, ověření sítí ze serveru, zrcadlo s oddělenou čtecí fasádou `reader` a úzkým `MirrorControl` pro dispečera, jeden zdroj zásobníků undo, karta jen pro čtení drží „uloženo“, stav spojení nebliká, zastaralé komentáře, `kernelErrorCode` a pomůcky převodů do `testing.ts`, `plugin-api` závisí jen na `interaction`).
+
+- **N146 ⚠ – Karta, která po novém sezení přišla o zámek (`writable = false`), dál ukazuje úpravy jako povolené**; každou změnu odmítne server `READ_ONLY` a zrcadlo ji zahodí přes `onError`. Proč neopraveno: `readOnly` je v kontraktu `AppSession` (spec 11) a v `createEditLock` hodnota, ne Observable – změna by sáhla do `interaction` a `TitleBar.vue`. Patří k návrhu kanálu hlášení (N134).
+- **N147 – `kernelErrorCode` ve veřejném API `kernel` není** (jen `kernel/testing.ts`), upřesňuje N145; `validateMeshData` ve veřejném API zůstává (používá ho `remote`).
+

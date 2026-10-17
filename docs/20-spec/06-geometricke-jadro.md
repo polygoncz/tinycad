@@ -43,7 +43,7 @@ Třídy jsou skryté v modulech, ven jdou rozhraní a tovární funkce ([[0011-p
 
 ## Co z jádra zná klient
 
-Prohlížeč jádro nemá. TS modul `kernel` (prstenec 1, importuje jen `core`) po M47 obsahuje jen **typy** pro `render` a `remote` ([[Rozhodnutí nativního jádra|N122]]): `MeshData`, `MeshQuality`, `ShapeHandle`, `BoundingBox`, `MeshOps`, typy oblastí profilu `ProfileRegion`/`ProfileLoop`/`ProfileCurve`, chyby `KernelErrorCode`, `createKernelError`, `kernelErrorCode` a kontrolu `validateMeshData`. `GeometryKernel`, kontroly vstupů (`parse*Input`, `validateFaceInput`), `isRigidMotion`, `FakeKernel` a kontraktová sada z klienta zmizely. Sítě těles přichází z read modelu podle `content_version` ([[14-protokol#Read model a sítě]]), oblasti a 2D geometrie skici z `GeometryService`; `MeshOps` je port, přes který `render` síť dostane (v klientovi ji dodá vzdálený adaptér, ne jádro).
+Prohlížeč jádro nemá. TS modul `kernel` (prstenec 1, importuje jen `core`) po M47 obsahuje jen **typy** pro `render` a `remote` ([[Rozhodnutí nativního jádra|N122]]): `MeshData`, `MeshQuality`, `ShapeHandle`, `BoundingBox`, `MeshOps`, typy oblastí profilu `ProfileRegion`/`ProfileLoop`/`ProfileCurve`, chyby `KernelErrorCode`, `createKernelError` a kontrolu `validateMeshData` (volá ji `remote` u každé sítě ze serveru); `kernelErrorCode` je jen v `kernel/testing.ts`. `GeometryKernel`, kontroly vstupů (`parse*Input`, `validateFaceInput`), `isRigidMotion`, `FakeKernel` a kontraktová sada z klienta zmizely. Sítě těles přichází z read modelu podle `content_version` ([[14-protokol#Read model a sítě]]), oblasti a 2D geometrie skici z `GeometryService`; `MeshOps` je port, přes který `render` síť dostane (v klientovi ji dodá vzdálený adaptér, ne jádro).
 
 ## Handle místo tvarů
 

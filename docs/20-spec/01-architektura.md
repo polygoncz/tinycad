@@ -111,7 +111,7 @@ Prstence 1 a 2 se typují konfigurací `tsconfig.domain.json` bez knihovny `DOM`
 | `render` | `core`, `kernel` (jen typy: `MeshData`, `MeshOps`, `MeshQuality`, `ShapeHandle`, `BoundingBox`), `interaction` (jen typy: `ViewportPort`, události, `BodyId`, [[Q056 Odkud render bere BodyId\|Q056]]) | `three` (včetně `three/addons`) |
 | `interaction` | `core`, `document`, `ops`, `sketch` | – |
 | `sketcher` | `core`, `document`, `ops` (jen `ops/testing` v testech, pravidlo `sketcher-ops-only-in-tests`), `sketch`, `interaction` | – |
-| `plugin-api` | `core`, `interaction` | – |
+| `plugin-api` | `interaction` | – |
 | `features/*` | `core`, `document`, `interaction`, `plugin-api` | – |
 | `app` | `core`, `document`, `ops`, `kernel`, `sketch`, `solver-planegcs`, `text-opentype`, `remote`, `render`, `interaction`, `sketcher`, `plugin-api`, `features/*` (vše kromě `ui`; `protocol` jen přes `remote`) | – |
 | `ui` | `app`, `core`, typy z `document`, `interaction` a `sketcher`, hodnoty z `interaction/constants.ts` a `sketcher/constants.ts` | `vue`, `vue-i18n`, `@tabler/icons-webfont` ([[0014-preklady-vue-i18n-a-klice\|ADR 0014]], [[11-ui#Styl]]) |

@@ -141,6 +141,8 @@ message ReadModel { DocumentView document = 1; RegenView regen = 2; SessionView 
 - **Sítě na drátě** (`Mesh`): ploché pole little-endian (`float32` pozice, normály a body hran, `uint32` indexy a rozsahy), stejně jako `MeshData` ze [[06-geometricke-jadro|spec 06]]. Dekódované `bytes` může začínat na posunu, který není násobkem 4; pak se před `new Float32Array(...)` zkopíruje (`slice()`).
 - **Skici** (`SketchView`): rovina, vyřešené entity jako JSON ze [[12-skicar|spec 12]] včetně odvozených (zrcadlení, pole, písmena textu) a oblasti s obrysy (`Curve2`) pro vyplnění a picking ([[0028-geometrie-skici-v-jadre|ADR 0028]] bod 3).
 
+**Pořadí read modelů v klientovi** ([[Rozhodnutí nativního jádra]] N136, po revizi M47): jediné pravidlo v `RemoteSessionImpl.publish` – zveřejní se read model jen ze současného sezení a s generací ne nižší než poslední zveřejněná (stejná projde); nové sezení (změna `session_id`, např. po restartu serveru) vodítko vynuluje a odpovědi nahrazeného sezení se zahodí. Zrcadlo i pohled berou jen zveřejněný read model; síť z read modelu se ověří (`validateMeshData`).
+
 ## Události: `WatchSession`
 
 ```proto
