@@ -128,6 +128,10 @@ message BodyView {
   repeated string edge_names = 6;
   // Only when the client does not know content_version.
   Mesh mesh = 7;
+  // The plane of every planar face by index (as face_names: key i is the face with
+  // SubShapeIndex.index i + 1); non-planar faces are absent (N56). The client has no kernel and
+  // opens a sketch on a face synchronously.
+  map<uint32, Plane> face_planes = 8;
 }
 
 // A tessellated body (kernel MeshData). Arrays are little-endian: positions, normals and

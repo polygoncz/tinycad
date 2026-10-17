@@ -7,9 +7,39 @@
 // entries are left out of the rows and of the counts.
 
 import { ObservableValue } from '@/core';
-import type { Disposable, Observable } from '@/core';
+import type { Disposable, Observable, Subscribable } from '@/core';
 import { isDocumentRename, rebuildUndoStacks } from '@/ops';
 import type { LogEntry, OperationLogReader } from '@/ops';
+
+/**
+ * One entry of the log for the history panel (N73): without the operations, with their type.
+ * The server sends exactly this (LogEntryView); the local path maps a LogEntry onto it.
+ */
+export interface HistoryEntry {
+  readonly seq: number;
+  readonly kind: 'do' | 'undo' | 'redo';
+  /** For undo/redo the seq of the original 'do'. */
+  readonly target?: number;
+  /** A translation key or the op type (ADR 0014). */
+  readonly label: string;
+  /** ms since epoch. */
+  readonly time: number;
+  /** The type of the operation ('feature.setParams', 'document.rename', 'batch'). */
+  readonly opType: string;
+}
+
+/**
+ * Port: the log as the history panel needs it (N73), instead of OperationLogReader: the entries
+ * and the undo stacks (seq of the original 'do' entries, the top at the end), which the server
+ * computes. M46 task 3 moves createHistoryModel onto it.
+ */
+export interface HistoryLog {
+  /** All entries, in order. */
+  entries(): readonly HistoryEntry[];
+  stacks(): { readonly undo: readonly number[]; readonly redo: readonly number[] };
+  /** After the entries or the stacks changed. */
+  readonly events: Subscribable<{ changed: undefined }>;
+}
 
 export interface HistoryRow {
   readonly seq: number;

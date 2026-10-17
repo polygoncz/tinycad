@@ -33,8 +33,9 @@ const modules = {
   protocol: { npm: ['@bufbuild/protobuf'] },
   // M39 (Q106): adapters of the ports over the gRPC protocol of the native core; only app imports
   // it. kernel for createKernelError: a failed call rejects like a kernel call (spec 14).
+  // M46 (N74): document and ops – the read model and the operations convert to their types.
   remote: {
-    deps: ['core', 'kernel', 'sketch', 'protocol'],
+    deps: ['core', 'document', 'ops', 'kernel', 'sketch', 'protocol'],
     npm: ['@bufbuild/protobuf', '@connectrpc/connect', '@connectrpc/connect-web'],
   },
   regen: { deps: ['core', 'document', 'kernel', 'sketch'] },
