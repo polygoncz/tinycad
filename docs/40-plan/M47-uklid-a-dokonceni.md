@@ -92,6 +92,10 @@ Stav `src/` k plánu (před M46 úkoly 5 a 6). Soubory, které M46 přidá (`rem
 - Velikost bundlu a čas startu před sérií a po ní zapsané v retrospektivě (N125).
 - Specifikace podle úkolu 6 popisují serverovou verzi, `npm run lint:vault` zelený; [[Roadmapa]] má sérii hotovou.
 
+## Úkol 1 (hotovo)
+
+9 nových případů `regen` z integračních scénářů (editace výšky, posunutý válec, poloměr nástroje booleanu, šířka kótovaného obdélníku, pole a text po změně, tažený bod splajnu, deska s 36 děrami z měření výkonu) – celkem 48, zelené v TS i v C++ beze změny `expected`, chyba v C++ se nenašla. Tabulka scénář → případ nebo C++ test je ve zprávě úkolu (deník).
+
 ## Měření „před“ (úkol 2, hotovo)
 
 `npm run measure` (`scripts/measure-startup.mjs`) na commitu `27c8e83` (`main` před přepnutím klienta, WASM verze), Chrome headless, localhost, 5 studených běhů, medián:
