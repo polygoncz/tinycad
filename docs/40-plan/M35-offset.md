@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 35
 aliases:
   - M35
@@ -16,7 +16,7 @@ specs:
 depends_on:
   - "[[M30-geometrie-skici-v-occt]]"
 started: 2026-10-17
-finished:
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-16
@@ -47,8 +47,8 @@ Pavel 2026-10-16: „Chtěl bych ještě dodělat do Sketch následující featu
 - [x] `sketch`: vazba a kóta `offset` (model, parse, edit, measure, poloha kóty).
 - [x] Řešič planegcs: vazba `offset`.
 - [x] `sketch`: `chainOf`, `offsetEdit`, port; `app`.
-- [ ] `sketcher`: kóta offsetu v kresbě, nástroj, HUD nápověda nástrojů stopy A, e2e.
-- [ ] Spec podle skutečnosti.
+- [x] `sketcher`: kóta offsetu v kresbě, nástroj, HUD nápověda nástrojů stopy A, e2e.
+- [x] Spec podle skutečnosti.
 
 ## Implementační plán
 
@@ -111,4 +111,21 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 
 **Architektonická revize:** bez závažných porušení. Opraveno: rámec lineární kóty jen v `sketch` (`linearSpan`, kresba ho převádí), sdílené pomůcky nástrojů `previewIds`/`curvePairs` v `common.ts`. Spec 12 výslovně uvádí, že HUD nápověda ještě v kódu není.
 
+**2026-10-17 – natažen `main` s M37 a zrychleným e2e.** Konflikty sčítací (text × offset v `sketch/edit.ts`, `index.ts`, `testing.ts`, testy, i18n, spec 12); `isCurveEntity` je teď v `sketch/model.ts` a vylučuje i text – offset přes něj. HUD nápověda pro trim, extend, split, fillet, chamfer, chamferAngle a offset (10 klíčů `hint.*`). `npm run check` 8068 unit + 44 integračních, plné e2e (Chrome i WebKit) 186/186.
+
 ## Retrospektiva
+
+_(Návrh stopy, Pavel doplní nebo upraví.)_
+
+**Splnění kritérií:** offset obdélníku se zaoblením dovnitř i ven dá správný uzavřený tvar (kontraktová sada `offsetCurves`, řešič: zaoblený obdélník `dof 0` bez nadbytečnosti); offset splinu je kubický B-spline v toleranci `1e-4 · měřítko` (test adaptéru OCCT). Asociativita: změna kóty `d` i originálu kopii posune (planegcs testy, e2e `m35.spec.ts`).
+
+**Co bylo jinak, než se čekalo:**
+- Asociativní offset nepotřeboval nové primitivum řešiče, ale narazil na **degeneraci tečných spojů** (dvojnásobný kořen) – vyřešeno tečností v bodě místo vzdálenosti; spoj dvou oblouků zůstává omezením.
+- `BRepOffsetAPI_MakeOffset` je silný, ale plný pastí: jen nad vlastní plochou, neseřazené hrany, opačná strana u řetězce začínajícího obloukem po směru hodinových ručiček, tiché selhání ostrého rohu vedle splinu (záloha se zaoblenými rohy).
+- Data skici unesou jen kubický spline – aproximace musela jít přes `PointsToBSpline` (`ApproxCurve` stupeň nedodrží).
+
+**Co se osvědčilo:**
+- Prototyp OCCT před kontraktem (třetí milník po sobě) – zjištění o vlastní ploše a straně ušetřila implementaci slepé uličky.
+- Rozdělení na jádro / data / řešič / nástroj se souběhem 1 ‖ 2 a 3 ‖ 4 – každý kus testovatelný zvlášť, řešič se skutečným planegcs dřív, než existoval nástroj.
+- Úkol 5 rozdělený kvůli závislosti na jiné stopě (HUD nápověda až po M37) – nic nečekalo zbytečně.
+
