@@ -10,7 +10,6 @@ add_library(tinycad_kernel STATIC
   errors.cpp
   mesh.cpp
   profile.cpp
-  curves2d.cpp
   primitives.cpp
   query.cpp
   transform.cpp
@@ -26,9 +25,11 @@ target_include_directories(tinycad_kernel
   PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
   PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_features(tinycad_kernel PUBLIC cxx_std_23)
-# Modelling toolkits and TKDESTEP/TKXSBase for exportStep (decision N25); no visualization.
+# The 2D base tinycad_occt2d (N77), modelling toolkits and TKDESTEP/TKXSBase for exportStep
+# (decision N25); no visualization.
 target_link_libraries(tinycad_kernel
   PUBLIC tinycad_core
-  PRIVATE TKernel TKMath TKG2d TKG3d TKGeomBase TKGeomAlgo TKBRep TKTopAlgo TKPrim TKBO
+  PRIVATE tinycad_occt2d
+          TKernel TKMath TKG2d TKG3d TKGeomBase TKGeomAlgo TKBRep TKTopAlgo TKPrim TKBO
           TKBool TKFillet TKShHealing TKMesh TKDESTEP TKXSBase TKDE)
 tinycad_warnings(tinycad_kernel)

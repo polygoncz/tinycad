@@ -12,15 +12,24 @@
 #include <gp_Dir2d.hxx>
 #include <gp_Pnt2d.hxx>
 
+#include <array>
 #include <cmath>
 #include <optional>
 
+#include "tinycad/occt2d/curves.hpp"
+
 #include "algorithms.hpp"
 #include "failure.hpp"
-#include "geom2d.hpp"
 #include "touching.hpp"
 
 namespace tinycad::geometry::detail {
+
+using occt2d::circleCurve;
+using occt2d::dist;
+using occt2d::Kind;
+using occt2d::kTurn;
+using occt2d::scaleOf;
+using occt2d::wrap;
 
 namespace {
 
@@ -128,7 +137,8 @@ Touch projection(const Curve2& c, const Handle(Geom2d_Curve) & carrier, Vec2 cen
 }  // namespace
 
 FilletArc filletOf(const Curve2& a, const Curve2& b, double radius, Vec2 near) {
-  const double scale = scaleOf({a, b}, radius);
+  const std::array<Curve2, 2> pair{a, b};
+  const double scale = scaleOf(pair, radius);
   const double tol = kConfusion * scale;
   const Handle(Geom2d_Curve) carrierA = carrierOf(a, kLineReach * scale);
   const Handle(Geom2d_Curve) carrierB = carrierOf(b, kLineReach * scale);

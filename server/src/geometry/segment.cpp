@@ -3,10 +3,18 @@
 
 #include <cmath>
 
+#include "tinycad/occt2d/curves.hpp"
+
 #include "algorithms.hpp"
-#include "geom2d.hpp"
 
 namespace tinycad::geometry::detail {
+
+using occt2d::angleAround;
+using occt2d::arcSweep;
+using occt2d::Kind;
+using occt2d::onCircle;
+using occt2d::splineCurve;
+using occt2d::splineOf;
 
 namespace {
 
