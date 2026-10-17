@@ -71,6 +71,7 @@ Předpřipravený WASM build měl známé dluhy, které měl řešit [[M16-vlast
 Bod 9 se zúžil. [[M47-uklid-a-dokonceni|M47]] z prohlížeče odstranil `kernel-occt` (OCCT WASM a worker), `regen`, `persistence` včetně `persistence/idb` a buildery a objekty schémat featur. Modul `ops` ale v klientovi **zůstává**, jen menší:
 
 - **Proč zůstává** ([[Rozhodnutí nativního jádra|N63, N76]]): klient drží optimistické zrcadlo dokumentu (`app/mirror-document.ts`), které nepotvrzené změny použije lokálně TS handlery operací. Dialog featury, skicář i strom tak čtou dokument hned po `apply` a server zůstává autoritou.
+- **Pavel 2026-10-17 zúžení odmítl:** [[0031-tenky-klient-bez-handleru|ADR 0031]] (tenký klient bez handlerů) vrací bod 9 k původnímu záměru; provede [[M52-tenky-klient|M52]].
 - **Co z `ops` v klientovi je** ([[Rozhodnutí nativního jádra|N121]]): typy operací, `OP_VERSION`, registr a handlery, `applyOperation` a typy portů (`OperationDispatcher`, `DispatchMeta`, `Transaction`, `UndoManager`, `LogEntry`). Porty implementuje `app/remote-dispatcher.ts` nad serverem. Paměťový dispečer, log, transakce a undo jsou jen testovací dvojník v `ops/testing.ts`; přehrání logu, upcast a čtení záznamů jsou jen v C++ (`server/src/ops`).
 - **Co dál zůstává z domény:** model dokumentu (`document`) pro zrcadlo, model skici s řešičem a text (bod 5) a modul `kernel` jen jako typy sítí a chyb pro `render` a `remote` ([[Rozhodnutí nativního jádra|N122]]). Z WASM v prohlížeči zbyl jen planegcs ([[Rozhodnutí nativního jádra|N120]]).
 

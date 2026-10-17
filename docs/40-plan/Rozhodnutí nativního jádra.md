@@ -17,6 +17,24 @@ Postup: plán a kontrakty ve vaultu → úkoly přes `implementer` (po M39 tři 
 
 Značka **⚠ k revizi** = rozhodnutí, u kterého si nejsem jistý nebo které zužuje rozsah.
 
+## Pavlova rozhodnutí sporných míst (2026-10-17)
+
+Pavel prošel ⚠ místa na stránce „Sporná místa nativního jádra“. **Změny proti běhu** (navazující práce v [[Roadmapa#Po nativním jádře (M48–M52)]]):
+
+| Bod | Rozhodnutí Pavla | Kam |
+|---|---|---|
+| N63 | **Tenký klient bez handlerů operací** – optimistické zrcadlo zmizí, změny jdou jen přes server | [[0031-tenky-klient-bez-handleru\|ADR 0031]], [[M52-tenky-klient\|M52]] |
+| N77 | **Nová knihovna `occt2d`** – společný interní 2D základ pro `tinycad_kernel` i `tinycad_geometry` | [[M50-occt2d-a-vrstva-rpc\|M50]] |
+| N53 | **Doménové výsledky + převod ve vrstvě rpc** – `RuntimeDocument` bez typů protobufu | [[M50-occt2d-a-vrstva-rpc\|M50]] |
+| N142 | **Doplnit C++ měření výkonu regenerace** | [[M51-inverze-a-mereni\|M51]] |
+| N134 | **`AppSession.notice` a toast** – kanál dočasných hlášení | [[M48-hlaseni-v-ui\|M48]] |
+| N67 | **Popsat pravidla validace ve `FeatureTypeDescriptor`** | [[M49-pravidla-validace-v-popisu\|M49]] |
+| N35 | **Po chybě zápisu vrátit dokument inverzí** místo znovunačtení | [[M51-inverze-a-mereni\|M51]] |
+| N110-entry | `Change.entry` jako JSON: **rozhodne později** | – |
+| N126 | V IndexedDB nic nemá – přenos není potřeba | – |
+
+**Ponechat, jak je:** N110-runtime (běhový dokument zůstává v `storage`/`session`), N115, N120, N49, N124, N26, N143, N85, N146, N135, N65, N70, N21, N47, N56, N6 – tím přestávají být ⚠.
+
 ## Shrnutí pro revizi
 
 **Výsledek (2026-10-17):** série M38–M47 hotová v `main`. Aplikace běží jen proti C++ jádru za gRPC; e2e proti Docker Compose zelené v Chrome i WebKitu; bundle prohlížeče 10,1 → 2,8 MB gzip, WASM OCCT z prohlížeče pryč. Nejdůležitější ⚠ na projití:

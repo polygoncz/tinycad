@@ -72,6 +72,11 @@ Jediná entita až do M10 je **kvádr (Box)**. Druhá entita v M11 je zkouška r
 | [[M45-sezeni-pres-grpc\|M45]] | Sezení přes gRPC | `server` | `SessionService`: sezení, zámek, transakce, read model, `WatchSession` |
 | [[M46-klient-nad-read-modelem\|M46]] | Klient nad read modelem | `remote`, `app`, `interaction`, `render`, `ui`, `features/*` | prohlížeč proti serveru, e2e přes Docker Compose |
 | [[M47-uklid-a-dokonceni\|M47]] | Úklid a dokončení | `app`, `ui` a odstraněné moduly | bez WASM a domény v klientovi, specifikace serverové verze |
+| [[M48-hlaseni-v-ui\|M48]] | Hlášení v UI | `app`, `ui`, `sketcher` | `AppSession.notice` a toast (N134) |
+| [[M49-pravidla-validace-v-popisu\|M49]] | Pravidla validace v popisu typů | `server`, `remote`, `ui` | vlastní pravidla featur ve `FeatureTypeDescriptor` (N67) |
+| [[M50-occt2d-a-vrstva-rpc\|M50]] | Knihovna occt2d a vrstva rpc | `server` | jeden 2D základ OCCT (N77), doména bez protobufu (N53) |
+| [[M51-inverze-a-mereni\|M51]] | Inverze a měření | `server` | inverze po chybě zápisu (N35), měření výkonu regenerace (N142) |
+| [[M52-tenky-klient\|M52]] | Tenký klient | `app`, `interaction`, `sketcher`, `ops`, `document` | klient bez handlerů operací ([[0031-tenky-klient-bez-handleru\|ADR 0031]], N63) |
 
 **Noční rychloakce 2026-10-14:** [[M11-dalsi-entity|M11]]–[[M15-export-a-dokonceni|M15]] implementovány bez průběžného schvalování, rozhodnutí v [[Rozhodnutí noční rychloakce]]. M16 se tehdy nedělal – předpřipravený build stačil na celou první verzi. Pavel 2026-10-14 ho vrátil do plánu za M21 kvůli zásobníku Emscriptenu (A7 z [[Revize kódu 2026-10-14|revize kódu]]).
 
@@ -182,6 +187,20 @@ Pravidla série:
 **Pravidlo zmrazení (od startu M38) skončilo s M47** (2026-10-17): doména je v C++ (`server/src/`), z `src/` zmizely `kernel-occt`, `regen`, `persistence` a buildery featur; v klientovi zůstává zrcadlo (`document`, handlery `ops`) a model skici. Série běžela jako samostatný běh bez průběžného schvalování, rozhodnutí v [[Rozhodnutí nativního jádra]].
 
 **Otázky série:** všechny rozhodnuté (2026-10-17), naposledy [[Q103 Skica, kterou server nevyřeší|Q103]] a [[Q106 Moduly klienta pro gRPC|Q106]].
+
+## Po nativním jádře (M48–M52)
+
+Naplánováno 2026-10-17 z Pavlových rozhodnutí sporných míst samostatného běhu ([[Rozhodnutí nativního jádra#Pavlova rozhodnutí sporných míst (2026-10-17)]]). Hrubý plán, každý milník se před startem upřesní.
+
+**Souběžné stopy** (malý průnik souborů):
+
+| Stopa | Milníky | Soubory |
+|---|---|---|
+| A – server | [[M50-occt2d-a-vrstva-rpc\|M50]] → [[M51-inverze-a-mereni\|M51]] | `server/src/` |
+| B – klient | [[M48-hlaseni-v-ui\|M48]] → [[M52-tenky-klient\|M52]] | `src/app`, `src/ui`, `src/interaction`, `src/sketcher` |
+| C – kontrakt | [[M49-pravidla-validace-v-popisu\|M49]] | `server/proto`, `server/src/features`, `src/remote` |
+
+M52 začne po sloučení M48 a M49 (dialog featur potřebuje kanál hlášení i pravidla z popisu). Průnik A × C: `server/src/session` (popisy typů vs. vrstva rpc) – sdílené rozhraní popisů typů zafixovat při startu stop.
 
 ## Jak pracovat s milníkem
 
