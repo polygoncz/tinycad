@@ -101,25 +101,25 @@ class SketchEntity {
 using EntityPtr = std::shared_ptr<const SketchEntity>;
 
 struct SketchPoint final : SketchEntity {
-  SketchPoint(SketchEntityId id, double x, double y)
-      : SketchEntity(EntityKind::Point, std::move(id)), x(x), y(y) {}
+  SketchPoint(SketchEntityId id, double x_, double y_)
+      : SketchEntity(EntityKind::Point, std::move(id)), x(x_), y(y_) {}
   double x;
   double y;
 };
 
 /** `construction` = the TS optional `construction?: true` (false = absent in JSON). */
 struct SketchLine final : SketchEntity {
-  SketchLine(SketchEntityId id, SketchEntityId p1, SketchEntityId p2, bool construction)
+  SketchLine(SketchEntityId id, SketchEntityId p1_, SketchEntityId p2_, bool construction_)
       : SketchEntity(EntityKind::Line, std::move(id)),
-        p1(std::move(p1)), p2(std::move(p2)), construction(construction) {}
+        p1(std::move(p1_)), p2(std::move(p2_)), construction(construction_) {}
   SketchEntityId p1, p2;
   bool construction;
 };
 
 struct SketchCircle final : SketchEntity {
-  SketchCircle(SketchEntityId id, SketchEntityId center, double radius, bool construction)
+  SketchCircle(SketchEntityId id, SketchEntityId center_, double radius_, bool construction_)
       : SketchEntity(EntityKind::Circle, std::move(id)),
-        center(std::move(center)), radius(radius), construction(construction) {}
+        center(std::move(center_)), radius(radius_), construction(construction_) {}
   SketchEntityId center;
   double radius;
   bool construction;
@@ -127,22 +127,22 @@ struct SketchCircle final : SketchEntity {
 
 /** Counter-clockwise from start to end around center. */
 struct SketchArc final : SketchEntity {
-  SketchArc(SketchEntityId id, SketchEntityId center, SketchEntityId start, SketchEntityId end,
-            bool construction)
+  SketchArc(SketchEntityId id, SketchEntityId center_, SketchEntityId start_, SketchEntityId end_,
+            bool construction_)
       : SketchEntity(EntityKind::Arc, std::move(id)),
-        center(std::move(center)), start(std::move(start)), end(std::move(end)),
-        construction(construction) {}
+        center(std::move(center_)), start(std::move(start_)), end(std::move(end_)),
+        construction(construction_) {}
   SketchEntityId center, start, end;
   bool construction;
 };
 
 /** A spline through control points: degree = min(3, poles − 1), clamped knots from 0 to 1. */
 struct SketchBSpline final : SketchEntity {
-  SketchBSpline(SketchEntityId id, int degree, std::vector<SketchEntityId> poles,
-                std::vector<double> knots, bool construction)
+  SketchBSpline(SketchEntityId id, int degree_, std::vector<SketchEntityId> poles_,
+                std::vector<double> knots_, bool construction_)
       : SketchEntity(EntityKind::BSpline, std::move(id)),
-        degree(degree), poles(std::move(poles)), knots(std::move(knots)),
-        construction(construction) {}
+        degree(degree_), poles(std::move(poles_)), knots(std::move(knots_)),
+        construction(construction_) {}
   int degree;
   /** Sketch points, ≥ 2, distinct. */
   std::vector<SketchEntityId> poles;
@@ -152,12 +152,12 @@ struct SketchBSpline final : SketchEntity {
 
 /** A spline through points; its solved poles are stored (regen never calls the solver). */
 struct SketchFitSpline final : SketchEntity {
-  SketchFitSpline(SketchEntityId id, int degree, std::vector<SketchEntityId> fit,
-                  std::vector<double> params, std::vector<Vec2> poles, std::vector<double> knots,
-                  bool construction)
+  SketchFitSpline(SketchEntityId id, int degree_, std::vector<SketchEntityId> fit_,
+                  std::vector<double> params_, std::vector<Vec2> poles_, std::vector<double> knots_,
+                  bool construction_)
       : SketchEntity(EntityKind::FitSpline, std::move(id)),
-        degree(degree), fit(std::move(fit)), params(std::move(params)), poles(std::move(poles)),
-        knots(std::move(knots)), construction(construction) {}
+        degree(degree_), fit(std::move(fit_)), params(std::move(params_)), poles(std::move(poles_)),
+        knots(std::move(knots_)), construction(construction_) {}
   int degree;
   std::vector<SketchEntityId> fit;
   std::vector<double> params;
@@ -168,16 +168,16 @@ struct SketchFitSpline final : SketchEntity {
 
 /** A construction line without ends through two points (M31); always construction (JSON `true`). */
 struct SketchXLine final : SketchEntity {
-  SketchXLine(SketchEntityId id, SketchEntityId p1, SketchEntityId p2)
-      : SketchEntity(EntityKind::XLine, std::move(id)), p1(std::move(p1)), p2(std::move(p2)) {}
+  SketchXLine(SketchEntityId id, SketchEntityId p1_, SketchEntityId p2_)
+      : SketchEntity(EntityKind::XLine, std::move(id)), p1(std::move(p1_)), p2(std::move(p2_)) {}
   SketchEntityId p1, p2;
 };
 
 /** Mirror of the sources across the axis (a line or an xline), M36. */
 struct SketchMirror final : SketchEntity {
-  SketchMirror(SketchEntityId id, std::vector<SketchEntityId> sources, SketchEntityId axis)
+  SketchMirror(SketchEntityId id, std::vector<SketchEntityId> sources_, SketchEntityId axis_)
       : SketchEntity(EntityKind::Mirror, std::move(id)),
-        sources(std::move(sources)), axis(std::move(axis)) {}
+        sources(std::move(sources_)), axis(std::move(axis_)) {}
   std::vector<SketchEntityId> sources;
   SketchEntityId axis;
 };
@@ -192,20 +192,20 @@ struct PatternDirection {
 };
 
 struct SketchLinearPattern final : SketchEntity {
-  SketchLinearPattern(SketchEntityId id, std::vector<SketchEntityId> sources,
-                      PatternDirection direction1, std::optional<PatternDirection> direction2)
+  SketchLinearPattern(SketchEntityId id, std::vector<SketchEntityId> sources_,
+                      PatternDirection direction1_, std::optional<PatternDirection> direction2_)
       : SketchEntity(EntityKind::LinearPattern, std::move(id)),
-        sources(std::move(sources)), direction1(direction1), direction2(direction2) {}
+        sources(std::move(sources_)), direction1(direction1_), direction2(direction2_) {}
   std::vector<SketchEntityId> sources;
   PatternDirection direction1;
   std::optional<PatternDirection> direction2;
 };
 
 struct SketchCircularPattern final : SketchEntity {
-  SketchCircularPattern(SketchEntityId id, std::vector<SketchEntityId> sources,
-                        SketchEntityId center, int count, double angle)
+  SketchCircularPattern(SketchEntityId id, std::vector<SketchEntityId> sources_,
+                        SketchEntityId center_, int count_, double angle_)
       : SketchEntity(EntityKind::CircularPattern, std::move(id)),
-        sources(std::move(sources)), center(std::move(center)), count(count), angle(angle) {}
+        sources(std::move(sources_)), center(std::move(center_)), count(count_), angle(angle_) {}
   std::vector<SketchEntityId> sources;
   /** A sketch point. */
   SketchEntityId center;
@@ -231,11 +231,11 @@ struct TextContour {
 
 /** A one-line text with stored letter outlines (M37); never enters the solver. */
 struct SketchText final : SketchEntity {
-  SketchText(SketchEntityId id, std::string text, TextFont font, double height,
-             SketchEntityId baseline, std::vector<TextContour> contours, bool construction)
+  SketchText(SketchEntityId id, std::string text_, TextFont font_, double height_,
+             SketchEntityId baseline_, std::vector<TextContour> contours_, bool construction_)
       : SketchEntity(EntityKind::Text, std::move(id)),
-        text(std::move(text)), font(font), height(height), baseline(std::move(baseline)),
-        contours(std::move(contours)), construction(construction) {}
+        text(std::move(text_)), font(font_), height(height_), baseline(std::move(baseline_)),
+        contours(std::move(contours_)), construction(construction_) {}
   /** UTF-8; 1 … MAX_TEXT_LENGTH code points, no control characters. */
   std::string text;
   TextFont font;
@@ -305,45 +305,45 @@ using ConstraintPtr = std::shared_ptr<const SketchConstraint>;
  * tangent, hAlign/vAlign (points).
  */
 struct PairConstraint final : SketchConstraint {
-  PairConstraint(ConstraintKind kind, SketchConstraintId id, SketchEntityId a, SketchEntityId b)
-      : SketchConstraint(kind, std::move(id)), a(std::move(a)), b(std::move(b)) {}
+  PairConstraint(ConstraintKind kind, SketchConstraintId id, SketchEntityId a_, SketchEntityId b_)
+      : SketchConstraint(kind, std::move(id)), a(std::move(a_)), b(std::move(b_)) {}
   SketchEntityId a, b;
 };
 
 /** horizontal / vertical of a line or an xline. */
 struct LineConstraint final : SketchConstraint {
-  LineConstraint(ConstraintKind kind, SketchConstraintId id, SketchEntityId line)
-      : SketchConstraint(kind, std::move(id)), line(std::move(line)) {}
+  LineConstraint(ConstraintKind kind, SketchConstraintId id, SketchEntityId line_)
+      : SketchConstraint(kind, std::move(id)), line(std::move(line_)) {}
   SketchEntityId line;
 };
 
 /** A point on the carrier of a line/xline, the circle of an arc or a spline within its ends. */
 struct PointOnCurveConstraint final : SketchConstraint {
-  PointOnCurveConstraint(SketchConstraintId id, SketchEntityId point, SketchEntityId curve)
+  PointOnCurveConstraint(SketchConstraintId id, SketchEntityId point_, SketchEntityId curve_)
       : SketchConstraint(ConstraintKind::PointOnCurve, std::move(id)),
-        point(std::move(point)), curve(std::move(curve)) {}
+        point(std::move(point_)), curve(std::move(curve_)) {}
   SketchEntityId point, curve;
 };
 
 /** A point in the middle of a line (not an xline). */
 struct MidpointConstraint final : SketchConstraint {
-  MidpointConstraint(SketchConstraintId id, SketchEntityId point, SketchEntityId line)
+  MidpointConstraint(SketchConstraintId id, SketchEntityId point_, SketchEntityId line_)
       : SketchConstraint(ConstraintKind::Midpoint, std::move(id)),
-        point(std::move(point)), line(std::move(line)) {}
+        point(std::move(point_)), line(std::move(line_)) {}
   SketchEntityId point, line;
 };
 
 struct SymmetricConstraint final : SketchConstraint {
-  SymmetricConstraint(SketchConstraintId id, SketchEntityId a, SketchEntityId b,
-                      SketchEntityId axis)
+  SymmetricConstraint(SketchConstraintId id, SketchEntityId a_, SketchEntityId b_,
+                      SketchEntityId axis_)
       : SketchConstraint(ConstraintKind::Symmetric, std::move(id)),
-        a(std::move(a)), b(std::move(b)), axis(std::move(axis)) {}
+        a(std::move(a_)), b(std::move(b_)), axis(std::move(axis_)) {}
   SketchEntityId a, b, axis;
 };
 
 struct FixConstraint final : SketchConstraint {
-  FixConstraint(SketchConstraintId id, SketchEntityId point)
-      : SketchConstraint(ConstraintKind::Fix, std::move(id)), point(std::move(point)) {}
+  FixConstraint(SketchConstraintId id, SketchEntityId point_)
+      : SketchConstraint(ConstraintKind::Fix, std::move(id)), point(std::move(point_)) {}
   SketchEntityId point;
 };
 
@@ -362,10 +362,10 @@ struct DimensionPlacement {
 
 /** distance, hDistance, vDistance of two points; value > 0. */
 struct DistanceConstraint final : SketchConstraint {
-  DistanceConstraint(ConstraintKind kind, SketchConstraintId id, SketchEntityId a,
-                     SketchEntityId b, double value, std::optional<DimensionPlacement> placement)
+  DistanceConstraint(ConstraintKind kind, SketchConstraintId id, SketchEntityId a_,
+                     SketchEntityId b_, double value_, std::optional<DimensionPlacement> placement_)
       : SketchConstraint(kind, std::move(id)),
-        a(std::move(a)), b(std::move(b)), value(value), placement(placement) {}
+        a(std::move(a_)), b(std::move(b_)), value(value_), placement(placement_) {}
   SketchEntityId a, b;
   double value;
   std::optional<DimensionPlacement> placement;
@@ -373,10 +373,10 @@ struct DistanceConstraint final : SketchConstraint {
 
 /** The distance of a point to the infinite line of a line or an xline; value > 0. */
 struct PointLineDistanceConstraint final : SketchConstraint {
-  PointLineDistanceConstraint(SketchConstraintId id, SketchEntityId point, SketchEntityId line,
-                              double value, std::optional<DimensionPlacement> placement)
+  PointLineDistanceConstraint(SketchConstraintId id, SketchEntityId point_, SketchEntityId line_,
+                              double value_, std::optional<DimensionPlacement> placement_)
       : SketchConstraint(ConstraintKind::PointLineDistance, std::move(id)),
-        point(std::move(point)), line(std::move(line)), value(value), placement(placement) {}
+        point(std::move(point_)), line(std::move(line_)), value(value_), placement(placement_) {}
   SketchEntityId point, line;
   double value;
   std::optional<DimensionPlacement> placement;
@@ -384,11 +384,11 @@ struct PointLineDistanceConstraint final : SketchConstraint {
 
 /** The angle between two lines or xlines, 0 < value < π, each direction reversed by its flag. */
 struct AngleConstraint final : SketchConstraint {
-  AngleConstraint(SketchConstraintId id, SketchEntityId a, SketchEntityId b, double value,
-                  bool reverseA, bool reverseB, std::optional<DimensionPlacement> placement)
+  AngleConstraint(SketchConstraintId id, SketchEntityId a_, SketchEntityId b_, double value_,
+                  bool reverseA_, bool reverseB_, std::optional<DimensionPlacement> placement_)
       : SketchConstraint(ConstraintKind::Angle, std::move(id)),
-        a(std::move(a)), b(std::move(b)), value(value), reverseA(reverseA), reverseB(reverseB),
-        placement(placement) {}
+        a(std::move(a_)), b(std::move(b_)), value(value_), reverseA(reverseA_), reverseB(reverseB_),
+        placement(placement_) {}
   SketchEntityId a, b;
   double value;
   bool reverseA;
@@ -398,10 +398,10 @@ struct AngleConstraint final : SketchConstraint {
 
 /** radius / diameter of a circle or an arc. */
 struct RadialConstraint final : SketchConstraint {
-  RadialConstraint(ConstraintKind kind, SketchConstraintId id, SketchEntityId curve, double value,
-                   std::optional<DimensionPlacement> placement)
+  RadialConstraint(ConstraintKind kind, SketchConstraintId id, SketchEntityId curve_, double value_,
+                   std::optional<DimensionPlacement> placement_)
       : SketchConstraint(kind, std::move(id)),
-        curve(std::move(curve)), value(value), placement(placement) {}
+        curve(std::move(curve_)), value(value_), placement(placement_) {}
   SketchEntityId curve;
   double value;
   std::optional<DimensionPlacement> placement;
@@ -413,10 +413,10 @@ struct OffsetPair {
 
 /** An associative offset (M35): each copy keeps the distance value from its source. */
 struct OffsetConstraint final : SketchConstraint {
-  OffsetConstraint(SketchConstraintId id, std::vector<OffsetPair> pairs, double value,
-                   std::optional<DimensionPlacement> placement)
+  OffsetConstraint(SketchConstraintId id, std::vector<OffsetPair> pairs_, double value_,
+                   std::optional<DimensionPlacement> placement_)
       : SketchConstraint(ConstraintKind::Offset, std::move(id)),
-        pairs(std::move(pairs)), value(value), placement(placement) {}
+        pairs(std::move(pairs_)), value(value_), placement(placement_) {}
   std::vector<OffsetPair> pairs;
   double value;
   std::optional<DimensionPlacement> placement;

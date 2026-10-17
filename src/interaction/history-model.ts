@@ -1,15 +1,43 @@
 // The history panel (spec 10, "Historie úprav: HistoryModel", M15): the operation log as a
 // read-only timeline, newest first. The log is append-only and undo appends the inverse, so
 // "Undo" and "Redo" show as rows of their own and a 'do' says whether it is still in effect.
-// The status comes from rebuildUndoStacks, the same rule as UndoManager, but the model does
-// not depend on UndoManager: the order of the `appended` subscribers would not be certain.
+// The status comes from the undo stacks of the log port (N73: the server computes them, the
+// local path with rebuildUndoStacks, the same rule as UndoManager).
 // M19.2 (D5): document.rename is outside undo, so it is no step of the history either; its
 // entries are left out of the rows and of the counts.
 
 import { ObservableValue } from '@/core';
-import type { Disposable, Observable } from '@/core';
-import { isDocumentRename, rebuildUndoStacks } from '@/ops';
-import type { LogEntry, OperationLogReader } from '@/ops';
+import type { Disposable, Observable, Subscribable } from '@/core';
+
+/**
+ * One entry of the log for the history panel (N73): without the operations, with their type.
+ * The server sends exactly this (LogEntryView); the local path maps a LogEntry onto it.
+ */
+export interface HistoryEntry {
+  readonly seq: number;
+  readonly kind: 'do' | 'undo' | 'redo';
+  /** For undo/redo the seq of the original 'do'. */
+  readonly target?: number;
+  /** A translation key or the op type (ADR 0014). */
+  readonly label: string;
+  /** ms since epoch. */
+  readonly time: number;
+  /** The type of the operation ('feature.setParams', 'document.rename', 'batch'). */
+  readonly opType: string;
+}
+
+/**
+ * Port: the log as the history panel needs it (N73), instead of OperationLogReader: the entries
+ * and the undo stacks (seq of the original 'do' entries, the top at the end), which the server
+ * computes.
+ */
+export interface HistoryLog {
+  /** All entries, in order. */
+  entries(): readonly HistoryEntry[];
+  stacks(): { readonly undo: readonly number[]; readonly redo: readonly number[] };
+  /** After the entries or the stacks changed. */
+  readonly events: Subscribable<{ changed: undefined }>;
+}
 
 export interface HistoryRow {
   readonly seq: number;
@@ -52,13 +80,13 @@ function sameRow(a: HistoryRow, b: HistoryRow): boolean {
   );
 }
 
-export function createHistoryModel(deps: { log: OperationLogReader }): HistoryModel {
+export function createHistoryModel(deps: { log: HistoryLog }): HistoryModel {
   const { log } = deps;
 
   /** Rows of the last snapshot by seq, so an unchanged row stays the same object. */
   let previous: ReadonlyMap<number, HistoryRow> = new Map();
 
-  function rowOf(entry: LogEntry, status: RowStatus): HistoryRow {
+  function rowOf(entry: HistoryEntry, status: RowStatus): HistoryRow {
     const values: HistoryRow = {
       seq: entry.seq,
       kind: entry.kind,
@@ -72,12 +100,11 @@ export function createHistoryModel(deps: { log: OperationLogReader }): HistoryMo
   }
 
   function compute(): HistoryState {
-    const all = log.entries();
-    const stacks = rebuildUndoStacks(all);
-    const entries = all.filter((entry) => !isDocumentRename(entry.op));
+    const stacks = log.stacks();
+    const entries = log.entries().filter((entry) => entry.opType !== 'document.rename');
     const undone = new Set(stacks.redo);
     const active = new Set(stacks.undo);
-    const statusOf = (entry: LogEntry): RowStatus => {
+    const statusOf = (entry: HistoryEntry): RowStatus => {
       if (entry.kind !== 'do') return null;
       if (active.has(entry.seq)) return 'active';
       return undone.has(entry.seq) ? 'undone' : 'abandoned';
@@ -103,7 +130,7 @@ export function createHistoryModel(deps: { log: OperationLogReader }): HistoryMo
   }
 
   const state = new ObservableValue<HistoryState>(compute());
-  const unsubscribe = log.events.on('appended', () => {
+  const unsubscribe = log.events.on('changed', () => {
     const next = compute();
     if (!sameState(state.get(), next)) state.set(next);
   });

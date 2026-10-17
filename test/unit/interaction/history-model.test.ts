@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { OP_VERSION } from '@/ops';
-import type { DocumentRenameOp, StudioSetRollbackOp } from '@/ops';
+import { Emitter } from '@/core';
+import { OP_VERSION, rebuildUndoStacks } from '@/ops';
+import type { DocumentRenameOp, OperationLogReader, StudioSetRollbackOp } from '@/ops';
 import { createOperationLog } from '@/ops';
 import { anOpsSession } from '@/ops/testing';
 import { HISTORY_LIMIT, createHistoryModel } from '@/interaction/history-model';
-import type { HistoryRow } from '@/interaction/history-model';
+import type { HistoryLog, HistoryRow } from '@/interaction/history-model';
 
 /** A real op that works on an empty document: moving the bar to the end. */
 const BAR: StudioSetRollbackOp = {
@@ -20,9 +21,30 @@ const RENAME: DocumentRenameOp = {
   name: 'Díl',
 };
 
+/** The port over a local log, as the local path of app adapts it (N73). */
+function historyLogOf(log: OperationLogReader): HistoryLog {
+  const emitter = new Emitter<{ changed: undefined }>();
+  log.events.on('appended', () => {
+    emitter.emit('changed', undefined);
+  });
+  return {
+    entries: () =>
+      log.entries().map((entry) => ({
+        seq: entry.seq,
+        kind: entry.kind,
+        ...(entry.target === undefined ? {} : { target: entry.target }),
+        label: entry.label,
+        time: entry.time,
+        opType: entry.op.type,
+      })),
+    stacks: () => rebuildUndoStacks(log.entries()),
+    events: emitter.asSubscribable(),
+  };
+}
+
 function setup() {
   const ops = anOpsSession();
-  const history = createHistoryModel({ log: ops.log });
+  const history = createHistoryModel({ log: historyLogOf(ops.log) });
   const doOp = (label: string): void => {
     ops.dispatcher.dispatch(BAR, { kind: 'do', label });
   };
@@ -142,7 +164,9 @@ describe('createHistoryModel', () => {
     undo.undo();
     doOp('c');
     undo.undo();
-    const restored = createHistoryModel({ log: createOperationLog(log.entries()) });
+    const restored = createHistoryModel({
+      log: historyLogOf(createOperationLog(log.entries())),
+    });
     expect(restored.state.get()).toEqual(history.state.get());
   });
 
@@ -161,6 +185,28 @@ describe('createHistoryModel', () => {
     expect(history.state.get().total).toBe(2);
     expect(history.state.get().older).toBe(0);
     expect(count).toBe(1);
+  });
+
+  it('takes the statuses from the stacks of the port, not from the entries', () => {
+    const emitter = new Emitter<{ changed: undefined }>();
+    const entry = (seq: number) => ({
+      seq,
+      kind: 'do' as const,
+      label: `op${String(seq)}`,
+      time: seq,
+      opType: 'feature.setParams',
+    });
+    let stacks = { undo: [1, 2], redo: [] as number[] };
+    const log: HistoryLog = {
+      entries: () => [entry(1), entry(2)],
+      stacks: () => stacks,
+      events: emitter.asSubscribable(),
+    };
+    const history = createHistoryModel({ log });
+    expect(history.state.get().rows.map((row) => row.status)).toEqual(['active', 'active']);
+    stacks = { undo: [1], redo: [2] };
+    emitter.emit('changed', undefined);
+    expect(history.state.get().rows.map((row) => row.status)).toEqual(['undone', 'active']);
   });
 
   it('stops following the log after dispose', () => {

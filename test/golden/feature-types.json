@@ -1,0 +1,531 @@
+{
+  "feature_types": [
+    {
+      "defaults": {
+        "depth": 10,
+        "height": 10,
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "width": 10
+      },
+      "icon": "box",
+      "label": "box.label",
+      "params": [
+        {
+          "key": "origin",
+          "label": "box.origin",
+          "point": {
+            "default_value": {}
+          }
+        },
+        {
+          "key": "width",
+          "label": "box.width",
+          "length": {
+            "default_value": 10,
+            "exclusive_min": true,
+            "min": 0
+          }
+        },
+        {
+          "key": "depth",
+          "label": "box.depth",
+          "length": {
+            "default_value": 10,
+            "exclusive_min": true,
+            "min": 0
+          }
+        },
+        {
+          "key": "height",
+          "label": "box.height",
+          "length": {
+            "default_value": 10,
+            "exclusive_min": true,
+            "min": 0
+          }
+        }
+      ],
+      "type": "box",
+      "version": 1
+    },
+    {
+      "defaults": {
+        "axis": "z",
+        "base": [
+          0,
+          0,
+          0
+        ],
+        "height": 10,
+        "radius": 5
+      },
+      "icon": "cylinder",
+      "label": "cylinder.label",
+      "params": [
+        {
+          "key": "base",
+          "label": "cylinder.base",
+          "point": {
+            "default_value": {}
+          }
+        },
+        {
+          "enumeration": {
+            "default_value": "z",
+            "options": [
+              {
+                "label": "cylinder.axis.x",
+                "value": "x"
+              },
+              {
+                "label": "cylinder.axis.y",
+                "value": "y"
+              },
+              {
+                "label": "cylinder.axis.z",
+                "value": "z"
+              }
+            ]
+          },
+          "key": "axis",
+          "label": "cylinder.axis"
+        },
+        {
+          "key": "radius",
+          "label": "cylinder.radius",
+          "length": {
+            "default_value": 5,
+            "exclusive_min": true,
+            "min": 0
+          }
+        },
+        {
+          "key": "height",
+          "label": "cylinder.height",
+          "length": {
+            "default_value": 10,
+            "exclusive_min": true,
+            "min": 0
+          }
+        }
+      ],
+      "type": "cylinder",
+      "version": 1
+    },
+    {
+      "defaults": {
+        "keepTools": false,
+        "op": "union",
+        "targets": [],
+        "tools": []
+      },
+      "icon": "layers-union",
+      "label": "boolean.label",
+      "params": [
+        {
+          "enumeration": {
+            "default_value": "union",
+            "options": [
+              {
+                "label": "boolean.op.union",
+                "value": "union"
+              },
+              {
+                "label": "boolean.op.subtract",
+                "value": "subtract"
+              },
+              {
+                "label": "boolean.op.intersect",
+                "value": "intersect"
+              }
+            ]
+          },
+          "key": "op",
+          "label": "boolean.op"
+        },
+        {
+          "bodies": {
+            "min": 1
+          },
+          "key": "targets",
+          "label": "boolean.targets"
+        },
+        {
+          "bodies": {
+            "min": 1
+          },
+          "key": "tools",
+          "label": "boolean.tools"
+        },
+        {
+          "boolean": {},
+          "key": "keepTools",
+          "label": "boolean.keepTools"
+        }
+      ],
+      "type": "boolean",
+      "version": 1
+    },
+    {
+      "defaults": {
+        "distance": 10,
+        "endType": "blind",
+        "flip": false,
+        "operation": "new",
+        "regions": [],
+        "targets": [],
+        "upTo": []
+      },
+      "icon": "arrow-big-up-lines",
+      "label": "extrude.label",
+      "params": [
+        {
+          "key": "regions",
+          "label": "extrude.regions",
+          "region": {
+            "min": 1
+          }
+        },
+        {
+          "enumeration": {
+            "default_value": "new",
+            "options": [
+              {
+                "label": "extrude.operation.new",
+                "value": "new"
+              },
+              {
+                "label": "extrude.operation.add",
+                "value": "add"
+              },
+              {
+                "label": "extrude.operation.remove",
+                "value": "remove"
+              },
+              {
+                "label": "extrude.operation.intersect",
+                "value": "intersect"
+              }
+            ]
+          },
+          "key": "operation",
+          "label": "extrude.operation"
+        },
+        {
+          "bodies": {
+            "min": 1
+          },
+          "group": "extrude.group.merge",
+          "key": "targets",
+          "label": "extrude.targets",
+          "visible_when": {
+            "equals_none": [
+              "new"
+            ],
+            "param": "operation"
+          }
+        },
+        {
+          "enumeration": {
+            "default_value": "blind",
+            "options": [
+              {
+                "label": "extrude.endType.blind",
+                "value": "blind"
+              },
+              {
+                "label": "extrude.endType.symmetric",
+                "value": "symmetric"
+              },
+              {
+                "label": "extrude.endType.upToFace",
+                "value": "upToFace"
+              }
+            ]
+          },
+          "key": "endType",
+          "label": "extrude.endType"
+        },
+        {
+          "key": "distance",
+          "label": "extrude.distance",
+          "length": {
+            "default_value": 10,
+            "exclusive_min": true,
+            "min": 0
+          },
+          "visible_when": {
+            "equals_none": [
+              "upToFace"
+            ],
+            "param": "endType"
+          }
+        },
+        {
+          "key": "upTo",
+          "label": "extrude.upTo",
+          "topo": {
+            "entity": "ENTITY_FACE",
+            "max": 1,
+            "min": 1
+          },
+          "visible_when": {
+            "equals_any": [
+              "upToFace"
+            ],
+            "param": "endType"
+          }
+        },
+        {
+          "boolean": {},
+          "key": "flip",
+          "label": "extrude.flip",
+          "visible_when": {
+            "equals_any": [
+              "blind"
+            ],
+            "param": "endType"
+          }
+        }
+      ],
+      "type": "extrude",
+      "version": 1
+    },
+    {
+      "defaults": {
+        "angle": 6.283185307179586,
+        "axis": null,
+        "flip": false,
+        "operation": "new",
+        "regions": [],
+        "targets": []
+      },
+      "icon": "rotate-360",
+      "label": "revolve.label",
+      "params": [
+        {
+          "key": "regions",
+          "label": "revolve.regions",
+          "region": {
+            "min": 1
+          }
+        },
+        {
+          "axis": {},
+          "key": "axis",
+          "label": "revolve.axis"
+        },
+        {
+          "enumeration": {
+            "default_value": "new",
+            "options": [
+              {
+                "label": "revolve.operation.new",
+                "value": "new"
+              },
+              {
+                "label": "revolve.operation.add",
+                "value": "add"
+              },
+              {
+                "label": "revolve.operation.remove",
+                "value": "remove"
+              },
+              {
+                "label": "revolve.operation.intersect",
+                "value": "intersect"
+              }
+            ]
+          },
+          "key": "operation",
+          "label": "revolve.operation"
+        },
+        {
+          "bodies": {
+            "min": 1
+          },
+          "group": "revolve.group.merge",
+          "key": "targets",
+          "label": "revolve.targets",
+          "visible_when": {
+            "equals_none": [
+              "new"
+            ],
+            "param": "operation"
+          }
+        },
+        {
+          "angle": {
+            "default_value": 6.283185307179586,
+            "exclusive_min": true,
+            "max": 6.283185307179586,
+            "min": 0
+          },
+          "key": "angle",
+          "label": "revolve.angle"
+        },
+        {
+          "boolean": {},
+          "key": "flip",
+          "label": "revolve.flip",
+          "visible_when": {
+            "less_than": 6.283185306179586,
+            "param": "angle"
+          }
+        }
+      ],
+      "type": "revolve",
+      "version": 1
+    },
+    {
+      "defaults": {
+        "edges": [],
+        "radius": 1
+      },
+      "icon": "border-radius",
+      "label": "fillet.label",
+      "params": [
+        {
+          "key": "edges",
+          "label": "fillet.edges",
+          "topo": {
+            "entity": "ENTITY_EDGE",
+            "min": 1
+          }
+        },
+        {
+          "key": "radius",
+          "label": "fillet.radius",
+          "length": {
+            "default_value": 1,
+            "exclusive_min": true,
+            "min": 0
+          }
+        }
+      ],
+      "type": "fillet",
+      "version": 1
+    },
+    {
+      "defaults": {
+        "distance": 1,
+        "edges": []
+      },
+      "icon": "border-corner-square",
+      "label": "chamfer.label",
+      "params": [
+        {
+          "key": "edges",
+          "label": "chamfer.edges",
+          "topo": {
+            "entity": "ENTITY_EDGE",
+            "min": 1
+          }
+        },
+        {
+          "key": "distance",
+          "label": "chamfer.distance",
+          "length": {
+            "default_value": 1,
+            "exclusive_min": true,
+            "min": 0
+          }
+        }
+      ],
+      "type": "chamfer",
+      "version": 1
+    },
+    {
+      "defaults": {
+        "bodies": [],
+        "pivot": "bodiesCenter",
+        "pivotPoint": [
+          0,
+          0,
+          0
+        ],
+        "rx": 0,
+        "ry": 0,
+        "rz": 0,
+        "translate": [
+          0,
+          0,
+          0
+        ]
+      },
+      "icon": "arrows-move",
+      "label": "transform.label",
+      "params": [
+        {
+          "bodies": {
+            "min": 1
+          },
+          "key": "bodies",
+          "label": "transform.bodies"
+        },
+        {
+          "enumeration": {
+            "default_value": "bodiesCenter",
+            "options": [
+              {
+                "label": "transform.pivot.bodiesCenter",
+                "value": "bodiesCenter"
+              },
+              {
+                "label": "transform.pivot.origin",
+                "value": "origin"
+              },
+              {
+                "label": "transform.pivot.point",
+                "value": "point"
+              }
+            ]
+          },
+          "key": "pivot",
+          "label": "transform.pivot"
+        },
+        {
+          "key": "pivotPoint",
+          "label": "transform.pivotPoint",
+          "point": {
+            "default_value": {}
+          },
+          "visible_when": {
+            "equals_any": [
+              "point"
+            ],
+            "param": "pivot"
+          }
+        },
+        {
+          "key": "translate",
+          "label": "transform.translate",
+          "point": {
+            "default_value": {}
+          }
+        },
+        {
+          "angle": {},
+          "key": "rx",
+          "label": "transform.rx"
+        },
+        {
+          "angle": {},
+          "key": "ry",
+          "label": "transform.ry"
+        },
+        {
+          "angle": {},
+          "key": "rz",
+          "label": "transform.rz"
+        }
+      ],
+      "type": "transform",
+      "version": 3
+    }
+  ]
+}

@@ -95,6 +95,9 @@ struct Change {
   bool repeated = false;
 };
 
+// After a Storage error the document is reloaded from its file (N35): the whole runtime (document,
+// log, dispatcher, undo, transaction) is replaced, so references obtained earlier from document()
+// or log() are invalid and callers (the session layer, M45) must fetch them again.
 class PersistentDocument {
  public:
   struct Dependencies {

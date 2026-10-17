@@ -1,0 +1,1240 @@
+{
+  "format": "tinycad.file",
+  "formatVersion": 2,
+  "snapshot": {
+    "format": "tinycad.snapshot",
+    "formatVersion": 1,
+    "atSeq": 30,
+    "document": {
+      "meta": { "id": "src", "name": "Bracket", "createdAt": 5 },
+      "studio": {
+        "features": [
+          {
+            "id": "a",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "A29",
+            "params": { "size": 1 },
+            "suppressed": false
+          },
+          {
+            "type": "box",
+            "typeVersion": 1,
+            "name": "N30",
+            "params": { "size": 1 },
+            "suppressed": false,
+            "id": "n30"
+          },
+          {
+            "type": "box",
+            "typeVersion": 1,
+            "name": "N24",
+            "params": { "size": 1 },
+            "suppressed": false,
+            "id": "n24"
+          },
+          {
+            "id": "n18",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "N18",
+            "params": { "size": 1 },
+            "suppressed": false
+          },
+          {
+            "id": "n12",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "N12",
+            "params": { "size": 1 },
+            "suppressed": false
+          },
+          {
+            "id": "n6",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "N6",
+            "params": { "size": 1 },
+            "suppressed": false
+          }
+        ],
+        "rollbackIndex": 6
+      }
+    }
+  },
+  "history": {
+    "base": {
+      "format": "tinycad.snapshot",
+      "formatVersion": 1,
+      "atSeq": 0,
+      "document": {
+        "meta": { "id": "src", "name": "Bracket", "createdAt": 5 },
+        "studio": {
+          "features": [
+            {
+              "id": "a",
+              "type": "box",
+              "typeVersion": 1,
+              "name": "A",
+              "params": { "size": 1 },
+              "suppressed": false
+            }
+          ],
+          "rollbackIndex": 1
+        }
+      }
+    },
+    "entries": [
+      {
+        "seq": 1,
+        "kind": "do",
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B1" },
+            {
+              "type": "feature.add",
+              "v": 1,
+              "feature": {
+                "type": "box",
+                "typeVersion": 1,
+                "name": "M1",
+                "params": { "size": 1 },
+                "suppressed": false,
+                "id": "m1"
+              },
+              "index": 0
+            }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m1" },
+                { "type": "studio.setRollback", "v": 1, "index": 1 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A" }
+          ]
+        },
+        "label": "batch",
+        "time": 1
+      },
+      {
+        "seq": 2,
+        "kind": "undo",
+        "target": 1,
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m1" },
+                { "type": "studio.setRollback", "v": 1, "index": 1 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A" }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B1" },
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "studio.setRollback", "v": 1, "index": 1 },
+                {
+                  "type": "batch",
+                  "v": 1,
+                  "ops": [
+                    {
+                      "type": "feature.add",
+                      "v": 1,
+                      "feature": {
+                        "type": "box",
+                        "typeVersion": 1,
+                        "name": "M1",
+                        "params": { "size": 1 },
+                        "suppressed": false,
+                        "id": "m1"
+                      },
+                      "index": 0
+                    },
+                    { "type": "studio.setRollback", "v": 1, "index": 2 }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "label": "batch",
+        "time": 2
+      },
+      {
+        "seq": 3,
+        "kind": "redo",
+        "target": 1,
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B1" },
+            {
+              "type": "feature.add",
+              "v": 1,
+              "feature": {
+                "type": "box",
+                "typeVersion": 1,
+                "name": "M1",
+                "params": { "size": 1 },
+                "suppressed": false,
+                "id": "m1"
+              },
+              "index": 0
+            }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m1" },
+                { "type": "studio.setRollback", "v": 1, "index": 1 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A" }
+          ]
+        },
+        "label": "batch",
+        "time": 3
+      },
+      {
+        "seq": 4,
+        "kind": "undo",
+        "target": 1,
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m1" },
+                { "type": "studio.setRollback", "v": 1, "index": 1 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A" }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B1" },
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "studio.setRollback", "v": 1, "index": 1 },
+                {
+                  "type": "batch",
+                  "v": 1,
+                  "ops": [
+                    {
+                      "type": "feature.add",
+                      "v": 1,
+                      "feature": {
+                        "type": "box",
+                        "typeVersion": 1,
+                        "name": "M1",
+                        "params": { "size": 1 },
+                        "suppressed": false,
+                        "id": "m1"
+                      },
+                      "index": 0
+                    },
+                    { "type": "studio.setRollback", "v": 1, "index": 2 }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "label": "batch",
+        "time": 4
+      },
+      {
+        "seq": 5,
+        "kind": "do",
+        "op": { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A5" },
+        "inverse": { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A" },
+        "label": "feature.rename",
+        "time": 5
+      },
+      {
+        "seq": 6,
+        "kind": "do",
+        "op": {
+          "type": "feature.add",
+          "v": 1,
+          "feature": {
+            "type": "box",
+            "typeVersion": 1,
+            "name": "N6",
+            "params": { "size": 1 },
+            "suppressed": false,
+            "id": "n6"
+          },
+          "index": 1
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.remove", "v": 1, "featureId": "n6" },
+            { "type": "studio.setRollback", "v": 1, "index": 1 }
+          ]
+        },
+        "label": "feature.add",
+        "time": 6
+      },
+      {
+        "seq": 7,
+        "kind": "do",
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B7" },
+            {
+              "type": "feature.add",
+              "v": 1,
+              "feature": {
+                "type": "box",
+                "typeVersion": 1,
+                "name": "M7",
+                "params": { "size": 1 },
+                "suppressed": false,
+                "id": "m7"
+              },
+              "index": 0
+            }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m7" },
+                { "type": "studio.setRollback", "v": 1, "index": 2 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A5" }
+          ]
+        },
+        "label": "batch",
+        "time": 7
+      },
+      {
+        "seq": 8,
+        "kind": "undo",
+        "target": 7,
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m7" },
+                { "type": "studio.setRollback", "v": 1, "index": 2 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A5" }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B7" },
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "studio.setRollback", "v": 1, "index": 2 },
+                {
+                  "type": "batch",
+                  "v": 1,
+                  "ops": [
+                    {
+                      "type": "feature.add",
+                      "v": 1,
+                      "feature": {
+                        "type": "box",
+                        "typeVersion": 1,
+                        "name": "M7",
+                        "params": { "size": 1 },
+                        "suppressed": false,
+                        "id": "m7"
+                      },
+                      "index": 0
+                    },
+                    { "type": "studio.setRollback", "v": 1, "index": 3 }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "label": "batch",
+        "time": 8
+      },
+      {
+        "seq": 9,
+        "kind": "redo",
+        "target": 7,
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B7" },
+            {
+              "type": "feature.add",
+              "v": 1,
+              "feature": {
+                "type": "box",
+                "typeVersion": 1,
+                "name": "M7",
+                "params": { "size": 1 },
+                "suppressed": false,
+                "id": "m7"
+              },
+              "index": 0
+            }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m7" },
+                { "type": "studio.setRollback", "v": 1, "index": 2 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A5" }
+          ]
+        },
+        "label": "batch",
+        "time": 9
+      },
+      {
+        "seq": 10,
+        "kind": "undo",
+        "target": 7,
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m7" },
+                { "type": "studio.setRollback", "v": 1, "index": 2 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A5" }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B7" },
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "studio.setRollback", "v": 1, "index": 2 },
+                {
+                  "type": "batch",
+                  "v": 1,
+                  "ops": [
+                    {
+                      "type": "feature.add",
+                      "v": 1,
+                      "feature": {
+                        "type": "box",
+                        "typeVersion": 1,
+                        "name": "M7",
+                        "params": { "size": 1 },
+                        "suppressed": false,
+                        "id": "m7"
+                      },
+                      "index": 0
+                    },
+                    { "type": "studio.setRollback", "v": 1, "index": 3 }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "label": "batch",
+        "time": 10
+      },
+      {
+        "seq": 11,
+        "kind": "do",
+        "op": { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A11" },
+        "inverse": { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A5" },
+        "label": "feature.rename",
+        "time": 11
+      },
+      {
+        "seq": 12,
+        "kind": "do",
+        "op": {
+          "type": "feature.add",
+          "v": 1,
+          "feature": {
+            "type": "box",
+            "typeVersion": 1,
+            "name": "N12",
+            "params": { "size": 1 },
+            "suppressed": false,
+            "id": "n12"
+          },
+          "index": 1
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.remove", "v": 1, "featureId": "n12" },
+            { "type": "studio.setRollback", "v": 1, "index": 2 }
+          ]
+        },
+        "label": "feature.add",
+        "time": 12
+      },
+      {
+        "seq": 13,
+        "kind": "do",
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B13" },
+            {
+              "type": "feature.add",
+              "v": 1,
+              "feature": {
+                "type": "box",
+                "typeVersion": 1,
+                "name": "M13",
+                "params": { "size": 1 },
+                "suppressed": false,
+                "id": "m13"
+              },
+              "index": 0
+            }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m13" },
+                { "type": "studio.setRollback", "v": 1, "index": 3 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A11" }
+          ]
+        },
+        "label": "batch",
+        "time": 13
+      },
+      {
+        "seq": 14,
+        "kind": "undo",
+        "target": 13,
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m13" },
+                { "type": "studio.setRollback", "v": 1, "index": 3 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A11" }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B13" },
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "studio.setRollback", "v": 1, "index": 3 },
+                {
+                  "type": "batch",
+                  "v": 1,
+                  "ops": [
+                    {
+                      "type": "feature.add",
+                      "v": 1,
+                      "feature": {
+                        "type": "box",
+                        "typeVersion": 1,
+                        "name": "M13",
+                        "params": { "size": 1 },
+                        "suppressed": false,
+                        "id": "m13"
+                      },
+                      "index": 0
+                    },
+                    { "type": "studio.setRollback", "v": 1, "index": 4 }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "label": "batch",
+        "time": 14
+      },
+      {
+        "seq": 15,
+        "kind": "redo",
+        "target": 13,
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B13" },
+            {
+              "type": "feature.add",
+              "v": 1,
+              "feature": {
+                "type": "box",
+                "typeVersion": 1,
+                "name": "M13",
+                "params": { "size": 1 },
+                "suppressed": false,
+                "id": "m13"
+              },
+              "index": 0
+            }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m13" },
+                { "type": "studio.setRollback", "v": 1, "index": 3 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A11" }
+          ]
+        },
+        "label": "batch",
+        "time": 15
+      },
+      {
+        "seq": 16,
+        "kind": "undo",
+        "target": 13,
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m13" },
+                { "type": "studio.setRollback", "v": 1, "index": 3 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A11" }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B13" },
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "studio.setRollback", "v": 1, "index": 3 },
+                {
+                  "type": "batch",
+                  "v": 1,
+                  "ops": [
+                    {
+                      "type": "feature.add",
+                      "v": 1,
+                      "feature": {
+                        "type": "box",
+                        "typeVersion": 1,
+                        "name": "M13",
+                        "params": { "size": 1 },
+                        "suppressed": false,
+                        "id": "m13"
+                      },
+                      "index": 0
+                    },
+                    { "type": "studio.setRollback", "v": 1, "index": 4 }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "label": "batch",
+        "time": 16
+      },
+      {
+        "seq": 17,
+        "kind": "do",
+        "op": { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A17" },
+        "inverse": { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A11" },
+        "label": "feature.rename",
+        "time": 17
+      },
+      {
+        "seq": 18,
+        "kind": "do",
+        "op": {
+          "type": "feature.add",
+          "v": 1,
+          "feature": {
+            "type": "box",
+            "typeVersion": 1,
+            "name": "N18",
+            "params": { "size": 1 },
+            "suppressed": false,
+            "id": "n18"
+          },
+          "index": 1
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.remove", "v": 1, "featureId": "n18" },
+            { "type": "studio.setRollback", "v": 1, "index": 3 }
+          ]
+        },
+        "label": "feature.add",
+        "time": 18
+      },
+      {
+        "seq": 19,
+        "kind": "do",
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B19" },
+            {
+              "type": "feature.add",
+              "v": 1,
+              "feature": {
+                "type": "box",
+                "typeVersion": 1,
+                "name": "M19",
+                "params": { "size": 1 },
+                "suppressed": false,
+                "id": "m19"
+              },
+              "index": 0
+            }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m19" },
+                { "type": "studio.setRollback", "v": 1, "index": 4 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A17" }
+          ]
+        },
+        "label": "batch",
+        "time": 19
+      },
+      {
+        "seq": 20,
+        "kind": "undo",
+        "target": 19,
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m19" },
+                { "type": "studio.setRollback", "v": 1, "index": 4 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A17" }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B19" },
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "studio.setRollback", "v": 1, "index": 4 },
+                {
+                  "type": "batch",
+                  "v": 1,
+                  "ops": [
+                    {
+                      "type": "feature.add",
+                      "v": 1,
+                      "feature": {
+                        "type": "box",
+                        "typeVersion": 1,
+                        "name": "M19",
+                        "params": { "size": 1 },
+                        "suppressed": false,
+                        "id": "m19"
+                      },
+                      "index": 0
+                    },
+                    { "type": "studio.setRollback", "v": 1, "index": 5 }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "label": "batch",
+        "time": 20
+      },
+      {
+        "seq": 21,
+        "kind": "redo",
+        "target": 19,
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B19" },
+            {
+              "type": "feature.add",
+              "v": 1,
+              "feature": {
+                "type": "box",
+                "typeVersion": 1,
+                "name": "M19",
+                "params": { "size": 1 },
+                "suppressed": false,
+                "id": "m19"
+              },
+              "index": 0
+            }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m19" },
+                { "type": "studio.setRollback", "v": 1, "index": 4 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A17" }
+          ]
+        },
+        "label": "batch",
+        "time": 21
+      },
+      {
+        "seq": 22,
+        "kind": "undo",
+        "target": 19,
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m19" },
+                { "type": "studio.setRollback", "v": 1, "index": 4 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A17" }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B19" },
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "studio.setRollback", "v": 1, "index": 4 },
+                {
+                  "type": "batch",
+                  "v": 1,
+                  "ops": [
+                    {
+                      "type": "feature.add",
+                      "v": 1,
+                      "feature": {
+                        "type": "box",
+                        "typeVersion": 1,
+                        "name": "M19",
+                        "params": { "size": 1 },
+                        "suppressed": false,
+                        "id": "m19"
+                      },
+                      "index": 0
+                    },
+                    { "type": "studio.setRollback", "v": 1, "index": 5 }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "label": "batch",
+        "time": 22
+      },
+      {
+        "seq": 23,
+        "kind": "do",
+        "op": { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A23" },
+        "inverse": { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A17" },
+        "label": "feature.rename",
+        "time": 23
+      },
+      {
+        "seq": 24,
+        "kind": "do",
+        "op": {
+          "type": "feature.add",
+          "v": 1,
+          "feature": {
+            "type": "box",
+            "typeVersion": 1,
+            "name": "N24",
+            "params": { "size": 1 },
+            "suppressed": false,
+            "id": "n24"
+          },
+          "index": 1
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.remove", "v": 1, "featureId": "n24" },
+            { "type": "studio.setRollback", "v": 1, "index": 4 }
+          ]
+        },
+        "label": "feature.add",
+        "time": 24
+      },
+      {
+        "seq": 25,
+        "kind": "do",
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B25" },
+            {
+              "type": "feature.add",
+              "v": 1,
+              "feature": {
+                "type": "box",
+                "typeVersion": 1,
+                "name": "M25",
+                "params": { "size": 1 },
+                "suppressed": false,
+                "id": "m25"
+              },
+              "index": 0
+            }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m25" },
+                { "type": "studio.setRollback", "v": 1, "index": 5 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A23" }
+          ]
+        },
+        "label": "batch",
+        "time": 25
+      },
+      {
+        "seq": 26,
+        "kind": "undo",
+        "target": 25,
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m25" },
+                { "type": "studio.setRollback", "v": 1, "index": 5 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A23" }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B25" },
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "studio.setRollback", "v": 1, "index": 5 },
+                {
+                  "type": "batch",
+                  "v": 1,
+                  "ops": [
+                    {
+                      "type": "feature.add",
+                      "v": 1,
+                      "feature": {
+                        "type": "box",
+                        "typeVersion": 1,
+                        "name": "M25",
+                        "params": { "size": 1 },
+                        "suppressed": false,
+                        "id": "m25"
+                      },
+                      "index": 0
+                    },
+                    { "type": "studio.setRollback", "v": 1, "index": 6 }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "label": "batch",
+        "time": 26
+      },
+      {
+        "seq": 27,
+        "kind": "redo",
+        "target": 25,
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B25" },
+            {
+              "type": "feature.add",
+              "v": 1,
+              "feature": {
+                "type": "box",
+                "typeVersion": 1,
+                "name": "M25",
+                "params": { "size": 1 },
+                "suppressed": false,
+                "id": "m25"
+              },
+              "index": 0
+            }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m25" },
+                { "type": "studio.setRollback", "v": 1, "index": 5 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A23" }
+          ]
+        },
+        "label": "batch",
+        "time": 27
+      },
+      {
+        "seq": 28,
+        "kind": "undo",
+        "target": 25,
+        "op": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "feature.remove", "v": 1, "featureId": "m25" },
+                { "type": "studio.setRollback", "v": 1, "index": 5 }
+              ]
+            },
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A23" }
+          ]
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.rename", "v": 1, "featureId": "a", "name": "B25" },
+            {
+              "type": "batch",
+              "v": 1,
+              "ops": [
+                { "type": "studio.setRollback", "v": 1, "index": 5 },
+                {
+                  "type": "batch",
+                  "v": 1,
+                  "ops": [
+                    {
+                      "type": "feature.add",
+                      "v": 1,
+                      "feature": {
+                        "type": "box",
+                        "typeVersion": 1,
+                        "name": "M25",
+                        "params": { "size": 1 },
+                        "suppressed": false,
+                        "id": "m25"
+                      },
+                      "index": 0
+                    },
+                    { "type": "studio.setRollback", "v": 1, "index": 6 }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "label": "batch",
+        "time": 28
+      },
+      {
+        "seq": 29,
+        "kind": "do",
+        "op": { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A29" },
+        "inverse": { "type": "feature.rename", "v": 1, "featureId": "a", "name": "A23" },
+        "label": "feature.rename",
+        "time": 29
+      },
+      {
+        "seq": 30,
+        "kind": "do",
+        "op": {
+          "type": "feature.add",
+          "v": 1,
+          "feature": {
+            "type": "box",
+            "typeVersion": 1,
+            "name": "N30",
+            "params": { "size": 1 },
+            "suppressed": false,
+            "id": "n30"
+          },
+          "index": 1
+        },
+        "inverse": {
+          "type": "batch",
+          "v": 1,
+          "ops": [
+            { "type": "feature.remove", "v": 1, "featureId": "n30" },
+            { "type": "studio.setRollback", "v": 1, "index": 5 }
+          ]
+        },
+        "label": "feature.add",
+        "time": 30
+      }
+    ]
+  }
+}

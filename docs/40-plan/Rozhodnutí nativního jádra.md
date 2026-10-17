@@ -19,9 +19,12 @@ Značka **⚠ k revizi** = rozhodnutí, u kterého si nejsem jistý nebo které 
 
 ## Shrnutí pro revizi
 
+- **Revize architektury serveru po M44:** návrh struktury knihoven a odložené body jsou v N110.
 - **Pavel 2026-10-17: návrh a architekturu serveru projdeme spolu po sérii** (třídy, hranice knihoven v `server/src/`, porty). Do té doby platí OOP a KISS (N12) a strukturální rozhodnutí jsou v seznamu níže.
 
 - **Plány M41, M43, M44.1 (2026-10-17), k revizi:** N35 (STORAGE → znovunačtení místo inverze), N37 (gRPC `DocumentService` do M45), N38 (migrace z IndexedDB jen existujícím exportem a `tinycad-import`), N47 (řešení skici před dispečerem, ne v handleru).
+
+- **Plány M45 a M46 (2026-10-17), k revizi:** N56 (tři doplňky `.proto`), N63 (optimistické zrcadlo dokumentu v klientovi – v klientovi zůstanou TS handlery operací i po M47), N65 (lokální skica při `SKETCH_NOT_SOLVED` jen do konce transakce), N67 (vlastní pravidla validace featur se v dialogu u pole neukážou), N70 (spadlá karta drží zámek až 10 min), N71 (tlačítko přenosu z IndexedDB místo jen `tinycad-import`).
 
 _(doplňuje se průběžně)_
 
@@ -108,3 +111,109 @@ Zafixované hlavičky navíc: `server/src/storage/include/tinycad/storage/{store
 - **N50 – Triplet `arm64-linux-release`** (jen release build závislostí, poloviční čas) a staticky slinkovaná binárka v obrazu 206 MB.
 - **N51 – 2D geometrie má vlastní `ErrorCode`** (`InvalidInput`, `OperationFailed`, `Internal`) a výsledné typy (`CurveHit`, `FilletArc`, `OffsetCurve`) v `tinycad/geometry/geometry.hpp`, aby nezávisela na knihovně jádra.
 - **N52 – Envoy přijme cestu s předponou `/api` i bez ní** (Vite proxy předponu odstraňuje).
+
+## Plány M45 a M46 (sezení přes gRPC a klient)
+
+Zafixované hlavičky navíc: `server/src/session/include/tinycad/session/*.hpp`. TS kontrakty M46 jsou v [[M46-klient-nad-read-modelem#TS kontrakty (zafixuje úkol 1)]]. Plány v [[M45-sezeni-pres-grpc|M45]] a [[M46-klient-nad-read-modelem|M46]]; spec 14 upravená ve stejném kroku.
+
+### M45 – Sezení přes gRPC
+
+- **N53 – Jedna knihovna `tinycad_session` s doménou sezení i gRPC adaptéry; read model rovnou do zpráv `tinycad.v1`.** `SessionServiceImpl` a `DocumentServiceImpl` jsou v ní vedle `RuntimeDocument`, `SessionManager` a `ReadModelBuilder`. Proč: read model je kontrakt, C++ zrcadlo zpráv by byl druhý zdroj pravdy a převod navíc (KISS); oblast „sezení“ je služba, stejně jako `tinycad_service` pro `GeometryService`.
+- **N54 – Vlákna: synchronní gRPC server, zámek manageru → zámek běhového dokumentu → zámek bufferu událostí.** Jedno `OcctKernel`, `Regenerator` a `PlanegcsSolver` na běhový dokument; každá metoda `RuntimeDocument` drží jeho mutex celou dobu, změny nikdy neběží pod zámkem manageru; `WatchSession` blokuje své vlákno v `EventRing::waitAfter`. Proč: jádro smí mít jednoho volajícího (N13) a dokumenty jsou na sobě nezávislé; asynchronní gRPC API by pro jednoho uživatele bylo jen složitější.
+- **N55 – Generace read modelu = čítač změn běhového dokumentu, ne počet `Regenerator::run`.** Regenerace běží při každém read modelu s `input_of` toho požadavku, cache podle identity ji zlevní. Proč: `input_of` je per požadavek a sezení, kdežto generace má růst jen se změnou dokumentu (události `changed`, zahození staršího read modelu v klientovi).
+- **N56 ⚠ – Tři doplňky kontraktu:** `OpenSessionRequest.resume_session_id` (reload karty pokračuje v témže sezení se zámkem), `BodyView.face_planes` (roviny rovinných ploch: klient bez jádra otevírá skicu na ploše synchronně) a `ERROR_REASON_DOCUMENT_OPEN` (smazání otevřeného dokumentu a přejmenování při otevřené transakci odmítne jako dnes prohlížeč). Jen přidaná pole a hodnota, `buf breaking` projde. ⚠ protože jde o změnu kontraktu zafixovaného v M39.
+- **N57 – Otisk požadavku = hex SHA-256 deterministické serializace bez `session_id`, `operation_id` a `read`, z požadavku klienta.** Stejný řetězec jde do SQLite i do paměti sezení. Proč: opakování s jinými `known_meshes` nebo z nového sezení po restartu je tentýž požadavek; operace po opětovném vyřešení skici se může lišit v posledních bitech a nesmí z opakování udělat `OPERATION_ID_REUSED`.
+- **N58 – Idempotence kroků transakce = FIFO posledních 64 úspěšných `operation_id` s otiskem v sezení, kontrola pod zámkem dokumentu.** Opakování odpoví aktuálním read modelem bez nového použití; neúspěšný krok se při opakování vykoná znovu. Ids trvalých požadavků a kroků se křížem nekontrolují (chyba klienta). Proč: nejjednodušší, co splní „dvakrát `Apply` = jedno použití“ i při souběhu původního požadavku a jeho opakování po timeoutu klienta.
+- **N59 – Timeout nečinnosti uklízí vlákno `reaper` každých 30 s; poslední sezení uvolní běhový dokument i s jádrem.** V testech se volá `reapIdle` s falešnými hodinami. Běhový dokument, na kterém ještě běží RPC, dožije v jeho `shared_ptr`, ale nemá zámek a už nezapíše. Proč: deterministické testy a uvolnění paměti OCCT po zavření dokumentu.
+- **N60 – Sítě se tesselují jednou na `(content_version, kvalita)` v mezipaměti běhového dokumentu**, po každé regeneraci ořezané na verze posledního výsledku. Proč: více sezení i každý další read model sdílí jednu tessellaci; verze jiného `input_of` se případně tesseluje znovu (KISS).
+- **N61 – Data v `TINYCAD_DATA_DIR` (výchozí `/data`) na svazku `tinycad-data`, timeout v `TINYCAD_SESSION_IDLE_SECONDS` (600).** Epocha procesu z M39 zaniká, restart odliší prefix `content_version` (N43). Proč: dokumenty musí přežít `docker compose restart` a e2e potřebuje vlastní adresář dat (N72).
+- **N62 – Spec 14 upravená podle dřívějších rozhodnutí:** formát `content_version` (N43), `STORAGE` → znovunačtení a `NO_TRANSACTION` po zopakovaném `Commit` (N35), opětovné řešení skici před dispečerem i pro `ApplyTransient` a `batch` (N47), směrování `RenameDocument` (N37), otisk (N57), generace (N55), obnovení sezení a `DOCUMENT_OPEN` (N56), primární jméno plochy v `face_names`.
+
+### M46 – Klient nad read modelem
+
+- **N63 ⚠ – Klient drží optimistické zrcadlo dokumentu.** `MirrorDocument` = dokument posledního read modelu + odeslané nepotvrzené změny použité lokálně TS handlery; `RemoteDispatcher` implementuje dnešní `OperationDispatcher`, `Transaction` a `UndoManager` synchronně a každá odpověď zrcadlo přestaví. Proč: dialog featury, skicář i strom čtou dokument hned po `apply`/`dispatch`; s asynchronními porty by se musely přepsat, takto zůstanou beze změny a server je dál autorita. ⚠ protože v klientovi zůstanou handlery operací, `applyOperation` a typy operací i po [[M47-uklid-a-dokonceni|M47]] (ADR 0030 bod 9 počítal s odstraněním celého `ops`); M47 z `ops` odstraní jen log, přehrání, upcast a čtení záznamů.
+- **N64 – Undo a redo nejsou optimistické.** Čekají na odpověď (jedna cesta na server); `canUndo`/`canRedo` z read modelu. Proč: inverze záznamů logu klient nemá a undo není častá interaktivní akce.
+- **N65 ⚠ – Lokální skica při `SKETCH_NOT_SOLVED` zůstane v zrcadle do dalšího přijatého `setParams` téže skici nebo do konce transakce.** `Commit` zapíše poslední serverem přijatý stav. Proč: splní Q103 („klient ponechá lokální skicu“) jedním pravidlem fasády; ⚠ protože nevyřešená lokální změna se při `Commit` neuloží (UI to hlásí klíčem `sketch.notSolved`).
+- **N66 – `render` beze změny: `MeshOps` nad mezipamětí sítí podle `content_version`.** Každá verze dostane stálý syntetický `ShapeHandle`; identita handle = identita verze, takže `syncLayers`, náhled i `SceneSync` fungují jako dnes. Proč: port `MeshOps` už existuje a výměna sítí podle identity handle je přesně výměna podle verze (Q100).
+- **N67 ⚠ – Schémata v klientovi z `FeatureTypeDescriptor` s `validate` = `validateAgainstSchema`.** `defaults` z popisu, bez `migrate`, `visibleWhen` jako funkce nad daty; z `FeaturePlugin` se v serverové cestě berou jen `tools`, `manipulators` a `messages` (typ pluginu zúží M47). Proč: Q098 – validace rozhoduje server, generická kontrola je jen pohodlí dialogu. ⚠ protože vlastní pravidla featur (mimo generická) se v dialogu u pole neukážou, jen jako červená featura v read modelu.
+- **N68 – Po M46 je server jediná cesta aplikace (konec N3).** `openAppSession` i seznam dokumentů jdou přes server, `VITE_CORE_URL` jen přepisuje výchozí `/api`, `E2E_CORE` zaniká a `test:e2e` běží proti Compose. Lokální `createAppSession`, `doc-lock`, IDB katalog a jejich testy zůstanou v `src/` nezapojené, dokud je M47 nesmaže. Proč: dvě cesty v kompozičním kořeni a dvojí e2e by zdvojily práci a ADR 0030 („do konce M46 WASM běží“) je splněno.
+- **N69 – Stav spojení se mapuje na dnešní `KernelUiState` a `PersistenceStatus`.** Připojuji = `starting`, obnovuji = `restarting`, nedostupný = `unavailable`, `retryKernel` = nový pokus; změny v letu = `pending`, opakování = `error`, vzdáno s nepotvrzenými změnami = `failed`. UI dostane jen nové texty. Proč: titulek, banner a tlačítko „zkusit znovu“ už existují.
+- **N70 ⚠ – Sezení přežije reload karty přes `sessionStorage` a `resume_session_id`; při `pagehide` best-effort `CloseSession` s `keepalive`.** Proč: dnešní Web Lock se uvolní hned, serverový zámek by po reloadu nechal kartu jen pro čtení. ⚠ protože karta, která spadne bez `CloseSession`, drží zámek až do timeoutu (10 min) a jiná karta je do té doby jen pro čtení.
+- **N71 ⚠ – Přenos dokumentů z IndexedDB tlačítkem na úvodní obrazovce (upřesnění N38).** Každý dokument se exportuje dnešním `exportStoredDocument` a pošle `ImportDocument` s `operation_id` = `import:<sha256>` (opakování nezdvojí); IndexedDB se nemaže. Proč: M47 IndexedDB z klienta odstraní, takže pohodlný přenos jde jen v M46; je to jeden malý modul a tlačítko, `tinycad-import` zůstává pro soubory. ⚠ protože N38 tlačítko nechtěl – pokud Pavel dokumenty v prohlížeči nemá, úkol se vypustí.
+- **N72 – E2E proti jednomu Compose s vlastním projektem a dočasnými daty; každý test ve vlastním dokumentu.** `docker-compose.e2e.yml` (`tinycad-e2e-<port>`, `tmpfs`, vlastní port Envoy), fixture vytvoří dokument přes `DocumentService`; testy seznamu tvrdí jen o svých dokumentech. Proč: workery sdílejí server (dřív měl každý svou IndexedDB) a e2e nesmí sahat na Pavlova data.
+- **N73 – Historie úprav přes úzký port `HistoryLog`** (záznamy bez operací s `opType`, zásobníky ze serveru) místo `OperationLogReader`. Jediná změna rozhraní `interaction` v M46. Proč: `LogEntryView` operace nenese a historie je nepotřebuje.
+- **N74 – `remote` smí navíc importovat `document` a `ops` (typy operací, `OP_VERSION`).** Upraví se `.dependency-cruiser.cjs` a tabulka ve [[01-architektura]]. Proč: převody read modelu a operací vrací doménové typy, které app předává portům beze změny.
+- **N75 – Zlatý soubor s popisy typů ze serveru** (původně `test/shared-cases/schema/feature-types.json`, podle N88 `test/golden/feature-types.json`). Zapíše ho C++ test M45, TS test M46 z něj staví schémata a pouští sdílené případy `schema.visibleWhen`. Proč: jediný způsob, jak ověřit převod popisu v obou jazycích na stejných datech bez běžícího serveru v unit testech.
+
+### Schválení plánu M45 a M46 (hlavní sezení)
+
+- **N76 ⚠ – Návrhy plánovače M45/M46 přijaté:** doplňky kontraktu N56 (jen přidávají, `buf breaking` je pustí), optimistická kopie dokumentu v klientovi N63 (zužuje [[0030-nativni-jadro-pres-grpc|ADR 0030]] bod 9 – handlery operací zůstanou v klientovi i po M47), N65, N67 a N70 jako méně jisté chování k revizi, tlačítko importu z IndexedDB N71 zůstává (levné; nevím, jestli Pavel v IndexedDB dokumenty má). Proč: bez optimistické kopie by se musel přepsat dialog featur, skicář, strom i vykreslování najednou; s ní se mění jen adaptéry za porty.
+
+## M42 – Jádro OCCT nativně
+
+- **N77 ⚠ – 2D základ (Geom2d křivky, obálky, kontroly křivek) je zatím zdvojený** v `tinycad_kernel` a `tinycad_geometry`. Proč: `tinycad_geometry` ho veřejně nenabízí a stopy běžely souběžně; sloučit do veřejné pomocné knihovny při společné revizi architektury serveru.
+- **N78 – Výpisy OCCT (statistiky STEP překladače) ztlumené jednou za proces** na úroveň varování. Proč: zahlcovaly stdout při každém exportu; centrálně v `app` při M45.
+- **N79 – Výjimky OCCT převádí každá metoda jádra vlastním `try/catch`** (ne šablonou), `Build` u zaoblení a sražení a zápis STEP jako `OperationFailed`, ostatní `Internal` – stejně jako TS.
+
+## M40 – Dokument a operace v C++
+
+- **N80 – `invert` a `apply` handlerů vrací `Result` s cestou chyby** (`featureId`, `index`, `ops[i].…`), místo výjimky jako v TS. Proč: operace přicházejí od klienta po síti; nesedící operace je očekávaná chyba (`INVALID_OPERATION`), ne chyba programu.
+- **N81 – `Dispatcher::begin` vrací `unique_ptr<Transaction>`, zničení otevřené transakce ji zruší** (RAII). Proč: transakce nesmí přežít dispečer ani výjimku v sezení.
+- **N82 – Property test přehrání: 200 semínek vlastního generátoru** (TS 1000 běhů fast-check). Proč: rychlost buildu v Dockeru; úmyslná chyba rollback baru se chytila.
+
+## M44 – Model skici a řešič v C++
+
+- **N83 – planegcs ze Salusoft89 commitu `9d26bae`** (značka `v1.3.0` neexistuje; commit odpovídá npm 1.3.0, `gcs_wrapper.ts` bajt po bajtu shodný s `node_modules`). Obal `GcsSystem` vyrenderovaný ručně ze šablony upstreamu (bez Embind), dva malé patche (`Console.h`, `gcs_system.h`), licence LGPL 2.1 v `server/third_party/planegcs/`.
+- **N84 – planegcs a adaptér řešiče se překládají s `-ffp-contract=off`.** Proč: WebAssembly nemá fused multiply-add; bez toho by GCC na arm64 slučoval `a*b+c` a výsledky by se od klienta lišily víc.
+- **N85 ⚠ – Řešič „bit po bitu jako WASM“ nejde zaručit v plném rozsahu.** Numericky chaotické mezní případy (tečna úsečky a oblouku při tažení) se mohou lišit stavem `ok`/`failed`; sdílené případy jsou zelené. Podle [[Q103 Skica, kterou server nevyřeší|Q103]] platí výsledek serveru.
+
+## M46 – úkol 1 (základy klienta, souběžně s M45)
+
+- **N86 – Selhaný `fetch` je `UNAVAILABLE`** (connect-web ho hlásí jako `Unknown` s příčinou `TypeError`), takže se opakuje se stejným `operation_id`. Proč: jinak by výpadek sítě (e2e `setOffline`) klient neopakoval.
+- **N87 – Schéma featury z `FeatureTypeDescriptor` má `migrate`, který odmítne.** Proč: registr vyžaduje `migrate` u verze > 1 (transform v3); data ze serveru jsou vždy v aktuální verzi, migruje jen server.
+- **N88 – Zlatý soubor popisů typů je `test/golden/feature-types.json`**, ne v `test/shared-cases/schema/` (N75 upřesněno). Proč: kostra sdílených případů čte každý JSON v oblasti jako případ.
+- **N89 – `DocumentView.created_at_ms`** (jen přidané pole). Proč: zrcadlo dokumentu v klientovi potřebuje celé `DocumentMeta`.
+- **N90 – Typy klienta zvolené implementátorem úkolu 1 přijaté** (`PlaneData`, `AxisData`, `HistoryData`, `RemoteDocumentSummary`, `Timers`, `ReadModelView`); sítě se z `bytes` vždy kopírují do vlastního bufferu.
+
+## M45 úkol 1 a M46 úkol 4
+
+- **N91 – Index plochy a hrany v `face_names`, `edge_names` a `face_planes` je `SubShapeIndex.index` od 0**, ne `i + 1` (spec 14 a komentáře `.proto` opravené). Proč: `SubShapeIndex` je od 0 v TS i v C++, `i + 1` byl překlep návrhu.
+- **N92 – Stav ukládání `failed` při `offline` se řídí čekajícími změnami zrcadla** (fasáda, úkol 3), ne frontou sezení – fronta po vyčerpání pokusů změny vyřeší jako neúspěšné a `pending` klesne na 0, i když zrcadlo změny zahodilo. Zapojení v úkolu 5 M46.
+- **N93 – `retain` mezipaměti sítí nezahodí verze, které nese požadavek v letu** (`known_meshes`), jinak by server síť neposlal a klient by ji neměl. Zapojení v úkolu 5 M46.
+- **N94 – Klíč `body_id` z `.proto` se v JSON operace jmenuje `body`** (výjimka z pravidla „pole 1:1 v camelCase“, spec 04 a handlery M40 čtou `body`). Otisk požadavku přes OpenSSL `EVP_Digest` (`libcrypto` je v obrazu jako závislost gRPC).
+- **N95 – Zlatý soubor popisů typů zapisuje C++ test** (`TINYCAD_UPDATE_GOLDEN=1`), protobuf JSON se jmény polí z `.proto` ve tvaru `{ "feature_types": [...] }`; `test/golden/` je v `.dockerignore` výjimkou a v `.prettierignore`.
+
+## M46 úkol 3
+
+- **N96 – `applyOperation` se exportuje z `ops`** (úkol 5) a fasáda klienta ho použije místo obchvatu přes jednorázový dispečer. Proč: `ops` v klientovi zůstává (N63); zmrazení dovoluje změnu API, kterou vyžaduje přechod na server. Spec 04 doplněna při úkolu 5.
+- **N97 – Fasáda nesloučí kroky transakce přes `merge`** (každý `apply` je krok s inverzí, aby šel odebrat právě odmítnutý krok); prozatímní záznam `commit` je `batch` nepřechodných kroků. Read model ze `refresh` při čekajících změnách se odloží do vyprázdnění fronty (jinak by se změna v letu použila dvakrát).
+- **N98 – Selhaný `begin` nechá lokální transakci otevřenou, její kroky skončí `NO_TRANSACTION` a zrcadlo se vrátí na základ; selhaný `commit` se jen nahlásí.** Doplní se do spec 14 při M46.
+
+## M46 úkol 2
+
+- **N99 – `keepalive` při zavření karty přes interní hlavičku**, kterou transport z `createCoreTransport` odstraní a pošle `fetch` s `keepalive: true` (connect-web volbu na volání nemá).
+- **N100 – Po `SESSION_NOT_FOUND` skončí všechny čekající transakční požadavky (`begin`, `apply`, `applyTransient`, `commit`, `abort`) `NO_TRANSACTION`**; trvalé (`dispatch`, `undo`, `redo`) jdou znovu se stejným `operation_id`. Pozdní `SESSION_NOT_FOUND` z už nahrazeného sezení další sezení neotevře (druhé by bylo jen pro čtení).
+- **N101 – Slučuje se jen poslední čekající `apply` se `setParams` téže featury** (užší než plán, stejné jako slučování v `ops/transaction.ts`, nemění pořadí změn). Po vyčerpání pokusů se další čekající změny posílají dál, každá s vlastními pokusy.
+
+## M41 – Persistence v SQLite
+
+- **N102 – `openssl` výslovně ve `vcpkg.json`** (otisky SHA-256 v `storage`, `session` a `tinycad-import`); dosud byl jen závislostí gRPC, z cache se nic nepřestaví.
+- **N103 – Svazek dokumentů a práva uživatele `tinycad` v Compose patří do úkolu 5 M45**; `tinycad-import` se spouští `docker compose run --rm --entrypoint tinycad-import -v <složka>:/import core /import`.
+- **N104 ⚠ – Poškozené cíle undo v logu při otevření vyhodí výjimku** (`AssertionError` z `UndoManager`) místo `LoadError`; při importu se zachytí jako issue. Známé omezení spec 05; vrstva sezení (M45) výjimku převede na `INTERNAL`.
+- **N105 – Dočasný soubor nového dokumentu v režimu rollback journal, WAL až po přejmenování**; kontrola formátu před přepnutím do WAL; čísla v `meta` jako JSON text.
+
+## Revize architektury serveru po M44
+
+Revize (`architecture-reviewer`) nad M39–M44 a pahýly M45 nenašla porušení OOP/KISS ani holé `new`/`delete`; hlavní nálezy jsou souběh vláken pro M45, nekonzistentní chyby a duplicity.
+
+- **N106 – Pravidla vláken a zámků v [[14-protokol#Vlákna a zámky serveru]]** (pod zámkem manageru nic dlouhého, zavření bufferu událostí při uvolnění dokumentu a před vypnutím serveru, zámek procesu pro STEP). Proč: jinak `WatchSession` nikdy neskončí, vypnutí se zasekne a jedna regenerace zablokuje všechna sezení.
+- **N107 – Idempotence před řešením skici** (`PersistentDocument::lookup`), prázdný `Commit` si pamatuje sezení, **otisk z kanonického JSON** a jedna funkce `importKey` pro oba importy. Mění N57.
+- **N108 – Jedno pravidlo chyb: data zvenku nikdy nehází výjimku** – `rebuildUndoStacks` a `PersistentDocument::open` vrací `LoadError` (uzavírá N104), přehrávání nechytá `std::exception`, řešič chytá jen výjimky planegcs, `bad_alloc` všechny knihovny propouštějí. Opraví stopa A hned.
+- **N109 – Levné úklidy hned:** `tinycad_session` linkuje `tinycad_storage` (ne include cesty), solver a jádro se skládají v `app`; `as<T>()` v modelu skici s assertem; limit hloubky vnořených `batch`; `trimJs` do `core`; `document::featureJson`/`readFeature` místo kopií v `ops`; hlavička builderů ve vlastním include adresáři `tinycad_feature_builders`.
+- **N110 ⚠ – Na společnou revizi s Pavlem odloženo:** sloučení 2D základu (N77 – `tinycad_geometry` do `tinycad_kernel`, nebo knihovna `occt2d`), vrstva „runtime“ (`PersistentDocument` + `RuntimeDocument` mimo `storage`), read model psaný rovnou do protobufu (N53), `Change.entry` jako JSON mezi knihovnami, přejmenování `OperationLoadError`. Návrh struktury je v revizi; zatím se nic nepřesouvá.
+
+## M43 – Regenerace v C++
+
+- **N111 – Fillet a Chamfer sdílí jednu funkci `buildDressup`**, `NameTable` si jména seřadí sám, `#k` řadí `std::stable_sort` (porovnání s tolerancí není striktní uspořádání). Spouštěč případů `regen` bere nové `OcctKernel` na každý případ.
+- **N112 – Property test regenerace ověřuje `liveHandleCount == ownedHandleCount`** a 0 handle po zničení Regeneratoru místo počtu handle v cache (cache není zvenku vidět). Stačí: únik i předčasné uvolnění se projeví.
+

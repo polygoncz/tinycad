@@ -128,7 +128,13 @@ export type {
 export { createTopoInspector } from './topo-inspector';
 export type { TopoHover, TopoInspector } from './topo-inspector';
 export { HISTORY_LIMIT, createHistoryModel } from './history-model';
-export type { HistoryModel, HistoryRow, HistoryState } from './history-model';
+export type {
+  HistoryEntry,
+  HistoryLog,
+  HistoryModel,
+  HistoryRow,
+  HistoryState,
+} from './history-model';
 export { createDocumentNameModel } from './document-name';
 export { createDocumentListModel } from './document-list-model';
 export type {

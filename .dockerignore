@@ -1,7 +1,9 @@
 # Docker build context is the repository root (server/Dockerfile).
 # Allowlist: the core image needs only the server sources and the shared
-# test cases (test/shared-cases, run by the GoogleTest suite).
+# test cases (test/shared-cases, run by the GoogleTest suite) and the golden
+# files shared with TS (test/golden).
 *
 !server/
 !test/shared-cases/
+!test/golden/
 server/build/

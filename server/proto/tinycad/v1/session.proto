@@ -144,6 +144,10 @@ message OpenSessionRequest {
   // Tessellation of every mesh of the session; unset = the server default.
   MeshQuality mesh_quality = 2;
   ReadModelOptions read = 3;
+  // The session_id this tab had before a reload (sessionStorage, N56, N70). When it names a live
+  // session of the same document, that session is returned with its lease; an unknown, closed or
+  // foreign id opens a new session, without an error. Empty = a new session.
+  string resume_session_id = 4;
 }
 
 message OpenSessionResponse {

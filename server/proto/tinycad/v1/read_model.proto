@@ -46,6 +46,8 @@ message DocumentView {
   uint32 rollback_index = 5;
   // Metadata of bodies by BodyId (spec 03 "Metadata těles"); a body without metadata is absent.
   map<string, BodyMeta> body_meta = 6;
+  // DocumentMeta.createdAt in ms since the epoch (the client mirror needs the whole meta, N89).
+  int64 created_at_ms = 7;
 }
 
 message BodyMeta {
@@ -123,11 +125,15 @@ message BodyView {
   // Changes with the shape (Q099); the key of the mesh cache of the client.
   string content_version = 4;
   // Topological names (spec 08) by index of the subshape: face_names[i] is the name of the face
-  // with SubShapeIndex.index i + 1; '' = no name. The order of faces and edges is that of Mesh.
+  // with SubShapeIndex.index i (0-based, N91); '' = no name. The order of faces and edges is that of Mesh.
   repeated string face_names = 5;
   repeated string edge_names = 6;
   // Only when the client does not know content_version.
   Mesh mesh = 7;
+  // The plane of every planar face by index (as face_names: key i is the face with
+  // SubShapeIndex.index i, 0-based, N91); non-planar faces are absent (N56). The client has no kernel and
+  // opens a sketch on a face synchronously.
+  map<uint32, Plane> face_planes = 8;
 }
 
 // A tessellated body (kernel MeshData). Arrays are little-endian: positions, normals and

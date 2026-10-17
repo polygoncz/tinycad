@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 43
 aliases:
   - M43
@@ -13,8 +13,8 @@ specs:
 depends_on:
   - "[[M40-dokument-a-operace-v-cpp]]"
   - "[[M42-jadro-occt-nativne]]"
-started:
-finished:
+started: 2026-10-17
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-17
@@ -34,11 +34,11 @@ updated: 2026-10-17
 
 ## Úkoly
 
-- [ ] 1. Kostra `tinycad_regen` a `tinycad_feature_builders`, stav, tabulka jmen a sledované jádro
-- [ ] 2. Řešení referencí, roviny ploch, operace tělesa a testovací podpora (souběžně s 3)
-- [ ] 3. `Regenerator`: cache, statusy, kotvy, sweep a `content_version` (souběžně s 2)
-- [ ] 4. Buildery Box, Cylinder, Boolean, Transform, Fillet, Chamfer a spouštěč sdílených případů `regen` (souběžně s 5)
-- [ ] 5. Buildery Extrude a Revolve a property test regenerace (souběžně s 4)
+- [x] 1. Kostra `tinycad_regen` a `tinycad_feature_builders`, stav, tabulka jmen a sledované jádro
+- [x] 2. Řešení referencí, roviny ploch, operace tělesa a testovací podpora (souběžně s 3)
+- [x] 3. `Regenerator`: cache, statusy, kotvy, sweep a `content_version` (souběžně s 2)
+- [x] 4. Buildery Box, Cylinder, Boolean, Transform, Fillet, Chamfer a spouštěč sdílených případů `regen` (souběžně s 5)
+- [x] 5. Buildery Extrude a Revolve a property test regenerace (souběžně s 4)
 
 Úkol 1 jde první a sám a založí všechny zdrojové soubory obou knihoven s pahýly (N30), úkoly 2 a 3 pak běží souběžně, po jejich sloučení souběžně 4 a 5. Builder skici a sdílené případy se skicami jsou v [[M44.1-builder-skici-na-serveru|M44.1]] (N46).
 
@@ -121,4 +121,9 @@ Regenerace s cache podle identity ukazatele, mark & sweep nad nativním jádrem,
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+_Návrh Clauda (samostatný běh, stopa B)._
+
+- `tinycad_regen` (synchronní Regenerator s cache, mark & sweep, `content_version`, topologické pojmenování) a buildery osmi featur v `tinycad_feature_builders`; začal souběžně s M40 na hlavičkách dokumentu a dokončil se po jeho sloučení.
+- Sdílené případy `regen` bez skici 24/24 v C++; 163 testů regenerace, 53 builderů.
+- Property test (100 semínek) ověřuje cache proti čerstvé regeneraci a počet handle; jeho kontrola pokrytí odhalila, že generátor nikdy nevyrobil fungující Boolean – osvědčené pravidlo „každá kontrola musí umět selhat“ i pro generátory.
+- Rozdíl proti TS: jména po booleanu nad OCCT jsou nadmnožina jmen z FakeKernelu (zachová jména všech přeživších ploch).
