@@ -225,3 +225,8 @@ Revize (`architecture-reviewer`) nad M39–M44 a pahýly M45 nenašla porušení
 - **N116 – Souběžné buildy C++ v Dockeru (8 GB RAM) s nejvýš `-j3` na agenta.** Proč: při `-j6` čtyř souběžných buildů padal kompilátor na nedostatek paměti.
 - **N117 – Čtení logu a souborů nekopíruje surový JSON před kontrolou** (kopie v nlohmann je rekurzivní; 100 000 vnořených `batch` shodilo server na přetečení zásobníku). Nalezeno při implementaci N113.
 
+## M45 úkoly 2 a 3
+
+- **N118 – `regen_progress` jen při regeneraci po změně a jen za skutečně přestavěné featury.** Proč: regenerace běží při každém read modelu (i `GetReadModel` a opakování) a hlásila by i featury z cache; kruhový buffer 256 událostí by se točil a čtenáři by dostávali `resync`. Implementuje úkol 4.
+- **N119 – `RuntimeDocument::commit` bere `StepKey` (paměť sezení + klíč)** místo `OperationKey`, aby si prázdný `Commit` pamatovalo sezení (N107); `SessionManager::shutdown()` přidaný do kontraktu (N106). Zámek pro zápis má v běhovém dokumentu vlastní listový zámek, takže `open` pod zámkem manageru nikdy nečeká na běžící změnu; rezervace dokumentu (`nullptr`) platí po dobu načítání i uvolnění.
+
