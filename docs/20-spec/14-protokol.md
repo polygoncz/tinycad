@@ -110,6 +110,17 @@ Pravidla:
 - Stejné `operation_id` s jiným obsahem požadavku → `OPERATION_ID_REUSED`. **Obsah** = otisk požadavku: SHA-256 jeho deterministické serializace bez `session_id`, `operation_id` a `read`, spočítaný z požadavku klienta, ne z operace po opětovném vyřešení skici ([[Rozhodnutí nativního jádra|N57]]). Opakování s jinými `known_meshes` nebo z nového sezení po restartu serveru je tedy tentýž požadavek.
 - Opakovaný požadavek se nevykoná znovu a nevytvoří událost `changed`.
 
+### Vlákna a zámky serveru
+
+Z revize architektury po M44 ([[Rozhodnutí nativního jádra]] N106–N108):
+
+- **Pořadí zámků:** manager sezení → dokument → události. **Pod zámkem manageru se nikdy nečeká na zámek dokumentu ani nespouští OCCT** (načtení dokumentu a první regenerace běží mimo něj: vloží se rezervace, dokument se dosadí po načtení; uvolnění pronájmu s `Abort` až po uvolnění zámku manageru).
+- **Uvolnění běhového dokumentu výslovně zavře jeho kruhový buffer událostí**; `WatchSession` pak skončí `OK`. Při vypnutí serveru se nejdřív zavřou všechny buffery (`SessionManager::shutdown`), teprve potom `Server::Shutdown`.
+- Export STEP drží zámek celého procesu (globální stav `STEPControl_Writer`).
+- **Idempotence před řešením skici:** pořadí v běhovém dokumentu je otisk → hledání uloženého záznamu (`PersistentDocument::lookup`) → teprve potom opětovné řešení skici a změna. Opakovaný požadavek se tak nikdy znovu neřeší.
+- **Prázdný `Commit`** se do logu nezapíše, ale jeho `operation_id` si pamatuje sezení (`RecentResponses`), takže opakování vrátí úspěch, ne `NO_TRANSACTION`.
+- **Otisk požadavku = SHA-256 z kanonického JSON** (operace přes převod spec 04, klíče seřazené), ne z bajtů protobufu: deterministická serializace protobufu je zaručená jen v rámci jednoho buildu a otisk je trvale v SQLite. Import (`ImportDocument` i `tinycad-import`) má otisk z obsahu souboru a stejný klíč `import:<sha>` (jedna funkce `importKey`).
+
 ## Read model a sítě
 
 ```proto

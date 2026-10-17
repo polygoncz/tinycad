@@ -19,6 +19,7 @@ Značka **⚠ k revizi** = rozhodnutí, u kterého si nejsem jistý nebo které 
 
 ## Shrnutí pro revizi
 
+- **Revize architektury serveru po M44:** návrh struktury knihoven a odložené body jsou v N110.
 - **Pavel 2026-10-17: návrh a architekturu serveru projdeme spolu po sérii** (třídy, hranice knihoven v `server/src/`, porty). Do té doby platí OOP a KISS (N12) a strukturální rozhodnutí jsou v seznamu níže.
 
 - **Plány M41, M43, M44.1 (2026-10-17), k revizi:** N35 (STORAGE → znovunačtení místo inverze), N37 (gRPC `DocumentService` do M45), N38 (migrace z IndexedDB jen existujícím exportem a `tinycad-import`), N47 (řešení skici před dispečerem, ne v handleru).
@@ -200,4 +201,14 @@ Zafixované hlavičky navíc: `server/src/session/include/tinycad/session/*.hpp`
 - **N103 – Svazek dokumentů a práva uživatele `tinycad` v Compose patří do úkolu 5 M45**; `tinycad-import` se spouští `docker compose run --rm --entrypoint tinycad-import -v <složka>:/import core /import`.
 - **N104 ⚠ – Poškozené cíle undo v logu při otevření vyhodí výjimku** (`AssertionError` z `UndoManager`) místo `LoadError`; při importu se zachytí jako issue. Známé omezení spec 05; vrstva sezení (M45) výjimku převede na `INTERNAL`.
 - **N105 – Dočasný soubor nového dokumentu v režimu rollback journal, WAL až po přejmenování**; kontrola formátu před přepnutím do WAL; čísla v `meta` jako JSON text.
+
+## Revize architektury serveru po M44
+
+Revize (`architecture-reviewer`) nad M39–M44 a pahýly M45 nenašla porušení OOP/KISS ani holé `new`/`delete`; hlavní nálezy jsou souběh vláken pro M45, nekonzistentní chyby a duplicity.
+
+- **N106 – Pravidla vláken a zámků v [[14-protokol#Vlákna a zámky serveru]]** (pod zámkem manageru nic dlouhého, zavření bufferu událostí při uvolnění dokumentu a před vypnutím serveru, zámek procesu pro STEP). Proč: jinak `WatchSession` nikdy neskončí, vypnutí se zasekne a jedna regenerace zablokuje všechna sezení.
+- **N107 – Idempotence před řešením skici** (`PersistentDocument::lookup`), prázdný `Commit` si pamatuje sezení, **otisk z kanonického JSON** a jedna funkce `importKey` pro oba importy. Mění N57.
+- **N108 – Jedno pravidlo chyb: data zvenku nikdy nehází výjimku** – `rebuildUndoStacks` a `PersistentDocument::open` vrací `LoadError` (uzavírá N104), přehrávání nechytá `std::exception`, řešič chytá jen výjimky planegcs, `bad_alloc` všechny knihovny propouštějí. Opraví stopa A hned.
+- **N109 – Levné úklidy hned:** `tinycad_session` linkuje `tinycad_storage` (ne include cesty), solver a jádro se skládají v `app`; `as<T>()` v modelu skici s assertem; limit hloubky vnořených `batch`; `trimJs` do `core`; `document::featureJson`/`readFeature` místo kopií v `ops`; hlavička builderů ve vlastním include adresáři `tinycad_feature_builders`.
+- **N110 ⚠ – Na společnou revizi s Pavlem odloženo:** sloučení 2D základu (N77 – `tinycad_geometry` do `tinycad_kernel`, nebo knihovna `occt2d`), vrstva „runtime“ (`PersistentDocument` + `RuntimeDocument` mimo `storage`), read model psaný rovnou do protobufu (N53), `Change.entry` jako JSON mezi knihovnami, přejmenování `OperationLoadError`. Návrh struktury je v revizi; zatím se nic nepřesouvá.
 
