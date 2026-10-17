@@ -8,7 +8,8 @@
 import { assert, DisposableStore, Emitter } from '@/core';
 import type { Disposable } from '@/core';
 import type { DispatchMeta, Operation, OperationDispatcher, Transaction, UndoManager } from '@/ops';
-import type { ChangeOutcome, ChangeRequest, RemoteError, RemoteSession } from '@/remote';
+import { RemoteError } from '@/remote';
+import type { ChangeOutcome, ChangeRequest, RemoteSession } from '@/remote';
 
 export interface RemoteDispatcherDeps {
   readonly session: Pick<RemoteSession, 'readModel' | 'events' | 'change'>;
@@ -218,8 +219,12 @@ class RemoteDispatcher implements OperationDispatcher, Disposable {
     let outcome: ChangeOutcome;
     try {
       outcome = await this.session.change(request);
-    } catch {
-      return false;
+    } catch (e) {
+      // A RemoteError rejection is the disposal of the session (CANCELLED): expected. Anything else
+      // is a bug of the program (e.g. an operation operationToProto cannot encode) and must not
+      // vanish silently (N176).
+      if (this.disposed || e instanceof RemoteError) return false;
+      throw e;
     }
     if (this.disposed) return false;
     if (outcome.ok) return true;

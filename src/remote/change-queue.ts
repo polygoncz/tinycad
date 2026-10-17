@@ -170,5 +170,7 @@ function noTransaction(): RemoteError {
 }
 
 function disposedError(): Error {
-  return new Error('RemoteSession: disposed');
+  // The same shape as the disposal of the session (session.ts): a RemoteError CANCELLED, so the
+  // dispatcher tells an expected cancellation from a bug of the program (N176).
+  return new RemoteError({ code: 'CANCELLED', message: 'RemoteSession: disposed' });
 }

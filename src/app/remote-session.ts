@@ -198,9 +198,10 @@ function wireRemoteSession(
     },
     onLost: () => {
       // The transaction died on the server (spec 14, N167): the dialog and the sketcher close;
-      // their transaction is a no-op now, so cancel sends nothing. The notice of the event lost
-      // comes from connectNoticeSources, that of a refused begin from onError.
+      // their transaction is a no-op now, so cancel sends nothing. The same notice as for the event
+      // lost (N175); a repeated notice replaces the earlier one, so both sources show it once.
       features.current.get()?.cancel();
+      notices.show({ kind: 'warning', key: 'notice.transactionLost' });
     },
   });
   lifetime.add(remote);

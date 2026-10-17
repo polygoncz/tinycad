@@ -369,3 +369,9 @@ Upřesnění hrubého plánu [[M52-tenky-klient|M52]] (plánovač 2026-10-17, po
 
 - **N174 – Chyba dispečera je plochá struktura `DispatchError` (`Invalid` / `WriteFailed`, `path`, `message`, `reverted`)**; zapisovač nesmí volat dispečer (reentrance je chyba programátora). Měření regenerace mění v kroku z cache poloměr zaoblení (ne poslední válec jako M15), čísla proto nejsou s M15 přímo srovnatelná.
 
+## M52 – Tenký klient
+
+- **N175 – Ztracená transakce (`NO_TRANSACTION` u kroku, odmítnutý `begin`) ukáže stejné hlášení `notice.transactionLost` jako událost `lost`**; opakované hlášení nahradí dřívější, takže se ukáže jednou.
+- **N176 – Zamítnutí změny, které není `RemoteError`, je chyba programu a dispečer ho nespolkne** (nezachycené odmítnutí se ukáže v konzoli a shodí e2e); zrušení sezení odmítá jednotně `RemoteError CANCELLED`.
+- **N177 – Text sekce panelu skici porovnává hodnoty jednotlivě** (watch na getter vracející nové pole resetoval rozepsaný text při každém novém snímku – po M52 častější); `RemoteAppSessionDeps.now` zmizel s dočasnými záznamy zrcadla.
+
