@@ -23,6 +23,7 @@ import type {
 import type { PluginMessages } from '@/plugin-api';
 import type { BodyLayer, CameraController, Viewport } from '@/render';
 import type { SketchEditor } from '@/sketcher';
+import type { AppNotice } from './notices';
 import type { ViewportSettings, ViewSettings } from './view-settings';
 
 /** The state of the core for the title bar (N69: the connection mapped onto it). */
@@ -100,6 +101,13 @@ export interface AppSession extends Disposable {
    * UI; null otherwise and when read-only.
    */
   readonly persistenceError: Observable<string | null>;
+  /**
+   * M48: transient notices (a lost transaction, a refused change, the server gone or back, N151),
+   * oldest first; ui shows them as toasts. Not the state of the title bar: they disappear.
+   */
+  readonly notices: Observable<readonly AppNotice[]>;
+  /** Removes the notice with this id (the user closed it); an unknown id does nothing. */
+  dismissNotice(id: number): void;
   readonly selection: SelectionModel;
   /** Timeline. */
   readonly featureTree: FeatureTreeModel;

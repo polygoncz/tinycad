@@ -49,6 +49,8 @@ import {
 } from '@/sketcher';
 import { createConnectionState } from './connection-state';
 import { MirrorDocument } from './mirror-document';
+import { connectNoticeSources } from './notice-sources';
+import { createNoticeCenter, noticeOfRefusal } from './notices';
 import { queueEmpty } from './queue-empty';
 import { refuseChanges, refuseUndo } from './read-only';
 import { createReadModelView } from './read-model-view';
@@ -183,6 +185,8 @@ function wireRemoteSession(
   const mirror = new MirrorDocument(session.readModel.get().document);
   const doc = mirror.reader;
   const connection = lifetime.add(createConnectionState({ session, readOnly, reportError }));
+  const notices = lifetime.add(createNoticeCenter());
+  lifetime.add(connectNoticeSources(session, notices));
   const historyLog = lifetime.add(new RemoteHistory(session));
   const remote = createRemoteDispatcher({
     mirror,
@@ -193,13 +197,15 @@ function wireRemoteSession(
     onError: (error) => {
       // N92: a change dropped for the outage makes saving 'failed' while offline.
       connection.changeDropped(error);
-      reportError(error);
+      // A refusal of the server or a change that no longer applies: a notice (N151, N153).
+      const notice = noticeOfRefusal(error);
+      if (notice !== null) notices.show(notice);
     },
     onLost: () => {
       // The transaction died on the server (spec 14): the dialog and the sketcher close; their
-      // transaction is a no-op now, so cancel sends nothing.
+      // transaction is a no-op now, so cancel sends nothing. The notice comes from the event of
+      // the session itself (connectNoticeSources).
       features.current.get()?.cancel();
-      reportError(new Error('The open transaction ended on the server; the dialog was closed'));
     },
   });
   lifetime.add(remote);
@@ -475,6 +481,10 @@ function wireRemoteSession(
     },
     persistence: connection.persistence,
     persistenceError: connection.persistenceError,
+    notices: notices.notices,
+    dismissNotice(id) {
+      notices.dismiss(id);
+    },
     selection,
     featureTree,
     browser,
@@ -577,7 +587,10 @@ function retainingInFlight(meshes: VersionMeshes, inFlight: () => Iterable<strin
   };
 }
 
-/** Errors with nobody to hand them to (a refused change, a failed refresh, a lost transaction). */
+/**
+ * Unexpected errors with nobody to hand them to (a failed close or refresh, a failing subscriber);
+ * the known ones are notices (N153).
+ */
 function reportError(error: unknown): void {
   console.error(error);
 }
