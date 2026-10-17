@@ -22,6 +22,7 @@
 // | KERNEL_OPERATION_FAILED     | FAILED_PRECONDITION | GeometryService: as a rejected port call    |
 // | KERNEL_INTERNAL             | INTERNAL            | GeometryService: as a rejected port call    |
 // | STORAGE                     | UNAVAILABLE         | retries with the same operation_id          |
+// | DOCUMENT_OPEN               | FAILED_PRECONDITION | the document is open; shows the error       |
 //
 // Errors of features after a regeneration are not RPC errors: the change succeeded, the feature
 // is red. They travel in the read model as FeatureStatus (read_model.proto).
@@ -58,6 +59,9 @@ enum ErrorReason {
   ERROR_REASON_KERNEL_INTERNAL = 15;
   // SQLite failed; nothing was written, the request may be retried.
   ERROR_REASON_STORAGE = 16;
+  // DocumentService: the document is open in a session, so DeleteDocument (and RenameDocument
+  // during an open transaction) is refused, as the browser refused it before (N56).
+  ERROR_REASON_DOCUMENT_OPEN = 17;
 }
 
 // The domain detail of a google.rpc.Status.
