@@ -18,10 +18,11 @@ milestones:
   - "[[M22-rezimy-zobrazeni]]"
   - "[[M23-postprocessing-a-ao]]"
   - "[[M24-realisticke-zobrazeni]]"
+  - "[[M46-klient-nad-read-modelem]]"
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-15
+updated: 2026-10-17
 ---
 # 09 – `render`: vykreslování
 
@@ -263,12 +264,12 @@ Implementace `SceneSync`:
 3. Jakmile jsou **všechny** sítě dané generace vyřízené (`Promise.allSettled`), vymění scénu najednou v jednom synchronním bloku: odebere a uvolní `BodyView` z `remove`, přidá nové, pak `requestRender()`. Žádné problikávání napůl starého a napůl nového modelu.
 4. **Chyba tessellace** ([[Q059 Chyba tessellace v SceneSync|Q059]]): v aktuální generaci → `reportError(body, error)`, těleso se nezobrazí, ostatní se vymění normálně. V zastaralé generaci se chyba zahodí.
 5. Pokud mezitím přišel novější `sync` nebo `reset`, výsledek starého se zahodí (vzor generací jako v regeneraci). Zahazují se jen `MeshData`, GPU zdroje ještě nevznikly.
-6. Po výměně cache zapomene handle, které v posledním `sync` nejsou (regenerace je uvolnila a nové jádro je znovu nepoužije).
-7. **Výměna instance jádra** (restart workeru, [[Q060 Výměna jádra a cache sítí v render|Q060]], [[Q037 Pád workeru a čekající RPC volání|Q037]]): `app` zavolá `reset(newMeshes)` a vynutí plnou regeneraci. Handle jsou jedinečné jen v rámci instance a nové jádro čísluje znovu. Napojení v [[M10-ui|M10]].
+6. Po výměně cache zapomene handle, které v posledním `sync` nejsou (verze sítě, která z read modelu zmizela, se už nevrátí pod týmž handle).
+7. **Výměna instance jádra** (restart workeru, [[Q060 Výměna jádra a cache sítí v render|Q060]], [[Q037 Pád workeru a čekající RPC volání|Q037]]) od [[M46-klient-nad-read-modelem|M46]] neplatí: jádro běží na serveru a klient žádnou instanci nevyměňuje. **Handle = verze sítě po dobu karty** ([[Rozhodnutí nativního jádra|N66]]): `app` při sestavení session jednou zavolá `reset(meshes)` s `MeshOps` nad mezipamětí sítí podle `content_version` (`src/app/version-meshes.ts`); každá verze dostane stálý syntetický `ShapeHandle` (čítač od 1, po celou kartu se nezmenšuje), `tessellate` vrátí síť, kterou přinesl read model, a kvalitu sítí určuje sezení na serveru (`OpenSession.mesh_quality`). Identita handle je tak identita verze a body 1–6 vymění právě sítě, jejichž verze se změnila. `reset` dál zahodí cache i zobrazená tělesa (kontrakt `BodyLayer` se nezměnil), `app` ho ale volá jen jednou.
 8. Logika bodů 1–7 je oddělená od Three.js (`SceneSync`, `scene-sync.ts`): výsledkem je plán `{ remove, add }`, který `BodyLayer` provede synchronně ve funkci `apply`. Plán, který nic nemění, se neprovádí (žádné zbytečné překreslení). `reset` provede plán, který odebere všechna zobrazená tělesa, takže `apply` musí snést volání i mimo `sync`.
 9. Po výměně scény `HighlightLayer` přestaví zvýraznění z nových sítí. Cíle, jejichž těleso zmizelo nebo index je mimo rozsah, tiše vypustí. Jestli index po regeneraci ukazuje na „stejnou“ plochu, řeší [[08-topologicke-pojmenovani|topologické pojmenování]] v `interaction` (M14): výběr se přemapuje podle jména a `interaction` pošle nové cíle; `render` jména nezná.
 
-**Sdílená cache a výměna jádra** ([[M21-vstupni-stav-editovane-featury|M21]]): sítě drží jedna sdílená cache `createSharedMeshCache(meshes, quality)` a každá vrstva těles (hlavní a náhled) je její klient. `retain` jedné vrstvy drží sjednocení toho, co potřebují všechny vrstvy, a handle běžícího `sync` zůstává v cache až do dalšího `retain` téže vrstvy. Stejný handle se tak tesseluje jednou, i když je v obou vrstvách. `SceneSync` dostává cache zvenku a místo `reset(meshes)` má `clear()`. Výměnu jádra dělá vlastník cache (`BodyLayers`): `reset` cache, pak `clear()` obou vrstev. `Viewport.bodies.reset(meshes)` proto vyprázdní i náhled.
+**Sdílená cache a výměna jádra** ([[M21-vstupni-stav-editovane-featury|M21]]): sítě drží jedna sdílená cache `createSharedMeshCache(meshes, quality)` a každá vrstva těles (hlavní a náhled) je její klient. `retain` jedné vrstvy drží sjednocení toho, co potřebují všechny vrstvy, a handle běžícího `sync` zůstává v cache až do dalšího `retain` téže vrstvy. Stejný handle se tak tesseluje jednou, i když je v obou vrstvách. `SceneSync` dostává cache zvenku a místo `reset(meshes)` má `clear()`. Výměnu jádra dělá vlastník cache (`BodyLayers`): `reset` cache, pak `clear()` obou vrstev. `Viewport.bodies.reset(meshes)` proto vyprázdní i náhled. Od M46 se `reset` volá jen při sestavení session (bod 7).
 
 ## Náhled
 
@@ -762,7 +763,7 @@ Filtr (`PickFilter`, [[10-interakce#Port viewportu]], M10.1): průchod přes hra
 
 `render` se testuje nejhůř, proto v něm má být co nejméně logiky ([[Q061 Testy render v Node|Q061]]):
 - Čisté funkce leží v souborech **bez importu `three`** (hlídá pravidlo v `.dependency-cruiser.cjs`, protože `three` v Node běží a testy by porušení nepoznaly) a testují se v Node (`tsconfig.test.json` beze změny): `diffBodies`, `triangleToFace`, `polylinesToSegments`, `faceTriangles`, `closestSegments`, `fitOrtho` a směry standardních pohledů, od M17 operace kamery (`orbit`, `pan`, `zoomAt`, `turn`, `ease`, `interpolate`, `clipRange`, `orientationFor`), `cameraGesture`, `wheelFactor`, `buildViewCube` a `cubeRegionAt`, `toViewPointerEvent`/`toViewKeyEvent`, `FrameScheduler`, `meshBounds`/`unionBounds` (obálka pro `fitAll`, počítaná z `positions`), `MeshCache`, sdílená cache `createSharedMeshCache` a generace `SceneSync`, od M12 `tessellateSketch`, `pickSketch` a `viewDirectionFor` (od M17 zaniká), od M13 `pickSketchRegion` a `pointInRegion`, od M15 `parseHexColor`, `pickHandle`, `projectHandles`, `handleBounds`, `handleHidden`, `arcPoints` a `viewChangedSince`, od M19.2 `sketchHits`, `sketchGridStep` a `gridLines` (`sketch-grid.ts`), od M22 `resolveDisplay` a `samePlan` (`display-style.ts`), od M23 `aoParameters`, `isValidAoSetting`, `AO_SETTING_RANGES` a `DEFAULT_AO_SETTINGS` (`ao-parameters.ts`), od M24 `MATERIAL_PRESETS` a `physicalColor` (`material-presets.ts`) (proti ručnímu `MeshOps` v testu, jehož `tessellate` vrací odložené sliby, které test splní nebo odmítne v libovolném pořadí; bez Three.js – výsledkem je plán výměny, ne scéna).
-- Testy `render` nesmí importovat `@/kernel/testing` (`FakeKernel`): `render` závisí na `kernel` jen typově a `testing.ts` otevírá jen hodnotovým závislostem ([[01-architektura]]). Sítě v testech jsou ruční, malé a záměrně s klíči ploch mimo pořadí.
+- `render` závisí na `kernel` jen typově ([[Rozhodnutí nativního jádra|N122]]: modul `kernel` jsou od M47 jen typy, bez `FakeKernel` a `testing.ts`). Sítě v testech jsou ruční `MeshData` v `test/unit/render/` (malé a záměrně s klíči ploch mimo pořadí) a `MeshOps` je ruční dvojník v testu.
 - Kód s Three.js (`Viewport`, `BodyView`, vrstvy) se ověřuje ručně na dev stránce `dev/viewport.html` a e2e testy (Playwright). Three.js ale běží i v Node, takže část kódu s ním má testy v Node: `Picker` (`picker.test.ts` s ruční sítí; od [[M19.1-opravy-z-revize|M19.1]] i hrany z více segmentů, kontrola zakrytí a `body`, `edgeIndex` a `point` v aserci, od M19.2 `isVisible`), `SketchLayer` a `HighlightLayer`, od M23 `partitionScene`, `aoExcluded` a `hideDuring` (`scene-partition.ts`), od M24 `withoutBackground`, `aoExcluded` se sklem, `injectAgxToneMapping` s kanárkem shader chunků, `BodyLayer` s fyzikálními materiály (sdílení podle dvojice, uvolnění při změně plánu, `setEnvironment`, `setPalette`) a `SceneHelpers.setGridVisible`. Pipeline AO (`ao-pipeline.ts`) potřebuje WebGL, ověřuje ji e2e `m23.spec.ts` a ruční kontrola.
 
 ## Otevřené otázky

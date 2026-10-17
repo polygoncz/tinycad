@@ -11,10 +11,13 @@ milestones:
   - "[[M03-operace]]"
   - "[[M12-skicar]]"
   - "[[M15-export-a-dokonceni]]"
+  - "[[M40-dokument-a-operace-v-cpp]]"
+  - "[[M46-klient-nad-read-modelem]]"
+  - "[[M47-uklid-a-dokonceni]]"
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-15
+updated: 2026-10-17
 ---
 # 04 – `ops`: operace, log a undo/redo
 
@@ -25,6 +28,10 @@ updated: 2026-10-15
 Jediná cesta, jak změnit dokument. Každá změna je **operace** – serializovatelný popis (data). Operace se aplikují přes dispečera a zapisují do **neměnného logu**. Undo/redo, ukládání i případná budoucí synchronizace stojí na tomto logu ([[0005-operacni-log|ADR 0005]]). Závisí na `core` a `document`.
 
 **Hlavní invariant:** přehrání logu od prázdného dokumentu dá přesně živý dokument. Všechna pravidla níže slouží jemu.
+
+**Kde běží (od [[M47-uklid-a-dokonceni|M47]]):** dispečer, transakce, log, undo, přehrání, upcast a čtení záznamů implementuje C++ na serveru, knihovna `tinycad_ops` v `server/src/ops` (hlavičky `server/src/ops/include/tinycad/ops/`, [[M40-dokument-a-operace-v-cpp|M40]]); log na disk zapisuje úložiště SQLite ([[05-persistence]]). Zápis v TS níže zůstává zápisem kontraktu. Odchylky C++: dokument ani dispečer nemají události, `UndoManager` se napojí háčkem `onAppended` a logika výjimek odběratelů odpadá ([[Rozhodnutí nativního jádra|N21]]); `invert` a `apply` vrací chybu s cestou místo výjimky ([[Rozhodnutí nativního jádra|N80]]); zničení otevřené transakce ji zruší ([[Rozhodnutí nativního jádra|N81]]).
+
+V klientovi zůstává z `ops` jen to, co potřebuje optimistické zrcadlo dokumentu ([[Rozhodnutí nativního jádra|N63, N121]]): typy operací, `OP_VERSION`, registr a handlery, `applyOperation` a typy portů `OperationDispatcher`, `DispatchMeta`, `Transaction`, `UndoManager`, `LogEntry` (`ops/ports.ts`). Porty implementuje `app/remote-dispatcher.ts` nad sezením na serveru: změnu hned použije na zrcadlo TS handlery a pošle ji serveru, odpověď zrcadlo přestaví ([[14-protokol#Změny dokumentu]]). Paměťový dispečer, log, transakce a undo z této specifikace jsou v klientovi jen testovací dvojník portů v `ops/testing.ts` (`createOperationDispatcher`, `createOperationLog`, `createUndoManager`, `anOpsSession`) pro testy `interaction` a `sketcher`; produkční kód je importovat nesmí.
 
 ## Operace
 
@@ -133,7 +140,7 @@ Ověřuje to property-based test (viz [[13-testovani|13]]).
 
 ## Dávka a rollback bar
 
-Obě obecná pravidla řeší **jedna interní funkce** `applyOperation(doc, handlers, op): { inverse: Operation; deferred: unknown[] }` (inverze a odložené výjimky odběratelů, viz níže). Sdílí ji `dispatch`, transakce i `replayLog`, takže se nikde nemůžou rozejít ([[Q031 Inverze dávky operací|Q031]]).
+Obě obecná pravidla řeší **jedna funkce** `applyOperation(doc, handlers, op): { inverse: Operation; deferred: unknown[] }` (inverze a odložené výjimky odběratelů, viz níže). Sdílí ji `dispatch`, transakce i `replayLog`, takže se nikde nemůžou rozejít ([[Q031 Inverze dávky operací|Q031]]). Od [[M46-klient-nad-read-modelem|M46]] je exportovaná z `ops`: zrcadlo dokumentu v klientovi jí používá operace bez logu ([[Rozhodnutí nativního jádra|N96]]).
 
 ### Dávka
 
@@ -265,7 +272,7 @@ export interface LogEntry {
   readonly time: number;             // ms epoch, jen metadata
 }
 
-/** Čtecí role logu (ADR 0011): UndoManager, persistence, UI historie. */
+/** Čtecí role logu (ADR 0011): UndoManager, úložiště, historie. */
 export interface OperationLogReader {
   /** Záznamy se seq ≥ fromSeq (výchozí 1), v pořadí. Kopie pole. */
   entries(fromSeq?: number): readonly LogEntry[];
@@ -284,9 +291,9 @@ export interface OperationLog extends OperationLogReader {
 export function createOperationLog(entries?: readonly LogEntry[]): OperationLog;
 ```
 
-V paměti je celý log (pro naše velikosti dokumentů to stačí). Na disk ho zapisuje `persistence` ([[05-persistence|05]]), která poslouchá `appended`.
+V paměti je celý log (pro naše velikosti dokumentů to stačí). Na serveru ho drží `PersistentDocument`, který každý záznam zapíše do SQLite před návratem z požadavku ([[05-persistence|05]], [[Rozhodnutí nativního jádra|N36]]).
 
-**Panel historie** (M15, [[10-interakce#Historie úprav: `HistoryModel`]]) čte log jen přes `OperationLogReader`: řádek = záznam (`label` je klíč překladu nebo typ operace, ADR 0014), stav vrácení se odvodí z `rebuildUndoStacks`. Log se kvůli panelu nemění; s historií se přenáší i v souboru `.tinycad.json` ([[05-persistence#Export a import souboru]]).
+**Panel historie** (M15, [[10-interakce#Historie úprav: `HistoryModel`]]) čte od [[M46-klient-nad-read-modelem|M46]] úzký port `HistoryLog` (záznamy s `opType` bez operací a zásobníky ze serveru, `app/remote-history.ts`, [[Rozhodnutí nativního jádra|N73]]): řádek = záznam (`label` je klíč překladu nebo typ operace, ADR 0014), stav vrácení se odvodí ze zásobníků, které server spočítá `rebuildUndoStacks`. Log se kvůli panelu nemění; s historií se přenáší i v souboru `.tinycad.json` ([[05-persistence#Export a import souboru]]).
 
 ## Undo / redo
 
@@ -330,6 +337,8 @@ Pravidla (jeden krok `step(stacks, entry)`, sdílený `rebuildUndoStacks` i živ
 Redo aplikuje původní `op` znovu a inverzi spočítá znovu z aktuálního stavu. Díky tomu je redo správné, i kdyby se stav mezi tím nějak lišil.
 
 ## Přehrání a upcast
+
+Přehrání, upcast a čtení záznamů logu jsou od [[M47-uklid-a-dokonceni|M47]] jen v C++ (`server/src/ops/replay.cpp`, `upcast.cpp`, `parse_entry.cpp`); používá je úložiště při otevření dokumentu. Klient log nečte. Stejně `rebuildUndoStacks` (`server/src/ops/undo.cpp`).
 
 ```ts
 /** Aplikuje entry.op všech záznamů v pořadí přes applyOperation. Výjimky letí. */
@@ -375,7 +384,7 @@ Hodnoty `params` proti schématu featury se při načítání nekontrolují a ne
 ### Načtení záznamu logu
 
 ```ts
-/** Data zvenku → LogEntry. Pro persistence (spec 05). */
+/** Data zvenku → LogEntry. Pro úložiště (spec 05). */
 export function parseLogEntry(handlers: OpHandlerRegistry, raw: unknown): Result<LogEntry, OperationLoadError>;
 ```
 
@@ -385,6 +394,8 @@ export function parseLogEntry(handlers: OpHandlerRegistry, raw: unknown): Result
 - Výsledek je nový objekt jen se známými poli (přebytečná pole z úložiště se zahodí).
 
 ## Testy
+
+Od [[M47-uklid-a-dokonceni|M47]] běží v TS (`test/unit/ops/`) testy handlerů, `applyOperation` a testovacího dvojníka (dispečer, log, transakce, undo bez `rebuildUndoStacks`) a sdílené případy `ops` druhu `script` ([[13-testovani#Sdílené testovací případy]]). Celou sadu včetně přehrání, upcastu, `parseLogEntry`, `rebuildUndoStacks` a property testu přehrání implementuje C++ (`server/test/ops/`, property test 200 semínek vlastního generátoru, [[Rozhodnutí nativního jádra|N28, N82]]).
 
 - Každý vestavěný handler: `invert` → `apply(op)` → `apply(inverze)` vrátí dokument do původního stavu (porovnání `toData`); `invert` dokument nezmění; `invert` na neexistující featuru vyhodí.
 - `applyOperation`: obalení inverze obnovou baru u add/remove/move před barem, na baru a za barem; bez obalení u `studio.setRollback`; dávka včetně vnořené a prázdné; atomičnost dávky při selhání podoperace; výjimka odběratele (beze změny vs. se změnou).
@@ -401,7 +412,7 @@ export function parseLogEntry(handlers: OpHandlerRegistry, raw: unknown): Result
 - `parseLogEntry`: platný záznam každého `kind`, každé pole rozbité zvlášť, `target` u `do`, chyba v `op` i `inverse` s prefixem cesty, upcast staré verze operace uvnitř záznamu.
 - `body.rename`, `body.setVisible`, `body.setColor` (M15) a `body.setMaterial` (M24): inverze vrátí metadata, `invert` tělesa bez metadat, `validate` s rozbitým `body`. Každý z nich **zachová ostatní pole metadat**, i ta přidaná později: `apply` skládá metadata z `...aktuální`, ne výčtem polí (M24 opravuje `setVisible` a `setColor`, které pole vypisovaly a `material` by zahodily). Test: těleso se jménem, skrytím, barvou i materiálem, každá operace změní jen své pole.
 - `document.rename` (M19.2): apply, inverze, `validate` (prázdné jméno, mezery na krajích, ne řetězec); po přejmenování je `canUndo` jako předtím, undo vrátí předchozí krok, ne jméno, a redo zásobník přežije.
-- **Replay test** (fast-check, 1000 sekvencí): náhodné operace (od M11 včetně `body.*`, od M15 i `body.setColor`, od M24 i `body.setMaterial`), transakce (commit i abort), undo a redo; pak `replayLog` na prázdný dokument → `toData` se shoduje se živým dokumentem a `rebuildUndoStacks` se shoduje se živými zásobníky.
+- **Replay test** (v C++ `replay_property_test.cpp`, dřív fast-check, 1000 sekvencí): náhodné operace (od M11 včetně `body.*`, od M15 i `body.setColor`, od M24 i `body.setMaterial`), transakce (commit i abort), undo a redo; pak `replayLog` na prázdný dokument → `toData` se shoduje se živým dokumentem a `rebuildUndoStacks` se shoduje se živými zásobníky.
 
 ## Otevřené otázky
 

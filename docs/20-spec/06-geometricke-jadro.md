@@ -7,7 +7,7 @@ aliases:
   - Spec 06
 modules:
   - kernel
-  - kernel-occt
+  - server
 milestones:
   - "[[M05-kernel-port]]"
   - "[[M07-kernel-occt]]"
@@ -17,48 +17,54 @@ milestones:
   - "[[M14-topologicke-pojmenovani]]"
   - "[[M15-export-a-dokonceni]]"
   - "[[M16-vlastni-occt-build]]"
+  - "[[M42-jadro-occt-nativne]]"
+  - "[[M47-uklid-a-dokonceni]]"
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-15
+updated: 2026-10-17
 ---
-# 06 – `kernel` a `kernel-occt`: geometrické jádro
+# 06 – `kernel`: geometrické jádro
 
 > **Pojmy:** [[Geometrické jádro]], [[Handle tvaru]], [[Port a adaptér]]  
-> **Rozhodnutí:** [[0002-occt-wasm-ve-workeru]], [[0011-programovani-proti-rozhranim]], [[Q039 Chyby jádra přes hranici workeru|Q039]]  
-> **Milník:** [[M05-kernel-port]], [[M07-kernel-occt]], [[M11-dalsi-entity]]
+> **Rozhodnutí:** [[0030-nativni-jadro-pres-grpc|ADR 0030]], [[0011-programovani-proti-rozhranim]], [[Rozhodnutí nativního jádra|N13–N16]], [[Q039 Chyby jádra přes hranici workeru|Q039]]  
+> **Milník:** [[M05-kernel-port]], [[M07-kernel-occt]], [[M11-dalsi-entity]], [[M42-jadro-occt-nativne]]  
+> **Archiv:** [[06-geometricke-jadro v prohlížeči]] (OCCT WASM ve workeru a `FakeKernel` do M46)
 
-Geometrické jádro je za **portem** `GeometryKernel`. Doména (`regen`) zná jen rozhraní. Konkrétní implementace:
+Geometrické jádro je za **portem** `GeometryKernel`. Regenerace (`server/src/regen`) a buildery featur znají jen rozhraní (buildery jen jeho část `ModelingKernel`). Implementace je jediná:
 
-- **Nativní OCCT na serveru** (od [[M39-kostra-serveru|M39]], [[0030-nativni-jadro-pres-grpc|ADR 0030]]): **OCCT 8.0.1** z registru vcpkg (baseline `a5f73622`, triplet `arm64-linux-release`), knihovny v `server/src/` (2D geometrie skicáře `tinycad_geometry` za `GeometryService`). Dokud [[M46-klient-nad-read-modelem|M46]] nepřepne klienta, běží v prohlížeči dál WASM verze níže.
-- **OCCT** (`kernel-occt`): OpenCascade ve WASM, běží ve Web Workeru ([[0002-occt-wasm-ve-workeru|ADR 0002]]). Tovární funkce `createOcctKernel(): Promise<GeometryKernel & Disposable & { onDisconnected }>` (počká na start workeru) – M7.
-- **Fake** (`kernel`): jednoduchá implementace v paměti pro testy vyšších vrstev, každý tvar drží jen jako AABB (od M11 i válec, transformace a boolean, [[#`FakeKernel`]]). `createFakeKernel(): FakeKernel` z `kernel/testing.ts` – M5.
+- **Nativní OCCT na serveru** (od [[M42-jadro-occt-nativne|M42]], [[0030-nativni-jadro-pres-grpc|ADR 0030]]): **OCCT 8.0.1** z registru vcpkg (baseline `a5f73622`, triplet `arm64-linux-release`). Třída `OcctKernel` v knihovně `tinycad_kernel` (`server/src/kernel`), hlavičky v `server/src/kernel/include/tinycad/kernel/`: port `kernel.hpp`, `occt_kernel.hpp`, typy `types.hpp`, `profile.hpp`, `mesh.hpp`, `errors.hpp`. 2D geometrie skicáře (`curveIntersections`, `curveSegment`, `filletArc`, `offsetCurves`) není v portu jádra, ale v knihovně `tinycad_geometry` (`server/src/geometry`) za `GeometryService` ([[Rozhodnutí nativního jádra|N15]], [[14-protokol#`GeometryService`]]).
 
-Třídy jsou skryté v modulech, ven jdou rozhraní a tovární funkce ([[0011-programovani-proti-rozhranim|ADR 0011]]). Ven nejde ani třída chyby ([[#Chyby]]).
+**Zápis v této specifikaci:** signatury zůstávají v TypeScriptu jako zápis kontraktu ([[Rozhodnutí nativního jádra|N128]]); C++ se liší jen formou. Metody jsou synchronní a vrací `KernelResult<T>` = `std::expected<T, KernelError>` místo `Promise` a nikdy nevyhazují, jednu instanci obsluhuje jeden volající ([[Rozhodnutí nativního jádra|N13]]); `ShapeHandle` je `enum class` nad `uint64_t` a tabulka tvarů žije v `OcctKernel::Impl` (pimpl, [[Rozhodnutí nativního jádra|N14]]); `ModelingKernel` je v hlavičce jádra ([[Rozhodnutí nativního jádra|N16]]); `exportStep` vrací `std::string`. „Odmítnutý `Promise` s kódem“ v textu níže znamená v C++ `KernelResult` s `KernelError` toho kódu.
 
-`kernel` je prstenec 1 a importuje jen `core`.
+Do M46 běželo jádro v prohlížeči jako OpenCascade ve WASM ve Web Workeru (`kernel-occt`) a testy vyšších vrstev používaly TS `FakeKernel`: [[06-geometricke-jadro v prohlížeči]].
+
+Třídy jsou skryté v modulech, ven jdou rozhraní a tovární funkce ([[0011-programovani-proti-rozhranim|ADR 0011]]). Typy OCCT nejsou ve veřejných hlavičkách.
+
+## Co z jádra zná klient
+
+Prohlížeč jádro nemá. TS modul `kernel` (prstenec 1, importuje jen `core`) po M47 obsahuje jen **typy** pro `render` a `remote` ([[Rozhodnutí nativního jádra|N122]]): `MeshData`, `MeshQuality`, `ShapeHandle`, `BoundingBox`, `MeshOps`, typy oblastí profilu `ProfileRegion`/`ProfileLoop`/`ProfileCurve`, chyby `KernelErrorCode`, `createKernelError`, `kernelErrorCode` a kontrolu `validateMeshData`. `GeometryKernel`, kontroly vstupů (`parse*Input`, `validateFaceInput`), `isRigidMotion`, `FakeKernel` a kontraktová sada z klienta zmizely. Sítě těles přichází z read modelu podle `content_version` ([[14-protokol#Read model a sítě]]), oblasti a 2D geometrie skici z `GeometryService`; `MeshOps` je port, přes který `render` síť dostane (v klientovi ji dodá vzdálený adaptér, ne jádro).
 
 ## Handle místo tvarů
 
-`TopoDS_Shape` žije ve workeru a nikdy neopouští jeho paměť. Ven jde jen neprůhledné číslo, [[Handle tvaru|handle]]:
+`TopoDS_Shape` žije v tabulce tvarů `OcctKernel` a nikdy jádro neopustí. Ven jde jen neprůhledné číslo, [[Handle tvaru|handle]] (v C++ `enum class ShapeHandle : uint64_t`, `types.hpp`):
 
 ```ts
 export type ShapeHandle = Brand<number, 'ShapeHandle'>;
 ```
 
 - Každá operace vrací **nový** handle. Vstupní handle se nemění (neměnnost jako v doméně).
-- Handle je kladné celé číslo a **v rámci jedné instance jádra se nikdy nepoužije znovu** (rostoucí čítač). Uvolněný handle proto spolehlivě skončí chybou `'unknown-handle'`, nikdy nezamění tvar. Na tom stojí souběh `render` a mark & sweep v [[07-regenerace#Životnost handle: mark & sweep|regeneraci]].
+- Handle je kladné celé číslo a **v rámci jedné instance jádra se nikdy nepoužije znovu** (rostoucí čítač). Uvolněný handle proto spolehlivě skončí chybou `'unknown-handle'`, nikdy nezamění tvar. Na tom stojí mark & sweep v [[07-regenerace#Životnost handle: mark & sweep|regeneraci]] a `content_version` tělesa ([[Rozhodnutí nativního jádra|N43]]).
 - Handle se musí uvolnit (`release`). O životnost se stará `regen` (mark & sweep).
-- Handle platí jen v rámci jedné instance jádra. Neukládají se a dokument na ně neodkazuje. Handle z jiné instance jádra rozpoznat nejde (je to jen číslo). Aplikace má jedno jádro.
-
+- Handle platí jen v rámci jedné instance jádra. Neukládají se a dokument na ně neodkazuje. Handle z jiné instance jádra rozpoznat nejde (je to jen číslo). Server má jedno jádro na běhový dokument ([[Rozhodnutí nativního jádra|N54]]); zničení jádra uvolní všechny tvary (RAII).
 ## Datové struktury na obou stranách
 
 Port přenáší jen **identitu** (handle) a **hodnoty** (síť, bounding box, indexy podtvarů, historie). Obaly kolem tvarů žijí na obou stranách hranice a každý drží něco jiného:
 
 ```
-hlavní vlákno (doména)                         worker (adaptér, M7)
+regenerace (server/src/regen)                  jádro (server/src/kernel, pimpl)
 ┌────────────────────────────┐                ┌──────────────────────────────────┐
-│ regen: Body                │   ShapeHandle  │ kernel-occt: ShapeEntry          │
+│ regen: Body                │   ShapeHandle  │ OcctKernel::Impl: ShapeEntry     │
 │  id: BodyId (stabilní)     │ ─────────────► │  shape: TopoDS_Shape             │
 │  shape: ShapeHandle        │   (jen číslo)  │  faces/edges/vertices:           │
 │  origin: FeatureId         │                │    TopTools_IndexedMapOfShape    │
@@ -68,10 +74,9 @@ hlavní vlákno (doména)                         worker (adaptér, M7)
                                                 „co OCCT má a jak to najít“
 ```
 
-- **`ShapeEntry` (adaptér):** handle je klíč do soukromé `Map<ShapeHandle, ShapeEntry>`. Záznam drží tvar a **mapy podtvarů** spočítané jednou při vzniku tvaru (algoritmem `TopExp::MapShapes`, [[#`kernel-occt`: architektura adaptéru|viz adaptér]]). Díky nim je `SubShapeIndex` pro daný handle stabilní napříč dotazy (síť, topologie, historie). Cache sítě, role a historie přibudou, až je bude potřeba (M11, M14); v M7 záznam drží jen tvar a mapy. Je soukromý v adaptéru. `FakeKernel` má vlastní záznam `{ min, max }` (AABB).
+- **`ShapeEntry` (adaptér):** handle je klíč do soukromé `Map<ShapeHandle, ShapeEntry>`. Záznam drží tvar a **mapy podtvarů** spočítané jednou při vzniku tvaru (`TopExp::MapShapes` do `NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher>`, `server/src/kernel/shape_table.hpp`, [[#Adaptér `OcctKernel`|viz adaptér]]). Díky nim je `SubShapeIndex` pro daný handle stabilní napříč dotazy (síť, topologie, historie). Od M14 drží navíc role hran profilu z `makeFace`. Je soukromý v adaptéru.
 - **`Body` (doména, [[07-regenerace|spec 07]]):** stabilní `BodyId` napříč regeneracemi (handle se mění při každé), rodokmen (`origin`, `lastModifiedBy`, [[0015-artefakty-a-identita-telesa|ADR 0015]]) a od M14 topologická jména. UI, výběr i reference featur odkazují na `Body` a jména, nikdy na handle.
-- Na hlavním vlákně **nejsou** objekty obalující tvar (proxy s metodami `shape.mesh()`). Neměly by vlastní data a míchaly by „co tvar znamená“ (`Body`) s „co spočítalo jádro“ (`ShapeEntry`).
-
+- V regeneraci **nejsou** objekty obalující tvar (proxy s metodami `shape.mesh()`). Neměly by vlastní data a míchaly by „co tvar znamená“ (`Body`) s „co spočítalo jádro“ (`ShapeEntry`).
 ## Rozhraní (segregované)
 
 Rozhraní je rozdělené podle schopností (interface segregation). Builder featury si vezme jen to, co potřebuje. Rozhraní **roste s milníky**, nic se nepřidává do zásoby.
@@ -132,7 +137,7 @@ export interface GeometryKernel extends PrimitiveOps, TransformOps, BooleanOps, 
 export function isRigidMotion(m: Mat4, tolerance?: number): boolean;
 ```
 
-`transform` přijímá jen tuhé pohyby ([[Rozhodnutí noční rychloakce#M11 – Další entity|R7]]): `gp_Trsf` v OCCT zrcadlení a měřítko sice umí, ale zrcadlení otočí navinutí trojúhelníků a měřítko mění geometrii (kopie místo lokace). Featura Transform v M11 nic jiného nepotřebuje. `isRigidMotion` je jedna kontrola pro obě implementace.
+`transform` přijímá jen tuhé pohyby ([[Rozhodnutí noční rychloakce#M11 – Další entity|R7]]): `gp_Trsf` v OCCT zrcadlení a měřítko sice umí, ale zrcadlení otočí navinutí trojúhelníků a měřítko mění geometrii (kopie místo lokace). Featura Transform v M11 nic jiného nepotřebuje. `isRigidMotion` je jedna kontrola (v C++ `mesh.hpp`).
 
 Výsledek booleanu je v M11 **vždy jeden handle** (u více cílů nebo nesouvislého výsledku compound více solidů). Rozpad na více těles podle historie jádra přijde s historií v [[M14-topologicke-pojmenovani|M14]] ([[Rozhodnutí noční rychloakce#M11 – Další entity|R8]]).
 
@@ -269,9 +274,11 @@ export interface SketchOps {
 
 - Je v `SketchOps`, a tedy i v `ModelingKernel` builderu ([[07-regenerace#Builder featury]]).
 - Křivky ve smyčkách výsledku nesou `id` vstupní křivky a jsou orientované podél smyčky (oblouk může mít `ccw: false`, spline obrácené `poles` a uzly `a + b − k` pozpátku, kde `[a, b]` je rozsah uzlů – pro `[0, 1]` tedy `1 − k`; tatáž křivka). Výsledek jde rovnou do `makeFace` (`outer`, `holes`).
-- **Klient workeru** posílá vstup i výsledek jako strukturovaná data (`postMessage`), bez handle; `TrackingKernel` regenerace ho jen přeposílá (nic neuvolňuje).
+- `TrackingKernel` regenerace (`server/src/regen/src/tracking_kernel.cpp`) volání jen přeposílá (nic neuvolňuje); vstup i výsledek jsou data bez handle.
 
 ### Stav po M33
+
+> **Od M47 ([[Rozhodnutí nativního jádra|N15]]):** metody z *Stav po M33*, *Stav po M34* a *Stav po M35* nejsou v portu jádra. Implementuje je `tinycad_geometry` (`server/src/geometry`: `intersections.cpp`, `segment.cpp`, `fillet.cpp`, `offset.cpp`, `offset_chain.cpp`, sdílené `geom2d.cpp`, kontroly vstupu `validate.cpp`) za `GeometryService` a skicář je volá přes síť ([[14-protokol#`GeometryService`]]). Signatury níže jsou kontrakt těchto volání. Fake implementace z TS: [[06-geometricke-jadro v prohlížeči]].
 
 Průsečíky a kusy křivek skici pro trim, extend a split ([[M33-trim-extend-split|M33]], [[12-skicar#Trim, extend, split (M33)]]). Data, ne handle:
 
@@ -291,8 +298,8 @@ export interface SketchOps {
 }
 ```
 
-- **`curveIntersections`:** vstup jako u `profileRegions` (`parseProfileRegionsInput`: id povinné a unikátní, nulové délky vynechané). Průsečíky i ve sdílených koncových bodech a tečné dotyky; překryv → oba konce společného úseku s `overlap`. Body se slučují do `1e-7 · max(1, |souřadnice|)`. Uzel uzavřeného splinu se hlásí jako samoprůsečík (`ta` první, `tb` poslední uzel). **Nehlásí se:** dvě shodné kružnice (překryv bez konců) a překryv se splinem. OCCT hlásí tečný dotyk jako krátký společný úsek; adaptér ho podle mezery uvnitř úseku převede na jeden bod. OCCT: `Geom2dAPI_InterCurveCurve` s předfiltrem obálek (jako oblasti), parametry přes `Geom2dAPI_ProjectPointOnCurve` (`InterCurveCurve` je nevrací), převedené na `t` ze spec 12. Fake: vzorce z `fake-regions.ts`, spline vzorkováním úseků mezi uzly a Newtonem na přesné křivce (tessellace by bodovou toleranci nesplnila). Kód: `kernel/fake-curves.ts`, `kernel-occt/curves.ts`, sdílená stavba 2D křivek a předfiltr obálek `kernel-occt/geom2d.ts`.
-- **`curveSegment`:** křivka podle tvaru z `makeFace` (bez povinného id), `from < to` v definičním oboru (`t` ze spec 12; u kružnice `to < from + 2π` – celá otáčka by byl oblouk nulové délky), jinak `'invalid-input'`; parametr do `1e-9 · max(1, |mez|)` za mezí se posune na mez. Kontrolu sdílí obě jádra: `parseCurveSegmentInput(p: unknown): Result<CurveSegmentInput, readonly string[]>` z `kernel`. Úsečka a oblouk přesně ze vzorců; spline `Geom2d_BSplineCurve.Segment(from, to)` (fake: vkládání uzlů v TS), uzly kusu přeškálované do `[0, 1]`. Body kusu leží na původní křivce (kontraktová sada vzorkuje).
+- **`curveIntersections`:** vstup jako u `profileRegions` (kontrola jako `parseProfileRegionsInput`: id povinné a unikátní, nulové délky vynechané). Průsečíky i ve sdílených koncových bodech a tečné dotyky; překryv → oba konce společného úseku s `overlap`. Body se slučují do `1e-7 · max(1, |souřadnice|)`. Uzel uzavřeného splinu se hlásí jako samoprůsečík (`ta` první, `tb` poslední uzel). **Nehlásí se:** dvě shodné kružnice (překryv bez konců) a překryv se splinem. OCCT hlásí tečný dotyk jako krátký společný úsek; adaptér ho podle mezery uvnitř úseku převede na jeden bod. OCCT: `Geom2dAPI_InterCurveCurve` s předfiltrem obálek (jako oblasti), parametry přes `Geom2dAPI_ProjectPointOnCurve` (`InterCurveCurve` je nevrací), převedené na `t` ze spec 12. Kód: `server/src/geometry/intersections.cpp`, sdílená stavba 2D křivek a předfiltr obálek `server/src/geometry/geom2d.cpp`.
+- **`curveSegment`:** křivka podle tvaru z `makeFace` (bez povinného id), `from < to` v definičním oboru (`t` ze spec 12; u kružnice `to < from + 2π` – celá otáčka by byl oblouk nulové délky), jinak `'invalid-input'`; parametr do `1e-9 · max(1, |mez|)` za mezí se posune na mez. Kontrola vstupu v `server/src/geometry/validate.cpp` (port `parseCurveSegmentInput`). Úsečka a oblouk přesně ze vzorců; spline `Geom2d_BSplineCurve::Segment(from, to)` (`segment.cpp`), uzly kusu přeškálované do `[0, 1]`. Body kusu leží na původní křivce (test vzorkuje).
 
 ### Stav po M34
 
@@ -305,7 +312,7 @@ SketchOps.filletArc(p: { readonly a: ProfileCurve; readonly b: ProfileCurve; rea
 
 - `a`, `b` úsečka nebo oblouk (tvar z `makeFace`, id nepovinné), `radius` konečné > 0, `near` konečné, jinak `'invalid-input'`. Střed ve vzdálenosti `radius` od nosné geometrie obou (nekonečná přímka, celá kružnice), nejbližší `near`; body dotyku a jejich `t` (M33; u úsečky i mimo `[0, 1]`). Bez řešení → `'operation-failed'`.
 - Nekonečně mnoho středů (rovnoběžky přesně `2r` od sebe, kolineární úsečky, soustředné oblouky s mezerou `2r`) → bod společné ekvidistanty nejbližší `near`; při shodě vzdáleností první nalezený. `t` bodu dotyku mimo oblouk = úhel od `from` ve směru oblouku v `[0, 2π)`.
-- OCCT: `Geom2d_OffsetCurve(±radius)` nosné geometrie – úsečka jako `Geom2d_TrimmedCurve(Geom2d_Line)` na `±1e6 · měřítko` kolem `from` (`InterCurveCurve` na ekvidistantě nekonečné přímky vyhodí výjimku; střed dál než tato mez → `'operation-failed'`, fake ho najde – mimo kontrakt), oblouk jako `Geom2d_Circle`; průsečíky `Geom2dAPI_InterCurveCurve` (tečný dotyk hlášený jako úsek jako v M33), body dotyku `Geom2dAPI_ProjectPointOnCurve`. Degenerovaná ekvidistanta oblouku (`|ρ − r|` v toleranci) se vynechá. Kód `kernel-occt/fillet.ts`. Fake: analyticky (`kernel/fake-fillet.ts`). Kontrola vstupu `parseFilletArcInput` z `kernel`.
+- OCCT: `Geom2d_OffsetCurve(±radius)` nosné geometrie – úsečka jako `Geom2d_TrimmedCurve(Geom2d_Line)` na `±1e6 · měřítko` kolem `from` (`InterCurveCurve` na ekvidistantě nekonečné přímky vyhodí výjimku; střed dál než tato mez → `'operation-failed'`), oblouk jako `Geom2d_Circle`; průsečíky `Geom2dAPI_InterCurveCurve` (tečný dotyk hlášený jako úsek jako v M33), body dotyku `Geom2dAPI_ProjectPointOnCurve`. Degenerovaná ekvidistanta oblouku (`|ρ − r|` v toleranci) se vynechá. Kód `server/src/geometry/fillet.cpp`, kontrola vstupu `validate.cpp` (port `parseFilletArcInput`).
 
 ### Stav po M35
 
@@ -320,21 +327,20 @@ SketchOps.offsetCurves(p: { readonly curves: readonly ProfileCurve[]; readonly c
 - Výstup: navazující křivky v pořadí průchodu, `source` = id vstupu (spoj bez `source`); ostré rohy ven (prodloužení), zaniklé hrany vynechané, spline → kubický B-spline v toleranci `1e-4 · měřítko`. Nemožný offset → `'operation-failed'`.
 - OCCT (prototyp M35): `BRepOffsetAPI_MakeOffset(face, GeomAbs_Intersection, isOpenResult = !closed)` nad **vlastní rovinnou plochou** `BRepBuilderAPI_MakeFace(gp_Pln, drát, true)` (ze samotného drátu selže i úsečka; uzavřený drát s `isOpenResult = true` dává nesmysl), `Perform(distance)`; hrany výstupu nejsou seřazené (a mohou být `REVERSED`) → vlastní řetězení; `source` z `Generated(vstupní hrana)` (vstupní hrany z `MakeWire.Edge()` jako `face.ts`); spline kusy (`GeomAbs_OffsetCurve`) přes pcurve na vlastní ploše → body → `Geom2dAPI_PointsToBSpline(…, 3, 3, …)` (`Geom2dConvert_ApproxCurve` stupeň 3 nedodrží). `IsDone() = false` → `'operation-failed'`.
 - Upřesnění z implementace (úkol 1 M35): výsledek běží ve směru vstupu, uzavřený začíná kusem první vstupní křivky; měřítko tolerance `max(1, |d|, |souřadnice|)`, spoje výstupu do `1e-6 · měřítko`; kružnice s `closed: false` → `'invalid-input'`. OCCT u otevřeného řetězce začínajícího obloukem po směru hodinových ručiček dá stranu opačně (hrana se staví proti směru) → adaptér stranu ověří na výsledku a případně spočítá s `-d`. Řetězení: hrany výstupu v jejich směru (oblouk `ccw` podle `Axis().Direction().Z()`, `OffsetCurve` vzorkováním přes `BRepAdaptor_Curve`), hladově podle koncových bodů. Spline: kusy se stejným `source` sloučené, vzorky do `Geom2dAPI_PointsToBSpline.Init(body, 3, 3, C2, tol)` (konstruktor s pěti argumenty stupeň 3 nedá), uzly do `[0, 1]`, krajní póly přesně do spojů. **Ostrý roh vedle splinu** `GeomAbs_Intersection` nezvládne (vrátí `IsDone()`, ale zahodí hrany) → adaptér použije výsledek `GeomAbs_Arc` (zaoblené jsou pak **všechny** vypouklé rohy řetězce, spoje bez `source`); selže, jen když selže i ten. Smyčka splinu (`d` > poloměr křivosti) dá vloženou úsečku se `source` splinu (není přesná ekvidistanta).
-- Fake: úsečky, oblouky a kružnice analyticky (průsečíky sousedních ekvidistant, bez zániku hran); spline a zánik → `'operation-failed'` (kontraktová sada je nezkouší).
 
 ### Kontrakt (platí pro každou implementaci)
 
-Ověřuje ho kontraktová sada ([[#Testy]]), spuštěná pro `FakeKernel` v M5 a pro OCCT v M7.
+Ověřuje ho C++ kontraktová sada nad `OcctKernel` (`server/test/kernel`, port TS sady, [[Rozhodnutí nativního jádra|N26]], [[#Testy]]).
 
-- **Asynchronní a bez synchronních výjimek:** každá metoda vrací `Promise`. Chyba je vždy odmítnutý `Promise`, nikdy výjimka při volání.
+- **Bez výjimek:** v TS zápisu vrací každá metoda `Promise` a chyba je odmítnutý `Promise`, nikdy výjimka při volání. V C++ je chyba `KernelResult` s `KernelError`; výjimka OCCT se uvnitř převede na kód (`server/src/kernel/guarded.hpp`), ven propadne jen `std::bad_alloc` a `AssertionError` (chyba programu, [[Rozhodnutí nativního jádra|N114]]).
 - **`makeBox`:** každá složka `origin` je konečné číslo, každá složka `size` je konečné číslo > 0, jinak `'invalid-input'`. Vrací nový handle. Bounding box výsledku **obaluje** `[origin, origin + size]`: `min ≤ origin`, `max ≥ origin + size`, nadsazení nejvýš 1e-6 v každé složce. OCCT `BRepBndLib::Add` rozšiřuje box o toleranci tvaru (~1e-7), adaptér proto použije `BRepBndLib::AddOptimal` bez tolerance tvaru (M7).
 - **`makeCylinder`** (M11): každá složka `base` a `axis` konečná, délka `axis` > 1e-9, `radius` a `height` konečné > 0, jinak `'invalid-input'`. Bounding box výsledku odpovídá válci (podstavy `base` a `base + height·â` s poloměrem `radius`) s tolerancí 1e-5 v každé složce.
 - **`transform`** (M11): všech 16 prvků konečných a `isRigidMotion(m)`, jinak `'invalid-input'`; neznámý handle → `'unknown-handle'`. Vstupní tvar se nemění a zůstává platný. Bounding box výsledku = bounding box tvaru přemístěného `m` (tolerance 1e-5).
 - **`boolean`** (M11): `op` je jedna ze tří hodnot, `targets` i `tools` neprázdné a žádný handle se neopakuje (ani napříč seznamy), jinak `'invalid-input'`; neznámý handle → `'unknown-handle'`. Výsledek bez jediného solidu (prázdný průnik, rozdíl, který cíl celý odebere) a selhání algoritmu → `'operation-failed'`. Vstupy zůstávají platné. `union` = sjednocení všech vstupů, `subtract` = cíle bez nástrojů, `intersect` = společná část cílů a nástrojů.
 - **`makeFace`** (M12): `plane` má konečné složky, `xDir` i `normal` jednotkové a navzájem kolmé (`plane.isOrthonormal`, tolerance 1e-9); `outer` neprázdná; každá smyčka je buď jediná `circle` (poloměr konečný > 0), nebo ≥ 1 křivek `line`/`arc` (bez `circle`), kde konec každé křivky leží na začátku další a konec poslední na začátku první (tolerance `1e-7 · max(1, |souřadnice|)`); úsečka a oblouk nenulové délky (`from ≠ to`), oblouk s `|to − center| = |from − center|` (relativně 1e-7) a poloměrem > 1e-9. Jinak `'invalid-input'`. Orientace smyček je libovolná (jádro si ji srovná). Bounding box výsledku = obálka smyčky `outer` v prostoru (tolerance 1e-5; kontraktová sada jen pro roviny s osami rovnoběžnými se souřadnicovými). Plochu, kterou nejde postavit (samoprotínající se smyčka), OCCT hlásí `'operation-failed'`.
-- **`profileRegions`** (M30): každá křivka má `id` (neprázdný řetězec, v rámci volání unikátní) a splňuje tvar křivky z `makeFace` (konečná čísla, oblouk se stejnými poloměry, spline s platnými uzly), jinak `'invalid-input'`; pořadí a orientace křivek jsou libovolné. Úsečka nebo oblouk nulové délky (konce do tolerance `makeFace`) a spline, jehož všechny póly leží v jednom bodě, se **vynechá** (není chyba); unikátnost `id` platí i pro vynechané křivky. Kontrolu vstupu sdílí obě implementace: `parseProfileRegionsInput(p: unknown): Result<readonly IdentifiedCurve[], readonly string[]>` z `kernel` (kopie křivek bez vynechaných, jako `validateFaceInput` pro `makeFace`). Výsledek podle [[12-skicar#Oblasti (profily)]]: konce křivek do tolerance jsou jeden uzel; dvě křivky se společným bodem mimo sdílený koncový uzel (průsečík, dotyk konce s vnitřkem, překryv, i spline křížící sám sebe) → `{ regions: [], crossing: true }`; otevřené čáry nic neohraničují; vnější hranice komponenty se stane dírou nejmenší omezené stěny **jiné** komponenty, která ji obsahuje; oblasti seřazené podle `name`. Kontraktová sada porovnává `name`, `crossing`, počet děr a jejich jména přesně, `area` relativně 1e-6 (spline 1e-3, protože `FakeKernel` spline tessellací s tolerancí `1e-4 · měřítko` – chyba plochy vychází až 3·10⁻⁴) a body smyček do `1e-7 · max(1, |souřadnice|)`. Tolerance výpočtu jsou věcí implementace (TS fake, OCCT `Precision::Confusion`); případy na hraně tolerance kontraktová sada nezkouší.
+- **`profileRegions`** (M30): každá křivka má `id` (neprázdný řetězec, v rámci volání unikátní) a splňuje tvar křivky z `makeFace` (konečná čísla, oblouk se stejnými poloměry, spline s platnými uzly), jinak `'invalid-input'`; pořadí a orientace křivek jsou libovolné. Úsečka nebo oblouk nulové délky (konce do tolerance `makeFace`) a spline, jehož všechny póly leží v jednom bodě, se **vynechá** (není chyba); unikátnost `id` platí i pro vynechané křivky. Kontrola vstupu: `parseProfileRegionsInput` v `profile.hpp` (kopie křivek bez vynechaných, jako `validateFaceInput` pro `makeFace`; v TS `parseProfileRegionsInput(p: unknown): Result<readonly IdentifiedCurve[], readonly string[]>`). Výsledek podle [[12-skicar#Oblasti (profily)]]: konce křivek do tolerance jsou jeden uzel; dvě křivky se společným bodem mimo sdílený koncový uzel (průsečík, dotyk konce s vnitřkem, překryv, i spline křížící sám sebe) → `{ regions: [], crossing: true }`; otevřené čáry nic neohraničují; vnější hranice komponenty se stane dírou nejmenší omezené stěny **jiné** komponenty, která ji obsahuje; oblasti seřazené podle `name`. Kontraktová sada porovnává `name`, `crossing`, počet děr a jejich jména přesně, `area` relativně 1e-6 (spline 1e-3, převzato z TS sady, kde `FakeKernel` počítal spline tessellací s tolerancí `1e-4 · měřítko` – chyba plochy vycházela až 3·10⁻⁴) a body smyček do `1e-7 · max(1, |souřadnice|)`. Tolerance výpočtu jsou věcí implementace (OCCT `Precision::Confusion`); případy na hraně tolerance kontraktová sada nezkouší.
 - **`extrude`** (M13): neznámý handle → `'unknown-handle'`; `profile` není plocha (`TopAbs_FACE` – výsledek `makeFace` nebo jeho `transform`) → `'invalid-input'`; každá složka `direction` konečná a jeho délka > 1e-9, `distance` konečné > 0, jinak `'invalid-input'`. Vrací nový handle se solidem, profil zůstává platný. Bounding box výsledku = obálka bbox profilu a bbox profilu posunutého o `d̂ · distance` (tolerance 1e-5; kontraktová sada jen pro plochy v rovinách rovnoběžných se souřadnicovými). Směr rovnoběžný s rovinou plochy se nekontroluje ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R63]] ⚠). Pozor: směr ležící **přesně** v rovině profilu OCCT nechytí – vznikne solid nulové tloušťky, který projde i `BRepCheck_Analyzer`, takže jádro vrátí úspěch. V tinycad to nenastane, protože směr je vždy normála skici ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R84]] ⚠).
-- **`revolve`** (M13): neznámý handle → `'unknown-handle'`; `profile` není plocha → `'invalid-input'`; složky `axis.origin` a `axis.direction` konečné, délka směru > 1e-9, `angle` konečný a `0 < angle ≤ 2π + 1e-9`, jinak `'invalid-input'`. Profil zůstává platný. Bounding box pro případy kontraktové sady (profil v rovině obsahující osu rovnoběžnou se souřadnicovou osou, úhel začíná na souřadnicové rovině) s tolerancí 1e-5. Osa, která profil protíná, se předem nekontroluje (R63 ⚠); OCCT ji odmítne už v `IsDone()` → `'operation-failed'` (ověřeno testem v `kernel-occt/occt-sweep.test.ts`). Osa ležící na hraně profilu je platná (válec).
+- **`revolve`** (M13): neznámý handle → `'unknown-handle'`; `profile` není plocha → `'invalid-input'`; složky `axis.origin` a `axis.direction` konečné, délka směru > 1e-9, `angle` konečný a `0 < angle ≤ 2π + 1e-9`, jinak `'invalid-input'`. Profil zůstává platný. Bounding box pro případy kontraktové sady (profil v rovině obsahující osu rovnoběžnou se souřadnicovou osou, úhel začíná na souřadnicové rovině) s tolerancí 1e-5. Osa, která profil protíná, se předem nekontroluje (R63 ⚠); OCCT ji odmítne už v `IsDone()` → `'operation-failed'` (ověřeno testem v `server/test/kernel/sweep_test.cpp`). Osa ležící na hraně profilu je platná (válec).
 - **`roles` a `history`** (M14): podle [[#Stav po M14]]. Indexy v rolích a historii jsou platné indexy podtvarů výstupu (a vstupů), vzestupně bez duplicit. **Úplnost historie:** každá plocha každého vstupu je v `history` právě jednou – buď v `modified` (i nezměněná plocha jako identita na svůj index ve výstupu), nebo v `deleted`. Pořadí položek: podle vstupu, pak druhu (`face`, `edge`, `vertex`), pak indexu.
 - **`topology`** (M14): neznámý handle → `'unknown-handle'`; počty ploch a hran odpovídají síti (`tessellate`); kvádr má 6 rovinných ploch s normálami ±X, ±Y, ±Z ven z tělesa a bodem roviny na příslušné stěně, 12 hran se dvěma různými sousedními plochami a dvěma vrcholy, `vertexCount` 8.
 - **`fillet`, `chamfer`** (M14): neznámý handle → `'unknown-handle'`; `edges` neprázdné, celá čísla v rozsahu hran tvaru, bez duplicit, `radius`/`distance` konečné > 0, jinak `'invalid-input'`. Selhání algoritmu (poloměr větší než sousední plochy, hrana, kterou zaoblit nejde) → `'operation-failed'`, nikdy `'internal'`. Vstup zůstává platný. Bounding box zaobleného nebo zkoseného kvádru (jedna hrana) = bounding box kvádru (tolerance 1e-5).
@@ -346,8 +352,8 @@ Ověřuje ho kontraktová sada ([[#Testy]]), spuštěná pro `FakeKernel` v M5 a
   - Neznámý nebo už uvolněný handle → `'unknown-handle'`. Stejný handle dvakrát v jednom volání → `'invalid-input'`.
   - **Atomický:** při chybě se neuvolní nic. Přísnost odhalí chyby v mark & sweep, které by tolerantní `release` skryl.
 - **`liveHandleCount`:** počet vytvořených a neuvolněných handle. Neúspěšná operace žádný handle nevytvoří.
-- **Více chyb najednou** (např. neznámý handle i neplatná kvalita): který kód se vrátí, není určeno a sada to netestuje. `FakeKernel` dává přednost chybě z `failNext`.
-- **Izolace:** jádro si neponechává odkaz na vstupní objekty (`origin`, `size`, `base`, `axis`, matice, pole handle) a **čte je synchronně při volání**, jako by je klonoval `postMessage`. Změna vstupu hned po volání (před `await`) výsledek neovlivní. Vrácená data nesdílí paměť s ničím jiným. Když čtení vstupu selže (vstup mimo typy, např. `null`), je to také odmítnutý `Promise`, ne synchronní výjimka (u `makeFace` a `profileRegions` s kódem `'invalid-input'`, protože jejich kontrola vstupu přijímá `unknown`; jinde `'internal'`).
+- **Více chyb najednou** (např. neznámý handle i neplatná kvalita): který kód se vrátí, není určeno a sada to netestuje. Dekorátor `CountingKernel` testů regenerace dává přednost chybě z `failNext` ([[Rozhodnutí nativního jádra|N45]]).
+- **Izolace:** jádro si neponechává odkaz na vstupní objekty (`origin`, `size`, `base`, `axis`, matice, pole handle) a **čte je při volání** (v C++ jsou vstupy `const&` a `std::span`). Změna vstupu hned po volání (před `await`) výsledek neovlivní. Vrácená data nesdílí paměť s ničím jiným. V TS zápisu platilo: když čtení vstupu selže (vstup mimo typy, např. `null`), je to také odmítnutý `Promise`, ne synchronní výjimka (u `makeFace` a `profileRegions` s kódem `'invalid-input'`, protože jejich kontrola vstupu přijímá `unknown`; jinde `'internal'`); v C++ to typy vstupu nepřipustí.
 
 ### Výsledek operace a historie
 
@@ -391,11 +397,11 @@ export interface MeshData {
   readonly edgeRanges: Uint32Array<ArrayBuffer>;   // trojice [edgeIndex, firstPoint, pointCount]
 }
 
-/** Strukturální kontrola sítě. Prázdné pole = v pořádku. Pro testy obou jader a vývojovou kontrolu v app (render smí z kernel jen typy). */
+/** Strukturální kontrola sítě. Prázdné pole = v pořádku. Pro testy jádra a vývojovou kontrolu v app (render smí z kernel jen typy). */
 export function validateMeshData(mesh: MeshData): readonly string[];
 ```
 
-Ploché typed arrays, aby šly přes `postMessage` přenést jako transferable bez kopírování. **Každé pole má vlastní `ArrayBuffer`** (a zabírá ho celý). Seznam bufferů k přenosu tak nemá duplicity, se kterými by `postMessage` skončil `DataCloneError`.
+V klientovi ploché typed arrays, aby šly přes `postMessage` přenést jako transferable bez kopírování (síť přichází z read modelu, [[14-protokol#Read model a sítě]]); v C++ je `MeshData` s vektory v `mesh.hpp`, tamtéž `validateMeshData`. **Každé pole má vlastní `ArrayBuffer`** (a zabírá ho celý). Seznam bufferů k přenosu tak nemá duplicity, se kterými by `postMessage` skončil `DataCloneError`.
 
 `validateMeshData` kontroluje:
 - délky: `positions` a `normals` stejně dlouhé a dělitelné 3, `indices` dělitelné 3, `faceRanges` a `edgeRanges` dělitelné 3, `edgePositions` dělitelné 3,
@@ -415,82 +421,64 @@ export function createKernelError(code: KernelErrorCode, message: string): Error
 export function kernelErrorCode(e: unknown): KernelErrorCode | undefined;
 ```
 
-- Neočekávaná výjimka uvnitř implementace (chyba v adaptéru, výjimka OCCT) se převede na `'internal'`.
-- `regen` chybu s kódem jádra zachytí a označí featuru jako chybnou (`KERNEL`), regenerace pokračuje. Chyba bez kódu jádra chybou featury není: `RpcError` `'disconnected'` ([[Q037 Pád workeru a čekající RPC volání|Q037]]) znamená, že jádro zaniklo – `run` odmítne a `regen` zahodí cache i vlastněné handle ([[Q049 Pád jádra během regenerace|Q049]]); jiná výjimka je chyba programu ([[Q043 Výjimka builderu mimo jádro|Q043]]).
+- Neočekávaná výjimka uvnitř implementace (výjimka OCCT `Standard_Failure`, jiná výjimka) se převede na `'internal'`; `std::bad_alloc` a `AssertionError` propadnou ([[Rozhodnutí nativního jádra|N114]]). V C++ je chyba `KernelError { code, message }` a `enum class KernelErrorCode { InvalidInput, OperationFailed, UnknownHandle, Internal }` (`errors.hpp`).
+- Regenerace chybu jádra převede na status featury `KERNEL` a pokračuje ([[07-regenerace#Stav featury]]); výjimka z builderu, která z jádra nepochází, je chyba programu ([[Q043 Výjimka builderu mimo jádro|Q043]]). Pád jádra se ztrátou handle ([[Q049 Pád jádra během regenerace|Q049]]) na serveru nenastává ([[Rozhodnutí nativního jádra|N40]]).
 
-## `kernel-occt`: architektura adaptéru
+## Adaptér `OcctKernel`
+
+Architektura adaptéru `kernel-occt` v prohlížeči (worker, `ready`, tessellace ve workeru, Vite, výjimky a trapy WASM): [[06-geometricke-jadro v prohlížeči]].
 
 ```
-hlavní vlákno                               Web Worker
-┌───────────────────────────┐   rpc    ┌──────────────────────────────────────┐
-│ createOcctKernel()        │ ───────► │ occt.worker.ts                       │
-│  Worker + RpcClient       │          │   serveRpc(createOcctWorkerImpl(     │
-│  createOcctKernelClient   │ ◄─────── │     loadOcct() → OcctKernelImpl))    │
-│  → GeometryKernel         │ transfer │ OcctKernelImpl                       │
-│    & Disposable           │          │   Map<ShapeHandle, ShapeEntry>       │
-└───────────────────────────┘          │   tessellateEntry (BRepMesh)         │
-                                       │ OCCT WASM modul                      │
-                                       └──────────────────────────────────────┘
+regenerace / sezení (jeden volající, N13, N54)
+        │  ModelingKernel / GeometryKernel (kernel.hpp)
+        ▼
+OcctKernel (occt_kernel.hpp) ── Impl: ShapeTable  Map<ShapeHandle, ShapeEntry> (shape_table.hpp)
+        │  operace v samostatných souborech: primitives, transform, boolean, face, regions,
+        │  sweep, dressup, query, topology, history, tessellate, step (server/src/kernel/*.cpp)
+        ▼
+OCCT 8.0.1 (nativní knihovny TK*)
 ```
 
-- `createOcctKernel()` (jediný veřejný export) vlastní worker a klienta RPC. `createOcctKernelClient` je tenký, jen převádí volání na RPC a dostane z klienta RPC jen `call` (`failAll`/`dispose` patří vlastníkovi workeru). Chyby nepřevádí, kód přežije v `RpcError`.
-- `createOcctWorkerImpl(init: Promise<GeometryKernel>)` je strana workeru: implementace protokolu, která na každé volání počká na inicializaci ([[#Start workeru a `ready`]]).
-- `OcctKernelImpl` drží soukromou `Map` handle → `ShapeEntry` ([[#Datové struktury na obou stranách]]) a veškerou práci s OCCT. Modul OCCT dostane v konstruktoru (nenačítá ho sám), takže jde testovat přímo v Node bez workeru. Všechny OCCT objekty vytvořené v metodě uvolňuje deklarací `using` (embind objekty mají `[Symbol.dispose]`, který volá `.delete()`), `try/finally` jen tam, kde objekt opouští rozsah ([[0013-replicad-opencascadejs|ADR 0013]]).
-- Inicializace WASM proběhne jednou při startu workeru (v prohlížeči ~300 ms, v Node ~100 ms), klient vystaví `ready: Promise<void>`.
-- Worker zpracovává požadavky sériově. Dlouhé operace (fillet) blokují další, pro začátek je to přijatelné.
-- **Mapy podtvarů:** zvolený build nemá svázané `TopExp::MapShapes` ani `TopTools_IndexedMapOfShape`. Jediný pomocník adaptéru je počítá stejným algoritmem: `TopExp_Explorer(shape, typ)` a přidání podtvaru, jen pokud v seznamu ještě není podtvar `IsSame`. Pořadí, a tedy i `SubShapeIndex`, je proto stejné jako u `MapShapes`. Cena je O(n²) volání `IsSame`.
-- **Výjimky OCCT** přicházejí jako `WebAssembly.Exception`. Adaptér je přes `getExceptionMessage` převede na chybu `'internal'` se zprávou `<typ OCCT>: <zpráva>`, při prázdné zprávě jen `<typ OCCT>`. `'operation-failed'` z převodu výjimky nevzniká: operace, které běžně selhávají (boolean, fillet – M11+), kontrolují `IsDone()` a tuto chybu vyhodí samy. Výjimka se po přečtení zprávy uvolní (`oc.decrementExceptionRefcount(e)` v `occtExceptionText`). C++ výjimka, která doletí do JS, má počítadlo referencí 1 a žádný C++ `catch` ji neuvolní, takže by na haldě zůstalo asi 140 B na výjimku (M19.1). Každá taková výjimka navíc nechá ukazatel zásobníku Emscriptenu posunutý o 32 B. Build nevystavuje `stackRestore`, takže po ~262 000 výjimkách přijde trap (viz doplněk [[Q055 Pád WASM jádra|Q055]]) a řeší ho restart jádra. Pád samotného WASM je **fatální**. Fatální chyby rozpoznává `isWasmTrap`:
-  - `WebAssembly.RuntimeError`: trap, `unreachable`, nedostatek paměti, „function signature mismatch“;
-  - přetečení zásobníku: `RangeError` se zprávou o call stacku, ve Firefoxu `InternalError: too much recursion`. Ostatní `RangeError` (alokace pole) fatální nejsou;
-  - `SuppressedError` z `using` se rozbalí rekurzivně (`error` i `suppressed`), od M19.1, stejně v kopii pro planegcs.
-
-  Fatální pád ([[Q055 Pád WASM jádra|Q055]], od M10) proběhne takto: ([[Q055 Pád WASM jádra|Q055]], od M10): worker nejdřív pošle notifikaci `{ type: 'fatal', message }` (bez `id`, RPC klient ji přeskočí) a teprve pak odpoví na volání chybou; klient na notifikaci zavolá `failAll` → všechna čekající volání **včetně toho, které trap vyvolalo**, i další volání skončí `'disconnected'` a worker se ukončí. Požadavky, které ve workeru čekají po trapu, worker k jádru nepustí. `toKernelError` trap nepřevádí na `'internal'`, nechá ho projít. Jádro po trapu už nic nepočítá, protože jeho paměť může být poškozená. Nové jádro vytvoří `app` ([[11-ui]]); `regen` po `'disconnected'` zahodí cache a handle ([[Q049 Pád jádra během regenerace|Q049]]). Vlastní build ([[M16-vlastni-occt-build]]) trapy jen omezí, neodstraní.
-- **Vite:** WASM se načítá přes `import wasmUrl from 'replicad-opencascadejs/wasm?url'` a `locateFile: () => wasmUrl`, balík je v `optimizeDeps.exclude`, worker má `format: 'es'`. Import s dotazem `?url` dependency-cruiser nevyřeší (bere `?url` jako část podcesty `exports`), proto ho pravidlo `not-to-unresolvable` vynechává a hlídá ho zvláštní pravidlo `<modul>-allowed-npm-assets` se stejným seznamem npm balíků ([[01-architektura]]). Překlep v takové cestě odhalí až `vite build`. `vite build` hlásí neškodné varování: `node:module` z kódu Emscriptenu pro Node se v prohlížeči nahradí prázdným modulem.
-- **`using` v prohlížeči:** Vite 8 deklaraci `using` převádí na pomocnou funkci, která hledá `Symbol.dispose ?? Symbol.for('Symbol.dispose')`. Embind ale metodu `[Symbol.dispose]` přidá jen tehdy, když `Symbol.dispose` existuje. Worker proto **před** inicializací OCCT doplní `Symbol.dispose = Symbol.for('Symbol.dispose')`, **jen pokud chybí** (v TS přes `Object.defineProperty`, vlastnost je deklarovaná jako readonly), aby obě strany použily stejný symbol i v prohlížeči bez nativní podpory.
-
-### Start workeru a `ready`
-
-Modulový worker inicializuje OCCT asynchronně. Zpráva, která do workeru dorazí dřív, než si zaregistruje posluchače, se ztratí. Proto:
-
-1. `occt.worker.ts` zavolá `serveRpc` **hned synchronně** při startu. Implementace drží `Promise<OcctKernelImpl>` a každá metoda nejdřív počká na něj.
-2. Protokol `OcctKernelProtocol` = metody `GeometryKernel` + `ready(): void`. `ready` počká na inicializaci. Selhání inicializace (nenalezený WASM…) se tak dostane ke klientovi jako odmítnutí (`'internal'` se zprávou), ne jako neodchycená výjimka ve workeru, kterou `worker.onerror` nezachytí. Implementace selhání inicializace hned označí jako ošetřené (`catch`), aby z něj ve workeru nebylo neošetřené odmítnutí, dokud se nikdo nezeptá; každé další `await` přesto odmítne.
-3. `createOcctKernel()` vytvoří worker, napojí `onerror`/`messageerror` na `rpc.failAll`, počká na `ready` a vrátí `GeometryKernel & Disposable & { onDisconnected }`. `onDisconnected` přeposílá `RpcClient.onDisconnected`, takže jádro splní port `SupervisedKernel` ze spec 11 (M19.1). Když `ready` selže, worker ukončí a odmítne: chyba inicializace OCCT → `'internal'`; worker, který vůbec nenaběhne (404, chyba skriptu) → `onerror` → `'disconnected'`. `dispose()` = `rpc.dispose()` + `worker.terminate()`.
-4. Klient výsledek `tessellate` jen předá: buffery přišly přes `transfer`, worker o ně přišel (kontrakt nových bufferů tím platí automaticky).
+- `OcctKernel` je jediná veřejná třída; tabulka tvarů a všechny typy OCCT jsou v soukromém `Impl` (pimpl, [[Rozhodnutí nativního jádra|N14]]). Zničení jádra uvolní všechny tvary.
+- Každá veřejná metoda běží v `try` a cokoli vyhozeného převede na `KernelError` (`guarded.hpp`: `KernelFailure` nese kód očekávané chyby, `Standard_Failure` a jiné výjimky → `'internal'`); `std::bad_alloc` a `AssertionError` propadnou ([[Rozhodnutí nativního jádra|N114]]). Operace, které běžně selhávají (boolean, fillet), kontrolují `IsDone()` samy a vrací `'operation-failed'`.
+- Instance není bezpečná pro vlákna; volání serializuje vrstva sezení ([[Rozhodnutí nativního jádra|N13]], [[14-protokol#Vlákna a zámky serveru]]). Dlouhé operace (fillet) blokují další volání téhož dokumentu.
+- **Mapy podtvarů:** `TopExp::MapShapes` přímo (WASM build ho neměl). `SubShapeIndex` = pozice v mapě minus 1.
+- Algoritmy níže jsou port TS adaptéru `kernel-occt` (stejné kroky, stejné role a historie); odchylky nativního OCCT jsou uvedené u jednotlivých odrážek.
 
 ### Tessellace v adaptéru
 
-- `BRepMesh_IncrementalMesh(shape, linearDeflection, false, angularDeflection, false)`: absolutní průhyb, bez paralelismu (worker je jednovláknový).
+- `BRepMesh_IncrementalMesh(shape, linearDeflection, false, angularDeflection, false)`: absolutní průhyb, bez paralelismu (jeden volající, N13).
 - Plochy v pořadí mapy podtvarů (`SubShapeIndex` = pozice). Každá plocha má **vlastní vrcholy** (žádné sdílení mezi plochami), aby šly normály ostrých hran a `faceRanges`. Uzly triangulace se transformují `TopLoc_Location` plochy.
 - Plocha s orientací `TopAbs_REVERSED`: prohodí se pořadí dvou vrcholů každého trojúhelníku a otočí normály, aby trojúhelníky byly CCW při pohledu zvenku.
 - Normály z OCCT: `BRepLib_ToolTriangulatedShape.ComputeNormals(face, triangulation)` spočte normálu skutečné plochy v UV bodu každého uzlu (`GeomLib::NormEstim`); kde normála plochy není definovaná (pól koule), OCCT sám vezme průměr normál trojúhelníků v uzlu. Normály uloží do triangulace (`Poly_Triangulation.Normal(i)`) v souřadnicích plochy **bez** lokace a **bez** ohledu na orientaci plochy. Adaptér je proto otočí lokací (`gp_Dir.Transform(trsf)`, jen rotační část) a u plochy `TopAbs_REVERSED` obrátí. Nahrazuje dřívější vlastní průměr normál trojúhelníků (M11, [[Rozhodnutí noční rychloakce#M11 – Další entity|R21]]), který na švu a okraji pláště válce ujížděl o polovinu úhlového kroku; změna podle přání co nejvíc používat OCCT ([[Q088 Geometrie skici v TypeScriptu nebo v OCCT|Q088]]). Plocha, jejíž triangulace normály nedostane (`HasNormals()` je `false`), se vynechá jako plocha bez trojúhelníků.
 - Lokace se aplikují přes `gp_Trsf.Transforms(x, y, z)` (bez nového objektu OCCT na uzel). **Zrcadlící lokace** (`gp_Trsf.IsNegative()`) by otočila navinutí; nevznikne, protože `transform` přijímá jen tuhé pohyby (M11).
 - Hrany v pořadí mapy podtvarů. Polyline z `BRep_Tool.PolygonOnTriangulation(edge, loc)`: OCCT vybere první reprezentaci hrany na triangulaci sousední plochy a vrátí polygon, tu triangulaci a složenou lokaci. Uzly polygonu jsou indexy do vrácené triangulace, transformují se vrácenou lokací. Degenerovaná hrana, hrana bez polygonu nebo s méně než 2 body se do `edgeRanges` nezapíše (jako plocha bez trojúhelníků).
-- Chybějící triangulaci nebo polygon vrací binding jako JS `null`, i když `.d.ts` slibuje objekt; adaptér na `null` testuje explicitně.
-- Výsledek se kopíruje do nových typed arrays, každé s vlastním `ArrayBuffer` ([[#Síť pro vykreslení]]).
+- Chybějící triangulace nebo polygon je prázdný `Handle` (`IsNull()`); adaptér to testuje explicitně.
+- Výsledek se kopíruje do nových vektorů `MeshData` ([[#Síť pro vykreslení]]). Kód `server/src/kernel/tessellate.cpp`.
 
 ### Modelovací operace v adaptéru (M11)
 
 - **Válec:** `BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(base), gp_Dir(axis)), radius, height)`. Má 3 plochy (plášť, dvě podstavy) a 3 hrany (dvě kružnice a šev).
 - **Transformace:** `gp_Trsf.SetValues(a11 … a34)` po řádcích (`a_rc = m[c*4 + r]`, `Mat4` je po sloupcích) a `BRepBuilderAPI_Transform(shape, trsf, false)`. Tuhý pohyb jen nastaví lokaci, geometrie (`TShape`) se nekopíruje a sdílí s původním tvarem; tessellace lokaci ploch aplikuje.
-- **Boolean:** prázdný konstruktor `BRepAlgoAPI_Fuse | Cut | Common`, `SetArguments(cíle)`, `SetTools(nástroje)` (seznamy `NCollection_List_TopoDS_Shape`; `Append` vrací nový obal `TopoDS_Shape`, který adaptér smaže), `Build()`. `HasErrors()` → `'operation-failed'`; výsledek bez solidu (`TopExp_Explorer(výsledek, TopAbs_SOLID).More()` je `false`) → `'operation-failed'`.
+- **Boolean:** prázdný konstruktor `BRepAlgoAPI_Fuse | Cut | Common`, `SetArguments(cíle)`, `SetTools(nástroje)` (seznamy `TopTools_ListOfShape`), `Build()`. `HasErrors()` → `'operation-failed'`; výsledek bez solidu (`TopExp_Explorer(výsledek, TopAbs_SOLID).More()` je `false`) → `'operation-failed'`.
 
 ### Rovinná plocha v adaptéru (M12)
 
 - Rovina `gp_Ax3(gp_Pnt(origin), gp_Dir(normal), gp_Dir(xDir))`, `gp_Pln(ax3)`; bod roviny `(x, y)` → `origin + x·xDir + y·yDir` (`plane.toWorld` z `core`).
 - Hrany: úsečka `BRepBuilderAPI_MakeEdge(gp_Pnt, gp_Pnt)`; oblouk `BRepBuilderAPI_MakeEdge(gp_Circ, P1, P2)` s `gp_Circ(gp_Ax2(střed, normal, xDir), r)` – kružnice v OCCT běží proti směru hodinových ručiček kolem `normal`, takže pro `ccw: false` se body prohodí; kružnice `BRepBuilderAPI_MakeEdge(gp_Circ)`.
-- Smyčka `BRepBuilderAPI_MakeWire` (`Add` po hranách, `IsDone()` jinak `'operation-failed'`); plocha `BRepBuilderAPI_MakeFace(gp_Pln, outerWire, true)`, díry `Add(holeWire)`, pak `ShapeFix_Face(face).FixOrientation()` (srovná orientaci děr; samotné `Perform()` to nestačí, ověřeno v M12) a `BRepCheck_Analyzer(face).IsValid()` jinak `'operation-failed'`. Všechny objekty OCCT přes `using`.
+- Smyčka `BRepBuilderAPI_MakeWire` (`Add` po hranách, `IsDone()` jinak `'operation-failed'`); plocha `BRepBuilderAPI_MakeFace(gp_Pln, outerWire, true)`, díry `Add(holeWire)`, pak `ShapeFix_Face(face).FixOrientation()` (srovná orientaci děr; samotné `Perform()` to nestačí, ověřeno v M12) a `BRepCheck_Analyzer(face).IsValid()` jinak `'operation-failed'`. Objekty OCCT drží hodnoty a `Handle` (RAII).
 
-- **B-spline (M29):** `Geom_BSplineCurve(Poles: NCollection_Array1_gp_Pnt, Knots: NCollection_Array1_double, Multiplicities: NCollection_Array1_int, Degree)` ve 3D (řídicí body převedené `plane.toWorld`, pole s dolní mezí 0 – OCCT je přijme), uzly zkomprimované na unikátní hodnoty a násobnosti (build neexportuje `BSplCLib`), hrana `BRepBuilderAPI_MakeEdge(Geom_Curve)`. Adaptér nic nevzorkuje ani neaproximuje; platnost hlídá stávající `BRepCheck_Analyzer` (spline křížící jinou stranu → `'operation-failed'`). Měření plochy v testech potřebuje přesnou variantu `BRepGProp.SurfaceProperties(shape, props, 1e-9, false)` – výchozí se u plochy se splinem plete o ~2e-4 relativně.
+- **B-spline (M29):** `Geom_BSplineCurve(Poles: NCollection_Array1_gp_Pnt, Knots: NCollection_Array1_double, Multiplicities: NCollection_Array1_int, Degree)` ve 3D (řídicí body převedené `plane.toWorld`), uzly zkomprimované na unikátní hodnoty a násobnosti (`compressKnots`, port z TS), hrana `BRepBuilderAPI_MakeEdge(Geom_Curve)`. Adaptér nic nevzorkuje ani neaproximuje; platnost hlídá stávající `BRepCheck_Analyzer` (spline křížící jinou stranu → `'operation-failed'`). Měření plochy v testech potřebuje přesnou variantu `BRepGProp::SurfaceProperties(shape, props, 1e-9, false)` – výchozí se u plochy se splinem plete o ~2e-4 relativně.
 
 ### Oblasti skici v adaptéru (M30)
 
-`kernel-occt/regions.ts` (`profileRegionsOf`). Cesta zvolená prototypem ([[M30-geometrie-skici-v-occt#Průběh stopy|M30]]): build neváže `BOPAlgo_Builder`, `BOPAlgo_Tools`, `IntAna2d`, `GCE2d` ani klasifikátory bodu v ploše (`BRepClass_FaceClassifier`, `BRepTopAdaptor_FClass2d`); `BRepAlgoAPI_Splitter` nepozná spline křížící sám sebe, visící hranu nechá v ploše a trojúhelník dotýkající se obdélníku rohem udělá dírou. Proto algoritmus kontraktu (spec 12 *Oblasti (profily)*) s geometrií z OCCT:
+`server/src/kernel/regions.cpp`, port `kernel-occt/regions.ts` ([[Rozhodnutí nativního jádra|N29]]). Cesta zvolená prototypem ([[M30-geometrie-skici-v-occt#Průběh stopy|M30]]): WASM build nevázal `BOPAlgo_Builder`, `BOPAlgo_Tools`, `IntAna2d`, `GCE2d` ani klasifikátory bodu v ploše (`BRepClass_FaceClassifier`, `BRepTopAdaptor_FClass2d`); `BRepAlgoAPI_Splitter` nepozná spline křížící sám sebe, visící hranu nechá v ploše a trojúhelník dotýkající se obdélníku rohem udělá dírou. Proto algoritmus kontraktu (spec 12 *Oblasti (profily)*) s geometrií z OCCT:
 
-- Vstup zkontroluje `parseProfileRegionsInput` (sdílený s fake). 2D křivky `GC_MakeSegment2d`, `GC_MakeArcOfCircle2d` (oblouk vždy proti směru, `ccw: false` se otočí), `GC_MakeCircle2d`, `Geom2d_BSplineCurve` (uzly přes `compressKnots` z `face.ts`). Tolerance `tol = 1e-7 · max(1, největší |souřadnice|)` pro uzly i průsečíky.
+- Vstup zkontroluje `parseProfileRegionsInput` (`profile.hpp`). 2D křivky `GC_MakeSegment2d`, `GC_MakeArcOfCircle2d` (oblouk vždy proti směru, `ccw: false` se otočí), `GC_MakeCircle2d`, `Geom2d_BSplineCurve` (uzly přes `compressKnots`). Tolerance `tol = 1e-7 · max(1, největší |souřadnice|)` pro uzly i průsečíky.
 - **Křížení:** `Geom2dAPI_InterCurveCurve(c1, c2, tol)` jen pro dvojice s překrytými obálkami (řazení podle x); `NbSegments() > 0` (překryv) nebo bod průsečíku dál než `1e3 · tol` od sdíleného uzlu → `crossing`. Spline proti sobě `Geom2dAPI_InterCurveCurve(c, tol)`; u uzavřeného splinu bod v jeho uzlu jen tehdy, když jím křivka prochází i uvnitř (promítnutí uzlu). Průsečíky nevrací parametry, rozhoduje poloha bodu.
-- **Stěny:** polohrany s úhlem tečny a znaménkovou křivostí z `D1`/`D2` (zápis do předem vytvořených `gp_Pnt2d`/`gp_Vec2d`, bez alokace v cyklu), `next(e)` jako fake. Znaménková plocha cyklu = součet Greenových integrálů ∮(x dy − y dx)/2 hran (5bodový Gauss–Legendre nad `D1`, spline po úsecích mezi uzly, oblouk 16 kusů na otáčku); ne `BRepGProp` nad plochou z `MakeFace`, který u sevřené smyčky dává jiný obsah. Osamocená kružnice πr².
+- **Stěny:** polohrany s úhlem tečny a znaménkovou křivostí z `D1`/`D2` (zápis do předem vytvořených `gp_Pnt2d`/`gp_Vec2d`, bez alokace v cyklu), `next(e)` jako TS fake do M46. Znaménková plocha cyklu = součet Greenových integrálů ∮(x dy − y dx)/2 hran (5bodový Gauss–Legendre nad `D1`, spline po úsecích mezi uzly, oblouk 16 kusů na otáčku); ne `BRepGProp` nad plochou z `MakeFace`, který u sevřené smyčky dává jiný obsah. Osamocená kružnice πr².
 - **Díry:** bod vnější hranice v kandidátní stěně: obálka, pak parita průsečíků paprsku (`Geom2d_Line` + `InterCurveCurve`). Paprsek pod iracionálním úhlem; když projde uzlem nebo se křivky jen dotkne (sin úhlu ≤ 1e-3), další směr posunutý o zlatý úhel, nejvýš 8 pokusů.
-- **Výstup:** smyčky ze **vstupních** křivek (souřadnice beze změny), zpětná polohrana = úsečka s prohozenými konci, oblouk `ccw: false`, spline s obrácenými póly a uzly `a + b − k`. Oblasti podle `name`, výsledek zmrazený. Mřížka 840 úseček ~50 ms, 1860 ~110 ms (TS fake ~390 ms).
+- **Výstup:** smyčky ze **vstupních** křivek (souřadnice beze změny), zpětná polohrana = úsečka s prohozenými konci, oblouk `ccw: false`, spline s obrácenými póly a uzly `a + b − k`. Oblasti podle `name`, výsledek zmrazený. Mřížka 840 úseček ~50 ms, 1860 ~110 ms (měřeno ve WASM v M30).
 - Pro [[Q093 Oblasti z křížících se křivek|Q093]] (oblasti z křížících se křivek) je kandidát `BRepAlgoAPI_Splitter`: křivky v průsečících rozdělí sám a jména kusů dá historie.
 
 ### Tažení v adaptéru (M13)
@@ -498,93 +486,37 @@ Modulový worker inicializuje OCCT asynchronně. Zpráva, která do workeru dora
 - Typ profilu: `shape.ShapeType()` musí být `TopAbs_FACE`, jinak `'invalid-input'` (kontrola před stavbou).
 - **Hranol:** `BRepPrimAPI_MakePrism(face, gp_Vec(d̂ · distance), false, true)` (bez kopie, kanonizace ploch). `IsDone()`, výsledek obsahuje solid (`TopExp_Explorer(…, TopAbs_SOLID).More()`) a `BRepCheck_Analyzer(výsledek).IsValid()`, jinak `'operation-failed'`.
 - **Rotace:** `gp_Ax1(gp_Pnt(origin), gp_Dir(direction))`, `BRepPrimAPI_MakeRevol(face, ax1, angle, false)`; stejné kontroly jako u hranolu.
-- `FirstShape()`/`LastShape()` (start a konec) a `Generated(hrana)` (boční plochy) algoritmus umí; využije je M14 pro `roles` a historii. Všechny objekty OCCT přes `using`.
+- `FirstShape()`/`LastShape()` (start a konec) a `Generated(hrana)` (boční plochy) algoritmus umí; využije je M14 pro `roles` a historii. Objekty OCCT drží hodnoty a `Handle` (RAII).
 
 ### Historie, role a topologie v adaptéru (M14)
 
-- **Historie** jedním pomocníkem `collectHistory(maker, inputs: ShapeEntry[], output: ShapeEntry)` pro každý algoritmus s `Modified/Generated/IsDeleted` (`BRepBuilderAPI_MakeShape`, `BRepAlgoAPI_BuilderAlgo`, `BRepFilletAPI_*`): pro každou plochu `f` každého vstupu `IsDeleted(f)` → `deleted`; jinak `Modified(f)` → indexy ploch výstupu přes `IsSame`; prázdný seznam a `f` je ve výstupu (`IsSame`) → identita; prázdný a ve výstupu není → `deleted`. `Generated(s)` pro plochy, hrany a vrcholy vstupu → jen podtvary typu plocha, které ve výstupu jsou. Prvky seznamů (`NCollection_List_TopoDS_Shape`) a obaly z nich adaptér maže. Cena O(F_vstup · F_výstup) volání `IsSame`; zrychlení přes hash tvaru (v buildu je jako statické `ReplicadShapeHasher.HashCode(tvar, horníMez)`, ne na `TopTools_ShapeMapHasher`) až bude potřeba.
+- **Historie** jedním pomocníkem `collectHistory(maker, inputs: ShapeEntry[], output: ShapeEntry)` pro každý algoritmus s `Modified/Generated/IsDeleted` (`BRepBuilderAPI_MakeShape`, `BRepAlgoAPI_BuilderAlgo`, `BRepFilletAPI_*`): pro každou plochu `f` každého vstupu `IsDeleted(f)` → `deleted`; jinak `Modified(f)` → indexy ploch výstupu přes `IsSame`; prázdný seznam a `f` je ve výstupu (`IsSame`) → identita; prázdný a ve výstupu není → `deleted`. `Generated(s)` pro plochy, hrany a vrcholy vstupu → jen podtvary typu plocha, které ve výstupu jsou. Hledání plochy výstupu přes mapu podtvarů s `TopTools_ShapeMapHasher` (`FindIndex`), ne lineární `IsSame`. Kód `server/src/kernel/history.cpp` (`HistoryCollector`).
 - Boolean: `SetToFillHistory(true)` je výchozí; `Modified` cílových i nástrojových ploch. Transformace: `BRepBuilderAPI_Transform` (`Modified` vrátí přemístěnou plochu).
 - **Role kvádru** z `BRepPrimAPI_MakeBox` přes tabulku: `TopFace` → `face:top`, `BottomFace` → `face:bottom`, `LeftFace` (YMin) → `face:front`, `RightFace` (YMax) → `face:back`, `BackFace` (XMin) → `face:left`, `FrontFace` (XMax) → `face:right`; index přes `IsSame` v mapě ploch. **Válec:** `Face()` z `BRepPrimAPI_MakeOneAxis` → `face:side`; ze dvou rovinných ploch je `face:bottom` ta, jejíž bod roviny má menší průmět na osu.
 - **`makeFace`:** hrany se staví s id křivky; `BRepBuilderAPI_MakeWire` při slučování vrcholů hrany **kopíruje**, proto se k id ukládá hrana z `MakeWire.Edge()` po každém `Add` (ne postavená hrana); po `ShapeFix_Face` se každá hrana výsledku přiřadí přes `IsSame` k těmto hranám ([[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R119]]). `ShapeEntry` dostane `edgeRoles: ReadonlyMap<number, string>` (index hrany → id); `transform` ji přenese přes `Modified` hran (pořadí mapy podtvarů se tuhým pohybem nemění).
 - **Hranol a rotace:** `FirstShape()`/`LastShape()` → `face:start`/`face:end`, jen když je `IsSame` ve výsledku; `Generated(hrana profilu)` → `face:side:<id>` pro hrany s rolí; historie přes `collectHistory` (vstup 0 = profil). Rotace o 2π vrací pro hranu kolmou na osu prázdné `Generated` a mezikruží nemá šev: boční plocha se pak hledá náhradně mezi plochami, které nemá žádná jiná role, jako plocha ohraničená všemi kružnicemi z `Generated(vrchol hrany)` ([[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R118]] ⚠); historie zůstává přesně podle OCCT. Hrana profilu ležící na ose plochu nevytvoří, takže role nemá.
-- **Topologie:** typ plochy `BRepAdaptor_Surface(face).GetType()` (`GeomAbs_Plane` → `'plane'`, `Cylinder`, `Cone`, `Sphere`, `Torus`, jinak `'other'`); rovina z `Plane()` (`Location`, `Axis().Direction()`); normála plochy je `XDir × YDir` rámce, tedy u levotočivého rámce (`gp_Pln.Direct()` = false) opačná než `Axis()` (R119), a u plochy s orientací `TopAbs_REVERSED` ještě obrácená; sousednost hrana → plochy přes `TopExp_Explorer(plocha, TopAbs_EDGE)` a `IsSame` v mapě hran; vrcholy hrany přes `TopExp_Explorer(hrana, TopAbs_VERTEX)`; střed `BRepAdaptor_Curve` v `(First + Last) / 2`. Topologie obsahuje i degenerované hrany (vrchol kužele, pól koule), které síť nemá, takže počet hran topologie se může lišit od počtu hran v `edgeRanges`; indexy sdílí. `TopTools_IndexedDataMapOfShapeListOfShape` (`TopExp::MapShapesAndAncestors`) build nemá, proto výpočet přes explorer, O(F · E).
-- **Zaoblení a zkosení:** `BRepFilletAPI_MakeFillet(shape)`, `Add(radius, TopoDS.Edge(hrana))` pro každou hranu, `Build()`; `BRepFilletAPI_MakeChamfer(shape)`, `Add(distance, hrana)`. Po každém `Add` se ověří `maker.Contour(hrana) !== 0`. `Add` je `void` a hranu, kterou OCCT nezpracuje (např. šev válce), jinak tiše vynechá. Taková hrana → `'operation-failed'` se zprávou `fillet: OCCT did not accept edge <i>` (resp. `chamfer: …`), dřív se zaoblily jen ostatní hrany a hlásil se úspěch ([[M19.1-opravy-z-revize|M19.1]]). Výjimka OCCT z `Build`/`Shape`, `!IsDone()`, výsledek bez solidu nebo neplatný (`BRepCheck_Analyzer`) → `'operation-failed'` se zprávou; jiné výjimky (trap WASM, chyba programu) proletí beze změny (trap zůstává fatální, [[Q055 Pád WASM jádra|Q055]]). Historie přes `collectHistory`. Všechny objekty OCCT přes `using`.
-- Protokol workeru a klient přeposílají `topology`, `fillet` a `chamfer` jako ostatní metody.
+- **Topologie:** typ plochy `BRepAdaptor_Surface(face).GetType()` (`GeomAbs_Plane` → `'plane'`, `Cylinder`, `Cone`, `Sphere`, `Torus`, jinak `'other'`); rovina z `Plane()` (`Location`, `Axis().Direction()`); normála plochy je `XDir × YDir` rámce, tedy u levotočivého rámce (`gp_Pln.Direct()` = false) opačná než `Axis()` (R119), a u plochy s orientací `TopAbs_REVERSED` ještě obrácená; sousednost hrana → plochy přes `TopExp_Explorer(plocha, TopAbs_EDGE)` a `IsSame` v mapě hran; vrcholy hrany přes `TopExp_Explorer(hrana, TopAbs_VERTEX)`; střed `BRepAdaptor_Curve` v `(First + Last) / 2`. Topologie obsahuje i degenerované hrany (vrchol kužele, pól koule), které síť nemá, takže počet hran topologie se může lišit od počtu hran v `edgeRanges`; indexy sdílí. Sousednost hran a ploch jednou mapou `TopExp::MapShapesAndAncestors` (WASM build ji neměl a počítal přes explorer, O(F · E)); kód `topology.cpp`.
+- **Zaoblení a zkosení:** `BRepFilletAPI_MakeFillet(shape)`, `Add(radius, TopoDS.Edge(hrana))` pro každou hranu, `Build()`; `BRepFilletAPI_MakeChamfer(shape)`, `Add(distance, hrana)`. Po každém `Add` se ověří `maker.Contour(hrana) !== 0`. `Add` je `void` a hranu, kterou OCCT nezpracuje (např. šev válce), jinak tiše vynechá. Taková hrana → `'operation-failed'` se zprávou `fillet: OCCT did not accept edge <i>` (resp. `chamfer: …`), dřív se zaoblily jen ostatní hrany a hlásil se úspěch ([[M19.1-opravy-z-revize|M19.1]]). Výjimka OCCT z `Build`/`Shape`, `!IsDone()`, výsledek bez solidu nebo neplatný (`BRepCheck_Analyzer`) → `'operation-failed'` se zprávou; `std::bad_alloc` a `AssertionError` propadnou ([[Rozhodnutí nativního jádra|N114]]). Fillet a Chamfer v regeneraci sdílí `buildDressup` ([[Rozhodnutí nativního jádra|N111]]). Historie přes `collectHistory`. Objekty OCCT drží hodnoty a `Handle` (RAII).
 
 ### Export STEP v adaptéru (M15)
 
-- Tvar k zápisu: jeden handle přímo jeho tvar, víc → `TopoDS_Compound` (`TopoDS_Builder.MakeCompound`, `Add` pro každý tvar v pořadí `shapes`). Předpřipravený build váže `TopoDS_Builder`, ne jeho podtřídu `BRep_Builder`; `MakeCompound` a `Add` jsou metody `TopoDS_Builder` (M15).
-- `STEPControl_Writer`: `Transfer(tvar, STEPControl_AsIs, true, new Message_ProgressRange())` a `Write(cesta)`; status jiný než `IFSelect_RetDone` → `'operation-failed'`; výjimka OCCT z `Transfer`/`Write` také → `'operation-failed'` (se zprávou výjimky), past WASM projde beze změny (fatální, [[Q055 Pád WASM jádra|Q055]]). Jednotky výchozí (`write.step.unit` = mm, souhlasí s [[01-architektura#Souřadnice a jednotky]]); soubor v mm a schéma AP214 ověřené testem v M15.
-- Writer umí psát jen do souboru, proto přes virtuální souborový systém Emscriptenu (`oc.FS`, paměťový MEMFS): cesta `/tmp/tinycad-export-<n>.step` s rostoucím čítačem instance, `oc.FS.readFile(cesta)` → kopie do nového `Uint8Array` (vlastní buffer), `oc.FS.unlink(cesta)` ve `finally` – soubor nezůstane ani po chybě. Objekty OCCT přes `using`.
-- Worker vrací bajty přes `transfer` (jako síť), klient je jen předá.
+- Tvar k zápisu: jeden handle přímo jeho tvar, víc → `TopoDS_Compound` (`TopoDS_Builder.MakeCompound`, `Add` pro každý tvar v pořadí `shapes`).
+- `STEPControl_Writer`: `Transfer(tvar, STEPControl_AsIs)` a `Write(cesta)`; status jiný než `IFSelect_RetDone` → `'operation-failed'`; výjimka OCCT z `Transfer`/`Write` také → `'operation-failed'` (se zprávou výjimky). Jednotky výchozí (`write.step.unit` = mm, souhlasí s [[01-architektura#Souřadnice a jednotky]]); soubor v mm a schéma AP214 ověřené testem v M15.
+- Writer umí psát jen do souboru: dočasný soubor `<temp_directory_path>/tinycad-export-<pid>-<n>.step`, přečtený do `std::string` a smazaný RAII objektem i po chybě. `STEPControl_Writer` má globální stav, proto zápis drží zámek celého procesu ([[14-protokol#Vlákna a zámky serveru]]). Kód `step.cpp`.
+- Klient dostane bajty přes `SessionService` ([[14-protokol]]).
 
-### Volba WASM buildu OCCT (spike v M7)
-
-Rozhodnuto ([[Q012 Volba WASM buildu OCCT|Q012]], [[0013-replicad-opencascadejs|ADR 0013]]): **`replicad-opencascadejs` 1.1.0**. Měření ze spiku (`spikes/m07-occt/`) jsou v ADR.
-
-| Varianta | Pro | Proti |
-|---|---|---|
-| `opencascade.js` (předpřipravený build) | celé API z JS včetně map | od 2023 stojí, 50 MB WASM, start ~2,4 s, výjimky jako holé ukazatele, přípony přetížení `_1`, `_2` |
-| **`replicad-opencascadejs`** (zúžený build z projektu replicad) – zvoleno | 23 MB WASM, start ~100 ms, udržovaný, `Symbol.dispose`, čitelné výjimky | jen podmnožina API, chybí mapy podtvarů |
-| Vlastní C++ modul přes Emscripten + embind | úzké API přesně podle `GeometryKernel`, logika v C++, které Pavel zná; malý soubor | nutnost sestavit OCCT pro Emscripten, složitější build |
-
-Port drží API úzké, aby šlo později přejít na vlastní C++ modul beze změny zbytku aplikace. Přechod je samostatný milník [[M16-vlastni-occt-build]].
-
-## `FakeKernel`
-
-```ts
-// kernel/testing.ts – jen pro testy (testing.ts se nedostane do produkčního bundlu)
-export interface FakeKernel extends GeometryKernel {
-  /** Další volání metody `op` selže s `code` (bez vedlejších účinků). Více volání failNext se řadí do fronty. */
-  failNext(op: KernelOp, code: KernelErrorCode, message?: string): void;
-  /** Počet volání metody (včetně selhaných), nebo všech metod. Pro testy „regenerace nevolá jádro“. */
-  callCount(op?: KernelOp): number;
-}
-export type KernelOp = keyof GeometryKernel;
-export function createFakeKernel(): FakeKernel;
-
-/** Kontraktová sada; factory vytvoří pro každý test čerstvé jádro. */
-export function describeGeometryKernelContract(name: string, factory: () => Promise<GeometryKernel>): void;
-```
-
-- Žije v `kernel/testing.ts`, aby ho mohly používat testy modulů, které na `kernel` závisí hodnotově (`regen`, `features/*`). `render` má z `kernel` jen typy, testuje proti vlastnímu stubu `MeshOps`. Do produkčního kódu se fake nedostane.
-- Záznam tvaru (`AabbEntry`) je AABB. `makeBox` uloží `[origin, origin + size]`. Od M11: `makeCylinder` uloží AABB válce pro libovolnou osu (`â` jednotková osa, v ose `k` rozšíření `radius · sqrt(1 − â_k²)` kolem obou podstav); `transform` AABB osmi rohů vstupního AABB po `mat4.transformPoint`; `boolean('union')` obalový AABB všech vstupů, `'subtract'` obalový AABB cílů (jeden cíl beze změny – fake nic neodečítá), `'intersect'` průnik obalu cílů s obalem nástrojů, prázdný nebo nulové tloušťky → `'operation-failed'`. Od M12 `makeFace` uloží AABB smyčky `outer` v prostoru: koncové body křivek a u oblouků a kružnic body v lokálních úhlech 0, π/2, π, 3π/2, které na křivce leží, převedené `plane.toWorld` (přesné pro roviny s osami rovnoběžnými se souřadnicovými, jinde podhodnocené – fake to nevadí); `tessellate` plochy je kvádr s nulovou tloušťkou. Validace vstupů je stejná jako u OCCT.
-- Od M13 si záznam pamatuje příznak „plocha“ (`makeFace` ano, `transform` ho dědí, ostatní operace ne) pro kontrolu profilu v `extrude`/`revolve`. `extrude` uloží obálku AABB profilu a AABB posunutého o `d̂ · distance`; `revolve` obálku osmi rohů AABB profilu otočených kolem osy o úhly `0`, `angle` a každé `k · π/2` mezi nimi (přesné pro případy kontraktové sady, jinde přibližné – fake to nevadí).
-- Od M14: `topology` každého záznamu je topologie kvádru AABB – 6 rovinných ploch v pořadí sítě (−X, +X, −Y, +Y, −Z, +Z, rovina se středem stěny a normálou ven), 12 hran v pořadí sítě se sousedností a vrcholy odvozenými z rohů, 8 vrcholů, střed hrany = střed úsečky. Role: `makeBox` → `left 0, right 1, front 2, back 3, bottom 4, top 5`; `makeCylinder` → `bottom`/`top` = stěna ve směru −/+ převládající složky osy, `side` = zbylé 4; `extrude` → `start`/`end` = stěna ve směru −/+ převládající složky `d̂` (boční role fake nevrací); `makeFace` a `revolve` role nevrací. Historie: `transform`, `fillet`, `chamfer` identita 6 ploch; `boolean` identita prvního vstupu, ostatní vstupy `deleted`; `extrude`/`revolve` profil `deleted`. `fillet`/`chamfer` vrací AABB beze změny (nový handle) a kontrolují vstup jako OCCT (rozsah hran = 12).
-- Od M15: `exportStep` kontroluje vstup jako OCCT a vrací deterministický pseudo-STEP (bajty ASCII kódované ručně `charCodeAt`, protože doménový tsconfig bez DOM a typů Node `TextEncoder` nezná – stejné bajty jako `TextEncoder` pro ASCII): `ISO-10303-21;`, `HEADER;` … `ENDSEC;`, `DATA;`, řádek `#<i>=FAKE_SOLID((min),(max));` na každý tvar v pořadí `shapes` (AABB), `ENDSEC;`, `END-ISO-10303-21;`. Testy vyšších vrstev tak ověří, co se exportovalo.
-- Od M29 `makeFace` se splinem: AABB z bodů `bspline.tessellate` (`core`) s tolerancí `1e-7 · max(1, největší |souřadnice|)`; validace jako u OCCT.
-- Od M30 `profileRegions` počítá oblasti původním algoritmem skicáře z M12–M29 v TypeScriptu (planární graf, polohrany, tessellace splinu s `1e-4 · max(1, |souřadnice|)`), přesunutým ze `sketch/regions.ts` do `kernel/fake-regions.ts`. Fake je tak skutečný výpočet, ne aproximace: vyšší vrstvy testují oblasti bez OCCT a kontraktová sada drží obě implementace ve shodě.
-- `tessellate` vrací AABB jako kvádr: 6 ploch po 2 trojúhelnících (24 vrcholů, normály ploch), pořadí ploch −X, +X, −Y, +Y, −Z, +Z. Dál 12 hran po 2 bodech. Platí pro každý tvar, i válec a výsledek booleanu.
-- Volání `failNext` se týká jen dalšího volání dané metody. Injektovaná chyba nevytvoří handle a nic neuvolní.
-- Výsledky se vrací asynchronně (v mikroúloze), nikdy synchronně, aby testy vyšších vrstev nespoléhaly na pořadí, které by s workerem neplatilo.
+Volba WASM buildu OCCT (spike v M7, [[Q012 Volba WASM buildu OCCT|Q012]], [[0013-replicad-opencascadejs|ADR 0013]]) a TS `FakeKernel`: [[06-geometricke-jadro v prohlížeči]].
 
 ## Testy
 
-- **Kontraktová sada** `describeGeometryKernelContract` v `kernel/testing.ts`, spuštěná pro `FakeKernel` (M5) a pro `OcctKernelImpl` přímo v Node (M7, `src/kernel-occt/*.test.ts` v projektu `unit`, tedy v `npm run check`; modul OCCT se načte jednou na soubor, [[Q051 Kde běží kontraktové testy OCCT|Q051]]). Pokrývá každou odrážku [[#Kontrakt (platí pro každou implementaci)|kontraktu]]:
-  - nové handle po každé operaci, nikdy znovu použité,
-  - všechny kódy chyb, odmítnutí místo synchronní výjimky, atomicitu `release`, `liveHandleCount`,
-  - **kvádr:** bounding box, síť projde `validateMeshData`, právě 6 ploch s indexy 0–5 a 12 hran s indexy 0–11, každá plocha má aspoň 2 trojúhelníky, body leží v AABB a pokrývají ho, normály trojúhelníků jedné plochy jsou shodné, kolmé ke stěně (rovnoběžné se souřadnicovou osou), míří **ven** a šest ploch leží na šesti různých stěnách (navinutí trojúhelníku souhlasí s normálou),
-  - nové buffery při každém `tessellate`,
-  - **M11** (bbox s tolerancí 1e-5, nic, co platí jen pro jedno jádro): `makeCylinder` pro osy X, Y a nejednotkovou Z a každý neplatný vstup; `transform` posun, rotace o 90° a 45° kolem Z, vstup zůstává platný, nerigidní matice (zrcadlení, měřítko, zkosení, `NaN`) → `'invalid-input'`; `boolean` – `union` překrývajících se i oddělených kvádrů (obalový bbox), `intersect` překrývajících se (přesný průnik) a oddělených (`'operation-failed'`, žádný handle), `subtract` s nástrojem, který odřízne roh (bbox cíle), neplatné seznamy a `op`; síť každého výsledku projde `validateMeshData` a leží v bbox; izolace vstupů.
-- **M12** (kontraktová sada): `makeFace` – čtverec v rovině XY, obdélník v rovině XZ posunuté do `origin [0, 5, 0]`, kružnice v rovině YZ, smyčka z úsečky a půlkruhového oblouku („D“, `ccw` true i false), čtverec s kruhovou dírou: bbox s tolerancí 1e-5, síť projde `validateMeshData`; neortonormální rovina, neuzavřená smyčka, kružnice uprostřed víceprvkové smyčky, nulová úsečka, oblouk s nestejným poloměrem, prázdná `outer` → `'invalid-input'` bez handle; izolace vstupu.
-- **M13** (kontraktová sada): `extrude` – čtverec 10 × 10 na XY o 5 ve směru +Z, o 5 ve směru `[0, 0, 3]` (nejednotkový), ve směru −Z, obdélník na XZ ve směru −Y: bbox s tolerancí 1e-5, síť projde `validateMeshData` a leží v bbox; profil zůstává platný; profil po `transform` (posunutý čtverec) funguje; `distance` 0, záporná, `NaN`, nulový směr, profil kvádr → `'invalid-input'` bez handle; neznámý handle; izolace vstupu. `revolve` – obdélník na XZ (`x ∈ [5, 10]`, `z ∈ [0, 10]`) kolem osy Z o 2π → bbox `[−10, 10]² × [0, 10]`, o π/2 → `[0, 10]² × [0, 10]`, o π/2 kolem osy s opačným směrem → `x ∈ [0, 10]`, `y ∈ [−10, 0]`; úhel 0, záporný, > 2π, `NaN`, nulový směr osy, profil kvádr → `'invalid-input'`; síť projde `validateMeshData`.
-- **M14** (kontraktová sada): `topology` kvádru (6 rovinných ploch s normálami ven, 12 hran, každá se dvěma plochami a dvěma vrcholy, 8 vrcholů; počty sedí se sítí; `unknown-handle`); role kvádru (6 klíčů, každý jedna plocha, různé, normála plochy role odpovídá ose podle tabulky) a válce (`top`/`bottom` po jedné rovinné ploše s normálou ±osa, `side` neprázdné, disjunktní); úplnost historie u `transform`, `boolean` (všechny tři operace), `extrude`, `revolve`, `fillet`, `chamfer` (každá plocha vstupu právě jednou v `modified` nebo `deleted`, indexy v rozsahu); `fillet`/`chamfer` jedné hrany kvádru – bbox beze změny, vstup platný, neplatné vstupy (`[]`, duplicita, index mimo rozsah, neceločíselný, poloměr 0, záporný, `NaN`) → `'invalid-input'` bez handle; izolace vstupu `edges`.
-- **M15** (kontraktová sada): `exportStep` kvádru a dvou kvádrů – začátek a konec textu, neprázdný; `[]` a duplicitní handle → `'invalid-input'`; neznámý a uvolněný handle → `'unknown-handle'`; vstup zůstává platný a `liveHandleCount` se nemění; dvě volání vrací různé buffery.
-- `kernel-occt` navíc (M15, akceptace): kvádr 20 × 20 × 10 minus válec r = 3 přes celou výšku → bajty zpět do `oc.FS` → `STEPControl_Reader` (`ReadFile` = `IFSelect_RetDone`, `TransferRoots`, `OneShape`) má právě jeden solid s objemem `4000 − 90π` (`BRepGProp.VolumeProperties`, relativně 1e-4) a stejným bounding boxem (1e-5); dva oddělené kvádry → dva solidy a součet objemů; dočasný soubor po exportu v `oc.FS` není.
-- `kernel-occt` navíc (M14): kvádr minus procházející válec – plocha pláště válce je v `modified` z nástroje, horní a spodní stěna kvádru z cíle, podstavy válce `deleted`, topologie 7 ploch a hrana mezi horní stěnou a pláštěm; zaoblení hrany kvádru – 7 ploch, právě jedna `generated` z dané hrany, dvě sousední stěny `modified`; zkosení – 7 ploch, nová rovinná; zaoblení i zkosení velikosti 11 u kvádru 10 → `'operation-failed'` (plán počítal s poloměrem 6, ten v testu neselhal); `makeFace` obdélníku s id čtyř úseček – 4 role `edge:<id>` na různé hrany, po `transform` a `extrude` 4 role `face:side:<id>` + `start` + `end` (6 ploch); rotace o 2π bez `start`/`end`, o π/2 s nimi; kružnice s id → jedna boční plocha; válec `bottom` v `base`.
-- `kernel-occt` navíc (M13): hranol čtverce 10 × 10 × 5 má 6 ploch a objem 500 (1 %); hranol čtverce s kruhovou dírou r = 2 má 7 ploch a objem `(100 − 4π) · 5`; rotace obdélníku (`x ∈ [5, 10]`) o 2π má 4 plochy a objem `750π`, o π/2 6 ploch a čtvrtinu objemu; rotace obdélníku `x ∈ [0, 5]` (osa na hraně) o 2π má objem `250π`.
-- `kernel-occt` navíc (M12): plocha má v síti 1 plochu; obsah (`BRepGProp.SurfaceProperties`) čtverce s dírou = `a² − πr²` (relativně 1e-6), „D“ = obdélník + půlkruh; samoprotínající se smyčka (motýlek) → `'operation-failed'`.
-- `validateMeshData`: platná síť, každé pravidlo porušené zvlášť.
-- `kernelErrorCode`: vlastní chyba, `RpcError` se stejným kódem, cizí kód a ne-chyba → `undefined`.
-- `FakeKernel` navíc: `failNext` (jednorázové, fronta, bez vedlejších účinků), `callCount`.
-- `isRigidMotion`: identita, rotace s posunem → `true`; zrcadlení, měřítko, zkosení, neafinní spodní řádek, `NaN` → `false`.
-- `kernel-occt` navíc (M11, mimo kontrakt): válec má 3 plochy a objem ze sítě do 1 % od `πr²h`; posunutý a otočený kvádr 6 ploch a stejný objem; kvádr minus válec, který jím prochází, 7 ploch a objem do 1 %; `subtract`, kde nástroj cíl celý pokryje → `'operation-failed'`; `union` oddělených kvádrů 12 ploch.
-- `kernel-occt` navíc (M7):
-  - mapy podtvarů: kvádr má 6 / 12 / 8 ploch, hran a vrcholů, pořadí ploch −X, +X, −Y, +Y, −Z, +Z (pořadí `MapShapes` pro `MakeBox`),
-  - `boundingBox` kvádru přesně (bez tolerance tvaru),
-  - výjimka OCCT uvnitř metody → odmítnutí s kódem `'internal'` a typem výjimky ve zprávě,
-  - paměť se automaticky netestuje: samo OCCT po `delete()` nechá ~11 kB na kvádr, takže únik v adaptéru nejde od úniku buildu odlišit ([[Q054 Únik paměti v OCCT buildu|Q054]]). Že adaptér uvolní všechny objekty OCCT, které vlastní (`using`, `ShapeEntry` při `release`), ověřuje revize. Paměťový test patří do [[M16-vlastni-occt-build]],
-  - klient přes `MessageChannel` v Node: `ready`, předání sítě přes `transfer`, chyba jádra dorazí s kódem, `failAll` odmítne čekající volání.
+C++ testy v `server/test/kernel/` (spustitelný `tinycad_kernel_tests`, GoogleTest) nad `OcctKernel`: port TS kontraktové sady `kernel/testing.ts` a testů adaptéru `test/unit/kernel-occt` ([[Rozhodnutí nativního jádra|N26]]). Původní rozpis TS testů: [[06-geometricke-jadro v prohlížeči#Testy]].
+
+- **Kontraktová sada** pokrývá každou odrážku [[#Kontrakt (platí pro každou implementaci)|kontraktu]] po souborech: `lifecycle_test.cpp` (nové handle, nikdy znovu použité, kódy chyb, atomicita `release`, `liveHandleCount`), `modeling_test.cpp` (kvádr, M11 válec, `transform`, `boolean`), `face_test.cpp` (M12, B-spline M29), `sweep_test.cpp` (M13), `topology_test.cpp`, `history_test.cpp`, `dressup_test.cpp` (M14), `step_test.cpp` (M15 včetně zpětného načtení `STEPControl_Reader`, objem a bbox), `regions_test.cpp` (M30), `tessellate_test.cpp` a `mesh_test.cpp` (síť projde `validateMeshData`, nové buffery, kvádr 6 ploch a 12 hran s normálami ven; `validateMeshData` a `isRigidMotion` po pravidlech), `profile_test.cpp` (`validateFaceInput`, `parseProfileRegionsInput`), `guarded_test.cpp` (převod výjimek na kódy, N114).
+- Případy a tolerance jsou stejné jako v TS sadě (bbox 1e-5, objemy ze sítě do 1 %, úplnost historie, role kvádru a válce, akceptace M12–M15 z adaptéru).
+- **Paměť** (`memory_test.cpp`, [[Rozhodnutí nativního jádra|N31]]): 200 kol modelování a uvolnění, růst RSS po zahřátí nejvýš 20 MB a `liveHandleCount` 0. Q054 a Q055 byly specifické pro WASM build.
+- 2D geometrie skicáře (`tinycad_geometry`) se testuje sdílenými případy `geometry` (`server/test/shared-cases/geometry_cases_test.cpp`) a přes `GeometryService` ([[14-protokol#Testy]]).
+- Chování jádra v celé sestavě ověřují sdílené případy `regen` ([[07-regenerace#Testy]], [[13-testovani]]).
+- Klient: testy typů a pomůcek modulu `kernel` v `test/unit/kernel/` (`validateMeshData`, `kernelErrorCode`).
 
 ## Otevřené otázky
 

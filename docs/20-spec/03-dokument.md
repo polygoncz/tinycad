@@ -13,10 +13,12 @@ milestones:
   - "[[M13-extrude-revolve]]"
   - "[[M14-topologicke-pojmenovani]]"
   - "[[M15-export-a-dokonceni]]"
+  - "[[M40-dokument-a-operace-v-cpp]]"
+  - "[[M47-uklid-a-dokonceni]]"
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-15
+updated: 2026-10-17
 ---
 # 03 – `document`: doménový model
 
@@ -25,6 +27,8 @@ updated: 2026-10-15
 > **Milník:** [[M02-dokument]]
 
 Popisuje, **co** uživatel vytvořil: recept ze seřazených featur. Neobsahuje žádnou geometrii ani logiku jejího výpočtu. Závisí jen na `core`.
+
+**Kde běží (od [[M47-uklid-a-dokonceni|M47]]):** autoritou je C++ dokument na serveru, knihovna `tinycad_document` v `server/src/document` (třída `Document` nad `shared_ptr<const …>`, [[Rozhodnutí nativního jádra|N17]]; hlavičky v `server/src/document/include/tinycad/document/`). Zápis v TS níže zůstává zápisem kontraktu, C++ ho implementuje beze změny chování (sdílené případy, [[13-testovani#Sdílené testovací případy]]). Modul `document` v klientovi drží optimistické zrcadlo dokumentu (`app/mirror-document.ts`, [[Rozhodnutí nativního jádra|N63]]): model, reference, schéma a registr, `validateAgainstSchema` (generická kontrola v dialogu nad schématem z `FeatureTypeDescriptor`, [[14-protokol#Schéma featur]]), `evaluateParams` a `migrateFeatureData` pro handlery operací.
 
 ## Model
 
@@ -109,7 +113,7 @@ export function createDocument(init: CreateDocumentInit): DocumentWriter;
 
 ## Reference na jiné entity
 
-Parametry featur mohou odkazovat na výsledky jiných featur. Reference jsou vždy **jména**, nikdy indexy nebo handle. Tvar id se kontroluje na datové hranici: `FeatureId` nesmí být prázdné, obsahovat `/` ani být vyhrazené `'origin'` (M12, vlastník počáteční geometrie; `fromData`, `validate` u `feature.add`), `BodyId` v referenci musí mít tvar `<vlastník>/body[:<n>]` (`readRef`); asserty v `bodyId` a `originOfBody` jsou pak jen pojistka proti chybě programu. Značkovaná id (`FeatureId`, `BodyId`…) vznikají přetypováním jen na důvěryhodných místech: při generování id v `interaction` (`FeatureEditor`), v `fromData` po kontrole tvaru dat, v `bodyId` (ražba `BodyId`, [[0015-artefakty-a-identita-telesa|ADR 0015]]), v `parseBodyId` (kontrola tvaru id tělesa z dat zvenku, M11: klíče metadat v `fromData`, `validate` operací `body.*`) v `parsePlaneId` a `sketchId` (M12), v konstantách `ORIGIN` a `ORIGIN_PLANE_IDS` v `document/origin.ts` (M12), v `parseAxisId`, `parseSketchId` a `ORIGIN_AXIS_IDS` (M13), `TopoName` jen v `propagateNames` v `regen` (M14, [[08-topologicke-pojmenovani#Jména]]; z dat je `readRef` převezme jako neprázdný řetězec) a v interní kontrole tvaru reference `readRef`, kterou sdílí `validateAgainstSchema` a `referencesOf`. Mimo `document` se reference z neověřených hodnot čtou jen přes veřejné `readRefOf(kinds, r)` (M14: `interaction` – `topo` v dialogu, rovina skici), takže `TopoName` z dat vzniká na jediném místě; `readRef` zůstává interní. Rovinu skici (`PlaneRef | TopoRef`, první položka parametru `planes`) čte jediná veřejná `readPlaneRef(value)` a porovnává `samePlaneRef(a, b)` (M21), které sdílí skicář i tabulka druhů referencí.
+Parametry featur mohou odkazovat na výsledky jiných featur. Reference jsou vždy **jména**, nikdy indexy nebo handle. Tvar id se kontroluje na datové hranici: `FeatureId` nesmí být prázdné, obsahovat `/` ani být vyhrazené `'origin'` (M12, vlastník počáteční geometrie; `fromData`, `validate` u `feature.add`), `BodyId` v referenci musí mít tvar `<vlastník>/body[:<n>]` (`readRef`); asserty v `bodyId` a `originOfBody` jsou pak jen pojistka proti chybě programu. Značkovaná id (`FeatureId`, `BodyId`…) vznikají přetypováním jen na důvěryhodných místech: při generování id v `interaction` (`FeatureEditor`), v `fromData` po kontrole tvaru dat, v `bodyId` (ražba `BodyId`, [[0015-artefakty-a-identita-telesa|ADR 0015]]), v `parseBodyId` (kontrola tvaru id tělesa z dat zvenku, M11: klíče metadat v `fromData`, `validate` operací `body.*`) v `parsePlaneId` a `sketchId` (M12), v konstantách `ORIGIN` a `ORIGIN_PLANE_IDS` v `document/origin.ts` (M12), v `parseAxisId`, `parseSketchId` a `ORIGIN_AXIS_IDS` (M13), `TopoName` jen v `propagateNames` v regeneraci (M14, dnes C++, [[08-topologicke-pojmenovani#Jména]]; z dat je `readRef` převezme jako neprázdný řetězec) a v interní kontrole tvaru reference `readRef`, kterou sdílí `validateAgainstSchema` a `referencesOf`. Mimo `document` se reference z neověřených hodnot čtou jen přes veřejné `readRefOf(kinds, r)` (M14: `interaction` – `topo` v dialogu, rovina skici), takže `TopoName` z dat vzniká na jediném místě; `readRef` zůstává interní. Rovinu skici (`PlaneRef | TopoRef`, první položka parametru `planes`) čte jediná veřejná `readPlaneRef(value)` a porovnává `samePlaneRef(a, b)` (M21), které sdílí skicář i tabulka druhů referencí.
 
 ```ts
 export type BodyId = Brand<string, 'BodyId'>;   // '<featureId>/body' nebo '<featureId>/body:<n>'
@@ -133,7 +137,7 @@ M13 přidal `AxisRef` a `SketchEntityRef` ([[M13-extrude-revolve|M13]]): osa Rev
 
 ### Počáteční geometrie (M12)
 
-Počáteční roviny jsou artefakty vyhrazeného vlastníka `origin` ([[12-skicar#Roviny a počátek]], [[0015-artefakty-a-identita-telesa|ADR 0015]]). Jejich id a rámce jsou konstanty v `document`, protože na ně odkazují reference v datech; `regen` z nich seeduje `EMPTY_STATE` a `interaction` z nich staví řádky Prohlížeče.
+Počáteční roviny jsou artefakty vyhrazeného vlastníka `origin` ([[12-skicar#Roviny a počátek]], [[0015-artefakty-a-identita-telesa|ADR 0015]]). Jejich id a rámce jsou konstanty v `document`, protože na ně odkazují reference v datech; regenerace z nich seeduje `EMPTY_STATE` a `interaction` z nich staví řádky Prohlížeče.
 
 ```ts
 export type SketchId = Brand<string, 'SketchId'>;            // '<featureId>/sketch'
@@ -213,7 +217,7 @@ export function isBodyColor(v: unknown): v is string;
 
 ## Schéma featury
 
-Datová část typu featury: co za parametry má, jak vypadají výchozí hodnoty a jak se migrují stará data. Chování (výpočet geometrie) je v `regen` ([[0004-data-oddelene-od-chovani|ADR 0004]]).
+Datová část typu featury: co za parametry má, jak vypadají výchozí hodnoty a jak se migrují stará data. Chování (výpočet geometrie) je v regeneraci na serveru, buildery v `server/src/features/<name>/` ([[0004-data-oddelene-od-chovani|ADR 0004]], [[07-regenerace]]). Klient schéma dostane ze serveru jako `FeatureTypeDescriptor` a vlastní objekty schémat od M47 nemá ([[Rozhodnutí nativního jádra|N67, N123]]).
 
 ```ts
 export type ParamSpec =
@@ -321,6 +325,8 @@ export function evaluateParams<P>(schema: FeatureSchema<P>, params: unknown, var
 - Kdo zná jen `FeatureSchema` bez typu (`Evaluated<unknown>`), přetypuje na `Evaluated<KonkrétníP>` až u pluginu, který typ zná.
 ## Serializace
 
+Serializaci a načítání dat zvenku (soubor SQLite, import `.tinycad.json`) dělá od [[M47-uklid-a-dokonceni|M47]] jen server (`server/src/document/serialize.cpp`, testy `server/test/document/serialize_test.cpp`). Klient dokument nenačítá ani neukládá: zrcadlo staví dokument z read modelu přes `createDocument`, takže `fromData` a `toData` z TS modulu zmizely s úklidem exportů bez produkčního uživatele (M47 úkol 4). Pravidla níže jsou kontrakt C++ implementace.
+
 ```ts
 export interface DocumentData {
   readonly meta: DocumentMeta;
@@ -340,12 +346,12 @@ export interface DocumentLoadError { readonly issues: readonly DocumentLoadIssue
 - Hlásí všechny problémy najednou, každý s cestou v datech.
 - `fromData` u každé featury porovná `typeVersion` s `schema.version` a případně zavolá `migrate`. Výjimka z `migrate` i výsledek, který není objekt, je problém načtení (stará data, se kterými migrace nepočítá), ne chyba programátora. Featura novější než schéma by neměla nastat ([[Q025 Featura z novější verze|Q025]]); kdyby přesto, je to také problém načtení.
 - Neznámý typ featury při načítání: featura se zachová jako „neznámá“ (data beze změny), regenerace ji označí chybou. Dokument se tím nerozbije.
-- Formát musí být čisté JSON (žádné `Map`, `Date`, `undefined` v polích). Ověří test „`JSON.parse(JSON.stringify(x))` je hluboce rovno `x`“. `fromData` to u `params` (i u výsledku `migrate`) kontroluje: jen čisté objekty (prototyp `Object.prototype` nebo `null`), pole, řetězce, konečná čísla, `boolean` a `null`. IndexedDB ukládá structured clone, takže by se tam jinak `Date` nebo `Map` dostaly. Kontrola je od [[M19.1-opravy-z-revize|M19.1]] jedna sdílená funkce `isJsonValue(v)` / `isJsonObject(v)` (`document/json.ts`, export z `index.ts`). Používá ji čtení (`fromData`) i zápis (`validate` operací, [[04-operace-a-historie#Handler]]). Pole s dírou neprojde, protože JSON z díry udělá `null`. Kontrola je lineární a nealokuje, běží při každém kroku tažení skici.
+- Formát musí být čisté JSON (žádné `Map`, `Date`, `undefined` v polích). Ověří test „`JSON.parse(JSON.stringify(x))` je hluboce rovno `x`“. `fromData` to u `params` (i u výsledku `migrate`) kontroluje: jen čisté objekty (prototyp `Object.prototype` nebo `null`), pole, řetězce, konečná čísla, `boolean` a `null`. (Původně kvůli IndexedDB, která ukládala structured clone, takže by se tam jinak `Date` nebo `Map` dostaly; v klientovi kontrola dál chrání operace, které jdou na server jako JSON.) Kontrola je od [[M19.1-opravy-z-revize|M19.1]] jedna sdílená funkce `isJsonValue(v)` / `isJsonObject(v)` (`document/json.ts`, export z `index.ts`). Používá ji čtení (`fromData`) i zápis (`validate` operací, [[04-operace-a-historie#Handler]]). Pole s dírou neprojde, protože JSON z díry udělá `null`. Kontrola je lineární a nealokuje, běží při každém kroku tažení skici.
 - `toData` vrací zmrazený obal.
 
 ### Migrace dat featur
 
-Migraci parametrů na aktuální verzi schématu používá `fromData` i `ops` (migrace při `apply`, [[04-operace-a-historie#Handler]], [[Q035 Migrace featur v záznamech logu|Q035]]), proto je exportovaná:
+Migraci parametrů na aktuální verzi schématu používá `fromData` (na serveru) i `ops` (migrace při `apply`, [[04-operace-a-historie#Handler]], [[Q035 Migrace featur v záznamech logu|Q035]]), proto je exportovaná:
 
 ```ts
 export interface FeatureData { readonly type: string; readonly typeVersion: number; readonly params: unknown }
@@ -356,6 +362,8 @@ export function migrateFeatureData(schemas: RegistryReader<FeatureSchema>, data:
 `fromData` cesty prefixuje `studio.features[i].`. Migrovaný výsledek zachová ostatní pole vstupu (`{ ...data, typeVersion, params }`); nezměněná data vrací jako tentýž objekt.
 
 ## Testy
+
+Testy modelu, referencí a schématu běží v obou jazycích (`test/unit/document/` a `server/test/document/`); testy serializace (`toData`, `fromData`) jen v C++.
 
 - Invarianty mutátorů (duplicitní id, neexistující featura, indexy mimo rozsah).
 - Posun rollback baru pro vložení, smazání a přesun před barem, na baru a za barem.

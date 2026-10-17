@@ -16,7 +16,7 @@ milestones:
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-15
+updated: 2026-10-17
 ---
 # 10 – `interaction`: výběr, nástroje, akce
 
@@ -220,8 +220,8 @@ Stav, který UI zobrazuje, vystavují prezentační modely jako `Observable<T>` 
   ```
 
   Režim `model` a společná tlačítka všech režimů (historie, zobrazení) jsou vestavěné. Dva příspěvky pro tentýž režim jsou chyba sestavení (výjimka). Skicář dodá `SKETCH_TOOLBAR` (revize M20: `interaction` dřív obsah lišty skicáře znal, i když ho neimportoval).
-  Známá mez: `ToolDescriptor.group` je uzavřený výčet a obsahuje skupiny skicáře `draw` a `constrain`, takže jejich jména `interaction` pořád zná. Čistá `toolbarGroups(input)` je vedle modelu kvůli testům. `ui` si nechává jen rozložení do šířky a přetečení (`ui/toolbar-fit.ts`). Sestavuje ho `createAppSession`, `AppSession.toolbar` je bez `dispose`.
-- **`DocumentListModel`** (`createDocumentListModel({ catalog, confirm })`): stavy načítání (načtení nikdy neodmítne, chyba je `failed` se „Zkusit znovu“), `busy` blokuje druhou akci, potvrzení smazání přes `confirm(request: ConfirmRequest)` (klíč a parametry, překládá `ui`, jako u vestavěných akcí), pořadí smazání a znovunačtení, přejmenování na místě a import (`importFile(readText)`, čtení souboru i `JSON.parse` běží pod `busy`). Seznam dokumentů dodá port `DocumentCatalog { list, create, importFile, remove, rename }` definovaný v `interaction`; adaptér `createDocumentCatalog` je v `app/documents.ts`. Model nedrží nic mezi voláními, proto nemá `dispose`.
+  Známá mez: `ToolDescriptor.group` je uzavřený výčet a obsahuje skupiny skicáře `draw` a `constrain`, takže jejich jména `interaction` pořád zná. Čistá `toolbarGroups(input)` je vedle modelu kvůli testům. `ui` si nechává jen rozložení do šířky a přetečení (`ui/toolbar-fit.ts`). Sestavuje ho `createRemoteAppSession` (do M46 `createAppSession`), `AppSession.toolbar` je bez `dispose`.
+- **`DocumentListModel`** (`createDocumentListModel({ catalog, confirm })`): stavy načítání (načtení nikdy neodmítne, chyba je `failed` se „Zkusit znovu“), `busy` blokuje druhou akci, potvrzení smazání přes `confirm(request: ConfirmRequest)` (klíč a parametry, překládá `ui`, jako u vestavěných akcí), pořadí smazání a znovunačtení, přejmenování na místě a import (`importFile(readText)`, čtení souboru i `JSON.parse` běží pod `busy`). Seznam dokumentů dodá port `DocumentCatalog { list, create, importFile, remove, rename }` definovaný v `interaction`; adaptér `createRemoteDocumentsCatalog` nad `DocumentService` jádra je v `app/remote-documents-catalog.ts` (do M46 `createDocumentCatalog` nad IndexedDB, [[11-ui v prohlížeči]]). Model nedrží nic mezi voláními, proto nemá `dispose`.
 
 Společná pravidla snapshotů:
 - Model vystavuje `ObservableValue.asObservable()`, nikdy samotnou `ObservableValue` (přetypováním by šlo zapisovat, revize M9). Závislosti dostává v nejužší potřebné podobě: `RegistryReader` místo registru, `SelectionCommands` místo `SelectionModel`, `Pick<FeatureEditor, …>` místo celého editoru ([[0011-programovani-proti-rozhranim|ADR 0011]]).
@@ -581,7 +581,7 @@ export type ManipulatorRegistry = Registry<ManipulatorDescriptor>;   // klíč =
 export function createManipulatorRegistry(): ManipulatorRegistry;
 ```
 
-- `frame` a `pickPoint` jsou zapsané jako **metody** (bivariance, jako `FeatureBuilder.build`), aby šel `ManipulatorDescriptor<TransformParams>` předat jako `ManipulatorDescriptor`. M19 přejmenovává `handles()` na `frame()`, protože vrací i `center`.
+- `frame` a `pickPoint` jsou zapsané jako **metody** (bivariance, jako dřív `FeatureBuilder.build`), aby šel `ManipulatorDescriptor<TransformParams>` předat jako `ManipulatorDescriptor`. M19 přejmenovává `handles()` na `frame()`, protože vrací i `center`.
 - Id úchytů jedné featury jsou unikátní napříč režimy (`tx` v režimu Volný a `px` v režimu pivotu jsou různé úchyty).
 - Úchyt nesmí záviset na kotvě odvozené z parametru, který sám táhne (invariant kotev, [[07-regenerace#Kotvy manipulátorů (M18)]]).
 
@@ -903,13 +903,20 @@ export interface HistoryState {
 export const HISTORY_LIMIT = 200;
 
 export interface HistoryModel extends Disposable { readonly state: Observable<HistoryState> }
-export function createHistoryModel(deps: { log: OperationLogReader }): HistoryModel;
+/** Port historie (M46, N73): záznamy logu bez operací a zásobníky undo, obojí ze serveru (místo OperationLogReader). */
+export interface HistoryEntry { readonly seq: number; readonly kind: 'do' | 'undo' | 'redo'; readonly target?: number; readonly label: string; readonly time: number; readonly opType: string }
+export interface HistoryLog {
+  entries(): readonly HistoryEntry[];
+  stacks(): { readonly undo: readonly number[]; readonly redo: readonly number[] };   // seq původních 'do', vrchol na konci
+  readonly events: Subscribable<{ changed: undefined }>;
+}
+export function createHistoryModel(deps: { log: HistoryLog }): HistoryModel;
 ```
 
 - `rows`: nejnovější první, nejvýš `HISTORY_LIMIT` (DOM s tisíci řádky by byl pomalý); `total` = počet záznamů logu kromě `document.rename`; `older` = `total − rows.length` (ui ho jen ukáže, nepočítá – oprava revize M15).
-- `status` se počítá z `rebuildUndoStacks(log.entries())` (`ops`), stejného pravidla jako `UndoManager`; model na `UndoManager` nezávisí (pořadí odběratelů `appended` by nebylo jisté). Přepočet je O(n) na záznam – pro naše logy zanedbatelné.
-- Přepočet po `log.events.appended`; nový snapshot jen při změně, řádek, jehož hodnoty se nezměnily, je **tentýž objekt** (pravidla snapshotů výše). Zmrazené. `dispose` odhlásí odběr.
-- **Přejmenování dokumentu** (M19.2, [[M19.2-ux-backlog|D5]]): záznamy s operací `document.rename` (na nejvyšší úrovni) model vynechá z `rows` i z počtů (`total`, `older`). Panel ukazuje kroky undo a přejmenování mezi ně nepatří ([[04-operace-a-historie#Operace dokumentu]]); jinak by se ukázalo jako `abandoned`. `status` ostatních řádků se dál počítá z celého logu.
+- `status` se počítá ze zásobníků portu (`log.stacks()`): na undo zásobníku `active`, na redo `undone`, jinak `abandoned`. Zásobníky počítá server stejným pravidlem jako `UndoManager` ([[04-operace-a-historie#Undo / redo]]); do M46 je model počítal sám z `rebuildUndoStacks(log.entries())`. Adaptér `RemoteHistory` (`app/remote-history.ts`) načte záznamy a zásobníky z `GetHistory` znovu, když se změní `lastSeq` read modelu ([[Rozhodnutí nativního jádra|N73]], [[14-protokol]]).
+- Přepočet po `log.events.changed`; nový snapshot jen při změně, řádek, jehož hodnoty se nezměnily, je **tentýž objekt** (pravidla snapshotů výše). Zmrazené. `dispose` odhlásí odběr.
+- **Přejmenování dokumentu** (M19.2, [[M19.2-ux-backlog|D5]]): záznamy s `opType` `document.rename` model vynechá z `rows` i z počtů (`total`, `older`). Panel ukazuje kroky undo a přejmenování mezi ně nepatří ([[04-operace-a-historie#Operace dokumentu]]); jinak by se ukázalo jako `abandoned`. `status` ostatních řádků se dál počítá z celého logu.
 - Klik na řádek nic nedělá: návrat k dřívějšímu záznamu by byl větvení logu ([[Q006 Větvení operačního logu|Q006]], R127 ⚠).
 
 ## Jméno dokumentu: `DocumentNameModel`
@@ -945,7 +952,7 @@ export const FILE_ACTION_IDS = { exportStep: 'file.exportStep', exportDocument: 
 /** Port: app exportuje a soubor stáhne; odmítnutí = export se nepovedl. */
 export interface FileExporter {
   exportStep(bodies: readonly BodyId[]): Promise<void>;
-  exportDocument(): Promise<{ readonly withHistory: boolean }>;   // M19.1: false = živý dokument bez historie (úložiště nefunguje)
+  exportDocument(): Promise<{ readonly withHistory: boolean }>;   // M19.1: false = živý dokument bez historie (úložiště nefunguje); export ze serveru je vždy true
 }
 
 export type FileTask = 'step' | 'document';
@@ -967,7 +974,7 @@ export function createFileActions(deps: {
 
 - Obě akce: `group: 'file'` (menu Soubor v `TitleBar`), `label` = id (klíč překladu), bez zkratky, režim `model`. Registrují se při vytvoření; `dispose` odhlásí odběry.
 - `exportStep` je povolená, když nic neběží, není otevřený dialog (`editor.current === null`; jinak by šel ven náhled), je režim `model` a poslední `RegenSnapshot` má aspoň jedno těleso, které není v `browser.hidden`. Spustí `exporter.exportStep(tělesa)` s viditelnými tělesy v pořadí snapshotu (pořadí Prohlížeče, R122 ⚠: výběr těles k exportu není). Režim jen pro čtení export nezakazuje.
-- `exportDocument` je povolená, když nic neběží (i s otevřeným dialogem – exportuje se uložený stav, [[05-persistence#Export a import souboru]]).
+- `exportDocument` je povolená, když nic neběží (i s otevřeným dialogem – exportuje se uložený stav, [[05-persistence#Export a import souboru]]). Od M46 to je export ze serveru: `createRemoteFileExporter` (`app/remote-file-exporter.ts`) počká na prázdnou frontu změn a stáhne soubor z `DocumentService.ExportDocument`, vždy s historií ([[11-ui#Kompoziční kořen (app)]]). STEP stejně exportuje server (`ExportStep`) z viditelných těles svého koncového stavu.
 - Běh: `status` `running` (obě akce zakázané) → po vyřízení `idle`, po odmítnutí `failed` se zprávou (`Error.message`, jinak `String(e)`). Další spuštění `failed` přepíše.
 
 ## Skicář
@@ -1144,7 +1151,7 @@ Spline (M29) → `polyline` z `bspline.tessellate` s tolerancí `SPLINE_TOLERANC
 
 Kopie zrcadlení a polí (M36) → `toSketchDrawing` i `artifactDrawing` přidají `patternCopies(data)` s odvozenými id `<pole>:<index>.<zdroj>` stylem zdroje (u vybraného nebo najetého pole jeho stylem); pořadí bodů: body dat, body kopií, `__origin`. `entityAt` přeloží id kopie (`patternOfCopy`, po polygonu `__poles:`) na id pole, takže klik na kopii vybere pole; tah za kopii nic nepohne ([[12-skicar#Zrcadlení a pole (M36)]]).
 
-- `artifactDrawing` (M13): konstrukční křivky se kreslí (stylem `construction`), aby šla konstrukční úsečka vybrat jako osa Rotace ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R74]] ⚠); `regions` kresby = oblasti z argumentu ve stejném pořadí (od M30 `SketchArtifact.outlines` z jádra, předá je `app/regen-pipeline.ts`; do M29 `computeRegions` z entit), `id` = jméno oblasti (shodné s klíči `SketchArtifact.regions`), oblouky a kružnice lomenou čarou s krokem nejvýš π/36.
+- `artifactDrawing` (M13): konstrukční křivky se kreslí (stylem `construction`), aby šla konstrukční úsečka vybrat jako osa Rotace ([[Rozhodnutí noční rychloakce#M13 – Extrude a Revolve|R74]] ⚠); `regions` kresby = oblasti z argumentu ve stejném pořadí (od M30 `SketchArtifact.outlines` z jádra, od M46 z read modelu, předá je `app/read-model-view.ts`; do M29 `computeRegions` z entit), `id` = jméno oblasti (shodné s klíči `SketchArtifact.regions`), oblouky a kružnice lomenou čarou s krokem nejvýš π/36.
 - `axisDrawing` (M13): rovina kresby s `xDir = d̂`, `normal = unit(d̂ × (|d̂_z| < 0.9 ? +Z : +X))` a počátkem `axis.origin`, jedna úsečka id `'axis'` od `−size/2` do `size/2`; bez bodů a oblastí. Id kresby je id osy, takže zásah osy ve viewportu převede `refPick` na `AxisRef`.
 
 ### Nástroje a akce skicáře
@@ -1270,7 +1277,7 @@ Akce registruje `createBuiltInActions` volané z `app` (undo, redo, smazat výb�
 - `SelectionModel`: `set` s duplicitami, `toggle` přidá/odebere, `clear`, žádná emise beze změny, vyčištění `face`/`edge` při nové generaci (`feature`/`body` zůstávají); `bindSelectionHighlight`.
 - `ToolManager`: výchozí nástroj po vytvoření, přepínání a deaktivace předchozího, neznámé id, `finish` (i uvnitř `activate`, i starý `ctx`), `Escape`, `unhandledKey`, přeposílání událostí jen aktivnímu nástroji, zakrytí nástrojem `refPick` podle `activeRefParam`.
 - `SelectTool` s `FakeViewport`: hover, `leave`, klik → `set`, Shift+klik → `toggle`, klik do prázdna → `clear`, tažení nad toleranci nic nevybere, pravé tlačítko ignoruje, `Escape`.
-- `FeatureEditSession` se skutečným dokumentem a dispečerem (jádro ani regenerace nejsou potřeba; `interaction` na `kernel` nesmí ani v testech). Integrační test v `tests/` s `FakeKernel` a regenerací ověří živý náhled. Případy: create → `setParam` ×20 → commit = **jeden** záznam v logu; cancel = dokument i log beze změny; jméno `Box 2`; vložení na bar; edit featury před i za barem posune bar dočasně a po commit/cancel ho vrátí, v logu není `studio.setRollback`; neplatná hodnota → `issues`; druhá session → výjimka; příkazy po zavření → výjimka; undo zakázané během session.
+- `FeatureEditSession` se skutečným dokumentem a dispečerem (paměťový dvojník z `ops/testing.ts`, [[Rozhodnutí nativního jádra|N121]]; jádro ani regenerace nejsou potřeba; `interaction` na `kernel` nesmí ani v testech). Živý náhled nad regenerací ověřují testy `app` nad falešným jádrem (`createFakeCore()`, `test/unit/app/remote-session.test.ts`) a e2e proti serveru; integrační test s `FakeKernel` zanikl s lokální regenerací v M47. Případy: create → `setParam` ×20 → commit = **jeden** záznam v logu; cancel = dokument i log beze změny; jméno `Box 2`; vložení na bar; edit featury před i za barem posune bar dočasně a po commit/cancel ho vrátí, v logu není `studio.setRollback`; neplatná hodnota → `issues`; druhá session → výjimka; příkazy po zavření → výjimka; undo zakázané během session.
 - `ActionRegistry`: zkratky včetně `Mod` a `Shift`, přesná shoda modifikátorů, velikost písmen, ignorování v textovém poli, zakázaná akce, neplatná a duplicitní zkratka, nový snapshot jen pro změněnou akci.
 - `FeatureTreeModel`: snapshot řádků po přidání featury, chybě regenerace, potlačení a posunu rollback baru; nový snapshot je nový objekt, nezměněný řádek zůstává identický; `selected`, `editing`; `rename` s mezerami a prázdné; `dependents`, `dependentsOf`, `move` (platný, odmítnutý, existující porušení) – M11.
 - `feature.delete` s potvrzením: bez závislých bez dotazu, se závislými dotaz s `n`, zamítnutí nic nesmaže (M11).

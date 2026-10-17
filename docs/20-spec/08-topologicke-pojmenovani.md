@@ -8,15 +8,17 @@ aliases:
 modules:
   - regen
   - kernel
-  - kernel-occt
+  - server
   - document
   - interaction
 milestones:
   - "[[M14-topologicke-pojmenovani]]"
+  - "[[M43-regenerace-v-cpp]]"
+  - "[[M47-uklid-a-dokonceni]]"
 tags:
   - spec
 created: 2026-10-12
-updated: 2026-10-14
+updated: 2026-10-17
 ---
 # 08 – Topologické pojmenování
 
@@ -25,6 +27,8 @@ updated: 2026-10-14
 > **Milník:** [[M14-topologicke-pojmenovani]]
 
 > Stav: implementováno v M14 (kontrakt v [[M14-topologicke-pojmenovani#Implementační plán]], rozhodnutí R91–R120 a oprava revize v [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování]]). Do M14 existovaly jen reference na celá tělesa (`BodyRef`), oblasti, roviny a osy.
+
+> **Implementace (od M47):** pojmenování běží na serveru v C++. Role, historii a topologii vrací `OcctKernel` (`server/src/kernel`: `history.cpp`, `topology.cpp`, `primitives.cpp`, `face.cpp`, `sweep.cpp`, [[06-geometricke-jadro#Historie, role a topologie v adaptéru (M14)]]), tabulku jmen staví `server/src/regen/src/names.cpp` (port `regen/names.ts` pravidlo po pravidle, hlavička `server/src/regen/include/tinycad/regen/names.hpp`; `#k` řadí `std::stable_sort`, [[Rozhodnutí nativního jádra|N111]]). TS signatury níže jsou zápis kontraktu ([[Rozhodnutí nativního jádra|N128]]). Klient jména nepočítá: primární jména ploch a jména hran dostává v read modelu (`BodyView.face_names`, `edge_names`, [[14-protokol#Read model a sítě]]) a staví z nich `TopoNames` pro picking.
 
 ## Problém
 
@@ -44,7 +48,7 @@ Celý tok v jedné větě: **jádro** vrací ke každému tvaru role (u primitiv
 export type TopoName = Brand<string, 'TopoName'>;   // definováno v document
 ```
 
-Formát je datový kontrakt ([[0018-format-topologickych-jmen|ADR 0018]]): jméno se ukládá v `TopoRef.name` do dokumentu. Jméno je **neprůhledný řetězec** – porovnává se a ukládá, nikdy se nerozebírá (ani v `dependenciesOf`, ani v UI). Razí ho jediné místo, `propagateNames` v `regen/names.ts` (jediné přetypování na `TopoName`). Řazení jmen = výchozí `Array.prototype.sort()` (kódové jednotky UTF-16), nikdy `localeCompare`.
+Formát je datový kontrakt ([[0018-format-topologickych-jmen|ADR 0018]]): jméno se ukládá v `TopoRef.name` do dokumentu. Jméno je **neprůhledný řetězec** – porovnává se a ukládá, nikdy se nerozebírá (ani v `dependenciesOf`, ani v UI). Razí ho jediné místo, `propagateNames` v `server/src/regen/src/names.cpp` (do M46 `regen/names.ts`, jediné přetypování na `TopoName`). Řazení jmen = výchozí `Array.prototype.sort()` (kódové jednotky UTF-16), nikdy `localeCompare`; v C++ `std::sort` a `std::set` nad `std::string` (bajty UTF-8), pro jména z ASCII totéž pořadí.
 
 ### Plochy
 
@@ -89,7 +93,7 @@ Jména hran, rovina skici na ploše i „Po plochu“ potřebují topologii výs
 ## Tabulka jmen a přenos
 
 ```ts
-// regen/names.ts (veřejné API regen)
+// regen/names.ts (veřejné API regen); C++: server/src/regen/include/tinycad/regen/names.hpp
 export interface NameTable {
   /** Indexy ploch se jménem, vzestupně; neznámé jméno → []. */
   faces(name: TopoName): readonly number[];
@@ -142,7 +146,7 @@ Pravidla `propagateNames`:
 7. **Hrany** se pojmenují až nakonec z primárních jmen ploch výstupu a `topology` podle pravidel v [[#Hrany]].
 8. Index mimo rozsah výstupu nebo vstupu, neznámý `input` → výjimka (chyba adaptéru, ne uživatele). Index vstupu se kontroluje jen u vstupu s neprázdnou topologií: vstup bez jmen (`EMPTY_NAMES` za plochu profilu) topologii nemá, ale historie tažení na něj odkazuje ([[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R114]]).
 
-Funkce je **čistá** a deterministická (výsledek nezávisí na pořadí položek v historii ani v `roles`), výsledek je zmrazený (`Object.freeze` tabulky a polí indexů; `faceEntries`/`edgeEntries` jsou uvnitř obyčejné `Map`, zmrazené jen typem `ReadonlyMap` – [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|oprava revize M14]] ⚠) a testuje se bez jádra na ručně sestavené historii. Adaptér jádra musí v historii vracet **každou plochu každého vstupu právě jednou** – v `modified` (i identitu) nebo v `deleted` –, aby TypeScriptová strana nic neodvozovala; kontraktová sada to ověřuje pro obě jádra ([[06-geometricke-jadro#Kontrakt (platí pro každou implementaci)]]).
+Funkce je **čistá** a deterministická (výsledek nezávisí na pořadí položek v historii ani v `roles`), výsledek je zmrazený (`Object.freeze` tabulky a polí indexů; `faceEntries`/`edgeEntries` jsou uvnitř obyčejné `Map`, zmrazené jen typem `ReadonlyMap` – [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|oprava revize M14]] ⚠) a testuje se bez jádra na ručně sestavené historii. Adaptér jádra musí v historii vracet **každou plochu každého vstupu právě jednou** – v `modified` (i identitu) nebo v `deleted` –, aby strana regenerace nic neodvozovala; kontraktová sada jádra to ověřuje (`server/test/kernel/history_test.cpp`) ([[06-geometricke-jadro#Kontrakt (platí pro každou implementaci)]]).
 
 `Body.names` je tabulka jmen aktuálního tvaru tělesa. Featura, která těleso **mění**, ji přepočítá přes `nameShape` (vstupy = tabulky vstupních tvarů v pořadí, v jakém je předala jádru), nekopíruje ji ([[07-regenerace#Builder featury]], [[Rozhodnutí noční rychloakce#M14 – Topologické pojmenování|R113]]).
 
@@ -183,12 +187,12 @@ Ladicí panel jmen ([[Rozhodnutí noční rychloakce#M14 – Topologické pojmen
 
 ## Scénáře, které musí fungovat (akceptační testy M14)
 
-Integrační testy s OCCT v Node (`createInThreadOcctKernel`, [[M14-topologicke-pojmenovani#Implementační plán]]); `<box>` = id featury kvádru atd.
+Od úkolu 1 M47 sdílené případy `regen` v `test/shared-cases/regen/` nad C++ regenerací a `OcctKernel` (spouštěč `server/test/shared-cases/regen_cases_test.cpp`, [[07-regenerace#Testy]], [[Rozhodnutí nativního jádra|N127]]); do M46 integrační testy s OCCT ve WASM v Node (`createInThreadOcctKernel`, [[M14-topologicke-pojmenovani#Implementační plán]]). `<box>` = id featury kvádru atd. Pravidla `propagateNames` na ručně sestavených historiích testuje `server/test/regen/names_test.cpp`, `nameShape` nad jádrem `name_shape_test.cpp`.
 
-1. **Fillet přežije změnu rozměru:** kvádr 10 × 10 × 10 v počátku; Fillet na hraně `edge:<box>/face:front|<box>/face:top` (r = 1) → těleso má 7 ploch, jednu s jménem `<fillet>/face:fillet:edge:<box>/face:front|<box>/face:top`; změna výšky kvádru na 20 → fillet bez chyby, 7 ploch, bbox `z ∈ [0, 20]`.
-2. **Skica na ploše:** skica na `<box>/face:top` s obdélníkem uvnitř plochy, vysunutí „přidat“ do kvádru o 5 → bez chyby, bbox `z ∈ [0, 15]`; změna výšky kvádru na 20 → skica i vysunutí bez chyby, rovina skici `z = 20`, bbox `z ∈ [0, 25]`.
-3. **Fillet na hraně díry:** kvádr minus válec, který jím prochází (díra), fillet na hraně `edge:<box>/face:top|<cyl>/face:side` (r = 0,5); posun válce (změna `base`) → fillet bez chyby, stejný počet ploch.
-4. **Smazaná reference:** ve scénáři 1 s dalším nezávislým válcem smazání kvádru → Fillet `UNRESOLVED_REFERENCE` s `issues` `[{ param: 'edges', code: 'param.unresolvedRef' }]`, válec bez chyby a dál ve stavu.
+1. **Fillet přežije změnu rozměru:** kvádr 10 × 10 × 10 v počátku; Fillet na hraně `edge:<box>/face:front|<box>/face:top` (r = 1) → těleso má 7 ploch, jednu s jménem `<fillet>/face:fillet:edge:<box>/face:front|<box>/face:top`; změna výšky kvádru na 20 → fillet bez chyby, 7 ploch, bbox `z ∈ [0, 20]`. Případy `fillet-box-edge.json`, `fillet-box-edge-taller.json`.
+2. **Skica na ploše:** skica na `<box>/face:top` s obdélníkem uvnitř plochy, vysunutí „přidat“ do kvádru o 5 → bez chyby, bbox `z ∈ [0, 15]`; změna výšky kvádru na 20 → skica i vysunutí bez chyby, rovina skici `z = 20`, bbox `z ∈ [0, 25]`. Případy `extrude-add-on-top-face.json`, `extrude-add-on-top-face-taller.json`.
+3. **Fillet na hraně díry:** kvádr minus válec, který jím prochází (díra), fillet na hraně `edge:<box>/face:top|<cyl>/face:side` (r = 0,5); posun válce (změna `base`) → fillet bez chyby, stejný počet ploch. Případy `fillet-hole-edge.json`, `fillet-hole-edge-moved-cylinder.json`.
+4. **Smazaná reference:** ve scénáři 1 s dalším nezávislým válcem smazání kvádru → Fillet `UNRESOLVED_REFERENCE` s `issues` `[{ param: 'edges', code: 'param.unresolvedRef' }]`, válec bez chyby a dál ve stavu. Případ `fillet-unresolved-after-deleted-box.json`.
 
 ## Srovnání s jinými přístupy
 

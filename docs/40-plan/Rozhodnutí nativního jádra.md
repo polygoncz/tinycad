@@ -270,3 +270,10 @@ Revize (`architecture-reviewer`) nad M39–M44 a pahýly M45 nenašla porušení
 
 - **N140 – Akceptační `rg` úkolu 5 vynechává `spikes/`** a hledá `E2E_CORE\b` a `playwright\.core` (jinak by chytil živou `E2E_CORE_PORT` a balíček `playwright-core`). Historický spike `spikes/m07-occt/` k [[0013-replicad-opencascadejs|ADR 0013]] zůstává jako záznam.
 
+## M47 úkol 6 (specifikace)
+
+- **N141 – TS `regionCurves` v `sketch` zůstává** (používají ho sdílené případy `sketch.derived`, model skici v klientovi je podle ADR 0030 bod 5 dál TS).
+- **N142 ⚠ – Měření výkonu regenerace po sérii neexistuje** (TS perf test zmizel s regenerací, C++ ho nemá); deska s 36 děrami zůstala jako případ správnosti `boolean-plate-36-holes-fillet`. Doplnit C++ měření je kandidát na další práci.
+- **N143 ⚠ – C++ řadí jména po bajtech UTF-8, spec 13 říká kódové jednotky UTF-16**; liší se jen u ne-ASCII jmen (id jsou ASCII). Spec 06 to uvádí; sjednotit při revizi.
+- **N144 – Stavy UI, které serverová cesta nenastaví** (`RegenUiState.failed`, `KernelUiState 'failed'`, varování „export bez historie“), zůstávají v typech a specifikace 10 a 11 to uvádějí; úklid patří k návrhu kanálu hlášení (N134).
+
