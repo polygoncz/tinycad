@@ -78,7 +78,7 @@ export interface BodyData {
   readonly lastModifiedBy: FeatureId;
   /** Changes with the shape (Q100); the key of the mesh cache. */
   readonly contentVersion: string;
-  /** faceNames[i] is the primary name of the face with index i + 1; '' = no name. */
+  /** faceNames[i] is the primary name of the face with index i (0-based, N91); '' = no name. */
   readonly faceNames: readonly string[];
   readonly edgeNames: readonly string[];
   /** Index of a planar face (as faceNames) → its plane (N56); non-planar faces are absent. */

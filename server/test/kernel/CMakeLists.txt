@@ -16,7 +16,8 @@ add_executable(tinycad_kernel_tests
   regions_test.cpp
   dressup_test.cpp
   step_test.cpp
-  memory_test.cpp)
+  memory_test.cpp
+  guarded_test.cpp)
 target_include_directories(tinycad_kernel_tests PRIVATE "${PROJECT_SOURCE_DIR}/src/kernel")
 target_link_libraries(tinycad_kernel_tests PRIVATE
   tinycad_kernel tinycad_core GTest::gtest GTest::gtest_main

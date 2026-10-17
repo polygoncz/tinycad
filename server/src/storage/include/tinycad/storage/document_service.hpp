@@ -62,6 +62,14 @@ struct ServiceError {
 template <class T>
 using ServiceResult = core::Result<T, ServiceError>;
 
+/**
+ * The key of an imported file (spec 14 "Vlákna a zámky serveru", N38, N71, N107): fingerprint =
+ * lowercase hex SHA-256 of the file content, id = 'import:' + fingerprint. The one function for
+ * both imports (ImportDocument of the session layer and the tinycad-import tool), so importing the
+ * same file again either way finds the document created the first time.
+ */
+OperationKey importKey(std::string_view content);
+
 class DocumentService {
  public:
   struct Dependencies {

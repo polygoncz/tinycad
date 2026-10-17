@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { create, fromJson } from '@bufbuild/protobuf';
 import type { JsonValue } from '@bufbuild/protobuf';
@@ -11,7 +11,8 @@ import { featureSchemaOf, RemoteError, visibleWhenOf } from '@/remote';
 import { aFeatureTypeDescriptor, listValue } from '@/remote/testing';
 
 const SHARED_CASES = join(import.meta.dirname, '../../shared-cases/schema');
-const GOLDEN = join(SHARED_CASES, 'feature-types.json');
+// The golden file written by the C++ tests (N88, N95).
+const GOLDEN = join(import.meta.dirname, '../../golden/feature-types.json');
 
 /** One descriptor with a param of every kind of ParamDescriptor.spec. */
 const EVERY_KIND = aFeatureTypeDescriptor({
@@ -253,9 +254,8 @@ function goldenDescriptors(): readonly FeatureTypeDescriptor[] {
 }
 
 describe('golden file of the descriptors of the core (N75)', () => {
-  it.skipIf(!existsSync(GOLDEN))(
-    'gives the same visibility for every shared case schema.visibleWhen as in C++ ' +
-      '(skipped until M45 writes test/shared-cases/schema/feature-types.json)',
+  it(
+    'gives the same visibility for every shared case schema.visibleWhen as in C++',
     () => {
       const schemas = new Map<string, FeatureSchema>(
         goldenDescriptors().map((d) => [d.type, featureSchemaOf(d)]),

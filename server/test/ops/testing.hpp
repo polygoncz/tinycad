@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "document/testing.hpp"
+#include "tinycad/document/serialize.hpp"
 #include "tinycad/ops/dispatcher.hpp"
 #include "tinycad/ops/handler.hpp"
 #include "tinycad/ops/log.hpp"
@@ -26,10 +27,7 @@ inline const document::FeatureSchemaRegistry& noSchemas() {
 }
 
 /** The JSON of a feature as feature.add carries it. */
-inline Json featureJson(const document::FeatureInstance& f) {
-  return {{"id", f.id.str()},     {"type", f.type},      {"typeVersion", f.typeVersion},
-          {"name", f.name},       {"params", *f.params}, {"suppressed", f.suppressed}};
-}
+using document::featureJson;
 
 inline Json renameOp(const std::string& featureId, const std::string& name) {
   return {{"type", "feature.rename"}, {"v", 1}, {"featureId", featureId}, {"name", name}};

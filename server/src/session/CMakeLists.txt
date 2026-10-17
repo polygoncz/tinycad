@@ -19,21 +19,17 @@ add_library(tinycad_session STATIC
   src/runtime_document.cpp
   src/session_manager.cpp
   src/session_service.cpp
-  src/document_service.cpp)
+  src/document_service.cpp
+  src/runtime_support.cpp)
 target_include_directories(tinycad_session
   PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
   PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(tinycad_session PUBLIC cxx_std_23)
+# The solver and the kernel are composed in app (N109): RuntimeDocument gets factories of the
+# ports, so this library needs the port headers of tinycad_kernel and tinycad_sketch only.
 target_link_libraries(tinycad_session
-  PUBLIC tinycad_ops tinycad_features tinycad_kernel tinycad_sketch tinycad_solver_planegcs
-         tinycad_document tinycad_core tinycad_proto gRPC::grpc++
+  PUBLIC tinycad_storage tinycad_regen tinycad_feature_builders tinycad_ops tinycad_features
+         tinycad_kernel tinycad_sketch tinycad_document tinycad_core tinycad_proto gRPC::grpc++
   PRIVATE OpenSSL::Crypto)
-
-# TODO(M45 merge of tracks A and B): link tinycad_storage (M41), tinycad_regen and
-# tinycad_feature_builders (M43/M44.1) instead of reaching their headers directly. Until those
-# libraries exist on this branch the session code uses only their headers (types, no calls).
-target_include_directories(tinycad_session PUBLIC
-  "${PROJECT_SOURCE_DIR}/src/storage/include"
-  "${PROJECT_SOURCE_DIR}/src/regen/include")
 
 tinycad_warnings(tinycad_session)

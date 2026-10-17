@@ -30,8 +30,9 @@ class KernelFailure : public std::runtime_error {
 /**
  * Called from a `catch (...)`: the current exception as a KernelError (toKernelError of
  * src/kernel-occt/occt.ts). A KernelFailure keeps its code; an OCCT exception (Standard_Failure)
- * or any other exception becomes Internal with `method` and its text. std::bad_alloc is
- * rethrown: running out of memory is not a kernel error (kernel.hpp).
+ * or any other exception becomes Internal with `method` and its text. std::bad_alloc and
+ * core::AssertionError are rethrown: running out of memory is not a kernel error (kernel.hpp)
+ * and a bug is not an expected failure (N114).
  */
 KernelError currentError(const std::string& method);
 

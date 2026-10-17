@@ -19,6 +19,7 @@
 
 #include "tinycad/core/curve2.hpp"
 #include "tinycad/core/math.hpp"
+#include "tinycad/core/result.hpp"
 #include "tinycad/core/strong_id.hpp"
 
 namespace tinycad::sketch {
@@ -84,10 +85,14 @@ class SketchEntity {
   /** A point or a curve (isPatternSource). */
   [[nodiscard]] bool isPatternSource() const;
 
-  /** The concrete type; the caller has checked kind(). */
+  /** The concrete type; the caller has checked kind(). Another type is a bug (AssertionError). */
   template <class T>
   [[nodiscard]] const T& as() const {
-    return static_cast<const T&>(*this);
+    const T* concrete = dynamic_cast<const T*>(this);
+    TINYCAD_ASSERT(concrete != nullptr, "Sketch entity '" + id_.str() + "' is a " +
+                                            std::string(entityKindName(kind_)) +
+                                            ", not the type asked for");
+    return *concrete;
   }
 
  protected:
@@ -285,9 +290,17 @@ class SketchConstraint {
   /** A dimension: a constraint with a value (isDimension). */
   [[nodiscard]] bool isDimension() const;
 
+  /**
+   * The concrete type; the caller has checked kind(). Another type is a bug (AssertionError). A
+   * dynamic_cast, not the kind: kinds with the same fields share one class.
+   */
   template <class T>
   [[nodiscard]] const T& as() const {
-    return static_cast<const T&>(*this);
+    const T* concrete = dynamic_cast<const T*>(this);
+    TINYCAD_ASSERT(concrete != nullptr, "Sketch constraint '" + id_.str() + "' is a " +
+                                            std::string(constraintKindName(kind_)) +
+                                            ", not the type asked for");
+    return *concrete;
   }
 
  protected:

@@ -151,7 +151,7 @@ TEST(UndoDocumentRename, RebuildUndoStacksSkipsItTheSameWay) {
   ASSERT_TRUE(s.dispatcher.dispatch(renameOp("a", "Y")));
   ASSERT_TRUE(s.undo.undo());
   ASSERT_TRUE(s.dispatcher.dispatch(renameDocument("Part")));
-  EXPECT_EQ(ops::rebuildUndoStacks(s.log.entries()), (ops::UndoStacks{{1}, {2}}));
+  EXPECT_EQ(ops::rebuildUndoStacks(s.log.entries()).value(), (ops::UndoStacks{{1}, {2}}));
   EXPECT_EQ(s.undo.stacks(), (ops::UndoStacks{{1}, {2}}));
 }
 
@@ -165,10 +165,10 @@ TEST(RebuildUndoStacks, EqualsTheLiveStacks) {
   ASSERT_TRUE(s.undo.redo());
   ASSERT_TRUE(s.dispatcher.dispatch(renameOp("b", "W")));
   ASSERT_TRUE(s.undo.undo());
-  EXPECT_EQ(ops::rebuildUndoStacks(s.log.entries()), s.undo.stacks());
+  EXPECT_EQ(ops::rebuildUndoStacks(s.log.entries()).value(), s.undo.stacks());
 }
 
-TEST(RebuildUndoStacks, AssertsOnACorruptEntry) {
+TEST(RebuildUndoStacks, ReturnsTheSeqOfACorruptEntry) {
   OpsSession s(twoFeatures());
   ASSERT_TRUE(s.dispatcher.dispatch(renameOp("a", "X")));
   ASSERT_TRUE(s.dispatcher.dispatch(renameOp("a", "Y")));
@@ -177,10 +177,27 @@ TEST(RebuildUndoStacks, AssertsOnACorruptEntry) {
   bad.seq = 3;
   bad.kind = ops::EntryKind::Undo;
   bad.target = 1;
-  EXPECT_THROW((void)ops::rebuildUndoStacks({entries[0], entries[1], bad}), core::AssertionError);
+  const auto undo = ops::rebuildUndoStacks({entries[0], entries[1], bad});
+  ASSERT_FALSE(undo.has_value());
+  EXPECT_EQ(undo.error().seq, 3);
   bad.kind = ops::EntryKind::Redo;
-  EXPECT_THROW((void)ops::rebuildUndoStacks({entries[0], entries[1], bad}), core::AssertionError);
-  EXPECT_EQ(ops::rebuildUndoStacks({}), ops::UndoStacks{});
+  const auto redo = ops::rebuildUndoStacks({entries[0], entries[1], bad});
+  ASSERT_FALSE(redo.has_value());
+  EXPECT_EQ(redo.error().seq, 3);
+  EXPECT_EQ(ops::rebuildUndoStacks({}).value(), ops::UndoStacks{});
+}
+
+TEST(UndoManager, AssertsOnALogTheCallerDidNotCheck) {
+  OpsSession s(twoFeatures());
+  ASSERT_TRUE(s.dispatcher.dispatch(renameOp("a", "X")));
+  ops::LogEntry bad = s.log.entries()[0];
+  bad.seq = 2;
+  bad.kind = ops::EntryKind::Redo;
+  bad.target = 1;
+  ops::OperationLog log({s.log.entries()[0], bad});
+  // A dispatcher of its own: the one of the session has its listener already.
+  ops::OperationDispatcher dispatcher(*s.doc, s.handlers, log, [] { return 0.0; });
+  EXPECT_THROW((void)ops::UndoManager(dispatcher, log), core::AssertionError);
 }
 
 TEST(Reopening, ContinuesUndoRedoIdenticallyAfterRebuildingFromStoredEntries) {

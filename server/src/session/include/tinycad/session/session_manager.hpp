@@ -11,13 +11,18 @@
 // thread-safe): DocumentService RPCs go through it, so a rename or a delete never races with
 // opening the same document (N37, N56).
 //
-// Threads (N54): one manager mutex guards the maps, the activity of sessions and every catalog
-// call; it is held while a document loads (one user, KISS). Changes do NOT run under it: an RPC
-// finds its Session (find), releases the manager mutex and calls the RuntimeDocument, which has
-// its own mutex. A RuntimeDocument unloaded while an RPC on it is still running lives on in that
-// RPC's shared_ptr; it holds no lease any more, so it never writes again.
+// Threads (N54, N106, spec 14 "Vlákna a zámky serveru"): one manager mutex guards the maps, the
+// activity of sessions and every catalog call. Nothing long runs under it and it never waits for a
+// document lock: loading a document (SQLite, the first regeneration in OCCT) runs outside it behind
+// a reservation in the map, and releasing a lease (with the Abort of an open transaction) and
+// unloading a document run after it is released. Changes do NOT run under it either: an RPC finds
+// its Session (find), releases the manager mutex and calls the RuntimeDocument, which has its own
+// mutex. A RuntimeDocument unloaded while an RPC on it is still running lives on in that RPC's
+// shared_ptr; it holds no lease any more, so it never writes again. Unloading closes the EventRing
+// of the document, so every WatchSession on it ends.
 
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <functional>
 #include <map>
@@ -175,17 +180,42 @@ class SessionManager {
                                                                   const storage::OperationKey& key);
   storage::ServiceResult<storage::ExportedFile> exportDocument(const document::DocumentId& id);
 
+  /**
+   * Server shutdown, BEFORE grpc::Server::Shutdown (N106): closes the EventRing of every loaded
+   * document, so every running WatchSession ends and the gRPC shutdown does not wait for them.
+   * Sessions stay until the manager is destroyed.
+   */
+  void shutdown();
+
   [[nodiscard]] const SessionConfig& config() const { return deps_.config; }
   [[nodiscard]] std::size_t sessionCount() const;
   [[nodiscard]] bool isLoaded(const document::DocumentId& id) const;
 
  private:
-  /** Under mutex_: lease release, erase, unload the document after its last session. */
-  void closeLocked(const SessionId& id);
+  /** What closing a session leaves to do after the manager mutex is released (N106). */
+  struct Departure {
+    SessionPtr session;
+    /** Set when it was the last session of its document: unload it. */
+    std::shared_ptr<RuntimeDocument> unload;
+  };
+
+  /**
+   * Under mutex_: erases the session; after the last session of a document its map entry becomes
+   * a reservation (nullptr) until leave() finished unloading it.
+   */
+  Departure detachLocked(const SessionId& id);
+  /** Without mutex_: lease release (Abort), then the unload (EventRing closed, entry erased). */
+  void leave(Departure departure);
+  /** Under mutex_ (held by `lock`): waits until no reservation stands for `document`. */
+  void waitForDocumentLocked(std::unique_lock<std::mutex>& lock,
+                             const document::DocumentId& document);
 
   Dependencies deps_;
   mutable std::mutex mutex_;
+  /** Signalled when a reservation in documents_ is filled or erased. */
+  std::condition_variable documentsChanged_;
   std::map<SessionId, SessionPtr> sessions_;
+  /** Loaded documents; nullptr = a reservation while the document loads or unloads (N106). */
   std::map<document::DocumentId, std::shared_ptr<RuntimeDocument>> documents_;
 };
 

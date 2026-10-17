@@ -96,6 +96,37 @@ TEST(UpcastOperation, ReportsErrorsInsideABatchWithAComposedPath) {
   EXPECT_EQ(errorPath(handlers(), Json{{"type", "batch"}, {"v", 2}, {"ops", Json::array()}}), "v");
 }
 
+/**
+ * `depth` batches nested in each other around a rename (depth 0: the rename alone). Moves only:
+ * copying (an initializer list copies) a very deep value would recurse.
+ */
+Json nestedBatches(int depth) {
+  Json op = renameOp("a", "x");
+  for (int i = 0; i < depth; ++i) {
+    Json outer = batchOp(Json::array());
+    outer["ops"].push_back(std::move(op));
+    op = std::move(outer);
+  }
+  return op;
+}
+
+TEST(UpcastOperation, AcceptsBatchesNestedUpToTheLimitAndRefusesDeeperOnesAtTheirPath) {
+  EXPECT_EQ(errorPath(handlers(), nestedBatches(ops::MAX_BATCH_DEPTH)), "<ok>");
+  // The 65th batch is at ops[0] of the 64th: 64 times 'ops[0]'.
+  std::string path = "ops[0]";
+  for (int i = 1; i < ops::MAX_BATCH_DEPTH; ++i) path += ".ops[0]";
+  EXPECT_EQ(errorPath(handlers(), nestedBatches(ops::MAX_BATCH_DEPTH + 1)), path);
+}
+
+TEST(UpcastOperation, ADeeplyNestedLogEntryIsAnErrorNotAStackOverflow) {
+  Json entry = {{"seq", 1}, {"kind", "do"}, {"inverse", renameOp("a", "A")},
+                {"label", "deep"}, {"time", 0}};
+  entry["op"] = nestedBatches(100'000);
+  const auto parsed = ops::parseLogEntry(handlers(), entry);
+  ASSERT_FALSE(parsed.has_value());
+  EXPECT_TRUE(parsed.error().path.starts_with("op.ops[0]")) << parsed.error().path.substr(0, 40);
+}
+
 TEST(UpcastOperation, AssertsWhenUpcastReturnsAWrongVersion) {
   const auto bad = registryWith([](int, const ops::Operation&) -> ops::Operation {
     return {{"type", "test.ping"}, {"v", 1}};

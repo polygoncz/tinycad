@@ -23,7 +23,13 @@ Result validated(const OpHandler& handler, Operation op) {
   return op;
 }
 
-Result upcastBatch(const OpHandlerRegistry& handlers, const Json& raw, double v) {
+Result upcastAt(const OpHandlerRegistry& handlers, const Json& raw, int depth);
+
+/** `depth`: the nesting of this batch, 1 for the outermost one. */
+Result upcastBatch(const OpHandlerRegistry& handlers, const Json& raw, double v, int depth) {
+  if (depth > MAX_BATCH_DEPTH) {
+    return fail("", "Batches nested deeper than " + std::to_string(MAX_BATCH_DEPTH));
+  }
   const int version = opVersion("batch");
   if (v != version) {
     return fail("v", "Batch has version " + number(v) + ", newer than supported " +
@@ -33,7 +39,7 @@ Result upcastBatch(const OpHandlerRegistry& handlers, const Json& raw, double v)
   if (rawOps == raw.end() || !rawOps->is_array()) return fail("ops", "Must be an array");
   Json ops = Json::array();
   for (std::size_t i = 0; i < rawOps->size(); ++i) {
-    auto result = upcastOperation(handlers, (*rawOps)[i]);
+    auto result = upcastAt(handlers, (*rawOps)[i], depth);
     if (!result) {
       const std::string prefix = "ops[" + std::to_string(i) + "]";
       const std::string& path = result.error().path;
@@ -44,9 +50,8 @@ Result upcastBatch(const OpHandlerRegistry& handlers, const Json& raw, double v)
   return Json{{"type", "batch"}, {"v", version}, {"ops", std::move(ops)}};
 }
 
-}  // namespace
-
-Result upcastOperation(const OpHandlerRegistry& handlers, const Json& raw) {
+/** upcastOperation of an operation inside `depth` batches. */
+Result upcastAt(const OpHandlerRegistry& handlers, const Json& raw, int depth) {
   if (!raw.is_object()) return fail("", "Must be an object");
   const auto type = raw.find("type");
   if (type == raw.end() || !type->is_string()) return fail("type", "Must be a string");
@@ -57,7 +62,7 @@ Result upcastOperation(const OpHandlerRegistry& handlers, const Json& raw) {
   const double v = core::numberOf(*rawV);
   const std::string& name = type->get_ref<const std::string&>();
 
-  if (name == "batch") return upcastBatch(handlers, raw, v);
+  if (name == "batch") return upcastBatch(handlers, raw, v, depth + 1);
 
   const OpHandler* handler = handlers.find(name);
   if (handler == nullptr) return fail("type", "Unknown operation type '" + name + "'");
@@ -76,6 +81,12 @@ Result upcastOperation(const OpHandlerRegistry& handlers, const Json& raw) {
                  "Upcast of '" + name + "' returned another version than " +
                      std::to_string(handler->version()));
   return validated(*handler, std::move(upcasted));
+}
+
+}  // namespace
+
+Result upcastOperation(const OpHandlerRegistry& handlers, const Json& raw) {
+  return upcastAt(handlers, raw, 0);
 }
 
 }  // namespace tinycad::ops

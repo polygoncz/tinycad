@@ -316,7 +316,7 @@ class SequenceRun {
     if (!document::sameStudio(*replayed->studio(), *session_.doc->studio())) {
       return "sameStudio differs after replay";
     }
-    if (ops::rebuildUndoStacks(entries) != session_.undo.stacks()) {
+    if (ops::rebuildUndoStacks(entries).value() != session_.undo.stacks()) {
       return "rebuildUndoStacks differs from the live stacks";
     }
     while (session_.undo.canUndo()) {

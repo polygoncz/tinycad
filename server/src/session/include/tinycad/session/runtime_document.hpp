@@ -142,8 +142,12 @@ class RuntimeDocument {
                                      const StepKey& step,
                                      const tinycad::v1::ReadModelOptions& options,
                                      tinycad::v1::ChangeResult* out);
-  /** An empty transaction: success without entry (spec 04). */
-  SessionResult<void> commit(const Caller& caller, const storage::OperationKey& key,
+  /**
+   * An empty transaction: success without entry (spec 04). Durable idempotence for a written
+   * entry; an empty commit writes nothing, so its key is remembered in `step.recent` and a retry
+   * succeeds again instead of NoTransaction (N107).
+   */
+  SessionResult<void> commit(const Caller& caller, const StepKey& step,
                              const tinycad::v1::ReadModelOptions& options,
                              tinycad::v1::ChangeResult* out);
   SessionResult<void> abort(const Caller& caller, const StepKey& step,

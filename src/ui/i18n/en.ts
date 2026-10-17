@@ -208,6 +208,8 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'sketch.conflict': 'The constraint conflicts with others',
   'sketch.redundant': 'The constraint is redundant',
   'sketch.solverFailed': 'The sketch could not be solved',
+  // SKETCH_NOT_SOLVED of the core (Q103, N48): the server did not solve the sketch.
+  'sketch.notSolved': 'The server could not solve the sketch; the local version is kept.',
   'sketch.planeMissing': 'The sketch plane is missing, pick a new one',
   // The numeric input while drawing (M32): the labels of the fields.
   'sketch.input.x': 'X',
