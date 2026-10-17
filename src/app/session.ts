@@ -45,6 +45,7 @@ import type {
   Mode,
   SelectionModel,
   ToolbarModel,
+  ToolHint,
   TopoInspector,
   ViewKeyEvent,
   ViewportPort,
@@ -56,7 +57,7 @@ import type { DocumentStore, PersistenceStatus, Scheduler } from '@/persistence'
 import type { FeaturePlugin, PluginMessages } from '@/plugin-api';
 import { createRegenerator, planeOfRef, sketchesOf } from '@/regen';
 import type { BodyLayer, CameraController, Viewport } from '@/render';
-import type { ConstraintSolver } from '@/sketch';
+import type { ConstraintSolver, TextOutliner } from '@/sketch';
 import {
   createSketchActions,
   createSketchEditor,
@@ -139,6 +140,11 @@ export interface AppSessionDeps {
   readonly verify?: boolean;
   /** M12: the solver of the sketcher; tests FakeSolver, the browser createPlanegcsSolver(). */
   readonly solver: ConstraintSolver;
+  /**
+   * M37: the letter outlines of sketch texts; tests createFakeTextOutliner, the browser
+   * createOpentypeOutliner over the bundled fonts (fontUrl).
+   */
+  readonly text: TextOutliner;
   /** M15: downloads an exported file; tests capture it, the browser hands ui's implementation. */
   readonly download: (file: DownloadFile) => void;
   /** M15: the theme at the start: the first value of defaultBodyColor; later viewSettings.setTheme. */
@@ -225,6 +231,11 @@ export interface AppSession extends Disposable {
     project(world: Vec3): readonly [x: number, y: number] | null;
     /** The view moved (camera, resize): positions of the HUD are stale; every frame of an animation. */
     onViewChanged(listener: () => void): Unsubscribe;
+  };
+  /** M37: the tools as ui sees them: the hint HUD of the active tool (spec 11, rule 8a). */
+  readonly tools: {
+    /** The hint of the active tool's current step; null = none. */
+    readonly hint: Observable<ToolHint | null>;
   };
   /**
    * M19.2: projection of world points onto the view and its moves, forwarded from the viewport
@@ -343,6 +354,7 @@ function wireSession(
     // M30, M33: the geometry of the sketch in the kernel; always the live kernel of the
     // supervisor (declared below, read only when the sketcher calls the port).
     geometry: createSketchGeometry(() => supervisor.kernel()),
+    text: deps.text,
     viewport,
     // Origin planes and planar faces of the last regeneration (M14); before the first one
     // EMPTY_STATE still has the origin planes.
@@ -595,6 +607,7 @@ function wireSession(
     files,
     defaultBodyColor,
     documentName,
+    tools: { hint: tools.hint },
     manipulator: {
       hud: manipulators.hud,
       setMode(id) {

@@ -25,6 +25,7 @@ import { createRectangle3pTool } from './sketch-tools/rectangle3p-tool';
 import { createSketchSelectTool } from './sketch-tools/select-tool';
 import { createSlotTool } from './sketch-tools/slot-tool';
 import { createSplineTool } from './sketch-tools/spline-tool';
+import { createTextTool } from './sketch-tools/text-tool';
 import { createSplitTool } from './sketch-tools/split-tool';
 import { createExtendTool } from './sketch-tools/extend-tool';
 import { createFilletTool } from './sketch-tools/fillet-tool';
@@ -86,6 +87,17 @@ export function createSketchTools(deps: { sketches: SketchEditor }): readonly To
       shortcut: 'P',
       family: 'line',
       create: () => createPointTool(sketches),
+    }),
+    // The text (M37) folds into the line family after the point: the toolbar may not grow by a
+    // button (spec 12); a Tabler icon of letters, no shortcut.
+    Object.freeze<ToolDescriptor>({
+      id: 'sketch.text',
+      label: 'tool.text',
+      icon: 'typography',
+      group: 'draw',
+      modes: SKETCH,
+      family: 'line',
+      create: () => createTextTool(sketches),
     }),
     Object.freeze<ToolDescriptor>({
       id: 'sketch.rectangle',

@@ -1,6 +1,6 @@
 import { assert, assertNever } from '@/core';
 import { pointsById } from './points';
-import { isLineCarrier, isPattern } from './model';
+import { isCurveEntity, isLineCarrier, isPattern } from './model';
 import type {
   DimensionKind,
   GeometricConstraintKind,
@@ -14,6 +14,7 @@ import type {
   SketchItemId,
   SketchPattern,
   SketchPoint,
+  SketchText,
   SketchXLine,
 } from './model';
 
@@ -24,7 +25,8 @@ import type {
 const MIN_DIMENSION = 1e-9;
 
 const isRound = (e: SketchEntity): boolean => e.kind === 'circle' || e.kind === 'arc';
-const isCurve = (e: SketchEntity): e is SketchCurve => e.kind !== 'point' && !isPattern(e);
+/** A pattern (M36) or a text (M37): a recipe no constraint or dimension may refer to. */
+const isRecipe = (e: SketchEntity): boolean => isPattern(e) || e.kind === 'text';
 
 /** The end points of a spline (first and last pole or fit point), or undefined for other entities. */
 function splineEnds(e: SketchEntity): readonly SketchEntityId[] | undefined {
@@ -43,14 +45,14 @@ function lineAtSplineEnd(first: SketchEntity, second: SketchEntity): boolean {
 
 /**
  * The constraint for the selected entities (in selection order), or null when the selection does
- * not fit or contains a pattern (M36). Onshape's convention for the M26 kinds: coincident of a
+ * not fit or contains a pattern (M36) or a text (M37). Onshape's convention for the M26 kinds: coincident of a
  * point and a curve is pointOnCurve, horizontal/vertical of two points is hAlign/vAlign.
  */
 export function constraintFor(
   kind: GeometricConstraintKind,
   selected: readonly SketchEntity[],
 ): SketchConstraintDraft | null {
-  if (selected.some(isPattern)) return null;
+  if (selected.some(isRecipe)) return null;
   if (kind === 'symmetric') return symmetricFor(selected);
   const [first, second] = selected;
   if (selected.length === 1 && first !== undefined) {
@@ -110,11 +112,14 @@ export function constraintFor(
   }
 }
 
-/** symmetric (M36): two different points and an axis line, in this order; no point of the axis. */
+/**
+ * symmetric (M36): two different points and an axis (a line or an xline, M31), in this order; no
+ * point of the axis.
+ */
 function symmetricFor(selected: readonly SketchEntity[]): SketchConstraintDraft | null {
   const [a, b, axis] = selected;
   if (selected.length !== 3 || a?.kind !== 'point' || b?.kind !== 'point') return null;
-  if (axis?.kind !== 'line' || a.id === b.id) return null;
+  if (axis === undefined || !isLineCarrier(axis) || a.id === b.id) return null;
   const ends = curvePoints(axis);
   if (ends.includes(a.id) || ends.includes(b.id)) return null;
   return { kind: 'symmetric', a: a.id, b: b.id, axis: axis.id };
@@ -131,7 +136,7 @@ function pointOn(
   make: (point: SketchEntityId, curve: SketchEntityId) => SketchConstraintDraft,
 ): SketchConstraintDraft | null {
   const [point, curve] = first.kind === 'point' ? [first, second] : [second, first];
-  if (point.kind !== 'point' || !isCurve(curve) || !accepts(curve)) return null;
+  if (point.kind !== 'point' || !isCurveEntity(curve) || !accepts(curve)) return null;
   if (curvePoints(curve).includes(point.id)) return null;
   return make(point.id, curve.id);
 }
@@ -139,13 +144,13 @@ function pointOn(
 /**
  * The dimension for the selected entities: 1 line → distance(p1, p2); 1 circle/arc → radius;
  * 2 points → distance. value = the measured value; ≤ 1e-9 → null. An xline has no length → null;
- * a pattern selected → null.
+ * a pattern or a text selected → null.
  */
 export function dimensionFor(
   selected: readonly SketchEntity[],
   data: SketchData,
 ): SketchConstraintDraft | null {
-  if (selected.some(isPattern)) return null;
+  if (selected.some(isRecipe)) return null;
   const [first, second] = selected;
   let draft: Extract<SketchConstraintDraft, { kind: DimensionKind }> | null = null;
   if (selected.length === 1 && first !== undefined) {
@@ -243,10 +248,11 @@ function pointLineDistance(p: SketchPoint, [p1, p2]: readonly [SketchPoint, Sket
   return Math.abs((p.x - p1.x) * dy - (p.y - p1.y) * dx) / Math.hypot(dx, dy);
 }
 
-/** A curve whose construction flag can be toggled: all but an xline (always construction). */
-type TogglableCurve = Exclude<SketchCurve, SketchXLine>;
+/** What construction can be toggled on: curves but an xline (always construction), and texts (M37). */
+type TogglableCurve = Exclude<SketchCurve, SketchXLine> | SketchText;
 
-const isTogglable = (e: SketchEntity): e is TogglableCurve => isCurve(e) && e.kind !== 'xline';
+const isTogglable = (e: SketchEntity): e is TogglableCurve =>
+  (isCurveEntity(e) && e.kind !== 'xline') || e.kind === 'text';
 
 function withoutConstruction(c: TogglableCurve): TogglableCurve {
   switch (c.kind) {
@@ -267,6 +273,16 @@ function withoutConstruction(c: TogglableCurve): TogglableCurve {
         params: c.params,
         poles: c.poles,
         knots: c.knots,
+      };
+    case 'text':
+      return {
+        kind: c.kind,
+        id: c.id,
+        text: c.text,
+        font: c.font,
+        height: c.height,
+        baseline: c.baseline,
+        contours: c.contours,
       };
     default:
       return assertNever(c);
@@ -342,17 +358,19 @@ export function constraintTargets(c: SketchConstraint): readonly SketchEntityId[
  * Removes items with a cascade; the order of the rest does not change. Unknown ids are ignored.
  * (1) selected constraints; (2) selected entities, with a point also the curves using it;
  * (2a) removed sources leave the sources of patterns, a pattern without sources goes; (2b) a
- * pattern goes with its axis or center; (3) points of removed curves that no remaining curve uses
- * and that are no center of a remaining pattern; (4) constraints on removed entities, an offset
- * loses only the pairs with a removed curve and goes with its last pair (M35). Steps 2–3 repeat
- * until nothing more goes (a removed curve empties a pattern, which frees its center).
+ * pattern goes with its axis or center; (2c) a text goes with its baseline (M37); (3) points of
+ * removed curves that no remaining curve uses and that are no center of a remaining pattern;
+ * (4) constraints on removed entities, an offset loses only the pairs with a removed curve and
+ * goes with its last pair (M35). Steps 2–3 repeat until nothing more goes (a removed curve empties
+ * a pattern, which frees its center).
  */
 export function removeItems(data: SketchData, ids: readonly SketchItemId[]): SketchData {
   const selected = new Set<string>(ids);
   const removed = new Set<string>();
   for (const e of data.entities) if (selected.has(e.id)) removed.add(e.id);
-  const curves = data.entities.filter(isCurve);
+  const curves = data.entities.filter(isCurveEntity);
   const patterns = data.entities.filter(isPattern);
+  const texts = data.entities.filter((e) => e.kind === 'text');
   let before = -1;
   while (removed.size !== before) {
     before = removed.size;
@@ -364,6 +382,7 @@ export function removeItems(data: SketchData, ids: readonly SketchItemId[]): Ske
       const anchorRemoved = anchor !== undefined && removed.has(anchor);
       if (anchorRemoved || p.sources.every((s) => removed.has(s))) removed.add(p.id);
     }
+    for (const t of texts) if (removed.has(t.baseline)) removed.add(t.id);
     const stillUsed = new Set<string>([
       ...curves.filter((c) => !removed.has(c.id)).flatMap((c) => curvePoints(c)),
       ...patterns.flatMap((p) =>
@@ -422,9 +441,9 @@ function patternAnchor(p: SketchPattern): SketchEntityId | undefined {
 }
 
 /**
- * Toggles construction of the selected curves: all construction → all normal, otherwise all
- * construction. Points, patterns, constraints and xlines (always construction, M31) are ignored.
- * A normal curve has no `construction` field.
+ * Toggles construction of the selected curves and texts (M37): all construction → all normal,
+ * otherwise all construction. Points, patterns, constraints and xlines (always construction, M31)
+ * are ignored. A normal curve or text has no `construction` field.
  */
 export function toggleConstruction(data: SketchData, ids: readonly SketchItemId[]): SketchData {
   const selected = new Set<string>(ids);

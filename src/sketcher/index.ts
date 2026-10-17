@@ -10,6 +10,7 @@ export type {
   SketchPlaneField,
   SketchSession,
   SketchState,
+  TextParams,
 } from './sketch-session';
 export type { DimensionGeometry, SketchDimensionView } from './sketch-dimensions';
 export type { PatternParam, SketchPatternDimensionView } from './sketch-pattern-dimensions';

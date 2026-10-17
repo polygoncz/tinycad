@@ -257,7 +257,9 @@ describe('endTangent', () => {
   ]);
   const curve = (cid: string): SketchCurve => {
     const e = data.entities.find((x) => x.id === cid);
-    if (e === undefined || e.kind === 'point' || isPattern(e)) throw new Error(`no curve ${cid}`);
+    if (e === undefined || e.kind === 'point' || e.kind === 'text' || isPattern(e)) {
+      throw new Error(`no curve ${cid}`);
+    }
     return e;
   };
 

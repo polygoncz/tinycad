@@ -1,6 +1,6 @@
 import { err, ok } from '@/core';
 import type { Result } from '@/core';
-import { isDimensionKind, patternParamsValid } from './model';
+import { isDimensionKind, patternParamsValid, textParamsValid } from './model';
 import type { DimensionKind, DimensionPlacement, SketchData, SketchPattern } from './model';
 
 // Shape and invariant checks of sketch data (spec 12 "Kontrola dat"). The only trusted place
@@ -34,10 +34,23 @@ const ENTITY_FIELDS: Readonly<Record<string, { required: string[]; optional: str
   mirror: { required: ['id', 'sources', 'axis'], optional: [] },
   linearPattern: { required: ['id', 'sources', 'direction1'], optional: ['direction2'] },
   circularPattern: { required: ['id', 'sources', 'center', 'count', 'angle'], optional: [] },
+  text: {
+    required: ['id', 'text', 'font', 'height', 'baseline', 'contours'],
+    optional: ['construction'],
+  },
 };
 
-/** The entity kinds of mirrors and patterns (M36): recipes, no constraint may refer to them. */
-const PATTERN = new Set(['mirror', 'linearPattern', 'circularPattern']);
+/**
+ * The entity kinds of mirrors, patterns (M36) and texts (M37): recipes whose curves are derived,
+ * no constraint may refer to them.
+ */
+const RECIPE = new Set(['mirror', 'linearPattern', 'circularPattern', 'text']);
+
+/** The fewest and most poles of a segment of a letter outline (a line … a cubic Bézier curve). */
+const MIN_TEXT_POLES = 2;
+const MAX_TEXT_POLES = 4;
+/** Relative tolerance of joined and closed letter outlines (spec 12 "Text ve skice (M37)"). */
+const TEXT_JOIN_TOLERANCE = 1e-9;
 
 /** The highest spline degree (cubic); a spline's degree = min(MAX_SPLINE_DEGREE, points − 1). */
 const MAX_SPLINE_DEGREE = 3;
@@ -49,6 +62,9 @@ const MAX_SPLINE_DEGREE = 3;
 type Target = 'point' | 'line' | 'carrier' | 'round' | 'curve';
 const ROUND = new Set(['circle', 'arc']);
 const CARRIER = new Set(['line', 'xline']);
+/** A raw target that is a line or an xline (M31): a mirror axis, a text baseline. */
+const isCarrier = (t: Fields | undefined): boolean =>
+  typeof t?.kind === 'string' && CARRIER.has(t.kind);
 /** pointOnCurve may lie on any curve, a spline (M29) and an xline (M31) too. */
 const CURVE = new Set(['line', 'circle', 'arc', 'bspline', 'fitSpline', 'xline']);
 
@@ -85,7 +101,7 @@ const CONSTRAINT_FIELDS: Readonly<
   midpoint: { point: 'point', line: 'line' },
   hAlign: { a: 'point', b: 'point' },
   vAlign: { a: 'point', b: 'point' },
-  symmetric: { a: 'point', b: 'point', axis: 'line' },
+  symmetric: { a: 'point', b: 'point', axis: 'carrier' },
   fix: { point: 'point' },
   distance: { a: 'point', b: 'point', value: 'value' },
   hDistance: { a: 'point', b: 'point', value: 'value' },
@@ -207,7 +223,7 @@ function entityValid(
     }
     case 'mirror': {
       const axis = typeof item.axis === 'string' ? targets.get(item.axis) : undefined;
-      return patternValid(item, targets, item.axis) && axis?.kind === 'line';
+      return patternValid(item, targets, item.axis) && isCarrier(axis);
     }
     case 'linearPattern':
       return (
@@ -224,9 +240,74 @@ function entityValid(
         typeof item.angle === 'number' &&
         patternValuesValid(item)
       );
+    case 'text': {
+      const baseline = typeof item.baseline === 'string' ? targets.get(item.baseline) : undefined;
+      return (
+        plainId(item.id) &&
+        isCarrier(baseline) &&
+        typeof item.text === 'string' &&
+        typeof item.font === 'string' &&
+        typeof item.height === 'number' &&
+        textParamsValid({ text: item.text, font: item.font, height: item.height }) &&
+        contoursValid(item.text, item.contours)
+      );
+    }
     default:
       return false;
   }
+}
+
+/**
+ * The outlines of a text (M37): every contour belongs to a character of the string (its index in
+ * code points and its code point) and is a closed chain of 2–4-pole segments with finite
+ * coordinates.
+ */
+function contoursValid(text: string, contours: unknown): boolean {
+  const chars = Array.from(text);
+  if (!Array.isArray(contours)) return false;
+  return (contours as readonly unknown[]).every((c) => {
+    if (!isRecord(c) || !hasExactly(c, ['char', 'code', 'segments'], [])) return false;
+    const { char, code } = c;
+    if (typeof char !== 'number' || !Number.isInteger(char)) return false;
+    const ch = chars[char];
+    return ch !== undefined && code === ch.codePointAt(0) && loopValid(c.segments);
+  });
+}
+
+/** ≥ 1 segment of 2–4 finite poles, each starting where the previous ends, the last ending at the first. */
+function loopValid(segments: unknown): boolean {
+  if (!Array.isArray(segments) || segments.length === 0) return false;
+  const items = segments as readonly unknown[];
+  const poles: (readonly [number, number])[][] = [];
+  for (const segment of items) {
+    if (!Array.isArray(segment)) return false;
+    const values = segment as readonly unknown[];
+    if (values.length < MIN_TEXT_POLES || values.length > MAX_TEXT_POLES) return false;
+    const pairs = values.map(finitePair);
+    if (!pairs.every((p) => p !== undefined)) return false;
+    poles.push(pairs);
+  }
+  return poles.every((segment, i) => {
+    const next = poles[(i + 1) % poles.length];
+    const end = segment[segment.length - 1];
+    const start = next?.[0];
+    return end !== undefined && start !== undefined && samePole(end, start);
+  });
+}
+
+/** A pair of finite numbers, else undefined. */
+function finitePair(v: unknown): readonly [number, number] | undefined {
+  if (!Array.isArray(v) || v.length !== 2) return undefined;
+  const [x, y] = v as readonly unknown[];
+  return isFiniteNumber(x) && isFiniteNumber(y) ? [x, y] : undefined;
+}
+
+/** Equal coordinates within TEXT_JOIN_TOLERANCE · max(1, |coordinate|). */
+function samePole(a: readonly [number, number], b: readonly [number, number]): boolean {
+  return a.every((v, i) => {
+    const w = b[i] ?? Number.NaN;
+    return Math.abs(v - w) <= TEXT_JOIN_TOLERANCE * Math.max(1, Math.abs(v), Math.abs(w));
+  });
 }
 
 /**
@@ -396,8 +477,8 @@ function constraintValid(
     if (target !== undefined) refTargets.push(target);
   }
   if (refs.length === 2 && refs[0] === refs[1]) return false;
-  // Mirrors and patterns are recipes: no constraint refers to them (M36).
-  if (refKinds.some((k) => PATTERN.has(k))) return false;
+  // Mirrors, patterns and texts are recipes: no constraint refers to them (M36, M37).
+  if (refKinds.some((k) => RECIPE.has(k))) return false;
   if (kind === 'tangent' && lineAtSplineEnd(refTargets)) return true;
   if (kind === 'equal' || kind === 'tangent') return pairAllowed(kind, refKinds);
   if (kind === 'pointLineDistance' && isEndOf(item.point, item.line, targets)) return false;

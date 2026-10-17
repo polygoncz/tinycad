@@ -3,7 +3,7 @@
 
 import { DebugMode, GcsWrapper, SolveStatus, type SketchPrimitive } from '@salusoft89/planegcs';
 import { bspline, type BSplineShape, type Vec2 } from '@/core';
-import { isPattern } from '@/sketch';
+import { isCurveEntity } from '@/sketch';
 import type {
   SketchArc,
   SketchBSpline,
@@ -269,7 +269,9 @@ function entityPrimitives(
     case 'mirror':
     case 'linearPattern':
     case 'circularPattern':
-      // Recipes (M36): their copies are derived from the solved originals, never solved.
+    case 'text':
+      // Recipes (M36, M37): their copies and letters are derived from the solved originals,
+      // never solved.
       return [];
   }
 }
@@ -813,8 +815,7 @@ function pointOf(
 
 function curveOf(entities: ReadonlyMap<SketchEntityId, SketchEntity>, id: SketchEntityId): Curve {
   const e = entities.get(id);
-  if (e === undefined || e.kind === 'point' || isPattern(e))
-    throw new Error(`${id} is not a curve`);
+  if (e === undefined || !isCurveEntity(e)) throw new Error(`${id} is not a curve`);
   return e;
 }
 

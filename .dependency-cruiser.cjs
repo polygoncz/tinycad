@@ -27,6 +27,8 @@ const modules = {
   sketch: { deps: ['core'] },
   // M12: solver adapter in a worker (ADR 0016); only app imports it.
   'solver-planegcs': { deps: ['core', 'sketch'], npm: ['@salusoft89/planegcs'] },
+  // M37: letter outlines over opentype.js and the bundled fonts (ADR 0029); only app imports it.
+  'text-opentype': { deps: ['core', 'sketch'], npm: ['opentype.js'] },
   regen: { deps: ['core', 'document', 'kernel', 'sketch'] },
   render: { deps: ['core'], types: ['kernel', 'interaction'], npm: ['three'] },
   interaction: { deps: ['core', 'document', 'ops', 'sketch'] },
@@ -49,6 +51,7 @@ const modules = {
       'kernel-occt',
       'sketch',
       'solver-planegcs',
+      'text-opentype',
       'regen',
       'render',
       'interaction',

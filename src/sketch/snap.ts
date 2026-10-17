@@ -3,9 +3,9 @@ import { assertNever, bspline } from '@/core';
 import { SPLINE_TOLERANCE, curve2 } from './geometry';
 import { pointsById } from './points';
 import type { Curve2 } from './geometry';
-import { isPattern } from './model';
+import { isCurveEntity } from './model';
 import { patternCopies } from './patterns';
-import type { SketchCurve, SketchData, SketchEntity, SketchEntityId, SketchPoint } from './model';
+import type { SketchData, SketchEntity, SketchEntityId, SketchPoint } from './model';
 import { angleOf, dist, dot, length, lerp, mod2pi, sub } from './vec2';
 
 // The snapper of the sketcher tools (spec 12 "Snapper a auto-vazby (M26)"): where a click lands in
@@ -107,7 +107,7 @@ function inferredSnap(
   const { tolerance } = opts;
   const byId = pointsById(data);
   const curves = data.entities
-    .filter(isCurve)
+    .filter(isCurveEntity)
     .filter(included)
     // An xline (M31) is drawn as a long line, but has no midpoint and projects without clamping.
     .map((c) => ({ id: c.id, shape: curve2(c, byId), infinite: c.kind === 'xline' }));
@@ -297,8 +297,4 @@ function at(p: SketchPoint): Vec2 {
 
 function isPoint(e: SketchEntity): e is SketchPoint {
   return e.kind === 'point';
-}
-
-function isCurve(e: SketchEntity): e is SketchCurve {
-  return e.kind !== 'point' && !isPattern(e);
 }

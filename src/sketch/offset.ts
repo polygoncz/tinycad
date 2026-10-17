@@ -12,8 +12,9 @@ import type {
   SketchEntityId,
   SketchPoint,
 } from './model';
+import { isCurveEntity } from './model';
 import { pointsById } from './points';
-import { endIds, isCurveEntity } from './trim';
+import { endIds } from './trim';
 import type { IdSource, SketchEdit } from './trim';
 
 // Offset of a chain of sketch curves (spec 12 "Offset (M35)"): the chain the tool picks, the

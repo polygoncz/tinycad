@@ -1,6 +1,7 @@
 // openAppSession (spec 11, "Kompoziční kořen (app)"): the thin browser layer. It builds what
 // createAppSession takes as deps – the OCCT kernel worker, the IndexedDB store, the Web Lock
-// (Q038), the three.js viewport and the planegcs solver worker (M12) – and releases them again. Only the e2e test covers it; the
+// (Q038), the three.js viewport, the planegcs solver worker (M12) and the text outliner over the
+// bundled fonts (M37) – and releases them again. Only the e2e test covers it; the
 // parts with logic (documents.ts, doc-lock.ts) are tested in Node.
 
 import { createRandomIdGenerator, DisposableStore } from '@/core';
@@ -15,6 +16,8 @@ import { createIdbDocumentStore } from '@/persistence/idb';
 import type { FeaturePlugin } from '@/plugin-api';
 import { createViewport } from '@/render';
 import { createPlanegcsSolver } from '@/solver-planegcs';
+import type { TextFontId } from '@/sketch';
+import { createOpentypeOutliner, fontUrl } from '@/text-opentype';
 import { acquireDocumentLock } from './doc-lock';
 import { disposeOpenSession } from './dispose-open-session';
 import { createDocumentCatalog } from './documents';
@@ -81,6 +84,8 @@ export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSe
       confirm: opts.confirm,
       readOnly: !lock.held,
       solver,
+      // M37: the bundled fonts are fetched on the first text in each of them.
+      text: createOpentypeOutliner(loadFont),
       download: opts.download,
       theme: opts.theme,
       // Replay the whole log on every open while developing (spec 05, "verify").
@@ -169,6 +174,17 @@ async function withStore<T>(call: (store: DocumentStore) => Promise<T>): Promise
   } finally {
     store.dispose();
   }
+}
+
+/**
+ * The bytes of a bundled font (M37, spec 12 "Adaptér text-opentype") over its Vite URL; an HTTP
+ * error rejects, so the outliner does not keep the font and tries again next time.
+ */
+async function loadFont(font: TextFontId): Promise<ArrayBuffer> {
+  const response = await fetch(fontUrl(font));
+  if (!response.ok)
+    throw new Error(`Font '${font}' failed to load: HTTP ${String(response.status)}`);
+  return response.arrayBuffer();
 }
 
 /** Ids of Q002 from the crypto random source (Q022). */

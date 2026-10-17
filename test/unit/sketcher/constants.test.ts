@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { TEXT_FONTS } from '@/sketch';
 import * as constants from '@/sketcher/constants';
 import {
   SKETCH_ACTION_IDS,
   SKETCH_CONSTRAINT_ACTION_GROUP,
   SKETCH_DRAW_ACTION_GROUP,
   SKETCH_SELECT_TOOL_ID,
+  SKETCH_TEXT_FONTS,
   sketchConstraintActionId,
 } from '@/sketcher/constants';
 
@@ -18,6 +20,7 @@ describe('sketcher/constants', () => {
         'SKETCH_CONSTRAINT_ACTION_GROUP',
         'SKETCH_DRAW_ACTION_GROUP',
         'SKETCH_SELECT_TOOL_ID',
+        'SKETCH_TEXT_FONTS',
         'sketchConstraintActionId',
       ].sort(),
     );
@@ -41,5 +44,10 @@ describe('sketcher/constants', () => {
     expect(SKETCH_CONSTRAINT_ACTION_GROUP).toBe('sketch.constraint');
     expect(SKETCH_DRAW_ACTION_GROUP).toBe('sketch.draw');
     expect(SKETCH_SELECT_TOOL_ID).toBe('sketch.select');
+  });
+
+  it('has the fonts of a text of sketch in their order, frozen (M37)', () => {
+    expect(SKETCH_TEXT_FONTS).toEqual(TEXT_FONTS);
+    expect(Object.isFrozen(SKETCH_TEXT_FONTS)).toBe(true);
   });
 });

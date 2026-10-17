@@ -5,6 +5,7 @@ import type { SketchData, SketchEntityId } from '@/sketch/model';
 import { parseSketchData } from '@/sketch/parse';
 import { SPLINE_TOLERANCE, XLINE_EXTENT } from '@/sketch/geometry';
 import { ORIGIN_SNAP, snap } from '@/sketch/snap';
+import { textData } from '@/sketch/testing';
 import type { SnapOptions, SnapResult } from '@/sketch/snap';
 
 function sketch(entities: readonly unknown[]): SketchData {
@@ -529,5 +530,22 @@ describe('snap: copies of patterns are geometry without identity (M36)', () => {
     const r = snap([-10, 11], withPoint, OPTS);
 
     expect(r).toMatchObject({ kind: 'point', point: id('n') });
+  });
+});
+
+describe('snap: texts are ignored (M37)', () => {
+  // The fake square of 'a' runs from (0.5, 0) to (5.5, 5) on the baseline from (0, 0) to (100, 0);
+  // the baseline lies at y = 0, so the cursor stays above it.
+  const TEXT = textData({ text: 'a', p1: [0, 0], p2: [100, 0] });
+
+  it.each<[string, Vec2]>([
+    ['a corner of a letter', [5.5, 5]],
+    ['the top edge of a letter', [3, 5]],
+    ['the middle of a letter edge', [5.5, 2.5]],
+  ])('no snap to %s', (_name, at) => {
+    const r = snap(at, TEXT, { ...OPTS, tolerance: 0.5 });
+    expect(r.kind).toBe('free');
+    expect(r.point).toBeNull();
+    expect(r.inferred).toEqual([]);
   });
 });

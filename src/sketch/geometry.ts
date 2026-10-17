@@ -4,6 +4,10 @@ import type { SketchCurve, SketchData, SketchEntity, SketchEntityId, SketchPoint
 import { lerp, normalize, sub } from './vec2';
 import { patternCopies } from './patterns';
 import { pointsById } from './points';
+import { textCurves } from './text';
+import type { Curve2 } from './curve2';
+
+export type { Curve2 } from './curve2';
 
 // 2D geometry of sketch curves for regions and the kernel (spec 12 "Geometrie a pomůcky editace").
 
@@ -12,35 +16,6 @@ import { pointsById } from './points';
  * sketcher draws and snaps to splines with it.
  */
 export const SPLINE_TOLERANCE = 1e-4;
-
-/**
- * A 2D curve for regions and the kernel. The same shape as ProfileCurve in kernel (structural
- * typing, ADR 0017). `id` (M14) is the id of the sketch entity the curve comes from.
- */
-export type Curve2 =
-  | { readonly kind: 'line'; readonly from: Vec2; readonly to: Vec2; readonly id?: string }
-  | {
-      readonly kind: 'arc';
-      readonly center: Vec2;
-      readonly from: Vec2;
-      readonly to: Vec2;
-      readonly ccw: boolean;
-      readonly id?: string;
-    }
-  | {
-      readonly kind: 'circle';
-      readonly center: Vec2;
-      readonly radius: number;
-      readonly id?: string;
-    }
-  /** M29: a clamped polynomial B-spline (the shape of BSplineShape in core/math/bspline.ts). */
-  | {
-      readonly kind: 'bspline';
-      readonly degree: number;
-      readonly poles: readonly Vec2[];
-      readonly knots: readonly number[];
-      readonly id?: string;
-    };
 
 /**
  * Half the length (mm) of the line an xline is drawn, picked and snapped as (M31): far beyond any
@@ -130,7 +105,8 @@ export function curve2(
  * The curves that bound regions (spec 12 "Křivky pro oblasti a odvozená id"): the non-construction
  * curves of the sketch as Curve2 with the entity id, in the order of the entities, then the
  * non-construction curve copies of mirrors and patterns (M36) with their derived ids, in the
- * order of patternCopies. The one place that decides what bounds regions; the kernel skips
+ * order of patternCopies, then the letter curves of the non-construction texts (M37, textCurves;
+ * the holes of letters are found by the kernel). The one place that decides what bounds regions; the kernel skips
  * degenerate curves itself. Region names are sorted ids, so the order does not change them.
  */
 export function regionCurves(data: SketchData): readonly Curve2[] {
@@ -138,7 +114,12 @@ export function regionCurves(data: SketchData): readonly Curve2[] {
   const points = new Map(pointsById(data));
   for (const copy of copies) if (copy.kind === 'point') points.set(copy.id, copy);
   const curves = [...data.entities, ...copies].filter(isRegionCurve);
-  return Object.freeze(curves.map((curve) => curve2(curve, points)));
+  // A construction text bounds nothing; its baseline (usually construction) stays for the others.
+  const texts = textCurves({
+    entities: data.entities.filter((e) => e.kind !== 'text' || e.construction !== true),
+    constraints: data.constraints,
+  });
+  return Object.freeze([...curves.map((curve) => curve2(curve, points)), ...texts]);
 }
 
 // Exhaustive on purpose: a new kind of entity (M31, M36, M37) must decide here whether it
@@ -151,7 +132,8 @@ function isRegionCurve(e: SketchEntity): e is SketchCurve {
     case 'mirror':
     case 'linearPattern':
     case 'circularPattern':
-      // A pattern is a recipe, not a curve; its copies are added by regionCurves (M36).
+    case 'text':
+      // A pattern or a text is a recipe, not a curve; regionCurves adds its derived curves.
       return false;
     case 'line':
     case 'circle':

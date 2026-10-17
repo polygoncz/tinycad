@@ -93,7 +93,7 @@ export type SketchCurve =
   SketchLine | SketchCircle | SketchArc | SketchBSpline | SketchFitSpline | SketchXLine;
 
 /**
- * Mirror of the sources across the axis (a line). One copy with index 1 (spec 12 "Zrcadlení a
+ * Mirror of the sources across the axis (a line or an xline, M31). One copy with index 1 (spec 12 "Zrcadlení a
  * pole (M36)"). Like every pattern, a recipe: the copies are derived (patternCopies).
  */
 export interface SketchMirror {
@@ -135,9 +135,72 @@ export interface SketchCircularPattern {
   readonly angle: number;
 }
 
+/** A font bundled for sketch text (spec 12 "Text ve skice (M37)"). */
+export type TextFontId = 'sans' | 'serif' | 'mono';
+/** In this order: the order of the font choice in the panel. */
+export const TEXT_FONTS: readonly TextFontId[] = Object.freeze(['sans', 'serif', 'mono']);
+/**
+ * A piece of a letter outline in the local coordinates of a text (mm): 2 poles = a line, 3 = a
+ * quadratic, 4 = a cubic Bézier curve.
+ */
+export type TextSegment = readonly Vec2[];
+/** One closed loop of one letter; the end of the last segment = the start of the first. */
+export interface TextContour {
+  /** Index of the character in [...text] (code points, not UTF-16 units). */
+  readonly char: number;
+  /** The code point of that character (checks that the outline matches the text). */
+  readonly code: number;
+  readonly segments: readonly TextSegment[];
+}
+
+/**
+ * A one-line text (spec 12 "Text ve skice (M37)"): letter outlines stored in its local coordinates
+ * (x along the baseline from p1 of the anchor line, y to the left of it, mm), so regen needs no
+ * font. A member of SketchEntity, not of SketchCurve (like a pattern, M36): its curves are derived
+ * (textCurves) and it never enters the solver.
+ */
+export interface SketchText {
+  readonly kind: 'text';
+  readonly id: SketchEntityId;
+  /** 1 … MAX_TEXT_LENGTH code points, one line, no control characters. */
+  readonly text: string;
+  readonly font: TextFontId;
+  /** Mm, > 0: the size of the font (em), like font-size. */
+  readonly height: number;
+  /** A line or an xline (M31): the baseline starts at its p1 and runs towards p2; its length does not matter. */
+  readonly baseline: SketchEntityId;
+  /** Computed by the sketcher from text, font and height (TextOutliner). */
+  readonly contours: readonly TextContour[];
+  readonly construction?: true;
+}
+
+/** The longest text in code points. */
+export const MAX_TEXT_LENGTH = 200;
+
+/**
+ * The values of a text the user sets (M37): `text` 1 … MAX_TEXT_LENGTH code points without control
+ * characters (\p{Cc}), `font` one of TEXT_FONTS, `height` finite and > 0. The one rule for the
+ * data check (parseSketchData) and SketchSession.setTextParams.
+ */
+export function textParamsValid(p: {
+  readonly text: string;
+  readonly font: string;
+  readonly height: number;
+}): boolean {
+  const length = Array.from(p.text).length;
+  return (
+    length > 0 &&
+    length <= MAX_TEXT_LENGTH &&
+    !/\p{Cc}/u.test(p.text) &&
+    (TEXT_FONTS as readonly string[]).includes(p.font) &&
+    Number.isFinite(p.height) &&
+    p.height > 0
+  );
+}
+
 /** A mirror or a pattern: a member of SketchEntity, not of SketchCurve (it carries a recipe). */
 export type SketchPattern = SketchMirror | SketchLinearPattern | SketchCircularPattern;
-export type SketchEntity = SketchPoint | SketchCurve | SketchPattern;
+export type SketchEntity = SketchPoint | SketchCurve | SketchPattern | SketchText;
 
 /** The largest number of instances in one direction of a pattern. */
 export const MAX_PATTERN_COUNT = 100;
@@ -146,7 +209,16 @@ export function isPattern(e: SketchEntity): e is SketchPattern {
   return e.kind === 'mirror' || e.kind === 'linearPattern' || e.kind === 'circularPattern';
 }
 
-/** A possible source of a mirror or pattern: a point or a curve, never a pattern (spec 12). */
+/**
+ * A curve entity of the data: not a point, not a pattern (M36 – a recipe whose copies are no
+ * entities, so the modify tools never cut, trim or join them; Q089) and not a text (M37 – a recipe
+ * whose letter curves are no entities either).
+ */
+export function isCurveEntity(e: SketchEntity): e is SketchCurve {
+  return e.kind !== 'point' && !isPattern(e) && e.kind !== 'text';
+}
+
+/** A possible source of a mirror or pattern: a point or a curve, never a pattern or a text (spec 12). */
 export function isPatternSource(e: SketchEntity): e is SketchPoint | SketchCurve {
   switch (e.kind) {
     case 'point':
@@ -160,6 +232,7 @@ export function isPatternSource(e: SketchEntity): e is SketchPoint | SketchCurve
     case 'mirror':
     case 'linearPattern':
     case 'circularPattern':
+    case 'text':
       return false;
     default:
       return assertNever(e);
@@ -377,7 +450,7 @@ export type SketchConstraint =
       readonly a: SketchEntityId;
       readonly b: SketchEntityId;
     }
-  /** Points a, b symmetric across the axis (a line): the middle of ab on the axis, ab perpendicular to it (M36). */
+  /** Points a, b symmetric across the axis (a line or an xline): the middle of ab on the axis, ab perpendicular to it (M36). */
   | {
       readonly kind: 'symmetric';
       readonly id: SketchConstraintId;

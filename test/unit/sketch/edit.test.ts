@@ -11,6 +11,7 @@ import {
 import { isDimension, isPattern } from '@/sketch/model';
 import type { SketchConstraint, SketchData, SketchEntity, SketchItemId } from '@/sketch/model';
 import { parseSketchData } from '@/sketch/parse';
+import { textData } from '@/sketch/testing';
 
 function sketch(entities: readonly unknown[], constraints: readonly unknown[] = []): SketchData {
   const r = parseSketchData(entities, constraints);
@@ -666,10 +667,7 @@ describe('infinite lines (xline, M31) in editing helpers', () => {
 
   it('curvePoints of an xline are its two points', () => {
     const [x] = xe('x');
-    expect(x === undefined || x.kind === 'point' || isPattern(x) ? [] : curvePoints(x)).toEqual([
-      'a',
-      'c',
-    ]);
+    expect(x?.kind === 'xline' ? curvePoints(x) : []).toEqual(['a', 'c']);
   });
 
   it('removing a point of an xline removes the xline and its constraints', () => {
@@ -1043,5 +1041,113 @@ describe('offset constraint (M35)', () => {
     expect(Object.isFrozen(c)).toBe(true);
     expect(c?.kind === 'offset' && Object.isFrozen(c.pairs)).toBe(true);
     expect(parseSketchData(r.entities, r.constraints).ok).toBe(true);
+  });
+});
+
+/**
+ * M37: a text 't' ('ab') on its construction baseline t.bl (points t.p1, t.p2) with a horizontal
+ * constraint on the baseline; a second text 'u' on the same baseline; a line ef with points e, f.
+ */
+const TEXTS = sketch(
+  [
+    ...textData({ id: 't' }).entities,
+    ...textData({ id: 'u', text: 'c' }).entities.filter((e) => e.kind === 'text'),
+    { kind: 'point', id: 'e', x: 0, y: 20 },
+    { kind: 'point', id: 'f', x: 10, y: 20 },
+    { kind: 'line', id: 'ef', p1: 'e', p2: 'f' },
+  ].map((e) => (e.kind === 'text' && e.id === 'u' ? { ...e, baseline: 't.bl' } : e)),
+  [{ kind: 'horizontal', id: 'h', line: 't.bl' }],
+);
+
+const textEntity = (id: string): SketchEntity => {
+  const e = TEXTS.entities.find((x) => x.id === id);
+  if (e === undefined) throw new Error(`no entity ${id}`);
+  return e;
+};
+/** Ids from test strings; the data was parsed, so these are real ids. */
+const textIds = (...xs: string[]): readonly SketchItemId[] =>
+  [...TEXTS.entities, ...TEXTS.constraints].map((x) => x.id).filter((id) => xs.includes(id));
+const idsOf = (data: SketchData) => data.entities.map((e) => e.id);
+
+describe('editing helpers with texts (M37)', () => {
+  it('constraintFor and dimensionFor return null when a text is selected', () => {
+    const t = textEntity('t');
+    const line = textEntity('ef');
+    const point = textEntity('e');
+    expect(constraintFor('horizontal', [t])).toBeNull();
+    expect(constraintFor('fix', [t])).toBeNull();
+    expect(constraintFor('parallel', [t, line])).toBeNull();
+    expect(constraintFor('equal', [line, t])).toBeNull();
+    expect(constraintFor('coincident', [point, t])).toBeNull();
+    expect(constraintFor('midpoint', [t, point])).toBeNull();
+    expect(dimensionFor([t], TEXTS)).toBeNull();
+    expect(dimensionFor([t, line], TEXTS)).toBeNull();
+  });
+
+  it('toggleConstruction toggles a text with the selected curves', () => {
+    const once = toggleConstruction(TEXTS, textIds('t', 'ef'));
+    const t = once.entities.find((x) => x.id === 't');
+    expect(t?.kind === 'text' && t.construction).toBe(true);
+    const ef = once.entities.find((x) => x.id === 'ef');
+    expect(ef?.kind === 'line' && ef.construction).toBe(true);
+    const back = toggleConstruction(once, textIds('t'));
+    const normal = back.entities.find((x) => x.id === 't');
+    // A normal text has no construction field at all, like a curve.
+    expect(normal).toEqual({ ...textEntity('t') });
+    expect(normal !== undefined && Object.hasOwn(normal, 'construction')).toBe(false);
+    expect(parseSketchData(back.entities, back.constraints).ok).toBe(true);
+  });
+
+  it('toggleConstruction of a construction text and a normal curve makes both construction', () => {
+    const once = toggleConstruction(TEXTS, textIds('t'));
+    const both = toggleConstruction(once, textIds('t', 'ef'));
+    const t = both.entities.find((x) => x.id === 't');
+    expect(t?.kind === 'text' && t.construction).toBe(true);
+  });
+
+  it('removing a text keeps its baseline and the constraints on it', () => {
+    const r = removeItems(TEXTS, textIds('t'));
+    expect(idsOf(r)).toEqual(idsOf(TEXTS).filter((x) => x !== 't'));
+    expect(r.constraints.map((c) => c.id)).toEqual(['h']);
+  });
+
+  it('removing the baseline removes every text on it', () => {
+    const r = removeItems(TEXTS, textIds('t.bl'));
+    expect(idsOf(r)).toEqual(['e', 'f', 'ef']);
+    expect(r.constraints).toEqual([]);
+  });
+
+  it('removing a point of the baseline removes the baseline and the texts', () => {
+    const r = removeItems(TEXTS, textIds('t.p2'));
+    expect(idsOf(r)).toEqual(['e', 'f', 'ef']);
+  });
+});
+
+describe('symmetric constraint across an xline (after M31)', () => {
+  const X = sketch(
+    [
+      ...PATTERNS.entities.filter((e) => !isPattern(e)),
+      { kind: 'xline', id: 'xx', p1: 'x', p2: 'y', construction: true },
+    ],
+    [],
+  );
+  const sel = (...xs: string[]) =>
+    xs.map((id) => {
+      const found = X.entities.find((e) => e.id === id);
+      if (found === undefined) throw new Error(`no entity ${id}`);
+      return found;
+    });
+
+  it('constraintFor takes an xline as the axis', () => {
+    expect(constraintFor('symmetric', sel('a', 'c', 'xx'))).toEqual({
+      kind: 'symmetric',
+      a: 'a',
+      b: 'c',
+      axis: 'xx',
+    });
+  });
+
+  it('constraintFor refuses a point of the xline', () => {
+    expect(constraintFor('symmetric', sel('x', 'c', 'xx'))).toBeNull();
   });
 });

@@ -214,7 +214,8 @@ function anchorOf(byId: ReadonlyMap<string, SketchEntity>, entity: SketchEntity)
     case 'mirror':
     case 'linearPattern':
     case 'circularPattern':
-      // No constraint refers to a pattern (parseSketchData), so it never carries a glyph.
+    case 'text':
+      // No constraint refers to a pattern or a text (parseSketchData), so it never carries a glyph.
       return null;
     default:
       return assertNever(entity);

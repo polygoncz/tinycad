@@ -14,8 +14,9 @@ import type {
   SketchLine,
   SketchPoint,
 } from './model';
-import { coordinatesOf, endIds, findCurve, isCurveEntity, newPoints, rebuild } from './trim';
+import { coordinatesOf, endIds, findCurve, newPoints, rebuild } from './trim';
 import type { IdSource, SketchEdit } from './trim';
+import { isCurveEntity } from './model';
 import { dist, dot, length } from './vec2';
 
 // Fillet and chamfer between two sketch curves (spec 12 "Zaoblení a sražení ve skice (M34)"):

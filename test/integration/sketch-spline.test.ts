@@ -35,7 +35,7 @@ import type { SketchEntity, SketchFitSpline, SketchPoint } from '@/sketch';
 import { createSketchEditor } from '@/sketcher';
 import type { SketchSession } from '@/sketcher';
 import { createInThreadPlanegcsSolver } from '@/solver-planegcs/testing';
-import { createFakeSketchGeometry } from '@/sketch/testing';
+import { createFakeSketchGeometry, createFakeTextOutliner } from '@/sketch/testing';
 
 const META = { id: 'sketch-spline' as DocumentId, name: 'Spline', createdAt: 0 }; // a test id is trusted
 const TOLERANCE = 1e-6;
@@ -63,6 +63,7 @@ function setup(kernel: GeometryKernel) {
     features,
     solver: createInThreadPlanegcsSolver(),
     geometry: createFakeSketchGeometry(),
+    text: createFakeTextOutliner(),
     viewport: new FakeViewport(),
     resolvePlane: (ref) => (ref.kind === 'plane' ? planes.get(ref.plane) : undefined),
     // Only origin planes here: the reference is the plane of the artifact.

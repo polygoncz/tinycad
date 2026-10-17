@@ -14,6 +14,7 @@ modules:
   - kernel-occt
   - sketch
   - solver-planegcs
+  - text-opentype
   - regen
   - render
   - interaction
@@ -58,7 +59,7 @@ Nad vrstvami platí hrubší dělení podle toho, jestli modul smí znát platfo
 |---|---|---|
 | 1. Doména | `core`, `document`, `ops`, `regen`, `kernel`, `sketch` (M12), `persistence` (bez `idb/`), `plugin-api`, `features/*` | ne |
 | 2. Prezentační logika | `interaction` ([[Prezentační model\|prezentační modely]], nástroje, port `ViewportPort`), `sketcher` (režim skicáře, [[0024-modul-sketcher\|ADR 0024]]) | ne |
-| 3. Adaptéry a platforma | `render`, `ui`, `kernel-occt`, `solver-planegcs` (M12), `persistence/idb`, `app` | ano |
+| 3. Adaptéry a platforma | `render`, `ui`, `kernel-occt`, `solver-planegcs` (M12), `text-opentype` (M37), `persistence/idb`, `app` | ano |
 
 Prstence 1 a 2 se typují konfigurací `tsconfig.domain.json` bez knihovny `DOM`, takže použití `window` nebo `KeyboardEvent` shodí `typecheck`. `app` je kompoziční kořen *pro danou platformu*.
 
@@ -106,6 +107,7 @@ Prstence 1 a 2 se typují konfigurací `tsconfig.domain.json` bez knihovny `DOM`
 | `kernel-occt` | `core`, `kernel` | `replicad-opencascadejs` ([[0013-replicad-opencascadejs\|ADR 0013]]) |
 | `sketch` (M12) | `core` | – |
 | `solver-planegcs` (M12) | `core`, `sketch` | `@salusoft89/planegcs` ([[0016-planegcs-resic-vazeb\|ADR 0016]]) |
+| `text-opentype` (M37) | `core`, `sketch` | `opentype.js` ([[0029-text-ve-skice-pres-opentype\|ADR 0029]]) |
 | `regen` | `core`, `document`, `kernel`, `sketch` | – |
 | `render` | `core`, `kernel` (jen typy: `MeshData`, `MeshOps`, `MeshQuality`, `ShapeHandle`, `BoundingBox`), `interaction` (jen typy: `ViewportPort`, události, `BodyId`, [[Q056 Odkud render bere BodyId\|Q056]]) | `three` (včetně `three/addons`) |
 | `interaction` | `core`, `document`, `ops`, `sketch` | – |
@@ -117,7 +119,7 @@ Prstence 1 a 2 se typují konfigurací `tsconfig.domain.json` bez knihovny `DOM`
 
 Důležité zákazy:
 - `features/*` se navzájem neimportují.
-- Nic kromě `app` neimportuje `kernel-occt` ani `solver-planegcs` (konkrétní implementace). `sketch` je doménový model skici a port řešiče, ne plugin; skicář (režim, nástroje) je modul `sketcher` ([[0024-modul-sketcher|ADR 0024]]) ([[0017-modul-sketch-a-skicar|ADR 0017]], M12).
+- Nic kromě `app` neimportuje `kernel-occt`, `solver-planegcs` ani `text-opentype` (konkrétní implementace). `sketch` je doménový model skici a port řešiče, ne plugin; skicář (režim, nástroje) je modul `sketcher` ([[0024-modul-sketcher|ADR 0024]]) ([[0017-modul-sketch-a-skicar|ADR 0017]], M12).
 - `ui` nesahá na `ops`, `regen`, `kernel`, `render` přímo – jen přes `AppSession`.
 - `regen` nezná `ops` (regenerace neví, jak změna vznikla).
 - `interaction/constants.ts` je datový vstupní bod ([[M20-zpevneni-struktury|M20]], D6): jen hodnoty (konstanty, rozměry glyfů, prahy) bez importů kromě `core` a datových souborů modulu bez závislostí (dnes `mode.ts`, seznam `DATA_ENTRY_MODULES` v `.dependency-cruiser.cjs`; pravidlo hlídá i je). Modul, který smí z `interaction` jen typy (`ui`), z něj smí i hodnoty (sloupec `constants` v `.dependency-cruiser.cjs`). Čistotu hlídá pravidlo `interaction-constants-only-data`. Obsah: `ACTION_IDS`, `FILE_ACTION_IDS`, `toolActionId`, `toolModes`, `MANIPULATOR_GLYPHS`, `HANDLE_VISIBILITY` a od [[M28-koty|M28]] `CLICK_TOLERANCE_PX` (práh tahu proti kliku, sdílí ho `select-tool` a tah popisku kóty v `ui`). `render` hodnoty nebere, dostane je od `app` při vytvoření viewportu.
@@ -172,6 +174,7 @@ tinycad/
 │  ├─ kernel-occt/          adaptér OCCT, worker
 │  ├─ sketch/               model skici, oblasti, port ConstraintSolver (M12)
 │  ├─ solver-planegcs/      adaptér řešiče vazeb, worker (M12)
+│  ├─ text-opentype/        adaptér obrysů písmen, přibalené fonty (M37)
 │  ├─ regen/
 │  ├─ render/
 │  ├─ interaction/          prezentační modely; podsložky manipulators/ a feature-dialog/

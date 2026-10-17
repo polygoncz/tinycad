@@ -6,7 +6,11 @@ import type { FeatureSchema, ParamSchema } from '@/document';
 import { anOpsSession } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE, parseSketchData } from '@/sketch';
 import type { SketchData } from '@/sketch';
-import { createFakeSketchGeometry, createFakeSolver } from '@/sketch/testing';
+import {
+  createFakeSketchGeometry,
+  createFakeSolver,
+  createFakeTextOutliner,
+} from '@/sketch/testing';
 import {
   SELECT_TOOL,
   createFeatureEditor,
@@ -128,6 +132,7 @@ async function dimensioning(sketch: SketchData = SKETCH) {
     features: editor,
     solver: createFakeSolver(),
     geometry: createFakeSketchGeometry(),
+    text: createFakeTextOutliner(),
     viewport,
     resolvePlane: () => ({ origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, 0, 1] }),
     planeOfSketch: () => undefined,
@@ -135,7 +140,7 @@ async function dimensioning(sketch: SketchData = SKETCH) {
   const registry = createToolRegistry();
   registry.register(SELECT_TOOL);
   for (const tool of createSketchTools({ sketches })) registry.register(tool);
-  const ctx: Omit<ToolContext, 'finish'> = {
+  const ctx: Omit<ToolContext, 'finish' | 'setHint'> = {
     viewport,
     selection: createSelectionModel({ regen: new FakeRegenStatus() }),
     doc: ops.doc,

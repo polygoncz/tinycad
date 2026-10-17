@@ -1,14 +1,16 @@
 // Ring 1 – sketch data model, data checks, 2D geometry, the curves bounding regions, editing
 // helpers, the parameter of curves, trim/extend/split (M33), fillet and chamfer (M34), offset
-// (M35) and the ConstraintSolver and
-// SketchGeometry ports (spec 12, ADR 0017). Depends only on core.
+// (M35) and the ConstraintSolver, SketchGeometry and TextOutliner ports (spec 12, ADR 0017).
+// Depends only on core.
 // Public API of sketch. Everything else in this folder is internal.
 
 export { GEOMETRIC_CONSTRAINT_KINDS, SKETCH_FEATURE_TYPE, SKETCH_PARAM } from './model';
 export { DIMENSION_KINDS, isDimension, isLineCarrier } from './model';
+export { MAX_TEXT_LENGTH, TEXT_FONTS, textParamsValid } from './model';
 export {
   MAX_PATTERN_COUNT,
   circularStep,
+  isCurveEntity,
   isPattern,
   isPatternSource,
   patternParamsValid,
@@ -40,7 +42,11 @@ export type {
   SketchMirror,
   SketchPattern,
   SketchPoint,
+  SketchText,
   SketchXLine,
+  TextContour,
+  TextFontId,
+  TextSegment,
 } from './model';
 export { patternCopies, patternOfCopy } from './patterns';
 export { parseSketchData } from './parse';
@@ -125,3 +131,5 @@ export {
 export type { ChamferRequest, Corner, FilletEdge, FilletRequest } from './fillet';
 export { chainCurves, chainOf, offsetEdit } from './offset';
 export type { Chain, OffsetRequest } from './offset';
+export { derivedOwner, textCurves } from './text';
+export type { TextOutliner } from './text';

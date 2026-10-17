@@ -12,11 +12,13 @@ import {
   curve2,
   curvePoints,
   isDimension,
+  isCurveEntity,
   isPattern,
   movePlacement,
   parseSketchData,
   pointsById,
   removeItems,
+  textParamsValid,
   toggleConstruction,
 } from '@/sketch';
 import type {
@@ -36,6 +38,10 @@ import type {
   SolveInput,
   SolveResult,
   SolveStatus,
+  SketchText,
+  TextContour,
+  TextFontId,
+  TextOutliner,
 } from '@/sketch';
 import { samePlaneRef } from '@/document';
 import type { PlaneRef, TopoRef } from '@/document';
@@ -128,6 +134,13 @@ export interface SketchSession {
    */
   setPatternParam(pattern: SketchEntityId, param: PatternParam, value: number): boolean;
   /**
+   * New values of a text (M37, the panel): checked like the data (textParamsValid), the contours
+   * computed again by the TextOutliner, written in one setParams without the solver, queued like
+   * toggleConstruction. An invalid value, an id that is no text or an outliner that fails → false
+   * and nothing written.
+   */
+  setTextParams(id: SketchEntityId, params: Partial<TextParams>): Promise<boolean>;
+  /**
    * The constraints a click of a drawing tool would add at `at` (M26), or null for none: shown as
    * SketchState.inference; the guides are drawn into the overlay SKETCH_GUIDES_OVERLAY_ID. Neither
    * solved nor written.
@@ -157,6 +170,13 @@ export interface SketchSession {
   finish(): void;
   /** FeatureEditSession.cancel → nothing. */
   cancel(): void;
+}
+
+/** The string, font and height of a text (M37); setTextParams takes a part, a missing field keeps its value. */
+export interface TextParams {
+  readonly text: string;
+  readonly font: TextFontId;
+  readonly height: number;
 }
 
 export interface SketchState {
@@ -314,6 +334,8 @@ export function openSketchSession(deps: {
   solver: ConstraintSolver;
   /** The geometry of the sketch in the kernel (SketchGeometry, M30): intersections and pieces (M33). */
   geometry: SketchGeometry;
+  /** M37: the letter outlines of setTextParams (spec 12 "Text ve skice"). */
+  text: TextOutliner;
   /**
    * The drawings: the session draws the edited sketch and nothing else; screenToRay: the cursor
    * of a dragged dimension label (M28); overlay: the snap guides of the inference preview (M26).
@@ -520,8 +542,8 @@ export function openSketchSession(deps: {
     const data: SketchData = { entities, constraints: EMPTY_DATA.constraints };
     const points = pointsById(data);
     const curves = entities.flatMap((e) =>
-      // A mirror or pattern (M36) is a recipe: its copies are no entities and do not cut.
-      e.kind === 'point' || isPattern(e) ? [] : [curve2(e, points)],
+      // A mirror, a pattern (M36) or a text (M37) is a recipe: its derived curves do not cut.
+      isCurveEntity(e) ? [curve2(e, points)] : [],
     );
     promiseOf(() => geometry.intersections(curves)).then(
       (hits) => {
@@ -684,6 +706,17 @@ export function openSketchSession(deps: {
     });
     if (writers === 1) refresh();
     return done;
+  }
+
+  /** The outlines of the values, or null when the outliner rejected (no font). */
+  async function outlineOrNull(
+    values: Pick<SketchText, 'text' | 'font' | 'height'>,
+  ): Promise<readonly TextContour[] | null> {
+    try {
+      return await deps.text.outline(values);
+    } catch {
+      return null;
+    }
   }
 
   /** The solver's answer, or null when it rejected (infrastructure failure). */
@@ -957,6 +990,34 @@ export function openSketchSession(deps: {
       });
       return true;
     },
+    setTextParams(id, params) {
+      checkOpen('setTextParams');
+      const current = textOf(readData(), id);
+      if (current === undefined || !textParamsValid(withTextParams(current, params))) {
+        return Promise.resolve(false);
+      }
+      // Always queued: the outlines come later, and a solve that read the data before would undo
+      // the write (like toggleConstruction).
+      return enqueueWrite(async () => {
+        // The text when its turn comes: it may have changed or gone meanwhile.
+        const before = textOf(readData(), id);
+        if (!open || before === undefined) return false;
+        const values = withTextParams(before, params);
+        if (!textParamsValid(values)) return false;
+        const contours = await outlineOrNull(values);
+        // Closed while the outliner worked (the state, as `open` reads narrowed here).
+        if (contours === null || !state.get().open) return false;
+        const data = readData();
+        const after = textOf(data, id);
+        if (after === undefined) return false;
+        const changed: SketchText = Object.freeze({ ...after, ...values, contours });
+        write({
+          entities: data.entities.map((e) => (e === after ? changed : e)),
+          constraints: data.constraints,
+        });
+        return true;
+      });
+    },
     setInferencePreview(p) {
       checkOpen('setInferencePreview');
       drawGuides(p?.guides ?? []);
@@ -1121,6 +1182,24 @@ function withPlacement(c: DimensionConstraint, p: DimensionPlacement): Dimension
 }
 
 /** The promise of the job; a synchronous throw becomes its rejection. */
+/** The text `id` of the data, or undefined when there is none. */
+function textOf(data: SketchData, id: SketchEntityId): SketchText | undefined {
+  const found = data.entities.find((e) => e.id === id);
+  return found?.kind === 'text' ? found : undefined;
+}
+
+/** The string, font and height of the text with the given ones in their place. */
+function withTextParams(
+  text: SketchText,
+  params: Partial<TextParams>,
+): Pick<SketchText, 'text' | 'font' | 'height'> {
+  return {
+    text: params.text ?? text.text,
+    font: params.font ?? text.font,
+    height: params.height ?? text.height,
+  };
+}
+
 function promiseOf<T>(job: () => Promise<T>): Promise<T> {
   try {
     return job();
@@ -1195,7 +1274,7 @@ function glyphsShownFor(
 ): ReadonlySet<SketchItemId> {
   const items = hover === null ? selection : [...selection, hover];
   const points = data.entities.flatMap((e) =>
-    items.includes(e.id) && e.kind !== 'point' && !isPattern(e) ? curvePoints(e) : [],
+    items.includes(e.id) && isCurveEntity(e) ? curvePoints(e) : [],
   );
   return new Set<SketchItemId>([
     ...items,

@@ -984,3 +984,276 @@ describe('parseSketchData – offset (M35)', () => {
     expect(offsetIssues([{ kind: 'fix', id: 'f', point: 'a' }, bad])).toEqual([constraintIssue(1)]);
   });
 });
+
+describe('parseSketchData – text (M37)', () => {
+  /** A closed square loop of character `char` (code `code`) from x0, side 1, made of lines. */
+  const square = (char: number, code: number, x0 = 0) => ({
+    char,
+    code,
+    segments: [
+      [
+        [x0, 0],
+        [x0 + 1, 0],
+      ],
+      [
+        [x0 + 1, 0],
+        [x0 + 1, 1],
+      ],
+      [
+        [x0 + 1, 1],
+        [x0, 1],
+      ],
+      [
+        [x0, 1],
+        [x0, 0],
+      ],
+    ],
+  });
+  /** A loop of one quadratic and one cubic Bézier segment. */
+  const curved = (char: number, code: number) => ({
+    char,
+    code,
+    segments: [
+      [
+        [0, 0],
+        [1, 2],
+        [2, 0],
+      ],
+      [
+        [2, 0],
+        [2, -1],
+        [0, -1],
+        [0, 0],
+      ],
+    ],
+  });
+  const TEXT = {
+    kind: 'text',
+    id: 't',
+    text: 'a b',
+    font: 'sans',
+    height: 10,
+    baseline: 'ab',
+    // 'a' has two loops, the space none, 'b' one curved loop.
+    contours: [square(0, 97), square(0, 97, 3), curved(2, 98)],
+  };
+  const withContour = (contour: unknown) => ({ ...TEXT, contours: [contour] });
+  const segmentsOf = (...segments: unknown[]) => withContour({ char: 0, code: 97, segments });
+
+  it('accepts a text, a construction text and every font', () => {
+    expect(
+      entityIssues([
+        ...ENTITIES,
+        TEXT,
+        { ...TEXT, id: 't2', construction: true },
+        { ...TEXT, id: 't3', font: 'serif' },
+        { ...TEXT, id: 't4', font: 'mono', baseline: 'bc' },
+      ]),
+    ).toEqual([]);
+  });
+
+  it('accepts a text without contours, before its baseline', () => {
+    expect(entityIssues([{ ...TEXT, text: '   ', contours: [] }, ...ENTITIES])).toEqual([]);
+  });
+
+  it('counts the length in code points, not UTF-16 units', () => {
+    // 200 astral code points are 400 UTF-16 units.
+    const astral = '😀'.repeat(200);
+    expect(entityIssues([...ENTITIES, { ...TEXT, text: astral, contours: [] }])).toEqual([]);
+    const contour = { ...square(1, 'ž'.codePointAt(0) ?? 0) };
+    expect(entityIssues([...ENTITIES, { ...TEXT, text: '😀ž', contours: [contour] }])).toEqual([]);
+  });
+
+  it('accepts continuity and closure within 1e-9 relative to the coordinates', () => {
+    const far = 1e6;
+    const loop = {
+      char: 0,
+      code: 97,
+      segments: [
+        [
+          [far, 0],
+          [far + 1, 0],
+        ],
+        [
+          [far + 1 + 1e-4, 0],
+          [far, 1],
+        ],
+        [
+          [far, 1],
+          [far + 5e-4, 0],
+        ],
+      ],
+    };
+    expect(entityIssues([...ENTITIES, withContour(loop)])).toEqual([]);
+  });
+
+  it.each([
+    ['text with an extra property', { ...TEXT, size: 1 }],
+    [
+      'text without contours',
+      { kind: 'text', id: 't', text: 'a', font: 'sans', height: 1, baseline: 'ab' },
+    ],
+    ['construction false', { ...TEXT, construction: false }],
+    ['id with a colon', { ...TEXT, id: 't:1' }],
+    ['id with a comma', { ...TEXT, id: 't,1' }],
+    ['empty string', { ...TEXT, text: '', contours: [] }],
+    ['string not a string', { ...TEXT, text: 5, contours: [] }],
+    ['string too long', { ...TEXT, text: 'x'.repeat(201), contours: [] }],
+    ['a line break', { ...TEXT, text: 'a\nb', contours: [] }],
+    ['a tab', { ...TEXT, text: 'a\tb', contours: [] }],
+    ['a DEL character', { ...TEXT, text: 'a\u007f', contours: [] }],
+    ['unknown font', { ...TEXT, font: 'comic' }],
+    ['height zero', { ...TEXT, height: 0 }],
+    ['height negative', { ...TEXT, height: -1 }],
+    ['height infinite', { ...TEXT, height: Infinity }],
+    ['height NaN', { ...TEXT, height: Number.NaN }],
+    ['baseline a circle', { ...TEXT, baseline: 'k' }],
+    ['baseline a point', { ...TEXT, baseline: 'a' }],
+    ['baseline missing', { ...TEXT, baseline: 'zz' }],
+    ['contours not an array', { ...TEXT, contours: {} }],
+    ['contour not an object', withContour([])],
+    ['contour with an extra property', withContour({ ...square(0, 97), x: 1 })],
+    ['contour without segments', withContour({ char: 0, code: 97 })],
+    ['char out of range', withContour(square(3, 97))],
+    ['char negative', withContour(square(-1, 97))],
+    ['char not an integer', withContour(square(0.5, 97))],
+    ['code of another character', withContour(square(0, 98))],
+    // UTF-16 index 2 would be 'a'; in code points the text has only 2 characters.
+    ['char in UTF-16 units', { ...TEXT, text: '😀a', contours: [square(2, 97)] }],
+    ['no segments', segmentsOf()],
+    ['segments not an array', withContour({ char: 0, code: 97, segments: 'x' })],
+    [
+      'a segment of one pole',
+      segmentsOf(
+        [[0, 0]],
+        [
+          [0, 0],
+          [0, 0],
+        ],
+      ),
+    ],
+    [
+      'a segment of five poles',
+      segmentsOf([
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 1],
+        [0, 0],
+      ]),
+    ],
+    [
+      'a pole not a pair',
+      segmentsOf(
+        [
+          [0, 0, 0],
+          [1, 0],
+        ],
+        [
+          [1, 0],
+          [0, 0, 0],
+        ],
+      ),
+    ],
+    [
+      'a pole not finite',
+      segmentsOf(
+        [
+          [0, 0],
+          [Number.NaN, 0],
+        ],
+        [
+          [Number.NaN, 0],
+          [0, 0],
+        ],
+      ),
+    ],
+    [
+      'an open loop',
+      segmentsOf(
+        [
+          [0, 0],
+          [1, 0],
+        ],
+        [
+          [1, 0],
+          [1, 1],
+        ],
+      ),
+    ],
+    [
+      'segments that do not join',
+      segmentsOf(
+        [
+          [0, 0],
+          [1, 0],
+        ],
+        [
+          [1, 1e-6],
+          [0, 0],
+        ],
+      ),
+    ],
+  ])('reports %s at its index', (_name, bad) => {
+    expect(entityIssues([...ENTITIES, TEXT, bad])).toEqual([entityIssue(ENTITIES.length + 1)]);
+  });
+
+  it('reports a text as a pattern source', () => {
+    expect(
+      entityIssues([...ENTITIES, TEXT, { kind: 'mirror', id: 'm', sources: ['t'], axis: 'ab' }]),
+    ).toEqual([entityIssue(ENTITIES.length + 1)]);
+  });
+
+  it.each([
+    ['a horizontal of a text', { kind: 'horizontal', id: 'x', line: 't' }],
+    ['an equal of a line and a text', { kind: 'equal', id: 'x', a: 'ab', b: 't' }],
+    ['a pointOnCurve on a text', { kind: 'pointOnCurve', id: 'x', point: 'c', curve: 't' }],
+    ['a fix of a text', { kind: 'fix', id: 'x', point: 't' }],
+    ['a radius of a text', { kind: 'radius', id: 'x', curve: 't', value: 1 }],
+  ])('reports %s', (_name, bad) => {
+    const r = parseSketchData([...ENTITIES, TEXT], [bad]);
+    expect(r.ok ? [] : r.error).toEqual([constraintIssue(0)]);
+  });
+
+  it('accepts constraints on the baseline of a text', () => {
+    const r = parseSketchData([...ENTITIES, TEXT], [{ kind: 'horizontal', id: 'x', line: 'ab' }]);
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe('parseSketchData – an xline as an axis or a baseline (M36, M37 after M31)', () => {
+  const XLINE = { kind: 'xline', id: 'x', p1: 'b', p2: 'd', construction: true };
+  const WITH_XLINE: readonly unknown[] = [...ENTITIES, XLINE];
+
+  it('accepts a mirror across an xline', () => {
+    const mirror = { kind: 'mirror', id: 'm', sources: ['ab'], axis: 'x' };
+    expect(entityIssues([...WITH_XLINE, mirror])).toEqual([]);
+  });
+
+  it('accepts a text on an xline', () => {
+    const text = {
+      kind: 'text',
+      id: 't',
+      text: 'a',
+      font: 'sans',
+      height: 10,
+      baseline: 'x',
+      contours: [],
+    };
+    expect(entityIssues([...WITH_XLINE, text])).toEqual([]);
+  });
+
+  it('accepts a symmetric constraint across an xline', () => {
+    const r = parseSketchData(WITH_XLINE, [
+      { kind: 'symmetric', id: 's', a: 'a', b: 'c', axis: 'x' },
+    ]);
+    expect(r.ok ? [] : r.error).toEqual([]);
+  });
+
+  it('reports a symmetric constraint with a point of the xline', () => {
+    const r = parseSketchData(WITH_XLINE, [
+      { kind: 'symmetric', id: 's', a: 'b', b: 'c', axis: 'x' },
+    ]);
+    expect(r.ok ? [] : r.error).toEqual([constraintIssue(0)]);
+  });
+});
