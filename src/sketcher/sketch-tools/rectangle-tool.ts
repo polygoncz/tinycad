@@ -18,6 +18,7 @@ import type {
   SketchEntityId,
   SketchLine,
 } from '@/sketch';
+import { isPlainEscape } from '@/interaction';
 import type { Tool, ToolContext } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
 import type { SketchSession } from '../sketch-session';
@@ -119,6 +120,13 @@ export function createRectangleTool(sketches: SketchEditor): Tool {
           return;
         }
       }
+    },
+    onKey(ctx, _session, e) {
+      if (!isPlainEscape(e) || corner === null) return false;
+      // Escape forgets the first corner; a second one ends the tool.
+      corner = null;
+      clearPreview(ctx);
+      return true;
     },
   });
 }

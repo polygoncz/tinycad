@@ -11,6 +11,7 @@
 import { vec2 } from '@/core';
 import { inferRadius } from '@/sketch';
 import type { SketchConstraint, SketchData, SketchEntityId } from '@/sketch';
+import { isPlainEscape } from '@/interaction';
 import type { Tool } from '@/interaction';
 import type { InputField } from '../numeric-input';
 import type { SketchEditor } from '../sketch-editor';
@@ -120,6 +121,13 @@ export function createCircleTool(sketches: SketchEditor): Tool {
           return;
         }
       }
+    },
+    onKey(ctx, _session, e) {
+      if (!isPlainEscape(e) || center === null) return false;
+      // Escape forgets the centre; a second one ends the tool.
+      center = null;
+      clearPreview(ctx);
+      return true;
     },
   });
 }

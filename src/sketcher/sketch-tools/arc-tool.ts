@@ -15,6 +15,7 @@ import { vec2 } from '@/core';
 import type { Vec2 } from '@/core';
 import { inferRadius } from '@/sketch';
 import type { SketchConstraint, SketchData, SketchEntityId } from '@/sketch';
+import { isPlainEscape } from '@/interaction';
 import type { Tool } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
 import type { GlyphKind } from '../sketch-glyphs';
@@ -168,6 +169,15 @@ export function createArcTool(sketches: SketchEditor): Tool {
           return;
         }
       }
+    },
+    onKey(ctx, _session, e) {
+      if (!isPlainEscape(e) || center === null) return false;
+      // Escape forgets the centre, the start and its locked radius; a second one ends the tool.
+      center = null;
+      start = null;
+      radius = null;
+      clearPreview(ctx);
+      return true;
     },
   });
 }
