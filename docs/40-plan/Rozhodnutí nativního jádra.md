@@ -188,3 +188,9 @@ Zafixované hlavičky navíc: `server/src/session/include/tinycad/session/*.hpp`
 - **N97 – Fasáda nesloučí kroky transakce přes `merge`** (každý `apply` je krok s inverzí, aby šel odebrat právě odmítnutý krok); prozatímní záznam `commit` je `batch` nepřechodných kroků. Read model ze `refresh` při čekajících změnách se odloží do vyprázdnění fronty (jinak by se změna v letu použila dvakrát).
 - **N98 – Selhaný `begin` nechá lokální transakci otevřenou, její kroky skončí `NO_TRANSACTION` a zrcadlo se vrátí na základ; selhaný `commit` se jen nahlásí.** Doplní se do spec 14 při M46.
 
+## M46 úkol 2
+
+- **N99 – `keepalive` při zavření karty přes interní hlavičku**, kterou transport z `createCoreTransport` odstraní a pošle `fetch` s `keepalive: true` (connect-web volbu na volání nemá).
+- **N100 – Po `SESSION_NOT_FOUND` skončí všechny čekající transakční požadavky (`begin`, `apply`, `applyTransient`, `commit`, `abort`) `NO_TRANSACTION`**; trvalé (`dispatch`, `undo`, `redo`) jdou znovu se stejným `operation_id`. Pozdní `SESSION_NOT_FOUND` z už nahrazeného sezení další sezení neotevře (druhé by bylo jen pro čtení).
+- **N101 – Slučuje se jen poslední čekající `apply` se `setParams` téže featury** (užší než plán, stejné jako slučování v `ops/transaction.ts`, nemění pořadí změn). Po vyčerpání pokusů se další čekající změny posílají dál, každá s vlastními pokusy.
+
