@@ -57,7 +57,7 @@ import type { DocumentStore, PersistenceStatus, Scheduler } from '@/persistence'
 import type { FeaturePlugin, PluginMessages } from '@/plugin-api';
 import { createRegenerator, planeOfRef, sketchesOf } from '@/regen';
 import type { BodyLayer, CameraController, Viewport } from '@/render';
-import type { ConstraintSolver, TextOutliner } from '@/sketch';
+import type { ConstraintSolver, SketchGeometry, TextOutliner } from '@/sketch';
 import {
   createSketchActions,
   createSketchEditor,
@@ -145,6 +145,11 @@ export interface AppSessionDeps {
    * createOpentypeOutliner over the bundled fonts (fontUrl).
    */
   readonly text: TextOutliner;
+  /**
+   * M39 (N3): the geometry of the sketch over GeometryService of the native core
+   * (createRemoteSketchGeometry); without it the kernel of the supervisor answers (WASM).
+   */
+  readonly geometry?: SketchGeometry;
   /** M15: downloads an exported file; tests capture it, the browser hands ui's implementation. */
   readonly download: (file: DownloadFile) => void;
   /** M15: the theme at the start: the first value of defaultBodyColor; later viewSettings.setTheme. */
@@ -352,8 +357,9 @@ function wireSession(
     features,
     solver: deps.solver,
     // M30, M33: the geometry of the sketch in the kernel; always the live kernel of the
-    // supervisor (declared below, read only when the sketcher calls the port).
-    geometry: createSketchGeometry(() => supervisor.kernel()),
+    // supervisor (declared below, read only when the sketcher calls the port). M39: or the
+    // native core over gRPC, when the browser layer hands it.
+    geometry: deps.geometry ?? createSketchGeometry(() => supervisor.kernel()),
     text: deps.text,
     viewport,
     // Origin planes and planar faces of the last regeneration (M14); before the first one

@@ -12,6 +12,9 @@ docs/.obsidian/workspace.json
 docs/.obsidian/workspace-mobile.json
 docs/.obsidian/cache
 
+# Protocol code generated from server/proto (npm run gen:proto, Q106)
+src/protocol/
+
 # TypeScript incremental build info, Vite cache
 *.tsbuildinfo
 .vite/

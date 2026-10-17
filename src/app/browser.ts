@@ -14,9 +14,10 @@ import { createOcctKernel } from '@/kernel-occt';
 import type { DocumentStore, Scheduler } from '@/persistence';
 import { createIdbDocumentStore } from '@/persistence/idb';
 import type { FeaturePlugin } from '@/plugin-api';
+import { createCoreTransport, createRemoteSketchGeometry } from '@/remote';
 import { createViewport } from '@/render';
 import { createPlanegcsSolver } from '@/solver-planegcs';
-import type { TextFontId } from '@/sketch';
+import type { SketchGeometry, TextFontId } from '@/sketch';
 import { createOpentypeOutliner, fontUrl } from '@/text-opentype';
 import { acquireDocumentLock } from './doc-lock';
 import { disposeOpenSession } from './dispose-open-session';
@@ -86,6 +87,7 @@ export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSe
       solver,
       // M37: the bundled fonts are fetched on the first text in each of them.
       text: createOpentypeOutliner(loadFont),
+      ...remoteGeometry(),
       download: opts.download,
       theme: opts.theme,
       // Replay the whole log on every open while developing (spec 05, "verify").
@@ -185,6 +187,16 @@ async function loadFont(font: TextFontId): Promise<ArrayBuffer> {
   if (!response.ok)
     throw new Error(`Font '${font}' failed to load: HTTP ${String(response.status)}`);
   return response.arrayBuffer();
+}
+
+/**
+ * M39 (N3): with VITE_CORE_URL set (e.g. '/api' through the Vite proxy to Envoy) the sketch
+ * geometry goes over GeometryService of the native core; without it the WASM kernel answers, so
+ * the app still runs without Docker.
+ */
+function remoteGeometry(): { readonly geometry?: SketchGeometry } {
+  const url = import.meta.env.VITE_CORE_URL;
+  return url ? { geometry: createRemoteSketchGeometry(createCoreTransport(url)) } : {};
 }
 
 /** Ids of Q002 from the crypto random source (Q022). */
