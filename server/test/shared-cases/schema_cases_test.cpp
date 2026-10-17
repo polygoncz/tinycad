@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <set>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -22,16 +21,6 @@ namespace tinycad::testing {
 namespace {
 
 using core::Json;
-
-/**
- * The cases of the sketch schema, which comes with the sketch model in M44.1 (decision N22). A
- * fixed list, not "whatever fails": a new failing case must not hide here.
- */
-const std::set<std::string> kSketchCases = {
-    "validate-sketch-defaults",          "validate-sketch-entities-not-array",
-    "validate-sketch-invalid-constraint", "validate-sketch-invalid-entity",
-    "validate-sketch-missing-constraints", "validate-sketch-no-plane",
-    "validate-sketch-rectangle",          "validate-sketch-two-planes"};
 
 const document::FeatureSchemaRegistry& schemas() {
   static const document::FeatureSchemaRegistry registry = [] {
@@ -108,9 +97,6 @@ Json runVisibleWhen(const Json& input) {
 class SchemaSharedCase : public ::testing::TestWithParam<std::string> {};
 
 TEST_P(SchemaSharedCase, MatchesExpected) {
-  if (kSketchCases.contains(GetParam())) {
-    GTEST_SKIP() << "the sketch schema comes with M44.1 (decision N22)";
-  }
   const Json sharedCase = loadCase("schema", GetParam());
   const std::string kind = sharedCase.at("kind").get<std::string>();
   ASSERT_TRUE(sharedCase.contains("expected")) << "'expected' is missing";
@@ -141,13 +127,6 @@ INSTANTIATE_TEST_SUITE_P(Schema, SchemaSharedCase, ::testing::ValuesIn(caseNames
 
 // No folder or no case would leave the suite empty and green.
 TEST(SchemaSharedCases, AreFound) { EXPECT_FALSE(caseNames("schema").empty()); }
-
-TEST(SchemaSharedCases, TheSkippedSketchCasesExist) {
-  const auto names = caseNames("schema");
-  for (const auto& name : kSketchCases) {
-    EXPECT_TRUE(std::find(names.begin(), names.end(), name) != names.end()) << name;
-  }
-}
 
 }  // namespace
 }  // namespace tinycad::testing
