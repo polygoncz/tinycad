@@ -254,3 +254,10 @@ Revize (`architecture-reviewer`) nad M39–M44 a pahýly M45 nenašla porušení
 - **N133 – `check:server` staví s `CMAKE_BUILD_PARALLEL_LEVEL=3`** (proměnná prostředí ji přepíše), N116. Dva gRPC harnessy v jednom testovacím binárním souboru: `TestServer` (sezení) a `DocumentsTestServer` (dokumenty).
 - **N134 ⚠ – Klient: výklad N92** – `failed` = `offline` a změny ve frontě nebo změna zahozená s opakovatelnou chybou; vynuluje se při `online`, `flush()` pak odmítne. Ztráta transakce a `SKETCH_NOT_SOLVED` se zatím hlásí jen do konzole – `AppSession` nemá kanál dočasných hlášení (`notice`), doplní se po M46. `pagehide` zavře sezení s `keepalive` (neodeslané změny ve frontě zaniknou), obnovení z bfcache = reload.
 
+## M46 úkol 6 (e2e proti Compose)
+
+- **N135 ⚠ – Navázané sezení s otevřenou transakcí z předchozí stránky zruší klient `Abort`em** před sestavením (`NO_TRANSACTION` se toleruje). Atomičtější by bylo zrušit ji na serveru při `OpenSession` s `resume_session_id` – k revizi.
+- **N136 – Klient zahodí read model se starší `regen.generation`** (stejnou přijme) a změnu odešle až po mikrotasku, aby nesla `input_of` dialogu otevřeného tímtéž kódem. Obojí našly e2e (výběr špatného tělesa, zaoblení zasažené vlastní hranou).
+- **N137 – Při latenci dialog vysunutí otevřený před odpovědí na dokončenou skicu oblast nepředvybere** (D6 z M19.2); přijato, předvýběr se dodatečně nedoplňuje.
+- **N138 – E2E: každý test zakládá svůj dokument přes `DocumentService` z Node** (`createDocument` vrací `{ id, name }`), vlastní Compose projekt podle `E2E_PORT` s daty v tmpfs; `test:e2e:core` a `playwright.core.config.ts` zanikly.
+

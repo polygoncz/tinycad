@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 46
 aliases:
   - M46
@@ -18,8 +18,8 @@ specs:
   - "[[11-ui]]"
 depends_on:
   - "[[M45-sezeni-pres-grpc]]"
-started:
-finished:
+started: 2026-10-17
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-17
@@ -37,12 +37,12 @@ updated: 2026-10-17
 
 ## Úkoly
 
-- [ ] 1. Základy `remote`: chyby, převody operací, read modelu a popisů typů, falešné jádro pro testy, pravidla závislostí
-- [ ] 2. `RemoteSession` (fronta změn, opakování, nové sezení, stream) a `RemoteDocuments` (souběžně s 3 a 4)
-- [ ] 3. Zrcadlo dokumentu a fasáda dispečeru, transakcí a undo; port historie (souběžně s 2 a 4)
-- [ ] 4. Read model → porty: stav regenerace, sítě podle verze, kresby skic, roviny pro skicář, registr typů, export, stav spojení (souběžně s 2 a 3)
-- [ ] 5. Kompoziční kořen nad serverem, seznam dokumentů, přenos z IndexedDB, texty stavu spojení (souběžně s 6)
-- [ ] 6. E2E proti Docker Compose: infrastruktura, úprava sady, nové testy latence, výpadku a reloadu (souběžně s 5)
+- [x] 1. Základy `remote`: chyby, převody operací, read modelu a popisů typů, falešné jádro pro testy, pravidla závislostí
+- [x] 2. `RemoteSession` (fronta změn, opakování, nové sezení, stream) a `RemoteDocuments` (souběžně s 3 a 4)
+- [x] 3. Zrcadlo dokumentu a fasáda dispečeru, transakcí a undo; port historie (souběžně s 2 a 4)
+- [x] 4. Read model → porty: stav regenerace, sítě podle verze, kresby skic, roviny pro skicář, registr typů, export, stav spojení (souběžně s 2 a 3)
+- [x] 5. Kompoziční kořen nad serverem, seznam dokumentů, přenos z IndexedDB, texty stavu spojení (souběžně s 6)
+- [x] 6. E2E proti Docker Compose: infrastruktura, úprava sady, nové testy latence, výpadku a reloadu (souběžně s 5)
 
 Úkol 1 jde první a sám a zafixuje TS kontrakty níže (rozhraní v `remote/index.ts` a v app s pahýly). Úkoly 2, 3 a 4 pak souběžně (každý ve svých souborech, proti kontraktům a falešným implementacím), po jejich sloučení souběžně 5 a 6 (6 dokončí zelenou sadu po natažení sloučeného 5).
 
@@ -184,4 +184,9 @@ Klient nad read modelem (CQRS v malém) s optimistickým zrcadlem a přestavěn�
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+_Návrh Clauda (samostatný běh)._
+
+- Šest úkolů, úkoly 1–4 souběžně s implementací serveru (M45) proti falešnému jádru (`createFakeCore`), úkol 5 souběžně s M45 úkoly 4–5; jen e2e (úkol 6) čekalo na hotový server.
+- Optimistické zrcadlo (N63) splnilo účel: `interaction`, `sketcher` a `render` se nezměnily, přepnutí jádra pod UI šlo přes porty z M9–M21.
+- E2E proti Compose poprvé spojily celek a našly čtyři chyby, všechny v klientovi (registr vs. schémata bez `migrate`, opožděný read model přepsal novější, navázané sezení s otevřenou transakcí, `BeginTransaction` bez `input_of`) – server žádnou. Unit testy proti falešnému jádru pořadí odpovědí v čase nezachytily.
+- Výsledek: `npm run test:e2e` 103/103, `test:e2e:full` 206/206 (Chrome i WebKit) proti serveru, včetně latence 150 ms, výpadku během tažení a dvou karet.
