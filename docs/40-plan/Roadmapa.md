@@ -198,9 +198,9 @@ Naplánováno 2026-10-17 z Pavlových rozhodnutí sporných míst samostatného 
 |---|---|---|
 | A – server | [[M50-occt2d-a-vrstva-rpc\|M50]] → [[M51-inverze-a-mereni\|M51]] | `server/src/` |
 | B – klient | [[M48-hlaseni-v-ui\|M48]] → [[M52-tenky-klient\|M52]] | `src/app`, `src/ui`, `src/interaction`, `src/sketcher` |
-| C – kontrakt | [[M49-pravidla-validace-v-popisu\|M49]] | `server/proto`, `server/src/features`, `src/remote` |
+| C – kontrakt | [[M49-pravidla-validace-v-popisu\|M49]] | `server/proto`, `server/src/document`, `server/src/features`, `server/src/session/src/feature_types.cpp`, `src/document`, `src/remote`, `test/integration/shared-cases` |
 
-M52 začne po sloučení M48 a M49 (dialog featur potřebuje kanál hlášení i pravidla z popisu). Průnik A × C: `server/src/session` (popisy typů vs. vrstva rpc) – sdílené rozhraní popisů typů zafixovat při startu stop.
+M52 začne po sloučení M48 a M49 (dialog featur potřebuje kanál hlášení i pravidla z popisu). Průnik A × C: převodník popisů typů `feature_types.cpp` (M50 ho přesouvá do `tinycad_rpc`, M49 do něj přidává `describeRule`). Sdílené rozhraní je zafixované v kódu: `server/src/document/include/tinycad/document/param_rule.hpp` a `FeatureSchema::rules()` / `checkParamRules` v `schema.hpp` – žádná stopa ho nemění bez hlavního sezení. Před úkolem 3 M50 hlavní sezení sloučí do stopy A `main`, je-li v něm M49; jinak `describeRule` do rpc přenese slučovatel M49 ([[Rozhodnutí nativního jádra#Plány M48–M51 (po nativním jádře)|N148]]). Restart jádra v e2e M48 běží v samostatném projektu Playwright `restart` až po ostatních testech (N152).
 
 ## Jak pracovat s milníkem
 
