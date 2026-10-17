@@ -50,7 +50,8 @@ const switcher = createDocumentSwitcher<AppSession>({
   },
 });
 const view = switcher.view;
-// The error of closing the previous document: a toast until dismissed (M48: through ToastStack).
+// The error of closing the previous document: a toast until dismissed, in the stack of AppShell
+// while a document is open, otherwise in that of the start page (N170).
 const closeToasts = computed(() =>
   closeErrorToasts(view.value.closeError, (key, params) => t(key, { ...params })),
 );
@@ -100,7 +101,13 @@ function hotPromise(data: unknown, key: string): Promise<unknown> | null {
 </script>
 
 <template>
-  <AppShell v-if="view.session !== null" :key="view.docId ?? ''" :session="view.session" />
+  <AppShell
+    v-if="view.session !== null"
+    :key="view.docId ?? ''"
+    :session="view.session"
+    :close-toasts="closeToasts"
+    @dismiss-close="switcher.dismissCloseError()"
+  />
   <div v-else class="start">
     <DocumentList v-if="view.docId === null" />
     <div v-else class="notice" role="status">
@@ -115,9 +122,9 @@ function hotPromise(data: unknown, key: string): Promise<unknown> | null {
         <p>{{ t('app.opening') }}</p>
       </template>
     </div>
+    <!-- With a document open AppShell draws the one stack of toasts (N170). -->
+    <ToastStack :items="closeToasts" @dismiss="switcher.dismissCloseError()" />
   </div>
-
-  <ToastStack :items="closeToasts" @dismiss="switcher.dismissCloseError()" />
 </template>
 
 <style>

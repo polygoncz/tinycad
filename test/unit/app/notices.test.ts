@@ -197,6 +197,14 @@ describe('noticeOfRefusal', () => {
     });
   });
 
+  it.each(['NOTHING_TO_UNDO', 'NOTHING_TO_REDO'] as const)(
+    '%s: null, a quick Ctrl+Z before the read model is a harmless race (N169)',
+    (reason) => {
+      const error = new RemoteError({ code: 'FAILED_PRECONDITION', reason, message: 'm' });
+      expect(noticeOfRefusal(error)).toBeNull();
+    },
+  );
+
   it('anything else (a change that no longer applies): the warning notice.changeDropped', () => {
     expect(noticeOfRefusal(new Error('stale'))).toEqual({
       kind: 'warning',

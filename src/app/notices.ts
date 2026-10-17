@@ -129,13 +129,15 @@ class NoticeCenterImpl implements NoticeCenter {
 }
 
 /**
- * A change refused by the server → a notice, or null when another channel shows it. The one place
- * that makes a notice of an error; M52 calls it from its dispatcher unchanged.
+ * A change refused by the server → a notice, or null when another channel shows it or nobody needs
+ * to see it. The one place that makes a notice of an error (the remote dispatcher calls it).
  */
 export function noticeOfRefusal(error: unknown): NoticeInput | null {
   if (!(error instanceof RemoteError)) return { kind: 'warning', key: 'notice.changeDropped' };
   if (error.reason === 'SKETCH_NOT_SOLVED') return { kind: 'warning', key: 'sketch.notSolved' };
   if (error.reason === 'READ_ONLY') return { kind: 'error', key: 'notice.readOnly' };
+  // N169: a quick Ctrl+Z before the read model of the previous one is a harmless race.
+  if (error.reason === 'NOTHING_TO_UNDO' || error.reason === 'NOTHING_TO_REDO') return null;
   // The outage is shown by the title bar and the notice of the connection (N92).
   if (isRetryable(error)) return null;
   // RemoteError has no missing reason, it is 'UNSPECIFIED' then: the code says more.

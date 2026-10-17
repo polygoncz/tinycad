@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { AppNotice, NoticeParams } from '@/app';
-import { closeErrorToasts, noticeIdOf, toastItemsOf } from '@/ui/toasts';
+import {
+  closeErrorToasts,
+  isCloseErrorToast,
+  noticeIdOf,
+  pageToasts,
+  toastItemsOf,
+} from '@/ui/toasts';
 
 function aNotice(overrides: Partial<AppNotice> = {}): AppNotice {
   return { id: 1, kind: 'info', key: 'k', params: {}, sticky: false, ...overrides };
@@ -58,5 +64,27 @@ describe('closeErrorToasts', () => {
 
   it('no error: no toast', () => {
     expect(closeErrorToasts(null, t)).toEqual([]);
+  });
+});
+
+describe('pageToasts (N170)', () => {
+  it('one list: the error of closing first, then the notices of the session', () => {
+    const close = closeErrorToasts('disk full', t);
+    const notices = toastItemsOf([aNotice({ id: 4 })], t);
+    const items = pageToasts(close, notices);
+    expect(items.map((item) => item.id)).toEqual(['close-error', 'notice-4']);
+    expect(Object.isFrozen(items)).toBe(true);
+  });
+
+  it('without an error of closing: the notices only', () => {
+    const notices = toastItemsOf([aNotice({ id: 4 })], t);
+    expect(pageToasts([], notices)).toEqual(notices);
+  });
+});
+
+describe('isCloseErrorToast', () => {
+  it('true only for the toast of the error of closing', () => {
+    expect(isCloseErrorToast('close-error')).toBe(true);
+    expect(isCloseErrorToast('notice-1')).toBe(false);
   });
 });

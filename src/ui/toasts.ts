@@ -1,7 +1,7 @@
 import type { AppNotice, NoticeParams } from '@/app';
 
-// The toasts of the page (spec 11, "Komponenty", N151): the transient notices of the session and
-// the error of closing a document, drawn by one ToastStack. This presenter turns the notices of
+// The toasts of the page (spec 11, "Komponenty", N151, N170): the transient notices of the session
+// and the error of closing a document, drawn by one ToastStack. This presenter turns the notices of
 // the session into items with a translated text and maps the id of a toast back to its notice;
 // the component only draws them (ADR 0010).
 
@@ -52,4 +52,17 @@ export function closeErrorToasts(
       text: t('app.closeError', { error: closeError }),
     }),
   ]);
+}
+
+/** The id is that of the toast of the error of closing (closeErrorToasts). */
+export function isCloseErrorToast(toastId: string): boolean {
+  return toastId === CLOSE_ERROR_ID;
+}
+
+/** All toasts of the page in one list (N170): the error of closing first, then the notices. */
+export function pageToasts(
+  closeToasts: readonly ToastItem[],
+  noticeToasts: readonly ToastItem[],
+): readonly ToastItem[] {
+  return Object.freeze([...closeToasts, ...noticeToasts]);
 }

@@ -39,13 +39,19 @@ import SketchPatternDimensions from './SketchPatternDimensions.vue';
 import Timeline from './Timeline.vue';
 import TitleBar from './TitleBar.vue';
 import ToastStack from './ToastStack.vue';
-import { noticeIdOf, toastItemsOf } from '../toasts';
+import { isCloseErrorToast, noticeIdOf, pageToasts, toastItemsOf } from '../toasts';
+import type { ToastItem } from '../toasts';
 import Toolbar from './Toolbar.vue';
 import TopoDebugPanel from './TopoDebugPanel.vue';
 import { viewCubeLabels } from '../view-cube-labels';
 import ViewportHost from './ViewportHost.vue';
 
-const props = defineProps<{ session: AppSession }>();
+const props = defineProps<{
+  session: AppSession;
+  /** The error of closing the previous document as a toast (App.vue); [] = none (N170). */
+  closeToasts: readonly ToastItem[];
+}>();
+const emit = defineEmits<{ 'dismiss-close': [] }>();
 // One session per AppShell: App.vue mounts a new AppShell for every document.
 const session = props.session;
 provideSession(session);
@@ -74,10 +80,20 @@ watch(
   { immediate: true },
 );
 
-// M48: the transient notices of the session as toasts (N151); closing one dismisses its notice.
+// M48: the transient notices of the session as toasts (N151), in one stack with the error of
+// closing the previous document (N170); closing a toast dismisses its source.
 const notices = useObservable(session.notices);
-const toasts = computed(() => toastItemsOf(notices.value, (key, params) => t(key, { ...params })));
+const toasts = computed(() =>
+  pageToasts(
+    props.closeToasts,
+    toastItemsOf(notices.value, (key, params) => t(key, { ...params })),
+  ),
+);
 function dismissToast(id: string): void {
+  if (isCloseErrorToast(id)) {
+    emit('dismiss-close');
+    return;
+  }
   const notice = noticeIdOf(id);
   if (notice !== null) session.dismissNotice(notice);
 }
