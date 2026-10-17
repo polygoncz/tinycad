@@ -15,6 +15,7 @@
     "gtest",
     "sqlite3",
     "eigen3",
-    "boost-graph"
+    "boost-graph",
+    "openssl"
   ]
 }

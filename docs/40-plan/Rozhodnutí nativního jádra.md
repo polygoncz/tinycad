@@ -194,3 +194,10 @@ Zafixované hlavičky navíc: `server/src/session/include/tinycad/session/*.hpp`
 - **N100 – Po `SESSION_NOT_FOUND` skončí všechny čekající transakční požadavky (`begin`, `apply`, `applyTransient`, `commit`, `abort`) `NO_TRANSACTION`**; trvalé (`dispatch`, `undo`, `redo`) jdou znovu se stejným `operation_id`. Pozdní `SESSION_NOT_FOUND` z už nahrazeného sezení další sezení neotevře (druhé by bylo jen pro čtení).
 - **N101 – Slučuje se jen poslední čekající `apply` se `setParams` téže featury** (užší než plán, stejné jako slučování v `ops/transaction.ts`, nemění pořadí změn). Po vyčerpání pokusů se další čekající změny posílají dál, každá s vlastními pokusy.
 
+## M41 – Persistence v SQLite
+
+- **N102 – `openssl` výslovně ve `vcpkg.json`** (otisky SHA-256 v `storage`, `session` a `tinycad-import`); dosud byl jen závislostí gRPC, z cache se nic nepřestaví.
+- **N103 – Svazek dokumentů a práva uživatele `tinycad` v Compose patří do úkolu 5 M45**; `tinycad-import` se spouští `docker compose run --rm --entrypoint tinycad-import -v <složka>:/import core /import`.
+- **N104 ⚠ – Poškozené cíle undo v logu při otevření vyhodí výjimku** (`AssertionError` z `UndoManager`) místo `LoadError`; při importu se zachytí jako issue. Známé omezení spec 05; vrstva sezení (M45) výjimku převede na `INTERNAL`.
+- **N105 – Dočasný soubor nového dokumentu v režimu rollback journal, WAL až po přejmenování**; kontrola formátu před přepnutím do WAL; čísla v `meta` jako JSON text.
+

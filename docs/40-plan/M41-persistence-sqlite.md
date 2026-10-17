@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 41
 aliases:
   - M41
@@ -12,8 +12,8 @@ specs:
   - "[[14-protokol]]"
 depends_on:
   - "[[M40-dokument-a-operace-v-cpp]]"
-started:
-finished:
+started: 2026-10-17
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-17
@@ -33,9 +33,9 @@ updated: 2026-10-17
 
 ## Úkoly
 
-- [ ] 1. Úložiště SQLite: katalog a soubor dokumentu (souběžně s 2)
-- [ ] 2. Načtení, snapshot a soubor `.tinycad.json` (souběžně s 1)
-- [ ] 3. `PersistentDocument`, `DocumentService`, nástroj `tinycad-import` a test pádu procesu
+- [x] 1. Úložiště SQLite: katalog a soubor dokumentu (souběžně s 2)
+- [x] 2. Načtení, snapshot a soubor `.tinycad.json` (souběžně s 1)
+- [x] 3. `PersistentDocument`, `DocumentService`, nástroj `tinycad-import` a test pádu procesu
 
 Úkoly 1 a 2 běží souběžně (dva subagenti `implementer`): 1 sahá jen do SQLite a na `ops` nezávisí (N33), 2 pracuje nad daty (`StoredDocument`) bez SQLite. Úkol 3 po sloučení obou. Úkol 1 smí začít i dřív než M40 úkol 4, potřebuje jen `tinycad_document`.
 
@@ -100,4 +100,9 @@ SQLite jako formát souboru (WAL, `synchronous`, transakce, unikátní index), i
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+_Návrh Clauda (samostatný běh, stopa A)._
+
+- SQLite úložiště (soubor na dokument, WAL, unikátní `operation_id`, snapshoty po 100 záznamech), `PersistentDocument`, C++ `DocumentService` a nástroj `tinycad-import`; 159 testů úložiště.
+- Test pádu procesu přímo v `ctest`: pomocný proces zapíše K změn a ukončí se `SIGKILL`; po znovuotevření sedí dokument, log, undo i snapshoty (K = 1, 7, 250).
+- Export historie z C++ je roven souboru, který vyrobil TS `exportStoredDocument` – formát `.tinycad.json` je kompatibilní oběma směry.
+- Do M45 přechází: svazek `/data/documents` a práva v Compose, gRPC adaptér `DocumentService` (N37).
