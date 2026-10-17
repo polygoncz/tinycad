@@ -30,6 +30,7 @@
     "gen:proto": "node scripts/gen-proto.mjs",
     "check:proto": "buf lint server/proto && buf breaking server/proto --against '.git#branch=main,subdir=server/proto'",
     "check:server": "node scripts/check-server.mjs",
+    "setup:clangd": "node scripts/setup-clangd.mjs",
     "check:full": "run-s check check:server",
     "check": "run-p --aggregate-output --continue-on-error check:proto typecheck lint lint:deps lint:vault test test:integration"
   },
