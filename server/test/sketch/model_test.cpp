@@ -42,6 +42,20 @@ SketchCircularPattern circular(int count, double angle) {
   return {SketchEntityId("cp"), {SketchEntityId("ab")}, SketchEntityId("o"), count, angle};
 }
 
+TEST(As, GivesTheConcreteTypeAndAssertsOnAnotherOne) {
+  const SketchPoint point(SketchEntityId("a"), 1, 2);
+  const SketchEntity& entity = point;
+  EXPECT_EQ(entity.as<SketchPoint>().x, 1);
+  EXPECT_THROW((void)entity.as<SketchLine>(), core::AssertionError);
+
+  // Kinds with the same fields share a class: the class decides, not the kind.
+  const PairConstraint coincident(ConstraintKind::Coincident, SketchConstraintId("c"),
+                                  SketchEntityId("a"), SketchEntityId("b"));
+  const SketchConstraint& constraint = coincident;
+  EXPECT_EQ(constraint.as<PairConstraint>().b.str(), "b");
+  EXPECT_THROW((void)constraint.as<PointOnCurveConstraint>(), core::AssertionError);
+}
+
 TEST(CircularStep, AFullCircleStepsByAngleOverCountInBothSenses) {
   EXPECT_NEAR(circular(4, 2 * PI).step(), PI / 2, 1e-12);
   EXPECT_NEAR(circular(4, -2 * PI).step(), -PI / 2, 1e-12);

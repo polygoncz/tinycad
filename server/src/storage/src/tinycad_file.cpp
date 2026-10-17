@@ -1,6 +1,5 @@
 #include "tinycad_file.hpp"
 
-#include <exception>
 #include <utility>
 
 #include "snapshot.hpp"
@@ -89,10 +88,8 @@ core::Result<CheckedFile, DocumentLoadError> checkHistory(
   const document::DocumentData baseData = document::toData(*base->doc);
   auto applied = replayEach(*base->doc, handlers, *entries);
   if (!applied) return core::fail(entryIssue(applied.error(), false));
-  try {
-    (void)ops::rebuildUndoStacks(*entries);
-  } catch (const std::exception& e) {
-    return core::fail(issue("history.entries", e.what()));
+  if (auto stacks = ops::rebuildUndoStacks(*entries); !stacks) {
+    return core::fail(issue("history.entries", stacks.error().message));
   }
   // A file from outside may have been edited: a mismatch is broken data, not broken determinism.
   const document::DocumentData state = document::toData(*snapshot->doc);

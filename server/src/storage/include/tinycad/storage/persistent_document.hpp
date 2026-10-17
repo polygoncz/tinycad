@@ -47,11 +47,17 @@ inline constexpr std::int64_t SNAPSHOT_EVERY = 100;
 /** Why stored data could not be loaded (spec 05 LoadDocumentError, Q033). */
 struct LoadError {
   enum class Kind {
-    /** The latest snapshot: envelope or fromData (issue paths 'format', 'atSeq', 'document.…'). */
+    /**
+     * The latest snapshot: envelope or fromData (issue paths 'format', 'atSeq', 'document.…'), or
+     * with verify a snapshot the log from the base does not reproduce ('document').
+     */
     Snapshot,
     /** The base snapshot (verify only). */
     Base,
-    /** A log entry: parseLogEntry, a seq gap ('seq') or a handler refusing it on replay ('op'). */
+    /**
+     * A log entry: parseLogEntry, a seq gap ('seq'), an undo or redo entry off the top of its
+     * stack ('target') or a handler refusing it on replay ('op').
+     */
     Entry,
     /** The file could not be read (StoreError Io). */
     Storage,
@@ -111,9 +117,10 @@ class PersistentDocument {
   };
 
   /**
-   * Opens a stored document (spec 05 "Načtení dokumentu"): parses every entry, loads the latest
-   * snapshot, replays the entries after it, rebuilds the undo stacks from the whole log; with
-   * verify also replays from the base and throws AssertionError on a mismatch (determinism).
+   * Opens a stored document (spec 05 "Načtení dokumentu"): parses every entry, rebuilds the undo
+   * stacks from the whole log (a corrupt undo target is Entry, path 'target'), loads the latest
+   * snapshot, replays the entries after it; with verify also replays from the base, a mismatch is
+   * Snapshot with path 'document'. Data from the file never throw (N108).
    * Takes ownership of the file. `deps` must outlive the document.
    */
   static core::Result<std::unique_ptr<PersistentDocument>, LoadError> open(
@@ -130,6 +137,16 @@ class PersistentDocument {
   [[nodiscard]] bool inTransaction() const;
   /** True after a failed reload (N35): every change returns Storage. */
   [[nodiscard]] bool broken() const;
+
+  /**
+   * The durable idempotence check alone (spec 14 "Vlákna a zámky serveru", N107): the stored
+   * entry when the key was written already (Change with repeated = true), nullopt when the id is
+   * not stored yet, OperationIdReused for the same id with another fingerprint, Storage when the
+   * document is broken or the file cannot be read. Changes nothing. The session calls it BEFORE it
+   * re-solves a sketch, so a repeated request is never solved again; every durable call below
+   * makes the same check first.
+   */
+  core::Result<std::optional<Change>, ChangeError> lookup(const OperationKey& key);
 
   // --- durable: at most one log entry, written before return --------------------------------
 

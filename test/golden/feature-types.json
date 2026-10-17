@@ -172,6 +172,42 @@
     },
     {
       "defaults": {
+        "constraints": [],
+        "entities": [],
+        "plane": [
+          {
+            "kind": "plane",
+            "plane": "origin/plane:xy"
+          }
+        ]
+      },
+      "icon": "pencil",
+      "label": "sketch.label",
+      "params": [
+        {
+          "key": "plane",
+          "label": "sketch.plane",
+          "planes": {
+            "max": 1,
+            "min": 1
+          }
+        },
+        {
+          "data": {},
+          "key": "entities",
+          "label": "sketch.entities"
+        },
+        {
+          "data": {},
+          "key": "constraints",
+          "label": "sketch.constraints"
+        }
+      ],
+      "type": "sketch",
+      "version": 1
+    },
+    {
+      "defaults": {
         "distance": 10,
         "endType": "blind",
         "flip": false,

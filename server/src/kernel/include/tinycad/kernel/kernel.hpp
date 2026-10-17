@@ -7,7 +7,7 @@
 // - SYNCHRONOUS. TS needed Promises because OCCT lived in a worker; here the kernel runs in the
 //   calling thread. Every method returns KernelResult<T> and never throws: an OCCT exception or
 //   any other unexpected exception becomes a KernelError (OperationFailed or Internal per method,
-//   spec 06 Kontrakt). std::bad_alloc is the only exception that may pass.
+//   spec 06 Kontrakt). Only std::bad_alloc and core::AssertionError (a bug, N114) may pass.
 // - NOT THREAD-SAFE. One instance = one caller at a time (like the single TS worker). The session
 //   layer (M45) serializes calls per instance.
 // - Inputs are values, read during the call and never kept (the "isolation" contract holds by

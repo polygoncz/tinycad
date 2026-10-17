@@ -214,14 +214,14 @@ TEST(LoadDocument, SnapshotPlusTheRestOfTheLogEqualsReplayFromTheBase) {
   EXPECT_EQ(opened.doc->feature(FeatureId("a"))->name, "A7");
 }
 
-TEST(LoadDocument, ThrowsWhenReplayFromTheBaseDiffersFromSnapshotAndLog) {
+TEST(LoadDocument, ASnapshotTheReplayFromTheBaseDoesNotReproduceIsASnapshotErrorAtDocument) {
   auto s = aStoredSession(3);
   // A snapshot at 3 that does not match the log: the state after a different history.
   dispatch(*s.session, testing::renameOp("a", "elsewhere"));
   s.stored.snapshot = snapshotJson(*s.session->doc, 3);
-  const ops::OpHandlerRegistry handlers(testing::noSchemas());
-  EXPECT_THROW((void)loadDocument(s.stored, id, testing::noSchemas(), handlers, true),
-               core::AssertionError);
+  const LoadError error = loadError(s.stored, true);
+  EXPECT_EQ(error.kind, LoadError::Kind::Snapshot);
+  EXPECT_EQ(pathsOf(error), std::vector<std::string>{"document"});
   // Without verify the mismatch goes unnoticed.
   EXPECT_EQ(loaded(s.stored, false).doc->feature(FeatureId("a"))->name, "elsewhere");
 }
@@ -487,6 +487,76 @@ TEST(LoadDocumentErrors, ABaseWithAtSeqOtherThan0IsABaseErrorAtAtSeq) {
   const LoadError error = loadError(s.stored, true);
   EXPECT_EQ(error.kind, LoadError::Kind::Base);
   EXPECT_EQ(pathsOf(error), std::vector<std::string>{"atSeq"});
+}
+
+/** A handler with a bug: its apply asserts. */
+class AssertingHandler final : public ops::OpHandler {
+ public:
+  [[nodiscard]] std::string_view type() const override { return "test.assert"; }
+  [[nodiscard]] int version() const override { return 1; }
+  [[nodiscard]] core::Result<ops::Operation, ops::OperationLoadError> invert(
+      const document::DocumentReader& /*doc*/, const ops::Operation& op) const override {
+    return op;
+  }
+  core::Result<void, ops::OperationLoadError> apply(document::DocumentWriter& /*doc*/,
+                                                    const ops::Operation& /*op*/) const override {
+    TINYCAD_ASSERT(false, "test.assert: a bug");
+    return {};
+  }
+};
+
+TEST(LoadDocumentErrors, AnExceptionWhileReplayingIsABugAndPropagates) {
+  auto s = aStoredSession(1);
+  const Json op = {{"type", "test.assert"}, {"v", 1}};
+  s.stored.entries[0].entry["op"] = op;
+  s.stored.entries[0].entry["inverse"] = op;
+  ops::OpHandlerRegistry handlers(testing::noSchemas());
+  handlers.add(std::make_shared<AssertingHandler>());
+  EXPECT_THROW((void)loadDocument(s.stored, id, testing::noSchemas(), handlers, false),
+               core::AssertionError);
+}
+
+TEST(LoadDocumentErrors, ADeeplyNestedEntryIsAnEntryErrorNotAStackOverflow) {
+  auto s = aStoredSession(2);
+  // Built by moves: copying a value this deep would recurse (N113).
+  Json op = testing::renameOp("a", "deep");
+  for (int i = 0; i < 100'000; ++i) {
+    Json outer = testing::batchOp(Json::array());
+    outer["ops"].push_back(std::move(op));
+    op = std::move(outer);
+  }
+  s.stored.entries[1].entry["op"] = std::move(op);
+  const LoadError error = loadError(s.stored);
+  EXPECT_EQ(error.kind, LoadError::Kind::Entry);
+  EXPECT_EQ(error.seq, 2);
+  ASSERT_EQ(error.issues.size(), 1U);
+  EXPECT_TRUE(error.issues[0].path.starts_with("op.ops[0]"));
+}
+
+TEST(LoadDocumentErrors, AnUndoEntryOffTheTopOfTheStackIsAnEntryErrorAtTarget) {
+  auto s = aStoredSession(2);
+  ASSERT_TRUE(s.session->undo.undo().has_value());
+  s.stored = storedOf(s.stored.base, s.session->log, s.stored.base);
+  // Entry 3 undoes entry 2; pointed at entry 1 it is not the top of the undo stack (N104).
+  ASSERT_EQ(s.stored.entries[2].entry["target"], 2);
+  s.stored.entries[2].entry["target"] = 1;
+  for (const bool verify : {false, true}) {
+    const LoadError error = loadError(s.stored, verify);
+    EXPECT_EQ(error.kind, LoadError::Kind::Entry);
+    EXPECT_EQ(error.seq, 3);
+    EXPECT_EQ(pathsOf(error), std::vector<std::string>{"target"});
+  }
+}
+
+TEST(LoadDocumentErrors, ARedoEntryWithAnEmptyRedoStackIsAnEntryErrorAtTarget) {
+  auto s = aStoredSession(2);
+  ASSERT_TRUE(s.session->undo.undo().has_value());
+  s.stored = storedOf(s.stored.base, s.session->log, s.stored.base);
+  s.stored.entries[2].entry["kind"] = "redo";
+  const LoadError error = loadError(s.stored);
+  EXPECT_EQ(error.kind, LoadError::Kind::Entry);
+  EXPECT_EQ(error.seq, 3);
+  EXPECT_EQ(pathsOf(error), std::vector<std::string>{"target"});
 }
 
 TEST(LoadDocumentErrors, EveryEntryIsParsedAlsoTheOnesBeforeTheSnapshot) {

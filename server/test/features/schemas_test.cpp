@@ -50,11 +50,11 @@ Strings codes(const std::vector<document::ParamIssue>& issues) {
   return out;
 }
 
-TEST(BuiltInSchemas, RegistersTheEightSchemasInPluginOrder) {
+TEST(BuiltInSchemas, RegistersTheNineSchemasInPluginOrder) {
   Strings types;
   for (const auto* schema : registry().all()) types.push_back(schema->type());
-  EXPECT_EQ(types, (Strings{"box", "cylinder", "boolean", "extrude", "revolve", "fillet", "chamfer",
-                            "transform"}));
+  EXPECT_EQ(types, (Strings{"box", "cylinder", "boolean", "sketch", "extrude", "revolve", "fillet",
+                            "chamfer", "transform"}));
 }
 
 struct Identity {
@@ -92,6 +92,7 @@ INSTANTIATE_TEST_SUITE_P(
         Identity{"box", 1, "box", {"origin", "width", "depth", "height"}},
         Identity{"cylinder", 1, "cylinder", {"base", "axis", "radius", "height"}},
         Identity{"boolean", 1, "layers-union", {"op", "targets", "tools", "keepTools"}},
+        Identity{"sketch", 1, "pencil", {"plane", "entities", "constraints"}},
         Identity{"extrude", 1, "arrow-big-up-lines",
                  {"regions", "operation", "targets", "endType", "distance", "upTo", "flip"}},
         Identity{"revolve", 1, "rotate-360",
