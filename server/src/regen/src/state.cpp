@@ -54,12 +54,12 @@ StatePtr makeEmptyState() {
   const FeatureId origin{std::string(document::ORIGIN)};
   std::vector<ArtifactPtr> artifacts;
   for (const auto& p : document::ORIGIN_PLANES) {
-    artifacts.push_back(
-        std::make_shared<const PlaneArtifact>(document::PlaneId(std::string(p.id)), origin, p.plane));
+    artifacts.push_back(std::make_shared<const PlaneArtifact>(document::PlaneId(std::string(p.id)),
+                                                              origin, p.plane));
   }
   for (const auto& a : document::ORIGIN_AXES) {
-    artifacts.push_back(std::make_shared<const AxisArtifact>(
-        document::AxisId(std::string(a.id)), origin, a.origin, a.direction));
+    artifacts.push_back(std::make_shared<const AxisArtifact>(document::AxisId(std::string(a.id)),
+                                                             origin, a.origin, a.direction));
   }
   return std::make_shared<const RegenState>(std::move(artifacts));
 }

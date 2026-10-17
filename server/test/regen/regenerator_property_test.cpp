@@ -44,8 +44,8 @@ struct Step {
 std::string describeStep(const Step& s) {
   static const char* kinds[] = {"add", "remove", "setParam", "suppress", "rollback", "move"};
   std::ostringstream out;
-  out << kinds[static_cast<int>(s.kind)] << "(type " << s.type << ", " << s.a << ", " << s.b
-      << ", " << s.c << ")";
+  out << kinds[static_cast<int>(s.kind)] << "(type " << s.type << ", " << s.a << ", " << s.b << ", "
+      << s.c << ")";
   return out.str();
 }
 
@@ -145,7 +145,8 @@ class StudioModel {
 
   static Json bodyRef(const std::string& id) { return {{"kind", "body"}, {"body", id + "/body"}}; }
 
-  /** An edge between the front face and another face of the box `id` (edges of other bodies are unresolved). */
+  /** An edge between the front face and another face of the box `id` (edges of other bodies are
+   * unresolved). */
   static Json edgeRef(const std::string& id, int n) {
     static const char* others[] = {"top", "bottom", "left", "right"};
     const std::string other = others[n % 4];
@@ -234,7 +235,8 @@ std::vector<Step> randomSteps(std::mt19937& rng) {
 }
 
 struct Regen {
-  Regen() : regenerator(std::make_unique<Regenerator>(kernel, builders(), schemas(), stoppedClock)) {}
+  Regen()
+      : regenerator(std::make_unique<Regenerator>(kernel, builders(), schemas(), stoppedClock)) {}
   CountingKernel kernel;
   std::unique_ptr<Regenerator> regenerator;
 };

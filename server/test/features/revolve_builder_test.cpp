@@ -13,7 +13,8 @@ using regen::test::aSketchArtifact;
 const core::Plane kXz{{0, 0, 0}, {1, 0, 0}, {0, -1, 0}};
 constexpr double kTurn = 2 * std::numbers::pi;
 
-/** A sketch s1 on XZ: region r1 = [0,10]² (world x and z), a construction line c on the Z axis, a circle k. */
+/** A sketch s1 on XZ: region r1 = [0,10]² (world x and z), a construction line c on the Z axis, a
+ * circle k. */
 regen::StatePtr sketchState(CountingKernel& kernel,
                             regen::StatePtr state = regen::RegenState::empty()) {
   const std::vector<core::Vec2> c{{0, 0}, {10, 0}, {10, 10}, {0, 10}};
@@ -21,7 +22,8 @@ regen::StatePtr sketchState(CountingKernel& kernel,
   for (std::size_t i = 0; i < 4; ++i) outer.push_back(core::Curve2::line(c[i], c[(i + 1) % 4]));
   auto face = kernel.occt().makeFace({kXz, outer, {}});
   if (!face) throw std::runtime_error(face.error().message);
-  const Json entities = Json::array({{{"id", "c"}, {"kind", "line"}}, {{"id", "k"}, {"kind", "circle"}}});
+  const Json entities =
+      Json::array({{{"id", "c"}, {"kind", "line"}}, {{"id", "k"}, {"kind", "circle"}}});
   return state->with(aSketchArtifact("s1", {face->shape}, kXz,
                                      {regen::SketchLineSegment{"c", {0, 0}, {0, 5}}}, entities));
 }
@@ -36,7 +38,8 @@ struct RevolveParams {
 
   [[nodiscard]] Json json() const {
     Json r = Json::array();
-    for (const auto& name : regions) r.push_back({{"kind", "region"}, {"sketch", "s1"}, {"region", name}});
+    for (const auto& name : regions)
+      r.push_back({{"kind", "region"}, {"sketch", "s1"}, {"region", name}});
     Json t = Json::array();
     for (const auto& id : targets) t.push_back(bodyRef(id));
     return {{"regions", r}, {"axis", axis},   {"operation", operation},

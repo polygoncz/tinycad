@@ -15,7 +15,8 @@ regen::BuildResult buildDressup(DressupKind kind, const regen::BuildInput& input
 
   // Params are valid here: evaluateParams ran the schema first.
   const auto& p = input.params;
-  auto resolved = ctx.resolveTopo(refsOf(p, "edges", document::RefKind::Topo), regen::TopoKind::Edge);
+  auto resolved =
+      ctx.resolveTopo(refsOf(p, "edges", document::RefKind::Topo), regen::TopoKind::Edge);
   if (!resolved) return core::fail(regen::unresolvedReference("edges", resolved.error()));
   const double size = numberOf(p, param);
 

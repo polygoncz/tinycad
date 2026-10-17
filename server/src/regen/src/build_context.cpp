@@ -121,8 +121,8 @@ core::Result<ResolvedAxis, RefError> BuildContext::resolveAxis(const EntityRef& 
     if (hasEntity(sketch, ref.entity)) {
       return core::fail(RefError{ref, "Sketch entity '" + ref.entity + "' is not a line"});
     }
-    return core::fail(RefError{ref, "Sketch entity '" + ref.entity + "' of sketch '" +
-                                        ref.sketch.str() + "' not found"});
+    return core::fail(RefError{
+        ref, "Sketch entity '" + ref.entity + "' of sketch '" + ref.sketch.str() + "' not found"});
   }
   const Vec3 p1 = toWorld(sketch.plane, line->p1);
   const Vec3 p2 = toWorld(sketch.plane, line->p2);

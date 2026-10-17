@@ -43,9 +43,12 @@ std::string formatIssues(const std::vector<document::ParamIssue>& issues) {
 }  // namespace
 
 struct Regenerator::Impl {
-  Impl(kernel::GeometryKernel& kernel, const FeatureBuilderRegistryReader& builders,
-       const document::FeatureSchemaRegistryReader& schemas, Clock now)
-      : kernel(kernel), builders(builders), schemas(schemas), now(std::move(now)) {}
+  Impl(kernel::GeometryKernel& kernelPort, const FeatureBuilderRegistryReader& builderRegistry,
+       const document::FeatureSchemaRegistryReader& schemaRegistry, Clock clock)
+      : kernel(kernelPort),
+        builders(builderRegistry),
+        schemas(schemaRegistry),
+        now(std::move(clock)) {}
 
   kernel::GeometryKernel& kernel;
   const FeatureBuilderRegistryReader& builders;
@@ -128,9 +131,9 @@ struct Regenerator::Impl {
     auto released = kernel.release(dead);
     if (!released) {
       // release is atomic: nothing was released, so the handles stay owned.
-      TINYCAD_ASSERT(released.error().code != kernel::KernelErrorCode::UnknownHandle,
-                     "Regenerator owned a handle the kernel does not know: " +
-                         released.error().message);
+      TINYCAD_ASSERT(
+          released.error().code != kernel::KernelErrorCode::UnknownHandle,
+          "Regenerator owned a handle the kernel does not know: " + released.error().message);
       // Any other kernel error (Internal): the next sweep tries again (Q040).
       return;
     }
@@ -142,9 +145,8 @@ struct Regenerator::Impl {
                          const std::optional<FeatureId>& inputOf) {
     const auto& features = studio.features;
     const std::size_t count = features.size();
-    const std::size_t rollback =
-        static_cast<std::size_t>(std::max(0, std::min(studio.rollbackIndex,
-                                                      static_cast<int>(count))));
+    const std::size_t rollback = static_cast<std::size_t>(
+        std::max(0, std::min(studio.rollbackIndex, static_cast<int>(count))));
 
     // Cache step 1: the first position whose feature is not the cached pointer.
     std::size_t k = 0;

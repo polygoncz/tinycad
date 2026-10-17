@@ -28,8 +28,8 @@ FeatureError kernelFailure(const kernel::KernelError& e) {
       code = "kernel.internal";
       break;
   }
-  return FeatureError{FeatureErrorCode::Kernel, e.message,
-                      {document::ParamIssue{"", std::move(code), nullptr}}};
+  return FeatureError{
+      FeatureErrorCode::Kernel, e.message, {document::ParamIssue{"", std::move(code), nullptr}}};
 }
 
 void FeatureBuilderRegistry::add(FeatureBuilderPtr builder) {

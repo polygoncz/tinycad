@@ -12,14 +12,11 @@ namespace {
 
 const kernel::BoxInput kBox{{0, 0, 0}, {1, 2, 3}};
 const kernel::CylinderInput kCylinder{{0, 0, 0}, {0, 0, 1}, 1, 2};
-const kernel::FaceInput kFace{core::Plane{{0, 0, 0}, {1, 0, 0}, {0, 0, 1}},
-                              {core::Curve2::circle({0, 0}, 1)},
-                              {}};
+const kernel::FaceInput kFace{
+    core::Plane{{0, 0, 0}, {1, 0, 0}, {0, 0, 1}}, {core::Curve2::circle({0, 0}, 1)}, {}};
 const kernel::Axis kYAxis{{0, 0, 0}, {0, 1, 0}};
 
-core::Mat4 translation(double x) {
-  return {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, 0, 0, 1};
-}
+core::Mat4 translation(double x) { return {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, 0, 0, 1}; }
 
 struct Rig {
   CountingKernel real;
@@ -87,8 +84,7 @@ TEST(TrackingKernel, AddsTheHandlesOfFilletAndChamfer) {
   ASSERT_TRUE(filleted);
   auto chamfered = s.kernel.chamfer(box->shape, e12, 0.1);
   ASSERT_TRUE(chamfered);
-  EXPECT_EQ(ownedOf(s),
-            (std::vector<ShapeHandle>{box->shape, filleted->shape, chamfered->shape}));
+  EXPECT_EQ(ownedOf(s), (std::vector<ShapeHandle>{box->shape, filleted->shape, chamfered->shape}));
   EXPECT_TRUE(filleted->history.has_value());
 }
 

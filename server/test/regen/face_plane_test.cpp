@@ -1,11 +1,12 @@
 // Planes of references (port of test/unit/regen/face-plane.test.ts) over OcctKernel.
 
+#include "tinycad/regen/face_plane.hpp"
+
 #include <gtest/gtest.h>
 
 #include <cmath>
 
 #include "regen/testing.hpp"
-#include "tinycad/regen/face_plane.hpp"
 
 namespace tinycad::regen::test {
 namespace {
@@ -97,15 +98,15 @@ StatePtr boxState(CountingKernel& kernel) {
 }
 
 TEST(PlaneOfRef, GivesThePlaneOfAnOriginPlaneArtifact) {
-  const auto p = planeOfRef(*RegenState::empty(),
-                            EntityRef::toPlane(document::PlaneId("origin/plane:xz")));
+  const auto p =
+      planeOfRef(*RegenState::empty(), EntityRef::toPlane(document::PlaneId("origin/plane:xz")));
   ASSERT_TRUE(p.has_value());
   EXPECT_EQ(*p, RegenState::empty()->planes()[1]->plane());
 }
 
 TEST(PlaneOfRef, GivesNothingForAMissingPlane) {
-  EXPECT_FALSE(planeOfRef(*RegenState::empty(),
-                          EntityRef::toPlane(document::PlaneId("origin/plane:ab"))));
+  EXPECT_FALSE(
+      planeOfRef(*RegenState::empty(), EntityRef::toPlane(document::PlaneId("origin/plane:ab"))));
 }
 
 TEST(PlaneOfRef, GivesTheFrameOfTheTopFaceOfABox) {
@@ -122,8 +123,7 @@ TEST(PlaneOfRef, GivesNothingForAMissingBodyAMissingNameAndANonPlanarFace) {
   const auto state = boxState(kernel);
   EXPECT_FALSE(planeOfRef(*state, topoRef("x", "b/face:top")));
   EXPECT_FALSE(planeOfRef(*state, topoRef("b", "b/face:none")));
-  const auto curved =
-      state->with(aBody("c", ShapeHandle{1}, aNameTable({{"c/face:side", {0}}})));
+  const auto curved = state->with(aBody("c", ShapeHandle{1}, aNameTable({{"c/face:side", {0}}})));
   EXPECT_FALSE(planeOfRef(*curved, topoRef("c", "c/face:side")));
 }
 

@@ -29,7 +29,8 @@ SpyBuilder::Build failingFor(std::vector<std::string> failing) {
   return [failing](const BuildInput& input, BuildContext& ctx) -> BuildResult {
     for (const auto& id : failing) {
       if (input.feature.id.str() == id) {
-        return core::fail(FeatureError{FeatureErrorCode::InvalidParams, "nope",
+        return core::fail(FeatureError{FeatureErrorCode::InvalidParams,
+                                       "nope",
                                        {document::ParamIssue{"size", "own.code", nullptr}}});
       }
     }
@@ -233,8 +234,9 @@ TEST(RegeneratorStatuses, ATypeWithoutSchemaOrWithoutBuilderGivesUnknownTypeAndG
   // 'cylinder' has a builder, 'sphere' a schema, 'torus' neither.
   s.builders.add(std::make_shared<CubeBuilder>("cylinder"));
   s.schemas.add(aSchema("sphere"));
-  const auto r = s.regenerator->run(aStudio({aFeature("c", 1, "cylinder"), aFeature("s", 1, "sphere"),
-                                             aFeature("t", 1, "torus"), aFeature("f1")}));
+  const auto r =
+      s.regenerator->run(aStudio({aFeature("c", 1, "cylinder"), aFeature("s", 1, "sphere"),
+                                  aFeature("t", 1, "torus"), aFeature("f1")}));
   EXPECT_EQ(kindsOf(r), (Kinds{{"c", Error}, {"s", Error}, {"t", Error}, {"f1", Ok}}));
   for (const auto* id : {"c", "s", "t"}) {
     EXPECT_EQ(statusOf(r, id).error->code, FeatureErrorCode::UnknownType) << id;

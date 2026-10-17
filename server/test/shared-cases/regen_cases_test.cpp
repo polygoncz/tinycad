@@ -28,13 +28,20 @@ using core::Json;
  * list. A fixed list, not "whatever fails": a new failing case must not hide here.
  */
 const std::set<std::string> kSketchCases = {
-    "extrude-add-on-top-face",       "extrude-rectangle",
-    "extrude-remove-hole",           "extrude-unresolved-region",
-    "extrude-up-to-face",            "input-of-extrude-on-top-face",
-    "revolve-full-turn-origin-axis", "revolve-full-turn-sketch-line",
-    "sketch-bspline-extrude",        "sketch-circular-pattern-extrude",
-    "sketch-fitspline-extrude",      "sketch-spline-crossing-warning",
-    "sketch-spline-with-hole-extrude", "sketch-text-construction",
+    "extrude-add-on-top-face",
+    "extrude-rectangle",
+    "extrude-remove-hole",
+    "extrude-unresolved-region",
+    "extrude-up-to-face",
+    "input-of-extrude-on-top-face",
+    "revolve-full-turn-origin-axis",
+    "revolve-full-turn-sketch-line",
+    "sketch-bspline-extrude",
+    "sketch-circular-pattern-extrude",
+    "sketch-fitspline-extrude",
+    "sketch-spline-crossing-warning",
+    "sketch-spline-with-hole-extrude",
+    "sketch-text-construction",
     "sketch-text-extrude",
 };
 

@@ -1,10 +1,11 @@
 // content_version of a body (spec 14, Q100, decision N43).
 
+#include "tinycad/regen/content_version.hpp"
+
 #include <gtest/gtest.h>
 
 #include "regen/testing.hpp"
 #include "tinycad/core/result.hpp"
-#include "tinycad/regen/content_version.hpp"
 
 namespace tinycad::regen::test {
 namespace {

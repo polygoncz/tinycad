@@ -111,7 +111,8 @@ Json describeBody(kernel::GeometryKernel& kernel, const regen::Body& body) {
     if (info.plane) {
       const auto& o = info.plane->origin;
       const auto& n = info.plane->normal;
-      face["plane"] = {{"normal", vec3Json(n)}, {"offset", n[0] * o[0] + n[1] * o[1] + n[2] * o[2]}};
+      face["plane"] = {{"normal", vec3Json(n)},
+                       {"offset", n[0] * o[0] + n[1] * o[1] + n[2] * o[2]}};
     }
     faces.push_back(std::move(face));
   }

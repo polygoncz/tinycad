@@ -101,8 +101,8 @@ TEST(RegeneratorSweep, ARebuiltSketchReleasesItsOldRegionFacesAndKeepsTheNewOnes
   registerType(s, "sketch", buildTwoFaceSketch);
   const auto sketch = aFeature("s", 1, "sketch");
   s.regenerator->run(aStudio({sketch}));
-  s.regenerator->run(aStudio({std::make_shared<const document::FeatureInstance>(*sketch),
-                              aFeature("f1")}));
+  s.regenerator->run(
+      aStudio({std::make_shared<const document::FeatureInstance>(*sketch), aFeature("f1")}));
   EXPECT_EQ(s.kernel.calls("makeFace"), 4);
   EXPECT_EQ(s.kernel.calls("release"), 1);
   EXPECT_EQ(s.kernel.liveHandleCount(), 3U);

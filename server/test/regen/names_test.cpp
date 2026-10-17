@@ -1,13 +1,14 @@
 // propagateNames on hand-built topologies and histories (spec 08; port of
 // test/unit/regen/names.test.ts): no kernel needed.
 
+#include "tinycad/regen/names.hpp"
+
 #include <gtest/gtest.h>
 
 #include <algorithm>
 
 #include "regen/testing.hpp"
 #include "tinycad/core/result.hpp"
-#include "tinycad/regen/names.hpp"
 
 namespace tinycad::regen::test {
 namespace {
@@ -56,24 +57,23 @@ TopologySummary boxTopology() {
       std::sort(shared.begin(), shared.end());
       const auto ca = corner(a);
       const auto cb = corner(b);
-      t.edges.push_back(anEdge(shared, {a, b},
-                               {(ca[0] + cb[0]) / 2, (ca[1] + cb[1]) / 2, (ca[2] + cb[2]) / 2}));
+      t.edges.push_back(
+          anEdge(shared, {a, b}, {(ca[0] + cb[0]) / 2, (ca[1] + cb[1]) / 2, (ca[2] + cb[2]) / 2}));
     }
   }
   return t;
 }
 
 kernel::Roles boxRoles() {
-  return {{"face:left", {face(0)}},  {"face:right", {face(1)}},  {"face:front", {face(2)}},
-          {"face:back", {face(3)}},  {"face:bottom", {face(4)}}, {"face:top", {face(5)}}};
+  return {{"face:left", {face(0)}}, {"face:right", {face(1)}},  {"face:front", {face(2)}},
+          {"face:back", {face(3)}}, {"face:bottom", {face(4)}}, {"face:top", {face(5)}}};
 }
 
 NamingInput naming(const std::string& feature, std::vector<NameTablePtr> inputs,
                    TopologySummary topology, kernel::Roles roles = {},
-                   std::optional<ShapeHistory> history = std::nullopt,
-                   std::string tag = "gen") {
-  return NamingInput{fid(feature), std::move(inputs), std::move(history), std::move(roles),
-                     std::move(topology), std::move(tag)};
+                   std::optional<ShapeHistory> history = std::nullopt, std::string tag = "gen") {
+  return NamingInput{fid(feature),     std::move(inputs),   std::move(history),
+                     std::move(roles), std::move(topology), std::move(tag)};
 }
 
 NameTablePtr aBoxTable(const std::string& id = "box") {
@@ -120,8 +120,8 @@ TEST(PropagateNamesRoles, NamesBoxFacesByRoleAndEdgesByTheirTwoFaces) {
 }
 
 TEST(PropagateNamesRoles, IgnoresRoleKeysThatAreNotFaces) {
-  const auto t =
-      propagateNames(naming("f", {}, facesOnly(1), {{"edge:l1", {edge(0)}}, {"face:start", {face(0)}}}));
+  const auto t = propagateNames(
+      naming("f", {}, facesOnly(1), {{"edge:l1", {edge(0)}}, {"face:start", {face(0)}}}));
   EXPECT_EQ(keys(t->faceEntries()), std::vector<std::string>{"f/face:start"});
   EXPECT_TRUE(t->edgeEntries().empty());
 }
@@ -144,9 +144,9 @@ TEST(PropagateNamesHistory, KeepsNamesThroughAnIdentityHistory) {
 
 TEST(PropagateNamesHistory, GivesASplitFaceItsNameOnBothOutputFaces) {
   const auto input = propagateNames(naming("a", {}, facesOnly(1), {{"face:x", {face(0)}}}));
-  const auto t = propagateNames(naming(
-      "cut", {input}, facesOnly(2), {},
-      ShapeHistory{{HistoryLink{0, face(0), {face(0), face(1)}}}, {}, {}}));
+  const auto t =
+      propagateNames(naming("cut", {input}, facesOnly(2), {},
+                            ShapeHistory{{HistoryLink{0, face(0), {face(0), face(1)}}}, {}, {}}));
   EXPECT_EQ(t->faces(tn("a/face:x")), (std::vector<int>{0, 1}));
   EXPECT_EQ(nameOr(t->nameOfFace(1)), "a/face:x");
 }
@@ -156,9 +156,8 @@ TEST(PropagateNamesHistory, KeepsAllNamesOnAMergedFacePrimaryFirstBySortOrder) {
   const auto b = propagateNames(naming("b", {}, facesOnly(1), {{"face:y", {face(0)}}}));
   const auto t = propagateNames(naming(
       "u", {a, b}, facesOnly(1), {},
-      ShapeHistory{{HistoryLink{0, face(0), {face(0)}}, HistoryLink{1, face(0), {face(0)}}},
-                   {},
-                   {}}));
+      ShapeHistory{
+          {HistoryLink{0, face(0), {face(0)}}, HistoryLink{1, face(0), {face(0)}}}, {}, {}}));
   EXPECT_EQ(t->namesOfFace(0), (std::vector<TopoName>{tn("a/face:z"), tn("b/face:y")}));
   EXPECT_EQ(nameOr(t->nameOfFace(0)), "a/face:z");
   EXPECT_EQ(t->faces(tn("b/face:y")), std::vector<int>{0});
@@ -166,9 +165,9 @@ TEST(PropagateNamesHistory, KeepsAllNamesOnAMergedFacePrimaryFirstBySortOrder) {
 
 TEST(PropagateNamesHistory, DropsTheNameOfADeletedFace) {
   const auto box = aBoxTable();
-  const auto t = propagateNames(naming(
-      "cut", {box}, facesOnly(5), {},
-      ShapeHistory{identity(0, 5), {}, {kernel::DeletedSubShape{0, face(5)}}}));
+  const auto t = propagateNames(
+      naming("cut", {box}, facesOnly(5), {},
+             ShapeHistory{identity(0, 5), {}, {kernel::DeletedSubShape{0, face(5)}}}));
   EXPECT_TRUE(t->faces(tn("box/face:top")).empty());
   EXPECT_FALSE(t->faceEntries().contains(tn("box/face:top")));
   EXPECT_EQ(t->faceEntries().size(), 5U);
@@ -176,18 +175,18 @@ TEST(PropagateNamesHistory, DropsTheNameOfADeletedFace) {
 
 TEST(PropagateNamesHistory, NamesAFaceGeneratedFromAnEdgeByTagAndEdgeName) {
   const auto box = aBoxTable();
-  const auto t = propagateNames(naming(
-      "fil", {box}, facesOnly(7), {},
-      ShapeHistory{identity(0, 6), {HistoryLink{0, edge(0), {face(6)}}}, {}}, "fillet"));
+  const auto t = propagateNames(
+      naming("fil", {box}, facesOnly(7), {},
+             ShapeHistory{identity(0, 6), {HistoryLink{0, edge(0), {face(6)}}}, {}}, "fillet"));
   EXPECT_EQ(nameOr(t->nameOfFace(6)), "fil/face:fillet:" + box->nameOfEdge(0)->str());
   EXPECT_EQ(nameOr(t->nameOfFace(6)), "fil/face:fillet:edge:box/face:bottom|box/face:front");
 }
 
 TEST(PropagateNamesHistory, NamesAFaceGeneratedFromAVertexByTheFacesAroundIt) {
   const auto box = aBoxTable();
-  const auto t = propagateNames(naming(
-      "fil", {box}, facesOnly(7), {},
-      ShapeHistory{identity(0, 6), {HistoryLink{0, vertex(0), {face(6)}}}, {}}, "fillet"));
+  const auto t = propagateNames(
+      naming("fil", {box}, facesOnly(7), {},
+             ShapeHistory{identity(0, 6), {HistoryLink{0, vertex(0), {face(6)}}}, {}}, "fillet"));
   // Corner 0 = (0, 0, 0): left, front, bottom.
   EXPECT_EQ(nameOr(t->nameOfFace(6)),
             "fil/face:fillet:vertex:box/face:bottom|box/face:front|box/face:left");
@@ -202,9 +201,10 @@ TEST(PropagateNamesHistory, NamesAFaceGeneratedFromAFaceWithTheDefaultTag) {
 }
 
 TEST(PropagateNamesHistory, SkipsAGeneratedSourceWithoutAName) {
-  const auto t = propagateNames(naming(
-      "ex", {NameTable::empty()}, facesOnly(1), {},
-      ShapeHistory{{}, {HistoryLink{0, edge(3), {face(0)}}}, {kernel::DeletedSubShape{0, face(0)}}}));
+  const auto t = propagateNames(
+      naming("ex", {NameTable::empty()}, facesOnly(1), {},
+             ShapeHistory{
+                 {}, {HistoryLink{0, edge(3), {face(0)}}}, {kernel::DeletedSubShape{0, face(0)}}}));
   EXPECT_FALSE(t->nameOfFace(0).has_value());
   EXPECT_TRUE(t->namesOfFace(0).empty());
   EXPECT_TRUE(t->faceEntries().empty());
@@ -234,7 +234,7 @@ TEST(PropagateNamesHistory, LeavesAFaceWithoutHistoryAndRoleWithoutAName) {
 NameTablePtr twoEdgesBetween(kernel::Roles roles, core::Vec3 m0, core::Vec3 m1) {
   TopologySummary t;
   t.faces.assign(5, kPlane);
-  t.edges = {anEdge({0, 1}, {0, 1}, m0), anEdge({0, 1}, {2, 3}, m1),
+  t.edges = {anEdge({0, 1}, {0, 1}, m0),     anEdge({0, 1}, {2, 3}, m1),
              anEdge({0, 2}, {0}, {0, 0, 0}), anEdge({1, 3}, {1}, {0, 0, 0}),
              anEdge({0, 4}, {2}, {0, 0, 0}), anEdge({1, 4}, {3}, {0, 0, 0})};
   t.vertexCount = 4;
@@ -300,16 +300,15 @@ TEST(PropagateNamesEdges, LeavesAnEdgeNextToAnUnnamedFaceWithoutAName) {
 }
 
 TEST(PropagateNamesEdges, UsesThePrimaryNameOfAMergedFace) {
-  const auto a = propagateNames(
-      naming("a", {}, facesOnly(2), {{"face:p", {face(0)}}, {"face:q", {face(1)}}}));
+  const auto a =
+      propagateNames(naming("a", {}, facesOnly(2), {{"face:p", {face(0)}}, {"face:q", {face(1)}}}));
   TopologySummary topology;
   topology.faces = {kPlane};
   topology.edges = {anEdge({0}, {}, {0, 0, 0})};
   const auto t = propagateNames(naming(
       "u", {a}, topology, {},
-      ShapeHistory{{HistoryLink{0, face(0), {face(0)}}, HistoryLink{0, face(1), {face(0)}}},
-                   {},
-                   {}}));
+      ShapeHistory{
+          {HistoryLink{0, face(0), {face(0)}}, HistoryLink{0, face(1), {face(0)}}}, {}, {}}));
   EXPECT_EQ(nameOr(t->nameOfEdge(0)), "edge:a/face:p|a/face:p");
 }
 

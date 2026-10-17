@@ -5,11 +5,12 @@
 // Difference to TS: the FakeKernel boolean kept only the names of the first input; OCCT carries
 // the names of every input face that survives, so the name checks are subsets, not equalities.
 
+#include "tinycad/regen/body_operation.hpp"
+
 #include <gtest/gtest.h>
 
 #include "regen/testing.hpp"
 #include "tinycad/core/result.hpp"
-#include "tinycad/regen/body_operation.hpp"
 
 namespace tinycad::regen::test {
 namespace {
@@ -163,8 +164,9 @@ TEST(ApplyBodyOperationAdd, UnitesTheFirstTargetWithTheOtherTargetsAndTheShapes)
   Rig s;
   const auto out = apply(s, BodyOperation::Add, {s.p1, s.p2}, {s.c, s.a});
   ASSERT_EQ(s.kernel.booleanCalls().size(), 1U);
-  EXPECT_EQ(s.kernel.booleanCalls()[0],
-            (Call{kernel::BooleanOp::Union, {s.c->shape()}, {s.a->shape(), s.p1.shape, s.p2.shape}}));
+  EXPECT_EQ(
+      s.kernel.booleanCalls()[0],
+      (Call{kernel::BooleanOp::Union, {s.c->shape()}, {s.a->shape(), s.p1.shape, s.p2.shape}}));
   // The result keeps the identity and the place of the first target c; a is consumed.
   EXPECT_EQ(idsOf(*out), withOrigin({"s/sketch", "b/body", "c/body"}));
   const auto result = bodyAt(*out, "c/body");
@@ -193,7 +195,8 @@ TEST(ApplyBodyOperationRemoveIntersect, CallsTheBooleanForEachTargetOnItsOwnAndK
       EXPECT_NE(changed->shape(), target->shape());
       EXPECT_NE(changed->names(), target->names());
       // The names of each target go over the history of its own boolean (M14).
-      EXPECT_TRUE(changed->names()->faceEntries().contains(TopoName(target->id().substr(0, 1) + "/face:bottom")));
+      EXPECT_TRUE(changed->names()->faceEntries().contains(
+          TopoName(target->id().substr(0, 1) + "/face:bottom")));
       if (op == BodyOperation::Remove) {
         EXPECT_TRUE(hasAllFaceNames(*changed->names(), *target->names()));
       }
@@ -205,8 +208,8 @@ TEST(ApplyBodyOperationRemoveIntersect, CallsTheBooleanForEachTargetOnItsOwnAndK
 TEST(ApplyBodyOperation, LeavesTheInputStateAsItWas) {
   Rig s;
   const auto before = s.state->artifacts();
-  for (const auto op : {BodyOperation::New, BodyOperation::Add, BodyOperation::Remove,
-                        BodyOperation::Intersect}) {
+  for (const auto op :
+       {BodyOperation::New, BodyOperation::Add, BodyOperation::Remove, BodyOperation::Intersect}) {
     const auto out = apply(s, op, {s.p1}, {s.a});
     EXPECT_NE(out, s.state);
   }
@@ -221,7 +224,8 @@ TEST(ApplyBodyOperation, LetsAKernelErrorThrough) {
   EXPECT_EQ(out.error().code, kernel::KernelErrorCode::OperationFailed);
   // An empty result of OCCT is a kernel error too: c minus a disjoint prism is fine, but
   // intersecting c with p2 gives nothing.
-  auto empty = applyBodyOperation(s.kernel, s.state, kFeature, BodyOperation::Intersect, {s.p2}, {s.c});
+  auto empty =
+      applyBodyOperation(s.kernel, s.state, kFeature, BodyOperation::Intersect, {s.p2}, {s.c});
   ASSERT_FALSE(empty);
   EXPECT_EQ(empty.error().code, kernel::KernelErrorCode::OperationFailed);
 }

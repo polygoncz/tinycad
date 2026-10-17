@@ -15,10 +15,9 @@ namespace {
 
 /** Wall-clock ms of the first use in this process: tells a restarted server apart. */
 std::int64_t processStartMs() {
-  static const std::int64_t start =
-      std::chrono::duration_cast<std::chrono::milliseconds>(
-          std::chrono::system_clock::now().time_since_epoch())
-          .count();
+  static const std::int64_t start = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        std::chrono::system_clock::now().time_since_epoch())
+                                        .count();
   return start;
 }
 

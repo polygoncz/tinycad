@@ -57,7 +57,8 @@ kernel::KernelResult<kernel::ShapeResult> CountingKernel::transform(ShapeHandle 
 kernel::KernelResult<kernel::ShapeResult> CountingKernel::boolean(
     kernel::BooleanOp op, std::span<const ShapeHandle> targets,
     std::span<const ShapeHandle> tools) {
-  booleanCalls_.push_back(BooleanCall{op, {targets.begin(), targets.end()}, {tools.begin(), tools.end()}});
+  booleanCalls_.push_back(
+      BooleanCall{op, {targets.begin(), targets.end()}, {tools.begin(), tools.end()}});
   if (auto e = enter("boolean")) return core::fail(*e);
   return occt_.boolean(op, targets, tools);
 }

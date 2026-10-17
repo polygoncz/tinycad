@@ -13,8 +13,8 @@ using regen::test::aSketchArtifact;
 const core::Plane kXy{{0, 0, 0}, {1, 0, 0}, {0, 0, 1}};
 
 /** The rectangle [x0, x0 + w] × [y0, y0 + h] of a plane as a face of the kernel. */
-kernel::ShapeHandle rectangle(CountingKernel& kernel, const core::Plane& plane, double x0, double y0,
-                              double w, double h) {
+kernel::ShapeHandle rectangle(CountingKernel& kernel, const core::Plane& plane, double x0,
+                              double y0, double w, double h) {
   const std::vector<core::Vec2> c{{x0, y0}, {x0 + w, y0}, {x0 + w, y0 + h}, {x0, y0 + h}};
   kernel::ProfileLoop outer;
   for (std::size_t i = 0; i < 4; ++i) {
@@ -36,11 +36,12 @@ struct ExtrudeParams {
 
   [[nodiscard]] Json json() const {
     Json r = Json::array();
-    for (const auto& name : regions) r.push_back({{"kind", "region"}, {"sketch", "s1"}, {"region", name}});
+    for (const auto& name : regions)
+      r.push_back({{"kind", "region"}, {"sketch", "s1"}, {"region", name}});
     Json t = Json::array();
     for (const auto& id : targets) t.push_back(bodyRef(id));
-    return {{"regions", r},   {"operation", operation}, {"targets", t}, {"endType", endType},
-            {"distance", distance}, {"upTo", upTo},      {"flip", flip}};
+    return {{"regions", r},         {"operation", operation}, {"targets", t}, {"endType", endType},
+            {"distance", distance}, {"upTo", upTo},           {"flip", flip}};
   }
 };
 
@@ -73,8 +74,8 @@ TEST(ExtrudeBuilder, FlipExtrudesAgainstTheNormal) {
   CountingKernel kernel;
   ExtrudeParams p;
   p.flip = true;
-  const auto box = bodyBox(kernel, build(kernel, "extrude", "e1", p.json(), sketchState(kernel)),
-                           "e1/body");
+  const auto box =
+      bodyBox(kernel, build(kernel, "extrude", "e1", p.json(), sketchState(kernel)), "e1/body");
   expectVec(box.min, {0, 0, -10});
   expectVec(box.max, {4, 2, 0});
 }
@@ -84,8 +85,8 @@ TEST(ExtrudeBuilder, SymmetricMovesTheFaceBackByHalfTheDistanceAndIgnoresFlip) {
   ExtrudeParams p;
   p.endType = "symmetric";
   p.flip = true;
-  const auto box = bodyBox(kernel, build(kernel, "extrude", "e1", p.json(), sketchState(kernel)),
-                           "e1/body");
+  const auto box =
+      bodyBox(kernel, build(kernel, "extrude", "e1", p.json(), sketchState(kernel)), "e1/body");
   expectVec(box.min, {0, 0, -5});
   expectVec(box.max, {4, 2, 5});
 }
@@ -169,7 +170,8 @@ ExtrudeParams upTo(const std::string& face) {
 
 TEST(ExtrudeBuilderUpToFace, ExtrudesUpToTheBottomFaceOfABoxIgnoringDistanceAndFlip) {
   CountingKernel kernel;
-  const auto built = build(kernel, "extrude", "e1", upTo("k/face:bottom").json(), upToState(kernel));
+  const auto built =
+      build(kernel, "extrude", "e1", upTo("k/face:bottom").json(), upToState(kernel));
   const auto box = bodyBox(kernel, built, "e1/body");
   expectVec(box.min, {0, 0, 0});
   expectVec(box.max, {4, 2, 5});
@@ -181,8 +183,8 @@ TEST(ExtrudeBuilderUpToFace, MeasuresTheDistanceFromThePlaneOfEachRegion) {
   auto state = withBox(kernel, "k", {-1, -1, 5}, {14, 5, 3});
   const core::Plane raised{{0, 0, 1}, {1, 0, 0}, {0, 0, 1}};
   state = state->with(aSketchArtifact("s1", {rectangle(kernel, raised, 0, 0, 4, 2)}, raised));
-  const auto box = bodyBox(kernel, build(kernel, "extrude", "e1", upTo("k/face:bottom").json(), state),
-                           "e1/body");
+  const auto box = bodyBox(
+      kernel, build(kernel, "extrude", "e1", upTo("k/face:bottom").json(), state), "e1/body");
   expectVec(box.min, {0, 0, 1});
   expectVec(box.max, {4, 2, 5});
 }

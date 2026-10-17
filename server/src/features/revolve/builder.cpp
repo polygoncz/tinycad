@@ -44,8 +44,7 @@ regen::BuildResult RevolveBuilder::build(const regen::BuildInput& input,
   // flip is hidden at a full turn, where its value is not validated, so it must not count.
   const bool flip = flipApplies(angle) && boolOf(p, "flip");
   const core::Vec3& d = axis->direction;
-  const kernel::Axis kernelAxis{axis->origin,
-                                flip ? core::Vec3{-d[0], -d[1], -d[2]} : d};
+  const kernel::Axis kernelAxis{axis->origin, flip ? core::Vec3{-d[0], -d[1], -d[2]} : d};
   // One region after another: a deterministic order of the kernel calls.
   std::vector<kernel::ShapeResult> shapes;
   for (const auto& region : *regions) {

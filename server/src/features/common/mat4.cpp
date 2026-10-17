@@ -31,10 +31,13 @@ Mat4 rotationAxisAngle(const Vec3& axis, double angle) {
   const double s = std::sin(angle);
   const double c = std::cos(angle);
   const double t = 1 - c;
+  // Column-major: each line is one column of the matrix.
+  // clang-format off
   return {x * x * t + c,     y * x * t + z * s, z * x * t - y * s, 0,
           x * y * t - z * s, y * y * t + c,     z * y * t + x * s, 0,
           x * z * t + y * s, y * z * t - x * s, z * z * t + c,     0,
           0,                 0,                 0,                 1};
+  // clang-format on
 }
 
 Mat4 multiply(const Mat4& a, const Mat4& b) {

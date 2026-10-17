@@ -25,9 +25,8 @@ TEST(CylinderBuilder, AddsOneBodyCreatedAndLastModifiedByTheFeature) {
 
 TEST(CylinderBuilder, NamesTheFacesTopBottomAndSideByTheirRoles) {
   CountingKernel kernel;
-  const auto body =
-      bodyAt(*build(kernel, "cylinder", "c1", cylinderParams({0, 0, 0}, "z", 1, 2)).ok().state,
-             "c1/body");
+  const auto body = bodyAt(
+      *build(kernel, "cylinder", "c1", cylinderParams({0, 0, 0}, "z", 1, 2)).ok().state, "c1/body");
   EXPECT_EQ(faceNames(*body->names()),
             (std::vector<std::string>{"c1/face:bottom", "c1/face:side", "c1/face:top"}));
 }

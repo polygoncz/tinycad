@@ -115,8 +115,8 @@ TEST(BuildContextRegions, ResolvesRegionsOfTwoSketchesInTheOrderOfRefs) {
 
 TEST(BuildContextRegions, ReturnsAMissingSketchAMissingRegionAndAnotherKind) {
   CountingKernel kernel;
-  auto t = aBuildContext(kernel, aState({aSketchArtifact("s1", {ShapeHandle{5}}),
-                                         aBody("f1", ShapeHandle{1})}));
+  auto t = aBuildContext(
+      kernel, aState({aSketchArtifact("s1", {ShapeHandle{5}}), aBody("f1", ShapeHandle{1})}));
   auto noSketch = t->ctx.resolveRegions({regionRef("s9", "r1")});
   ASSERT_FALSE(noSketch);
   EXPECT_EQ(noSketch.error().ref, regionRef("s9", "r1"));
@@ -127,19 +127,19 @@ TEST(BuildContextRegions, ReturnsAMissingSketchAMissingRegionAndAnotherKind) {
   EXPECT_FALSE(t->ctx.resolveRegions({regionRef("f1", "r1")}));
 }
 
-/** A sketch on XZ: line l (1,2)-(1,5), construction line c (0,0)-(3,4), zero line z, circle k, point a. */
+/** A sketch on XZ: line l (1,2)-(1,5), construction line c (0,0)-(3,4), zero line z, circle k,
+ * point a. */
 StatePtr sketchOnXz() {
   const Json entities = Json::array({{{"id", "a"}, {"kind", "point"}, {"x", 1}, {"y", 2}},
                                      {{"id", "k"}, {"kind", "circle"}},
                                      {{"id", "l"}, {"kind", "line"}},
                                      {{"id", "c"}, {"kind", "line"}},
                                      {{"id", "z"}, {"kind", "line"}}});
-  return RegenState::empty()->with(
-      aSketchArtifact("s1", {}, kXz,
-                      {SketchLineSegment{"l", {1, 2}, {1, 5}},
-                       SketchLineSegment{"c", {0, 0}, {3, 4}},
-                       SketchLineSegment{"z", {2, 2}, {2, 2}}},
-                      entities));
+  return RegenState::empty()->with(aSketchArtifact(
+      "s1", {}, kXz,
+      {SketchLineSegment{"l", {1, 2}, {1, 5}}, SketchLineSegment{"c", {0, 0}, {3, 4}},
+       SketchLineSegment{"z", {2, 2}, {2, 2}}},
+      entities));
 }
 
 TEST(BuildContextAxis, ResolvesTheOriginAxisZ) {
@@ -192,10 +192,9 @@ TEST(BuildContextAxis, ReturnsARefErrorForACircleAPointAMissingEntityAndAMissing
 
 TEST(BuildContextTopo, ResolvesFacesAndEdgesByName) {
   CountingKernel kernel;
-  const auto body =
-      aBody("b", ShapeHandle{1},
-            aNameTable({{"b/face:top", {5}}, {"b/face:split", {1, 3}}},
-                       {{"edge:x", {2, 0}}, {"edge:y", {4}}}));
+  const auto body = aBody("b", ShapeHandle{1},
+                          aNameTable({{"b/face:top", {5}}, {"b/face:split", {1, 3}}},
+                                     {{"edge:x", {2, 0}}, {"edge:y", {4}}}));
   auto t = aBuildContext(kernel, aState({body}));
   auto faces = t->ctx.resolveTopo({topoRef("b", "b/face:top")}, TopoKind::Face);
   ASSERT_TRUE(faces);
@@ -217,12 +216,13 @@ TEST(BuildContextTopo, ResolvesFacesAndEdgesByName) {
 
 TEST(BuildContextTopo, LooksFaceNamesUpOnlyAmongFacesAndReturnsTheFirstMissing) {
   CountingKernel kernel;
-  const auto body = aBody("b", ShapeHandle{1}, aNameTable({{"b/face:top", {0}}}, {{"edge:x", {0}}}));
+  const auto body =
+      aBody("b", ShapeHandle{1}, aNameTable({{"b/face:top", {0}}}, {{"edge:x", {0}}}));
   auto t = aBuildContext(kernel, aState({body}));
   EXPECT_FALSE(t->ctx.resolveTopo({topoRef("b", "edge:x")}, TopoKind::Face));
   EXPECT_FALSE(t->ctx.resolveTopo({topoRef("b", "b/face:top")}, TopoKind::Edge));
-  auto r = t->ctx.resolveTopo({topoRef("b", "b/face:top"), topoRef("b", "b/face:gone")},
-                              TopoKind::Face);
+  auto r =
+      t->ctx.resolveTopo({topoRef("b", "b/face:top"), topoRef("b", "b/face:gone")}, TopoKind::Face);
   ASSERT_FALSE(r);
   EXPECT_EQ(r.error().ref, topoRef("b", "b/face:gone"));
   EXPECT_FALSE(t->ctx.resolveTopo({topoRef("x", "b/face:top")}, TopoKind::Face));
@@ -259,7 +259,8 @@ TEST(BuildContextPlanesOfFaces, TakesTheSmallestIndexAndWarnsWhenTheNameMatchesS
                                               kernel::FacePlane{{0, 0, double(i)}, {0, 0, 1}}});
   }
   auto t = aBuildContext(
-      kernel, aState({aBody("b", ShapeHandle{1}, aNameTable({{"b/face:split", {4, 2}}}, {}, topology))}));
+      kernel,
+      aState({aBody("b", ShapeHandle{1}, aNameTable({{"b/face:split", {4, 2}}}, {}, topology))}));
   auto r = t->ctx.resolvePlanes({topoRef("b", "b/face:split")});
   ASSERT_TRUE(r);
   expectVec((*r)[0].plane.origin, {0, 0, 2});
@@ -269,7 +270,8 @@ TEST(BuildContextPlanesOfFaces, TakesTheSmallestIndexAndWarnsWhenTheNameMatchesS
 
 TEST(BuildContextPlanesOfFaces, ReturnsARefErrorForAFaceThatIsNotPlanar) {
   CountingKernel kernel;
-  auto t = aBuildContext(kernel, aState({aBody("b", ShapeHandle{1}, aNameTable({{"c/face:side", {0}}}))}));
+  auto t = aBuildContext(kernel,
+                         aState({aBody("b", ShapeHandle{1}, aNameTable({{"c/face:side", {0}}}))}));
   auto r = t->ctx.resolvePlanes({topoRef("b", "c/face:side")});
   ASSERT_FALSE(r);
   EXPECT_EQ(r.error().ref, topoRef("b", "c/face:side"));

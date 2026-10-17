@@ -32,8 +32,9 @@ TEST(BooleanBuilder, UnionMergesTheOtherTargetsAndTheToolsIntoTheFirstTarget) {
   const auto b = bodyAt(*state, "b/body");
   const auto c = bodyAt(*state, "c/body");
   const auto out = build(kernel, "boolean", "s", booleanParams("union", {"a", "c"}, {"b"}), state);
-  EXPECT_EQ(kernel.booleanCalls(),
-            (std::vector<Call>{Call{kernel::BooleanOp::Union, {a->shape()}, {c->shape(), b->shape()}}}));
+  EXPECT_EQ(
+      kernel.booleanCalls(),
+      (std::vector<Call>{Call{kernel::BooleanOp::Union, {a->shape()}, {c->shape(), b->shape()}}}));
   const auto result = bodyAt(*out.ok().state, "a/body");
   expectVec(bboxOf(kernel, *result).max, {30, 10, 10});
   // The other targets and the tools leave.
@@ -48,9 +49,10 @@ TEST(BooleanBuilder, SubtractAndIntersectPassAllTargetsAndAllTools) {
   const auto c = bodyAt(*state, "c/body");
   build(kernel, "boolean", "s", booleanParams("subtract", {"a", "c"}, {"b"}), state);
   build(kernel, "boolean", "i", booleanParams("intersect", {"a"}, {"b"}), state);
-  EXPECT_EQ(kernel.booleanCalls(),
-            (std::vector<Call>{Call{kernel::BooleanOp::Subtract, {a->shape(), c->shape()}, {b->shape()}},
-                               Call{kernel::BooleanOp::Intersect, {a->shape()}, {b->shape()}}}));
+  EXPECT_EQ(
+      kernel.booleanCalls(),
+      (std::vector<Call>{Call{kernel::BooleanOp::Subtract, {a->shape(), c->shape()}, {b->shape()}},
+                         Call{kernel::BooleanOp::Intersect, {a->shape()}, {b->shape()}}}));
 }
 
 TEST(BooleanBuilder, TheResultKeepsTheIdentityAndPlaceOfTheFirstTargetAndIsModifiedByIt) {

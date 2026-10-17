@@ -73,9 +73,9 @@ core::Result<PlaneOfRef, std::string> resolvePlaneRef(const RegenState& state,
   // indices are ascending and not empty: the first is the face with the smallest index.
   const int index = found->indices.front();
   const auto& faces = found->body->names()->topology().faces;
-  const kernel::FaceInfo* face =
-      static_cast<std::size_t>(index) < faces.size() ? &faces[static_cast<std::size_t>(index)]
-                                                     : nullptr;
+  const kernel::FaceInfo* face = static_cast<std::size_t>(index) < faces.size()
+                                     ? &faces[static_cast<std::size_t>(index)]
+                                     : nullptr;
   if (face == nullptr || face->surface != kernel::SurfaceType::Plane || !face->plane) {
     return core::fail("Face '" + ref.name.str() + "' is not planar");
   }

@@ -124,8 +124,8 @@ regen::BuildResult ExtrudeBuilder::build(const regen::BuildInput& input,
   for (const auto& region : *regions) faces.push_back(region.face);
   auto q = centerOf(ctx.kernel(), faces);
   if (!q) return core::fail(regen::kernelFailure(q.error()));
-  const core::Vec3 base = math::sub(
-      *q, math::scale(normal, math::dot(math::sub(*q, sketchPlane.origin), normal)));
+  const core::Vec3 base =
+      math::sub(*q, math::scale(normal, math::dot(math::sub(*q, sketchPlane.origin), normal)));
   regen::FeatureAnchors anchors;
   anchors["base"] = regen::Anchor{base, normal};
   return regen::BuildOutput{std::move(*next), std::move(anchors)};

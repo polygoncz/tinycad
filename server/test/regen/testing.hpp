@@ -23,7 +23,9 @@
 
 namespace tinycad::regen {
 
-inline void PrintTo(FeatureStatusKind kind, std::ostream* os) { *os << featureStatusKindName(kind); }
+inline void PrintTo(FeatureStatusKind kind, std::ostream* os) {
+  *os << featureStatusKindName(kind);
+}
 inline void PrintTo(FeatureErrorCode code, std::ostream* os) { *os << featureErrorCodeName(code); }
 
 }  // namespace tinycad::regen
@@ -81,7 +83,8 @@ class CountingKernel final : public kernel::GeometryKernel {
   kernel::KernelResult<kernel::ShapeResult> makeFace(const kernel::FaceInput& p) override;
   kernel::KernelResult<kernel::ProfileRegions> profileRegions(
       std::span<const kernel::ProfileCurve> curves) override;
-  kernel::KernelResult<kernel::ShapeResult> extrude(ShapeHandle profile, const core::Vec3& direction,
+  kernel::KernelResult<kernel::ShapeResult> extrude(ShapeHandle profile,
+                                                    const core::Vec3& direction,
                                                     double distance) override;
   kernel::KernelResult<kernel::ShapeResult> revolve(ShapeHandle profile, const kernel::Axis& axis,
                                                     double angle) override;
@@ -214,8 +217,7 @@ inline double stoppedClock() { return 0; }
  * are declared in dependency order, so the Regenerator is destroyed before the kernel.
  */
 struct RegenSetup {
-  explicit RegenSetup(SpyBuilder::Build build = buildCube,
-                      Regenerator::Clock now = stoppedClock);
+  explicit RegenSetup(SpyBuilder::Build build = buildCube, Regenerator::Clock now = stoppedClock);
 
   CountingKernel kernel;
   document::FeatureSchemaRegistry schemas;

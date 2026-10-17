@@ -43,10 +43,10 @@ const char* typeName(SubShapeType type) {
 
 /** The index of `sub` if it lies in `topology`, else throws (an adapter bug). */
 int checkIndex(const SubShapeIndex& sub, const TopologySummary& topology, const char* where) {
-  const std::size_t count = sub.type == SubShapeType::Face   ? topology.faces.size()
-                            : sub.type == SubShapeType::Edge ? topology.edges.size()
-                                                             : static_cast<std::size_t>(
-                                                                   topology.vertexCount);
+  const std::size_t count = sub.type == SubShapeType::Face ? topology.faces.size()
+                            : sub.type == SubShapeType::Edge
+                                ? topology.edges.size()
+                                : static_cast<std::size_t>(topology.vertexCount);
   if (sub.index < 0 || static_cast<std::size_t>(sub.index) >= count) {
     throw core::AssertionError(std::string(typeName(sub.type)) + " " + std::to_string(sub.index) +
                                " out of range of the " + where + " (" + std::to_string(count) +
@@ -204,9 +204,9 @@ std::vector<OptName> edgeNames(const TopologySummary& topology,
 // NameTable
 
 const NameTablePtr& NameTable::empty() {
-  static const NameTablePtr table = std::make_shared<const NameTable>(
-      std::vector<std::vector<TopoName>>{}, std::vector<std::optional<TopoName>>{},
-      TopologySummary{});
+  static const NameTablePtr table =
+      std::make_shared<const NameTable>(std::vector<std::vector<TopoName>>{},
+                                        std::vector<std::optional<TopoName>>{}, TopologySummary{});
   return table;
 }
 
