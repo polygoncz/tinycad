@@ -119,7 +119,7 @@ Jak z existující sady testů udělat jazykově nezávislou specifikaci (golden
 
 ## Retrospektiva
 
-_Návrh Clauda, Pavel doplní nebo upraví._
+_Návrh Clauda, Pavel 2026-10-17 souhlasí._
 
 **Co bylo jinak, než se čekalo**
 - „Exportér z dnešních testů“ z hrubého plánu nešel postavit: tvrzení jsou kód, ne data. Rekordér (vstupy z testů, výstupy zaznamenané z TS, revize v git diffu) byl jednodušší a pevnější ([[Q107 Výstupy sdílených případů|Q107]]).
