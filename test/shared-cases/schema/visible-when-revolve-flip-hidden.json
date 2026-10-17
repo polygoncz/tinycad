@@ -1,0 +1,17 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Revolve flip is hidden for a full turn",
+  "source": "test/unit/features/revolve/revolve.test.ts › revolve param visibility › shows flip only for an angle below a full turn",
+  "input": {
+    "type": "revolve",
+    "param": "flip",
+    "params": {
+      "angle": 6.283185307179586
+    }
+  },
+  "expected": {
+    "ok": {
+      "visible": false
+    }
+  }
+}

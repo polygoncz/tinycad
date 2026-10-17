@@ -9,3 +9,5 @@ package-lock.json
 .claude/
 scripts/
 spikes/
+# Shared test cases: the record mode (npm run cases:record) owns their JSON format.
+test/shared-cases/

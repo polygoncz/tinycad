@@ -1,0 +1,17 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Extrude upTo is hidden for the end type blind",
+  "source": "test/unit/features/extrude/extrude.test.ts › extrude param visibility › upTo for endType blind visible: false",
+  "input": {
+    "type": "extrude",
+    "param": "upTo",
+    "params": {
+      "endType": "blind"
+    }
+  },
+  "expected": {
+    "ok": {
+      "visible": false
+    }
+  }
+}

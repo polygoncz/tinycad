@@ -1,0 +1,14 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Extrude targets are visible without an operation (equals_none over a missing param)",
+  "input": {
+    "type": "extrude",
+    "param": "targets",
+    "params": {}
+  },
+  "expected": {
+    "ok": {
+      "visible": true
+    }
+  }
+}

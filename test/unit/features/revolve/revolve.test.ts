@@ -383,6 +383,12 @@ describe('revolve param visibility', () => {
     expect(isParamVisible(spec('targets'), { operation: 'intersect' })).toBe(true);
   });
 
+  // Spec 14 VisibleWhen, equals_none: a value of another type hides, a missing param shows.
+  it('hides targets for an operation of another type and shows them for a missing one', () => {
+    expect(isParamVisible(spec('targets'), { operation: 0 })).toBe(false);
+    expect(isParamVisible(spec('targets'), {})).toBe(true);
+  });
+
   it('shows flip only for an angle below a full turn', () => {
     expect(isParamVisible(spec('flip'), { angle: FULL_TURN })).toBe(false);
     expect(isParamVisible(spec('flip'), { angle: FULL_TURN - 1e-10 })).toBe(false);

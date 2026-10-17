@@ -1,0 +1,17 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Revolve flip is hidden for an angle that is a string",
+  "source": "test/unit/features/revolve/revolve.test.ts › revolve param visibility › hides flip for an angle that is not a number, without throwing",
+  "input": {
+    "type": "revolve",
+    "param": "flip",
+    "params": {
+      "angle": "x"
+    }
+  },
+  "expected": {
+    "ok": {
+      "visible": false
+    }
+  }
+}

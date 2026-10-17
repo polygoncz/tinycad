@@ -1,0 +1,17 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Revolve flip is visible 1e-6 below a full turn",
+  "source": "test/unit/features/revolve/revolve.test.ts › revolve param visibility › shows flip only for an angle below a full turn",
+  "input": {
+    "type": "revolve",
+    "param": "flip",
+    "params": {
+      "angle": 6.283184307179586
+    }
+  },
+  "expected": {
+    "ok": {
+      "visible": true
+    }
+  }
+}

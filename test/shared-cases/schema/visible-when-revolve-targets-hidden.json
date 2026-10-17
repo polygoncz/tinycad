@@ -1,0 +1,17 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Revolve targets are hidden for the operation new",
+  "source": "test/unit/features/revolve/revolve.test.ts › revolve param visibility › shows targets only for add, remove and intersect",
+  "input": {
+    "type": "revolve",
+    "param": "targets",
+    "params": {
+      "operation": "new"
+    }
+  },
+  "expected": {
+    "ok": {
+      "visible": false
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Transform pivotPoint is visible for the pivot point",
+  "source": "test/unit/features/transform/transform.test.ts › shows pivotPoint only for the pivot point",
+  "input": {
+    "type": "transform",
+    "param": "pivotPoint",
+    "params": {
+      "bodies": [],
+      "pivot": "point",
+      "pivotPoint": [
+        0,
+        0,
+        0
+      ],
+      "translate": [
+        0,
+        0,
+        0
+      ],
+      "rx": 0,
+      "ry": 0,
+      "rz": 0
+    }
+  },
+  "expected": {
+    "ok": {
+      "visible": true
+    }
+  }
+}

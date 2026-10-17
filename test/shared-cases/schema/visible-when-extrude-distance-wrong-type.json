@@ -1,0 +1,16 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Extrude distance for an end type that is not a string",
+  "input": {
+    "type": "extrude",
+    "param": "distance",
+    "params": {
+      "endType": 0
+    }
+  },
+  "expected": {
+    "ok": {
+      "visible": false
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Transform pivotPoint is hidden without a pivot (equals_any over a missing param)",
+  "source": "test/unit/features/transform/transform.test.ts › shows pivotPoint only for the pivot point",
+  "input": {
+    "type": "transform",
+    "param": "pivotPoint",
+    "params": {}
+  },
+  "expected": {
+    "ok": {
+      "visible": false
+    }
+  }
+}

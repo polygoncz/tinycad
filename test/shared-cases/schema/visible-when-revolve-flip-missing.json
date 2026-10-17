@@ -1,0 +1,15 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Revolve flip is hidden without an angle (less_than over a missing param)",
+  "source": "test/unit/features/revolve/revolve.test.ts › revolve param visibility › hides flip for an angle that is not a number, without throwing",
+  "input": {
+    "type": "revolve",
+    "param": "flip",
+    "params": {}
+  },
+  "expected": {
+    "ok": {
+      "visible": false
+    }
+  }
+}

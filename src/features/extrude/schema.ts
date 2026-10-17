@@ -44,7 +44,15 @@ export function flipApplies(endType: unknown): boolean {
  * so distance is hidden and the builder ignores it. Takes unchecked values (visibleWhen).
  */
 export function distanceApplies(endType: unknown): boolean {
-  return endType !== 'upToFace';
+  return noneOf(endType, 'upToFace');
+}
+
+/**
+ * The equals_none test of VisibleWhen (spec 14) over an unchecked value: a missing param shows,
+ * a value of another type than the options hides.
+ */
+function noneOf(value: unknown, ...options: readonly string[]): boolean {
+  return value === undefined || (typeof value === 'string' && !options.includes(value));
 }
 
 // Frozen deeply – the schema object, every ParamSpec and the enum options: the schema is shared
@@ -69,7 +77,7 @@ const params: ParamSchemaOf<ExtrudeParams> = Object.freeze<ParamSchemaOf<Extrude
     label: 'extrude.targets',
     min: 1,
     group: 'extrude.group.merge',
-    visibleWhen: (p) => p['operation'] !== 'new',
+    visibleWhen: (p) => noneOf(p['operation'], 'new'),
   }),
   endType: Object.freeze<ParamSpec>({
     kind: 'enum',

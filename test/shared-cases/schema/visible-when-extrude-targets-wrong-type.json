@@ -1,0 +1,16 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Extrude targets for an operation that is not a string",
+  "input": {
+    "type": "extrude",
+    "param": "targets",
+    "params": {
+      "operation": 0
+    }
+  },
+  "expected": {
+    "ok": {
+      "visible": false
+    }
+  }
+}

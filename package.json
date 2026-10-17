@@ -17,6 +17,7 @@
     "lint:vault": "node scripts/vault-lint.mjs",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration --passWithNoTests",
+    "cases:record": "node scripts/cases-record.mjs",
     "test:e2e": "playwright test --project=chrome",
     "test:e2e:full": "playwright test",
     "check": "run-p --aggregate-output --continue-on-error typecheck lint lint:deps lint:vault test test:integration"

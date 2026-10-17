@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: doing
 order: 38
 aliases:
   - M38
@@ -17,7 +17,7 @@ specs:
   - "[[14-protokol]]"
 depends_on:
   - "[[M37-text-ve-skice]]"
-started:
+started: 2026-10-17
 finished:
 tags:
   - milnik
@@ -28,26 +28,77 @@ updated: 2026-10-17
 
 **Cíl:** TS doména se zmrazí a z jejích testů vzniknou sdílené testovací případy (JSON), proti kterým se bude ověřovat C++ jádro.
 
-> Hrubý plán série nativního jádra (2026-10-17). Před zahájením upřesnit úkoly, kontrakt a Implementační plán.
-
-**Specifikace:** [[13-testovani]], [[14-protokol]], [[0030-nativni-jadro-pres-grpc|ADR 0030]]
+**Specifikace:** [[13-testovani#Sdílené testovací případy]] (kontrakt), [[14-protokol]], [[0030-nativni-jadro-pres-grpc|ADR 0030]]
 
 **Navazuje na:** [[M37-text-ve-skice]]
 
+**Rozhodnutí při startu (2026-10-17):** [[Q107 Výstupy sdílených případů|Q107]] výstupy zaznamenané z TS (`npm run cases:record`), [[Q108 Plochy a hrany ve sdílených případech|Q108]] jména přesně a indexy vůbec, [[Q109 Řešič skici ve sdílených případech|Q109]] řešič podle DOF (pevný bod), [[Q110 Tolerance sdílených případů|Q110]] tolerance a objem ze sítě. „Exportér z dnešních testů“ z hrubého plánu je rekordér: vstupy se vytáhnou z dnešních testů, výstupy zapíše TS doména.
+
 ## Úkoly
 
-- [ ] Vyhlásit zmrazení: od začátku milníku se `document`, `ops`, `regen`, `kernel`, `kernel-occt`, `features/*` a `persistence` mění jen kvůli chybám (pravidlo v [[Roadmapa#Nativní jádro (M38–M47)]]).
-- [ ] Formát sdíleného případu (`test/shared-cases/<oblast>/<název>.json`): vstup, očekávaný výstup, tolerance. Krátký popis do [[13-testovani]].
-- [ ] Exportér případů z dnešních testů: replay logů (operace → `toData`), transakce a undo, migrace featur, `validate` operací.
-- [ ] Případy regenerace nad skutečným OCCT (WASM): dokument → statusy, tělesa (objem, obálka, počty ploch a hran, jména ploch a hran), kotvy.
-- [ ] Případy kontraktové sady jádra a 2D geometrie skici (oblasti, průsečíky, segment, zaoblení, offset) s tolerancemi.
-- [ ] Případy řešiče skici (vstupní data skici → vyřešené souřadnice) a odvozených entit (zrcadlení, pole, písmena textu).
-- [ ] TS testy čtou tytéž soubory, takže případ nemůže zastarat (případ, který TS neprojde, shodí `npm run check`).
+- [x] Vyhlásit zmrazení: od 2026-10-17 se `document`, `ops`, `regen`, `kernel`, `kernel-occt`, `features/*` a `persistence` mění jen kvůli chybám (pravidlo v [[Roadmapa#Nativní jádro (M38–M47)]]).
+- [x] 1. Kostra sdílených případů a `schema.visibleWhen`
+- [ ] 2. Operace, dokument a schémata
+- [ ] 3. Regenerace nad OCCT
+- [ ] 4. 2D geometrie skici
+- [ ] 5. Řešič skici a odvozené entity
+- [ ] 6. Metatest pokrytí
+
+Úkol 1 jde první a sám (zafixuje kostru, kterou ostatní sdílejí). **Úkoly 2–5 běží souběžně** (Pavel 2026-10-17): každý jeden subagent `implementer` ve vlastním worktree, každý píše jen svůj spouštěč a svou složku případů, kostru jen čte. Hlavní sezení je slučuje po jednom. Úkol 6 po sloučení všech.
 
 ## Akceptační kritéria
 
-- Sdílené případy pokrývají všechny typy operací, všechny featury, všechny metody `SketchGeometry` a řešič skici.
-- TS sada je proti nim zelená a `npm run check` je spouští.
+- Sdílené případy pokrývají všechny typy operací (s upcastem i chybami), všechny featury (úspěch i chybové statusy), všechny metody `SketchGeometry` (úspěch i chyba), řešič skici (DOF 0, DOF > 0, konflikt, nadbytečná vazba, tažení, každý druh vazby) a odvozené entity. Hlídá to metatest pokrytí (úkol 6), ne revize očima.
+- TS sada je proti nim zelená a `npm run check` je spouští (projekt `integration`). Případ, který TS neprojde, `npm run check` shodí.
+- `npm run cases:record` po doběhu nezmění žádný soubor (případy odpovídají TS).
+
+## Implementační plán
+
+Jeden úkol = jedno spuštění subagenta `implementer`. Kontrakt: [[13-testovani#Sdílené testovací případy]] (obálka, porovnání, tolerance, tabulka druhů). Pro všechny úkoly:
+
+- **Vstupy** se berou z dnešních testů (pole `source`), výstupy zapíše `npm run cases:record`. Po záznamu implementátor u každého případu porovná zapsaný výstup s tvrzeními původního testu. Když nesedí, je to podezření na chybu TS: hlásí ho jako otázku a výstup ručně nemění.
+- Zmrazené moduly se **nemění**. Když spouštěč potřebuje něco, co veřejné API modulu nedává, implementátor to vrátí jako otázku.
+- Spouštěče importují jen přes `@/` a veřejné `index.ts` nebo `testing.ts` modulů (výjimka jako v dnešních integračních testech: pluginy přímo z `@/features/<name>`).
+
+### 1. Kostra a `schema.visibleWhen`
+
+- **Soubory:** `test/integration/shared-cases/support/` (`case.ts` – typy obálky a `kind`, načtení všech případů oblasti a kontrola obálky; `compare.ts` – porovnání s tolerancemi a cestou k první odlišnosti, výchozí tolerance; `record.ts` – režim `CASES_RECORD=1`, zápis `expected` beze změny vstupů; `runner.ts` – `describeSharedCases(area, run)`, které pro každý případ vytvoří `it` a podle režimu porovná nebo zapíše; `mesh-volume.ts` – objem ze sítě, převzatý z `test/integration/extrude-scenario.test.ts`), `test/integration/shared-cases/schema.test.ts` (spouštěč `schema.visibleWhen`), `test/shared-cases/schema/*.json`, `package.json` (`cases:record`), `.prettierignore` (`test/shared-cases/` – formát JSON určuje rekordér).
+- **Případy:** všech 7 predikátů `visibleWhen` ([[14-protokol#Schéma featur]]: extrude `targets`, `distance`, `upTo`, `flip`; revolve `targets`, `flip`; transform `pivotPoint`), u každého viditelné i skryté, plus chybějící parametr a hodnota jiného typu.
+- **Testy:** `support/compare.test.ts` (shoda, odlišný klíč, délka pole, číslo v toleranci a mimo, `volume` relativně, `angle`, cesta v hlášení), `support/case.test.ts` (neznámý `kind` a neznámá vlastnost obálky jsou chyba), záznam do dočasné složky (vstupy beze změny, `expected` přepsané, druhý záznam nic nezmění).
+- **Hotovo když:** `npm run cases:record` zapíše případy `schema`, druhý běh nic nezmění, `npm run check` zelený.
+
+### 2. Operace, dokument a schémata (souběžně)
+
+- **Soubory:** `test/integration/shared-cases/ops.test.ts` (`ops.upcast`, `ops.replay`, `ops.script`), `document.test.ts` (`document.load`), `schema-validate.test.ts` (`schema.validate`), `test/shared-cases/ops/`, `document/`, `schema/validate-*.json`.
+- **Případy:** `ops.upcast` – každý typ z `OP_VERSION` platný, `feature.setParams` v1 → v2, chyby (neznámý typ, `v` 0, novější `v`, chybějící pole u každého typu, `batch`); `ops.replay` – každý typ aspoň jednou, záznamy `undo` a `redo`; `ops.script` – 50 × `setParams` v transakci = 1 záznam, `abort`, `applyTransient` mimo log, `commit` prázdné transakce, undo a redo po dispatchi i po transakci; `document.load` – migrace každé featury se schématem `version` > 1 ze všech starších verzí, neplatný dokument (`issues` s cestou); `schema.validate` – výchozí parametry každé featury bez chyb a každý kód `ParamIssue` aspoň jednou.
+- **Zdroje:** `test/unit/ops/*`, `test/unit/document/serialize.test.ts`, `validate.test.ts`, `test/unit/features/*/schema*.test.ts`.
+- **Hotovo když:** případy zapsané a ověřené proti zdrojům, `npm run check` zelený.
+
+### 3. Regenerace nad OCCT (souběžně)
+
+- **Soubory:** `test/integration/shared-cases/regen.test.ts`, `test/shared-cases/regen/`.
+- **Případy:** každá z 9 vestavěných featur v úspěšném dokumentu; statusy `INVALID_PARAMS`, `UNRESOLVED_REFERENCE`, `KERNEL` (příliš velké zaoblení), `UNKNOWN_TYPE`, `suppressed`, `rolledBack`; `inputOf`; vysunutí `upToFace`, rotace, boolean všech tří druhů, zaoblení a sražení (jména ploch po úpravě), skica se splajnem, s textem a s polem (oblasti).
+- **Zdroje:** `test/integration/*-scenario.test.ts`, `topo-scenarios.test.ts`, `sketch-*.test.ts`, `test/unit/regen/regenerator*.test.ts` (scénáře, ne `FakeKernel`).
+- **Hotovo když:** případy zapsané a ověřené proti zdrojům, `npm run check` zelený.
+
+### 4. 2D geometrie skici (souběžně)
+
+- **Soubory:** `test/integration/shared-cases/geometry.test.ts`, `test/shared-cases/geometry/`.
+- **Případy:** sekce kontraktové sady v `src/kernel/testing.ts` pro `curveIntersections`, `curveSegment`, `filletArc`, `offsetCurves` (intersections, pieces, centers, no solution, closed a open chains) a jejich sekce `input (spec 06 …)` jako chybové případy s `KernelErrorCode`. Každá metoda úspěch i chyba, každý druh `Curve2` aspoň jednou.
+- **Hotovo když:** případy zapsané a ověřené proti zdrojům, `npm run check` zelený.
+
+### 5. Řešič skici a odvozené entity (souběžně)
+
+- **Soubory:** `test/integration/shared-cases/sketch.test.ts` (`sketch.solve` s `createInThreadPlanegcsSolver`, `sketch.derived`), `test/shared-cases/sketch/`.
+- **Případy:** `sketch.solve` – plně určený obdélník (DOF 0), nedourčená skica (pevný bod), konflikt, nadbytečná vazba, tažení bodu, každý druh vazby aspoň v jednom případu; `sketch.derived` – zrcadlení, lineární a kruhové pole, text, konstrukční entity mimo `regionCurves`.
+- **Zdroje:** `test/unit/solver-planegcs/solve*.test.ts`, `test/unit/sketch/patterns.test.ts`, `text.test.ts`, `geometry.test.ts`.
+- **Hotovo když:** případy zapsané a ověřené proti zdrojům, `npm run check` zelený.
+
+### 6. Metatest pokrytí (po sloučení 2–5)
+
+- **Soubory:** `test/integration/shared-cases/coverage.test.ts`.
+- **Kontroly:** každý typ z `OP_VERSION` v `ops.upcast` i `ops.replay`; každá featura z vestavěných pluginů v `regen` s `ok` a v `schema.validate`; každý kód `FeatureError` v `regen`; každá metoda `geometry.*` s `ok` i `error`; `sketch.solve` s `dof` 0, `dof` > 0, `conflict` a každým druhem vazby; každý predikát `visibleWhen`. Každá kontrola má vlastní úmyslnou chybu, která ji shodí (smazaný případ).
+- **Hotovo když:** `npm run check` zelený, `npm run cases:record` nic nezmění; revize `architecture-reviewer`.
 
 ## Co se naučíš
 

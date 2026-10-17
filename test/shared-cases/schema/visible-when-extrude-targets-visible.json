@@ -1,0 +1,17 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Extrude targets are visible for an operation other than new",
+  "source": "test/unit/features/extrude/extrude.test.ts › extrude param visibility › targets for operation add visible: true",
+  "input": {
+    "type": "extrude",
+    "param": "targets",
+    "params": {
+      "operation": "add"
+    }
+  },
+  "expected": {
+    "ok": {
+      "visible": true
+    }
+  }
+}

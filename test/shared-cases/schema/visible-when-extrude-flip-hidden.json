@@ -1,0 +1,17 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Extrude flip is hidden for the end type symmetric",
+  "source": "test/unit/features/extrude/extrude.test.ts › extrude param visibility › flip for endType symmetric visible: false",
+  "input": {
+    "type": "extrude",
+    "param": "flip",
+    "params": {
+      "endType": "symmetric"
+    }
+  },
+  "expected": {
+    "ok": {
+      "visible": false
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "kind": "schema.visibleWhen",
+  "description": "Extrude upTo is hidden without an end type (equals_any over a missing param)",
+  "input": {
+    "type": "extrude",
+    "param": "upTo",
+    "params": {}
+  },
+  "expected": {
+    "ok": {
+      "visible": false
+    }
+  }
+}
