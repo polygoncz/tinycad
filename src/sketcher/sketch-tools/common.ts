@@ -536,6 +536,12 @@ export interface ClickHandlers {
   constrain?(cursor: Vec2, values: ReadonlyMap<string, number>): Vec2;
   /** M32: the values of the fields for the point `at` (what the fields would show if not entered). */
   measure?(at: Vec2): ReadonlyMap<string, number>;
+  /**
+   * M37: the hint key of the current step (`hint.<tool>.<step>`); null = none. Asked like
+   * inputFields: on activate, after every step and on every move. Without it clickTool never
+   * touches the hint (the tool shows its own, e.g. withHint).
+   */
+  hint?(): string | null;
 }
 
 /** Removes the numeric input of a session that is still open. */
@@ -563,6 +569,9 @@ interface Cursor {
  * With entered values a move (previewValues) and a click or Enter (lockedValues, at the last
  * cursor) pass the constrained point in mods.input; the fields are shown in
  * SketchState.numericInput at that point (or at the cursor), free ones with the measured values.
+ *
+ * The hint HUD (M37, spec 10 "Nástroje"): with handlers.hint the tool shows the hint of the
+ * current step whenever it asks for the fields; the manager drops repeated hints.
  */
 export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool {
   let ctx: ToolContext | null = null;
@@ -590,9 +599,19 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
       shown = false;
       handlers.reset();
       input = emptyInput(session === null ? [] : fieldsOf());
-      if (ctx !== null) clearPreview(ctx);
+      if (ctx !== null) {
+        clearPreview(ctx);
+        showHint(ctx);
+      }
     }
     return session;
+  }
+
+  /** The hint of the current step (M37), only for handlers with hints. */
+  function showHint(c: ToolContext): void {
+    if (handlers.hint === undefined) return;
+    const key = handlers.hint();
+    c.setHint(key === null ? null : { key });
   }
 
   function fieldsOf(): readonly InputField[] {
@@ -612,11 +631,13 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
         return old !== undefined && f.id === old.id && f.kind === old.kind;
       });
     if (!same) input = emptyInput(fields);
+    if (ctx !== null) showHint(ctx);
   }
 
   /** A new step of the tool: the fields asked again, the input empty, shown at the cursor. */
   function restart(c: ToolContext, session: SketchSession): void {
     input = emptyInput(fieldsOf());
+    showHint(c);
     show(c, session);
   }
 
@@ -697,6 +718,7 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
       input = emptyInput(owner === null ? [] : fieldsOf());
       cursor = null;
       shown = false;
+      showHint(c);
     },
     deactivate() {
       if (ctx !== null) clearPreview(ctx);
@@ -726,6 +748,7 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
             Math.hypot(e.x - start.x, e.y - start.y) > CLICK_TOLERANCE_PX
           ) {
             drag = handlers.onDragStart(c, session, start.x, start.y, e.mods) ? 'taken' : 'refused';
+            if (drag === 'taken') showHint(c);
           }
           if (drag === 'taken') {
             handlers.onDrag?.(c, session, e.x, e.y, e.mods);
@@ -779,6 +802,7 @@ export function clickTool(sketches: SketchEditor, handlers: ClickHandlers): Tool
         down = null;
         drag = null;
         handlers.onDragCancel?.(c, session);
+        showHint(c);
         return true;
       }
       const handled = handlers.onKey?.(c, session, e) ?? false;

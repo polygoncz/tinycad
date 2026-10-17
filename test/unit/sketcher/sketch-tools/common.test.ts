@@ -130,9 +130,16 @@ interface Call {
  * the origin (step 0) and the fields x, y (step 1); a click goes to the next step, Escape resets.
  * `onKey` handles Escape and the letter q.
  */
-async function aTool(opts: { fields?: (step: number) => readonly InputField[] } = {}) {
+async function aTool(
+  opts: {
+    fields?: (step: number) => readonly InputField[];
+    hint?: (step: number) => string | null;
+  } = {},
+) {
   const s = await sketching();
   const calls: Call[] = [];
+  /** The keys the tool passed to setHint, in order (null = cleared). */
+  const hints: (string | null)[] = [];
   let step = 0;
   let asked = 0;
   const fieldsOf = opts.fields ?? ((n: number) => (n % 2 === 0 ? POLAR_FIELDS : XY_FIELDS));
@@ -155,6 +162,7 @@ async function aTool(opts: { fields?: (step: number) => readonly InputField[] } 
             ['y', at[1]],
           ]);
     },
+    ...(opts.hint === undefined ? {} : { hint: () => opts.hint?.(step) ?? null }),
     onMove(_ctx, _session, x, y, mods) {
       calls.push({ name: 'move', at: [x, y], ...(mods.input ? { input: mods.input } : {}) });
     },
@@ -172,7 +180,7 @@ async function aTool(opts: { fields?: (step: number) => readonly InputField[] } 
     },
   };
   const tool = clickTool(s.sketches, handlers);
-  tool.activate(s.ctx);
+  tool.activate({ ...s.ctx, setHint: (h) => hints.push(h?.key ?? null) });
   const pointer = (type: ViewPointerEvent['type'], x: number, y: number): void => {
     tool.onPointer?.({
       type,
@@ -186,6 +194,12 @@ async function aTool(opts: { fields?: (step: number) => readonly InputField[] } 
     ...s,
     tool,
     calls,
+    hints,
+    lastHint: () => hints.at(-1),
+    /** Changes the step without an event of the tool (like a write refused later). */
+    setStep: (n: number) => {
+      step = n;
+    },
     asked: () => asked,
     move: (x: number, y: number) => {
       pointer('move', x, y);
@@ -392,6 +406,56 @@ describe('clickTool follows a step changed without an event (M32)', () => {
     keys(t, '10');
     t.move(31, 40);
     expect(numericOf(t.session)?.fields[0]?.text).toBe('10');
+  });
+});
+
+describe('clickTool and the hint HUD (M37)', () => {
+  const stepHint = (n: number): string => `hint.test.step${String(n)}`;
+
+  it('activate shows the hint of the first step', async () => {
+    const t = await aTool({ hint: stepHint });
+    expect(t.lastHint()).toBe('hint.test.step0');
+  });
+
+  it('a click shows the hint of the next step', async () => {
+    const t = await aTool({ hint: stepHint });
+    t.click(10, 10);
+    expect(t.lastHint()).toBe('hint.test.step1');
+  });
+
+  it('Enter of the numeric input is a step too', async () => {
+    const t = await aTool({ hint: stepHint });
+    t.move(10, 10);
+    t.key('Enter');
+    expect(t.lastHint()).toBe('hint.test.step1');
+  });
+
+  it('a key handled by the tool shows the hint of its step', async () => {
+    const t = await aTool({ hint: stepHint });
+    t.click(10, 10);
+    t.key('Escape');
+    expect(t.lastHint()).toBe('hint.test.step0');
+  });
+
+  it('a move follows a step changed without an event', async () => {
+    const t = await aTool({ hint: stepHint });
+    t.setStep(2);
+    t.move(10, 10);
+    expect(t.lastHint()).toBe('hint.test.step2');
+  });
+
+  it('a null hint clears the HUD', async () => {
+    const t = await aTool({ hint: (n) => (n === 0 ? 'hint.test.step0' : null) });
+    t.click(10, 10);
+    expect(t.lastHint()).toBeNull();
+  });
+
+  it('handlers without hint leave the HUD to the tool (withHint, the corner tools)', async () => {
+    const t = await aTool();
+    t.click(10, 10);
+    t.key('Escape');
+    t.move(20, 20);
+    expect(t.hints).toEqual([]);
   });
 });
 

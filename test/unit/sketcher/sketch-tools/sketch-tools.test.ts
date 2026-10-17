@@ -2095,3 +2095,240 @@ describe('the drawing tools preview the inferred constraints (M26)', () => {
     expect(viewport.overlayShapes.has('sketch-guides')).toBe(false);
   });
 });
+
+describe('the drawing tools: the hint HUD (M37)', () => {
+  // A triangle of lines for the tools that pick curves or end points: a on y = 0, b on x = 0, c
+  // the hypotenuse.
+  const TRIANGLE = data([
+    { kind: 'point', id: 'p1', x: 0, y: 0 },
+    { kind: 'point', id: 'p2', x: 100, y: 0 },
+    { kind: 'point', id: 'p3', x: 0, y: 100 },
+    { kind: 'line', id: 'a', p1: 'p1', p2: 'p2' },
+    { kind: 'line', id: 'b', p1: 'p1', p2: 'p3' },
+    { kind: 'line', id: 'c', p1: 'p2', p2: 'p3' },
+  ]);
+
+  /** A click, a key, or the press-move of a drag (the release is its own step). */
+  type Action =
+    | readonly ['click', number, number]
+    | readonly ['key', string]
+    | readonly ['press', number, number, number, number]
+    | readonly ['release', number, number];
+  /** An action and the hint key after it; the first entry is the hint on activation. */
+  type Scenario = readonly [string, string | null, ...(readonly [Action, string | null])[]];
+
+  const Esc: Action = ['key', 'Escape'];
+  const at = (x: number, y: number): Action => ['click', x, y];
+
+  async function act(viewport: FakeViewport, action: Action): Promise<void> {
+    switch (action[0]) {
+      case 'click':
+        click(viewport, action[1], action[2]);
+        break;
+      case 'key':
+        viewport.emitKey({ key: action[1], mods: NO_MODS, inTextField: false });
+        break;
+      case 'press':
+        viewport.emitPointer(pointer('move', action[1], action[2]));
+        viewport.emitPointer(pointer('down', action[1], action[2]));
+        viewport.emitPointer(pointer('move', action[3], action[4]));
+        break;
+      case 'release':
+        viewport.emitPointer(pointer('up', action[1], action[2]));
+        break;
+    }
+    await settle();
+  }
+
+  const scenarios: readonly Scenario[] = [
+    [
+      'sketch.line',
+      'hint.line.start',
+      [at(10, 10), 'hint.line.next'],
+      [at(40, 10), 'hint.line.next'],
+      [['press', 40, 10, 60, 30], 'hint.line.arc'],
+      [Esc, 'hint.line.next'],
+      [['release', 60, 30], 'hint.line.next'],
+      [['press', 40, 10, 60, 30], 'hint.line.arc'],
+      [['release', 60, 30], 'hint.line.next'],
+      [Esc, 'hint.line.start'],
+    ],
+    [
+      'sketch.xline',
+      'hint.xline.first',
+      [at(10, 10), 'hint.xline.second'],
+      [Esc, 'hint.xline.first'],
+      [at(10, 10), 'hint.xline.second'],
+      [at(40, 30), 'hint.xline.first'],
+    ],
+    ['sketch.point', 'hint.point.place', [at(10, 10), 'hint.point.place']],
+    [
+      'sketch.rectangle',
+      'hint.rectangle.first',
+      [at(10, 10), 'hint.rectangle.second'],
+      [at(40, 30), 'hint.rectangle.first'],
+      [at(10, 50), 'hint.rectangle.second'],
+      // No Escape of its own: the tool ends.
+      [Esc, null],
+    ],
+    [
+      'sketch.rectangleCenter',
+      'hint.rectangleCenter.center',
+      [at(10, 10), 'hint.rectangleCenter.corner'],
+      [Esc, 'hint.rectangleCenter.center'],
+      [at(10, 10), 'hint.rectangleCenter.corner'],
+      [at(40, 30), 'hint.rectangleCenter.center'],
+    ],
+    [
+      'sketch.rectangle3p',
+      'hint.rectangle3p.first',
+      [at(10, 10), 'hint.rectangle3p.second'],
+      [at(40, 10), 'hint.rectangle3p.height'],
+      [Esc, 'hint.rectangle3p.first'],
+      [at(10, 10), 'hint.rectangle3p.second'],
+      [at(40, 10), 'hint.rectangle3p.height'],
+      [at(40, 30), 'hint.rectangle3p.first'],
+    ],
+    [
+      'sketch.circle',
+      'hint.circle.center',
+      [at(10, 10), 'hint.circle.rim'],
+      [at(30, 10), 'hint.circle.center'],
+      [at(60, 60), 'hint.circle.rim'],
+      [Esc, null],
+    ],
+    [
+      'sketch.circle2p',
+      'hint.circle2p.first',
+      [at(10, 10), 'hint.circle2p.second'],
+      [Esc, 'hint.circle2p.first'],
+      [at(10, 10), 'hint.circle2p.second'],
+      [at(30, 10), 'hint.circle2p.first'],
+    ],
+    [
+      'sketch.circle3p',
+      'hint.circle3p.first',
+      [at(10, 10), 'hint.circle3p.second'],
+      [at(30, 10), 'hint.circle3p.third'],
+      [Esc, 'hint.circle3p.first'],
+      [at(10, 10), 'hint.circle3p.second'],
+      [at(30, 10), 'hint.circle3p.third'],
+      [at(20, 30), 'hint.circle3p.first'],
+    ],
+    [
+      'sketch.arc',
+      'hint.arc.center',
+      [at(10, 10), 'hint.arc.start'],
+      [at(30, 10), 'hint.arc.end'],
+      [at(10, 30), 'hint.arc.center'],
+      [at(60, 60), 'hint.arc.start'],
+      [Esc, null],
+    ],
+    [
+      'sketch.arc3p',
+      'hint.arc3p.start',
+      [at(10, 10), 'hint.arc3p.end'],
+      [at(40, 10), 'hint.arc3p.through'],
+      [Esc, 'hint.arc3p.start'],
+      [at(10, 10), 'hint.arc3p.end'],
+      [at(40, 10), 'hint.arc3p.through'],
+      [at(25, 20), 'hint.arc3p.start'],
+    ],
+    [
+      'sketch.spline',
+      'hint.spline.first',
+      [at(10, 10), 'hint.spline.next'],
+      [at(30, 20), 'hint.spline.next'],
+      [Esc, 'hint.spline.first'],
+      [at(10, 10), 'hint.spline.next'],
+      [at(30, 20), 'hint.spline.next'],
+      [['key', 'Enter'], 'hint.spline.first'],
+    ],
+    [
+      'sketch.fitSpline',
+      'hint.fitSpline.first',
+      [at(10, 10), 'hint.fitSpline.next'],
+      [Esc, 'hint.fitSpline.first'],
+    ],
+    [
+      'sketch.slot',
+      'hint.slot.first',
+      [at(10, 10), 'hint.slot.second'],
+      [at(50, 10), 'hint.slot.width'],
+      [Esc, 'hint.slot.first'],
+      [at(10, 10), 'hint.slot.second'],
+      [at(50, 10), 'hint.slot.width'],
+      [at(30, 20), 'hint.slot.first'],
+    ],
+    [
+      'sketch.slotOverall',
+      'hint.slotOverall.first',
+      [at(10, 10), 'hint.slotOverall.second'],
+      [at(50, 10), 'hint.slot.width'],
+      [at(30, 20), 'hint.slotOverall.first'],
+    ],
+    [
+      'sketch.slotArc',
+      'hint.slotArc.center',
+      [at(10, 10), 'hint.slotArc.start'],
+      [at(30, 10), 'hint.slotArc.end'],
+      [at(10, 30), 'hint.slot.width'],
+      [Esc, 'hint.slotArc.center'],
+    ],
+  ];
+
+  /** The tools over the triangle. */
+  const onTriangle: readonly Scenario[] = [
+    [
+      'sketch.circle2t',
+      'hint.circle2t.first',
+      [at(50, 0), 'hint.circle2t.second'],
+      [at(0, 50), 'hint.circle2t.place'],
+      [Esc, 'hint.circle2t.first'],
+    ],
+    [
+      'sketch.circle3t',
+      'hint.circle3t.first',
+      [at(50, 0), 'hint.circle3t.second'],
+      [at(0, 50), 'hint.circle3t.third'],
+      [Esc, 'hint.circle3t.first'],
+    ],
+    [
+      'sketch.arcTangent',
+      'hint.arcTangent.start',
+      [at(100, 0), 'hint.arcTangent.end'],
+      [Esc, 'hint.arcTangent.start'],
+    ],
+    [
+      'sketch.dimension',
+      'hint.dimension.pick',
+      [at(100, 0), 'hint.dimension.second'],
+      [at(0, 50), 'hint.dimension.place'],
+      [Esc, 'hint.dimension.pick'],
+      [at(50, 0), 'hint.dimension.place'],
+      [at(50, 20), 'hint.dimension.pick'],
+    ],
+  ];
+
+  async function run(scenario: Scenario, sketch?: SketchData): Promise<void> {
+    const [tool, initial, ...steps] = scenario;
+    const { manager, viewport } = await sketching(sketch === undefined ? {} : { sketch });
+    manager.activate(tool);
+    const hintOf = (): string | null => manager.hint.get()?.key ?? null;
+    expect(hintOf()).toBe(initial);
+    for (const [index, [action, expected]] of steps.entries()) {
+      await act(viewport, action);
+      expect(hintOf(), `${tool}, step ${String(index + 1)}: ${action.join(' ')}`).toBe(expected);
+    }
+    manager.activate('sketch.select');
+    expect(manager.hint.get()).toBeNull();
+  }
+
+  it.each(scenarios.map((s) => [s[0], s] as const))('%s', async (_tool, scenario) => {
+    await run(scenario);
+  });
+
+  it.each(onTriangle.map((s) => [s[0], s] as const))('%s over curves', async (_tool, scenario) => {
+    await run(scenario, TRIANGLE);
+  });
+});

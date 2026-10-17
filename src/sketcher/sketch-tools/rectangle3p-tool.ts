@@ -92,6 +92,10 @@ export function createRectangle3pTool(sketches: SketchEditor): Tool {
     reset() {
       progress = null;
     },
+    hint() {
+      if (progress === null) return 'hint.rectangle3p.first';
+      return progress.kind === 'first' ? 'hint.rectangle3p.second' : 'hint.rectangle3p.height';
+    },
     inputFields() {
       if (progress === null) return XY_FIELDS;
       return progress.kind === 'first' ? POLAR_FIELDS : HEIGHT_FIELDS;

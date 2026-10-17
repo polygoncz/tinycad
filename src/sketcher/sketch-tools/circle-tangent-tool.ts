@@ -68,6 +68,13 @@ type CircleTangentStep =
 /** The tool of `count` tangents: 2 = sketch.circle2t, 3 = sketch.circle3t. */
 export function createCircleTangentTool(sketches: SketchEditor, count: 2 | 3): Tool {
   let picked: readonly PickedCurve[] = [];
+  /** The hint keys by the number of picked curves (M37); the last step of 2 tangents places. */
+  const tool = count === 2 ? 'circle2t' : 'circle3t';
+  const hints = [
+    `hint.${tool}.first`,
+    `hint.${tool}.second`,
+    count === 2 ? 'hint.circle2t.place' : 'hint.circle3t.third',
+  ];
   /** The session whose selection shows the picked curves. */
   let owner: SketchSession | null = null;
 
@@ -93,6 +100,9 @@ export function createCircleTangentTool(sketches: SketchEditor, count: 2 | 3): T
 
   return clickTool(sketches, {
     reset: forget,
+    hint() {
+      return hints[picked.length] ?? null;
+    },
     onMove(ctx, session, x, y) {
       const at = stepAt(ctx, session, x, y);
       if (at === null) return;

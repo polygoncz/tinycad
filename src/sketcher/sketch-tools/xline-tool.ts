@@ -63,6 +63,9 @@ export function createXLineTool(sketches: SketchEditor): Tool {
     reset() {
       first = null;
     },
+    hint() {
+      return first === null ? 'hint.xline.first' : 'hint.xline.second';
+    },
     inputFields() {
       return first === null ? XY_FIELDS : POLAR_FIELDS;
     },

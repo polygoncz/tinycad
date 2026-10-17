@@ -56,6 +56,9 @@ export function createCircle2pTool(sketches: SketchEditor): Tool {
     reset() {
       first = null;
     },
+    hint() {
+      return first === null ? 'hint.circle2p.first' : 'hint.circle2p.second';
+    },
     onMove(ctx, session, x, y, mods) {
       const mode = snapMode(sketches, mods);
       const target = snapAt(ctx, session, x, y, mode);

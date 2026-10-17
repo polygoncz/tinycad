@@ -42,12 +42,22 @@ type Circle3pStep =
       readonly equal: SketchEntityId | null;
     };
 
+/** The hint keys by the number of picked points (M37). */
+const CIRCLE3P_HINTS: readonly string[] = [
+  'hint.circle3p.first',
+  'hint.circle3p.second',
+  'hint.circle3p.third',
+];
+
 export function createCircle3pTool(sketches: SketchEditor): Tool {
   let picked: readonly SnapTarget[] = [];
 
   return clickTool(sketches, {
     reset() {
       picked = [];
+    },
+    hint() {
+      return CIRCLE3P_HINTS[picked.length] ?? null;
     },
     onMove(ctx, session, x, y, mods) {
       const mode = snapMode(sketches, mods);

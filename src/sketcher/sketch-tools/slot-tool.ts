@@ -114,6 +114,9 @@ export function createSlotTool(sketches: SketchEditor, kind: SlotKind): Tool {
     reset() {
       picked = [];
     },
+    hint() {
+      return slotHint(kind, picked.length);
+    },
     inputFields() {
       return fieldsOf(kind, picked.length);
     },
@@ -168,6 +171,18 @@ export function createSlotTool(sketches: SketchEditor, kind: SlotKind): Tool {
 
 /** Points of the axis before the width: 2 for a straight slot, centre, start and end for an arc slot. */
 const axisCount = (kind: SlotKind): number => (kind === 'arc' ? 3 : 2);
+
+/** The hint keys of the axis points by the kind (M37); the width is shared by all three. */
+const SLOT_HINTS: Readonly<Record<SlotKind, readonly string[]>> = {
+  centers: ['hint.slot.first', 'hint.slot.second'],
+  overall: ['hint.slotOverall.first', 'hint.slotOverall.second'],
+  arc: ['hint.slotArc.center', 'hint.slotArc.start', 'hint.slotArc.end'],
+};
+
+/** The hint of the step after `count` picked points (M37). */
+function slotHint(kind: SlotKind, count: number): string {
+  return SLOT_HINTS[kind][count] ?? 'hint.slot.width';
+}
 
 /** The fields of the step after `count` picked points (spec 12, M32, "Pole a kóty podle nástrojů"). */
 function fieldsOf(kind: SlotKind, count: number): readonly InputField[] {
