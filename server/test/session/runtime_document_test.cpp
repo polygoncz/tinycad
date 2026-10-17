@@ -1,12 +1,15 @@
 // RuntimeDocument (spec 14 "Sezení", "Změny dokumentu", "Idempotence", "Vlákna a zámky serveru";
-// decisions N35, N47, N54, N55, N58, N107): the edit lease, the steps of a change, durable and
-// in-memory idempotence, the STORAGE reload, rename through the document and the events.
+// decisions N47, N54, N55, N58, N107, N155): the edit lease, the steps of a change, durable and
+// in-memory idempotence, STORAGE (reverted, the reload only as the fallback), rename through the
+// document and the events.
 
 #include "tinycad/session/runtime_document.hpp"
 
 #include <gtest/gtest.h>
 
+#include "ops/testing.hpp"
 #include "session/runtime_testing.hpp"
+#include "tinycad/document/serialize.hpp"
 
 namespace tinycad::session {
 namespace {
@@ -316,35 +319,85 @@ TEST_F(RuntimeDocumentTest, AFailedStepIsNotRememberedAndRunsAgainOnRetry) {
   EXPECT_TRUE(retry.has_value());
 }
 
-// --- STORAGE (N35) ------------------------------------------------------------------------
+// --- STORAGE (N155) -----------------------------------------------------------------------
 
-TEST_F(RuntimeDocumentTest, AFailedWriteReloadsTheDocumentAndDropsTheTransaction) {
+/** The features and the rollback bar of a read model as JSON (for before/after comparisons). */
+Json studioOf(const ReadModel& model) {
+  Json features = Json::array();
+  for (const auto& feature : model.studio->features) features.push_back(document::featureJson(*feature));
+  return {{"features", features}, {"rollbackIndex", model.studio->rollbackIndex}};
+}
+
+TEST_F(RuntimeDocumentTest, AFailedDispatchIsRevertedWithoutAChange) {
   dispatch(addBox("a", 0), "op-1");
-  ASSERT_TRUE(keep(doc->begin(writer, "Drag", step("b1"), options)));
-  ASSERT_TRUE(keep(doc->apply(writer, setWidth("a", 20), step("a1"), options)));
-  const auto generationBefore = changedOf(*doc).back().generation;
+  const auto before = doc->readModel(writer, options);
+  ASSERT_TRUE(before.has_value());
+  const auto eventsBefore = eventsOf(*doc).size();
 
   fail->append = true;
-  EXPECT_EQ(reasonOf(doc->commit(writer, step("c1"), options)), ErrorReason::Storage);
+  EXPECT_EQ(reasonOf(doc->dispatch(writer, setWidth("a", 20), "", key("op-2"), options)),
+            ErrorReason::Storage);
   fail->append = false;
 
-  const auto changes = changedOf(*doc);
-  EXPECT_EQ(changes.back().generation, generationBefore + 1);
-  EXPECT_EQ(changes.back().bySessionId, "");
+  // The inverse brought the document back: no event, the same generation and read model.
+  EXPECT_EQ(eventsOf(*doc).size(), eventsBefore);
+  const auto after = doc->readModel(writer, options);
+  ASSERT_TRUE(after.has_value());
+  EXPECT_EQ(after->generation, before->generation);
+  EXPECT_EQ(after->lastSeq, 1);
+  EXPECT_EQ(studioOf(*after), studioOf(*before));
+  EXPECT_TRUE(after->session.canUndo);
   EXPECT_EQ(storedLog(id).size(), 1U);
-  EXPECT_EQ(storedParams(id, "a").at("width"), 10);
 
-  // The transaction is gone with the reload: the retried Commit is NoTransaction.
-  EXPECT_EQ(reasonOf(doc->commit(writer, step("c1"), options)), ErrorReason::NoTransaction);
-  auto model = doc->readModel(writer, options);
-  ASSERT_TRUE(model.has_value());
-  EXPECT_FALSE(model->session.transactionLabel.has_value());
-  EXPECT_EQ(model->lastSeq, 1);
-
-  // The document equals the file: the next change continues from it.
-  dispatch(setWidth("a", 30), "op-3");
+  // The next change continues from it.
+  dispatch(setWidth("a", 30), "op-2");
   EXPECT_EQ(storedLog(id).size(), 2U);
   EXPECT_EQ(storedLog(id)[1].at("inverse"), setWidth("a", 10));
+}
+
+/** A runtime document whose handlers know test.brokenInverse (its inverse always fails). */
+class RuntimeDocumentBrokenInverseTest : public RuntimeDocumentTest {
+ protected:
+  ops::OpHandlerRegistry brokenHandlers = [this] {
+    ops::OpHandlerRegistry handlers(registries.schemas);
+    handlers.add(std::make_shared<tinycad::testing::BrokenInverseHandler>());
+    return handlers;
+  }();
+  RuntimeDocument::Dependencies brokenDeps = [this] {
+    RuntimeDocument::Dependencies copy{deps.catalog,  deps.schemas,   brokenHandlers,
+                                       deps.builders, deps.now,       deps.steady,
+                                       deps.newKernel, deps.newSolver, deps.eventCapacity,
+                                       deps.verify};
+    return copy;
+  }();
+  std::unique_ptr<RuntimeDocument> broken = [this] {
+    auto opened = RuntimeDocument::open(id, brokenDeps);
+    EXPECT_TRUE(opened.has_value());
+    return opened ? std::move(*opened) : nullptr;
+  }();
+
+  void SetUp() override { ASSERT_TRUE(broken->acquireLease(writer.session)); }
+};
+
+TEST_F(RuntimeDocumentBrokenInverseTest, OnlyTheFallbackReloadIsAChange) {
+  ASSERT_TRUE(keep(broken->dispatch(writer, tinycad::testing::BrokenInverseHandler::op("Stored"),
+                                    "", key("op-1"), options)));
+  const auto generationBefore = changedOf(*broken).back().generation;
+
+  fail->append = true;
+  auto failed = broken->dispatch(writer, tinycad::testing::BrokenInverseHandler::op("Lost"), "",
+                                 key("op-2"), options);
+  fail->append = false;
+  EXPECT_EQ(reasonOf(failed), ErrorReason::Storage);
+
+  // Reloaded from the file: generation + 1 and `changed` without a session.
+  const auto changes = changedOf(*broken);
+  EXPECT_EQ(changes.back().generation, generationBefore + 1);
+  EXPECT_EQ(changes.back().bySessionId, "");
+  const auto model = broken->readModel(writer, options);
+  ASSERT_TRUE(model.has_value());
+  EXPECT_EQ(model->meta.name, "Stored");
+  EXPECT_EQ(model->lastSeq, 1);
 }
 
 // --- rename through the document (N37) ----------------------------------------------------

@@ -35,7 +35,7 @@ enum class ErrorReason {
   /**
    * Reserved: M41 ChangeErrorCode has no "unknown target" yet, so a handler refusing an unknown
    * feature comes back as InvalidOperation. With one writer per document (Q102) the client can
-   * only hit it after a STORAGE reload (N35); see the M45 plan.
+   * only hit it after a STORAGE reload (the fallback of N155); see the M45 plan.
    */
   UnknownTarget,
   ReadOnly,

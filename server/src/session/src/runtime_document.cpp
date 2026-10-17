@@ -176,12 +176,13 @@ struct RuntimeDocument::Impl {
   }
 
   /**
-   * A failed PersistentDocument call. Storage of a durable call that found the document intact
-   * means it was reloaded from the file (N35): that is a change of its own (generation + 1 and
-   * `changed` without a session, so every session refreshes), and the open transaction is gone.
+   * A failed PersistentDocument call. Storage normally leaves the document as it was (the inverse
+   * reverted it, a failed commit keeps the transaction open, N155), so nothing changed. Only the
+   * fallback reload (`reloaded`) is a change of its own: generation + 1 and `changed` without a
+   * session, so every session refreshes; the open transaction is gone then.
    */
-  SessionError failed(const storage::ChangeError& error, bool wasBroken) {
-    if (error.code == storage::ChangeErrorCode::Storage && !wasBroken) changed("");
+  SessionError failed(const storage::ChangeError& error) {
+    if (error.code == storage::ChangeErrorCode::Storage && error.reloaded) changed("");
     return fromChangeError(error);
   }
 
@@ -252,8 +253,8 @@ struct RuntimeDocument::Impl {
   /** Steps 5 and 6 of a durable call after the PersistentDocument call. */
   SessionResult<ChangeResult> finishDurable(
       const Caller& caller, core::Result<storage::Change, storage::ChangeError> change,
-      bool wasBroken, const ReadModelOptions& options) {
-    if (!change) return core::fail(failed(change.error(), wasBroken));
+      const ReadModelOptions& options) {
+    if (!change) return core::fail(failed(change.error()));
     if (!change->repeated) changed(caller.session.str());
     return answer(caller, change->entry, options);
   }
@@ -348,9 +349,7 @@ SessionResult<ChangeResult> RuntimeDocument::dispatch(const Caller& caller, cons
   if (auto done = impl_->repeatedDurable(caller, key, options)) return *done;
   auto solved = impl_->solved(op);
   if (!solved) return core::fail(std::move(solved.error()));
-  const bool wasBroken = impl_->doc->broken();
-  return impl_->finishDurable(caller, impl_->doc->dispatch(*solved, label, key), wasBroken,
-                              options);
+  return impl_->finishDurable(caller, impl_->doc->dispatch(*solved, label, key), options);
 }
 
 SessionResult<ChangeResult> RuntimeDocument::undo(const Caller& caller,
@@ -358,8 +357,7 @@ SessionResult<ChangeResult> RuntimeDocument::undo(const Caller& caller,
                                                   const ReadModelOptions& options) {
   const std::lock_guard lock(impl_->mutex);
   if (auto done = impl_->repeatedDurable(caller, key, options)) return *done;
-  const bool wasBroken = impl_->doc->broken();
-  return impl_->finishDurable(caller, impl_->doc->undo(key), wasBroken, options);
+  return impl_->finishDurable(caller, impl_->doc->undo(key), options);
 }
 
 SessionResult<ChangeResult> RuntimeDocument::redo(const Caller& caller,
@@ -367,8 +365,7 @@ SessionResult<ChangeResult> RuntimeDocument::redo(const Caller& caller,
                                                   const ReadModelOptions& options) {
   const std::lock_guard lock(impl_->mutex);
   if (auto done = impl_->repeatedDurable(caller, key, options)) return *done;
-  const bool wasBroken = impl_->doc->broken();
-  return impl_->finishDurable(caller, impl_->doc->redo(key), wasBroken, options);
+  return impl_->finishDurable(caller, impl_->doc->redo(key), options);
 }
 
 SessionResult<ChangeResult> RuntimeDocument::commit(const Caller& caller, const StepKey& step,
@@ -377,10 +374,9 @@ SessionResult<ChangeResult> RuntimeDocument::commit(const Caller& caller, const 
   if (auto done = impl_->repeatedDurable(caller, step.key, options)) return *done;
   // An empty commit left no entry to find; the session remembers its key instead (N107).
   if (auto done = impl_->repeatedStep(caller, step, options)) return *done;
-  const bool wasBroken = impl_->doc->broken();
   auto change = impl_->doc->commit(step.key);
   if (change && !change->entry) step.recent.remember(step.key);
-  return impl_->finishDurable(caller, std::move(change), wasBroken, options);
+  return impl_->finishDurable(caller, std::move(change), options);
 }
 
 // --- transaction steps (in-memory idempotence, N58) ---------------------------------------
@@ -453,9 +449,8 @@ SessionResult<storage::DocumentSummary> RuntimeDocument::rename(const std::strin
   const core::Json op{{"type", "document.rename"},
                       {"v", ops::opVersion("document.rename")},
                       {"name", trimmed}};
-  const bool wasBroken = impl_->doc->broken();
   auto change = impl_->doc->dispatch(op, "document.rename", key);
-  if (!change) return core::fail(impl_->failed(change.error(), wasBroken));
+  if (!change) return core::fail(impl_->failed(change.error()));
   if (!change->repeated) impl_->changed("");
   return summary();
 }

@@ -1,22 +1,28 @@
 #pragma once
 
 // A document open for changes with its log persisted (spec 05, spec 14 "Změny dokumentu" and
-// "Idempotence", decisions N35, N36): the in-memory document, operation log, dispatcher and undo of
-// ops (M40) over one DocumentFile. The core of the runtime document of M45: the session layer adds
-// sessions, the write lock, in-memory idempotence of transaction steps, regeneration and the read
-// model on top.
+// "Idempotence", decisions N36, N155): the in-memory document, operation log, dispatcher and undo
+// of ops (M40) over one DocumentFile. The core of the runtime document of M45: the session layer
+// adds sessions, the write lock, in-memory idempotence of transaction steps, regeneration and the
+// read model on top.
 //
 // Rules:
 // - "Saved = answered": dispatch, commit, undo and redo write their log entry to SQLite BEFORE
 //   they return. At most one entry per call.
+// - Write-ahead (N155): the document is the EntryWriter of its dispatcher, so an entry is written
+//   to the file BEFORE it is appended to the log in memory. A failed write → Storage with nothing
+//   appended: dispatch, undo and redo revert the document with the entry's inverse, commit leaves
+//   the transaction open (its logged steps applied, its transient steps gone) and a retried Commit
+//   writes it. Log, undo stacks and transaction are as before the call (`reloaded` = false).
+// - Fallback: when the inverse itself fails (a handler bug), the in-memory state is RELOADED from
+//   the file (`reloaded` = true, an open transaction is gone); when even the reload fails, the
+//   document is broken and every later call returns Storage.
 // - Durable idempotence: each of them takes an OperationKey. A key whose id is stored returns the
 //   stored entry without applying anything (repeated = true); the same id with another
 //   fingerprint → OperationIdReused.
-// - A failed write → Storage, and the in-memory state is RELOADED from the file (N35 ⚠, instead
-//   of applying the inverse): the log and the document then always match what is on disk. When
-//   even the reload fails, the document is broken and every later call returns Storage.
-// - A snapshot after every SNAPSHOT_EVERY-th entry (seq % 100 == 0, spec 05); a failed snapshot
-//   is not an error of the change (the entry is stored) and is only reported to stderr.
+// - A snapshot after every SNAPSHOT_EVERY-th entry (seq % 100 == 0, spec 05), once the entry is
+//   in the log; a failed snapshot is not an error of the change (the entry is stored) and is only
+//   reported to stderr.
 //
 // The ops types are forward-declared: their headers are those of M40 (tinycad/ops/*.hpp, designed
 // by the M40 implementer). The main session aligns the names at the start of M41.
@@ -82,7 +88,10 @@ enum class ChangeErrorCode {
   NothingToRedo,
   /** The same operation id with another fingerprint. */
   OperationIdReused,
-  /** Writing failed; the in-memory state was reloaded from the file (N35). */
+  /**
+   * Writing failed (or the document is broken). The document is as before the call, except with
+   * ChangeError::reloaded (N155).
+   */
   Storage,
 };
 
@@ -92,6 +101,12 @@ struct ChangeError {
   std::string path;
   /** Technical text; never compared. */
   std::string message;
+  /**
+   * Storage only: the inverse of the failed write failed too and the document was reloaded from
+   * its file (the fallback of N155); an open transaction is gone. False when the reload failed as
+   * well (then broken()).
+   */
+  bool reloaded = false;
 };
 
 struct Change {
@@ -101,9 +116,10 @@ struct Change {
   bool repeated = false;
 };
 
-// After a Storage error the document is reloaded from its file (N35): the whole runtime (document,
-// log, dispatcher, undo, transaction) is replaced, so references obtained earlier from document()
-// or log() are invalid and callers (the session layer, M45) must fetch them again.
+// After a Storage error with `reloaded` the document was reloaded from its file (N155 fallback):
+// the whole runtime (document, log, dispatcher, undo, transaction) is replaced, so references
+// obtained earlier from document() or log() are invalid and callers (the session layer, M45) must
+// fetch them again.
 class PersistentDocument {
  public:
   struct Dependencies {
@@ -135,7 +151,7 @@ class PersistentDocument {
   [[nodiscard]] bool canUndo() const;
   [[nodiscard]] bool canRedo() const;
   [[nodiscard]] bool inTransaction() const;
-  /** True after a failed reload (N35): every change returns Storage. */
+  /** True after a failed reload (N155 fallback): every change returns Storage. */
   [[nodiscard]] bool broken() const;
 
   /**

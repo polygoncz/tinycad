@@ -1,5 +1,6 @@
-// PersistentDocument (spec 14 "Změny dokumentu", decisions N35, N36): the document, log, dispatcher
-// and undo of ops over a SQLite file, every durable call written before it returns.
+// PersistentDocument (spec 14 "Změny dokumentu", decisions N36, N155): the document, log,
+// dispatcher and undo of ops over a SQLite file, every durable call written before it returns; a
+// failed write reverted by the inverse, the reload only as the fallback.
 
 #include "tinycad/storage/persistent_document.hpp"
 
@@ -31,11 +32,14 @@ class PersistentDocumentTest : public ::testing::Test {
     ASSERT_TRUE(catalog->create(testing::metaOf("d1"), testing::aSnapshotJson("d1", 0), std::nullopt));
   }
 
-  std::unique_ptr<PersistentDocument> open() {
+  std::unique_ptr<PersistentDocument> open() { return openWith(deps); }
+
+  /** d1 behind a FailingFile; `d` must outlive the document. */
+  std::unique_ptr<PersistentDocument> openWith(const PersistentDocument::Dependencies& d) {
     auto file = catalog->open(document::DocumentId("d1"));
     EXPECT_TRUE(file.has_value());
     auto doc = PersistentDocument::open(
-        std::make_unique<testing::FailingFile>(std::move(*file), fail), deps);
+        std::make_unique<testing::FailingFile>(std::move(*file), fail), d);
     EXPECT_TRUE(doc.has_value()) << (doc ? "" : doc.error().message);
     return doc ? std::move(*doc) : nullptr;
   }
@@ -49,13 +53,21 @@ class PersistentDocumentTest : public ::testing::Test {
   static std::string nameOfA(const PersistentDocument& doc) {
     return doc.document().feature(FeatureId("a"))->name;
   }
-};
 
-std::vector<Json> logJson(const PersistentDocument& doc) {
-  std::vector<Json> out;
-  for (const auto& entry : doc.log().entries()) out.push_back(ops::logEntryJson(entry));
-  return out;
-}
+  static std::vector<Json> logJson(const PersistentDocument& doc) {
+    std::vector<Json> out;
+    for (const auto& entry : doc.log().entries()) out.push_back(ops::logEntryJson(entry));
+    return out;
+  }
+
+  /** The log in memory equals the entries of the file (read through a second connection). */
+  void expectTheLogMatchesTheFile(const PersistentDocument& doc) {
+    std::vector<Json> stored;
+    const StoredDocument file = catalog->open(document::DocumentId("d1")).value()->load().value();
+    for (const auto& entry : file.entries) stored.push_back(entry.entry);
+    EXPECT_EQ(stored, logJson(doc));
+  }
+};
 
 ChangeErrorCode codeOf(const auto& result) {
   EXPECT_FALSE(result.has_value());
@@ -244,58 +256,129 @@ TEST_F(PersistentDocumentTest, AFailedSnapshotIsNotAnErrorOfTheChange) {
   EXPECT_EQ(testing::integerColumn(path(), "SELECT at_seq FROM snapshots"), std::vector<std::int64_t>{0});
 }
 
-TEST_F(PersistentDocumentTest, AFailedWriteIsStorageAndTheDocumentIsReloadedFromTheFile) {
+TEST_F(PersistentDocumentTest, AFailedWriteIsStorageAndTheDocumentIsRevertedByTheInverse) {
   auto doc = open();
   ASSERT_TRUE(doc->dispatch(testing::renameOp("a", "B"), "x", key(1)));
+  const std::vector<Json> logBefore = logJson(*doc);
   fail->append = true;
-  EXPECT_EQ(codeOf(doc->dispatch(testing::renameOp("a", "Lost"), "x", key(2))),
-            ChangeErrorCode::Storage);
-  // The document equals the file: the failed change is gone, the log is the stored one.
+  auto failed = doc->dispatch(testing::renameOp("a", "Lost"), "x", key(2));
+  EXPECT_EQ(codeOf(failed), ChangeErrorCode::Storage);
+  EXPECT_FALSE(failed.error().reloaded);
+  // The inverse brought the document back; the log and undo never saw the entry (N155).
   EXPECT_EQ(nameOfA(*doc), "B");
-  EXPECT_EQ(doc->log().lastSeq(), 1);
+  EXPECT_EQ(logJson(*doc), logBefore);
   EXPECT_FALSE(doc->broken());
   EXPECT_TRUE(doc->canUndo());
+  EXPECT_FALSE(doc->canRedo());
+  expectTheLogMatchesTheFile(*doc);
 
-  // The same key goes through once writing works again.
+  // The same key goes through once writing works again, with the next seq.
   fail->append = false;
   auto retried = doc->dispatch(testing::renameOp("a", "Lost"), "x", key(2));
   ASSERT_TRUE(retried.has_value());
   EXPECT_FALSE(retried->repeated);
+  EXPECT_EQ((*retried->entry)["seq"], 2);
   EXPECT_EQ(nameOfA(*doc), "Lost");
   EXPECT_EQ(storedSeqs(), (std::vector<std::int64_t>{1, 2}));
+  expectTheLogMatchesTheFile(*doc);
 }
 
-TEST_F(PersistentDocumentTest, AFailedCommitDropsTheTransaction) {
+TEST_F(PersistentDocumentTest, AFailedCommitKeepsTheTransactionOpen) {
   auto doc = open();
-  ASSERT_TRUE(doc->begin("Drag"));
-  ASSERT_TRUE(doc->apply(testing::renameOp("a", "Lost")));
+  ASSERT_TRUE(doc->begin("Edit"));
+  ASSERT_TRUE(doc->apply(testing::renameOp("a", "Kept")));
+  ASSERT_TRUE(doc->applyTransient(testing::suppressOp("a", true)));
+  ASSERT_TRUE(doc->apply(testing::setParamsOp("a", {{"size", 7}})));
   fail->append = true;
-  EXPECT_EQ(codeOf(doc->commit(key(1))), ChangeErrorCode::Storage);
+  auto failed = doc->commit(key(1));
+  EXPECT_EQ(codeOf(failed), ChangeErrorCode::Storage);
+  EXPECT_FALSE(failed.error().reloaded);
+  // Open, both steps applied, the transient step gone, nothing stored.
+  EXPECT_TRUE(doc->inTransaction());
+  EXPECT_EQ(nameOfA(*doc), "Kept");
+  EXPECT_EQ(*doc->document().feature(FeatureId("a"))->params, (Json{{"size", 7}}));
+  EXPECT_FALSE(doc->document().feature(FeatureId("a"))->suppressed);
+  EXPECT_EQ(doc->log().lastSeq(), 0);
+  expectTheLogMatchesTheFile(*doc);
+
+  // A retried Commit (same key) writes one entry with both steps (spec 14).
   fail->append = false;
+  auto retried = doc->commit(key(1));
+  ASSERT_TRUE(retried.has_value());
+  ASSERT_TRUE(retried->entry.has_value());
+  EXPECT_EQ((*retried->entry)["op"]["type"], "batch");
+  EXPECT_EQ((*retried->entry)["op"]["ops"].size(), 2U);
   EXPECT_FALSE(doc->inTransaction());
-  EXPECT_EQ(nameOfA(*doc), "A");
-  // A repeated Commit after STORAGE finds no transaction (spec 14).
-  EXPECT_EQ(codeOf(doc->commit(key(1))), ChangeErrorCode::NoTransaction);
+  EXPECT_EQ(storedSeqs(), std::vector<std::int64_t>{1});
+  EXPECT_TRUE(doc->canUndo());
+  expectTheLogMatchesTheFile(*doc);
 }
 
-TEST_F(PersistentDocumentTest, AFailedUndoIsReloadedToo) {
+TEST_F(PersistentDocumentTest, AFailedUndoKeepsTheStacks) {
   auto doc = open();
   ASSERT_TRUE(doc->dispatch(testing::renameOp("a", "B"), "x", key(1)));
   fail->append = true;
-  EXPECT_EQ(codeOf(doc->undo(key(2))), ChangeErrorCode::Storage);
+  auto failed = doc->undo(key(2));
+  EXPECT_EQ(codeOf(failed), ChangeErrorCode::Storage);
+  EXPECT_FALSE(failed.error().reloaded);
   EXPECT_EQ(nameOfA(*doc), "B");
   EXPECT_TRUE(doc->canUndo());
   EXPECT_FALSE(doc->canRedo());
+  expectTheLogMatchesTheFile(*doc);
+  fail->append = false;
+  ASSERT_TRUE(doc->undo(key(2)));
+  EXPECT_EQ(nameOfA(*doc), "A");
+  EXPECT_TRUE(doc->canRedo());
+  fail->append = true;
+  EXPECT_EQ(codeOf(doc->redo(key(3))), ChangeErrorCode::Storage);
+  EXPECT_EQ(nameOfA(*doc), "A");
+  EXPECT_TRUE(doc->canRedo());
+  expectTheLogMatchesTheFile(*doc);
 }
 
-TEST_F(PersistentDocumentTest, WhenTheReloadFailsTooTheDocumentIsBroken) {
+/** A document whose handlers know test.brokenInverse: its inverse always fails (a handler bug). */
+class PersistentDocumentBrokenInverseTest : public PersistentDocumentTest {
+ protected:
+  ops::OpHandlerRegistry handlers = [] {
+    ops::OpHandlerRegistry registry(testing::serverSchemas());
+    registry.add(std::make_shared<testing::BrokenInverseHandler>());
+    return registry;
+  }();
+  PersistentDocument::Dependencies brokenDeps{testing::serverSchemas(), handlers, clock.clock(),
+                                              true};
+
+  std::unique_ptr<PersistentDocument> open() { return openWith(brokenDeps); }
+};
+
+TEST_F(PersistentDocumentBrokenInverseTest, WhenTheInverseFailsTheDocumentIsReloaded) {
+  auto doc = open();
+  ASSERT_TRUE(doc->dispatch(testing::BrokenInverseHandler::op("Stored"), "x", key(1)));
+  fail->append = true;
+  auto failed = doc->dispatch(testing::BrokenInverseHandler::op("Lost"), "x", key(2));
+  EXPECT_EQ(codeOf(failed), ChangeErrorCode::Storage);
+  EXPECT_TRUE(failed.error().reloaded);
+  // The file is the state again; no transaction survives a reload.
+  EXPECT_EQ(doc->document().meta().name, "Stored");
+  EXPECT_EQ(doc->log().lastSeq(), 1);
+  EXPECT_FALSE(doc->inTransaction());
+  EXPECT_FALSE(doc->broken());
+  EXPECT_TRUE(doc->canUndo());
+  expectTheLogMatchesTheFile(*doc);
+  fail->append = false;
+  ASSERT_TRUE(doc->dispatch(testing::BrokenInverseHandler::op("Lost"), "x", key(2)));
+  EXPECT_EQ(doc->document().meta().name, "Lost");
+  expectTheLogMatchesTheFile(*doc);
+}
+
+TEST_F(PersistentDocumentBrokenInverseTest, WhenTheReloadFailsTooTheDocumentIsBroken) {
   auto doc = open();
   fail->append = true;
   fail->load = true;
   ::testing::internal::CaptureStderr();
-  EXPECT_EQ(codeOf(doc->dispatch(testing::renameOp("a", "Lost"), "x", key(1))),
-            ChangeErrorCode::Storage);
+  auto failed = doc->dispatch(testing::BrokenInverseHandler::op("Lost"), "x", key(1));
   (void)::testing::internal::GetCapturedStderr();
+  EXPECT_EQ(codeOf(failed), ChangeErrorCode::Storage);
+  EXPECT_FALSE(failed.error().reloaded);
   EXPECT_TRUE(doc->broken());
   fail->append = false;
   fail->load = false;
@@ -354,10 +437,7 @@ TEST_F(PersistentDocumentTest, TheLogInMemoryMatchesTheFile) {
   ASSERT_TRUE(doc->apply(testing::suppressOp("a", true)));
   ASSERT_TRUE(doc->commit(key(2)));
   ASSERT_TRUE(doc->undo(key(3)));
-  std::vector<Json> stored;
-  const StoredDocument file = catalog->open(document::DocumentId("d1")).value()->load().value();
-  for (const auto& entry : file.entries) stored.push_back(entry.entry);
-  EXPECT_EQ(stored, logJson(*doc));
+  expectTheLogMatchesTheFile(*doc);
 }
 
 }  // namespace

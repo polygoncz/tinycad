@@ -125,9 +125,10 @@ class RuntimeDocument {
   //
   // Each returns the log entry (nullopt when none) and the read model of the caller after the
   // change (ReadModelOptions of the request). Errors leave the document, the transaction, the
-  // log, the generation and the events unchanged (except Storage, N35: the document was reloaded
-  // from the file, generation + 1 and `changed`, an open transaction is gone – a retried Commit
-  // then answers NoTransaction).
+  // log, the generation and the events unchanged. Storage too (N155): a failed write is reverted
+  // by the inverse, and a failed Commit keeps the transaction open, so a retried Commit writes it.
+  // Only the fallback reload after a failing inverse (ChangeError::reloaded) is generation + 1 and
+  // `changed`, and an open transaction is gone then.
 
   /** OperationDispatcher::dispatch; label '' = the op type. Durable idempotence (N34). */
   SessionResult<ChangeResult> dispatch(const Caller& caller, const core::Json& op,

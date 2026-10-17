@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include "failing_file.hpp"
 #include "ops/testing.hpp"
 #include "storage/testing.hpp"
 #include "tinycad/storage/document_service.hpp"
@@ -76,6 +77,33 @@ TEST_F(IdempotenceTest, CommitTwiceWithTheSameKeyIsOneEntryEvenWithoutATransacti
   ASSERT_TRUE(second.has_value());
   EXPECT_TRUE(second->repeated);
   EXPECT_EQ(second->entry, first->entry);
+  EXPECT_EQ(storedSeqs(), std::vector<std::int64_t>{1});
+}
+
+TEST_F(IdempotenceTest, AFailedWriteDoesNotUseUpTheKeyAndTheRetryIsOneEntry) {
+  auto fail = std::make_shared<testing::FailSwitches>();
+  auto doc = PersistentDocument::open(
+                 std::make_unique<testing::FailingFile>(
+                     catalog->open(document::DocumentId("d1")).value(), fail),
+                 deps)
+                 .value();
+  ASSERT_TRUE(doc->begin("T"));
+  ASSERT_TRUE(doc->apply(testing::renameOp("a", "B")));
+  const OperationKey key{"op-1", "fp-1"};
+  fail->append = true;
+  ASSERT_FALSE(doc->commit(key).has_value());
+  // Nothing is stored under the key: the retry is a new attempt, not a repeat (N155).
+  auto found = doc->lookup(key);
+  ASSERT_TRUE(found.has_value());
+  EXPECT_FALSE(found->has_value());
+  fail->append = false;
+  auto retried = doc->commit(key);
+  ASSERT_TRUE(retried.has_value());
+  EXPECT_FALSE(retried->repeated);
+  auto repeated = doc->commit(key);
+  ASSERT_TRUE(repeated.has_value());
+  EXPECT_TRUE(repeated->repeated);
+  EXPECT_EQ(repeated->entry, retried->entry);
   EXPECT_EQ(storedSeqs(), std::vector<std::int64_t>{1});
 }
 
