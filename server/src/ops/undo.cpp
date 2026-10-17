@@ -74,14 +74,15 @@ bool UndoManager::canRedo() const { return !stacks_.redo.empty() && !dispatcher_
 
 UndoStacks UndoManager::stacks() const { return stacks_; }
 
-// Stacks change only in onAppended, so a failed dispatch (nothing appended) changes nothing. The
+// Stacks change only in onAppended, so a failed dispatch (nothing appended, a failed write
+// included: N155) changes nothing. The
 // dispatcher writes only entries that fit the stacks: a mismatch here is a bug.
 void UndoManager::onAppended(const LogEntry& entry) {
   const auto error = step(stacks_, entry);
   TINYCAD_ASSERT(!error, error.value_or(""));
 }
 
-core::Result<LogEntry, OperationLoadError> UndoManager::undo() {
+core::Result<LogEntry, DispatchError> UndoManager::undo() {
   TINYCAD_ASSERT(canUndo(), "undo: nothing to undo");
   const std::int64_t target = stacks_.undo.back();
   const LogEntry* entry = log_.entry(target);
@@ -91,7 +92,7 @@ core::Result<LogEntry, OperationLoadError> UndoManager::undo() {
   return dispatcher_.dispatch(inverse, {.label = entry->label, .kind = EntryKind::Undo, .target = target});
 }
 
-core::Result<LogEntry, OperationLoadError> UndoManager::redo() {
+core::Result<LogEntry, DispatchError> UndoManager::redo() {
   TINYCAD_ASSERT(canRedo(), "redo: nothing to redo");
   const std::int64_t target = stacks_.redo.back();
   const LogEntry* entry = log_.entry(target);

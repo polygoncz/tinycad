@@ -122,6 +122,37 @@ TEST(Undo, AFailedUndoChangesNeitherTheLogNorTheStacks) {
   EXPECT_EQ(doc->studio(), studio);
 }
 
+TEST(Undo, AFailedWriteOfUndoOrRedoKeepsTheStacksAndTheDocument) {
+  OpsSession s(twoFeatures());
+  FakeWriter writer;
+  s.dispatcher.setWriter(&writer);
+  ASSERT_TRUE(s.dispatcher.dispatch(renameOp("a", "X")));
+  ASSERT_TRUE(s.dispatcher.dispatch(renameOp("a", "Y")));
+  ASSERT_TRUE(s.undo.undo());
+  const auto stacks = s.undo.stacks();
+  const Json before = dataOf(*s.doc);
+
+  writer.failing = true;
+  const auto undone = s.undo.undo();
+  ASSERT_FALSE(undone.has_value());
+  EXPECT_EQ(undone.error().kind, ops::DispatchError::Kind::WriteFailed);
+  const auto redone = s.undo.redo();
+  ASSERT_FALSE(redone.has_value());
+  EXPECT_EQ(redone.error().kind, ops::DispatchError::Kind::WriteFailed);
+  EXPECT_EQ(s.undo.stacks(), stacks);
+  EXPECT_EQ(s.log.lastSeq(), 3);
+  EXPECT_EQ(dataOf(*s.doc), before);
+
+  // Once writing works, both go through.
+  writer.failing = false;
+  ASSERT_TRUE(s.undo.redo());
+  EXPECT_EQ(nameOf(*s.doc, "a"), "Y");
+  ASSERT_TRUE(s.undo.undo());
+  EXPECT_EQ(nameOf(*s.doc, "a"), "X");
+  EXPECT_EQ(s.log.lastSeq(), 5);
+  s.dispatcher.setWriter(nullptr);
+}
+
 TEST(UndoDocumentRename, StaysOutOfUndo) {
   OpsSession s(twoFeatures());
   ASSERT_TRUE(s.dispatcher.dispatch(renameOp("a", "X")));

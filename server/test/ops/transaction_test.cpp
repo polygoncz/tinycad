@@ -34,7 +34,7 @@ TEST(TransactionCommit, Compresses50SetParamsOfOneFeatureIntoOneEntry) {
   OpsSession s(twoFeatures());
   auto tx = s.dispatcher.begin("Drag");
   for (int i = 1; i <= 50; ++i) ASSERT_TRUE(tx->apply(setParams("a", i)));
-  const auto entry = tx->commit();
+  const auto entry = tx->commit().value();
   ASSERT_TRUE(entry.has_value());
   EXPECT_EQ(s.log.lastSeq(), 1);
   EXPECT_EQ(entry->kind, ops::EntryKind::Do);
@@ -49,7 +49,7 @@ TEST(TransactionCommit, MakesABatchOfAddAndMergedSetParams) {
   const auto c = aFeature({.id = "c", .params = Json{{"size", 0}}});
   ASSERT_TRUE(tx->apply(addOp(*c, 2)));
   for (int i = 1; i <= 3; ++i) ASSERT_TRUE(tx->apply(setParams("c", i)));
-  const auto entry = tx->commit();
+  const auto entry = tx->commit().value();
   ASSERT_TRUE(entry.has_value());
   EXPECT_EQ(entry->op, batchOp(Json::array({addOp(*c, 2), setParams("c", 3)})));
   EXPECT_EQ(entry->inverse.at("ops").at(0), setParams("c", 0));
@@ -62,14 +62,14 @@ TEST(TransactionCommit, DoesNotMergeNonAdjacentOps) {
   ASSERT_TRUE(tx->apply(setParams("a", 1)));
   ASSERT_TRUE(tx->apply(setParams("b", 1)));
   ASSERT_TRUE(tx->apply(setParams("a", 2)));
-  const auto entry = tx->commit();
+  const auto entry = tx->commit().value();
   ASSERT_TRUE(entry.has_value());
   EXPECT_EQ(entry->op.at("ops").size(), 3U);
 }
 
 TEST(TransactionCommit, AnEmptyTransactionReturnsNulloptAndWritesNothing) {
   OpsSession s(twoFeatures());
-  EXPECT_FALSE(s.dispatcher.begin("x")->commit().has_value());
+  EXPECT_FALSE(s.dispatcher.begin("x")->commit().value().has_value());
   EXPECT_EQ(s.log.lastSeq(), 0);
   EXPECT_FALSE(s.dispatcher.inTransaction());
 }
@@ -94,21 +94,21 @@ TEST(TransactionLifecycle, AFailingApplyLeavesTheTransactionOpenAndUnchanged) {
   EXPECT_FALSE(tx->apply(setParams("zzz", 1)).has_value());
   EXPECT_EQ(s.doc->studio(), studio);
   EXPECT_TRUE(s.dispatcher.inTransaction());
-  EXPECT_EQ(tx->commit()->op, setParams("a", 1));
+  EXPECT_EQ(tx->commit().value()->op, setParams("a", 1));
 }
 
 TEST(TransactionLifecycle, EveryCallAfterTheEndThrows) {
   OpsSession s(twoFeatures());
   auto tx = s.dispatcher.begin("x");
-  tx->commit();
+  tx->commit().value();
   EXPECT_TRUE(tx->ended());
   EXPECT_THROW((void)tx->apply(setParams("a", 1)), core::AssertionError);
   EXPECT_THROW((void)tx->applyTransient(rollbackOp(1)), core::AssertionError);
-  EXPECT_THROW((void)tx->commit(), core::AssertionError);
+  EXPECT_THROW((void)tx->commit().value(), core::AssertionError);
   EXPECT_THROW(tx->abort(), core::AssertionError);
   auto tx2 = s.dispatcher.begin("y");
   tx2->abort();
-  EXPECT_THROW((void)tx2->commit(), core::AssertionError);
+  EXPECT_THROW((void)tx2->commit().value(), core::AssertionError);
 }
 
 TEST(TransactionLifecycle, DestroyingAnOpenTransactionAbortsIt) {
@@ -129,7 +129,7 @@ TEST(TransactionTransient, CommitRevertsTheTransientStepAndWritesOnlyTheLoggedOn
   ASSERT_TRUE(tx->applyTransient(rollbackOp(1)));
   EXPECT_EQ(s.doc->studio()->rollbackIndex, 1);
   for (int i = 1; i <= 3; ++i) ASSERT_TRUE(tx->apply(setParams("a", i)));
-  const auto entry = tx->commit();
+  const auto entry = tx->commit().value();
   ASSERT_TRUE(entry.has_value());
   EXPECT_EQ(s.log.lastSeq(), 1);
   EXPECT_EQ(entry->op, setParams("a", 3));
@@ -155,7 +155,7 @@ TEST(TransactionTransient, OnlyTransientStepsWriteNothing) {
   auto tx = s.dispatcher.begin("Edit");
   ASSERT_TRUE(tx->applyTransient(rollbackOp(1)));
   ASSERT_TRUE(tx->applyTransient(rollbackOp(0)));
-  EXPECT_FALSE(tx->commit().has_value());
+  EXPECT_FALSE(tx->commit().value().has_value());
   EXPECT_EQ(s.log.lastSeq(), 0);
   EXPECT_EQ(dataOf(*s.doc), before);
 }
@@ -168,7 +168,7 @@ TEST(TransactionTransient, AFailingHandlerLeavesTheTransactionOpenAndUnchanged) 
   EXPECT_TRUE(s.dispatcher.inTransaction());
   EXPECT_EQ(dataOf(*s.doc), before);
   ASSERT_TRUE(tx->apply(setParams("a", 1)));
-  EXPECT_EQ(tx->commit()->op, setParams("a", 1));
+  EXPECT_EQ(tx->commit().value()->op, setParams("a", 1));
   EXPECT_EQ(s.doc->studio()->rollbackIndex, 2);
 }
 
@@ -177,10 +177,79 @@ TEST(TransactionTransient, ReplayingTheLogAfterCommitGivesTheLiveDocument) {
   auto tx = s.dispatcher.begin("Edit");
   ASSERT_TRUE(tx->applyTransient(rollbackOp(0)));
   for (int i = 1; i <= 3; ++i) ASSERT_TRUE(tx->apply(setParams("b", i)));
-  tx->commit();
+  tx->commit().value();
   OpsSession replayed(twoFeatures());
   ASSERT_TRUE(ops::replayLog(*replayed.doc, s.handlers, s.log.entries()));
   EXPECT_EQ(dataOf(*replayed.doc), dataOf(*s.doc));
+}
+
+// --- a failed write of the commit (N155) -------------------------------------------------------
+
+TEST(TransactionCommitWriteFailed, KeepsTheTransactionOpenWithItsLoggedSteps) {
+  OpsSession s(twoFeatures());
+  FakeWriter writer;
+  s.dispatcher.setWriter(&writer);
+  auto tx = s.dispatcher.begin("Edit");
+  ASSERT_TRUE(tx->apply(setParams("a", 1)));
+  ASSERT_TRUE(tx->applyTransient(rollbackOp(1)));
+  ASSERT_TRUE(tx->apply(setParams("b", 2)));
+  writer.failing = true;
+  const auto failed = tx->commit();
+  ASSERT_FALSE(failed.has_value());
+  EXPECT_TRUE(failed.error().reverted);
+  EXPECT_FALSE(failed.error().message.empty());
+  // Open, the logged steps applied, the transient one reverted, nothing in the log.
+  EXPECT_FALSE(tx->ended());
+  EXPECT_TRUE(s.dispatcher.inTransaction());
+  EXPECT_EQ(*s.doc->feature(FeatureId("a"))->params, (Json{{"size", 1}}));
+  EXPECT_EQ(*s.doc->feature(FeatureId("b"))->params, (Json{{"size", 2}}));
+  EXPECT_EQ(s.doc->studio()->rollbackIndex, 2);
+  EXPECT_EQ(s.log.lastSeq(), 0);
+  EXPECT_FALSE(s.undo.canUndo());
+
+  // The next commit with a working writer writes one entry with both steps.
+  writer.failing = false;
+  const auto entry = tx->commit().value();
+  ASSERT_TRUE(entry.has_value());
+  EXPECT_TRUE(tx->ended());
+  EXPECT_EQ(s.log.lastSeq(), 1);
+  EXPECT_EQ(entry->op, batchOp(Json::array({setParams("a", 1), setParams("b", 2)})));
+  EXPECT_EQ(entry->inverse, batchOp(Json::array({setParams("b", 0), setParams("a", 0)})));
+  ASSERT_EQ(writer.written.size(), 1U);
+  EXPECT_EQ(writer.written[0].seq, 1);
+  s.dispatcher.setWriter(nullptr);
+}
+
+TEST(TransactionCommitWriteFailed, AbortAfterwardsRevertsTheLoggedSteps) {
+  OpsSession s(twoFeatures());
+  const Json before = dataOf(*s.doc);
+  FakeWriter writer;
+  writer.failing = true;
+  s.dispatcher.setWriter(&writer);
+  auto tx = s.dispatcher.begin("Edit");
+  ASSERT_TRUE(tx->apply(setParams("a", 1)));
+  ASSERT_TRUE(tx->applyTransient(rollbackOp(0)));
+  ASSERT_FALSE(tx->commit().has_value());
+  tx->abort();
+  EXPECT_EQ(dataOf(*s.doc), before);
+  EXPECT_FALSE(s.dispatcher.inTransaction());
+  EXPECT_EQ(s.log.lastSeq(), 0);
+  s.dispatcher.setWriter(nullptr);
+}
+
+TEST(TransactionCommitWriteFailed, AnEmptyTransactionDoesNotCallTheWriter) {
+  OpsSession s(twoFeatures());
+  FakeWriter writer;
+  writer.failing = true;
+  s.dispatcher.setWriter(&writer);
+  auto tx = s.dispatcher.begin("Edit");
+  ASSERT_TRUE(tx->applyTransient(rollbackOp(1)));
+  const auto committed = tx->commit();
+  ASSERT_TRUE(committed.has_value());
+  EXPECT_FALSE(committed->has_value());
+  EXPECT_EQ(writer.calls, 0);
+  EXPECT_TRUE(tx->ended());
+  s.dispatcher.setWriter(nullptr);
 }
 
 // --- merging on apply (ADR 0025) --------------------------------------------------------------
@@ -272,7 +341,7 @@ TEST(TransactionMerging, CommitStillMergesLoggedStepsAroundATransientOne) {
   ASSERT_TRUE(tx->apply(RecordingHandler::set("a", 1)));
   ASSERT_TRUE(tx->applyTransient(RecordingHandler::set("t", 5)));
   ASSERT_TRUE(tx->apply(RecordingHandler::set("a", 2)));
-  const auto entry = tx->commit();
+  const auto entry = tx->commit().value();
   ASSERT_TRUE(entry.has_value());
   EXPECT_EQ(entry->op, RecordingHandler::set("a", 2));
   EXPECT_EQ(entry->inverse, RecordingHandler::set("a", 0));
