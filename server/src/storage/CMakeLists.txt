@@ -14,7 +14,6 @@ add_library(tinycad_storage STATIC
   src/snapshot.cpp
   src/load.cpp
   src/tinycad_file.cpp
-  src/trim.cpp
   src/persistent_document.cpp
   src/document_service.cpp)
 target_include_directories(tinycad_storage

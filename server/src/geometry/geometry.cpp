@@ -3,6 +3,7 @@
 #include <Standard_Failure.hxx>
 
 #include <exception>
+#include <new>
 #include <string>
 
 #include "algorithms.hpp"
@@ -28,10 +29,16 @@ namespace {
 /**
  * Called from a catch (...): the current exception as the error of a Result. A Failure keeps
  * its code; an OCCT exception or anything else is 'internal' (as toKernelError of
- * src/kernel-occt/occt.ts).
+ * src/kernel-occt/occt.ts). std::bad_alloc and core::AssertionError are rethrown: running out
+ * of memory is not a geometry error and a bug is not an expected failure (N108, N114; as
+ * currentError of the kernel).
  */
 GeometryError currentError(const std::string& call) {
   try {
+    throw;
+  } catch (const std::bad_alloc&) {
+    throw;
+  } catch (const core::AssertionError&) {
     throw;
   } catch (const detail::Failure& e) {
     return {e.code(), e.what()};

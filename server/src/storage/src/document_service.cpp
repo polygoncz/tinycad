@@ -3,9 +3,9 @@
 #include <utility>
 
 #include "snapshot.hpp"
+#include "tinycad/core/text.hpp"
 #include "tinycad/ops/log.hpp"
 #include "tinycad_file.hpp"
-#include "trim.hpp"
 
 namespace tinycad::storage {
 
@@ -94,7 +94,7 @@ ServiceResult<std::vector<DocumentSummary>> DocumentService::list() {
 
 ServiceResult<DocumentSummary> DocumentService::create(const std::string& name,
                                                        const OperationKey& key) {
-  const std::string trimmed = trimName(name);
+  const std::string trimmed = core::trimJs(name);
   if (trimmed.empty()) return core::fail(serviceError(ServiceErrorCode::InvalidName, "empty name"));
   if (auto before = createdBefore(deps_.catalog, key)) return *before;
 
@@ -108,7 +108,7 @@ ServiceResult<DocumentSummary> DocumentService::create(const std::string& name,
 ServiceResult<DocumentSummary> DocumentService::rename(const DocumentId& id,
                                                        const std::string& name,
                                                        const OperationKey& key) {
-  const std::string trimmed = trimName(name);
+  const std::string trimmed = core::trimJs(name);
   if (trimmed.empty()) return core::fail(serviceError(ServiceErrorCode::InvalidName, "empty name"));
 
   auto file = deps_.catalog.open(id);

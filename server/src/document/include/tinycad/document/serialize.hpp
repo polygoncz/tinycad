@@ -56,6 +56,21 @@ DocumentData toData(const DocumentReader& doc);
 Json documentDataJson(const DocumentData& data);
 
 /**
+ * The JSON of one feature (FeatureInstance of TS): the features of documentDataJson, the feature
+ * of a feature.add operation. Without params (null) the params are {}.
+ */
+Json featureJson(const FeatureInstance& f);
+
+/**
+ * One feature from outside, as fromData reads each of `studio.features`: checks the shape (id
+ * without '/' and other than 'origin', type, typeVersion a whole number >= 1 that fits an int,
+ * name, params a plain JSON object, suppressed) and migrates known types to the current schema
+ * version (migrateFeatureData). Every problem, paths relative to the feature ('id', 'params').
+ */
+core::Result<FeaturePtr, DocumentLoadError> readFeature(const Json& raw,
+                                                        const FeatureSchemaRegistryReader& schemas);
+
+/**
  * Loads data from outside (persistence, import): checks the shape and the invariants, reports
  * EVERY problem with its path, migrates known features to the current schema version, keeps
  * unknown feature types unchanged (fromData in TS).

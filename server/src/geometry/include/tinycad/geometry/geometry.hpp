@@ -25,7 +25,7 @@ enum class ErrorCode {
   InvalidInput,
   /** A valid input OCCT cannot process (no fillet of that radius, an impossible offset). */
   OperationFailed,
-  /** Anything unexpected: an OCCT exception, a bug. */
+  /** Anything unexpected: an OCCT exception (a core::AssertionError propagates, N114). */
   Internal,
 };
 

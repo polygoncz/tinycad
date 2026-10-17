@@ -40,6 +40,7 @@ add_subdirectory(src/app)
 add_subdirectory(src/tools)
 
 add_subdirectory(test/support)
+add_subdirectory(test/core)
 add_subdirectory(test/document)
 add_subdirectory(test/features)
 add_subdirectory(test/ops)

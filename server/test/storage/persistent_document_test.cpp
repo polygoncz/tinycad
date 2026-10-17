@@ -324,6 +324,29 @@ TEST_F(PersistentDocumentTest, OpenReportsBrokenDataAndStorage) {
   EXPECT_EQ(failing.error().kind, LoadError::Kind::Storage);
 }
 
+TEST_F(PersistentDocumentTest, OpenReportsACorruptUndoTargetAsAnEntryError) {
+  {
+    auto doc = open();
+    ASSERT_TRUE(doc->dispatch(testing::renameOp("a", "X"), "x", key(1)));
+    ASSERT_TRUE(doc->dispatch(testing::renameOp("a", "Y"), "y", key(2)));
+  }
+  {
+    // An undo of entry 1 while entry 2 is the top of the undo stack (N104).
+    auto file = catalog->open(document::DocumentId("d1")).value();
+    Json undo = testing::anEntryJson(3, testing::renameOp("a", "A"));
+    undo["kind"] = "undo";
+    undo["target"] = 1;
+    const StoredEntry broken{3, std::nullopt, undo};
+    ASSERT_TRUE(file->appendEntries(std::span(&broken, 1)));
+  }
+  auto doc = PersistentDocument::open(catalog->open(document::DocumentId("d1")).value(), deps);
+  ASSERT_FALSE(doc.has_value());
+  EXPECT_EQ(doc.error().kind, LoadError::Kind::Entry);
+  EXPECT_EQ(doc.error().seq, 3);
+  ASSERT_EQ(doc.error().issues.size(), 1U);
+  EXPECT_EQ(doc.error().issues[0].path, "target");
+}
+
 TEST_F(PersistentDocumentTest, TheLogInMemoryMatchesTheFile) {
   auto doc = open();
   ASSERT_TRUE(doc->dispatch(testing::renameOp("a", "B"), "x", key(1)));

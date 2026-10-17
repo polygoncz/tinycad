@@ -1,10 +1,10 @@
-#include "trim.hpp"
+#include "tinycad/core/text.hpp"
 
-namespace tinycad::storage {
+namespace tinycad::core {
 
 namespace {
 
-// The same list as kTrimmed in server/src/ops/handlers/document.cpp (internal to ops).
+/** What String.prototype.trim removes (ECMAScript WhiteSpace and LineTerminator), UTF-8. */
 constexpr std::string_view TRIMMED[] = {
     "\t",           "\n",           "\v",           "\f",           "\r",           " ",
     "\xC2\xA0",     "\xE1\x9A\x80", "\xE2\x80\x80", "\xE2\x80\x81", "\xE2\x80\x82", "\xE2\x80\x83",
@@ -14,22 +14,29 @@ constexpr std::string_view TRIMMED[] = {
 
 }  // namespace
 
-std::string trimName(std::string_view name) {
+std::string trimJs(std::string_view text) {
   bool changed = true;
-  while (changed && !name.empty()) {
+  while (changed && !text.empty()) {
     changed = false;
     for (const std::string_view space : TRIMMED) {
-      if (name.starts_with(space)) {
-        name.remove_prefix(space.size());
+      if (text.starts_with(space)) {
+        text.remove_prefix(space.size());
         changed = true;
       }
-      if (name.ends_with(space)) {
-        name.remove_suffix(space.size());
+      if (text.ends_with(space)) {
+        text.remove_suffix(space.size());
         changed = true;
       }
     }
   }
-  return std::string(name);
+  return std::string(text);
 }
 
-}  // namespace tinycad::storage
+bool isTrimmed(std::string_view text) {
+  for (const std::string_view space : TRIMMED) {
+    if (text.starts_with(space) || text.ends_with(space)) return false;
+  }
+  return true;
+}
+
+}  // namespace tinycad::core

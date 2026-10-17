@@ -197,7 +197,7 @@ TEST_F(DocumentServiceTest, ImportsAFileWithHistoryAndKeepsTheUndoStacks) {
   EXPECT_EQ(stored.base["document"]["meta"]["id"], imported.id.str());
   auto doc = open(imported.id);  // with verify: base + log == snapshot
   const Json stacks = Json::parse(readFixture("bracket-history.stacks.json"));
-  const ops::UndoStacks rebuilt = ops::rebuildUndoStacks(doc->log().entries());
+  const ops::UndoStacks rebuilt = ops::rebuildUndoStacks(doc->log().entries()).value();
   EXPECT_EQ(rebuilt.undo, stacks["undo"].get<std::vector<std::int64_t>>());
   EXPECT_TRUE(doc->canUndo());
 }
@@ -259,8 +259,8 @@ TEST_F(DocumentServiceTest, ExportThenImportGivesTheSameDocumentAndUndo) {
   auto copy = open(imported.id);
   EXPECT_TRUE(document::sameStudio(*copy->document().studio(), *original->document().studio()));
   EXPECT_EQ(copy->document().meta().name, "A/B: c");
-  EXPECT_EQ(ops::rebuildUndoStacks(copy->log().entries()),
-            ops::rebuildUndoStacks(original->log().entries()));
+  EXPECT_EQ(ops::rebuildUndoStacks(copy->log().entries()).value(),
+            ops::rebuildUndoStacks(original->log().entries()).value());
   EXPECT_TRUE(copy->canRedo());
 }
 
