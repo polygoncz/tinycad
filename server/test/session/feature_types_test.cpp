@@ -224,6 +224,25 @@ TEST(DescribeFeatureTypes, TransformCarriesItsSchemaVersion) {
 
 // --- schema.visibleWhen over the descriptor -----------------------------------------------------
 
+TEST(DescribeFeatureTypes, BooleanCarriesItsRuleSameBody) {
+  const auto descriptors = describeFeatureTypes(schemas());
+  const auto* boolean = descriptorOf(descriptors, "boolean");
+  ASSERT_NE(boolean, nullptr);
+  ASSERT_EQ(boolean->rules_size(), 1);
+  const v1::ParamRule& rule = boolean->rules(0);
+  EXPECT_EQ(rule.code(), "boolean.sameBody");
+  ASSERT_EQ(rule.rule_case(), v1::ParamRule::kDisjointRefs);
+  EXPECT_EQ(rule.disjoint_refs().param(), "tools");
+  EXPECT_EQ(rule.disjoint_refs().other(), "targets");
+}
+
+TEST(DescribeFeatureTypes, OtherTypesHaveNoRules) {
+  for (const auto& descriptor : describeFeatureTypes(schemas())) {
+    if (descriptor.type() == "boolean") continue;
+    EXPECT_EQ(descriptor.rules_size(), 0) << descriptor.type();
+  }
+}
+
 TEST(DescribeFeatureTypes, VisibleWhenOfTheDescriptorGivesTheSharedCaseResults) {
   const auto descriptors = describeFeatureTypes(schemas());
   int checked = 0;

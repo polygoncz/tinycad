@@ -2,7 +2,7 @@
 // a NaN or an infinity would silently become null there, so it fails the case with its path.
 
 import { describe, expect, it } from 'vitest';
-import { asJson } from './runner';
+import { asJson, recordsCases } from './runner';
 
 describe('asJson', () => {
   it('drops undefined keys like a file read back would', () => {
@@ -25,5 +25,14 @@ describe('asJson', () => {
     expect(() => asJson({ ok: { statuses: { 'f-1': Number.NaN } } })).toThrow(
       'outcome.ok.statuses["f-1"]: NaN is not a finite number',
     );
+  });
+});
+
+describe('recordsCases', () => {
+  it('records only with CASES_RECORD=1 and not for a runner whose cases are not recorded', () => {
+    expect(recordsCases({}, { CASES_RECORD: '1' })).toBe(true);
+    expect(recordsCases({ recorded: true }, { CASES_RECORD: '1' })).toBe(true);
+    expect(recordsCases({ recorded: false }, { CASES_RECORD: '1' })).toBe(false);
+    expect(recordsCases({}, {})).toBe(false);
   });
 });

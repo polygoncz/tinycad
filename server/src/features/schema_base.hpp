@@ -2,8 +2,9 @@
 
 // The common base of the schemas of the built-in features (internal to tinycad_features): holds
 // the data every FeatureSchema exposes and validates with the generic checks of
-// validateAgainstSchema. A feature with own rules (boolean) or a migration (transform) overrides
-// validate or migrate; the others are just a constructor with their data.
+// validateAgainstSchema and its declarative rules (checkParamRules, M49). A feature with rules
+// that cannot be data (sketch) or a migration (transform) overrides validate or migrate; the
+// others (boolean with its rule too) are just a constructor with their data.
 
 #include <optional>
 #include <string>
@@ -23,20 +24,24 @@ class BuiltInSchema : public document::FeatureSchema {
   [[nodiscard]] const std::string& label() const override { return label_; }
   [[nodiscard]] const std::string& icon() const override { return icon_; }
   [[nodiscard]] const document::ParamSchema& params() const override { return params_; }
+  [[nodiscard]] const document::ParamRules& rules() const override { return rules_; }
   [[nodiscard]] Json defaults() const override { return defaults_; }
   [[nodiscard]] std::vector<document::ParamIssue> validate(const Json& params) const override {
-    return document::validateAgainstSchema(params_, params);
+    auto issues = document::validateAgainstSchema(params_, params);
+    document::checkParamRules(params_, rules_, params, issues);
+    return issues;
   }
 
  protected:
   BuiltInSchema(std::string type, int version, std::string label, std::string icon,
-                document::ParamSchema params, Json defaults)
+                document::ParamSchema params, Json defaults, document::ParamRules rules = {})
       : type_(std::move(type)),
         version_(version),
         label_(std::move(label)),
         icon_(std::move(icon)),
         params_(std::move(params)),
-        defaults_(std::move(defaults)) {}
+        defaults_(std::move(defaults)),
+        rules_(std::move(rules)) {}
 
  private:
   std::string type_;
@@ -45,6 +50,7 @@ class BuiltInSchema : public document::FeatureSchema {
   std::string icon_;
   document::ParamSchema params_;
   Json defaults_;
+  document::ParamRules rules_;
 };
 
 /** A length > 0 (the exclusive lower bound 0 of Q050), the common size param of the features. */

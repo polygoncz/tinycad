@@ -92,3 +92,52 @@ function show(value: unknown): string {
 function isObject(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
+
+// --- Orderings the domain does not define (spec 13: a runner sorts before comparing) -----------
+// Total and independent of the stability of the sort, because the C++ suite repeats them with
+// std::sort (issueBefore in server/test/shared-cases/schema_cases_test.cpp); strings by UTF-16
+// code units, never by locale.
+
+/** By UTF-16 code units (not localeCompare): the same order in every language. */
+export function compareStrings(a: string, b: string): number {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
+/**
+ * JSON with the keys of every object sorted by UTF-16 code units and no whitespace; '' for
+ * undefined, so an issue without params sorts first (canonicalJson of the C++ runner).
+ */
+export function canonicalJson(value: unknown): string {
+  if (value === undefined) return '';
+  return JSON.stringify(canonical(value));
+}
+
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (!isObject(value)) return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort(compareStrings)
+      .map((key) => [key, canonical(value[key])]),
+  );
+}
+
+/** The shape of a ParamIssue the ordering reads. */
+export interface SortableIssue {
+  readonly param: string;
+  readonly code: string;
+  readonly params?: unknown;
+}
+
+/**
+ * The order of the issues of schema.validate (spec 13): by param, code and the canonical JSON of
+ * params. Two issues equal in all three are equal as JSON, so their mutual order does not show.
+ */
+export function compareIssues(a: SortableIssue, b: SortableIssue): number {
+  return (
+    compareStrings(a.param, b.param) ||
+    compareStrings(a.code, b.code) ||
+    compareStrings(canonicalJson(a.params), canonicalJson(b.params))
+  );
+}

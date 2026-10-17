@@ -12,6 +12,7 @@ milestones:
   - "[[M39-kostra-serveru]]"
   - "[[M45-sezeni-pres-grpc]]"
   - "[[M46-klient-nad-read-modelem]]"
+  - "[[M49-pravidla-validace-v-popisu]]"
 tags:
   - spec
 created: 2026-10-17
@@ -164,6 +165,7 @@ rpc WatchSession(WatchSessionRequest) returns (stream WatchSessionResponse);   /
 
 - `ParamDescriptor.spec` je `oneof` přes druhy dnešního `ParamSpec` (`length`, `angle`, `number`, `boolean`, `enumeration` pro `enum`, `point`, `data`, `bodies`, `topo`, `region`, `planes`, `axis`). Meze slouží jen poli v dialogu, rozhoduje server.
 - **`VisibleWhen`** ([[Q105 Viditelnost parametru jako data|Q105]]): `{ param, equals_any | equals_none | less_than }` nad neověřenými parametry. Hodnota jiného typu, než test čeká, znamená „skryto“; chybějící parametr u `equals_none` znamená „viditelné“. Vyhodnocuje klient (dialog) i server (validace), jedna funkce na každé straně a společné testovací případy. Sdílené případy `schema.visibleWhen` ([[13-testovani#Sdílené testovací případy]]) při startu [[M38-zmrazeni-domeny|M38]] ukázaly, že TS predikáty `equals_none` (extrude `targets` a `distance`, revolve `targets`) hodnotu jiného typu ukazovaly. Opraveno v TS jako chyba (Pavel 2026-10-17).
+- **`rules`** ([[M49-pravidla-validace-v-popisu|M49]], [[Rozhodnutí nativního jádra|N148, N149]]): vlastní pravidla typu nad rámec obecné kontroly jako data, `ParamRule { code, oneof rule { DisjointRefs disjoint_refs } }`, `DisjointRefs { param, other }` (sémantika v [[03-dokument#Vlastní pravidla]]). Klient je převede na `ParamRule` dokumentu a `validate` ze `featureSchemaOf` vrací obecnou kontrolu + `checkParamRules`, takže dialog ukáže u pole stejný kód jako server (`boolean.sameBody` s `{ index }`). Pravidlo **neznámého druhu** (prázdný `oneof` u klienta, který novou zprávu nezná) klient bez chyby vynechá – dopředná kompatibilita, server hlášení dál vrátí v read modelu. Většina typů má `rules` prázdné; pravidla, která daty popsat nejdou, v popisu nejsou ([[03-dokument#Pravidla jen na serveru]]).
 - Klientská půlka [[Plugin featury|pluginu featury]] drží jen `tools`, `manipulators` a `messages` a páruje se s popisem podle `type`. Typ bez klientské půlky má dialog ze schématu a žádné nástroje navíc.
 
 ## `GeometryService`
@@ -192,6 +194,7 @@ Chyby featur po regeneraci nejsou chyby RPC, jdou v `RegenView.statuses` (`Featu
 - **Kontrakt:** `buf lint` a `buf breaking` proti `main` v `npm run check` (krok `check:proto`).
 - **Převody:** každá zpráva `Operation` ↔ JSON operace spec 04 tam a zpět (C++), `ParamDescriptor` ↔ `ParamSpec` (TS), `Mesh` ↔ `MeshData` včetně posunu, který není násobkem 4 (TS).
 - **`VisibleWhen`:** sedm dnešních predikátů jako sdílené případy, stejný výsledek v C++ a v TS, včetně chybějícího parametru a hodnoty jiného typu.
+- **Pravidla (M49):** `describeRule` (boolean má `disjoint_refs { param: "tools", other: "targets" }`, ostatní typy `rules` prázdné), zlatý soubor `test/golden/feature-types.json` s pravidlem; v TS `featureSchemaOf` s pravidlem (kód a `{ index }`) a s pravidlem neznámého druhu (i binárně s neznámým polem `oneof`) → ignorováno; sdílené případy `schema.validate` v C++ i v TS.
 - **Sezení** (C++ integrační přes skutečný gRPC kanál): otevření, druhé sezení `writable = false` a `READ_ONLY`, timeout zahodí transakci a uvolní zámek, `SESSION_NOT_FOUND` po zavření, `resume_session_id` vrátí totéž sezení se zámkem, smazání otevřeného dokumentu `DOCUMENT_OPEN`.
 - **Idempotence:** dvakrát `Commit` se stejným id = jeden záznam; dvakrát `Apply` = jedno použití; stejné id s jinou operací = `OPERATION_ID_REUSED`; `Commit` zopakovaný po restartu serveru najde záznam v SQLite.
 - **Transakce a undo přes RPC:** dnešní testy spec 04 (50 změn = 1 záznam, abort, přechodné kroky, undo po znovuotevření) projdou proti `SessionService`.

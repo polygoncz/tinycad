@@ -25,6 +25,7 @@ describe('document public API', () => {
         'ORIGIN_AXES',
         'ORIGIN_PLANES',
         'ORIGIN_PLANE_IDS',
+        'checkParamRules',
         'createDocument',
         'createFeatureSchemaRegistry',
         'dependenciesOf',

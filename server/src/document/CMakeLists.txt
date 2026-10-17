@@ -11,6 +11,7 @@ add_library(tinycad_document STATIC
   schema.cpp
   validate.cpp
   ref_kinds.cpp
+  rules.cpp
   evaluate.cpp)
 target_include_directories(tinycad_document
   PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"

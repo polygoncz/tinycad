@@ -122,6 +122,21 @@ Json booleanParams(Json targets, Json tools) {
   return {{"op", "union"}, {"targets", targets}, {"tools", tools}, {"keepTools", false}};
 }
 
+TEST(BuiltInSchemas, OnlyTheBooleanHasADeclarativeRule) {
+  for (const auto* schema : registry().all()) {
+    if (schema->type() == "boolean") continue;
+    EXPECT_TRUE(schema->rules().empty()) << schema->type();
+  }
+}
+
+TEST(BooleanSchema, HasTheRuleSameBodyAsData) {
+  EXPECT_EQ(registry().get("boolean").rules(),
+            (document::ParamRules{{.kind = document::ParamRule::Kind::DisjointRefs,
+                                   .code = "boolean.sameBody",
+                                   .param = "tools",
+                                   .other = "targets"}}));
+}
+
 TEST(BooleanSchema, RejectsABodyThatIsATargetAndAToolAtItsIndexInTools) {
   const auto& schema = registry().get("boolean");
   const auto issues = schema.validate(booleanParams(
