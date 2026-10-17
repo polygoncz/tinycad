@@ -50,7 +50,7 @@ updated: 2026-10-17
 ## Úkoly
 
 - [ ] 1. Převést integrační scénáře bez obdoby v C++ na sdílené případy `regen` (souběžně s 2)
-- [ ] 2. Měření „před“: velikost bundlu a čas startu před sérií (souběžně s 1)
+- [x] 2. Měření „před“: velikost bundlu a čas startu před sérií (souběžně s 1)
 - [ ] 3. Smazat lokální cestu: `kernel-occt`, `regen`, `persistence`, buildery a schémata featur, lokální `app`, přenos z IndexedDB, závislosti a konfigurace
 - [ ] 4. Zúžit `ops`, `kernel` a `document`, upravit běžce sdílených případů (souběžně s 5 a 6)
 - [ ] 5. E2E, konfigurace nástrojů, README a `CLAUDE.md` (souběžně s 4 a 6)
@@ -91,6 +91,21 @@ Stav `src/` k plánu (před M46 úkoly 5 a 6). Soubory, které M46 přidá (`rem
 - `npm run check`, `npm run check:server` (včetně nových sdílených případů z úkolu 1) a `npm run test:e2e:full` proti Docker Compose zelené.
 - Velikost bundlu a čas startu před sérií a po ní zapsané v retrospektivě (N125).
 - Specifikace podle úkolu 6 popisují serverovou verzi, `npm run lint:vault` zelený; [[Roadmapa]] má sérii hotovou.
+
+## Měření „před“ (úkol 2, hotovo)
+
+`npm run measure` (`scripts/measure-startup.mjs`) na commitu `27c8e83` (`main` před přepnutím klienta, WASM verze), Chrome headless, localhost, 5 studených běhů, medián:
+
+| Metrika | Před |
+|---|---|
+| úvodní obrazovka | 98,9 ms |
+| nový dokument → povolená lišta (start OCCT) | 158,7 ms |
+| OK kvádru → těleso | 116,8 ms |
+| přeneseno sítí (stránka i workery) | 23,98 MB (11 požadavků) |
+| `dist/` celkem syrově / gzip | 28,68 MB / 10,08 MB |
+| z toho WASM (`replicad_single.wasm` + `planegcs.wasm`) | 23,46 MB / 7,42 MB |
+
+Časy na localhostu skoro nic neříkají (bez omezení sítě); srovnatelná je hlavně velikost a přenesené bajty. Resource Timing nevidí požadavky workerů, proto se srovnává `network` (odchylka od kontraktu úkolu 2).
 
 ## Implementační plán
 
