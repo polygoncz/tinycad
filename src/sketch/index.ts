@@ -95,10 +95,11 @@ export type { LineInference } from './infer';
 export {
   defaultPlacement,
   dimensionTarget,
+  linearSpan,
   movePlacement,
   placeDimension,
 } from './dimension-placement';
-export type { DimensionTarget } from './dimension-placement';
+export type { DimensionTarget, LinearSpan } from './dimension-placement';
 export { SPLINE_TOLERANCE } from './geometry';
 export type { ConstraintSolver, SolveInput, SolveResult, SolveStatus } from './solver';
 export type { CurveHit, FilletArc, OffsetCurve2, SketchGeometry } from './geometry-port';

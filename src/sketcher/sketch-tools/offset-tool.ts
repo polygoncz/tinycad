@@ -13,9 +13,15 @@ import type { Tool, ToolContext } from '@/interaction';
 import type { InputField } from '../numeric-input';
 import type { SketchEditor } from '../sketch-editor';
 import type { SketchSession } from '../sketch-session';
-import { clearPreview, clickTool, inputValues, previewPairs } from './common';
+import {
+  clearPreview,
+  clickTool,
+  curvePairs,
+  inputValues,
+  previewIds,
+  previewPairs,
+} from './common';
 import type { ToolMods } from './common';
-import { curvePairs, previewIds } from './corner-tool';
 import { curveAt, idSource, unchanged } from './curve-pick';
 
 /** The one field of the numeric input: the distance (label sketch.input.distance). */

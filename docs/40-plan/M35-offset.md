@@ -109,4 +109,6 @@ _(Zapisuje stopa: rozhodnutí s Pavlem, odchylky od plánu, výsledky testů. Hl
 
 **Úkoly 4 a 5 (bez HUD nápovědy) hotové.** Nástroj Odsadit (ikona `box-padding`), kresba kóty `offset` podle `offsetFrame`, pole číselného vstupu „Vzdálenost“, e2e `m35.spec.ts` (offset ven, změna kóty, vysunutí rámečku; offset dovnitř). `npm run check` 7828 unit + 42 integračních, e2e 180/180. HUD nápověda čeká na M37 v `main`.
 
+**Architektonická revize:** bez závažných porušení. Opraveno: rámec lineární kóty jen v `sketch` (`linearSpan`, kresba ho převádí), sdílené pomůcky nástrojů `previewIds`/`curvePairs` v `common.ts`. Spec 12 výslovně uvádí, že HUD nápověda ještě v kódu není.
+
 ## Retrospektiva

@@ -70,6 +70,7 @@ describe('sketch public API', () => {
         'isLineCarrier',
         'isPattern',
         'isPatternSource',
+        'linearSpan',
         'measure',
         'movePlacement',
         'parseSketchData',

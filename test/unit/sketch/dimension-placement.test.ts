@@ -3,6 +3,7 @@ import type { Vec2 } from '@/core';
 import {
   defaultPlacement,
   dimensionTarget,
+  linearSpan,
   movePlacement,
   placeDimension,
 } from '@/sketch/dimension-placement';
@@ -594,9 +595,96 @@ describe('offset dimension (M35)', () => {
     expect(movePlacement(c, cursor, ODATA)).toEqual(expected);
   });
 
+  const span = (from: Vec2, to: Vec2, u: Vec2, m: Vec2): unknown => ({
+    from: from.map(close),
+    to: to.map(close),
+    u: u.map(close),
+    m: m.map(close),
+  });
+
+  it.each<[string, DimensionConstraint, unknown]>([
+    // From the foot (0,0) of copy.p1 on the source to copy.p1 (0,−2).
+    ['a line pair', offsetDim('l', 'l2'), span([0, 0], [0, -2], [0, -1], [0, -1])],
+    [
+      'a circle pair: along the π/4 ray, source → copy',
+      offsetDim('k', 'k2'),
+      span(diagonal(2), diagonal(3), [Math.SQRT1_2, Math.SQRT1_2], diagonal(2.5)),
+    ],
+    [
+      'an inward circle pair: u towards o',
+      offsetDim('k2', 'k'),
+      span(diagonal(3), diagonal(2), [-Math.SQRT1_2, -Math.SQRT1_2], diagonal(2.5)),
+    ],
+    [
+      'an arc pair: along its middle ray',
+      offsetDim('q', 'q2'),
+      span(diagonal(4), diagonal(5.5), [Math.SQRT1_2, Math.SQRT1_2], diagonal(4.75)),
+    ],
+    ['a zero-length source line', offsetDim('ln', 'l2'), null],
+  ])('linearSpan – %s', (_name, c, expected) => {
+    expect(linearSpan(c, ODATA)).toEqual(expected);
+  });
+
   it('movePlacement keeps the current placement for a zero-length source line', () => {
     expect(movePlacement(offsetDim('ln', 'l2'), [5, 5], ODATA)).toEqual(lin(0, 0));
     const placement = { kind: 'linear', offset: 3, along: 1 };
     expect(movePlacement(offsetDim('ln', 'l2', { placement }), [5, 5], ODATA)).toEqual(placement);
+  });
+});
+
+describe('linearSpan', () => {
+  it.each<[string, Record<string, unknown>, unknown]>([
+    [
+      'a distance: a → b',
+      { kind: 'distance', a: 'e', b: 'f', value: 10 },
+      { from: [20, 0], to: [26, 8], u: [close(0.6), close(0.8)], m: [23, 4] },
+    ],
+    [
+      'a horizontal distance: along x',
+      { kind: 'hDistance', a: 'e', b: 'f', value: 6 },
+      { from: [20, 0], to: [26, 8], u: [1, 0], m: [23, 4] },
+    ],
+    [
+      'a vertical distance: along y',
+      { kind: 'vDistance', a: 'e', b: 'f', value: 8 },
+      { from: [20, 0], to: [26, 8], u: [0, 1], m: [23, 4] },
+    ],
+    [
+      'a point–line distance: from the foot to the point',
+      { kind: 'pointLineDistance', point: 'z', line: 'ab', value: 5 },
+      { from: [5, 0], to: [5, 5], u: [0, 1], m: [5, 2.5] },
+    ],
+    ['a radius is not linear', { kind: 'radius', curve: 'k', value: 3 }, null],
+    ['an angle is not linear', { kind: 'angle', a: 'la', b: 'lb', value: 1 }, null],
+  ])('%s', (_name, c, expected) => {
+    expect(linearSpan(dim(c), DATA)).toEqual(expected);
+  });
+
+  it('is null when a referenced entity is missing or of a wrong kind', () => {
+    const empty: SketchData = { entities: [], constraints: [] };
+    expect(linearSpan(dim({ kind: 'distance', a: 'e', b: 'f', value: 10 }), empty)).toBeNull();
+    expect(
+      linearSpan(dim({ kind: 'pointLineDistance', point: 'z', line: 'ab', value: 5 }), empty),
+    ).toBeNull();
+    const pointOnly: SketchData = {
+      entities: DATA.entities.filter((x) => x.id !== 'ab'),
+      constraints: [],
+    };
+    expect(
+      linearSpan(dim({ kind: 'pointLineDistance', point: 'z', line: 'ab', value: 5 }), pointOnly),
+    ).toBeNull();
+  });
+
+  it('is null for an offset whose pair does not resolve', () => {
+    const [c] = sketch(
+      [
+        { kind: 'point', id: 'o', x: 0, y: 0 },
+        { kind: 'circle', id: 'k', center: 'o', radius: 2 },
+        { kind: 'circle', id: 'k2', center: 'o', radius: 3 },
+      ],
+      [{ kind: 'offset', id: 'off', pairs: [{ source: 'k', copy: 'k2' }], value: 1 }],
+    ).constraints;
+    assert(c?.kind === 'offset');
+    expect(linearSpan(c, { entities: [], constraints: [] })).toBeNull();
   });
 });

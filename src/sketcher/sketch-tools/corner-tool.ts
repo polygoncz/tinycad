@@ -15,13 +15,10 @@ import {
   isDimension,
   isFilletEdge,
   nearestParam,
-  paramRange,
-  piecePolyline,
   pointAt,
   pointsById,
 } from '@/sketch';
 import type {
-  Curve2,
   FilletEdge,
   IdSource,
   SketchConstraintId,
@@ -35,7 +32,15 @@ import type { Tool, ToolContext } from '@/interaction';
 import { isPlainEscape } from '@/interaction';
 import type { SketchEditor } from '../sketch-editor';
 import type { SketchSession } from '../sketch-session';
-import { clearPreview, clickTool, cursorAt, distance, previewPairs } from './common';
+import {
+  clearPreview,
+  clickTool,
+  curvePairs,
+  cursorAt,
+  distance,
+  previewIds,
+  previewPairs,
+} from './common';
 import { idSource, unchanged } from './curve-pick';
 import { entityAt } from './snap';
 
@@ -240,20 +245,6 @@ async function answerOf<K extends CornerKey, A>(
   return { input, preview: newCurves(key.pair.data, edit.data) };
 }
 
-/**
- * Ids for the edit of the preview: only the shape of the edit is used, nothing of it is written,
- * so the ids need not come from the generator of the tool context. Also used by the offset tool.
- */
-export function previewIds(): IdSource {
-  let n = 0;
-  const next = (): string => `__preview${String(++n)}`;
-  return {
-    // Branding a local id that never leaves the preview (the trusted ids come from ctx.ids).
-    entity: () => next() as SketchEntityId,
-    constraint: () => next() as SketchConstraintId,
-  };
-}
-
 /** The curves of `after` not in `before` (the fillet arc, the chamfer line) as pairs of points. */
 function newCurves(before: SketchData, after: SketchData): readonly Vec2[] {
   const old = new Set<string>(before.entities.map((e) => e.id));
@@ -261,16 +252,6 @@ function newCurves(before: SketchData, after: SketchData): readonly Vec2[] {
   return after.entities.flatMap((e) =>
     e.kind === 'point' || isPattern(e) || old.has(e.id) ? [] : curvePairs(curve2(e, points)),
   );
-}
-
-/** The whole curve as pairs of points (a polyline). */
-export function curvePairs(c: Curve2): readonly Vec2[] {
-  const [lo, hi] = paramRange(c);
-  const points = piecePolyline(c, lo, hi);
-  return points.slice(1).flatMap((p, i) => {
-    const prev = points[i];
-    return prev === undefined ? [] : [prev, p];
-  });
 }
 
 const byId =
