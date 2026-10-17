@@ -21,7 +21,7 @@ updated: 2026-10-17
 ---
 # M42 – Jádro OCCT nativně
 
-**Cíl:** Port `GeometryKernel` v C++ nad OCCT 8.0.1: primitiva, transformace, booleany, vysunutí a rotace, zaoblení a sražení, topologie, tessellace, oblasti skici, STEP.
+**Cíl:** Port `GeometryKernel` v C++ nad OCCT 8 (nejnovější z vcpkg): primitiva, transformace, booleany, vysunutí a rotace, zaoblení a sražení, topologie, tessellace, oblasti skici, STEP.
 
 > Hrubý plán série nativního jádra (2026-10-17). Před zahájením upřesnit úkoly, kontrakt a Implementační plán.
 
@@ -41,12 +41,12 @@ updated: 2026-10-17
 
 ## Akceptační kritéria
 
-- Kontraktová sada projde nad OCCT 8.0.1 s tolerancemi z M38.
+- Kontraktová sada projde nad OCCT z vcpkg s tolerancemi z M38.
 - Paměťový test je zelený nebo únik vysvětlený a ohraničený.
 
 ## Co se naučíš
 
-Nativní OCCT 8.0.1 a migrace ze 7.x, správa paměti `Handle(Standard_Transient)`, srovnání s WASM.
+Nativní OCCT 8 a migrace ze 7.x, správa paměti `Handle(Standard_Transient)`, srovnání s WASM.
 
 ## Otevřené otázky
 

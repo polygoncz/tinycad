@@ -35,7 +35,7 @@ Předpřipravený WASM build měl známé dluhy, které měl řešit [[M16-vlast
 ## Rozhodnutí
 
 1. **Nativní C++ jádro `tinycad-core`** vlastní dokument, [[Operační log|operační log]], [[Transakce|transakce]], undo, [[Regenerace|regeneraci]], [[Topologické pojmenování|topologické pojmenování]], buildery featur a jejich schémata a OCCT. Přepíše se **naráz** z TS domény zmrazené po M37. Její testy jsou specifikace C++ verze (sdílené testovací případy, [[M38-zmrazeni-domeny|M38]]).
-2. **OCCT 8.0.1** (připnuté přesně) nativně, přes **vcpkg** v režimu manifestu s připnutou baseline; dále gRPC, protobuf, SQLite, GoogleTest. planegcs se vendoruje ze zdrojů ([[Q104 Nástroje pro kontrakt a C++ server|Q104]]).
+2. **OCCT nativně v nejnovější verzi z registru vcpkg** (dnes 8.0.1), přes **vcpkg** v režimu manifestu s připnutou baseline, kterou posouváme vědomě při startu milníků série; dále gRPC, protobuf, SQLite, GoogleTest. planegcs se vendoruje ze zdrojů ([[Q104 Nástroje pro kontrakt a C++ server|Q104]]).
 3. **Kontrakt v `.proto`** (`server/proto/tinycad/v1/`, [[14-protokol|spec 14]]): `DocumentService`, `SessionService` a bezstavová `GeometryService`. Podle čtyř zásad Q094: sezení nezávislé na spojení, idempotentní změny s `operation_id`, navazovaný stream událostí se `seq`, chyby jako `google.rpc.Status` s typovaným `ErrorDetail`. Kontrakt hlídá `buf lint` a `buf breaking`.
 4. **Prohlížeč přes gRPC-Web a Envoy.** Klient z protobuf-es a `@connectrpc/connect-web`. Envoy jen překládá gRPC-Web na gRPC, přidává timeouty a health check. Vše běží v **Docker Compose** na localhostu. Přihlášení, TLS a vystavení na internet jsou mimo rozsah.
 5. **Řešič skici zůstává v klientovi**, server je autorita: při každém `Apply` se `setParams` skici ji znovu vyřeší nativním planegcs a platí jeho výsledek ([[Q097 Transakce a undo přes RPC|Q097]]). Klient si ponechá jen model skici (`sketch`, `solver-planegcs`, `text-opentype`) a 2D geometrii skicáře volá přes `GeometryService` za nezměněným portem `SketchGeometry` ([[Q096 Geometrie skici přes síť|Q096]]).
@@ -55,7 +55,7 @@ Předpřipravený WASM build měl známé dluhy, které měl řešit [[M16-vlast
 
 ## Důsledky
 
-- \+ Nativní OCCT 8.0.1 bez omezení WASM buildu: celé API, žádný únik z buildu, výjimky C++ bez posunu zásobníku, rychlé mapy podtvarů (`TopTools_IndexedMapOfShape`).
+- \+ Nativní OCCT 8 bez omezení WASM buildu: celé API, žádný únik z buildu, výjimky C++ bez posunu zásobníku, rychlé mapy podtvarů (`TopTools_IndexedMapOfShape`).
 - \+ Pavel si projde celou cestu: `.proto` → generovaný C++ a TS kód → Envoy → prohlížeč, se zásadami, které platí i pro RFEM.
 - \+ Jádro je čistý gRPC server, připojí se k němu i Python nebo C# klient napřímo.
 - \+ Prohlížeč se zmenší o ~23 MB WASM a o ~15 000 řádků TS domény.

@@ -62,10 +62,10 @@ Jediná entita až do M10 je **kvádr (Box)**. Druhá entita v M11 je zkouška r
 | [[M36-zrcadleni-a-pole\|M36]] | Zrcadlení a pole | `sketch`, `solver-planegcs`, `sketcher`, `render`, `ui` | parametrické zrcadlení, lineární a kruhové pole s vynesenými kótami ([[Q089 Parametrické zrcadlení a pole ve skice\|Q089]]) |
 | [[M37-text-ve-skice\|M37]] | Text ve skice | `sketch`, `features/*`, `sketcher`, `render`, `ui` | text jako obrysy písmen přes opentype.js ([[0029-text-ve-skice-pres-opentype\|ADR 0029]]) |
 | [[M38-zmrazeni-domeny\|M38]] | Zmrazení domény | `document`, `ops`, `regen`, `kernel`, `sketch`, `features/*` | TS doména zmrazená, sdílené testovací případy (JSON) jako specifikace C++ jádra |
-| [[M39-kostra-serveru\|M39]] | Kostra serveru a GeometryService | `server`, `app`, `sketcher` | `server/` (CMake, vcpkg, OCCT 8.0.1), Docker Compose s Envoy, `.proto` → C++ a TS, 2D geometrie skicáře přes gRPC |
+| [[M39-kostra-serveru\|M39]] | Kostra serveru a GeometryService | `server`, `app`, `sketcher` | `server/` (CMake, vcpkg, nejnovější OCCT z vcpkg), Docker Compose s Envoy, `.proto` → C++ a TS, 2D geometrie skicáře přes gRPC |
 | [[M40-dokument-a-operace-v-cpp\|M40]] | Dokument a operace v C++ | `server` | model dokumentu, schémata, operace, log, transakce, undo |
 | [[M41-persistence-sqlite\|M41]] | Persistence v SQLite | `server` | SQLite soubor na dokument, idempotence, `DocumentService` |
-| [[M42-jadro-occt-nativne\|M42]] | Jádro OCCT nativně | `server` | port `GeometryKernel` nad OCCT 8.0.1, tessellace, STEP, paměťový test |
+| [[M42-jadro-occt-nativne\|M42]] | Jádro OCCT nativně | `server` | port `GeometryKernel` nad OCCT 8, tessellace, STEP, paměťový test |
 | [[M43-regenerace-v-cpp\|M43]] | Regenerace a featury v C++ | `server` | Regenerator, pojmenování, buildery, `content_version` |
 | [[M44-skica-na-serveru\|M44]] | Skica na serveru | `server`, `sketch`, `sketcher` | model skici, nativní planegcs, server jako autorita skici |
 | [[M45-sezeni-pres-grpc\|M45]] | Sezení přes gRPC | `server` | `SessionService`: sezení, zámek, transakce, read model, `WatchSession` |
