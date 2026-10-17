@@ -266,3 +266,7 @@ Revize (`architecture-reviewer`) nad M39–M44 a pahýly M45 nenašla porušení
 - **N139 – Mrtvý kód bez produkčního uživatele se maže** (úkol 4): `app/dispose-open-session.ts`, `app/page-lifecycle.ts`, `app/file-names.ts`, `DocumentInfo`, `test/integration/shared-cases/support/sort.ts`; popisky `source` se zmínkou o FakeKernel v případech `regen` se přepíšou. `AppSessionDeps` zmizel s lokální cestou (odkazoval na smazané typy). Plugin skici je bez typu parametrů (`features/*` nesmí záviset na `sketch`).
 - Výsledek úkolu 3: −35 963 řádků (src −12 428, test −23 455), `dist/` 28,68 → 5,67 MB syrově, 10,08 → 2,81 MB gzip; jediný WASM v prohlížeči je `planegcs` (484 kB, N120).
 
+## M47 úkol 5
+
+- **N140 – Akceptační `rg` úkolu 5 vynechává `spikes/`** a hledá `E2E_CORE\b` a `playwright\.core` (jinak by chytil živou `E2E_CORE_PORT` a balíček `playwright-core`). Historický spike `spikes/m07-occt/` k [[0013-replicad-opencascadejs|ADR 0013]] zůstává jako záznam.
+

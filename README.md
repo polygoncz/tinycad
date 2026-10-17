@@ -52,4 +52,4 @@ Mimo Obsidian se dá číst jako obyčejný Markdown, jen odkazy jsou ve tvaru `
 
 ## Stav
 
-Projekt je ve fázi návrhu. Stav milníků je ve vlastnostech souborů v `docs/40-plan/` a v přehledu na stránce *Roadmapa*.
+Výuková aplikace s nativním C++ jádrem za gRPC (série M38–M47). Stav milníků je ve vlastnostech souborů v `docs/40-plan/` a v přehledu na stránce *Roadmapa*.
