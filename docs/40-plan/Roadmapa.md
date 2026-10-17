@@ -67,7 +67,8 @@ Jediná entita až do M10 je **kvádr (Box)**. Druhá entita v M11 je zkouška r
 | [[M41-persistence-sqlite\|M41]] | Persistence v SQLite | `server` | SQLite soubor na dokument, idempotence, `DocumentService` |
 | [[M42-jadro-occt-nativne\|M42]] | Jádro OCCT nativně | `server` | port `GeometryKernel` nad OCCT 8, tessellace, STEP, paměťový test |
 | [[M43-regenerace-v-cpp\|M43]] | Regenerace a featury v C++ | `server` | Regenerator, pojmenování, buildery, `content_version` |
-| [[M44-skica-na-serveru\|M44]] | Skica na serveru | `server`, `sketch`, `sketcher` | model skici, nativní planegcs, server jako autorita skici |
+| [[M44-skica-na-serveru\|M44]] | Model skici a řešič v C++ | `server` | model skici, odvozené entity, nativní planegcs (souběžně od M39) |
+| [[M44.1-builder-skici-na-serveru\|M44.1]] | Builder skici na serveru | `server`, `sketcher` | builder skici v regeneraci, server jako autorita skici (`SKETCH_NOT_SOLVED`) |
 | [[M45-sezeni-pres-grpc\|M45]] | Sezení přes gRPC | `server` | `SessionService`: sezení, zámek, transakce, read model, `WatchSession` |
 | [[M46-klient-nad-read-modelem\|M46]] | Klient nad read modelem | `remote`, `app`, `interaction`, `render`, `ui`, `features/*` | prohlížeč proti serveru, e2e přes Docker Compose |
 | [[M47-uklid-a-dokonceni\|M47]] | Úklid a dokončení | `app`, `ui` a odstraněné moduly | bez WASM a domény v klientovi, specifikace serverové verze |
@@ -93,10 +94,14 @@ Rozšíření skicáře II (po M29):
   stopa B: M31 ─► M32
   stopa C: M36 ─► M37 (po sloučení M30)
 
-Nativní jádro (po M37):
-  M38 ─► M39 ─► M40 ─┬─► M41 ──────────────────┐
-                     │                         ├─► M45 ─► M46 ─► M47
-              M39 ───┴─► M42 ─► M43 ─► M44 ────┘
+Nativní jádro (po M37), stopy po M39:
+  M38 ─► M39 ─┬─► stopa A: M40 ─┬─► M41 ─────────────────┐
+              │                 ▼                        │
+              ├─► stopa B: M42 ─► M43 ─► M44.1 ──────────┴─► M45 ─► M46 ─► M47
+              │                            ▲
+              └─► stopa C: M44 ────────────┘
+
+  M43 začne po sloučení M40 a M42, M44.1 po sloučení M44, M45 po M41 a M44.1.
 ```
 
 M4 (persistence) a M5 (port jádra) na sobě nezávisí – pořadí lze prohodit. Persistence je dřív, protože ověří formát logu, dokud je čerstvý.
@@ -155,17 +160,23 @@ Naplánováno 2026-10-17 po sérii M30–M37 podle [[Q094 Nativní jádro na ser
 Proč toto pořadí:
 - **M38 první:** přepis naráz potřebuje pevný cíl. Zmrazená TS doména a sdílené testovací případy (JSON) jsou specifikace, proti které se C++ ověřuje od prvního dne.
 - **M39 jako svislý řez:** bezstavová `GeometryService` projde celým stackem (vcpkg, `.proto`, Envoy, gRPC-Web, adaptér za portem) bez doménového stavu. Hned je co spustit a riziko „dlouho nic nefunguje“ se zmenší.
-- **Odspodu nahoru jako v M0–M10:** dokument a operace (M40) → persistence (M41) a jádro (M42) → regenerace (M43) → skica (M44) → služba sezení (M45) → klient (M46). Každá vrstva je hotová a otestovaná v C++, než na ní stojí další.
+- **Odspodu nahoru jako v M0–M10:** dokument a operace (M40) → persistence (M41) a jádro (M42) → regenerace (M43) → skica (M44, M44.1) → služba sezení (M45) → klient (M46). Každá vrstva je hotová a otestovaná v C++, než na ní stojí další.
+- **Souběžně od M39** (Pavel 2026-10-17): M42 potřebuje jen kostru z M39, ne model dokumentu, proto běží vedle M40. Model skici a řešič (M44) na regeneraci nezávisí, proto se oddělily od builderu skici (M44.1) a běží jako třetí stopa. Kritická cesta je M39 → M40 ∥ M42 → M43 → M44.1 → M45 → M46 → M47; M41 a M44 jsou mimo ni.
 - **M47 až na konec:** WASM a TS doména zůstávají v klientovi, dokud M46 nepřepne aplikaci na server. Až do té doby aplikace běží.
 
-**Souběžné stopy** (metodika [[Souběžné stopy agentů]]) po sloučení M40, průnik souborů je malý:
+**Souběžné stopy** (metodika [[Souběžné stopy agentů]]) po sloučení M39, průnik souborů je malý:
 
-| Stopa | Milníky | Poznámka |
-|---|---|---|
-| A – úložiště | [[M41-persistence-sqlite\|M41]] | `server/src/storage/`, jen nad modelem z M40 |
-| B – geometrie | [[M42-jadro-occt-nativne\|M42]] → [[M43-regenerace-v-cpp\|M43]] → [[M44-skica-na-serveru\|M44]] | `server/src/kernel/`, `regen/`, `sketch/` |
+| Stopa | Milníky | Soubory | Čeká na |
+|---|---|---|---|
+| A – dokument a úložiště | [[M40-dokument-a-operace-v-cpp\|M40]] → [[M41-persistence-sqlite\|M41]] | `server/src/document/`, `ops/`, `storage/` | – |
+| B – geometrie | [[M42-jadro-occt-nativne\|M42]] → [[M43-regenerace-v-cpp\|M43]] → [[M44.1-builder-skici-na-serveru\|M44.1]] | `server/src/kernel/`, `regen/`, `features/` | M43 natáhne `main` se sloučeným M40, M44.1 se sloučeným M44 |
+| C – skica | [[M44-skica-na-serveru\|M44]] | `server/src/sketch/`, `server/third_party/planegcs/` | – |
 
-Sdílené kontrakty stop (rozhraní C++ modelu dokumentu a portu jádra) se zafixují při startu M40. M45 začne po sloučení obou stop.
+Pravidla série:
+- **Sdílené kontrakty** zafixuje hlavní sezení při startu stop (po M39): veřejné hlavičky C++ modelu dokumentu a registru schémat (M40, používá M41 a M43), portu jádra `GeometryKernel` (M42, používá M43) a modelu skici (M44, používá M44.1). Změna zafixované hlavičky jde přes hlavní sezení.
+- **Build:** každá oblast má vlastní knihovnu v `server/src/<oblast>/CMakeLists.txt`, kořenový `CMakeLists.txt` stopy jen doplňují o `add_subdirectory` (sčítací konflikty). `vcpkg.json` a baseline mění jen hlavní sezení; závislosti planegcs (Eigen, případně Boost) přidá už [[M39-kostra-serveru|M39]], aby stopy baseline neměnily souběžně. Binární cache vcpkg je sdílená mezi worktree, adresáře buildu jsou vlastní.
+- Každá stopa ověřuje svou část proti sdíleným případům z [[M38-zmrazeni-domeny|M38]]: A `ops.*`, `document.load`, `schema.*`; B `geometry.*` (už M39), `regen`; C `sketch.solve`, `sketch.derived`.
+- M45 začne po sloučení všech tří stop. [[M46-klient-nad-read-modelem|M46]] se nedělí (Pavel 2026-10-17), jde po M45.
 
 **Pravidlo zmrazení (od startu M38):** `document`, `ops`, `regen`, `kernel`, `kernel-occt`, `persistence` a `features/*` v `src/` se mění jen kvůli chybám. Nová funkce domény počká na server. Kód se ze `src/` odstraní až v [[M47-uklid-a-dokonceni|M47]].
 

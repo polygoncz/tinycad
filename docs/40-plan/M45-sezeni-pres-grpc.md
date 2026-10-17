@@ -11,7 +11,7 @@ specs:
   - "[[14-protokol]]"
 depends_on:
   - "[[M41-persistence-sqlite]]"
-  - "[[M44-skica-na-serveru]]"
+  - "[[M44.1-builder-skici-na-serveru]]"
 started:
 finished:
 tags:
@@ -27,7 +27,7 @@ updated: 2026-10-17
 
 **Specifikace:** [[14-protokol]], [[0030-nativni-jadro-pres-grpc|ADR 0030]]
 
-**Navazuje na:** [[M41-persistence-sqlite]], [[M44-skica-na-serveru]]
+**Navazuje na:** [[M41-persistence-sqlite]], [[M44.1-builder-skici-na-serveru]]
 
 ## Úkoly
 

@@ -35,7 +35,7 @@ updated: 2026-10-17
 - [ ] Regenerator: cache podle identity featury, generace, statusy, chyby featur, vstup editované featury ([[0025-vstupni-stav-editovane-featury|ADR 0025]]).
 - [ ] Mark & sweep tvarů, `content_version` (`<epocha>.<n>`) při novém tvaru tělesa ([[Q100 Verze sítí v mezipaměti klienta|Q100]]).
 - [ ] Topologické pojmenování ([[08-topologicke-pojmenovani]]): `nameShape`, přenos jmen, reference.
-- [ ] Buildery a C++ pluginy: Box, Cylinder, Transform, Boolean, Extrude, Revolve, Fillet, Chamfer (skica v M44).
+- [ ] Buildery a C++ pluginy: Box, Cylinder, Transform, Boolean, Extrude, Revolve, Fillet, Chamfer (skica v [[M44.1-builder-skici-na-serveru|M44.1]]).
 - [ ] Sdílené případy regenerace z M38 zelené (objemy, obálky, jména, kotvy, statusy).
 
 ## Akceptační kritéria

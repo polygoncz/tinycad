@@ -34,7 +34,7 @@ updated: 2026-10-17
 ## Úkoly
 
 - [ ] Moduly `protocol` a `remote` podle [[Q106 Moduly klienta pro gRPC|Q106]]: propsat do [[01-architektura]] a `.dependency-cruiser.cjs`, `src/protocol/` do `.gitignore`, skript `gen:proto` před `typecheck`, `dev` a `build`.
-- [ ] `server/`: `CMakeLists.txt`, `CMakePresets.json`, `vcpkg.json` s připnutou baseline (grpc, protobuf, opencascade, sqlite3, gtest, nlohmann-json). Baseline je nejnovější registr vcpkg a OCCT je verze, kterou nabízí (dnes 8.0.1), bez overlay portu a `overrides`. Zapsat skutečnou verzi do [[06-geometricke-jadro]] ([[Q104 Nástroje pro kontrakt a C++ server|Q104]]).
+- [ ] `server/`: `CMakeLists.txt`, `CMakePresets.json`, `vcpkg.json` s připnutou baseline (grpc, protobuf, opencascade, sqlite3, gtest, nlohmann-json a závislosti planegcs – Eigen, případně Boost – aby souběžné stopy po M39 baseline neměnily). Baseline je nejnovější registr vcpkg a OCCT je verze, kterou nabízí (dnes 8.0.1), bez overlay portu a `overrides`. Zapsat skutečnou verzi do [[06-geometricke-jadro]] ([[Q104 Nástroje pro kontrakt a C++ server|Q104]]).
 - [ ] `buf generate`: C++ do buildu serveru, TS (protobuf-es) do `src/protocol/`. `npm run check` dostane `check:proto` (`buf lint`, `buf breaking` proti `main`).
 - [ ] `docker-compose.yml`: `core` (vícestupňový Dockerfile, binární cache vcpkg ve volume) a `envoy` (filtr `grpc_web`, CORS pro `localhost:5173`, health check). Vite proxy `/api` na Envoy.
 - [ ] `GeometryService` v C++ nad OCCT (`Geom2dAPI_InterCurveCurve`, segment, zaoblení, offset) proti sdíleným případům z M38.

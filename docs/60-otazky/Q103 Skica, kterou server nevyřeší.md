@@ -2,7 +2,7 @@
 type: question
 status: answered
 area: "[[14-protokol]]"
-decide_by: "[[M44-skica-na-serveru]]"
+decide_by: "[[M44.1-builder-skici-na-serveru]]"
 proposal: "Když nativní planegcs skicu z feature.setParams nevyřeší, server operaci odmítne (SKETCH_NOT_SOLVED) a dokument se nezmění; klient ponechá lokální stav a ukáže chybu."
 decision: "Server operaci odmítne (FAILED_PRECONDITION, SKETCH_NOT_SOLVED), dokument se nezmění, klient ponechá lokální skicu a ukáže chybu; vyřešenou skicu server uloží vždy ve svém řešení a klient ho převezme bez tolerance."
 tags:
@@ -12,7 +12,7 @@ updated: 2026-10-17
 ---
 # Q103 Skica, kterou server nevyřeší
 
-**Oblast:** [[14-protokol]], [[12-skicar]], [[Q094 Nativní jádro na serveru přes gRPC|Q094]] · **Rozhodnout do:** [[M44-skica-na-serveru|M44]]
+**Oblast:** [[14-protokol]], [[12-skicar]], [[Q094 Nativní jádro na serveru přes gRPC|Q094]] · **Rozhodnout do:** [[M44.1-builder-skici-na-serveru|M44.1]] (původně M44, rozděleno 2026-10-17)
 
 ## Otázka
 
@@ -40,4 +40,4 @@ Detail k rozhodnutí v M44: jakou toleranci má mít „jiné souřadnice“, ab
 - Nevyřešená skica: `Apply` (i `Dispatch`) se `setParams` skici skončí `FAILED_PRECONDITION` s `ErrorDetail { reason: SKETCH_NOT_SOLVED, issues: [{ param: 'sketch', code: 'sketch.notSolved' }] }`. Dokument, transakce i log zůstanou beze změny. Klient ponechá lokální skicu a ukáže chybu (klíč `sketch.notSolved` v `messages` skicáře).
 - Vyřešená skica: server uloží **vždy svůj** výsledek a klient převezme souřadnice z read modelu, bez prahu tolerance. Rozdíl v řádu 1e-9 mm není vidět, takže skica neposkakuje, a platí jedno pravidlo: platná data jsou serverová.
 
-Propsáno do [[14-protokol#Změny dokumentu]] a [[M44-skica-na-serveru]].
+Propsáno do [[14-protokol#Změny dokumentu]] a [[M44.1-builder-skici-na-serveru]] (po rozdělení M44 2026-10-17).
