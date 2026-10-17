@@ -1,10 +1,15 @@
 import type { Registry } from '@/core';
 import type { DocumentReader, DocumentWriter } from '@/document';
-import type { OperationLoadError } from './load-error';
 import type { Operation } from './operation';
 
 // Kept apart from handler.ts so that the built-in handlers can import the interface
 // without a cycle (handler.ts imports the handlers to pre-fill the registry).
+
+/** A problem in the payload of an operation, with a path relative to the checked value. */
+export interface OperationLoadError {
+  readonly path: string;
+  readonly message: string;
+}
 
 export interface OpHandler<O extends Operation = Operation> {
   readonly type: string;
@@ -15,12 +20,10 @@ export interface OpHandler<O extends Operation = Operation> {
   apply(doc: DocumentWriter, op: O): void;
   /** Optional: merges two consecutive operations (e.g. two setParams of one feature). */
   merge?(prev: O, next: O): O | null;
-  /** Converts an older version of the operation to the current one when loading a log. */
-  upcast?(fromVersion: number, raw: unknown): O;
   /**
-   * Checks the payload shape of an operation of the current version when loading (the envelope
-   * is already checked) and before every apply (M19.1), so a write never accepts what loading
-   * refuses. Empty array = fine. Shape only, not the relation to the document.
+   * Checks the payload shape of an operation of the current version before every apply (M19.1;
+   * the core checks the same when loading a log, so a write never accepts what loading refuses).
+   * Empty array = fine. Shape only, not the relation to the document.
    */
   validate?(raw: Readonly<Record<string, unknown>>): readonly OperationLoadError[];
 }

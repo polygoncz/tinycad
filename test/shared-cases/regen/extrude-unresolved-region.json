@@ -1,7 +1,7 @@
 {
   "kind": "regen",
   "description": "A rectangle without its line ab bounds no region: the extrude is UNRESOLVED_REFERENCE at regions",
-  "source": "test/integration/extrude-scenario.test.ts › extrude scenario (rectangle, real solver, FakeKernel) › a deleted line of the rectangle leaves the extrude with an unresolved region",
+  "source": "test/integration/extrude-scenario.test.ts › extrude scenario (rectangle, real solver) › a deleted line of the rectangle leaves the extrude with an unresolved region",
   "input": {
     "document": {
       "meta": {

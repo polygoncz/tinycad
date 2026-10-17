@@ -1,16 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator, ObservableValue } from '@/core';
-import { bodyId, createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
-import type {
-  BodyId,
-  FeatureId,
-  FeatureInstance,
-  FeatureSchema,
-  ParamSchema,
-  ParamSchemaOf,
-} from '@/document';
-import { aFeature } from '@/document/testing';
-import type { DocumentOptions } from '@/document/testing';
+import { createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
+import { aFeature, bodyId } from '@/document/testing';
+import type { BodyId, FeatureId, FeatureInstance, FeatureSchema, ParamSchema } from '@/document';
+import type { DocumentOptions, ParamSchemaOf } from '@/document/testing';
 import { anOpsSession } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE } from '@/sketch';
 import { createActionRegistry } from '@/interaction/actions';

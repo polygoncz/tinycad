@@ -46,10 +46,11 @@ export function toData(doc: DocumentReader): DocumentData {
 }
 
 /**
- * Loads data from outside (persistence, import). Broken data is an expected failure,
- * so it is a Result, not an exception (Q026). Checks the shape, the document invariants
- * and migrates features to their current schema version. Feature params are taken over
- * by the document (and frozen), not copied. Unknown feature types are kept unchanged.
+ * Loads data from outside (since M47 only in tests; the core loads documents). Broken data is
+ * an expected failure, so it is a Result, not an exception (Q026). Checks the shape, the
+ * document invariants and migrates features to their current schema version. Feature params
+ * are taken over by the document (and frozen), not copied. Unknown feature types are kept
+ * unchanged.
  */
 export function fromData(
   data: unknown,

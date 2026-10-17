@@ -10,9 +10,10 @@ export interface ApplyResult {
 }
 
 /**
- * The one place where an operation reaches the document (spec 04): shared by the dispatcher,
- * transactions and replayLog, so validation, batch inverses, rollback bar restoring and
- * subscriber exceptions are handled the same everywhere.
+ * The one place where an operation reaches the document (spec 04): shared by the optimistic
+ * mirror of the client (app) and the in-memory dispatcher and transactions of ops/testing.ts, so
+ * validation, batch inverses, rollback bar restoring and subscriber exceptions are handled the
+ * same everywhere.
  */
 export function applyOperation(
   doc: DocumentWriter,
@@ -70,7 +71,7 @@ function applySingle(doc: DocumentWriter, handlers: OpHandlerRegistry, op: Opera
 
 /**
  * What loading refuses or changes must not be written (D1, M19.1): the current version of the
- * handler and the same validate as upcastOperation. Otherwise an operation with NaN in its params
+ * handler and the same validate the core runs on loading. Otherwise an operation with NaN in its params
  * or a newer version would reach the log and the document could not be opened again, and an
  * older one would be upcast on loading into something else than what was applied. Lists every
  * problem of the payload.

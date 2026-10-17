@@ -8,7 +8,6 @@ export { BUILT_IN_OPERATION_TYPES } from './operation-types';
 export type {
   AppSession,
   AppViewport,
-  DocumentInfo,
   DownloadFile,
   KernelUiState,
   RegenUiState,

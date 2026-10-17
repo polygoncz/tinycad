@@ -3,7 +3,7 @@
 // native core (N68); the types moved here unchanged from the local session of the browser (M47).
 
 import type { Disposable, Observable, Unsubscribe, Vec3 } from '@/core';
-import type { BodyId, BodyMaterial, DocumentMeta, DocumentReader } from '@/document';
+import type { BodyId, BodyMaterial, DocumentReader } from '@/document';
 import type {
   ActionRegistry,
   BrowserModel,
@@ -54,15 +54,6 @@ export interface DownloadFile {
   readonly name: string;
   readonly mime: string;
   readonly data: string | Uint8Array<ArrayBuffer>;
-}
-
-/** A stored document in the list of documents. */
-export interface DocumentInfo {
-  readonly meta: DocumentMeta;
-  /** Highest stored seq, 0 = no entries. */
-  readonly lastSeq: number;
-  /** ms since epoch, the last write to the document. */
-  readonly updatedAt: number;
 }
 
 /**

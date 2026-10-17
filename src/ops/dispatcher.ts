@@ -1,40 +1,13 @@
 import { assert, Emitter } from '@/core';
-import type { Subscribable } from '@/core';
 import type { DocumentWriter } from '@/document';
 import { applyOperation } from './apply';
 import type { ApplyResult } from './apply';
-import type { LogEntry, OperationLog } from './log';
+import type { OperationLog } from './log';
 import type { OpHandlerRegistry } from './op-handler';
 import type { Operation } from './operation';
 import { throwCollected } from './errors';
+import type { LogEntry, OperationDispatcher } from './ports';
 import { createTransaction } from './transaction';
-import type { Transaction } from './transaction';
-
-export interface DispatchMeta {
-  /** Default: op.type. */
-  readonly label?: string;
-  /** Default 'do'. 'undo' and 'redo' are used by UndoManager. */
-  readonly kind?: 'do' | 'undo' | 'redo';
-  /** Required exactly for 'undo' and 'redo': seq of an existing 'do' entry. */
-  readonly target?: number;
-}
-
-export interface OperationDispatcher {
-  /** Applies the operation and writes it to the log as a separate entry. */
-  dispatch(op: Operation, meta?: DispatchMeta): LogEntry;
-  /** Starts a transaction. Only one at a time; a second begin throws. */
-  begin(label: string): Transaction;
-  readonly inTransaction: boolean;
-  readonly events: Subscribable<{
-    /**
-     * After every application: dispatch and commit (entry); Transaction.apply, applyTransient,
-     * reverting transient steps on commit and abort (entry null).
-     */
-    applied: { entry: LogEntry | null; op: Operation };
-    /** A transaction started (true) or ended by commit or abort (false). */
-    transaction: { active: boolean };
-  }>;
-}
 
 export function createOperationDispatcher(deps: {
   doc: DocumentWriter;

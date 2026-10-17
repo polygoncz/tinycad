@@ -7,6 +7,13 @@ import type { DocumentWriter } from './document';
 import type { Evaluated } from './evaluate';
 import type { DocumentId, DocumentMeta, FeatureId, FeatureInstance } from './model';
 
+// Parts of the model only tests use since the core owns minting ids, origin axis ids in
+// feature params and serialization (M47): kept here, outside the public API.
+export { ORIGIN_AXIS_IDS } from './origin';
+export { bodyId } from './refs';
+export type { ParamSchemaOf } from './schema';
+export { fromData, toData } from './serialize';
+
 // Default ids depend on call order within a test file. Tests that assert on ids or
 // names pass them explicitly; the defaults only guarantee uniqueness.
 let nextFeature = 0;

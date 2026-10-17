@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Emitter } from '@/core';
-import { OP_VERSION, rebuildUndoStacks } from '@/ops';
-import type { DocumentRenameOp, OperationLogReader, StudioSetRollbackOp } from '@/ops';
-import { createOperationLog } from '@/ops';
-import { anOpsSession } from '@/ops/testing';
+import { OP_VERSION } from '@/ops';
+import type { DocumentRenameOp, StudioSetRollbackOp, UndoManager } from '@/ops';
+import { anOpsSession, createOperationLog, createUndoManager } from '@/ops/testing';
+import type { OperationLogReader } from '@/ops/testing';
 import { HISTORY_LIMIT, createHistoryModel } from '@/interaction/history-model';
 import type { HistoryLog, HistoryRow } from '@/interaction/history-model';
 
@@ -21,8 +21,8 @@ const RENAME: DocumentRenameOp = {
   name: 'Díl',
 };
 
-/** The port over a local log, as the local path of app adapts it (N73). */
-function historyLogOf(log: OperationLogReader): HistoryLog {
+/** The port over the in-memory log and undo of ops/testing.ts. */
+function historyLogOf(log: OperationLogReader, undo: UndoManager): HistoryLog {
   const emitter = new Emitter<{ changed: undefined }>();
   log.events.on('appended', () => {
     emitter.emit('changed', undefined);
@@ -37,14 +37,14 @@ function historyLogOf(log: OperationLogReader): HistoryLog {
         time: entry.time,
         opType: entry.op.type,
       })),
-    stacks: () => rebuildUndoStacks(log.entries()),
+    stacks: () => undo.stacks(),
     events: emitter.asSubscribable(),
   };
 }
 
 function setup() {
   const ops = anOpsSession();
-  const history = createHistoryModel({ log: historyLogOf(ops.log) });
+  const history = createHistoryModel({ log: historyLogOf(ops.log, ops.undo) });
   const doOp = (label: string): void => {
     ops.dispatcher.dispatch(BAR, { kind: 'do', label });
   };
@@ -158,14 +158,15 @@ describe('createHistoryModel', () => {
   });
 
   it('gives the same rows for a log restored from the stored entries', () => {
-    const { doOp, undo, log, history } = setup();
+    const { doOp, undo, log, dispatcher, history } = setup();
     doOp('a');
     doOp('b');
     undo.undo();
     doOp('c');
     undo.undo();
+    const restoredLog = createOperationLog(log.entries());
     const restored = createHistoryModel({
-      log: historyLogOf(createOperationLog(log.entries())),
+      log: historyLogOf(restoredLog, createUndoManager({ dispatcher, log: restoredLog })),
     });
     expect(restored.state.get()).toEqual(history.state.get());
   });

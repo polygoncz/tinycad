@@ -1,7 +1,7 @@
 import type { OpHandler } from '../op-handler';
 import { OP_VERSION } from '../operation';
 import type { DocumentRenameOp } from '../operation';
-import type { OperationLoadError } from '../load-error';
+import type { OperationLoadError } from '../op-handler';
 import { validateShape } from './shape';
 
 // The name of the document (M19.2, D5): metadata outside undo, yet changed only by a handler,

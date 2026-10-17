@@ -7,9 +7,9 @@ import type {
   FeatureId,
   FeatureInstance,
   FeatureSchema,
-  ParamSchemaOf,
   PartStudioData,
 } from '@/document';
+import type { ParamSchemaOf } from '@/document/testing';
 import { aFeature } from '@/document/testing';
 import { createFeatureEditor } from '@/interaction';
 import { createOpHandlerRegistry, OP_VERSION } from '@/ops';

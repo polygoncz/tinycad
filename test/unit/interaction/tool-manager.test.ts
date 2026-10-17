@@ -1,13 +1,7 @@
 import { createSequentialIdGenerator, ObservableValue } from '@/core';
 import { createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
-import type {
-  BodyId,
-  Evaluated,
-  FeatureId,
-  FeatureSchema,
-  ParamSchemaOf,
-  TopoName,
-} from '@/document';
+import type { BodyId, Evaluated, FeatureId, FeatureSchema, TopoName } from '@/document';
+import type { ParamSchemaOf } from '@/document/testing';
 import { anOpsSession } from '@/ops/testing';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import type {

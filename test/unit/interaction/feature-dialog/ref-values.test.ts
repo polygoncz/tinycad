@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ORIGIN_AXIS_IDS, bodyId } from '@/document';
+import { aDocument, aFeature, bodyId, ORIGIN_AXIS_IDS } from '@/document/testing';
 import type { AxisRef, FeatureId, SketchEntityRef, TopoName, TopoRef } from '@/document';
-import { aDocument, aFeature } from '@/document/testing';
 import { rectangleData } from '@/sketch/testing';
 import {
   axisRefOf,

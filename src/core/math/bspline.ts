@@ -3,7 +3,7 @@ import { vec2, type Vec2 } from './vec2';
 
 // Polynomial B-spline math (spec 02-core, spec 12 "Spliny (M29)", Q086, Q087): evaluation,
 // derivatives, tessellation and global interpolation (Piegl–Tiller, The NURBS Book). In core
-// because sketch and the FakeKernel need it both. No gl-matrix here.
+// because sketch, sketcher and the solver adapter need it. No gl-matrix here.
 
 /** A clamped polynomial B-spline. Structurally a subset of the Curve2 and ProfileCurve `bspline` variants. */
 export interface BSplineShape {

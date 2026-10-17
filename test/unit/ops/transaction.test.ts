@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { FeatureId } from '@/document';
-import { createFeatureSchemaRegistry, toData } from '@/document';
-import { aDocument, aFeature } from '@/document/testing';
+import { createFeatureSchemaRegistry } from '@/document';
+import { aDocument, aFeature, toData } from '@/document/testing';
 import { createOperationDispatcher } from '@/ops/dispatcher';
 import { createOpHandlerRegistry } from '@/ops/handler';
 import { createOperationLog } from '@/ops/log';
-import type { LogEntry } from '@/ops/log';
+import type { LogEntry } from '@/ops/ports';
 import type {
   FeatureAddOp,
   FeatureRemoveOp,
@@ -13,7 +13,6 @@ import type {
   Operation,
   StudioSetRollbackOp,
 } from '@/ops/operation';
-import { replayLog } from '@/ops/replay';
 
 const id = (s: string): FeatureId => s as FeatureId;
 const setParams = (featureId: string, size: number): FeatureSetParamsOp => ({
@@ -437,17 +436,6 @@ describe('applyTransient', () => {
     tx.apply(setParams('a', 1));
     expect(tx.commit()?.op).toEqual(setParams('a', 1));
     expect(doc.studio.rollbackIndex).toBe(2);
-  });
-
-  it('replaying the log after commit gives the live document', () => {
-    const { doc, handlers, log, dispatcher } = setup();
-    const tx = dispatcher.begin('Edit');
-    tx.applyTransient(setRollback(0));
-    for (let i = 1; i <= 3; i++) tx.apply(setParams('b', i));
-    tx.commit();
-    const { doc: replayed } = setup();
-    replayLog(replayed, handlers, log.entries());
-    expect(toData(replayed)).toEqual(toData(doc));
   });
 
   it('throws after the transaction has ended', () => {

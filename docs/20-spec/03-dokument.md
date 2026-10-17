@@ -325,7 +325,7 @@ export function evaluateParams<P>(schema: FeatureSchema<P>, params: unknown, var
 - Kdo zná jen `FeatureSchema` bez typu (`Evaluated<unknown>`), přetypuje na `Evaluated<KonkrétníP>` až u pluginu, který typ zná.
 ## Serializace
 
-Serializaci a načítání dat zvenku (soubor SQLite, import `.tinycad.json`) dělá od [[M47-uklid-a-dokonceni|M47]] jen server (`server/src/document/serialize.cpp`, testy `server/test/document/serialize_test.cpp`). Klient dokument nenačítá ani neukládá: zrcadlo staví dokument z read modelu přes `createDocument`, takže `fromData` a `toData` z TS modulu zmizely s úklidem exportů bez produkčního uživatele (M47 úkol 4). Pravidla níže jsou kontrakt C++ implementace.
+Serializaci a načítání dat zvenku (soubor SQLite, import `.tinycad.json`) dělá od [[M47-uklid-a-dokonceni|M47]] jen server (`server/src/document/serialize.cpp`, testy `server/test/document/serialize_test.cpp`). Klient dokument nenačítá ani neukládá: zrcadlo staví dokument z read modelu přes `createDocument`, takže `fromData` a `toData` z veřejného API TS modulu zmizely; zůstaly jen jako testovací pomůcka v `document/testing.ts` (běžec sdílených případů `ops.script`, testy `interaction`; M47 úkol 4, [[Rozhodnutí nativního jádra|N145]]). Pravidla níže jsou kontrakt C++ implementace.
 
 ```ts
 export interface DocumentData {

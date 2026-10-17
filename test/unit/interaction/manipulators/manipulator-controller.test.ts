@@ -1,7 +1,9 @@
 import { createSequentialIdGenerator } from '@/core';
 import type { Vec3 } from '@/core';
-import { bodyId, createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
-import type { FeatureId, FeatureSchema, ParamSchemaOf } from '@/document';
+import { createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
+import { bodyId } from '@/document/testing';
+import type { FeatureId, FeatureSchema } from '@/document';
+import type { ParamSchemaOf } from '@/document/testing';
 import { anOpsSession } from '@/ops/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { createFeatureEditor } from '@/interaction/feature-dialog/feature-editor';

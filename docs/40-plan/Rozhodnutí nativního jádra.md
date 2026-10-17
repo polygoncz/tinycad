@@ -277,3 +277,7 @@ Revize (`architecture-reviewer`) nad M39–M44 a pahýly M45 nenašla porušení
 - **N143 ⚠ – C++ řadí jména po bajtech UTF-8, spec 13 říká kódové jednotky UTF-16**; liší se jen u ne-ASCII jmen (id jsou ASCII). Spec 06 to uvádí; sjednotit při revizi.
 - **N144 – Stavy UI, které serverová cesta nenastaví** (`RegenUiState.failed`, `KernelUiState 'failed'`, varování „export bez historie“), zůstávají v typech a specifikace 10 a 11 to uvádějí; úklid patří k návrhu kanálu hlášení (N134).
 
+## M47 úkol 4
+
+- **N145 – Exporty, které používají jen testy, se přesunuly do `testing.ts` modulu místo smazání** (`document`: `fromData`, `toData`, `bodyId`, `ORIGIN_AXIS_IDS`, `ParamSchemaOf`; `ops`: paměťový dispečer, log a undo podle N121). Proč: běžec `ops.script` a ~15 testů `interaction` a `sketcher` je potřebují a mají zůstat beze změny. `OpHandler.upcast` zmizel s `upcastOperation`; `kernelErrorCode` a `validateMeshData` zůstávají ve veřejném API (inventura, N122). Úkol 4: −10 276 řádků.
+

@@ -1,22 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
-import {
-  ORIGIN_AXIS_IDS,
-  bodyId,
-  createFeatureSchemaRegistry,
-  toData,
-  validateAgainstSchema,
-} from '@/document';
-import type {
-  FeatureId,
-  FeatureSchema,
-  ParamSchema,
-  ParamSchemaOf,
-  TopoName,
-  TopoRef,
-} from '@/document';
-import { aFeature } from '@/document/testing';
-import type { DocumentOptions } from '@/document/testing';
+import { createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
+import { aFeature, bodyId, ORIGIN_AXIS_IDS, toData } from '@/document/testing';
+import type { FeatureId, FeatureSchema, ParamSchema, TopoName, TopoRef } from '@/document';
+import type { DocumentOptions, ParamSchemaOf } from '@/document/testing';
 import type { BatchOp, FeatureAddOp, Operation } from '@/ops';
 import { OP_VERSION } from '@/ops';
 import { anOpsSession } from '@/ops/testing';

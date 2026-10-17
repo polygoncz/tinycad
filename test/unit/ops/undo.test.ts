@@ -1,19 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { DocumentWriter, FeatureId } from '@/document';
-import { createFeatureSchemaRegistry, toData } from '@/document';
-import { aDocument, aFeature } from '@/document/testing';
+import { createFeatureSchemaRegistry } from '@/document';
+import { aDocument, aFeature, toData } from '@/document/testing';
 import { createOperationDispatcher } from '@/ops/dispatcher';
 import { createOpHandlerRegistry } from '@/ops/handler';
 import { createOperationLog } from '@/ops/log';
-import type { LogEntry } from '@/ops/log';
 import type {
   DocumentRenameOp,
   FeatureRemoveOp,
   FeatureRenameOp,
   StudioSetRollbackOp,
 } from '@/ops/operation';
-import { replayLog } from '@/ops/replay';
-import { createUndoManager, rebuildUndoStacks } from '@/ops/undo';
+import { createUndoManager } from '@/ops/undo';
 
 const id = (s: string): FeatureId => s as FeatureId;
 const remove = (featureId: string): FeatureRemoveOp => ({
@@ -227,90 +225,12 @@ describe('document.rename stays out of undo (M19.2, D5)', () => {
     expect(undo.stacks()).toEqual({ undo: [], redo: [] });
   });
 
-  it('rebuildUndoStacks skips it the same way', () => {
-    const { dispatcher, log, undo } = setup();
+  it('keeps redo and leaves the stacks as they were', () => {
+    const { dispatcher, undo } = setup();
     dispatcher.dispatch(rename('a', 'X'));
     dispatcher.dispatch(rename('a', 'Y'));
     undo.undo();
     dispatcher.dispatch(renameDocument('Part'));
-    expect(rebuildUndoStacks(log.entries())).toEqual({ undo: [1], redo: [2] });
     expect(undo.stacks()).toEqual({ undo: [1], redo: [2] });
-  });
-
-  it('replayLog renames the document', () => {
-    const live = setup();
-    live.dispatcher.dispatch(rename('a', 'X'));
-    live.dispatcher.dispatch(renameDocument('Part'));
-    const doc = aDocument({
-      features: [aFeature({ id: 'a', name: 'A' }), aFeature({ id: 'b', name: 'B' })],
-    });
-    replayLog(doc, live.handlers, live.log.entries());
-    expect(doc.meta.name).toBe('Part');
-    expect(toData(doc)).toEqual(toData(live.doc));
-  });
-});
-
-describe('rebuildUndoStacks', () => {
-  it('equals the live stacks', () => {
-    const { dispatcher, log, undo } = setup();
-    dispatcher.dispatch(rename('a', 'X'));
-    dispatcher.dispatch(rename('a', 'Y'));
-    dispatcher.dispatch(rename('b', 'Z'));
-    undo.undo();
-    undo.undo();
-    undo.redo();
-    dispatcher.dispatch(rename('b', 'W'));
-    undo.undo();
-    expect(rebuildUndoStacks(log.entries())).toEqual(undo.stacks());
-  });
-
-  it('throws with the seq of a corrupt entry', () => {
-    const { dispatcher, log } = setup();
-    dispatcher.dispatch(rename('a', 'X'));
-    dispatcher.dispatch(rename('a', 'Y'));
-    const good = log.entries();
-    const last = good[1];
-    if (last === undefined) throw new Error('setup');
-    const bad: LogEntry = { ...last, seq: 3, kind: 'undo', target: 1 };
-    expect(() => rebuildUndoStacks([...good, bad])).toThrow(/entry 3/);
-    const bad2: LogEntry = { ...last, seq: 3, kind: 'redo', target: 1 };
-    expect(() => rebuildUndoStacks([...good, bad2])).toThrow(/entry 3/);
-  });
-
-  it('is empty for an empty log', () => {
-    expect(rebuildUndoStacks([])).toEqual({ undo: [], redo: [] });
-  });
-});
-
-describe('reopening', () => {
-  it('continues undo/redo identically after rebuilding from stored entries', () => {
-    const live = setup();
-    live.dispatcher.dispatch(rename('a', 'X'));
-    live.dispatcher.dispatch(rename('b', 'Y'));
-    live.dispatcher.dispatch(remove('a'));
-    live.undo.undo();
-    live.undo.undo();
-
-    // Reopen: a fresh document in the initial state, the log replayed onto it.
-    const entries = live.log.entries();
-    const doc = aDocument({
-      features: [aFeature({ id: 'a', name: 'A' }), aFeature({ id: 'b', name: 'B' })],
-    });
-    const handlers = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
-    replayLog(doc, handlers, entries);
-    expect(toData(doc)).toEqual(toData(live.doc));
-    const log = createOperationLog(entries);
-    const dispatcher = createOperationDispatcher({ doc, handlers, log });
-    const undo = createUndoManager({ dispatcher, log });
-    expect(undo.stacks()).toEqual(live.undo.stacks());
-
-    for (const m of [live.undo, undo]) {
-      m.undo();
-      m.redo();
-      m.redo();
-      m.undo();
-    }
-    expect(toData(doc)).toEqual(toData(live.doc));
-    expect(undo.stacks()).toEqual(live.undo.stacks());
   });
 });
