@@ -16,7 +16,8 @@
 #include <utility>
 #include <vector>
 
-#include "curves2d.hpp"
+#include "tinycad/occt2d/boxes.hpp"
+
 #include "guarded.hpp"
 
 // Port of src/kernel-occt/regions.ts (the contract algorithm of the FakeKernel with the
@@ -27,6 +28,24 @@
 // loops of the result are built from the input curves, not read back from OCCT.
 
 namespace tinycad::kernel::detail {
+
+using occt2d::boundedCurve;
+using occt2d::Box;
+using occt2d::boxOf;
+using occt2d::circleCurve;
+using occt2d::counterClockwise;
+using occt2d::Curve2;
+using occt2d::dist;
+using occt2d::endOf;
+using occt2d::inBox;
+using occt2d::Kind;
+using occt2d::kTurn;
+using occt2d::overlappingPairs;
+using occt2d::scaleOf;
+using occt2d::startOf;
+using occt2d::unionOf;
+using occt2d::Vec2;
+using occt2d::wrap;
 
 namespace {
 

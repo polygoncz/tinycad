@@ -1,14 +1,14 @@
 #pragma once
 
-// The read model (spec 14 "Read model a sítě", Q099, Q100): the whole small snapshot the client
-// gets after every change, written straight into the tinycad.v1 messages (decision N53: the read
-// model IS the contract, no C++ mirror of it).
+// The read model (spec 14 "Read model a sítě", Q099, Q100) as domain data (read_model.hpp,
+// decisions N53, N154): the builder collects what one read model needs from the runtime document
+// and does under the document lock only what needs the kernel or the Regenerator. The rpc layer
+// converts the result into the tinycad.v1 messages after the lock is released.
 //
-// Meshes are the exception: every BodyView carries content_version (N43, Regenerator::
-// contentVersion) and gets its Mesh only when the client did not list that version in
-// ReadModelOptions.known_meshes. Tessellation is done once per (content_version, quality) and
-// kept in the MeshCache of the runtime document (N60), so several sessions and every later read
-// model reuse it.
+// Meshes: every BodyView carries its content version (N43, Regenerator::contentVersion) and gets
+// its mesh only when the client did not list that version in ReadModelOptions::knownMeshes.
+// Tessellation is done once per (content version, quality) and kept in the MeshCache of the
+// runtime document (N60), so several sessions and every later read model reuse it.
 //
 // Not thread-safe: the RuntimeDocument calls both classes under its lock (N54).
 
@@ -24,8 +24,8 @@
 #include "tinycad/kernel/kernel.hpp"
 #include "tinycad/regen/regenerator.hpp"
 #include "tinycad/regen/state.hpp"
+#include "tinycad/session/read_model.hpp"
 #include "tinycad/session/session_error.hpp"
-#include "tinycad/v1/read_model.pb.h"
 
 namespace tinycad::session {
 
@@ -55,11 +55,11 @@ class MeshCache {
 /** Everything one read model is built from; all references valid for the call only. */
 struct ReadModelInput {
   const document::DocumentReader& document;
-  /** seq of the last log entry (DocumentView.last_seq). */
+  /** seq of the last log entry. */
   std::int64_t lastSeq = 0;
-  /** RegenView.generation: the change counter of the runtime document (N55). */
+  /** The change counter of the runtime document (N55). */
   std::uint64_t generation = 0;
-  /** The result of Regenerator::run for this studio and ReadModelOptions.input_of. */
+  /** The result of Regenerator::run for this studio and ReadModelOptions::inputOf. */
   const regen::RegenResult& regen;
   /** Regenerator::contentVersion. */
   const regen::Regenerator& versions;
@@ -67,7 +67,7 @@ struct ReadModelInput {
   bool writable = false;
   bool canUndo = false;
   bool canRedo = false;
-  /** TransactionView.label; nullopt = no open transaction in the document. */
+  /** The label of the open transaction; nullopt = no open transaction in the document. */
   std::optional<std::string> transactionLabel;
   /** The tessellation of this session (OpenSessionRequest.mesh_quality or the server default). */
   kernel::MeshQuality quality;
@@ -79,31 +79,22 @@ class ReadModelBuilder {
   explicit ReadModelBuilder(MeshCache& meshes);
 
   /**
-   * Fills `out` (cleared first):
-   * - document: id, name, last_seq, features (featureToProto, in order), rollback_index,
-   *   body_meta (only bodies with metadata; material UNSPECIFIED when default).
-   * - regen: generation, statuses of every feature (Ok/Warning/Error/Suppressed/RolledBack,
-   *   FeatureError code and issues), final state, input (only when options.input_of names a
-   *   feature with RegenResult::input; the same mesh rule), anchors (ok and warning features in
-   *   front of the bar, RegenResult::anchors), duration_ms.
-   * - StateView: bodies in state order with origin, last_modified_by, content_version,
-   *   face_names[i] / edge_names[i] = NameTable primary name of face / edge i ('' = none),
-   *   face_planes (N56: index i of every planar face of NameTable::topology → its plane, so a
-   *   client without a kernel resolves a sketch on a face), mesh only when content_version is not
-   *   in known_meshes; sketches (SketchArtifact: sketch_id, feature_id = owner, plane, entities =
-   *   entities followed by derivedEntities as one ListValue, regions from outlines in artifact
-   *   order: name, outer, holes, area); planes; axes.
-   * - session: writable, can_undo, can_redo, transaction.
-   * A mesh that fails to tessellate → SessionError Internal (and `out` is unspecified).
+   * The read model of the input:
+   * - meta and studio of the document, lastSeq, generation;
+   * - regen = a copy of input.regen, its `input` kept only when options.inputOf names that
+   *   feature (ADR 0025);
+   * - bodies = the bodies of the final state in state order, inputBodies = those of the input
+   *   state (empty without input): each with its content version and its mesh from the
+   *   MeshCache, nullptr when the version is in options.knownMeshes;
+   * - session: writable, canUndo, canRedo, transactionLabel.
+   * A mesh that fails to tessellate → SessionError Internal.
    */
-  SessionResult<void> build(const ReadModelInput& input,
-                            const tinycad::v1::ReadModelOptions& options,
-                            tinycad::v1::ReadModel* out);
+  SessionResult<ReadModel> build(const ReadModelInput& input, const ReadModelOptions& options);
 
   /**
    * The content_versions of the bodies of result.finalState and of result.input, for
    * MeshCache::retain after a regeneration (a version another session still needs for its own
-   * input_of is simply tessellated again on its next read model).
+   * inputOf is simply tessellated again on its next read model).
    */
   static std::set<std::string> liveVersions(const regen::RegenResult& result,
                                             const regen::Regenerator& versions);

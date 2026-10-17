@@ -4,43 +4,7 @@
 
 namespace tinycad::session {
 
-namespace v1 = tinycad::v1;
-
 namespace {
-
-v1::FeatureError::Code errorCode(regen::FeatureErrorCode code) {
-  switch (code) {
-    case regen::FeatureErrorCode::InvalidParams:
-      return v1::FeatureError::CODE_INVALID_PARAMS;
-    case regen::FeatureErrorCode::UnresolvedReference:
-      return v1::FeatureError::CODE_UNRESOLVED_REFERENCE;
-    case regen::FeatureErrorCode::Kernel:
-      return v1::FeatureError::CODE_KERNEL;
-    case regen::FeatureErrorCode::UnknownType:
-      return v1::FeatureError::CODE_UNKNOWN_TYPE;
-    case regen::FeatureErrorCode::StaleVersion:
-      return v1::FeatureError::CODE_STALE_VERSION;
-  }
-  return v1::FeatureError::CODE_UNSPECIFIED;
-}
-
-/** As in session_error.cpp: ParamIssue.params → ParamIssue.values. */
-void issueToProto(const document::ParamIssue& issue, v1::ParamIssue* out) {
-  out->set_param(issue.param);
-  out->set_code(issue.code);
-  if (!issue.params.is_object()) return;
-  auto& values = *out->mutable_values();
-  for (const auto& item : issue.params.items()) {
-    v1::ParamIssueValue& value = values[item.key()];
-    if (item.value().is_number()) {
-      value.set_number(item.value().get<double>());
-    } else if (item.value().is_string()) {
-      value.set_text(item.value().get<std::string>());
-    } else {
-      value.set_text(item.value().dump());
-    }
-  }
-}
 
 // The same list as kTrimmed in server/src/ops/handlers/document.cpp (internal to ops).
 constexpr std::string_view kTrimmed[] = {
@@ -57,32 +21,6 @@ void trimFileNameEdges(std::string& s) {
 }
 
 }  // namespace
-
-void featureStatusToProto(const regen::FeatureStatus& status, v1::FeatureStatus* out) {
-  out->Clear();
-  switch (status.kind) {
-    case regen::FeatureStatusKind::Ok:
-      out->mutable_ok();
-      return;
-    case regen::FeatureStatusKind::Warning:
-      out->mutable_warning()->set_message(status.message);
-      return;
-    case regen::FeatureStatusKind::Error: {
-      auto* error = out->mutable_error();
-      if (!status.error) return;
-      error->set_code(errorCode(status.error->code));
-      error->set_message(status.error->message);
-      for (const auto& issue : status.error->issues) issueToProto(issue, error->add_issues());
-      return;
-    }
-    case regen::FeatureStatusKind::Suppressed:
-      out->mutable_suppressed();
-      return;
-    case regen::FeatureStatusKind::RolledBack:
-      out->mutable_rolled_back();
-      return;
-  }
-}
 
 std::string trimDocumentName(std::string_view name) {
   bool changed = true;

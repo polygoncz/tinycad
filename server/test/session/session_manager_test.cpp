@@ -26,8 +26,7 @@ class SessionManagerTest : public RuntimeFixture {
                                    [this] { return "s" + std::to_string(++nextSession); },
                                    SessionConfig{}});
   document::DocumentId part = createDocument("Part");
-  v1::ReadModelOptions options;
-  v1::ChangeResult out;
+  ReadModelOptions options;
 
   SessionPtr open(const document::DocumentId& id, const std::string& resume = {}) {
     auto opened = manager->open(id, std::nullopt, resume);
@@ -35,8 +34,9 @@ class SessionManagerTest : public RuntimeFixture {
     return opened ? opened->session : nullptr;
   }
 
-  SessionResult<void> dispatch(const SessionPtr& session, const Json& op, const std::string& id) {
-    return session->document().dispatch(session->caller(), op, "", key(id), options, &out);
+  SessionResult<ChangeResult> dispatch(const SessionPtr& session, const Json& op,
+                                       const std::string& id) {
+    return session->document().dispatch(session->caller(), op, "", key(id), options);
   }
 };
 
@@ -62,7 +62,7 @@ TEST_F(SessionManagerTest, AChangeIsAnnouncedToTheReadOnlySessionWithTheWriterId
   ASSERT_TRUE(dispatch(writer, addBox("a", 0), "op-1"));
   const auto changes = changedOf(reader->document());
   ASSERT_EQ(changes.size(), 1U);
-  EXPECT_EQ(changes[0].by_session_id(), writer->id().str());
+  EXPECT_EQ(changes[0].bySessionId, writer->id().str());
 }
 
 TEST_F(SessionManagerTest, WhenTheWriterLeavesTheReadOnlySessionStaysReadOnly) {
@@ -98,11 +98,11 @@ TEST_F(SessionManagerTest, ClosingTheWriterAbortsItsTransaction) {
   const SessionPtr writer = open(part);
   const SessionPtr reader = open(part);
   ASSERT_TRUE(writer->document().begin(writer->caller(), "T", {writer->recent(), key("b1")},
-                                       options, &out));
+                                       options));
   manager->close(writer->id().str());
-  v1::ReadModel model;
-  ASSERT_TRUE(reader->document().readModel(reader->caller(), options, &model));
-  EXPECT_FALSE(model.session().has_transaction());
+  auto model = reader->document().readModel(reader->caller(), options);
+  ASSERT_TRUE(model.has_value());
+  EXPECT_FALSE(model->session.transactionLabel.has_value());
 }
 
 TEST_F(SessionManagerTest, OpeningAMissingDocumentKeepsNothing) {
@@ -158,10 +158,10 @@ TEST_F(SessionManagerTest, RenamingAnOpenDocumentGoesThroughItsRuntimeDocument) 
   EXPECT_EQ(renamed->name, "Renamed");
   const auto changes = changedOf(session->document());
   ASSERT_EQ(changes.size(), 1U);
-  EXPECT_EQ(changes[0].by_session_id(), "");
-  v1::ReadModel model;
-  ASSERT_TRUE(session->document().readModel(session->caller(), options, &model));
-  EXPECT_EQ(model.document().name(), "Renamed");
+  EXPECT_EQ(changes[0].bySessionId, "");
+  auto model = session->document().readModel(session->caller(), options);
+  ASSERT_TRUE(model.has_value());
+  EXPECT_EQ(model->meta.name, "Renamed");
   EXPECT_EQ(storedLog(part).size(), 1U);
 }
 
@@ -209,7 +209,7 @@ TEST_F(SessionManagerTest, ShutdownClosesTheEventsOfEveryLoadedDocument) {
 TEST_F(SessionManagerTest, DestroyingTheManagerClosesEverySession) {
   const SessionPtr writer = open(part);
   ASSERT_TRUE(writer->document().begin(writer->caller(), "T", {writer->recent(), key("b1")},
-                                       options, &out));
+                                       options));
   const std::shared_ptr<RuntimeDocument> runtime = writer->documentPtr();
   manager.reset();
   EXPECT_FALSE(runtime->leaseHolder().has_value());
@@ -233,13 +233,12 @@ TEST_F(SessionManagerTest, TwoSessionsOpeningAtOnceShareOneDocumentAndOneLease) 
 TEST_F(SessionManagerTest, TwoThreadsApplyingTheSameOperationIdApplyItOnce) {
   const SessionPtr writer = open(part);
   ASSERT_TRUE(writer->document().begin(writer->caller(), "T", {writer->recent(), key("b1")},
-                                       options, &out));
+                                       options));
   const auto changesBefore = changedOf(writer->document()).size();
   const auto applyOnce = [&] {
-    v1::ChangeResult result;
     // A second application of the same feature.add would fail with a duplicate id.
     return writer->document()
-        .apply(writer->caller(), addBox("a", 0), {writer->recent(), key("a1")}, options, &result)
+        .apply(writer->caller(), addBox("a", 0), {writer->recent(), key("a1")}, options)
         .has_value();
   };
   auto first = std::async(std::launch::async, applyOnce);
@@ -254,9 +253,8 @@ TEST_F(SessionManagerTest, AChangeRunningInTheKernelNeverBlocksTheManager) {
   const document::DocumentId other = createDocument("Other");
   gate->close();
   auto change = std::async(std::launch::async, [&] {
-    v1::ChangeResult result;
     return writer->document()
-        .dispatch(writer->caller(), addBox("a", 0), "", key("op-1"), options, &result)
+        .dispatch(writer->caller(), addBox("a", 0), "", key("op-1"), options)
         .has_value();
   });
   ASSERT_TRUE(gate->someoneWaits());

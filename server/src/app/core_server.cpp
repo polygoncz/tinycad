@@ -8,7 +8,6 @@
 #include "tinycad/features/builders.hpp"
 #include "tinycad/features/builtin.hpp"
 #include "tinycad/kernel/occt_kernel.hpp"
-#include "tinycad/session/feature_types.hpp"
 #include "tinycad/solver_planegcs/planegcs_solver.hpp"
 
 namespace tinycad::app {
@@ -77,9 +76,8 @@ CoreServer::CoreServer(const CoreConfig& config) : config_(config) {
   manager_ = std::make_unique<session::SessionManager>(session::SessionManager::Dependencies{
       *runtime_, *documents_, [] { return std::chrono::steady_clock::now(); },
       [this] { return uuids_.next(); }, sessions});
-  sessionService_ = std::make_unique<session::SessionServiceImpl>(
-      *manager_, session::describeFeatureTypes(schemas_));
-  documentService_ = std::make_unique<session::DocumentServiceImpl>(*manager_);
+  sessionService_ = std::make_unique<rpc::SessionServiceImpl>(*manager_, schemas_);
+  documentService_ = std::make_unique<rpc::DocumentServiceImpl>(*manager_);
 }
 
 bool CoreServer::listen() {

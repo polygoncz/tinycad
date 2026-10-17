@@ -18,15 +18,16 @@ namespace {
 using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 
-tinycad::v1::SessionEvent changed(std::uint64_t generation) {
-  tinycad::v1::SessionEvent event;
-  event.mutable_changed()->set_generation(generation);
+SessionEvent changed(std::uint64_t generation) {
+  SessionEvent event;
+  event.kind = SessionEvent::Kind::Changed;
+  event.generation = generation;
   return event;
 }
 
-std::vector<std::uint64_t> seqsOf(const std::vector<tinycad::v1::SessionEvent>& events) {
+std::vector<std::uint64_t> seqsOf(const std::vector<SessionEvent>& events) {
   std::vector<std::uint64_t> out;
-  for (const auto& e : events) out.push_back(e.seq());
+  for (const auto& e : events) out.push_back(e.seq);
   return out;
 }
 
@@ -46,15 +47,15 @@ TEST(EventRing, RefusesAZeroCapacity) {
 TEST(EventRing, NumbersEventsFromOneAndOverwritesTheirSeq) {
   EventRing ring;
   auto first = changed(1);
-  first.set_seq(42);
+  first.seq = 42;
   EXPECT_EQ(ring.append(first), 1U);
   EXPECT_EQ(ring.append(changed(2)), 2U);
   EXPECT_EQ(ring.lastSeq(), 2U);
   const auto events = ring.after(0);
   ASSERT_TRUE(events.has_value());
   EXPECT_EQ(seqsOf(*events), (std::vector<std::uint64_t>{1, 2}));
-  EXPECT_EQ((*events)[0].changed().generation(), 1U);
-  EXPECT_EQ((*events)[1].changed().generation(), 2U);
+  EXPECT_EQ((*events)[0].generation, 1U);
+  EXPECT_EQ((*events)[1].generation, 2U);
 }
 
 TEST(EventRing, ReturnsOnlyTheEventsAfterTheSeqInOrder) {
@@ -74,8 +75,8 @@ TEST(EventRing, DropsTheOldestBeyondCapacity) {
   const auto kept = ring.after(44);
   ASSERT_TRUE(kept.has_value());
   EXPECT_EQ(kept->size(), 256U);
-  EXPECT_EQ(kept->front().seq(), 45U);
-  EXPECT_EQ(kept->back().seq(), 300U);
+  EXPECT_EQ(kept->front().seq, 45U);
+  EXPECT_EQ(kept->back().seq, 300U);
   EXPECT_FALSE(ring.after(43).has_value());
   EXPECT_FALSE(ring.after(0).has_value());
 }
@@ -107,7 +108,7 @@ TEST(EventRing, WaitAfterReturnsEmptyAtTheDeadline) {
 
 TEST(EventRing, WaitAfterWakesUpOnAppend) {
   EventRing ring;
-  std::optional<std::vector<tinycad::v1::SessionEvent>> got;
+  std::optional<std::vector<SessionEvent>> got;
   std::thread watcher([&] { got = ring.waitAfter(0, steady_clock::now() + std::chrono::hours(1)); });
   std::this_thread::sleep_for(milliseconds(20));
   ring.append(changed(1));
@@ -118,7 +119,7 @@ TEST(EventRing, WaitAfterWakesUpOnAppend) {
 
 TEST(EventRing, CloseWakesEveryWaiterForGood) {
   EventRing ring;
-  std::vector<std::optional<std::vector<tinycad::v1::SessionEvent>>> got(2);
+  std::vector<std::optional<std::vector<SessionEvent>>> got(2);
   std::vector<std::thread> watchers;
   for (auto& slot : got) {
     watchers.emplace_back(

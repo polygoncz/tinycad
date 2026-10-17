@@ -13,6 +13,7 @@ milestones:
   - "[[M45-sezeni-pres-grpc]]"
   - "[[M46-klient-nad-read-modelem]]"
   - "[[M49-pravidla-validace-v-popisu]]"
+  - "[[M50-occt2d-a-vrstva-rpc]]"
 tags:
   - spec
 created: 2026-10-17
@@ -44,6 +45,28 @@ remote/ adaptéry  ── gRPC-Web ──► překlad na gRPC  ── gRPC ─�
 | `GeometryService` | žádný | 2D geometrie skicáře za portem `SketchGeometry` ([[Q096 Geometrie skici přes síť|Q096]]) |
 
 Soubory: `common.proto` (vektory, rovina, `ParamIssue`), `errors.proto` (`ErrorDetail`), `operations.proto`, `schema.proto` (`FeatureTypeDescriptor`), `read_model.proto`, `geometry.proto`, `session.proto` (obě služby s dokumenty a sezením).
+
+### Vrstva rpc na serveru
+
+Od [[M50-occt2d-a-vrstva-rpc|M50]] ([[Rozhodnutí nativního jádra|N53, N154]]) zná protobuf a gRPC na serveru jen knihovna `tinycad_rpc` (`server/src/rpc`) a kompoziční kořen `tinycad_app`. Doména pod ní (`session`, `storage`, `regen`, `geometry`…) `tinycad_proto` nelinkuje, takže `.pb.h` v ní nejde přeložit.
+
+```
+SessionServiceImpl / DocumentServiceImpl / GeometryServiceImpl      (tinycad_rpc)
+   │ request → doménové vstupy: operationToJson, readModelOptionsOf, operationKey (otisk)
+   ▼
+SessionManager → RuntimeDocument (zámek dokumentu)                  (tinycad_session)
+   │ vrací doménové výsledky: session::ReadModel, ChangeResult, HistoryView;
+   │ EventRing drží session::SessionEvent
+   ▼
+readModelToProto, changeResultToProto, historyToProto, sessionEventToProto,
+toStatus (SessionError → google.rpc.Status)                         (tinycad_rpc, mimo zámek)
+```
+
+- **Doménový read model** (`session/read_model.hpp`) drží jen sdílená neměnná data: `DocumentMeta`, `StudioPtr`, kopii `RegenResult` (stavy, `StatePtr`, kotvy, vstup), pro každé těleso `BodyPtr` s verzí obsahu a `shared_ptr<const MeshData>` (`nullptr`, když verzi klient uvedl v `known_meshes`) a pohled sezení. Pod zámkem dokumentu se dělá jen to, co potřebuje jádro nebo regenerátor (regenerace, verze obsahu, tessellace do `MeshCache`); `regen.input` zůstane jen tehdy, když ho `input_of` žádal.
+- **Převod do protobufu běží v RPC po návratu z `RuntimeDocument`**, tedy bez zámku dokumentu, a nikdy nevolá jádro. Vrstva navíc zámek zkrátí, ne prodlouží. Odpovědi jsou bajt po bajtu stejné jako před M50 (testy `grpc_*` beze změny).
+- `WatchSession` dělá `resync` a `heartbeat` sám; uložené události převádí `sessionEventToProto`.
+- `SessionServiceImpl` postaví popisy typů featur (`describeFeatureTypes`) jednou v konstruktoru z registru schémat.
+- Stavy chyb jsou v `rpc/status.hpp`: `toStatus` a `internalStatusOfCurrentException` pro sezení a dokumenty (`ERROR_REASON_UNSPECIFIED`), `geometryStatus` a `internalGeometryStatusOfCurrentException` pro `GeometryService` (`KERNEL_INTERNAL`).
 
 ## Čtyři zásady
 
@@ -117,6 +140,7 @@ Z revize architektury po M44 ([[Rozhodnutí nativního jádra]] N106–N108):
 
 - **Pořadí zámků:** manager sezení → dokument → události. **Pod zámkem manageru se nikdy nečeká na zámek dokumentu ani nespouští OCCT** (načtení dokumentu a první regenerace běží mimo něj: vloží se rezervace, dokument se dosadí po načtení; uvolnění pronájmu s `Abort` až po uvolnění zámku manageru).
 - **Uvolnění běhového dokumentu výslovně zavře jeho kruhový buffer událostí**; `WatchSession` pak skončí `OK`. Při vypnutí serveru se nejdřív zavřou všechny buffery (`SessionManager::shutdown`), teprve potom `Server::Shutdown`.
+- **Převod read modelu do `tinycad.v1` běží mimo zámek dokumentu** (vrstva rpc, viz výše): `RuntimeDocument` vrací doménový read model ze sdílených neměnných dat a služba ho převede až po návratu.
 - Export STEP drží zámek celého procesu (globální stav `STEPControl_Writer`).
 - **Idempotence před řešením skici:** pořadí v běhovém dokumentu je otisk → hledání uloženého záznamu (`PersistentDocument::lookup`) → teprve potom opětovné řešení skici a změna. Opakovaný požadavek se tak nikdy znovu neřeší.
 - **Prázdný `Commit`** se do logu nezapíše, ale jeho `operation_id` si pamatuje sezení (`RecentResponses`), takže opakování vrátí úspěch, ne `NO_TRANSACTION`.

@@ -6,7 +6,7 @@ target_include_directories(tinycad_app PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_features(tinycad_app PUBLIC cxx_std_23)
 # The solver and the kernel are composed here (N109).
 target_link_libraries(tinycad_app
-  PUBLIC tinycad_session tinycad_service gRPC::grpc++ Threads::Threads
+  PUBLIC tinycad_rpc tinycad_session gRPC::grpc++ Threads::Threads
   PRIVATE tinycad_kernel tinycad_solver_planegcs tinycad_feature_builders tinycad_features)
 tinycad_warnings(tinycad_app)
 
