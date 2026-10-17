@@ -101,6 +101,19 @@ describe('toRemoteError', () => {
     expect(toRemoteError('boom').code).toBe('UNKNOWN');
   });
 
+  it('a failed fetch is UNAVAILABLE (N86)', () => {
+    const failed = new TypeError('Failed to fetch');
+    // connect-web wraps the rejection of fetch as UNKNOWN with the TypeError as the cause
+    expect(
+      toRemoteError(new ConnectError('x', Code.Unknown, undefined, undefined, failed)).code,
+    ).toBe('UNAVAILABLE');
+    expect(toRemoteError(failed).code).toBe('UNAVAILABLE');
+    expect(isRetryable(failed)).toBe(true);
+    expect(
+      toRemoteError(new ConnectError('x', Code.Unknown, undefined, undefined, new Error())).code,
+    ).toBe('UNKNOWN');
+  });
+
   it('an unknown reason of a newer server is UNSPECIFIED', () => {
     const error = toRemoteError(failure(Code.FailedPrecondition, 999 as ErrorReason)); // a value this client does not know
     expect(error.reason).toBe('UNSPECIFIED');
