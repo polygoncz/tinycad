@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "kernel_test_support.hpp"
@@ -163,6 +164,40 @@ TEST_F(Step, NoTemporaryFileStaysAfterAnExportAFailedOneIncluded) {
   ok(kernel.exportStep(std::span(&a, 1)));
   ok(kernel.exportStep(std::vector{a, aBox({{5, 0, 0}, {1, 1, 1}})}));
   EXPECT_EQ(codeOf(kernel.exportStep(std::vector{a, a})), KernelErrorCode::InvalidInput);
+  EXPECT_EQ(exportFiles(), std::vector<std::string>{});
+}
+
+TEST(StepThreads, ExportsFromSeveralThreadsAtOnceAllSucceed) {
+  // Every thread has its own kernel (one kernel is not shared between threads); the STEP
+  // translator itself is process-wide, so the exports take a process-wide lock (N106).
+  constexpr int kThreads = 4;
+  constexpr int kExports = 3;
+  std::vector<std::string> texts(kThreads * kExports);
+  std::vector<std::thread> threads;
+  for (int t = 0; t < kThreads; ++t) {
+    threads.emplace_back([t, &texts] {
+      // No ok() here: an exception in a thread would end the process. A failure leaves the text
+      // empty, which the checks below report.
+      OcctKernel kernel;
+      const auto made = kernel.makeBox({{0, 0, 0}, {1.0 + t, 2, 3}});
+      if (!made) return;
+      const ShapeHandle box = made->shape;
+      for (int i = 0; i < kExports; ++i) {
+        auto text = kernel.exportStep(std::span(&box, 1));
+        if (text) texts[static_cast<std::size_t>(t * kExports + i)] = std::move(*text);
+      }
+    });
+  }
+  for (std::thread& thread : threads) thread.join();
+  for (int t = 0; t < kThreads; ++t) {
+    for (int i = 0; i < kExports; ++i) {
+      const std::string& text = texts[static_cast<std::size_t>(t * kExports + i)];
+      expectStepFrame(text);
+      const std::vector<double> volumes = solidVolumes(readBack(text));
+      ASSERT_EQ(volumes.size(), 1U) << t << " " << i;
+      expectRelativelyClose(volumes[0], (1.0 + t) * 6, 1e-6);
+    }
+  }
   EXPECT_EQ(exportFiles(), std::vector<std::string>{});
 }
 

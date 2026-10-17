@@ -78,9 +78,22 @@ void quietInfoMessages() {
   });
 }
 
+/**
+ * Serializes every STEP export of the process (N106, spec 14 "Vlákna a zámky serveru"): the STEP
+ * translator keeps process-wide state – the static parameters of Interface_Static
+ * (write.step.schema, write.step.unit) and the shared protocol and session of the XSControl
+ * library – that is not thread safe, so two sessions exporting at once could corrupt each other.
+ * One export at a time is cheap compared to that; other kernel calls do not take it.
+ */
+std::mutex& stepMutex() {
+  static std::mutex mutex;
+  return mutex;
+}
+
 /** STEPControl_Writer: AP214 and mm are the defaults of write.step.schema and write.step.unit. */
 void writeFile(const TopoDS_Shape& shape, const std::filesystem::path& path) {
   quietInfoMessages();
+  const std::scoped_lock lock(stepMutex());
   try {
     STEPControl_Writer writer;
     const IFSelect_ReturnStatus transferred = writer.Transfer(shape, STEPControl_AsIs);

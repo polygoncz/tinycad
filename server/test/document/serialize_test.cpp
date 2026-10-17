@@ -191,6 +191,35 @@ TEST(MigrateFeatureData, MigratesAndReportsWithPathsRelativeToTheFeature) {
             "params");
 }
 
+TEST(ReadFeature, ReadsOneFeatureAndFeatureJsonGivesItBack) {
+  const auto registry = registryOf(boxV2());
+  const auto f = document::readFeature(box("a", 3), registry);
+  ASSERT_TRUE(f.has_value());
+  EXPECT_EQ(document::featureJson(**f), box("a", 3));
+}
+
+TEST(ReadFeature, MigratesAndReportsEveryProblemWithPathsRelativeToTheFeature) {
+  const auto registry = registryOf(boxV2());
+  Json v1 = box("a", 1);
+  v1["typeVersion"] = 1;
+  v1["params"] = {{"size", 5}};
+  const auto migrated = document::readFeature(v1, registry);
+  ASSERT_TRUE(migrated.has_value());
+  EXPECT_EQ(*(*migrated)->params, (Json{{"width", 5}}));
+
+  Json broken = box("a/b", 1);
+  broken["typeVersion"] = 4294967296.0;  // above the int range
+  broken.erase("suppressed");
+  const auto failed = document::readFeature(broken, registry);
+  ASSERT_FALSE(failed.has_value());
+  Strings paths;
+  for (const DocumentLoadIssue& issue : failed.error().issues) paths.push_back(issue.path);
+  EXPECT_EQ(paths, (Strings{"id", "typeVersion", "suppressed"}));
+
+  v1["params"] = {{"size", "x"}};
+  EXPECT_EQ(document::readFeature(v1, registry).error().issues.at(0).path, "params");
+}
+
 TEST(SerializeUnknownTypes, KeepsThemUnchanged) {
   const Json teleport = {{"id", "t"},        {"type", "teleport"},
                          {"typeVersion", 7}, {"name", "T"},

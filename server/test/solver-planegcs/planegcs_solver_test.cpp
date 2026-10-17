@@ -7,10 +7,12 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <memory>
 #include <cmath>
 #include <numbers>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "bspline.hpp"
 #include "testing.hpp"
@@ -148,6 +150,21 @@ TEST(PlanegcsSolverDrag, DraggingAPointThatDoesNotExistFails) {
 
 TEST(PlanegcsSolverDrag, DraggingALineIsAFailedSolve) {
   EXPECT_EQ(solve(rectangle(), dragOf("ab", {1, 1})).status, SolveStatus::Failed);
+}
+
+// --- exceptions (N108)
+
+TEST(PlanegcsSolverExceptions, ABugInTheAdapterPropagatesInsteadOfAFailedSolve) {
+  // A constraint of kind pointOnCurve that is not a PointOnCurveConstraint: Sketch::parse never
+  // builds one, so reading it is a bug (as<T>() asserts), not a sketch the solver cannot take.
+  const Sketch valid = sketchOf(RECTANGLE_ENTITIES, RECTANGLE_CONSTRAINTS);
+  std::vector<sketch::ConstraintPtr> constraints = valid.constraints();
+  constraints.push_back(std::make_shared<const sketch::PairConstraint>(
+      sketch::ConstraintKind::PointOnCurve, sketch::SketchConstraintId("broken"),
+      sketch::SketchEntityId("a"), sketch::SketchEntityId("cd")));
+  const Sketch broken(valid.entities(), constraints);
+  PlanegcsSolver solver;
+  EXPECT_THROW((void)solver.solve(broken, std::nullopt), core::AssertionError);
 }
 
 // --- conflicts and redundancy

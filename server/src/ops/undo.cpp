@@ -1,49 +1,68 @@
 #include "tinycad/ops/undo.hpp"
 
+#include <optional>
 #include <string>
+#include <utility>
 
 namespace tinycad::ops {
 
 namespace {
 
-/** One step shared by rebuildUndoStacks and the live manager; asserts on a corrupt log. */
-void step(UndoStacks& stacks, const LogEntry& entry) {
+/**
+ * One step shared by rebuildUndoStacks and the live manager: the error of an undo or redo entry
+ * that does not target the top of its stack, nullopt when applied.
+ */
+std::optional<std::string> step(UndoStacks& stacks, const LogEntry& entry) {
   switch (entry.kind) {
     case EntryKind::Do:
       // The name of the document is metadata outside undo (M19.2): Ctrl+Z does not bring back the
       // old name and a rename keeps redo. It commutes with every other operation, so undo of the
       // steps around it stays correct.
-      if (isDocumentRename(entry.op)) return;
+      if (isDocumentRename(entry.op)) return std::nullopt;
       stacks.undo.push_back(entry.seq);
       stacks.redo.clear();
-      return;
+      return std::nullopt;
     case EntryKind::Undo:
-      TINYCAD_ASSERT(!stacks.undo.empty() && stacks.undo.back() == entry.target,
-                     "Corrupt log: undo entry " + std::to_string(entry.seq) +
-                         " does not target the top of the undo stack");
+      if (stacks.undo.empty() || stacks.undo.back() != entry.target) {
+        return "Corrupt log: undo entry " + std::to_string(entry.seq) +
+               " does not target the top of the undo stack";
+      }
       stacks.redo.push_back(stacks.undo.back());
       stacks.undo.pop_back();
-      return;
+      return std::nullopt;
     case EntryKind::Redo:
-      TINYCAD_ASSERT(!stacks.redo.empty() && stacks.redo.back() == entry.target,
-                     "Corrupt log: redo entry " + std::to_string(entry.seq) +
-                         " does not target the top of the redo stack");
+      if (stacks.redo.empty() || stacks.redo.back() != entry.target) {
+        return "Corrupt log: redo entry " + std::to_string(entry.seq) +
+               " does not target the top of the redo stack";
+      }
       stacks.undo.push_back(stacks.redo.back());
       stacks.redo.pop_back();
-      return;
+      return std::nullopt;
   }
+  return std::nullopt;
+}
+
+/** The stacks of a log the caller has checked: a corrupt one is a bug of the caller. */
+UndoStacks checkedStacks(const std::vector<LogEntry>& entries) {
+  auto stacks = rebuildUndoStacks(entries);
+  TINYCAD_ASSERT(stacks.has_value(), "UndoManager: " + (stacks ? "" : stacks.error().message));
+  return std::move(*stacks);
 }
 
 }  // namespace
 
-UndoStacks rebuildUndoStacks(const std::vector<LogEntry>& entries) {
+core::Result<UndoStacks, CorruptUndoLog> rebuildUndoStacks(const std::vector<LogEntry>& entries) {
   UndoStacks stacks;
-  for (const LogEntry& entry : entries) step(stacks, entry);
+  for (const LogEntry& entry : entries) {
+    if (auto error = step(stacks, entry)) {
+      return core::fail(CorruptUndoLog{entry.seq, std::move(*error)});
+    }
+  }
   return stacks;
 }
 
 UndoManager::UndoManager(OperationDispatcher& dispatcher, const OperationLog& log)
-    : dispatcher_(dispatcher), log_(log), stacks_(rebuildUndoStacks(log.entries())) {
+    : dispatcher_(dispatcher), log_(log), stacks_(checkedStacks(log.entries())) {
   dispatcher_.setListener(this);
 }
 
@@ -55,8 +74,12 @@ bool UndoManager::canRedo() const { return !stacks_.redo.empty() && !dispatcher_
 
 UndoStacks UndoManager::stacks() const { return stacks_; }
 
-// Stacks change only in onAppended, so a failed dispatch (nothing appended) changes nothing.
-void UndoManager::onAppended(const LogEntry& entry) { step(stacks_, entry); }
+// Stacks change only in onAppended, so a failed dispatch (nothing appended) changes nothing. The
+// dispatcher writes only entries that fit the stacks: a mismatch here is a bug.
+void UndoManager::onAppended(const LogEntry& entry) {
+  const auto error = step(stacks_, entry);
+  TINYCAD_ASSERT(!error, error.value_or(""));
+}
 
 core::Result<LogEntry, OperationLoadError> UndoManager::undo() {
   TINYCAD_ASSERT(canUndo(), "undo: nothing to undo");

@@ -66,18 +66,19 @@ core::Result<LoadedSnapshot, LoadError> loadBaseSnapshot(
     const document::FeatureSchemaRegistryReader& schemas);
 
 /**
- * Applies the entries one at a time, so a failing one is named: a handler error or an exception
- * while applying is Entry with path 'op' (a broken log is broken data, not a bug).
+ * Applies the entries one at a time, so a failing one is named: a handler error is Entry with
+ * path 'op' (a broken log is broken data, not a bug). An exception is a bug and propagates.
  */
 core::Result<void, LoadError> replayEach(document::DocumentWriter& doc,
                                          const ops::OpHandlerRegistry& handlers,
                                          std::span<const ops::LogEntry> entries);
 
 /**
- * Opens stored data (loadDocument of spec 05): parses every entry, loads the latest snapshot,
- * replays the entries after it. With `verify` also loads the base snapshot (Base errors), replays
- * the whole log from it (Entry errors) and throws AssertionError when the two states differ
- * (determinism).
+ * Opens stored data (loadDocument of spec 05): parses every entry, rebuilds the undo stacks (an
+ * undo or redo entry off the top of its stack is Entry with path 'target'), loads the latest
+ * snapshot, replays the entries after it. With `verify` also loads the base snapshot (Base
+ * errors), replays the whole log from it (Entry errors); when the two states differ, Snapshot
+ * with path 'document' (N108).
  */
 core::Result<LoadedDocument, LoadError> loadDocument(
     const StoredDocument& stored, const document::DocumentId& id,

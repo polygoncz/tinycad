@@ -45,11 +45,6 @@ core::Result<FeaturePtr, OperationLoadError> requireFeature(const DocumentReader
   return f;
 }
 
-Json featureJson(const FeatureInstance& f) {
-  return {{"id", f.id.str()},     {"type", f.type},     {"typeVersion", f.typeVersion},
-          {"name", f.name},       {"params", *f.params}, {"suppressed", f.suppressed}};
-}
-
 /**
  * Feature data of an operation on the current version of its schema (Q035); a failed migration
  * is a failure of the operation before any change, at `prefix` + the path of the issue.
@@ -87,27 +82,22 @@ class FeatureAddHandler final : public shape::ShapedHandler {
   }
 
   VoidResult apply(DocumentWriter& doc, const Operation& op) const override {
-    const Json& raw = op.at("feature");
-    const auto typeVersion = intOf(raw.at("typeVersion"));
-    if (!typeVersion) return core::fail(OperationLoadError{"feature.typeVersion", "Too large"});
+    // The same reading as a feature of a snapshot: shape and migration to the current schema
+    // version (Q035), before any change. Migration first, like the TS handler.
+    auto f = document::readFeature(op.at("feature"), schemas_);
+    if (!f) {
+      const document::DocumentLoadIssue& issue = f.error().issues.front();
+      return core::fail(OperationLoadError{"feature." + issue.path, "Feature: " + issue.message});
+    }
     const double index = core::numberOf(op.at("index"));
     if (index > static_cast<double>(doc.studio()->features.size())) {
       return core::fail(OperationLoadError{"index", "Index out of range"});
     }
-    const FeatureId id(text(raw, "id"));
-    if (doc.indexOf(id) != -1) {
-      return core::fail(OperationLoadError{"feature.id", "Duplicate feature id '" + id.str() + "'"});
+    if (doc.indexOf((*f)->id) != -1) {
+      return core::fail(
+          OperationLoadError{"feature.id", "Duplicate feature id '" + (*f)->id.str() + "'"});
     }
-    auto data = migrated(schemas_, {text(raw, "type"), *typeVersion, raw.at("params")}, "feature.");
-    if (!data) return core::fail(data.error());
-    auto f = std::make_shared<FeatureInstance>();
-    f->id = id;
-    f->type = std::move(data->type);
-    f->typeVersion = data->typeVersion;
-    f->name = text(raw, "name");
-    f->params = std::make_shared<const Json>(std::move(data->params));
-    f->suppressed = raw.at("suppressed").get<bool>();
-    doc.insertFeature(static_cast<int>(index), std::move(f));
+    doc.insertFeature(static_cast<int>(index), std::move(*f));
     return {};
   }
 
@@ -124,7 +114,7 @@ class FeatureRemoveHandler final : public shape::ShapedHandler {
     if (!f) return core::fail(f.error());
     return Json{{"type", "feature.add"},
                 {"v", opVersion("feature.add")},
-                {"feature", featureJson(**f)},
+                {"feature", document::featureJson(**f)},
                 {"index", doc.indexOf((*f)->id)}};
   }
 

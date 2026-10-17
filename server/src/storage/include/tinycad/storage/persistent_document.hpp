@@ -47,11 +47,17 @@ inline constexpr std::int64_t SNAPSHOT_EVERY = 100;
 /** Why stored data could not be loaded (spec 05 LoadDocumentError, Q033). */
 struct LoadError {
   enum class Kind {
-    /** The latest snapshot: envelope or fromData (issue paths 'format', 'atSeq', 'document.…'). */
+    /**
+     * The latest snapshot: envelope or fromData (issue paths 'format', 'atSeq', 'document.…'), or
+     * with verify a snapshot the log from the base does not reproduce ('document').
+     */
     Snapshot,
     /** The base snapshot (verify only). */
     Base,
-    /** A log entry: parseLogEntry, a seq gap ('seq') or a handler refusing it on replay ('op'). */
+    /**
+     * A log entry: parseLogEntry, a seq gap ('seq'), an undo or redo entry off the top of its
+     * stack ('target') or a handler refusing it on replay ('op').
+     */
     Entry,
     /** The file could not be read (StoreError Io). */
     Storage,
@@ -111,9 +117,10 @@ class PersistentDocument {
   };
 
   /**
-   * Opens a stored document (spec 05 "Načtení dokumentu"): parses every entry, loads the latest
-   * snapshot, replays the entries after it, rebuilds the undo stacks from the whole log; with
-   * verify also replays from the base and throws AssertionError on a mismatch (determinism).
+   * Opens a stored document (spec 05 "Načtení dokumentu"): parses every entry, rebuilds the undo
+   * stacks from the whole log (a corrupt undo target is Entry, path 'target'), loads the latest
+   * snapshot, replays the entries after it; with verify also replays from the base, a mismatch is
+   * Snapshot with path 'document'. Data from the file never throw (N108).
    * Takes ownership of the file. `deps` must outlive the document.
    */
   static core::Result<std::unique_ptr<PersistentDocument>, LoadError> open(

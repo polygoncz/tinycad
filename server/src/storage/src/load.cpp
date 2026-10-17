@@ -1,10 +1,10 @@
 #include "load.hpp"
 
-#include <exception>
 #include <utility>
 
 #include "tinycad/ops/parse_entry.hpp"
 #include "tinycad/ops/replay.hpp"
+#include "tinycad/ops/undo.hpp"
 
 namespace tinycad::storage {
 
@@ -125,14 +125,11 @@ core::Result<LoadedSnapshot, LoadError> loadBaseSnapshot(
 core::Result<void, LoadError> replayEach(document::DocumentWriter& doc,
                                          const ops::OpHandlerRegistry& handlers,
                                          std::span<const ops::LogEntry> entries) {
+  // Handlers refuse what does not fit the document as a value, so a mutator never asserts on data
+  // from the file; an exception here is a bug and propagates (N108).
   for (const ops::LogEntry& entry : entries) {
-    try {
-      auto replayed = ops::replayLog(doc, handlers, {entry});
-      if (!replayed) return core::fail(entryError(entry.seq, "op", replayed.error().error.message));
-    } catch (const std::exception& e) {
-      // A document mutator asserting on data from the file: broken data, not a bug here.
-      return core::fail(entryError(entry.seq, "op", e.what()));
-    }
+    auto replayed = ops::replayLog(doc, handlers, {entry});
+    if (!replayed) return core::fail(entryError(entry.seq, "op", replayed.error().error.message));
   }
   return {};
 }
@@ -151,6 +148,10 @@ core::Result<LoadedDocument, LoadError> loadDocument(
   for (const StoredEntry& entry : stored.entries) raw.push_back(entry.entry);
   auto entries = parseEntries(handlers, raw);
   if (!entries) return core::fail(std::move(entries.error()));
+  // Undo targets are broken data too (N108): checked here, so the undo manager never asserts.
+  if (auto stacks = ops::rebuildUndoStacks(*entries); !stacks) {
+    return core::fail(entryError(stacks.error().seq, "target", stacks.error().message));
+  }
   const auto lastSeq = static_cast<std::int64_t>(entries->size());
 
   auto latest = loadSnapshot(stored.snapshot, id, lastSeq, schemas, LoadError::Kind::Snapshot);
@@ -166,11 +167,14 @@ core::Result<LoadedDocument, LoadError> loadDocument(
     // A handler refusing an entry is broken data here too, not broken determinism.
     auto fromBase = replayEach(*base->doc, handlers, *entries);
     if (!fromBase) return core::fail(std::move(fromBase.error()));
-    TINYCAD_ASSERT(sameDocumentData(*base->doc, *latest->doc),
-                   "loadDocument: document '" + id.str() +
-                       "' replayed from the base snapshot differs from snapshot " +
-                       std::to_string(latest->atSeq) +
-                       " + log (operations are not deterministic)");
+    // Stored data that disagree with themselves are a failure like any other (N108), even though
+    // the cause may be operations that are not deterministic.
+    if (!sameDocumentData(*base->doc, *latest->doc)) {
+      return core::fail(snapshotError(
+          LoadError::Kind::Snapshot,
+          {{"document", "Replayed from the base snapshot, the log gives another document than "
+                        "snapshot " + std::to_string(latest->atSeq) + " + log"}}));
+    }
   }
   return LoadedDocument{std::move(latest->doc), std::move(*entries)};
 }
