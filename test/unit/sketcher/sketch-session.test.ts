@@ -441,6 +441,7 @@ function controlledGeometry(): { geometry: SketchGeometry; calls: IntersectionsC
       }),
     segment: () => Promise.reject(new Error('segment is not used here')),
     fillet: () => Promise.reject(new Error('fillet is not used here')),
+    offset: () => Promise.reject(new Error('offset is not used here')),
   };
   return { geometry, calls };
 }

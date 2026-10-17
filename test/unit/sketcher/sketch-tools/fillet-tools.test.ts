@@ -231,6 +231,7 @@ function countingGeometry(): SketchGeometry & { readonly fillets: number } {
       fillets += 1;
       return fake.fillet(a, b, radius, near);
     },
+    offset: (chain, closed, distance) => fake.offset(chain, closed, distance),
     get fillets() {
       return fillets;
     },
@@ -420,6 +421,7 @@ describe('the fillet tool', () => {
             fake.fillet(a, b, radius, near).then(resolve, reject);
           });
         }),
+      offset: (chain, closed, distance) => fake.offset(chain, closed, distance),
     };
     const { viewport } = await editing(RECT, 'sketch.fillet', geometry);
     await move(viewport, [100, 0]);

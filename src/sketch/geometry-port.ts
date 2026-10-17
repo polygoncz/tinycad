@@ -2,7 +2,7 @@ import type { Vec2 } from '@/core';
 import type { Curve2 } from './geometry';
 
 // The geometry port of the sketcher (spec 12 "Geometrie skici v jádře (M30)" and "Trim, extend,
-// split (M33)", ADR 0028, Q092): geometry of the sketch the kernel computes for the sketcher
+// split (M33)", "Offset (M35)", ADR 0028, Q092): geometry of the sketch the kernel computes for the sketcher
 // tools. app implements it over the kernel client and hands it to the sketcher next to the
 // ConstraintSolver.
 
@@ -34,6 +34,13 @@ export interface FilletArc {
   readonly tb: number;
 }
 
+/**
+ * A curve of the offset of a chain (M35): `source` is the id of the input curve it comes from;
+ * without it a join (around a loop of a spline, or a rounded corner). The shape of OffsetCurve in
+ * kernel (structural typing, ADR 0017).
+ */
+export type OffsetCurve2 = Curve2 & { readonly source?: string };
+
 export interface SketchGeometry {
   /**
    * All intersections of the curves (construction ones too, also in shared end points), ordered
@@ -51,4 +58,16 @@ export interface SketchGeometry {
    * further than 2·radius apart).
    */
   fillet(a: Curve2, b: Curve2, radius: number, near: Vec2): Promise<FilletArc>;
+  /**
+   * The offset of a chain (M35): the curves with their ids oriented along the chain and joined
+   * (end of one = start of the next, closed also last → first), distance ≠ 0 – closed > 0
+   * outwards, open > 0 to the right of the direction of the chain. The result runs along the
+   * chain, joined, a closed one starting with a piece of the first input curve; rejects an
+   * impossible offset.
+   */
+  offset(
+    chain: readonly Curve2[],
+    closed: boolean,
+    distance: number,
+  ): Promise<readonly OffsetCurve2[]>;
 }

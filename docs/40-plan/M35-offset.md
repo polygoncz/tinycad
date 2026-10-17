@@ -46,7 +46,7 @@ Pavel 2026-10-16: „Chtěl bych ještě dodělat do Sketch následující featu
 - [x] Jádro: `offsetCurves`.
 - [x] `sketch`: vazba a kóta `offset` (model, parse, edit, measure, poloha kóty).
 - [x] Řešič planegcs: vazba `offset`.
-- [ ] `sketch`: `chainOf`, `offsetEdit`, port; `app`.
+- [x] `sketch`: `chainOf`, `offsetEdit`, port; `app`.
 - [ ] `sketcher`: kóta offsetu v kresbě, nástroj, HUD nápověda nástrojů stopy A, e2e.
 - [ ] Spec podle skutečnosti.
 

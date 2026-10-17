@@ -1,5 +1,15 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { parseSketchData, type SketchData, type SketchEntity } from '@/sketch';
+import {
+  chainCurves,
+  chainOf,
+  offsetEdit,
+  parseSketchData,
+  type SketchConstraintId,
+  type SketchData,
+  type SketchEntity,
+  type SketchEntityId,
+} from '@/sketch';
+import { createFakeSketchGeometry, rectangleData } from '@/sketch/testing';
 import { loadPlanegcs, type PlanegcsModule } from '@/solver-planegcs/planegcs-module';
 import { solveSketch } from '@/solver-planegcs/solve';
 
@@ -286,5 +296,41 @@ describe('solveSketch – offset of a circle', () => {
     const data = offsetCircle(6, 1, 8);
     expect(radiusOf(solved(data), 'K')).toBeCloseTo(9, 6);
     expect(solveSketch(mod, data).dof).toBe(0);
+  });
+});
+
+describe('solveSketch – the edit of the offset tool (offsetEdit, M35 task 4)', () => {
+  /** Ids n1… and k1… like the tool's ToolContext; test-only branding. */
+  function ids(): { entity(): SketchEntityId; constraint(): SketchConstraintId } {
+    let e = 0;
+    let c = 0;
+    return {
+      entity: () => `n${String(++e)}` as SketchEntityId,
+      constraint: () => `k${String(++c)}` as SketchConstraintId,
+    };
+  }
+
+  it('the offset of a rectangle keeps the degrees of freedom of the original', async () => {
+    const data = rectangleData();
+    // Test-only branding of the id of the side ab of rectangleData.
+    const chain = chainOf(data, 'ab' as SketchEntityId);
+    if (chain === null) throw new Error('no chain');
+    const result = await createFakeSketchGeometry().offset(chainCurves(data, chain), true, 1);
+    const edit = offsetEdit(data, { chain, distance: 1, result }, ids());
+    if (edit === null) throw new Error('no edit');
+
+    const before = solveSketch(mod, data);
+    const after = solveSketch(mod, edit.data);
+    expect(after).toMatchObject({ status: 'ok', conflicting: [], redundant: [] });
+    expect(after.dof).toBe(before.dof);
+    // Nothing moves: the copy is where the kernel put it.
+    const copy = edit.data.entities.filter((e) => e.kind === 'point' && e.id.startsWith('n'));
+    expect(copy).toHaveLength(4);
+    for (const p of copy) {
+      const solved = after.entities?.find((e) => e.id === p.id);
+      if (solved?.kind !== 'point' || p.kind !== 'point') throw new Error('a point');
+      expect(solved.x).toBeCloseTo(p.x, 7);
+      expect(solved.y).toBeCloseTo(p.y, 7);
+    }
   });
 });

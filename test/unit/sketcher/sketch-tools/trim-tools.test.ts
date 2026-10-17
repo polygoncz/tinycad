@@ -211,6 +211,7 @@ const SILENT: SketchGeometry = {
   intersections: () => new Promise<never>(() => undefined),
   segment: () => new Promise<never>(() => undefined),
   fillet: () => new Promise<never>(() => undefined),
+  offset: () => new Promise<never>(() => undefined),
 };
 
 describe('the trim tool', () => {
@@ -377,6 +378,7 @@ describe('the extend tool', () => {
           : fake.intersections(curves),
       segment: (curve, from, to) => fake.segment(curve, from, to),
       fillet: (a, b, radius, near) => fake.fillet(a, b, radius, near),
+      offset: (chain, closed, distance) => fake.offset(chain, closed, distance),
     };
     const { viewport, session, rewrite } = await editing(LINE_CIRCLE, 'sketch.extend', geometry);
     await move(viewport, [35, 0]);
@@ -502,6 +504,7 @@ function splineGeometry(): SketchGeometry & { readonly segments: [number, number
       return Promise.resolve(bezierPiece(curve, from, to));
     },
     fillet: () => Promise.reject(new Error('fillet is not used here')),
+    offset: () => Promise.reject(new Error('offset is not used here')),
   };
 }
 

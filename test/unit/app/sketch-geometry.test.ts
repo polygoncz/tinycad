@@ -74,6 +74,36 @@ describe('createSketchGeometry', () => {
     await expect(geometry.intersections([H, V])).rejects.toThrow();
     await expect(geometry.segment(H, 0, 0.5)).rejects.toThrow();
     await expect(geometry.fillet(H, V, 0.1, [1.1, 0.1])).rejects.toThrow();
+    await expect(geometry.offset([H], false, 1)).rejects.toThrow();
+  });
+
+  it('gives the offset of a chain from the kernel (offsetCurves)', async () => {
+    const kernel = createFakeKernel();
+    const geometry = createSketchGeometry(() => kernel);
+    const up: Curve2 = { kind: 'line', from: [2, 0], to: [2, 3], id: 'u' };
+
+    const result = await geometry.offset([H, up], false, 1);
+
+    expect(result).toHaveLength(2);
+    const [first, second] = result;
+    expect(first?.source).toBe('h');
+    expect(second?.source).toBe('u');
+    if (first?.kind !== 'line' || second?.kind !== 'line') throw new Error('lines');
+    expect(first.from[0]).toBeCloseTo(0, 9);
+    expect(first.from[1]).toBeCloseTo(-1, 9);
+    expect(first.to[0]).toBeCloseTo(3, 9);
+    expect(first.to[1]).toBeCloseTo(-1, 9);
+    expect(second.to[0]).toBeCloseTo(3, 9);
+    expect(second.to[1]).toBeCloseTo(3, 9);
+    expect(kernel.callCount('offsetCurves')).toBe(1);
+  });
+
+  it('rejects an offset the kernel cannot make', async () => {
+    const kernel = createFakeKernel();
+    const geometry = createSketchGeometry(() => kernel);
+    kernel.failNext('offsetCurves', 'operation-failed', 'no offset');
+
+    await expect(geometry.offset([H], false, 1)).rejects.toThrow('no offset');
   });
 
   it('gives the fillet arc of two lines from the kernel (filletArc)', async () => {

@@ -1204,7 +1204,7 @@ Rozhodnuto 2026-10-17 se stopou A ([[M35-offset|M35]], [[Q095 Asociativita offse
 
 ### Řetězec
 
-`chainOf(data, curve): Chain | null` (`sketch/offset.ts`, čistá funkce): od křivky přes koncové body, ve kterých se potkávají **právě dvě** křivky (`isCurveEntity`, ne `xline`, ne kopie pole ani text), oběma směry. `Chain = { curves: readonly { id; reversed: boolean }[]; closed: boolean }` – křivky v pořadí průchodu, `reversed` = křivka jde proti svému směru (`p1→p2`, `start→end`, póly). Kružnice je řetězec sama o sobě (`closed`). Konstrukční křivka do řetězce nekonstrukční nejde a naopak.
+`chainOf(data, curve): Chain | null` (`sketch/offset.ts`, čistá funkce): od křivky přes koncové body, ve kterých se potkávají **právě dvě** křivky (`isCurveEntity`, ne `xline`, ne kopie pole ani text), oběma směry. `Chain = { curves: readonly { id; reversed: boolean }[]; closed: boolean }` – křivky v pořadí průchodu, `reversed` = křivka jde proti svému směru (`p1→p2`, `start→end`, póly). Kružnice je řetězec sama o sobě (`closed`). Konstrukční křivka do řetězce nekonstrukční nejde a naopak. Do „právě dvou“ se počítají jen křivky se stejným konstrukčním stavem (konstrukční úhlopříčka v rohu obdélníku řetězec nepřeruší); body se poznají podle id (konce spojené jen vazbou `coincident` řetězec nespojí). Uzavřený řetězec začíná kliknutou křivkou, u otevřeného má kliknutá křivka `reversed: false`. `chainCurves(data, chain)` dá vstup jádra (obrácený spline: póly pozpátku, uzly `lo + hi − k`).
 
 ### Port
 
@@ -1241,7 +1241,7 @@ SketchGeometry.offset(chain: readonly Curve2[], closed: boolean, distance: numbe
 
 ### Úprava dat (`offsetEdit`)
 
-`offsetEdit(data, req: { chain: Chain; distance: number; result: readonly OffsetCurve2[] }, ids): SketchEdit | null` – nové křivky z `result`: navazující kopie **sdílejí** koncové body (nové body, před křivkami); oblouk/kružnice kopie ze zdroje oblouku/kružnice použije **bod středu zdroje**; spline jako `bspline` s novými póly. Vazba `offset` s páry pro úsečky, oblouky a kružnice, jejichž kopie je téhož druhu (jinak pár není – zapečeno), `value = |distance|`, `edit` = její id (otevře se k úpravě). `added` = { vazba `offset` } (při konfliktu zapečený offset bez vazby). Kopie přebírají `construction` zdroje. Prázdný výsledek → `null`.
+`offsetEdit(data, req: { chain: Chain; distance: number; result: readonly OffsetCurve2[] }, ids): SketchEdit | null` – nové křivky z `result`: navazující kopie **sdílejí** koncové body (nové body, před křivkami); oblouk/kružnice kopie ze zdroje oblouku/kružnice použije **bod středu zdroje**; spline jako `bspline` s novými póly. Vazba `offset` s páry pro úsečky, oblouky a kružnice, jejichž kopie je téhož druhu (jinak pár není – zapečeno), `value = |distance|`, `edit` = její id (otevře se k úpravě). `added` = { vazba `offset` } (při konfliktu zapečený offset bez vazby). Kopie přebírají `construction` zdroje. Prázdný výsledek → `null`. Upřesnění (úkol 4): bod středu zdroje se použije, jen když na něm střed výsledku leží; jinak nový bod a bez páru. Více kopií téhož zdroje (smyčka splinu) → pár jen první. Bez páru vazba nevznikne. Výsledek jádra se nekontroluje na navazování (kontrakt jádra).
 
 ### Nástroj (`sketch.offset`)
 
