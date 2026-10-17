@@ -8,7 +8,14 @@ import type { ConsoleMessage, Page } from '@playwright/test';
  * Console errors that are known and accepted. Each entry needs a reason; keep the list short
  * and the patterns narrow (match the specific message, not a whole category).
  */
-const IGNORED_CONSOLE_ERRORS: readonly { readonly pattern: RegExp; readonly reason: string }[] = [];
+const IGNORED_CONSOLE_ERRORS: readonly { readonly pattern: RegExp; readonly reason: string }[] = [
+  {
+    pattern: /^Failed to load resource: net::ERR_INTERNET_DISCONNECTED$/,
+    reason:
+      'm46-outage takes the network away (context.setOffline): the browser itself reports every ' +
+      'request that fails then; the session repeats them (N86)',
+  },
+];
 
 function ignored(text: string): boolean {
   return IGNORED_CONSOLE_ERRORS.some(({ pattern }) => pattern.test(text));

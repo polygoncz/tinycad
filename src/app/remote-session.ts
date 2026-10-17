@@ -128,6 +128,7 @@ export async function createRemoteAppSession(deps: RemoteAppSessionDeps): Promis
   });
   const lifetime = new DisposableStore();
   try {
+    await abortForeignTransaction(session);
     return wireRemoteSession(deps, session, {
       // N93: the meshes a request in flight says it has stay until its answer is there.
       meshes: retainingInFlight(meshes, () => inFlight.versions()),
@@ -142,6 +143,19 @@ export async function createRemoteAppSession(deps: RemoteAppSessionDeps): Promis
     session.dispose();
     throw e;
   }
+}
+
+/**
+ * A session resumed after a reload whose CloseSession got lost (N70) still has the transaction of
+ * a dialog of the page before; this page has no such dialog, so the transaction is aborted before
+ * anything is wired (its steps are not in the document then). NO_TRANSACTION (it ended meanwhile)
+ * is fine; any other failure rejects.
+ */
+async function abortForeignTransaction(session: RemoteSession): Promise<void> {
+  const { writable, transactionLabel } = session.readModel.get().session;
+  if (!writable || transactionLabel === null) return;
+  const outcome = await session.change({ kind: 'abort' });
+  if (!outcome.ok && outcome.error.reason !== 'NO_TRANSACTION') throw outcome.error;
 }
 
 function wireRemoteSession(
