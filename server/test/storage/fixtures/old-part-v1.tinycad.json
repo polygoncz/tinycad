@@ -1,0 +1,25 @@
+{
+  "format": "tinycad.file",
+  "formatVersion": 1,
+  "snapshot": {
+    "format": "tinycad.snapshot",
+    "formatVersion": 1,
+    "atSeq": 0,
+    "document": {
+      "meta": { "id": "old", "name": "Old part", "createdAt": 3 },
+      "studio": {
+        "features": [
+          {
+            "id": "a",
+            "type": "box",
+            "typeVersion": 1,
+            "name": "A",
+            "params": { "size": 2 },
+            "suppressed": false
+          }
+        ],
+        "rollbackIndex": 1
+      }
+    }
+  }
+}
