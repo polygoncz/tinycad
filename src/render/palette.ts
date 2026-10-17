@@ -36,6 +36,12 @@ export interface ScenePalette {
   readonly meshLine: number;
   /** Vertical gradient behind the bodies in Realistic (M24, spec 09 "Realistic"). */
   readonly realisticBackground: readonly [top: number, bottom: number];
+  /**
+   * Overlay style 'warning' (M33, the crossing points of a sketch, Q093): a red of its own, not
+   * the X axis, apart from the blue sketch and the orange selection, with a contrast of at least
+   * 4.5:1 to the background.
+   */
+  readonly warning: number;
 }
 
 function freezePalette(palette: ScenePalette): ScenePalette {
@@ -64,6 +70,8 @@ export const LIGHT_PALETTE: ScenePalette = freezePalette({
   hiddenEdge: 0x8b929c,
   meshLine: 0x8e99a8,
   realisticBackground: [0xf4f6f9, 0xd9dee5],
+  // A deep red: the axis red (#ff3b30) has only 3.2:1 on the light background.
+  warning: 0xd70015,
 });
 
 /** By the M10 mockup (spec 11, "Rozvržení"). */
@@ -86,6 +94,8 @@ export const DARK_PALETTE: ScenePalette = freezePalette({
   hiddenEdge: 0x6b7280,
   meshLine: 0x5a7fb0,
   realisticBackground: [0x3a3f47, 0x1c1f24],
+  // A light coral red: brighter than the axis red, still apart from the orange selection.
+  warning: 0xff6961,
 });
 
 /**

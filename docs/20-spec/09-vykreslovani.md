@@ -100,6 +100,7 @@ export interface ScenePalette {
   readonly hiddenEdge: number;  // M22: čárkované skryté hrany; světlá 0x8b929c, tmavá 0x6b7280
   readonly meshLine: number;    // M22: čáry triangulace; světlá 0x8e99a8, tmavá 0x5a7fb0
   readonly realisticBackground: readonly [top: number, bottom: number];   // M24: gradient pozadí Realistic; světlá 0xf4f6f9, 0xd9dee5; tmavá 0x3a3f47, 0x1c1f24
+  readonly warning: number;     // styl overlay 'warning' (M33, body křížení skici): světlá 0xd70015 (kontrast 4,9 : 1), tmavá 0xff6961 (5,8 : 1)
 }
 export const LIGHT_PALETTE: ScenePalette;
 export const DARK_PALETTE: ScenePalette;
@@ -310,7 +311,8 @@ Zvýraznění plochy je **malá vlastní kopie** jejích trojúhelníků: čist�
   - Hrana: **tlusté čáry** `LineSegments2` + `LineMaterial` z `three/addons` (3 px). WebGL kreslí `LineSegments` vždy 1 px široké bez ohledu na `linewidth`, takže by zvýraznění na hraně tělesa zaniklo. `LineMaterial` potřebuje rozlišení plátna, viewport ho předává při každé změně velikosti.
   - Přestavbu po výměně scény spouští `BodyLayer` volbou `afterApply` (volá se v `apply` po výměně, před `requestRender`).
 - `OverlayLayer implements OverlayPort`: `OverlayShape` → `LineSegments`/`Points` ve vlastní skupině scény, styly `preview` a `construction` jako dva sdílené materiály. `set(id, …)` uvolní předchozí geometrii pod stejným `id`. `lines` s lichým počtem bodů je chyba (assert), pod `id` pak zůstane předchozí stav. `construction` je čárkovaná (`LineDashedMaterial`).
-- Zvýraznění a overlay do pickingu nevstupují. Zvýraznění plochy se kreslí nad plochou tělesa díky `polygonOffset` (u čar a bodů nemá účinek). Hrany zvýraznění a overlay mají `depthTest` zapnutý a vyšší `renderOrder` (zvýraznění 1, overlay 2): na stejné hloubce vyhrají, ale tělesa před nimi je zakryjí.
+- Zvýraznění a overlay do pickingu nevstupují. Zvýraznění plochy se kreslí nad plochou tělesa díky `polygonOffset` (u čar a bodů nemá účinek). Hrany zvýraznění a overlay mají `depthTest` zapnutý a vyšší `renderOrder` (zvýraznění 1, overlay 2): na stejné hloubce vyhrají, ale tělesa před nimi je zakryjí. Styl overlay `'warning'` má `renderOrder` 3,5, nad čarami skici (3) a pod manipulátory (4): bod křížení leží přímo na čarách skici a s pořadím 2 by ho překryly (zjištěno vizuálně, 2026-10-17).
+- **Barva varování** `palette.warning` (body křížení skici, M33, [[Q093 Oblasti z křížících se křivek|Q093]]) je vlastní červená, ne červená osy X: odstín do 10° od červené, kontrast aspoň 4,5 : 1 vůči pozadí a vzdálenost v RGB aspoň 60 od os, skici (`sketch`, `sketchDefined`), výběru, hoveru a `preview` (test palety). Světlá `#d70015` je tmavší než osa (`#ff3b30` má na světlém pozadí jen 3,2 : 1), tmavá `#ff6961` světlejší korálová, aby se na tmavém pozadí neslila s oranžovým výběrem.
 
 ## Styl zobrazení
 

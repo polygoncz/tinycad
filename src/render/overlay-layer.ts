@@ -17,12 +17,17 @@ const GAP_SIZE = 1.5;
 const POINT_SIZE = 6;
 /** After the bodies and the highlight. */
 const RENDER_ORDER = 2;
+/**
+ * The style 'warning' over the sketch lines (renderOrder 3): a crossing point lies on them and
+ * would hide under them. Under the manipulators (4).
+ */
+const WARNING_RENDER_ORDER = 3.5;
 
 /** What the viewport needs on top of OverlayPort; internal. */
 export interface OverlayLayerInternal extends OverlayPort, Disposable {
   /** Parent of every overlay object; the viewport puts it into the scene. */
   readonly group: THREE.Group;
-  /** Recolours both styles in place (Q072); the caller requests the render. */
+  /** Recolours every style in place (Q072); the caller requests the render. */
   setPalette(palette: ScenePalette): void;
   /** Box around the points of every shape (spec 09, "Near a far"); null = no points. */
   bounds(): BoundingBox | null;
@@ -53,12 +58,12 @@ export function createOverlayLayer(options: OverlayLayerOptions): OverlayLayerIn
       gapSize: GAP_SIZE,
       depthTest: true,
     }),
-    warning: new THREE.LineBasicMaterial({ color: warningColor(palette), depthTest: true }),
+    warning: new THREE.LineBasicMaterial({ color: palette.warning, depthTest: true }),
   };
   const pointMaterials: Record<OverlayStyle, THREE.PointsMaterial> = {
     preview: createPointMaterial(palette.preview),
     construction: createPointMaterial(palette.construction),
-    warning: createPointMaterial(warningColor(palette)),
+    warning: createPointMaterial(palette.warning),
   };
   const entries = new Map<string, Entry>();
 
@@ -74,7 +79,7 @@ export function createOverlayLayer(options: OverlayLayerOptions): OverlayLayerIn
     } else {
       object = new THREE.Points(geometry, pointMaterials[shape.style]);
     }
-    object.renderOrder = RENDER_ORDER;
+    object.renderOrder = shape.style === 'warning' ? WARNING_RENDER_ORDER : RENDER_ORDER;
     return { object, geometry };
   }
 
@@ -111,12 +116,10 @@ export function createOverlayLayer(options: OverlayLayerOptions): OverlayLayerIn
       requestRender();
     },
     setPalette(next: ScenePalette): void {
-      for (const style of ['preview', 'construction'] as const) {
+      for (const style of ['preview', 'construction', 'warning'] as const) {
         lineMaterials[style].color.setHex(next[style]);
         pointMaterials[style].color.setHex(next[style]);
       }
-      lineMaterials.warning.color.setHex(warningColor(next));
-      pointMaterials.warning.color.setHex(warningColor(next));
     },
     bounds(): BoundingBox | null {
       return unionBounds([...entries.values()].map((entry) => entry.bounds));
@@ -134,15 +137,6 @@ export function createOverlayLayer(options: OverlayLayerOptions): OverlayLayerIn
       }
     },
   };
-}
-
-/**
- * The colour of the style 'warning' (M33, the crossing points of a sketch): the red of the X
- * axis, the one red of both palettes, apart from the blue sketch and the orange selection. The
- * palette has no colour of warnings of its own.
- */
-function warningColor(palette: ScenePalette): number {
-  return palette.axes[0];
 }
 
 function createPointMaterial(color: number): THREE.PointsMaterial {

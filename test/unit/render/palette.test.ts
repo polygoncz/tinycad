@@ -24,6 +24,7 @@ const KEYS = [
   'hiddenEdge',
   'meshLine',
   'realisticBackground',
+  'warning',
 ] as const satisfies readonly (keyof ScenePalette)[];
 
 /** Relative luminance of 0xRRGGBB (WCAG 2). */
@@ -128,6 +129,18 @@ describe.each([
   it('gives the body preview a contrast of at least 3:1 to the background (WCAG non-text)', () => {
     expect(contrast(palette.bodyPreview, palette.background)).toBeGreaterThanOrEqual(3);
   });
+
+  // The crossing points of a sketch (M33, Q093): a red of its own, not the X axis, readable on the
+  // background and on the sketch lines it sits on, apart from the selection and the hover.
+  it('draws warnings in a red of their own, apart from the axes, the sketch and the selection', () => {
+    const red = palette.warning;
+    expect(hue(red) <= 10 || hue(red) >= 345, 'red hue').toBe(true);
+    expect(contrast(red, palette.background)).toBeGreaterThanOrEqual(4.5);
+    for (const key of ['sketch', 'sketchDefined', 'selection', 'hover', 'preview'] as const) {
+      expect(distance(red, palette[key]), key).toBeGreaterThanOrEqual(60);
+    }
+    for (const axis of palette.axes) expect(distance(red, axis)).toBeGreaterThanOrEqual(60);
+  });
 });
 
 describe('parseHexColor', () => {
@@ -173,6 +186,7 @@ describe('palettes', () => {
       hiddenEdge: 0x8b929c,
       meshLine: 0x8e99a8,
       realisticBackground: [0xf4f6f9, 0xd9dee5],
+      warning: 0xd70015,
     });
   });
 
@@ -188,6 +202,7 @@ describe('palettes', () => {
       construction: 0x6b7280,
       sketch: 0x409cff,
       sketchDefined: 0xf2f2f7,
+      warning: 0xff6961,
     });
   });
 

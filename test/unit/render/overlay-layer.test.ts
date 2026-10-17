@@ -61,30 +61,39 @@ describe('OverlayLayer palette', () => {
 });
 
 describe('OverlayLayer warning style (M33)', () => {
-  it('draws points and lines in red apart from the sketch and the selection, recoloured by setPalette', () => {
+  const segment = [
+    [0, 0, 0],
+    [1, 0, 0],
+  ] as const;
+
+  it('draws points and lines in palette.warning, recoloured by setPalette', () => {
     const layer = createOverlayLayer({ requestRender: () => undefined, palette: LIGHT_PALETTE });
-    const segment = [
-      [0, 0, 0],
-      [1, 0, 0],
-    ] as const;
     layer.set('crossings', [
       { kind: 'points', style: 'warning', points: segment },
       { kind: 'lines', style: 'warning', points: segment },
     ]);
     expect(drawn(layer.group).map(({ color }) => color)).toEqual([
-      LIGHT_PALETTE.axes[0],
-      LIGHT_PALETTE.axes[0],
+      LIGHT_PALETTE.warning,
+      LIGHT_PALETTE.warning,
     ]);
-    for (const key of ['sketch', 'sketchDefined', 'selection', 'hover', 'preview'] as const) {
-      expect(LIGHT_PALETTE.axes[0], key).not.toBe(LIGHT_PALETTE[key]);
-      expect(DARK_PALETTE.axes[0], key).not.toBe(DARK_PALETTE[key]);
-    }
 
     layer.setPalette(DARK_PALETTE);
     expect(drawn(layer.group).map(({ color }) => color)).toEqual([
-      DARK_PALETTE.axes[0],
-      DARK_PALETTE.axes[0],
+      DARK_PALETTE.warning,
+      DARK_PALETTE.warning,
     ]);
+  });
+
+  // A crossing point lies on the sketch lines (renderOrder 3, spec 09): under them it would hide.
+  it('draws warnings over the sketch lines, the other styles under them', () => {
+    const layer = createOverlayLayer({ requestRender: () => undefined, palette: LIGHT_PALETTE });
+    layer.set('crossings', [
+      { kind: 'points', style: 'warning', points: segment },
+      { kind: 'lines', style: 'warning', points: segment },
+      { kind: 'points', style: 'preview', points: segment },
+      { kind: 'lines', style: 'construction', points: segment },
+    ]);
+    expect(layer.group.children.map((object) => object.renderOrder)).toEqual([3.5, 3.5, 2, 2]);
   });
 });
 
