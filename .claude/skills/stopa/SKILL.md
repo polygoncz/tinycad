@@ -32,7 +32,7 @@ Hlavní sezení (ty) je **dispečer**: rozhoduje s Pavlem, píše kontrakty, spo
 1. Ověř, že stopa dokončila svou část: milníky ve větvi `status: done` (nebo dohodnutá část), `git -C <worktree> status` čistý, zpráva stopy hlásí zelený check a e2e.
 2. `git log main..<větev>`, `git merge-base --is-ancestor main <větev>` (obsahuje stopa aktuální `main`?), přečti *Průběh stopy* a zkontroluj diff proti kontraktu ve spec u nejcitlivějších míst (sdílené typy, adaptéry, hranice modulů).
 3. `git merge --no-ff <větev>` v hlavním checkoutu se zprávou `Merge track X: Mnn …` a řádkem `Co-Authored-By`. Konflikty řeš tady: sčítací (obě strany přidaly) ponech obě; u ostatních čti obě strany a spec.
-4. **Vždy celý `npm run check`** – sémantické konflikty git nehlásí, najde je typecheck (vyčerpávající `switch`). Pak `npm run test:e2e` (běží-li dev server, `E2E_PORT=<volný port>`). Nic necommituj, dokud obojí neprojde.
+4. **Vždy celý `npm run check`** – sémantické konflikty git nehlásí, najde je typecheck (vyčerpávající `switch`). Pak `npm run test:e2e:full` – Chrome i WebKit (běží-li dev server, `E2E_PORT=<volný port>`). Nic necommituj, dokud obojí neprojde.
 5. Úkoly, které stopa předala hlavnímu sezení (doplnění cizí spec, wikilinky na poznámky z jiných větví), udělej teď.
 6. Přenes *Průběh stopy* do dnešního deníku (sekce „Sloučení stopy …“: co přibylo, rozhodnutí, konflikty, výsledky testů, otevřené body) a commitni.
 7. Zbylým stopám pošli zprávu: co je nového v `main`, kde čekat konflikty a co ověřit. Stopě, která čekala na tuto, dej pokyn pokračovat.

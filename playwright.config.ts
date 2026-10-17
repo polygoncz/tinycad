@@ -12,7 +12,9 @@ export default defineConfig({
   // The OCCT WASM takes a few seconds to load and compile in every new page.
   timeout: 90_000,
   expect: { timeout: 20_000 },
-  workers: 1,
+  // Tests in one file run in order; files run in parallel. Every test has its own browser
+  // context, so IndexedDB never leaks between workers. E2E_WORKERS overrides the default.
+  workers: Number(process.env.E2E_WORKERS ?? 4),
   forbidOnly: true,
   retries: 0,
   reporter: 'list',
@@ -23,6 +25,8 @@ export default defineConfig({
     locale: 'cs-CZ',
     trace: 'retain-on-failure',
   },
+  // `npm run test:e2e` runs only chrome (day-to-day work); `npm run test:e2e:full` runs both,
+  // when a milestone or a track is closed.
   projects: [
     // The installed Google Chrome, no downloaded Chromium.
     { name: 'chrome', use: { channel: 'chrome' } },
