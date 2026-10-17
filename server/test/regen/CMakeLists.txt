@@ -23,10 +23,13 @@ add_executable(tinycad_regen_tests
   regenerator_input_test.cpp
   regenerator_sweep_test.cpp
   content_version_test.cpp
-  regenerator_property_test.cpp)
+  regenerator_property_test.cpp
+  regeneration_measure_test.cpp)
 target_link_libraries(tinycad_regen_tests PRIVATE
   tinycad_regen_testing tinycad_regen tinycad_regen_describe tinycad_test_support
   tinycad_feature_builders GTest::gtest GTest::gtest_main)
 tinycad_warnings(tinycad_regen_tests)
 
+# regeneration_measure_test.cpp (N156) loads the document of a shared regen case (tinycad_test_support)
+# and regenerates it with the built-in schemas and builders (tinycad_feature_builders).
 gtest_discover_tests(tinycad_regen_tests DISCOVERY_MODE PRE_TEST)
