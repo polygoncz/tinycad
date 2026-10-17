@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: doing
+status: done
 order: 39
 aliases:
   - M39
@@ -15,7 +15,7 @@ specs:
 depends_on:
   - "[[M38-zmrazeni-domeny]]"
 started: 2026-10-17
-finished:
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-17
@@ -33,13 +33,13 @@ updated: 2026-10-17
 
 ## Úkoly
 
-- [ ] Moduly `protocol` a `remote` podle [[Q106 Moduly klienta pro gRPC|Q106]]: propsat do [[01-architektura]] a `.dependency-cruiser.cjs`, `src/protocol/` do `.gitignore`, skript `gen:proto` před `typecheck`, `dev` a `build`.
-- [ ] `server/`: `CMakeLists.txt`, `CMakePresets.json`, `vcpkg.json` s připnutou baseline (grpc, protobuf, opencascade, sqlite3, gtest, nlohmann-json a závislosti planegcs – Eigen, případně Boost – aby souběžné stopy po M39 baseline neměnily). Baseline je nejnovější registr vcpkg a OCCT je verze, kterou nabízí (dnes 8.0.1), bez overlay portu a `overrides`. Zapsat skutečnou verzi do [[06-geometricke-jadro]] ([[Q104 Nástroje pro kontrakt a C++ server|Q104]]).
-- [ ] `buf generate`: C++ do buildu serveru, TS (protobuf-es) do `src/protocol/`. `npm run check` dostane `check:proto` (`buf lint`, `buf breaking` proti `main`).
-- [ ] `docker-compose.yml`: `core` (vícestupňový Dockerfile, binární cache vcpkg ve volume) a `envoy` (filtr `grpc_web`, CORS pro `localhost:5173`, health check). Vite proxy `/api` na Envoy.
-- [ ] `GeometryService` v C++ nad OCCT (`Geom2dAPI_InterCurveCurve`, segment, zaoblení, offset) proti sdíleným případům z M38.
-- [ ] Adaptér `SketchGeometry` v `remote/` s jedním požadavkem v letu na metodu ([[Q096 Geometrie skici přes síť|Q096]]); `app` ho použije místo WASM.
-- [ ] `npm run check` dostane `check:server` (build a GoogleTest v Dockeru); e2e trim/offset proti Docker Compose.
+- [x] Moduly `protocol` a `remote` podle [[Q106 Moduly klienta pro gRPC|Q106]]: propsat do [[01-architektura]] a `.dependency-cruiser.cjs`, `src/protocol/` do `.gitignore`, skript `gen:proto` před `typecheck`, `dev` a `build`.
+- [x] `server/`: `CMakeLists.txt`, `CMakePresets.json`, `vcpkg.json` s připnutou baseline (grpc, protobuf, opencascade, sqlite3, gtest, nlohmann-json a závislosti planegcs – Eigen, případně Boost – aby souběžné stopy po M39 baseline neměnily). Baseline je nejnovější registr vcpkg a OCCT je verze, kterou nabízí (dnes 8.0.1), bez overlay portu a `overrides`. Zapsat skutečnou verzi do [[06-geometricke-jadro]] ([[Q104 Nástroje pro kontrakt a C++ server|Q104]]).
+- [x] `buf generate`: C++ do buildu serveru, TS (protobuf-es) do `src/protocol/`. `npm run check` dostane `check:proto` (`buf lint`, `buf breaking` proti `main`).
+- [x] `docker-compose.yml`: `core` (vícestupňový Dockerfile, binární cache vcpkg ve volume) a `envoy` (filtr `grpc_web`, CORS pro `localhost:5173`, health check). Vite proxy `/api` na Envoy.
+- [x] `GeometryService` v C++ nad OCCT (`Geom2dAPI_InterCurveCurve`, segment, zaoblení, offset) proti sdíleným případům z M38.
+- [x] Adaptér `SketchGeometry` v `remote/` s jedním požadavkem v letu na metodu ([[Q096 Geometrie skici přes síť|Q096]]); `app` ho použije místo WASM.
+- [x] `npm run check` dostane `check:server` (build a GoogleTest v Dockeru); e2e trim/offset proti Docker Compose.
 
 ## Akceptační kritéria
 
@@ -76,4 +76,10 @@ CMake s vcpkg, generování kódu z `.proto` pro dva jazyky, Envoy a gRPC-Web, p
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+_Návrh Clauda (samostatný běh)._
+
+- Server a klient šly souběžně ve dvou worktree bez konfliktu; serverová část čekala hlavně na první build závislostí (~28 min, OCCT 11 min), další buildy ~20 s díky BuildKit cache (N5).
+- Všech 86 sdílených případů `geometry.*` prošlo v C++ nad OCCT 8.0.1 bez úpravy – golden testy z M38 se vyplatily hned v prvním milníku.
+- Implementátor klienta našel chybu kontraktu: slučování „poslední vyhrává“ by nástrojům podstrčilo cizí výsledek → slučování jen podle klíče (N6), spec 14 upravená.
+- Odchylky: `check:server` mimo `npm run check` (N49, `check:full`), aplikace volí adaptér podle `VITE_CORE_URL` (N3), e2e přes server samostatnou konfigurací (`npm run test:e2e:core`).
+- Výsledek: `check:full` zelený (8208 unit, 635 integračních, 93 testů serveru), e2e přes Compose 3/3.
