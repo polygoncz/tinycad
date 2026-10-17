@@ -59,11 +59,8 @@ export interface DownloadFile {
 /**
  * What app needs from the 3D view: the port of interaction plus mounting, the body layer, the
  * camera, the view settings (palette, view cube labels, rotation mode), body visibility and body
- * colour (M15). render's Viewport is one; tests
- * use a fake.
- * app hands the kernel to the view through `bodies.reset` whenever a kernel becomes ready
- * (spec 09, "Výměna instance jádra"), so the meshes the view was created with are replaced
- * before the first sync.
+ * colour (M15). render's Viewport is one; tests use a fake. app hands the view the meshes of the
+ * read model by content_version once, through `bodies.reset` before the first sync (N66).
  */
 export interface AppViewport extends ViewportPort, ViewportSettings {
   mount(el: HTMLElement): void;
@@ -90,17 +87,11 @@ export interface AppSession extends Disposable {
   /** Read-only or an open feature dialog: the one rule, from interaction (createEditLock). */
   readonly locked: Observable<boolean>;
   readonly regen: Observable<RegenUiState>;
-  /** Q055: restart after a kernel crash. */
+  /** The connection to the core mapped onto the state of the kernel (N69). */
   readonly kernel: Observable<KernelUiState>;
-  /**
-   * Why the kernel did not start ('unavailable') or its last crash ('failed'), for the UI; null
-   * otherwise.
-   */
+  /** The text of the last failed call while `kernel` is 'unavailable', for the UI; null otherwise. */
   readonly kernelError: Observable<string | null>;
-  /**
-   * M19.1: from 'failed' or 'unavailable' starts the kernel again, with an empty restart window;
-   * in any other state it does nothing.
-   */
+  /** A new attempt to reach the core: reads the read model again (GetReadModel, spec 14). */
   retryKernel(): void;
   /** Always 'saved' when read-only. */
   readonly persistence: Observable<PersistenceStatus>;
@@ -185,15 +176,16 @@ export interface AppSession extends Disposable {
   /** D7 of M20: theme, view cube labels and rotation mode from ui (one port, see ViewSettings). */
   readonly viewSettings: ViewSettings;
   /**
-   * Writes the pending queue of the persistence now, without the delay; read-only: nothing.
-   * openAppSession calls it on pagehide and visibilitychange to hidden (Q034).
+   * Waits until the queue of changes of the session is empty (the server has them); rejects when
+   * changes were given up for an outage (N92). Read-only: nothing is queued.
    */
   flush(): Promise<void>;
   /**
-   * Writes the pending queue of the persistence (flush), then releases like dispose. Rejects
-   * with the error of the flush, after releasing anyway. A second call returns the same promise.
+   * flush, then releases like dispose and closes the session (CloseSession). Rejects with the
+   * error of the flush or the close, after releasing anyway. A second call returns the same
+   * promise.
    */
   close(): Promise<void>;
-  /** Synchronous safety net: releases at once, the final save runs without being awaited. */
+  /** Synchronous safety net: releases at once, CloseSession runs without being awaited (N70). */
   dispose(): void;
 }

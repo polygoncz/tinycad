@@ -1,5 +1,4 @@
-// The read model → the ports of the view (D3 of M19.1
-// kept): meshes into VersionMeshes, viewport.syncLayers, then RegenStatusPort, the drawings of the
+// The read model → the ports of the view (D3 of M19.1 kept): meshes into VersionMeshes, viewport.syncLayers, then RegenStatusPort, the drawings of the
 // sketches, RegenUiState, afterSync and the first fitAll; resolvePlane and planeOfSketch for the
 // sketcher. Every body is shown under the handle of its content_version (N66), so the view swaps
 // exactly the meshes whose version changed. While a feature dialog is open (ADR 0025) and the read
@@ -54,7 +53,7 @@ export interface ReadModelViewDeps {
 
 export interface ReadModelView extends RegenStatusPort, Disposable {
   readonly ui: Observable<RegenUiState>;
-  /** A new read model; one of an older generation than the shown one is dropped. */
+  /** A new read model, as the session published it (the session orders them, N136). */
   show(readModel: ReadModelData): void;
   /** A plane of the final state by id, or the plane of a planar face of a body (facePlanes). */
   resolvePlane(ref: PlaneRef | TopoRef): Plane | undefined;
@@ -95,7 +94,7 @@ const EMPTY_SNAPSHOT: RegenSnapshot = Object.freeze({
 export function createReadModelView(deps: ReadModelViewDeps): ReadModelView {
   const { meshes, viewport, reportError } = deps;
   let disposed = false;
-  /** The last read model show() accepted; its generation is the floor for the next one. */
+  /** The last read model show() got: closing a dialog shows its final state again. */
   let latest: ReadModelData | null = null;
   /** The read model of the last published snapshot: the planes of the sketcher come from it. */
   let published: ReadModelData | null = null;
@@ -231,7 +230,6 @@ export function createReadModelView(deps: ReadModelViewDeps): ReadModelView {
     ui: ui.asObservable(),
     show(readModel) {
       if (disposed) return;
-      if (latest !== null && readModel.regen.generation < latest.regen.generation) return;
       latest = readModel;
       render(readModel);
     },
@@ -241,7 +239,8 @@ export function createReadModelView(deps: ReadModelViewDeps): ReadModelView {
       if (ref.kind === 'plane') return final.planes.find((p) => p.id === ref.plane)?.plane;
       const body = final.bodies.find((b) => b.id === ref.body);
       if (body === undefined) return undefined;
-      // The face with the smallest index of the name, as regen's planeOfRef.
+      // The face with the smallest index of the name, as planeOfRef of the server
+      // (server/src/regen/include/tinycad/regen/face_plane.hpp).
       const [index] = namesOf(body).faces(ref.name);
       return index === undefined ? undefined : body.facePlanes.get(index);
     },
@@ -264,7 +263,7 @@ function versionsOf(readModel: ReadModelData): string[] {
   return [...final.bodies, ...(input?.state.bodies ?? [])].map((b) => b.contentVersion);
 }
 
-/** The snapshot of the port, as regen-status-adapter makes it from a RegenResult. */
+/** The snapshot of the RegenStatusPort from the regeneration of the read model. */
 function snapshotOf(
   readModel: ReadModelData,
   shown: ReadModelData['regen']['input'],
@@ -382,10 +381,13 @@ function createSketchDrawings(
     const shown = new Set<string>();
     for (const sketch of last) {
       if (sketch.featureId === edited) continue;
-      shown.add(sketch.sketchId);
-      if (drawn.get(sketch.sketchId) === sketch) continue;
+      if (drawn.get(sketch.sketchId) === sketch) {
+        shown.add(sketch.sketchId);
+        continue;
+      }
       // The entities of the read model are unchecked JSON of spec 12: parsed, so the drawing gets
-      // typed entities; a sketch the client cannot read is reported, not drawn.
+      // typed entities; a sketch the client cannot read is reported and not drawn (an older
+      // drawing of it goes below, it would show a stale sketch).
       const parsed = parseSketchData(sketch.entities, []);
       if (!parsed.ok) {
         reportError(
@@ -393,6 +395,7 @@ function createSketchDrawings(
         );
         continue;
       }
+      shown.add(sketch.sketchId);
       drawn.set(sketch.sketchId, sketch);
       port.set(
         sketch.sketchId,

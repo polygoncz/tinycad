@@ -184,15 +184,17 @@ describe('createReadModelView', () => {
     await expect(h.meshes.tessellate(h.meshes.handleOf('vBox'), QUALITY)).rejects.toThrow();
   });
 
-  it('drops a read model of an older generation', async () => {
+  // The session orders read models (N136) and starts again after a restart of the server, when
+  // the generation may drop: the view shows whatever it is given.
+  it('shows a read model of a lower generation too (the session decides the order)', async () => {
     const h = setup();
     h.view.show(twoBodies(3));
     await settle();
-    h.view.show(twoBodies(2, { box: 'old', cyl: 'old2' }));
+    h.view.show(twoBodies(1, { box: 'vBox2', cyl: 'vCyl2' }));
     await settle();
-    expect(h.viewport.syncs).toHaveLength(1);
-    expect(h.published).toHaveLength(1);
-    expect(h.meshes.versions()).toEqual(['vBox', 'vCyl']);
+    expect(h.viewport.syncs).toHaveLength(2);
+    expect(h.published).toHaveLength(2);
+    expect(h.meshes.versions()).toEqual(['vBox2', 'vCyl2']);
   });
 
   it('publishes only the newest of two syncs under way', async () => {
@@ -356,6 +358,19 @@ describe('createReadModelView', () => {
 
   it('reports a sketch it cannot read and does not draw it', async () => {
     const h = setup();
+    h.view.show(readModel({ regen: { final: { sketches: [aSketchView()] } } }));
+    await settle();
+    expect(h.viewport.sketchDrawings.size).toBe(0);
+    expect(h.errors).toHaveLength(1);
+  });
+
+  it('a drawn sketch whose next version it cannot read is removed, not left stale', async () => {
+    const h = setup();
+    h.view.show(
+      readModel({ regen: { final: { sketches: [aSketchView({ entities: SKETCH_ENTITIES })] } } }),
+    );
+    await settle();
+    expect([...h.viewport.sketchDrawings.keys()]).toEqual(['f2/sketch']);
     h.view.show(readModel({ regen: { final: { sketches: [aSketchView()] } } }));
     await settle();
     expect(h.viewport.sketchDrawings.size).toBe(0);
