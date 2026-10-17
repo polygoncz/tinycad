@@ -11,6 +11,8 @@ Argumenty: `$ARGUMENTS` (např. `start M30-M33`, `sloucit stopa-b-m31`). Metodik
 
 Hlavní sezení (ty) je **dispečer**: rozhoduje s Pavlem, píše kontrakty, spouští a slučuje stopy. Stopy implementují. Nic nerozhoduj potichu.
 
+**Hlavní checkout patří jen dispečerovi.** Jiná práce během série (i Pavlova drobná vylepšení) jde do vlastní session ve vlastním worktree a slučuje se jako stopa – dvě session v jednom checkoutu sdílejí index i `MERGE_HEAD`. Po každém sloučení: dev server nad `main` běží dál a hlášení končí krátkým „co zkusit“.
+
 ## start
 
 1. **Milníky.** Přečti zadané milníky, jejich specifikace a otevřené otázky s `decide_by` na ně. Hrubé plány nejdřív upřesni s Pavlem (jako `/milnik start`, krok 6).
@@ -29,7 +31,7 @@ Hlavní sezení (ty) je **dispečer**: rozhoduje s Pavlem, píše kontrakty, spo
 
 ## sloucit
 
-1. Ověř, že stopa dokončila svou část: milníky ve větvi `status: done` (nebo dohodnutá část), `git -C <worktree> status` čistý, zpráva stopy hlásí zelený check a e2e.
+1. Ověř, že stopa dokončila svou část: milníky ve větvi `status: done` (nebo dohodnutá část), `git -C <worktree> status` čistý, zpráva stopy hlásí zelený check a e2e. Stopa má mít natažený aktuální `main` (`git merge-base --is-ancestor main <ref>`); když nemá, požádej ji o natažení – konflikty řeší stopa, ne dispečer. Když větev obsahuje i další milník, slučuj ref uzavření milníku.
 2. `git log main..<větev>`, `git merge-base --is-ancestor main <větev>` (obsahuje stopa aktuální `main`?), přečti *Průběh stopy* a zkontroluj diff proti kontraktu ve spec u nejcitlivějších míst (sdílené typy, adaptéry, hranice modulů).
 3. `git merge --no-ff <větev>` v hlavním checkoutu se zprávou `Merge track X: Mnn …` a řádkem `Co-Authored-By`. Konflikty řeš tady: sčítací (obě strany přidaly) ponech obě; u ostatních čti obě strany a spec.
 4. **Vždy celý `npm run check`** – sémantické konflikty git nehlásí, najde je typecheck (vyčerpávající `switch`). Pak `npm run test:e2e:full` – Chrome i WebKit (běží-li dev server, `E2E_PORT=<volný port>`). Nic necommituj, dokud obojí neprojde.

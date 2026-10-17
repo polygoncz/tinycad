@@ -131,6 +131,8 @@ Souběžné stopy podle metodiky [[Souběžné stopy agentů]] (pravidla 1–4 j
 
 Sdílené kontrakty jsou zafixované (2026-10-16) v [[12-skicar#Sdílené kontrakty série II]]: kdo přidává které členy unií, nekonečná přímka, vazba symetrie, `regionCurves` a odvozená id, id nástrojů a akcí. Port jádra M30 je v [[12-skicar#Geometrie skici v jádře (M30)]] a [[06-geometricke-jadro#Stav po M30]], implementační plán v [[M30-geometrie-skici-v-occt#Implementační plán]]. Stopa A smí jako jediná měnit `kernel`, `kernel-occt` a builder skici.
 
+**Zhodnocení série II (2026-10-17):** M30–M37 celé v `main` – 8 milníků za ~6½ h práce, bez regrese, e2e 136 → 186. Pavel: „v pohodě“, pokračovat; nejtěžší přehled o stavu a zkoušení výsledku. Nová pravidla v metodice: stopa si před sloučením natáhne `main`; hlavní checkout jen dispečer (drobná vylepšení souběžně se stopami ve vlastní session a worktree); hlášení po sloučení s „co zkusit“. Podrobnosti v [[Souběžné stopy agentů#Zhodnocení druhé série (M30–M37, 2026-10-16 a 17)]].
+
 ## Jak pracovat s milníkem
 
 1. Při zahájení nastav ve vlastnostech milníku `status: doing` a `started`. Přečti si soubor milníku a odkazované specifikace. U milníků označených „hrubý plán“ nejdřív upřesni úkoly a akceptační kritéria (a případně specifikaci).

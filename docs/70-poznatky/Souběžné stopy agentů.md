@@ -43,12 +43,15 @@ updated: 2026-10-15
    - Novou otázku čísluje až po kontrole posledního čísla v `main` a hned ji hlásí hlavnímu sezení.
    - Na poznámku, která existuje jen v jiné větvi, neodkazuje wikilinkem (neprošel by `lint:vault`), ale textem. Wikilink doplní hlavní sezení při sloučení.
    - Commituje na svou větev a do `main` neslučuje.
+   - **Před ohlášením k sloučení si natáhne `main`** a konflikty vyřeší sama (od série M30–M37): sloučení do `main` je pak bez konfliktů a dispečer jen ověřuje. Když větev obsahuje už i commity dalšího milníku, ohlásí ref uzavření milníku.
 5. **Hlavní sezení je dispečer:**
    - otázky stop předává člověku a jeho rozhodnutí posílá zpět s doslovnou citací;
    - v každé odpovědi shrne **úplný stav** rozhodnutí, protože zprávy se můžou zkřížit (stopa se zeptá znovu dřív, než jí dorazí odpověď);
    - slučuje po jednom: zkontroluje diff proti kontraktu, spustí `npm run check` a e2e, průběh stopy přenese do deníku a doplní wikilinky;
-   - stopu, která čeká na jinou (např. nástroje nad snapperem), pozdrží a pustí ji až po sloučení té druhé.
-6. **Přehled pro člověka:** stav se bere z gitu a z vaultu, ne z paměti agenta. V tinycad to dělá panel `/stopy` (mod Claude Code v `.claude/skills/tinycad-stopy/`): worktree, commity navíc, rozpracované soubory, milníky podle `status`, zaškrtnuté úkoly a `depends_on`.
+   - stopu, která čeká na jinou (např. nástroje nad snapperem), pozdrží a pustí ji až po sloučení té druhé;
+   - **hlavní checkout patří jen jemu** (od série M30–M37): jiná práce – i drobná vylepšení, která člověk chce dělat souběžně se stopami – běží ve vlastní session ve vlastním worktree a do `main` ji slučuje dispečer stejně jako stopu. Dvě session v jednom checkoutu sdílejí index i `MERGE_HEAD`: commit jedné „dokončí“ rozjeté sloučení druhé a souběžné e2e si mažou `test-results`.
+6. **Zkoušení výsledku:** dev server běží nad hlavním checkoutem (tedy nad `main`) a po každém sloučení se obnoví; hlášení o sloučení končí krátkým „co zkusit“ (nástroj, gesto). Člověk zkouší jen to, co je v `main`, ne rozpracované větve.
+7. **Přehled pro člověka:** stav se bere z gitu a z vaultu, ne z paměti agenta. V tinycad to dělá panel `/stopy` (mod Claude Code v `.claude/skills/tinycad-stopy/`): worktree, commity navíc, rozpracované soubory, milníky podle `status`, zaškrtnuté úkoly a `depends_on`.
 
 ### Zhodnocení první série (M25–M29, 2026-10-15 a 16)
 
@@ -76,6 +79,26 @@ updated: 2026-10-15
 - Sdílený `npm run check` ve worktree s více implementátory padá na rozpracovaných souborech sousedů – buď izolované worktree implementátorů (jako stopa A), nebo počkat.
 - Úkol, který čeká na jinou stopu (nástroje splinu na snapperu), rozdělit už v plánu a hlídat v panelu.
 - Primitiva cizí knihovny ověřit prototypem před kontraktem ([[Primitivum knihovny ověř prototypem před kontraktem]]).
+
+### Zhodnocení druhé série (M30–M37, 2026-10-16 a 17)
+
+**Verdikt (Pavel):** „v pohodě“, pokračovat. Nejtěžší: **přehled o stavu** a **zkoušení výsledku**. Přání: moci souběžně se stopami dělat drobná vylepšení (z toho pravidlo o hlavním checkoutu výše).
+
+| Měřítko | Výsledek |
+|---|---|
+| Čas | plán 16. 10. 18:02, stopy od 18:23; do 00:51 sloučeno 6 milníků, ráno M37 a M35 – **8 milníků za ~6½ h práce**. Tři stopy: A (M30, M33–M35), B (M31, M32), C (M36, M37). |
+| Rozsah | ~205 commitů ve stopách; unit testy 6508 → 8071, integrační 39 → 44, e2e 136 → 186. |
+| Konflikty | M30, M31, M32, M34, M35 bez konfliktu (stopa měla natažený `main`); M36 25 souborů + 4 sémantické, M33 5 + sémantické, M37 4 + sémantické – řešil dispečer. |
+| Kvalita | žádná regrese po sloučení; e2e po každém sloučení zelené (jednou až po opravě lišty). |
+
+**Co typecheck nechytil** (tři nové druhy sémantických konfliktů):
+- **Sdílený prostředek UI** – šířka lišty skicáře: každá stopa se vešla sama, dohromady ne; dvakrát to odhalilo až e2e (*Kóta* v „…“). Řešení Pavlem: bod a text do rodiny úsečky, všechny úpravy jedna rodina. Zjištění: kontrakty předem fixovaly typy, ne prostor v liště.
+- **Zdvojené pravidlo** – lokální `kind !== 'point'` v nástrojích (`curve-pick.ts`, zaoblení) nová entita tiše prošla; vyčerpávající `switch` ano. Našla to architektonická revize stopy, ne typy. Zjištění: pravidla typu „co je křivka“ patří na jedno místo doménového modulu (`isCurveEntity`).
+- **Sdílený pracovní strom** – jiná session v hlavním checkoutu commitnula během dispečerova rozjetého sloučení (M35 skončil ve slučovacím commitu s cizí zprávou) a souběžné e2e si mazaly `test-results`. Z toho pravidlo „hlavní checkout jen dispečer“.
+
+**Co se osvědčilo:** kontrakty sdílených typů předem (tabulka „kdo přidává co“); prototyp primitiv cizí knihovny před implementací (OCCT v M30, M34, M35 – pokaždé změnil plán); stopy, které si natáhly `main` samy (sloučení bez konfliktu); závislost mezi stopami oddělená už v plánu (M36 úkol 5 čekal na M30); dev server nad `main` pro zkoušení mezi sloučeními (Pavel díky tomu našel UX slabinu nástrojů polí → HUD nápověda).
+
+**Co zlepšit:** přehled a zkoušení – hlášení po sloučení s „co zkusit“; drobná vylepšení ve vlastní session; u nových nástrojů myslet na místo v liště při psaní kontraktu.
 
 ### Opakovatelnost
 
