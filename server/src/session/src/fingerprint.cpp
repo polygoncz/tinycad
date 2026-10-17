@@ -6,10 +6,16 @@
 #include <memory>
 
 #include <google/protobuf/descriptor.h>
-#include <google/protobuf/io/coded_stream.h>
-#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
+#include <google/protobuf/util/json_util.h>
 
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "tinycad/core/json.hpp"
 #include "tinycad/core/result.hpp"
+#include "tinycad/session/operation_codec.hpp"
+#include "tinycad/v1/operations.pb.h"
 
 namespace tinycad::session {
 
@@ -19,6 +25,51 @@ namespace {
 
 /** The fields that do not make a request different (spec 14 "Idempotence", N57). */
 constexpr std::array<const char*, 3> kIgnoredFields = {"session_id", "operation_id", "read"};
+
+/** The proto3 JSON of a message (proto field names), parsed; keys come out sorted (std::map). */
+core::Json protoJson(const pb::Message& message) {
+  pb::util::JsonPrintOptions options;
+  options.preserve_proto_field_names = true;
+  std::string text;
+  const auto printed = pb::util::MessageToJsonString(message, &text, options);
+  TINYCAD_ASSERT(printed.ok(), "cannot print " + std::string(message.GetTypeName()) + " as JSON");
+  return core::Json::parse(text);
+}
+
+/**
+ * A field of type tinycad.v1.Operation as the JSON operation of spec 04; an operation the codec
+ * refuses (an empty oneof) keeps its proto JSON, so even a broken request has one fingerprint.
+ */
+core::Json operationJson(const pb::Message& message) {
+  const auto* op = dynamic_cast<const tinycad::v1::Operation*>(&message);
+  TINYCAD_ASSERT(op != nullptr, "an Operation field that is not tinycad.v1.Operation");
+  auto converted = operationToJson(*op);
+  return converted ? *converted : protoJson(message);
+}
+
+/** N107: object of the set fields, Operation fields through the codec, sorted keys, compact. */
+std::string canonicalJson(pb::Message& request) {
+  const pb::Descriptor* descriptor = request.GetDescriptor();
+  const pb::Reflection* reflection = request.GetReflection();
+  const std::string operationType(tinycad::v1::Operation::descriptor()->full_name());
+
+  // Operation fields are converted separately and cleared before the generic print.
+  std::vector<std::pair<std::string, core::Json>> operations;
+  for (int i = 0; i < descriptor->field_count(); ++i) {
+    const pb::FieldDescriptor* field = descriptor->field(i);
+    if (field->is_repeated() || field->cpp_type() != pb::FieldDescriptor::CPPTYPE_MESSAGE ||
+        std::string(field->message_type()->full_name()) != operationType ||
+        !reflection->HasField(request, field)) {
+      continue;
+    }
+    const pb::Message& op = reflection->GetMessage(request, field);
+    operations.emplace_back(std::string(field->name()), operationJson(op));
+    reflection->ClearField(&request, field);
+  }
+  core::Json json = protoJson(request);
+  for (auto& [name, op] : operations) json[name] = std::move(op);
+  return json.dump();
+}
 
 }  // namespace
 
@@ -50,16 +101,7 @@ std::string requestFingerprint(const pb::Message& request) {
     }
   }
 
-  // Deterministic: map entries (Struct fields of params) sorted by key, so equal requests give
-  // equal bytes within one build of the server.
-  std::string bytes;
-  {
-    pb::io::StringOutputStream stream(&bytes);
-    pb::io::CodedOutputStream coded(&stream);
-    coded.SetSerializationDeterministic(true);
-    copy->SerializeToCodedStream(&coded);
-  }
-  return sha256Hex(bytes);
+  return sha256Hex(canonicalJson(*copy));
 }
 
 storage::OperationKey operationKey(const pb::Message& request) {

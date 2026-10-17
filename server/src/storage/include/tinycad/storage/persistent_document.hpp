@@ -138,6 +138,16 @@ class PersistentDocument {
   /** True after a failed reload (N35): every change returns Storage. */
   [[nodiscard]] bool broken() const;
 
+  /**
+   * The durable idempotence check alone (spec 14 "Vlákna a zámky serveru", N107): the stored
+   * entry when the key was written already (Change with repeated = true), nullopt when the id is
+   * not stored yet, OperationIdReused for the same id with another fingerprint, Storage when the
+   * document is broken or the file cannot be read. Changes nothing. The session calls it BEFORE it
+   * re-solves a sketch, so a repeated request is never solved again; every durable call below
+   * makes the same check first.
+   */
+  core::Result<std::optional<Change>, ChangeError> lookup(const OperationKey& key);
+
   // --- durable: at most one log entry, written before return --------------------------------
 
   /** OperationDispatcher::dispatch (one entry). */

@@ -4,5 +4,5 @@
 # with history) into the SQLite catalog (M41, decision N38).
 add_executable(tinycad-import tinycad_import.cpp)
 target_compile_features(tinycad-import PRIVATE cxx_std_23)
-target_link_libraries(tinycad-import PRIVATE tinycad_storage tinycad_features OpenSSL::Crypto)
+target_link_libraries(tinycad-import PRIVATE tinycad_storage tinycad_features)
 tinycad_warnings(tinycad-import)

@@ -83,21 +83,29 @@ struct PersistentDocument::Impl {
 
   [[nodiscard]] bool inTransaction() const { return runtime->transaction != nullptr; }
 
-  /**
-   * The first step of every durable call: Storage when broken; the stored entry when the key was
-   * written already (repeated) or OperationIdReused for another fingerprint; nullopt = go on.
-   */
-  std::optional<core::Result<Change, ChangeError>> repeatedOrRefused(const OperationKey& key) {
+  /** PersistentDocument::lookup. */
+  core::Result<std::optional<Change>, ChangeError> lookup(const OperationKey& key) {
     if (broken) return core::fail(changeError(ChangeErrorCode::Storage, "the document is broken"));
     auto found = file->findEntry(key.id);
     if (!found) return core::fail(changeError(ChangeErrorCode::Storage, found.error().message));
-    if (!*found) return std::nullopt;
+    if (!*found) return std::optional<Change>();
     const StoredEntry& stored = **found;
     if (!stored.operation || stored.operation->fingerprint != key.fingerprint) {
       return core::fail(changeError(ChangeErrorCode::OperationIdReused,
                                     "operation id '" + key.id + "' was used for another request"));
     }
-    return changeOf(stored.entry, true);
+    return std::optional<Change>(changeOf(stored.entry, true));
+  }
+
+  /**
+   * The first step of every durable call: the stored entry or the error of lookup; nullopt = the
+   * key is new, go on.
+   */
+  std::optional<core::Result<Change, ChangeError>> repeatedOrRefused(const OperationKey& key) {
+    auto found = lookup(key);
+    if (!found) return core::fail(std::move(found.error()));
+    if (!*found) return std::nullopt;
+    return std::move(**found);
   }
 
   /**
@@ -166,6 +174,11 @@ bool PersistentDocument::canRedo() const { return impl_->runtime->undo.canRedo()
 bool PersistentDocument::inTransaction() const { return impl_->inTransaction(); }
 
 bool PersistentDocument::broken() const { return impl_->broken; }
+
+core::Result<std::optional<Change>, ChangeError> PersistentDocument::lookup(
+    const OperationKey& key) {
+  return impl_->lookup(key);
+}
 
 // --- durable ------------------------------------------------------------------------------
 

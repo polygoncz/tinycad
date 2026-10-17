@@ -2,7 +2,10 @@
 # the .tinycad.json file, the persistent document and the document catalog service (spec 05,
 # spec 14, M41, decisions N32–N39); the C++ counterpart of src/persistence. Public headers
 # include/tinycad/storage/ (the contract for M45); src/ holds the internal parts. Depends on the
-# document, the operations and SQLite only: no OCCT, regeneration, gRPC or protobuf.
+# document, the operations, SQLite and libcrypto only: no OCCT, regeneration, gRPC or protobuf.
+# SHA-256 of importKey (N107) comes from OpenSSL's libcrypto, a vcpkg dependency of gRPC.
+find_package(OpenSSL REQUIRED)
+
 add_library(tinycad_storage STATIC
   src/error.cpp
   src/sqlite.cpp
@@ -22,5 +25,5 @@ target_include_directories(tinycad_storage
 target_compile_features(tinycad_storage PUBLIC cxx_std_23)
 target_link_libraries(tinycad_storage
   PUBLIC tinycad_document tinycad_ops
-  PRIVATE unofficial::sqlite3::sqlite3)
+  PRIVATE unofficial::sqlite3::sqlite3 OpenSSL::Crypto)
 tinycad_warnings(tinycad_storage)
