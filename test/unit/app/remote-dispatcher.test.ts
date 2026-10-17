@@ -135,9 +135,11 @@ class FakeRemoteSession implements RemoteSession {
     return flush();
   }
 
-  /** Rejects the oldest change, as the session does after its dispose. */
-  reject(): Promise<void> {
-    this.take().reject(new RemoteError({ code: 'CANCELLED', message: 'disposed' }));
+  /** Rejects the oldest change, by default as the session does after its dispose. */
+  reject(
+    error: unknown = new RemoteError({ code: 'CANCELLED', message: 'disposed' }),
+  ): Promise<void> {
+    this.take().reject(error);
     return flush();
   }
 
@@ -482,7 +484,7 @@ describe('createRemoteDispatcher: dispose', () => {
   it('a rejection that is not a RemoteError (a bug of the program) is not swallowed (N176)', async () => {
     const { session, dispatcher } = setup();
     const result = dispatcher.dispatch(rename('a'));
-    session.take().reject(new TypeError('cannot encode'));
+    void session.reject(new TypeError('cannot encode'));
     await expect(result).rejects.toBeInstanceOf(TypeError);
   });
 
