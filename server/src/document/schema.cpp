@@ -29,6 +29,41 @@ bool sameKindAsAnOption(const Json& value, const std::vector<Json>& values) {
                      [&](const Json& v) { return jsonKindOf(v) == kind; });
 }
 
+/** A reference param holding a list (DisjointRefs compares lists, not the single Axis). */
+bool isReferenceList(ParamKind kind) {
+  switch (kind) {
+    case ParamKind::Bodies:
+    case ParamKind::Topo:
+    case ParamKind::Region:
+    case ParamKind::Planes: return true;
+    default: return false;
+  }
+}
+
+const ParamSpec* findSpec(const ParamSchema& schema, const std::string& key) {
+  for (const ParamEntry& entry : schema) {
+    if (entry.key == key) return &entry.spec;
+  }
+  return nullptr;
+}
+
+/** A rule must speak about two different reference lists of the schema and have a code. */
+void assertValidRule(const FeatureSchema& schema, const ParamRule& rule) {
+  const std::string where = "Feature schema '" + schema.type() + "' rule '" + rule.code + "'";
+  TINYCAD_ASSERT(!rule.code.empty(), "Feature schema '" + schema.type() + "' has a rule without code");
+  TINYCAD_ASSERT(rule.param != rule.other, where + ": param and other are the same");
+  for (const std::string& key : {rule.param, rule.other}) {
+    const ParamSpec* spec = findSpec(schema.params(), key);
+    TINYCAD_ASSERT(spec != nullptr, where + ": unknown param '" + key + "'");
+    switch (rule.kind) {
+      case ParamRule::Kind::DisjointRefs:
+        TINYCAD_ASSERT(isReferenceList(spec->kind),
+                       where + ": param '" + key + "' is not a reference list");
+        break;
+    }
+  }
+}
+
 }  // namespace
 
 bool ParamSpec::isReference() const {
@@ -93,6 +128,7 @@ void FeatureSchemaRegistry::add(FeatureSchemaPtr schema) {
                      std::to_string(schema->version()) + " needs migrate()");
   TINYCAD_ASSERT(find(schema->type()) == nullptr,
                  "Feature schema '" + schema->type() + "' is already registered");
+  for (const ParamRule& rule : schema->rules()) assertValidRule(*schema, rule);
   schemas_.push_back(std::move(schema));
 }
 

@@ -10,24 +10,6 @@ namespace tinycad::document {
 
 namespace {
 
-/**
- * What makes two references the same (spec 03): body for body, body + name for topo, sketch +
- * region for region, plane for plane, axis for axis, sketch + entity for a sketch entity. Extra
- * fields of the raw data are ignored, readRef keeps only these. A list of strings, so no
- * separator character inside a name can make two keys collide.
- */
-std::vector<std::string> refKey(const EntityRef& ref) {
-  switch (ref.kind) {
-    case RefKind::Body: return {"body", ref.body.str()};
-    case RefKind::Topo: return {"topo", ref.body.str(), ref.name.str()};
-    case RefKind::Region: return {"region", ref.sketch.str(), ref.region};
-    case RefKind::Plane: return {"plane", ref.plane.str()};
-    case RefKind::Axis: return {"axis", ref.axis.str()};
-    case RefKind::SketchEntity: return {"sketchEntity", ref.sketch.str(), ref.entity};
-  }
-  return {};
-}
-
 ParamProblem problem(std::string code, Json params = nullptr) {
   return ParamProblem{std::move(code), std::move(params)};
 }
@@ -69,6 +51,25 @@ std::optional<ParamProblem> checkList(const Json& value, const ParamSpec& spec,
 }
 
 }  // namespace
+
+// Extra fields of the raw data are ignored: readRef keeps only the fields of the key.
+std::vector<std::string> refKey(const EntityRef& ref) {
+  switch (ref.kind) {
+    case RefKind::Body: return {"body", ref.body.str()};
+    case RefKind::Topo: return {"topo", ref.body.str(), ref.name.str()};
+    case RefKind::Region: return {"region", ref.sketch.str(), ref.region};
+    case RefKind::Plane: return {"plane", ref.plane.str()};
+    case RefKind::Axis: return {"axis", ref.axis.str()};
+    case RefKind::SketchEntity: return {"sketchEntity", ref.sketch.str(), ref.entity};
+  }
+  return {};
+}
+
+std::vector<std::string> refKeyOf(const ParamSpec& spec, const Json& item) {
+  const auto ref = readRefOf(refKindsOf(spec.kind), item);
+  if (!ref) return {};
+  return refKey(*ref);
+}
 
 const std::vector<RefKind>& refKindsOf(ParamKind kind) {
   static const std::vector<RefKind> body = {RefKind::Body};
