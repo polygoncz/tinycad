@@ -52,13 +52,13 @@ function historyRows(page: Page): Locator {
 test('download STEP, history panel, body colour, export and import of the document', async ({
   page,
 }) => {
-  await createDocument(page);
+  const doc = await createDocument(page);
 
   // 1. A box → File → Export STEP: the file of the document name starts like STEP.
   await confirmDialog(await openTool(page, 'Kvádr', 'Kvádr 1'));
   await expect(page.getByText('Tělesa: 1')).toBeVisible();
   const step = await downloadFromFileMenu(page, 'Exportovat STEP');
-  expect(downloadName(step)).toBe('Bez názvu.step');
+  expect(downloadName(step)).toBe(`${doc.name}.step`);
   expect((await downloadedText(step)).startsWith('ISO-10303-21;')).toBe(true);
 
   // 2. A cylinder; the history panel lists both, newest first; undo adds its own row on top and
@@ -94,7 +94,7 @@ test('download STEP, history panel, body colour, export and import of the docume
   // document opens with the same features and the colour, and undo works there (the history came
   // along): the last entry is the colour, the one before it the cylinder.
   const exported = await downloadFromFileMenu(page, 'Exportovat dokument');
-  expect(downloadName(exported)).toBe('Bez názvu.tinycad.json');
+  expect(downloadName(exported)).toBe(`${doc.name}.tinycad.json`);
   const exportedPath = await exported.path();
   const sourceUrl = page.url();
 

@@ -35,7 +35,7 @@ export function createRemoteRegistries(
   plugins: readonly FeaturePlugin[],
 ): RemoteRegistries {
   const schemas = createFeatureSchemaRegistry();
-  for (const schema of featureTypes) schemas.register(schema);
+  for (const schema of featureTypes) schemas.register(migratedByCore(schema));
   const tools = createToolRegistry();
   tools.register(SELECT_TOOL);
   const manipulators = createManipulatorRegistry();
@@ -52,6 +52,23 @@ export function createRemoteRegistries(
   }
   const handlers = createOpHandlerRegistry({ schemas });
   return { schemas, tools, manipulators, handlers, messages: mergeMessages(known) };
+}
+
+/**
+ * The registry of document asks every schema above version 1 for migrate; the descriptors of the
+ * core have none, because the core migrates the features before the client sees them (N67). Such
+ * a schema gets a migrate that only fails, so a call would show the broken assumption.
+ */
+function migratedByCore(schema: FeatureSchema): FeatureSchema {
+  if (schema.version === 1 || schema.migrate !== undefined) return schema;
+  return Object.freeze({
+    ...schema,
+    migrate(fromVersion: number): never {
+      throw new Error(
+        `Feature '${schema.type}' version ${String(fromVersion)} reached the client; the core migrates features`,
+      );
+    },
+  });
 }
 
 /** One dictionary per language over the plugins; a key defined twice is a programmer error. */

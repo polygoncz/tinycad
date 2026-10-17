@@ -38,7 +38,12 @@ async function flush(): Promise<void> {
 function model(
   size: number,
   generation: number,
-  extra: { readonly writable?: boolean; readonly bodies?: ReturnType<typeof aBodyView>[] } = {},
+  extra: {
+    readonly writable?: boolean;
+    readonly bodies?: ReturnType<typeof aBodyView>[];
+    /** The label of a transaction open on the document. */
+    readonly transaction?: string;
+  } = {},
 ): ReadModel {
   return aReadModel({
     document: {
@@ -56,7 +61,10 @@ function model(
       rollbackIndex: 1,
     },
     regen: { generation: BigInt(generation), final: { bodies: extra.bodies ?? [] } },
-    session: { writable: extra.writable ?? true },
+    session: {
+      writable: extra.writable ?? true,
+      ...(extra.transaction === undefined ? {} : { transaction: { label: extra.transaction } }),
+    },
   });
 }
 
@@ -73,10 +81,20 @@ afterEach(() => {
 interface SetupOptions {
   readonly writable?: boolean;
   readonly bodies?: ReturnType<typeof aBodyView>[];
+  /** The read model of the first OpenSession, instead of the state of the server. */
+  readonly opened?: ReadModel;
 }
 
-async function setup({ writable = true, bodies }: SetupOptions = {}) {
+async function setup({ writable = true, bodies, opened: first }: SetupOptions = {}) {
   const core = createFakeCore();
+  if (first !== undefined) {
+    core.respond('openSession', {
+      sessionId: 'session-1',
+      readModel: first,
+      eventSeq: 0n,
+      featureTypes: [aFeatureTypeDescriptor()],
+    });
+  }
   // The state of the server: every answer carries it, a test changes it.
   let server = model(10, 1, { writable, ...(bodies === undefined ? {} : { bodies }) });
   const answer = () => ({ result: { readModel: server } });
@@ -186,6 +204,21 @@ describe('createRemoteAppSession', () => {
     await flush();
     expect(core.calls).not.toContain('beginTransaction');
     expect(core.calls).not.toContain('dispatch');
+  });
+
+  // E2E M46: a reload whose CloseSession got lost resumes the session with the transaction of
+  // the dialog of the page before; this page has no dialog, so every begin failed.
+  it('aborts the transaction a resumed session still has open, before anything else', async () => {
+    const resumed = model(99, 3, { transaction: 'feature.edit' });
+    const { core, session } = await setup({ opened: resumed });
+    expect(core.calls.filter((c) => c !== 'watchSession').slice(0, 2)).toEqual([
+      'openSession',
+      'abort',
+    ]);
+    expect(sizeOf(session)).toBe(10);
+    session.features.edit(F1).setParam('size', 12);
+    await flush();
+    expect(core.calls).toContain('beginTransaction');
   });
 
   it('a transaction lost on the server closes the dialog', async () => {
