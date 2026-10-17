@@ -213,11 +213,23 @@ describe('RemoteSession.change', () => {
     core.respond('beginTransaction', first.answer);
     void session.change({ kind: 'begin', label: 'Edit' });
     const applied = session.change({ kind: 'apply', op: rename('a') });
+    await flush();
     setRead({ knownMeshes: ['v1'], inputOf: 'f1' as FeatureId }); // a test id
     first.release();
     await applied;
     expect(core.requests('beginTransaction')[0]?.read).toMatchObject({ knownMeshes: [] });
     expect(core.requests('apply')[0]?.read).toMatchObject({ knownMeshes: ['v1'], inputOf: 'f1' });
+    session.dispose();
+  });
+
+  // E2E M46: the feature dialog begins its transaction before it is the open dialog, so a begin
+  // sent at once went without input_of, and its answer replaced the input of the refresh.
+  it('a change goes after the synchronous code that queued it: it reads the options set there', async () => {
+    const { core, session, setRead } = await setup();
+    const begun = session.change({ kind: 'begin', label: 'Edit' });
+    setRead({ knownMeshes: [], inputOf: 'f1' as FeatureId }); // a test id
+    await begun;
+    expect(core.requests('beginTransaction')[0]?.read?.inputOf).toBe('f1');
     session.dispose();
   });
 

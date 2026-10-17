@@ -206,8 +206,14 @@ class RemoteSessionImpl implements RemoteSession {
 
   // ---- internal ------------------------------------------------------------------------------
 
-  /** Sends one change to the current session; a failure of the call is the outcome. */
+  /**
+   * Sends one change to the current session; a failure of the call is the outcome. The call goes
+   * after the synchronous code that queued the change: the request reads its read options when it
+   * is sent, and that code may set them in the same step (the feature dialog begins its
+   * transaction before it is the open dialog, whose feature is input_of).
+   */
   private async send(change: QueuedChange): Promise<ChangeSent> {
+    await Promise.resolve();
     const { sessionId, epoch } = this;
     try {
       const result = await this.retrier.run(() => this.rpcOf(change, sessionId));

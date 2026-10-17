@@ -4,6 +4,7 @@ import {
   clickCanvas,
   confirmDialog,
   createDocument,
+  editFeatureWithInput,
   expectNoErrors,
   fillParam,
   isoCanvasOffset,
@@ -89,9 +90,7 @@ test('editing a fillet picks the edges of its input: a second edge, no error', a
 
   // 2. Edit: the picked edge is still a chip of the dialog (in the input it exists, so its name
   // resolves and it is highlighted; the highlight itself is checked by the unit tests).
-  await timelineFeature(page, 'Zaoblení 1').dblclick();
-  const edited = page.getByRole('dialog', { name: 'Zaoblení 1', exact: true });
-  await expect(edited).toBeVisible();
+  const edited = await editFeatureWithInput(page, 'Zaoblení 1');
   const editedEdges = refField(edited, 'Hrany');
   await expect(editedEdges).toContainText('Vybráno: 1');
   await expect(edited.getByRole('button', { name: 'Odebrat Hrana 1', exact: true })).toBeVisible();

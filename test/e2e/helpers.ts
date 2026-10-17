@@ -177,6 +177,21 @@ export async function openTool(page: Page, tool: string, feature: string): Promi
   return dialog;
 }
 
+/**
+ * Opens the edit dialog of a feature by a double click in the Timeline and waits until the view
+ * shows the input of the feature (ADR 0025): the app reads the model again with input_of once the
+ * dialog is open, and until that answer is in, the view still shows the result of the feature, so
+ * a pick would hit it.
+ */
+export async function editFeatureWithInput(page: Page, name: string): Promise<Locator> {
+  const inputRead = page.waitForResponse((r) => r.url().endsWith('/GetReadModel'));
+  await timelineFeature(page, name).dblclick();
+  const dialog = page.getByRole('dialog', { name, exact: true });
+  await expect(dialog).toBeVisible();
+  await inputRead;
+  return dialog;
+}
+
 /** OK of the feature dialog; the dialog closes. */
 export async function confirmDialog(dialog: Locator): Promise<void> {
   await dialog.getByRole('button', { name: 'OK', exact: true }).click();
