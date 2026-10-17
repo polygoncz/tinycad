@@ -186,9 +186,7 @@ describe('featureSchemaOf', () => {
         'param.unexpected',
         'boolean.sameBody',
       ]);
-      expect(s.validate({ ...same, targets: [] }).map((i) => i.code)).toEqual([
-        'param.tooFewRefs',
-      ]);
+      expect(s.validate({ ...same, targets: [] }).map((i) => i.code)).toEqual(['param.tooFewRefs']);
     });
 
     it('ignores a rule of a kind this client does not know', () => {

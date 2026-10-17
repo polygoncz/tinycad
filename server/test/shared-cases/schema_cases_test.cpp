@@ -1,8 +1,9 @@
 // The runner of the shared cases schema.validate and schema.visibleWhen (spec 13, "Druhy
-// případů"; the TypeScript twins are test/integration/shared-cases/schema-validate.test.ts and
-// schema.test.ts): the issues of the params of a built-in feature by the validate of its schema,
-// sorted by param, code and the canonical JSON of params; whether a param applies by
-// isParamVisible over the declarative VisibleWhen (N20).
+// případů"; the TypeScript twin is test/integration/shared-cases/schema.test.ts, N150): the issues
+// of the params of a built-in feature by the validate of its schema, sorted by param, code and the
+// canonical JSON of params; whether a param applies by isParamVisible over the declarative
+// VisibleWhen (N20). The reference: the TS runner drops the codes of the rules only the server
+// checks (SERVER_ONLY_CODES, spec 03), this one checks every issue.
 
 #include <gtest/gtest.h>
 
