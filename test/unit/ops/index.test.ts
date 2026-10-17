@@ -3,19 +3,11 @@ import * as ops from '@/ops';
 
 // Guards the public API: a value export removed or added by accident shows up here.
 describe('ops public API', () => {
-  it('exports exactly the runtime values of spec 04', () => {
+  it('exports exactly the runtime values of spec 04 (N121)', () => {
     expect(Object.keys(ops).sort()).toEqual([
       'OP_VERSION',
       'applyOperation',
       'createOpHandlerRegistry',
-      'createOperationDispatcher',
-      'createOperationLog',
-      'createUndoManager',
-      'isDocumentRename',
-      'parseLogEntry',
-      'rebuildUndoStacks',
-      'replayLog',
-      'upcastOperation',
     ]);
   });
 

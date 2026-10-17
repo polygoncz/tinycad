@@ -1,13 +1,12 @@
 import { createSequentialIdGenerator } from '@/core';
 import {
-  ORIGIN_AXIS_IDS,
   ORIGIN_PLANE_IDS,
   createFeatureSchemaRegistry,
   sketchId,
   validateAgainstSchema,
 } from '@/document';
+import { aFeature, ORIGIN_AXIS_IDS } from '@/document/testing';
 import type { BodyId, FeatureId, FeatureSchema, ParamSchema, TopoName } from '@/document';
-import { aFeature } from '@/document/testing';
 import { anOpsSession } from '@/ops/testing';
 import { rectangleData } from '@/sketch/testing';
 import { describe, expect, it } from 'vitest';

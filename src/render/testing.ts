@@ -1,13 +1,12 @@
-// Test helpers of render; only *.test.ts may import this file. render may not use the
-// FakeKernel (kernel is a type-only dependency), so its tests build meshes by hand.
+// Test helpers of render; only *.test.ts may import this file. kernel is a type-only dependency
+// and the kernel runs on the server, so the tests of render build meshes by hand.
 
 import type { Vec3 } from '@/core';
 import type { MeshData, MeshOps, ShapeHandle } from '@/kernel';
 
 /**
  * An axis-aligned box as 6 faces of 2 triangles (24 vertices, flat normals, counter-clockwise
- * seen from outside) in order −X, +X, −Y, +Y, −Z, +Z, and 12 edges of 2 points. Same layout as
- * the FakeKernel's box mesh.
+ * seen from outside) in order −X, +X, −Y, +Y, −Z, +Z, and 12 edges of 2 points.
  */
 export function aBoxMesh(min: Vec3, max: Vec3): MeshData {
   const positions: number[] = [];

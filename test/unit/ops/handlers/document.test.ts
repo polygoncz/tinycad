@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createFeatureSchemaRegistry, toData } from '@/document';
-import { aDocument, aFeature } from '@/document/testing';
+import { createFeatureSchemaRegistry } from '@/document';
+import { aDocument, aFeature, toData } from '@/document/testing';
 import { createOpHandlerRegistry } from '@/ops/handler';
 import { OP_VERSION } from '@/ops/operation';
 import type { DocumentRenameOp } from '@/ops/operation';
 import { anOpsSession } from '@/ops/testing';
-import { upcastOperation } from '@/ops/upcast';
 
 const handlers = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
 const handler = handlers.get('document.rename');
@@ -61,7 +60,6 @@ describe('document.rename (M19.2, D5)', () => {
   it('validate: a valid operation passes', () => {
     const raw = { type: 'document.rename', v: 1, name: 'Díl' };
     expect(handler.validate?.(raw)).toEqual([]);
-    expect(upcastOperation(handlers, raw)).toEqual({ ok: true, value: raw });
   });
 
   it.each([
@@ -75,9 +73,6 @@ describe('document.rename (M19.2, D5)', () => {
   ])('validate: name %s fails at name', (_, name) => {
     const raw = { type: 'document.rename', v: 1, name };
     expect((handler.validate?.(raw) ?? []).map((e) => e.path)).toEqual(['name']);
-    const r = upcastOperation(handlers, raw);
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.path).toBe('name');
   });
 
   it('dispatch of an invalid name throws and changes nothing', () => {

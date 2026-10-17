@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyId, BodyMaterial, DocumentWriter, FeatureId, FeatureSchema } from '@/document';
-import { createFeatureSchemaRegistry, toData } from '@/document';
-import { aDocument, aFeature } from '@/document/testing';
+import { createFeatureSchemaRegistry } from '@/document';
+import { aDocument, aFeature, toData } from '@/document/testing';
 import { createOpHandlerRegistry } from '@/ops/handler';
 import { anOpsSession } from '@/ops/testing';
 import { OP_VERSION } from '@/ops/operation';

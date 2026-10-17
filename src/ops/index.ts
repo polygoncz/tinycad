@@ -1,5 +1,6 @@
-// Ring 1 – operations, dispatcher, operation log, transactions, undo/redo.
-// Public API of ops (spec 04). Everything else in this folder is internal.
+// Ring 1 – operations, their handlers and the ports of dispatching, transactions and undo.
+// Public API of ops (spec 04, N121). Everything else in this folder is internal; the in-memory
+// dispatcher, log, transaction and undo are a test double in ops/testing.ts.
 
 export type {
   BatchOp,
@@ -17,20 +18,15 @@ export type {
   Operation,
   StudioSetRollbackOp,
 } from './operation';
-export { isDocumentRename, OP_VERSION } from './operation';
+export { OP_VERSION } from './operation';
 export { createOpHandlerRegistry } from './handler';
-export type { OpHandler, OpHandlerRegistry } from './handler';
-export { createOperationLog } from './log';
-export type { LogEntry, OperationLog, OperationLogReader } from './log';
-export { replayLog } from './replay';
+export type { OpHandlerRegistry } from './handler';
 // N96: the optimistic mirror of the client (app) applies operations without a log.
 export { applyOperation } from './apply';
-export type { ApplyResult } from './apply';
-export { createOperationDispatcher } from './dispatcher';
-export type { DispatchMeta, OperationDispatcher } from './dispatcher';
-export type { Transaction } from './transaction';
-export { createUndoManager, rebuildUndoStacks } from './undo';
-export type { UndoManager } from './undo';
-export { upcastOperation } from './upcast';
-export { parseLogEntry } from './parse-entry';
-export type { OperationLoadError } from './load-error';
+export type {
+  DispatchMeta,
+  LogEntry,
+  OperationDispatcher,
+  Transaction,
+  UndoManager,
+} from './ports';

@@ -24,7 +24,7 @@ class KernelError extends Error {
   }
 }
 
-/** Error with a `code` property, for kernel implementations (fake, OCCT). */
+/** Error with a `code` property, for the client side of the kernel (remote). */
 export function createKernelError(code: KernelErrorCode, message: string): Error {
   return new KernelError(code, message);
 }

@@ -3,14 +3,10 @@
 // (N63). The C++ core is the reference (N124): ops.upcast and ops.replay run only there, because
 // loading and replaying stored logs is the core's alone.
 
-import { fromData, toData } from '@/document';
+import { fromData, toData } from '@/document/testing';
 import type { DocumentWriter } from '@/document';
-import {
-  createOperationDispatcher,
-  createOperationLog,
-  createOpHandlerRegistry,
-  createUndoManager,
-} from '@/ops';
+import { createOpHandlerRegistry } from '@/ops';
+import { createOperationDispatcher, createOperationLog, createUndoManager } from '@/ops/testing';
 import type { LogEntry, Operation, Transaction } from '@/ops';
 import type { CaseOutcome } from './support/case';
 import { builtInSchemas } from './support/schemas';

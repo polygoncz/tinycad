@@ -1,7 +1,7 @@
 {
   "kind": "regen",
   "description": "A rectangle fixed and dimensioned by the solver, its width changed to 60, extruded by 10: one body 60 × 20 × 10",
-  "source": "test/integration/extrude-scenario.test.ts › extrude scenario (rectangle, real solver, FakeKernel) › a new width of the sketch regenerates the same body 60 wide, undo brings 40 back",
+  "source": "test/integration/extrude-scenario.test.ts › extrude scenario (rectangle, real solver) › a new width of the sketch regenerates the same body 60 wide, undo brings 40 back",
   "input": {
     "document": {
       "meta": {

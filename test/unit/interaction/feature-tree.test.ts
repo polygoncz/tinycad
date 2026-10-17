@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
-import { bodyId, createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
-import type { BodyId, FeatureId, FeatureSchema, ParamSchemaOf } from '@/document';
-import { aFeature } from '@/document/testing';
-import type { DocumentOptions } from '@/document/testing';
+import { createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
+import { aFeature, bodyId } from '@/document/testing';
+import type { BodyId, FeatureId, FeatureSchema } from '@/document';
+import type { DocumentOptions, ParamSchemaOf } from '@/document/testing';
 import type { FeatureAddOp, FeatureSetParamsOp, FeatureSuppressOp } from '@/ops';
 import { OP_VERSION } from '@/ops';
 import { anOpsSession } from '@/ops/testing';

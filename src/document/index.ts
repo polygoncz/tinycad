@@ -17,7 +17,6 @@ export type {
   AxisRef,
   BodyId,
   BodyRef,
-  EntityRef,
   PlaneId,
   PlaneRef,
   SketchEntityRef,
@@ -27,9 +26,7 @@ export type {
   TopoRef,
 } from './refs';
 export {
-  bodyId,
   originOfBody,
-  ownerOf,
   ownerOfArtifact,
   parseAxisId,
   parseBodyId,
@@ -40,13 +37,11 @@ export {
   samePlaneRef,
   sketchId,
 } from './refs';
-export { ORIGIN, ORIGIN_AXES, ORIGIN_AXIS_IDS, ORIGIN_PLANE_IDS, ORIGIN_PLANES } from './origin';
-export type { OriginAxis, OriginPlane } from './origin';
-export { dependenciesOf, dependentsOf, orderViolations, referencesOf } from './references';
+export { ORIGIN, ORIGIN_AXES, ORIGIN_PLANE_IDS, ORIGIN_PLANES } from './origin';
+export { dependenciesOf, orderViolations } from './references';
 export type { OrderViolation } from './references';
 
 export { createDocument } from './cad-document';
-export type { CreateDocumentInit } from './cad-document';
 
 export { createFeatureSchemaRegistry, isParamVisible } from './schema';
 export type {
@@ -54,14 +49,13 @@ export type {
   FeatureSchemaRegistry,
   ParamIssue,
   ParamSchema,
-  ParamSchemaOf,
   ParamSpec,
   RefParamKind,
   RefParamSpec,
 } from './schema';
 export { validateAgainstSchema } from './validate';
 export { NO_VARIABLES, evaluateParams } from './evaluate';
-export type { Evaluated, ParamVariables } from './evaluate';
-export { isJsonObject, isJsonValue } from './json';
-export { fromData, migrateFeatureData, toData } from './serialize';
-export type { DocumentData, DocumentLoadError, DocumentLoadIssue, FeatureData } from './serialize';
+export type { Evaluated } from './evaluate';
+export { isJsonObject } from './json';
+export { migrateFeatureData } from './serialize';
+export type { DocumentLoadError, DocumentLoadIssue, FeatureData } from './serialize';

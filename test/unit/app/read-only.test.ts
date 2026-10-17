@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createDocument, createFeatureSchemaRegistry } from '@/document';
 import type { DocumentId } from '@/document';
-import { createOperationDispatcher, createOperationLog, createOpHandlerRegistry } from '@/ops';
+import { createOpHandlerRegistry } from '@/ops';
+import { createOperationDispatcher, createOperationLog } from '@/ops/testing';
 import type { DocumentRenameOp, OperationDispatcher } from '@/ops';
 import { refuseChanges } from '@/app/read-only';
 

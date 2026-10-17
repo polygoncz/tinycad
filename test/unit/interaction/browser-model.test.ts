@@ -1,14 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
 import {
-  ORIGIN_AXIS_IDS,
   ORIGIN_PLANE_IDS,
-  bodyId,
   createFeatureSchemaRegistry,
   sketchId,
-  toData,
   validateAgainstSchema,
 } from '@/document';
+import { aFeature, bodyId, ORIGIN_AXIS_IDS, toData } from '@/document/testing';
 import type {
   AxisId,
   BodyMaterial,
@@ -17,7 +15,6 @@ import type {
   ParamSchema,
   PlaneId,
 } from '@/document';
-import { aFeature } from '@/document/testing';
 import type {
   BodyRenameOp,
   BodySetColorOp,

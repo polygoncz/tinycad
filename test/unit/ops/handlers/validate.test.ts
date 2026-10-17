@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createFeatureSchemaRegistry } from '@/document';
 import { createOpHandlerRegistry } from '@/ops/handler';
-import { upcastOperation } from '@/ops/upcast';
 
 const handlers = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
 
@@ -133,7 +132,6 @@ describe('validate of built-in handlers', () => {
 
   it.each(Object.entries(valid))('%s: a valid operation passes', (type, raw) => {
     expect(handlers.get(type).validate?.(raw)).toEqual([]);
-    expect(upcastOperation(handlers, raw)).toEqual({ ok: true, value: raw });
   });
 
   it('body.setColor: null (the default color) passes', () => {
@@ -149,36 +147,5 @@ describe('validate of built-in handlers', () => {
   it.each(broken)('%s: %j fails at %j', (type, raw, path) => {
     const errors = handlers.get(type).validate?.(raw) ?? [];
     expect(errors.map((e) => e.path)).toContain(path);
-    const r = upcastOperation(handlers, raw);
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.path).toBe(path);
-  });
-
-  it('reports a broken payload inside a batch with the ops[i] prefix', () => {
-    const r = upcastOperation(handlers, {
-      type: 'batch',
-      v: 1,
-      ops: [
-        valid['feature.remove'],
-        { type: 'batch', v: 1, ops: [withFeature({ typeVersion: 0 })] },
-      ],
-    });
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.path).toBe('ops[1].ops[0].feature.typeVersion');
-  });
-
-  it('validates the result of upcast, not the raw older version', () => {
-    const registry = createOpHandlerRegistry({ schemas: createFeatureSchemaRegistry() });
-    registry.register({
-      type: 'test.ping',
-      version: 2,
-      invert: (_doc, op) => op,
-      apply: () => undefined,
-      upcast: () => ({ type: 'test.ping', v: 2 }),
-      validate: (raw) => (typeof raw.n === 'number' ? [] : [{ path: 'n', message: 'Missing' }]),
-    });
-    const r = upcastOperation(registry, { type: 'test.ping', v: 1, n: 5 });
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.path).toBe('n');
   });
 });

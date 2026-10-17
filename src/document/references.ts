@@ -66,18 +66,6 @@ export function dependenciesOf(
   return deps;
 }
 
-/** The features whose dependencies contain the id, in map order. */
-export function dependentsOf(
-  deps: ReadonlyMap<FeatureId, readonly FeatureId[]>,
-  id: FeatureId,
-): readonly FeatureId[] {
-  const dependents: FeatureId[] = [];
-  for (const [feature, dependsOn] of deps) {
-    if (dependsOn.includes(id)) dependents.push(feature);
-  }
-  return Object.freeze(dependents);
-}
-
 /**
  * Pairs where the dependency sits at an index >= the feature's index: the feature refers
  * to something the state before it does not have yet. Empty = the order is valid.

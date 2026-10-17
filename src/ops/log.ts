@@ -1,23 +1,8 @@
 import { assert, Emitter } from '@/core';
 import type { Subscribable } from '@/core';
-import type { Operation } from './operation';
+import type { LogEntry } from './ports';
 
-export interface LogEntry {
-  /** 1, 2, 3, … within a document. */
-  readonly seq: number;
-  readonly kind: 'do' | 'undo' | 'redo';
-  /** For undo/redo: seq of the original 'do' entry. */
-  readonly target?: number;
-  /** Exactly what was applied. */
-  readonly op: Operation;
-  readonly inverse: Operation;
-  /** Shown in the history. */
-  readonly label: string;
-  /** ms since epoch, metadata only. */
-  readonly time: number;
-}
-
-/** Read role of the log (ADR 0011): UndoManager, persistence, history UI. */
+/** Read role of the log (ADR 0011): UndoManager and the tests. */
 export interface OperationLogReader {
   /** Entries with seq >= fromSeq (default 1), in order. A copy of the array. */
   entries(fromSeq?: number): readonly LogEntry[];

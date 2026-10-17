@@ -6,10 +6,7 @@ import type {
   AxisRef,
   BodyMaterial,
   BodyMeta,
-  EntityRef,
   FeatureId,
-  OriginAxis,
-  OriginPlane,
   PlaneId,
   PlaneRef,
   SketchEntityRef,
@@ -26,25 +23,19 @@ describe('document public API', () => {
         'NO_VARIABLES',
         'ORIGIN',
         'ORIGIN_AXES',
-        'ORIGIN_AXIS_IDS',
         'ORIGIN_PLANES',
         'ORIGIN_PLANE_IDS',
-        'bodyId',
         'createDocument',
         'createFeatureSchemaRegistry',
         'dependenciesOf',
-        'dependentsOf',
         'evaluateParams',
-        'fromData',
         'isBodyColor',
         'isBodyMaterial',
         'isJsonObject',
-        'isJsonValue',
         'isParamVisible',
         'migrateFeatureData',
         'orderViolations',
         'originOfBody',
-        'ownerOf',
         'ownerOfArtifact',
         'parseAxisId',
         'parseBodyId',
@@ -52,10 +43,8 @@ describe('document public API', () => {
         'parseSketchId',
         'readPlaneRef',
         'readRefOf',
-        'referencesOf',
         'samePlaneRef',
         'sketchId',
-        'toData',
         'validateAgainstSchema',
       ].sort(),
     );
@@ -75,8 +64,7 @@ describe('document public API', () => {
 
   it('exports the plane and sketch types of spec 03 (M12)', () => {
     expectTypeOf<PlaneRef>().toEqualTypeOf<{ readonly kind: 'plane'; readonly plane: PlaneId }>();
-    expectTypeOf<PlaneRef>().toExtend<EntityRef>();
-    expectTypeOf<OriginPlane>().toEqualTypeOf<{
+    expectTypeOf<(typeof document.ORIGIN_PLANES)[number]>().toEqualTypeOf<{
       readonly id: PlaneId;
       readonly label: string;
       readonly plane: Plane;
@@ -92,9 +80,7 @@ describe('document public API', () => {
       readonly sketch: FeatureId;
       readonly entity: string;
     }>();
-    expectTypeOf<AxisRef>().toExtend<EntityRef>();
-    expectTypeOf<SketchEntityRef>().toExtend<EntityRef>();
-    expectTypeOf<OriginAxis>().toEqualTypeOf<{
+    expectTypeOf<(typeof document.ORIGIN_AXES)[number]>().toEqualTypeOf<{
       readonly id: AxisId;
       readonly label: string;
       readonly origin: Vec3;
