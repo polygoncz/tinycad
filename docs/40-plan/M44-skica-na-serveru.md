@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 44
 aliases:
   - M44
@@ -14,8 +14,8 @@ specs:
   - "[[14-protokol]]"
 depends_on:
   - "[[M39-kostra-serveru]]"
-started:
-finished:
+started: 2026-10-17
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-17
@@ -37,10 +37,10 @@ updated: 2026-10-17
 
 ## Úkoly
 
-- [ ] 1. Model skici, kontrola dat a JSON (třída `Sketch`)
-- [ ] 2. planegcs ze zdrojů a kouřový test (souběžně s 1)
-- [ ] 3. Odvozené entity a sdílené případy `sketch.derived`
-- [ ] 4. Adaptér `PlanegcsSolver` a sdílené případy `sketch.solve` (souběžně s 3)
+- [x] 1. Model skici, kontrola dat a JSON (třída `Sketch`)
+- [x] 2. planegcs ze zdrojů a kouřový test (souběžně s 1)
+- [x] 3. Odvozené entity a sdílené případy `sketch.derived`
+- [x] 4. Adaptér `PlanegcsSolver` a sdílené případy `sketch.solve` (souběžně s 3)
 
 Úkoly 1 a 2 běží souběžně (2 sahá jen do `server/third_party/planegcs/`), po sloučení obou běží souběžně 3 a 4.
 
@@ -97,4 +97,8 @@ Dva modely téže domény ve dvou jazycích a jak je udržet ve shodě; vendorov
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+_Návrh Clauda (samostatný běh, stopa C)._
+
+- Všech 112 sdílených případů (`sketch.solve` 75, `sketch.derived` 37) zelených v C++ napoprvé, bez úpravy případů; 366 testů serveru.
+- Implementátor navíc ověřil rozdílově proti TS v Node: 6000 náhodných skic pro parse bez rozdílu, 726 variant řešiče – rozdíl jen v jednom numericky chaotickém mezním případu (posun cíle o 1e-12 přepíná výsledek i v TS samotném).
+- planegcs vendorovaný ze stejného commitu jako npm balíček klienta (`9d26bae`), bez FMA (`-ffp-contract=off`), aby nativní výpočet co nejvíc odpovídal WASM.

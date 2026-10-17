@@ -160,3 +160,9 @@ Zafixované hlavičky navíc: `server/src/session/include/tinycad/session/*.hpp`
 - **N81 – `Dispatcher::begin` vrací `unique_ptr<Transaction>`, zničení otevřené transakce ji zruší** (RAII). Proč: transakce nesmí přežít dispečer ani výjimku v sezení.
 - **N82 – Property test přehrání: 200 semínek vlastního generátoru** (TS 1000 běhů fast-check). Proč: rychlost buildu v Dockeru; úmyslná chyba rollback baru se chytila.
 
+## M44 – Model skici a řešič v C++
+
+- **N83 – planegcs ze Salusoft89 commitu `9d26bae`** (značka `v1.3.0` neexistuje; commit odpovídá npm 1.3.0, `gcs_wrapper.ts` bajt po bajtu shodný s `node_modules`). Obal `GcsSystem` vyrenderovaný ručně ze šablony upstreamu (bez Embind), dva malé patche (`Console.h`, `gcs_system.h`), licence LGPL 2.1 v `server/third_party/planegcs/`.
+- **N84 – planegcs a adaptér řešiče se překládají s `-ffp-contract=off`.** Proč: WebAssembly nemá fused multiply-add; bez toho by GCC na arm64 slučoval `a*b+c` a výsledky by se od klienta lišily víc.
+- **N85 ⚠ – Řešič „bit po bitu jako WASM“ nejde zaručit v plném rozsahu.** Numericky chaotické mezní případy (tečna úsečky a oblouku při tažení) se mohou lišit stavem `ok`/`failed`; sdílené případy jsou zelené. Podle [[Q103 Skica, kterou server nevyřeší|Q103]] platí výsledek serveru.
+
