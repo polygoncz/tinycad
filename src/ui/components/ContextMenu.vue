@@ -7,7 +7,10 @@
 // its own stacking context, so the menu was drawn off the window and under the feature dialog.
 // Where it opens is placeMenu over its size measured after the render (hidden until then); the
 // keys move the focus by menuFocusIndex, Esc closes it and the focus goes back where it was.
+// An item with an icon (a ToolbarItem) shows it before its label; the column is there when any
+// item has one (menuHasIcons), an item without an icon keeps its room empty.
 import {
+  computed,
   nextTick,
   onBeforeUnmount,
   onMounted,
@@ -17,14 +20,15 @@ import {
   watch,
 } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { ActionState } from '@/interaction';
+import { menuHasIcons } from '../context-menu';
+import type { ContextMenuItem } from '../context-menu';
 import { isMacPlatform, shortcutText } from '../keyboard';
 import { isMenuNavigationKey, menuFocusIndex } from '../menu-navigation';
 import { placeMenu } from '../menu-position';
 import type { MenuPlacement } from '../menu-position';
 
 const props = defineProps<{
-  items: readonly ActionState[];
+  items: readonly ContextMenuItem[];
   /** The anchor in viewport pixels (clientX/clientY of the click); placeMenu decides the corner. */
   x: number;
   y: number;
@@ -32,6 +36,7 @@ const props = defineProps<{
 const emit = defineEmits<{ run: [id: string]; close: [] }>();
 
 const { t } = useI18n();
+const withIcons = computed(() => menuHasIcons(props.items));
 const menu = useTemplateRef<HTMLElement>('menu');
 // globalThis, not window/navigator: the ESLint config has no browser globals for .vue files
 // (no-undef); the types are the same.
@@ -76,7 +81,7 @@ async function open(): Promise<void> {
   focusItem(menuFocusIndex(enabledFlags(), null, 'Home'));
 }
 
-function choose(item: ActionState): void {
+function choose(item: ContextMenuItem): void {
   if (!item.enabled) return;
   emit('run', item.id);
   emit('close');
@@ -155,6 +160,12 @@ onUnmounted(() => {
         :disabled="!item.enabled"
         @click="choose(item)"
       >
+        <i
+          v-if="withIcons"
+          class="ti icon"
+          :class="item.icon === undefined ? undefined : `ti-${item.icon}`"
+          aria-hidden="true"
+        />
         <span class="label">{{ t(item.label) }}</span>
         <span v-if="item.shortcut !== null" class="shortcut">{{
           shortcutText(item.shortcut, isMac)
@@ -212,10 +223,25 @@ onUnmounted(() => {
 .row:disabled {
   color: var(--text-tertiary);
 }
+.icon {
+  flex: none;
+  width: 16px;
+  margin-left: -2px;
+  color: var(--text-secondary);
+  font-size: 16px;
+  text-align: center;
+}
+.row:disabled .icon {
+  color: inherit;
+}
 .shortcut {
   margin-left: auto;
   color: var(--text-tertiary);
   font-size: var(--font-size-small);
+}
+.row:hover:not(:disabled) .icon,
+.row:focus-visible .icon {
+  color: inherit;
 }
 .row:hover:not(:disabled) .shortcut,
 .row:focus-visible .shortcut {

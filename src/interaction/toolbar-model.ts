@@ -129,14 +129,14 @@ const COMMON_BUTTONS: Readonly<Record<string, readonly ToolbarActionButton[]>> =
   ],
   view: [
     { id: ACTION_IDS.fitAll, icon: 'zoom-scan' },
-    ...[
-      ACTION_IDS.viewFront,
-      ACTION_IDS.viewBack,
-      ACTION_IDS.viewRight,
-      ACTION_IDS.viewLeft,
-      ACTION_IDS.viewTop,
-      ACTION_IDS.viewBottom,
-    ].map((id) => ({ id, icon: 'square', menuOnly: true })),
+    // The side of the box drawn out is the side the view looks from; the front is the face
+    // facing the user, the back the hidden one (dashed).
+    { id: ACTION_IDS.viewFront, icon: 'square-dot', menuOnly: true },
+    { id: ACTION_IDS.viewBack, icon: 'square-dashed', menuOnly: true },
+    { id: ACTION_IDS.viewRight, icon: 'box-align-right', menuOnly: true },
+    { id: ACTION_IDS.viewLeft, icon: 'box-align-left', menuOnly: true },
+    { id: ACTION_IDS.viewTop, icon: 'box-align-top', menuOnly: true },
+    { id: ACTION_IDS.viewBottom, icon: 'box-align-bottom', menuOnly: true },
     { id: ACTION_IDS.viewIso, icon: 'cube', menuOnly: true },
   ],
 });

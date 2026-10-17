@@ -189,12 +189,12 @@ describe('toolbarGroups', () => {
       const view = groupsOf({ tools: [], actions, mode }).find((g) => g.id === 'view');
       expect(view?.items.map((i) => [i.id, i.icon, i.menuOnly])).toEqual([
         ['view.fitAll', 'zoom-scan', false],
-        ['view.front', 'square', true],
-        ['view.back', 'square', true],
-        ['view.right', 'square', true],
-        ['view.left', 'square', true],
-        ['view.top', 'square', true],
-        ['view.bottom', 'square', true],
+        ['view.front', 'square-dot', true],
+        ['view.back', 'square-dashed', true],
+        ['view.right', 'box-align-right', true],
+        ['view.left', 'box-align-left', true],
+        ['view.top', 'box-align-top', true],
+        ['view.bottom', 'box-align-bottom', true],
         ['view.iso', 'cube', true],
       ]);
       expect(view?.items[1]?.command).toEqual({ kind: 'action', id: 'view.front' });
