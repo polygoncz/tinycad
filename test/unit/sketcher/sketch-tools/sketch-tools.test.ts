@@ -2168,7 +2168,7 @@ describe('the drawing tools: the hint HUD (M37)', () => {
       [at(10, 10), 'hint.rectangle.second'],
       [at(40, 30), 'hint.rectangle.first'],
       [at(10, 50), 'hint.rectangle.second'],
-      // No Escape of its own: the tool ends.
+      [Esc, 'hint.rectangle.first'],
       [Esc, null],
     ],
     [
@@ -2195,6 +2195,7 @@ describe('the drawing tools: the hint HUD (M37)', () => {
       [at(10, 10), 'hint.circle.rim'],
       [at(30, 10), 'hint.circle.center'],
       [at(60, 60), 'hint.circle.rim'],
+      [Esc, 'hint.circle.center'],
       [Esc, null],
     ],
     [
@@ -2222,6 +2223,10 @@ describe('the drawing tools: the hint HUD (M37)', () => {
       [at(30, 10), 'hint.arc.end'],
       [at(10, 30), 'hint.arc.center'],
       [at(60, 60), 'hint.arc.start'],
+      [Esc, 'hint.arc.center'],
+      [at(60, 60), 'hint.arc.start'],
+      [at(80, 60), 'hint.arc.end'],
+      [Esc, 'hint.arc.center'],
       [Esc, null],
     ],
     [

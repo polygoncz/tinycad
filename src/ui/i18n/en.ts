@@ -364,7 +364,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'hint.point.place': 'Click to place a point, or type x and y (Tab, Enter)',
   'hint.rectangle.first': 'Click the first corner of the rectangle, or type x and y (Tab, Enter)',
   'hint.rectangle.second':
-    'Click the opposite corner, or type the width and height (Tab, Enter), Esc ends',
+    'Click the opposite corner, or type the width and height (Tab, Enter), Esc goes back',
   'hint.rectangleCenter.center': 'Click the center of the rectangle, or type x and y (Tab, Enter)',
   'hint.rectangleCenter.corner':
     'Click a corner, or type the width and height (Tab, Enter), Esc goes back',
@@ -373,7 +373,7 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
     'Click the second corner of the first side, or type the length and angle (Tab, Enter), Esc goes back',
   'hint.rectangle3p.height': 'Click the height of the rectangle, or type it (Enter), Esc goes back',
   'hint.circle.center': 'Click the center of the circle, or type x and y (Tab, Enter)',
-  'hint.circle.rim': 'Click the rim, or type the diameter (Enter), Esc ends',
+  'hint.circle.rim': 'Click the rim, or type the diameter (Enter), Esc goes back',
   'hint.circle2p.first': 'Click the first end of the diameter',
   'hint.circle2p.second': 'Click the second end of the diameter, Esc goes back',
   'hint.circle3p.first': 'Click the first point on the circle',
@@ -387,9 +387,9 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'hint.circle3t.third': 'Click the third tangent curve, Esc goes back',
   'hint.arc.center': 'Click the center of the arc, or type x and y (Tab, Enter)',
   'hint.arc.start':
-    'Click the start of the arc, or type the radius and angle (Tab, Enter), Esc ends',
+    'Click the start of the arc, or type the radius and angle (Tab, Enter), Esc goes back',
   'hint.arc.end':
-    'Click the end of the arc (counter-clockwise), or type the sweep (Enter), Esc ends',
+    'Click the end of the arc (counter-clockwise), or type the sweep (Enter), Esc goes back',
   'hint.arc3p.start': 'Click the start of the arc',
   'hint.arc3p.end': 'Click the end of the arc, Esc goes back',
   'hint.arc3p.through': 'Click a point on the arc, Esc goes back',

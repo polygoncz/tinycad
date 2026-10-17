@@ -1310,7 +1310,7 @@ export function derivedOwner(id: string): SketchEntityId | null;
 Doplnění po [[M37-text-ve-skice|M37]] (Pavel 2026-10-17): nápovědu v každém kroku mají všechny kreslicí nástroje a kóta, nejen nástroje polí, text a úprav. Mechanismus HUD je v [[10-interakce#Nástroje]].
 
 - **Kontrakt:** `ClickHandlers.hint?(): string | null` v `sketch-tools/common.ts` vrací klíč nápovědy aktuálního kroku (`null` = žádná). `clickTool` se na něj ptá stejně jako na `inputFields` ([[#Číselný vstup (M32)]]): při `activate`, po každém kroku (klik, Enter číselného vstupu, klávesa zpracovaná nástrojem, konec tahu), při nové session a při každém pohybu (krok změněný bez události, např. řetěz zrušený odmítnutým zápisem). Navíc při převzetí tahu (`onDragStart` → `true`) a při jeho zrušení Escem. Opakovaný klíč manažer znovu nehlásí. Bez `hint` `clickTool` nápovědu nemění, takže nástroje s vlastní nápovědou (`withHint`, rohové nástroje, pole) fungují dál.
-- **Texty:** jedna věta s klávesami v textu. Kde má krok číselný vstup, text ho zmiňuje: „(Tab, Enter)“ u dvou polí (Tab přepne pole, Enter potvrdí), „(Enter)“ u jednoho pole. „Esc zpět“ = nástroj zapomene rozpracovaný krok. „Esc ukončí“ = nástroj vlastní Esc nemá a Esc ho vypne (obdélník rohy, kružnice středem, oblouk středem; u úsečky Esc ukončí řetěz). Anglické texty v `en.ts` obdobně.
+- **Texty:** jedna věta s klávesami v textu. Kde má krok číselný vstup, text ho zmiňuje: „(Tab, Enter)“ u dvou polí (Tab přepne pole, Enter potvrdí), „(Enter)“ u jednoho pole. „Esc zpět“ = nástroj zapomene rozpracovaný krok. „Esc ukončí“ = u úsečky Esc ukončí řetěz. Esc se chová u všech kreslicích nástrojů stejně (sjednoceno po M37, Pavel 2026-10-17): s rozpracovaným krokem první Esc vrátí nástroj na první krok (zapomene všechny vybrané body, u oblouku středem i z kroku konce rovnou na střed, i se zamčeným poloměrem), bez něj Esc nástroj ukončí. Dřív obdélník rohy, kružnice středem a oblouk středem vlastní Esc neměly a první Esc je rovnou vypnul. Anglické texty v `en.ts` obdobně.
 
 | Nástroj | Krok | Klíč `hint.…` | Text (cs) |
 |---|---|---|---|
@@ -1321,14 +1321,14 @@ Doplnění po [[M37-text-ve-skice|M37]] (Pavel 2026-10-17): nápovědu v každé
 |  | druhý bod | `xline.second` | Klikni na druhý bod přímky, nebo napiš délku a úhel (Tab, Enter), Esc zpět |
 | bod (`sketch.point`) | jediný krok | `point.place` | Klikni pro bod, nebo napiš x a y (Tab, Enter) |
 | obdélník (`sketch.rectangle`) | první roh | `rectangle.first` | Klikni na první roh obdélníku, nebo napiš x a y (Tab, Enter) |
-|  | protější roh | `rectangle.second` | Klikni na protější roh, nebo napiš šířku a výšku (Tab, Enter), Esc ukončí |
+|  | protější roh | `rectangle.second` | Klikni na protější roh, nebo napiš šířku a výšku (Tab, Enter), Esc zpět |
 | obdélník středem | střed | `rectangleCenter.center` | Klikni na střed obdélníku, nebo napiš x a y (Tab, Enter) |
 |  | roh | `rectangleCenter.corner` | Klikni na roh, nebo napiš šířku a výšku (Tab, Enter), Esc zpět |
 | obdélník 3 body | první roh | `rectangle3p.first` | Klikni na první roh, nebo napiš x a y (Tab, Enter) |
 |  | druhý roh | `rectangle3p.second` | Klikni na druhý roh první strany, nebo napiš délku a úhel (Tab, Enter), Esc zpět |
 |  | výška | `rectangle3p.height` | Klikni pro výšku obdélníku, nebo ji napiš (Enter), Esc zpět |
 | kružnice (`sketch.circle`) | střed | `circle.center` | Klikni na střed kružnice, nebo napiš x a y (Tab, Enter) |
-|  | obvod | `circle.rim` | Klikni na obvod, nebo napiš průměr (Enter), Esc ukončí |
+|  | obvod | `circle.rim` | Klikni na obvod, nebo napiš průměr (Enter), Esc zpět |
 | kružnice 2 body | první konec | `circle2p.first` | Klikni na první konec průměru |
 |  | druhý konec | `circle2p.second` | Klikni na druhý konec průměru, Esc zpět |
 | kružnice 3 body | 0 bodů | `circle3p.first` | Klikni na první bod na kružnici |
@@ -1341,8 +1341,8 @@ Doplnění po [[M37-text-ve-skice|M37]] (Pavel 2026-10-17): nápovědu v každé
 |  | 1 křivka | `circle3t.second` | Klikni na druhou tečnou křivku, Esc zpět |
 |  | 2 křivky | `circle3t.third` | Klikni na třetí tečnou křivku, Esc zpět |
 | oblouk (`sketch.arc`) | střed | `arc.center` | Klikni na střed oblouku, nebo napiš x a y (Tab, Enter) |
-|  | začátek | `arc.start` | Klikni na začátek oblouku, nebo napiš poloměr a úhel (Tab, Enter), Esc ukončí |
-|  | konec | `arc.end` | Klikni na konec oblouku (proti směru hodinových ručiček), nebo napiš úhel rozevření (Enter), Esc ukončí |
+|  | začátek | `arc.start` | Klikni na začátek oblouku, nebo napiš poloměr a úhel (Tab, Enter), Esc zpět |
+|  | konec | `arc.end` | Klikni na konec oblouku (proti směru hodinových ručiček), nebo napiš úhel rozevření (Enter), Esc zpět |
 | oblouk 3 body | začátek | `arc3p.start` | Klikni na začátek oblouku |
 |  | konec | `arc3p.end` | Klikni na konec oblouku, Esc zpět |
 |  | bod na oblouku | `arc3p.through` | Klikni na bod na oblouku, Esc zpět |
