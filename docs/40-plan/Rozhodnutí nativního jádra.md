@@ -154,3 +154,9 @@ Zafixované hlavičky navíc: `server/src/session/include/tinycad/session/*.hpp`
 - **N78 – Výpisy OCCT (statistiky STEP překladače) ztlumené jednou za proces** na úroveň varování. Proč: zahlcovaly stdout při každém exportu; centrálně v `app` při M45.
 - **N79 – Výjimky OCCT převádí každá metoda jádra vlastním `try/catch`** (ne šablonou), `Build` u zaoblení a sražení a zápis STEP jako `OperationFailed`, ostatní `Internal` – stejně jako TS.
 
+## M40 – Dokument a operace v C++
+
+- **N80 – `invert` a `apply` handlerů vrací `Result` s cestou chyby** (`featureId`, `index`, `ops[i].…`), místo výjimky jako v TS. Proč: operace přicházejí od klienta po síti; nesedící operace je očekávaná chyba (`INVALID_OPERATION`), ne chyba programu.
+- **N81 – `Dispatcher::begin` vrací `unique_ptr<Transaction>`, zničení otevřené transakce ji zruší** (RAII). Proč: transakce nesmí přežít dispečer ani výjimku v sezení.
+- **N82 – Property test přehrání: 200 semínek vlastního generátoru** (TS 1000 běhů fast-check). Proč: rychlost buildu v Dockeru; úmyslná chyba rollback baru se chytila.
+

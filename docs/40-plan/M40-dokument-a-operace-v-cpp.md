@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 40
 aliases:
   - M40
@@ -12,8 +12,8 @@ specs:
   - "[[04-operace-a-historie]]"
 depends_on:
   - "[[M39-kostra-serveru]]"
-started:
-finished:
+started: 2026-10-17
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-17
@@ -33,10 +33,10 @@ updated: 2026-10-17
 
 ## Úkoly
 
-- [ ] 1. Knihovna `document` (model, reference, dokument, JSON, načtení a migrace, schéma a validace)
-- [ ] 2. Schémata osmi vestavěných featur a jejich sdílené případy (souběžně se 3)
-- [ ] 3. Operace, handlery, `applyOperation`, upcast a přehrání (souběžně se 2)
-- [ ] 4. Log, dispečer, transakce, undo a property test přehrání
+- [x] 1. Knihovna `document` (model, reference, dokument, JSON, načtení a migrace, schéma a validace)
+- [x] 2. Schémata osmi vestavěných featur a jejich sdílené případy (souběžně se 3)
+- [x] 3. Operace, handlery, `applyOperation`, upcast a přehrání (souběžně se 2)
+- [x] 4. Log, dispečer, transakce, undo a property test přehrání
 
 Úkol 1 jde první a sám. Úkoly 2 a 3 běží souběžně (dva subagenti `implementer` ve vlastních worktree), úkol 4 po sloučení 3. Převod `tinycad.v1.Operation` ↔ JSON operace se přesunul do [[M45-sezeni-pres-grpc|M45]] (N27 ⚠); schéma skici a jeho případy `validate-sketch-*` jsou v [[M44.1-builder-skici-na-serveru|M44.1]] (N22).
 
@@ -98,4 +98,9 @@ Neměnná data a event sourcing v C++: sdílení struktur přes `shared_ptr<cons
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+_Návrh Clauda (samostatný běh, stopa A)._
+
+- Jeden implementátor, čtyři úkoly po sobě, souběžně se stopami B a C; sloučení bez konfliktu.
+- Sdílené případy stopy A zelené v C++: `ops.upcast` 112, `ops.replay` 8, `ops.script` 17, `document.load` 33, `schema.validate` 63 (8 skic patří M44.1), `schema.visibleWhen` 30. Celkem 568 testů serveru.
+- Property test přehrání (vlastní generátor, 200 semínek) chytil úmyslně rozbitou obnovu rollback baru.
+- Odchylka od TS: nesedící operace je očekávaná chyba (`Result` s cestou), ne výjimka – operace chodí po síti (N80).
