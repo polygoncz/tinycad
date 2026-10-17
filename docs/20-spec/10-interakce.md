@@ -952,18 +952,18 @@ export const FILE_ACTION_IDS = { exportStep: 'file.exportStep', exportDocument: 
 /** Port: app exportuje a soubor stáhne; odmítnutí = export se nepovedl. */
 export interface FileExporter {
   exportStep(bodies: readonly BodyId[]): Promise<void>;
-  exportDocument(): Promise<{ readonly withHistory: boolean }>;   // M19.1: false = živý dokument bez historie (úložiště nefunguje); export ze serveru je vždy true
+  exportDocument(): Promise<void>;   // vždy s historií (server drží log); withHistory z M19.1 zrušeno v M48 (N153)
 }
 
 export type FileTask = 'step' | 'document';
 export type FileStatus =
-  | { readonly kind: 'idle'; readonly warning: 'file.exportedWithoutHistory' | null }   // warning: M19.1
+  | { readonly kind: 'idle' }   // upozornění „export bez historie“ (M19.1) zrušeno v M48 (N153)
   | { readonly kind: 'running'; readonly task: FileTask }
   | { readonly kind: 'failed'; readonly task: FileTask; readonly message: string };   // message technická, ui ukáže v tooltipu
 
 export interface FileActions extends Disposable {
   readonly status: Observable<FileStatus>;
-  dismiss(): void;                    // 'failed' → 'idle'; 'idle' s upozorněním → bez upozornění (M19.1); jinak nic
+  dismiss(): void;                    // 'failed' → 'idle'; jinak nic
 }
 
 export function createFileActions(deps: {
