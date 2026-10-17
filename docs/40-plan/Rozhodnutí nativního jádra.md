@@ -217,3 +217,10 @@ Revize (`architecture-reviewer`) nad M39–M44 a pahýly M45 nenašla porušení
 - **N111 – Fillet a Chamfer sdílí jednu funkci `buildDressup`**, `NameTable` si jména seřadí sám, `#k` řadí `std::stable_sort` (porovnání s tolerancí není striktní uspořádání). Spouštěč případů `regen` bere nové `OcctKernel` na každý případ.
 - **N112 – Property test regenerace ověřuje `liveHandleCount == ownedHandleCount`** a 0 handle po zničení Regeneratoru místo počtu handle v cache (cache není zvenku vidět). Stačí: únik i předčasné uvolnění se projeví.
 
+## Úklid z revize a M44.1
+
+- **N113 – Limit hloubky vnořeného `batch` 64 jen při načítání (`upcastOperation`)**, ne při aplikaci. Proč: transakce a inverze zanořují o 1–3 úrovně hlouběji než operace zvenku; jedna mez by porušila pravidlo M19.1 „co se zapíše, jde přečíst“. Operace ze sítě omezuje protobuf (rekurze 100).
+- **N114 – Jádro, 2D geometrie i řešič propouští `AssertionError` a `bad_alloc`**; ostatní výjimky knihoven OCCT a planegcs převádí na chybu jako hodnotu.
+- **N115 – `sketch_solve.hpp` zůstává v `features/include`, implementace v `tinycad_feature_builders`**; sezení linkuje `tinycad_feature_builders`. Přesun patří k revizi struktury (N110). Hlavička builderů je v `include-builders/` (N109).
+- **N116 – Souběžné buildy C++ v Dockeru (8 GB RAM) s nejvýš `-j3` na agenta.** Proč: při `-j6` čtyř souběžných buildů padal kompilátor na nedostatek paměti.
+
