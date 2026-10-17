@@ -33,6 +33,8 @@ Testy jsou součástí návrhu, ne dodatek. Architektura je postavená tak, aby 
 
 `npm run check` pouští své kroky (typecheck, lint, lint:deps, lint:vault, unit, integrační) **souběžně** přes `run-p` z `npm-run-all2`, výstupy po skončení kroku (`--aggregate-output`) a dokončí všechny i po chybě (`--continue-on-error`). Typecheck je inkrementální (`incremental` v `tsconfig.base.json`), Prettier s cache. ESLint cache nemá: typově informovaná pravidla (`no-floating-promises`…) závisí na typech z jiných souborů a cache by nezměněný soubor znovu nezkontrolovala. Od 2026-10-17: ~36 s místo ~58 s.
 
+**Server (od M39):** `npm run check:server` sestaví C++ jádro v Dockeru a pustí GoogleTest (`ctest`, včetně sdílených případů), `npm run check:full` = `check` + `check:server` (při slučování milníků, [[Rozhodnutí nativního jádra]] N49). E2E přes server: `npm run test:e2e:core` (zvedne Docker Compose, sestaví aplikaci s `VITE_CORE_URL=/api` do `dist-core`, konfigurace `playwright.core.config.ts`, jen Chrome).
+
 ## Klíčové invarianty (property-based)
 
 1. **Replay:** pro libovolnou sekvenci operací a undo/redo: přehrání logu od prázdného dokumentu = živý dokument.

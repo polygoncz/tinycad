@@ -168,12 +168,13 @@ Proč toto pořadí:
 
 | Stopa | Milníky | Soubory | Čeká na |
 |---|---|---|---|
-| A – dokument a úložiště | [[M40-dokument-a-operace-v-cpp\|M40]] → [[M41-persistence-sqlite\|M41]] | `server/src/document/`, `ops/`, `storage/` | – |
-| B – geometrie | [[M42-jadro-occt-nativne\|M42]] → [[M43-regenerace-v-cpp\|M43]] → [[M44.1-builder-skici-na-serveru\|M44.1]] | `server/src/kernel/`, `regen/`, `features/` | M43 natáhne `main` se sloučeným M40, M44.1 se sloučeným M44 |
-| C – skica | [[M44-skica-na-serveru\|M44]] | `server/src/sketch/`, `server/third_party/planegcs/` | – |
+| A – dokument a úložiště | [[M40-dokument-a-operace-v-cpp\|M40]] → [[M41-persistence-sqlite\|M41]] | `server/src/document/`, `ops/`, `storage/`, schémata `features/*/schema.*` | – |
+| B – geometrie | [[M42-jadro-occt-nativne\|M42]] → [[M43-regenerace-v-cpp\|M43]] → [[M44.1-builder-skici-na-serveru\|M44.1]] | `server/src/kernel/`, `regen/`, buildery `features/` (od M43) | M43 natáhne `main` se sloučeným M40, M44.1 se sloučeným M44 |
+| C – skica | [[M44-skica-na-serveru\|M44]] | `server/src/sketch/`, `solver-planegcs/`, `server/third_party/planegcs/` | – |
 
 Pravidla série:
-- **Sdílené kontrakty** zafixuje hlavní sezení při startu stop (po M39): veřejné hlavičky C++ modelu dokumentu a registru schémat (M40, používá M41 a M43), portu jádra `GeometryKernel` (M42, používá M43) a modelu skici (M44, používá M44.1). Změna zafixované hlavičky jde přes hlavní sezení.
+- **Úkol 0 hlavního sezení** po sloučení M39 a před startem stop ([[Rozhodnutí nativního jádra|N11]]): dokončit společnou oblast `server/src/core` (`tinycad_core`: matematika, `Curve2`, `StrongId`, `Result`, JSON), převést `tinycad_geometry` z M39 na `core::Curve2` a vytáhnout podporu sdílených případů (načtení obálky, porovnání s tolerancemi) do `tinycad_test_support`. Oblast `core` pak mění jen hlavní sezení.
+- **Sdílené kontrakty** jsou zafixované jako hlavičky (2026-10-17, [[Rozhodnutí nativního jádra|N13–N24]]): `server/src/{core,document,kernel,sketch,solver-planegcs}/include/tinycad/**/*.hpp`. Používají je: model dokumentu a registr schémat (M40 → M41, M43), port jádra `GeometryKernel` (M42 → M43), model skici a řešič (M44 → M44.1). Změna zafixované hlavičky jde přes hlavní sezení.
 - **Build:** každá oblast má vlastní knihovnu v `server/src/<oblast>/CMakeLists.txt`, kořenový `CMakeLists.txt` stopy jen doplňují o `add_subdirectory` (sčítací konflikty). `vcpkg.json` a baseline mění jen hlavní sezení; závislosti planegcs (Eigen, případně Boost) přidá už [[M39-kostra-serveru|M39]], aby stopy baseline neměnily souběžně. Binární cache vcpkg je sdílená mezi worktree, adresáře buildu jsou vlastní.
 - Každá stopa ověřuje svou část proti sdíleným případům z [[M38-zmrazeni-domeny|M38]]: A `ops.*`, `document.load`, `schema.*`; B `geometry.*` (už M39), `regen`; C `sketch.solve`, `sketch.derived`.
 - M45 začne po sloučení všech tří stop. [[M46-klient-nad-read-modelem|M46]] se nedělí (Pavel 2026-10-17), jde po M45.

@@ -1,0 +1,28 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "docker",
+      "displayName": "Release build in the Docker image (server/Dockerfile, stage build)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/docker",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_MANIFEST_INSTALL": "OFF",
+        "VCPKG_INSTALLED_DIR": "/opt/vcpkg_installed",
+        "TINYCAD_SHARED_CASES_DIR": "${sourceDir}/../test/shared-cases"
+      }
+    }
+  ],
+  "buildPresets": [{ "name": "docker", "configurePreset": "docker" }],
+  "testPresets": [
+    {
+      "name": "docker",
+      "configurePreset": "docker",
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    }
+  ]
+}

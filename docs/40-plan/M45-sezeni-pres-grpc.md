@@ -38,6 +38,7 @@ updated: 2026-10-17
 - [ ] `WatchSession`: kruhový buffer událostí, `after_seq`, `resync`, heartbeat.
 - [ ] Chyby jako `google.rpc.Status` s `ErrorDetail` podle tabulky v `errors.proto`.
 - [ ] Integrační testy přes skutečný gRPC kanál podle [[14-protokol#Testy]].
+- [ ] Převod `tinycad.v1.Operation` ↔ JSON operace spec 04 a zpět pro každý typ ([[Q101 Operace v kontraktu proto|Q101]], [[14-protokol#Testy]]); přesunuto z [[M40-dokument-a-operace-v-cpp|M40]] ([[Rozhodnutí nativního jádra|N27]]).
 
 ## Akceptační kritéria
 

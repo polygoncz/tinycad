@@ -1,6 +1,6 @@
 ---
 type: milestone
-status: todo
+status: done
 order: 39
 aliases:
   - M39
@@ -14,8 +14,8 @@ specs:
   - "[[12-skicar]]"
 depends_on:
   - "[[M38-zmrazeni-domeny]]"
-started:
-finished:
+started: 2026-10-17
+finished: 2026-10-17
 tags:
   - milnik
 created: 2026-10-17
@@ -33,19 +33,38 @@ updated: 2026-10-17
 
 ## Úkoly
 
-- [ ] Moduly `protocol` a `remote` podle [[Q106 Moduly klienta pro gRPC|Q106]]: propsat do [[01-architektura]] a `.dependency-cruiser.cjs`, `src/protocol/` do `.gitignore`, skript `gen:proto` před `typecheck`, `dev` a `build`.
-- [ ] `server/`: `CMakeLists.txt`, `CMakePresets.json`, `vcpkg.json` s připnutou baseline (grpc, protobuf, opencascade, sqlite3, gtest, nlohmann-json a závislosti planegcs – Eigen, případně Boost – aby souběžné stopy po M39 baseline neměnily). Baseline je nejnovější registr vcpkg a OCCT je verze, kterou nabízí (dnes 8.0.1), bez overlay portu a `overrides`. Zapsat skutečnou verzi do [[06-geometricke-jadro]] ([[Q104 Nástroje pro kontrakt a C++ server|Q104]]).
-- [ ] `buf generate`: C++ do buildu serveru, TS (protobuf-es) do `src/protocol/`. `npm run check` dostane `check:proto` (`buf lint`, `buf breaking` proti `main`).
-- [ ] `docker-compose.yml`: `core` (vícestupňový Dockerfile, binární cache vcpkg ve volume) a `envoy` (filtr `grpc_web`, CORS pro `localhost:5173`, health check). Vite proxy `/api` na Envoy.
-- [ ] `GeometryService` v C++ nad OCCT (`Geom2dAPI_InterCurveCurve`, segment, zaoblení, offset) proti sdíleným případům z M38.
-- [ ] Adaptér `SketchGeometry` v `remote/` s jedním požadavkem v letu na metodu ([[Q096 Geometrie skici přes síť|Q096]]); `app` ho použije místo WASM.
-- [ ] `npm run check` dostane `check:server` (build a GoogleTest v Dockeru); e2e trim/offset proti Docker Compose.
+- [x] Moduly `protocol` a `remote` podle [[Q106 Moduly klienta pro gRPC|Q106]]: propsat do [[01-architektura]] a `.dependency-cruiser.cjs`, `src/protocol/` do `.gitignore`, skript `gen:proto` před `typecheck`, `dev` a `build`.
+- [x] `server/`: `CMakeLists.txt`, `CMakePresets.json`, `vcpkg.json` s připnutou baseline (grpc, protobuf, opencascade, sqlite3, gtest, nlohmann-json a závislosti planegcs – Eigen, případně Boost – aby souběžné stopy po M39 baseline neměnily). Baseline je nejnovější registr vcpkg a OCCT je verze, kterou nabízí (dnes 8.0.1), bez overlay portu a `overrides`. Zapsat skutečnou verzi do [[06-geometricke-jadro]] ([[Q104 Nástroje pro kontrakt a C++ server|Q104]]).
+- [x] `buf generate`: C++ do buildu serveru, TS (protobuf-es) do `src/protocol/`. `npm run check` dostane `check:proto` (`buf lint`, `buf breaking` proti `main`).
+- [x] `docker-compose.yml`: `core` (vícestupňový Dockerfile, binární cache vcpkg ve volume) a `envoy` (filtr `grpc_web`, CORS pro `localhost:5173`, health check). Vite proxy `/api` na Envoy.
+- [x] `GeometryService` v C++ nad OCCT (`Geom2dAPI_InterCurveCurve`, segment, zaoblení, offset) proti sdíleným případům z M38.
+- [x] Adaptér `SketchGeometry` v `remote/` s jedním požadavkem v letu na metodu ([[Q096 Geometrie skici přes síť|Q096]]); `app` ho použije místo WASM.
+- [x] `npm run check` dostane `check:server` (build a GoogleTest v Dockeru); e2e trim/offset proti Docker Compose.
 
 ## Akceptační kritéria
 
 - `docker compose up` spustí jádro a Envoy jedním příkazem, build je reprodukovatelný.
 - Trim, extend, split, zaoblení a offset ve skicáři fungují přes server, e2e zelené.
 - Sdílené případy 2D geometrie projdou v C++.
+
+## Implementační plán
+
+Samostatný běh ([[Rozhodnutí nativního jádra]]). Dvě souběžné části ve vlastních worktree, sloučené hlavním sezením:
+
+### S. Server (`server/`, `docker-compose.yml`, `envoy/`)
+
+- **Soubory:** `server/CMakeLists.txt`, `CMakePresets.json`, `vcpkg.json` (baseline = nejnovější registr; grpc, protobuf, opencascade, nlohmann-json, gtest, sqlite3, eigen3 a boost pro planegcs), `server/Dockerfile` (vícestupňový: `deps` s vcpkg a binární cache, `build`, `runtime`), `server/src/geometry/` (knihovna 2D geometrie nad OCCT – přepis `src/kernel-occt` funkcí `curveIntersections`, `curveSegment`, `filletArc`, `offsetCurves` včetně kontrol vstupu a kódů chyb), `server/src/service/` (`GeometryService` přes gRPC, převod `Curve2` ↔ proto), `server/src/main.cpp`, `server/test/` (GoogleTest: spouštěč sdílených případů `geometry.*` nad `test/shared-cases/geometry/` se stejným porovnáním jako spec 13), `docker-compose.yml` (`core`, `envoy`; pojmenovaný sdílený svazek `tinycad-vcpkg-cache`), `envoy/envoy.yaml` (`grpc_web`, CORS pro `localhost:5173`, health check), `scripts/check-server.mjs` (build a GoogleTest v Dockeru).
+- **Hotovo když:** `docker compose up` spustí jádro a Envoy, 86 případů `geometry.*` zelených v C++, `grpcurl`/test volání přes Envoy funguje.
+
+### C. Klient (`src/protocol`, `src/remote`, nástroje)
+
+- **Soubory:** `buf.gen.yaml` (protobuf-es do `src/protocol/`, ne v gitu), `package.json` (`@bufbuild/buf`, `@bufbuild/protobuf`, `@bufbuild/protoc-gen-es`, `@connectrpc/connect`, `@connectrpc/connect-web`; skripty `gen:proto` před `typecheck`/`dev`/`build`/`test`, `check:proto` = `buf lint` + `buf breaking` proti `main`, `check:server`), `.gitignore`, `.dependency-cruiser.cjs` a [[01-architektura]] (moduly `protocol`, `remote` podle [[Q106 Moduly klienta pro gRPC|Q106]]), `src/remote/` (adaptér `SketchGeometry` nad `GeometryService` s jedním požadavkem v letu na metodu, převod `Curve2`, chyby → `KernelErrorCode`), `src/app` (volba adaptéru podle `VITE_CORE_URL`), `vite.config.ts` (proxy `/api` na Envoy).
+- **Testy:** adaptér proti falešnému transportu (jeden v letu, poslední vyhrává, chyby), převody tam a zpět.
+- **Hotovo když:** cílené testy zelené; celý `npm run check` při sloučení.
+
+### Společně (hlavní sezení)
+
+- E2E `test/e2e/m39.spec.ts` (trim a offset přes server) běží jen s `E2E_CORE=1` a spuštěným Compose.
 
 ## Co se naučíš
 
@@ -57,4 +76,10 @@ CMake s vcpkg, generování kódu z `.proto` pro dva jazyky, Envoy a gRPC-Web, p
 
 ## Retrospektiva
 
-_(vyplnit po dokončení; obecné poznatky přesunout do `70-poznatky/`)_
+_Návrh Clauda (samostatný běh)._
+
+- Server a klient šly souběžně ve dvou worktree bez konfliktu; serverová část čekala hlavně na první build závislostí (~28 min, OCCT 11 min), další buildy ~20 s díky BuildKit cache (N5).
+- Všech 86 sdílených případů `geometry.*` prošlo v C++ nad OCCT 8.0.1 bez úpravy – golden testy z M38 se vyplatily hned v prvním milníku.
+- Implementátor klienta našel chybu kontraktu: slučování „poslední vyhrává“ by nástrojům podstrčilo cizí výsledek → slučování jen podle klíče (N6), spec 14 upravená.
+- Odchylky: `check:server` mimo `npm run check` (N49, `check:full`), aplikace volí adaptér podle `VITE_CORE_URL` (N3), e2e přes server samostatnou konfigurací (`npm run test:e2e:core`).
+- Výsledek: `check:full` zelený (8208 unit, 635 integračních, 93 testů serveru), e2e přes Compose 3/3.

@@ -30,6 +30,7 @@ updated: 2026-10-15
 
 Geometrické jádro je za **portem** `GeometryKernel`. Doména (`regen`) zná jen rozhraní. Konkrétní implementace:
 
+- **Nativní OCCT na serveru** (od [[M39-kostra-serveru|M39]], [[0030-nativni-jadro-pres-grpc|ADR 0030]]): **OCCT 8.0.1** z registru vcpkg (baseline `a5f73622`, triplet `arm64-linux-release`), knihovny v `server/src/` (2D geometrie skicáře `tinycad_geometry` za `GeometryService`). Dokud [[M46-klient-nad-read-modelem|M46]] nepřepne klienta, běží v prohlížeči dál WASM verze níže.
 - **OCCT** (`kernel-occt`): OpenCascade ve WASM, běží ve Web Workeru ([[0002-occt-wasm-ve-workeru|ADR 0002]]). Tovární funkce `createOcctKernel(): Promise<GeometryKernel & Disposable & { onDisconnected }>` (počká na start workeru) – M7.
 - **Fake** (`kernel`): jednoduchá implementace v paměti pro testy vyšších vrstev, každý tvar drží jen jako AABB (od M11 i válec, transformace a boolean, [[#`FakeKernel`]]). `createFakeKernel(): FakeKernel` z `kernel/testing.ts` – M5.
 
