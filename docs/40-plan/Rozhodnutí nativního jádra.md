@@ -365,3 +365,7 @@ Upřesnění hrubého plánu [[M52-tenky-klient|M52]] (plánovač 2026-10-17, po
 - **N173 – Geometrická varianta stavu nečekané výjimky se jmenuje `internalGeometryStatusOfCurrentException`** (důvod `KERNEL_INTERNAL`), obecná zůstává `internalStatusOfCurrentException` (`UNSPECIFIED`); obě v `rpc/status`. Texty kontroly křivek bere `occt2d` z kopie v jádře (s čísly).
 - Tím je vyřešené N77 a N53 podle Pavla; N110-entry (`Change.entry` jako JSON) zůstává k pozdějšímu rozhodnutí.
 
+## M51 – Inverze a měření
+
+- **N174 – Chyba dispečera je plochá struktura `DispatchError` (`Invalid` / `WriteFailed`, `path`, `message`, `reverted`)**; zapisovač nesmí volat dispečer (reentrance je chyba programátora). Měření regenerace mění v kroku z cache poloměr zaoblení (ne poslední válec jako M15), čísla proto nejsou s M15 přímo srovnatelná.
+
