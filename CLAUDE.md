@@ -55,7 +55,7 @@ Sérii milníků s malým průnikem dotčených souborů lze implementovat soub�
 
 - `node scripts/claude-guard.selftest.mjs` – test hooku `claude-guard` (co blokuje a co ne); spustit po každé úpravě hooku.
 - `node scripts/vault-lint.mjs` – kontrola celého vaultu (od M0 i jako `npm run lint:vault` v `npm run check`).
-- `npm run check` – vše, co musí projít před dokončením úkolu: `typecheck` + `lint` + `lint:deps` + `lint:vault` + `test`.
+- `npm run check` – vše, co musí projít před dokončením úkolu: `typecheck` + `lint` + `lint:deps` + `lint:vault` + `test` + `test:integration`, souběžně (`run-p`); typecheck je inkrementální a Prettier s cache, ESLint záměrně bez cache (typově informovaná pravidla).
 - `npm run dev` – vývojový server Vite (http://localhost:5173), `npm run build` – produkční build.
 - `npm run typecheck` – `vue-tsc -b` nad všemi projekty: `tsconfig.domain.json` (prstence 1 a 2 bez DOM, ADR 0009), `tsconfig.app.json` (prohlížeč), `tsconfig.test.json` (testy v Node), `tsconfig.test-idb.json` (testy adaptéru IndexedDB, s typy DOM), `tsconfig.test-app.json` (testy `app` a `ui`, s typy DOM), `tsconfig.node.json` (konfigurace nástrojů).
 - `npm run lint:deps` – hranice modulů (dependency-cruiser, `.dependency-cruiser.cjs`). Tabulka modulů v něm musí odpovídat tabulce v `docs/20-spec/01-architektura.md`.

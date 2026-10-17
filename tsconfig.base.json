@@ -7,6 +7,8 @@
     "moduleResolution": "bundler",
     "moduleDetection": "force",
     "noEmit": true,
+    // Keep the checked program in tsBuildInfoFile, so `vue-tsc -b` rechecks only what changed.
+    "incremental": true,
     "skipLibCheck": true,
 
     // Strictness
