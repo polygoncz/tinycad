@@ -3,12 +3,8 @@ import * as ops from '@/ops';
 
 // Guards the public API: a value export removed or added by accident shows up here.
 describe('ops public API', () => {
-  it('exports exactly the runtime values of spec 04 (N121)', () => {
-    expect(Object.keys(ops).sort()).toEqual([
-      'OP_VERSION',
-      'applyOperation',
-      'createOpHandlerRegistry',
-    ]);
+  it('exports exactly the runtime values of spec 04 (N166): only OP_VERSION', () => {
+    expect(Object.keys(ops).sort()).toEqual(['OP_VERSION']);
   });
 
   it('OP_VERSION has the body metadata operations of M11, M15 and M24', () => {

@@ -90,17 +90,12 @@ const CONSTRAINT_KINDS = {
 const DERIVED_ENTITY_KINDS = ['mirror', 'linearPattern', 'circularPattern', 'text'] as const;
 
 /**
- * The kinds only the C++ core runs (N124): it is the reference implementation of the shared cases.
- * The client keeps the runners of what it runs itself: the handlers of the optimistic mirror
- * (ops.script), the solver of the sketch and the validation of the feature dialog (schema, N150).
+ * The kinds only the C++ core runs (N124, N166): it is the reference implementation of the shared
+ * cases. The client keeps the runners of what it runs itself: the solver of the sketch and the
+ * validation of the feature dialog (schema, N150); it has no handlers of operations (ADR 0031).
  */
 const ONLY_IN_CPP: ReadonlySet<string> = new Set(
-  CASE_KINDS.filter(
-    (k) =>
-      k === 'ops.upcast' ||
-      k === 'ops.replay' ||
-      !['ops', 'sketch', 'schema'].includes(areaOfKind(k)),
-  ),
+  CASE_KINDS.filter((k) => !['sketch', 'schema'].includes(areaOfKind(k))),
 );
 
 const cases: Readonly<Record<Area, readonly LoadedCase[]>> = {

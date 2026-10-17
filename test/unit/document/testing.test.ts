@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { aDocument, aFeature } from '@/document/testing';
+import { aSnapshotDocument, aFeature } from '@/document/testing';
 
 describe('test builders', () => {
   it('aFeature gives unique ids and valid defaults, overrides win', () => {
@@ -22,11 +22,13 @@ describe('test builders', () => {
     aFeature<{ width: number }>({ name: 'x' });
   });
 
-  it('aDocument puts the rollback bar at the end by default', () => {
-    const doc = aDocument({ features: [aFeature(), aFeature()] });
+  it('aSnapshotDocument puts the rollback bar at the end by default', () => {
+    const doc = aSnapshotDocument({ features: [aFeature(), aFeature()] });
     expect(doc.studio.rollbackIndex).toBe(2);
-    expect(aDocument({ features: [aFeature()], rollbackIndex: 0 }).studio.rollbackIndex).toBe(0);
-    expect(aDocument({ meta: { name: 'X' } }).meta).toEqual({
+    expect(
+      aSnapshotDocument({ features: [aFeature()], rollbackIndex: 0 }).studio.rollbackIndex,
+    ).toBe(0);
+    expect(aSnapshotDocument({ meta: { name: 'X' } }).meta).toEqual({
       id: 'doc1',
       name: 'X',
       createdAt: 0,

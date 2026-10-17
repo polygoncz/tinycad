@@ -2,8 +2,8 @@ import type { Brand } from '@/core';
 
 // The document is a recipe: an ordered list of features (ADR 0003). Everything here
 // is immutable plain JSON data (ADR 0006); behaviour lives elsewhere (ADR 0004).
-// Branded ids are created by a cast at a single trusted place: id generation in ops
-// and fromData after the shape check.
+// Branded ids are created by a cast at a single trusted place: id generation (FeatureEditor)
+// and the parse functions of refs.ts and of the read model after the shape check.
 
 export type DocumentId = Brand<string, 'DocumentId'>;
 export type FeatureId = Brand<string, 'FeatureId'>;
@@ -17,7 +17,7 @@ export interface FeatureInstance<P = unknown> {
   readonly id: FeatureId;
   /** Key into the registries: 'box', 'cylinder', … */
   readonly type: string;
-  /** Schema version the params were written with; fromData migrates older ones. */
+  /** Schema version the params were written with; the core migrates older ones. */
   readonly typeVersion: number;
   /** Display name, 'Box 1'. */
   readonly name: string;
@@ -77,7 +77,7 @@ export function isBodyMaterial(v: unknown): v is BodyMaterial {
 const BODY_COLOR = /^#[0-9a-f]{6}$/;
 
 /**
- * A valid body color '#rrggbb' in lower case (spec 03, M15). Shared by fromData and validate of
+ * A valid body color '#rrggbb' in lower case (spec 03, M15), the rule of the core for
  * body.setColor; upper case is refused, so replay needs no conversion.
  */
 export function isBodyColor(v: unknown): v is string {

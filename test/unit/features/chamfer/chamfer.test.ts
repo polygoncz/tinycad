@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ObservableValue, createSequentialIdGenerator } from '@/core';
 import type { FeatureSchema } from '@/document';
-import { aDocument, aFeature } from '@/document/testing';
+import { aSnapshotDocument, aFeature } from '@/document/testing';
 import {
   SELECT_TOOL,
   createSelectionModel,
@@ -92,7 +92,7 @@ function aToolManager(editor: FeatureEditor) {
     ctx: {
       viewport,
       selection: createSelectionModel({ regen: new FakeRegenStatus() }),
-      doc: aDocument(),
+      doc: aSnapshotDocument(),
       ids: createSequentialIdGenerator('t'),
       features: editor,
     },

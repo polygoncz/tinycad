@@ -38,7 +38,7 @@ const modules = {
   render: { deps: ['core'], types: ['kernel', 'interaction'], npm: ['three'] },
   interaction: { deps: ['core', 'document', 'ops', 'sketch'] },
   // M20: the sketcher over interaction (ADR 0024); interaction never imports it. ops only for
-  // the tests (anOpsSession of ops/testing.ts); the rule sketcher-ops-only-in-tests keeps its
+  // the tests (FakeOps of ops/testing.ts); the rule sketcher-ops-only-in-tests keeps its
   // production code off ops/index.ts.
   sketcher: { deps: ['core', 'document', 'ops', 'sketch', 'interaction'] },
   'plugin-api': { deps: ['interaction'] },

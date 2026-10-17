@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aDocument, aFeature, bodyId, ORIGIN_AXIS_IDS } from '@/document/testing';
+import { aSnapshotDocument, aFeature, bodyId, ORIGIN_AXIS_IDS } from '@/document/testing';
 import type { AxisRef, FeatureId, SketchEntityRef, TopoName, TopoRef } from '@/document';
 import { rectangleData } from '@/sketch/testing';
 import {
@@ -21,7 +21,7 @@ const B2 = bodyId(fid('f2'));
 const B3 = bodyId(fid('f3'));
 
 function aDoc() {
-  return aDocument({
+  return aSnapshotDocument({
     features: [
       aFeature({ id: 'f1', name: 'Box 1' }),
       aFeature({ id: 'f2', name: 'Cylinder 1' }),
@@ -56,7 +56,7 @@ describe('bodyOfRef', () => {
 describe('bodyRefLabel', () => {
   it('is the name from the metadata', () => {
     const doc = aDoc();
-    doc.setBodyMeta(B1, { name: 'Base' });
+    doc.replace({ studio: { ...doc.studio, bodies: { [B1]: { name: 'Base' } } } });
     expect(bodyRefLabel(doc, B1)).toBe('Base');
   });
 
@@ -70,8 +70,10 @@ describe('bodyRefLabel', () => {
 
   it('is null when the origin feature is not in the document, even with a name', () => {
     const doc = aDoc();
-    doc.setBodyMeta(B3, { name: 'Gone' });
-    doc.removeFeature(fid('f3'));
+    const features = doc.studio.features.filter((f) => f.id !== 'f3');
+    doc.replace({
+      studio: { features, rollbackIndex: features.length, bodies: { [B3]: { name: 'Gone' } } },
+    });
     expect(bodyRefLabel(doc, B3)).toBeNull();
     expect(bodyRefLabel(doc, bodyId(fid('nope')))).toBeNull();
   });
@@ -193,7 +195,7 @@ describe('isSketchLine (M13)', () => {
     ],
     constraints: rect.constraints,
   };
-  const doc = aDocument({
+  const doc = aSnapshotDocument({
     features: [
       aFeature({ id: 's1', type: 'sketch', name: 'Sketch 1', params: withCircle }),
       aFeature({ id: 'f1', name: 'Box 1' }),

@@ -1,7 +1,7 @@
-// Ring 1 – immutable domain model: CadDocument, features, schemas, serialization.
+// Ring 1 – immutable domain model: the read-only document over snapshots, features, schemas.
 // Public API of document (spec 03). Everything else in this folder is internal.
 
-export type { DocumentEvents, DocumentReader, DocumentWriter } from './document';
+export type { DocumentEvents, DocumentReader } from './document';
 export type {
   BodyMaterial,
   BodyMeta,
@@ -41,7 +41,6 @@ export { ORIGIN, ORIGIN_AXES, ORIGIN_PLANE_IDS, ORIGIN_PLANES } from './origin';
 export { dependenciesOf, orderViolations } from './references';
 export type { OrderViolation } from './references';
 
-export { createDocument } from './cad-document';
 export { createSnapshotDocument } from './snapshot-document';
 export type { DocumentSnapshot, SnapshotDocument } from './snapshot-document';
 
@@ -61,5 +60,4 @@ export type { ParamRule } from './rules';
 export { NO_VARIABLES, evaluateParams } from './evaluate';
 export type { Evaluated } from './evaluate';
 export { isJsonObject } from './json';
-export { migrateFeatureData } from './serialize';
-export type { DocumentLoadError, DocumentLoadIssue, FeatureData } from './serialize';
+export type { DocumentLoadError, DocumentLoadIssue } from './load-error';

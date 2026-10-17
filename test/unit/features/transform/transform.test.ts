@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ObservableValue, createSequentialIdGenerator, mat4, vec3 } from '@/core';
 import type { Vec3 } from '@/core';
 import type { BodyId, FeatureSchema } from '@/document';
-import { aDocument, aFeature, anEvaluated } from '@/document/testing';
+import { aSnapshotDocument, aFeature, anEvaluated } from '@/document/testing';
 import {
   SELECT_TOOL,
   createSelectionModel,
@@ -566,7 +566,7 @@ function aToolManager(editor: FeatureEditor) {
     ctx: {
       viewport,
       selection: createSelectionModel({ regen: new FakeRegenStatus() }),
-      doc: aDocument(),
+      doc: aSnapshotDocument(),
       ids: createSequentialIdGenerator('t'),
       features: editor,
     },

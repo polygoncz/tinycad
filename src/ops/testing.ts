@@ -2,30 +2,13 @@
 // sketcher (N166). It applies nothing: it records what was sent and answers when the test says so,
 // replacing its snapshot document with the read model of the answer first, as RemoteSession does.
 // dependency-cruiser allows importing it only from tests, so it never reaches the bundle.
-//
-// Until M52 task 3 it also keeps the in-memory double of before M52 and the transitional
-// anOpsSession, which adapts it to the ports of ports.ts.
 
 import { assert, Emitter } from '@/core';
-import type { RegistryReader } from '@/core';
-import { createFeatureSchemaRegistry } from '@/document';
-import type { DocumentWriter, FeatureId, FeatureSchema, PartStudioData } from '@/document';
-import { aDocument, aSnapshotDocument } from '@/document/testing';
+import type { FeatureId, PartStudioData } from '@/document';
+import { aSnapshotDocument } from '@/document/testing';
 import type { DocumentOptions, TestDocument } from '@/document/testing';
-import { createOperationDispatcher } from './dispatcher';
-import { createOpHandlerRegistry } from './handler';
-import type { OpHandlerRegistry } from './handler';
-import type {
-  OperationDispatcher as LegacyDispatcher,
-  UndoManager as LegacyUndoManager,
-} from './legacy-ports';
-import { createOperationLog } from './log';
-import type { OperationLog } from './log';
 import type { Operation } from './operation';
 import type { DispatchMeta, OperationDispatcher, Transaction, UndoManager } from './ports';
-import { createUndoManager } from './undo';
-
-// ---- FakeOps -----------------------------------------------------------------------------------
 
 /** One change sent through the ports, in the order of sending. */
 export type SentChange =
@@ -248,98 +231,4 @@ function isFeatureOf(
     feature.id === featureId &&
     'params' in feature
   );
-}
-
-// ---- the transitional in-memory double (until M52 task 3) --------------------------------------
-
-export { createOperationDispatcher } from './dispatcher';
-export { createOperationLog } from './log';
-export type { OperationLog, OperationLogReader } from './log';
-export { createUndoManager } from './undo';
-export type {
-  LogEntry,
-  OperationDispatcher as LegacyOperationDispatcher,
-  Transaction as LegacyTransaction,
-  UndoManager as LegacyUndoManager,
-} from './legacy-ports';
-
-export interface OpsSession {
-  readonly doc: DocumentWriter;
-  readonly handlers: OpHandlerRegistry;
-  readonly log: OperationLog;
-  /** The in-memory dispatcher behind the ports of M52: applies at once, resolves true. */
-  readonly dispatcher: OperationDispatcher;
-  readonly undo: UndoManager;
-}
-
-export interface OpsSessionOptions extends DocumentOptions {
-  /** Feature schemas the handlers migrate feature data with (Q035). Defaults to none. */
-  readonly schemas?: RegistryReader<FeatureSchema>;
-}
-
-/** A session over aDocument(init); LogEntry.time is deterministic (1, 2, 3, …). */
-export function anOpsSession(init: OpsSessionOptions = {}): OpsSession {
-  const { schemas = createFeatureSchemaRegistry(), ...documentOptions } = init;
-  const doc = aDocument(documentOptions);
-  const handlers = createOpHandlerRegistry({ schemas });
-  const log = createOperationLog();
-  let clock = 0;
-  const inner = createOperationDispatcher({ doc, handlers, log, now: () => ++clock });
-  const undo = createUndoManager({ dispatcher: inner, log });
-  return { doc, handlers, log, dispatcher: adaptDispatcher(inner), undo: adaptUndo(undo) };
-}
-
-const TAKEN = (): Promise<boolean> => Promise.resolve(true);
-
-function adaptDispatcher(inner: LegacyDispatcher): OperationDispatcher {
-  return {
-    dispatch(op, meta) {
-      inner.dispatch(op, meta);
-      return TAKEN();
-    },
-    begin(label) {
-      const tx = inner.begin(label);
-      return {
-        label: tx.label,
-        apply(op) {
-          tx.apply(op);
-          return TAKEN();
-        },
-        applyTransient(op) {
-          tx.applyTransient(op);
-          return TAKEN();
-        },
-        commit() {
-          tx.commit();
-          return TAKEN();
-        },
-        abort() {
-          tx.abort();
-          return TAKEN();
-        },
-      };
-    },
-    get inTransaction() {
-      return inner.inTransaction;
-    },
-  };
-}
-
-function adaptUndo(inner: LegacyUndoManager): UndoManager {
-  return {
-    canUndo: () => inner.canUndo(),
-    canRedo: () => inner.canRedo(),
-    undo() {
-      inner.undo();
-      return TAKEN();
-    },
-    redo() {
-      inner.redo();
-      return TAKEN();
-    },
-    events: inner.events,
-    dispose() {
-      inner.dispose();
-    },
-  };
 }
