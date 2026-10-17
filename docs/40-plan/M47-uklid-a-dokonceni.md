@@ -49,7 +49,7 @@ updated: 2026-10-17
 
 ## Úkoly
 
-- [ ] 1. Převést integrační scénáře bez obdoby v C++ na sdílené případy `regen` (souběžně s 2)
+- [x] 1. Převést integrační scénáře bez obdoby v C++ na sdílené případy `regen` (souběžně s 2)
 - [x] 2. Měření „před“: velikost bundlu a čas startu před sérií (souběžně s 1)
 - [x] 3. Smazat lokální cestu: `kernel-occt`, `regen`, `persistence`, buildery a schémata featur, lokální `app`, přenos z IndexedDB, závislosti a konfigurace
 - [ ] 4. Zúžit `ops`, `kernel` a `document`, upravit běžce sdílených případů (souběžně s 5 a 6)
