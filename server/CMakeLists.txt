@@ -21,12 +21,18 @@ include(TinycadWarnings)
 
 enable_testing()
 
+add_subdirectory(third_party/planegcs)
+
 add_subdirectory(src/proto)
 add_subdirectory(src/core)
 add_subdirectory(src/geometry)
+add_subdirectory(src/sketch)
+add_subdirectory(src/solver-planegcs)
 add_subdirectory(src/service)
 add_subdirectory(src/app)
 
 add_subdirectory(test/support)
 add_subdirectory(test/service)
 add_subdirectory(test/shared-cases)
+add_subdirectory(test/sketch)
+add_subdirectory(test/solver-planegcs)
