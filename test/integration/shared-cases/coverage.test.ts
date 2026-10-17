@@ -12,7 +12,12 @@ import type { FeatureErrorData, FeatureStatusData } from '@/remote';
 import type { SketchConstraint } from '@/sketch';
 import { areaOfKind, CASE_KINDS, loadCases } from './support/case';
 import type { Area, LoadedCase } from './support/case';
-import { builtInFeatureTypes, builtInSchemas } from './support/schemas';
+import {
+  builtInFeatureTypes,
+  builtInRuleCodes,
+  builtInSchemas,
+  SERVER_ONLY_CODES,
+} from './support/schemas';
 
 /**
  * Every FeatureError code. STALE_VERSION is listed (the object must be exhaustive) but not
@@ -85,14 +90,12 @@ const CONSTRAINT_KINDS = {
 const DERIVED_ENTITY_KINDS = ['mirror', 'linearPattern', 'circularPattern', 'text'] as const;
 
 /**
- * The kinds only the C++ core runs (N124): it is the reference implementation of the shared cases.
- * The client keeps the runners of what it runs itself: the handlers of the optimistic mirror
- * (ops.script) and the solver of the sketch.
+ * The kinds only the C++ core runs (N124, N166): it is the reference implementation of the shared
+ * cases. The client keeps the runners of what it runs itself: the solver of the sketch and the
+ * validation of the feature dialog (schema, N150); it has no handlers of operations (ADR 0031).
  */
 const ONLY_IN_CPP: ReadonlySet<string> = new Set(
-  CASE_KINDS.filter(
-    (k) => k === 'ops.upcast' || k === 'ops.replay' || !['ops', 'sketch'].includes(areaOfKind(k)),
-  ),
+  CASE_KINDS.filter((k) => !['sketch', 'schema'].includes(areaOfKind(k))),
 );
 
 const cases: Readonly<Record<Area, readonly LoadedCase[]>> = {
@@ -196,6 +199,16 @@ describe('shared cases coverage', () => {
       for (const issue of arrayAt(okOf(c), 'issues')) covered.add(stringAt(issue, 'code'));
     }
     expect(missing(required(GENERIC_PARAM_ISSUE_CODES), covered)).toEqual([]);
+  });
+
+  it('every declarative rule and every server-only code has a schema.validate case (M49)', () => {
+    const covered = new Set<string>();
+    for (const c of ofKind('schema', 'schema.validate')) {
+      for (const issue of arrayAt(okOf(c), 'issues')) covered.add(stringAt(issue, 'code'));
+    }
+    const rules = builtInRuleCodes();
+    expect(rules).toContain('boolean.sameBody');
+    expect(missing([...rules, ...SERVER_ONLY_CODES], covered)).toEqual([]);
   });
 
   it('every geometry kind has an ok and an error case', () => {

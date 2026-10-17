@@ -96,13 +96,20 @@ void Transaction::finish() {
   dispatcher_.endTransaction();
 }
 
-std::optional<LogEntry> Transaction::commit() {
+core::Result<std::optional<LogEntry>, WriteFailed> Transaction::commit() {
   checkOpen("commit");
   // Transient steps go back first; the logged ones commute with them (the caller's contract).
+  // They are dropped right away: when the write fails the transaction stays open without them.
   std::vector<Step> transient;
-  for (const Step& step : steps_) {
-    if (step.transient) transient.push_back(step);
+  std::vector<Step> kept;
+  for (Step& step : steps_) {
+    if (step.transient) {
+      transient.push_back(std::move(step));
+    } else {
+      kept.push_back(std::move(step));
+    }
   }
+  steps_ = std::move(kept);
   revert(transient);
 
   const std::vector<Step> logged = compress();
@@ -124,7 +131,10 @@ std::optional<LogEntry> Transaction::commit() {
       entry.inverse =
           Json{{"type", "batch"}, {"v", opVersion("batch")}, {"ops", std::move(inverses)}};
     }
-    written = dispatcher_.append(std::move(entry));
+    auto appended = dispatcher_.writeAndAppend(std::move(entry));
+    // Nothing was appended (N155): the transaction stays open with its logged steps applied.
+    if (!appended) return core::fail(WriteFailed{std::move(appended.error()), true});
+    written = std::move(*appended);
   }
   finish();
   return written;

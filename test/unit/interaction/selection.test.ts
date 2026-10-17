@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
 import { ORIGIN_PLANE_IDS, createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
 import type { FeatureId, FeatureSchema, ParamSchema } from '@/document';
-import { anOpsSession } from '@/ops/testing';
+import { aFakeOps } from '@/ops/testing';
 import type { BodyId, HighlightTarget, SelectionItem, TopoName } from '@/interaction';
 import { createFeatureEditor } from '@/interaction/feature-dialog/feature-editor';
 import {
@@ -334,10 +334,10 @@ describe('bindSelectionHighlight with the feature dialog (M13)', () => {
     const viewport = new FakeViewport();
     const schemas = createFeatureSchemaRegistry();
     schemas.register(SCHEMA);
-    const ops = anOpsSession({ schemas });
+    const ops = aFakeOps();
     const editor = createFeatureEditor({
       doc: ops.doc,
-      ops: ops.dispatcher,
+      ops,
       schemas,
       ids: createSequentialIdGenerator('new'),
     });
@@ -606,10 +606,10 @@ describe('bindSelectionHighlight with topo and bodies params of the dialog (M14)
     const viewport = new FakeViewport();
     const schemas = createFeatureSchemaRegistry();
     schemas.register(SCHEMA);
-    const ops = anOpsSession({ schemas });
+    const ops = aFakeOps();
     const editor = createFeatureEditor({
       doc: ops.doc,
-      ops: ops.dispatcher,
+      ops,
       schemas,
       ids: createSequentialIdGenerator('new'),
     });

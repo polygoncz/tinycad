@@ -62,12 +62,12 @@ const MATERIALS_TO_PROTO: Readonly<Record<DomainBodyMaterial, BodyMaterial>> = O
 });
 
 /**
- * An operation → the message Operation. The operation went through its handler already (the
- * client applies it to its mirror first, N63), so its payload has the shape of its type; an
- * unknown type or params that are no JSON object are a bug of the caller (assert).
+ * An operation → the message Operation. Its payload has the shape of its type (interaction builds
+ * it by the types of ops; the server validates it, ADR 0031); an unknown type or params that are
+ * no JSON object are a bug of the caller (assert).
  */
 export function operationToProto(op: Operation): ProtoOperation {
-  // The handler accepted op, so type decides the payload, as applyOperation reads it (ops/apply).
+  // The type decides the payload, as the handlers of the server read it.
   const known = op as KnownOperation;
   switch (known.type) {
     case 'feature.add':

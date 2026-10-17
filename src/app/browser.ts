@@ -67,7 +67,6 @@ export async function openAppSession(opts: OpenAppSessionOptions): Promise<AppSe
       timers: TIMERS,
       resume: sessionResume(opts.docId),
       newOperationId: () => crypto.randomUUID(),
-      now: Date.now,
       ids: randomIds(),
       translate: opts.translate,
       confirm: opts.confirm,

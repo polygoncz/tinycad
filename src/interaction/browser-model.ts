@@ -550,7 +550,7 @@ export function createBrowserModel(deps: {
         body,
         visible,
       };
-      ops.dispatch(op);
+      void ops.dispatch(op);
     },
     setColor(body, color) {
       // A caller error whatever the state, so it is checked before the guards.
@@ -565,7 +565,7 @@ export function createBrowserModel(deps: {
         body,
         color,
       };
-      ops.dispatch(op);
+      void ops.dispatch(op);
     },
     setMaterial(body, material) {
       // Like setColor: a caller error whatever the state, so it is checked before the guards.
@@ -580,7 +580,7 @@ export function createBrowserModel(deps: {
         body,
         material,
       };
-      ops.dispatch(op);
+      void ops.dispatch(op);
     },
     beginRename(body) {
       if (canChange(body)) renaming.set(body);
@@ -600,7 +600,7 @@ export function createBrowserModel(deps: {
         body,
         name: trimmed,
       };
-      ops.dispatch(op);
+      void ops.dispatch(op);
     },
     selectPlane(plane, opts) {
       // A focused param that takes planes gets the plane instead of the selection (M21, Q076).

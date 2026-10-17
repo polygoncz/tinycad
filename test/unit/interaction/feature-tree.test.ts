@@ -4,9 +4,9 @@ import { createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
 import { aFeature, bodyId } from '@/document/testing';
 import type { BodyId, FeatureId, FeatureSchema } from '@/document';
 import type { DocumentOptions, ParamSchemaOf } from '@/document/testing';
-import type { FeatureAddOp, FeatureSetParamsOp, FeatureSuppressOp } from '@/ops';
+import type { FeatureAddOp } from '@/ops';
 import { OP_VERSION } from '@/ops';
-import { anOpsSession } from '@/ops/testing';
+import { aFakeOps } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE } from '@/sketch';
 import { createEditLock } from '@/interaction/edit-lock';
 import { createFeatureEditor } from '@/interaction/feature-dialog/feature-editor';
@@ -91,7 +91,7 @@ const EXT: FeatureSchema<ExtParams> = {
 };
 
 function setup(init: DocumentOptions = {}, sketchEdit?: (id: FeatureId) => void, readOnly = false) {
-  const session = anOpsSession(init);
+  const ops = aFakeOps(init);
   const schemas = createFeatureSchemaRegistry();
   schemas.register(BOX);
   schemas.register(USE);
@@ -99,14 +99,14 @@ function setup(init: DocumentOptions = {}, sketchEdit?: (id: FeatureId) => void,
   const regen = new FakeRegenStatus();
   const selection = createSelectionModel({ regen });
   const editor = createFeatureEditor({
-    doc: session.doc,
-    ops: session.dispatcher,
+    doc: ops.doc,
+    ops,
     schemas,
     ids: createSequentialIdGenerator('new'),
   });
   const tree = createFeatureTreeModel({
-    doc: session.doc,
-    ops: session.dispatcher,
+    doc: ops.doc,
+    ops,
     schemas,
     regen,
     editor,
@@ -119,27 +119,43 @@ function setup(init: DocumentOptions = {}, sketchEdit?: (id: FeatureId) => void,
   tree.rows.subscribe(() => {
     emits++;
   });
-  return { ...session, schemas, regen, selection, editor, tree, emits: () => emits };
+  return { ops, doc: ops.doc, schemas, regen, selection, editor, tree, emits: () => emits };
 }
 
+/** A read model of the server with a new box at `index` (inserting at the bar moves it, Q068). */
 function addFeature(s: ReturnType<typeof setup>, id: string, index: number): void {
-  const op: FeatureAddOp = {
-    type: 'feature.add',
-    v: OP_VERSION['feature.add'],
-    feature: aBox(id),
-    index,
-  };
-  s.dispatcher.dispatch(op);
+  const { features, rollbackIndex } = s.doc.studio;
+  s.doc.replace({
+    studio: {
+      features: features.toSpliced(index, 0, aBox(id)),
+      rollbackIndex: index <= rollbackIndex ? rollbackIndex + 1 : rollbackIndex,
+    },
+  });
 }
 
+/** A read model of the server with the feature suppressed. */
 function suppress(s: ReturnType<typeof setup>, id: string): void {
-  const op: FeatureSuppressOp = {
-    type: 'feature.suppress',
-    v: OP_VERSION['feature.suppress'],
-    featureId: fid(id),
-    suppressed: true,
-  };
-  s.dispatcher.dispatch(op);
+  const { studio } = s.doc;
+  s.doc.replace({
+    studio: {
+      ...studio,
+      features: studio.features.map((f) => (f.id === id ? { ...f, suppressed: true } : f)),
+    },
+  });
+}
+
+/** The server takes the feature.add of the open dialog: the new feature is in the read model. */
+function serveAdded(s: ReturnType<typeof setup>): void {
+  const add = s.ops.ops().findLast((op): op is FeatureAddOp => op.type === 'feature.add');
+  if (add === undefined) throw new Error('no feature.add sent');
+  addFeature(s, add.feature.id, add.index);
+  const { studio } = s.doc;
+  s.doc.replace({
+    studio: {
+      ...studio,
+      features: studio.features.map((f) => (f.id === add.feature.id ? add.feature : f)),
+    },
+  });
 }
 
 const ok = { kind: 'ok' } as const;
@@ -214,7 +230,7 @@ describe('FeatureTreeModel rows', () => {
         [fid('c'), ok],
       ]),
     );
-    s.tree.moveRollbackBar(1);
+    s.doc.replace({ studio: { ...s.doc.studio, rollbackIndex: 1 } });
     expect(s.tree.rows.get().map((r) => r.status)).toEqual(['ok', 'rolledBack', 'rolledBack']);
   });
 
@@ -339,12 +355,16 @@ describe('FeatureTreeModel rows', () => {
 });
 
 describe('FeatureTreeModel commands', () => {
-  it('rename trims the name and dispatches feature.rename', () => {
+  it('rename trims the name and dispatches feature.rename; the row follows the answer', () => {
     const s = setup({ features: [aBox('a')] });
     s.tree.rename(fid('a'), '  Base  ');
-    expect(s.doc.feature(fid('a'))?.name).toBe('Base');
+    // No optimism (N168): the row keeps the old name until the read model of the answer.
+    expect(s.tree.rows.get()[0]?.name).toBe('Name a');
+    s.ops.answer({
+      document: { studio: { features: [{ ...aBox('a'), name: 'Base' }], rollbackIndex: 1 } },
+    });
     expect(s.tree.rows.get()[0]?.name).toBe('Base');
-    expect(s.log.entries().at(-1)?.op).toEqual({
+    expect(s.ops.ops().at(-1)).toEqual({
       type: 'feature.rename',
       v: OP_VERSION['feature.rename'],
       featureId: 'a',
@@ -356,11 +376,10 @@ describe('FeatureTreeModel commands', () => {
     const s = setup({ features: [aBox('a')] });
     s.tree.rename(fid('a'), '   ');
     s.tree.rename(fid('a'), ' Name a ');
-    expect(s.log.entries()).toHaveLength(0);
-    expect(s.doc.feature(fid('a'))?.name).toBe('Name a');
+    expect(s.ops.sent).toEqual([]);
   });
 
-  it('moveRollbackBar dispatches studio.setRollback and updates rollbackIndex', () => {
+  it('moveRollbackBar dispatches studio.setRollback; rollbackIndex follows the answer', () => {
     const s = setup({ features: [aBox('a'), aBox('b')] });
     expect(s.tree.rollbackIndex.get()).toBe(2);
     let barEmits = 0;
@@ -369,10 +388,11 @@ describe('FeatureTreeModel commands', () => {
     });
 
     s.tree.moveRollbackBar(0);
-    expect(s.doc.studio.rollbackIndex).toBe(0);
+    expect(s.tree.rollbackIndex.get()).toBe(2);
+    s.ops.answer({ document: { studio: { ...s.doc.studio, rollbackIndex: 0 } } });
     expect(s.tree.rollbackIndex.get()).toBe(0);
     expect(barEmits).toBe(1);
-    expect(s.log.entries().at(-1)?.op).toEqual({
+    expect(s.ops.ops().at(-1)).toEqual({
       type: 'studio.setRollback',
       v: OP_VERSION['studio.setRollback'],
       index: 0,
@@ -382,7 +402,7 @@ describe('FeatureTreeModel commands', () => {
   it('moveRollbackBar to the same index does nothing', () => {
     const s = setup({ features: [aBox('a')] });
     s.tree.moveRollbackBar(1);
-    expect(s.log.entries()).toHaveLength(0);
+    expect(s.ops.sent).toEqual([]);
   });
 
   it('moveRollbackBar out of 0..features.length throws', () => {
@@ -396,12 +416,12 @@ describe('FeatureTreeModel commands', () => {
     expect(() => {
       s.tree.moveRollbackBar(0.5);
     }).toThrow();
-    expect(s.log.entries()).toHaveLength(0);
+    expect(s.ops.sent).toEqual([]);
   });
 
   it('rename and moveRollbackBar throw during a transaction outside the edit lock', () => {
     const s = setup({ features: [aBox('a'), aBox('b')] });
-    s.dispatcher.begin('other');
+    s.ops.begin('other');
     expect(() => {
       s.tree.rename(fid('a'), 'X');
     }).toThrow();
@@ -466,7 +486,7 @@ describe('FeatureTreeModel rename mode', () => {
     expect(s.tree.renaming.get()).toBeNull();
     s.tree.cancelRename();
     expect(emits).toBe(2);
-    expect(s.log.entries()).toHaveLength(0);
+    expect(s.ops.sent).toEqual([]);
   });
 
   it('rename ends the rename mode, also with an unchanged name', () => {
@@ -474,7 +494,7 @@ describe('FeatureTreeModel rename mode', () => {
     s.tree.beginRename(fid('a'));
     s.tree.rename(fid('a'), 'Base');
     expect(s.tree.renaming.get()).toBeNull();
-    expect(s.doc.feature(fid('a'))?.name).toBe('Base');
+    expect(s.ops.ops()).toHaveLength(1);
 
     s.tree.beginRename(fid('a'));
     s.tree.rename(fid('a'), '  ');
@@ -499,14 +519,15 @@ describe('FeatureTreeModel dependencies', () => {
   it('a changed reference changes dependents and only the affected rows', () => {
     const s = setup({ features: [aBox('a'), aBox('b'), aBox('c'), aUse('u', 'a')] });
     const before = s.tree.rows.get();
-    const op: FeatureSetParamsOp = {
-      type: 'feature.setParams',
-      v: OP_VERSION['feature.setParams'],
-      featureId: fid('u'),
-      typeVersion: 1,
-      params: using('b'),
-    };
-    s.dispatcher.dispatch(op);
+    // A read model with u referring to b instead of a.
+    s.doc.replace({
+      studio: {
+        ...s.doc.studio,
+        features: s.doc.studio.features.map((f) =>
+          f.id === 'u' ? { ...f, params: using('b') } : f,
+        ),
+      },
+    });
     const after = s.tree.rows.get();
     expect(after.map((r) => r.dependents)).toEqual([0, 1, 0, 0]);
     expect(after[0]).not.toBe(before[0]);
@@ -531,32 +552,31 @@ describe('FeatureTreeModel move', () => {
   it('a valid move dispatches feature.move', () => {
     const s = setup({ features: [aBox('a'), aBox('b'), aUse('u', 'a')] });
     expect(s.tree.move(fid('a'), 1)).toEqual([]);
-    expect(s.doc.studio.features.map((f) => f.id)).toEqual(['b', 'a', 'u']);
-    expect(s.log.entries()).toHaveLength(1);
-    expect(s.log.entries()[0]?.op).toEqual({
-      type: 'feature.move',
-      v: OP_VERSION['feature.move'],
-      featureId: 'a',
-      toIndex: 1,
-    });
+    expect(s.ops.ops()).toEqual([
+      {
+        type: 'feature.move',
+        v: OP_VERSION['feature.move'],
+        featureId: 'a',
+        toIndex: 1,
+      },
+    ]);
   });
 
   it('moving a dependent feature before its dependency returns the violations and changes nothing', () => {
     const s = setup({ features: [aBox('a'), aBox('b'), aUse('u', 'b')] });
     const violations = s.tree.move(fid('u'), 0);
     expect(violations).toEqual([{ feature: 'u', dependsOn: 'b' }]);
-    expect(s.doc.studio.features.map((f) => f.id)).toEqual(['a', 'b', 'u']);
-    expect(s.log.entries()).toHaveLength(0);
+    expect(s.ops.sent).toEqual([]);
 
     // Moving the dependency after the dependent is refused as well.
     expect(s.tree.move(fid('b'), 2)).toEqual([{ feature: 'u', dependsOn: 'b' }]);
-    expect(s.log.entries()).toHaveLength(0);
+    expect(s.ops.sent).toEqual([]);
   });
 
   it('a move to the same index does nothing', () => {
     const s = setup({ features: [aBox('a'), aBox('b')] });
     expect(s.tree.move(fid('b'), 1)).toEqual([]);
-    expect(s.log.entries()).toHaveLength(0);
+    expect(s.ops.sent).toEqual([]);
   });
 
   it('an unknown id or an index out of 0..features.length - 1 throws', () => {
@@ -565,19 +585,21 @@ describe('FeatureTreeModel move', () => {
       expect(() => s.tree.move(fid('a'), index)).toThrow();
     }
     expect(() => s.tree.move(fid('x'), 0)).toThrow();
-    expect(s.log.entries()).toHaveLength(0);
+    expect(s.ops.sent).toEqual([]);
   });
 
   it('a violation already in the document does not block another move', () => {
     // u refers to b, which comes after it: data from outside.
     const s = setup({ features: [aUse('u', 'b'), aBox('a'), aBox('b')] });
     expect(s.tree.move(fid('a'), 2)).toEqual([]);
-    expect(s.doc.studio.features.map((f) => f.id)).toEqual(['u', 'b', 'a']);
+    expect(s.ops.ops()).toEqual([
+      { type: 'feature.move', v: OP_VERSION['feature.move'], featureId: 'a', toIndex: 2 },
+    ]);
   });
 
   it('throws during a transaction outside the edit lock, like rename', () => {
     const s = setup({ features: [aBox('a'), aBox('b')] });
-    s.dispatcher.begin('other');
+    s.ops.begin('other');
     expect(() => s.tree.move(fid('a'), 1)).toThrow();
   });
 });
@@ -598,7 +620,7 @@ describe('FeatureTreeModel edit lock', () => {
       tryAll(s);
     }).not.toThrow();
     expect(s.doc.studio).toBe(studio);
-    expect(s.log.entries()).toHaveLength(0);
+    expect(s.ops.sent).toEqual([]);
     expect(s.tree.renaming.get()).toBeNull();
     expect(s.tree.rollbackIndex.get()).toBe(3);
   });
@@ -614,13 +636,8 @@ describe('FeatureTreeModel edit lock', () => {
     expect(s.tree.renaming.get()).toBeNull();
 
     s.editor.current.get()?.cancel();
-    expect(s.doc.studio.features.map((f) => [f.id, f.name])).toEqual([
-      ['a', 'Name a'],
-      ['b', 'Name b'],
-      ['c', 'Name c'],
-    ]);
-    expect(s.doc.studio.rollbackIndex).toBe(3);
-    expect(s.log.entries()).toHaveLength(0);
+    // Only the dialog sent something: its begin and abort.
+    expect(s.ops.sent.map((c) => c.kind)).toEqual(['begin', 'abort']);
   });
 
   it('the lock turning on ends the rename mode, turning off does not start it again', () => {
@@ -638,7 +655,7 @@ describe('FeatureTreeModel edit lock', () => {
     s.editor.current.get()?.cancel();
     expect(s.tree.renaming.get()).toBeNull();
     expect(emits).toBe(1);
-    expect(s.log.entries()).toHaveLength(0);
+    expect(s.ops.ops()).toEqual([]);
   });
 
   it('after dispose the lock no longer ends the rename mode', () => {
@@ -705,6 +722,7 @@ describe('FeatureTreeModel draft and error count (D6 of M19.2)', () => {
   it('a new feature without its required references is draft, not an error', () => {
     const s = setup({ features: [aBox('a')] });
     const session = s.editor.create('ext');
+    serveAdded(s);
     s.regen.publish(
       new Map([
         [fid('a'), ok],
@@ -724,6 +742,7 @@ describe('FeatureTreeModel draft and error count (D6 of M19.2)', () => {
   it('after the session ends the same health is an error again', () => {
     const s = setup();
     const session = s.editor.create('ext');
+    serveAdded(s);
     s.regen.publish(new Map([[session.featureId, missingInput()]]));
     expect(s.tree.rows.get()[0]?.status).toBe('draft');
 
@@ -745,6 +764,7 @@ describe('FeatureTreeModel draft and error count (D6 of M19.2)', () => {
   it('another error of a new feature stays an error', () => {
     const s = setup();
     const session = s.editor.create('ext');
+    serveAdded(s);
     const kernel = { param: '', code: 'kernel.operationFailed' };
     s.regen.publish(
       new Map([[session.featureId, { kind: 'error', message: 'BRep failed', issues: [kernel] }]]),

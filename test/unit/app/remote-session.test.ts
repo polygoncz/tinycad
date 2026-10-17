@@ -1,5 +1,6 @@
 import { Code } from '@connectrpc/connect';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import { createSequentialIdGenerator } from '@/core';
 import type { DocumentId, FeatureId } from '@/document';
 import {
@@ -19,7 +20,15 @@ import { FakeAppViewport } from '@/app/testing';
 
 // Values of ErrorReason of errors.proto: tests of app may not import protocol, so the fake core
 // gets the numbers (in the domain of the enum, so they type-check).
-const REASON = { UNSPECIFIED: 0, SESSION_NOT_FOUND: 10 } as const;
+const REASON = {
+  UNSPECIFIED: 0,
+  INVALID_OPERATION: 1,
+  READ_ONLY: 3,
+  NO_TRANSACTION: 5,
+  SKETCH_NOT_SOLVED: 9,
+  SESSION_NOT_FOUND: 10,
+  STORAGE: 16,
+} as const;
 type ReadModel = ReturnType<typeof aReadModel>;
 
 const DOC = 'doc-1' as DocumentId; // an id of the catalog of the fake core
@@ -74,9 +83,19 @@ const NO_GEOMETRY: SketchGeometry = new Proxy({} as SketchGeometry, {
 });
 
 const opened: AppSession[] = [];
+// M48: nothing of a known kind goes to the console any more (N153); the notices show it.
+let consoleError: MockInstance<typeof console.error>;
+beforeEach(() => {
+  consoleError = vi.spyOn(console, 'error');
+});
 afterEach(() => {
   for (const session of opened.splice(0)) session.dispose();
+  consoleError.mockRestore();
 });
+
+function noticeKeys(session: AppSession): readonly string[] {
+  return session.notices.get().map((n) => n.key);
+}
 
 interface SetupOptions {
   readonly writable?: boolean;
@@ -127,7 +146,6 @@ async function setup({ writable = true, bodies, opened: first }: SetupOptions = 
     timers: createManualTimers(),
     resume: { load: () => null, save: () => undefined },
     newOperationId: () => `op-${String(++next)}`,
-    now: () => 1_000_000,
     ids: createSequentialIdGenerator('n'),
     translate: (key) => key,
     confirm: () => true,
@@ -184,15 +202,53 @@ describe('createRemoteAppSession', () => {
     expect(session.persistence.get()).toBe('saved');
   });
 
-  it('a change from the dialog is in the document at once, the server data after the answer', async () => {
+  it('a change from the dialog: the dialog shows the entered value, the document the answer (N164)', async () => {
     const { core, session } = await setup();
     core.respond('apply', { result: { readModel: model(21, 2) } });
     const edit = session.features.edit(F1);
+    const shown: unknown[] = [];
+    edit.state.subscribe(() => shown.push(edit.state.get().params['size']));
     edit.setParam('size', 20);
-    expect(sizeOf(session)).toBe(20);
     expect(edit.state.get().params['size']).toBe(20);
+    expect(sizeOf(session)).toBe(10);
     await flush();
     expect(sizeOf(session)).toBe(21);
+    // N165: the promise of the change resolves after the document shows the answer, so the dialog
+    // never falls back to the document of before (10).
+    expect(shown).toEqual([20, 21]);
+  });
+
+  it('the dialog creates a feature: it is in the document only with the answer', async () => {
+    const { core, session } = await setup();
+    const answer = held<{ result: { readModel: ReadModel } }>();
+    core.respond('apply', () => answer.promise);
+    const edit = session.features.create('thing');
+    await flush();
+    const added = core.requests('apply')[0]?.op?.op;
+    expect(added?.case).toBe('featureAdd');
+    expect(session.doc.feature(edit.featureId)).toBeUndefined();
+    expect(edit.state.get().params).toEqual({ size: 10 });
+    const withNew = aReadModel({
+      document: {
+        documentId: DOC,
+        features: [
+          ...(model(10, 2).document?.features ?? []),
+          {
+            id: edit.featureId,
+            type: 'thing',
+            typeVersion: 1,
+            name: 'Thing 2',
+            suppressed: false,
+            params: { size: 10 },
+          },
+        ],
+        rollbackIndex: 2,
+      },
+      regen: { generation: 2n },
+    });
+    answer.release({ result: { readModel: withNew } });
+    await flush();
+    expect(session.doc.feature(edit.featureId)?.name).toBe('Thing 2');
   });
 
   // The review after M46/M47: one ordering rule for read models (N136), in the session.
@@ -256,6 +312,72 @@ describe('createRemoteAppSession', () => {
     expect(session.features.current.get()).toBeNull();
     expect(sizeOf(session)).toBe(10);
     expect(core.requests('openSession')).toHaveLength(2);
+    expect(noticeKeys(session)).toEqual(['notice.transactionLost']);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('SKETCH_NOT_SOLVED of a setParams: the notice sketch.notSolved, the entered value stays (N65, N164)', async () => {
+    const { core, session } = await setup();
+    const edit = session.features.edit(F1);
+    await flush();
+    core.respond('apply', aCoreError(Code.FailedPrecondition, REASON.SKETCH_NOT_SOLVED));
+    edit.setParam('size', 30);
+    await flush();
+    expect(edit.state.get().params['size']).toBe(30);
+    expect(sizeOf(session)).toBe(10);
+    expect(noticeKeys(session)).toEqual(['sketch.notSolved']);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('STORAGE of a Commit: the notice and an Abort; the next change goes through (N167)', async () => {
+    const { core, session } = await setup();
+    const edit = session.features.edit(F1);
+    await flush();
+    core.respond('commit', aCoreError(Code.Internal, REASON.STORAGE));
+    core.respond('abort', aCoreError(Code.FailedPrecondition, REASON.NO_TRANSACTION));
+    edit.commit();
+    expect(session.features.current.get()).toBeNull();
+    await flush();
+    expect(core.calls).toContain('abort');
+    expect(session.notices.get().map((n) => [n.key, n.params])).toEqual([
+      ['notice.changeRejected', { reason: 'STORAGE' }],
+    ]);
+    expect(session.documentName.rename('Bracket')).toBe(true);
+    await flush();
+    expect(core.requests('dispatch')).toHaveLength(1);
+    expect(session.notices.get()).toHaveLength(1);
+  });
+
+  it('READ_ONLY: the notice notice.readOnly (N146, N153)', async () => {
+    const { core, session } = await setup();
+    core.respond('dispatch', aCoreError(Code.FailedPrecondition, REASON.READ_ONLY));
+    session.documentName.rename('Bracket');
+    await flush();
+    expect(session.doc.meta.name).toBe('Document');
+    expect(noticeKeys(session)).toEqual(['notice.readOnly']);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('another refusal: notice.changeRejected with the reason', async () => {
+    const { core, session } = await setup();
+    core.respond('dispatch', aCoreError(Code.InvalidArgument, REASON.INVALID_OPERATION));
+    session.documentName.rename('Bracket');
+    await flush();
+    expect(session.notices.get().map((n) => [n.key, n.params])).toEqual([
+      ['notice.changeRejected', { reason: 'INVALID_OPERATION' }],
+    ]);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('dismissNotice removes the notice', async () => {
+    const { core, session } = await setup();
+    core.respond('dispatch', aCoreError(Code.FailedPrecondition, REASON.READ_ONLY));
+    session.documentName.rename('Bracket');
+    await flush();
+    const [notice] = session.notices.get();
+    if (notice === undefined) throw new Error('expected a notice');
+    session.dismissNotice(notice.id);
+    expect(session.notices.get()).toEqual([]);
   });
 
   it('opening and closing a dialog reads the model again with and without input_of', async () => {
@@ -296,6 +418,9 @@ describe('createRemoteAppSession', () => {
     expect(session.persistence.get()).toBe('failed');
     expect(session.doc.meta.name).toBe('Document');
     await expect(session.flush()).rejects.toThrow(/not saved/);
+    // The title bar and serverUnavailable show it; the dropped change itself is no notice.
+    expect(noticeKeys(session)).toEqual(['notice.serverUnavailable']);
+    expect(consoleError).not.toHaveBeenCalled();
   });
 
   it('keeps the mesh a request in flight says it has (N93)', async () => {

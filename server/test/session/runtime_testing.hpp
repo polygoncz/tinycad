@@ -36,7 +36,6 @@
 namespace tinycad::session::testing {
 
 using core::Json;
-namespace v1 = tinycad::v1;
 
 /** A unique empty directory under the system temp directory, removed with everything in it. */
 class ScratchDir {
@@ -236,15 +235,15 @@ inline Caller callerOf(const std::string& session) {
 }
 
 /** Every kept event of the document. */
-inline std::vector<v1::SessionEvent> eventsOf(RuntimeDocument& doc) {
-  return doc.events().after(0).value_or(std::vector<v1::SessionEvent>{});
+inline std::vector<SessionEvent> eventsOf(RuntimeDocument& doc) {
+  return doc.events().after(0).value_or(std::vector<SessionEvent>{});
 }
 
 /** The `changed` events of the document, in order. */
-inline std::vector<v1::SessionEvent::Changed> changedOf(RuntimeDocument& doc) {
-  std::vector<v1::SessionEvent::Changed> out;
+inline std::vector<SessionEvent> changedOf(RuntimeDocument& doc) {
+  std::vector<SessionEvent> out;
   for (const auto& event : eventsOf(doc)) {
-    if (event.has_changed()) out.push_back(event.changed());
+    if (event.kind == SessionEvent::Kind::Changed) out.push_back(event);
   }
   return out;
 }

@@ -19,8 +19,9 @@ import type {
   TopoRef,
 } from '@/document';
 import { aFeature } from '@/document/testing';
-import type { BatchOp, FeatureSetParamsOp, Operation } from '@/ops';
-import { anOpsSession } from '@/ops/testing';
+import type { FeatureAddOp, Operation } from '@/ops';
+import { aFakeOps } from '@/ops/testing';
+import type { FakeOps } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE, parseSketchData } from '@/sketch';
 import type {
   ConstraintSolver,
@@ -159,10 +160,10 @@ function setup(
     ...(opts.others ?? []),
     ...(opts.features ?? []).map((args) => aSketch(...args)),
   ];
-  const ops = anOpsSession({ schemas, features });
+  const ops = aFakeOps({ features });
   const editor = createFeatureEditor({
     doc: ops.doc,
-    ops: ops.dispatcher,
+    ops,
     schemas,
     ids: createSequentialIdGenerator('f'),
     translate: (key) => (key === 'sketch.label' ? 'Sketch' : key),
@@ -178,9 +179,16 @@ function setup(
     resolvePlane,
     planeOfSketch: opts.planeOfSketch ?? (() => undefined),
   });
-  const applied: Operation[] = [];
-  ops.dispatcher.events.on('applied', ({ op }) => applied.push(op));
-  return { ...ops, editor, solver: fake, viewport, sketches, applied };
+  /** The operations sent since the setup (editing: since the session opened). */
+  const applied = (): readonly Operation[] => ops.ops();
+  return { ops, doc: ops.doc, editor, solver: fake, viewport, sketches, applied };
+}
+
+/** The feature of the feature.add sent; throws when none was. */
+function added(ops: FakeOps): FeatureInstance {
+  const add = ops.ops().find((op): op is FeatureAddOp => op.type === 'feature.add');
+  if (add === undefined) throw new Error('no feature.add sent');
+  return add.feature;
 }
 
 /** Lets the solver answers (microtasks) and the queue settle. */
@@ -188,9 +196,14 @@ async function settle(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-/** Data of the feature in the document. */
-function docData(doc: ReturnType<typeof setup>['doc'], id: FeatureId): SketchData {
-  const params = doc.feature(id)?.params as Record<string, unknown> | undefined; // a sketch feature
+/**
+ * Data of the feature as sent to the server: of its last setParams, of the document before any
+ * (N172: the sketch sends every solved change).
+ */
+function docData(ops: FakeOps, id: FeatureId): SketchData {
+  // A sketch feature: its params are an object.
+  const params = (ops.lastParams(id) ?? ops.doc.feature(id)?.params) as
+    Record<string, unknown> | undefined;
   return data(
     (params?.entities as readonly unknown[] | undefined) ?? [],
     (params?.constraints as readonly unknown[] | undefined) ?? [],
@@ -202,8 +215,8 @@ async function editing(sketch: SketchData = rectangleData(), solver?: Constraint
   const ctx = setup({ features: [['s1', sketch]], ...(solver === undefined ? {} : { solver }) });
   const session = ctx.sketches.edit(fid('s1'));
   await settle();
-  ctx.applied.length = 0;
-  return { ...ctx, session };
+  const from = ctx.ops.ops().length;
+  return { ...ctx, session, applied: (): readonly Operation[] => ctx.ops.ops().slice(from) };
 }
 
 /** Solver calls after the first one (the solve on opening). */
@@ -229,7 +242,7 @@ function catchUnhandledRejections(): { readonly reasons: readonly unknown[]; sto
 
 describe('SketchEditor.create', () => {
   it('creates a sketch on the default plane XY and enters the sketch mode', () => {
-    const { doc, editor, sketches } = setup();
+    const { editor, sketches, ops } = setup();
     const modes: string[] = [];
     sketches.mode.subscribe(() => modes.push(sketches.mode.get()));
 
@@ -239,7 +252,7 @@ describe('SketchEditor.create', () => {
     expect(sketches.mode.get()).toBe('sketch');
     expect(modes).toEqual(['sketch']);
     expect(session.plane.get()).toBe(XY);
-    expect(doc.feature(session.featureId)?.type).toBe(SKETCH_FEATURE_TYPE);
+    expect(added(ops).type).toBe(SKETCH_FEATURE_TYPE);
     expect(editor.current.get()?.featureId).toBe(session.featureId);
     expect(session.state.get()).toMatchObject({
       open: true,
@@ -258,12 +271,12 @@ describe('SketchEditor.create', () => {
   });
 
   it('sets the plane param for another plane', () => {
-    const { doc, sketches } = setup();
+    const { sketches, ops } = setup();
 
     const session = sketches.create(planeRef(ORIGIN_PLANE_IDS.xz));
 
     expect(session.plane.get()).toBe(XZ);
-    expect(doc.feature(session.featureId)?.params).toMatchObject({
+    expect(ops.lastParams(session.featureId)).toMatchObject({
       plane: [{ kind: 'plane', plane: ORIGIN_PLANE_IDS.xz }],
     });
   });
@@ -274,18 +287,18 @@ describe('SketchEditor.create', () => {
     expect(() => sketches.create(planeRef('origin/plane:ab' as PlaneId))).toThrow();
 
     expect(doc.studio.features).toEqual([]);
-    expect(applied).toEqual([]);
+    expect(applied()).toEqual([]);
     expect(editor.current.get()).toBeNull();
     expect(sketches.mode.get()).toBe('model');
   });
 
   it('creates a sketch on a planar face: writes the TopoRef and opens on its plane (M14)', () => {
-    const { doc, sketches } = setup();
+    const { sketches, ops } = setup();
 
     const session = sketches.create(TOP_FACE);
 
     expect(session.plane.get()).toBe(TOP);
-    expect(doc.feature(session.featureId)?.params).toMatchObject({
+    expect(ops.lastParams(session.featureId)).toMatchObject({
       plane: [{ kind: 'topo', body: 'b1/body', name: 'b1/face:top' }],
     });
     expect(sketches.mode.get()).toBe('sketch');
@@ -297,19 +310,19 @@ describe('SketchEditor.create', () => {
     expect(() => sketches.create(topoRef('b1/body', 'b1/face:side'))).toThrow();
 
     expect(doc.studio.features).toEqual([]);
-    expect(applied).toEqual([]);
+    expect(applied()).toEqual([]);
     expect(editor.current.get()).toBeNull();
     expect(sketches.current.get()).toBeNull();
     expect(sketches.mode.get()).toBe('model');
   });
 
   it('throws while a session is open, changing nothing', () => {
-    const { doc, sketches } = setup();
+    const { sketches, ops } = setup();
     const first = sketches.create(planeRef(ORIGIN_PLANE_IDS.xy));
 
     expect(() => sketches.create(planeRef(ORIGIN_PLANE_IDS.xy))).toThrow();
     expect(() => sketches.edit(first.featureId)).toThrow();
-    expect(doc.studio.features).toHaveLength(1);
+    expect(ops.ops().filter((op) => op.type === 'feature.add')).toHaveLength(1);
     expect(sketches.current.get()).toBe(first);
   });
 
@@ -419,13 +432,13 @@ describe('SketchEditor.edit', () => {
 
   it('throws for a feature of another type and leaves no session', () => {
     const box = aFeature({ id: 'b1', name: 'Box', type: 'box', params: { width: 1 } });
-    const { editor, sketches, log, doc } = setup({ others: [box] });
+    const { editor, sketches, ops, doc } = setup({ others: [box] });
 
     expect(() => sketches.edit(fid('b1'))).toThrow();
 
     expect(editor.current.get()).toBeNull();
     expect(sketches.current.get()).toBeNull();
-    expect(log.entries()).toEqual([]);
+    expect(ops.ops()).toEqual([]);
     expect(doc.studio.rollbackIndex).toBe(1);
   });
 
@@ -528,7 +541,7 @@ describe('SketchEditor.edit without a plane (Q079, variant A)', () => {
   }
 
   it('does not throw: opens on the origin plane XY with planeMissing', () => {
-    const { session, sketches, viewport, log } = lostPlane();
+    const { session, sketches, viewport, ops } = lostPlane();
 
     expect(sketches.current.get()).toBe(session);
     expect(sketches.mode.get()).toBe('sketch');
@@ -536,7 +549,7 @@ describe('SketchEditor.edit without a plane (Q079, variant A)', () => {
     expect(session.state.get().planeMissing).toBe(true);
     expect(session.state.get().entities).toEqual(LINE.entities);
     expect(viewport.sketchDrawings.get(EDIT_SKETCH_DRAWING_ID)?.plane).toBe(XY);
-    expect(log.entries()).toEqual([]);
+    expect(ops.ops()).toEqual([]);
   });
 
   it('picks the plane at once', () => {
@@ -589,22 +602,19 @@ describe('SketchEditor.edit without a plane (Q079, variant A)', () => {
   });
 
   it('finish without a picked plane writes the entities and constraints, not the plane', async () => {
-    const { session, doc, log } = lostPlane();
+    const { session, ops } = lostPlane();
     await settle();
     session.cancelPlanePick();
     await session.remove([item('pq')]);
 
     session.finish();
 
-    const entries = log.entries();
-    expect(entries.map((e) => e.op.type)).toEqual(['feature.setParams']);
+    expect(new Set(ops.ops().map((op) => op.type))).toEqual(new Set(['feature.setParams']));
+    expect(ops.sent.at(-1)).toEqual({ kind: 'commit' });
     // The whole params: the entities changed, the plane is the lost reference as before.
-    const params = (entries[0]?.op as FeatureSetParamsOp).params as Record<string, unknown>; // a sketch feature
+    const params = ops.lastParams(fid('s2')) as Record<string, unknown>; // a sketch feature
     expect(params.plane).toEqual([GONE]);
-    expect(params.entities).toEqual(docData(doc, fid('s2')).entities);
-    expect(docData(doc, fid('s2')).entities).not.toEqual(LINE.entities);
-    const saved = doc.feature(fid('s2'))?.params as Record<string, unknown> | undefined; // a sketch feature
-    expect(saved?.plane).toEqual([GONE]);
+    expect(docData(ops, fid('s2')).entities).not.toEqual(LINE.entities);
   });
 });
 
@@ -620,7 +630,7 @@ describe('SketchSession first solve', () => {
     expect(session.state.get().status).toBe('solving');
     await settle();
     expect(session.state.get()).toMatchObject({ status: 'ok', dof: 4, fullyDefined: false });
-    expect(applied).toEqual([]);
+    expect(applied()).toEqual([]);
   });
 
   it('shows a failed first solve as status failed', async () => {
@@ -704,7 +714,7 @@ describe('SketchState.statusKey (the status line of the panel)', () => {
 
 describe('SketchSession writing changes', () => {
   it('addGeometry writes the solved data with one setParams and returns true', async () => {
-    const { session, doc, applied, solver } = await editing(LINE);
+    const { session, applied, solver, ops } = await editing(LINE);
     const add = data([...LINE.entities, { kind: 'point', id: 'r', x: 5, y: 5 }], []).entities.slice(
       -1,
     );
@@ -712,23 +722,23 @@ describe('SketchSession writing changes', () => {
     const written = await session.addGeometry({ entities: add, constraints: [] });
 
     expect(written).toBe(true);
-    expect(applied.map((op) => op.type)).toEqual(['feature.setParams']);
-    expect(docData(doc, fid('s1')).entities.map((e) => e.id)).toEqual(['p', 'q', 'pq', 'r']);
+    expect(applied().map((op) => op.type)).toEqual(['feature.setParams']);
+    expect(docData(ops, fid('s1')).entities.map((e) => e.id)).toEqual(['p', 'q', 'pq', 'r']);
     expect(laterCalls(solver.calls)[0]?.entities.map((e) => e.id)).toEqual(['p', 'q', 'pq', 'r']);
     expect(session.state.get()).toMatchObject({ status: 'ok', dof: 6, message: null });
     expect(session.state.get().entities.map((e) => e.id)).toEqual(['p', 'q', 'pq', 'r']);
   });
 
   it('writes the coordinates the solver returned', async () => {
-    const { session, doc, solver } = await editing(LINE);
+    const { session, solver, ops } = await editing(LINE);
     const moved = LINE.entities.map((e) => (e.id === 'q' ? { ...e, x: 4, y: 0 } : e));
     solver.next({ entities: moved });
     const h = constraint(LINE, { kind: 'horizontal', id: 'h', line: 'pq' });
 
     expect(await session.addConstraint(h)).toBe(true);
 
-    expect(docData(doc, fid('s1')).entities).toEqual(moved);
-    expect(docData(doc, fid('s1')).constraints).toEqual([h]);
+    expect(docData(ops, fid('s1')).entities).toEqual(moved);
+    expect(docData(ops, fid('s1')).constraints).toEqual([h]);
   });
 
   it('a conflict writes nothing and shows the message', async () => {
@@ -739,7 +749,7 @@ describe('SketchSession writing changes', () => {
 
     expect(await session.addConstraint(h)).toBe(false);
 
-    expect(applied).toEqual([]);
+    expect(applied()).toEqual([]);
     expect(session.state.get()).toMatchObject({
       message: { key: 'sketch.conflict' },
       status: 'ok',
@@ -753,7 +763,7 @@ describe('SketchSession writing changes', () => {
 
     expect(await session.remove([item('pq')])).toBe(false);
 
-    expect(applied).toEqual([]);
+    expect(applied()).toEqual([]);
     expect(session.state.get().message).toEqual({ key: 'sketch.solverFailed' });
   });
 
@@ -768,7 +778,7 @@ describe('SketchSession writing changes', () => {
 
     expect(await session.remove([item('pq')])).toBe(false);
 
-    expect(applied).toEqual([]);
+    expect(applied()).toEqual([]);
     expect(session.state.get().message).toEqual({ key: 'sketch.solverFailed' });
   });
 
@@ -789,13 +799,13 @@ describe('SketchSession writing changes', () => {
 
     expect(await session.addConstraint(h)).toBe(false);
 
-    expect(applied).toEqual([]);
+    expect(applied()).toEqual([]);
     expect(session.state.get().message).toEqual({ key: 'sketch.redundant' });
   });
 
   it('addGeometry leaves out its own redundant constraints and writes the rest', async () => {
     const rect = rectangleData();
-    const { session, doc, solver } = await editing(rect);
+    const { session, solver, ops } = await editing(rect);
     // A new point and a line from a to it, with an automatic horizontal the solver finds redundant.
     const added = data(
       [
@@ -814,7 +824,7 @@ describe('SketchSession writing changes', () => {
 
     expect(await session.addGeometry(add)).toBe(true);
 
-    const written = docData(doc, fid('s1'));
+    const written = docData(ops, fid('s1'));
     expect(written.entities.map((e) => e.id)).toContain('ae');
     expect(written.constraints.map((c) => c.id)).toEqual(['h1', 'v1', 'h2', 'v2']);
   });
@@ -838,11 +848,11 @@ describe('SketchSession writing changes', () => {
 
   it('setDimension writes the new value', async () => {
     const withDim = data(LINE.entities, [{ kind: 'distance', id: 'd', a: 'p', b: 'q', value: 5 }]);
-    const { session, doc, solver } = await editing(withDim);
+    const { session, solver, ops } = await editing(withDim);
 
     expect(await session.setDimension(cid('d'), 8)).toBe(true);
 
-    expect(docData(doc, fid('s1')).constraints).toEqual([
+    expect(docData(ops, fid('s1')).constraints).toEqual([
       { kind: 'distance', id: 'd', a: 'p', b: 'q', value: 8 },
     ]);
     expect(laterCalls(solver.calls)[0]?.constraints[0]).toMatchObject({ value: 8 });
@@ -851,12 +861,12 @@ describe('SketchSession writing changes', () => {
 
   it('setDimension with a conflict keeps the value', async () => {
     const withDim = data(LINE.entities, [{ kind: 'distance', id: 'd', a: 'p', b: 'q', value: 5 }]);
-    const { session, doc, solver } = await editing(withDim);
+    const { session, solver, ops } = await editing(withDim);
     solver.next({ status: 'conflict', entities: null, conflicting: [] });
 
     expect(await session.setDimension(cid('d'), 8)).toBe(false);
 
-    expect(docData(doc, fid('s1')).constraints[0]).toMatchObject({ value: 5 });
+    expect(docData(ops, fid('s1')).constraints[0]).toMatchObject({ value: 5 });
     expect(session.state.get().message).toEqual({ key: 'sketch.conflict' });
   });
 
@@ -870,7 +880,7 @@ describe('SketchSession writing changes', () => {
     expect(await session.setDimension(d, Number.NaN)).toBe(false);
 
     expect(laterCalls(solver.calls)).toEqual([]);
-    expect(applied).toEqual([]);
+    expect(applied()).toEqual([]);
   });
 
   it('setDimension of an angle needs 0 < value < π, else the data would turn invalid', async () => {
@@ -889,7 +899,7 @@ describe('SketchSession writing changes', () => {
     expect(await session.setDimension(cid('g'), 4)).toBe(false);
 
     expect(laterCalls(solver.calls)).toEqual([]);
-    expect(applied).toEqual([]);
+    expect(applied()).toEqual([]);
   });
 
   it('data without a change is not written', async () => {
@@ -897,38 +907,38 @@ describe('SketchSession writing changes', () => {
 
     expect(await session.remove([item('unknown')])).toBe(true);
 
-    expect(applied).toEqual([]);
+    expect(applied()).toEqual([]);
   });
 
   it('remove deletes with the cascade and drops vanished items from the selection', async () => {
     const rect = rectangleData();
-    const { session, doc } = await editing(rect);
+    const { session, ops } = await editing(rect);
     session.select(item('ab'));
     session.select(item('a'), { additive: true });
     session.select(item('c'), { additive: true });
 
     expect(await session.remove([item('a')])).toBe(true);
 
-    const written = docData(doc, fid('s1'));
+    const written = docData(ops, fid('s1'));
     expect(written.entities.map((e) => e.id)).toEqual(['b', 'c', 'd', 'bc', 'cd']);
     expect(written.constraints.map((c) => c.id)).toEqual(['v1', 'h2']);
     expect(session.state.get().selection).toEqual(['c']);
   });
 
   it('toggleConstruction writes at once without the solver', async () => {
-    const { session, doc, solver, applied } = await editing(LINE);
+    const { session, solver, applied, ops } = await editing(LINE);
 
     session.toggleConstruction([item('pq')]);
 
-    expect(applied.map((op) => op.type)).toEqual(['feature.setParams']);
-    expect(docData(doc, fid('s1')).entities[2]).toMatchObject({ construction: true });
+    expect(applied().map((op) => op.type)).toEqual(['feature.setParams']);
+    expect(docData(ops, fid('s1')).entities[2]).toMatchObject({ construction: true });
     expect(laterCalls(solver.calls)).toEqual([]);
     session.toggleConstruction([item('p')]);
-    expect(applied).toHaveLength(1);
+    expect(applied()).toHaveLength(1);
   });
 
   it('toggleConstruction behind a pending solve is not undone by its write', async () => {
-    const { session, doc, solver } = await editing(LINE);
+    const { session, solver, ops } = await editing(LINE);
     solver.hold();
     const added = session.addConstraint(constraint(LINE, { kind: 'fix', id: 'f', point: 'p' }));
 
@@ -937,13 +947,13 @@ describe('SketchSession writing changes', () => {
     await added;
     await settle();
 
-    const written = docData(doc, fid('s1'));
+    const written = docData(ops, fid('s1'));
     expect(written.entities[2]).toMatchObject({ construction: true });
     expect(written.constraints.map((c) => c.id)).toEqual(['f']);
   });
 
   it('a queued job that throws synchronously does not block the next command', async () => {
-    const { session, doc, solver } = await editing(LINE);
+    const { session, solver, ops } = await editing(LINE);
     const unhandled = catchUnhandledRejections();
     try {
       solver.hold();
@@ -970,7 +980,7 @@ describe('SketchSession writing changes', () => {
 
       expect(await added).toBe(true);
       expect(done).toBe(true);
-      const written = docData(doc, fid('s1'));
+      const written = docData(ops, fid('s1'));
       expect(written.entities[2]).toMatchObject({ construction: true });
       expect(written.constraints.map((c) => c.id)).toEqual(['f', 'h']);
       // The toggle has no promise for the caller: its failure is not swallowed.
@@ -981,7 +991,7 @@ describe('SketchSession writing changes', () => {
   });
 
   it('runs commands one after another, each on the data of the one before', async () => {
-    const { session, solver, doc } = await editing(LINE);
+    const { session, solver, ops } = await editing(LINE);
     solver.hold();
 
     const first = session.addConstraint(constraint(LINE, { kind: 'fix', id: 'f', point: 'p' }));
@@ -996,7 +1006,7 @@ describe('SketchSession writing changes', () => {
     expect(await second).toBe(true);
 
     expect(laterCalls(solver.calls)[1]?.constraints.map((c) => c.id)).toEqual(['f', 'h']);
-    expect(docData(doc, fid('s1')).constraints.map((c) => c.id)).toEqual(['f', 'h']);
+    expect(docData(ops, fid('s1')).constraints.map((c) => c.id)).toEqual(['f', 'h']);
   });
 
   it('drops a result that arrives after closing', async () => {
@@ -1008,7 +1018,7 @@ describe('SketchSession writing changes', () => {
     solver.release();
 
     expect(await pending).toBe(false);
-    expect(applied).toEqual([]);
+    expect(applied()).toEqual([]);
   });
 });
 
@@ -1033,7 +1043,7 @@ describe('SketchSession.addGeometry checks its automatic constraints (M26)', () 
   const idsOf = (d: SketchData | undefined) => d?.constraints.map((c) => c.id);
 
   it('a conflict solves again without the conflicting added constraints and writes', async () => {
-    const { session, solver, doc } = await editing(LINE);
+    const { session, solver, ops } = await editing(LINE);
     // An old constraint in the list cannot be left out; only the added ones are.
     solver.next({ status: 'conflict', entities: null, conflicting: [cid('pp'), cid('old')] });
 
@@ -1043,13 +1053,13 @@ describe('SketchSession.addGeometry checks its automatic constraints (M26)', () 
       ['h', 'pp', 'eq', 'f'],
       ['h', 'eq', 'f'],
     ]);
-    expect(idsOf(docData(doc, fid('s1')))).toEqual(['h', 'eq', 'f']);
-    expect(docData(doc, fid('s1')).entities.map((e) => e.id)).toEqual(['p', 'q', 'pq', 'r', 'qr']);
+    expect(idsOf(docData(ops, fid('s1')))).toEqual(['h', 'eq', 'f']);
+    expect(docData(ops, fid('s1')).entities.map((e) => e.id)).toEqual(['p', 'q', 'pq', 'r', 'qr']);
     expect(session.state.get().message).toBeNull();
   });
 
   it('fix and the required constraints stay in the retry even when conflicting', async () => {
-    const { session, solver, doc } = await editing(LINE);
+    const { session, solver, ops } = await editing(LINE);
     solver.next({
       status: 'conflict',
       entities: null,
@@ -1062,11 +1072,11 @@ describe('SketchSession.addGeometry checks its automatic constraints (M26)', () 
       ['h', 'pp', 'eq', 'f'],
       ['h', 'eq', 'f'],
     ]);
-    expect(idsOf(docData(doc, fid('s1')))).toEqual(['h', 'eq', 'f']);
+    expect(idsOf(docData(ops, fid('s1')))).toEqual(['h', 'eq', 'f']);
   });
 
   it('a second conflict keeps only fix and the required constraints', async () => {
-    const { session, solver, doc } = await editing(LINE);
+    const { session, solver, ops } = await editing(LINE);
     solver.next({ status: 'conflict', entities: null, conflicting: [cid('pp')] });
     solver.next({ status: 'conflict', entities: null, conflicting: [cid('eq')] });
 
@@ -1077,7 +1087,7 @@ describe('SketchSession.addGeometry checks its automatic constraints (M26)', () 
       ['h', 'eq', 'f'],
       ['h', 'f'],
     ]);
-    expect(idsOf(docData(doc, fid('s1')))).toEqual(['h', 'f']);
+    expect(idsOf(docData(ops, fid('s1')))).toEqual(['h', 'f']);
   });
 
   it('solves at most three times: a third conflict writes nothing', async () => {
@@ -1089,12 +1099,12 @@ describe('SketchSession.addGeometry checks its automatic constraints (M26)', () 
     expect(await session.addGeometry(ADD, REQUIRED)).toBe(false);
 
     expect(laterCalls(solver.calls)).toHaveLength(3);
-    expect(applied).toEqual([]);
+    expect(applied()).toEqual([]);
     expect(session.state.get().message).toEqual({ key: 'sketch.conflict' });
   });
 
   it('a conflict naming no added constraint goes straight to fix and required', async () => {
-    const { session, solver, doc } = await editing(LINE);
+    const { session, solver, ops } = await editing(LINE);
     solver.next({ status: 'conflict', entities: null, conflicting: [cid('old')] });
 
     expect(await session.addGeometry(ADD, REQUIRED)).toBe(true);
@@ -1103,17 +1113,17 @@ describe('SketchSession.addGeometry checks its automatic constraints (M26)', () 
       ['h', 'pp', 'eq', 'f'],
       ['h', 'f'],
     ]);
-    expect(idsOf(docData(doc, fid('s1')))).toEqual(['h', 'f']);
+    expect(idsOf(docData(ops, fid('s1')))).toEqual(['h', 'f']);
   });
 
   it('without required the last attempt keeps only fix', async () => {
-    const { session, solver, doc } = await editing(LINE);
+    const { session, solver, ops } = await editing(LINE);
     solver.next({ status: 'conflict', entities: null, conflicting: [] });
 
     expect(await session.addGeometry(ADD)).toBe(true);
 
     expect(laterCalls(solver.calls).map(idsOf)).toEqual([['h', 'pp', 'eq', 'f'], ['f']]);
-    expect(idsOf(docData(doc, fid('s1')))).toEqual(['f']);
+    expect(idsOf(docData(ops, fid('s1')))).toEqual(['f']);
   });
 
   it('a conflict that leaving out changes nothing is rejected after one solve', async () => {
@@ -1127,18 +1137,18 @@ describe('SketchSession.addGeometry checks its automatic constraints (M26)', () 
     expect(await session.addGeometry(onlyFixed, REQUIRED)).toBe(false);
 
     expect(laterCalls(solver.calls)).toHaveLength(1);
-    expect(applied).toEqual([]);
+    expect(applied()).toEqual([]);
     expect(session.state.get().message).toEqual({ key: 'sketch.conflict' });
   });
 
   it('the added constraints the retry finds redundant are left out', async () => {
-    const { session, solver, doc } = await editing(LINE);
+    const { session, solver, ops } = await editing(LINE);
     solver.next({ status: 'conflict', entities: null, conflicting: [cid('pp')] });
     solver.next({ redundant: [cid('eq'), cid('h')] });
 
     expect(await session.addGeometry(ADD, REQUIRED)).toBe(true);
 
-    expect(idsOf(docData(doc, fid('s1')))).toEqual(['f']);
+    expect(idsOf(docData(ops, fid('s1')))).toEqual(['f']);
   });
 
   it('a failed retry writes nothing and shows solverFailed', async () => {
@@ -1148,14 +1158,14 @@ describe('SketchSession.addGeometry checks its automatic constraints (M26)', () 
 
     expect(await session.addGeometry(ADD, REQUIRED)).toBe(false);
 
-    expect(applied).toEqual([]);
+    expect(applied()).toEqual([]);
     expect(session.state.get().message).toEqual({ key: 'sketch.solverFailed' });
   });
 });
 
 describe('SketchSession dragging', () => {
   it('keeps one solve running and one target waiting; the last target wins', async () => {
-    const { session, solver, doc } = await editing(LINE);
+    const { session, solver, ops } = await editing(LINE);
     solver.hold();
 
     session.drag(eid('q'), [5, 5]);
@@ -1171,7 +1181,7 @@ describe('SketchSession dragging', () => {
       { point: 'q', to: [5, 5] },
       { point: 'q', to: [7, 7] },
     ]);
-    expect(docData(doc, fid('s1')).entities[1]).toMatchObject({ x: 7, y: 7 });
+    expect(docData(ops, fid('s1')).entities[1]).toMatchObject({ x: 7, y: 7 });
   });
 
   it('a conflict while dragging is dropped silently', async () => {
@@ -1181,7 +1191,7 @@ describe('SketchSession dragging', () => {
     session.drag(eid('q'), [5, 5]);
     await session.endDrag();
 
-    expect(applied).toEqual([]);
+    expect(applied()).toEqual([]);
     expect(session.state.get().message).toBeNull();
   });
 
@@ -1728,8 +1738,8 @@ describe('SketchSession plane (M21)', () => {
 });
 
 describe('SketchSession finish and cancel', () => {
-  it('a new sketch is one log entry batch[feature.add, feature.setParams]', async () => {
-    const { sketches, log } = setup();
+  it('a new sketch is one transaction: feature.add, its setParams, one commit', async () => {
+    const { sketches, ops } = setup();
     const session = sketches.create(planeRef(ORIGIN_PLANE_IDS.xy));
     const added = data([
       { kind: 'point', id: 'p', x: 0, y: 0 },
@@ -1741,21 +1751,25 @@ describe('SketchSession finish and cancel', () => {
 
     session.finish();
 
-    const entries = log.entries();
-    expect(entries).toHaveLength(1);
-    const ops = (entries[0]?.op as BatchOp).ops; // the entry of a new feature is a batch
-    expect(ops.map((op) => op.type)).toEqual(['feature.add', 'feature.setParams']);
-    expect(ops[1]).toMatchObject({ params: { entities: more.entities } });
+    // One begin and one commit: the server merges the steps into one entry (spec 04).
+    const kinds = ops.sent.map((c) => c.kind);
+    expect(kinds.filter((k) => k === 'begin')).toHaveLength(1);
+    expect(kinds.filter((k) => k === 'commit')).toHaveLength(1);
+    expect(kinds.at(-1)).toBe('commit');
+    expect(ops.ops()[0]?.type).toBe('feature.add');
+    expect(ops.lastParams(session.featureId)).toMatchObject({ entities: more.entities });
   });
 
-  it('editing a sketch is one feature.setParams entry', async () => {
-    const { session, log } = await editing(LINE);
+  it('editing a sketch sends only feature.setParams in one transaction', async () => {
+    const { session, ops } = await editing(LINE);
     await session.remove([item('pq')]);
     await session.addConstraint(constraint(LINE, { kind: 'fix', id: 'f', point: 'p' }));
 
     session.finish();
 
-    expect(log.entries().map((e) => e.op.type)).toEqual(['feature.setParams']);
+    expect(new Set(ops.ops().map((op) => op.type))).toEqual(new Set(['feature.setParams']));
+    expect(ops.sent.filter((c) => c.kind === 'commit')).toHaveLength(1);
+    expect(ops.sent.at(-1)).toEqual({ kind: 'commit' });
   });
 
   it('finish closes the session and returns to the model mode', async () => {
@@ -1771,14 +1785,14 @@ describe('SketchSession finish and cancel', () => {
     expect(modes).toEqual(['model']);
   });
 
-  it('cancel leaves the log unchanged and removes a new sketch', async () => {
-    const { sketches, log, doc } = setup();
+  it('cancel sends an abort: the server drops a new sketch', async () => {
+    const { sketches, ops, doc } = setup();
     const session = sketches.create(planeRef(ORIGIN_PLANE_IDS.xy));
     await session.addGeometry(data([{ kind: 'point', id: 'p', x: 1, y: 1 }]));
 
     session.cancel();
 
-    expect(log.entries()).toEqual([]);
+    expect(ops.sent.at(-1)).toEqual({ kind: 'abort' });
     expect(doc.studio.features).toEqual([]);
     expect(sketches.mode.get()).toBe('model');
   });

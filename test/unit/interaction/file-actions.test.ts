@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator, ObservableValue } from '@/core';
 import { createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
 import type { BodyId, FeatureId, FeatureSchema, ParamSchema } from '@/document';
-import { anOpsSession } from '@/ops/testing';
+import { aFakeOps } from '@/ops/testing';
 import { createActionRegistry } from '@/interaction/actions';
 import { createFeatureEditor } from '@/interaction/feature-dialog/feature-editor';
 import { FILE_ACTION_IDS } from '@/interaction/constants';
@@ -27,8 +27,8 @@ const fid = (id: string): FeatureId => id as FeatureId; // test ids are trusted
 const bid = (id: string): BodyId => id as BodyId; // test ids are trusted
 
 const A = bid('a/body');
-/** Idle without a warning: the state before any export and after a full one. */
-const IDLE = { kind: 'idle', warning: null };
+/** Idle: the state before any export and after one. */
+const IDLE = { kind: 'idle' };
 const B = bid('b/body');
 const C = bid('c/body');
 
@@ -39,12 +39,13 @@ const flush = (): Promise<void> =>
   });
 
 function setup() {
-  const { doc, dispatcher } = anOpsSession();
+  const ops = aFakeOps();
+  const { doc } = ops;
   const schemas = createFeatureSchemaRegistry();
   schemas.register(BOX);
   const editor = createFeatureEditor({
     doc,
-    ops: dispatcher,
+    ops,
     schemas,
     ids: createSequentialIdGenerator('f'),
   });
@@ -210,48 +211,16 @@ describe('createFileActions', () => {
       expect(actions.status.get()).toEqual({ kind: 'running', task: 'document' });
     });
 
-    it('a document exported without history → idle with the warning (M19.1, D4)', async () => {
+    it('a document export → idle', async () => {
       const { registry, exporter, actions } = setup();
       registry.run(FILE_ACTION_IDS.exportDocument);
-      exporter.resolve({ withHistory: false });
+      exporter.resolve();
       await flush();
-      expect(actions.status.get()).toEqual({
-        kind: 'idle',
-        warning: 'file.exportedWithoutHistory',
-      });
+      expect(actions.status.get()).toEqual(IDLE);
       expect(Object.isFrozen(actions.status.get())).toBe(true);
     });
 
-    it('a document exported with its history → idle without a warning', async () => {
-      const { registry, exporter, actions } = setup();
-      registry.run(FILE_ACTION_IDS.exportDocument);
-      exporter.resolve({ withHistory: true });
-      await flush();
-      expect(actions.status.get()).toEqual(IDLE);
-    });
-
-    it('dismiss clears the warning', async () => {
-      const { registry, exporter, actions } = setup();
-      registry.run(FILE_ACTION_IDS.exportDocument);
-      exporter.resolve({ withHistory: false });
-      await flush();
-      actions.dismiss();
-      expect(actions.status.get()).toEqual(IDLE);
-    });
-
-    it('a new run replaces the warning; a full export then leaves none', async () => {
-      const { registry, exporter, actions } = setup();
-      registry.run(FILE_ACTION_IDS.exportDocument);
-      exporter.resolve({ withHistory: false });
-      await flush();
-      registry.run(FILE_ACTION_IDS.exportDocument);
-      expect(actions.status.get()).toEqual({ kind: 'running', task: 'document' });
-      exporter.resolve({ withHistory: true });
-      await flush();
-      expect(actions.status.get()).toEqual(IDLE);
-    });
-
-    it('dismiss does nothing unless failed or warned', () => {
+    it('dismiss does nothing unless failed', () => {
       const { registry, actions } = setup();
       actions.dismiss();
       expect(actions.status.get()).toEqual(IDLE);

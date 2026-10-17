@@ -1,10 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { createSequentialIdGenerator, ObservableValue } from '@/core';
 import { createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
+import { OP_VERSION } from '@/ops';
 import { aFeature, bodyId } from '@/document/testing';
-import type { BodyId, FeatureId, FeatureInstance, FeatureSchema, ParamSchema } from '@/document';
-import type { DocumentOptions, ParamSchemaOf } from '@/document/testing';
-import { anOpsSession } from '@/ops/testing';
+import type {
+  BodyId,
+  FeatureId,
+  FeatureInstance,
+  FeatureSchema,
+  ParamSchema,
+  PartStudioData,
+} from '@/document';
+import type { ParamSchemaOf } from '@/document/testing';
+import type {
+  FeatureAddOp,
+  FeatureRemoveOp,
+  FeatureSuppressOp,
+  Operation,
+  StudioSetRollbackOp,
+} from '@/ops';
+import { aFakeOps } from '@/ops/testing';
+import type { FakeOpsOptions } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE } from '@/sketch';
 import { createActionRegistry } from '@/interaction/actions';
 import type { ActionState } from '@/interaction/actions';
@@ -95,7 +111,7 @@ const RECT_TOOL = aTool('sketch.rectangle', 'R', ['sketch']);
 function setup(
   opts: {
     readOnly?: boolean;
-    init?: DocumentOptions;
+    init?: FakeOpsOptions;
     confirm?: (r: ConfirmRequest) => boolean;
     /** With a mode: the sketch tools are registered too and everything follows the mode. */
     mode?: ObservableValue<Mode>;
@@ -103,8 +119,9 @@ function setup(
     sketchEdit?: (id: FeatureId) => void;
   } = {},
 ) {
-  const ops = anOpsSession(opts.init);
-  const { doc, dispatcher, undo } = ops;
+  const ops = aFakeOps(opts.init);
+  const { doc, undo } = ops;
+  const dispatcher = ops;
   const schemas = createFeatureSchemaRegistry();
   schemas.register(BOX);
   schemas.register(USE);
@@ -167,10 +184,30 @@ function setup(
     },
   });
 
+  /** The next read model of the server: the given parts replace those of the document. */
+  function serve(patch: Partial<PartStudioData>): void {
+    ops.answerAll({ document: { studio: { ...doc.studio, ...patch } } });
+  }
+  /** A box through the dialog, taken by the server: in the document and undoable. */
   function addBox(): FeatureId {
     const edit = editor.create('box');
     edit.commit();
+    const add = ops.ops().findLast((op): op is FeatureAddOp => op.type === 'feature.add');
+    if (add === undefined) throw new Error('no feature.add sent');
+    const features = [...doc.studio.features, add.feature];
+    serve({ features, rollbackIndex: features.length });
+    undo.setFlags({ canUndo: true, canRedo: false });
     return edit.featureId;
+  }
+  /** The operations sent from now on. */
+  function sentFrom(): () => readonly Operation[] {
+    const before = ops.ops().length;
+    return () => ops.ops().slice(before);
+  }
+  /** The kinds of the changes sent from now on. */
+  function kindsFrom(): () => readonly string[] {
+    const before = ops.sent.length;
+    return () => ops.sent.slice(before).map((c) => c.kind);
   }
   function state(id: string): ActionState {
     const found = registry.actions.get().find((a) => a.id === id);
@@ -178,7 +215,11 @@ function setup(
     return found;
   }
   return {
-    ...ops,
+    ops,
+    doc,
+    serve,
+    sentFrom,
+    kindsFrom,
     registry,
     selection,
     editor,
@@ -199,6 +240,25 @@ function setup(
     bar: (): number => doc.studio.rollbackIndex,
   };
 }
+
+const removal = (featureId: FeatureId): FeatureRemoveOp => ({
+  type: 'feature.remove',
+  v: OP_VERSION['feature.remove'],
+  featureId,
+});
+
+const suppression = (featureId: FeatureId, suppressed: boolean): FeatureSuppressOp => ({
+  type: 'feature.suppress',
+  v: OP_VERSION['feature.suppress'],
+  featureId,
+  suppressed,
+});
+
+const rollback = (index: number): StudioSetRollbackOp => ({
+  type: 'studio.setRollback',
+  v: OP_VERSION['studio.setRollback'],
+  index,
+});
 
 const STANDARD_VIEW_ACTIONS = [
   'view.front',
@@ -316,7 +376,7 @@ describe('built-in actions – registration', () => {
 });
 
 describe('built-in actions – undo and redo', () => {
-  it('undo and redo bring the document back and forth', () => {
+  it('undo and redo send Undo and Redo; enabled follows the flags of the server', () => {
     const s = setup();
     expect(s.enabled('undo')).toBe(false);
     expect(s.enabled('redo')).toBe(false);
@@ -324,12 +384,14 @@ describe('built-in actions – undo and redo', () => {
     expect(s.enabled('undo')).toBe(true);
 
     s.viewport.emitKey(key('z', { mod: true }));
-    expect(s.doc.studio.features).toHaveLength(0);
+    expect(s.ops.sent.at(-1)).toEqual({ kind: 'undo' });
+    s.ops.undo.setFlags({ canUndo: false, canRedo: true });
     expect(s.enabled('undo')).toBe(false);
     expect(s.enabled('redo')).toBe(true);
 
     s.viewport.emitKey(key('Z', { mod: true, shift: true }));
-    expect(s.doc.studio.features).toHaveLength(1);
+    expect(s.ops.sent.at(-1)).toEqual({ kind: 'redo' });
+    s.ops.undo.setFlags({ canUndo: true, canRedo: false });
     expect(s.enabled('redo')).toBe(false);
   });
 
@@ -345,51 +407,56 @@ describe('built-in actions – undo and redo', () => {
 });
 
 describe('built-in actions – delete and suppress', () => {
-  it('delete removes the selected feature as one undoable step', () => {
+  it('delete sends the removal of the selected feature as one transaction (one undo step)', () => {
     const s = setup();
     const a = s.addBox();
-    const b = s.addBox();
+    s.addBox();
     expect(s.enabled('feature.delete')).toBe(false);
 
     s.select(a);
     expect(s.enabled('feature.delete')).toBe(true);
+    const kinds = s.kindsFrom();
+    const sent = s.sentFrom();
     s.viewport.emitKey(key('Delete'));
 
-    expect(s.featureIds()).toEqual([b]);
+    expect(kinds()).toEqual(['begin', 'apply', 'commit']);
+    expect(s.ops.sent.at(-3)).toEqual({ kind: 'begin', label: 'feature.delete' });
+    expect(sent()).toEqual([removal(a)]);
     expect(s.selection.items.get()).toEqual([]);
     expect(s.enabled('feature.delete')).toBe(false);
-    s.registry.run('undo');
-    expect(s.featureIds()).toEqual([a, b]);
   });
 
   it('delete also runs on Backspace', () => {
     const s = setup();
     const a = s.addBox();
-    const b = s.addBox();
+    s.addBox();
     s.select(a);
+    const sent = s.sentFrom();
     s.viewport.emitKey(key('Backspace'));
-    expect(s.featureIds()).toEqual([b]);
+    expect(sent()).toEqual([removal(a)]);
   });
 
-  it('delete removes every selected feature in one undoable step', () => {
+  it('delete removes every selected feature in one transaction', () => {
     const s = setup();
     const a = s.addBox();
-    const b = s.addBox();
+    s.addBox();
     const c = s.addBox();
     s.select(a, c);
+    const kinds = s.kindsFrom();
+    const sent = s.sentFrom();
     expect(s.registry.run('feature.delete')).toBe(true);
-    expect(s.featureIds()).toEqual([b]);
-    s.registry.run('undo');
-    expect(s.featureIds()).toEqual([a, b, c]);
+    expect(kinds()).toEqual(['begin', 'apply', 'apply', 'commit']);
+    expect(sent()).toEqual([removal(a), removal(c)]);
   });
 
   it('delete without dependent features does not ask', () => {
     const s = setup();
     const a = s.addBox();
     s.select(a);
+    const sent = s.sentFrom();
     s.registry.run('feature.delete');
     expect(s.confirms).toEqual([]);
-    expect(s.featureIds()).toEqual([]);
+    expect(sent()).toEqual([removal(a)]);
   });
 
   it('delete with dependent features asks with their count; false deletes nothing', () => {
@@ -401,8 +468,7 @@ describe('built-in actions – delete and suppress', () => {
     s.registry.run('feature.delete');
 
     expect(s.confirms).toEqual([{ key: 'feature.delete.confirm', params: { n: 2 } }]);
-    expect(s.featureIds()).toEqual(['a', 'u', 'v', 'b']);
-    expect(s.log.entries()).toHaveLength(0);
+    expect(s.ops.sent).toEqual([]);
     expect(s.selection.items.get()).toEqual([
       { kind: 'feature', feature: 'a' },
       { kind: 'feature', feature: 'b' },
@@ -415,10 +481,8 @@ describe('built-in actions – delete and suppress', () => {
     s.registry.run('feature.delete');
 
     expect(s.confirms).toEqual([{ key: 'feature.delete.confirm', params: { n: 1 } }]);
-    expect(s.featureIds()).toEqual(['u']);
+    expect(s.ops.ops()).toEqual([removal(fid('a'))]);
     expect(s.selection.items.get()).toEqual([]);
-    s.registry.run('undo');
-    expect(s.featureIds()).toEqual(['a', 'u']);
   });
 
   it('delete of a feature together with its dependents does not ask', () => {
@@ -426,7 +490,7 @@ describe('built-in actions – delete and suppress', () => {
     s.select(fid('a'), fid('u'));
     s.registry.run('feature.delete');
     expect(s.confirms).toEqual([]);
-    expect(s.featureIds()).toEqual([]);
+    expect(s.ops.ops()).toEqual([removal(fid('a')), removal(fid('u'))]);
   });
 
   it('suppress toggles the selected feature', () => {
@@ -436,24 +500,30 @@ describe('built-in actions – delete and suppress', () => {
     s.select(a);
     expect(s.enabled('feature.suppress')).toBe(true);
 
+    const sent = s.sentFrom();
     s.viewport.emitKey(key('s'));
-    expect(s.doc.feature(a)?.suppressed).toBe(true);
+    expect(sent()).toEqual([suppression(a, true)]);
+    s.serve({ features: s.doc.studio.features.map((f) => ({ ...f, suppressed: true })) });
     s.viewport.emitKey(key('s'));
-    expect(s.doc.feature(a)?.suppressed).toBe(false);
+    expect(sent()).toEqual([suppression(a, true), suppression(a, false)]);
   });
 
   it('suppress of a mixed selection suppresses all, of a suppressed one unsuppresses all', () => {
     const s = setup();
     const a = s.addBox();
     const b = s.addBox();
-    s.select(a);
-    s.registry.run('feature.suppress');
+    s.serve({
+      features: s.doc.studio.features.map((f) => ({ ...f, suppressed: f.id === a })),
+    });
     s.select(a, b);
 
+    const mixed = s.sentFrom();
     s.registry.run('feature.suppress');
-    expect(s.doc.studio.features.map((f) => f.suppressed)).toEqual([true, true]);
+    expect(mixed()).toEqual([suppression(b, true)]);
+    s.serve({ features: s.doc.studio.features.map((f) => ({ ...f, suppressed: true })) });
+    const all = s.sentFrom();
     s.registry.run('feature.suppress');
-    expect(s.doc.studio.features.map((f) => f.suppressed)).toEqual([false, false]);
+    expect(all()).toEqual([suppression(a, false), suppression(b, false)]);
   });
 
   it('a selection without features enables neither delete nor suppress', () => {
@@ -538,10 +608,11 @@ describe('built-in actions – edit and rename', () => {
     s.select(b);
     expect(s.enabled('feature.rename')).toBe(true);
 
+    const kinds = s.kindsFrom();
     expect(s.registry.run('feature.rename')).toBe(true);
     expect(s.featureTree.renaming.get()).toBe(b);
-    // Rename mode is view state: the document and the log stay as they were.
-    expect(s.log.entries()).toHaveLength(2);
+    // Rename mode is view state: nothing is sent.
+    expect(kinds()).toEqual([]);
   });
 
   it('rename is disabled while a feature edit session is open', () => {
@@ -565,15 +636,17 @@ describe('built-in actions – timeline', () => {
 
     s.select(a);
     expect(s.enabled('timeline.rollHere')).toBe(true);
+    const sent = s.sentFrom();
     s.registry.run('timeline.rollHere');
-    expect(s.bar()).toBe(1);
-    // The bar is already there.
+    expect(sent()).toEqual([rollback(1)]);
+    // The bar is there once the server answers.
+    s.serve({ rollbackIndex: 1 });
     expect(s.enabled('timeline.rollHere')).toBe(false);
 
     // A feature after the bar rolls the bar forward.
     s.select(b);
     s.registry.run('timeline.rollHere');
-    expect(s.bar()).toBe(2);
+    expect(sent()).toEqual([rollback(1), rollback(2)]);
   });
 
   it('roll here is disabled with more than one selected feature or an open dialog', () => {
@@ -598,19 +671,23 @@ describe('built-in actions – timeline', () => {
     expect(s.enabled('timeline.stepForward')).toBe(false);
     expect(s.enabled('timeline.toEnd')).toBe(false);
 
+    const sent = s.sentFrom();
     s.registry.run('timeline.stepBack');
-    expect(s.bar()).toBe(2);
+    expect(sent().at(-1)).toEqual(rollback(2));
+    s.serve({ rollbackIndex: 2 });
     expect(s.enabled('timeline.stepForward')).toBe(true);
     s.registry.run('timeline.toStart');
-    expect(s.bar()).toBe(0);
+    expect(sent().at(-1)).toEqual(rollback(0));
+    s.serve({ rollbackIndex: 0 });
     expect(s.enabled('timeline.stepBack')).toBe(false);
     expect(s.enabled('timeline.toStart')).toBe(false);
     expect(s.registry.run('timeline.stepBack')).toBe(false);
 
     s.registry.run('timeline.stepForward');
-    expect(s.bar()).toBe(1);
+    expect(sent().at(-1)).toEqual(rollback(1));
+    s.serve({ rollbackIndex: 1 });
     s.registry.run('timeline.toEnd');
-    expect(s.bar()).toBe(3);
+    expect(sent().at(-1)).toEqual(rollback(3));
   });
 
   it('an empty timeline has every step disabled', () => {
@@ -662,10 +739,14 @@ describe('built-in actions – locked', () => {
   it('read-only disables everything that changes the document, fit all stays', () => {
     const s = setup({
       readOnly: true,
-      init: { features: [aFeature({ id: 'a', type: 'box' }), aFeature({ id: 'b', type: 'box' })] },
+      init: {
+        features: [aFeature({ id: 'a', type: 'box' }), aFeature({ id: 'b', type: 'box' })],
+        rollbackIndex: 1,
+        // Something to undo and redo, so only the lock keeps them disabled.
+        canUndo: true,
+        canRedo: true,
+      },
     });
-    // Something to undo, so only the lock keeps undo disabled.
-    s.featureTree.moveRollbackBar(1);
     s.select(fid('a'));
 
     for (const id of [

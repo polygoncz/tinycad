@@ -218,7 +218,7 @@ export function createFeatureTreeModel(deps: {
         featureId: id,
         name: trimmed,
       };
-      ops.dispatch(op);
+      void ops.dispatch(op);
     },
     moveRollbackBar(index) {
       if (locked.get()) return;
@@ -233,7 +233,7 @@ export function createFeatureTreeModel(deps: {
         v: OP_VERSION['studio.setRollback'],
         index,
       };
-      ops.dispatch(op);
+      void ops.dispatch(op);
     },
     renaming: renaming.asObservable(),
     beginRename(id) {
@@ -284,7 +284,7 @@ export function createFeatureTreeModel(deps: {
         featureId: id,
         toIndex,
       };
-      ops.dispatch(op);
+      void ops.dispatch(op);
       return Object.freeze([]);
     },
     dispose() {

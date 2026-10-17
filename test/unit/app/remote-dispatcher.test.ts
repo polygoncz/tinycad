@@ -1,117 +1,55 @@
 import { describe, expect, it } from 'vitest';
-import { createSequentialIdGenerator, Emitter, ObservableValue } from '@/core';
+import { Emitter, ObservableValue } from '@/core';
 import type { Observable, Subscribable } from '@/core';
-import { createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
-import type {
-  DocumentId,
-  FeatureId,
-  FeatureInstance,
-  FeatureSchema,
-  PartStudioData,
-} from '@/document';
-import type { ParamSchemaOf } from '@/document/testing';
+import type { DocumentId, FeatureId, FeatureSchema } from '@/document';
 import { aFeature } from '@/document/testing';
-import { createFeatureEditor } from '@/interaction';
-import { createOpHandlerRegistry, OP_VERSION } from '@/ops';
-import type { FeatureSetParamsOp, Operation, StudioSetRollbackOp } from '@/ops';
+import { OP_VERSION } from '@/ops';
+import type { DocumentRenameOp, FeatureSetParamsOp } from '@/ops';
 import { RemoteError } from '@/remote';
 import type {
   ChangeOutcome,
   ChangeRequest,
   ConnectionState,
   HistoryData,
-  LogEntryData,
   ReadModelData,
   RemoteErrorReason,
   RemoteSession,
   RemoteSessionEvents,
 } from '@/remote';
-import { MirrorDocument } from '@/app/mirror-document';
 import { createRemoteDispatcher } from '@/app/remote-dispatcher';
 import { refuseChanges } from '@/app/read-only';
 
-// --- schemas: a box with a width, a "sketch" with one coordinate ---
-
-interface BoxParams {
-  readonly width: number;
-}
-
-const BOX_PARAMS: ParamSchemaOf<BoxParams> = {
-  width: { kind: 'length', label: 'box.width', default: 10, min: 0, exclusiveMin: true },
-};
-
-const BOX: FeatureSchema<BoxParams> = {
-  type: 'box',
-  version: 1,
-  label: 'box.label',
-  params: BOX_PARAMS,
-  defaults: () => ({ width: 10 }),
-  validate: (params) => validateAgainstSchema(BOX_PARAMS, params),
-};
-
-interface SketchParams {
-  readonly x: number;
-}
-
-const SKETCH_PARAMS: ParamSchemaOf<SketchParams> = {
-  x: { kind: 'number', label: 'sketch.x', default: 0 },
-};
-
-const SKETCH: FeatureSchema<SketchParams> = {
-  type: 'sketch',
-  version: 1,
-  label: 'sketch.label',
-  params: SKETCH_PARAMS,
-  defaults: () => ({ x: 0 }),
-  validate: (params) => validateAgainstSchema(SKETCH_PARAMS, params),
-};
-
 const fid = (id: string): FeatureId => id as FeatureId; // test ids are trusted
 
-const aBox = (id: string, width: number): FeatureInstance =>
-  aFeature<BoxParams>({ id, name: id, type: 'box', params: { width } });
-
-const aSketch = (id: string, x: number): FeatureInstance =>
-  aFeature<SketchParams>({ id, name: id, type: 'sketch', params: { x } });
-
-const setParams = (id: string, params: unknown, typeVersion = 1): FeatureSetParamsOp => ({
+const setParams = (id: string, params: unknown): FeatureSetParamsOp => ({
   type: 'feature.setParams',
   v: OP_VERSION['feature.setParams'],
   featureId: fid(id),
-  typeVersion,
+  typeVersion: 1,
   params,
 });
 
-const setRollback = (index: number): StudioSetRollbackOp => ({
-  type: 'studio.setRollback',
-  v: OP_VERSION['studio.setRollback'],
-  index,
+const rename = (name: string): DocumentRenameOp => ({
+  type: 'document.rename',
+  v: OP_VERSION['document.rename'],
+  name,
 });
 
-// --- read models ---
-
 interface ModelInit {
-  readonly features?: readonly FeatureInstance[];
-  readonly rollbackIndex?: number;
-  readonly lastSeq?: number;
   readonly canUndo?: boolean;
   readonly canRedo?: boolean;
   readonly name?: string;
 }
 
 function aReadModel(init: ModelInit = {}): ReadModelData {
-  const features = init.features ?? [];
-  const studio: PartStudioData = {
-    features,
-    rollbackIndex: init.rollbackIndex ?? features.length,
-  };
+  const features = [aFeature({ id: 'f1' })];
   return {
     document: {
       id: 'doc-1' as DocumentId, // test ids are trusted
       name: init.name ?? 'Part',
       createdAt: 0,
-      lastSeq: init.lastSeq ?? 0,
-      studio,
+      lastSeq: 0,
+      studio: { features, rollbackIndex: features.length },
     },
     regen: {
       generation: 1,
@@ -132,10 +70,12 @@ function aReadModel(init: ModelInit = {}): ReadModelData {
 
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
+const refusal = (reason: RemoteErrorReason): RemoteError =>
+  new RemoteError({ code: 'FAILED_PRECONDITION', reason, message: reason });
+
 /**
  * A RemoteSession for tests: records every change and settles them oldest first when the test
- * says so. A successful answer sets the read model before the change resolves, as a session that
- * emits synchronously and resolves its promise later.
+ * says so. A successful answer sets the read model before the change resolves, as the session.
  */
 class FakeRemoteSession implements RemoteSession {
   readonly featureTypes: readonly FeatureSchema[] = [];
@@ -149,7 +89,10 @@ class FakeRemoteSession implements RemoteSession {
   readonly events: Subscribable<RemoteSessionEvents> = this.emitter.asSubscribable();
   /** Every change ever requested, oldest first. */
   readonly sent: ChangeRequest[] = [];
-  private readonly open: { resolve: (outcome: ChangeOutcome) => void }[] = [];
+  private readonly open: {
+    resolve: (outcome: ChangeOutcome) => void;
+    reject: (e: unknown) => void;
+  }[] = [];
 
   constructor(initial: ReadModelData) {
     this.model = new ObservableValue(initial);
@@ -158,8 +101,8 @@ class FakeRemoteSession implements RemoteSession {
 
   change(request: ChangeRequest): Promise<ChangeOutcome> {
     this.sent.push(request);
-    return new Promise((resolve) => {
-      this.open.push({ resolve });
+    return new Promise((resolve, reject) => {
+      this.open.push({ resolve, reject });
     });
   }
 
@@ -167,50 +110,41 @@ class FakeRemoteSession implements RemoteSession {
     return this.open.length;
   }
 
-  /** Answers the oldest change with the read model; resolves after the answer is handled. */
-  answer(model: ReadModelData, entry: LogEntryData | null = null): Promise<void> {
-    const next = this.open.shift();
-    if (next === undefined) throw new Error('nothing to answer');
-    this.model.set(model);
-    next.resolve({ ok: true, entry, readModel: model });
-    return flush();
+  kinds(): readonly string[] {
+    return this.sent.map((r) => r.kind);
   }
 
-  /**
-   * Answers the oldest change with a read model the session does not publish: a newer one came
-   * first (N136).
-   */
-  answerUnpublished(model: ReadModelData): Promise<void> {
-    const next = this.open.shift();
-    if (next === undefined) throw new Error('nothing to answer');
+  /** Answers the oldest change with the read model; resolves after the answer is handled. */
+  answer(model: ReadModelData = this.model.get()): Promise<void> {
+    const next = this.take();
+    this.model.set(model);
     next.resolve({ ok: true, entry: null, readModel: model });
     return flush();
   }
 
   /** Refuses the oldest change. */
   refuse(reason: RemoteErrorReason): Promise<void> {
-    const next = this.open.shift();
-    if (next === undefined) throw new Error('nothing to refuse');
-    next.resolve({
-      ok: false,
-      error: new RemoteError({ code: 'FAILED_PRECONDITION', reason, message: reason }),
-    });
+    this.take().resolve({ ok: false, error: refusal(reason) });
     return flush();
   }
 
   /** Refuses the `count` oldest changes with one outcome, as the queue answers a coalesced pair. */
   refuseAll(count: number, reason: RemoteErrorReason): Promise<void> {
-    const outcome: ChangeOutcome = {
-      ok: false,
-      error: new RemoteError({ code: 'FAILED_PRECONDITION', reason, message: reason }),
-    };
+    const outcome: ChangeOutcome = { ok: false, error: refusal(reason) };
     for (const next of this.open.splice(0, count)) next.resolve(outcome);
     return flush();
   }
 
+  /** Rejects the oldest change, by default as the session does after its dispose. */
+  reject(
+    error: unknown = new RemoteError({ code: 'CANCELLED', message: 'disposed' }),
+  ): Promise<void> {
+    this.take().reject(error);
+    return flush();
+  }
+
   /** The transaction died with a new session: its read model, then `lost`. */
-  lose(model: ReadModelData): void {
-    this.model.set(model);
+  lose(): void {
     this.emitter.emit('lost', { what: 'transaction' });
   }
 
@@ -219,7 +153,7 @@ class FakeRemoteSession implements RemoteSession {
   }
 
   history(): Promise<HistoryData> {
-    return Promise.reject(new Error('the dispatcher reads the stacks from RemoteHistory'));
+    return Promise.reject(new Error('not used by the dispatcher'));
   }
 
   exportStep(): Promise<{ readonly content: Uint8Array; readonly fileName: string }> {
@@ -233,413 +167,334 @@ class FakeRemoteSession implements RemoteSession {
   dispose(): void {
     // nothing to release
   }
+
+  private take(): { resolve: (outcome: ChangeOutcome) => void; reject: (e: unknown) => void } {
+    const next = this.open.shift();
+    if (next === undefined) throw new Error('nothing to answer');
+    return next;
+  }
 }
 
 function setup(init: ModelInit = {}) {
-  const initial = aReadModel(init);
-  const session = new FakeRemoteSession(initial);
-  const control = new MirrorDocument(initial.document);
-  const mirror = control.reader;
-  const history = { stacks: (): HistoryData['stacks'] => ({ undo: [], redo: [] }) };
-  const schemas = createFeatureSchemaRegistry();
-  schemas.register(BOX);
-  schemas.register(SKETCH);
-  const handlers = createOpHandlerRegistry({ schemas });
+  const session = new FakeRemoteSession(aReadModel(init));
   const errors: Error[] = [];
   let lost = 0;
-  let clock = 100;
   const dispatcher = createRemoteDispatcher({
-    mirror: control,
     session,
-    history,
-    handlers,
-    now: () => ++clock,
     onError: (e) => errors.push(e),
     onLost: () => lost++,
   });
-  const paramsOf = (id: string): unknown => mirror.feature(fid(id))?.params;
-  return { session, mirror, history, schemas, dispatcher, errors, lost: () => lost, paramsOf };
+  /** The settled value of a promise of the dispatcher, or 'pending'. */
+  const track = (promise: Promise<boolean>) => {
+    let result: boolean | 'pending' = 'pending';
+    void promise.then((ok) => {
+      result = ok;
+    });
+    return () => result;
+  };
+  return { session, dispatcher, errors, lost: () => lost, track };
 }
 
-/** The reason of each reported RemoteError; 'client' for an error of the client. */
-const reasons = (errors: readonly Error[]): string[] =>
-  errors.map((e) => (e instanceof RemoteError ? e.reason : 'client'));
-
-const ops = (session: FakeRemoteSession): (Operation | string)[] =>
-  session.sent.map((r) => ('op' in r ? r.op : r.kind));
+const reasons = (errors: readonly Error[]): readonly string[] =>
+  errors.map((e) => (e instanceof RemoteError ? e.reason : e.message));
 
 describe('createRemoteDispatcher: dispatch', () => {
-  it('applies to the mirror at once, sends the change and returns a provisional entry', () => {
-    const { session, dispatcher, paramsOf } = setup({ features: [aBox('b', 1)], lastSeq: 4 });
-    const op = setParams('b', { width: 5 });
-    const entry = dispatcher.dispatch(op, { label: 'box.edit' });
-    expect(paramsOf('b')).toEqual({ width: 5 });
-    expect(session.sent).toEqual([{ kind: 'dispatch', op, label: 'box.edit' }]);
-    expect(entry).toMatchObject({ seq: 5, kind: 'do', op, label: 'box.edit', time: 101 });
-    expect(entry.inverse).toEqual(setParams('b', { width: 1 }));
+  it('sends the operation with its label and resolves true when the server takes it', async () => {
+    const { session, dispatcher, track } = setup();
+    const result = track(dispatcher.dispatch(rename('Bracket'), { label: 'doc.rename' }));
+    expect(session.sent).toEqual([
+      { kind: 'dispatch', op: rename('Bracket'), label: 'doc.rename' },
+    ]);
+    await flush();
+    expect(result()).toBe('pending');
+    await session.answer(aReadModel({ name: 'Bracket' }));
+    expect(result()).toBe(true);
   });
 
-  it('throws synchronously for an invalid operation and sends nothing', () => {
-    const { session, dispatcher, paramsOf } = setup({ features: [aBox('b', 1)] });
-    expect(() => dispatcher.dispatch(setParams('missing', { width: 5 }))).toThrow();
-    expect(() => dispatcher.dispatch(setParams('b', { width: 5 }, 7))).toThrow();
-    expect(session.sent).toEqual([]);
-    expect(paramsOf('b')).toEqual({ width: 1 });
+  it('without a label sends none', () => {
+    const { session, dispatcher } = setup();
+    void dispatcher.dispatch(rename('Bracket'));
+    expect(session.sent).toEqual([{ kind: 'dispatch', op: rename('Bracket') }]);
   });
 
-  it('emits applied with the entry', () => {
-    const { dispatcher } = setup({ features: [aBox('b', 1)] });
-    const seen: unknown[] = [];
-    dispatcher.events.on('applied', (e) => seen.push(e.entry?.kind));
-    dispatcher.dispatch(setParams('b', { width: 5 }));
-    expect(seen).toEqual(['do']);
-  });
-
-  it('the answer of the server replaces the local data (server coordinates of a sketch)', async () => {
-    const { session, dispatcher, paramsOf } = setup({ features: [aSketch('s', 0)] });
-    dispatcher.dispatch(setParams('s', { x: 1 }));
-    expect(paramsOf('s')).toEqual({ x: 1 });
-    await session.answer(aReadModel({ features: [aSketch('s', 1.0001)], lastSeq: 1 }));
-    expect(paramsOf('s')).toEqual({ x: 1.0001 });
-  });
-
-  it('two quick changes, the answer to the first: mirror = answer + the second', async () => {
-    const { session, dispatcher, paramsOf } = setup({ features: [aBox('a', 1), aBox('b', 1)] });
-    dispatcher.dispatch(setParams('a', { width: 2 }));
-    dispatcher.dispatch(setParams('b', { width: 3 }));
-    // The server corrected the first change.
-    await session.answer(aReadModel({ features: [aBox('a', 2.5), aBox('b', 1)], lastSeq: 1 }));
-    expect(paramsOf('a')).toEqual({ width: 2.5 });
-    expect(paramsOf('b')).toEqual({ width: 3 });
-    await session.answer(aReadModel({ features: [aBox('a', 2.5), aBox('b', 3)], lastSeq: 2 }));
-    expect(paramsOf('b')).toEqual({ width: 3 });
-  });
-
-  it('a refused second change is dropped from the mirror and reported', async () => {
-    const { session, dispatcher, paramsOf, errors } = setup({
-      features: [aBox('a', 1), aBox('b', 1)],
-    });
-    dispatcher.dispatch(setParams('a', { width: 2 }));
-    dispatcher.dispatch(setParams('b', { width: 3 }));
-    await session.answer(aReadModel({ features: [aBox('a', 2), aBox('b', 1)], lastSeq: 1 }));
+  it('a refusal: onError with the error of the server, false', async () => {
+    const { session, dispatcher, errors, track } = setup();
+    const result = track(dispatcher.dispatch(rename('Bracket')));
     await session.refuse('INVALID_OPERATION');
-    expect(paramsOf('a')).toEqual({ width: 2 });
-    expect(paramsOf('b')).toEqual({ width: 1 });
+    expect(result()).toBe(false);
     expect(reasons(errors)).toEqual(['INVALID_OPERATION']);
   });
 
-  it('a pending change that no longer applies on the new base is dropped and reported', async () => {
-    const { session, dispatcher, mirror, errors } = setup({ features: [aBox('a', 1)] });
-    dispatcher.dispatch(setParams('a', { width: 2 }));
-    dispatcher.dispatch(setParams('a', { width: 3 }));
-    // The server removed the feature with the first answer (e.g. another rule).
-    await session.answer(aReadModel({ features: [], lastSeq: 1 }));
-    expect(mirror.studio.features).toEqual([]);
-    // An error of the client: the server has not answered that change yet.
-    expect(reasons(errors)).toEqual(['client']);
-    expect(errors[0]?.message).toMatch(/no longer applies/);
-    // Its own later answer does not report it again.
-    await session.refuse('UNKNOWN_TARGET');
-    expect(errors).toHaveLength(1);
+  it('throws during a transaction and sends nothing', () => {
+    const { session, dispatcher } = setup();
+    dispatcher.begin('x');
+    expect(() => dispatcher.dispatch(rename('Bracket'))).toThrow(/transaction is running/);
+    expect(session.kinds()).toEqual(['begin']);
   });
 
-  it('a read model of the session while idle replaces the mirror (another tab)', () => {
-    const { session, paramsOf } = setup({ features: [aBox('a', 1)] });
-    session.model.set(aReadModel({ features: [aBox('a', 7)], lastSeq: 3 }));
-    expect(paramsOf('a')).toEqual({ width: 7 });
-  });
-
-  it('a read model of the session while changes are pending waits for the queue to drain', async () => {
-    const { session, dispatcher, paramsOf } = setup({ features: [aBox('a', 1), aBox('b', 1)] });
-    dispatcher.dispatch(setParams('a', { width: 2 }));
-    // A refresh that does not know whether it contains the pending change.
-    session.model.set(aReadModel({ features: [aBox('a', 1), aBox('b', 9)], lastSeq: 0 }));
-    expect(paramsOf('a')).toEqual({ width: 2 });
-    expect(paramsOf('b')).toEqual({ width: 1 });
-    await session.refuse('STORAGE');
-    // Drained: the newer read model is taken.
-    expect(paramsOf('a')).toEqual({ width: 1 });
-    expect(paramsOf('b')).toEqual({ width: 9 });
-  });
-});
-
-describe('createRemoteDispatcher: read models the session publishes', () => {
-  // The review after M46/M47: a refresh of G2 answered before the change of G1 (N136).
-  it('an answer the session did not publish is not the base: the newer published one is', async () => {
-    const { session, dispatcher, paramsOf } = setup({ features: [aBox('a', 1), aBox('b', 1)] });
-    dispatcher.dispatch(setParams('a', { width: 2 }));
-    // G2: the change and a change of another tab.
-    session.model.set(aReadModel({ features: [aBox('a', 2), aBox('b', 9)], lastSeq: 2 }));
-    await session.answerUnpublished(aReadModel({ features: [aBox('a', 2), aBox('b', 1)] }));
-    expect(paramsOf('a')).toEqual({ width: 2 });
-    expect(paramsOf('b')).toEqual({ width: 9 });
-  });
-
-  it('a later change stays on top of the newer published read model', async () => {
-    const { session, dispatcher, paramsOf } = setup({ features: [aBox('a', 1), aBox('b', 1)] });
-    dispatcher.dispatch(setParams('a', { width: 2 }));
-    dispatcher.dispatch(setParams('b', { width: 3 }));
-    session.model.set(aReadModel({ features: [aBox('a', 2), aBox('b', 1)], name: 'G2' }));
-    await session.answerUnpublished(aReadModel({ features: [aBox('a', 1), aBox('b', 1)] }));
-    expect(paramsOf('a')).toEqual({ width: 2 });
-    expect(paramsOf('b')).toEqual({ width: 3 });
+  it('two applies of a transaction are both sent in order and each promise resolves', async () => {
+    const { session, dispatcher, track } = setup();
+    const tx = dispatcher.begin('feature.edit');
+    const first = track(tx.apply(setParams('f1', { size: 2 })));
+    const second = track(tx.apply(setParams('f1', { size: 3 })));
+    expect(session.sent.slice(1)).toEqual([
+      { kind: 'apply', op: setParams('f1', { size: 2 }) },
+      { kind: 'apply', op: setParams('f1', { size: 3 }) },
+    ]);
+    await session.answer();
+    await session.answer();
+    await session.answer();
+    expect([first(), second()]).toEqual([true, true]);
   });
 
   it('both changes of a coalesced pair refused: onError once', async () => {
-    const { session, dispatcher, errors, paramsOf } = setup({ features: [aBox('a', 1)] });
-    const tx = dispatcher.begin('drag');
-    tx.apply(setParams('a', { width: 2 }));
-    tx.apply(setParams('a', { width: 3 }));
-    await session.answer(aReadModel({ features: [aBox('a', 1)] }));
+    const { session, dispatcher, errors, track } = setup();
+    const tx = dispatcher.begin('feature.edit');
+    await session.answer();
+    const first = track(tx.apply(setParams('f1', { size: 2 })));
+    const second = track(tx.apply(setParams('f1', { size: 3 })));
     await session.refuseAll(2, 'INVALID_OPERATION');
-    expect(reasons(errors)).toEqual(['INVALID_OPERATION']);
-    expect(paramsOf('a')).toEqual({ width: 1 });
+    expect([first(), second()]).toEqual([false, false]);
+    expect(errors).toHaveLength(1);
   });
 });
 
 describe('createRemoteDispatcher: transactions', () => {
-  it('apply is in the mirror at once and the feature dialog reads it synchronously', () => {
-    const { session, dispatcher, mirror, schemas } = setup({ features: [aBox('b', 1)] });
-    const editor = createFeatureEditor({
-      doc: mirror,
-      ops: dispatcher,
-      schemas,
-      ids: createSequentialIdGenerator('new'),
-    });
-    const edit = editor.edit(fid('b'));
+  it('begin starts at once and sends BeginTransaction; a second begin throws', () => {
+    const { session, dispatcher } = setup();
+    const tx = dispatcher.begin('feature.edit');
+    expect(tx.label).toBe('feature.edit');
     expect(dispatcher.inTransaction).toBe(true);
-    edit.setParam('width', 4);
-    expect(edit.state.get().params).toEqual({ width: 4 });
-    expect(mirror.feature(fid('b'))?.params).toEqual({ width: 4 });
-    expect(ops(session)).toEqual(['begin', setParams('b', { width: 4 })]);
+    expect(session.sent).toEqual([{ kind: 'begin', label: 'feature.edit' }]);
+    expect(() => dispatcher.begin('y')).toThrow(/already running/);
   });
 
-  it('commit ends at once: the bar is back, the transient step reverted, one entry', () => {
-    const { session, dispatcher, mirror, paramsOf } = setup({
-      features: [aBox('a', 1), aBox('b', 1)],
-    });
+  it('a refused begin: onError and the transaction is lost (onLost, steps no-op)', async () => {
+    const { session, dispatcher, errors, lost, track } = setup();
     const tx = dispatcher.begin('feature.edit');
-    tx.applyTransient(setRollback(1));
-    tx.apply(setParams('a', { width: 3 }));
-    expect(mirror.studio.rollbackIndex).toBe(1);
-    const entry = tx.commit();
-    expect(dispatcher.inTransaction).toBe(false);
-    expect(mirror.studio.rollbackIndex).toBe(2);
-    expect(paramsOf('a')).toEqual({ width: 3 });
-    expect(entry).toMatchObject({
-      kind: 'do',
-      label: 'feature.edit',
-      op: setParams('a', { width: 3 }),
-    });
-    expect(ops(session)).toEqual(['begin', setRollback(1), setParams('a', { width: 3 }), 'commit']);
-    expect(session.sent[1]?.kind).toBe('applyTransient');
-  });
-
-  it('commit of an empty transaction returns null', () => {
-    const { dispatcher } = setup();
-    expect(dispatcher.begin('x').commit()).toBeNull();
-  });
-
-  it('abort ends at once and reverts every step', () => {
-    const { session, dispatcher, mirror, paramsOf } = setup({
-      features: [aBox('a', 1), aBox('b', 1)],
-    });
-    const seen: boolean[] = [];
-    dispatcher.events.on('transaction', (e) => seen.push(e.active));
-    const tx = dispatcher.begin('feature.edit');
-    tx.applyTransient(setRollback(1));
-    tx.apply(setParams('a', { width: 3 }));
-    tx.apply(setParams('a', { width: 4 }));
-    tx.abort();
-    expect(dispatcher.inTransaction).toBe(false);
-    expect(mirror.studio.rollbackIndex).toBe(2);
-    expect(paramsOf('a')).toEqual({ width: 1 });
-    expect(seen).toEqual([true, false]);
-    expect(session.sent.at(-1)).toEqual({ kind: 'abort' });
-    expect(() => {
-      tx.apply(setParams('a', { width: 5 }));
-    }).toThrow(/has ended/);
-  });
-
-  it('a commit pending when the answer to apply arrives is replayed by its inverses', async () => {
-    const { session, dispatcher, mirror, paramsOf } = setup({
-      features: [aBox('a', 1), aBox('b', 1)],
-    });
-    const tx = dispatcher.begin('feature.edit');
-    tx.applyTransient(setRollback(1));
-    tx.apply(setParams('a', { width: 3 }));
-    tx.commit();
-    // begin, then applyTransient: the server document is mid-transaction with the bar at 1.
-    await session.answer(aReadModel({ features: [aBox('a', 1), aBox('b', 1)] }));
-    await session.answer(aReadModel({ features: [aBox('a', 1), aBox('b', 1)], rollbackIndex: 1 }));
-    expect(mirror.studio.rollbackIndex).toBe(2);
-    expect(paramsOf('a')).toEqual({ width: 3 });
-    await session.answer(aReadModel({ features: [aBox('a', 3), aBox('b', 1)], rollbackIndex: 1 }));
-    expect(mirror.studio.rollbackIndex).toBe(2);
-    expect(paramsOf('a')).toEqual({ width: 3 });
-    await session.answer(aReadModel({ features: [aBox('a', 3), aBox('b', 1)], lastSeq: 1 }));
-    expect(mirror.studio.rollbackIndex).toBe(2);
-    expect(session.unanswered).toBe(0);
-  });
-
-  it('abort after confirmed steps reverts them by their remembered inverses', async () => {
-    const { session, dispatcher, paramsOf } = setup({ features: [aBox('a', 1)] });
-    const tx = dispatcher.begin('feature.edit');
-    tx.apply(setParams('a', { width: 3 }));
-    await session.answer(aReadModel({ features: [aBox('a', 1)] }));
-    await session.answer(aReadModel({ features: [aBox('a', 3)] }));
-    expect(session.unanswered).toBe(0);
-    tx.abort();
-    expect(paramsOf('a')).toEqual({ width: 1 });
-    // The server state is still mid-transaction until the answer to abort.
-    session.model.set(aReadModel({ features: [aBox('a', 3)], name: 'Again' }));
-    expect(paramsOf('a')).toEqual({ width: 1 });
-    await session.answer(aReadModel({ features: [aBox('a', 1)] }));
-    expect(paramsOf('a')).toEqual({ width: 1 });
-  });
-
-  it('SKETCH_NOT_SOLVED keeps the local sketch until the next accepted setParams', async () => {
-    const { session, dispatcher, paramsOf, errors } = setup({ features: [aSketch('s', 0)] });
-    const tx = dispatcher.begin('sketch.edit');
-    tx.apply(setParams('s', { x: 1 }));
-    await session.answer(aReadModel({ features: [aSketch('s', 0)] }));
-    await session.refuse('SKETCH_NOT_SOLVED');
-    expect(reasons(errors)).toEqual(['SKETCH_NOT_SOLVED']);
-    expect(paramsOf('s')).toEqual({ x: 1 });
-    // Another answer (a refresh) keeps the layer.
-    session.model.set(aReadModel({ features: [aSketch('s', 0)], name: 'Renamed' }));
-    expect(paramsOf('s')).toEqual({ x: 1 });
-    // A newer local setParams shows at once.
-    tx.apply(setParams('s', { x: 2 }));
-    expect(paramsOf('s')).toEqual({ x: 2 });
-    await session.answer(aReadModel({ features: [aSketch('s', 2.0001)] }));
-    expect(paramsOf('s')).toEqual({ x: 2.0001 });
-    // The layer is gone: a later answer is the server state.
-    session.model.set(aReadModel({ features: [aSketch('s', 2.5)] }));
-    expect(paramsOf('s')).toEqual({ x: 2.5 });
-  });
-
-  it('commit drops the local sketch of SKETCH_NOT_SOLVED', async () => {
-    const { session, dispatcher, paramsOf } = setup({ features: [aSketch('s', 0)] });
-    const tx = dispatcher.begin('sketch.edit');
-    tx.apply(setParams('s', { x: 1 }));
-    await session.answer(aReadModel({ features: [aSketch('s', 0)] }));
-    await session.refuse('SKETCH_NOT_SOLVED');
-    expect(paramsOf('s')).toEqual({ x: 1 });
-    tx.commit();
-    expect(paramsOf('s')).toEqual({ x: 0 });
-  });
-
-  it('lost ends the transaction without an RPC; its object is a no-op; mirror = the new model', () => {
-    const { session, dispatcher, mirror, lost, paramsOf } = setup({ features: [aBox('a', 1)] });
-    const seen: boolean[] = [];
-    dispatcher.events.on('transaction', (e) => seen.push(e.active));
-    const tx = dispatcher.begin('feature.edit');
-    tx.apply(setParams('a', { width: 3 }));
-    session.lose(aReadModel({ features: [aBox('a', 1), aBox('c', 2)] }));
-    expect(dispatcher.inTransaction).toBe(false);
+    await session.refuse('TRANSACTION_OPEN');
+    expect(reasons(errors)).toEqual(['TRANSACTION_OPEN']);
     expect(lost()).toBe(1);
-    expect(seen).toEqual([true, false]);
-    expect(mirror.studio.features.map((f) => f.id)).toEqual(['a', 'c']);
-    expect(paramsOf('a')).toEqual({ width: 1 });
-    const sent = session.sent.length;
-    tx.apply(setParams('a', { width: 4 }));
-    expect(tx.commit()).toBeNull();
-    tx.abort();
-    expect(session.sent).toHaveLength(sent);
-    expect(paramsOf('a')).toEqual({ width: 1 });
-    // A new transaction can start.
-    expect(() => dispatcher.begin('next')).not.toThrow();
+    expect(dispatcher.inTransaction).toBe(false);
+    const result = track(tx.apply(setParams('f1', { size: 2 })));
+    await flush();
+    expect(result()).toBe(false);
+    expect(session.kinds()).toEqual(['begin']);
   });
 
-  it('lost keeps a pending durable change on top of the new model', async () => {
-    const { session, dispatcher, paramsOf, errors } = setup({ features: [aBox('a', 1)] });
-    dispatcher.dispatch(setParams('a', { width: 2 }));
-    const tx = dispatcher.begin('x');
-    tx.apply(setParams('a', { width: 3 }));
-    session.lose(aReadModel({ features: [aBox('a', 1)] }));
-    expect(paramsOf('a')).toEqual({ width: 2 });
-    // The session sends the dispatch again; the transaction steps end with NO_TRANSACTION.
-    await session.answer(aReadModel({ features: [aBox('a', 2)], lastSeq: 1 }));
+  it('applyTransient sends ApplyTransient and resolves true when taken', async () => {
+    const { session, dispatcher, track } = setup();
+    const tx = dispatcher.begin('feature.edit');
+    const op = setParams('f1', { size: 2 });
+    const result = track(tx.applyTransient(op));
+    expect(session.sent[1]).toEqual({ kind: 'applyTransient', op });
+    await session.answer();
+    await session.answer();
+    expect(result()).toBe(true);
+  });
+
+  it('NO_TRANSACTION of a step: the transaction is lost, onLost once, no onError', async () => {
+    const { session, dispatcher, errors, lost, track } = setup();
+    const tx = dispatcher.begin('feature.edit');
+    await session.answer();
+    const first = track(tx.apply(setParams('f1', { size: 2 })));
+    const second = track(tx.applyTransient(setParams('f1', { size: 3 })));
     await session.refuse('NO_TRANSACTION');
     await session.refuse('NO_TRANSACTION');
-    expect(paramsOf('a')).toEqual({ width: 2 });
+    expect([first(), second()]).toEqual([false, false]);
+    expect(lost()).toBe(1);
     expect(errors).toEqual([]);
+    expect(dispatcher.inTransaction).toBe(false);
+    const commit = track(tx.commit());
+    await flush();
+    expect(commit()).toBe(false);
+    expect(session.kinds()).toEqual(['begin', 'apply', 'applyTransient']);
+  });
+
+  it('another refusal of a step: onError, false, the transaction stays open', async () => {
+    const { session, dispatcher, errors, lost, track } = setup();
+    const tx = dispatcher.begin('feature.edit');
+    await session.answer();
+    const result = track(tx.apply(setParams('f1', { size: -1 })));
+    await session.refuse('INVALID_OPERATION');
+    expect(result()).toBe(false);
+    expect(reasons(errors)).toEqual(['INVALID_OPERATION']);
+    expect(lost()).toBe(0);
+    expect(dispatcher.inTransaction).toBe(true);
+  });
+
+  it('commit ends at once and resolves true when taken; a further call throws', async () => {
+    const { session, dispatcher, track } = setup();
+    const tx = dispatcher.begin('feature.edit');
+    const result = track(tx.commit());
+    expect(dispatcher.inTransaction).toBe(false);
+    expect(session.kinds()).toEqual(['begin', 'commit']);
+    expect(() => tx.apply(setParams('f1', {}))).toThrow(/has ended/);
+    expect(() => tx.commit()).toThrow(/has ended/);
+    await session.answer();
+    await session.answer();
+    expect(result()).toBe(true);
+  });
+
+  it('commit refused with NO_TRANSACTION: onError, false, no abort', async () => {
+    const { session, dispatcher, errors, track } = setup();
+    const tx = dispatcher.begin('feature.edit');
+    await session.answer();
+    const result = track(tx.commit());
+    await session.refuse('NO_TRANSACTION');
+    expect(result()).toBe(false);
+    expect(reasons(errors)).toEqual(['NO_TRANSACTION']);
+    expect(session.kinds()).toEqual(['begin', 'commit']);
+  });
+
+  it('commit refused otherwise (STORAGE): onError and an abort best effort (N167)', async () => {
+    const { session, dispatcher, errors, track } = setup();
+    const tx = dispatcher.begin('feature.edit');
+    await session.answer();
+    const result = track(tx.commit());
+    await session.refuse('STORAGE');
+    expect(result()).toBe(false);
+    expect(session.kinds()).toEqual(['begin', 'commit', 'abort']);
+    // NO_TRANSACTION of that abort (the server dropped the transaction itself) is fine.
+    await session.refuse('NO_TRANSACTION');
+    expect(reasons(errors)).toEqual(['STORAGE']);
+    // The next change goes through.
+    const next = track(dispatcher.dispatch(rename('Bracket')));
+    await session.answer();
+    expect(next()).toBe(true);
+  });
+
+  it('abort ends at once; NO_TRANSACTION is ignored, another refusal reported', async () => {
+    const { session, dispatcher, errors, track } = setup();
+    const first = track(dispatcher.begin('a').abort());
+    expect(dispatcher.inTransaction).toBe(false);
+    await session.answer();
+    await session.refuse('NO_TRANSACTION');
+    expect(first()).toBe(false);
+    expect(errors).toEqual([]);
+    const second = track(dispatcher.begin('b').abort());
+    await session.answer();
+    await session.refuse('STORAGE');
+    expect(second()).toBe(false);
+    expect(reasons(errors)).toEqual(['STORAGE']);
+  });
+
+  it('lost in the middle of a transaction: onLost, its steps are no-ops resolving false', async () => {
+    const { session, dispatcher, lost, track } = setup();
+    const tx = dispatcher.begin('feature.edit');
+    session.lose();
+    expect(lost()).toBe(1);
+    expect(dispatcher.inTransaction).toBe(false);
+    const step = track(tx.apply(setParams('f1', { size: 2 })));
+    const abort = track(tx.abort());
+    await flush();
+    expect([step(), abort()]).toEqual([false, false]);
+    expect(session.kinds()).toEqual(['begin']);
+  });
+
+  it('lost without a transaction: nothing', () => {
+    const { session, lost } = setup();
+    session.lose();
+    expect(lost()).toBe(0);
+  });
+
+  it('NO_TRANSACTION of a step of an ended transaction does not lose the newer one', async () => {
+    const { session, dispatcher, errors, lost } = setup();
+    const tx = dispatcher.begin('a');
+    void tx.apply(setParams('f1', { size: 2 }));
+    void tx.commit();
+    dispatcher.begin('b');
+    await session.answer();
+    await session.refuse('NO_TRANSACTION');
+    expect(lost()).toBe(0);
+    expect(errors).toEqual([]);
+    expect(dispatcher.inTransaction).toBe(true);
   });
 });
 
-describe('createRemoteDispatcher: read-only and undo', () => {
-  it('READ_ONLY: refuseChanges refuses and nothing is sent', () => {
-    const { session, dispatcher } = setup({ features: [aBox('a', 1)] });
-    const readOnly = refuseChanges(dispatcher);
-    expect(() => readOnly.dispatch(setParams('a', { width: 2 }))).toThrow(/read-only/);
-    expect(() => readOnly.begin('x')).toThrow(/read-only/);
-    expect(session.sent).toEqual([]);
-  });
-
-  it('undo waits for the answer; canUndo comes from the read model', async () => {
-    const { session, dispatcher, paramsOf } = setup({
-      features: [aBox('a', 2)],
-      lastSeq: 1,
-      canUndo: true,
-    });
-    const { undo } = dispatcher;
-    const changes: unknown[] = [];
-    undo.events.on('changed', (e) => changes.push(e));
-    expect(undo.canUndo()).toBe(true);
-    expect(undo.canRedo()).toBe(false);
-    undo.undo();
+describe('createRemoteDispatcher: undo and read-only', () => {
+  it('undo sends Undo and waits for the answer; canUndo comes from the read model', async () => {
+    const { session, dispatcher, track } = setup({ canUndo: true });
+    const flags: { canUndo: boolean; canRedo: boolean }[] = [];
+    dispatcher.undo.events.on('changed', (e) => flags.push(e));
+    expect(dispatcher.undo.canUndo()).toBe(true);
+    expect(dispatcher.undo.canRedo()).toBe(false);
+    const result = track(dispatcher.undo.undo());
     expect(session.sent).toEqual([{ kind: 'undo' }]);
-    expect(paramsOf('a')).toEqual({ width: 2 });
-    await session.answer(
-      aReadModel({ features: [aBox('a', 1)], lastSeq: 2, canUndo: false, canRedo: true }),
-    );
-    expect(paramsOf('a')).toEqual({ width: 1 });
-    expect(undo.canUndo()).toBe(false);
-    expect(undo.canRedo()).toBe(true);
-    expect(changes).toEqual([{ canUndo: false, canRedo: true }]);
-    undo.redo();
-    expect(session.sent.at(-1)).toEqual({ kind: 'redo' });
+    await session.answer(aReadModel({ canRedo: true }));
+    expect(result()).toBe(true);
+    expect(dispatcher.undo.canUndo()).toBe(false);
+    expect(dispatcher.undo.canRedo()).toBe(true);
+    expect(flags).toEqual([{ canUndo: false, canRedo: true }]);
+    expect(() => dispatcher.undo.undo()).toThrow(/nothing to undo/);
   });
 
-  it('canUndo is false during a transaction', () => {
+  it('redo; a refusal: onError, false', async () => {
+    const { session, dispatcher, errors, track } = setup({ canRedo: true });
+    const result = track(dispatcher.undo.redo());
+    expect(session.sent).toEqual([{ kind: 'redo' }]);
+    await session.refuse('NOTHING_TO_REDO');
+    expect(result()).toBe(false);
+    expect(reasons(errors)).toEqual(['NOTHING_TO_REDO']);
+  });
+
+  it('canUndo is false during a transaction, changed at its begin and end', () => {
     const { dispatcher } = setup({ canUndo: true });
-    const changes: unknown[] = [];
-    dispatcher.undo.events.on('changed', (e) => changes.push(e));
+    const flags: boolean[] = [];
+    dispatcher.undo.events.on('changed', (e) => flags.push(e.canUndo));
     const tx = dispatcher.begin('x');
     expect(dispatcher.undo.canUndo()).toBe(false);
-    expect(() => {
-      dispatcher.undo.undo();
-    }).toThrow(/nothing to undo/);
-    tx.abort();
+    void tx.abort();
     expect(dispatcher.undo.canUndo()).toBe(true);
-    expect(changes).toEqual([
-      { canUndo: false, canRedo: false },
-      { canUndo: true, canRedo: false },
-    ]);
+    expect(flags).toEqual([false, true]);
   });
 
-  it('stacks are those of the history (RemoteHistory), copied', () => {
-    const { dispatcher, history } = setup({ lastSeq: 2 });
-    history.stacks = () => ({ undo: [1], redo: [2] });
-    const stacks = dispatcher.undo.stacks();
-    expect(stacks).toEqual({ undo: [1], redo: [2] });
-    expect(stacks).not.toBe(history.stacks());
+  it('READ_ONLY: refuseChanges throws and nothing is sent', () => {
+    const { session, dispatcher } = setup();
+    const guarded = refuseChanges(dispatcher);
+    expect(() => guarded.dispatch(rename('x'))).toThrow(/read-only/);
+    expect(() => guarded.begin('x')).toThrow(/read-only/);
+    expect(session.sent).toEqual([]);
   });
+});
 
-  it('stops following the session after dispose', async () => {
-    const { session, dispatcher, paramsOf } = setup({ features: [aBox('a', 1)] });
-    dispatcher.dispatch(setParams('a', { width: 2 }));
+describe('createRemoteDispatcher: dispose', () => {
+  it('late answers resolve false without onError; read models change no flags', async () => {
+    const { session, dispatcher, errors, track } = setup({ canUndo: true });
+    const flags: unknown[] = [];
+    dispatcher.undo.events.on('changed', (e) => flags.push(e));
+    const ok = track(dispatcher.dispatch(rename('a')));
+    const refused = track(dispatcher.undo.undo());
     dispatcher.dispose();
-    session.model.set(aReadModel({ features: [aBox('a', 7)] }));
-    await session.answer(aReadModel({ features: [aBox('a', 8)] }));
-    expect(paramsOf('a')).toEqual({ width: 2 });
+    await session.answer(aReadModel());
+    await session.refuse('INVALID_OPERATION');
+    expect([ok(), refused()]).toEqual([false, false]);
+    expect(errors).toEqual([]);
+    expect(flags).toEqual([]);
   });
 
-  it('dispose of its undo does nothing: the dispatcher owns the subscriptions', () => {
-    const { session, dispatcher, paramsOf } = setup({ features: [aBox('a', 1)] });
+  it('a rejected change (the session was disposed) resolves false', async () => {
+    const { session, dispatcher, errors, track } = setup();
+    const result = track(dispatcher.dispatch(rename('a')));
+    await session.reject();
+    expect(result()).toBe(false);
+    expect(errors).toEqual([]);
+  });
+
+  it('a rejection that is not a RemoteError (a bug of the program) is not swallowed (N176)', async () => {
+    const { session, dispatcher } = setup();
+    const result = dispatcher.dispatch(rename('a'));
+    void session.reject(new TypeError('cannot encode'));
+    await expect(result).rejects.toBeInstanceOf(TypeError);
+  });
+
+  it('dispose of its undo does nothing: the dispatcher owns the subscriptions', async () => {
+    const { session, dispatcher } = setup({ canUndo: true });
+    const flags: unknown[] = [];
+    dispatcher.undo.events.on('changed', (e) => flags.push(e));
     dispatcher.undo.dispose();
-    session.model.set(aReadModel({ features: [aBox('a', 7)] }));
-    expect(paramsOf('a')).toEqual({ width: 7 });
+    void dispatcher.undo.undo();
+    await session.answer(aReadModel());
+    expect(flags).toEqual([{ canUndo: false, canRedo: false }]);
   });
 });

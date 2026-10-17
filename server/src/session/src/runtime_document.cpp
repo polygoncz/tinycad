@@ -11,13 +11,10 @@
 #include "tinycad/ops/log.hpp"
 #include "tinycad/ops/operation.hpp"
 #include "tinycad/ops/undo.hpp"
-#include "tinycad/session/operation_codec.hpp"
 #include "tinycad/session/read_model_builder.hpp"
 #include "tinycad/storage/persistent_document.hpp"
 
 namespace tinycad::session {
-
-namespace v1 = tinycad::v1;
 
 namespace {
 
@@ -73,11 +70,11 @@ class ProgressEvents final : public regen::RegenObserver {
   void featureDone(int /*runGeneration*/, const document::FeatureId& feature,
                    const regen::FeatureStatus& status) override {
     if (std::ranges::find(rebuilt_, feature) == rebuilt_.end()) return;
-    v1::SessionEvent event;
-    auto* progress = event.mutable_regen_progress();
-    progress->set_generation(generation_);
-    progress->set_feature_id(feature.str());
-    featureStatusToProto(status, progress->mutable_status());
+    SessionEvent event;
+    event.kind = SessionEvent::Kind::RegenProgress;
+    event.generation = generation_;
+    event.featureId = feature;
+    event.status = status;
     events_.append(std::move(event));
   }
 
@@ -179,12 +176,13 @@ struct RuntimeDocument::Impl {
   }
 
   /**
-   * A failed PersistentDocument call. Storage of a durable call that found the document intact
-   * means it was reloaded from the file (N35): that is a change of its own (generation + 1 and
-   * `changed` without a session, so every session refreshes), and the open transaction is gone.
+   * A failed PersistentDocument call. Storage normally leaves the document as it was (the inverse
+   * reverted it, a failed commit keeps the transaction open, N155), so nothing changed. Only the
+   * fallback reload (`reloaded`) is a change of its own: generation + 1 and `changed` without a
+   * session, so every session refreshes; the open transaction is gone then.
    */
-  SessionError failed(const storage::ChangeError& error, bool wasBroken) {
-    if (error.code == storage::ChangeErrorCode::Storage && !wasBroken) changed("");
+  SessionError failed(const storage::ChangeError& error) {
+    if (error.code == storage::ChangeErrorCode::Storage && error.reloaded) changed("");
     return fromChangeError(error);
   }
 
@@ -192,11 +190,11 @@ struct RuntimeDocument::Impl {
   void changed(const std::string& bySession) {
     ++generation;
     progress.changeHappened();
-    v1::SessionEvent event;
-    auto* changedEvent = event.mutable_changed();
-    changedEvent->set_generation(generation);
-    changedEvent->set_last_seq(static_cast<std::uint64_t>(doc->log().lastSeq()));
-    changedEvent->set_by_session_id(bySession);
+    SessionEvent event;
+    event.kind = SessionEvent::Kind::Changed;
+    event.generation = generation;
+    event.lastSeq = doc->log().lastSeq();
+    event.bySessionId = bySession;
     events.append(std::move(event));
   }
 
@@ -215,10 +213,9 @@ struct RuntimeDocument::Impl {
   }
 
   /** Step 6: regeneration with the input_of of the request, then the read model of the caller. */
-  SessionResult<void> readModel(const Caller& caller, const v1::ReadModelOptions& options,
-                                v1::ReadModel* out) {
+  SessionResult<ReadModel> readModel(const Caller& caller, const ReadModelOptions& options) {
     regen::RunOptions run;
-    if (!options.input_of().empty()) run.inputOf = document::FeatureId(options.input_of());
+    run.inputOf = options.inputOf;
     const document::StudioPtr studio = doc->document().studio();
     const regen::RegenResult result = regenerate(*studio, run);
     meshes->retain(ReadModelBuilder::liveVersions(result, *regenerator));
@@ -227,15 +224,15 @@ struct RuntimeDocument::Impl {
                                *regenerator,        holdsLease(caller.session),
                                doc->canUndo(),      doc->canRedo(),
                                openTransaction(),   caller.quality};
-    return readModels->build(input, options, out);
+    return readModels->build(input, options);
   }
 
   /** The ChangeResult: the entry (when there is one) and the read model of the caller. */
-  SessionResult<void> answer(const Caller& caller, const std::optional<core::Json>& entry,
-                             const v1::ReadModelOptions& options, v1::ChangeResult* out) {
-    out->Clear();
-    if (entry) logEntryView(*entry, out->mutable_entry());
-    return readModel(caller, options, out->mutable_read_model());
+  SessionResult<ChangeResult> answer(const Caller& caller, const std::optional<core::Json>& entry,
+                                     const ReadModelOptions& options) {
+    auto model = readModel(caller, options);
+    if (!model) return core::fail(std::move(model.error()));
+    return ChangeResult{entry, std::move(*model)};
   }
 
   /**
@@ -243,25 +240,23 @@ struct RuntimeDocument::Impl {
    * entry. Returns the finished call (the answer to a repeated request, or the error) or nullopt
    * when the request is new and the change goes on.
    */
-  std::optional<SessionResult<void>> repeatedDurable(const Caller& caller,
-                                                     const storage::OperationKey& key,
-                                                     const v1::ReadModelOptions& options,
-                                                     v1::ChangeResult* out) {
+  std::optional<SessionResult<ChangeResult>> repeatedDurable(const Caller& caller,
+                                                             const storage::OperationKey& key,
+                                                             const ReadModelOptions& options) {
     if (!holdsLease(caller.session)) return core::fail(readOnly());
     auto found = stored(key);
     if (!found) return core::fail(std::move(found.error()));
-    if (*found) return answer(caller, (*found)->entry, options, out);
+    if (*found) return answer(caller, (*found)->entry, options);
     return std::nullopt;
   }
 
   /** Steps 5 and 6 of a durable call after the PersistentDocument call. */
-  SessionResult<void> finishDurable(const Caller& caller,
-                                    core::Result<storage::Change, storage::ChangeError> change,
-                                    bool wasBroken, const v1::ReadModelOptions& options,
-                                    v1::ChangeResult* out) {
-    if (!change) return core::fail(failed(change.error(), wasBroken));
+  SessionResult<ChangeResult> finishDurable(
+      const Caller& caller, core::Result<storage::Change, storage::ChangeError> change,
+      const ReadModelOptions& options) {
+    if (!change) return core::fail(failed(change.error()));
     if (!change->repeated) changed(caller.session.str());
-    return answer(caller, change->entry, options, out);
+    return answer(caller, change->entry, options);
   }
 
   /**
@@ -269,15 +264,15 @@ struct RuntimeDocument::Impl {
    * steps. Returns the finished call (the CURRENT read model for a repeat, or the error) or
    * nullopt when the step is new.
    */
-  std::optional<SessionResult<void>> repeatedStep(const Caller& caller, const StepKey& step,
-                                                  const v1::ReadModelOptions& options,
-                                                  v1::ChangeResult* out) {
+  std::optional<SessionResult<ChangeResult>> repeatedStep(const Caller& caller,
+                                                          const StepKey& step,
+                                                          const ReadModelOptions& options) {
     if (!holdsLease(caller.session)) return core::fail(readOnly());
     switch (step.recent.lookup(step.key)) {
       case RecentResponses::Lookup::New:
         return std::nullopt;
       case RecentResponses::Lookup::Repeated:
-        return answer(caller, std::nullopt, options, out);
+        return answer(caller, std::nullopt, options);
       case RecentResponses::Lookup::Reused:
         return core::fail(operationIdReused(step.key));
     }
@@ -285,11 +280,11 @@ struct RuntimeDocument::Impl {
   }
 
   /** Steps 5 and 6 of a successful transaction step. */
-  SessionResult<void> finishStep(const Caller& caller, const StepKey& step,
-                                 const v1::ReadModelOptions& options, v1::ChangeResult* out) {
+  SessionResult<ChangeResult> finishStep(const Caller& caller, const StepKey& step,
+                                         const ReadModelOptions& options) {
     step.recent.remember(step.key);
     changed(caller.session.str());
-    return answer(caller, std::nullopt, options, out);
+    return answer(caller, std::nullopt, options);
   }
 };
 
@@ -346,99 +341,89 @@ std::optional<SessionId> RuntimeDocument::leaseHolder() const {
 // The lease and the stored entry come first, so a repeated request is never solved again (N107);
 // the sketch is solved only for a new one.
 
-SessionResult<void> RuntimeDocument::dispatch(const Caller& caller, const core::Json& op,
-                                              const std::string& label,
-                                              const storage::OperationKey& key,
-                                              const v1::ReadModelOptions& options,
-                                              v1::ChangeResult* out) {
+SessionResult<ChangeResult> RuntimeDocument::dispatch(const Caller& caller, const core::Json& op,
+                                                      const std::string& label,
+                                                      const storage::OperationKey& key,
+                                                      const ReadModelOptions& options) {
   const std::lock_guard lock(impl_->mutex);
-  if (auto done = impl_->repeatedDurable(caller, key, options, out)) return *done;
+  if (auto done = impl_->repeatedDurable(caller, key, options)) return *done;
   auto solved = impl_->solved(op);
   if (!solved) return core::fail(std::move(solved.error()));
-  const bool wasBroken = impl_->doc->broken();
-  return impl_->finishDurable(caller, impl_->doc->dispatch(*solved, label, key), wasBroken,
-                              options, out);
+  return impl_->finishDurable(caller, impl_->doc->dispatch(*solved, label, key), options);
 }
 
-SessionResult<void> RuntimeDocument::undo(const Caller& caller, const storage::OperationKey& key,
-                                          const v1::ReadModelOptions& options,
-                                          v1::ChangeResult* out) {
+SessionResult<ChangeResult> RuntimeDocument::undo(const Caller& caller,
+                                                  const storage::OperationKey& key,
+                                                  const ReadModelOptions& options) {
   const std::lock_guard lock(impl_->mutex);
-  if (auto done = impl_->repeatedDurable(caller, key, options, out)) return *done;
-  const bool wasBroken = impl_->doc->broken();
-  return impl_->finishDurable(caller, impl_->doc->undo(key), wasBroken, options, out);
+  if (auto done = impl_->repeatedDurable(caller, key, options)) return *done;
+  return impl_->finishDurable(caller, impl_->doc->undo(key), options);
 }
 
-SessionResult<void> RuntimeDocument::redo(const Caller& caller, const storage::OperationKey& key,
-                                          const v1::ReadModelOptions& options,
-                                          v1::ChangeResult* out) {
+SessionResult<ChangeResult> RuntimeDocument::redo(const Caller& caller,
+                                                  const storage::OperationKey& key,
+                                                  const ReadModelOptions& options) {
   const std::lock_guard lock(impl_->mutex);
-  if (auto done = impl_->repeatedDurable(caller, key, options, out)) return *done;
-  const bool wasBroken = impl_->doc->broken();
-  return impl_->finishDurable(caller, impl_->doc->redo(key), wasBroken, options, out);
+  if (auto done = impl_->repeatedDurable(caller, key, options)) return *done;
+  return impl_->finishDurable(caller, impl_->doc->redo(key), options);
 }
 
-SessionResult<void> RuntimeDocument::commit(const Caller& caller, const StepKey& step,
-                                            const v1::ReadModelOptions& options,
-                                            v1::ChangeResult* out) {
+SessionResult<ChangeResult> RuntimeDocument::commit(const Caller& caller, const StepKey& step,
+                                                    const ReadModelOptions& options) {
   const std::lock_guard lock(impl_->mutex);
-  if (auto done = impl_->repeatedDurable(caller, step.key, options, out)) return *done;
+  if (auto done = impl_->repeatedDurable(caller, step.key, options)) return *done;
   // An empty commit left no entry to find; the session remembers its key instead (N107).
-  if (auto done = impl_->repeatedStep(caller, step, options, out)) return *done;
-  const bool wasBroken = impl_->doc->broken();
+  if (auto done = impl_->repeatedStep(caller, step, options)) return *done;
   auto change = impl_->doc->commit(step.key);
   if (change && !change->entry) step.recent.remember(step.key);
-  return impl_->finishDurable(caller, std::move(change), wasBroken, options, out);
+  return impl_->finishDurable(caller, std::move(change), options);
 }
 
 // --- transaction steps (in-memory idempotence, N58) ---------------------------------------
 
-SessionResult<void> RuntimeDocument::begin(const Caller& caller, const std::string& label,
-                                           const StepKey& step,
-                                           const v1::ReadModelOptions& options,
-                                           v1::ChangeResult* out) {
+SessionResult<ChangeResult> RuntimeDocument::begin(const Caller& caller, const std::string& label,
+                                                   const StepKey& step,
+                                                   const ReadModelOptions& options) {
   const std::lock_guard lock(impl_->mutex);
-  if (auto done = impl_->repeatedStep(caller, step, options, out)) return *done;
+  if (auto done = impl_->repeatedStep(caller, step, options)) return *done;
   auto begun = impl_->doc->begin(label);
   if (!begun) return core::fail(fromChangeError(begun.error()));
   impl_->transactionLabel = label;
-  return impl_->finishStep(caller, step, options, out);
+  return impl_->finishStep(caller, step, options);
 }
 
-SessionResult<void> RuntimeDocument::apply(const Caller& caller, const core::Json& op,
-                                           const StepKey& step,
-                                           const v1::ReadModelOptions& options,
-                                           v1::ChangeResult* out) {
+SessionResult<ChangeResult> RuntimeDocument::apply(const Caller& caller, const core::Json& op,
+                                                   const StepKey& step,
+                                                   const ReadModelOptions& options) {
   const std::lock_guard lock(impl_->mutex);
-  if (auto done = impl_->repeatedStep(caller, step, options, out)) return *done;
+  if (auto done = impl_->repeatedStep(caller, step, options)) return *done;
   auto solved = impl_->solved(op);
   if (!solved) return core::fail(std::move(solved.error()));
   auto applied = impl_->doc->apply(*solved);
   if (!applied) return core::fail(fromChangeError(applied.error()));
-  return impl_->finishStep(caller, step, options, out);
+  return impl_->finishStep(caller, step, options);
 }
 
-SessionResult<void> RuntimeDocument::applyTransient(const Caller& caller, const core::Json& op,
-                                                    const StepKey& step,
-                                                    const v1::ReadModelOptions& options,
-                                                    v1::ChangeResult* out) {
+SessionResult<ChangeResult> RuntimeDocument::applyTransient(const Caller& caller,
+                                                            const core::Json& op,
+                                                            const StepKey& step,
+                                                            const ReadModelOptions& options) {
   const std::lock_guard lock(impl_->mutex);
-  if (auto done = impl_->repeatedStep(caller, step, options, out)) return *done;
+  if (auto done = impl_->repeatedStep(caller, step, options)) return *done;
   auto solved = impl_->solved(op);
   if (!solved) return core::fail(std::move(solved.error()));
   auto applied = impl_->doc->applyTransient(*solved);
   if (!applied) return core::fail(fromChangeError(applied.error()));
-  return impl_->finishStep(caller, step, options, out);
+  return impl_->finishStep(caller, step, options);
 }
 
-SessionResult<void> RuntimeDocument::abort(const Caller& caller, const StepKey& step,
-                                           const v1::ReadModelOptions& options,
-                                           v1::ChangeResult* out) {
+SessionResult<ChangeResult> RuntimeDocument::abort(const Caller& caller, const StepKey& step,
+                                                   const ReadModelOptions& options) {
   const std::lock_guard lock(impl_->mutex);
-  if (auto done = impl_->repeatedStep(caller, step, options, out)) return *done;
+  if (auto done = impl_->repeatedStep(caller, step, options)) return *done;
   auto aborted = impl_->doc->abort();
   if (!aborted) return core::fail(fromChangeError(aborted.error()));
-  return impl_->finishStep(caller, step, options, out);
+  return impl_->finishStep(caller, step, options);
 }
 
 // --- rename through DocumentService (N37) -------------------------------------------------
@@ -464,36 +449,36 @@ SessionResult<storage::DocumentSummary> RuntimeDocument::rename(const std::strin
   const core::Json op{{"type", "document.rename"},
                       {"v", ops::opVersion("document.rename")},
                       {"name", trimmed}};
-  const bool wasBroken = impl_->doc->broken();
   auto change = impl_->doc->dispatch(op, "document.rename", key);
-  if (!change) return core::fail(impl_->failed(change.error(), wasBroken));
+  if (!change) return core::fail(impl_->failed(change.error()));
   if (!change->repeated) impl_->changed("");
   return summary();
 }
 
 // --- reading ------------------------------------------------------------------------------
 
-SessionResult<void> RuntimeDocument::readModel(const Caller& caller,
-                                               const v1::ReadModelOptions& options,
-                                               v1::ReadModel* out, std::uint64_t* eventSeq) {
+SessionResult<ReadModel> RuntimeDocument::readModel(const Caller& caller,
+                                                    const ReadModelOptions& options,
+                                                    std::uint64_t* eventSeq) {
   const std::lock_guard lock(impl_->mutex);
-  auto built = impl_->readModel(caller, options, out);
+  auto built = impl_->readModel(caller, options);
   if (built && eventSeq != nullptr) *eventSeq = impl_->events.lastSeq();
   return built;
 }
 
-void RuntimeDocument::history(std::int64_t fromSeq, v1::GetHistoryResponse* out) {
+HistoryView RuntimeDocument::history(std::int64_t fromSeq) {
   const std::lock_guard lock(impl_->mutex);
-  out->Clear();
+  HistoryView out;
   const ops::OperationLog& log = impl_->doc->log();
   for (const ops::LogEntry& entry : log.entries(std::max<std::int64_t>(fromSeq, 1))) {
-    logEntryView(ops::logEntryJson(entry), out->add_entries());
+    out.entries.push_back(ops::logEntryJson(entry));
   }
   // The log in memory was checked when the document was loaded (N108), so it cannot be corrupt.
   const auto stacks = ops::rebuildUndoStacks(log.entries());
   TINYCAD_ASSERT(stacks.has_value(), "the undo targets of an open document are consistent");
-  for (const std::int64_t seq : stacks->undo) out->add_undo_stack(static_cast<std::uint64_t>(seq));
-  for (const std::int64_t seq : stacks->redo) out->add_redo_stack(static_cast<std::uint64_t>(seq));
+  out.undoStack = stacks->undo;
+  out.redoStack = stacks->redo;
+  return out;
 }
 
 SessionResult<StepFile> RuntimeDocument::exportStep() {

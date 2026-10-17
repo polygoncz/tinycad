@@ -21,7 +21,8 @@ function ignored(text: string, allowed: RegExp | null): boolean {
 export const test = base.extend<{
   /**
    * Console errors a test causes on purpose (test.use in its file), e.g. the browser's own report
-   * of requests failing while the test holds the network offline. A narrow pattern only.
+   * of requests failing while the test holds the network offline. A narrow pattern only; it is
+   * matched against the text followed by ` (<url>)` when the message has a URL.
    */
   allowedConsoleError: RegExp | null;
   consoleErrors: string[];
@@ -32,10 +33,12 @@ export const test = base.extend<{
       const errors: string[] = [];
       const watch = (page: Page): void => {
         page.on('console', (message: ConsoleMessage) => {
-          if (message.type() === 'error' && !ignored(message.text(), allowedConsoleError)) {
-            const { url } = message.location();
-            errors.push(`console: ${message.text()}${url === '' ? '' : ` (${url})`}`);
-          }
+          if (message.type() !== 'error') return;
+          // The patterns see the text with the URL of the message: the browser's report of a
+          // failed request names the request only there.
+          const { url } = message.location();
+          const report = `${message.text()}${url === '' ? '' : ` (${url})`}`;
+          if (!ignored(report, allowedConsoleError)) errors.push(`console: ${report}`);
         });
         page.on('pageerror', (error) => {
           if (!ignored(error.message, allowedConsoleError))

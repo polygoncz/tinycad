@@ -3,7 +3,7 @@ import { createSequentialIdGenerator } from '@/core';
 import { createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
 import type { FeatureSchema } from '@/document';
 import type { ParamSchemaOf } from '@/document/testing';
-import { anOpsSession } from '@/ops/testing';
+import { aFakeOps } from '@/ops/testing';
 import { createEditLock } from '@/interaction/edit-lock';
 import { createFeatureEditor } from '@/interaction/feature-dialog/feature-editor';
 
@@ -21,12 +21,12 @@ const BOX: FeatureSchema<{ readonly width: number }> = {
 };
 
 function setup() {
-  const session = anOpsSession();
+  const session = aFakeOps();
   const schemas = createFeatureSchemaRegistry();
   schemas.register(BOX);
   const editor = createFeatureEditor({
     doc: session.doc,
-    ops: session.dispatcher,
+    ops: session,
     schemas,
     ids: createSequentialIdGenerator('new'),
   });

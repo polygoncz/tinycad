@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "document/testing.hpp"
 #include "tinycad/document/serialize.hpp"
@@ -119,6 +120,50 @@ class TestHandler final : public ops::OpHandler {
   int version_;
   Upcast upcast_;
   bool fail_;
+};
+
+/**
+ * A fake EntryWriter (write-ahead, N155): records every entry it was asked to write and fails
+ * while `failing` is set or on the `failOn`-th call (1-based, 0 = never).
+ */
+class FakeWriter final : public ops::EntryWriter {
+ public:
+  core::Result<void, std::string> write(const ops::LogEntry& entry) override {
+    ++calls;
+    if (failing || calls == failOn) return core::fail(std::string("injected write failure"));
+    written.push_back(entry);
+    return {};
+  }
+
+  bool failing = false;
+  int failOn = 0;
+  int calls = 0;
+  /** The entries written successfully, in order. */
+  std::vector<ops::LogEntry> written;
+};
+
+/**
+ * test.brokenInverse { name }: renames the document, but its inverse (the same type with
+ * `broken: true` and the old name) always fails – a handler bug, for the fallback of N155.
+ */
+class BrokenInverseHandler final : public ops::OpHandler {
+ public:
+  [[nodiscard]] std::string_view type() const override { return "test.brokenInverse"; }
+  [[nodiscard]] int version() const override { return 1; }
+  [[nodiscard]] core::Result<ops::Operation, ops::OperationLoadError> invert(
+      const document::DocumentReader& doc, const ops::Operation& /*op*/) const override {
+    return Json{{"type", "test.brokenInverse"}, {"v", 1}, {"name", doc.meta().name}, {"broken", true}};
+  }
+  core::Result<void, ops::OperationLoadError> apply(document::DocumentWriter& doc,
+                                                    const ops::Operation& op) const override {
+    if (op.value("broken", false)) return core::fail(ops::OperationLoadError{"broken", "a broken inverse"});
+    doc.rename(op.at("name").get<std::string>());
+    return {};
+  }
+
+  static Json op(const std::string& name) {
+    return {{"type", "test.brokenInverse"}, {"v", 1}, {"name", name}};
+  }
 };
 
 }  // namespace tinycad::testing

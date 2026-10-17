@@ -84,7 +84,7 @@ Json runReplay(const Json& input) {
 }
 
 /** The value of a step that must not fail; a failure is a broken case. */
-ops::LogEntry must(core::Result<ops::LogEntry, ops::OperationLoadError> result, int step) {
+ops::LogEntry must(core::Result<ops::LogEntry, ops::DispatchError> result, int step) {
   if (!result) {
     throw std::runtime_error("step " + std::to_string(step) + ": " + result.error().path + ": " +
                              result.error().message);
@@ -129,7 +129,8 @@ Json runScript(const Json& input) {
     } else if (s.contains("applyTransient")) {
       must(open().applyTransient(s.at("applyTransient")), step);
     } else if (s.value("commit", false)) {
-      open().commit();
+      // No writer: a commit cannot fail.
+      (void)open().commit().value();
       transaction.reset();
     } else if (s.value("abort", false)) {
       open().abort();

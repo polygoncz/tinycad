@@ -4,7 +4,7 @@ import { createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
 import { bodyId } from '@/document/testing';
 import type { FeatureId, FeatureSchema } from '@/document';
 import type { ParamSchemaOf } from '@/document/testing';
-import { anOpsSession } from '@/ops/testing';
+import { aFakeOps } from '@/ops/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { createFeatureEditor } from '@/interaction/feature-dialog/feature-editor';
 import { createManipulatorController } from '@/interaction/manipulators/manipulator-controller';
@@ -177,12 +177,12 @@ function key(k: string, mods: KeyMods = NO_MODS): ViewKeyEvent {
 }
 
 function setup(options: GizmoOptions & { register?: boolean } = {}) {
-  const ops = anOpsSession();
+  const ops = aFakeOps();
   const schemas = createFeatureSchemaRegistry();
   schemas.register(GIZMO_SCHEMA);
   const features = createFeatureEditor({
     doc: ops.doc,
-    ops: ops.dispatcher,
+    ops,
     schemas,
     ids: createSequentialIdGenerator('g'),
   });
@@ -402,7 +402,7 @@ describe('createManipulatorController – dragging', () => {
     expect(paramsOf(session)).toEqual(GIZMO_DEFAULTS);
   });
 
-  it('the whole drag is one log entry after commit', () => {
+  it('the whole drag is one transaction: one begin and one commit (the server merges)', () => {
     const { ops, controller, open, pickAt } = setup();
     const session = open();
     pickAt('a');
@@ -411,7 +411,10 @@ describe('createManipulatorController – dragging', () => {
     controller.onPointer(at('move', 14, 0));
     controller.onPointer(at('up', 14, 0));
     session.commit();
-    expect(ops.log.entries()).toHaveLength(1);
+    const kinds = ops.sent.map((c) => c.kind);
+    expect(kinds.filter((k) => k === 'begin')).toHaveLength(1);
+    expect(kinds.at(-1)).toBe('commit');
+    expect(kinds.filter((k) => k === 'commit')).toHaveLength(1);
   });
 
   it('while dragging other buttons, downs, leave and moves off the handle are swallowed', () => {
@@ -541,9 +544,19 @@ describe('createManipulatorController – last known anchors (M20)', () => {
   });
 
   it('closing the session forgets them: a new session of the feature waits for anchors', () => {
-    const { viewport, regen, features, open } = setup();
+    const { ops, viewport, regen, features, open } = setup();
     const session = open();
     session.commit();
+    // The server took the new feature: it is in the read model now.
+    const feature = {
+      id: session.featureId,
+      type: 'gizmo',
+      typeVersion: 1,
+      name: 'Gizmo 1',
+      params: GIZMO_DEFAULTS,
+      suppressed: false,
+    };
+    ops.answerAll({ document: { studio: { features: [feature], rollbackIndex: 1 } } });
     regen.publish(new Map());
     const again = features.edit(session.featureId);
     expect(viewport.manipulatorViews).toEqual([]);

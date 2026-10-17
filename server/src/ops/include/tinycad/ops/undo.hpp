@@ -53,10 +53,13 @@ class UndoManager final : private LogListener {
   /** A copy of the current stacks. */
   [[nodiscard]] UndoStacks stacks() const;
 
-  /** Precondition canUndo() (AssertionError). A failing dispatch changes neither log nor stacks. */
-  core::Result<LogEntry, OperationLoadError> undo();
+  /**
+   * Precondition canUndo() (AssertionError). A failing dispatch (a refused operation or a failed
+   * write, N155) changes neither log nor stacks.
+   */
+  core::Result<LogEntry, DispatchError> undo();
   /** Precondition canRedo() (AssertionError). */
-  core::Result<LogEntry, OperationLoadError> redo();
+  core::Result<LogEntry, DispatchError> redo();
 
  private:
   void onAppended(const LogEntry& entry) override;

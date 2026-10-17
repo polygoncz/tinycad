@@ -133,7 +133,7 @@ export function ownerOf(ref: EntityRef): FeatureId {
  */
 export function readRef(kind: EntityRef['kind'], r: unknown): EntityRef | undefined {
   if (!isRecord(r) || r.kind !== kind) return undefined;
-  // The id casts below follow the shape check, as in fromData (spec 03).
+  // The id casts below follow the shape check, as everywhere in this file (spec 03).
   switch (kind) {
     case 'body': {
       const body = parseBodyId(r.body);
@@ -227,10 +227,10 @@ const BODY_ID = /^[^/]+\/body(?::[1-9][0-9]*)?$/;
 /**
  * Text in the shape of a body id '<owner>/body[:<n>]' -> BodyId, otherwise undefined. The trusted
  * place where a body id from outside becomes branded: references (readRef), keys of body
- * metadata in fromData, validate of the body.* operations (spec 03).
+ * metadata of the read model (spec 03).
  */
 export function parseBodyId(v: unknown): BodyId | undefined {
-  // The cast follows the shape check, as in fromData.
+  // The cast follows the shape check.
   return typeof v === 'string' && BODY_ID.test(v) ? (v as BodyId) : undefined;
 }
 
@@ -242,7 +242,7 @@ const PLANE_ID = /^[^/]+\/plane:[a-z0-9]+$/;
  * trusted place where a plane id from outside becomes branded (references, spec 03).
  */
 export function parsePlaneId(v: unknown): PlaneId | undefined {
-  // The cast follows the shape check, as in fromData.
+  // The cast follows the shape check.
   return typeof v === 'string' && PLANE_ID.test(v) ? (v as PlaneId) : undefined;
 }
 
@@ -254,7 +254,7 @@ const AXIS_ID = /^[^/]+\/axis:[a-z0-9]+$/;
  * trusted place where an axis id from outside becomes branded (references, spec 03).
  */
 export function parseAxisId(v: unknown): AxisId | undefined {
-  // The cast follows the shape check, as in fromData.
+  // The cast follows the shape check.
   return typeof v === 'string' && AXIS_ID.test(v) ? (v as AxisId) : undefined;
 }
 
@@ -266,6 +266,6 @@ const SKETCH_ID = /^[^/]+\/sketch$/;
  * interaction reads the feature of a drawing id with it.
  */
 export function parseSketchId(v: unknown): SketchId | undefined {
-  // The cast follows the shape check, as in fromData.
+  // The cast follows the shape check.
   return typeof v === 'string' && SKETCH_ID.test(v) ? (v as SketchId) : undefined;
 }

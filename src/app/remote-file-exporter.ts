@@ -2,7 +2,7 @@
 // port createFileActions uses today. Both files come from the server once the queue of changes is
 // empty, so they hold everything the user did: STEP of the visible bodies of the final state
 // (ExportStep) and the document file with its history (ExportDocument; the server keeps the log,
-// so there is no export without history any more, M19.1 D4). The file goes to `download`.
+// so there is no export without history, N153). The file goes to `download`.
 
 import type { DocumentId } from '@/document';
 import type { FileExporter } from '@/interaction';
@@ -27,11 +27,10 @@ export function createRemoteFileExporter(deps: RemoteFileExporterDeps): FileExpo
       deps.download({ name: fileName, mime: 'model/step', data: ownBytes(content) });
     },
 
-    async exportDocument(): Promise<{ readonly withHistory: boolean }> {
+    async exportDocument(): Promise<void> {
       await queueEmpty(deps.session.pending);
       const { content, fileName } = await deps.documents.exportFile(deps.docId);
       deps.download({ name: fileName, mime: 'application/json', data: ownBytes(content) });
-      return { withHistory: true };
     },
   };
 }

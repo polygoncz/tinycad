@@ -14,7 +14,7 @@ supersedes:
 tags:
   - adr
 created: 2026-10-17
-updated: 2026-10-17
+updated: 2026-10-18
 ---
 # 0031 – Tenký klient bez handlerů operací
 
@@ -44,3 +44,15 @@ Samostatný běh M46 zvolil optimistické zrcadlo dokumentu (N63): klient každo
 - \+ Z klienta zmizí další kód (`ops`, měnitelný `document`) a jeho testy.
 - − Každá změna mimo skicu je vidět až po odpovědi serveru (na localhostu desítky ms, „odkudkoli“ 50–150 ms). Dialog featur a manipulátory to musí zvládnout: stav „čeká na server“, slučování tažení.
 - − Testy `interaction` a `sketcher`, které dnes stojí na paměťovém dvojníku `ops`, se musí přepsat na falešné vzdálené sezení.
+
+## Provedení (M52)
+
+Rozhodnutí platí beze změny; [[M52-tenky-klient|M52]] ho provedl a dotáhl podrobnosti, které ADR nechalo na plánování:
+
+- [[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N163]] – porty vrací `Promise<boolean>` (přijato / odmítnuto), bez událostí, `LogEntry` a zásobníků; [[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N165]] – dokument klienta = neměnné snímky read modelu (`createSnapshotDocument`); [[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N166]] – `ops` = typy operací, `OP_VERSION` a porty, testovací dvojník `FakeOps`, TS běžec `ops.script` pryč.
+- [[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N164]] ⚠ – jediný lokální stav změn jsou [[Rozpracované hodnoty dialogu|rozpracované hodnoty dialogu]]; bod 3 („poslední vyhrává“) se vykládá jako odpověď na **poslední odeslanou** změnu session. [[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N172]] – skica dál posílá `setParams` po každé vyřešené úpravě.
+- [[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N167]] ⚠ – chyby transakce v tenkém dispečeru (ztracená transakce, `Abort` po odmítnutém `Commit`); [[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N168]] ⚠ – odezva bez optimismu, ovládací prvky se nezakazují.
+- [[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N169]], [[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N170]] – hlášení undo souběhu a jeden `ToastStack`; [[Rozhodnutí nativního jádra#Plán M52 – tenký klient|N171]] – pořadí úkolů.
+- [[Rozhodnutí nativního jádra#M52 – Tenký klient|N175]] – ztracená transakce ukáže `notice.transactionLost`; [[Rozhodnutí nativního jádra#M52 – Tenký klient|N176]] – odmítnutí, které není `RemoteError`, je chyba programu; [[Rozhodnutí nativního jádra#M52 – Tenký klient|N177]] – sekce Text panelu skici a `RemoteAppSessionDeps` bez `now`.
+
+Specifikace po M52: [[01-architektura]], [[03-dokument]], [[04-operace-a-historie]], [[10-interakce]], [[11-ui]], [[13-testovani]], [[14-protokol]].

@@ -1,12 +1,11 @@
-// Plain JSON (spec 03): the one check for reading (fromData) and writing (op validate, M19.1),
-// so that a write never accepts what a read refuses.
+// Plain JSON (spec 03): the check of the params the client sends (remote/operations.ts).
 
 /**
  * A plain JSON value: null, a string, a boolean, a finite number, an array of JSON values
  * without holes or a plain JSON object. Operations go to the server as JSON
  * (google.protobuf.Struct, spec 14), so Map, Date, class instances, undefined or NaN could
- * otherwise slip into the mirror of the document and break the JSON round trip. Linear in the size of the value and without allocations: it runs on every drag step of
- * a sketch.
+ * otherwise break the JSON round trip. Linear in the size of the value and without allocations: it
+ * runs on every drag step of a sketch.
  */
 export function isJsonValue(v: unknown): boolean {
   if (v === null || typeof v === 'string' || typeof v === 'boolean') return true;

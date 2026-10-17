@@ -14,8 +14,8 @@
 // Also the page-level bindings of a session: the theme (Q072), the view cube labels of the
 // language (M17), the rotation mode of the camera (M17.1), the display style of the bodies (M22,
 // its button left of the view cube), the AO settings (M23, their panel opened from the display
-// style menu) and the global keyboard.
-import { onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue';
+// style menu), the global keyboard and the toasts of the notices of the session (M48).
+import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { AppSession } from '@/app';
 import { provideSession } from '../composables/use-session';
@@ -38,12 +38,20 @@ import SketchPanel from './SketchPanel.vue';
 import SketchPatternDimensions from './SketchPatternDimensions.vue';
 import Timeline from './Timeline.vue';
 import TitleBar from './TitleBar.vue';
+import ToastStack from './ToastStack.vue';
+import { isCloseErrorToast, noticeIdOf, pageToasts, toastItemsOf } from '../toasts';
+import type { ToastItem } from '../toasts';
 import Toolbar from './Toolbar.vue';
 import TopoDebugPanel from './TopoDebugPanel.vue';
 import { viewCubeLabels } from '../view-cube-labels';
 import ViewportHost from './ViewportHost.vue';
 
-const props = defineProps<{ session: AppSession }>();
+const props = defineProps<{
+  session: AppSession;
+  /** The error of closing the previous document as a toast (App.vue); [] = none (N170). */
+  closeToasts: readonly ToastItem[];
+}>();
+const emit = defineEmits<{ 'dismiss-close': [] }>();
 // One session per AppShell: App.vue mounts a new AppShell for every document.
 const session = props.session;
 provideSession(session);
@@ -71,6 +79,24 @@ watch(
   },
   { immediate: true },
 );
+
+// M48: the transient notices of the session as toasts (N151), in one stack with the error of
+// closing the previous document (N170); closing a toast dismisses its source.
+const notices = useObservable(session.notices);
+const toasts = computed(() =>
+  pageToasts(
+    props.closeToasts,
+    toastItemsOf(notices.value, (key, params) => t(key, { ...params })),
+  ),
+);
+function dismissToast(id: string): void {
+  if (isCloseErrorToast(id)) {
+    emit('dismiss-close');
+    return;
+  }
+  const notice = noticeIdOf(id);
+  if (notice !== null) session.dismissNotice(notice);
+}
 
 // The rotation mode belongs to the page like the theme (M17.1, ADR 0020); the button at the
 // view cube only asks for a toggle, the controller decides and remembers.
@@ -189,6 +215,7 @@ onUnmounted(() => {
       <HistoryPanel v-else-if="historyOpen" />
     </main>
     <Timeline />
+    <ToastStack :items="toasts" @dismiss="dismissToast" />
   </div>
 </template>
 

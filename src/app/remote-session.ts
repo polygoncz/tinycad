@@ -1,14 +1,15 @@
 // createRemoteAppSession (spec 11, "Kompoziční kořen (app)"; M46, N63–N70): the AppSession over a
 // session of the native core. It wires the models of the session over the parts of M46, which
 // stand in for a local document, dispatcher, undo, persistence, kernel and regeneration: the
-// optimistic mirror and the remote dispatcher, the read model view with the
+// snapshot document of the read model and the remote dispatcher (ADR 0031), the read model view with the
 // meshes by content_version, the history and the export of the server, and the connection
 // mapped onto the kernel and save states. It knows no DOM: the transport, the viewport, the timers
 // and the resume store come in as deps, so it runs in Node over createFakeCore().
 
 import { DisposableStore, ObservableValue } from '@/core';
 import type { IdGenerator, Unsubscribe } from '@/core';
-import type { DocumentId, FeatureId } from '@/document';
+import { createSnapshotDocument } from '@/document';
+import type { DocumentId, DocumentSnapshot, FeatureId } from '@/document';
 import {
   bindSelectionHighlight,
   createActionRegistry,
@@ -33,6 +34,7 @@ import type { MeshQuality } from '@/kernel';
 import type { FeaturePlugin } from '@/plugin-api';
 import { createRemoteDocuments, openRemoteSession } from '@/remote';
 import type {
+  ReadModelData,
   RemoteSession,
   RemoteSessionOptions,
   RetryPolicy,
@@ -48,7 +50,8 @@ import {
   SKETCH_TOOLBAR,
 } from '@/sketcher';
 import { createConnectionState } from './connection-state';
-import { MirrorDocument } from './mirror-document';
+import { connectNoticeSources } from './notice-sources';
+import { createNoticeCenter, noticeOfRefusal } from './notices';
 import { queueEmpty } from './queue-empty';
 import { refuseChanges, refuseUndo } from './read-only';
 import { createReadModelView } from './read-model-view';
@@ -78,8 +81,6 @@ export interface RemoteAppSessionDeps {
   readonly resume: SessionResumeStore;
   /** A new UUID v4 for every request that changes something. */
   readonly newOperationId: () => string;
-  /** Clock in ms: the time of the provisional log entries. */
-  readonly now: () => number;
   /** Ids of new features. */
   readonly ids: IdGenerator;
   /** Translation of keys: the name of a new feature (ADR 0014). */
@@ -168,38 +169,39 @@ function wireRemoteSession(
   const { viewport } = deps;
   const { lifetime } = parts;
   const registries = createRemoteRegistries(session.featureTypes, deps.plugins);
-  const {
-    schemas,
-    tools: toolRegistry,
-    manipulators: manipulatorRegistry,
-    handlers,
-    messages,
-  } = registries;
+  const { schemas, tools: toolRegistry, manipulators: manipulatorRegistry, messages } = registries;
   // Q102: the core decides who writes; the second tab of a document is read-only.
   const readOnly = !session.readModel.get().session.writable;
 
-  // 1. The document: the mirror of the read model, changed by the remote dispatcher only; the
-  // rest gets its reader (ADR 0011). The history is the one source of the undo stacks.
-  const mirror = new MirrorDocument(session.readModel.get().document);
-  const doc = mirror.reader;
+  // 1. The document: snapshots of the read model (N165), replaced here only; the rest gets its
+  // reader. It follows the read model before the dispatcher exists, so the document shows the
+  // read model of an answer before the promise of the change resolves.
+  const document = createSnapshotDocument(snapshotOf(session.readModel.get()));
+  const doc = document.reader;
+  lifetime.add(
+    session.readModel.subscribe(() => {
+      document.replace(snapshotOf(session.readModel.get()));
+    }),
+  );
   const connection = lifetime.add(createConnectionState({ session, readOnly, reportError }));
+  const notices = lifetime.add(createNoticeCenter());
+  lifetime.add(connectNoticeSources(session, notices));
   const historyLog = lifetime.add(new RemoteHistory(session));
   const remote = createRemoteDispatcher({
-    mirror,
     session,
-    history: historyLog,
-    handlers,
-    now: deps.now,
     onError: (error) => {
       // N92: a change dropped for the outage makes saving 'failed' while offline.
       connection.changeDropped(error);
-      reportError(error);
+      // A refusal of the server: a notice (N151, N153).
+      const notice = noticeOfRefusal(error);
+      if (notice !== null) notices.show(notice);
     },
     onLost: () => {
-      // The transaction died on the server (spec 14): the dialog and the sketcher close; their
-      // transaction is a no-op now, so cancel sends nothing.
+      // The transaction died on the server (spec 14, N167): the dialog and the sketcher close;
+      // their transaction is a no-op now, so cancel sends nothing. The same notice as for the event
+      // lost (N175); a repeated notice replaces the earlier one, so both sources show it once.
       features.current.get()?.cancel();
-      reportError(new Error('The open transaction ended on the server; the dialog was closed'));
+      notices.show({ kind: 'warning', key: 'notice.transactionLost' });
     },
   });
   lifetime.add(remote);
@@ -475,6 +477,10 @@ function wireRemoteSession(
     },
     persistence: connection.persistence,
     persistenceError: connection.persistenceError,
+    notices: notices.notices,
+    dismissNotice(id) {
+      notices.dismiss(id);
+    },
     selection,
     featureTree,
     browser,
@@ -517,6 +523,12 @@ function wireRemoteSession(
     },
     dispose,
   };
+}
+
+/** The document of a read model as a snapshot of the client document. */
+function snapshotOf(model: ReadModelData): DocumentSnapshot {
+  const { id, name, createdAt, studio } = model.document;
+  return { meta: { id, name, createdAt }, studio };
 }
 
 /**
@@ -577,7 +589,10 @@ function retainingInFlight(meshes: VersionMeshes, inFlight: () => Iterable<strin
   };
 }
 
-/** Errors with nobody to hand them to (a refused change, a failed refresh, a lost transaction). */
+/**
+ * Unexpected errors with nobody to hand them to (a failed close or refresh, a failing subscriber);
+ * the known ones are notices (N153).
+ */
 function reportError(error: unknown): void {
   console.error(error);
 }

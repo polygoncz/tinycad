@@ -95,6 +95,16 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'app.closeError': 'The last changes of the previous document could not be saved: {error}',
   'app.dismiss': 'Dismiss',
 
+  // Notices of the session (M48, N151): toasts that disappear.
+  'notice.transactionLost':
+    'The server interrupted the edit in progress. The dialog closed and the change was not saved.',
+  'notice.serverUnavailable': 'The server is not reachable. Changes are not being saved.',
+  'notice.connectionRestored': 'The connection to the server is back.',
+  'notice.readOnly': 'The document is read-only here – another tab is editing it.',
+  'notice.changeRejected': 'The server refused the change ({reason}).',
+  'notice.changeDropped':
+    'An unsaved change no longer applied to the newer document; it was dropped.',
+
   // Title bar.
   'titleBar.documents': 'Documents',
   'titleBar.rename': 'Rename document',
@@ -107,10 +117,8 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'titleBar.persistence.export': 'Export',
   'titleBar.kernel.starting': 'Connecting to the server…',
   'titleBar.kernel.restarting': 'Connection to the server lost, reconnecting…',
-  'titleBar.kernel.failed': 'The geometry kernel crashed repeatedly.',
   'titleBar.kernel.unavailable': 'The server is not reachable.',
   'titleBar.kernel.retry': 'Try again',
-  'titleBar.regen.failed': 'Regeneration failed',
   'titleBar.details': 'Details',
   'titleBar.language': 'Language: {language}',
   'titleBar.locale.cs': 'Czech',
@@ -284,8 +292,6 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'file.running': 'Exporting…',
   'file.failed': 'Export failed',
   // The warning of a finished export (M19.1, D4): FileStatus.warning is the key.
-  'file.exportedWithoutHistory':
-    'The document was exported without its edit history because saving does not work.',
 
   // History panel (M15).
   'history.title': 'Edit history',

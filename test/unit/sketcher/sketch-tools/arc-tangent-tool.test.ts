@@ -3,7 +3,7 @@ import { createSequentialIdGenerator } from '@/core';
 import type { Vec2 } from '@/core';
 import { ORIGIN_PLANE_IDS, createFeatureSchemaRegistry, validateAgainstSchema } from '@/document';
 import type { FeatureSchema, ParamSchema } from '@/document';
-import { anOpsSession } from '@/ops/testing';
+import { aFakeOps } from '@/ops/testing';
 import { SKETCH_FEATURE_TYPE, parseSketchData } from '@/sketch';
 import type { SketchData, SketchEntity } from '@/sketch';
 import {
@@ -98,10 +98,10 @@ async function settle(): Promise<void> {
 async function sketching(opts: { sketch?: SketchData } = {}) {
   const schemas = createFeatureSchemaRegistry();
   schemas.register(SKETCH_SCHEMA);
-  const ops = anOpsSession({ schemas });
+  const ops = aFakeOps();
   const editor = createFeatureEditor({
     doc: ops.doc,
-    ops: ops.dispatcher,
+    ops,
     schemas,
     ids: createSequentialIdGenerator('f'),
     translate: (key) => key,

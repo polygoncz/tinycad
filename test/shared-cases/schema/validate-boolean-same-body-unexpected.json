@@ -1,0 +1,41 @@
+{
+  "kind": "schema.validate",
+  "description": "An issue at another param does not stop boolean.sameBody: param.unexpected and the same body are both reported",
+  "input": {
+    "type": "boolean",
+    "params": {
+      "op": "union",
+      "targets": [
+        {
+          "kind": "body",
+          "body": "a/body"
+        }
+      ],
+      "tools": [
+        {
+          "kind": "body",
+          "body": "a/body"
+        }
+      ],
+      "keepTools": false,
+      "mode": "fast"
+    }
+  },
+  "expected": {
+    "ok": {
+      "issues": [
+        {
+          "param": "mode",
+          "code": "param.unexpected"
+        },
+        {
+          "param": "tools",
+          "code": "boolean.sameBody",
+          "params": {
+            "index": 0
+          }
+        }
+      ]
+    }
+  }
+}

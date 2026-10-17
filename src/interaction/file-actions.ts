@@ -16,28 +16,21 @@ import type { RegenStatusPort } from './regen-status-port';
 /** Port: app exports and downloads the file; a rejection = the export failed. */
 export interface FileExporter {
   exportStep(bodies: readonly BodyId[]): Promise<void>;
-  /**
-   * M19.1 (D4): `withHistory` is false when app had to export the live document without its edit
-   * history, because the store could not take the work.
-   */
-  exportDocument(): Promise<{ readonly withHistory: boolean }>;
+  /** The document file with its edit history (the server keeps the log, N153). */
+  exportDocument(): Promise<void>;
 }
 
 export type FileTask = 'step' | 'document';
 
-/** The translation key of the warning of a finished export (M19.1). */
-type FileWarning = 'file.exportedWithoutHistory';
-
 export type FileStatus =
-  /** warning: the last export finished, but the file lacks something; ui shows the key. */
-  | { readonly kind: 'idle'; readonly warning: FileWarning | null }
+  | { readonly kind: 'idle' }
   | { readonly kind: 'running'; readonly task: FileTask }
   /** message is technical; ui shows it in a tooltip. */
   | { readonly kind: 'failed'; readonly task: FileTask; readonly message: string };
 
 export interface FileActions extends Disposable {
   readonly status: Observable<FileStatus>;
-  /** 'failed' or 'idle' with a warning → 'idle' without one, otherwise nothing. */
+  /** 'failed' → 'idle', otherwise nothing. */
   dismiss(): void;
 }
 
@@ -46,12 +39,7 @@ const FILE_GROUP = 'file';
 
 const MODEL_ONLY: readonly Mode[] = Object.freeze(['model']);
 
-const IDLE: FileStatus = Object.freeze({ kind: 'idle', warning: null });
-
-const EXPORTED_WITHOUT_HISTORY: FileStatus = Object.freeze({
-  kind: 'idle',
-  warning: 'file.exportedWithoutHistory',
-});
+const IDLE: FileStatus = Object.freeze({ kind: 'idle' });
 
 function messageOf(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -94,22 +82,19 @@ export function createFileActions(deps: {
     return regen.state.get().bodies.flatMap(({ body }) => (hidden.has(body) ? [] : [body]));
   }
 
-  /**
-   * Runs one export: running → idle when it settles (with the status `run` resolves with), failed
-   * when it rejects.
-   */
-  function start(task: FileTask, run: () => Promise<FileStatus>): void {
+  /** Runs one export: running → idle when it resolves, failed when it rejects. */
+  function start(task: FileTask, run: () => Promise<void>): void {
     if (isRunning()) return;
     status.set(Object.freeze({ kind: 'running', task }));
-    let promise: Promise<FileStatus>;
+    let promise: Promise<void>;
     try {
       promise = run();
     } catch (e) {
       promise = Promise.reject(e instanceof Error ? e : new Error(String(e)));
     }
     promise.then(
-      (done) => {
-        status.set(done);
+      () => {
+        status.set(IDLE);
       },
       (e: unknown) => {
         status.set(Object.freeze({ kind: 'failed', task, message: messageOf(e) }));
@@ -132,10 +117,7 @@ export function createFileActions(deps: {
     ),
     run: () => {
       const bodies = visibleBodies();
-      start('step', async () => {
-        await exporter.exportStep(bodies);
-        return IDLE;
-      });
+      start('step', () => exporter.exportStep(bodies));
     },
   });
 
@@ -146,20 +128,14 @@ export function createFileActions(deps: {
     modes: MODEL_ONLY,
     enabled: derived(() => !isRunning(), [status]),
     run: () => {
-      start('document', async () => {
-        const { withHistory } = await exporter.exportDocument();
-        return withHistory ? IDLE : EXPORTED_WITHOUT_HISTORY;
-      });
+      start('document', () => exporter.exportDocument());
     },
   });
 
   return {
     status: status.asObservable(),
     dismiss() {
-      const current = status.get();
-      if (current.kind === 'failed' || (current.kind === 'idle' && current.warning !== null)) {
-        status.set(IDLE);
-      }
+      if (status.get().kind === 'failed') status.set(IDLE);
     },
     dispose() {
       subscriptions.dispose();

@@ -1,54 +1,88 @@
 import { describe, expect, it } from 'vitest';
 import { Emitter } from '@/core';
-import { OP_VERSION } from '@/ops';
-import type { DocumentRenameOp, StudioSetRollbackOp, UndoManager } from '@/ops';
-import { anOpsSession, createOperationLog, createUndoManager } from '@/ops/testing';
-import type { OperationLogReader } from '@/ops/testing';
 import { HISTORY_LIMIT, createHistoryModel } from '@/interaction/history-model';
-import type { HistoryLog, HistoryRow } from '@/interaction/history-model';
+import type { HistoryEntry, HistoryLog, HistoryRow } from '@/interaction/history-model';
 
-/** A real op that works on an empty document: moving the bar to the end. */
-const BAR: StudioSetRollbackOp = {
-  type: 'studio.setRollback',
-  v: OP_VERSION['studio.setRollback'],
-  index: 0,
-};
+/**
+ * A scripted log of the server (N73): entries and undo stacks as the server computes them, one
+ * clock tick per entry. document.rename stays outside undo (M19.2, D5).
+ */
+class ScriptedLog implements HistoryLog {
+  private readonly list: HistoryEntry[] = [];
+  private undoStack: number[] = [];
+  private redoStack: number[] = [];
+  private readonly emitter = new Emitter<{ changed: undefined }>();
+  readonly events = this.emitter.asSubscribable();
 
-/** Renaming the document: outside undo, so outside the history panel (M19.2, D5). */
-const RENAME: DocumentRenameOp = {
-  type: 'document.rename',
-  v: OP_VERSION['document.rename'],
-  name: 'Díl',
-};
+  entries(): readonly HistoryEntry[] {
+    return [...this.list];
+  }
 
-/** The port over the in-memory log and undo of ops/testing.ts. */
-function historyLogOf(log: OperationLogReader, undo: UndoManager): HistoryLog {
-  const emitter = new Emitter<{ changed: undefined }>();
-  log.events.on('appended', () => {
-    emitter.emit('changed', undefined);
-  });
-  return {
-    entries: () =>
-      log.entries().map((entry) => ({
-        seq: entry.seq,
-        kind: entry.kind,
-        ...(entry.target === undefined ? {} : { target: entry.target }),
-        label: entry.label,
-        time: entry.time,
-        opType: entry.op.type,
-      })),
-    stacks: () => undo.stacks(),
-    events: emitter.asSubscribable(),
-  };
+  stacks() {
+    return { undo: [...this.undoStack], redo: [...this.redoStack] };
+  }
+
+  get lastSeq(): number {
+    return this.list.length;
+  }
+
+  do(label: string, opType = 'studio.setRollback'): void {
+    const seq = this.append({ kind: 'do', label, opType });
+    if (opType === 'document.rename') return;
+    this.undoStack.push(seq);
+    this.redoStack = [];
+    this.emitter.emit('changed', undefined);
+  }
+
+  /** document.rename: an entry, but no step of undo; its answer changes nothing of the history. */
+  rename(): void {
+    this.do('document.rename', 'document.rename');
+  }
+
+  undo(): void {
+    const target = this.undoStack.pop();
+    if (target === undefined) throw new Error('nothing to undo');
+    this.redoStack.push(target);
+    this.append({
+      kind: 'undo',
+      target,
+      label: this.labelOf(target),
+      opType: 'studio.setRollback',
+    });
+    this.emitter.emit('changed', undefined);
+  }
+
+  redo(): void {
+    const target = this.redoStack.pop();
+    if (target === undefined) throw new Error('nothing to redo');
+    this.undoStack.push(target);
+    this.append({
+      kind: 'redo',
+      target,
+      label: this.labelOf(target),
+      opType: 'studio.setRollback',
+    });
+    this.emitter.emit('changed', undefined);
+  }
+
+  private append(entry: Omit<HistoryEntry, 'seq' | 'time'>): number {
+    const seq = this.list.length + 1;
+    this.list.push({ ...entry, seq, time: seq });
+    return seq;
+  }
+
+  private labelOf(seq: number): string {
+    return this.list[seq - 1]?.label ?? '';
+  }
 }
 
 function setup() {
-  const ops = anOpsSession();
-  const history = createHistoryModel({ log: historyLogOf(ops.log, ops.undo) });
+  const log = new ScriptedLog();
+  const history = createHistoryModel({ log });
   const doOp = (label: string): void => {
-    ops.dispatcher.dispatch(BAR, { kind: 'do', label });
+    log.do(label);
   };
-  return { ...ops, history, doOp, rows: () => history.state.get().rows };
+  return { log, undo: log, history, doOp, rows: () => history.state.get().rows };
 }
 
 const brief = (row: HistoryRow) => ({
@@ -157,26 +191,23 @@ describe('createHistoryModel', () => {
     expect(count).toBe(2);
   });
 
-  it('gives the same rows for a log restored from the stored entries', () => {
-    const { doOp, undo, log, dispatcher, history } = setup();
+  it('gives the same rows for a new model over the same log', () => {
+    const { doOp, undo, log, history } = setup();
     doOp('a');
     doOp('b');
     undo.undo();
     doOp('c');
     undo.undo();
-    const restoredLog = createOperationLog(log.entries());
-    const restored = createHistoryModel({
-      log: historyLogOf(restoredLog, createUndoManager({ dispatcher, log: restoredLog })),
-    });
+    const restored = createHistoryModel({ log });
     expect(restored.state.get()).toEqual(history.state.get());
   });
 
   it('leaves out document.rename: no row, not counted, no notification', () => {
-    const { doOp, dispatcher, rows, history, log } = setup();
+    const { doOp, rows, history, log } = setup();
     doOp('a');
     let count = 0;
     history.state.subscribe(() => count++);
-    dispatcher.dispatch(RENAME);
+    log.rename();
     doOp('b');
     expect(log.lastSeq).toBe(3);
     expect(rows().map(brief)).toEqual([

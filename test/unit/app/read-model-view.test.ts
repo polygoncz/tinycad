@@ -379,12 +379,12 @@ describe('createReadModelView', () => {
 
   it('keeps RegenUiState, afterSync and the first view', async () => {
     const h = setup();
-    expect(h.view.ui.get()).toEqual({ busy: false, bodyCount: 0, lastMs: null, failed: null });
+    expect(h.view.ui.get()).toEqual({ busy: false, bodyCount: 0, lastMs: null });
     h.pending.set(1);
     expect(h.view.ui.get().busy).toBe(true);
     h.view.show(twoBodies(1));
     await settle();
-    expect(h.view.ui.get()).toEqual({ busy: true, bodyCount: 2, lastMs: 12, failed: null });
+    expect(h.view.ui.get()).toEqual({ busy: true, bodyCount: 2, lastMs: 12 });
     expect(h.afterSync.count).toBe(1);
     expect(h.viewport.fitAllCount).toBe(1);
     h.pending.set(0);

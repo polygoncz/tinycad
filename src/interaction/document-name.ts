@@ -54,7 +54,7 @@ export function createDocumentNameModel(deps: {
       v: OP_VERSION['document.rename'],
       name: trimmed,
     };
-    ops.dispatch(op);
+    void ops.dispatch(op);
     return true;
   }
 

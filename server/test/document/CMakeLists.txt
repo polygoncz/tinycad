@@ -7,6 +7,7 @@ add_executable(tinycad_document_tests
   json_test.cpp
   model_test.cpp
   refs_test.cpp
+  rules_test.cpp
   schema_test.cpp
   serialize_test.cpp
   validate_test.cpp)

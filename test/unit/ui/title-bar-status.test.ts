@@ -5,22 +5,15 @@ import { en } from '@/ui/i18n/en';
 import { saveDotOf, titleBarNotices } from '@/ui/title-bar-status';
 import type { TitleBarInput } from '@/ui/title-bar-status';
 
-/** Everything works: saved, the kernel ready, the last regeneration without an error. */
+/** Everything works: saved, the kernel ready. */
 const FINE: TitleBarInput = {
   persistence: 'saved',
   persistenceError: null,
   kernel: 'ready',
   kernelError: null,
-  regenFailed: null,
 };
 
-const KERNEL_STATES: readonly KernelUiState[] = [
-  'starting',
-  'ready',
-  'restarting',
-  'failed',
-  'unavailable',
-];
+const KERNEL_STATES: readonly KernelUiState[] = ['starting', 'ready', 'restarting', 'unavailable'];
 
 describe('saveDotOf', () => {
   it('is the dot while saving works', () => {
@@ -108,20 +101,6 @@ describe('titleBarNotices', () => {
       ]);
     });
 
-    it('failed: an alert with the cause and Try again', () => {
-      expect(
-        titleBarNotices({ ...FINE, kernel: 'failed', kernelError: 'RuntimeError: unreachable' }),
-      ).toEqual([
-        {
-          id: 'kernel',
-          tone: 'error',
-          text: 'titleBar.kernel.failed',
-          detail: 'RuntimeError: unreachable',
-          action: { kind: 'retryKernel', label: 'titleBar.kernel.retry' },
-        },
-      ]);
-    });
-
     it('unavailable: an alert with the cause and Try again', () => {
       expect(
         titleBarNotices({ ...FINE, kernel: 'unavailable', kernelError: 'WASM failed to load' }),
@@ -136,32 +115,19 @@ describe('titleBarNotices', () => {
       ]);
     });
 
-    it('a failed kernel without a cause has no detail', () => {
-      expect(titleBarNotices({ ...FINE, kernel: 'failed' })[0]?.detail).toBeNull();
+    it('an unreachable server without a cause has no detail', () => {
+      expect(titleBarNotices({ ...FINE, kernel: 'unavailable' })[0]?.detail).toBeNull();
     });
   });
 
-  it('a failed regeneration: an alert with the error as the detail', () => {
-    expect(titleBarNotices({ ...FINE, regenFailed: 'TypeError: x is undefined' })).toEqual([
-      {
-        id: 'regen',
-        tone: 'error',
-        text: 'titleBar.regen.failed',
-        detail: 'TypeError: x is undefined',
-        action: null,
-      },
-    ]);
-  });
-
-  it('several at once in the order persistence, kernel, regeneration', () => {
+  it('several at once in the order persistence, kernel', () => {
     const notices = titleBarNotices({
       persistence: 'failed',
       persistenceError: 'gone',
       kernel: 'unavailable',
       kernelError: 'no WASM',
-      regenFailed: 'bug',
     });
-    expect(notices.map((n) => n.id)).toEqual(['persistence', 'kernel', 'regen']);
+    expect(notices.map((n) => n.id)).toEqual(['persistence', 'kernel']);
     expect(Object.isFrozen(notices)).toBe(true);
     for (const notice of notices) expect(Object.isFrozen(notice)).toBe(true);
   });
@@ -175,7 +141,6 @@ describe('titleBarNotices', () => {
           persistenceError: 'e',
           kernel,
           kernelError: 'e',
-          regenFailed: 'e',
         });
         for (const notice of notices) {
           keys.add(notice.text);
@@ -183,7 +148,7 @@ describe('titleBarNotices', () => {
         }
       }
     }
-    for (const key of [...keys, 'titleBar.details', 'file.exportedWithoutHistory']) {
+    for (const key of [...keys, 'titleBar.details']) {
       expect(cs[key], `cs ${key}`).toBeTypeOf('string');
       expect(en[key], `en ${key}`).toBeTypeOf('string');
     }

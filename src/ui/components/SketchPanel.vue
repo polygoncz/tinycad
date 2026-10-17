@@ -131,8 +131,10 @@ const textValueId = useId();
 const textFontId = useId();
 const textHeightId = useId();
 const drafts = ref<Record<TextField, string>>({ text: '', font: '', height: '' });
+// Each value is a source of its own, compared by value: a new snapshot with the same values (the
+// read model of an answer, M52) keeps what is being typed.
 watch(
-  () => [text.value?.id, text.value?.text, text.value?.font, text.value?.height],
+  [() => text.value?.id, () => text.value?.text, () => text.value?.font, () => text.value?.height],
   () => {
     revert('text');
     revert('font');

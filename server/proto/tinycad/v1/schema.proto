@@ -26,6 +26,9 @@ message FeatureTypeDescriptor {
   repeated ParamDescriptor params = 5;
   // Params of a new feature (FeatureSchema.defaults()), the client puts them in feature.add.
   google.protobuf.Struct defaults = 6;
+  // Rules beyond the generic checks (spec 03 "Vlastní pravidla", N67): the client reports the
+  // same ParamIssue code at the field; the server decides. Empty for most types.
+  repeated ParamRule rules = 7;
 }
 
 message ParamDescriptor {
@@ -120,4 +123,22 @@ message VisibleWhen {
     // The value is a number below this (revolve: angle < 2π − 1e-9).
     double less_than = 4;
   }
+}
+
+// A declarative rule of a feature type. A client that does not know the kind of a rule ignores
+// it (the server still reports the issue in the read model).
+message ParamRule {
+  // ParamIssue.code and the translation key, 'boolean.sameBody'.
+  string code = 1;
+  oneof rule {
+    DisjointRefs disjoint_refs = 10;
+  }
+}
+
+// No reference of the list `param` is also in the list `other` (the same reference by the key
+// of param.duplicateRef). Issue { param, code, { index } } at the first such item of `param`;
+// checked only when both are visible and passed the generic checks.
+message DisjointRefs {
+  string param = 1;
+  string other = 2;
 }

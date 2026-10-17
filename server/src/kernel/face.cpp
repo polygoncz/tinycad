@@ -20,7 +20,8 @@
 #include <utility>
 #include <vector>
 
-#include "curves2d.hpp"
+#include "tinycad/occt2d/curves.hpp"
+
 #include "guarded.hpp"
 #include "operations.hpp"
 
@@ -28,6 +29,13 @@
 // in TS). The edges are built in space from the plane frame, exactly as the TS adapter does.
 
 namespace tinycad::kernel::detail {
+
+using occt2d::CompressedKnots;
+using occt2d::compressKnots;
+using occt2d::Curve2;
+using occt2d::dist;
+using occt2d::Kind;
+using occt2d::Vec2;
 
 namespace {
 

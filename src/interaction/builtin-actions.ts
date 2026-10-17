@@ -120,17 +120,15 @@ export function createBuiltInActions(deps: {
     return selected.length === 1 ? (selected[0] ?? null) : null;
   }
 
-  /** All ops in one transaction, so the action is one undo step. */
+  /**
+   * All ops in one transaction, so the action is one undo step. Nothing waits for the answer: the
+   * document changes with the read model, a refusal is a notice of app (N168).
+   */
   function applyAll(label: string, list: readonly Operation[]): void {
     if (list.length === 0) return;
     const tx = ops.begin(label);
-    try {
-      for (const op of list) tx.apply(op);
-    } catch (e) {
-      tx.abort();
-      throw e;
-    }
-    tx.commit();
+    for (const op of list) void tx.apply(op);
+    void tx.commit();
   }
 
   registry.register({
@@ -139,7 +137,7 @@ export function createBuiltInActions(deps: {
     shortcut: 'Mod+Z',
     enabled: derived(() => !isLocked() && undo.canUndo(), [onUndo, onLock]),
     run: () => {
-      undo.undo();
+      void undo.undo();
     },
   });
 
@@ -149,7 +147,7 @@ export function createBuiltInActions(deps: {
     shortcut: 'Mod+Shift+Z',
     enabled: derived(() => !isLocked() && undo.canRedo(), [onUndo, onLock]),
     run: () => {
-      undo.redo();
+      void undo.redo();
     },
   });
 

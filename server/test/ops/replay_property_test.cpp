@@ -298,7 +298,7 @@ class SequenceRun {
       if (!applied) return "transaction step " + op.dump() + " failed: " + applied.error().message;
     }
     if (s.flag) {
-      record(tx->commit(), start);
+      record(tx->commit().value(), start);
     } else {
       tx->abort();
       if (dataOf(*session_.doc) != start) return "abort did not restore the state";

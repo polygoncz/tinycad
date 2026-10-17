@@ -1,8 +1,16 @@
 // The comparison of shared cases (spec 13, Porovnání a tolerance): same keys, same array
-// lengths, numbers within the tolerance picked by the key name, the path to the first difference.
+// lengths, numbers within the tolerance picked by the key name, the path to the first difference;
+// and the orderings a runner applies before comparing (total, strings by UTF-16 code units).
 
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_TOLERANCE, firstDifference, resolveTolerance } from './compare';
+import {
+  DEFAULT_TOLERANCE,
+  canonicalJson,
+  compareIssues,
+  compareStrings,
+  firstDifference,
+  resolveTolerance,
+} from './compare';
 
 describe('firstDifference', () => {
   it('finds no difference between equal values', () => {
@@ -105,5 +113,54 @@ describe('resolveTolerance', () => {
       angle: 1e-9,
       relative: 1e-6,
     });
+  });
+});
+
+describe('compareStrings', () => {
+  it('orders by UTF-16 code units, not by locale', () => {
+    expect(['b', 'a', 'B', 'é', 'e'].sort(compareStrings)).toEqual(['B', 'a', 'b', 'e', 'é']);
+    expect(compareStrings('x', 'x')).toBe(0);
+  });
+});
+
+describe('canonicalJson', () => {
+  it('sorts the keys of every object, arrays keep their order', () => {
+    expect(canonicalJson({ b: 1, a: { d: [2, 1], c: 'x' } })).toBe(
+      '{"a":{"c":"x","d":[2,1]},"b":1}',
+    );
+  });
+
+  it('is empty for undefined', () => {
+    expect(canonicalJson(undefined)).toBe('');
+  });
+});
+
+describe('compareIssues', () => {
+  it('orders by param, then code, then the canonical JSON of params', () => {
+    const issues = [
+      { param: 'b', code: 'param.missing' },
+      { param: 'a', code: 'param.tooFewRefs', params: { min: 1 } },
+      { param: 'a', code: 'param.invalidRef', params: { index: 2 } },
+      { param: 'a', code: 'param.invalidRef', params: { index: 1 } },
+      { param: 'a', code: 'param.invalidRef' },
+      { param: '', code: 'param.wrongType' },
+    ];
+    expect([...issues].sort(compareIssues)).toEqual([
+      { param: '', code: 'param.wrongType' },
+      { param: 'a', code: 'param.invalidRef' },
+      { param: 'a', code: 'param.invalidRef', params: { index: 1 } },
+      { param: 'a', code: 'param.invalidRef', params: { index: 2 } },
+      { param: 'a', code: 'param.tooFewRefs', params: { min: 1 } },
+      { param: 'b', code: 'param.missing' },
+    ]);
+  });
+
+  it('does not depend on the order of the keys of params', () => {
+    expect(
+      compareIssues(
+        { param: 'a', code: 'c', params: { x: 1, y: 2 } },
+        { param: 'a', code: 'c', params: { y: 2, x: 1 } },
+      ),
+    ).toBe(0);
   });
 });

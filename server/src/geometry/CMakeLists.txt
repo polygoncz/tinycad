@@ -2,7 +2,6 @@
 # Public header include/tinycad/geometry/geometry.hpp; the sources and their headers here are
 # internal (OCCT never shows in the public header).
 add_library(tinycad_geometry STATIC
-  geom2d.cpp
   validate.cpp
   touching.cpp
   intersections.cpp
@@ -17,5 +16,6 @@ target_include_directories(tinycad_geometry
 target_compile_features(tinycad_geometry PUBLIC cxx_std_23)
 target_link_libraries(tinycad_geometry
   PUBLIC tinycad_core
-  PRIVATE TKernel TKMath TKG2d TKG3d TKGeomBase TKGeomAlgo TKBRep TKTopAlgo TKOffset)
+  PRIVATE tinycad_occt2d
+          TKernel TKMath TKG2d TKG3d TKGeomBase TKGeomAlgo TKBRep TKTopAlgo TKOffset)
 tinycad_warnings(tinycad_geometry)

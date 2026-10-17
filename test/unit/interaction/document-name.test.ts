@@ -1,19 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { ObservableValue } from '@/core';
 import { OP_VERSION } from '@/ops';
-import type { DocumentRenameOp, StudioSetRollbackOp } from '@/ops';
-import { anOpsSession } from '@/ops/testing';
+import type { DocumentRenameOp } from '@/ops';
+import { aFakeOps } from '@/ops/testing';
 import { createDocumentNameModel } from '@/interaction/document-name';
 
 function setup(opts: { locked?: boolean } = {}) {
-  const session = anOpsSession({ meta: { name: 'Untitled' } });
+  const ops = aFakeOps({ meta: { name: 'Untitled' } });
   const locked = new ObservableValue(opts.locked ?? false);
   const model = createDocumentNameModel({
-    doc: session.doc,
-    ops: session.dispatcher,
+    doc: ops.doc,
+    ops,
     locked: locked.asObservable(),
   });
-  return { ...session, locked, model };
+  return { ops, doc: ops.doc, locked, model };
 }
 
 const renameTo = (name: string): DocumentRenameOp => ({
@@ -29,61 +29,49 @@ describe('createDocumentNameModel (M19.2, D5)', () => {
   });
 
   it('name follows a rename from anywhere (undo of other steps, replay, another model)', () => {
-    const { model, dispatcher } = setup();
+    const { model, doc } = setup();
     let calls = 0;
     model.name.subscribe(() => calls++);
-    dispatcher.dispatch(renameTo('Part'));
+    doc.replace({ name: 'Part' });
     expect(model.name.get()).toBe('Part');
     expect(calls).toBe(1);
   });
 
   it('a change of the studio alone does not notify', () => {
-    const { model, dispatcher } = setup();
+    const { model, doc } = setup();
     let calls = 0;
     model.name.subscribe(() => calls++);
-    const bar: StudioSetRollbackOp = { type: 'studio.setRollback', v: 1, index: 0 };
-    dispatcher.dispatch(bar);
+    doc.replace({ studio: { features: [], rollbackIndex: 0, bodies: {} } });
     expect(calls).toBe(0);
   });
 
-  it("rename('  Díl  ') writes the trimmed name as one document.rename entry", () => {
-    const { model, doc, log } = setup();
+  it("rename('  Díl  ') sends the trimmed name as one document.rename; the name follows the answer", () => {
+    const { model, ops } = setup();
     expect(model.rename('  Díl  ')).toBe(true);
-    expect(doc.meta.name).toBe('Díl');
+    expect(ops.sent).toEqual([{ kind: 'dispatch', op: renameTo('Díl') }]);
+    // No optimism (N168): the name changes with the read model of the answer.
+    expect(model.name.get()).toBe('Untitled');
+    ops.answer({ document: { name: 'Díl' } });
     expect(model.name.get()).toBe('Díl');
-    expect(log.entries()).toHaveLength(1);
-    expect(log.entries()[0]).toMatchObject({
-      kind: 'do',
-      op: renameTo('Díl'),
-      label: 'document.rename',
-    });
   });
 
-  it('the rename is not undoable', () => {
-    const { model, undo } = setup();
-    model.rename('Díl');
-    expect(undo.canUndo()).toBe(false);
-  });
-
-  it.each([[''], ['   ']])('rename(%j) returns false and writes nothing', (name) => {
-    const { model, doc, log } = setup();
+  it.each([[''], ['   ']])('rename(%j) returns false and sends nothing', (name) => {
+    const { model, ops } = setup();
     expect(model.rename(name)).toBe(false);
-    expect(doc.meta.name).toBe('Untitled');
-    expect(log.lastSeq).toBe(0);
+    expect(ops.sent).toEqual([]);
   });
 
   it('the same name (after trimming) returns true without an operation', () => {
-    const { model, log } = setup();
+    const { model, ops } = setup();
     expect(model.rename(' Untitled ')).toBe(true);
-    expect(log.lastSeq).toBe(0);
+    expect(ops.sent).toEqual([]);
   });
 
-  it('while locked rename returns false and writes nothing; canRename is false', () => {
-    const { model, doc, log } = setup({ locked: true });
+  it('while locked rename returns false and sends nothing; canRename is false', () => {
+    const { model, ops } = setup({ locked: true });
     expect(model.canRename.get()).toBe(false);
     expect(model.rename('Díl')).toBe(false);
-    expect(doc.meta.name).toBe('Untitled');
-    expect(log.lastSeq).toBe(0);
+    expect(ops.sent).toEqual([]);
   });
 
   it('canRename follows the lock', () => {
@@ -99,9 +87,9 @@ describe('createDocumentNameModel (M19.2, D5)', () => {
   });
 
   it('dispose stops following the document', () => {
-    const { model, dispatcher } = setup();
+    const { model, doc } = setup();
     model.dispose();
-    dispatcher.dispatch(renameTo('Part'));
+    doc.replace({ name: 'Part' });
     expect(model.name.get()).toBe('Untitled');
   });
 });

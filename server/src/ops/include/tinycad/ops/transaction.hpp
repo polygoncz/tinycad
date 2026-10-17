@@ -4,18 +4,19 @@
 // as one log entry on commit. Neighbouring steps of one type merge when their handler can merge
 // them (two setParams of one feature, ADR 0025), on apply and again on commit; a transient step
 // (applyTransient, Q018) is reverted on commit and abort, never logged, and interrupts merging.
+// A commit whose entry cannot be written (EntryWriter, N155) leaves the transaction open.
 
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "tinycad/core/result.hpp"
+#include "tinycad/ops/dispatcher.hpp"
 #include "tinycad/ops/log.hpp"
 #include "tinycad/ops/operation.hpp"
 
 namespace tinycad::ops {
 
-class OperationDispatcher;
 class OpHandlerRegistry;
 
 class Transaction {
@@ -36,9 +37,11 @@ class Transaction {
   /**
    * Reverts the transient steps, writes one entry (the only step, or a batch of the merged steps
    * with a batch of their inverses in reverse order) and ends. An empty transaction writes nothing
-   * and returns nullopt.
+   * (the writer is not called) and returns nullopt. A failed write (N155) does NOT end it: the
+   * logged steps stay applied, the transient ones are gone (reverted, never logged), and a later
+   * commit or abort works as usual. `reverted` of the failure is always true.
    */
-  std::optional<LogEntry> commit();
+  core::Result<std::optional<LogEntry>, WriteFailed> commit();
   /** Applies the inverses in reverse order, writes nothing and ends. */
   void abort();
 

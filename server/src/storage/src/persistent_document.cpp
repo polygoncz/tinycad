@@ -31,9 +31,13 @@ ChangeError invalidOperation(const ops::OperationLoadError& error) {
   return changeError(ChangeErrorCode::InvalidOperation, error.message, error.path);
 }
 
+ChangeError invalidOperation(const ops::DispatchError& error) {
+  return changeError(ChangeErrorCode::InvalidOperation, error.message, error.path);
+}
+
 /**
  * The in-memory half of the document: document, log, dispatcher, undo and the open transaction.
- * Replaced as a whole when the state is reloaded from the file (N35). Not movable: the parts
+ * Replaced as a whole when the state is reloaded from the file (the fallback of N155). Not movable: the parts
  * refer to each other. Members are destroyed in reverse order, so an open transaction is aborted
  * while the document still exists.
  */
@@ -56,14 +60,40 @@ struct Runtime {
 
 }  // namespace
 
-struct PersistentDocument::Impl {
+/**
+ * The document and the EntryWriter of its dispatcher (write-ahead, N155): the dispatcher hands
+ * every entry to write() before it appends it to the log.
+ */
+struct PersistentDocument::Impl final : ops::EntryWriter {
   Impl(std::unique_ptr<DocumentFile> f, const Dependencies& d, std::unique_ptr<Runtime> r)
-      : file(std::move(f)), deps(d), runtime(std::move(r)) {}
+      : file(std::move(f)), deps(d) {
+    use(std::move(r));
+  }
+  ~Impl() override = default;
+  Impl(const Impl&) = delete;
+  Impl& operator=(const Impl&) = delete;
 
   std::unique_ptr<DocumentFile> file;
   Dependencies deps;
   std::unique_ptr<Runtime> runtime;
   bool broken = false;
+  /** The key of the durable call running now: the key write() stores with its entry. */
+  std::optional<OperationKey> currentKey;
+
+  /** Makes `r` the runtime and this its writer. */
+  void use(std::unique_ptr<Runtime> r) {
+    runtime = std::move(r);
+    runtime->dispatcher.setWriter(this);
+  }
+
+  /** EntryWriter: the entry with the key of the running call, appended to the file. */
+  core::Result<void, std::string> write(const ops::LogEntry& entry) override {
+    TINYCAD_ASSERT(currentKey.has_value(), "PersistentDocument: a write outside a durable call");
+    const StoredEntry stored{entry.seq, *currentKey, ops::logEntryJson(entry)};
+    auto appended = file->appendEntries(std::span<const StoredEntry>(&stored, 1));
+    if (!appended) return core::fail(std::move(appended.error().message));
+    return {};
+  }
 
   /** Loads the file into a new runtime. */
   static core::Result<std::unique_ptr<Runtime>, LoadError> loadRuntime(DocumentFile& file,
@@ -109,17 +139,10 @@ struct PersistentDocument::Impl {
   }
 
   /**
-   * Writes the new log entry with its key before returning ("saved = answered"); every 100th
-   * entry also gets a snapshot. A failed write reloads the state from the file (N35).
+   * The answer to an entry the dispatcher wrote (write-ahead) and appended; every 100th entry
+   * also gets a snapshot, now that the document holds the entry.
    */
-  core::Result<Change, ChangeError> persist(const OperationKey& key, const ops::LogEntry& entry) {
-    const core::Json json = ops::logEntryJson(entry);
-    const StoredEntry stored{entry.seq, key, json};
-    auto appended = file->appendEntries(std::span<const StoredEntry>(&stored, 1));
-    if (!appended) {
-      reload();
-      return core::fail(changeError(ChangeErrorCode::Storage, appended.error().message));
-    }
+  Change written(const ops::LogEntry& entry) {
     if (entry.seq % SNAPSHOT_EVERY == 0) {
       auto saved = file->saveSnapshot(entry.seq, snapshotJson(*runtime->doc, entry.seq));
       // The entry is stored; a missing snapshot only makes the next load replay more.
@@ -128,7 +151,23 @@ struct PersistentDocument::Impl {
                   << file->id().str() << "' failed: " << saved.error().message << '\n';
       }
     }
-    return changeOf(json, false);
+    return changeOf(ops::logEntryJson(entry), false);
+  }
+
+  /** The result of dispatch, undo or redo (the dispatcher ran with `currentKey` set). */
+  core::Result<Change, ChangeError> finish(const core::Result<ops::LogEntry, ops::DispatchError>& entry) {
+    currentKey.reset();
+    if (entry) return written(*entry);
+    const ops::DispatchError& error = entry.error();
+    if (error.kind == ops::DispatchError::Kind::Invalid) return core::fail(invalidOperation(error));
+    // Nothing was appended. The inverse brought the document back, unless it failed too (a
+    // handler bug): then the file is the only trustworthy state (N155 fallback).
+    ChangeError failed = changeError(ChangeErrorCode::Storage, error.message);
+    if (!error.reverted) {
+      reload();
+      failed.reloaded = !broken;
+    }
+    return core::fail(std::move(failed));
   }
 
   /** The in-memory state from the file again; when that fails too, the document is broken. */
@@ -140,7 +179,7 @@ struct PersistentDocument::Impl {
                 << "' failed: " << reloaded.error().message << '\n';
       return;
     }
-    runtime = std::move(*reloaded);
+    use(std::move(*reloaded));
   }
 
   /** Storage when broken, else nullopt (for the in-memory calls). */
@@ -193,9 +232,8 @@ core::Result<Change, ChangeError> PersistentDocument::dispatch(const core::Json&
   ops::DispatchMeta meta;
   // An empty label means the default: the type of the operation (spec 04).
   if (!label.empty()) meta.label = label;
-  auto entry = impl_->runtime->dispatcher.dispatch(operation, meta);
-  if (!entry) return core::fail(invalidOperation(entry.error()));
-  return impl_->persist(key, *entry);
+  impl_->currentKey = key;
+  return impl_->finish(impl_->runtime->dispatcher.dispatch(operation, meta));
 }
 
 core::Result<Change, ChangeError> PersistentDocument::commit(const OperationKey& key) {
@@ -203,10 +241,17 @@ core::Result<Change, ChangeError> PersistentDocument::commit(const OperationKey&
   if (!impl_->inTransaction()) {
     return core::fail(changeError(ChangeErrorCode::NoTransaction, "commit: no transaction"));
   }
-  const std::optional<ops::LogEntry> entry = impl_->runtime->transaction->commit();
+  impl_->currentKey = key;
+  auto committed = impl_->runtime->transaction->commit();
+  impl_->currentKey.reset();
+  // Nothing was appended (N155): the transaction stays open with its logged steps applied, so a
+  // retried Commit writes it.
+  if (!committed) {
+    return core::fail(changeError(ChangeErrorCode::Storage, committed.error().message));
+  }
   impl_->runtime->transaction.reset();
-  if (!entry) return Change{};
-  return impl_->persist(key, *entry);
+  if (!*committed) return Change{};
+  return impl_->written(**committed);
 }
 
 core::Result<Change, ChangeError> PersistentDocument::undo(const OperationKey& key) {
@@ -217,9 +262,8 @@ core::Result<Change, ChangeError> PersistentDocument::undo(const OperationKey& k
   if (!impl_->runtime->undo.canUndo()) {
     return core::fail(changeError(ChangeErrorCode::NothingToUndo, "nothing to undo"));
   }
-  auto entry = impl_->runtime->undo.undo();
-  if (!entry) return core::fail(invalidOperation(entry.error()));
-  return impl_->persist(key, *entry);
+  impl_->currentKey = key;
+  return impl_->finish(impl_->runtime->undo.undo());
 }
 
 core::Result<Change, ChangeError> PersistentDocument::redo(const OperationKey& key) {
@@ -230,9 +274,8 @@ core::Result<Change, ChangeError> PersistentDocument::redo(const OperationKey& k
   if (!impl_->runtime->undo.canRedo()) {
     return core::fail(changeError(ChangeErrorCode::NothingToRedo, "nothing to redo"));
   }
-  auto entry = impl_->runtime->undo.redo();
-  if (!entry) return core::fail(invalidOperation(entry.error()));
-  return impl_->persist(key, *entry);
+  impl_->currentKey = key;
+  return impl_->finish(impl_->runtime->undo.redo());
 }
 
 // --- in memory ----------------------------------------------------------------------------

@@ -96,6 +96,15 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'app.closeError': 'Poslední změny předchozího dokumentu se nepodařilo uložit: {error}',
   'app.dismiss': 'Zavřít',
 
+  // Notices of the session (M48, N151): toasts that disappear.
+  'notice.transactionLost':
+    'Server přerušil rozpracovanou úpravu. Dialog se zavřel a změna se neuložila.',
+  'notice.serverUnavailable': 'Server je nedostupný. Změny se neukládají.',
+  'notice.connectionRestored': 'Spojení se serverem je obnovené.',
+  'notice.readOnly': 'Dokument je otevřený jen pro čtení – upravuje ho jiná karta.',
+  'notice.changeRejected': 'Server změnu odmítl ({reason}).',
+  'notice.changeDropped': 'Neuloženou změnu už nešlo použít na novější dokument; zahodila se.',
+
   // Title bar.
   'titleBar.documents': 'Dokumenty',
   'titleBar.rename': 'Přejmenovat dokument',
@@ -108,10 +117,8 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'titleBar.persistence.export': 'Exportovat',
   'titleBar.kernel.starting': 'Připojuji se k serveru…',
   'titleBar.kernel.restarting': 'Spojení se serverem přerušeno, obnovuji spojení…',
-  'titleBar.kernel.failed': 'Geometrické jádro opakovaně spadlo.',
   'titleBar.kernel.unavailable': 'Server není dostupný.',
   'titleBar.kernel.retry': 'Zkusit znovu',
-  'titleBar.regen.failed': 'Přepočet selhal',
   'titleBar.details': 'Podrobnosti',
   'titleBar.language': 'Jazyk: {language}',
   'titleBar.locale.cs': 'čeština',
@@ -284,8 +291,6 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'file.running': 'Exportuji…',
   'file.failed': 'Export se nezdařil',
   // The warning of a finished export (M19.1, D4): FileStatus.warning is the key.
-  'file.exportedWithoutHistory':
-    'Dokument byl exportován bez historie úprav, protože ukládání nefunguje.',
 
   // History panel (M15).
   'history.title': 'Historie úprav',

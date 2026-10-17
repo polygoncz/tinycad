@@ -2,7 +2,7 @@
 
 // Test helpers of the session layer (M45): a part studio from JSON (fromData over the built-in
 // schemas), a Regenerator over the real OcctKernel with the built-in builders (decision N45) and
-// the read model of one regeneration. Test-only.
+// the read model of one regeneration (domain data, read_model.hpp). Test-only.
 //
 // The sketch builder of M44.1 is not among the built-in builders yet, so the read model tests of
 // sketches use a small test type 'testSketch' (schema without rules, builder that turns its params
@@ -140,21 +140,19 @@ class StudioFixture {
   }
 
   /**
-   * Regenerates the document (with options.input_of) and builds its read model; the mesh cache
+   * Regenerates the document (with options.inputOf) and builds its read model; the mesh cache
    * keeps only the live versions afterwards, as the runtime document does.
    */
-  tinycad::v1::ReadModel readModel(const document::DocumentReader& doc,
-                                   const tinycad::v1::ReadModelOptions& options = {}) {
+  ReadModel readModel(const document::DocumentReader& doc, const ReadModelOptions& options = {}) {
     regen::RunOptions run;
-    if (!options.input_of().empty()) run.inputOf = document::FeatureId(options.input_of());
+    run.inputOf = options.inputOf;
     lastResult = regenerator->run(*doc.studio(), run);
-    tinycad::v1::ReadModel out;
     const ReadModelInput input{doc,  7,    3,     lastResult, *regenerator, true, true, false,
                                "Box 1: height", testQuality()};
-    auto built = builder.build(input, options, &out);
+    auto built = builder.build(input, options);
     if (!built) throw std::runtime_error("read model failed: " + built.error().message);
     meshes.retain(ReadModelBuilder::liveVersions(lastResult, *regenerator));
-    return out;
+    return std::move(*built);
   }
 
   regen::test::CountingKernel kernel;
@@ -166,27 +164,27 @@ class StudioFixture {
   regen::RegenResult lastResult;
 };
 
-/** ReadModelOptions with the known meshes and input_of. */
-inline tinycad::v1::ReadModelOptions optionsWith(const std::vector<std::string>& known,
-                                                 const std::string& inputOf = "") {
-  tinycad::v1::ReadModelOptions options;
-  for (const auto& version : known) options.add_known_meshes(version);
-  options.set_input_of(inputOf);
+/** ReadModelOptions with the known meshes and inputOf ('' = none). */
+inline ReadModelOptions optionsWith(const std::vector<std::string>& known,
+                                    const std::string& inputOf = "") {
+  ReadModelOptions options;
+  options.knownMeshes.insert(known.begin(), known.end());
+  if (!inputOf.empty()) options.inputOf = document::FeatureId(inputOf);
   return options;
 }
 
-/** content_version of every body of the state view, in order. */
-inline std::vector<std::string> versionsOf(const tinycad::v1::StateView& state) {
+/** The content version of every body, in order. */
+inline std::vector<std::string> versionsOf(const std::vector<BodyView>& bodies) {
   std::vector<std::string> out;
-  for (const auto& body : state.bodies()) out.push_back(body.content_version());
+  for (const auto& body : bodies) out.push_back(body.contentVersion);
   return out;
 }
 
-/** Ids of the bodies of the state view that carry a mesh, in order. */
-inline std::vector<std::string> bodiesWithMesh(const tinycad::v1::StateView& state) {
+/** Ids of the bodies that carry a mesh, in order. */
+inline std::vector<std::string> bodiesWithMesh(const std::vector<BodyView>& bodies) {
   std::vector<std::string> out;
-  for (const auto& body : state.bodies()) {
-    if (body.has_mesh()) out.push_back(body.body_id());
+  for (const auto& body : bodies) {
+    if (body.mesh) out.push_back(body.body->id());
   }
   return out;
 }

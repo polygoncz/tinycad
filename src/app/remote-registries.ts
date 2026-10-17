@@ -2,14 +2,11 @@
 // the server describes (featureSchemaOf), the plugins of the client give only what the server
 // cannot – tools, manipulators and the texts of their translation keys. A plugin of a type the
 // server does not know is skipped with a warning (an older server, a plugin under development).
-// The handlers of the operations run over these schemas on the optimistic mirror (N63).
 
 import { createFeatureSchemaRegistry } from '@/document';
 import type { FeatureSchema, FeatureSchemaRegistry } from '@/document';
 import { createManipulatorRegistry, createToolRegistry, SELECT_TOOL } from '@/interaction';
 import type { ManipulatorRegistry, ToolRegistry } from '@/interaction';
-import { createOpHandlerRegistry } from '@/ops';
-import type { OpHandlerRegistry } from '@/ops';
 import type { FeaturePlugin, PluginMessages } from '@/plugin-api';
 
 /** The registries of a session; no builders, the server regenerates. */
@@ -20,8 +17,6 @@ export interface RemoteRegistries {
   readonly tools: ToolRegistry;
   /** Manipulator descriptors of the plugins the server knows, by feature type. */
   readonly manipulators: ManipulatorRegistry;
-  /** The built-in handlers of operations over `schemas`, for the mirror. */
-  readonly handlers: OpHandlerRegistry;
   /** Dictionaries of the plugins the server knows, for vue-i18n (ADR 0014). */
   readonly messages: PluginMessages;
 }
@@ -50,8 +45,7 @@ export function createRemoteRegistries(
     for (const tool of plugin.tools ?? []) tools.register(tool);
     if (plugin.manipulators !== undefined) manipulators.register(plugin.manipulators);
   }
-  const handlers = createOpHandlerRegistry({ schemas });
-  return { schemas, tools, manipulators, handlers, messages: mergeMessages(known) };
+  return { schemas, tools, manipulators, messages: mergeMessages(known) };
 }
 
 /**

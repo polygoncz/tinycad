@@ -4,8 +4,8 @@ import type { BodyId, BodyMaterial, FeatureId, FeatureInstance } from '@/documen
 // there is no constructor function. The log lives forever, so shapes stay small.
 
 /**
- * Current schema version of every operation type, in one place: handlers (their `version` and
- * the `v` of the inverses they create), applyOperation and upcast all use it (spec 04).
+ * Current schema version of every operation type, in one place: the client writes it into `v` of
+ * every operation it sends; the handlers of the server (server/src/ops) check it (spec 04).
  * One object keyed by type rather than loose constants, so a lookup by type stays typo-safe.
  * Exported from index.ts for creators of operations outside ops (spec 04).
  */
@@ -116,16 +116,7 @@ export interface DocumentRenameOp extends Operation {
   readonly name: string;
 }
 
-/**
- * The operation renames the document (M19.2, D5): the test of the rule "the name is outside
- * undo" of the client (the in-memory undo of ops/testing.ts); the server has its own
- * (server/src/ops). Checks the name too, so it can be given any operation.
- */
-export function isDocumentRename(op: Operation): op is DocumentRenameOp {
-  return op.type === 'document.rename' && 'name' in op && typeof op.name === 'string';
-}
-
-/** Structural operation without a handler in the registry (Q031). */
+/** Structural operation: a transaction of several steps in one log entry (Q031). */
 export interface BatchOp extends Operation {
   readonly type: 'batch';
   readonly ops: readonly Operation[];

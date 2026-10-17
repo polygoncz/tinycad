@@ -3,10 +3,10 @@
 // dot for the save state while saving works (green saved, orange pending), the read-only notice
 // (Q038), the notices of the states that need the user's attention (M19.1, titleBarNotices: a
 // save that fails or no longer works with Export, the kernel that starts, restarts or does not
-// run with Try again, a regeneration that threw; the technical cause in expandable Details) and
+// run with Try again; the technical cause in expandable Details) and
 // the switches of language and theme; in development builds also the switch of the debug panel
 // of topological names (M14, R111). M15: the File menu (the actions of FILE_ACTION_IDS)
-// with the state of an export and its warning (M19.1: a document exported without history), and
+// with the state of an export, and
 // the switch of the history panel (its open state is layout of AppShell). M19.2 (D5): the name
 // is a button that turns into a text field; Enter or leaving it renames through
 // session.documentName (outside undo), Esc cancels. Only bindings.
@@ -45,7 +45,6 @@ const persistence = useObservable(session.persistence);
 const persistenceError = useObservable(session.persistenceError);
 const kernel = useObservable(session.kernel);
 const kernelError = useObservable(session.kernelError);
-const regen = useObservable(session.regen);
 const saveDot = computed(() => saveDotOf(persistence.value));
 const notices = computed(() =>
   titleBarNotices({
@@ -53,7 +52,6 @@ const notices = computed(() =>
     persistenceError: persistenceError.value,
     kernel: kernel.value,
     kernelError: kernelError.value,
-    regenFailed: regen.value.failed,
   }),
 );
 // The debug switch exists only in development builds (spec 11); production drops it.
@@ -148,23 +146,6 @@ function toggleTopoNames(): void {
         <i class="ti ti-x" aria-hidden="true" />
       </button>
     </span>
-    <span
-      v-else-if="fileStatus.kind === 'idle' && fileStatus.warning !== null"
-      class="file-status warning"
-      role="status"
-    >
-      <i class="ti ti-alert-circle" aria-hidden="true" /> {{ t(fileStatus.warning) }}
-      <button
-        type="button"
-        class="dismiss"
-        :title="t('app.dismiss')"
-        :aria-label="t('app.dismiss')"
-        @click="session.files.dismiss()"
-      >
-        <i class="ti ti-x" aria-hidden="true" />
-      </button>
-    </span>
-
     <div class="title">
       <input
         v-if="renaming !== null"
@@ -411,10 +392,6 @@ function toggleTopoNames(): void {
 }
 .file-status.failed {
   color: var(--danger);
-}
-/* Orange text would be hard to read on the bar; the icon carries the colour. */
-.file-status.warning > .ti {
-  color: var(--warning);
 }
 .dismiss {
   display: inline-flex;
