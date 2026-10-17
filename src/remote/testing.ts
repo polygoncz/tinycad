@@ -7,6 +7,7 @@ import type { DescMessage, JsonValue, MessageInitShape, MessageShape } from '@bu
 import { ListValueSchema } from '@bufbuild/protobuf/wkt';
 import { ConnectError, createRouterTransport } from '@connectrpc/connect';
 import type { Code, HandlerContext, Transport } from '@connectrpc/connect';
+import type { Disposable } from '@/core';
 import type { MeshData } from '@/kernel';
 import {
   BodyViewSchema,
@@ -29,6 +30,7 @@ import type {
   ReadModel,
   SketchView,
 } from '@/protocol';
+import type { Timers } from './session-contract';
 
 // ---- builders ----------------------------------------------------------------------------------
 
@@ -438,5 +440,56 @@ function defaultAnswer(method: FakeUnaryMethod): FakeAnswer<FakeUnaryMethod> {
     case 'importDocument':
     case 'exportDocument':
       return {};
+  }
+}
+
+// ---- timers --------------------------------------------------------------------------------------
+
+/** Timers of a session the test drives: nothing runs until advance (tests never sleep). */
+export interface ManualTimers extends Timers {
+  /** Moves the clock by `ms` and runs every timer due by then, in the order they are due. */
+  advance(ms: number): void;
+  /** The delays (ms from when they were scheduled) of the timers waiting now, in order. */
+  readonly waiting: readonly number[];
+}
+
+export function createManualTimers(): ManualTimers {
+  return new ManualTimersImpl();
+}
+
+interface ManualTimer {
+  readonly at: number;
+  readonly delay: number;
+  readonly fn: () => void;
+}
+
+class ManualTimersImpl implements ManualTimers {
+  private now = 0;
+  private timers: readonly ManualTimer[] = [];
+
+  get waiting(): readonly number[] {
+    return this.timers.map((t) => t.delay);
+  }
+
+  schedule(fn: () => void, ms: number): Disposable {
+    const timer: ManualTimer = { at: this.now + ms, delay: ms, fn };
+    this.timers = [...this.timers, timer];
+    return {
+      dispose: () => {
+        this.timers = this.timers.filter((t) => t !== timer);
+      },
+    };
+  }
+
+  advance(ms: number): void {
+    const until = this.now + ms;
+    for (;;) {
+      const due = [...this.timers].filter((t) => t.at <= until).sort((a, b) => a.at - b.at)[0];
+      if (due === undefined) break;
+      this.timers = this.timers.filter((t) => t !== due);
+      this.now = due.at;
+      due.fn();
+    }
+    this.now = until;
   }
 }

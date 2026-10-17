@@ -128,14 +128,16 @@ const CODE_NAMES: Readonly<Record<Code, RemoteErrorCode>> = Object.freeze({
  * Any failure of a call → RemoteError. A RemoteError stays itself; anything else goes through
  * ConnectError.from (an Error that is no ConnectError is UNKNOWN). The first ErrorDetail gives
  * reason, path and issues; without one the reason is 'UNSPECIFIED'. A reason this client does not
- * know (a newer server) is 'UNSPECIFIED' too. The ConnectError stays as the cause.
+ * know (a newer server) is 'UNSPECIFIED' too. A failed fetch (no network, connect-web reports it
+ * as UNKNOWN caused by a TypeError) is UNAVAILABLE, so it is repeated (N86). The ConnectError stays
+ * as the cause.
  */
 export function toRemoteError(e: unknown): RemoteError {
   if (e instanceof RemoteError) return e;
   const error = ConnectError.from(e);
   const detail = error.findDetails(ErrorDetailSchema)[0];
   return new RemoteError({
-    code: CODE_NAMES[error.code],
+    code: failedFetch(error) ? 'UNAVAILABLE' : CODE_NAMES[error.code],
     reason: detail === undefined ? 'UNSPECIFIED' : reasonName(detail.reason),
     path: detail?.path ?? '',
     issues: detail?.issues.map(issueFromProto) ?? [],
@@ -161,6 +163,11 @@ export function issueFromProto(issue: ProtoParamIssue): ParamIssue {
     code: issue.code,
     ...(Object.keys(params).length > 0 ? { params: Object.freeze(params) } : {}),
   });
+}
+
+/** fetch rejects with a TypeError when the request does not reach any server (N86). */
+function failedFetch(error: ConnectError): boolean {
+  return error.code === Code.Unknown && error.cause instanceof TypeError;
 }
 
 function reasonName(reason: ErrorReason): RemoteErrorReason {
