@@ -11,6 +11,7 @@ milestones:
   - "[[M38-zmrazeni-domeny]]"
   - "[[M47-uklid-a-dokonceni]]"
   - "[[M49-pravidla-validace-v-popisu]]"
+  - "[[M51-inverze-a-mereni]]"
 tags:
   - spec
 created: 2026-10-12
@@ -50,7 +51,7 @@ Invarianty 1–5 ověřují od [[M47-uklid-a-dokonceni|M47]] property testy v C+
 
 ## Měření výkonu
 
-**Od [[M47-uklid-a-dokonceni|M47]]:** měření regenerace z M15 (níže) běželo nad TS regenerací a WASM a zmizelo s nimi; model desky s 36 otvory zůstal jako sdílený případ `regen` `boolean-plate-36-holes-fillet` (ověřuje výsledek, ne čas). Časové měření regenerace v C++ zatím není. Měří se start aplikace: `npm run measure` (`scripts/measure-startup.mjs`) jde přes UI scénářem úvodní obrazovka → nový dokument → kvádr, medián z 5 studených načtení, přenesené bajty a velikost `dist/assets`; čísla před a po sérii jsou v [[M47-uklid-a-dokonceni]] ([[Rozhodnutí nativního jádra|N125]]).
+**Od [[M47-uklid-a-dokonceni|M47]]:** měření regenerace z M15 (níže) běželo nad TS regenerací a WASM a zmizelo s nimi; model desky s 36 otvory zůstal jako sdílený případ `regen` `boolean-plate-36-holes-fillet` (ověřuje výsledek, ne čas). Od [[M51-inverze-a-mereni|M51]] ho měří C++ (níže). Měří se i start aplikace: `npm run measure` (`scripts/measure-startup.mjs`) jde přes UI scénářem úvodní obrazovka → nový dokument → kvádr, medián z 5 studených načtení, přenesené bajty a velikost `dist/assets`; čísla před a po sérii jsou v [[M47-uklid-a-dokonceni]] ([[Rozhodnutí nativního jádra|N125]]).
 
 Původní měření z [[M15-export-a-dokonceni|M15]] ([[Rozhodnutí noční rychloakce#M15 – Export a dokončení|R130]]), platilo do M46. Test **měří a vypisuje, ale na čase nikdy nepadá**: časy závisí na stroji a zatížení, test s časovým limitem by byl buď křehký, nebo tak volný, že nic neprokazuje ([[Měření, které nemůže selhat]]).
 
@@ -59,6 +60,22 @@ Původní měření z [[M15-export-a-dokonceni|M15]] ([[Rozhodnutí noční rych
 - Ověřuje jen deterministické veličiny: žádná chyba featury, počet těles a ploch, **počty volání jádra** při přepočtu z cache (jádro obalené počítadlem přes `Proxy`) a `liveHandleCount` = živé handle stavu. **Každá** kontrola měření potřebuje vlastní úmyslnou chybu, která ji shodí (cache vypnutá → padne kontrola počtu volání; vynechaný `release` → padne kontrola `liveHandleCount`; …) – jedna chyba pro celý test dokazuje jen tu jednu kontrolu.
 - Hrany k zaoblení hledá test **z topologie** tělesa (`names.topology`: hrana mezi dvěma rovinnými plochami s různými normálami kolmými na Z), ne rozebíráním jmen – formát jmen zná jen `regen` ([[0018-format-topologickych-jmen|ADR 0018]], oprava revize M15).
 - Čísla se zapisují do vaultu ([[Q007 Cache geometrie|Q007]]), ne do testu. Naměřeno v M15: první regenerace ~103 ms, tessellace ~34 ms, plný přepočet ~101 ms, změna posledního válce ~91 ms.
+
+**Měření regenerace v C++ (od [[M51-inverze-a-mereni|M51]], [[Rozhodnutí nativního jádra|N142, N156]]):** gtest `RegenerationMeasure` (`server/test/regen/regeneration_measure_test.cpp`, v `tinycad_regen_tests`), běží v `check:server` jako ostatní testy a stejně jako M15 **na čase nikdy nepadá**.
+
+- Model: dokument sdíleného případu `regen/boolean-plate-36-holes-fillet` (`loadCase`, `document::fromData`), žádná druhá kopie modelu. Jádro: `OcctKernel` za počítacím dekorátorem `CountingKernel` z `server/test/regen/testing.hpp` ([[Rozhodnutí nativního jádra|N45]]).
+- Měří (každé 3× s novým `Regenerator` nad novým jádrem, vypíše medián v ms tabulkou na `std::cout`, hodiny `steady_clock`): (1) první regeneraci, (2) tessellaci těles výsledku (`MeshQuality{0.1, 0.5}`, výchozí kvalita sezení), (3) plný přepočet po změně první featury (šířka desky), (4) přepočet z cache po změně poslední featury (poloměr zaoblení – jiný krok než „poslední válec“ v M15, ten přepočítal i boolean).
+- Ověřuje jen deterministické veličiny, každou s vlastní úmyslnou chybou, která ji shodila (ověřeno při M51, chyby nejsou v kódu):
+
+| Kontrola | Úmyslná chyba | Spadla |
+|---|---|---|
+| žádná featura v chybě | poloměr zaoblení 120 | ano (`f39: error`) |
+| jedno těleso | boolean jen s prvním nástrojem | ano (36 těles) |
+| 46 ploch | boolean `union` místo `subtract` | ano (154 ploch) |
+| přepočet z cache: 0× `makeBox`, 0× `makeCylinder`, 0× `boolean`, 1× `fillet`, 2 modelovací volání (`fillet` + `topology`) | v kroku 4 změněná první featura místo poslední (bez cache) | ano (36 válců, 1 boolean, 1 kvádr, 78 volání) |
+| `liveHandleCount` = `ownedHandleCount` za života `Regenerator`, 0 po jeho zničení | `ShapeHandle` vytvořený v testu a neuvolněný | ano (40 ≠ 39, 1 ≠ 0) |
+
+- Naměřeno v M51 (Docker Desktop na Macu, arm64, Release, tři běhy testu): první regenerace ~52–58 ms, tessellace ~31–39 ms, plný přepočet ~53–72 ms, přepočet z cache po změně zaoblení ~12–17 ms (volání jádra: `fillet`, `topology` a jedno `release`). Nativní OCCT je tedy u první regenerace a plného přepočtu asi dvakrát rychlejší než WASM v M15.
 
 ## Sdílené testovací případy
 

@@ -13,6 +13,7 @@ milestones:
   - "[[M15-export-a-dokonceni]]"
   - "[[M41-persistence-sqlite]]"
   - "[[M47-uklid-a-dokonceni]]"
+  - "[[M51-inverze-a-mereni]]"
 tags:
   - spec
 created: 2026-10-12
@@ -139,12 +140,18 @@ Proč SQLite a ne IndexedDB nebo Postgres: [[0030-nativni-jadro-pres-grpc|ADR 00
 
 ## Zápis na serveru: `PersistentDocument`
 
-Služba s frontou zápisů a časovačem z prohlížeče na serveru není (archiv: [[05-persistence v prohlížeči#Služba na hlavním vlákně]]). Otevřený dokument drží `PersistentDocument` (`server/src/storage/include/tinycad/storage/persistent_document.hpp`, [[Rozhodnutí nativního jádra|N35, N36]]): dokument, log, dispečer a undo z `tinycad_ops` nad jedním `DocumentFile`. Běhový dokument sezení ([[14-protokol#Sezení]]) ho obaluje.
+Služba s frontou zápisů a časovačem z prohlížeče na serveru není (archiv: [[05-persistence v prohlížeči#Služba na hlavním vlákně]]). Otevřený dokument drží `PersistentDocument` (`server/src/storage/include/tinycad/storage/persistent_document.hpp`, [[Rozhodnutí nativního jádra|N36, N155]]): dokument, log, dispečer a undo z `tinycad_ops` nad jedním `DocumentFile`. Běhový dokument sezení ([[14-protokol#Sezení]]) ho obaluje.
 
 - **Uloženo = odpovězeno.** `dispatch`, `commit`, `undo` a `redo` zapíší svůj záznam do SQLite **před** návratem, nejvýš jeden záznam na volání. Kroky otevřené transakce zůstávají jen v paměti, takže fronta ani zpoždění nejsou potřeba.
 - **Trvalá idempotence:** každé volání nese `OperationKey` (`operation_id` a otisk požadavku). Uložené `operation_id` vrátí uložený záznam bez nové aplikace; stejné id s jiným otiskem → `OPERATION_ID_REUSED` ([[14-protokol#Idempotence]]).
-- **Snapshot** po každém 100. záznamu (`seq % 100 == 0`) ve stejném volání; jeho selhání není chyba změny (záznam je uložený), jen se vypíše.
-- **Selhání zápisu** → `STORAGE` a dokument v paměti se **znovu načte ze souboru**, místo aby se aplikovala inverze ([[Rozhodnutí nativního jádra|N35]] ⚠). Log v paměti tak vždy odpovídá disku. Selže-li i načtení, dokument je rozbitý a každá další změna vrací `STORAGE`.
+- **Snapshot** po každém 100. záznamu (`seq % 100 == 0`) ve stejném volání, až když je záznam v logu (dokument ho už obsahuje); jeho selhání není chyba změny (záznam je uložený), jen se vypíše.
+- **Zápis před logem** (write-ahead, od [[M51-inverze-a-mereni|M51]], [[Rozhodnutí nativního jádra|N155]]): `PersistentDocument` je `EntryWriter` svého dispečera ([[04-operace-a-historie#Zápis před logem (server)]]). Dispečer záznam sestaví, nechá ho zapsat (`StoredEntry{seq, klíč volání, JSON záznamu}` přes `DocumentFile::appendEntries`) a do logu v paměti ho přidá, až když zápis prošel. Klíč (`OperationKey`) nastaví `dispatch`/`commit`/`undo`/`redo` těsně před voláním dispečera.
+- **Selhání zápisu** → `STORAGE` a log ani zásobníky undo se nezměnily, protože záznam do logu nikdy nedošel:
+  - `dispatch`, `undo`, `redo`: dispečer aplikuje `entry.inverse`, dokument je jako před voláním.
+  - `commit`: nic se nevrací, **transakce zůstane otevřená** se svými kroky, přechodné kroky zaniknou (byly vrácené a nikdy se nelogují). Opakovaný `commit` (stejný nebo nový klíč) ji zapíše; klíč neúspěšného pokusu není uložený, takže opakování není „opakovaný požadavek“.
+  - **Záloha:** selže-li sama inverze (chyba handleru), dokument v paměti se **znovu načte ze souboru** (`ChangeError::reloaded = true`, otevřená transakce zanikne). Selže-li i načtení, dokument je rozbitý (`broken()`, `reloaded = false`) a každá další změna vrací `STORAGE`.
+
+  Proč je inverze křehčí než znovunačtení: spoléhá na to, že inverze handleru přesně vrátí operaci (hlídají to testy handlerů a property test přehrání), kdežto znovunačtení dá vždy stav shodný s diskem. Proto zůstává jako záloha. Do M51 se po každém `STORAGE` dokument znovu načítal a otevřená transakce se zahodila (N35, jinak než spec 14, která mluvila o inverzi).
 
 V klientovi stav ukládání (`PersistenceStatus` `saved`/`pending`/`error`/`failed` v titulku) vychází z fronty nepotvrzených změn a stavu spojení ([[Rozhodnutí nativního jádra|N69, N92, N134]]).
 
@@ -241,7 +248,7 @@ Od [[M41-persistence-sqlite|M41]] v C++, `server/test/storage/` (testy TS verze 
 
 - **Kontraktové testy úložiště** (port `describeDocumentStoreContract` s úpravami [[Rozhodnutí nativního jádra|N34]]) nad skutečnými soubory SQLite v dočasném adresáři: `catalog_test.cpp`, `document_file_test.cpp` – chybové kódy, přísné `seq`, `DuplicateOperation`, atomicita, promazání snapshotů, řazení `list`, `remove`, nebezpečné id; `snapshot_keep_test.cpp`, `renamed_to_test.cpp`.
 - **Načtení a soubor:** `load_test.cpp` (každá větev `LoadDocumentError`, 250 operací → uložení → načtení → stejný dokument a undo, `verify`), `snapshot_test.cpp`, `tinycad_file_test.cpp` (export → import, soubor verze 1 z M4, každá chyba historie s cestou, vadný soubor nic neuloží).
-- **`PersistentDocument`:** `persistent_document_test.cpp`, `idempotence_test.cpp` (jeden záznam pro stejné `operation_id`, `OPERATION_ID_REUSED`), selhání zápisu dekorátorem `failing_file.hpp` → znovunačtení (N35), snapshot po 100 záznamech.
+- **`PersistentDocument`:** `persistent_document_test.cpp`, `idempotence_test.cpp` (jeden záznam pro stejné `operation_id`, `OPERATION_ID_REUSED`, klíč neúspěšného zápisu zůstane volný), snapshot po 100 záznamech. Selhání zápisu dekorátorem `failing_file.hpp` (N155): `AFailedWriteIsStorageAndTheDocumentIsRevertedByTheInverse`, `AFailedCommitKeepsTheTransactionOpen` (opakovaný `commit` uloží jeden záznam s oběma kroky), `AFailedUndoKeepsTheStacks`, `WhenTheInverseFailsTheDocumentIsReloaded` a `WhenTheReloadFailsTooTheDocumentIsBroken` (testovací handler `BrokenInverseHandler` s rozbitou inverzí); po každém selhání „log v paměti = soubor“.
 - **Pád procesu:** `crash_test.cpp` – proces zabitý uprostřed zápisu, znovuotevření dá týž dokument i undo.
 - **Služba a import:** `document_service_test.cpp`, `tinycad_import_test.cpp`.
 
