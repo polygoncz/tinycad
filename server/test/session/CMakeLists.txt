@@ -19,7 +19,12 @@ add_executable(tinycad_session_tests
   runtime_document_transactions_test.cpp
   session_manager_test.cpp
   idle_timeout_test.cpp
-  grpc_documents_test.cpp)
+  grpc_documents_test.cpp
+  grpc_session_test.cpp
+  grpc_idempotence_test.cpp
+  grpc_transactions_test.cpp
+  grpc_meshes_test.cpp
+  grpc_watch_test.cpp)
 target_compile_definitions(tinycad_session_tests PRIVATE
   TINYCAD_GOLDEN_DIR="${TINYCAD_GOLDEN_DIR}"
   # grpc_documents_test.cpp imports the .tinycad.json files of the storage tests (M41).

@@ -10,7 +10,7 @@
 #include <string>
 
 #include "google/rpc/status.pb.h"
-#include "session/grpc_harness.hpp"
+#include "session/grpc_documents_harness.hpp"
 #include "tinycad/core/json.hpp"
 #include "tinycad/v1/errors.pb.h"
 
@@ -40,7 +40,7 @@ std::string fixture(const std::string& name) {
 
 class GrpcDocumentsTest : public ::testing::Test {
  protected:
-  TestServer server;
+  DocumentsTestServer server;
   std::unique_ptr<v1::DocumentService::Stub> documents = server.documents();
 
   grpc::Status create(const std::string& name, const std::string& operationId,
