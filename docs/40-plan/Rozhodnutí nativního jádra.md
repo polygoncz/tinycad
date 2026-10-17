@@ -223,4 +223,5 @@ Revize (`architecture-reviewer`) nad M39–M44 a pahýly M45 nenašla porušení
 - **N114 – Jádro, 2D geometrie i řešič propouští `AssertionError` a `bad_alloc`**; ostatní výjimky knihoven OCCT a planegcs převádí na chybu jako hodnotu.
 - **N115 – `sketch_solve.hpp` zůstává v `features/include`, implementace v `tinycad_feature_builders`**; sezení linkuje `tinycad_feature_builders`. Přesun patří k revizi struktury (N110). Hlavička builderů je v `include-builders/` (N109).
 - **N116 – Souběžné buildy C++ v Dockeru (8 GB RAM) s nejvýš `-j3` na agenta.** Proč: při `-j6` čtyř souběžných buildů padal kompilátor na nedostatek paměti.
+- **N117 – Čtení logu a souborů nekopíruje surový JSON před kontrolou** (kopie v nlohmann je rekurzivní; 100 000 vnořených `batch` shodilo server na přetečení zásobníku). Nalezeno při implementaci N113.
 
