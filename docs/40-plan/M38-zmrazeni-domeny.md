@@ -131,3 +131,5 @@ _Návrh Clauda, Pavel doplní nebo upraví._
 - Souběžné úkoly 2–5 jako čtyři subagenti ve worktree místo celých stop: kostra zafixovaná předem v úkolu 1, každý úkol vlastní složka, sloučení bez konfliktu. Na jeden milník lehčí než `/stopa`.
 - Metatest pokrytí odvozený z kódu (`satisfies Record<…>`) udělal z akceptačního kritéria test. Každá kontrola ověřená úmyslně odebraným případem.
 - Implementátoři vracející „díry ve spec“ jako otázky místo tichého rozhodnutí.
+
+**Obecné poznatky:** [[Golden testy pro přepis do jiného jazyka]], [[Metatest pokrytí odvozený z kódu]].
