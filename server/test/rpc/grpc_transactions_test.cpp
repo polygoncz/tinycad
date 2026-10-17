@@ -3,6 +3,7 @@
 // "Testy"; Q097): 50 changes = 1 entry, abort, transient steps, the errors of the table, and undo
 // and redo after the document was reopened and after a server restart.
 
+#include <google/protobuf/util/message_differencer.h>
 #include <gtest/gtest.h>
 
 #include "rpc/grpc_harness.hpp"
@@ -153,6 +154,55 @@ TEST_F(GrpcTransactionsTest, UndoAndRedoWorkAfterTheDocumentWasReopened) {
   ASSERT_TRUE(redone.ok()) << redone.status.error_message();
   EXPECT_EQ(widthOf(redone.response.result().read_model(), "a"), 20);
   EXPECT_EQ(server.storedLog(part).size(), 4U);
+}
+
+// --- STORAGE (N155) -----------------------------------------------------------------------
+
+TEST_F(GrpcTransactionsTest, AFailedCommitIsStorageAndTheTransactionStaysOpenForARetry) {
+  ASSERT_TRUE(server.begin(session, "Edit", "b-1").ok());
+  ASSERT_TRUE(server.apply(session, setWidth("a", 20), "a-1").ok());
+  ASSERT_TRUE(server.apply(session, addBox("b", 1), "a-2").ok());
+  const std::uint64_t generation = model().regen().generation();
+
+  server.failures().append = true;
+  auto failed = server.commit(session, "c-1");
+  server.failures().append = false;
+  EXPECT_EQ(failed.status.error_code(), grpc::StatusCode::UNAVAILABLE);
+  EXPECT_EQ(detailOf(failed.status).reason(), v1::ERROR_REASON_STORAGE);
+
+  // The transaction is still open with both steps; nothing changed, nothing stored.
+  const v1::ReadModel after = model();
+  EXPECT_EQ(after.session().transaction().label(), "Edit");
+  EXPECT_EQ(after.regen().generation(), generation);
+  EXPECT_EQ(after.document().features_size(), 2);
+  EXPECT_EQ(server.storedLog(part).size(), 1U);
+
+  // A retried Commit with a new operation id succeeds (not NO_TRANSACTION, spec 14).
+  auto retried = server.commit(session, "c-2");
+  ASSERT_TRUE(retried.ok()) << retried.status.error_message();
+  ASSERT_TRUE(retried.response.result().has_entry());
+  EXPECT_FALSE(retried.response.result().read_model().session().has_transaction());
+  EXPECT_EQ(server.storedLog(part).size(), 2U);
+}
+
+TEST_F(GrpcTransactionsTest, AFailedDispatchLeavesTheReadModelAsItWas) {
+  const v1::ReadModel before = model();
+  server.failures().append = true;
+  auto failed = server.dispatch(session, setWidth("a", 20), "op-1");
+  server.failures().append = false;
+  EXPECT_EQ(detailOf(failed.status).reason(), v1::ERROR_REASON_STORAGE);
+  const v1::ReadModel after = model();
+  EXPECT_EQ(after.regen().generation(), before.regen().generation());
+  EXPECT_EQ(after.document().last_seq(), before.document().last_seq());
+  EXPECT_EQ(widthOf(after, "a"), 10);
+  EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(after.document(), before.document()));
+
+  // The same operation id again is a new attempt (nothing was stored under it) and succeeds.
+  auto retried = server.dispatch(session, setWidth("a", 20), "op-1");
+  ASSERT_TRUE(retried.ok()) << retried.status.error_message();
+  EXPECT_TRUE(retried.response.result().has_entry());
+  EXPECT_EQ(widthOf(retried.response.result().read_model(), "a"), 20);
+  EXPECT_EQ(server.storedLog(part).size(), 2U);
 }
 
 }  // namespace

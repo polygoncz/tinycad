@@ -167,6 +167,8 @@ class TestServer {
   [[nodiscard]] v1::SessionService::Stub& sessions() { return *instance_->sessions; }
   [[nodiscard]] v1::DocumentService::Stub& documents() { return *instance_->documents; }
   [[nodiscard]] const std::filesystem::path& dataDir() const { return dir_.path(); }
+  /** The switches of the failing decorator between runtime documents and the catalog (spec 05). */
+  [[nodiscard]] tinycad::testing::FailSwitches& failures() { return *failures_; }
 
   /** A new empty document through the catalog of the manager. */
   document::DocumentId createDocument(const std::string& name = "Part") {
@@ -308,6 +310,8 @@ class TestServer {
   /** Everything one run of the server owns, destroyed in reverse order. */
   struct Instance {
     std::unique_ptr<storage::DocumentCatalog> catalog;
+    /** Runtime documents open their files through it, so a test can make writing fail. */
+    std::unique_ptr<tinycad::testing::FailingCatalog> failing;
     std::unique_ptr<storage::DocumentService> catalogService;
     std::unique_ptr<SessionManager> manager;
     std::unique_ptr<SessionServiceImpl> sessionService;
@@ -335,12 +339,13 @@ class TestServer {
     const int run = ++runs_;
     auto next = std::make_unique<Instance>();
     next->catalog = storage::openSqliteCatalog(dir_.path(), now_);
+    next->failing = std::make_unique<tinycad::testing::FailingCatalog>(*next->catalog, failures_);
     next->catalogService = std::make_unique<storage::DocumentService>(
         storage::DocumentService::Dependencies{*next->catalog, registries.schemas,
                                                registries.handlers, now_,
                                                [this] { return "doc" + std::to_string(++ids_); }});
     const RuntimeDocument::Dependencies runtime{
-        *next->catalog,
+        *next->failing,
         registries.schemas,
         registries.handlers,
         registries.builders,
@@ -391,6 +396,9 @@ class TestServer {
 
   SessionConfig config_;
   ScratchDir dir_;
+  /** Shared by every run, so the switches survive restart(). */
+  std::shared_ptr<tinycad::testing::FailSwitches> failures_ =
+      std::make_shared<tinycad::testing::FailSwitches>();
   storage::WallClock now_ = [] { return 1000.0; };
   std::atomic<long long> steadyMs_{0};
   std::atomic<int> sessionIds_{0};

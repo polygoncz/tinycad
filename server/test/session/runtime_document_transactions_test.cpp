@@ -211,5 +211,47 @@ TEST_F(RuntimeTransactionsTest, UndoAndRedoContinueAfterTheDocumentIsOpenedAgain
   EXPECT_EQ(storedParams(id, "a").at("width"), 30);
 }
 
+// --- STORAGE in a transaction (N155) ------------------------------------------------------
+
+TEST_F(RuntimeTransactionsTest, AFailedCommitKeepsTheTransactionAndARetryWritesIt) {
+  begin("Drag");
+  apply(setWidth("a", 20));
+  apply(setWidth("b", 30));
+  const auto generationBefore = changedOf(*doc).back().generation;
+
+  fail->append = true;
+  EXPECT_EQ(reasonOf(doc->commit(writer, step(), options)), ErrorReason::Storage);
+  fail->append = false;
+
+  // Still open with both steps, no change event, nothing stored.
+  EXPECT_EQ(changedOf(*doc).back().generation, generationBefore);
+  auto model = doc->readModel(writer, options);
+  ASSERT_TRUE(model.has_value());
+  EXPECT_EQ(model->session.transactionLabel, "Drag");
+  EXPECT_EQ(model->generation, generationBefore);
+  EXPECT_EQ(storedLog(id).size(), 1U);
+
+  // A retried Commit (a new operation id) writes one entry with both steps.
+  commit();
+  ASSERT_TRUE(out.entry.has_value());
+  EXPECT_EQ(out.entry->at("op").at("ops").size(), 2U);
+  EXPECT_FALSE(out.readModel.session.transactionLabel.has_value());
+  EXPECT_EQ(storedLog(id).size(), 2U);
+  EXPECT_EQ(storedParams(id, "a").at("width"), 20);
+  EXPECT_EQ(storedParams(id, "b").at("width"), 30);
+}
+
+TEST_F(RuntimeTransactionsTest, ARetriedDispatchWithTheSameIdAfterStorageIsANewAttempt) {
+  fail->append = true;
+  EXPECT_EQ(reasonOf(doc->dispatch(writer, setWidth("a", 20), "", key("retry"), options)),
+            ErrorReason::Storage);
+  fail->append = false;
+  // Nothing was stored under the id, so this is not a repeat: it applies and writes.
+  ASSERT_TRUE(keep(doc->dispatch(writer, setWidth("a", 20), "", key("retry"), options)));
+  ASSERT_TRUE(out.entry.has_value());
+  EXPECT_EQ(storedLog(id).size(), 2U);
+  EXPECT_EQ(storedParams(id, "a").at("width"), 20);
+}
+
 }  // namespace
 }  // namespace tinycad::session
