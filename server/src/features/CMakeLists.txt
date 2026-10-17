@@ -19,3 +19,27 @@ target_include_directories(tinycad_features
 target_compile_features(tinycad_features PUBLIC cxx_std_23)
 target_link_libraries(tinycad_features PUBLIC tinycad_document)
 tinycad_warnings(tinycad_features)
+
+# tinycad_feature_builders: the builders (geometry half) of the built-in features, one class per
+# feature in <name>/builder.{hpp,cpp} (M43, decision N44); common/ holds their shared internals
+# (matrices, param reading, the fillet/chamfer twin). Public header
+# include/tinycad/features/builders.hpp. Only the kernel port, no OCCT type.
+add_library(tinycad_feature_builders STATIC
+  builders.cpp
+  common/mat4.cpp
+  common/params.cpp
+  common/dressup.cpp
+  box/builder.cpp
+  cylinder/builder.cpp
+  boolean/builder.cpp
+  extrude/builder.cpp
+  revolve/builder.cpp
+  fillet/builder.cpp
+  chamfer/builder.cpp
+  transform/builder.cpp)
+target_include_directories(tinycad_feature_builders
+  PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(tinycad_feature_builders PUBLIC cxx_std_23)
+target_link_libraries(tinycad_feature_builders PUBLIC tinycad_features tinycad_regen)
+tinycad_warnings(tinycad_feature_builders)
