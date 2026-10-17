@@ -96,6 +96,15 @@ export const cs: Readonly<Record<string, string>> = Object.freeze({
   'app.closeError': 'Poslední změny předchozího dokumentu se nepodařilo uložit: {error}',
   'app.dismiss': 'Zavřít',
 
+  // Notices of the session (M48, N151): toasts that disappear.
+  'notice.transactionLost':
+    'Server přerušil rozpracovanou úpravu. Dialog se zavřel a změna se neuložila.',
+  'notice.serverUnavailable': 'Server je nedostupný. Změny se neukládají.',
+  'notice.connectionRestored': 'Spojení se serverem je obnovené.',
+  'notice.readOnly': 'Dokument je otevřený jen pro čtení – upravuje ho jiná karta.',
+  'notice.changeRejected': 'Server změnu odmítl ({reason}).',
+  'notice.changeDropped': 'Neuloženou změnu už nešlo použít na novější dokument; zahodila se.',
+
   // Title bar.
   'titleBar.documents': 'Dokumenty',
   'titleBar.rename': 'Přejmenovat dokument',

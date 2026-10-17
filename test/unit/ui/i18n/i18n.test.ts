@@ -261,6 +261,18 @@ const VIEW_CUBE_KEYS = [
 // The aria-label of the value field of the manipulator HUD (M19, spec 11 rule 8).
 const MANIPULATOR_KEYS = ['manipulator.field.label'];
 
+// Keys of the notices of the session app hands to ui (M48, N151): its sources and noticeOfRefusal.
+const NOTICE_KEYS = [
+  'notice.transactionLost',
+  'notice.serverUnavailable',
+  'notice.connectionRestored',
+  'notice.readOnly',
+  'notice.changeRejected',
+  'notice.changeDropped',
+  'sketch.notSolved',
+  'app.dismiss',
+];
+
 // The material select of a body row in the Browser (M24, Q078).
 const MATERIAL_KEYS = [
   'displayStyle.mode.realistic',
@@ -310,6 +322,7 @@ describe('built-in dictionaries', () => {
     ...FILE_KEYS,
     ...VIEW_CUBE_KEYS,
     ...MANIPULATOR_KEYS,
+    ...NOTICE_KEYS,
     ...MATERIAL_KEYS,
     // The types of the built-in operations (OP_VERSION of ops, through app): the dispatcher
     // writes the type as the label of an entry without one, so the history panel translates it

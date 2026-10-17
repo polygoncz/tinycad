@@ -95,6 +95,16 @@ export const en: Readonly<Record<string, string>> = Object.freeze({
   'app.closeError': 'The last changes of the previous document could not be saved: {error}',
   'app.dismiss': 'Dismiss',
 
+  // Notices of the session (M48, N151): toasts that disappear.
+  'notice.transactionLost':
+    'The server interrupted the edit in progress. The dialog closed and the change was not saved.',
+  'notice.serverUnavailable': 'The server is not reachable. Changes are not being saved.',
+  'notice.connectionRestored': 'The connection to the server is back.',
+  'notice.readOnly': 'The document is read-only here – another tab is editing it.',
+  'notice.changeRejected': 'The server refused the change ({reason}).',
+  'notice.changeDropped':
+    'An unsaved change no longer applied to the newer document; it was dropped.',
+
   // Title bar.
   'titleBar.documents': 'Documents',
   'titleBar.rename': 'Rename document',
